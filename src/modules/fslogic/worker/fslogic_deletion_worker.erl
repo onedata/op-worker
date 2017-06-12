@@ -71,7 +71,7 @@ init(_Args) ->
                 FileGuid = fslogic_uuid:uuid_to_guid(FileUuid),
                 FileCtx = file_ctx:new_by_guid(FileGuid),
                 UserCtx = user_ctx:new(?ROOT_SESS_ID),
-                ok = remove_file_and_file_meta(FileCtx, UserCtx, false)
+                ok = fslogic_delete:remove_file_and_file_meta(FileCtx, UserCtx, false)
             end, RemovedFiles),
 
             lists:foreach(fun(#document{key = FileUuid}) ->
@@ -104,12 +104,12 @@ handle({fslogic_deletion_request, UserCtx, FileCtx, Silent}) ->
             ok = file_handles:mark_to_remove(FileCtx),
             fslogic_event_emitter:emit_file_removed(FileCtx, [user_ctx:get_session_id(UserCtx)]);
         false ->
-            remove_file_and_file_meta(FileCtx, UserCtx, Silent)
+            fslogic_delete:remove_file_and_file_meta(FileCtx, UserCtx, Silent)
     end,
     ok;
 handle({open_file_deletion_request, FileCtx}) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
-    remove_file_and_file_meta(FileCtx, UserCtx, false);
+    fslogic_delete:remove_file_and_file_meta(FileCtx, UserCtx, false);
 handle(_Request) ->
     ?log_bad_request(_Request),
     {error, wrong_request}.
@@ -126,54 +126,3 @@ cleanup() ->
     ok.
 
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Removes file and file meta. If parameter Silent is true, file_removed_event
-%% will not be emitted.
-%% @end
-%%--------------------------------------------------------------------
--spec remove_file_and_file_meta(file_ctx:ctx(), user_ctx:ctx(), boolean()) -> ok.
-remove_file_and_file_meta(FileCtx, UserCtx, Silent) ->
-    {FileDoc = #document{
-        value = #file_meta{
-            type = Type,
-            shares = Shares
-        }
-    }, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
-    {ParentCtx, FileCtx3} = file_ctx:get_parent(FileCtx2, UserCtx),
-    ok = delete_shares(UserCtx, Shares),
-
-    fslogic_times:update_mtime_ctime(ParentCtx),
-    case Type of
-        ?REGULAR_FILE_TYPE ->
-            sfm_utils:delete_storage_file(FileCtx3, UserCtx);
-        _ -> ok
-    end,
-    ok = file_meta:delete(FileDoc),
-    case Silent of
-        true ->
-            ok;
-        false ->
-            SessId = user_ctx:get_session_id(UserCtx),
-            fslogic_event_emitter:emit_file_removed(FileCtx3, [SessId]),
-            ok
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Removes given shares from oz and db.
-%% @end
-%%--------------------------------------------------------------------
--spec delete_shares(user_ctx:ctx(), [od_share:id()]) -> ok | no_return().
-delete_shares(_UserCtx, []) ->
-    ok;
-delete_shares(UserCtx, Shares) ->
-    Auth = user_ctx:get_auth(UserCtx),
-    [ok = share_logic:delete(Auth, ShareId) || ShareId <- Shares],
-    ok.

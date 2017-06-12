@@ -44,8 +44,8 @@ handle_error(Request, Type, Error) ->
         "Cannot process request ~p (code: ~p)~nStacktrace: ~s",
     FormatArgs = [lager:pr(Request, ?MODULE), Code, lager:pr_stacktrace(Stacktrace, {Type, Error})],
     case LogLevel of
-        debug -> ?debug(MsgFormat, FormatArgs);
-        error -> ?error(MsgFormat, FormatArgs)
+        debug -> ?critical(MsgFormat, FormatArgs);
+        error -> ?critical(MsgFormat, FormatArgs)
     end,
     error_response(Request, Status).
 

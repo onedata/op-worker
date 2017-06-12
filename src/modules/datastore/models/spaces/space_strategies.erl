@@ -20,7 +20,8 @@
 
 %% API
 -export([new/1, add_storage/2, add_storage/3]).
--export([set_strategy/4, set_strategy/5, update_last_import_time/3]).
+-export([set_strategy/4, set_strategy/5, update_last_import_time/3,
+    get_storage_import_details/2, get_storage_update_details/2]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
@@ -257,6 +258,28 @@ set_strategy(SpaceId, StorageId, StrategyType, StrategyName, StrategyArgs) ->
         {ok, OldValue#space_strategies{storage_strategies = maps:put(StorageId, NewSS, Strategies)}}
     end).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns current configuration of storage_ import.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_storage_import_details(od_space:id(), storage:id()) -> space_strategy:config().
+get_storage_import_details(SpaceId, StorageId) ->
+    {ok, Doc} = get(SpaceId),
+    get_storage_strategy_config(Doc, storage_import, StorageId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns current configuration of storage_update.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_storage_update_details(od_space:id(), storage:id()) -> space_strategy:config().
+get_storage_update_details(SpaceId, StorageId) ->
+    {ok, Doc} = get(SpaceId),
+    get_storage_strategy_config(Doc, storage_update, StorageId).
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Sets last_import_time to new value.
@@ -276,3 +299,25 @@ update_last_import_time(SpaceId, StorageId, NewLastImportTime) ->
 %%% Internal functions
 %%%===================================================================
 
+%%%-------------------------------------------------------------------
+%%% @private
+%%% @doc
+%%% Returns space_strategy:config() for given StrategyType.
+%%% @end
+%%%-------------------------------------------------------------------
+-spec get_storage_strategy_config(#space_strategies{}, space_strategy:type(),
+    storage:id()) -> space_strategy:config().
+get_storage_strategy_config(#space_strategies{
+    storage_strategies = Strategies
+}, storage_import, StorageId
+) ->
+    #storage_strategies{storage_import = Import} = maps:get(StorageId, Strategies),
+    Import;
+get_storage_strategy_config(#space_strategies{
+    storage_strategies = Strategies
+}, storage_update, StorageId
+) ->
+    #storage_strategies{storage_update = Update} = maps:get(StorageId, Strategies),
+    Update;
+get_storage_strategy_config(#document{value=Value}, StrategyType, StorageId) ->
+    get_storage_strategy_config(Value, StrategyType, StorageId).

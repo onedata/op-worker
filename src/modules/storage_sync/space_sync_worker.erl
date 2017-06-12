@@ -23,7 +23,6 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 
--define(INFINITY, 9999999999999999999999).
 -define(SYNC_JOB_TIMEOUT,  timer:hours(24)).
 -define(ASYNC_JOB_TIMEOUT,  timer:seconds(10)).
 
@@ -57,7 +56,7 @@
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
     start_pools(),
-    space_sync_monitoring:start_reporter(),
+    storage_sync_monitoring:start_reporter(),
     schedule_check_strategy(),
     {ok, #{}}.
 
@@ -97,7 +96,7 @@ handle(_Request) ->
     Error :: timeout | term().
 cleanup() ->
     stop_pools(),
-    space_sync_monitoring:delete_reporter(),
+    storage_sync_monitoring:delete_reporter(),
     ok.
 
 %%%===================================================================
@@ -236,11 +235,11 @@ start_storage_import_and_update(SpaceId, StorageId, LastImportTime) ->
     {RootDirCtx, _} = file_ctx:get_parent(SpaceCtx, user_ctx:new(?ROOT_SESS_ID)),
 
     ImportAns = storage_import:start(SpaceId, StorageId, LastImportTime,
-        RootDirCtx, SpaceId, ?INFINITY),
+        RootDirCtx, SpaceId),
     log_import_answer(ImportAns, SpaceId, StorageId),
 
     UpdateAns = storage_update:start(SpaceId, StorageId, LastImportTime,
-        RootDirCtx, SpaceId, ?INFINITY),
+        RootDirCtx, SpaceId),
     log_update_answer(UpdateAns, SpaceId, StorageId).
 
 
@@ -277,10 +276,10 @@ log_update_answer(Answer, SpaceId, StorageId) ->
 -spec log_answer([space_strategy:job_result()] | space_strategy:job_result(),
     od_space:id(), storage:id(), atom()) -> ok.
 log_answer({error, Reason}, SpaceId, StorageId, Strategy) ->
-    ?warning("~p of storage: ~p  supporting space: ~p failed due to: ~p",
+    ?critical("~p of storage: ~p  supporting space: ~p failed due to: ~p",
         [Strategy, StorageId, SpaceId, Reason]);
 log_answer(Answer, SpaceId, StorageId, Strategy) ->
-    ?debug("~p of storage: ~p  supporting space: ~p finished with: ~p",
+    ?critical("~p of storage: ~p  supporting space: ~p finished with: ~p",
         [Strategy, StorageId, SpaceId, Answer]).
 
 %%--------------------------------------------------------------------
@@ -292,16 +291,34 @@ log_answer(Answer, SpaceId, StorageId, Strategy) ->
 -spec run_job(space_strategy:job()) -> space_strategy:job_result().
 run_job(Job = #space_strategy_job{strategy_type = StrategyType}) ->
     MergeType = merge_type(Job),
-    {LocalResult, NextJobs} =
-        try StrategyType:strategy_handle_job(Job) of
-            {LocalResult0, NextJobs0} ->
-                {LocalResult0, NextJobs0}
-        catch
-            _:Reason ->
-                {{error, Reason}, []}
-        end,
+    JobResult = try
+        StrategyType:strategy_handle_job(Job)
+    catch
+        Type:Reason ->
+            ?error_stacktrace("Job: ~p failed with ~p:~p", [Job, Type, Reason]),
+            {{error, Reason}, []}
+    end,
+    handle_job_result(Job, StrategyType, MergeType, JobResult).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Runs given job and all its subjobs.
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_job_result(space_strategy:job(), space_strategy:type(),
+    space_strategy:job_merge_type(),
+    {space_strategy:job_result(), [space_strategy:job()]} |
+    {space_strategy:job_result(), [space_strategy:job()], space_strategy:job_posthook()})
+    -> space_strategy:job_result().
+handle_job_result(Job, StrategyType, MergeType, {LocalResult, NextJobs}) ->
     ChildrenResult = run({MergeType, NextJobs}),
-    StrategyType:strategy_merge_result(Job, LocalResult, ChildrenResult).
+    StrategyType:strategy_merge_result(Job, LocalResult, ChildrenResult);
+handle_job_result(Job, StrategyType, MergeType, {LocalResult, NextJobs, Posthook}) ->
+    ChildrenResult = run({MergeType, NextJobs}),
+    Result = StrategyType:strategy_merge_result(Job, LocalResult, ChildrenResult),
+    Posthook(Result).
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -321,6 +338,7 @@ run_job(Job = #space_strategy_job{strategy_type = StrategyType}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec run_and_merge_all([space_strategy:job()]) -> space_strategy:job_result().
+run_and_merge_all([]) -> ok;
 run_and_merge_all(Jobs = [
     #space_strategy_job{
         strategy_type = StrategyType}
@@ -512,7 +530,7 @@ maybe_increase_jobs_counter(JobsQueue = [#space_strategy_job{
     strategy_type = storage_import,
     data = #{space_id := SpaceId, storage_id := StorageId}
 } | _Rest])  ->
-    space_sync_monitoring:update_files_to_import_counter(SpaceId, StorageId,
+    storage_sync_monitoring:update_files_to_import_counter(SpaceId, StorageId,
         length(JobsQueue));
 maybe_increase_jobs_counter(_)  -> ok.
 
@@ -526,5 +544,5 @@ maybe_decrease_jobs_counter(JobsQueue = [#space_strategy_job{
     strategy_type = storage_import,
     data = #{space_id := SpaceId, storage_id := StorageId}
 } | _Rest])  ->
-    space_sync_monitoring:update_files_to_import_counter(SpaceId, StorageId, -length(JobsQueue));
+    storage_sync_monitoring:update_files_to_import_counter(SpaceId, StorageId, -length(JobsQueue));
 maybe_decrease_jobs_counter(_)  -> ok.

@@ -31,6 +31,7 @@
 -type job()             :: #space_strategy_job{}.
 -type job_result()      :: term().
 -type job_data()        :: term().
+-type job_posthook()    :: undefined | fun((Result :: job_result()) -> ok) .
 
 -type config()          :: {name(), arguments()}.
 
@@ -42,8 +43,10 @@
 %%%===================================================================
 
 %% Types
--export_type([definition/0, name/0, description/0, argument_name/0, argument_type/0, argument_value/0]).
--export_type([job/0, arguments/0, job_result/0, job_data/0, config/0, type/0]).
+-export_type([definition/0, name/0, description/0, argument_name/0,
+    argument_type/0, argument_value/0]).
+-export_type([job/0, arguments/0, job_result/0, job_data/0, config/0, type/0,
+    job_posthook/0]).
 -export_type([job_merge_type/0, runnable/0]).
 
 %% API

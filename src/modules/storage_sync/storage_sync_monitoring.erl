@@ -7,30 +7,33 @@
 %%% This module is responsible for reporting metrics
 %%% @end
 %%%-------------------------------------------------------------------
--module(space_sync_monitoring).
+-module(storage_sync_monitoring).
 -author("Jakub Kudzia").
 
 -include_lib("ctool/include/logging.hrl").
--include("modules/fslogic/fslogic_common.hrl").
 
 
 %% API
+-export([ start_reporter/0, delete_reporter/0]).
 -export([start_imported_files_counter/2, increase_imported_files_counter/2,
-    stop_imported_files_counter/2, start_reporter/0, start_files_to_import_counter/2,
-    delete_reporter/0, stop_files_to_import_counter/2, update_files_to_import_counter/3, get_files_to_import_value/2, get_imported_files_value/2]).
+    stop_imported_files_counter/2, start_files_to_import_counter/2,
+    stop_files_to_import_counter/2, update_files_to_import_counter/3,
+    get_files_to_import_value/2, get_imported_files_value/2]).
 
 -type type() :: imported_files | files_to_import.
 -type error() :: {error, term()}.
 
 
--define(COUNTER_NAME(SpaceId, StorageId, Type),
-    [storage_import, binary_to_atom(SpaceId, latin1), binary_to_atom(StorageId, latin1), Type]).
+-define(COUNTER_NAME(SpaceId, StorageId, Type), [
+    storage_import, binary_to_atom(SpaceId, latin1),
+    binary_to_atom(StorageId, latin1), Type
+]).
 -define(COUNTER_LOGGING_INTERVAL, timer:seconds(60)).
 
 -define(REPORTER_NAME, exometer_report_lager).
 -define(IMPORTED_FILES, imported_files).
 -define(FILES_TO_IMPORT, files_to_import).
-
+-define(LOG_LEVEL, info).
 
 %%%-------------------------------------------------------------------
 %%% @doc
@@ -40,7 +43,8 @@
 -spec start_reporter() -> ok | error().
 start_reporter() ->
     exometer_report:add_reporter(?REPORTER_NAME, [
-        {type_map,[{'_',integer}]}
+        {type_map,[{'_',integer}]},
+        {level, ?LOG_LEVEL}
     ]).
 
 %%%-------------------------------------------------------------------
@@ -146,8 +150,8 @@ get_imported_files_value(SpaceId, StorageId) ->
     type()) -> ok | error().
 start_and_subscribe_storage_import_counter(SpaceId, StorageId, CounterType) ->
     CounterName = ?COUNTER_NAME(SpaceId, StorageId, CounterType),
-    exometer:new(CounterName, counter),
-    exometer_report:subscribe(?REPORTER_NAME, CounterName,[value], ?COUNTER_LOGGING_INTERVAL).
+    ok = exometer:new(CounterName, counter),
+    ok = exometer_report:subscribe(?REPORTER_NAME, CounterName,[value], ?COUNTER_LOGGING_INTERVAL).
 
 %%%-------------------------------------------------------------------
 %%% @private

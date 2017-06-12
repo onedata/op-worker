@@ -23,8 +23,10 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([chmod_storage_file/3, rename_storage_file/6, create_storage_file_if_not_exists/1,
-    create_storage_file/2, delete_storage_file/2, delete_storage_file_without_location/2]).
+-export([chmod_storage_file/3, rename_storage_file/6,
+    create_storage_file_if_not_exists/1, create_storage_file/2,
+    delete_storage_file/2, delete_storage_file_without_location/2,
+    delete_storage_dir/2]).
 
 %%%===================================================================
 %%% API
@@ -160,6 +162,18 @@ delete_storage_file_without_location(FileCtx, UserCtx) ->
     SFMHandle = storage_file_manager:new_handle(SessId, FileCtx2),
     storage_file_manager:unlink(SFMHandle),
     FileLocationId.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes directory from storage.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_storage_dir(file_ctx:ctx(), user_ctx:ctx()) ->
+    datastore:ext_key().
+delete_storage_dir(FileCtx, UserCtx) ->
+    SessId = user_ctx:get_session_id(UserCtx),
+    SFMHandle = storage_file_manager:new_handle(SessId, FileCtx),
+    storage_file_manager:rmdir(SFMHandle).
 
 %%%===================================================================
 %%% Internal functions

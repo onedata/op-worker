@@ -12,125 +12,49 @@
 -author("Jakub Kudzia").
 
 -include("modules/fslogic/fslogic_common.hrl").
--include_lib("ctool/include/logging.hrl").
 
 
 %% API
--export([start_storage_import/2, start_storage_import/3, start_storage_import/4,
-    stop_storage_import/2, stop_storage_import/1,
-    start_storage_update/2, start_storage_update/3, start_storage_update/4,
-    stop_storage_update/2, stop_storage_update/1,
-    start_storage_import_and_update/2, start_storage_import_and_update/3,
-    start_storage_import_and_update/4,
-    stop_storage_import_and_update/1, stop_storage_import_and_update/2]).
+-export([start_simple_scan_import/3, modify_storage_import/3,
+    modify_storage_import/4, stop_storage_import/1, stop_storage_update/1,
+    modify_storage_update/4, modify_storage_update/3,
+    start_simple_scan_update/6
+]).
 
--define(DEFAULT_STRATEGY_NAME, bfs_scan).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv start_storage_import(SpaceId, ScanInterval, ?DEFAULT_STRATEGY_NAME).
+%% Modifies storage_import strategy for given space
 %% @end
 %%--------------------------------------------------------------------
--spec start_storage_import(od_space:id(), non_neg_integer()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
-start_storage_import(SpaceId, ScanInterval) ->
-    start_storage_import(SpaceId, ScanInterval, ?DEFAULT_STRATEGY_NAME).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Wrapper for starting storage import. By default uses head from list
-%% of storage_ids associated with given SpaceId.
-%% @end
-%%--------------------------------------------------------------------
--spec start_storage_import(od_space:id(), non_neg_integer(), space_strategy:name()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
-start_storage_import(SpaceId, ScanInterval, StrategyName) ->
+-spec modify_storage_import(od_space:id(), space_strategy:name(),
+    space_strategy:arguments()) -> {ok, datastore:ext_key()} | datastore:update_error().
+modify_storage_import(SpaceId, StrategyName, Args) ->
     StorageId = get_supporting_storage(SpaceId),
-    start_storage_import(SpaceId, ScanInterval, StrategyName, StorageId).
+    modify_storage_import(SpaceId, StrategyName, StorageId, Args).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Wrapper for starting storage import.
+%% Modifies storage_import strategy for given space
 %% @end
 %%--------------------------------------------------------------------
--spec start_storage_import(od_space:id(), non_neg_integer(), space_strategy:name(),
-    storage:id()) -> {ok, datastore:ext_key()} | datastore:update_error().
-start_storage_import(SpaceId, ScanInterval, StrategyName, StorageId) ->
+-spec modify_storage_import(od_space:id(), space_strategy:name(),
+    storage:id(), space_strategy:arguments()) ->
+    {ok, datastore:ext_key()} | datastore:update_error().
+modify_storage_import(SpaceId, StrategyName, StorageId, Args) ->
     file_meta:make_space_exist(SpaceId),
-    ok = space_sync_monitoring:start_imported_files_counter(SpaceId, StorageId),
-    ok = space_sync_monitoring:start_files_to_import_counter(SpaceId, StorageId),
-    space_strategies:set_strategy(SpaceId, StorageId, storage_import,
-        StrategyName, #{scan_interval => ScanInterval}).
+    turn_counters_on_or_off(SpaceId, StrategyName, StorageId),
+    space_strategies:set_strategy(SpaceId, StorageId, storage_import, StrategyName, Args).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv start_storage_update(SpaceId, ScanInterval, ?DEFAULT_STRATEGY_NAME).
+%% @equiv modify_storage_import(SpaceId, simple_scan, StorageId, #{max_depth =>MaxDepth}).
 %% @end
 %%--------------------------------------------------------------------
--spec start_storage_update(od_space:id(), non_neg_integer()) ->
+-spec start_simple_scan_import(od_space:id(), storage:id(), non_neg_integer()) ->
     {ok, datastore:ext_key()} | datastore:update_error().
-start_storage_update(SpaceId, ScanInterval) ->
-    start_storage_update(SpaceId, ScanInterval, ?DEFAULT_STRATEGY_NAME).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Wrapper for starting storage update. By default uses head from list
-%% of storage_ids associated with given SpaceId.
-%% @end
-%%--------------------------------------------------------------------
--spec start_storage_update(od_space:id(), non_neg_integer(), space_strategy:name()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
-start_storage_update(SpaceId, ScanInterval, StrategyName) ->
-    StorageId = get_supporting_storage(SpaceId),
-    start_storage_update(SpaceId, ScanInterval, StrategyName, StorageId).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Wrapper for starting storage update.
-%% @end
-%%--------------------------------------------------------------------
--spec start_storage_update(od_space:id(), non_neg_integer(), space_strategy:name(),
-    storage:id()) -> {ok, datastore:ext_key()} | datastore:update_error().
-start_storage_update(SpaceId, ScanInterval, StrategyName, StorageId) ->
-    file_meta:make_space_exist(SpaceId),
-    space_strategies:set_strategy(SpaceId, StorageId, storage_update,
-        StrategyName, #{scan_interval => ScanInterval}).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% @equiv start_storage_import_and_update(SpaceId, ScanInterval, ?DEFAULT_STRATEGY_NAME).
-%% @end
-%%--------------------------------------------------------------------
--spec start_storage_import_and_update(od_space:id(), non_neg_integer()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
-start_storage_import_and_update(SpaceId, ScanInterval) ->
-    start_storage_import_and_update(SpaceId, ScanInterval, ?DEFAULT_STRATEGY_NAME).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Wrapper for starting storage import and update. By default uses head from list
-%% of storage_ids associated with given SpaceId.
-%% @end
-%%--------------------------------------------------------------------
--spec start_storage_import_and_update(od_space:id(), non_neg_integer(), space_strategy:name()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
-start_storage_import_and_update(SpaceId, ScanInterval, StrategyName) ->
-    StorageId = get_supporting_storage(SpaceId),
-    start_storage_import_and_update(SpaceId, ScanInterval, StrategyName, StorageId).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Wrapper for starting storage import and update
-%% @end
-%%--------------------------------------------------------------------
--spec start_storage_import_and_update(od_space:id(), non_neg_integer(), space_strategy:name(),
-    storage:id()) -> {ok, datastore:ext_key()} | datastore:update_error().
-start_storage_import_and_update(SpaceId, ScanInterval, StrategyName, StorageId) ->
-    start_storage_import(SpaceId, ScanInterval, StrategyName, StorageId),
-    start_storage_update(SpaceId, ScanInterval, StrategyName, StorageId).
-
+start_simple_scan_import(SpaceId, StorageId, MaxDepth) ->
+    modify_storage_import(SpaceId, simple_scan, StorageId, #{max_depth =>MaxDepth}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -141,19 +65,48 @@ start_storage_import_and_update(SpaceId, ScanInterval, StrategyName, StorageId) 
     {ok, datastore:ext_key()} | datastore:update_error().
 stop_storage_import(SpaceId) ->
     StorageId = get_supporting_storage(SpaceId),
-    stop_storage_import(SpaceId, StorageId).
+    modify_storage_import(SpaceId, no_import, StorageId, #{}).
+
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Wrapper for stopping storage import.
+%% @equiv modify_storage_update(SpaceId, StrategyName, StorageId, Args).
 %% @end
 %%--------------------------------------------------------------------
--spec stop_storage_import(od_space:id(), storage:id()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
-stop_storage_import(SpaceId, StorageId) ->
-    space_sync_monitoring:stop_imported_files_counter(SpaceId, StorageId),
-    space_sync_monitoring:stop_files_to_import_counter(SpaceId, StorageId),
-    space_strategies:set_strategy(SpaceId, StorageId, storage_import, no_import, #{}).
+-spec modify_storage_update(od_space:id(), space_strategy:name(),
+    space_strategy:arguments()) -> {ok, datastore:ext_key()} | datastore:update_error().
+modify_storage_update(SpaceId, StrategyName, Args) ->
+    StorageId = get_supporting_storage(SpaceId),
+    modify_storage_update(SpaceId, StrategyName, StorageId, Args).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Wrapper for starting storage update.
+%% @end
+%%--------------------------------------------------------------------
+-spec modify_storage_update(od_space:id(),space_strategy:name(), storage:id(),
+    space_strategy:arguments()) -> {ok, datastore:ext_key()} | datastore:update_error().
+modify_storage_update(SpaceId, StrategyName, StorageId, Args) ->
+    file_meta:make_space_exist(SpaceId),
+    space_strategies:set_strategy(SpaceId, StorageId, storage_update, StrategyName, Args).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv modify_storage_update(SpaceId, simple_scan, Args).
+%% @end
+%%--------------------------------------------------------------------
+-spec start_simple_scan_update(od_space:id(), storage:id(), non_neg_integer(), non_neg_integer(),
+    boolean(), boolean()) -> {ok, datastore:ext_key()} | datastore:update_error().
+start_simple_scan_update(SpaceId, StorageId, MaxDepth, ScanInterval, WriteOnce, DeleteEnable) ->
+    modify_storage_update(SpaceId, simple_scan, StorageId, #{
+        max_depth => MaxDepth,
+        scan_interval => ScanInterval,
+        write_once => WriteOnce,
+        delete_enable => DeleteEnable
+    }).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -163,41 +116,7 @@ stop_storage_import(SpaceId, StorageId) ->
 -spec stop_storage_update(od_space:id()) ->
     {ok, datastore:ext_key()} | datastore:update_error().
 stop_storage_update(SpaceId) ->
-    StorageId = get_supporting_storage(SpaceId),
-    stop_storage_update(SpaceId, StorageId).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Wrapper for stopping storage update.
-%% @end
-%%--------------------------------------------------------------------
--spec stop_storage_update(od_space:id(), storage:id()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
-stop_storage_update(SpaceId, StorageId) ->
-    space_strategies:set_strategy(SpaceId, StorageId, storage_update, no_import, #{}).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Wrapper for stopping storage import and update.
-%% @end
-%%--------------------------------------------------------------------
--spec stop_storage_import_and_update(od_space:id()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
-stop_storage_import_and_update(SpaceId) ->
-    StorageId = get_supporting_storage(SpaceId),
-    stop_storage_import_and_update(SpaceId, StorageId).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Wrapper for stopping storage import and update.
-%% @end
-%%--------------------------------------------------------------------
--spec stop_storage_import_and_update(od_space:id(), storage:id()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
-stop_storage_import_and_update(SpaceId, StorageId) ->
-    stop_storage_import(SpaceId, StorageId),
-    stop_storage_update(SpaceId, StorageId).
-
+    modify_storage_import(SpaceId, no_update, #{}).
 
 %%%===================================================================
 %%% Internal functions
@@ -211,5 +130,17 @@ stop_storage_import_and_update(SpaceId, StorageId) ->
 %%--------------------------------------------------------------------
 -spec get_supporting_storage(od_space:id()) -> storage:id().
 get_supporting_storage(SpaceId) ->
-    {ok, #document{value=#space_storage{storage_ids=StorageIds}}} = space_storage:get(SpaceId),
+    {ok, #document{value=#space_storage{storage_ids=StorageIds}}} =
+        space_storage:get(SpaceId),
     hd(StorageIds).
+
+
+turn_counters_on_or_off(SpaceId, no_import, StorageId) ->
+    storage_sync_monitoring:stop_imported_files_counter(SpaceId, StorageId),
+    storage_sync_monitoring:stop_files_to_import_counter(SpaceId, StorageId);
+turn_counters_on_or_off(SpaceId, no_update, StorageId) ->
+    storage_sync_monitoring:stop_imported_files_counter(SpaceId, StorageId),
+    storage_sync_monitoring:stop_files_to_import_counter(SpaceId, StorageId);
+turn_counters_on_or_off(SpaceId, _, StorageId) ->
+    storage_sync_monitoring:start_imported_files_counter(SpaceId, StorageId),
+    storage_sync_monitoring:start_files_to_import_counter(SpaceId, StorageId).
