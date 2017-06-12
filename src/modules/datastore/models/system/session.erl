@@ -652,7 +652,7 @@ add_missing_helper(SessionId, SpaceId, StorageDoc) ->
 -spec delete_helpers_on_this_node(SessId :: id()) ->
     ok | datastore:generic_error().
 delete_helpers_on_this_node(SessId) ->
-    Links = model:execute_with_default_context(?MODULE, foreach_link,
+    {ok, Links} = model:execute_with_default_context(?MODULE, foreach_link,
         [SessId, fun
             (LinkName, {_V, [{_, _, HelperKey, helper_handle}]}, Acc) ->
                 helper_handle:delete(HelperKey),
