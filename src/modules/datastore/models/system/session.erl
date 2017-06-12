@@ -624,7 +624,7 @@ add_missing_helper(SessionId, SpaceId, StorageDoc) ->
 
     case model:execute_with_default_context(
         ?MODULE, add_links,
-        [SessionId, [{link_key(StorageId, SpaceId), {Key, helper_handle}}]],
+        [SessionId, [{link_key(SpaceId, StorageId), {Key, helper_handle}}]],
         [{level, ?HELPER_LINK_LEVEL}]
     ) of
         ok ->
