@@ -105,7 +105,7 @@ init_per_suite(Config) ->
 
 
 init_per_testcase(stress_test, Config) ->
-    application:start(etls),
+    ssl:start(),
     hackney:start(),
     initializer:disable_quota_limit(Config),
     initializer:enable_grpca_based_communication(Config),
@@ -122,7 +122,7 @@ end_per_testcase(stress_test, Config) ->
     initializer:disable_grpca_based_communication(Config),
     initializer:unload_quota_mocks(Config),
     hackney:stop(),
-    application:stop(etls);
+    ssl:stop();
 
 end_per_testcase(_Case, Config) ->
     Config.

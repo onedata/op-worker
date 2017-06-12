@@ -437,7 +437,7 @@ init_per_suite(Config) ->
 
 init_per_testcase(_Case, Config) ->
     NewConfig = test_node_starter:prepare_test_environment(Config, ?MODULE),
-    application:start(etls),
+    ssl:start(),
     hackney:start(),
     [Worker1, Worker2 | _] = ?config(op_worker_nodes, NewConfig),
     start_applier(Worker1, ?REMOTE_APPLIER),
@@ -448,7 +448,7 @@ end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lists:foreach(fun stop_applier/1, Workers),
     hackney:stop(),
-    application:stop(etls),
+    ssl:stop(),
     test_node_starter:clean_environment(Config).
 
 %%%===================================================================

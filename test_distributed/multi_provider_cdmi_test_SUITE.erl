@@ -188,7 +188,7 @@ init_per_suite(Config) ->
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, datastore_pool_queue_flush_delay, 1000)
         end, ?config(op_worker_nodes, NewConfig2)),
 
-        application:start(etls),
+        ssl:start(),
         hackney:start(),
         initializer:enable_grpca_based_communication(NewConfig2),
         initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2)
@@ -200,7 +200,7 @@ end_per_suite(Config) ->
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:disable_grpca_based_communication(Config),
     hackney:stop(),
-    application:stop(etls),
+    ssl:stop(),
     initializer:teardown_storage(Config).
 
 init_per_testcase(choose_adequate_handler_test = Case, Config) ->
