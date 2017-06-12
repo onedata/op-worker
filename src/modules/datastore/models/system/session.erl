@@ -586,7 +586,7 @@ is_guest(_) ->
 fetch_lock_fetch_helper(SessionId, SpaceId, StorageDoc, InCriticalSection) ->
     StorageId = storage:get_id(StorageDoc),
     FetchResult = model:execute_with_default_context(
-        ?MODULE, fetch_link_target, [SessionId, link_key(SpaceId, StorageId)],
+        ?MODULE, fetch_link_target, [SessionId, link_key(StorageId, SpaceId)],
         [{level, ?HELPER_LINK_LEVEL}]
     ),
 
@@ -600,6 +600,14 @@ fetch_lock_fetch_helper(SessionId, SpaceId, StorageDoc, InCriticalSection) ->
             end);
 
         {{error, link_not_found}, true} ->
+            add_missing_helper(SessionId, SpaceId, StorageDoc);
+
+        {{error, {not_found, _}}, false} ->
+            critical_section:run({SessionId, SpaceId, StorageId}, fun() ->
+                fetch_lock_fetch_helper(SessionId, SpaceId, StorageDoc, true)
+            end);
+
+        {{error, {not_found, _}}, true} ->
             add_missing_helper(SessionId, SpaceId, StorageDoc);
 
         {{error, Reason}, _} ->
@@ -624,7 +632,7 @@ add_missing_helper(SessionId, SpaceId, StorageDoc) ->
 
     case model:execute_with_default_context(
         ?MODULE, add_links,
-        [SessionId, [{link_key(SpaceId, StorageId), {Key, helper_handle}}]],
+        [SessionId, [{link_key(StorageId, SpaceId), {Key, helper_handle}}]],
         [{level, ?HELPER_LINK_LEVEL}]
     ) of
         ok ->
@@ -644,14 +652,18 @@ add_missing_helper(SessionId, SpaceId, StorageDoc) ->
 -spec delete_helpers_on_this_node(SessId :: id()) ->
     ok | datastore:generic_error().
 delete_helpers_on_this_node(SessId) ->
-    model:execute_with_default_context(?MODULE, foreach_link,
+    Links = model:execute_with_default_context(?MODULE, foreach_link,
         [SessId, fun
-            (_LinkName, {_V, [{_, _, HelperKey, helper_handle}]}, _) ->
-                helper_handle:delete(HelperKey);
-            (_, _, _) ->
-                ok
-        end, undefined],
+            (LinkName, {_V, [{_, _, HelperKey, helper_handle}]}, Acc) ->
+                helper_handle:delete(HelperKey),
+                [LinkName | Acc];
+            (_, _, Acc) ->
+                Acc
+        end, []],
         [{level, ?HELPER_LINK_LEVEL}]
+    ),
+    model:execute_with_default_context(
+        ?MODULE, delete_links, [SessId, Links]
     ),
     ok.
 
