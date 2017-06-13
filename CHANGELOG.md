@@ -4,6 +4,23 @@
 CHANGELOG
 ---------
 
+### 3.0.0-rc16
+
+* Generate empty monitoring events in order to fill null data.
+* Send size of event in read/write events.
+* VFS-3183 Add fsync operation to fslogic
+* VFS-3233 Add support for sig v2 to AWS S3 helper
+* VFS-3248 Move xattrs from provider to fuse messages. Add create and replace flags to setxattr.
+* VFS-3017 Fix wrong index encoding.
+* VFS-3017 Emit file_removed event when file removal is requested.
+* VFS-3187 Execute requests synchronously in connection process.
+* VFS-3187 Add trap_exit flag to connection.
+* VFS-3017 Copy/remove files during move when non posix storage is used
+* VFS-3017 Enable file garbage collection, adjust tests to the new rename implemenetation
+* VFS-3025 Implement rename operation.
+* VFS-3025 Rewrite current remove implementation and delete rename operation.
+
+
 ### 3.0.0-rc15
 
 * Add token_auth translator.
