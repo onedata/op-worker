@@ -69,13 +69,9 @@ get_file_id_const(#storage_file_ctx{id = FileId}) ->
 get_children_ctxs_batch_const(StorageFileCtx, Offset, BatchSize) ->
     SFMHandle = storage_file_ctx:get_handle_const(StorageFileCtx),
     {ok, ChildrenIds} = storage_file_manager:readdir(SFMHandle, Offset, BatchSize),
-    lists:filtermap(fun(ChildId) ->
-        case file_meta:is_hidden(ChildId) of
-            false ->
-                BaseName = filename:basename(ChildId),
-                {true, storage_file_ctx:get_child_ctx(StorageFileCtx, BaseName)};
-            _ -> false
-        end
+    lists:map(fun(ChildId) ->
+        BaseName = filename:basename(ChildId),
+        storage_file_ctx:get_child_ctx(StorageFileCtx, BaseName)
     end, ChildrenIds).
 
 
