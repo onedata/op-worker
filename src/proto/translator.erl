@@ -22,6 +22,7 @@
 -include("proto/oneclient/diagnostic_messages.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
 -include("proto/oneprovider/dbsync_messages.hrl").
+-include("proto/oneprovider/dbsync_messages2.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("clproto/include/messages.hrl").
@@ -92,7 +93,7 @@ translate_from_protobuf(#'Events'{events = Evts}) ->
 translate_from_protobuf(#'FlushEvents'{} = Record) ->
     #flush_events{
         provider_id = Record#'FlushEvents'.provider_id,
-        subscription_id = Record#'FlushEvents'.subscription_id,
+        subscription_id = integer_to_binary(Record#'FlushEvents'.subscription_id),
         context = binary_to_term(Record#'FlushEvents'.context)
     };
 translate_from_protobuf(#'FileReadEvent'{} = Record) ->
@@ -134,7 +135,7 @@ translate_from_protobuf(#'QuotaExceededEvent'{spaces = Spaces}) ->
 %% SUBSCRIPTION
 translate_from_protobuf(#'Subscription'{id = Id, type = {_, Record}}) ->
     #subscription{
-        id = Id,
+        id = integer_to_binary(Id),
         type = translate_from_protobuf(Record)
     };
 translate_from_protobuf(#'FileReadSubscription'{} = Record) ->
@@ -172,12 +173,14 @@ translate_from_protobuf(#'FileRenamedSubscription'{} = Record) ->
 translate_from_protobuf(#'QuotaExceededSubscription'{}) ->
     #quota_exceeded_subscription{};
 translate_from_protobuf(#'SubscriptionCancellation'{id = Id}) ->
-    #subscription_cancellation{id = Id};
+    #subscription_cancellation{id = integer_to_binary(Id)};
 
 
 %% HANDSHAKE
 translate_from_protobuf(#'HandshakeRequest'{token = Token, session_id = SessionId}) ->
     #handshake_request{auth = translate_from_protobuf(Token), session_id = SessionId};
+translate_from_protobuf(#'Token'{value = Token, secondary_values = []}) ->
+    #token_auth{token = Token};
 translate_from_protobuf(#'Token'{value = Macaroon, secondary_values = DischargeMacaroons}) ->
     #macaroon_auth{macaroon = Macaroon, disch_macaroons = DischargeMacaroons};
 
@@ -378,8 +381,8 @@ translate_from_protobuf(#'ProviderRequest'{context_guid = ContextGuid,
         provider_request = translate_from_protobuf(Record)};
 translate_from_protobuf(#'GetXattr'{name = Name, inherited = Inherited}) ->
     #get_xattr{name = Name, inherited = Inherited};
-translate_from_protobuf(#'SetXattr'{xattr = Xattr}) ->
-    #set_xattr{xattr = translate_from_protobuf(Xattr)};
+translate_from_protobuf(#'SetXattr'{xattr = Xattr, create = Create, replace = Replace}) ->
+    #set_xattr{xattr = translate_from_protobuf(Xattr), create = Create, replace = Replace};
 translate_from_protobuf(#'RemoveXattr'{name = Name}) ->
     #remove_xattr{name = Name};
 translate_from_protobuf(#'ListXattr'{inherited = Inherited, show_internal = ShowInternal}) ->
@@ -404,8 +407,8 @@ translate_from_protobuf(#'SetMimetype'{value = Value}) ->
     #set_mimetype{value = Value};
 translate_from_protobuf(#'GetFilePath'{}) ->
     #get_file_path{};
-translate_from_protobuf(#'FSync'{}) ->
-    #fsync{};
+translate_from_protobuf(#'FSync'{data_only = DataOnly, handle_id = HandleId}) ->
+    #fsync{data_only = DataOnly, handle_id = HandleId};
 translate_from_protobuf(#'GetFileDistribution'{}) ->
     #get_file_distribution{};
 translate_from_protobuf(#'ReplicateFile'{provider_id = ProviderId,
@@ -486,7 +489,29 @@ translate_from_protobuf(#'StatusRequest'{}) ->
     #status_request{};
 translate_from_protobuf(#'ChangesRequest'{since_seq = Since, until_seq = Until}) ->
     #changes_request{since_seq = Since, until_seq = Until};
-
+translate_from_protobuf(#'DBSyncMessage'{message_body = {_, MB}}) ->
+    #dbsync_message{message_body = translate_from_protobuf(MB)};
+translate_from_protobuf(#'TreeBroadcast2'{changes_batch = CB} = TB) ->
+    #tree_broadcast2{
+        src_provider_id = TB#'TreeBroadcast2'.src_provider_id,
+        low_provider_id = TB#'TreeBroadcast2'.low_provider_id,
+        high_provider_id = TB#'TreeBroadcast2'.high_provider_id,
+        message_id = TB#'TreeBroadcast2'.message_id,
+        message_body = translate_from_protobuf(CB)
+    };
+translate_from_protobuf(#'ChangesBatch'{} = CB) ->
+    #changes_batch{
+        space_id = CB#'ChangesBatch'.space_id,
+        since = CB#'ChangesBatch'.since,
+        until = CB#'ChangesBatch'.until,
+        compressed_docs = CB#'ChangesBatch'.compressed_docs
+    };
+translate_from_protobuf(#'ChangesRequest2'{} = CR) ->
+    #changes_request2{
+        space_id = CR#'ChangesRequest2'.space_id,
+        since = CR#'ChangesRequest2'.since,
+        until = CR#'ChangesRequest2'.until
+    };
 
 translate_from_protobuf(undefined) ->
     undefined.
@@ -522,7 +547,7 @@ translate_to_protobuf(#events{events = Evts}) ->
 translate_to_protobuf(#flush_events{provider_id = ProviderId,
     subscription_id = SubId, context = Context}) ->
     {flush_events, #'FlushEvents'{provider_id = ProviderId,
-        subscription_id = SubId, context = term_to_binary(Context)}};
+        subscription_id = binary_to_integer(SubId), context = term_to_binary(Context)}};
 translate_to_protobuf(#file_read_event{} = Record) ->
     {file_read, #'FileReadEvent'{
         counter = Record#file_read_event.counter,
@@ -558,7 +583,8 @@ translate_to_protobuf(#quota_exceeded_event{spaces = Spaces}) ->
 
 %% SUBSCRIPTION
 translate_to_protobuf(#subscription{id = Id, type = Type}) ->
-    {subscription, #'Subscription'{id = Id, type = translate_to_protobuf(Type)}};
+    {subscription, #'Subscription'{id = binary_to_integer(Id),
+        type = translate_to_protobuf(Type)}};
 translate_to_protobuf(#file_read_subscription{} = Sub) ->
     {file_read, #'FileReadSubscription'{
         counter_threshold = Sub#file_read_subscription.counter_threshold,
@@ -594,7 +620,8 @@ translate_to_protobuf(#file_renamed_subscription{} = Record) ->
 translate_to_protobuf(#quota_exceeded_subscription{}) ->
     {quota_exceeded, #'QuotaExceededSubscription'{}};
 translate_to_protobuf(#subscription_cancellation{id = Id}) ->
-    {subscription_cancellation, #'SubscriptionCancellation'{id = Id}};
+    {subscription_cancellation, #'SubscriptionCancellation'{
+        id = binary_to_integer(Id)}};
 
 
 %% HANDSHAKE
@@ -602,6 +629,8 @@ translate_to_protobuf(#handshake_response{status = Status}) ->
     {handshake_response, #'HandshakeResponse'{status = Status}};
 translate_to_protobuf(#macaroon_auth{macaroon = Macaroon, disch_macaroons = DMacaroons}) ->
     #'Token'{value = Macaroon, secondary_values = DMacaroons};
+translate_to_protobuf(#token_auth{token = Token}) ->
+    #'Token'{value = Token};
 
 
 %% DIAGNOSTIC
@@ -800,9 +829,9 @@ translate_to_protobuf(#provider_request{context_guid = ContextGuid,
         provider_request = translate_to_protobuf(Record)}};
 translate_to_protobuf(#get_xattr{name = Name, inherited = Inherited}) ->
     {get_xattr, #'GetXattr'{name = Name, inherited = Inherited}};
-translate_to_protobuf(#set_xattr{xattr = Xattr}) ->
+translate_to_protobuf(#set_xattr{xattr = Xattr, create = Create, replace = Replace}) ->
     {_, XattrT} = translate_to_protobuf(Xattr),
-    {set_xattr, #'SetXattr'{xattr = XattrT}};
+    {set_xattr, #'SetXattr'{xattr = XattrT, create = Create, replace = Replace}};
 translate_to_protobuf(#remove_xattr{name = Name}) ->
     {remove_xattr, #'RemoveXattr'{name = Name}};
 translate_to_protobuf(#list_xattr{inherited = Inherited, show_internal = ShowInternal}) ->
@@ -828,8 +857,8 @@ translate_to_protobuf(#set_mimetype{value = Value}) ->
     {set_mimetype, #'SetMimetype'{value = Value}};
 translate_to_protobuf(#get_file_path{}) ->
     {get_file_path, #'GetFilePath'{}};
-translate_to_protobuf(#fsync{}) ->
-    {fsync, #'FSync'{}};
+translate_to_protobuf(#fsync{data_only = DataOnly, handle_id = HandleId}) ->
+    {fsync, #'FSync'{data_only = DataOnly, handle_id = HandleId}};
 translate_to_protobuf(#get_file_distribution{}) ->
     {get_file_distribution, #'GetFileDistribution'{}};
 translate_to_protobuf(#replicate_file{provider_id = ProviderId,
@@ -908,7 +937,30 @@ translate_to_protobuf(#status_request{}) ->
     {status_request, #'StatusRequest'{}};
 translate_to_protobuf(#changes_request{since_seq = Since, until_seq = Until}) ->
     {changes_request, #'ChangesRequest'{since_seq = Since, until_seq = Until}};
-
+translate_to_protobuf(#dbsync_message{message_body = MB}) ->
+    {dbsync_message, #'DBSyncMessage'{message_body = translate_to_protobuf(MB)}};
+translate_to_protobuf(#tree_broadcast2{message_body = CB} = TB) ->
+    {_, CB2} = translate_to_protobuf(CB),
+    {tree_broadcast, #'TreeBroadcast2'{
+        src_provider_id = TB#'tree_broadcast2'.src_provider_id,
+        low_provider_id = TB#'tree_broadcast2'.low_provider_id,
+        high_provider_id = TB#'tree_broadcast2'.high_provider_id,
+        message_id = TB#'tree_broadcast2'.message_id,
+        changes_batch = CB2
+    }};
+translate_to_protobuf(#changes_batch{} = CB) ->
+    {changes_batch, #'ChangesBatch'{
+        space_id = CB#'changes_batch'.space_id,
+        since = CB#'changes_batch'.since,
+        until = CB#'changes_batch'.until,
+        compressed_docs = CB#'changes_batch'.compressed_docs
+    }};
+translate_to_protobuf(#changes_request2{} = CR) ->
+    {changes_request, #'ChangesRequest2'{
+        space_id = CR#'changes_request2'.space_id,
+        since = CR#'changes_request2'.since,
+        until = CR#'changes_request2'.until
+    }};
 
 translate_to_protobuf(undefined) ->
     undefined.

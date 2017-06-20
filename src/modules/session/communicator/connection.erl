@@ -77,6 +77,7 @@ start_link(SessionId, Hostname, Port, Transport, Timeout) ->
 -spec init(Args :: term(), Socket :: etls:socket(), Transport :: atom(), Opts :: list()) ->
     no_return().
 init(Ref, Socket, Transport, _Opts) ->
+    process_flag(trap_exit, true),
     ok = proc_lib:init_ack({ok, self()}),
     ok = ranch:accept_ack(Ref),
     ok = Transport:setopts(Socket, [binary, {active, once}, {packet, ?PACKET_VALUE}]),
@@ -219,6 +220,11 @@ handle_call({send, #server_message{} = ServerMsg}, _From, State = #state{socket 
 handle_call({send, ClientMsg = #client_message{message_id = #message_id{recipient = Pid, id = MessageId} = MID}},
     _From, State = #state{socket = Socket, transport = Transport}) when is_pid(Pid) ->
     {ok, _} = message_id:save(#document{key = MessageId, value = MID}),
+    % TODO - better management of message_id
+    spawn(fun() ->
+        timer:sleep(timer:minutes(5)),
+        message_id:delete(MessageId)
+    end),
     send_client_message(Socket, Transport, ClientMsg),
     {reply, ok, State};
 handle_call({send, ClientMsg = #client_message{}},
@@ -310,7 +316,6 @@ terminate(Reason, #state{session_id = SessId, socket = Socket} = State) ->
     ?log_terminate(Reason, State),
     session:remove_connection(SessId, self()),
     etls:close(Socket),
-    etls:close(State#state.socket),
     ok.
 
 %%--------------------------------------------------------------------
@@ -440,7 +445,8 @@ handle_normal_message(State0 = #state{certificate = Cert, session_id = SessId, s
         case {IsProvider, Msg0} of
             %% If message comes from provider and proxy session is requested - proceed
             %% with authorization and switch context to the proxy session.
-            {true, #client_message{proxy_session_id = ProxySessionId, proxy_session_auth = Auth = #macaroon_auth{}}} when ProxySessionId =/= undefined ->
+            {true, #client_message{proxy_session_id = ProxySessionId, proxy_session_auth = Auth}}
+                when ProxySessionId =/= undefined, Auth =/= undefined ->
                 ProviderId = provider_auth_manager:get_provider_id(Cert),
                 {ok, _} = session_manager:reuse_or_create_proxy_session(ProxySessionId, ProviderId, Auth, fuse),
                 {Msg0, ProxySessionId};

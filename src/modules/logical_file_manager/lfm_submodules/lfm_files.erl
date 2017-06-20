@@ -79,7 +79,17 @@ mv(SessId, FileKey, TargetPath) ->
     {ok, fslogic_worker:file_guid()} | logical_file_manager:error_reply().
 cp(SessId, FileKey, TargetPath) ->
     {guid, Guid} = fslogic_uuid:ensure_guid(SessId, FileKey),
-    copy_utils:copy(SessId, {guid, Guid}, TargetPath).
+    {TargetName, TargetParentPath} = fslogic_path:basename_and_parent(TargetPath),
+    remote_utils:call_fslogic(SessId, fuse_request,
+        #resolve_guid{path = TargetParentPath},
+        fun(#guid{guid = TargetParentGuid}) ->
+            case copy_utils:copy(SessId, Guid, TargetParentGuid, TargetName) of
+                {ok, NewGuid, _} ->
+                    {ok, NewGuid};
+                Error ->
+                    Error
+            end
+        end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -271,9 +281,10 @@ fsync(Handle) ->
     FileGuid = lfm_context:get_guid(Handle),
     ProviderId = lfm_context:get_provider_id(Handle),
 
-    %todo fsync via fslogic
     lfm_event_utils:flush_event_queue(SessionId, ProviderId,
-        fslogic_uuid:guid_to_uuid(FileGuid)).
+        fslogic_uuid:guid_to_uuid(FileGuid)),
+    remote_utils:call_fslogic(SessionId, file_request,
+        FileGuid, #fsync{data_only = false}, fun(_) -> ok end).
 
 %%--------------------------------------------------------------------
 %% @equiv write(FileHandle, Offset, Buffer, true)

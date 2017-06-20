@@ -96,15 +96,13 @@ rename_file_test(Config) ->
     ?assertEqual({ok, <<"test1">>}, lfm_proxy:read(W, Handle3, 0, 10)),
     ?assertEqual(ok, lfm_proxy:close(W, Handle3)),
 
-
-        %% without overwrite
+    %% without overwrite
     ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, {guid, File2Guid}, filename(1, TestDir, "/renamed_file2_target"))),
     {_, Handle4} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {path, filename(1, TestDir, "/renamed_file2_target")}, read)),
     ?assertEqual({ok, <<"test2">>}, lfm_proxy:read(W, Handle4, 0, 10)),
     ?assertEqual(ok, lfm_proxy:close(W, Handle4)),
 
-
-        %% with illegal overwrite
+    %% with illegal overwrite
     ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, "/renamed_file3_target"))),
     ?assertEqual({error, ?EISDIR}, lfm_proxy:mv(W, SessId, {guid, File3Guid}, filename(1, TestDir, "/renamed_file3_target"))),
 
@@ -135,7 +133,6 @@ rename_dbsync_test(Config) ->
     {_, Handle3} = ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, {path, filename(4, TestDir, "/nasted/renamed_file1_target")}, read), 30),
     ?assertEqual({ok, <<"test1">>}, lfm_proxy:read(W2, Handle3, 0, 10), 30),
     ?assertEqual(ok, lfm_proxy:close(W2, Handle3)).
-
 
 move_file_test(Config) ->
     [W | _] = sorted_workers(Config),
@@ -491,7 +488,6 @@ attributes_retaining_test(Config) ->
             ?assertEqual({ok, [Ace]}, lfm_proxy:get_acl(Worker, SessId, {path, Path})),
             ?assertEqual({ok, Mimetype}, lfm_proxy:get_mimetype(Worker, SessId, {path, Path})),
             ?assertEqual({ok, TransferEncoding}, lfm_proxy:get_transfer_encoding(Worker, SessId, {path, Path})),
-            ?assertEqual({ok, CompletionStatus}, lfm_proxy:get_cdmi_completion_status(Worker, SessId, {path, Path})),
             lists:foreach(
                 fun(#xattr{name = XattrName} = Xattr) ->
                     ?assertEqual({ok, Xattr}, lfm_proxy:get_xattr(Worker, SessId, {path, Path}, XattrName))
@@ -518,12 +514,16 @@ times_update_test(Config) ->
     {_, InnerFile3Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W1, SessId1, filename(1, TestDir, "/dir3/inner_file3"), 8#770)),
 
     ParentGuids = [SourceParentGuid, TargetParent1Guid, TargetParent2Guid, TargetParent3Guid],
-    PreRenameDirGuids = [Dir1Guid, Dir2Guid, Dir3Guid],
-    PreRenameInnerGuids = [InnerFile1Guid, InnerFile2Guid, InnerFile3Guid],
+    PreRenameDirGuids = [Dir1Guid],
+    PreRenameBetweenSpacesDirGuids = [Dir2Guid, Dir3Guid],
+    PreRenameInnerGuids = [InnerFile1Guid],
+    PreRenameBetweenSpacesInnerGuids = [InnerFile2Guid, InnerFile3Guid],
 
     PreRenameParentTimes = get_times(W1, SessId1, guid, ParentGuids),
     PreRenameDirTimes = get_times(W1, SessId1, guid, PreRenameDirGuids),
+    PreRenameBetweenSpacesDirTimes = get_times(W1, SessId1, guid, PreRenameBetweenSpacesDirGuids),
     PreRenameInnerTimes = get_times(W1, SessId1, guid, PreRenameInnerGuids),
+    PreRenameBetweenSpacesInnerTimes = get_times(W1, SessId1, guid, PreRenameBetweenSpacesInnerGuids),
 
     %% ensure time difference
     ct:sleep(timer:seconds(1)),
@@ -533,19 +533,25 @@ times_update_test(Config) ->
     ?assertMatch({ok, _}, lfm_proxy:mv(W1, SessId1, {guid, Dir3Guid}, filename(3, TestDir, "/target3/dir3_target"))),
 
     PostRenameDirPaths = [
-        filename(1, TestDir, "/target1/dir1_target"),
+        filename(1, TestDir, "/target1/dir1_target")
+    ],
+    PostRenameBetweenSpacesDirPaths = [
         filename(2, TestDir, "/target2/dir2_target"),
         filename(3, TestDir, "/target3/dir3_target")
     ],
     PostRenameInnerPaths = [
-        filename(1, TestDir, "/target1/dir1_target/inner_file1"),
+        filename(1, TestDir, "/target1/dir1_target/inner_file1")
+    ],
+    PostRenameBetweenSpacesInnerPaths = [
         filename(2, TestDir, "/target2/dir2_target/inner_file2"),
         filename(3, TestDir, "/target3/dir3_target/inner_file3")
     ],
 
     PostRenameParentTimes = get_times(W1, SessId1, guid, ParentGuids),
     PostRenameDirTimes = get_times(W1, SessId1, path, PostRenameDirPaths),
+    PostRenameBetweenSpacesDirTimes = get_times(W1, SessId1, path, PostRenameBetweenSpacesDirPaths),
     PostRenameInnerTimes = get_times(W1, SessId1, path, PostRenameInnerPaths),
+    PostRenameBetweenSpacesInnerTimes = get_times(W1, SessId1, path, PostRenameBetweenSpacesInnerPaths),
 
     lists:foreach(
         fun({{PreATime, PreMTime, PreCTime}, {PostATime, PostMTime, PostCTime}}) ->
@@ -558,15 +564,29 @@ times_update_test(Config) ->
         fun({{PreATime, PreMTime, PreCTime}, {PostATime, PostMTime, PostCTime}}) ->
             ?assert(PreATime =:= PostATime),
             ?assert(PreMTime =:= PostMTime),
-            ?assert(PreCTime < PostCTime)
+            ?assert(PreCTime =:= PostCTime)
         end, lists:zip(PreRenameDirTimes, PostRenameDirTimes)),
+
+    lists:foreach(
+        fun({{PreATime, PreMTime, PreCTime}, {PostATime, PostMTime, PostCTime}}) ->
+            ?assert(PreATime < PostATime),
+            ?assert(PreMTime < PostMTime),
+            ?assert(PreCTime < PostCTime)
+        end, lists:zip(PreRenameBetweenSpacesDirTimes, PostRenameBetweenSpacesDirTimes)),
 
     lists:foreach(
         fun({{PreATime, PreMTime, PreCTime}, {PostATime, PostMTime, PostCTime}}) ->
             ?assert(PreATime =:= PostATime),
             ?assert(PreMTime =:= PostMTime),
             ?assert(PreCTime =:= PostCTime)
-        end, lists:zip(PreRenameInnerTimes, PostRenameInnerTimes)).
+        end, lists:zip(PreRenameInnerTimes, PostRenameInnerTimes)),
+
+    lists:foreach(
+        fun({{PreATime, PreMTime, PreCTime}, {PostATime, PostMTime, PostCTime}}) ->
+            ?assert(PreATime < PostATime),
+            ?assert(PreMTime < PostMTime),
+            ?assert(PreCTime < PostCTime)
+        end, lists:zip(PreRenameBetweenSpacesInnerTimes, PostRenameBetweenSpacesInnerTimes)).
 
 moving_dir_into_itself_test(Config) ->
     [W | _] = sorted_workers(Config),
@@ -618,12 +638,12 @@ reading_from_open_file_after_rename_test(Config) ->
     {_, Handle5} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {guid, File2Guid}, read)),
     ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, {guid, File2Guid}, filename(2, TestDir, "/file2_target"))),
     ?assertEqual({ok, <<"test2">>}, lfm_proxy:read(W, Handle5, 0, 5)),
-    ?assertEqual(ok, lfm_proxy:close(W, Handle5)).
+    ?assertEqual(ok, lfm_proxy:close(W, Handle5)),
 %% TODO: VFS-2007
-%%    {_, Handle6} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {guid, File3Guid}, read)),
-%%    ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, {guid, File3Guid}, filename(3, TestDir, "/file3_target"))),
-%%    ?assertEqual({ok, <<"test3">>}, lfm_proxy:read(W, Handle6, 0, 5)),
-%%    ?assertEqual(ok, lfm_proxy:close(W, Handle6)),
+    {_, Handle6} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {guid, File3Guid}, read)),
+    ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, {guid, File3Guid}, filename(3, TestDir, "/file3_target"))),
+    ?assertEqual({ok, <<"test3">>}, lfm_proxy:read(W, Handle6, 0, 5)),
+    ?assertEqual(ok, lfm_proxy:close(W, Handle6)).
 
 redirecting_event_to_renamed_file_test(Config) ->
     [W1 | _] = sorted_workers(Config),
@@ -631,32 +651,18 @@ redirecting_event_to_renamed_file_test(Config) ->
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
 
     ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId, filename(1, TestDir, ""))),
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId, filename(2, TestDir, ""))),
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId, filename(3, TestDir, ""))),
     {_, File1Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W1, SessId, filename(1, TestDir, "/file1"), 8#770)),
-    {_, File2Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W1, SessId, filename(1, TestDir, "/file2"), 8#770)),
-
-    {_, NewFile1Guid} = ?assertMatch({ok, _}, lfm_proxy:mv(W1, SessId, {guid, File1Guid}, filename(2, TestDir, "/file1_target"))),
-    {_, NewFile2Guid} = ?assertMatch({ok, _}, lfm_proxy:mv(W1, SessId, {guid, File2Guid}, filename(3, TestDir, "/file2_target"))),
-
-    BaseEvent = #file_written_event{size = 1, file_size = 1,
-        blocks = [#file_block{offset = 0, size = 1}]},
+    {_, NewFile1Guid} = ?assertMatch({ok, _}, lfm_proxy:mv(W1, SessId, {guid, File1Guid}, filename(1, TestDir, "/file1_target"))),
 
     flush(),
+    BaseEvent = #file_written_event{size = 1, file_size = 1,
+        blocks = [#file_block{offset = 0, size = 1}]},
     ?assertEqual(ok, rpc:call(W1, event, emit, [BaseEvent#file_written_event{
         file_guid = File1Guid
     }, SessId])),
     {_, [#file_written_event{file_guid = Evt1Guid}]} =
         ?assertReceivedMatch({events, [#file_written_event{}]}, ?TIMEOUT),
-    ?assertEqual(fslogic_uuid:guid_to_uuid(NewFile1Guid), fslogic_uuid:guid_to_uuid(Evt1Guid)),
-
-    flush(),
-    ?assertEqual(ok, rpc:call(W1, event, emit, [BaseEvent#file_written_event{
-        file_guid = File2Guid
-    }, SessId])),
-    {_, [#file_written_event{file_guid = Evt2Guid}]} =
-        ?assertReceivedMatch({events, [#file_written_event{}]}, ?TIMEOUT),
-    ?assertEqual(fslogic_uuid:guid_to_uuid(NewFile2Guid), fslogic_uuid:guid_to_uuid(Evt2Guid)).
+    ?assertEqual(fslogic_uuid:guid_to_uuid(NewFile1Guid), fslogic_uuid:guid_to_uuid(Evt1Guid)).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

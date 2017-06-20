@@ -20,10 +20,18 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([copy/3]).
+-export([copy/4]).
 
--define(COPY_BUFFER_SIZE, application:get_env(?APP_NAME, rename_file_chunk_size, 8388608)). % 8*1024*1024
+-define(COPY_BUFFER_SIZE,
+    application:get_env(?APP_NAME, rename_file_chunk_size, 8388608)). % 8*1024*1024
 -define(COPY_LS_SIZE, application:get_env(?APP_NAME, ls_chunk_size, 5000)).
+
+-type child_entry() :: {
+    OldGuid :: fslogic_worker:file_guid(),
+    NewGuid :: fslogic_worker:file_guid(),
+    NewParentGuid :: fslogic_worker:file_guid(),
+    NewName :: file_meta:name()
+}.
 
 %%%===================================================================
 %%% API
@@ -34,15 +42,18 @@
 %% Checks file type and executes type specific copy function.
 %% @end
 %%--------------------------------------------------------------------
--spec copy(session:id(), SourceEntry :: {guid, fslogic_worker:file_guid()}, TargetPath :: file_meta:path()) ->
-    {ok, fslogic_worker:file_guid()} | {error, term()}.
-copy(SessId, SourceEntry, TargetPath) ->
+-spec copy(session:id(), SourceGuid :: fslogic_worker:file_guid(),
+    TargetParentGuid :: fslogic_worker:file_guid(),
+    TargetName :: file_meta:name()) ->
+    {ok, NewFileGuid :: fslogic_worker:file_guid(),
+        [child_entry()]} | {error, term()}.
+copy(SessId, SourceGuid, TargetParentGuid, TargetName) ->
     try
-        case logical_file_manager:stat(SessId, SourceEntry) of
+        case logical_file_manager:stat(SessId, {guid, SourceGuid}) of
             {ok, #file_attr{type = ?DIRECTORY_TYPE} = Attr} ->
-                copy_dir(SessId, Attr, TargetPath);
+                copy_dir(SessId, Attr, TargetParentGuid, TargetName);
             {ok, Attr} ->
-                copy_file(SessId, Attr, TargetPath)
+                copy_file(SessId, Attr, TargetParentGuid, TargetName)
         end
     catch
         _:{badmatch, Error}  ->
@@ -59,13 +70,16 @@ copy(SessId, SourceEntry, TargetPath) ->
 %% Checks permissions and copies directory.
 %% @end
 %%--------------------------------------------------------------------
--spec copy_dir(session:id(), #file_attr{}, LogicalTargetPath :: file_meta:path()) ->
-    {ok, fslogic_worker:file_guid()} | {error, term()}.
-copy_dir(SessId, #file_attr{guid = SourceGuid, mode = Mode}, LogicalTargetPath) ->
-    {ok, TargetGuid} = logical_file_manager:mkdir(SessId, LogicalTargetPath),
-    ok = copy_children(SessId, SourceGuid, LogicalTargetPath, 0),
+-spec copy_dir(session:id(), #file_attr{},
+    TargetParentGuid :: fslogic_worker:file_guid(),
+    TargetName :: file_meta:name()) ->
+    {ok, NewFileGuid :: fslogic_worker:file_guid(), [child_entry()]}.
+copy_dir(SessId, #file_attr{guid = SourceGuid, mode = Mode}, TargetParentGuid, TargetName) ->
+    {ok, TargetGuid} = logical_file_manager:mkdir(
+        SessId, TargetParentGuid, TargetName, undefined),
+    {ok, ChildEntries} = copy_children(SessId, SourceGuid, TargetGuid, 0),
     ok = copy_metadata(SessId, SourceGuid, TargetGuid, Mode),
-    {ok, TargetGuid}.
+    {ok, TargetGuid, ChildEntries}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -73,16 +87,22 @@ copy_dir(SessId, #file_attr{guid = SourceGuid, mode = Mode}, LogicalTargetPath) 
 %% Checks permissions and copies file.
 %% @end
 %%--------------------------------------------------------------------
--spec copy_file(session:id(), #file_attr{}, LogicalTargetPath :: file_meta:path()) ->
-    {ok, fslogic_worker:file_guid()} | {error, term()}.
-copy_file(SessId, #file_attr{guid = SourceGuid, mode = Mode}, LogicalTargetPath) ->
-    {ok, {TargetGuid, TargetHandle}} = logical_file_manager:create_and_open(SessId, LogicalTargetPath, Mode, write),
-    {ok, SourceHandle} = logical_file_manager:open(SessId, {guid, SourceGuid}, read),
-    {ok, _NewSourceHandle, _NewTargetHandle} = copy_file_content(SourceHandle, TargetHandle, 0),
+-spec copy_file(session:id(), #file_attr{},
+    TargetParentGuid :: fslogic_worker:file_guid(),
+    TargetName :: file_meta:name()) ->
+    {ok, NewFileGuid :: fslogic_worker:file_guid(), [child_entry()]}.
+copy_file(SessId, #file_attr{guid = SourceGuid, mode = Mode}, TargetParentGuid, TargetName) ->
+    {ok, {TargetGuid, TargetHandle}} = logical_file_manager:create_and_open(
+        SessId, TargetParentGuid, TargetName, Mode, write),
+    {ok, SourceHandle} =
+        logical_file_manager:open(SessId, {guid, SourceGuid}, read),
+    {ok, _NewSourceHandle, _NewTargetHandle} =
+        copy_file_content(SourceHandle, TargetHandle, 0),
     ok = copy_metadata(SessId, SourceGuid, TargetGuid, Mode),
+    ok = logical_file_manager:release(SourceHandle),
     ok = logical_file_manager:fsync(TargetHandle),
     ok = logical_file_manager:release(TargetHandle),
-    {ok, TargetGuid}.
+    {ok, TargetGuid, []}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -113,17 +133,22 @@ copy_file_content(SourceHandle, TargetHandle, Offset) ->
 %% Copies children of file
 %% @end
 %%--------------------------------------------------------------------
--spec copy_children(session:id(), fslogic_worker:file_guid(), file_meta:path(), non_neg_integer()) ->
-    ok | {error, term()}.
-copy_children(SessId, ParentGuid, TargetPath, Offset) ->
+-spec copy_children(session:id(), fslogic_worker:file_guid(), file_meta:path(),
+    non_neg_integer()) -> {ok, [child_entry()]} | {error, term()}.
+copy_children(SessId, ParentGuid, TargetParentGuid, Offset) ->
     case logical_file_manager:ls(SessId, {guid, ParentGuid}, Offset, ?COPY_LS_SIZE) of
         {ok, []} ->
-            ok;
+            {ok, []};
         {ok, Children} ->
-            lists:foreach(fun({ChildGuid, ChildName}) ->
-                {ok, _} = copy(SessId, {guid, ChildGuid}, filename:join(TargetPath, ChildName))
-            end, Children),
-            ok;
+            ChildEntries = lists:foldl(fun({ChildGuid, ChildName}, ChildrenEntries) ->
+                {ok, NewChildGuid, NewChildrenEntries} =
+                    copy(SessId, ChildGuid, TargetParentGuid, ChildName),
+                [
+                    {ChildGuid, NewChildGuid, TargetParentGuid, ChildName} |
+                        NewChildrenEntries ++ ChildrenEntries
+                ]
+            end, [], Children),
+            {ok, ChildEntries};
         Error ->
             Error
     end.
@@ -137,19 +162,22 @@ copy_children(SessId, ParentGuid, TargetPath, Offset) ->
 -spec copy_metadata(session:id(), fslogic_worker:file_guid(),
     fslogic_worker:file_guid(), file_meta:posix_permissions()) -> ok.
 copy_metadata(SessId, SourceGuid, TargetGuid, Mode) ->
-    {ok, Xattrs} = logical_file_manager:list_xattr(SessId, {guid, SourceGuid}, false, true),
+    {ok, Xattrs} =
+        logical_file_manager:list_xattr(SessId, {guid, SourceGuid}, false, true),
     lists:foreach(fun
         (?ACL_KEY) ->
             ok;
         (?CDMI_COMPLETION_STATUS_KEY) ->
             ok;
         (XattrName) ->
-            {ok, Xattr} = logical_file_manager:get_xattr(SessId, {guid, SourceGuid}, XattrName, false),
+            {ok, Xattr} = logical_file_manager:get_xattr(
+                SessId, {guid, SourceGuid}, XattrName, false),
             ok = logical_file_manager:set_xattr(SessId, {guid, TargetGuid}, Xattr)
     end, Xattrs),
     case lists:member(?ACL_KEY, Xattrs) of
         true ->
-            {ok, Xattr} = logical_file_manager:get_xattr(SessId, {guid, SourceGuid}, ?ACL_KEY, false),
+            {ok, Xattr} = logical_file_manager:get_xattr(
+                SessId, {guid, SourceGuid}, ?ACL_KEY, false),
             ok = logical_file_manager:set_xattr(SessId, {guid, TargetGuid}, Xattr);
         false ->
             ok = logical_file_manager:set_perms(SessId, {guid, TargetGuid}, Mode)

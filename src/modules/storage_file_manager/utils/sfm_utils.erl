@@ -5,6 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
+%%% @todo simplify rename logic here
 %%% @doc
 %%% Utility functions for storage file manager module.
 %%% @end
@@ -22,8 +23,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([chmod_storage_file/3, rename_storage_file/5,
-    rename_storage_file_updating_location/3, create_storage_file_if_not_exists/1,
+-export([chmod_storage_file/3, rename_storage_file/6, create_storage_file_if_not_exists/1,
     create_storage_file/2, delete_storage_file/2, delete_storage_file_without_location/2]).
 
 %%%===================================================================
@@ -49,86 +49,33 @@ chmod_storage_file(UserCtx, FileCtx, Mode) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Renames file on storage, updates replica info.
-%% @end
-%%--------------------------------------------------------------------
--spec rename_storage_file_updating_location(user_ctx:ctx(), file_ctx:ctx(), od_space:id()) -> ok.
-rename_storage_file_updating_location(UserCtx, SourceFileCtx, TargetSpaceId) ->
-    {#document{value = #file_meta{mode = Mode}}, SourceFileCtx2} =
-        file_ctx:get_file_doc(SourceFileCtx),
-    {[#document{value = LocalLocation}], SourceFileCtx3} =
-        file_ctx:get_local_file_location_docs(SourceFileCtx2),
-    {FileId, SourceFileCtx4} = file_ctx:get_storage_file_id(SourceFileCtx3),
-    [<<"/">>, _SourceSpaceId | Rest] = fslogic_path:split(FileId),
-    TargetFileId = filename:join([<<"/">>, TargetSpaceId | Rest]),
-    SessId = user_ctx:get_session_id(UserCtx),
-    ok = sfm_utils:rename_storage_file(SessId, LocalLocation, TargetFileId, TargetSpaceId, Mode),
-    ok = replica_updater:rename(SourceFileCtx4, TargetFileId, TargetSpaceId),
-
-    FileUuid = file_ctx:get_uuid_const(SourceFileCtx),
-    TargetFileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, TargetSpaceId)),
-    ok = sfm_utils:chmod_storage_file(
-        user_ctx:new(?ROOT_SESS_ID),
-        TargetFileCtx,
-        Mode
-    ).
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Renames file on storage.
 %% @end
 %%--------------------------------------------------------------------
--spec rename_storage_file(session:id(), Location :: #file_location{},
-    TargetFileId :: helpers:file_id(), TargetSpaceId :: od_space:id(),
-    file_meta:posix_permissions()) -> ok.
-rename_storage_file(SessId, Location, TargetFileId, TargetSpaceId, Mode) ->
-    #file_location{uuid = FileUuid, space_id = SourceSpaceId,
-        storage_id = SourceStorageId, file_id = SourceFileId} = Location,
-
+-spec rename_storage_file(session:id(), od_space:id(), storage:doc(),
+    file_meta:uuid(), helpers:file_id(), helpers:file_id()) -> ok | {error, term()}.
+rename_storage_file(SessId, SpaceId, Storage, FileUuid, SourceFileId, TargetFileId) ->
     %create target dir
-    {ok, TargetStorage = #document{key = TargetStorageId}} =
-        fslogic_storage:select_storage(TargetSpaceId),
     TargetDir = filename:dirname(TargetFileId),
     TargetDirHandle = storage_file_manager:new_handle(?ROOT_SESS_ID,
-        TargetSpaceId, undefined, TargetStorage, TargetDir, undefined),
+        SpaceId, undefined, Storage, TargetDir, undefined),
     case storage_file_manager:mkdir(TargetDirHandle,
         ?AUTO_CREATED_PARENT_DIR_MODE, true)
     of
         ok ->
             ok;
-        {error, eexist} ->
+        {error, ?EEXIST} ->
             ok
     end,
 
-    {ok, SourceStorage} = storage:get(SourceStorageId),
-    SourceHandle = storage_file_manager:new_handle(SessId, SourceSpaceId,
-        FileUuid, SourceStorage, SourceFileId, undefined),
-    TargetHandle = storage_file_manager:new_handle(SessId,
-        TargetSpaceId, FileUuid, TargetStorage, TargetFileId, undefined),
-    case storage_file_manager:stat(TargetHandle) of
-        {ok, _} ->
-            ok;
-        _ ->
-            case TargetStorageId =:= SourceStorageId of
-                true ->
-                    case SourceFileId =/= TargetFileId of
-                        true ->
-                            case storage_file_manager:mv(SourceHandle, TargetFileId) of
-                                ok ->
-                                    ok;
-                                _ ->
-                                    storage_file_manager:create(TargetHandle, Mode),
-                                    ok = copy_file_contents_sfm(SourceHandle, TargetHandle),
-                                    ok = storage_file_manager:unlink(SourceHandle)
-                            end;
-                        false ->
-                            ok
-                    end;
-                false ->
-                    storage_file_manager:create(TargetHandle, 8#770),
-                    ok = copy_file_contents_sfm(SourceHandle, TargetHandle),
-                    ok = storage_file_manager:unlink(SourceHandle)
-            end
+    SourceHandle = storage_file_manager:new_handle(SessId, SpaceId,
+        FileUuid, Storage, SourceFileId, undefined),
+
+    case SourceFileId =/= TargetFileId of
+        true ->
+            storage_file_manager:mv(SourceHandle, TargetFileId);
+        false ->
+            ok
     end.
 
 %%--------------------------------------------------------------------
@@ -217,33 +164,6 @@ delete_storage_file_without_location(FileCtx, UserCtx) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Copies file contents to another file on sfm level.
-%% @end
-%%--------------------------------------------------------------------
--spec copy_file_contents_sfm(HandleFrom :: storage_file_manager:handle(),
-    HandleTo :: storage_file_manager:handle()) -> ok.
-copy_file_contents_sfm(FromHandle, ToHandle) ->
-    {ok, OpenFromHandle} = storage_file_manager:open(FromHandle, read),
-    {ok, OpenToHandle} = storage_file_manager:open(ToHandle, write),
-    {ok, ChunkSize} = application:get_env(?APP_NAME, rename_file_chunk_size),
-    copy_file_contents_sfm(OpenFromHandle, OpenToHandle, 0, ChunkSize).
-
--spec copy_file_contents_sfm(HandleFrom :: storage_file_manager:handle(),
-    HandleTo :: storage_file_manager:handle(), Offset :: non_neg_integer(),
-    Size :: non_neg_integer()) -> ok.
-copy_file_contents_sfm(FromHandle, ToHandle, Offset, Size) ->
-    {ok, Data} = storage_file_manager:read(FromHandle, Offset, Size),
-    DataSize = size(Data),
-    {ok, DataSize} = storage_file_manager:write(ToHandle, Offset, Data),
-    case DataSize of
-        0 ->
-            ok;
-        _ ->
-            copy_file_contents_sfm(FromHandle, ToHandle, Offset + DataSize, Size)
-    end.
 
 %%--------------------------------------------------------------------
 %% @doc

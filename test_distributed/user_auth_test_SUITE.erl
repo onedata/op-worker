@@ -57,7 +57,7 @@ token_authentication(Config) ->
     ),
     ?assertMatch(
         {ok, #document{value = #user_identity{user_id = ?USER_ID}}},
-        rpc:call(Worker1, user_identity, get, [#macaroon_auth{macaroon = ?MACAROON}])
+        rpc:call(Worker1, user_identity, get, [#token_auth{token = ?MACAROON}])
     ),
     test_utils:mock_validate_and_unload(Workers, oz_endpoint),
     ok = etls:close(Sock).

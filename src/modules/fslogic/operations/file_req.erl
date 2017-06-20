@@ -17,10 +17,9 @@
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-
 %% API
 -export([create_file/5, make_file/4, get_file_location/2, open_file/3,
-    open_file_insecure/3, release/3]).
+    open_file_insecure/3, fsync/4, release/3]).
 
 %%%===================================================================
 %%% API
@@ -79,22 +78,6 @@ open_file(UserCtx, FileCtx, rdwr) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Removes file handle saved in session.
-%% @end
-%%--------------------------------------------------------------------
--spec release(user_ctx:ctx(), file_ctx:ctx(), HandleId :: binary()) ->
-    fslogic_worker:fuse_response().
-release(UserCtx, FileCtx, HandleId) ->
-    SessId = user_ctx:get_session_id(UserCtx),
-    {ok, SfmHandle} = session:get_handle(SessId, HandleId),
-    ok = session:remove_handle(SessId, HandleId),
-    ok = file_handles:register_release(FileCtx, SessId, 1),
-    ok = storage_file_manager:release(SfmHandle),
-    #fuse_response{status = #status{code = ?OK}}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
 %% Opens a file and returns a handle to it.
 %% @end
 %%--------------------------------------------------------------------
@@ -111,11 +94,39 @@ open_file_insecure(UserCtx, FileCtx, Flag) ->
         fuse_response = #file_opened{handle_id = HandleId}
     }.
 
+%%--------------------------------------------------------------------
+%% @equiv fsync_insecure(UserCtx, FileCtx, DataOnly) with permission check
+%% @end
+%%--------------------------------------------------------------------
+-spec fsync(user_ctx:ctx(), FileCtx :: file_ctx:ctx(),
+    boolean(), binary()) -> no_return() | #fuse_response{}.
+fsync(UserCtx, FileCtx, DataOnly, HandleId) ->
+    check_permissions:execute(
+        [traverse_ancestors],
+        [UserCtx, FileCtx, DataOnly, HandleId],
+        fun fsync_insecure/4).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes file handle saved in session.
+%% @end
+%%--------------------------------------------------------------------
+-spec release(user_ctx:ctx(), file_ctx:ctx(), HandleId :: binary()) ->
+    fslogic_worker:fuse_response().
+release(UserCtx, FileCtx, HandleId) ->
+    SessId = user_ctx:get_session_id(UserCtx),
+    {ok, SfmHandle} = session:get_handle(SessId, HandleId),
+    ok = session:remove_handle(SessId, HandleId),
+    ok = file_handles:register_release(FileCtx, SessId, 1),
+    ok = storage_file_manager:release(SfmHandle),
+    #fuse_response{status = #status{code = ?OK}}.
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Creates and open file. Returns handle to the file, its attributes
 %% and location.
@@ -158,6 +169,7 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
     }.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Creates file. Returns its attributes.
 %% @end
@@ -171,6 +183,7 @@ make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     attr_req:get_file_attr_insecure(UserCtx, FileCtx2).
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Returns file location.
 %% @end
@@ -178,6 +191,7 @@ make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
 -spec get_file_location_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:fuse_response().
 get_file_location_insecure(_UserCtx, FileCtx) ->
+    throw_if_not_exists(FileCtx),
     {#document{key = StorageId}, FileCtx2} = file_ctx:get_storage_doc(FileCtx),
     {[#document{value = #file_location{
         blocks = Blocks, file_id = FileId
@@ -216,11 +230,11 @@ create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
     {ok, FileUuid} = file_meta:create({uuid, ParentFileUuid}, File), %todo pass file_ctx
 
     CTime = erlang:system_time(seconds),
+    SpaceId = file_ctx:get_space_id_const(ParentFileCtx),
     {ok, _} = times:create(#document{key = FileUuid, value = #times{
         mtime = CTime, atime = CTime, ctime = CTime
-    }}),
+    }, scope = SpaceId}),
 
-    SpaceId = file_ctx:get_space_id_const(ParentFileCtx),
     file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId)).
 
 %%--------------------------------------------------------------------
@@ -274,3 +288,46 @@ open_file_for_rdwr(UserCtx, FileCtx) ->
         [traverse_ancestors, ?read_object, ?write_object],
         [UserCtx, FileCtx, rdwr],
         fun open_file_insecure/3).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Flushes events and fsyncs file on storage
+%% @end
+%%--------------------------------------------------------------------
+-spec fsync_insecure(user_ctx:ctx(), FileCtx :: file_ctx:ctx(),
+    boolean(), binary()) -> #fuse_response{}.
+fsync_insecure(UserCtx, FileCtx, _DataOnly, undefined) ->
+    flush_event_queue(UserCtx, FileCtx);
+fsync_insecure(UserCtx, FileCtx, DataOnly, HandleId) ->
+    SessId = user_ctx:get_session_id(UserCtx),
+    {ok, Handle} = session:get_handle(SessId, HandleId),
+    storage_file_manager:fsync(Handle, DataOnly),
+    flush_event_queue(UserCtx, FileCtx).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Flush event queue of session
+%% @end
+%%--------------------------------------------------------------------
+-spec flush_event_queue(user_ctx:ctx(), file_ctx:ctx()) -> #fuse_response{}.
+flush_event_queue(UserCtx, FileCtx) ->
+    SessId = user_ctx:get_session_id(UserCtx),
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    lfm_event_utils:flush_event_queue(SessId, oneprovider:get_provider_id(), FileUuid),
+    #fuse_response{
+        status = #status{code = ?OK}
+    }.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Throws ?ENOENT if file does not exist.
+%% @end
+%%--------------------------------------------------------------------
+-spec throw_if_not_exists(file_ctx:ctx()) -> ok | no_return().
+throw_if_not_exists(FileCtx) ->
+    case file_ctx:file_exists_const(FileCtx) of
+        true -> ok;
+        false -> throw(?ENOENT)
+    end.

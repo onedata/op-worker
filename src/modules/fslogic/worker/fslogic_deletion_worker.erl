@@ -61,21 +61,26 @@ request_open_file_deletion(FileCtx) ->
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    {ok, Docs} = file_handles:list(),
-    RemovedFiles = lists:filter(fun(#document{value = Handle}) ->
-        Handle#file_handles.is_removed
-    end, Docs),
+    % TODO - refactor - do not use list
+    case file_handles:list() of
+        {ok, Docs} ->
+            RemovedFiles = lists:filter(fun(#document{value = Handle}) ->
+                Handle#file_handles.is_removed
+            end, Docs),
 
-    lists:foreach(fun(#document{key = FileUuid}) ->
-        FileGuid = fslogic_uuid:uuid_to_guid(FileUuid),
-        FileCtx = file_ctx:new_by_guid(FileGuid),
-        UserCtx = user_ctx:new(?ROOT_SESS_ID),
-        ok = remove_file_and_file_meta(FileCtx, UserCtx, false)
-    end, RemovedFiles),
+            lists:foreach(fun(#document{key = FileUuid}) ->
+                FileGuid = fslogic_uuid:uuid_to_guid(FileUuid),
+                FileCtx = file_ctx:new_by_guid(FileGuid),
+                UserCtx = user_ctx:new(?ROOT_SESS_ID),
+                ok = remove_file_and_file_meta(FileCtx, UserCtx, false)
+            end, RemovedFiles),
 
-    lists:foreach(fun(#document{key = FileUuid}) ->
-        ok = file_handles:delete(FileUuid)
-    end, Docs),
+            lists:foreach(fun(#document{key = FileUuid}) ->
+                ok = file_handles:delete(FileUuid)
+            end, Docs);
+        Error ->
+            ?error_stacktrace("Cannot clean open files descriptors - ~p", [Error])
+    end,
     {ok, #{}}.
 
 %%--------------------------------------------------------------------
@@ -97,14 +102,8 @@ handle({fslogic_deletion_request, UserCtx, FileCtx, Silent}) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     case file_handles:exists(FileUuid) of
         true ->
-            {ParentFile, FileCtx2} = file_ctx:get_parent(FileCtx, UserCtx),
-            NewName = <<?HIDDEN_FILE_PREFIX, FileUuid/binary>>,
-
-            #fuse_response{status = #status{code = ?OK}} = rename_req:rename(
-                UserCtx, FileCtx2, ParentFile, NewName),
             ok = file_handles:mark_to_remove(FileCtx),
-            fslogic_event_emitter:emit_file_renamed_to_client(
-                file_ctx:reset(FileCtx2), NewName, UserCtx);
+            fslogic_event_emitter:emit_file_removed(FileCtx, [user_ctx:get_session_id(UserCtx)]);
         false ->
             remove_file_and_file_meta(FileCtx, UserCtx, Silent)
     end,
@@ -146,7 +145,7 @@ remove_file_and_file_meta(FileCtx, UserCtx, Silent) ->
             type = Type,
             shares = Shares
         }
-    }, FileCtx2} = file_ctx:get_file_doc(FileCtx),
+    }, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
     {ParentCtx, FileCtx3} = file_ctx:get_parent(FileCtx2, UserCtx),
     ok = delete_shares(UserCtx, Shares),
 

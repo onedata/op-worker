@@ -29,6 +29,10 @@
 %% test API
 -export([crc16/1, build_objectid/1, build_objectid/2, to_base16/1, from_base16/1]).
 
+-type objectid() :: binary().
+
+-export_type([objectid/0]).
+
 %% The SNMP Enterprise Number for your organization in network byte
 %% order. See RFC 2578 and
 %% http://www.iana.org/assignments/enterprise-numbers
@@ -89,7 +93,7 @@
 %%--------------------------------------------------------------------
 %% @doc Converts uuid to cdmi objectid format
 %%--------------------------------------------------------------------
--spec guid_to_objectid(onedata_file_api:file_guid()) -> {ok, binary()} | {error, atom()}.
+-spec guid_to_objectid(onedata_file_api:file_guid()) -> {ok, objectid()} | {error, atom()}.
 guid_to_objectid(Guid) ->
     case build_objectid(http_utils:base64url_decode(Guid)) of
         {error, Error} -> {error, Error};
@@ -99,7 +103,7 @@ guid_to_objectid(Guid) ->
 %%--------------------------------------------------------------------
 %% @doc Converts cdmi objectid format to uuid
 %%--------------------------------------------------------------------
--spec objectid_to_guid(binary()) -> {ok, onedata_file_api:file_guid()} | {error, atom()}.
+-spec objectid_to_guid(objectid()) -> {ok, onedata_file_api:file_guid()} | {error, atom()}.
 objectid_to_guid(ObjectId) ->
     case from_base16(ObjectId) of
         <<0:8, _Enum:24, 0:8, _Length:8, _Crc:16, Data/binary>> ->

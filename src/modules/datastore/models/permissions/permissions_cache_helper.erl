@@ -18,7 +18,7 @@
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, create_or_update/2,
-    list/0, model_init/0, 'after'/5, before/4]).
+    list/0, count/0, model_init/0, 'after'/5, before/4]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -102,10 +102,25 @@ list() ->
     Filter = fun
                  ('$end_of_table', Acc) ->
                      {abort, Acc};
-                 (#document{key = Uuid}, Acc) ->
+                 (Uuid, Acc) ->
                      {next, [Uuid | Acc]}
              end,
-    model:execute_with_default_context(?MODULE, list, [Filter, []]).
+    model:execute_with_default_context(?MODULE, list_keys, [Filter, []]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns count of all records.
+%% @end
+%%--------------------------------------------------------------------
+-spec count() -> {ok, non_neg_integer()} | datastore:generic_error() | no_return().
+count() ->
+    Filter = fun
+        ('$end_of_table', Acc) ->
+            {abort, Acc};
+        (_Uuid, Acc) ->
+            {next, Acc + 1}
+    end,
+    model:execute_with_default_context(?MODULE, list_keys, [Filter, 0]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -114,7 +129,8 @@ list() ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(permissions_cache_helper_bucket, [], ?GLOBAL_ONLY_LEVEL).
+    ?MODEL_CONFIG(permissions_cache_helper_bucket, [], ?GLOBAL_ONLY_LEVEL)#model_config{
+        list_enabled = {true, return_errors}, volatile = true}.
 
 %%--------------------------------------------------------------------
 %% @doc

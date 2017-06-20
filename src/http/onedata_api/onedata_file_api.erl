@@ -26,7 +26,7 @@
 %% Functions concerning file permissions
 -export([set_perms/3, check_perms/3, set_acl/3, get_acl/2, remove_acl/2]).
 %% Functions concerning file attributes
--export([stat/2, set_xattr/3, get_xattr/4, remove_xattr/3, list_xattr/4]).
+-export([stat/2, set_xattr/3, set_xattr/5, get_xattr/4, remove_xattr/3, list_xattr/4]).
 %% Functions concerning cdmi attributes
 -export([get_transfer_encoding/2, set_transfer_encoding/3,
     get_cdmi_completion_status/2, set_cdmi_completion_status/3,
@@ -78,6 +78,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc Creates a directory.
+%% @end
 %%--------------------------------------------------------------------
 -spec mkdir(Auth :: onedata_auth_api:auth(), Path :: file_path()) ->
     {ok, file_guid()} | error_reply().
@@ -109,6 +110,7 @@ ls(Auth, FileKey, Offset, Limit) ->
 
 %%--------------------------------------------------------------------
 %% @doc Returns number of children of a directory.
+%% @end
 %%--------------------------------------------------------------------
 -spec get_children_count(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path()) ->
     {ok, integer()} | error_reply().
@@ -117,6 +119,7 @@ get_children_count(Auth, FileKey) ->
 
 %%--------------------------------------------------------------------
 %% @doc Deletes a file or directory recursively.
+%% @end
 %%--------------------------------------------------------------------
 -spec rm_recursive(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path())
         -> ok | error_reply().
@@ -125,6 +128,7 @@ rm_recursive(Auth, FileKey) ->
 
 %%--------------------------------------------------------------------
 %% @doc Moves a file or directory to a new location.
+%% @end
 %%--------------------------------------------------------------------
 -spec mv(onedata_auth_api:auth(), file_id_or_path(), file_path()) ->
     {ok, file_guid()} | error_reply().
@@ -133,6 +137,7 @@ mv(Auth, FileEntry, TargetPath) ->
 
 %%--------------------------------------------------------------------
 %% @doc Copies a file or directory to given location.
+%% @end
 %%--------------------------------------------------------------------
 -spec cp(onedata_auth_api:auth(), file_id_or_path(), file_path()) ->
     {ok, file_guid()} | error_reply().
@@ -141,6 +146,7 @@ cp(Auth, FileEntry, TargetPath) ->
 
 %%--------------------------------------------------------------------
 %% @doc Returns full path of file
+%% @end
 %%--------------------------------------------------------------------
 -spec get_file_path(Auth :: onedata_auth_api:auth(), Uuid :: file_guid()) ->
     {ok, file_path()}.
@@ -149,6 +155,7 @@ get_file_path(Auth, Uuid) ->
 
 %%--------------------------------------------------------------------
 %% @doc Removes a file or an empty directory.
+%% @end
 %%--------------------------------------------------------------------
 -spec unlink(onedata_auth_api:auth(), file_id_or_path()) -> ok | error_reply().
 unlink(Auth, FileEntry) ->
@@ -156,6 +163,7 @@ unlink(Auth, FileEntry) ->
 
 %%--------------------------------------------------------------------
 %% @doc Flushes waiting events for session connected with handler.
+%% @end
 %%--------------------------------------------------------------------
 -spec fsync(file_handle()) -> ok | error_reply().
 fsync(Handle) ->
@@ -163,6 +171,7 @@ fsync(Handle) ->
 
 %%--------------------------------------------------------------------
 %% @doc Creates a new file.
+%% @end
 %%--------------------------------------------------------------------
 -spec create(Auth :: onedata_auth_api:auth(), Path :: file_path(), Mode :: file_meta:posix_permissions()) ->
     {ok, file_guid()} | error_reply().
@@ -177,6 +186,7 @@ create(Auth, ParentGuid, Name, Mode) ->
 
 %%--------------------------------------------------------------------
 %% @doc Opens a file in selected mode and returns a file handle used to read or write.
+%% @end
 %%--------------------------------------------------------------------
 -spec open(onedata_auth_api:auth(), FileKey :: file_id_or_path(), OpenType :: open_mode()) ->
     {ok, file_handle()} | error_reply().
@@ -185,6 +195,7 @@ open(Auth, FileKey, OpenType) ->
 
 %%--------------------------------------------------------------------
 %% @doc Writes data to a file. Returns number of written bytes.
+%% @end
 %%--------------------------------------------------------------------
 -spec write(FileHandle :: file_handle(), Offset :: integer(), Buffer :: binary()) ->
     {ok, NewHandle :: file_handle(), integer()} | error_reply().
@@ -193,6 +204,7 @@ write(FileHandle, Offset, Buffer) ->
 
 %%--------------------------------------------------------------------
 %% @doc Reads requested part of a file.
+%% @end
 %%--------------------------------------------------------------------
 -spec read(FileHandle :: file_handle(), Offset :: integer(), MaxSize :: integer()) ->
     {ok, NewHandle :: file_handle(), binary()} | error_reply().
@@ -201,6 +213,7 @@ read(FileHandle, Offset, MaxSize) ->
 
 %%--------------------------------------------------------------------
 %% @doc Truncates a file.
+%% @end
 %%--------------------------------------------------------------------
 -spec truncate(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path(), Size :: non_neg_integer()) ->
     ok | error_reply().
@@ -209,6 +222,7 @@ truncate(Auth, FileKey, Size) ->
 
 %%--------------------------------------------------------------------
 %% @doc Releases previously opened file.
+%% @end
 %%--------------------------------------------------------------------
 -spec release(FileHandle :: file_handle()) ->
     ok | error_reply().
@@ -217,6 +231,7 @@ release(FileHandle) ->
 
 %%--------------------------------------------------------------------
 %% @doc Returns block map for a file.
+%% @end
 %%--------------------------------------------------------------------
 -spec get_file_distribution(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path()) ->
     {ok, list()} | error_reply().
@@ -225,6 +240,7 @@ get_file_distribution(Auth, FileKey) ->
 
 %%--------------------------------------------------------------------
 %% @doc Replicates file on given provider.
+%% @end
 %%--------------------------------------------------------------------
 -spec replicate_file(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path(), ProviderId :: binary()) ->
     ok | error_reply().
@@ -233,6 +249,7 @@ replicate_file(Auth, FileKey, ProviderId) ->
 
 %%--------------------------------------------------------------------
 %% @doc Changes the permissions of a file.
+%% @end
 %%--------------------------------------------------------------------
 -spec set_perms(onedata_auth_api:auth(), file_key(), perms_octal()) -> ok | error_reply().
 set_perms(Auth, FileKey, NewPerms) ->
@@ -240,6 +257,7 @@ set_perms(Auth, FileKey, NewPerms) ->
 
 %%--------------------------------------------------------------------
 %% @doc Checks if current user has given permissions for given file.
+%% @end
 %%--------------------------------------------------------------------
 -spec check_perms(onedata_auth_api:auth(), FileKey :: file_key(), PermsType :: permission_type()) ->
     {ok, boolean()} | error_reply().
@@ -248,6 +266,7 @@ check_perms(Auth, FileKey, PermType) ->
 
 %%--------------------------------------------------------------------
 %% @doc Returns file's Access Control List.
+%% @end
 %%--------------------------------------------------------------------
 -spec get_acl(onedata_auth_api:auth(), file_key()) ->
     {ok, [access_control_entity()]} | error_reply().
@@ -256,6 +275,7 @@ get_acl(Auth, FileKey) ->
 
 %%--------------------------------------------------------------------
 %% @doc Updates file's Access Control List.
+%% @end
 %%--------------------------------------------------------------------
 -spec set_acl(onedata_auth_api:auth(), file_key(), EntityList :: [access_control_entity()]) ->
     ok | error_reply().
@@ -264,6 +284,7 @@ set_acl(Auth, FileKey, EntityList) ->
 
 %%--------------------------------------------------------------------
 %% @doc Removes file's Access Control List.
+%% @end
 %%--------------------------------------------------------------------
 -spec remove_acl(onedata_auth_api:auth(), file_key()) -> ok | error_reply().
 remove_acl(Auth, FileKey) ->
@@ -271,6 +292,7 @@ remove_acl(Auth, FileKey) ->
 
 %%--------------------------------------------------------------------
 %% @doc Returns file attributes.
+%% @end
 %%--------------------------------------------------------------------
 -spec stat(onedata_auth_api:auth(), file_key()) -> {ok, file_attributes()} | error_reply().
 stat(Auth, FileKey) ->
@@ -278,6 +300,7 @@ stat(Auth, FileKey) ->
 
 %%--------------------------------------------------------------------
 %% @doc Returns file's extended attribute by key.
+%% @end
 %%--------------------------------------------------------------------
 -spec get_xattr(onedata_auth_api:auth(), file_key(), xattr_name(), boolean()) ->
     {ok, #xattr{}} | error_reply().
@@ -285,14 +308,26 @@ get_xattr(Auth, FileKey, XattrName, Inherited) ->
     logical_file_manager:get_xattr(Auth, FileKey, XattrName, Inherited).
 
 %%--------------------------------------------------------------------
-%% @doc Updates file's extended attribute by key.
+%% @equiv set_xattr(Auth, FileKey, Xattr, false, false).
+%% @end
 %%--------------------------------------------------------------------
--spec set_xattr(onedata_auth_api:auth(), file_key(), #xattr{}) -> ok | error_reply().
+-spec set_xattr(onedata_auth_api:auth(), file_key(), #xattr{}) ->
+    ok | error_reply().
 set_xattr(Auth, FileKey, Xattr) ->
-    logical_file_manager:set_xattr(Auth, FileKey, Xattr).
+    set_xattr(Auth, FileKey, Xattr, false, false).
+
+%%--------------------------------------------------------------------
+%% @doc Updates file's extended attribute by key.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_xattr(onedata_auth_api:auth(), file_key(), #xattr{},
+    Create :: boolean(), Replace :: boolean()) -> ok | error_reply().
+set_xattr(Auth, FileKey, Xattr, Create, Replace) ->
+    logical_file_manager:set_xattr(Auth, FileKey, Xattr, Create, Replace).
 
 %%--------------------------------------------------------------------
 %% @doc Removes file's extended attribute by key.
+%% @end
 %%--------------------------------------------------------------------
 -spec remove_xattr(onedata_auth_api:auth(), file_key(), xattr_name()) ->
     ok | error_reply().
@@ -301,6 +336,7 @@ remove_xattr(Auth, FileKey, XattrName) ->
 
 %%--------------------------------------------------------------------
 %% @doc Returns complete list of extended attribute names of a file.
+%% @end
 %%--------------------------------------------------------------------
 -spec list_xattr(onedata_auth_api:auth(), file_key(), boolean(), boolean()) -> {ok, [xattr_name()]} | error_reply().
 list_xattr(Auth, FileKey, Inherited, ShowInternal) ->
@@ -308,6 +344,7 @@ list_xattr(Auth, FileKey, Inherited, ShowInternal) ->
 
 %%--------------------------------------------------------------------
 %% @doc Returns encoding suitable for rest transfer.
+%% @end
 %%--------------------------------------------------------------------
 -spec get_transfer_encoding(onedata_auth_api:auth(), file_key()) ->
     {ok, transfer_encoding()} | error_reply().
@@ -316,6 +353,7 @@ get_transfer_encoding(Auth, FileKey) ->
 
 %%--------------------------------------------------------------------
 %% @doc Sets encoding suitable for rest transfer.
+%% @end
 %%--------------------------------------------------------------------
 -spec set_transfer_encoding(onedata_auth_api:auth(), file_key(), transfer_encoding()) ->
     ok | error_reply().
@@ -346,6 +384,7 @@ set_cdmi_completion_status(Auth, FileKey, CompletionStatus) ->
 
 %%--------------------------------------------------------------------
 %% @doc Returns mimetype of file.
+%% @end
 %%--------------------------------------------------------------------
 -spec get_mimetype(onedata_auth_api:auth(), file_key()) ->
     {ok, mimetype()} | error_reply().
@@ -354,6 +393,7 @@ get_mimetype(Auth, FileKey) ->
 
 %%--------------------------------------------------------------------
 %% @doc Sets mimetype of file.
+%% @end
 %%--------------------------------------------------------------------
 -spec set_mimetype(onedata_auth_api:auth(), file_key(), mimetype()) ->
     ok | error_reply().
@@ -381,8 +421,7 @@ remove_share(Auth, ShareID) ->
     logical_file_manager:remove_share(Auth, ShareID).
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Removes file share by ShareGuid.
+%% @doc Removes file share by ShareGuid.
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_share_by_guid(onedata_auth_api:auth(), share_file_guid()) -> ok | error_reply().
@@ -390,8 +429,7 @@ remove_share_by_guid(Auth, ShareGuid) ->
     logical_file_manager:remove_share_by_guid(Auth, ShareGuid).
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Get json metadata linked with file
+%% @doc Get json metadata linked with file
 %% @end
 %%--------------------------------------------------------------------
 -spec get_metadata(onedata_auth_api:auth(), file_key(), metadata_type(), metadata_filter(), boolean()) ->
@@ -400,8 +438,7 @@ get_metadata(Auth, FileKey, Type, Names, Inherited) ->
     logical_file_manager:get_metadata(Auth, FileKey, Type, Names, Inherited).
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Set json metadata linked with file
+%% @doc Set json metadata linked with file
 %% @end
 %%--------------------------------------------------------------------
 -spec set_metadata(onedata_auth_api:auth(), file_key(), metadata_type(), metadata_value(), metadata_filter()) ->
@@ -410,8 +447,7 @@ set_metadata(Auth, FileKey, Type, Value, Names) ->
     logical_file_manager:set_metadata(Auth, FileKey, Type, Value, Names).
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Check if file has custom metadata defined
+%% @doc Check if file has custom metadata defined
 %% @end
 %%--------------------------------------------------------------------
 -spec has_custom_metadata(onedata_auth_api:auth(), file_key()) ->
@@ -420,8 +456,7 @@ has_custom_metadata(Auth, FileKey) ->
     logical_file_manager:has_custom_metadata(Auth, FileKey).
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Remove metadata linked with file
+%% @doc Remove metadata linked with file
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_metadata(onedata_auth_api:auth(), file_key(), metadata_type()) ->

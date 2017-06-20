@@ -19,7 +19,7 @@
 %% API
 -export([init/1, teardown/1, stat/3, truncate/4, create/4, unlink/3, open/4, close/2, close_all/1,
     read/4, write/4, mkdir/3, mkdir/4, mv/4, ls/5, set_perms/4, update_times/6,
-    get_xattr/4, get_xattr/5, set_xattr/4, remove_xattr/4, list_xattr/5, get_acl/3, set_acl/4,
+    get_xattr/4, get_xattr/5, set_xattr/4, set_xattr/6, remove_xattr/4, list_xattr/5, get_acl/3, set_acl/4,
     write_and_check/4, get_transfer_encoding/3, set_transfer_encoding/4,
     get_cdmi_completion_status/3, set_cdmi_completion_status/4, get_mimetype/3,
     set_mimetype/4, fsync/2, rm_recursive/3, get_metadata/6, set_metadata/6,
@@ -195,7 +195,7 @@ mkdir(Worker, SessId, Path, Mode) ->
     ?EXEC(Worker, logical_file_manager:mkdir(SessId, Path, Mode)).
 
 -spec ls(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), integer(), integer()) ->
-    {ok, [{fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), file_meta:name()}]} | logical_file_manager:error_reply().
+    {ok, [{fslogic_worker:file_guid(), file_meta:name()}]} | logical_file_manager:error_reply().
 ls(Worker, SessId, FileKey, Offset, Limit) ->
     ?EXEC(Worker, logical_file_manager:ls(SessId, uuid_to_guid(Worker, FileKey), Offset, Limit)).
 
@@ -228,7 +228,13 @@ get_xattr(Worker, SessId, FileKey, XattrKey, Inherited) ->
 -spec set_xattr(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), #xattr{}) ->
     ok | logical_file_manager:error_reply().
 set_xattr(Worker, SessId, FileKey, Xattr) ->
-    ?EXEC(Worker, logical_file_manager:set_xattr(SessId, uuid_to_guid(Worker, FileKey), Xattr)).
+    set_xattr(Worker, SessId, FileKey, Xattr, false, false).
+
+-spec set_xattr(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), #xattr{},
+    Create :: boolean(), Replace :: boolean()) ->
+    ok | logical_file_manager:error_reply().
+set_xattr(Worker, SessId, FileKey, Xattr, Create, Replace) ->
+    ?EXEC(Worker, logical_file_manager:set_xattr(SessId, uuid_to_guid(Worker, FileKey), Xattr, Create, Replace)).
 
 -spec remove_xattr(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), xattr:name()) ->
     ok | logical_file_manager:error_reply().

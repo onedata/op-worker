@@ -370,6 +370,7 @@ rename_bigger_then_quota_should_fail(Config) ->
     ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space1">>, [File3, File3], File2), 0, crypto:strong_rand_bytes(8))),
     ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space1">>, [File3], File2), 0, crypto:strong_rand_bytes(2))),
     ?assertMatch({error, ?ENOSPC}, rename(P1, User1,        f(<<"space1">>, File3), f(<<"space0">>, File3))),
+    ?assertMatch(ok, rm_recursive(P1, User1,                f(<<"space0">>, File3))),
     ?assertMatch({ok, _}, rename(P1, User1,                 f(<<"space1">>, [File3], File3), f(<<"space0">>, File3))),
 
     %% Cleanup only
@@ -494,6 +495,9 @@ write_to_file(Worker, SessionId, Path, Offset, Data) ->
 
 mkdir(Worker, SessionId, Path) ->
     lfm_proxy:mkdir(Worker, SessionId, Path).
+
+rm_recursive(Worker, SessionId, Path) ->
+    lfm_proxy:rm_recursive(Worker, SessionId, {path, Path}).
 
 unlink(Worker, SessionId, Path) ->
     lfm_proxy:unlink(Worker, SessionId, {path, Path}).

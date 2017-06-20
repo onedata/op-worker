@@ -18,8 +18,8 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([get_file_attr/2, get_file_attr_insecure/2, get_child_attr/3, chmod/3,
-    update_times/5, chmod_attrs_only_insecure/2]).
+-export([get_file_attr/2, get_file_attr_insecure/2, get_file_attr_insecure/3,
+    get_child_attr/3, chmod/3, update_times/5, chmod_attrs_only_insecure/2]).
 
 %%%===================================================================
 %%% API
@@ -38,17 +38,33 @@ get_file_attr(UserCtx, FileCtx) ->
         fun get_file_attr_insecure/2).
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Returns file attributes.
+%% @equiv get_file_attr_insecure(UserCtx, FileCtx, false).
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_attr_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:fuse_response().
 get_file_attr_insecure(UserCtx, FileCtx) ->
+    get_file_attr_insecure(UserCtx, FileCtx, false).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file attributes. When the AllowDeletedFiles flag is set to true,
+%% function will return attributes even for files that are marked as deleted.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_attr_insecure(user_ctx:ctx(), file_ctx:ctx(),
+    AllowDeletedFiles :: boolean()) ->
+fslogic_worker:fuse_response().
+get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles) ->
     {#document{key = Uuid, value = #file_meta{
         type = Type, mode = Mode, provider_id = ProviderId, owner = OwnerId,
         shares = Shares}}, FileCtx2
-    } = file_ctx:get_file_doc(FileCtx),
+    } = case AllowDeletedFiles of
+        true ->
+            file_ctx:get_file_doc_including_deleted(FileCtx);
+        false ->
+            file_ctx:get_file_doc(FileCtx)
+    end,
     ShareId = file_ctx:get_share_id_const(FileCtx),
     {FileName, FileCtx3} = file_ctx:get_aliased_name(FileCtx2, UserCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx3),

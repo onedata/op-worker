@@ -83,7 +83,8 @@ update_mtime_ctime(FileCtx, CurrentTime) ->
 update_times_and_emit(FileCtx, TimesMap) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     Times = prepare_times(TimesMap),
-    {ok, FileUuid} = times:create_or_update(#document{key = FileUuid, value = Times}, TimesMap),
+    {ok, FileUuid} = times:create_or_update(#document{key = FileUuid,
+        value = Times, scope = file_ctx:get_space_id_const(FileCtx)}, TimesMap),
     spawn(fun() ->
         fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx)
     end),

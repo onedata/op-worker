@@ -16,24 +16,6 @@
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 
--record(get_xattr, {
-    name :: xattr:name(),
-    inherited = false :: boolean()
-}).
-
--record(set_xattr, {
-    xattr :: #xattr{}
-}).
-
--record(remove_xattr, {
-    name :: xattr:name()
-}).
-
--record(list_xattr, {
-    inherited = false :: boolean(),
-    show_internal = true :: boolean()
-}).
-
 -record(get_parent, {
 }).
 
@@ -75,9 +57,6 @@
 -record(get_file_path, {
 }).
 
--record(fsync, {
-}).
-
 -record(get_file_distribution, {
 }).
 
@@ -113,17 +92,12 @@
 }).
 
 -type provider_request_type() ::
-#get_xattr{} | #set_xattr{} | #remove_xattr{} | #list_xattr{} |
 #get_parent{} | #get_acl{} | #set_acl{} | #remove_acl{} |
 #get_transfer_encoding{} | #set_transfer_encoding{} |
 #get_cdmi_completion_status{} | #set_cdmi_completion_status{} |
-#get_mimetype{} | #set_mimetype{} | #get_file_path{} | #fsync{} |
+#get_mimetype{} | #set_mimetype{} | #get_file_path{} |
 #get_file_distribution{} | #replicate_file{} | #get_metadata{} | #remove_metadata{} |
 #set_metadata{} | #check_perms{} | #create_share{} | #remove_share{}.
-
--record(xattr_list, {
-    names :: [xattr:name()]
-}).
 
 -record(transfer_encoding, {
     value :: binary()
@@ -161,9 +135,9 @@
 }).
 
 -type provider_response_type() ::
-    #xattr{} | #xattr_list{} | #transfer_encoding{} | #cdmi_completion_status{} |
-    #mimetype{} | #acl{} | #dir{} | #file_path{} | #file_distribution{} |
-    #metadata{} | #share{} | undefined.
+    #transfer_encoding{} | #cdmi_completion_status{} |#mimetype{} | #acl{} |
+    #dir{} | #file_path{} | #file_distribution{} | #metadata{} | #share{} |
+    undefined.
 
 -record(provider_request, {
     context_guid :: fslogic_worker:file_guid(),

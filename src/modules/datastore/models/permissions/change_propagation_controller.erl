@@ -24,6 +24,8 @@
 %% export API
 -export([save_change/6, mark_change_propagated/1, verify_propagation/3]).
 
+-define(SET_LINK_SCOPE(ScopeID), [{scope, ScopeID}]).
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns structure of the record in specified version.
@@ -186,9 +188,10 @@ save_change(Model, Key, Rev, SpaceId, VefifyModule, VerifyFun) ->
         _ ->
             Doc = #document{key = get_key(Model, Key),
                 value = #change_propagation_controller{change_revision = Rev, space_id = SpaceId,
-                    verify_module = VefifyModule, verify_function = VerifyFun}},
+                    verify_module = VefifyModule, verify_function = VerifyFun}, scope = SpaceId},
             {ok, _Uuid} = save(Doc),
-            ok = model:execute_with_default_context(?MODULE, add_links, [Doc, {MyId, Doc}]),
+            ok = model:execute_with_default_context(?MODULE, add_links,
+                [Doc, {MyId, Doc}], ?SET_LINK_SCOPE(SpaceId)),
             ok
     end.
 
@@ -199,15 +202,8 @@ save_change(Model, Key, Rev, SpaceId, VefifyModule, VerifyFun) ->
 %%--------------------------------------------------------------------
 -spec mark_change_propagated(datastore:document()) -> ok | no_return().
 mark_change_propagated(#document{key = ControllerKey, value = #change_propagation_controller{space_id = SpaceId,
-    change_revision = Rev, verify_module = VM, verify_function = VF}} = Doc) ->
-    MyId = oneprovider:get_provider_id(),
-    case verify_propagation(ControllerKey, SpaceId, true) of
-        {ok, true} ->
-            ok;
-        {ok, _} ->
-            ok = model:execute_with_default_context(?MODULE, add_links, [Doc, {MyId, Doc}])
-    end,
-
+    change_revision = Rev, verify_module = VM, verify_function = VF}}) ->
+    ok = verify_propagation(ControllerKey, SpaceId, true),
     {Model, Uuid} = decode_key(ControllerKey),
     ok = apply(VM, VF, [Model, Uuid, Rev, SpaceId]).
 
@@ -217,32 +213,40 @@ mark_change_propagated(#document{key = ControllerKey, value = #change_propagatio
 %% @end
 %%--------------------------------------------------------------------
 -spec verify_propagation(ControllerKey :: datastore:ext_key(), SpaceId :: space_info:id(), AddLocal :: boolean()) ->
-    {ok, boolean()} | no_return().
+    ok | no_return().
 verify_propagation(ControllerKey, SpaceId, AddLocal) ->
     MyId = oneprovider:get_provider_id(),
     ListFun = fun(LinkName, _LinkTarget, Acc) ->
         [LinkName | Acc]
     end,
 
-    {ok, Links} = model:execute_with_default_context(?MODULE, foreach_link, [ControllerKey, ListFun, []]),
-    LocalListed = lists:member(MyId, Links),
-    Correction = case ((not LocalListed) and AddLocal) of
-        true ->
-            1;
-        _ ->
-            0
-    end,
+    critical_section:run({?MODULE, verify_propagation}, fun() ->
+        {ok, Links} = model:execute_with_default_context(?MODULE, foreach_link, [ControllerKey, ListFun, []]),
+        LocalListed = lists:member(MyId, Links),
+        Correction = case ((not LocalListed) and AddLocal) of
+            true ->
+                1;
+            _ ->
+                0
+        end,
 
-    Providers = dbsync_utils:get_providers_for_space(SpaceId),
-    ToDel = (length(Links) + Correction) >= length(Providers),
-    case ToDel of
-        true ->
-            ok = model:execute_with_default_context(?MODULE, delete_links, [ControllerKey, Links]),
-            ok = delete(ControllerKey, ?PRED_ALWAYS, [ignore_links]);
-        _ ->
-            ok
-    end,
-    {ok, ToDel}.
+        Providers = dbsync_utils:get_providers_for_space(SpaceId),
+        ToDel = (length(Links) + Correction) >= length(Providers),
+        case {ToDel, LocalListed, AddLocal} of
+            {true, true, _} ->
+                ok = model:execute_with_default_context(?MODULE, delete_links,
+                    [ControllerKey, Links], ?SET_LINK_SCOPE(SpaceId)),
+                ok = delete(ControllerKey, ?PRED_ALWAYS, [ignore_links]);
+            {true, _, _} ->
+                ok = delete(ControllerKey, ?PRED_ALWAYS, [ignore_links]);
+            {_, _, true} ->
+                ok = model:execute_with_default_context(?MODULE, add_links,
+                    [ControllerKey, {MyId, {ControllerKey, ?MODULE}}],
+                    ?SET_LINK_SCOPE(SpaceId));
+            {_, _, _} ->
+                ok
+        end
+    end).
 
 %%%===================================================================
 %%% Internal functions

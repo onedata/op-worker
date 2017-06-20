@@ -176,7 +176,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    StoreLevel = ?DISK_ONLY_LEVEL,
+    StoreLevel = ?GLOBALLY_CACHED_LEVEL,
     ?MODEL_CONFIG(handle_info_bucket, [], StoreLevel).
 
 %%--------------------------------------------------------------------

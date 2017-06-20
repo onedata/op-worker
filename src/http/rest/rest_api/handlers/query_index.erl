@@ -205,7 +205,7 @@ prepare_options([{stale, <<"false">>} | Rest]) ->
 prepare_options([{stale, _} | _]) ->
     throw(?ERROR_INVALID_STALE);
 prepare_options([{spatial, true} | Rest]) ->
-    [spatial | prepare_options(Rest)];
+    [{spatial, true} | prepare_options(Rest)];
 prepare_options([{spatial, false} | Rest]) ->
     prepare_options(Rest);
 

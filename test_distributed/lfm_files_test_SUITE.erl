@@ -32,6 +32,7 @@
     fslogic_new_file_test/1,
     lfm_create_and_unlink_test/1,
     lfm_create_and_access_test/1,
+    lfm_basic_rename_test/1,
     lfm_basic_rdwr_test/1,
     lfm_basic_rdwr_opens_file_once_test/1,
     lfm_basic_rdwr_after_file_delete_test/1,
@@ -61,6 +62,7 @@
     fslogic_new_file_test,
     lfm_create_and_unlink_test,
     lfm_create_and_access_test,
+    lfm_basic_rename_test,
     lfm_basic_rdwr_test,
     lfm_basic_rdwr_opens_file_once_test,
     lfm_basic_rdwr_after_file_delete_test,
@@ -552,6 +554,17 @@ lfm_create_and_unlink_test(Config) ->
 
     ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath11, 8#755)),
     ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, FilePath21, 8#755)).
+
+lfm_basic_rename_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_rename">>, 8#755),
+
+    lfm_proxy:mv(W, SessId1, {guid, FileGuid}, <<"/space_name1/test_rename2">>),
+
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name1/test_rename">>})),
+    {ok, Stats} = ?assertMatch({ok, _}, lfm_proxy:stat(W, SessId1, {guid, FileGuid})),
+    ?assertEqual({ok, Stats}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name1/test_rename2">>})).
 
 lfm_basic_rdwr_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),

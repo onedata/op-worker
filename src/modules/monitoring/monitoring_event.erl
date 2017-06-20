@@ -174,7 +174,9 @@ aggregate_monitoring_events(#monitoring_event{type = #rtransfer_statistics{} = T
 -spec handle_monitoring_events(Evts :: [event:type()], Ctx :: maps:map()) ->
     [ok | {error, Reason :: term()}].
 handle_monitoring_events(Evts, Ctx) ->
-    Result = lists:map(fun maybe_handle_monitoring_event/1, Evts),
+    SpaceIds = get_space_ids(Evts),
+    MissingEvents = missing_events(SpaceIds, Evts),
+    Result = lists:map(fun maybe_handle_monitoring_event/1, Evts ++ MissingEvents),
     case Ctx of
         #{notify := Fun} -> Fun(Result);
         _ -> ok
@@ -184,6 +186,98 @@ handle_monitoring_events(Evts, Ctx) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Get list of SpaceIds of events
+%% @end
+%%--------------------------------------------------------------------
+-spec get_space_ids(Evts :: [event:type()]) -> [od_space:id()].
+get_space_ids([]) ->
+    [];
+get_space_ids([#monitoring_event{
+    type = #storage_used_updated{space_id = SpaceId}
+} | Rest]) ->
+    [SpaceId | get_space_ids(Rest) -- [SpaceId]];
+get_space_ids([#monitoring_event{
+    type = #od_space_updated{space_id = SpaceId}
+} | Rest]) ->
+    [SpaceId | get_space_ids(Rest) -- [SpaceId]];
+get_space_ids([#monitoring_event{
+    type = #file_operations_statistics{space_id = SpaceId}
+} | Rest]) ->
+    [SpaceId | get_space_ids(Rest) -- [SpaceId]];
+get_space_ids([#monitoring_event{
+    type = #rtransfer_statistics{space_id = SpaceId}
+} | Rest]) ->
+    [SpaceId | get_space_ids(Rest) -- [SpaceId]].
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Generate events with empty values for each missing event category.
+%% @end
+%%--------------------------------------------------------------------
+-spec missing_events([od_space:id()], [event:type()]) -> [event:type()].
+missing_events([], _Evts) ->
+    [];
+missing_events([SpaceId | Rest], Evts) ->
+    EmptyStorageUsedUpdated = #monitoring_event{type = #storage_used_updated{
+        space_id = SpaceId,
+        size_difference = 0
+    }},
+    MissingStorageUsedUpdated = missing_event(fun(#monitoring_event{
+        type = #storage_used_updated{space_id = Id}
+    }) -> SpaceId =:= Id;
+        (_) -> false
+    end, Evts, EmptyStorageUsedUpdated),
+
+    EmptyOdSpaceUpdated = #monitoring_event{type = #od_space_updated{
+        space_id = SpaceId
+    }},
+    MissingOdSpaceUpdated = missing_event(fun(#monitoring_event{
+        type = #od_space_updated{space_id = Id}
+    }) -> SpaceId =:= Id;
+        (_) -> false
+    end, Evts, EmptyOdSpaceUpdated ),
+
+    EmptyFileOperationsStatistics = #monitoring_event{type = #file_operations_statistics{
+        space_id = SpaceId
+    }},
+    MissingFileOperationsStatistics = missing_event(fun(#monitoring_event{
+        type = #file_operations_statistics{space_id = Id}
+    }) -> SpaceId =:= Id;
+        (_) -> false
+    end, Evts, EmptyFileOperationsStatistics ),
+
+    EmptyRtransferStatistics = #monitoring_event{type = #rtransfer_statistics{
+        space_id = SpaceId
+    }},
+    MissingRtransferStatistics = missing_event(fun(#monitoring_event{
+        type = #rtransfer_statistics{space_id = Id}
+    }) -> SpaceId =:= Id;
+        (_) -> false
+    end, Evts, EmptyRtransferStatistics ),
+
+    MissingStorageUsedUpdated ++ MissingOdSpaceUpdated
+        ++ MissingFileOperationsStatistics ++ MissingRtransferStatistics ++
+        missing_events(Rest, Evts).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns [EmptyEvent] if none of given events fulfills given precondition.
+%% Otherwise returns an empty list.
+%% @end
+%%--------------------------------------------------------------------
+-spec missing_event(Precondition :: function(), Evts :: [event:type()],
+    EmptyEvent :: event:type()) -> [event:type()].
+missing_event(Precondition, Events, EmptyEvent) ->
+    case lists:any(Precondition, Events) of
+        true -> [];
+        false -> [EmptyEvent]
+    end.
 
 %%--------------------------------------------------------------------
 %% @private

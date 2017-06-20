@@ -25,6 +25,7 @@
 %%%===================================================================
 %%% Types
 %%%===================================================================
+
 -type fuse_request() :: #fuse_request{}.
 -type provider_request() :: #provider_request{}.
 -type proxyio_request() :: #proxyio_request{}.
@@ -42,8 +43,8 @@
 -type file_guid() :: binary().
 -type file_guid_or_path() :: {guid, file_guid()} | {path, file_meta:path()}.
 
--export_type([file/0, ext_file/0, open_flag/0, posix_permissions/0,
-    file_guid/0, file_guid_or_path/0]).
+-export_type([request/0, response/0, file/0, ext_file/0, open_flag/0,
+    posix_permissions/0, file_guid/0, file_guid_or_path/0]).
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -105,9 +106,9 @@ handle({provider_request, SessId, ProviderRequest}) ->
     ?debug("provider_response: ~p", [Response]),
     {ok, Response};
 handle({proxyio_request, SessId, ProxyIORequest}) ->
-    ?debug("proxyio_request(~p): ~p", [SessId, ProxyIORequest]),
+    ?debug("proxyio_request(~p): ~p", [SessId, fslogic_log:mask_data_in_message(ProxyIORequest)]),
     Response = handle_request_and_process_response(SessId, ProxyIORequest),
-    ?debug("proxyio_response: ~p", [Response]),
+    ?debug("proxyio_response: ~p", [fslogic_log:mask_data_in_message(Response)]),
     {ok, Response};
 handle(_Request) ->
     ?log_bad_request(_Request),
@@ -161,20 +162,19 @@ handle_request_and_process_response(SessId, Request) ->
 handle_request(SessId, Request) ->
     UserCtx = user_ctx:new(SessId),
     FilePartialCtx = fslogic_request:get_file_partial_ctx(UserCtx, Request),
-    {FilePartialCtx2, Request2} = fslogic_request:update_target_guid_if_file_is_phantom(FilePartialCtx, Request),
-    Providers = fslogic_request:get_target_providers(UserCtx, FilePartialCtx2, Request2),
+    Providers = fslogic_request:get_target_providers(UserCtx, FilePartialCtx, Request),
 
     case lists:member(oneprovider:get_provider_id(), Providers) of
         true ->
-            FileCtx = case FilePartialCtx2 of
+            FileCtx = case FilePartialCtx of
                 undefined ->
                     undefined;
                 _ ->
-                    file_ctx:new_by_partial_context(FilePartialCtx2)
+                    file_ctx:new_by_partial_context(FilePartialCtx)
             end,
-            handle_request_locally(UserCtx, Request2, FileCtx);
+            handle_request_locally(UserCtx, Request, FileCtx);
         false ->
-            handle_request_remotely(UserCtx, Request2, Providers)
+            handle_request_remotely(UserCtx, Request, Providers)
     end.
 
 %%--------------------------------------------------------------------
@@ -281,7 +281,30 @@ handle_file_request(UserCtx, #truncate{size = Size}, FileCtx) ->
 handle_file_request(UserCtx, #synchronize_block{block = Block, prefetch = Prefetch}, FileCtx) ->
     sync_req:synchronize_block(UserCtx, FileCtx, Block, Prefetch);
 handle_file_request(UserCtx, #synchronize_block_and_compute_checksum{block = Block}, FileCtx) ->
-    sync_req:synchronize_block_and_compute_checksum(UserCtx, FileCtx, Block).
+    sync_req:synchronize_block_and_compute_checksum(UserCtx, FileCtx, Block);
+handle_file_request(UserCtx, #get_xattr{
+    name = XattrName,
+    inherited = Inherited
+}, FileCtx) ->
+    xattr_req:get_xattr(UserCtx, FileCtx, XattrName, Inherited);
+handle_file_request(UserCtx, #set_xattr{
+    xattr = Xattr,
+    create = Create,
+    replace = Replace
+}, FileCtx) ->
+    xattr_req:set_xattr(UserCtx, FileCtx, Xattr, Create, Replace);
+handle_file_request(UserCtx, #remove_xattr{name = XattrName}, FileCtx) ->
+    xattr_req:remove_xattr(UserCtx, FileCtx, XattrName);
+handle_file_request(UserCtx, #list_xattr{
+    inherited = Inherited,
+    show_internal = ShowInternal
+}, FileCtx) ->
+    xattr_req:list_xattr(UserCtx, FileCtx, Inherited, ShowInternal);
+handle_file_request(UserCtx, #fsync{
+    data_only = DataOnly,
+    handle_id = HandleId
+}, FileCtx) ->
+    file_req:fsync(UserCtx, FileCtx, DataOnly, HandleId).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -299,38 +322,24 @@ handle_provider_request(UserCtx, #get_parent{}, FileCtx) ->
     guid_req:get_parent(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #get_file_path{}, FileCtx) ->
     guid_req:get_file_path(UserCtx, FileCtx);
-handle_provider_request(UserCtx, #get_xattr{
-    name = XattrName,
-    inherited = Inherited
-}, FileCtx) ->
-    xattr_req:get_xattr(UserCtx, FileCtx, XattrName, Inherited);
-handle_provider_request(UserCtx, #set_xattr{xattr = Xattr}, FileCtx) ->
-    xattr_req:set_xattr(UserCtx, FileCtx, Xattr);
-handle_provider_request(UserCtx, #remove_xattr{name = XattrName}, FileCtx) ->
-    xattr_req:remove_xattr(UserCtx, FileCtx, XattrName);
-handle_provider_request(UserCtx, #list_xattr{
-    inherited = Inherited,
-    show_internal = ShowInternal
-}, FileCtx) ->
-    xattr_req:list_xattr(UserCtx, FileCtx, Inherited, ShowInternal);
 handle_provider_request(UserCtx, #get_acl{}, FileCtx) ->
     acl_req:get_acl(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #set_acl{acl = Acl}, FileCtx) ->
-    acl_req:set_acl(UserCtx, FileCtx, Acl);
+    acl_req:set_acl(UserCtx, FileCtx, Acl, false, false);
 handle_provider_request(UserCtx, #remove_acl{}, FileCtx) ->
     acl_req:remove_acl(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #get_transfer_encoding{}, FileCtx) ->
     cdmi_metadata_req:get_transfer_encoding(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #set_transfer_encoding{value = Value}, FileCtx) ->
-    cdmi_metadata_req:set_transfer_encoding(UserCtx, FileCtx, Value);
+    cdmi_metadata_req:set_transfer_encoding(UserCtx, FileCtx, Value, false, false);
 handle_provider_request(UserCtx, #get_cdmi_completion_status{}, FileCtx) ->
     cdmi_metadata_req:get_cdmi_completion_status(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #set_cdmi_completion_status{value = Value}, FileCtx) ->
-    cdmi_metadata_req:set_cdmi_completion_status(UserCtx, FileCtx, Value);
+    cdmi_metadata_req:set_cdmi_completion_status(UserCtx, FileCtx, Value, false, false);
 handle_provider_request(UserCtx, #get_mimetype{}, FileCtx) ->
     cdmi_metadata_req:get_mimetype(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #set_mimetype{value = Value}, FileCtx) ->
-    cdmi_metadata_req:set_mimetype(UserCtx, FileCtx, Value);
+    cdmi_metadata_req:set_mimetype(UserCtx, FileCtx, Value, false, false);
 handle_provider_request(UserCtx, #get_metadata{
     type = Type,
     names = Names,
@@ -341,7 +350,7 @@ handle_provider_request(UserCtx, #set_metadata{
     metadata = #metadata{type = Type, value = Value},
     names = Names
 }, FileCtx) ->
-    metadata_req:set_metadata(UserCtx, FileCtx, Type, Value, Names);
+    metadata_req:set_metadata(UserCtx, FileCtx, Type, Value, Names, false, false);
 handle_provider_request(UserCtx, #remove_metadata{type = Type}, FileCtx) ->
     metadata_req:remove_metadata(UserCtx, FileCtx, Type);
 handle_provider_request(UserCtx, #check_perms{flag = Flag}, FileCtx) ->
@@ -349,10 +358,7 @@ handle_provider_request(UserCtx, #check_perms{flag = Flag}, FileCtx) ->
 handle_provider_request(UserCtx, #create_share{name = Name}, FileCtx) ->
     share_req:create_share(UserCtx, FileCtx, Name);
 handle_provider_request(UserCtx, #remove_share{}, FileCtx) ->
-    share_req:remove_share(UserCtx, FileCtx);
-handle_provider_request(_UserCtx, Req, _FileCtx) ->
-    ?log_bad_request(Req),
-    erlang:error({invalid_request, Req}).
+    share_req:remove_share(UserCtx, FileCtx).
 
 %%--------------------------------------------------------------------
 %% @private

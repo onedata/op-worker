@@ -20,8 +20,8 @@
 -export([user_root_dir_uuid/1, user_root_dir_guid/1, ensure_guid/2]).
 -export([uuid_to_path/2]).
 -export([uuid_to_guid/2, uuid_to_guid/1, guid_to_uuid/1]).
--export([spaceid_to_space_dir_uuid/1, space_dir_uuid_to_spaceid/1, spaceid_to_space_dir_guid/1]).
--export([uuid_to_phantom_uuid/1, phantom_uuid_to_uuid/1]).
+-export([spaceid_to_space_dir_uuid/1, space_dir_uuid_to_spaceid/1,
+    space_dir_uuid_to_spaceid_no_error/1, spaceid_to_space_dir_guid/1]).
 -export([uuid_to_share_guid/3, unpack_share_guid/1]).
 -export([guid_to_share_guid/2, share_guid_to_guid/1, is_share_guid/1,
     guid_to_share_id/1, guid_to_space_id/1]).
@@ -141,23 +141,23 @@ space_dir_uuid_to_spaceid(SpaceUuid) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @doc
-%% For given file Uuid generates phantom's Uuid.
-%% @end
+%% @doc Convert file_meta uuid of space directory to SpaceId
 %%--------------------------------------------------------------------
--spec uuid_to_phantom_uuid(file_meta:uuid()) -> file_meta:uuid().
-uuid_to_phantom_uuid(FileUuid) ->
-    http_utils:base64url_encode(term_to_binary({phantom, FileUuid})).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% For given file Uuid generates phantom's Uuid.
-%% @end
-%%--------------------------------------------------------------------
--spec phantom_uuid_to_uuid(file_meta:uuid()) -> file_meta:uuid(). %todo why is it unused
-phantom_uuid_to_uuid(PhantomUuid) ->
-    {phantom, FileUuid} = binary_to_term(http_utils:base64url_decode(PhantomUuid)),
-    FileUuid.
+-spec space_dir_uuid_to_spaceid_no_error(file_meta:uuid()) -> od_space:id().
+space_dir_uuid_to_spaceid_no_error(<<>>) ->
+    <<>>;
+space_dir_uuid_to_spaceid_no_error(SpaceUuid) ->
+    try
+        case binary_to_term(http_utils:base64url_decode(SpaceUuid)) of
+            {space, SpaceId} ->
+                SpaceId;
+            _ ->
+                <<>>
+        end
+    catch
+        _:_ ->
+            <<>>
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

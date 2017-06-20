@@ -32,7 +32,7 @@
     many_files_creation_tree_test
 ]).
 
--define(TIMEOUT, timer:minutes(5)).
+-define(TIMEOUT, timer:minutes(20)).
 
 all() ->
     ?STRESS_ALL(?STRESS_CASES, ?STRESS_NO_CLEARING_CASES).

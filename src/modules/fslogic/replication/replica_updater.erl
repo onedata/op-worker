@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([update/4, rename/3]).
+-export([update/4, rename/2]).
 
 %%%===================================================================
 %%% API
@@ -69,24 +69,21 @@ update(FileCtx, Blocks, FileSize, BumpVersion) ->
 %% This function in synchronized on the file.
 %% @end
 %%--------------------------------------------------------------------
--spec rename(file_ctx:ctx(), TargetFileId :: helpers:file(),
-    TargetSpaceId :: binary()) -> ok | {error, Reason :: term()}.
-rename(FileCtx, TargetFileId, TargetSpaceId) ->
+-spec rename(file_ctx:ctx(), TargetFileId :: helpers:file()) ->
+    ok | {error, Reason :: term()}.
+rename(FileCtx, TargetFileId) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
     file_location:critical_section(FileUuid,
         fun() ->
             {[LocationDoc], _FileCtx2} = file_ctx:get_local_file_location_docs(file_ctx:reset(FileCtx)),
-            {ok, #document{key = TargetStorageId}} = fslogic_storage:select_storage(TargetSpaceId),
-
 
             replica_changes:set_last_rename(
                 version_vector:bump_version(
                     LocationDoc#document{value = LocationDoc#document.value#file_location{
-                            file_id = TargetFileId,
-                            space_id = TargetSpaceId,
-                            storage_id = TargetStorageId
+                            file_id = TargetFileId
                     }}
-                ), TargetFileId, TargetSpaceId
+                ), TargetFileId, SpaceId
             )
         %todo VFS-2813 support multi location, reconcile other local replicas according to this one
         end).

@@ -138,12 +138,12 @@ translate_event_to_protobuf_test() ->
 
 translate_subscription_cancellation_to_protobuf_test() ->
     ?assertEqual({subscription_cancellation, #'SubscriptionCancellation'{id = 42}},
-        translator:translate_to_protobuf(#subscription_cancellation{id = 42})
+        translator:translate_to_protobuf(#subscription_cancellation{id = <<"42">>})
     ).
 
 translate_subscription_to_protobuf_test() ->
     ?assertEqual({subscription, #'Subscription'{id = 123}},
-        translator:translate_to_protobuf(#subscription{id = 123})
+        translator:translate_to_protobuf(#subscription{id = <<"123">>})
     ).
 
 translate_read_subscription_to_protobuf_test() ->
@@ -315,7 +315,7 @@ get_write_event(FileGuid, Size, FileSize, Num, MaxS) ->
     }.
 
 get_token(Val) ->
-    {#macaroon_auth{macaroon = Val}, #'Token'{value = Val}}.
+    {#token_auth{token = Val}, #'Token'{value = Val}}.
 
 get_handshake_request(TokenVal, SessionId) ->
     {IntToken, PBToken} = get_token(TokenVal),

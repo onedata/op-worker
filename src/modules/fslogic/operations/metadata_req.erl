@@ -16,7 +16,7 @@
 -include("proto/oneprovider/provider_messages.hrl").
 
 %% API
--export([get_metadata/5, set_metadata/5, remove_metadata/3]).
+-export([get_metadata/5, set_metadata/7, remove_metadata/3]).
 
 %%%===================================================================
 %%% API
@@ -40,13 +40,13 @@ get_metadata(_UserCtx, FileCtx, MetadataType, Names, Inherited) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_metadata(user_ctx:ctx(), file_ctx:ctx(), custom_metadata:type(),
-    custom_metadata:value(), custom_metadata:filter()) ->
-    fslogic_worker:provider_response().
-set_metadata(_UserCtx, FileCtx, MetadataType, Value, Names) ->
+    custom_metadata:value(), custom_metadata:filter(), Create :: boolean(),
+    Replace :: boolean()) -> fslogic_worker:provider_response().
+set_metadata(_UserCtx, FileCtx, MetadataType, Value, Names, Create, Replace) ->
     check_permissions:execute(
         [traverse_ancestors, ?write_metadata],
-        [_UserCtx, FileCtx, MetadataType, Value, Names],
-        fun set_metadata_insecure/5).
+        [_UserCtx, FileCtx, MetadataType, Value, Names, Create, Replace],
+        fun set_metadata_insecure/7).
 
 %%--------------------------------------------------------------------
 %% @equiv remove_metadata_insecure/4 with permission checks
@@ -99,13 +99,14 @@ get_metadata_insecure(_UserCtx, FileCtx, rdf, _, Inherited) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_metadata_insecure(user_ctx:ctx(), file_ctx:ctx(),
-    custom_metadata:type(), custom_metadata:value(), custom_metadata:filter()) ->
+    custom_metadata:type(), custom_metadata:value(), custom_metadata:filter(),
+    Create :: boolean(), Replace :: boolean()) ->
     fslogic_worker:provider_response().
-set_metadata_insecure(_UserCtx, FileCtx, json, Value, Names) ->
-    {ok, _} = json_metadata:set(FileCtx, Value, Names),
+set_metadata_insecure(_UserCtx, FileCtx, json, Value, Names, Create, Replace) ->
+    {ok, _} = json_metadata:set(FileCtx, Value, Names, Create, Replace),
     #provider_response{status = #status{code = ?OK}};
-set_metadata_insecure(_UserCtx, FileCtx, rdf, Value, _) ->
-    {ok, _} = rdf_metadata:set(FileCtx, Value),
+set_metadata_insecure(_UserCtx, FileCtx, rdf, Value, _, Create, Replace) ->
+    {ok, _} = rdf_metadata:set(FileCtx, Value, Create, Replace),
     #provider_response{status = #status{code = ?OK}}.
 
 %%--------------------------------------------------------------------

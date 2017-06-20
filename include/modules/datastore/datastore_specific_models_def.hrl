@@ -273,9 +273,10 @@
     is_scope = false :: boolean(),
     scope :: datastore:key(),
     provider_id :: undefined | oneprovider:id(), %% ID of provider that created this file
-    %% symlink_value for symlinks, file_guid for phantom files (redirection)
-    link_value :: undefined | file_meta:symlink_value() | fslogic_worker:file_guid(),
-    shares = [] :: [od_share:id()]
+    %% symlink_value for symlinks
+    link_value :: undefined | file_meta:symlink_value(),
+    shares = [] :: [od_share:id()],
+    deleted = false :: boolean()
 }).
 
 -record(storage, {
@@ -336,9 +337,9 @@
     enoent_handling = ?DEFAULT_ENOENT_HANDLING_STRATEGY :: space_strategy:config()
 }).
 
-%% Model that holds state entries for DBSync worker
--record(dbsync_state, {
-    entry :: term()
+%% Model that holds synchronization state for a space
+-record(dbsync_state2, {
+    seq = #{} :: maps:map([{od_provider:id(), couchbase_changes:seq()}])
 }).
 
 %% Model that holds state entries for DBSync worker
@@ -385,6 +386,7 @@
 %% Model that holds file's custom metadata
 -record(custom_metadata, {
     space_id :: undefined | od_space:id(),
+    file_objectid :: undefined | cdmi_id:object_id(), % undefined only for upgraded docs
     value = #{} :: maps:map()
 }).
 

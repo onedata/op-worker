@@ -153,7 +153,8 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(session_bucket, [], ?GLOBAL_ONLY_LEVEL).
+    ?MODEL_CONFIG(session_bucket, [], ?GLOBAL_ONLY_LEVEL)#model_config{
+        list_enabled = {true, return_errors}}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -347,6 +348,9 @@ get_connections(SessId, HideOverloaded) ->
 %%--------------------------------------------------------------------
 -spec remove_connection(id(), Con :: pid()) ->
     ok | datastore:update_error().
+% TODO - calls with undefined SessId
+remove_connection(undefined, _) ->
+    ok;
 remove_connection(SessId, Con) ->
     Diff = fun(#session{connections = Cons} = Sess) ->
         NewCons = lists:filter(fun(C) -> C =/= Con end, Cons),
@@ -586,7 +590,7 @@ is_guest(_) ->
 fetch_lock_fetch_helper(SessionId, SpaceId, StorageDoc, InCriticalSection) ->
     StorageId = storage:get_id(StorageDoc),
     FetchResult = model:execute_with_default_context(
-        ?MODULE, fetch_link_target, [SessionId, link_key(SpaceId, StorageId)],
+        ?MODULE, fetch_link_target, [SessionId, link_key(StorageId, SpaceId)],
         [{level, ?HELPER_LINK_LEVEL}]
     ),
 
@@ -600,6 +604,14 @@ fetch_lock_fetch_helper(SessionId, SpaceId, StorageDoc, InCriticalSection) ->
             end);
 
         {{error, link_not_found}, true} ->
+            add_missing_helper(SessionId, SpaceId, StorageDoc);
+
+        {{error, {not_found, _}}, false} ->
+            critical_section:run({SessionId, SpaceId, StorageId}, fun() ->
+                fetch_lock_fetch_helper(SessionId, SpaceId, StorageDoc, true)
+            end);
+
+        {{error, {not_found, _}}, true} ->
             add_missing_helper(SessionId, SpaceId, StorageDoc);
 
         {{error, Reason}, _} ->
@@ -644,14 +656,18 @@ add_missing_helper(SessionId, SpaceId, StorageDoc) ->
 -spec delete_helpers_on_this_node(SessId :: id()) ->
     ok | datastore:generic_error().
 delete_helpers_on_this_node(SessId) ->
-    model:execute_with_default_context(?MODULE, foreach_link,
+    {ok, Links} = model:execute_with_default_context(?MODULE, foreach_link,
         [SessId, fun
-            (_LinkName, {_V, [{_, _, HelperKey, helper_handle}]}, _) ->
-                helper_handle:delete(HelperKey);
-            (_, _, _) ->
-                ok
-        end, undefined],
+            (LinkName, {_V, [{_, _, HelperKey, helper_handle}]}, Acc) ->
+                helper_handle:delete(HelperKey),
+                [LinkName | Acc];
+            (_, _, Acc) ->
+                Acc
+        end, []],
         [{level, ?HELPER_LINK_LEVEL}]
+    ),
+    model:execute_with_default_context(
+        ?MODULE, delete_links, [SessId, Links]
     ),
     ok.
 

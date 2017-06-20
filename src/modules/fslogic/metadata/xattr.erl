@@ -13,7 +13,7 @@
 
 %% API
 -export([get_by_name/2, get_by_name/3, delete_by_name/2, exists_by_name/2,
-    save/3, list/2]).
+    set/5, list/2]).
 
 -type name() :: binary().
 -type value() :: custom_metadata:json_term().
@@ -70,15 +70,15 @@ exists_by_name(FileCtx, XattrName) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Saves extended attribute
+%% Sets extended attribute
 %% @end
 %%--------------------------------------------------------------------
--spec save(file_ctx:ctx(), name(), value()) ->
+-spec set(file_ctx:ctx(), name(), value(), Create :: boolean(), Replace :: boolean()) ->
     {ok, datastore:key()} | datastore:generic_error().
-save(FileCtx, XattrName, XattreValue) ->
+set(FileCtx, XattrName, XattreValue, Create, Replace) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    custom_metadata:set_xattr_metadata(FileUuid, SpaceId, XattrName, XattreValue).
+    custom_metadata:set_xattr_metadata(FileUuid, SpaceId, XattrName, XattreValue, Create, Replace).
 
 %%--------------------------------------------------------------------
 %% @doc

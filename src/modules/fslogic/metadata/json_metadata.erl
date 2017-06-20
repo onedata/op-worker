@@ -13,9 +13,10 @@
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include("modules/fslogic/metadata.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 
 %% API
--export([get/3, set/3, remove/1]).
+-export([get/3, set/5, remove/1]).
 
 %%%===================================================================
 %%% API
@@ -77,18 +78,29 @@ get(FileCtx, Names, true) ->
 %% set_json_metadata(FileUuid, []) -> {ok, #{<<"l1">> => {<<"l2">> => <<"value">>}}}
 %%    meta: 'new_value'
 %%--------------------------------------------------------------------
--spec set(file_ctx:ctx(), custom_metadata:json(), [binary()]) ->
+-spec set(file_ctx:ctx(), custom_metadata:json(), [binary()], Create :: boolean(), Replace :: boolean()) ->
     {ok, file_meta:uuid()} | {error, term()}.
-set(FileCtx, JsonToInsert, Names) ->
-    ToCreate = #document{key = file_ctx:get_uuid_const(FileCtx), value = #custom_metadata{
+set(FileCtx, JsonToInsert, Names, Create, Replace) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    {ok, FileObjectid} = cdmi_id:guid_to_objectid(file_ctx:get_guid_const(FileCtx)),
+    ToCreate = #document{key = FileUuid, value = #custom_metadata{
         space_id = file_ctx:get_space_id_const(FileCtx),
+        file_objectid = FileObjectid,
         value = #{?JSON_METADATA_KEY => custom_meta_manipulation:insert(undefined, JsonToInsert, Names)}
     }},
-    custom_metadata:create_or_update(ToCreate, fun(Meta = #custom_metadata{value = MetaValue}) ->
-        Json = maps:get(?JSON_METADATA_KEY, MetaValue, #{}),
-        NewJson = custom_meta_manipulation:insert(Json, JsonToInsert, Names),
-        {ok, Meta#custom_metadata{value = MetaValue#{?JSON_METADATA_KEY => NewJson}}}
-    end).
+    UpdatingFunction = update_custom_meta_fun(JsonToInsert, Names, Create, Replace),
+
+    case Replace of
+        true ->
+            case custom_metadata:update(FileUuid, UpdatingFunction) of
+                {error, {not_found, _}} ->
+                    {error, ?ENODATA};
+                OtherAns ->
+                    OtherAns
+            end;
+        false ->
+            custom_metadata:create_or_update(ToCreate, UpdatingFunction)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc Removes file's json metadata
@@ -97,3 +109,28 @@ set(FileCtx, JsonToInsert, Names) ->
 -spec remove(file_ctx:ctx()) -> ok | {error, term()}.
 remove(FileCtx) ->
     custom_metadata:remove_xattr_metadata(file_ctx:get_uuid_const(FileCtx), ?JSON_METADATA_KEY).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns function used for updating custom_metadata doc.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_custom_meta_fun(custom_metadata:json(), [binary()],
+    Create :: boolean(), Replace :: boolean()) -> function().
+update_custom_meta_fun(JsonToInsert, Names, Create, Replace) ->
+    fun(Meta = #custom_metadata{value = MetaValue}) ->
+        case {maps:is_key(?JSON_METADATA_KEY, MetaValue), Create, Replace} of
+            {true, true, _} ->
+                {error, ?EEXIST};
+            {false, _, true} ->
+                {error, ?ENODATA};
+            _ ->
+                Json = maps:get(?JSON_METADATA_KEY, MetaValue, #{}),
+                NewJson = custom_meta_manipulation:insert(Json, JsonToInsert, Names),
+                {ok, Meta#custom_metadata{value = MetaValue#{?JSON_METADATA_KEY => NewJson}}}
+        end
+    end.
