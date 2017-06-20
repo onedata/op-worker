@@ -9,7 +9,7 @@
 %%% This SUITE contains stress test for single provider.
 %%% @end
 %%%--------------------------------------------------------------------
--module(stress_test_SUITE).
+-module(file_meta_stress_test_SUITE).
 -author("Michal Wrzeszcz").
 
 -include("global_definitions.hrl").

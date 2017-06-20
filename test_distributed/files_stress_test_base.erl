@@ -6,11 +6,11 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This SUITE contains save stress test for single provider. SUITE tests
-%%% creation of large dir by single process and tree of dirs by many processes.
+%%% This SUITE contains functions used during the save stress test
+%%% for single provider.
 %%% @end
 %%%--------------------------------------------------------------------
--module(save_stress_test_SUITE).
+-module(files_stress_test_base).
 -author("Michal Wrzeszcz").
 
 -include("global_definitions.hrl").
@@ -22,45 +22,17 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
--export([stress_test/1, stress_test_base/1, many_files_creation_tree_test/1, many_files_creation_tree_test_base/1,
-    single_dir_creation_test/1, single_dir_creation_test_base/1]).
--export([create_single_call/3]).
-
--define(STRESS_CASES, [single_dir_creation_test]).
--define(STRESS_NO_CLEARING_CASES, [
-    many_files_creation_tree_test
-]).
+-export([init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
+-export([many_files_creation_tree_test_base/2, single_dir_creation_test_base/2]).
+-export([create_single_call/4]).
 
 -define(TIMEOUT, timer:minutes(20)).
-
-all() ->
-    ?STRESS_ALL(?STRESS_CASES, ?STRESS_NO_CLEARING_CASES).
 
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
 
-stress_test(Config) ->
-    ?STRESS(Config,[
-            {description, "Main stress test function. Links together all cases to be done multiple times as one continous test."},
-            {success_rate, 90},
-            {config, [{name, stress}, {description, "Basic config for stress test"}]}
-        ]
-    ).
-stress_test_base(Config) ->
-    ?STRESS_TEST_BASE(Config).
-
-%%%===================================================================
-
-single_dir_creation_test(Config) ->
-    ?PERFORMANCE(Config, [
-        {parameters, [
-            [{name, files_num}, {value, 1000}, {description, "Numer of files in dir"}]
-        ]},
-        {description, "Creates files in dir using single process"}
-    ]).
-single_dir_creation_test_base(Config) ->
+single_dir_creation_test_base(Config, Clear) ->
     FilesNum = ?config(files_num, Config),
 
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -68,35 +40,71 @@ single_dir_creation_test_base(Config) ->
 
     SessId = ?config({session_id, {User, ?GET_DOMAIN(Worker)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
+    RepeatNum = ?config(rep_num, Config),
 
-    MainDir = generator:gen_name(),
-    Dir = <<"/", SpaceName/binary, "/", MainDir/binary>>,
+    {Dir, CheckAns, NameExt} = case {Clear, RepeatNum} of
+        {true, _} ->
+            MainDir = generator:gen_name(),
+            D = <<"/", SpaceName/binary, "/", MainDir/binary>>,
+            MkdirAns = lfm_proxy:mkdir(Worker, SessId, D, 8#755),
+            {D, MkdirAns, 0};
+        {_, 1} ->
+            MainDir = <<"test_dir">>,
+            D = <<"/", SpaceName/binary, "/", MainDir/binary>>,
+            MkdirAns = lfm_proxy:mkdir(Worker, SessId, D, 8#755),
+            {D, MkdirAns, 0};
+        _ ->
+            D = <<"/", SpaceName/binary, "/test_dir">>,
+            {D, {ok, ok}, RepeatNum}
+    end,
+    NameExtBin = integer_to_binary(NameExt),
 
-    case lfm_proxy:mkdir(Worker, SessId, Dir, 8#755) of
+    case CheckAns of
         {ok, _} ->
             {SaveOk, SaveTime, SError, SErrorTime} =
-                rpc:call(Worker, ?MODULE, create_single_call, [SessId, Dir, FilesNum]),
+                rpc:call(Worker, ?MODULE, create_single_call,
+                    [SessId, Dir, FilesNum, NameExtBin]),
 
-            {DelOk, DelTime, DError, DErrorTime} = lists:foldl(fun(N, {OkNum, OkTime, ErrorNum, ErrorTime}) ->
-                {T, A} = measure_execution_time(fun() ->
-                    N2 = integer_to_binary(N),
-                    File = <<Dir/binary, "/", N2/binary>>,
-                    lfm_proxy:unlink(Worker, SessId, {path, File})
-                end),
-                case A of
-                    ok ->
-                        {OkNum+1, OkTime+T, ErrorNum, ErrorTime};
+            {DelOk, DelTime, DError, DErrorTime} =
+                case Clear of
+                    true ->
+                        lists:foldl(fun(N, {OkNum, OkTime, ErrorNum, ErrorTime}) ->
+                            {T, A} = measure_execution_time(fun() ->
+                                N2 = integer_to_binary(N),
+                                File = <<Dir/binary, "/", NameExtBin/binary, "_", N2/binary>>,
+                                lfm_proxy:unlink(Worker, SessId, {path, File})
+                            end),
+                            case A of
+                                ok ->
+                                    {OkNum+1, OkTime+T, ErrorNum, ErrorTime};
+                                _ ->
+                                    {OkNum, OkTime, ErrorNum+1, ErrorTime+T}
+                            end
+                        end, {0,0,0,0}, lists:seq(1,FilesNum));
                     _ ->
-                        {OkNum, OkTime, ErrorNum+1, ErrorTime+T}
-                end
-            end, {0,0,0,0}, lists:seq(1,FilesNum)),
+                        {0,0,0,0}
+                end,
 
             SaveAvgTime = get_avg(SaveOk, SaveTime),
             SErrorAvgTime = get_avg(SError, SErrorTime),
             DelAvgTime = get_avg(DelOk, DelTime),
             DErrorAvgTime = get_avg(DError, DErrorTime),
 
-            ct:print("Save num ~p, del num ~p", [SaveOk, DelOk]),
+            case Clear of
+                true ->
+                    ct:print("Save num ~p, del num ~p", [SaveOk, DelOk]);
+                _ ->
+                    Sum = case get(ok_sum) of
+                        undefined ->
+                            0;
+                        S ->
+                            S
+                    end,
+                    NewSum = Sum + SaveOk,
+                    put(ok_sum, NewSum),
+
+                    ct:print("Save num ~p, sum ~p", [SaveOk, NewSum])
+            end,
 
             get_final_ans(SaveOk, SaveAvgTime, SError, SErrorAvgTime, DelOk, DelAvgTime, DError, DErrorAvgTime, 0);
         _ ->
@@ -104,18 +112,7 @@ single_dir_creation_test_base(Config) ->
             get_final_ans(0,0,0,0,0,0,0,0,1)
     end.
 
-many_files_creation_tree_test(Config) ->
-    ?PERFORMANCE(Config, [
-        {parameters, [
-            [{name, spawn_beg_level}, {value, 4}, {description, "Level of tree to start spawning processes"}],
-            [{name, spawn_end_level}, {value, 5}, {description, "Level of tree to stop spawning processes"}],
-            [{name, dir_level}, {value, 6}, {description, "Level of last test directory"}],
-            [{name, dirs_per_parent}, {value, 6}, {description, "Child directories in single dir"}],
-            [{name, files_per_dir}, {value, 40}, {description, "Number of files in single directory"}]
-        ]},
-        {description, "Creates directories' and files' tree using multiple process"}
-    ]).
-many_files_creation_tree_test_base(Config) ->
+many_files_creation_tree_test_base(Config, WriteToFile) ->
     % Get test and environment description
     SpawnBegLevel = ?config(spawn_beg_level, Config),
     SpawnEndLevel = ?config(spawn_end_level, Config),
@@ -185,11 +182,22 @@ many_files_creation_tree_test_base(Config) ->
                     N2 = integer_to_binary(N),
                     F = <<D/binary, "/", N2/binary>>,
                     {T, A} = measure_execution_time(fun() ->
-                        case lfm_proxy:create(Worker, SessId, F, 8#755) of
-                            {ok, _} ->
-                                file_ok;
-                            Other ->
-                                Other
+                        try
+                            {ok, _} = lfm_proxy:create(Worker, SessId, F, 8#755),
+                            case WriteToFile of
+                                true ->
+                                    {ok, Handle} = lfm_proxy:open(Worker, SessId, {path, F}, rdwr),
+                                    WriteBuf = generator:gen_name(),
+                                    WriteSize = size(WriteBuf),
+                                    {ok, WriteSize} = lfm_proxy:write(Worker, Handle, 0, WriteBuf),
+                                    ok = lfm_proxy:close(Worker, Handle),
+                                    file_ok;
+                                _ ->
+                                    file_ok
+                            end
+                        catch
+                            E1:E2 ->
+                                {error, {E1, E2}}
                         end
                     end),
                     Master ! {worker_ans, A, T}
@@ -268,7 +276,7 @@ many_files_creation_tree_test_base(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    [{?LOAD_MODULES, [initializer]} | Config].
+    [{?LOAD_MODULES, [initializer, ?MODULE]} | Config].
 
 init_per_testcase(stress_test, Config) ->
     ssl:start(),
@@ -406,11 +414,11 @@ get_final_ans(Saved, SaveTime, SErrors, SErrorsTime, Deleted, DelTime, DErrors, 
         #parameter{name = init_failed, value = InitFailed, description = "Has first phase of test failed (1 = true)"}
     ].
 
-create_single_call(SessId, Dir, FilesNum) ->
+create_single_call(SessId, Dir, FilesNum, NameExtBin) ->
     lists:foldl(fun(N, {OkNum, OkTime, ErrorNum, ErrorTime}) ->
         {T, A} = measure_execution_time(fun() ->
             N2 = integer_to_binary(N),
-            File = <<Dir/binary, "/", N2/binary>>,
+            File = <<Dir/binary, "/", NameExtBin/binary, "_", N2/binary>>,
             logical_file_manager:create(SessId, File)
         end),
         case A of
