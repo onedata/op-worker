@@ -751,7 +751,7 @@ spawn_ssl_echo_client(NodeToConnect) ->
 mock_identity(Workers) ->
     test_utils:mock_new(Workers, user_identity),
     test_utils:mock_expect(Workers, user_identity, get_or_fetch,
-        fun(#macaroon_auth{macaroon = ?MACAROON}) ->
+        fun(#token_auth{token = ?MACAROON}) ->
             {ok, #document{value = #user_identity{}}}
         end
     ).

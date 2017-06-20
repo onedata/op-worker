@@ -34,9 +34,11 @@
 maybe_emit_file_written(_FileGuid, _WrittenBlocks, _SessionId, false) ->
     ok;
 maybe_emit_file_written(FileGuid, WrittenBlocks, SessionId, true) ->
+    WrittenSize = size_of_blocks(WrittenBlocks),
     event:emit(#file_written_event{
         file_guid = FileGuid,
-        blocks = WrittenBlocks
+        blocks = WrittenBlocks,
+        size = WrittenSize
     }, SessionId).
 
 %%--------------------------------------------------------------------
@@ -50,9 +52,11 @@ maybe_emit_file_written(FileGuid, WrittenBlocks, SessionId, true) ->
 maybe_emit_file_read(_FileGuid, _ReadBlocks, _SessionId, false) ->
     ok;
 maybe_emit_file_read(FileGuid, ReadBlocks, SessionId, true) ->
+    ReadSize = size_of_blocks(ReadBlocks),
     event:emit(#file_read_event{
         file_guid = FileGuid,
-        blocks = ReadBlocks
+        blocks = ReadBlocks,
+        size = ReadSize
     }, SessionId).
 
 %%--------------------------------------------------------------------
@@ -95,3 +99,13 @@ flush_event_queue(SessionId, ProviderId, FileUuid) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Count size of blocks in given list
+%% @end
+%%--------------------------------------------------------------------
+-spec size_of_blocks(fslogic_blocks:blocks()) -> term().
+size_of_blocks(Blocks) ->
+    lists:sum([S || #file_block{size = S} <- Blocks]).

@@ -97,15 +97,11 @@ update(#monitoring_id{main_subject_type = space, metric_type = storage_used,
     CurrentSize = maps:get(storage_used, StateBuffer),
     SizeDifference = maps:get(size_difference, UpdateValue, 0),
 
-    case SizeDifference of
-        0 -> ok;
-        _ ->
-            NewSize = CurrentSize + SizeDifference,
-            {ok, _} = monitoring_state:update(MonitoringId,
-                #{state_buffer => #{storage_used => NewSize}}),
+    NewSize = CurrentSize + SizeDifference,
+    {ok, _} = monitoring_state:update(MonitoringId,
+        #{state_buffer => #{storage_used => NewSize}}),
 
-            ok = rrd_utils:update_rrd(MonitoringId, MonitoringState, UpdateTime, [NewSize])
-    end;
+    ok = rrd_utils:update_rrd(MonitoringId, MonitoringState, UpdateTime, [NewSize]);
 
 update(#monitoring_id{main_subject_type = space, main_subject_id = SpaceId,
     metric_type = storage_used} = MonitoringId, MonitoringState, UpdateTime, _UpdateValue) ->
@@ -166,11 +162,7 @@ update(#monitoring_id{main_subject_type = space, metric_type = remote_transfer} 
 -spec maybe_update(#monitoring_id{}, #monitoring_state{}, non_neg_integer(), term()) -> ok.
 maybe_update(MonitoringId, #monitoring_state{state_buffer = StateBuffer} = MonitoringState,
     UpdateTime, UpdateValue) ->
-    case maps:get(previous_value, StateBuffer, undefined) of
-        UpdateValue -> ok;
-        _ ->
-            {ok, _} = monitoring_state:update(MonitoringId,
-                #{state_buffer => #{previous_value => UpdateValue}}),
+    {ok, _} = monitoring_state:update(MonitoringId,
+        #{state_buffer => #{previous_value => UpdateValue}}),
 
-            ok = rrd_utils:update_rrd(MonitoringId, MonitoringState, UpdateTime, [UpdateValue])
-    end.
+    ok = rrd_utils:update_rrd(MonitoringId, MonitoringState, UpdateTime, [UpdateValue]).

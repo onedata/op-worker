@@ -4,6 +4,45 @@
 CHANGELOG
 ---------
 
+### 3.0.0-rc16
+
+* Generate empty monitoring events in order to fill null data.
+* Send size of event in read/write events.
+* VFS-3183 Add fsync operation to fslogic
+* VFS-3233 Add support for sig v2 to AWS S3 helper
+* VFS-3248 Move xattrs from provider to fuse messages. Add create and replace flags to setxattr.
+* VFS-3017 Fix wrong index encoding.
+* VFS-3017 Emit file_removed event when file removal is requested.
+* VFS-3187 Execute requests synchronously in connection process.
+* VFS-3187 Add trap_exit flag to connection.
+* VFS-3017 Copy/remove files during move when non posix storage is used
+* VFS-3017 Enable file garbage collection, adjust tests to the new rename implemenetation
+* VFS-3025 Implement rename operation.
+* VFS-3025 Rewrite current remove implementation and delete rename operation.
+
+
+### 3.0.0-rc15
+
+* Add token_auth translator.
+* Disable storage helpers buffering
+* VFS-3233 Add support for sig v2 to AWS S3 helper
+* VFS-3244 Switch level of dbsync periodic status logs to debug
+* VFS-3244 Do not fail on deletion_worker's init when we cannot list file handles for cleanup.
+* VFS-3244 Add file_objectid to custom_metadata document.
+* VFS-3251 Updating GUI to 3.0.0-rc15
+* VFS-3181 Add onezone URL to sessionDetails
+* Add service version info to sessionDetails in GUI
+* VFS-3213 Update cberl reference
+* VFS-3213 Add libcouchbase package dependency
+* VFS-3146 Update models specyfications
+* VFS-3146 Update hooks after datastore update
+* VFS-3146 Update datastore models to use new datastore API
+* VFS-3116 Handle chmod, truncate and updating timestamps in storage_sync
+* VFS-3088 Update dbsync state and events
+* VFS-3116 Refactor storage_import and space_sync_worker
+* VFS-3088 Integrate with refactored datastore
+
+
 ### 3.0.0-rc14
 
 * Dbsync uses datastore_pool to dump documents to db
