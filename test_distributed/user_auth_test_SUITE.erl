@@ -60,7 +60,7 @@ token_authentication(Config) ->
         rpc:call(Worker1, user_identity, get, [#token_auth{token = ?MACAROON}])
     ),
     test_utils:mock_validate_and_unload(Workers, oz_endpoint),
-    ok = ssl:close(Sock),
+    ok = ssl:close(Sock).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
