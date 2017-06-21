@@ -107,6 +107,7 @@ handle_cast({changes_batch, Since, Until, Docs}, State = #state{
         oneprovider:get_provider_id(),
         ProviderId
     ]),
+    ?info("bbbbb ~p", [{Since, Until, Docs, Supported, oneprovider:get_provider_id(), ProviderId}]),
     case Supported of
         true -> {noreply, handle_changes_batch(Since, Until, Docs, State)};
         false -> {stop, normal, State}
