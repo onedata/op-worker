@@ -27,6 +27,12 @@
 -export([guid_to_share_guid/2, share_guid_to_guid/1, is_share_guid/1,
     guid_to_share_id/1, guid_to_space_id/1]).
 
+-define(USER_ROOT_PREFIX, "userRoot_").
+-define(SPACE_ROOT_PREFIX, "space_").
+-define(GUID_SEPARATOR, "#").
+-define(GUID_PREFIX, "guid").
+-define(SHARE_GUID_PREFIX, "shareGuid").
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -41,7 +47,7 @@ is_user_root_dir_uuid(?ROOT_DIR_UUID) ->
     true;
 is_user_root_dir_uuid(FileUuid) ->
     case FileUuid of
-        <<"userRoot", "_", _UserId/binary>> ->
+        <<?USER_ROOT_PREFIX, _UserId/binary>> ->
             true;
         _ ->
             false
@@ -53,7 +59,7 @@ is_user_root_dir_uuid(FileUuid) ->
 %%--------------------------------------------------------------------
 -spec user_root_dir_uuid(UserId :: od_user:id()) -> file_meta:uuid().
 user_root_dir_uuid(UserId) ->
-    <<"userRoot", "_", UserId/binary>>.
+    <<?USER_ROOT_PREFIX, UserId/binary>>.
 
 %%--------------------------------------------------------------------
 %% @doc Returns Uuid of user's root directory.
@@ -104,9 +110,9 @@ uuid_to_path(SessionId, FileUuid) ->
 -spec uuid_to_guid(file_meta:uuid(), od_space:id() | undefined) ->
     fslogic_worker:file_guid().
 uuid_to_guid(FileUuid, undefined) ->
-    <<"guid", "#", FileUuid/binary, "#">>;
+    <<?GUID_PREFIX, ?GUID_SEPARATOR, FileUuid/binary, ?GUID_SEPARATOR>>;
 uuid_to_guid(FileUuid, SpaceId) ->
-    <<"guid", "#", FileUuid/binary, "#", SpaceId/binary>>.
+    <<?GUID_PREFIX, ?GUID_SEPARATOR, FileUuid/binary, ?GUID_SEPARATOR, SpaceId/binary>>.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -138,7 +144,7 @@ guid_to_uuid(FileGuid) ->
 %%--------------------------------------------------------------------
 -spec spaceid_to_space_dir_uuid(od_space:id()) -> file_meta:uuid().
 spaceid_to_space_dir_uuid(SpaceId) ->
-    <<"space", "_", SpaceId/binary>>.
+    <<?SPACE_ROOT_PREFIX, SpaceId/binary>>.
 
 %%--------------------------------------------------------------------
 %% @doc Convert SpaceId to guid of file_meta document of this space directory.
@@ -153,7 +159,7 @@ spaceid_to_space_dir_guid(SpaceId) ->
 -spec space_dir_uuid_to_spaceid(file_meta:uuid()) -> od_space:id().
 space_dir_uuid_to_spaceid(SpaceUuid) ->
     case SpaceUuid of
-        <<"space", "_", SpaceId/binary>> ->
+        <<?SPACE_ROOT_PREFIX, SpaceId/binary>> ->
             SpaceId;
         _ ->
             throw({not_a_space, {uuid, SpaceUuid}}) %todo remove this throw and return undefined instead
@@ -165,7 +171,7 @@ space_dir_uuid_to_spaceid(SpaceUuid) ->
 -spec space_dir_uuid_to_spaceid_no_error(file_meta:uuid()) -> od_space:id().
 space_dir_uuid_to_spaceid_no_error(SpaceUuid) ->
     case SpaceUuid of
-        <<"space", "_", SpaceId/binary>> ->
+        <<?SPACE_ROOT_PREFIX, SpaceId/binary>> ->
             SpaceId;
         _ ->
             <<>>
@@ -181,9 +187,15 @@ space_dir_uuid_to_spaceid_no_error(SpaceUuid) ->
 uuid_to_share_guid(FileUuid, SpaceId, undefined) ->
     uuid_to_guid(FileUuid, SpaceId);
 uuid_to_share_guid(FileUuid, undefined, ShareId) ->
-    <<"shareGuid", "#", FileUuid/binary, "#", "#", ShareId/binary>>;
+    <<?SHARE_GUID_PREFIX, ?GUID_SEPARATOR, FileUuid/binary,
+        ?GUID_SEPARATOR,
+        ?GUID_SEPARATOR, ShareId/binary
+    >>;
 uuid_to_share_guid(FileUuid, SpaceId, ShareId) ->
-    <<"shareGuid", "#", FileUuid/binary, "#", SpaceId/binary, "#", ShareId/binary>>.
+    <<?SHARE_GUID_PREFIX, ?GUID_SEPARATOR,  FileUuid/binary,
+        ?GUID_SEPARATOR, SpaceId/binary,
+        ?GUID_SEPARATOR, ShareId/binary
+    >>.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -214,14 +226,14 @@ share_guid_to_guid(ShareGuid) ->
 -spec unpack_share_guid(od_share:share_guid()) ->
     {file_meta:uuid(), undefined | od_space:id(), od_share:id() | undefined}.
 unpack_share_guid(ShareGuid) ->
-    try binary:split(ShareGuid, <<"#">>, [global]) of
-        [<<"shareGuid">>, FileUuid, <<>>, ShareId] ->
+    try binary:split(ShareGuid, <<?GUID_SEPARATOR>>, [global]) of
+        [<<?SHARE_GUID_PREFIX>>, FileUuid, <<>>, ShareId] ->
             {FileUuid, undefined, ShareId};
-        [<<"shareGuid">>, FileUuid, SpaceId, ShareId] ->
+        [<<?SHARE_GUID_PREFIX>>, FileUuid, SpaceId, ShareId] ->
             {FileUuid, SpaceId, ShareId};
-        [<<"guid">>, FileUuid, <<>>] ->
+        [<<?GUID_PREFIX>>, FileUuid, <<>>] ->
             {FileUuid, undefined, undefined};
-        [<<"guid">>, FileUuid, SpaceId] ->
+        [<<?GUID_PREFIX>>, FileUuid, SpaceId] ->
             {FileUuid, SpaceId, undefined};
         _ ->
             {ShareGuid, undefined, undefined}
@@ -260,16 +272,16 @@ guid_to_share_id(Guid) ->
 %%--------------------------------------------------------------------
 -spec guid_to_space_id(fslogic_worker:guid()) -> od_space:id() | undefined.
 guid_to_space_id(Guid) ->
-    try binary:split(Guid, <<"#">>, [global]) of
-        [<<"shareGuid">>, _FileUuid, <<>>, _ShareId] ->
+    try binary:split(Guid, <<?GUID_SEPARATOR>>, [global]) of
+        [<<?SHARE_GUID_PREFIX>>, _FileUuid, <<>>, _ShareId] ->
             undefined;
-        [<<"shareGuid">>, _FileUuid, SpaceId, _ShareId] ->
+        [<<?SHARE_GUID_PREFIX>>, _FileUuid, SpaceId, _ShareId] ->
             SpaceId;
-        [<<"guid">>, _FileUuid, <<>>] ->
+        [<<?GUID_PREFIX>>, _FileUuid, <<>>] ->
             undefined;
-        [<<"guid">>, _FileUuid, SpaceId] ->
+        [<<?GUID_PREFIX>>, _FileUuid, SpaceId] ->
             SpaceId;
-        [<<"space", "_", SpaceId/binary>>] ->
+        [<<?SPACE_ROOT_PREFIX, SpaceId/binary>>] ->
             SpaceId;
         _ ->
             undefined
@@ -291,13 +303,13 @@ guid_to_space_id(Guid) ->
     {file_meta:uuid(), od_space:id() | undefined}.
 unpack_guid(FileGuid) ->
     try binary:split(FileGuid, <<"#">>, [global]) of
-        [<<"shareGuid">>, FileUuid, <<>>, _ShareId] ->
+        [<<?SHARE_GUID_PREFIX>>, FileUuid, <<>>, _ShareId] ->
             {FileUuid, undefined};
-        [<<"shareGuid">>, FileUuid, SpaceId, _ShareId] ->
+        [<<?SHARE_GUID_PREFIX>>, FileUuid, SpaceId, _ShareId] ->
             {FileUuid, SpaceId};
-        [<<"guid">>, FileUuid, <<>>] ->
+        [<<?GUID_PREFIX>>, FileUuid, <<>>] ->
             {FileUuid, undefined};
-        [<<"guid">>, FileUuid, SpaceId] ->
+        [<<?GUID_PREFIX>>, FileUuid, SpaceId] ->
             {FileUuid, SpaceId};
         _ ->
             {FileGuid, undefined}
