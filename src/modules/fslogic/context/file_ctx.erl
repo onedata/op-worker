@@ -274,7 +274,7 @@ get_parent(FileCtx = #file_ctx{parent = undefined}, UserCtx) ->
                 of
                     true ->
                         UserId = user_ctx:get_user_id(UserCtx),
-                        fslogic_uuid:user_root_dir_guid(fslogic_uuid:user_root_dir_uuid(UserId));
+                        fslogic_uuid:user_root_dir_guid(UserId);
                     _ ->
                         fslogic_uuid:uuid_to_guid(ParentUuid, undefined)
                 end;

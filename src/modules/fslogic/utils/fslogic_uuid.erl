@@ -65,9 +65,9 @@ user_root_dir_uuid(UserId) ->
 %% @doc Returns Uuid of user's root directory.
 %% @end
 %%--------------------------------------------------------------------
--spec user_root_dir_guid(Uuid :: file_meta:uuid()) -> fslogic_worker:file_guid().
-user_root_dir_guid(Uuid) ->
-    uuid_to_guid(Uuid, undefined).
+-spec user_root_dir_guid(UserId :: od_user:id()) -> fslogic_worker:file_guid().
+user_root_dir_guid(UserId) ->
+    uuid_to_guid(user_root_dir_uuid(UserId), undefined).
 
 %%--------------------------------------------------------------------
 %% @doc

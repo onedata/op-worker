@@ -309,8 +309,7 @@ has_custom_metadata_test(Config) ->
 resolve_guid_of_root_should_return_root_guid(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {SessId, UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    RootUuid = rpc:call(Worker, fslogic_uuid, user_root_dir_uuid, [UserId]),
-    RootGuid = rpc:call(Worker, fslogic_uuid, user_root_dir_guid, [RootUuid]),
+    RootGuid = rpc:call(Worker, fslogic_uuid, user_root_dir_guid, [UserId]),
 
     ?assertEqual({ok, RootGuid}, lfm_proxy:resolve_guid(Worker, SessId, <<"/">>)).
 
