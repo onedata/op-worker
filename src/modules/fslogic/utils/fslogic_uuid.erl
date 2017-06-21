@@ -91,10 +91,10 @@ uuid_to_path(SessionId, FileUuid) ->
 %%--------------------------------------------------------------------
 -spec uuid_to_guid(file_meta:uuid(), od_space:id() | undefined) ->
     fslogic_worker:file_guid().
-uuid_to_guid(FileUuid, undefined) ->
-    <<?GUID_PREFIX, ?GUID_SEPARATOR, FileUuid/binary, ?GUID_SEPARATOR>>;
 uuid_to_guid(FileUuid, SpaceId) ->
-    <<?GUID_PREFIX, ?GUID_SEPARATOR, FileUuid/binary, ?GUID_SEPARATOR, SpaceId/binary>>.
+    DefinedSpaceId = utils:ensure_defined(SpaceId, undefined, <<>>),
+    <<?GUID_PREFIX, ?GUID_SEPARATOR,
+        FileUuid/binary, ?GUID_SEPARATOR, DefinedSpaceId/binary>>.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -152,11 +152,11 @@ space_dir_uuid_to_spaceid(SpaceUuid) ->
 %%--------------------------------------------------------------------
 -spec space_dir_uuid_to_spaceid_no_error(file_meta:uuid()) -> od_space:id().
 space_dir_uuid_to_spaceid_no_error(SpaceUuid) ->
-    case SpaceUuid of
-        <<?SPACE_ROOT_PREFIX, SpaceId/binary>> ->
-            SpaceId;
-        _ ->
-            <<>>
+    try space_dir_uuid_to_spaceid(SpaceUuid) of
+        SpaceId ->
+            SpaceId
+    catch
+        _:_ -> <<>>
     end.
 
 %%--------------------------------------------------------------------
@@ -168,14 +168,10 @@ space_dir_uuid_to_spaceid_no_error(SpaceUuid) ->
     od_share:share_guid().
 uuid_to_share_guid(FileUuid, SpaceId, undefined) ->
     uuid_to_guid(FileUuid, SpaceId);
-uuid_to_share_guid(FileUuid, undefined, ShareId) ->
-    <<?SHARE_GUID_PREFIX, ?GUID_SEPARATOR, FileUuid/binary,
-        ?GUID_SEPARATOR,
-        ?GUID_SEPARATOR, ShareId/binary
-    >>;
 uuid_to_share_guid(FileUuid, SpaceId, ShareId) ->
+    DefinedSpaceId = utils:ensure_defined(SpaceId, undefined, <<>>),
     <<?SHARE_GUID_PREFIX, ?GUID_SEPARATOR,  FileUuid/binary,
-        ?GUID_SEPARATOR, SpaceId/binary,
+        ?GUID_SEPARATOR, DefinedSpaceId/binary,
         ?GUID_SEPARATOR, ShareId/binary
     >>.
 
@@ -209,14 +205,12 @@ share_guid_to_guid(ShareGuid) ->
     {file_meta:uuid(), undefined | od_space:id(), od_share:id() | undefined}.
 unpack_share_guid(ShareGuid) ->
     try binary:split(ShareGuid, <<?GUID_SEPARATOR>>, [global]) of
-        [<<?SHARE_GUID_PREFIX>>, FileUuid, <<>>, ShareId] ->
-            {FileUuid, undefined, ShareId};
         [<<?SHARE_GUID_PREFIX>>, FileUuid, SpaceId, ShareId] ->
-            {FileUuid, SpaceId, ShareId};
-        [<<?GUID_PREFIX>>, FileUuid, <<>>] ->
-            {FileUuid, undefined, undefined};
+            NonEmptySpaceId = utils:ensure_defined(SpaceId, <<>>, undefined),
+            {FileUuid, NonEmptySpaceId, ShareId};
         [<<?GUID_PREFIX>>, FileUuid, SpaceId] ->
-            {FileUuid, SpaceId, undefined};
+            NonEmptySpaceId = utils:ensure_defined(SpaceId, <<>>, undefined),
+            {FileUuid, NonEmptySpaceId, undefined};
         _ ->
             {ShareGuid, undefined, undefined}
     catch
@@ -254,23 +248,8 @@ guid_to_share_id(Guid) ->
 %%--------------------------------------------------------------------
 -spec guid_to_space_id(fslogic_worker:guid()) -> od_space:id() | undefined.
 guid_to_space_id(Guid) ->
-    try binary:split(Guid, <<?GUID_SEPARATOR>>, [global]) of
-        [<<?SHARE_GUID_PREFIX>>, _FileUuid, <<>>, _ShareId] ->
-            undefined;
-        [<<?SHARE_GUID_PREFIX>>, _FileUuid, SpaceId, _ShareId] ->
-            SpaceId;
-        [<<?GUID_PREFIX>>, _FileUuid, <<>>] ->
-            undefined;
-        [<<?GUID_PREFIX>>, _FileUuid, SpaceId] ->
-            SpaceId;
-        [<<?SPACE_ROOT_PREFIX, SpaceId/binary>>] ->
-            SpaceId;
-        _ ->
-            undefined
-    catch
-        _:_ ->
-            undefined
-    end.
+    {_FileUuid, SpaceId, _ShareId} = unpack_share_guid(Guid),
+    SpaceId.
 
 %%%===================================================================
 %%% Internal functions
@@ -284,21 +263,8 @@ guid_to_space_id(Guid) ->
 -spec unpack_guid(FileGuid :: fslogic_worker:file_guid()) ->
     {file_meta:uuid(), od_space:id() | undefined}.
 unpack_guid(FileGuid) ->
-    try binary:split(FileGuid, <<"#">>, [global]) of
-        [<<?SHARE_GUID_PREFIX>>, FileUuid, <<>>, _ShareId] ->
-            {FileUuid, undefined};
-        [<<?SHARE_GUID_PREFIX>>, FileUuid, SpaceId, _ShareId] ->
-            {FileUuid, SpaceId};
-        [<<?GUID_PREFIX>>, FileUuid, <<>>] ->
-            {FileUuid, undefined};
-        [<<?GUID_PREFIX>>, FileUuid, SpaceId] ->
-            {FileUuid, SpaceId};
-        _ ->
-            {FileGuid, undefined}
-    catch
-        _:_ ->
-            {FileGuid, undefined}
-    end.
+    {FileUuid, SpaceId, _ShareId} = unpack_share_guid(FileGuid),
+    {FileUuid, SpaceId}.
 
 %%--------------------------------------------------------------------
 %% @private
