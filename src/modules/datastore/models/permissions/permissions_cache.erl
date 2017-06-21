@@ -13,6 +13,7 @@
 -author("Michal Wrzeszcz").
 -behaviour(model_behaviour).
 
+-include("global_definitions.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
@@ -20,11 +21,11 @@
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, create_or_update/2,
-    list/0, model_init/0, 'after'/5, before/4]).
+    list/0, count/0, model_init/0, 'after'/5, before/4]).
 
 %% API
 -export([check_permission/1, cache_permission/2, invalidate_permissions_cache/0, invalidate/2,
-    remote_invalidation/4]).
+    remote_invalidation/4, check_permission_cache_size/0]).
 
 %% Key of document that keeps information about whole cache status.
 -define(STATUS_UUID, <<"status">>).
@@ -53,6 +54,9 @@ save(Document) ->
 %%--------------------------------------------------------------------
 -spec update(datastore:ext_key(), Diff :: datastore:document_diff()) ->
     {ok, datastore:ext_key()} | datastore:update_error().
+update(?STATUS_UUID, Diff) ->
+    model:execute_with_default_context(?MODULE, update, [?STATUS_UUID, Diff],
+        [{volatile, false}]);
 update(Key, Diff) ->
     model:execute_with_default_context(?MODULE, update, [Key, Diff]).
 
@@ -74,6 +78,9 @@ create(Document) ->
 %%--------------------------------------------------------------------
 -spec create_or_update(datastore:document(), Diff :: datastore:document_diff()) ->
     {ok, datastore:ext_key()} | datastore:generic_error().
+create_or_update(#document{key = ?STATUS_UUID} = Doc, Diff) ->
+    model:execute_with_default_context(?MODULE, create_or_update, [Doc, Diff],
+        [{volatile, false}]);
 create_or_update(Doc, Diff) ->
     model:execute_with_default_context(?MODULE, create_or_update, [Doc, Diff]).
 
@@ -114,12 +121,29 @@ list() ->
     Filter = fun
         ('$end_of_table', Acc) ->
             {abort, Acc};
-        (#document{key = ?STATUS_UUID}, Acc) ->
+        (?STATUS_UUID, Acc) ->
             {next, Acc};
-        (#document{key = Uuid}, Acc) ->
+        (Uuid, Acc) ->
             {next, [Uuid | Acc]}
     end,
-    model:execute_with_default_context(?MODULE, list, [Filter, []]).
+    model:execute_with_default_context(?MODULE, list_keys, [Filter, []]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns count of all records.
+%% @end
+%%--------------------------------------------------------------------
+-spec count() -> {ok, non_neg_integer()} | datastore:generic_error() | no_return().
+count() ->
+    Filter = fun
+        ('$end_of_table', Acc) ->
+            {abort, Acc};
+        (?STATUS_UUID, Acc) ->
+            {next, Acc};
+        (_Uuid, Acc) ->
+            {next, Acc + 1}
+    end,
+    model:execute_with_default_context(?MODULE, list_keys, [Filter, 0]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -128,7 +152,8 @@ list() ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(permissions_cache_bucket, [], ?GLOBAL_ONLY_LEVEL).
+    ?MODEL_CONFIG(permissions_cache_bucket, [], ?GLOBAL_ONLY_LEVEL)#model_config{
+        list_enabled = {true, return_errors}, volatile = true}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -222,12 +247,36 @@ invalidate_permissions_cache() ->
                         lists:foreach(fun(Uuid) ->
                             ok = erlang:apply(CurrentModel, delete, [Uuid])
                         end, Uuids),
+                        % TODO - remove with new links
+                        model:execute_with_default_context(CurrentModel,
+                            del_list_info, [all, ok]),
                         ok = stop_clearing(CurrentModel),
                         ok
                     end, ?CLUSTER_LEVEL);
                 {error, parallel_cleaning} ->
                     ok
             end
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks size of cache and clears all permissions from cache if needed.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_permission_cache_size() -> ok.
+check_permission_cache_size() ->
+    CurrentModel = case get(?STATUS_UUID) of
+        {ok, #document{value = #permissions_cache{value = {Model, _}}}} ->
+            Model;
+        {error, {not_found, _}} ->
+            ?MODULE
+    end,
+    {ok, Count} = erlang:apply(CurrentModel, count, []),
+    case Count > application:get_env(?APP_NAME, permission_cache_size, 50000) of
+        true ->
+            invalidate_permissions_cache();
+        _ ->
+            ok
     end.
 
 %%--------------------------------------------------------------------
@@ -241,38 +290,16 @@ invalidate(Model, FileCtx) ->
     invalidate_permissions_cache(),
     Key = file_ctx:get_uuid_const(FileCtx),
 
-    #model_config{store_level = SL} = MC = Model:model_init(),
-    {Rev, Document} = case SL of
-        ?DISK_ONLY_LEVEL ->
-            {ok, Doc} = model:execute_with_default_context(MC, get, [Key],
-                ?OVERRIDE(?DISK_ONLY_LEVEL)),
-            {couchdb_datastore_driver:rev_to_number(Doc#document.rev), Doc};
-        _ ->
-            A1 = model:execute_with_default_context(MC, get, [Key],
-                ?OVERRIDE(?DISK_ONLY_LEVEL)),
-            A2 = model:execute_with_default_context(MC, get, [Key],
-                ?OVERRIDE(SL)),
-            case {A1, A2} of
-                {{ok, Doc}, {ok, Doc2}} ->
-                    case Doc2#document.value =:= Doc#document.value of
-                        true ->
-                            {couchdb_datastore_driver:rev_to_number(Doc#document.rev), Doc};
-                        _ ->
-                            {couchdb_datastore_driver:rev_to_number(Doc#document.rev) + 1, Doc}
-                    end;
-                {{ok, Doc}, _} ->
-                    {couchdb_datastore_driver:rev_to_number(Doc#document.rev), Doc};
-                {_, {ok, Doc}} ->
-                    {0, Doc}
-            end
-    end,
+    {ok, #document{rev = [RevInfo | _], scope = Scope}} =
+        model:execute_with_default_context(Model, get, [Key]),
+    {Rev, _} = memory_store_driver:rev_to_info(RevInfo),
 
-    case dbsync_worker:has_sync_context(Document) of
-        true ->
-            SpaceId = file_ctx:get_space_id_const(FileCtx),
-            ok = change_propagation_controller:save_change(Model, Key, Rev, SpaceId, ?MODEL_NAME, remote_invalidation);
+    case Scope of
+        <<>> ->
+            ok;
         _ ->
-            ok
+            SpaceId = file_ctx:get_space_id_const(FileCtx),
+            ok = change_propagation_controller:save_change(Model, Key, Rev, SpaceId, ?MODEL_NAME, remote_invalidation)
     end.
 
 %%--------------------------------------------------------------------

@@ -31,7 +31,7 @@
 %% Wrapper for change_replicated_internal, ignoring unsupported spaces.
 %% @end
 %%--------------------------------------------------------------------
--spec change_replicated(SpaceId :: binary(), dbsync_worker:change()) ->
+-spec change_replicated(SpaceId :: binary(), datastore:document()) ->
     any().
 change_replicated(SpaceId, Change) ->
     change_replicated(SpaceId, Change, undefined).
@@ -41,7 +41,7 @@ change_replicated(SpaceId, Change) ->
 %% Wrapper for change_replicated_internal, ignoring unsupported spaces.
 %% @end
 %%--------------------------------------------------------------------
--spec change_replicated(SpaceId :: binary(), dbsync_worker:change(), undefined | pid()) ->
+-spec change_replicated(SpaceId :: binary(), datastore:document(), undefined | pid()) ->
     any().
 change_replicated(SpaceId, Change, Master) ->
     true = is_supported(SpaceId),
@@ -53,16 +53,13 @@ change_replicated(SpaceId, Change, Master) ->
 %% Return value and any errors are ignored.
 %% @end
 %%--------------------------------------------------------------------
--spec change_replicated_internal(od_space:id(), dbsync_worker:change(), undefined | pid()) ->
+-spec change_replicated_internal(od_space:id(), datastore:document(), undefined | pid()) ->
     any() | no_return().
-change_replicated_internal(SpaceId, #change{
-    model = file_meta,
-    doc =  FileDoc = #document{
+change_replicated_internal(SpaceId, #document{
         key = FileUuid,
         value = #file_meta{type = ?REGULAR_FILE_TYPE, owner = UserId},
         deleted = true
-    }
-}, _Master) ->
+    } = FileDoc,_Master) ->
     ?debug("change_replicated_internal: deleted file_meta ~p", [FileUuid]),
     case model:execute_with_default_context(
         file_meta, exists, [FileUuid], [{hooks_config, no_hooks}]
@@ -75,90 +72,74 @@ change_replicated_internal(SpaceId, #change{
         _ ->
             ok
     end;
-change_replicated_internal(SpaceId, Change = #change{
-    model = file_meta,
-    doc = FileDoc = #document{
+change_replicated_internal(SpaceId, #document{
         key = FileUuid,
         value = #file_meta{type = ?REGULAR_FILE_TYPE}
-    }
-}, Master) ->
+    } = FileDoc, Master) ->
     ?debug("change_replicated_internal: changed file_meta ~p", [FileUuid]),
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
     ok = file_consistency:wait(FileUuid, SpaceId,
-        [times, link_to_parent, parent_links], [SpaceId, Change],
+        [times, link_to_parent, parent_links], [SpaceId, FileDoc],
         {Master, FileUuid}),
     ok = sfm_utils:create_storage_file_if_not_exists(FileCtx),
     ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []),
     ok = file_consistency:add_components_and_notify(FileUuid,
         [file_meta, local_file_location]);
-change_replicated_internal(SpaceId, Change = #change{
-    model = file_meta,
-    doc = FileDoc = #document{
+change_replicated_internal(SpaceId, #document{
         key = FileUuid,
         value = #file_meta{}
-    }}, Master) ->
+    } = FileDoc, Master) ->
     ?debug("change_replicated_internal: changed file_meta ~p", [FileUuid]),
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
-    ok = file_consistency:wait(FileUuid, SpaceId, [times, link_to_parent], [SpaceId, Change],
+    ok = file_consistency:wait(FileUuid, SpaceId, [times, link_to_parent], [SpaceId, FileDoc],
         {Master, FileUuid}),
     ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []),
     ok = file_consistency:add_components_and_notify(FileUuid, [file_meta]),
     ok = file_consistency:check_and_add_components(FileUuid, SpaceId, [parent_links]);
-change_replicated_internal(SpaceId, Change = #change{
-    model = file_location,
-    doc = Doc = #document{
+change_replicated_internal(SpaceId, #document{
         key = FileLocationId,
         value = #file_location{uuid = FileUuid}
-    }}, Master) ->
+    } = Doc, Master) ->
     ?debug("change_replicated_internal: changed file_location ~p", [FileUuid]),
     FileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId)),
     ok = file_consistency:wait(FileUuid, SpaceId,
-        [file_meta, times, local_file_location], [SpaceId, Change],
+        [file_meta, times, local_file_location], [SpaceId, Doc],
         {Master, FileLocationId}),
     ok = replica_dbsync_hook:on_file_location_change(FileCtx, Doc);
-change_replicated_internal(SpaceId, #change{
-    model = file_meta,
-    doc = #document{
+change_replicated_internal(SpaceId, #document{
         value = #links{
             model = file_meta,
             doc_key = FileUuid
         }
-    }}, _Master) ->
+    }, _Master) ->
     ?debug("change_replicated_internal: changed links ~p", [FileUuid]),
     ok = file_consistency:check_and_add_components(FileUuid, SpaceId, [link_to_parent, parent_links]);
-change_replicated_internal(_SpaceId, #change{
-    model = times,
-    doc = #document{
+change_replicated_internal(_SpaceId, #document{
         key = FileUuid,
         value = #times{}
-    }}, _Master) ->
+    }, _Master) ->
     ?debug("change_replicated_internal: changed times ~p", [FileUuid]),
     ok = file_consistency:add_components_and_notify(FileUuid, [times]);
-change_replicated_internal(SpaceId, #change{
-    model = change_propagation_controller,
-    doc = #document{
+change_replicated_internal(SpaceId, #document{
         deleted = false,
         value = #links{
             model = change_propagation_controller,
             doc_key = DocKey
         }
-    }}, _Master) ->
+    }, _Master) ->
     ?debug("change_replicated_internal: change_propagation_controller links ~p", [DocKey]),
-    {ok, _} = change_propagation_controller:verify_propagation(DocKey, SpaceId, false);
-change_replicated_internal(_SpaceId, #change{
-    model = change_propagation_controller,
-    doc = Doc = #document{
+    ok = change_propagation_controller:verify_propagation(DocKey, SpaceId, false);
+change_replicated_internal(_SpaceId, #document{
         deleted = false,
-        key = Key
-    }}, _Master) ->
+        key = Key,
+        value = #change_propagation_controller{}
+    } = Doc, _Master) ->
     ?debug("change_replicated_internal: change_propagation_controller ~p", [Key]),
     ok = change_propagation_controller:mark_change_propagated(Doc);
-change_replicated_internal(_SpaceId, #change{
-    model = custom_metadata,
-    doc = #document{
+change_replicated_internal(_SpaceId, #document{
         key = FileUuid,
         value = #custom_metadata{}
-    }}, _Master) ->
+    }, _Master) ->
     ?debug("change_replicated_internal: changed custom_metadata ~p", [FileUuid]),
     ok = file_consistency:add_components_and_notify(FileUuid, [custom_metadata]);
 change_replicated_internal(_SpaceId, _Change, _Master) ->

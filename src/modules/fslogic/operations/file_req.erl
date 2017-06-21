@@ -230,11 +230,11 @@ create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
     {ok, FileUuid} = file_meta:create({uuid, ParentFileUuid}, File), %todo pass file_ctx
 
     CTime = erlang:system_time(seconds),
+    SpaceId = file_ctx:get_space_id_const(ParentFileCtx),
     {ok, _} = times:create(#document{key = FileUuid, value = #times{
         mtime = CTime, atime = CTime, ctime = CTime
-    }}),
+    }, scope = SpaceId}),
 
-    SpaceId = file_ctx:get_space_id_const(ParentFileCtx),
     file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId)).
 
 %%--------------------------------------------------------------------

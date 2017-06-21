@@ -127,7 +127,7 @@ save(Document = #document{key = Key, value = #file_location{
             space_quota:apply_size_change_and_maybe_emit(SpaceId, NewSize),
             monitoring_event:emit_storage_used_updated(SpaceId, UserId, NewSize)
     end,
-    model:execute_with_default_context(?MODULE, save, [Document]).
+    model:execute_with_default_context(?MODULE, save, [Document#document{scope = SpaceId}]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -156,7 +156,7 @@ create(Document = #document{value = #file_location{
     space_quota:apply_size_change_and_maybe_emit(SpaceId, NewSize),
     monitoring_event:emit_storage_used_updated(SpaceId, UserId, NewSize),
 
-    model:execute_with_default_context(?MODULE, create, [Document]).
+    model:execute_with_default_context(?MODULE, create, [Document#document{scope = SpaceId}]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -259,8 +259,7 @@ before(_ModelName, _Method, _Level, _Context) ->
 %% Returns total size used by given file_location.
 %% @end
 %%--------------------------------------------------------------------
--spec count_bytes(datastore:document()) ->
-    Size :: non_neg_integer().
+-spec count_bytes(datastore:document()) -> Size :: non_neg_integer().
 count_bytes(#document{value = #file_location{blocks = Blocks}}) ->
     count_bytes(Blocks, 0).
 

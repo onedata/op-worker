@@ -31,7 +31,7 @@
 -spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
 record_struct(1) ->
     {record, [
-        {monitoring_id, {record, 1, [
+        {monitoring_id, {record, [
             {main_subject_type, atom},
             {main_subject_id, binary},
             {metric_type, atom},
@@ -136,7 +136,8 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(monitoring_state_bucket, [], ?DISK_ONLY_LEVEL).
+    ?MODEL_CONFIG(monitoring_state_bucket, [], ?GLOBALLY_CACHED_LEVEL)#model_config{
+        list_enabled = {true, return_errors}}.
 
 %%--------------------------------------------------------------------
 %% @doc

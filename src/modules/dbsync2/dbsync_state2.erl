@@ -1,36 +1,30 @@
 %%%-------------------------------------------------------------------
-%%% @author Lukasz Opiola
-%%% @copyright (C) 2016 ACK CYFRONET AGH
-%%% This software is released under the MIT license
-%%% cited in 'LICENSE.txt'.
+%%% @author Krzysztof Trzepla
+%%% @copyright (C) 2017 ACK CYFRONET AGH
+%%% This software is released under the MIT license cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Cache for handle service details fetched from OZ.
+%%% @doc
+%%% Persistent state of DBSync worker. For each space it holds mapping from
+%%% provider to a sequence number of the beginning of expected changes range.
 %%% @end
 %%%-------------------------------------------------------------------
--module(od_handle_service).
--author("Lukasz Opiola").
+-module(dbsync_state2).
+-author("Krzysztof Trzepla").
+
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
--include_lib("ctool/include/oz/oz_handle_services.hrl").
 
--type doc() :: datastore:document().
--type info() :: #od_handle_service{}.
--type id() :: binary().
--type name() :: binary().
--type proxy_endpoint() :: binary().
--type service_properties() :: proplists:proplist().  % JSON proplist
-
--export_type([doc/0, info/0, id/0]).
--export_type([name/0, proxy_endpoint/0, service_properties/0]).
+-export([record_struct/1]).
 
 %% model_behaviour callbacks
--export([save/1, get/1, get_or_fetch/2, list/0, exists/1, delete/1, update/2,
-    create/1, model_init/0, 'after'/5, before/4]).
--export([create_or_update/2]).
--export([record_struct/1]).
+-export([save/1, get/1, exists/1, delete/1, update/2, create/1]).
+-export([model_init/0, 'after'/5, before/4]).
+
+%% API
+-export([get_seq/2, set_seq/3]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -40,30 +34,12 @@
 -spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
 record_struct(1) ->
     {record, [
-        {name, string},
-        {proxy_endpoint, string},
-        {service_properties, [term]},
-        {users, [{string, [atom]}]},
-        {groups, [{string, [atom]}]},
-        {eff_users, [{string, [atom]}]},
-        {eff_groups, [{string, [atom]}]},
-        {revision_history, [term]}
+        {seq, #{string => integer}}
     ]}.
 
 %%%===================================================================
 %%% model_behaviour callbacks
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates document with using ID from document. If such object does not exist,
-%% it initialises the object with the document.
-%% @end
-%%--------------------------------------------------------------------
--spec create_or_update(datastore:document(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:ext_key()} | datastore:generic_error().
-create_or_update(Doc, Diff) ->
-    model:execute_with_default_context(?MODULE, create_or_update, [Doc, Diff]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -106,30 +82,6 @@ get(Key) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets space info from the database in user context. If space info is not found
-%% fetches it from onezone and stores it in the database.
-%% @end
-%%--------------------------------------------------------------------
--spec get_or_fetch(Auth :: oz_endpoint:auth(), HandleServiceId :: id()) ->
-    {ok, datastore:document()} | datastore:get_error().
-get_or_fetch(Auth, HandleServiceId) ->
-    case ?MODULE:get(HandleServiceId) of
-        {ok, Doc} -> {ok, Doc};
-        {error, {not_found, _}} -> fetch(Auth, HandleServiceId);
-        {error, Reason} -> {error, Reason}
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of all records.
-%% @end
-%%--------------------------------------------------------------------
--spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
-list() ->
-    model:execute_with_default_context(?MODULE, list, [?GET_ALL, []]).
-
-%%--------------------------------------------------------------------
-%% @doc
 %% {@link model_behaviour} callback delete/1.
 %% @end
 %%--------------------------------------------------------------------
@@ -145,7 +97,6 @@ delete(Key) ->
 -spec exists(datastore:ext_key()) -> datastore:exists_return().
 exists(Key) ->
     ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [Key])).
-
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link model_behaviour} callback model_init/0.
@@ -153,15 +104,15 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    StoreLevel = ?GLOBALLY_CACHED_LEVEL,
-    ?MODEL_CONFIG(handle_service_info_bucket, [], StoreLevel).
+    ?MODEL_CONFIG(dbsync2_bucket, [], ?GLOBALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link model_behaviour} callback 'after'/5.
 %% @end
 %%--------------------------------------------------------------------
--spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
+-spec 'after'(ModelName :: model_behaviour:model_type(),
+    Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
@@ -172,39 +123,51 @@ model_init() ->
 %% {@link model_behaviour} callback before/4.
 %% @end
 %%--------------------------------------------------------------------
--spec before(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
+-spec before(ModelName :: model_behaviour:model_type(),
+    Method :: model_behaviour:model_action(),
+    Level :: datastore:store_level(), Context :: term()) ->
+    ok | datastore:generic_error().
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
 
 %%%===================================================================
-%%% Internal functions
+%%% API functions
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
-%% Fetches space info from onezone and stores it in the database.
+%% Returns sequence number of the beginning of expected changes range
+%% from given space and provider.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch(Auth :: oz_endpoint:auth(), HandleServiceId :: id()) ->
-    {ok, datastore:document()} | datastore:get_error().
-fetch(Auth, HandleServiceId) ->
-    {ok, #handle_service_details{
-        name = Name,
-        proxy_endpoint = ProxyEndpoint,
-        service_properties = ServiceProperties
-    }} = oz_handle_services:get_details(Auth, HandleServiceId),
+-spec get_seq(od_space:id(), od_provider:id()) -> couchbase_changes:seq().
+get_seq(SpaceId, ProviderId) ->
+    case dbsync_state2:get(SpaceId) of
+        {ok, #document{value = #dbsync_state2{seq = Seq}}} ->
+            maps:get(ProviderId, Seq, 1);
+        {error, {not_found, _}} ->
+            1
+    end.
 
-    Doc = #document{key = HandleServiceId, value = #od_handle_service{
-        name = Name,
-        proxy_endpoint = ProxyEndpoint,
-        service_properties = ServiceProperties
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets sequence number of the beginning of expected changes range
+%% from given space and provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_seq(od_space:id(), od_provider:id(), couchbase_changes:seq()) ->
+    ok | {error, Reason :: term()}.
+set_seq(SpaceId, ProviderId, ProviderSeq) ->
+    Doc = #document{key = SpaceId, value = #dbsync_state2{
+        seq = #{ProviderId => ProviderSeq}
     }},
-
-    case create(Doc) of
-        {ok, _} -> ok;
-        {error, already_exists} -> ok
+    Diff = fun(#dbsync_state2{seq = Seq} = State) ->
+        {ok, State#dbsync_state2{seq = maps:put(ProviderId, ProviderSeq, Seq)}}
     end,
-
-    {ok, Doc}.
+    Result = model:execute_with_default_context(
+        ?MODULE, create_or_update, [Doc, Diff]
+    ),
+    case Result of
+        {ok, SpaceId} -> ok;
+        {error, Reason} -> {error, Reason}
+    end.

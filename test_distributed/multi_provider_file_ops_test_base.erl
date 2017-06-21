@@ -109,12 +109,10 @@ permission_cache_invalidate_test_skeleton(Config, Attempts, CheckedModule, Inval
     lists:foreach(fun(Worker) ->
         ?assertMatch({error,{not_found, _}}, ?rpc(Worker, change_propagation_controller, get,
             [ControllerUUID]), Attempts * length(Workers)),
-        % TODO - uncomment after VFS-2678
+
         ListFun = fun(LinkName, _LinkTarget, Acc) ->
             [LinkName | Acc]
         end,
-        MC = change_propagation_controller:model_init(),
-        LSL = MC#model_config.link_store_level,
         ?assertEqual({ok, []}, ?rpc(Worker, model, execute_with_default_context,
             [change_propagation_controller, foreach_link, [ControllerUUID, ListFun, []]]), Attempts)
     end, Workers),
@@ -385,11 +383,11 @@ distributed_modification_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyN
 
 file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
     timer:sleep(10000), % TODO - connection must appear after mock setup
-    Attempts = 15,
+    Attempts = 60,
     User = <<"user1">>,
 
     SessId = fun(W) -> ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config) end,
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
+    [{SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
     A1 = ?rpc(Worker1, file_meta, get, [{path, <<"/", SpaceName/binary>>}]),
     ?assertMatch({ok, _}, A1),
     {ok, SpaceDoc} = A1,
@@ -417,7 +415,8 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
                 mode = 8#775,
                 owner = User,
                 scope = SpaceKey
-            }
+            },
+            scope = SpaceId
             },
 %%            ct:print("Doc ~p ~p", [Uuid, Name]),
             {Doc, Name}
@@ -857,12 +856,11 @@ echo_and_delete_file_loop_test_base(Config0, IterationsNum, User) ->
 
 init_env(Config) ->
     lists:foreach(fun(Worker) ->
-        test_utils:set_env(Worker, ?APP_NAME, dbsync_flush_queue_interval, timer:seconds(1)),
+        test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
+        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_update_interval, timer:seconds(1)),
+        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_stream_update_interval, timer:seconds(1)),
         test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
-%%        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(2)),
-        % TODO - change to 2 seconds
-        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(1)),
-        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, datastore_pool_queue_flush_delay, 1000)
+        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(1)) % TODO - change to 2 seconds
     end, ?config(op_worker_nodes, Config)),
 
     application:start(etls),
@@ -929,8 +927,10 @@ get_locations_from_map(Map) ->
     end, [], Map).
 
 create_doc(Doc, _ParentDoc, _LocId, _Path) ->
+    SpaceId = Doc#document.scope,
     {ok, FileUuid} = file_meta:save(Doc),
-    {ok, _} = times:save(#document{key = FileUuid, value = #times{}}),
+    {ok, _} = times:save(#document{key = FileUuid, value = #times{},
+        scope = SpaceId}),
     ok.
 
 set_parent_link(Doc, ParentDoc, _LocId, _Path) ->
@@ -947,6 +947,7 @@ set_link_to_parent(Doc, ParentDoc, _LocId, _Path) ->
 create_location(Doc, _ParentDoc, LocId, Path) ->
     FDoc = Doc#document.value,
     FileUuid = Doc#document.key,
+    SpaceId = Doc#document.scope,
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(FDoc#file_meta.scope),
 
     {ok, #document{key = StorageId}} = fslogic_storage:select_storage(SpaceId),
@@ -957,7 +958,7 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
 
     MC = file_location:model_init(),
     {ok, _} = model:execute_with_default_context(MC, save,
-        [#document{key = LocId, value = Location}]),
+        [#document{key = LocId, value = Location, scope = SpaceId}]),
 
     LeafLess = filename:dirname(FileId),
     {ok, #document{key = StorageId} = Storage} = fslogic_storage:select_storage(SpaceId),
@@ -979,15 +980,16 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
 
 set_link_to_location(Doc, _ParentDoc, LocId, _Path) ->
     FileUuid = Doc#document.key,
+    SpaceId = Doc#document.scope,
     MC = file_meta:model_init(),
     ok = model:execute_with_default_context(MC, add_links,
         [Doc, {file_meta:location_ref(oneprovider:get_provider_id()), {LocId, file_location}}]),
     ok = model:execute_with_default_context(file_location, add_links,
-        [LocId, {file_meta, {FileUuid, file_meta}}]).
+        [LocId, {file_meta, {FileUuid, file_meta}}], [{scope, SpaceId}]).
 
 add_dbsync_state(Doc, _ParentDoc, _LocId, _Path) ->
-    {ok, SID} = dbsync_worker:get_space_id(Doc),
-    {ok, _} = dbsync_state:save(#document{key = dbsync_state:sid_doc_key(file_meta, Doc#document.key), value = #dbsync_state{entry = {ok, SID}}}),
+%%    {ok, SID} = dbsync_worker:get_space_id(Doc),
+%%    {ok, _} = dbsync_state:save(#document{key = dbsync_state:sid_doc_key(file_meta, Doc#document.key), value = #dbsync_state{entry = {ok, SID}}}),
     ok.
 
 extend_config(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts) ->

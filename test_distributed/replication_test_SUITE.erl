@@ -84,6 +84,8 @@ all() ->
 -define(rpc(Module, Function, Args), rpc:call(W1, Module, Function, Args)).
 -define(call_store(Model, F, A), ?rpc(
     model, execute_with_default_context, [Model, F, A])).
+-define(call_store(Model, F, A, O), ?rpc(
+    model, execute_with_default_context, [Model, F, A, O])).
 
 %%%===================================================================
 %%% Test functions
@@ -107,7 +109,7 @@ dbsync_trigger_should_create_local_file_location(Config) ->
 
     %when
     ?rpc(dbsync_events, change_replicated,
-        [SpaceId, #change{model = file_meta, doc = #document{key = FileUuid, value = FileMeta}}]),
+        [SpaceId, #document{key = FileUuid, value = FileMeta}]),
 
     %then
     ?assertMatch({ok, [_]}, ?rpc(file_meta, get_locations, [{uuid, FileUuid}])),
@@ -141,7 +143,7 @@ local_file_location_should_have_correct_uid_for_local_user(Config) ->
 
     %when
     ?rpc(dbsync_events, change_replicated,
-        [SpaceId, #change{model = file_meta, doc = #document{key = FileUuid, value = FileMeta}}]),
+        [SpaceId, #document{key = FileUuid, value = FileMeta}]),
 
     %then
     {Uid, _Gid} = rpc:call(W1, luma, get_posix_user_ctx, [UserId, SpaceId]),
@@ -186,9 +188,9 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
 
     %when
     ?rpc(dbsync_events, change_replicated,
-        [SpaceId, #change{model = file_meta, doc = #document{key = FileUuid, value = FileMeta}}]),
+        [SpaceId, #document{key = FileUuid, value = FileMeta}]),
     ?rpc(dbsync_events, change_replicated,
-        [SpaceId, #change{model = file_meta, doc = #document{key = FileUuid2, value = FileMeta2}}]),
+        [SpaceId, #document{key = FileUuid2, value = FileMeta2}]),
     ?rpc(od_user, create, [#document{key = ExternalUser, value = #od_user{name = <<"User">>, space_aliases = [{SpaceId, SpaceName}]}}]),
     timer:sleep(timer:seconds(1)), % need to wait for asynchronous trigger
 
@@ -412,8 +414,7 @@ external_change_should_invalidate_blocks(Config) ->
         [{uuid, FileUuid}, RemoteLocationId, ExternalProviderId])),
 
     % when
-    ?rpc(dbsync_events, change_replicated, [SpaceId,
-        #change{model = file_location, doc = UpdatedRemoteLocationDoc}]),
+    ?rpc(dbsync_events, change_replicated, [SpaceId, UpdatedRemoteLocationDoc]),
 
     % then
     ?assertMatch([#document{value = #file_location{version_vector = VV, blocks =
@@ -514,8 +515,7 @@ remote_change_should_invalidate_only_updated_part_of_file(Config) ->
         [{uuid, FileUuid}, RemoteLocationId, ExternalProviderId])),
 
     % when
-    ?rpc(dbsync_events, change_replicated, [SpaceId,
-        #change{model = file_location, doc = UpdatedRemoteLocationDoc}]),
+    ?rpc(dbsync_events, change_replicated, [SpaceId, UpdatedRemoteLocationDoc]),
 
     % then
     ?assertMatch([#document{value = #file_location{version_vector = VV, blocks =
@@ -558,8 +558,7 @@ remote_change_without_history_should_invalidate_whole_data(Config) ->
         [{uuid, FileUuid}, RemoteLocationId, ExternalProviderId])),
 
     % when
-    ?rpc(dbsync_events, change_replicated, [SpaceId,
-        #change{model = file_location, doc = UpdatedRemoteLocationDoc}]),
+    ?rpc(dbsync_events, change_replicated, [SpaceId, UpdatedRemoteLocationDoc]),
 
     % then
     ?assertMatch([#document{value = #file_location{version_vector = VV, size = ExternalSize,
@@ -609,8 +608,7 @@ remote_change_of_size_should_notify_clients(Config) ->
         fun(_Entry, _ExcludedSessions) -> ok end),
 
     % when
-    ?rpc(dbsync_events, change_replicated, [SpaceId,
-        #change{model = file_location, doc = UpdatedRemoteLocationDoc}]),
+    ?rpc(dbsync_events, change_replicated, [SpaceId, UpdatedRemoteLocationDoc]),
 
     % then
     TheFileCtxWithGuid = fun(FileCtx) ->
@@ -659,8 +657,7 @@ remote_change_of_blocks_should_notify_clients(Config) ->
         fun(_Entry, _ExcludedSessions) -> ok end),
 
     % when
-    ?rpc(dbsync_events, change_replicated, [SpaceId,
-        #change{model = file_location, doc = UpdatedRemoteLocationDoc}]),
+    ?rpc(dbsync_events, change_replicated, [SpaceId, UpdatedRemoteLocationDoc]),
 
     % then
     TheFileCtxWithGuid = fun(FileCtx) ->
@@ -714,8 +711,7 @@ remote_irrelevant_change_should_not_notify_clients(Config) ->
         fun(_Entry, _ExcludedSessions) -> ok end),
 
     % when
-    ?rpc(dbsync_events, change_replicated, [SpaceId,
-        #change{model = file_location, doc = UpdatedRemoteLocationDoc}]),
+    ?rpc(dbsync_events, change_replicated, [SpaceId, UpdatedRemoteLocationDoc]),
 
     % then
 %%    ?assertEqual(0, ?rpc(meck, num_calls, [fslogic_event_emitter, emit_file_location_changed, ['_', '_']])), %todo VFS-2132
@@ -769,8 +765,7 @@ conflicting_remote_changes_should_be_reconciled(Config) ->
     LocalLocation#file_location{version_vector = NewLocalVV, recent_changes = {[], LocalChanges}}}]),
 
     % when
-    ?rpc(dbsync_events, change_replicated, [SpaceId,
-        #change{model = file_location, doc = UpdatedRemoteLocationDoc}]),
+    ?rpc(dbsync_events, change_replicated, [SpaceId, UpdatedRemoteLocationDoc]),
 
     % then
     #document{value = #file_location{version_vector = MergedVV}} =
@@ -835,15 +830,14 @@ external_file_location_notification_should_wait_for_local_file_location(Config) 
 
     %when
     spawn(fun() ->
-        ?rpc(dbsync_events, change_replicated, [SpaceId,
-            #change{model = file_location, doc = RemoteLocation}])
+        ?rpc(dbsync_events, change_replicated, [SpaceId, RemoteLocation])
         end),
 
     %trigger file_meta change after some time
     timer:sleep(timer:seconds(5)),
     ?assertMatch({ok, []}, ?rpc(file_meta, get_locations, [{uuid, FileUuid}])),
-    ?rpc(dbsync_events, change_replicated,
-        [SpaceId, #change{model = file_meta, doc = #document{key = FileUuid, value = FileMeta}}]),
+    ?rpc(dbsync_events, change_replicated, [SpaceId,
+        #document{key = FileUuid, value = FileMeta}]),
     timer:sleep(timer:seconds(2)),
 
     %then
@@ -880,11 +874,13 @@ external_file_location_notification_should_wait_for_links(Config) ->
         blocks = [], file_id = ExternalFileId, uuid = FileUuid,
         version_vector = #{}, recent_changes = {[], [#file_block{offset = 2, size = 2}]}}}),
     RemoteVersion = RemoteLocation#document.value#file_location.version_vector,
-    ?rpc(dbsync_events, change_replicated, [SpaceId, #change{model = file_meta, doc = #document{key = FileUuid, value = FileMeta}}]),
+    ?rpc(dbsync_events, change_replicated, [SpaceId,
+        #document{key = FileUuid, value = FileMeta}]),
     {ok, [Id1]} = ?assertMatch({ok, [_]}, ?rpc(file_meta, get_locations, [{uuid, FileUuid}])),
 
-    ModelConfig = ?rpc(file_meta, model_init, []),
-    {ok, #document{key = LinkId, value = LinkValue}} = ?rpc(mnesia_cache_driver, get_link_doc, [ModelConfig, links_utils:links_doc_key(FileUuid, ProviderId)]),
+    {ok, #document{key = LinkId, value = LinkValue}} =
+        ?call_store(file_meta, get, [links_utils:links_doc_key(FileUuid, ProviderId)],
+            [{hooks_config, no_hooks}, {links_tree, {true, FileUuid}}]),
     test_utils:mock_new(W1, file_meta, [passthrough]),
     test_utils:mock_expect(W1, file_meta, exists_local_link_doc,
         fun(Key) ->
@@ -902,7 +898,7 @@ external_file_location_notification_should_wait_for_links(Config) ->
 
     %trigger file_location change
     spawn(fun() ->
-        ?rpc(dbsync_events, change_replicated, [SpaceId, #change{model = file_location, doc = RemoteLocation}])
+        ?rpc(dbsync_events, change_replicated, [SpaceId, RemoteLocation])
     end),
 
     % trigger link change after some time
@@ -915,7 +911,7 @@ external_file_location_notification_should_wait_for_links(Config) ->
             meck:passthrough([Key])
         end),
 
-    ?rpc(dbsync_events, change_replicated, [SpaceId, #change{model = file_meta, doc = LinkDoc}]),
+    ?rpc(dbsync_events, change_replicated, [SpaceId, LinkDoc]),
     timer:sleep(timer:seconds(2)),
 
     %then
@@ -953,8 +949,7 @@ external_file_location_notification_should_wait_for_file_meta(Config) ->
 
     %when
     spawn(fun() ->
-        ?rpc(dbsync_events, change_replicated, [SpaceId,
-            #change{model = file_location, doc = RemoteLocation}])
+        ?rpc(dbsync_events, change_replicated, [SpaceId, RemoteLocation])
     end),
 
     %trigger file_meta change after some time
@@ -962,8 +957,7 @@ external_file_location_notification_should_wait_for_file_meta(Config) ->
     {ok, FileUuid} = ?assertMatch({ok, _}, ?rpc(file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
     ?assertMatch({ok, _}, ?rpc(times, create, [#document{key = FileUuid, value = #times{atime = CTime, ctime = CTime, mtime = CTime}}])),
 
-    ?rpc(dbsync_events, change_replicated,
-        [SpaceId, #change{model = file_meta, doc = FileMeta}]),
+    ?rpc(dbsync_events, change_replicated, [SpaceId, FileMeta]),
     timer:sleep(timer:seconds(2)),
 
     %then
@@ -1002,8 +996,7 @@ changes_should_be_applied_even_when_the_issuer_process_is_dead(Config) ->
 
     %when
     Pid = spawn(fun() ->
-        ?rpc(dbsync_events, change_replicated, [SpaceId,
-            #change{model = file_location, doc = RemoteLocation}])
+        ?rpc(dbsync_events, change_replicated, [SpaceId, RemoteLocation])
     end),
 
     %trigger file_meta change after some time
@@ -1011,7 +1004,7 @@ changes_should_be_applied_even_when_the_issuer_process_is_dead(Config) ->
     exit(Pid, test_kill),
     ?assertMatch({ok, []}, ?rpc(file_meta, get_locations, [{uuid, FileUuid}])),
     ?rpc(dbsync_events, change_replicated,
-        [SpaceId, #change{model = file_meta, doc = #document{key = FileUuid, value = FileMeta}}]),
+        [SpaceId, #document{key = FileUuid, value = FileMeta}]),
     timer:sleep(timer:seconds(2)),
 
     %then
@@ -1066,8 +1059,7 @@ external_file_location_notification_should_wait_for_grandparent_file_meta(Config
 
     %when
     spawn(fun() ->
-        ?rpc(dbsync_events, change_replicated,
-            [SpaceId, #change{model = file_meta, doc = FileMeta}])
+        ?rpc(dbsync_events, change_replicated, [SpaceId, FileMeta])
     end),
 
     %trigger file_meta change after some time
@@ -1076,7 +1068,7 @@ external_file_location_notification_should_wait_for_grandparent_file_meta(Config
     {ok, _} = ?call_store(file_meta, save, [#document{key = Dir1Uuid, value = Dir1Meta}]),
     {ok, _} = ?call_store(times, save, [#document{key = Dir1Uuid, value = Dir1Times}]),
     ?rpc(dbsync_events, change_replicated,
-        [SpaceId, #change{model = file_meta, doc = #document{key = Dir1Uuid, value = Dir1Meta}}]),
+        [SpaceId, #document{key = Dir1Uuid, value = Dir1Meta}]),
     timer:sleep(timer:seconds(2)),
 
     %then

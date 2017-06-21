@@ -45,7 +45,7 @@
 -spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
 record_struct(1) ->
     {record, [
-        {value, #{string => {custom_type, index, index_encoder}}}
+        {value, #{string => {custom, index, index_encoder}}}
     ]}.
 
 %%%===================================================================
@@ -137,7 +137,8 @@ remove_index(UserId, IndexId) ->
         {ok, IndexesDoc#indexes{value = NewValue}}
     end) of
         {ok, _} ->
-            couchdb_datastore_driver:delete_view(custom_metadata, IndexId);
+            couchbase_driver:delete_design_doc(
+                model:make_disk_ctx(custom_metadata:model_init()), IndexId);
         {error, {not_found, indexes}} ->
             ok;
         Error ->
@@ -176,7 +177,13 @@ get_all_indexes(UserId) ->
 %%--------------------------------------------------------------------
 -spec query_view(index_id(), list()) -> {ok, [file_meta:uuid()]}.
 query_view(Id, Options) ->
-    {ok, FileUuids} = couchdb_datastore_driver:query_view(custom_metadata, Id, Options),
+    Ctx = model:make_disk_ctx(custom_metadata:model_init()),
+    {ok, {Rows}} = couchbase_driver:query_view(Ctx, Id, Id, Options),
+    FileUuids = lists:map(fun(Row) ->
+        {<<"id">>, <<"custom_metadata-", FileUuid/binary>>} =
+            lists:keyfind(<<"id">>, 1, Row),
+        FileUuid
+    end, Rows),
     {ok, lists:filtermap(fun(Uuid) ->
         try
             {true, fslogic_uuid:uuid_to_guid(Uuid)}
@@ -306,10 +313,14 @@ before(_ModelName, _Method, _Level, _Context) ->
 add_db_view(IndexId, SpaceId, Function, Spatial) ->
     RecordName = custom_metadata,
     RecordNameBin = atom_to_binary(RecordName, utf8),
-    DbViewFunction = <<"function (doc, meta) { 'use strict'; if(doc['<record_type>'] == '", RecordNameBin/binary, "' && doc['space_id'] == '", SpaceId/binary , "') { "
+    ViewFunction = <<"function (doc, meta) { 'use strict'; if(doc['_record'] == '", RecordNameBin/binary, "' && doc['space_id'] == '", SpaceId/binary , "') { "
         "var key = eval.call(null, '(", Function/binary, ")'); ",
         "var key_to_emit = key(doc['value']); if(key_to_emit) { emit(key_to_emit, null); } } }">>,
-    ok = couchdb_datastore_driver:add_view(RecordName, IndexId, DbViewFunction, Spatial).
+    Ctx = model:make_disk_ctx(custom_metadata:model_init()),
+    ok = case Spatial of
+        true -> couchbase_driver:save_spatial_view_doc(Ctx, IndexId, ViewFunction);
+        _ -> couchbase_driver:save_view_doc(Ctx, IndexId, ViewFunction)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc escapes characters: \ " ' \n \t \v \0 \f \r

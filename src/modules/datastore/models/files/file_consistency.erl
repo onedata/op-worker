@@ -331,13 +331,12 @@ check_missing_components(FileUuid, SpaceId, [{rev, Model, Rev} | RestMissing], F
 -spec verify_revision(file_meta:uuid(), atom(), non_neg_integer()) ->
     ok | younger_revision | not_found.
 verify_revision(FileUuid, Model, Rev) ->
-    Driver = datastore:driver_to_module(datastore:level_to_driver(?DISK_ONLY_LEVEL)),
-    MC = Model:model_init(),
     % TODO - what if document has been deleted in parallel by other provider?
     % TODO - get all revisions simmilar to process_raw_doc
-    case catch erlang:apply(Driver, get, [MC, FileUuid]) of
-        {ok, #document{rev = CurrentRev}} ->
-            case couchdb_datastore_driver:rev_to_number(CurrentRev) >= Rev of
+    case catch model:execute_with_default_context(Model, get, [FileUuid]) of
+        {ok, #document{rev = [CurrentRev | _]}} ->
+            {GetRev, _} = memory_store_driver:rev_to_info(CurrentRev),
+            case GetRev >= Rev of
                 true ->
                     ok;
                 _ ->
