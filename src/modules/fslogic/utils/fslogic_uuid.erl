@@ -93,8 +93,8 @@ uuid_to_path(SessionId, FileUuid) ->
     fslogic_worker:file_guid().
 uuid_to_guid(FileUuid, SpaceId) ->
     DefinedSpaceId = utils:ensure_defined(SpaceId, undefined, <<>>),
-    <<?GUID_PREFIX, ?GUID_SEPARATOR,
-        FileUuid/binary, ?GUID_SEPARATOR, DefinedSpaceId/binary>>.
+    http_utils:base64url_encode(<<?GUID_PREFIX, ?GUID_SEPARATOR,
+        FileUuid/binary, ?GUID_SEPARATOR, DefinedSpaceId/binary>>).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -170,10 +170,10 @@ uuid_to_share_guid(FileUuid, SpaceId, undefined) ->
     uuid_to_guid(FileUuid, SpaceId);
 uuid_to_share_guid(FileUuid, SpaceId, ShareId) ->
     DefinedSpaceId = utils:ensure_defined(SpaceId, undefined, <<>>),
-    <<?SHARE_GUID_PREFIX, ?GUID_SEPARATOR,  FileUuid/binary,
+    http_utils:base64url_encode(<<?SHARE_GUID_PREFIX, ?GUID_SEPARATOR,  FileUuid/binary,
         ?GUID_SEPARATOR, DefinedSpaceId/binary,
         ?GUID_SEPARATOR, ShareId/binary
-    >>.
+    >>).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -204,7 +204,7 @@ share_guid_to_guid(ShareGuid) ->
 -spec unpack_share_guid(od_share:share_guid()) ->
     {file_meta:uuid(), undefined | od_space:id(), od_share:id() | undefined}.
 unpack_share_guid(ShareGuid) ->
-    try binary:split(ShareGuid, <<?GUID_SEPARATOR>>, [global]) of
+    try binary:split(http_utils:base64url_decode(ShareGuid), <<?GUID_SEPARATOR>>, [global]) of
         [<<?SHARE_GUID_PREFIX>>, FileUuid, SpaceId, ShareId] ->
             NonEmptySpaceId = utils:ensure_defined(SpaceId, <<>>, undefined),
             {FileUuid, NonEmptySpaceId, ShareId};
