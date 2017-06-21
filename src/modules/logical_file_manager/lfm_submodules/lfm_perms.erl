@@ -33,7 +33,7 @@
     NewPerms :: file_meta:posix_permissions()) ->
     ok | logical_file_manager:error_reply().
 set_perms(SessId, FileKey, NewPerms) ->
-    {guid, Guid} = fslogic_uuid:ensure_guid(SessId, FileKey),
+    {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, file_request, Guid,
         #change_mode{mode = NewPerms},
         fun(_) -> ok end).
@@ -46,7 +46,7 @@ set_perms(SessId, FileKey, NewPerms) ->
 -spec check_perms(session:id(), logical_file_manager:file_key(), fslogic_worker:open_flag()) ->
     {ok, boolean()} | logical_file_manager:error_reply().
 check_perms(SessId, FileKey, Flag) ->
-    {guid, Guid} = fslogic_uuid:ensure_guid(SessId, FileKey),
+    {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
     case remote_utils:call_fslogic(SessId, provider_request, Guid,
         #check_perms{flag = Flag}, fun(_) -> ok end)
     of
@@ -68,7 +68,7 @@ check_perms(SessId, FileKey, Flag) ->
 -spec get_acl(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
     {ok, [access_control_entity()]} | logical_file_manager:error_reply().
 get_acl(SessId, FileKey) ->
-    {guid, Guid} = fslogic_uuid:ensure_guid(SessId, FileKey),
+    {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, Guid, #get_acl{},
         fun(#acl{value = Acl}) ->
             {ok, Acl}
@@ -83,7 +83,7 @@ get_acl(SessId, FileKey) ->
     EntityList :: [access_control_entity()]) ->
     ok | logical_file_manager:error_reply().
 set_acl(SessId, FileKey, Acl) ->
-    {guid, Guid} = fslogic_uuid:ensure_guid(SessId, FileKey),
+    {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, Guid,
         #set_acl{acl = #acl{value = Acl}},
         fun(_) -> ok end).
@@ -96,6 +96,6 @@ set_acl(SessId, FileKey, Acl) ->
 -spec remove_acl(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
     ok | logical_file_manager:error_reply().
 remove_acl(SessId, FileKey) ->
-    {guid, Guid} = fslogic_uuid:ensure_guid(SessId, FileKey),
+    {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, Guid, #remove_acl{},
         fun(_) -> ok end).

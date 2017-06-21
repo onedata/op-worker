@@ -13,12 +13,10 @@
 -author("Tomasz Lichon").
 
 -include("modules/fslogic/fslogic_common.hrl").
--include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([is_user_root_dir_uuid/1, user_root_dir_uuid/1, user_root_dir_guid/1,
-    ensure_guid/2]).
+-export([is_user_root_dir_uuid/1, user_root_dir_uuid/1, user_root_dir_guid/1]).
 -export([uuid_to_path/2]).
 -export([uuid_to_guid/2, uuid_to_guid/1, guid_to_uuid/1]).
 -export([spaceid_to_space_dir_uuid/1, space_dir_uuid_to_spaceid/1,
@@ -68,22 +66,6 @@ user_root_dir_uuid(UserId) ->
 -spec user_root_dir_guid(UserId :: od_user:id()) -> fslogic_worker:file_guid().
 user_root_dir_guid(UserId) ->
     uuid_to_guid(user_root_dir_uuid(UserId), undefined).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Converts given file entry to FileGuid.
-%% @end
-%%--------------------------------------------------------------------
--spec ensure_guid(session:id(), fslogic_worker:file_guid_or_path()) ->
-    {guid, fslogic_worker:file_guid()}.
-ensure_guid(_, {guid, FileGuid}) ->
-    {guid, FileGuid};
-ensure_guid(SessionId, {path, Path}) ->
-    remote_utils:call_fslogic(SessionId, fuse_request,
-        #resolve_guid{path = Path},
-        fun(#guid{guid = Guid}) ->
-            {guid, Guid}
-        end).
 
 %%--------------------------------------------------------------------
 %% @doc
