@@ -56,7 +56,7 @@
 ).
 
 -define(ID(Id, Ext), list_to_binary(
-    atom_to_list(Id) ++ " # " ++ atom_to_list(Ext)
+    atom_to_list(Id) ++ " @ " ++ atom_to_list(Ext)
 )).
 
 all() -> ?ALL([

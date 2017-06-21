@@ -16,7 +16,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([is_user_root_dir_uuid/1, user_root_dir_uuid/1, user_root_dir_guid/1]).
+-export([is_root_dir_uuid/1, user_root_dir_uuid/1, user_root_dir_guid/1]).
 -export([uuid_to_path/2]).
 -export([uuid_to_guid/2, uuid_to_guid/1, guid_to_uuid/1]).
 -export([spaceid_to_space_dir_uuid/1, space_dir_uuid_to_spaceid/1,
@@ -40,10 +40,10 @@
 %% Returns true if given uuid represents user root dir.
 %% @end
 %%--------------------------------------------------------------------
--spec is_user_root_dir_uuid(FileUuid :: file_meta:uuid()) -> boolean().
-is_user_root_dir_uuid(?ROOT_DIR_UUID) ->
+-spec is_root_dir_uuid(FileUuid :: file_meta:uuid()) -> boolean().
+is_root_dir_uuid(?ROOT_DIR_UUID) ->
     true;
-is_user_root_dir_uuid(FileUuid) ->
+is_root_dir_uuid(FileUuid) ->
     case FileUuid of
         <<?USER_ROOT_PREFIX, _UserId/binary>> ->
             true;

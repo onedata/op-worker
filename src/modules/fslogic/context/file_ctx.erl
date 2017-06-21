@@ -266,7 +266,7 @@ get_parent(FileCtx = #file_ctx{parent = undefined}, UserCtx) ->
     {Doc, FileCtx2} = get_file_doc_including_deleted(FileCtx),
     {ok, ParentUuid} = file_meta:get_parent_uuid(Doc),
     ParentGuid =
-        case is_root_dir_uuid(ParentUuid) of
+        case fslogic_uuid:is_root_dir_uuid(ParentUuid) of
             true ->
                 case ParentUuid =:= ?ROOT_DIR_UUID
                     andalso UserCtx =/= undefined
@@ -641,7 +641,7 @@ is_root_dir_const(#file_ctx{canonical_path = <<"/">>}) ->
     true;
 is_root_dir_const(#file_ctx{guid = Guid, canonical_path = undefined}) ->
     Uuid = fslogic_uuid:guid_to_uuid(Guid),
-    is_root_dir_uuid(Uuid);
+    fslogic_uuid:is_root_dir_uuid(Uuid);
 is_root_dir_const(#file_ctx{}) ->
     false.
 
@@ -718,14 +718,6 @@ is_dir(FileCtx) ->
 -spec new_child_by_uuid(file_meta:uuid(), file_meta:name(), od_space:id(), undefined | od_share:id()) -> ctx().
 new_child_by_uuid(Uuid, Name, SpaceId, ShareId) ->
     #file_ctx{guid = fslogic_uuid:uuid_to_share_guid(Uuid, SpaceId, ShareId), file_name = Name}.
-
-%%--------------------------------------------------------------------
-%% @doc Checks if uuid represents user's root dir
-%% @end
-%%--------------------------------------------------------------------
--spec is_root_dir_uuid(Uuid :: file_meta:uuid()) -> boolean().
-is_root_dir_uuid(Uuid) ->
-    fslogic_uuid:is_user_root_dir_uuid(Uuid).
 
 %%--------------------------------------------------------------------
 %% @private
