@@ -46,8 +46,9 @@
 %%--------------------------------------------------------------------
 -spec save(datastore:document()) ->
     {ok, datastore:ext_key()} | datastore:generic_error().
-save(Document) ->
-    model:execute_with_default_context(?MODULE, save, [Document]).
+save(#document{key = Key} = Document) ->
+    model:execute_with_default_context(?MODULE, save, [
+        Document#document{key = encode_key(Key)}]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -57,7 +58,7 @@ save(Document) ->
 -spec update(datastore:ext_key(), Diff :: datastore:document_diff()) ->
     {ok, datastore:ext_key()} | datastore:update_error().
 update(Key, Diff) ->
-    model:execute_with_default_context(?MODULE, update, [Key, Diff]).
+    model:execute_with_default_context(?MODULE, update, [encode_key(Key), Diff]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -66,8 +67,9 @@ update(Key, Diff) ->
 %%--------------------------------------------------------------------
 -spec create(datastore:document()) ->
     {ok, datastore:ext_key()} | datastore:create_error().
-create(Document) ->
-    model:execute_with_default_context(?MODULE, create, [Document]).
+create(#document{key = Key} = Document) ->
+    model:execute_with_default_context(?MODULE, create, [
+        Document#document{key = encode_key(Key)}]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -76,7 +78,7 @@ create(Document) ->
 %%--------------------------------------------------------------------
 -spec get(datastore:ext_key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
-    model:execute_with_default_context(?MODULE, get, [Key]).
+    model:execute_with_default_context(?MODULE, get, [encode_key(Key)]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -85,7 +87,7 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec delete(datastore:ext_key()) -> ok | datastore:generic_error().
 delete(Key) ->
-    model:execute_with_default_context(?MODULE, delete, [Key]).
+    model:execute_with_default_context(?MODULE, delete, [encode_key(Key)]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -94,7 +96,7 @@ delete(Key) ->
 %%--------------------------------------------------------------------
 -spec exists(datastore:ext_key()) -> datastore:exists_return().
 exists(Key) ->
-    ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [Key])).
+    ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [encode_key(Key)])).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -173,3 +175,6 @@ get_or_fetch(Cred) ->
         {error, {not_found, _}} -> fetch(Cred);
         Error -> Error
     end.
+
+encode_key(Key) ->
+    term_to_binary(Key).

@@ -227,6 +227,11 @@ handle_call({send, #server_message{} = ServerMsg}, _From, State = #state{socket 
 handle_call({send, ClientMsg = #client_message{message_id = #message_id{recipient = Pid, id = MessageId} = MID}},
     _From, State = #state{socket = Socket, transport = Transport}) when is_pid(Pid) ->
     {ok, _} = message_id:save(#document{key = MessageId, value = MID}),
+    % TODO - better management of message_id
+    spawn(fun() ->
+        timer:sleep(timer:minutes(5)),
+        message_id:delete(MessageId)
+    end),
     send_client_message(Socket, Transport, ClientMsg),
     {reply, ok, State};
 handle_call({send, ClientMsg = #client_message{}},

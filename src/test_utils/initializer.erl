@@ -672,6 +672,13 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
     %% Set expiration time for session to 1d.
     {_, []} = rpc:multicall(AllWorkers, application, set_env, [?APP_NAME, fuse_session_ttl_seconds, 240 * 60 * 60]),
 
+    lists:foreach(fun(Worker) ->
+        test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
+        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_update_interval, timer:seconds(1)),
+        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_stream_update_interval, timer:seconds(1))
+    end, AllWorkers),
+    rpc:multicall(AllWorkers, worker_proxy, call, [dbsync_worker2, streams_healthcheck]),
+
     proplists:compact(
         lists:flatten([{spaces, Spaces}] ++ [initializer:setup_session(W, Users, Config) || W <- MasterWorkers])
     ).

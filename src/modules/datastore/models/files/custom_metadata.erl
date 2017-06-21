@@ -63,13 +63,13 @@
 record_struct(1) ->
     {record, [
         {space_id, string},
-        {value, {custom_value, {json_utils, encode_map, decode_map}}}
+        {value, {custom, {json_utils, encode_map, decode_map}}}
     ]};
 record_struct(2) ->
     {record, [
         {space_id, string},
         {file_objectid, string},
-        {value, {custom_value, {json_utils, encode_map, decode_map}}}
+        {value, {custom, {json_utils, encode_map, decode_map}}}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -209,7 +209,7 @@ set_xattr_metadata(FileUuid, SpaceId, Name, Value, Create, Replace) ->
                 space_id = SpaceId,
                 file_objectid = FileObjectId,
                 value = Map
-            }},
+            }, scope = SpaceId},
             create_or_update(NewDoc, UpdatingFunction)
     end.
 

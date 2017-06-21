@@ -75,7 +75,7 @@ create_rrd(SpaceId, MonitoringId, StateBuffer, CreationTime) ->
                     rrd_guid = Guid,
                     state_buffer = StateBuffer,
                     last_update_time = CreationTime
-                }}),
+                }, scope = SpaceId}),
             ok;
         true -> ok
     end.

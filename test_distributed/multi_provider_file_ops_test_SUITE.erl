@@ -207,7 +207,7 @@ concurrent_create_test(Config) ->
         fun(WId) ->
             Check = fun() ->
                 {ok, CL} = lfm_proxy:ls(W(WId), SessId(W(WId)), {path, <<"/", Dir0Name/binary>>}, 0, 1000),
-                ExpectedChildCount = ProvIdCount * FileCount,
+                _ExpectedChildCount = ProvIdCount * FileCount,
                 {FetchedIds, FetchedNames} = lists:unzip(CL),
 
 %%                ct:print("Check ~p", [{lists:usort(Ids), lists:usort(FetchedIds)}]),

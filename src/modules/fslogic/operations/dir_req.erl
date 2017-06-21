@@ -73,7 +73,8 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     {ok, DirUuid} = file_meta:create(ParentDoc, File), %todo maybe pass file_ctx inside
     {ok, _} = times:create(#document{
         key = DirUuid,
-        value = #times{mtime = CTime, atime = CTime, ctime = CTime}
+        value = #times{mtime = CTime, atime = CTime, ctime = CTime},
+        scope = SpaceId
     }),
     fslogic_times:update_mtime_ctime(ParentFileCtx2),
     #fuse_response{status = #status{code = ?OK},

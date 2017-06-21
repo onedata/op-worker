@@ -18,7 +18,6 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include("http/rest/http_status.hrl").
--include("modules/dbsync/common.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
 
@@ -28,6 +27,12 @@
 
 %% resource functions
 -export([get_space_changes/2]).
+
+-record(change, {
+    seq :: non_neg_integer(),
+    doc :: datastore:document(),
+    model :: model_behaviour:model_type()
+}).
 
 %%%===================================================================
 %%% API
@@ -45,10 +50,10 @@ rest_init(Req, State) ->
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: term(), req(), maps:map()) -> ok.
 terminate(_, _, #{changes_stream := Stream, loop_pid := Pid, ref := Ref}) ->
-    gen_changes:stop(Stream),
-    Pid ! {Ref, stream_ended, undefined};
+    couchbase_changes:cancel_stream(Stream),
+    Pid ! {Ref, stream_ended};
 terminate(_, _, #{changes_stream := Stream}) ->
-    gen_changes:stop(Stream);
+    couchbase_changes:cancel_stream(Stream);
 terminate(_, _, #{}) ->
     ok.
 
@@ -111,18 +116,20 @@ get_space_changes(Req, State) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Init couchbeam changes stream
+%% Init changes stream.
 %% @end
 %%--------------------------------------------------------------------
 -spec init_stream(State :: maps:map()) -> maps:map().
-init_stream(State = #{last_seq := Since}) ->
+init_stream(State = #{last_seq := Since, space_id := SpaceId}) ->
     ?info("[ changes ]: Starting stream ~p", [Since]),
     Ref = make_ref(),
     Pid = self(),
 
     % todo limit to admin only (when we will have admin users)
-    {ok, Stream} = couchdb_datastore_driver:changes_start_link(
-        couchbeam_callbacks:notify_function(Pid, Ref), Since, infinity, couchdb_datastore_driver:sync_enabled_bucket()),
+    {ok, Stream} = couchbase_changes:stream(<<"sync">>, SpaceId, fun(Feed) ->
+        notify(Pid, Ref, Feed)
+    end, [{since, Since}]),
+
     State#{changes_stream => Stream, ref => Ref, loop_pid => Pid}.
 
 %%--------------------------------------------------------------------
@@ -281,3 +288,30 @@ prepare_response(#change{seq = Seq, doc = FileDoc = #document{
 same(X) ->
     put(x, X),
     get(x).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Forwards changes feed to a streaming process.
+%% @end
+%%--------------------------------------------------------------------
+-spec notify(pid(), reference(),
+    {ok, datastore:document() | end_of_stream} |
+    {error, couchbase_changes:since(), term()}) -> ok.
+notify(Pid, Ref, {ok, end_of_stream}) ->
+    Pid ! {Ref, stream_ended},
+    ok;
+notify(Pid, Ref, {ok, Doc = #document{seq = Seq, value = Value}}) when
+    is_record(Value, file_meta);
+    is_record(Value, custom_metadata);
+    is_record(Value, times);
+    is_record(Value, file_location) ->
+    Pid ! {Ref, #change{seq = Seq, doc = Doc, model = element(1, Value)}},
+    ok;
+notify(_Pid, _Ref, {ok, #document{}}) ->
+    ok;
+notify(Pid, Ref, {error, _Seq, Reason}) ->
+    ?error("Changes stream terminated abnormally due to: ~p", [Reason]),
+    Pid ! {Ref, stream_ended},
+    ok.

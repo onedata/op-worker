@@ -563,13 +563,14 @@ create_file_meta(FileMetaDoc, ParentPath) ->
 -spec create_times(file_meta:uuid(), times:time(), times:time(), times:time())
         -> {ok, datastore:key()}.
 create_times(FileUuid, MTime, ATime, CTime) ->
+    {ok, #document{scope = Scope}} = file_meta:get({uuid, FileUuid}),
     times:create(#document{
         key = FileUuid,
         value = #times{
             mtime = MTime,
             atime = ATime,
             ctime = CTime
-        }}).
+        }, scope = Scope}).
 
 %%--------------------------------------------------------------------
 %% @private

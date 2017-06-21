@@ -36,15 +36,15 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec validate_space_access(ProviderId :: oneprovider:id(), SpaceId :: od_space:id()) ->
-    ok | {error, space_not_supported_locally}.
+  ok | {error, space_not_supported_locally}.
 validate_space_access(ProviderId, SpaceId) ->
-    IsMember = lists:member(ProviderId, get_providers_for_space(SpaceId)),
-    ?debug("validate_space_access ~p ~p: ~p", [ProviderId, SpaceId, IsMember]),
-    case IsMember of
-        true -> ok;
-        false ->
-            {error, space_not_supported_locally}
-    end.
+  IsMember = lists:member(ProviderId, get_providers_for_space(SpaceId)),
+  ?debug("validate_space_access ~p ~p: ~p", [ProviderId, SpaceId, IsMember]),
+  case IsMember of
+    true -> ok;
+    false ->
+      {error, space_not_supported_locally}
+  end.
 
 
 %%--------------------------------------------------------------------
@@ -54,10 +54,10 @@ validate_space_access(ProviderId, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec temp_put(Key :: term(), Value :: term(), Timeout :: non_neg_integer()) -> ok.
 temp_put(Key, Value, 0) ->
-    worker_host:state_put(dbsync_worker, Key, Value);
+  worker_host:state_put(dbsync_worker, Key, Value);
 temp_put(Key, Value, Timeout) ->
-    timer:send_after(Timeout, whereis(dbsync_worker), {timer, {clear_temp, Key}}),
-    worker_host:state_put(dbsync_worker, Key, Value).
+  timer:send_after(Timeout, whereis(dbsync_worker), {timer, {clear_temp, Key}}),
+  worker_host:state_put(dbsync_worker, Key, Value).
 
 
 %%--------------------------------------------------------------------
@@ -67,7 +67,7 @@ temp_put(Key, Value, Timeout) ->
 %%--------------------------------------------------------------------
 -spec temp_clear(Key :: term()) -> ok.
 temp_clear(Key) ->
-    worker_host:state_delete(dbsync_worker, Key).
+  worker_host:state_delete(dbsync_worker, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -76,7 +76,7 @@ temp_clear(Key) ->
 %%--------------------------------------------------------------------
 -spec temp_get(Key :: term()) -> Value :: term().
 temp_get(Key) ->
-    worker_host:state_get(dbsync_worker, Key).
+  worker_host:state_get(dbsync_worker, Key).
 
 
 %%--------------------------------------------------------------------
@@ -85,15 +85,15 @@ temp_get(Key) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_providers_for_space(SpaceId :: binary()) ->
-    [oneprovider:id()].
+  [oneprovider:id()].
 get_providers_for_space(SpaceId) ->
-    try
-        {ok, #document{value = #od_space{providers = ProviderIds}}} = od_space:get_or_fetch(?ROOT_SESS_ID, SpaceId),
-        ProviderIds
-    catch
-        _:{_, {error, 'No such file or directory'}} ->
-            []
-    end .
+  try
+    {ok, #document{value = #od_space{providers = ProviderIds}}} = od_space:get_or_fetch(?ROOT_SESS_ID, SpaceId),
+    ProviderIds
+  catch
+    _:{_, {error, 'No such file or directory'}} ->
+      []
+  end .
 
 
 %%--------------------------------------------------------------------
@@ -101,9 +101,9 @@ get_providers_for_space(SpaceId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_spaces_for_provider() ->
-    [SpaceId :: binary()].
+  [SpaceId :: binary()].
 get_spaces_for_provider() ->
-    get_spaces_for_provider(oneprovider:get_provider_id()).
+  get_spaces_for_provider(oneprovider:get_provider_id()).
 
 
 %%--------------------------------------------------------------------
@@ -111,25 +111,25 @@ get_spaces_for_provider() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_spaces_for_provider(oneprovider:id()) ->
-    [SpaceId :: binary()].
+  [SpaceId :: binary()].
 get_spaces_for_provider(ProviderId) ->
-    Key = {spaces_for, ProviderId},
-    case temp_get(Key) of
-        SpaceIds0 when is_list(SpaceIds0) ->
-            SpaceIds0;
-        _ ->
-            {ok, SpaceIds} = oz_providers:get_spaces(provider),
-            SpaceIds1 = lists:foldl(
-                fun(SpaceId, Acc) ->
-                    {ok, Providers} = oz_spaces:get_providers(provider, SpaceId),
-                    case lists:member(ProviderId, Providers) of
-                        true -> [SpaceId | Acc];
-                        false -> Acc
-                    end
-                end, [], SpaceIds),
-            temp_put(Key, SpaceIds1, timer:seconds(15)),
-            SpaceIds1
-    end.
+  Key = {spaces_for, ProviderId},
+  case temp_get(Key) of
+    SpaceIds0 when is_list(SpaceIds0) ->
+      SpaceIds0;
+    _ ->
+      {ok, SpaceIds} = oz_providers:get_spaces(provider),
+      SpaceIds1 = lists:foldl(
+        fun(SpaceId, Acc) ->
+          {ok, Providers} = oz_spaces:get_providers(provider, SpaceId),
+          case lists:member(ProviderId, Providers) of
+            true -> [SpaceId | Acc];
+            false -> Acc
+          end
+        end, [], SpaceIds),
+      temp_put(Key, SpaceIds1, timer:seconds(15)),
+      SpaceIds1
+  end.
 
 
 %%--------------------------------------------------------------------
@@ -138,15 +138,15 @@ get_spaces_for_provider(ProviderId) ->
 %%--------------------------------------------------------------------
 -spec get_provider_urls(ProviderId :: oneprovider:id()) -> [URL :: binary()] | no_return().
 get_provider_urls(ProviderId) ->
-    Key = {urls_for, ProviderId},
-    case temp_get(Key) of
-       [_ | _] = URLs0 ->
-           URLs0;
-       _ ->
-           {ok, #provider_details{urls = URLs}} = oz_providers:get_details(provider, ProviderId),
-           temp_put(Key, URLs, timer:seconds(15)),
-           URLs
-   end.
+  Key = {urls_for, ProviderId},
+  case temp_get(Key) of
+    [_ | _] = URLs0 ->
+      URLs0;
+    _ ->
+      {ok, #provider_details{urls = URLs}} = oz_providers:get_details(provider, ProviderId),
+      temp_put(Key, URLs, timer:seconds(15)),
+      URLs
+  end.
 
 %%--------------------------------------------------------------------
 %% @doc Selects random URL of the provider
@@ -154,8 +154,8 @@ get_provider_urls(ProviderId) ->
 %%--------------------------------------------------------------------
 -spec get_provider_url(ProviderId :: oneprovider:id()) -> URL :: binary() | no_return().
 get_provider_url(ProviderId) ->
-    URLs = get_provider_urls(ProviderId),
-    _URL = lists:nth(crypto:rand_uniform(1, length(URLs) + 1), URLs).
+  URLs = get_provider_urls(ProviderId),
+  _URL = lists:nth(crypto:rand_uniform(1, length(URLs) + 1), URLs).
 
 
 %%--------------------------------------------------------------------
@@ -164,10 +164,10 @@ get_provider_url(ProviderId) ->
 %%--------------------------------------------------------------------
 -spec encode_term(term()) -> binary().
 encode_term(Doc) ->
-    Data = term_to_binary(Doc),
-    Compressed = zlib:compress(Data),
-    ?debug("[DBSync] Data compression ratio ~p", [size(Compressed) / size(Data)]),
-    Compressed.
+  Data = term_to_binary(Doc),
+  Compressed = zlib:compress(Data),
+  ?debug("[DBSync] Data compression ratio ~p", [size(Compressed) / size(Data)]),
+  Compressed.
 
 
 %%--------------------------------------------------------------------
@@ -176,7 +176,7 @@ encode_term(Doc) ->
 %%--------------------------------------------------------------------
 -spec decode_term(binary()) -> term().
 decode_term(Data) ->
-    binary_to_term(zlib:uncompress(Data)).
+  binary_to_term(zlib:uncompress(Data)).
 
 
 %%--------------------------------------------------------------------
@@ -185,7 +185,7 @@ decode_term(Data) ->
 %%--------------------------------------------------------------------
 -spec gen_request_id() -> binary().
 gen_request_id() ->
-    http_utils:base64url_encode(crypto:rand_bytes(32)).
+  http_utils:base64url_encode(crypto:rand_bytes(32)).
 
 
 %%--------------------------------------------------------------------
@@ -194,7 +194,7 @@ gen_request_id() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec communicate(oneprovider:id(), Message :: #tree_broadcast{} | #changes_request{} | #status_request{}) ->
-    {ok, MsgId :: term()} | {error, Reason :: term()}.
+  {ok, MsgId :: term()} | {error, Reason :: term()}.
 communicate(ProviderId, Message) ->
-    SessId = session_manager:get_provider_session_id(outgoing, ProviderId),
-    provider_communicator:communicate_async(#dbsync_request{message_body = Message}, SessId, self()).
+  SessId = session_manager:get_provider_session_id(outgoing, ProviderId),
+  provider_communicator:communicate_async(#dbsync_request{message_body = Message}, SessId, self()).

@@ -75,7 +75,7 @@ event_stream_should_unregister_from_event_manager_on_terminate(Config) ->
 event_stream_should_execute_init_handler_on_init(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, Stm} = start_event_stream(Worker),
-    ?assertReceivedMatch({init_handler, 1, <<_/binary>>}, ?TIMEOUT),
+    ?assertReceivedMatch({init_handler, <<"1">>, <<_/binary>>}, ?TIMEOUT),
     stop_event_stream(Stm).
 
 event_stream_should_execute_terminate_handler_on_terminate(Config) ->
@@ -167,7 +167,7 @@ start_event_stream(Worker, EmRule, EmTime) ->
     SessId = <<"session_id">>,
     Stm = event_stream_factory:create(#file_read_subscription{}),
     Sub = #subscription{
-        id = 1,
+        id = <<"1">>,
         type = #file_read_subscription{},
         stream = Stm#event_stream{
             init_handler = fun(_SubId, _SessId) ->

@@ -253,16 +253,12 @@ parse_timeout(Req, State) ->
 %%--------------------------------------------------------------------
 -spec parse_last_seq(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
-parse_last_seq(Req, State) ->
+parse_last_seq(Req, #{space_id := SpaceId} = State) ->
     {RawLastSeq, NewReq} = cowboy_req:qs_val(<<"last_seq">>, Req, ?DEFAULT_LAST_SEQ),
     case RawLastSeq of
         <<"now">> ->
-            case dbsync_worker:state_get(global_resume_seq) of
-                undefined ->
-                    {State#{last_seq => 0}, NewReq};
-                LastSeq ->
-                    {State#{last_seq => LastSeq}, NewReq}
-            end;
+            LastSeq = dbsync_state2:get_seq(SpaceId, oneprovider:get_provider_id()),
+            {State#{last_seq => LastSeq}, NewReq};
         Number ->
             try binary_to_integer(Number) of
                 LastSeq ->

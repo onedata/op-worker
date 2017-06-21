@@ -337,9 +337,9 @@
     enoent_handling = ?DEFAULT_ENOENT_HANDLING_STRATEGY :: space_strategy:config()
 }).
 
-%% Model that holds state entries for DBSync worker
--record(dbsync_state, {
-    entry :: term()
+%% Model that holds synchronization state for a space
+-record(dbsync_state2, {
+    seq = #{} :: maps:map([{od_provider:id(), couchbase_changes:seq()}])
 }).
 
 %% Model that holds state entries for DBSync worker

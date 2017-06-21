@@ -153,7 +153,8 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(session_bucket, [], ?GLOBAL_ONLY_LEVEL).
+    ?MODEL_CONFIG(session_bucket, [], ?GLOBAL_ONLY_LEVEL)#model_config{
+        list_enabled = {true, return_errors}}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -347,6 +348,9 @@ get_connections(SessId, HideOverloaded) ->
 %%--------------------------------------------------------------------
 -spec remove_connection(id(), Con :: pid()) ->
     ok | datastore:update_error().
+% TODO - calls with undefined SessId
+remove_connection(undefined, _) ->
+    ok;
 remove_connection(SessId, Con) ->
     Diff = fun(#session{connections = Cons} = Sess) ->
         NewCons = lists:filter(fun(C) -> C =/= Con end, Cons),

@@ -35,7 +35,7 @@
 -spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
 record_struct(1) ->
     {record, [
-        {storage_strategies, #{string => {record, 1, [
+        {storage_strategies, #{string => {record, [
             {filename_mapping, {atom, #{atom => term}}},
             {storage_import, {atom, #{atom => term}}},
             {storage_update, [ {atom, #{atom => term}} ]}, %% List of strategies
@@ -47,7 +47,7 @@ record_struct(1) ->
     ]};
 record_struct(2) ->
     {record, [
-        {storage_strategies, #{string => {record, 1, [
+        {storage_strategies, #{string => {record, [
             {filename_mapping, {atom, #{atom => term}}},
             {storage_import, {atom, #{atom => term}}},
             {storage_update, {atom, #{atom => term}}},

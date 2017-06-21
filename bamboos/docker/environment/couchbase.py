@@ -62,7 +62,7 @@ def _cluster_nodes(containers, cluster_name, master_hostname, uid):
         assert 0 == docker.exec_(container,
                      command=["/opt/couchbase/bin/couchbase-cli", "server-add", "-c", "{0}:8091".format(master_hostname),
                               "-u", "admin", "-p", "password", "--server-add={0}:8091".format(hostname),
-                              "--server-add-username=admin", "--server-add-password=password", "--services=data,index,query"],
+                              "--server-add-username=admin", "--server-add-password=password"],
                  stdout=sys.stderr)
 
 
@@ -89,7 +89,7 @@ bash'''
     assert 0 == docker.exec_(containers[0],
                  command=["/opt/couchbase/bin/couchbase-cli", "cluster-init", "-c", "{0}:8091".format(master_hostname),
                           "--cluster-init-username=admin", "--cluster-init-password=password",
-                          "--cluster-init-ramsize=" + str(cluster_ramsize), "--services=data,index,query"],
+                          "--cluster-init-ramsize=" + str(cluster_ramsize)],
                  stdout=sys.stderr)
 
     # Create buckets
@@ -97,7 +97,8 @@ bash'''
         assert 0 == docker.exec_(containers[0],
                  command=["/opt/couchbase/bin/couchbase-cli", "bucket-create", "-c", "{0}:8091".format(master_hostname),
                           "-u", "admin", "-p", "password", "--bucket=" + bucket_name,
-                          "--bucket-ramsize=" + str(bucket_size), "--wait"],
+                          "--bucket-ramsize=" + str(bucket_size),
+                          "--bucket-eviction-policy=fullEviction", "--wait"],
                  stdout=sys.stderr)
 
     # Create database cluster nodes
