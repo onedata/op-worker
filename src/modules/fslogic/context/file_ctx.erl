@@ -724,15 +724,8 @@ new_child_by_uuid(Uuid, Name, SpaceId, ShareId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec is_root_dir_uuid(Uuid :: file_meta:uuid()) -> boolean().
-is_root_dir_uuid(?ROOT_DIR_UUID) ->
-    true;
 is_root_dir_uuid(Uuid) ->
-    case (catch binary_to_term(http_utils:base64url_decode(Uuid))) of
-        {root_space, _UserId} ->
-            true;
-        _ ->
-            false
-    end.
+    fslogic_uuid:is_user_root_dir_uuid(Uuid).
 
 %%--------------------------------------------------------------------
 %% @private

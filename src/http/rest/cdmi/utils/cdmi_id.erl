@@ -95,7 +95,7 @@
 %%--------------------------------------------------------------------
 -spec guid_to_objectid(onedata_file_api:file_guid()) -> {ok, objectid()} | {error, atom()}.
 guid_to_objectid(Guid) ->
-    case build_objectid(http_utils:base64url_decode(Guid)) of
+    case build_objectid(Guid) of
         {error, Error} -> {error, Error};
         Id -> {ok, to_base16(Id)}
     end.
@@ -107,7 +107,7 @@ guid_to_objectid(Guid) ->
 objectid_to_guid(ObjectId) ->
     case from_base16(ObjectId) of
         <<0:8, _Enum:24, 0:8, _Length:8, _Crc:16, Data/binary>> ->
-            {ok, http_utils:base64url_encode(Data)};
+            {ok, Data};
         _Other -> {error, badarg}
     end.
 
