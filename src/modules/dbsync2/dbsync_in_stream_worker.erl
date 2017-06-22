@@ -186,6 +186,7 @@ code_change(_OldVsn, State, _Extra) ->
 -spec handle_changes_batch(couchbase_changes:since(), couchbase_changes:until(),
     [datastore:doc()], state()) -> state().
 handle_changes_batch(Since, Until, Docs, State = #state{seq = Seq}) ->
+    ?info("bbbb2 ~p", [{Since, Until, Seq}]),
     case Since == Seq of
         true ->
             apply_changes_batch(Since, Until, Docs, State);
@@ -235,6 +236,7 @@ apply_changes_batch(_Since, Until, Docs, State = #state{
         dbsync_changes:apply(Doc)
     end, Docs),
     State3 = update_seq(Until, State2),
+    ?info("bbbb3 ~p", [{State3}]),
     case ets:first(Stash) of
         '$end_of_table' ->
             State3;

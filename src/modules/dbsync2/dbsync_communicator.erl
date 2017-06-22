@@ -95,7 +95,7 @@ forward(#tree_broadcast2{
     ok.
 broadcast(SpaceId, MsgId, Msg, Opts) ->
     Hops = get_next_broadcast_hops(SpaceId, Opts),
-    ?info("dddd ~p", [{SpaceId, Msg, Hops}]),
+    ?info("dddd ~p", [{SpaceId, Hops}]),
     lists:foreach(fun({ProviderId, {LowProviderId, HighProviderId}}) ->
         Result = dbsync_communicator:send(ProviderId, #tree_broadcast2{
             src_provider_id = proplists:get_value(src_provider_id,
@@ -105,7 +105,7 @@ broadcast(SpaceId, MsgId, Msg, Opts) ->
             message_id = MsgId,
             message_body = Msg
         }),
-        ?info("dddd2 ~p", [{SpaceId, Msg, ProviderId, Result}]),
+%%        ?info("dddd2 ~p", [{SpaceId, Msg, ProviderId, Result}]),
         case Result of
             ok -> ok;
             {error, Reason} ->
