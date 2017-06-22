@@ -88,6 +88,13 @@ parser.add_argument(
     action='store_true'
 )
 
+parser.add_argument(
+    '--env-file', '-e',
+    action='store',
+    default=None,
+    help="path to description of test environment in .json file",
+    dest='env_file')
+
 [args, pass_args] = parser.parse_known_args()
 
 command = '''
@@ -103,7 +110,7 @@ if {shed_privileges}:
     os.setregid({gid}, {gid})
     os.setreuid({uid}, {uid})
 
-command = ['py.test'] + {args} + ['--test-type={test_type}'] + ['{test_dir}'] + ['--junitxml={report_path}']
+command = ['py.test'] + {args} + {env_file} + ['--test-type={test_type}'] + ['{test_dir}'] + ['--junitxml={report_path}']
 ret = subprocess.call(command)
 sys.exit(ret)
 '''
@@ -126,7 +133,9 @@ command = command.format(
     shed_privileges=(platform.system() == 'Linux'),
     report_path=args.report_path,
     test_type=args.test_type,
-    additional_code=additional_code)
+    additional_code=additional_code,
+    env_file=["--env-file={}".format(args.env_file)] if args.env_file else "[]"
+)
 
 # 128MB or more required for chrome tests to run with xvfb
 run_params = ['--shm-size=128m']
