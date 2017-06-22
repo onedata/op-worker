@@ -523,9 +523,7 @@ fetch_more_dir_children(SessionId, Props) ->
 %%--------------------------------------------------------------------
 -spec get_user_root_dir_uuid() -> fslogic_worker:file_guid().
 get_user_root_dir_uuid() ->
-    fslogic_uuid:user_root_dir_guid(
-        fslogic_uuid:user_root_dir_uuid(
-            gui_session:get_user_id())).
+    fslogic_uuid:user_root_dir_guid(gui_session:get_user_id()).
 
 
 %%--------------------------------------------------------------------

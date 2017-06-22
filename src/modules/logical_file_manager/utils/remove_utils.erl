@@ -29,7 +29,7 @@
 -spec rm(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
     ok | logical_file_manager:error_reply().
 rm(SessId, FileKey) ->
-    {guid, Guid} = fslogic_uuid:ensure_guid(SessId, FileKey),
+    {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
     {ok, Chunk} = application:get_env(?APP_NAME, ls_chunk_size),
     case is_dir(SessId, Guid) of
         true ->
