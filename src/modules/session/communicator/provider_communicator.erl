@@ -200,7 +200,7 @@ ensure_connected(SessId) ->
             lists:foreach(
                 fun(URL) ->
                     {ok, Port} = application:get_env(?APP_NAME, provider_protocol_handler_port),
-                    connection:start_link(SessId, URL, Port, ranch_etls, timer:seconds(5))
+                    connection:start_link(SessId, URL, Port, ranch_ssl, timer:seconds(5))
                 end, URLs),
             ok;
         {ok, Pid} ->

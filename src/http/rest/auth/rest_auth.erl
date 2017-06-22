@@ -134,7 +134,7 @@ resolve_auth(basic, Req) ->
     end;
 resolve_auth(certificate, Req) ->
     Socket = cowboy_req:get(socket, Req),
-    case etls:peercert(Socket) of
+    case ssl:peercert(Socket) of
         {ok, Der} ->
             Certificate = public_key:pkix_decode_cert(Der, otp),
             #certificate_auth{otp_cert = Certificate};

@@ -15,6 +15,7 @@
 -behaviour(ranch_protocol).
 -behaviour(gen_server).
 
+-include("global_definitions.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
@@ -42,7 +43,7 @@
     closed :: atom(),
     error :: atom(),
     % actual connection state
-    socket :: etls:socket(),
+    socket :: ssl:socket(),
     transport :: module(),
     session_id :: undefined | session:id(),
     connection_type :: incoming | outgoing,
@@ -61,7 +62,7 @@
 %% Starts the incoming connection.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(Ref :: atom(), Socket :: etls:socket(), Transport :: atom(),
+-spec start_link(Ref :: atom(), Socket :: ssl:socket(), Transport :: atom(),
     Opts :: list()) -> {ok, Pid :: pid()}.
 start_link(Ref, Socket, Transport, Opts) ->
     proc_lib:start_link(?MODULE, init, [Ref, Socket, Transport, Opts]).
@@ -74,7 +75,7 @@ start_link(SessionId, Hostname, Port, Transport, Timeout) ->
 %% Initializes the connection.
 %% @end
 %%--------------------------------------------------------------------
--spec init(Args :: term(), Socket :: etls:socket(), Transport :: atom(), Opts :: list()) ->
+-spec init(Args :: term(), Socket :: ssl:socket(), Transport :: atom(), Opts :: list()) ->
     no_return().
 init(Ref, Socket, Transport, _Opts) ->
     process_flag(trap_exit, true),
@@ -117,10 +118,16 @@ init(Ref, Socket, Transport, _Opts) ->
 -spec init(session:id(), Hostname :: binary(), Port :: non_neg_integer(), Transport :: atom(), Timeout :: non_neg_integer()) ->
     no_return().
 init(SessionId, Hostname, Port, Transport, Timeout) ->
-    TLSSettings = [{certfile, oz_plugin:get_cert_file()}, {keyfile, oz_plugin:get_key_file()}],
-    ?info("Connecting to ~p ~p ~p", [Hostname, Port, TLSSettings]),
-    % TODO - Often (first?) connection crashes with {error,'No such file or directory'}
-    {ok, Socket} = Transport:connect(Hostname, Port, TLSSettings, Timeout),
+    {ok, CaCertsDir} = application:get_env(?APP_NAME, cacerts_dir),
+    {ok, CaCertPems} = file_utils:read_files({dir, CaCertsDir}),
+    CaCerts = lists:map(fun cert_decoder:pem_to_der/1, CaCertPems),
+    TLSSettings = [
+        {certfile, oz_plugin:get_cert_file()},
+        {keyfile, oz_plugin:get_key_file()},
+        {cacerts, CaCerts}
+    ],
+    ?info("Connecting to ~p ~p", [Hostname, Port]),
+    {ok, Socket} = Transport:connect(binary_to_list(Hostname), Port, TLSSettings, Timeout),
     ok = Transport:setopts(Socket, [binary, {active, once}, {packet, ?PACKET_VALUE}]),
 
     {Ok, Closed, Error} = Transport:messages(),
@@ -272,7 +279,7 @@ handle_cast(_Request, State) ->
 %% Handles all non call/cast messages.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_info(Info :: timeout() | {Ok :: atom(), Socket :: etls:socket(),
+-spec handle_info(Info :: timeout() | {Ok :: atom(), Socket :: ssl:socket(),
     Data :: binary()} | term(), State :: #state{}) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
@@ -315,7 +322,7 @@ handle_info(_Info, State) ->
 terminate(Reason, #state{session_id = SessId, socket = Socket} = State) ->
     ?log_terminate(Reason, State),
     session:remove_connection(SessId, self()),
-    etls:close(Socket),
+    ssl:close(Socket),
     ok.
 
 %%--------------------------------------------------------------------
@@ -410,7 +417,7 @@ handle_handshake(State = #state{certificate = Cert, socket = Sock,
 %% Sends a server message with the handshake error details.
 %% @end
 %%--------------------------------------------------------------------
--spec report_handshake_error(Sock :: etls:socket(), Transp :: module(), Error :: term()) ->
+-spec report_handshake_error(Sock :: ssl:socket(), Transp :: module(), Error :: term()) ->
     ok.
 report_handshake_error(Sock, Transp, {badmatch, {error, Error}}) ->
     report_handshake_error(Sock, Transp, Error);
@@ -504,7 +511,7 @@ update_message_id(State, Msg) ->
 %% via erlang message
 %% @end
 %%--------------------------------------------------------------------
--spec activate_socket_once(Socket :: etls:socket(), Transport :: module()) -> ok.
+-spec activate_socket_once(Socket :: ssl:socket(), Transport :: module()) -> ok.
 activate_socket_once(Socket, Transport) ->
     ok = Transport:setopts(Socket, [{active, once}]).
 
@@ -514,7 +521,7 @@ activate_socket_once(Socket, Transport) ->
 %% Sends #server_message via given socket.
 %% @end
 %%--------------------------------------------------------------------
--spec send_server_message(Socket :: etls:socket(), Transport :: module(),
+-spec send_server_message(Socket :: ssl:socket(), Transport :: module(),
     ServerMessage :: #server_message{}) -> ok.
 send_server_message(Socket, Transport, #server_message{} = ServerMsg) ->
     try serializator:serialize_server_message(ServerMsg) of
@@ -533,7 +540,7 @@ send_server_message(Socket, Transport, #server_message{} = ServerMsg) ->
 %% Sends #client_message via given socket.
 %% @end
 %%--------------------------------------------------------------------
--spec send_client_message(Socket :: etls:socket(), Transport :: module(),
+-spec send_client_message(Socket :: ssl:socket(), Transport :: module(),
     ServerMessage :: #client_message{}) -> ok.
 send_client_message(Socket, Transport, #client_message{} = ClientMsg) ->
     try serializator:serialize_client_message(ClientMsg) of
@@ -552,10 +559,10 @@ send_client_message(Socket, Transport, #client_message{} = ClientMsg) ->
 %% Returns OTP certificate for given socket or 'undefined' if there isn't one.
 %% @end
 %%--------------------------------------------------------------------
--spec get_cert(Socket :: etls:socket()) ->
+-spec get_cert(Socket :: ssl:socket()) ->
     undefined | #'OTPCertificate'{}.
 get_cert(Socket) ->
-    case etls:peercert(Socket) of
+    case ssl:peercert(Socket) of
         {error, _} -> undefined;
         {ok, Der} -> public_key:pkix_decode_cert(Der, otp)
     end.

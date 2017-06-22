@@ -53,7 +53,8 @@ start() ->
     {ok, KeyFile} = application:get_env(?APP_NAME, web_ssl_key_file),
     {ok, CertFile} = application:get_env(?APP_NAME, web_ssl_cert_file),
     {ok, CaCertsDir} = application:get_env(?APP_NAME, cacerts_dir),
-    {ok, CaCerts} = file_utils:read_files({dir, CaCertsDir}),
+    {ok, CaCertPems} = file_utils:read_files({dir, CaCertsDir}),
+    CaCerts = lists:map(fun cert_decoder:pem_to_der/1, CaCertPems),
 
     Dispatch = cowboy_router:compile([
         {'_', rest_router:top_level_routing()}
@@ -61,13 +62,12 @@ start() ->
 
     % Start the listener for REST handler
     Result = ranch:start_listener(?REST_LISTENER, NbAcceptors,
-        ranch_etls, [
+        ranch_ssl, [
             {port, RestPort},
             {keyfile, KeyFile},
             {certfile, CertFile},
             {cacerts, CaCerts},
-            {ciphers, ssl:cipher_suites() -- ssl_utils:weak_ciphers()},
-            {versions, ['tlsv1.2', 'tlsv1.1']}
+            {ciphers, ssl:cipher_suites() -- ssl_utils:weak_ciphers()}
         ], cowboy_protocol, [
             {env, [{dispatch, Dispatch}]},
             {max_keepalive, 1},
