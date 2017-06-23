@@ -237,10 +237,15 @@ handle_changes_request(ProviderId, #changes_request2{
     since = Since,
     until = Until
 }) ->
-    Handler = fun(BatchSince, BatchUntil, Docs) ->
-        dbsync_communicator:send_changes(
-            ProviderId, SpaceId, BatchSince, BatchUntil, Docs
-        )
+    Handler = fun
+        (BatchSince, end_of_stream, Docs) ->
+            dbsync_communicator:send_changes(
+                ProviderId, SpaceId, BatchSince, Until, Docs
+            );
+        (BatchSince, BatchUntil, Docs) ->
+            dbsync_communicator:send_changes(
+                ProviderId, SpaceId, BatchSince, BatchUntil, Docs
+            )
     end,
     ReqId = dbsync_utils2:gen_request_id(),
     Spec = dbsync_out_stream_spec(ReqId, SpaceId, [

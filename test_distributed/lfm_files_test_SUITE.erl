@@ -979,10 +979,12 @@ end_per_testcase(ShareTest, Config) when
         ShareTest =:= share_child_list_test orelse
         ShareTest =:= share_child_read_test orelse
         ShareTest =:= share_permission_denied_test ->
+    tracer:stop(),
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Workers, oz_shares),
     end_per_testcase(?DEFAULT_CASE(ShareTest), Config);
 end_per_testcase(_Case, Config) ->
+    tracer:stop(),
     Workers = ?config(op_worker_nodes, Config),
     lfm_proxy:teardown(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),

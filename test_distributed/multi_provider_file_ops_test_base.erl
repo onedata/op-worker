@@ -27,7 +27,7 @@
     basic_opts_test_base/4, many_ops_test_base/6, distributed_modification_test_base/4, multi_space_test_base/3,
     file_consistency_test_skeleton/5, permission_cache_invalidate_test_base/2, get_links/1,
     mkdir_and_rmdir_loop_test_base/3, echo_and_delete_file_loop_test_base/3,
-    create_and_delete_file_loop_test_base/3
+    create_and_delete_file_loop_test_base/3, distributed_delete_test_base/4
 ]).
 -export([init_env/1, teardown_env/1]).
 
@@ -379,6 +379,78 @@ distributed_modification_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyN
         ?assertEqual(ok, lfm_proxy:close_all(W))
     end),
 
+    ok.
+
+distributed_delete_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts) ->
+    distributed_delete_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts);
+distributed_delete_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts) ->
+
+    Config = extend_config(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts),
+    SessId = ?config(session, Config),
+    SpaceName = ?config(space_name, Config),
+    Worker1 = ?config(worker1, Config),
+    Workers = ?config(op_worker_nodes, Config),
+
+    Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
+    Dir2 = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
+
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir, 8#755)),
+    verify_stats(Config, Dir, true),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir2, 8#755)),
+    verify_stats(Config, Dir2, true),
+    ct:print("Dirs verified"),
+
+    Children1 = lists:foldl(fun(_W, Acc) ->
+        Level2TmpDir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
+        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Level2TmpDir, 8#755)),
+        [Level2TmpDir | Acc]
+    end, [], Workers),
+    Children2 = lists:foldl(fun(W, Acc) ->
+        Level2TmpDir = <<Dir2/binary, "/", (generator:gen_name())/binary>>,
+        ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId(W), Level2TmpDir, 8#755)),
+        [Level2TmpDir | Acc]
+    end, [], Workers),
+    ct:print("Children created"),
+
+    Test = fun(MainDir, Children, Desc) ->
+        ct:print("Test ~p", [Desc]),
+
+        ChildrenWithUuids = lists:map(fun(Child) ->
+            {Child, verify_stats(Config, Child, true)}
+        end, Children),
+        ct:print("Children verified"),
+
+        Zipped = lists:zip(Workers, ChildrenWithUuids),
+
+        Master = self(),
+        lists:foreach(fun({W, {D, Uuid}}) ->
+            spawn_link(fun() ->
+                RmAns = lfm_proxy:unlink(W, SessId(W), {path, D}),
+                Master ! {rm_ans, W, D, Uuid, RmAns}
+            end)
+        end, Zipped),
+        ct:print("Parallel dirs rm processed spawned"),
+
+        lists:foreach(fun(_) ->
+            RmAnsCheck =
+                receive
+                    {rm_ans, W, D, Uuid, RmAns} ->
+                        {rm_ans, W, D, Uuid, RmAns}
+                after timer:seconds(2*Attempts+2) ->
+                    {error, timeout}
+                end,
+            ?assertMatch({rm_ans, _, _, _, ok}, RmAnsCheck),
+            {rm_ans, RecW, RecDir, RecUuid, ok} = RmAnsCheck,
+            ct:print("Verify spawn ~p", [{RecW, RecDir, RecUuid}]),
+            verify_del(Config, {RecDir, RecUuid, []}),
+            ct:print("Dir rm verified")
+        end, Workers),
+
+        verify_dir_size(Config, MainDir, 0)
+    end,
+
+    Test(Dir, Children1, "single provider created"),
+    Test(Dir2, Children2, "many providers created"),
     ok.
 
 file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
@@ -863,7 +935,7 @@ init_env(Config) ->
         test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(1)) % TODO - change to 2 seconds
     end, ?config(op_worker_nodes, Config)),
 
-    application:start(etls),
+    ssl:start(),
     hackney:start(),
     initializer:enable_grpca_based_communication(Config),
     initializer:disable_quota_limit(Config),
@@ -875,7 +947,7 @@ teardown_env(Config) ->
     initializer:unload_quota_mocks(Config),
     initializer:disable_grpca_based_communication(Config),
     hackney:stop(),
-    application:stop(etls).
+    ssl:stop().
 
 
 %%%===================================================================
@@ -1181,7 +1253,7 @@ verify_dir_size(Config, DirToCheck, DSize) ->
 
     VerAns0 = verify(Config, fun(W) ->
         CountChilden = fun() ->
-            LSAns = lfm_proxy:ls(W, SessId(W), {path, DirToCheck}, 0, 200),
+            LSAns = lfm_proxy:ls(W, SessId(W), {path, DirToCheck}, 0, 1000),
             ?assertMatch({ok, _}, LSAns),
             {ok, ListedDirs} = LSAns,
             length(ListedDirs)

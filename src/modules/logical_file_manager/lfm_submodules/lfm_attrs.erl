@@ -62,7 +62,7 @@ stat(SessId, FileKey) ->
     ATime :: file_meta:time(), MTime :: file_meta:time(),
     CTime :: file_meta:time()) -> ok | logical_file_manager:error_reply().
 update_times(SessId, FileKey, ATime, MTime, CTime) ->
-    {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
+    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #update_times{atime = ATime, mtime = MTime, ctime = CTime},
         fun(_) -> ok end).
@@ -76,7 +76,7 @@ update_times(SessId, FileKey, ATime, MTime, CTime) ->
     XattrName :: xattr:name(), boolean()) ->
     {ok, #xattr{}} | logical_file_manager:error_reply().
 get_xattr(SessId, FileKey, XattrName, Inherited) ->
-    {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
+    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #get_xattr{name = XattrName, inherited = Inherited},
         fun(#xattr{} = Xattr) ->
@@ -93,7 +93,7 @@ get_xattr(SessId, FileKey, XattrName, Inherited) ->
     Create :: boolean(), Replace :: boolean()) ->
     ok | logical_file_manager:error_reply().
 set_xattr(SessId, FileKey, Xattr, Create, Replace) ->
-    {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
+    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #set_xattr{xattr = Xattr, create = Create, replace = Replace},
         fun(_) -> ok end).
@@ -107,7 +107,7 @@ set_xattr(SessId, FileKey, Xattr, Create, Replace) ->
     XattrName :: xattr:name()) ->
     ok | logical_file_manager:error_reply().
 remove_xattr(SessId, FileKey, XattrName) ->
-    {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
+    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #remove_xattr{name = XattrName},
         fun(_) -> ok end).
@@ -121,7 +121,7 @@ remove_xattr(SessId, FileKey, XattrName) ->
     boolean(), boolean()) ->
     {ok, [xattr:name()]} | logical_file_manager:error_reply().
 list_xattr(SessId, FileKey, Inherited, ShowInternal) ->
-    {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
+    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #list_xattr{inherited = Inherited, show_internal = ShowInternal},
         fun(#xattr_list{names = Names}) ->
@@ -136,7 +136,7 @@ list_xattr(SessId, FileKey, Inherited, ShowInternal) ->
 -spec get_transfer_encoding(session:id(), logical_file_manager:file_key()) ->
     {ok, xattr:transfer_encoding()} | logical_file_manager:error_reply().
 get_transfer_encoding(SessId, FileKey) ->
-    {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
+    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
         #get_transfer_encoding{},
         fun(#transfer_encoding{value = Val}) -> {ok, Val} end).
@@ -150,7 +150,7 @@ get_transfer_encoding(SessId, FileKey) ->
     xattr:transfer_encoding()) ->
     ok | logical_file_manager:error_reply().
 set_transfer_encoding(SessId, FileKey, Encoding) ->
-    {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
+    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
         #set_transfer_encoding{value = Encoding},
         fun(_) -> ok end).
@@ -164,7 +164,7 @@ set_transfer_encoding(SessId, FileKey, Encoding) ->
 -spec get_cdmi_completion_status(session:id(), logical_file_manager:file_key()) ->
     {ok, xattr:cdmi_completion_status()} | logical_file_manager:error_reply().
 get_cdmi_completion_status(SessId, FileKey) ->
-    {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
+    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
         #get_cdmi_completion_status{},
         fun(#cdmi_completion_status{value = Val}) -> {ok, Val} end).
@@ -179,7 +179,7 @@ get_cdmi_completion_status(SessId, FileKey) ->
     xattr:cdmi_completion_status()) ->
     ok | logical_file_manager:error_reply().
 set_cdmi_completion_status(SessId, FileKey, CompletionStatus) ->
-    {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
+    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
         #set_cdmi_completion_status{value = CompletionStatus},
         fun(_) -> ok end).
@@ -192,7 +192,7 @@ set_cdmi_completion_status(SessId, FileKey, CompletionStatus) ->
 -spec get_mimetype(session:id(), logical_file_manager:file_key()) ->
     {ok, xattr:mimetype()} | logical_file_manager:error_reply().
 get_mimetype(SessId, FileKey) ->
-    {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
+    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
         #get_mimetype{},
         fun(#mimetype{value = Val}) -> {ok, Val} end).
@@ -205,7 +205,7 @@ get_mimetype(SessId, FileKey) ->
 -spec set_mimetype(session:id(), logical_file_manager:file_key(), xattr:mimetype()) ->
     ok | logical_file_manager:error_reply().
 set_mimetype(SessId, FileKey, Mimetype) ->
-    {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
+    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
         #set_mimetype{value = Mimetype},
         fun(_) -> ok end).
@@ -218,7 +218,7 @@ set_mimetype(SessId, FileKey, Mimetype) ->
 -spec get_metadata(session:id(), logical_file_manager:file_key(), custom_metadata:type(), custom_metadata:filter(), boolean()) ->
     {ok, custom_metadata:value()} | logical_file_manager:error_reply().
 get_metadata(SessId, FileKey, Type, Names, Inherited) ->
-    {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
+    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
         #get_metadata{type = Type, names = Names, inherited = Inherited},
         fun(#metadata{value = Value}) -> {ok, Value} end).
@@ -231,7 +231,7 @@ get_metadata(SessId, FileKey, Type, Names, Inherited) ->
 -spec set_metadata(session:id(), logical_file_manager:file_key(), custom_metadata:type(), custom_metadata:value(), custom_metadata:filter()) ->
     ok | logical_file_manager:error_reply().
 set_metadata(SessId, FileKey, Type, Value, Names) ->
-    {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
+    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
         #set_metadata{names = Names, metadata = #metadata{type = Type, value = Value}},
         fun(_) -> ok end).
@@ -271,7 +271,7 @@ has_custom_metadata(SessId, FileKey) ->
 -spec remove_metadata(session:id(), logical_file_manager:file_key(), custom_metadata:type()) ->
     ok | logical_file_manager:error_reply().
 remove_metadata(SessId, FileKey, Type) ->
-    {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
+    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
         #remove_metadata{type = Type},
         fun(_) -> ok end).

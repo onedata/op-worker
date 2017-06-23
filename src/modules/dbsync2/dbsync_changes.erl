@@ -95,8 +95,7 @@ apply(Doc = #document{key = Key, value = Value, scope = SpaceId}) ->
     {ok, datastore:document()} | {error, Reason :: any()}.
 foreign_links_get(ModelConfig, Key, MainDocKey) ->
     model:execute_with_default_context(ModelConfig, get,
-        [Key], [{hooks_config, no_hooks}, {links_tree, {true, MainDocKey}},
-            {disc_driver_ctx, bucket, <<"default">>}]).
+        [Key], [{hooks_config, no_hooks}, {links_tree, {true, MainDocKey}}]).
 
 
 %%--------------------------------------------------------------------

@@ -54,16 +54,16 @@ start() ->
     {ok, CertFile} =
         application:get_env(?APP_NAME, protocol_handler_ssl_cert_file),
     {ok, CaCertsDir} = application:get_env(?APP_NAME, cacerts_dir),
-    {ok, CaCerts} = file_utils:read_files({dir, CaCertsDir}),
+    {ok, CaCertPems} = file_utils:read_files({dir, CaCertsDir}),
+    CaCerts = lists:map(fun cert_decoder:pem_to_der/1, CaCertPems),
 
     Result = ranch:start_listener(?TCP_PROTO_LISTENER, DispatcherPoolSize,
-        ranch_etls, [
+        ranch_ssl, [
             {port, Port},
             {keyfile, KeyFile},
             {certfile, CertFile},
             {cacerts, CaCerts},
-            {ciphers, ssl:cipher_suites() -- ssl_utils:weak_ciphers()},
-            {versions, ['tlsv1.2', 'tlsv1.1']}
+            {ciphers, ssl:cipher_suites() -- ssl_utils:weak_ciphers()}
         ],
         connection, []
     ),
@@ -99,9 +99,9 @@ stop() ->
 healthcheck() ->
     {ok, Timeout} = application:get_env(?CLUSTER_WORKER_APP_NAME,
         nagios_healthcheck_timeout),
-    case etls:connect("127.0.0.1", port(), [{packet, 4}, {active, false}], Timeout) of
+    case ssl:connect("127.0.0.1", port(), [{packet, 4}, {active, false}], Timeout) of
         {ok, Sock} ->
-            etls:close(Sock),
+            ssl:close(Sock),
             ok;
         _ ->
             {error, server_not_responding}
