@@ -76,7 +76,7 @@ run(Job = #space_strategy_job{
     {space_strategy:job_result(), [space_strategy:job()], space_strategy:posthook()}.
 maybe_import_storage_file_and_children(Job0 = #space_strategy_job{
     data = Data0 = #{
-        storage_file_ctx := StorageFileCtx0,
+        storage_file_ctx := StorageFileCtx0
     }
 }) ->
     {#statbuf{
