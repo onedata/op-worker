@@ -30,7 +30,6 @@
 -spec apply(datastore:doc()) -> any().
 % TODO - do we sync any listed models?
 apply(Doc = #document{key = Key, value = Value, scope = SpaceId}) ->
-    ?info("aaaaa ~p", [Doc]),
     try
         case Value of
             #links{origin = Origin, doc_key = MainDocKey, model = ModelName} ->
