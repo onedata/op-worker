@@ -13,6 +13,7 @@
 -author("Rafal Slota").
 
 -include("modules/storage_sync/strategy_config.hrl").
+-include("modules/storage_sync/storage_sync.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -31,7 +32,7 @@
 -export_type([]).
 
 %% Callbacks
--export([available_strategies/0, strategy_init_jobs/3, strategy_handle_job/1]).
+-export([available_strategies/0, strategy_init_jobs/3, strategy_handle_job/1, worker_pools_config/0, main_worker_pool/0]).
 -export([strategy_merge_result/2, strategy_merge_result/3]).
 %%simple_scan callbacks
 -export([handle_already_imported_file/3, maybe_import_storage_file_and_children/1]).
@@ -53,7 +54,7 @@ available_strategies() ->
     [
         #space_strategy{
             name = simple_scan,
-            result_merge_type = merge_all,
+            result_merge_type = return_none,
             arguments = [
                 #space_strategy_argument{
                     name = max_depth,
@@ -152,6 +153,30 @@ strategy_merge_result(Jobs, Results) ->
 strategy_merge_result(Job, LocalResult, ChildrenResult) ->
     storage_import:strategy_merge_result(Job, LocalResult, ChildrenResult).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link space_strategy_behaviour} callback worker_pools_config/0.
+%% @end
+%%--------------------------------------------------------------------
+-spec worker_pools_config() -> [{worker_pool:name(), non_neg_integer()}].
+worker_pools_config() ->
+    {ok, FileWorkersNum} = application:get_env(?APP_NAME, ?STORAGE_SYNC_FILE_WORKERS_NUM_KEY),
+    {ok, DirWorkersNum} = application:get_env(?APP_NAME, ?STORAGE_SYNC_DIR_WORKERS_NUM_KEY),
+    [
+        {?STORAGE_SYNC_DIR_POOL_NAME, DirWorkersNum},
+        {?STORAGE_SYNC_FILE_POOL_NAME, FileWorkersNum}
+    ].
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link space_strategy_behaviour} callback main_worker_pool/0.
+%% @end
+%%--------------------------------------------------------------------
+-spec main_worker_pool() -> worker_pool:name().
+main_worker_pool() ->
+    ?STORAGE_SYNC_DIR_POOL_NAME.
+
+
 %%%===================================================================
 %%% API functions
 %%%===================================================================
@@ -190,7 +215,12 @@ start(SpaceId, StorageId, LastImportTime, ParentCtx, FileName) ->
 -spec maybe_import_storage_file_and_children(space_strategy:job()) ->
     {space_strategy:job_result(), [space_strategy:job()], space_strategy:posthook()}.
 maybe_import_storage_file_and_children(Job0 = #space_strategy_job{
-    data = Data0 = #{storage_file_ctx := StorageFileCtx0}
+    data = Data0 = #{
+        file_name := FileName,
+        storage_file_ctx := StorageFileCtx0,
+        space_id := SpaceId,
+        storage_id := StorageId
+    }
 }) ->
     {#statbuf{
         st_mtime = StorageMtime,
@@ -202,21 +232,24 @@ maybe_import_storage_file_and_children(Job0 = #space_strategy_job{
     Data2 = Job2#space_strategy_job.data,
     Offset = maps:get(dir_offset, Data2, 0),
     {ok, BatchSize} = application:get_env(?APP_NAME, dir_batch_size),
-    {SubJobs, Hash} = import_children(Job2, file_meta:type(Mode), Offset, FileCtx, BatchSize),
-
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    Posthook = fun
-        (ok) ->
-            case Hash of
-                undefined ->
-                    storage_sync_info:update(FileUuid, StorageMtime);
-                _ ->
-                    storage_sync_info:update(FileUuid, StorageMtime,
-                        Offset div BatchSize, Hash)
-            end;
-        (_) -> ok
+    Job3 = case Offset of
+        0 ->
+            Data3 = Data2#{mtime => StorageMtime},
+            Job2#space_strategy_job{data=Data3};
+        _ -> Job2
     end,
-    {LocalResult, SubJobs, Posthook}.
+
+    SubJobs = import_children(Job3, file_meta:type(Mode), Offset, FileCtx, BatchSize),
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+
+    case storage_sync_utils:all_subfiles_imported(SubJobs, FileUuid) of
+%%        todo fix setting counters, implement checking status in storage sync minitoring basing on coutners values
+        true ->
+            storage_sync_monitoring:update_files_to_update_counter(SpaceId, StorageId, length(SubJobs) - 1);
+        false ->
+            storage_sync_monitoring:update_files_to_update_counter(SpaceId, StorageId, length(SubJobs) - 2)
+    end,
+    {LocalResult, SubJobs}.
 
 
 %%%--------------------------------------------------------------------
@@ -248,22 +281,24 @@ handle_already_imported_file(Job = #space_strategy_job{
 %% @end
 %%--------------------------------------------------------------------
 -spec import_children(space_strategy:job(), file_meta:type(),
-    Offset :: non_neg_integer(), file_ctx:ctx(), non_neg_integer())
-        -> {[space_strategy:job()], binary() | undefined}.
+    Offset :: non_neg_integer(), file_ctx:ctx(), non_neg_integer()) ->
+    [space_strategy:job()].
 import_children(Job = #space_strategy_job{
     strategy_args = #{
         write_once := true}
 }, Type = ?DIRECTORY_TYPE, Offset, FileCtx, BatchSize
 ) ->
-    SubJobs = simple_scan:import_children(Job, Type, Offset, FileCtx, BatchSize),
-    {SubJobs, undefined};
+    simple_scan:import_children(Job, Type, Offset, FileCtx, BatchSize);
 import_children(Job = #space_strategy_job{
+    strategy_name = StrategyName,
+    strategy_type = StrategyType,
     strategy_args = #{
         write_once := false
     },
     data = Data0 = #{
         max_depth := MaxDepth,
-        storage_file_ctx := StorageFileCtx
+        storage_file_ctx := StorageFileCtx,
+        mtime := Mtime
     }},
     ?DIRECTORY_TYPE, Offset, FileCtx, BatchSize
 ) when MaxDepth > 0 ->
@@ -278,13 +313,28 @@ import_children(Job = #space_strategy_job{
                     storage_sync_utils:take_children_storage_ctxs_for_batch(BatchKey, Data1),
                 {BatchHash0, ChildrenStorageCtxsBatch0, Data2}
         end,
-    SubJobs = simple_scan:generate_jobs_for_importing_children(
+    {FilesJobs, DirJobs} = simple_scan:generate_jobs_for_importing_children(
         Job#space_strategy_job{data = Data}, Offset, FileCtx, ChildrenStorageCtxsBatch),
-    {SubJobs, BatchHash};
+
+    FilesResults = utils:pmap(fun(Job) ->
+        worker_pool:call(?STORAGE_SYNC_FILE_POOL_NAME, {StrategyName, run, [Job]},
+            worker_pool:default_strategy(), ?FILES_IMPORT_TIMEOUT)
+    end, FilesJobs),
+
+    case StrategyType:strategy_merge_result(FilesJobs, FilesResults) of
+        true ->
+            FileUuid = file_ctx:get_uuid_const(FileCtx),
+            case length(FilesJobs) < BatchSize of
+                true ->
+                    storage_sync_info:update(FileUuid, Mtime, BatchKey, BatchHash);
+                _ ->
+                    storage_sync_info:update(FileUuid, undefined, BatchKey, BatchHash)
+            end;
+        _ -> ok
+    end,
+    DirJobs;
 import_children(#space_strategy_job{}, _Type, _Offset, _FileCtx, _) ->
-    {[], undefined}.
-
-
+    [].
 
 
 %%%===================================================================

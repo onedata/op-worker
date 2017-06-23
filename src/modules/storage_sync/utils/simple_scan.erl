@@ -15,6 +15,7 @@
 -author("Jakub Kudzia").
 
 -include("modules/storage_sync/strategy_config.hrl").
+-include("modules/storage_sync/storage_sync.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -74,7 +75,9 @@ run(Job = #space_strategy_job{
 -spec maybe_import_storage_file_and_children(space_strategy:job()) ->
     {space_strategy:job_result(), [space_strategy:job()], space_strategy:posthook()}.
 maybe_import_storage_file_and_children(Job0 = #space_strategy_job{
-    data = Data0 = #{storage_file_ctx := StorageFileCtx0}
+    data = Data0 = #{
+        storage_file_ctx := StorageFileCtx0,
+    }
 }) ->
     {#statbuf{
         st_mtime = StorageMtime,
@@ -86,15 +89,20 @@ maybe_import_storage_file_and_children(Job0 = #space_strategy_job{
     Data2 = Job2#space_strategy_job.data,
     Offset = maps:get(dir_offset, Data2, 0),
     {ok, BatchSize} = application:get_env(?APP_NAME, dir_batch_size),
-    SubJobs = import_children(Job2, file_meta:type(Mode), Offset, FileCtx, BatchSize),
+    Type = file_meta:type(Mode),
 
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    Posthook = fun
-        (ok) ->
-            storage_sync_info:update(FileUuid, StorageMtime);
-        (_) -> ok
+    Job3 = case Offset of
+        0 ->
+            Data3 = Data2#{mtime => StorageMtime},
+            Job2#space_strategy_job{data=Data3};
+        _ -> Job2
     end,
-    {LocalResult, SubJobs, Posthook}.
+
+    SubJobs = import_children(Job3, Type, Offset, FileCtx, BatchSize),
+
+    {LocalResult, SubJobs}.
+
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -103,16 +111,6 @@ maybe_import_storage_file_and_children(Job0 = #space_strategy_job{
 %% @end
 %%--------------------------------------------------------------------
 -spec maybe_import_storage_file(space_strategy:job()) -> {ok, file:ctx()} | no_return().
-maybe_import_storage_file(Job = #space_strategy_job{
-    data = Data = #{
-        file_name := FileName,
-        parent_ctx := ParentCtx,
-        children_only := true
-    }}) ->
-    RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
-    {FileCtx, ParentCtx2} = file_ctx:get_child(ParentCtx, FileName, RootUserCtx),
-    Data2 = Data#{parent_ctx => ParentCtx2},
-    {ok, FileCtx, Job#space_strategy_job{data = Data2}};
 maybe_import_storage_file(Job = #space_strategy_job{
     data = #{
         file_name := FileName,
@@ -139,27 +137,57 @@ maybe_import_storage_file(Job = #space_strategy_job{
 %% @end
 %%--------------------------------------------------------------------
 -spec import_children(space_strategy:job(), file_meta:type(),
-    Offset :: non_neg_integer(), file_ctx:ctx(),
-    non_neg_integer()) -> [space_strategy:job()].
+    Offset :: non_neg_integer(), file_ctx:ctx(), non_neg_integer()) ->
+    [space_strategy:job()].
 import_children(Job = #space_strategy_job{
+    strategy_type = StrategyType,
     data = Data0 = #{
+        space_id := SpaceId,
+        storage_id := StorageId,
         max_depth := MaxDepth,
-        storage_file_ctx := StorageFileCtx
+        storage_file_ctx := StorageFileCtx,
+        mtime := Mtime
     }},
     ?DIRECTORY_TYPE, Offset, FileCtx, BatchSize
 ) when MaxDepth > 0 ->
-    {ChildrenStorageCtxBatch, Data} = case
-        storage_sync_utils:take_children_storage_ctxs_for_batch(Offset div BatchSize, Data0)
-    of
-        {undefined, _} ->
-            ChildrenStorageCtxsBatch0 = storage_file_ctx:get_children_ctxs_batch_const(
-                StorageFileCtx, Offset, BatchSize),
-            {ChildrenStorageCtxsBatch0, Data0};
-        {ChildrenStorageCtxBatch0, Data1} ->
-            {ChildrenStorageCtxBatch0, Data1}
+
+    BatchKey = Offset div BatchSize,
+    ChildrenStorageCtxsBatch1 =
+        storage_file_ctx:get_children_ctxs_batch_const(StorageFileCtx, Offset, BatchSize),
+    {BatchHash, ChildrenStorageCtxsBatch2} =
+        storage_sync_changes:count_files_attrs_hash(ChildrenStorageCtxsBatch1),
+    {FilesJobs, DirJobs} =
+        generate_jobs_for_importing_children(Job#space_strategy_job{data = Data0},
+        Offset, FileCtx, ChildrenStorageCtxsBatch2),
+
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FilesToImportNum = case storage_sync_utils:all_subfiles_imported(DirJobs, FileUuid) of
+        true ->
+            length(FilesJobs) + length(DirJobs);
+        _ ->
+            length(FilesJobs) + length(DirJobs) - 1
+
     end,
-    generate_jobs_for_importing_children(Job#space_strategy_job{data = Data},
-        Offset, FileCtx, ChildrenStorageCtxBatch);
+
+    storage_sync_monitoring:update_files_to_import_counter(SpaceId, StorageId, FilesToImportNum),
+
+    FilesResults = utils:pmap(fun(Job) ->
+        worker_pool:call(?STORAGE_SYNC_FILE_POOL_NAME, {?MODULE, run, [Job]},
+            worker_pool:default_strategy(), ?FILES_IMPORT_TIMEOUT)
+    end, FilesJobs),
+
+    case StrategyType:strategy_merge_result(FilesJobs, FilesResults) of
+        ok ->
+            FileUuid = file_ctx:get_uuid_const(FileCtx),
+            case length(FilesJobs) < BatchSize of
+                true ->
+                    storage_sync_info:update(FileUuid, Mtime, BatchKey, BatchHash);
+                _ ->
+                    storage_sync_info:update(FileUuid, undefined, BatchKey, BatchHash)
+            end;
+        _ -> ok
+    end,
+    DirJobs;
 import_children(#space_strategy_job{}, _Type, _Offset, _FileCtx, _) ->
     [].
 
@@ -188,7 +216,8 @@ maybe_import_file_with_existing_metadata(Job = #space_strategy_job{
 ) ->
 
     SFMHandle = storage_file_ctx:get_handle_const(StorageFileCtx),
-    {FileStats = #statbuf{st_mode = Mode}, _} = storage_file_ctx:get_stat_buf(StorageFileCtx),
+    {FileStats = #statbuf{st_mode = Mode}, _} =
+        storage_file_ctx:get_stat_buf(StorageFileCtx),
     CallbackModule = storage_sync_utils:module(Job),
     FileType = file_meta:type(Mode),
     LogicalAttrsResponse = #fuse_response{fuse_response = FileAttr} = get_attr(FileCtx),
@@ -215,7 +244,6 @@ maybe_import_file_with_existing_metadata(Job = #space_strategy_job{
 -spec import_file(storage:id(), od_space:id(), #statbuf{}, file_meta:path(),
     file_meta:path(), file_ctx:ctx()) -> {ok, file_ctx:ctx()}| no_return().
 import_file(StorageId, SpaceId, StatBuf, StorageFileId, FileName, ParentCtx) ->
-
     {ParentPath, _} = file_ctx:get_canonical_path(ParentCtx),
     CanonicalPath = filename:join([ParentPath, FileName]),
 
@@ -231,7 +259,7 @@ import_file(StorageId, SpaceId, StatBuf, StorageFileId, FileName, ParentCtx) ->
         ?ROOT_USER_ID, FSize),
 
     {ok, FileUuid} = create_file_meta(FileMetaDoc, ParentPath),
-    {ok, _} = create_times(FileUuid, MTime, ATime, CTime),
+    {ok, _} = create_times(FileUuid, MTime, ATime, CTime, SpaceId),
 
     case file_meta:type(Mode) of
         ?REGULAR_FILE_TYPE ->
@@ -240,6 +268,7 @@ import_file(StorageId, SpaceId, StatBuf, StorageFileId, FileName, ParentCtx) ->
             ok
     end,
     storage_sync_monitoring:increase_imported_files_counter(SpaceId, StorageId),
+    storage_sync_monitoring:update_files_to_import_counter(SpaceId, StorageId, -1),
     FileCtx = file_ctx:new_by_doc(FileMetaDoc#document{key = FileUuid}, SpaceId, undefined),
     ?debug("Import storage file ~p", [{StorageFileId, CanonicalPath}]),
     {ok, FileCtx}.
@@ -313,16 +342,16 @@ is_imported(_StorageId, _CanonicalPath, _FileType, #fuse_response{
 %% @end
 %%--------------------------------------------------------------------
 -spec generate_jobs_for_importing_children(space_strategy:job(),
-    non_neg_integer(), file_ctx:ctx(), [storage_file_ctx:ctx()])
-        -> [space_strategy:job()].
+    non_neg_integer(), file_ctx:ctx(), [storage_file_ctx:ctx()]) ->
+    {[space_strategy:job()], [space_strategy:job()]}.
 generate_jobs_for_importing_children(#space_strategy_job{}, _Offset, _FileCtx, []) ->
-    [];
+    {[], []};
 generate_jobs_for_importing_children(Job = #space_strategy_job{
     data = Data = #{
+        file_name := FileName,
         max_depth := MaxDepth
     }
 }, Offset, FileCtx, ChildrenStorageCtxsBatch) ->
-
     DirsOnly = maps:get(import_dirs_only, Data, false),
     DataClean = maps:remove(import_dirs_only, Data),
 
@@ -332,22 +361,23 @@ generate_jobs_for_importing_children(Job = #space_strategy_job{
         max_depth => MaxDepth - 1
     },
 
-    ChildrenData2 = maps:remove(children_only, ChildrenData),
-    Jobs = generate_jobs_for_subfiles(Job#space_strategy_job{data = DataClean},
-        ChildrenData2, ChildrenStorageCtxsBatch, DirsOnly),
-    {ok, DirBatch} = application:get_env(?APP_NAME, dir_batch_size),
+    Jobs = {FileJobs, DirJobs} = generate_jobs_for_subfiles(Job#space_strategy_job{data = DataClean},
+        ChildrenData, ChildrenStorageCtxsBatch, DirsOnly),
 
+
+    {ok, DirBatch} = application:get_env(?APP_NAME, dir_batch_size),
+    ?alert("Adding jobs for children of ~p in range: [~p - ~p). Jobs: ~p~n", [FileName, Offset, Offset + length(ChildrenStorageCtxsBatch), length(DirJobs)]),
     case length(ChildrenStorageCtxsBatch) < DirBatch of
         true ->
             Jobs;
         false ->
-            [
+            {FileJobs, [
                 Job#space_strategy_job{
-                    data = DataClean#{
+                    data = Data#{
                         dir_offset => Offset + length(ChildrenStorageCtxsBatch)
                     }
-                } | Jobs
-            ]
+                } | DirJobs
+            ]}
     end.
 
 
@@ -358,55 +388,28 @@ generate_jobs_for_importing_children(Job = #space_strategy_job{
 %%% only jobs subdirectories will be generated.
 %%% @end
 %%%-------------------------------------------------------------------
--spec generate_jobs_for_subfiles(space_strategy:job(), space_strategy:job_data(),
-    [storage_file_ctx:ctx()], DirsOnly :: boolean()) -> [space_strategy:job()].
-generate_jobs_for_subfiles(Job, Data, ChildrenStorageCtxsBatch, true) ->
-    generate_jobs_for_subdirs_only(Job, Data, ChildrenStorageCtxsBatch);
-generate_jobs_for_subfiles(Job, Data, ChildrenStorageCtxsBatch, false) ->
-    generate_jobs_for_all_subfiles(Job, Data, ChildrenStorageCtxsBatch).
+%%todo spec
+generate_jobs_for_subfiles(Job, Data, ChildrenStorageCtxsBatch, DirsOnly) ->
 
-
-%%%-------------------------------------------------------------------
-%%% @private
-%%% @doc
-%%% Generate jobs for all subfiles of given directory.
-%%% @end
-%%%-------------------------------------------------------------------
--spec generate_jobs_for_all_subfiles(space_strategy:job(),
-    space_strategy:job_data(), [storage_file_ctx:ctx()]) -> [space_strategy:job()].
-generate_jobs_for_all_subfiles(Job, Data, ChildrenStorageInfo) ->
-    lists:filtermap(fun(ChildStorageCtx) ->
+    lists:foldr(fun(ChildStorageCtx, AccIn = {FileJobsIn, DirJobsIn}) ->
         FileName = storage_file_ctx:get_file_id_const(ChildStorageCtx),
-        case file_meta:is_hidden(FileName) of
-            false ->
-                {true, new_job(Job, Data, ChildStorageCtx)};
-            _ ->
-                false
-        end
-    end, ChildrenStorageInfo).
-
-
-%%%-------------------------------------------------------------------
-%%% @private
-%%% @doc
-%%% Generate jobs only for subdirectories of given directory.
-%%% @end
-%%%-------------------------------------------------------------------
--spec generate_jobs_for_subdirs_only(space_strategy:job(),
-    space_strategy:job_data(), [storage_file_ctx:ctx()]) -> [space_strategy:job()].
-generate_jobs_for_subdirs_only(Job, Data, ChildrenStorageCtxs) ->
-    lists:filtermap(fun(ChildStorageCtx) ->
-
         {#statbuf{st_mode = Mode}, ChildStorageCtx2} =
             storage_file_ctx:get_stat_buf(ChildStorageCtx),
         FileName = storage_file_ctx:get_file_id_const(ChildStorageCtx2),
-        case {file_meta:type(Mode), file_meta:is_hidden(FileName)} of
-            {?DIRECTORY_TYPE, false} ->
-                {true, new_job(Job, Data, ChildStorageCtx2)};
+        case file_meta:is_hidden(FileName) of
+            false ->
+                case file_meta:type(Mode) of
+                    ?DIRECTORY_TYPE ->
+                        {FileJobsIn, [new_job(Job, Data, ChildStorageCtx) | DirJobsIn]};
+                    ?REGULAR_FILE_TYPE when DirsOnly ->
+                        AccIn;
+                    ?REGULAR_FILE_TYPE ->
+                        {[new_job(Job, Data, ChildStorageCtx) | FileJobsIn], DirJobsIn}
+                end;
             _ ->
-                false
+                AccIn
         end
-    end, ChildrenStorageCtxs).
+    end, {[], []}, ChildrenStorageCtxsBatch).
 
 
 %%%-------------------------------------------------------------------
@@ -552,16 +555,18 @@ create_file_meta(FileMetaDoc, ParentPath) ->
 %% Creates times
 %% @end
 %%--------------------------------------------------------------------
--spec create_times(file_meta:uuid(), times:time(), times:time(), times:time())
-        -> {ok, datastore:key()}.
-create_times(FileUuid, MTime, ATime, CTime) ->
+-spec create_times(file_meta:uuid(), times:time(), times:time(), times:time(),
+    od_space:id()) ->
+    {ok, datastore:key()}.
+create_times(FileUuid, MTime, ATime, CTime, SpaceId) ->
     times:create(#document{
         key = FileUuid,
         value = #times{
             mtime = MTime,
             atime = ATime,
             ctime = CTime
-        }}).
+        },
+        scope=SpaceId}).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -585,7 +590,11 @@ create_file_location(SpaceId, StorageId, FileUuid, CanonicalPath, Size) ->
         size = Size
     },
     {ok, LocId} = file_location:save_and_bump_version(
-        #document{key = datastore_utils:gen_uuid(), value = Location}),
+        #document{
+            key = datastore_utils:gen_uuid(),
+            value = Location,
+            scope = SpaceId
+    }),
     ok = file_meta:attach_location({uuid, FileUuid}, LocId,
         oneprovider:get_provider_id()).
 
@@ -606,6 +615,5 @@ delegate(Module, Function, Args, Arity) ->
         _ ->
             erlang:apply(?MODULE, Function, Args)
     end.
-
 
 

@@ -11,10 +11,13 @@
 -author("Jakub Kudzia").
 
 -include("modules/storage_sync/strategy_config.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 
 
 %% API
--export([take_children_storage_ctxs_for_batch/2, take_hash_for_batch/2, module/1]).
+-export([take_children_storage_ctxs_for_batch/2, take_hash_for_batch/2, module/1,
+    all_subfiles_imported/2, import_posthook/3, update_posthook/5]).
 
 
 %%%-------------------------------------------------------------------
@@ -46,9 +49,72 @@ take_hash_for_batch(BatchKey, Data) ->
 module(#space_strategy_job{strategy_type = Module}) ->
     Module.
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Check whether first job of list of subjobs matches given file.
+%% If true it means that some children haven't been imported yet.
+%% @end
+%%-------------------------------------------------------------------
+-spec all_subfiles_imported([space_strategy:job()], file_meta:uuid()) ->
+    boolean().
+all_subfiles_imported([], _FileUuid) -> true;
+all_subfiles_imported(Jobs, FileUuid) ->
+    not job_matches_file(hd(Jobs), FileUuid).
+
+
+
+import_posthook(SubJobs, FileCtx, StorageMtime) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    fun
+        (ok) ->
+            case all_subfiles_imported(SubJobs, FileUuid) of
+                true ->
+                    storage_sync_info:update(FileUuid, StorageMtime);
+                _ ->
+                    ok
+            end;
+        (_) -> ok
+    end.
+
+%%TODO jk
+update_posthook(SubJobs, FileCtx, StorageMtime, BatchKey, Hash) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    fun
+        (ok) ->
+            case all_subfiles_imported(SubJobs, FileUuid) of
+                true ->
+                    storage_sync_info:update(FileUuid, StorageMtime, BatchKey, Hash);
+                _ ->
+                    storage_sync_info:update(FileUuid, undefined, BatchKey, Hash)
+            end;
+        (_) -> ok
+    end.
+
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%-------------------------------------------------------------------
+%%% @private
+%% @doc
+%% Checks whether job matches file with name FileName and given FileCtx.
+%% @end
+%%-------------------------------------------------------------------
+-spec job_matches_file(space_strategy:job(), file_meta:uuid()) -> boolean().
+job_matches_file(#space_strategy_job{data = #{
+    file_name := FileName,
+    parent_ctx := ParentCtx
+}}, FileUuid) ->
+    try
+        {FileCtx2, _} = file_ctx:get_child(ParentCtx, FileName, user_ctx:new(?ROOT_SESS_ID)),
+        FileUuid =:= file_ctx:get_uuid_const(FileCtx2)
+    catch
+        throw:?ENOENT ->
+            false
+    end.
+
 
 %%%-------------------------------------------------------------------
 %%% @private

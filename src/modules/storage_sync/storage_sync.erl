@@ -89,6 +89,7 @@ modify_storage_update(SpaceId, StrategyName, Args) ->
     space_strategy:arguments()) -> {ok, datastore:ext_key()} | datastore:update_error().
 modify_storage_update(SpaceId, StrategyName, StorageId, Args) ->
     file_meta:make_space_exist(SpaceId),
+%%    turn_update_counters_on_or_off(SpaceId, StrategyName, StorageId),
     space_strategies:set_strategy(SpaceId, StorageId, storage_update, StrategyName, Args).
 
 
@@ -116,7 +117,7 @@ start_simple_scan_update(SpaceId, StorageId, MaxDepth, ScanInterval, WriteOnce, 
 -spec stop_storage_update(od_space:id()) ->
     {ok, datastore:ext_key()} | datastore:update_error().
 stop_storage_update(SpaceId) ->
-    modify_storage_import(SpaceId, no_update, #{}).
+    modify_storage_update(SpaceId, no_update, #{}).
 
 %%%===================================================================
 %%% Internal functions
@@ -144,3 +145,9 @@ turn_counters_on_or_off(SpaceId, no_update, StorageId) ->
 turn_counters_on_or_off(SpaceId, _, StorageId) ->
     storage_sync_monitoring:start_imported_files_counter(SpaceId, StorageId),
     storage_sync_monitoring:start_files_to_import_counter(SpaceId, StorageId).
+
+
+%%turn_update_counters_on_or_off(SpaceId, no_update, StorageId) ->
+%%    storage_sync_monitoring:stop_files_to_update_counter(SpaceId, StorageId);
+%%turn_update_counters_on_or_off(SpaceId, _, StorageId) ->
+%%    storage_sync_monitoring:start_files_to_update_counter(SpaceId, StorageId).

@@ -45,7 +45,6 @@ run(Job = #space_strategy_job{
         storage_file_ctx := StorageFileCtx
     }}, FileCtx) ->
 
-    ?critical("Starting full_update for: ~p", [FileName]),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     StorageTable = storage_table_name(FileUuid),
     DBTable = db_storage_name(FileUuid),
@@ -58,7 +57,6 @@ run(Job = #space_strategy_job{
     true = ets:delete(StorageTable),
     true = ets:delete(DBTable),
 
-    ?critical("Finished full_update for: ~p, Job: ~p", [FileName, Job2]),
     {ok, Job2}.
 
 

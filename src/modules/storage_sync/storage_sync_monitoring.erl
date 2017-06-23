@@ -14,25 +14,27 @@
 
 
 %% API
--export([ start_reporter/0, delete_reporter/0]).
+-export([start_reporter/0, delete_reporter/0]).
 -export([start_imported_files_counter/2, increase_imported_files_counter/2,
     stop_imported_files_counter/2, start_files_to_import_counter/2,
     stop_files_to_import_counter/2, update_files_to_import_counter/3,
-    get_files_to_import_value/2, get_imported_files_value/2]).
+    get_files_to_import_value/2, get_imported_files_value/2, start_files_to_update_counter/2,
+    update_files_to_update_counter/3, stop_files_to_update_counter/2]).
 
--type type() :: imported_files | files_to_import.
+-type type() :: imported_files | files_to_import | files_to_update.
 -type error() :: {error, term()}.
 
 
 -define(COUNTER_NAME(SpaceId, StorageId, Type), [
-    storage_import, binary_to_atom(SpaceId, latin1),
+    storage_sync, binary_to_atom(SpaceId, latin1),
     binary_to_atom(StorageId, latin1), Type
 ]).
--define(COUNTER_LOGGING_INTERVAL, timer:seconds(60)).
+-define(COUNTER_LOGGING_INTERVAL, timer:seconds(10)).
 
 -define(REPORTER_NAME, exometer_report_lager).
 -define(IMPORTED_FILES, imported_files).
 -define(FILES_TO_IMPORT, files_to_import).
+-define(FILES_TO_UPDATE, files_to_update).
 -define(LOG_LEVEL, info).
 
 %%%-------------------------------------------------------------------
@@ -42,9 +44,9 @@
 %%%-------------------------------------------------------------------
 -spec start_reporter() -> ok | error().
 start_reporter() ->
-    exometer_report:add_reporter(?REPORTER_NAME, [
+    exometer_report:add_reporter(exometer_report_lager, [
         {type_map,[{'_',integer}]},
-        {level, ?LOG_LEVEL}
+        {level, critical}
     ]).
 
 %%%-------------------------------------------------------------------
@@ -76,6 +78,15 @@ start_files_to_import_counter(SpaceId, StorageId) ->
 
 %%%-------------------------------------------------------------------
 %%% @doc
+%%% Starts counter of files to be imported
+%%% @end
+%%%-------------------------------------------------------------------
+-spec start_files_to_update_counter(od_space:id(), storage:id()) -> ok.
+start_files_to_update_counter(SpaceId, StorageId) ->
+    start_and_subscribe_storage_import_counter(SpaceId, StorageId, ?FILES_TO_UPDATE).
+
+%%%-------------------------------------------------------------------
+%%% @doc
 %%% Stops counter of imported files
 %%% @end
 %%%-------------------------------------------------------------------
@@ -88,10 +99,20 @@ stop_imported_files_counter(SpaceId, StorageId) ->
 %%% Stops counter of files to be imported
 %%% @end
 %%%-------------------------------------------------------------------
--spec stop_files_to_import_counter(od_space:id(), storage:id())
-        -> ok | {error, term()}.
+-spec stop_files_to_import_counter(od_space:id(), storage:id()) -> ok | {error, term()}.
 stop_files_to_import_counter(SpaceId, StorageId) ->
     stop_and_unsubscribe_storage_import_counter(SpaceId, StorageId, ?FILES_TO_IMPORT).
+
+
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% Stops counter of files to be updated
+%%% @end
+%%%-------------------------------------------------------------------
+-spec stop_files_to_update_counter(od_space:id(), storage:id()) ->
+    ok | {error, term()}.
+stop_files_to_update_counter(SpaceId, StorageId) ->
+    stop_and_unsubscribe_storage_import_counter(SpaceId, StorageId, ?FILES_TO_UPDATE).
 
 
 %%%-------------------------------------------------------------------
@@ -99,8 +120,8 @@ stop_files_to_import_counter(SpaceId, StorageId) ->
 %%% Increases counter of imported files
 %%% @end
 %%%-------------------------------------------------------------------
--spec increase_imported_files_counter(od_space:id(), storage:id())
-        -> ok | {error, term()}.
+-spec increase_imported_files_counter(od_space:id(), storage:id()) ->
+        ok | {error, term()}.
 increase_imported_files_counter(SpaceId, StorageId) ->
     update_counter(SpaceId, StorageId, ?IMPORTED_FILES, 1).
 
@@ -110,10 +131,21 @@ increase_imported_files_counter(SpaceId, StorageId) ->
 %%% Value can be negative.
 %%% @end
 %%%-------------------------------------------------------------------
--spec update_files_to_import_counter(od_space:id(), storage:id(), integer())
-        -> ok | error().
+-spec update_files_to_import_counter(od_space:id(), storage:id(), integer()) ->
+        ok | error().
 update_files_to_import_counter(SpaceId, StorageId, Value) ->
     update_counter(SpaceId, StorageId, ?FILES_TO_IMPORT, Value).
+
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% Updates counter of files to be updated with given Value.
+%%% Value can be negative.
+%%% @end
+%%%-------------------------------------------------------------------
+-spec update_files_to_update_counter(od_space:id(), storage:id(), integer()) ->
+         ok | error().
+update_files_to_update_counter(SpaceId, StorageId, Value) ->
+    update_counter(SpaceId, StorageId, ?FILES_TO_UPDATE, Value).
 
 
 %%%-------------------------------------------------------------------
@@ -163,7 +195,7 @@ start_and_subscribe_storage_import_counter(SpaceId, StorageId, CounterType) ->
     type()) -> ok | {error, term()}.
 stop_and_unsubscribe_storage_import_counter(SpaceId, StorageId, CounterType) ->
     CounterName = ?COUNTER_NAME(SpaceId, StorageId, CounterType),
-    exometer_report:unsubscribe(?REPORTER_NAME, CounterName, value),
+    exometer_report:unsubscribe(?REPORTER_NAME, CounterName, value), %todo check why this call returns error
     exometer:delete(CounterName).
 
 %%%-------------------------------------------------------------------
@@ -172,8 +204,8 @@ stop_and_unsubscribe_storage_import_counter(SpaceId, StorageId, CounterType) ->
 %%% Updates given counter with given Value.
 %%% @end
 %%%-------------------------------------------------------------------
--spec update_counter(od_space:id(), storage:id(), type(), integer())
-        -> ok | error().
+-spec update_counter(od_space:id(), storage:id(), type(), integer()) ->
+        ok | error().
 update_counter(SpaceId, StorageId, CounterType, Value) ->
     CounterName = ?COUNTER_NAME(SpaceId, StorageId, CounterType),
     exometer:update(CounterName, Value).

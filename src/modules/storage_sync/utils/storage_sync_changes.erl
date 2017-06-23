@@ -18,7 +18,7 @@
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--type hash() :: binary().
+-type hash() :: binary() | undefined.
 
 -export_type([hash/0]).
 
@@ -34,7 +34,7 @@
 -spec mtime_has_changed(#file_meta{}, storage_file_ctx:ctx()) -> boolean().
 mtime_has_changed(#file_meta{storage_sync_info = undefined}, _) ->
     true;
-mtime_has_changed(#file_meta{storage_sync_info = StSyncInfo}, StorageFileCtx) ->
+mtime_has_changed(#file_meta{name=Name, storage_sync_info = StSyncInfo}, StorageFileCtx) ->
     {#statbuf{st_mtime = StMtime}, _} = storage_file_ctx:get_stat_buf(StorageFileCtx),
     case StSyncInfo#storage_sync_info.last_synchronized_mtime of
         StMtime -> false;
@@ -50,8 +50,8 @@ mtime_has_changed(#file_meta{storage_sync_info = StSyncInfo}, StorageFileCtx) ->
 %%% synchronization.
 %%% @end
 %%%-------------------------------------------------------------------
--spec children_attrs_hash_has_changed(#file_meta{}, hash(), non_neg_integer())
-        -> boolean().
+-spec children_attrs_hash_has_changed(#file_meta{}, hash(), non_neg_integer()) ->
+    boolean().
 children_attrs_hash_has_changed(#file_meta{storage_sync_info = undefined},
     _CurrentChildrenAttrsHash, _Key
 ) ->

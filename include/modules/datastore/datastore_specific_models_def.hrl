@@ -265,7 +265,7 @@
 
 -record(storage_sync_info, {
     children_attrs_hashes = #{} :: #{non_neg_integer() => binary()},
-    last_synchronized_mtime = undefined :: non_neg_integer()
+    last_synchronized_mtime = undefined :: undefined | non_neg_integer()
 }).
 
 -record(file_meta, {
@@ -282,7 +282,7 @@
     link_value :: undefined | file_meta:symlink_value() | fslogic_worker:file_guid(),
     shares = [] :: [od_share:id()],
     deleted = false :: boolean(),
-    storage_sync_info = #storage_sync_info{} :: space_strategy:storage_sync_info()
+    storage_sync_info = #storage_sync_info{} :: file_meta:storage_sync_info()
 }).
 
 

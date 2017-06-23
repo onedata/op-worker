@@ -11,7 +11,7 @@
 
 -include_lib("ctool/include/test/test_utils.hrl").
 
--define(ATTEMPTS, 21).
+-define(ATTEMPTS, 25 ).
 
 -define(STORAGE(Config, Mnt),
     atom_to_binary(?config(host_path, ?config(Mnt, ?config(posix, ?config(storages, Config)))), latin1)).
@@ -33,6 +33,8 @@
 -define(TEST_FILE3, <<"test_file3">>).
 -define(TEST_FILE4, <<"test_file4">>).
 -define(INIT_FILE, <<".__onedata__init_file">>).
+-define(SPACE_TEST_DIR_PATH(DirName), filename:join(["/", ?SPACE_NAME, DirName])).
+-define(SPACE_TEST_FILE_IN_DIR_PATH(DirName, FileName), filename:join(["/", ?SPACE_NAME, DirName, FileName])).
 -define(SPACE_TEST_DIR_PATH, filename:join(["/", ?SPACE_NAME, ?TEST_DIR])).
 -define(SPACE_TEST_DIR_PATH2, filename:join(["/", ?SPACE_NAME, ?TEST_DIR2])).
 -define(SPACE_TEST_FILE_PATH, filename:join(["/", ?SPACE_NAME, ?TEST_FILE1])).

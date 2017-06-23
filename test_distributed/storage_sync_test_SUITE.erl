@@ -32,30 +32,34 @@
     delete_non_empty_directory_update_test/1,
     delete_directory_export_test/1,
     delete_file_update_test/1, delete_file_export_test/1,
-    append_file_import_test/1, append_file_export_test/1,
-    copy_file_import_test/1, move_file_update_test/1,
-    truncate_file_import_test/1, chmod_file_update_test/1,
+    append_file_update_test/1, append_file_export_test/1,
+    copy_file_update_test/1, move_file_update_test/1,
+    truncate_file_update_test/1, chmod_file_update_test/1,
     update_timestamps_file_import_test/1,
     create_file_in_dir_update_test/1, create_file_in_dir_exceed_batch_update_test/1,
-    chmod_file_update2_test/1, should_not_detect_timestamp_update_test/1]).
+    chmod_file_update2_test/1, should_not_detect_timestamp_update_test/1,
+    create_directory_import_many_test/1, create_subfiles_import_many_test/1]).
 
 -define(TEST_CASES, [
     create_directory_import_test,
+    create_directory_import_many_test,
     create_directory_export_test,
     create_file_import_test,
     create_file_export_test,
     create_file_in_dir_import_test,
+    create_subfiles_import_many_test,
     create_file_in_dir_update_test,
     create_file_in_dir_exceed_batch_update_test,
     delete_empty_directory_update_test,
     delete_non_empty_directory_update_test,
     delete_directory_export_test,
-%%    delete_file_export_test,
-    append_file_import_test,
+    append_file_update_test,
+    delete_file_export_test,
+    append_file_update_test,
     append_file_export_test,
-    copy_file_import_test,
+    copy_file_update_test,
     move_file_update_test,
-    truncate_file_import_test,
+    truncate_file_update_test,
     chmod_file_update_test,
     chmod_file_update2_test,
     update_timestamps_file_import_test,
@@ -74,6 +78,9 @@ all() -> ?ALL(?TEST_CASES).
 create_directory_import_test(Config) ->
     storage_sync_test_base:create_directory_import_test(Config, false).
 
+create_directory_import_many_test(Config) ->
+    storage_sync_test_base:create_directory_import_many_test(Config, false).
+
 create_directory_export_test(Config) ->
     storage_sync_test_base:create_directory_export_test(Config, false).
 
@@ -86,6 +93,9 @@ create_file_export_test(Config) ->
 create_file_in_dir_import_test(Config) ->
     storage_sync_test_base:create_file_in_dir_import_test(Config, false).
 
+create_subfiles_import_many_test(Config) ->
+    storage_sync_test_base:create_subfiles_import_many_test(Config, false).
+
 create_file_in_dir_update_test(Config) ->
     storage_sync_test_base:create_file_in_dir_update_test(Config, false).
 
@@ -96,7 +106,7 @@ delete_empty_directory_update_test(Config) ->
     storage_sync_test_base:delete_empty_directory_update_test(Config, false).
 
 delete_non_empty_directory_update_test(Config) ->
-    storage_sync_test_base:delete_empty_directory_update_test(Config, false).
+    storage_sync_test_base:delete_non_empty_directory_update_test(Config, false).
 
 delete_directory_export_test(Config) ->
     storage_sync_test_base:delete_directory_export_test(Config, false).
@@ -107,19 +117,19 @@ delete_file_update_test(Config) ->
 delete_file_export_test(Config) ->
     storage_sync_test_base:delete_file_export_test(Config, false).
 
-append_file_import_test(Config) ->
+append_file_update_test(Config) ->
     storage_sync_test_base:append_file_update_test(Config, false).
 
 append_file_export_test(Config) ->
     storage_sync_test_base:append_file_export_test(Config, false).
 
-copy_file_import_test(Config) ->
+copy_file_update_test(Config) ->
     storage_sync_test_base:copy_file_update_test(Config, false).
 
 move_file_update_test(Config) ->
     storage_sync_test_base:move_file_update_test(Config, false).
 
-truncate_file_import_test(Config) ->
+truncate_file_update_test(Config) ->
     storage_sync_test_base:truncate_file_update_test(Config, false).
 
 chmod_file_update_test(Config) ->
@@ -206,7 +216,8 @@ init_per_testcase(_Case, Config) ->
     initializer:enable_grpca_based_communication(Config),
     ConfigWithProxy = lfm_proxy:init(ConfigWithSessionInfo),
     Config2 = storage_sync_test_base:add_workers_storage_mount_points(ConfigWithProxy),
-    storage_sync_test_base:enable_storage_sync(Config2),
+%%    storage_sync_test_base:enable_storage_sync(Config2),
+    storage_sync_test_base:create_init_file(Config2),
     Config2.
 
 end_per_testcase(Case, Config) when

@@ -63,3 +63,19 @@
     LocalResult :: space_strategy:job_result(),
     ChildrenResult :: space_strategy:job_result()) ->
     space_strategy:job_result().
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of configs for worker pools used by given space strategy.
+%% Config is a tuple {PoolName, WorkersNum}.
+%% @end
+%%--------------------------------------------------------------------
+-callback worker_pools_config() -> [{worker_pool:name(), non_neg_integer()}].
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns name of worker pool that should be used by space_sync_worker
+%% to execute jobs of given strategy type.
+%% @end
+%%--------------------------------------------------------------------
+-callback main_worker_pool() -> worker_pool:name().

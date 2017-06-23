@@ -13,9 +13,12 @@
 -author("Rafal Slota").
 
 -include("modules/storage_sync/strategy_config.hrl").
+-include("global_definitions.hrl").
+-include("modules/storage_sync/storage_sync.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
+
 
 %%%===================================================================
 %%% Types
@@ -30,7 +33,8 @@
 
 %% Callbacks
 -export([available_strategies/0, strategy_init_jobs/3, strategy_handle_job/1,
-    strategy_merge_result/2, strategy_merge_result/3]).
+    strategy_merge_result/2, strategy_merge_result/3, worker_pools_config/0,
+    main_worker_pool/0]).
 
 %% API
 -export([start/5]).
@@ -49,7 +53,7 @@ available_strategies() ->
     [
         #space_strategy{
             name = simple_scan,
-            result_merge_type = merge_all,
+            result_merge_type = return_none,
             arguments = [
                 #space_strategy_argument{
                     name = max_depth,
@@ -138,6 +142,30 @@ strategy_merge_result(_Job, ok, Error) ->
     Error;
 strategy_merge_result(_Job, {error, Reason1}, {error, Reason2}) ->
     {error, [Reason1, Reason2]}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link space_strategy_behaviour} callback worker_pools_config/0.
+%% @end
+%%--------------------------------------------------------------------
+-spec worker_pools_config() -> [{worker_pool:name(), non_neg_integer()}].
+worker_pools_config() -> 
+    {ok, FileWorkersNum} = application:get_env(?APP_NAME, ?STORAGE_SYNC_FILE_WORKERS_NUM_KEY),
+    {ok, DirWorkersNum} = application:get_env(?APP_NAME, ?STORAGE_SYNC_DIR_WORKERS_NUM_KEY),
+    [
+        {?STORAGE_SYNC_DIR_POOL_NAME, DirWorkersNum},
+        {?STORAGE_SYNC_FILE_POOL_NAME, FileWorkersNum}
+    ].
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link space_strategy_behaviour} callback main_worker_pool/0.
+%% @end
+%%--------------------------------------------------------------------
+-spec main_worker_pool() -> worker_pool:name().
+main_worker_pool() ->
+    ?STORAGE_SYNC_DIR_POOL_NAME.
+
 
 %%%===================================================================
 %%% API functions

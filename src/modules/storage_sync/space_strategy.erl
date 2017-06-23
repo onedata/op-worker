@@ -13,6 +13,8 @@
 -author("Rafal Slota").
 
 -include("modules/storage_sync/strategy_config.hrl").
+-include("global_definitions.hrl").
+
 
 %%%===================================================================
 %%% Types
@@ -50,11 +52,41 @@
 -export_type([job_merge_type/0, runnable/0]).
 
 %% API
--export([]).
+-export([types/0, default_worker_pool_config/0, default_main_worker_pool/0]).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns list of space_strategy types.
+%% @end
+%%-------------------------------------------------------------------
+-spec types() -> [type()].
+types() -> [
+    storage_update, storage_import, filename_mapping,
+    file_caching, enoent_handling, file_conflict_resolution
+].
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Default config of worker_pool for space_strategies.
+%% @end
+%%-------------------------------------------------------------------
+-spec default_worker_pool_config() -> [{worker_pool:name(), non_neg_integer()}].
+default_worker_pool_config() ->
+    {ok, WorkersNum} = application:get_env(?APP_NAME, ?GENERIC_STRATEGY_WORKERS_NUM_KEY),
+    [{default_main_worker_pool(), WorkersNum}].
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Default pool for space_strategies.
+%% @end
+%%-------------------------------------------------------------------
+-spec default_main_worker_pool() -> worker_pool:name().
+default_main_worker_pool() ->
+    ?GENERIC_STRATEGY_POOL_NAME.
 
 %%%===================================================================
 %%% Internal functions

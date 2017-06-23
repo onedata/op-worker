@@ -56,7 +56,7 @@ remove_file_and_file_meta(FileCtx, UserCtx, Silent, RemoveStorageFile) ->
 
     case RemoveStorageFile of
         true ->
-            remove_file_on_storage(FileCtx3, UserCtx, Type);
+            ok = maybe_remove_file_on_storage(FileCtx3, UserCtx, Type);
         _ -> ok
     end,
 
@@ -80,11 +80,27 @@ remove_file_handles(FileCtx) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
+%% Removes given file on storage if it exists.
+%% Returns ok if file doesn't exist or if it was successfully deleted.
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_remove_file_on_storage(file_ctx:ctx(), user_ctx:ctx(),
+    file_meta:type()) -> ok | {error, term()}.
+maybe_remove_file_on_storage(FileCtx, UserCtx, FileType) ->
+    case remove_file_on_storage(FileCtx, UserCtx, FileType) of
+        ok -> ok;
+        {error, ?ENOENT} -> ok;
+        OtherError -> OtherError
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
 %% Removes given file on storage
 %% @end
 %%--------------------------------------------------------------------
--spec remove_file_on_storage(file_ctx:ctx(), user_ctx:ctx(), file_meta:type())
-        -> ok | {error, term()}.
+-spec remove_file_on_storage(file_ctx:ctx(), user_ctx:ctx(), file_meta:type()) ->
+    ok | {error, term()}.
 remove_file_on_storage(FileCtx, UserCtx, ?REGULAR_FILE_TYPE) ->
     sfm_utils:delete_storage_file(FileCtx, UserCtx);
 remove_file_on_storage(FileCtx, UserCtx, ?DIRECTORY_TYPE) ->
