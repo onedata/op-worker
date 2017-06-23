@@ -34,7 +34,8 @@
     permission_cache_invalidate_test/1, multi_space_test/1,
     mkdir_and_rmdir_loop_test/1, mkdir_and_rmdir_loop_test_base/1,
     create_and_delete_file_loop_test/1, create_and_delete_file_loop_test_base/1,
-    echo_and_delete_file_loop_test/1, echo_and_delete_file_loop_test_base/1]).
+    echo_and_delete_file_loop_test/1, echo_and_delete_file_loop_test_base/1,
+    distributed_delete_test/1]).
 
 -define(TEST_CASES, [
     db_sync_basic_opts_test, db_sync_many_ops_test, db_sync_distributed_modification_test,
@@ -42,7 +43,7 @@
     proxy_basic_opts_test2, proxy_many_ops_test2, proxy_distributed_modification_test2,
     file_consistency_test, concurrent_create_test, permission_cache_invalidate_test,
     multi_space_test,  mkdir_and_rmdir_loop_test, create_and_delete_file_loop_test,
-    echo_and_delete_file_loop_test
+    echo_and_delete_file_loop_test, distributed_delete_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -69,8 +70,8 @@ all() ->
         {description, Desc},
         {config, [{name, large_config},
             {parameters, [
-                [{name, dirs_num}, {value, 50}],
-                [{name, files_num}, {value, 100}]
+                [{name, dirs_num}, {value, 200}],
+                [{name, files_num}, {value, 300}]
             ]},
             {description, ""}
         ]}
@@ -79,12 +80,15 @@ all() ->
 db_sync_basic_opts_test(Config) ->
     multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
 
+distributed_delete_test(Config) ->
+    multi_provider_file_ops_test_base:distributed_delete_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
+
 db_sync_many_ops_test(Config) ->
     ?PERFORMANCE(Config, ?performance_description("Tests working on dirs and files with db_sync")).
 db_sync_many_ops_test_base(Config) ->
     DirsNum = ?config(dirs_num, Config),
     FilesNum = ?config(files_num, Config),
-    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {4,0,0,2}, 60, DirsNum, FilesNum).
+    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {4,0,0,2}, 180, DirsNum, FilesNum).
 
 db_sync_distributed_modification_test(Config) ->
     multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
