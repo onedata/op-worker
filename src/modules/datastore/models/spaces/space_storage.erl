@@ -207,7 +207,7 @@ add(SpaceId, StorageId, MountInRoot) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns list of storage IkDs attached to the space.
+%% Returns list of storage IDs attached to the space.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_storage_ids(model() | doc()) -> [storage:id()].

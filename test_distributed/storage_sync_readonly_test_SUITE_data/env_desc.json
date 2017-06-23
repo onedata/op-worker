@@ -15,7 +15,7 @@
                 {
                     "type": "posix",
                     "name": "/mnt/st1",
-                    "readonly": true
+                    "readonly": false
                 }
             ],
             "users": [],

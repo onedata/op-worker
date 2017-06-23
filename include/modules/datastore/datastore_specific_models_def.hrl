@@ -263,6 +263,11 @@
     share_id :: undefined | od_share:id()
 }).
 
+-record(storage_sync_info, {
+    children_attrs_hashes = #{} :: #{non_neg_integer() => binary()},
+    last_synchronized_mtime = undefined :: undefined | non_neg_integer()
+}).
+
 -record(file_meta, {
     name :: undefined | file_meta:name(),
     type :: undefined | file_meta:type(),
@@ -273,11 +278,13 @@
     is_scope = false :: boolean(),
     scope :: datastore:key(),
     provider_id :: undefined | oneprovider:id(), %% ID of provider that created this file
-    %% symlink_value for symlinks
-    link_value :: undefined | file_meta:symlink_value(),
+    %% symlink_value for symlinks, file_guid for phantom files (redirection)
+    link_value :: undefined | file_meta:symlink_value() | fslogic_worker:file_guid(),
     shares = [] :: [od_share:id()],
-    deleted = false :: boolean()
+    deleted = false :: boolean(),
+    storage_sync_info = #storage_sync_info{} :: file_meta:storage_sync_info()
 }).
+
 
 -record(storage, {
     name = <<>> :: storage:name(),
@@ -315,7 +322,7 @@
 
 -define(DEFAULT_FILENAME_MAPPING_STRATEGY, {simple, #{}}).
 -define(DEFAULT_STORAGE_IMPORT_STRATEGY, {no_import, #{}}).
--define(DEFAULT_STORAGE_UPDATE_STRATEGY, {no_import, #{}}).
+-define(DEFAULT_STORAGE_UPDATE_STRATEGY, {no_update, #{}}).
 
 %% Model that maps space to storage strategies
 -record(storage_strategies, {

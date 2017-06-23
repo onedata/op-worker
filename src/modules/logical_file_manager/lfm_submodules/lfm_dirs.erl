@@ -91,8 +91,9 @@ get_child_attr(SessId, ParentGuid, ChildName)  ->
 %% Returns number of children of a directory.
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_count(session:id(), FileKey :: fslogic_worker:file_guid_or_path())
-        -> {ok, integer()} | logical_file_manager:error_reply().
+-spec get_children_count(session:id(),
+    FileKey :: fslogic_worker:file_guid_or_path()) ->
+    {ok, integer()} | logical_file_manager:error_reply().
 get_children_count(SessId, FileKey) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     case count_children(SessId, FileGuid, 0) of

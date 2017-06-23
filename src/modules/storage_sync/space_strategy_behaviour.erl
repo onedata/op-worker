@@ -25,25 +25,29 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Initializes strategy job. Returns list of init jobs, all of which will be passed to strategy_handle_job/1.
+%% Initializes strategy job. Returns list of init jobs, all of which
+%% will be passed to strategy_handle_job/1.
 %% @end
 %%--------------------------------------------------------------------
--callback strategy_init_jobs(space_strategy:name(), space_strategy:arguments(), space_strategy:job_data()) ->
+-callback strategy_init_jobs(space_strategy:name(),
+    space_strategy:arguments(), space_strategy:job_data()) ->
     [space_strategy:job()].
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Handles given strategy job. This function shall return result of this handle and further child
-%% jobs to process afterwards.
+%% Handles given strategy job. This function shall return result of
+%% this handle and further child jobs to process afterwards.
 %% @end
 %%--------------------------------------------------------------------
 -callback strategy_handle_job(space_strategy:job()) ->
-    {space_strategy:job_result(), [space_strategy:job()]}.
+    {space_strategy:job_result(), [space_strategy:job()]} |
+    {space_strategy:job_result(), [space_strategy:job()], space_strategy:job_posthook()}.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% For given 'children' jobs and its results, this function has to return merged job result that will
-%% be passed as "ChildrenResult" in strategy_merge_result/3.
+%% For given 'children' jobs and its results, this function has to
+%% return merged job result that will be passed as "ChildrenResult" in
+%% strategy_merge_result/3.
 %% @end
 %%--------------------------------------------------------------------
 -callback strategy_merge_result(ChildrenJobs :: [space_strategy:job()],
@@ -55,6 +59,23 @@
 %% Merges job result with already merged children job results.
 %% @end
 %%--------------------------------------------------------------------
--callback strategy_merge_result(space_strategy:job(), LocalResult :: space_strategy:job_result(),
+-callback strategy_merge_result(space_strategy:job(),
+    LocalResult :: space_strategy:job_result(),
     ChildrenResult :: space_strategy:job_result()) ->
     space_strategy:job_result().
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of configs for worker pools used by given space strategy.
+%% Config is a tuple {PoolName, WorkersNum}.
+%% @end
+%%--------------------------------------------------------------------
+-callback worker_pools_config() -> [{worker_pool:name(), non_neg_integer()}].
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns name of worker pool that should be used by space_sync_worker
+%% to execute jobs of given strategy type.
+%% @end
+%%--------------------------------------------------------------------
+-callback main_worker_pool() -> worker_pool:name().
