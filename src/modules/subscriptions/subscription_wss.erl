@@ -68,8 +68,8 @@ start_link() ->
 
     Opts = [{keyfile, KeyFile}, {certfile, CertFile}, {cacerts, CaCerts}],
     Opts2 = case application:get_env(?APP_NAME, verify_oz_cert) of
-        {ok, true} -> [{verify_type, verify_peer} | Opts];
-        _ -> [{verify_type, verify_none} | Opts]
+        {ok, true} -> [{verify, verify_peer} | Opts];
+        _ -> [{verify, verify_none} | Opts]
     end,
 
     case websocket_client:start_link(Address, ?MODULE, [], Opts2) of

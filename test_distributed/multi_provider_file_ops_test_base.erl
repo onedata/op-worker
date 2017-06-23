@@ -935,7 +935,7 @@ init_env(Config) ->
         test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(1)) % TODO - change to 2 seconds
     end, ?config(op_worker_nodes, Config)),
 
-    application:start(etls),
+    ssl:start(),
     hackney:start(),
     initializer:enable_grpca_based_communication(Config),
     initializer:disable_quota_limit(Config),
@@ -947,7 +947,7 @@ teardown_env(Config) ->
     initializer:unload_quota_mocks(Config),
     initializer:disable_grpca_based_communication(Config),
     hackney:stop(),
-    application:stop(etls).
+    ssl:stop().
 
 
 %%%===================================================================

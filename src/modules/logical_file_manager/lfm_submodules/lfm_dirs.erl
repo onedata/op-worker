@@ -64,7 +64,7 @@ mkdir(SessId, ParentGuid, Name, Mode) ->
     Offset :: integer(), Limit :: integer()) ->
     {ok, [{fslogic_worker:file_guid(), file_meta:name()}]} | logical_file_manager:error_reply().
 ls(SessId, FileKey, Offset, Limit) ->
-    {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
+    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #get_file_children{offset = Offset, size = Limit},
         fun(#file_children{child_links = List}) ->
@@ -94,7 +94,7 @@ get_child_attr(SessId, ParentGuid, ChildName)  ->
 -spec get_children_count(session:id(), FileKey :: fslogic_worker:file_guid_or_path())
         -> {ok, integer()} | logical_file_manager:error_reply().
 get_children_count(SessId, FileKey) ->
-    {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
+    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     case count_children(SessId, FileGuid, 0) of
         {error, Err} -> {error, Err};
         ChildrenNum -> {ok, ChildrenNum}

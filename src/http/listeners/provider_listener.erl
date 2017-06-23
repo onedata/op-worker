@@ -53,18 +53,18 @@ start() ->
     {ok, CertFile} =
         application:get_env(?APP_NAME, protocol_handler_ssl_cert_file),
     {ok, CaCertsDir} = application:get_env(?APP_NAME, cacerts_dir),
-    {ok, CaCerts} = file_utils:read_files({dir, CaCertsDir}),
+    {ok, CaCertPems} = file_utils:read_files({dir, CaCertsDir}),
+    CaCerts = lists:map(fun cert_decoder:pem_to_der/1, CaCertPems),
 
     Result = ranch:start_listener(?TCP_PROTO_LISTENER, DispatcherPoolSize,
-        ranch_etls, [
+        ranch_ssl, [
             {port, Port},
             {keyfile, KeyFile},
             {certfile, CertFile},
             {cacerts, CaCerts},
-            {verify_type, verify_peer},
+            {verify, verify_peer},
             {fail_if_no_peer_cert, true},
-            {ciphers, ssl:cipher_suites() -- ssl_utils:weak_ciphers()},
-            {versions, ['tlsv1.2', 'tlsv1.1']}
+            {ciphers, ssl:cipher_suites() -- ssl_utils:weak_ciphers()}
         ],
         connection, []
     ),

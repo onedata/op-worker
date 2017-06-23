@@ -266,7 +266,7 @@ get_parent(FileCtx = #file_ctx{parent = undefined}, UserCtx) ->
     {Doc, FileCtx2} = get_file_doc_including_deleted(FileCtx),
     {ok, ParentUuid} = file_meta:get_parent_uuid(Doc),
     ParentGuid =
-        case is_root_dir_uuid(ParentUuid) of
+        case fslogic_uuid:is_root_dir_uuid(ParentUuid) of
             true ->
                 case ParentUuid =:= ?ROOT_DIR_UUID
                     andalso UserCtx =/= undefined
@@ -274,7 +274,7 @@ get_parent(FileCtx = #file_ctx{parent = undefined}, UserCtx) ->
                 of
                     true ->
                         UserId = user_ctx:get_user_id(UserCtx),
-                        fslogic_uuid:user_root_dir_guid(fslogic_uuid:user_root_dir_uuid(UserId));
+                        fslogic_uuid:user_root_dir_guid(UserId);
                     _ ->
                         fslogic_uuid:uuid_to_guid(ParentUuid, undefined)
                 end;
@@ -641,7 +641,7 @@ is_root_dir_const(#file_ctx{canonical_path = <<"/">>}) ->
     true;
 is_root_dir_const(#file_ctx{guid = Guid, canonical_path = undefined}) ->
     Uuid = fslogic_uuid:guid_to_uuid(Guid),
-    is_root_dir_uuid(Uuid);
+    fslogic_uuid:is_root_dir_uuid(Uuid);
 is_root_dir_const(#file_ctx{}) ->
     false.
 
@@ -718,21 +718,6 @@ is_dir(FileCtx) ->
 -spec new_child_by_uuid(file_meta:uuid(), file_meta:name(), od_space:id(), undefined | od_share:id()) -> ctx().
 new_child_by_uuid(Uuid, Name, SpaceId, ShareId) ->
     #file_ctx{guid = fslogic_uuid:uuid_to_share_guid(Uuid, SpaceId, ShareId), file_name = Name}.
-
-%%--------------------------------------------------------------------
-%% @doc Checks if uuid represents user's root dir
-%% @end
-%%--------------------------------------------------------------------
--spec is_root_dir_uuid(Uuid :: file_meta:uuid()) -> boolean().
-is_root_dir_uuid(?ROOT_DIR_UUID) ->
-    true;
-is_root_dir_uuid(Uuid) ->
-    case (catch binary_to_term(http_utils:base64url_decode(Uuid))) of
-        {root_space, _UserId} ->
-            true;
-        _ ->
-            false
-    end.
 
 %%--------------------------------------------------------------------
 %% @private

@@ -23,7 +23,7 @@
 -export([chown_or_schedule_chowning/1, chown_file/1]).
 
 %% model_behaviour callbacks
--export([save/1, get/1, exists/1, delete/1, update/2, create/1,
+-export([save/1, get/1, exists/1, delete/1, update/2, create/1, create_or_update/2,
     model_init/0, 'after'/5, before/4]).
 -export([record_struct/1, record_upgrade/2]).
 
@@ -154,6 +154,17 @@ exists(Key) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Updates document with using ID from document. If such object does not exist,
+%% it initialises the object with the document.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_or_update(datastore:document(), Diff :: datastore:document_diff()) ->
+    {ok, datastore:key()} | datastore:generic_error().
+create_or_update(Doc, Diff) ->
+    model:execute_with_default_context(?MODULE, create_or_update, [Doc, Diff]).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% {@link model_behaviour} callback model_init/0.
 %% @end
 %%--------------------------------------------------------------------
@@ -202,7 +213,6 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%--------------------------------------------------------------------
 -spec add(file_ctx:ctx(), od_user:id()) -> {ok, datastore:key()} | datastore:generic_error().
 add(FileCtx, UserId) ->
-    %todo add create_or_update operation to datastore
     FileGuid = file_ctx:get_guid_const(FileCtx),
     UpdateFun = fun(Val = #files_to_chown{file_guids = Guids}) ->
         case lists:member(FileGuid, Guids) of
@@ -212,17 +222,10 @@ add(FileCtx, UserId) ->
                 {ok, Val#files_to_chown{file_guids = [FileGuid | Guids]}}
         end
     end,
-    case update(UserId, UpdateFun) of
-        {ok, Key} ->
-            {ok, Key};
-        {error, {not_found, files_to_chown}} ->
-            create(#document{
-                key = UserId,
-                value = #files_to_chown{file_guids = [FileGuid]}
-            });
-        Other ->
-            Other
-    end.
+    DocToCreate = #document{key = UserId, value = #files_to_chown{
+        file_guids = [FileGuid]
+    }},
+    create_or_update(DocToCreate, UpdateFun).
 
 %%--------------------------------------------------------------------
 %% @private

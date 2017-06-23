@@ -30,7 +30,7 @@
 -spec create_share(session:id(), logical_file_manager:file_key(), od_share:name()) ->
     {ok, {od_share:id(), od_share:share_guid()}} | logical_file_manager:error_reply().
 create_share(SessId, FileKey, Name) ->
-    {guid, GUID} = fslogic_uuid:ensure_guid(SessId, FileKey),
+    {guid, GUID} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, GUID,
         #create_share{name = Name},
         fun(#share{share_id = ShareId, share_file_guid = ShareGuid}) ->
