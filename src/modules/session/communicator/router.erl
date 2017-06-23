@@ -21,6 +21,7 @@
 -include("proto/oneclient/handshake_messages.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
 -include("proto/oneprovider/dbsync_messages.hrl").
+-include("proto/oneprovider/dbsync_messages2.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -161,7 +162,13 @@ route_and_ignore_answer(#client_message{message_body = Auth} = Msg)
     {ok, _} = session:update(effective_session_id(Msg), #{auth => Auth}),
     ok;
 route_and_ignore_answer(#client_message{message_body = #fuse_request{} = FuseRequest} = Msg) ->
-    ok = worker_proxy:cast(fslogic_worker, {fuse_request, effective_session_id(Msg), FuseRequest}).
+    ok = worker_proxy:cast(fslogic_worker, {fuse_request, effective_session_id(Msg), FuseRequest});
+route_and_ignore_answer(ClientMsg = #client_message{
+    message_body = #dbsync_message{message_body = Msg}
+}) ->
+    ok = worker_proxy:cast(
+        dbsync_worker2, {dbsync_message, effective_session_id(ClientMsg), Msg}
+    ).
 
 %%--------------------------------------------------------------------
 %% @doc

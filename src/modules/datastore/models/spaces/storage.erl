@@ -50,7 +50,7 @@
 record_struct(1) ->
     {record, [
         {name, binary},
-        {helpers, [{record, 1, [
+        {helpers, [{record, [
             {name, string},
             {args, #{string => string}}
         ]}]}
@@ -58,7 +58,7 @@ record_struct(1) ->
 record_struct(2) ->
     {record, [
         {name, string},
-        {helpers, [{record, 1, [
+        {helpers, [{record, [
             {name, string},
             {args, #{string => string}},
             {admin_ctx, #{string => string}},
@@ -120,25 +120,23 @@ update(Key, Diff) ->
 -spec create(datastore:document()) ->
     {ok, datastore:key()} | datastore:create_error().
 create(#document{value = #storage{name = Name}} = Document) ->
-    critical_section:run_on_mnesia([?MODEL_NAME, ?STORAGE_LOCK_ID], fun() ->
+    critical_section:run([?MODEL_NAME, ?STORAGE_LOCK_ID], fun() ->
         case model:execute_with_default_context(?MODULE, fetch_link, [?ROOT_STORAGE, Name]) of
             {ok, _} ->
                 {error, already_exists};
             {error, link_not_found} ->
-                datastore:run_transaction(fun() ->
-                    model:execute_with_default_context(?MODULE, create,
-                        [#document{
-                            key = ?ROOT_STORAGE, value = #storage{name = ?ROOT_STORAGE}
-                        }]),
-                    case model:execute_with_default_context(?MODULE, create, [Document]) of
-                        {error, Reason} ->
-                            {error, Reason};
-                        {ok, Key} ->
-                            ok = model:execute_with_default_context(?MODULE,
-                                add_links, [?ROOT_STORAGE, {Name, {Key, ?MODEL_NAME}}]),
-                            {ok, Key}
-                    end
-                end)
+                model:execute_with_default_context(?MODULE, create,
+                    [#document{
+                        key = ?ROOT_STORAGE, value = #storage{name = ?ROOT_STORAGE}
+                    }]),
+                case model:execute_with_default_context(?MODULE, create, [Document]) of
+                    {error, Reason} ->
+                        {error, Reason};
+                    {ok, Key} ->
+                        ok = model:execute_with_default_context(?MODULE,
+                            add_links, [?ROOT_STORAGE, {Name, {Key, ?MODEL_NAME}}]),
+                        {ok, Key}
+                end
         end
     end).
 

@@ -135,7 +135,7 @@ exists(Key) ->
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
     Config = ?MODEL_CONFIG(open_file_bucket, [], ?GLOBALLY_CACHED_LEVEL),
-    Config#model_config{version = 2}.
+    Config#model_config{version = 2, list_enabled = {true, return_errors}}.
 
 %%--------------------------------------------------------------------
 %% @doc

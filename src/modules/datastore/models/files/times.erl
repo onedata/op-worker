@@ -101,7 +101,8 @@ update(Key, Diff) ->
 -spec create(datastore:document()) ->
     {ok, datastore:key()} | datastore:create_error().
 create(Document) ->
-    model:execute_with_default_context(?MODULE, create, [Document]).
+    model:execute_with_default_context(?MODULE, create, [Document],
+        [{generated_uuid, true}]).
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -31,6 +31,8 @@
 %% Prefix for link name for #file_location link
 -define(LOCATION_PREFIX, "location_").
 
+-define(SET_LINK_SCOPE(ScopeID), [{scope, ScopeID}]).
+
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4]).
@@ -117,7 +119,7 @@ record_struct(3) ->
         {link_value, string},
         {shares, [string]},
         {deleted, boolean},
-        {storage_sync_info, {record, 1, [
+        {storage_sync_info, {record, [
             {children_attrs_hash, #{integer => binary}},
             {last_synchronized_mtime, integer}
         ]}}
@@ -190,7 +192,8 @@ update(Key, Diff) ->
 create(#document{value = #file_meta{name = FileName}} = Document) ->
     case is_valid_filename(FileName) of
         true ->
-            model:execute_with_default_context(?MODULE, create, [Document]);
+            model:execute_with_default_context(?MODULE, create, [Document],
+                [{generated_uuid, true}]);
         false ->
             {error, invalid_filename}
     end.
@@ -226,20 +229,23 @@ create(#document{key = ParentUuid} = Parent, #document{value = #file_meta{name =
     ?run(begin
         {ok, Scope} = get_scope(Parent),
         FM1 = FM#file_meta{scope = Scope#document.key, provider_id = oneprovider:get_provider_id()},
-        FileDoc =
+        FileDoc00 =
             case FileDoc0 of
                 #document{key = undefined} = Doc ->
                     NewUuid = gen_file_uuid(),
-                    Doc#document{key = NewUuid, value = FM1, generated_uuid = true};
+                    Doc#document{key = NewUuid, value = FM1};
                 _ ->
                     FileDoc0#document{value = FM1}
             end,
-        critical_section:run_on_mnesia([?MODEL_NAME, ParentUuid],
+        {ok, DocScope} = get_scope(FileDoc00),
+        ScopeID = fslogic_uuid:space_dir_uuid_to_spaceid_no_error(DocScope#document.key),
+        FileDoc = FileDoc00#document{value = FM1, scope = ScopeID},
+        critical_section:run([?MODEL_NAME, ParentUuid],
             fun() ->
                 Exists = case AllowConflicts of
                     true -> false;
                     false ->
-                        case resolve_path(ParentUuid, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, FileName])) of
+                        case resolve_path({uuid, ParentUuid}, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, FileName])) of
                             {error, {not_found, _}} ->
                                 false;
                             {ok, _Value} ->
@@ -249,17 +255,17 @@ create(#document{key = ParentUuid} = Parent, #document{value = #file_meta{name =
 
                 case Exists of
                     false ->
-                        datastore:run_transaction(fun() ->
-                            case create(FileDoc) of
-                                {ok, Uuid} ->
-                                    SavedDoc = FileDoc#document{key = Uuid},
-                                    ok = model:execute_with_default_context(?MODULE, add_links, [Parent, {FileName, SavedDoc}]),
-                                    ok = model:execute_with_default_context(?MODULE, add_links, [SavedDoc, [{parent, Parent}]]),
-                                    {ok, Uuid};
-                                {error, Reason} ->
-                                    {error, Reason}
-                            end
-                        end);
+                        case create(FileDoc) of
+                            {ok, Uuid} ->
+                                SavedDoc = FileDoc#document{key = Uuid},
+                                ok = model:execute_with_default_context(?MODULE, add_links,
+                                    [Parent, [{FileName, SavedDoc}]]),
+                                ok = model:execute_with_default_context(?MODULE, add_links,
+                                    [SavedDoc, [{parent, Parent}]], [{generated_uuid, true}]),
+                                {ok, Uuid};
+                            {error, Reason} ->
+                                {error, Reason}
+                        end;
                     true ->
                         {error, already_exists}
                 end
@@ -305,11 +311,11 @@ fix_parent_links(Parent, Entry) ->
     {ok, #document{} = ParentDoc} = get(Parent),
     {ok, #document{value = #file_meta{name = FileName}} = FileDoc} = get(Entry),
     {ok, Scope} = get_scope(Parent),
-    datastore:run_transaction(fun() ->
-        ok = model:execute_with_default_context(?MODULE, set_links, [ParentDoc, {FileName, FileDoc}]),
-        ok = model:execute_with_default_context(?MODULE, set_links, [FileDoc, [{parent, ParentDoc}]])
-    end),
-    ok = set_scope(FileDoc, Scope#document.key).
+    ok = model:execute_with_default_context(?MODULE, set_links,
+        [ParentDoc, {FileName, FileDoc}]),
+    ok = set_scope(FileDoc, Scope#document.key),
+    ok = model:execute_with_default_context(?MODULE, set_links,
+        [FileDoc, [{parent, ParentDoc}]]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -326,6 +332,8 @@ delete_child_link(ParentDoc, ChildName) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(uuid() | entry()) -> {ok, datastore:document()} | datastore:get_error().
+get(undefined) ->
+    {error, {not_found, ?MODULE}};
 get({uuid, Key}) ->
     get(Key);
 get(#document{value = #file_meta{}} = Document) ->
@@ -865,6 +873,7 @@ setup_onedata_user(_Client, UserId) ->
         end, Spaces),
 
         FileUuid = fslogic_uuid:user_root_dir_uuid(UserId),
+        ScopeID = <<>>, % TODO - do we need scope for user dir
         case create({uuid, ?ROOT_DIR_UUID},
             #document{key = FileUuid,
                 value = #file_meta{
@@ -874,7 +883,8 @@ setup_onedata_user(_Client, UserId) ->
             }) of
             {ok, _RootUuid} ->
                 {ok, _} = times:save(#document{key = FileUuid, value =
-                #times{mtime = CTime, atime = CTime, ctime = CTime}}),
+                    #times{mtime = CTime, atime = CTime, ctime = CTime},
+                    scope = ScopeID}),
                 ok;
             {error, already_exists} -> ok
         end
@@ -891,13 +901,11 @@ setup_onedata_user(_Client, UserId) ->
 attach_location(Entry, #document{key = LocId}, ProviderId) ->
     attach_location(Entry, LocId, ProviderId);
 attach_location(Entry, LocId, ProviderId) ->
-    {ok, #document{key = FileId} = FDoc} = get(Entry),
-    datastore:run_transaction(fun() ->
-        ok = model:execute_with_default_context(?MODULE, add_links, [
-            FDoc, {location_ref(ProviderId), {LocId, file_location}}]),
-        ok = model:execute_with_default_context(?MODULE, add_links, [
-            LocId, {file_meta, {FileId, file_meta}}])
-    end).
+    {ok, #document{key = FileId, scope = ScopeID} = FDoc} = get(Entry),
+    ok = model:execute_with_default_context(?MODULE, add_links, [
+        FDoc, {location_ref(ProviderId), {LocId, file_location}}]),
+    ok = model:execute_with_default_context(?MODULE, add_links, [
+        LocId, {file_meta, {FileId, file_meta}}], ?SET_LINK_SCOPE(ScopeID)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -965,7 +973,8 @@ make_space_exist(SpaceId) ->
                     }}) of
                 {ok, _} ->
                     case times:create(#document{key = SpaceDirUuid, value =
-                    #times{mtime = CTime, atime = CTime, ctime = CTime}}) of
+                    #times{mtime = CTime, atime = CTime, ctime = CTime},
+                        scope = SpaceId}) of
                         {ok, _} -> ok;
                         {error, already_exists} -> ok
                     end;
@@ -1021,13 +1030,14 @@ delete_child_link_in_parent(ParentUuid, ChildName, ChildUuid) ->
     case model:execute_with_default_context(?MODULE, fetch_full_link,
         [ParentUuid, ChildName]) of
         {ok, {_, ParentTargets}} ->
+            {ok, #document{scope = Scope}} = get_scope(ParentUuid),
             lists:foreach(
                 fun({Scope0, VHash0, Key0, _}) ->
                     case Key0 of
                         ChildUuid ->
                             ok = model:execute_with_default_context(?MODULE, delete_links,
                                 [ParentUuid, [links_utils:make_scoped_link_name(ChildName,
-                                    Scope0, VHash0, size(Scope0))]]);
+                                    Scope0, VHash0, size(Scope0))]], ?SET_LINK_SCOPE(Scope));
                         _ -> ok
                     end
                 end, ParentTargets);

@@ -189,7 +189,7 @@ fetch(ProviderId) ->
         {PublicOnly, SpaceIDs} = case oz_providers:get_spaces(provider) of
             {ok, SIDs} -> {false, SIDs};
             {error, Res} ->
-                ?warning("Unable to fecth public info for provider ~p due to ~p", [
+                ?warning("Unable to fetch public info for provider ~p due to ~p", [
                     ProviderId, Res]),
                 {true, []}
         end,

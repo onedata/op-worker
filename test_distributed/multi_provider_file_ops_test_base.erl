@@ -27,7 +27,7 @@
     basic_opts_test_base/4, many_ops_test_base/6, distributed_modification_test_base/4, multi_space_test_base/3,
     file_consistency_test_skeleton/5, permission_cache_invalidate_test_base/2, get_links/1,
     mkdir_and_rmdir_loop_test_base/3, echo_and_delete_file_loop_test_base/3,
-    create_and_delete_file_loop_test_base/3
+    create_and_delete_file_loop_test_base/3, distributed_delete_test_base/4
 ]).
 -export([init_env/1, teardown_env/1]).
 
@@ -109,12 +109,10 @@ permission_cache_invalidate_test_skeleton(Config, Attempts, CheckedModule, Inval
     lists:foreach(fun(Worker) ->
         ?assertMatch({error,{not_found, _}}, ?rpc(Worker, change_propagation_controller, get,
             [ControllerUUID]), Attempts * length(Workers)),
-        % TODO - uncomment after VFS-2678
+
         ListFun = fun(LinkName, _LinkTarget, Acc) ->
             [LinkName | Acc]
         end,
-        MC = change_propagation_controller:model_init(),
-        LSL = MC#model_config.link_store_level,
         ?assertEqual({ok, []}, ?rpc(Worker, model, execute_with_default_context,
             [change_propagation_controller, foreach_link, [ControllerUUID, ListFun, []]]), Attempts)
     end, Workers),
@@ -383,13 +381,85 @@ distributed_modification_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyN
 
     ok.
 
+distributed_delete_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts) ->
+    distributed_delete_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts);
+distributed_delete_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts) ->
+
+    Config = extend_config(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts),
+    SessId = ?config(session, Config),
+    SpaceName = ?config(space_name, Config),
+    Worker1 = ?config(worker1, Config),
+    Workers = ?config(op_worker_nodes, Config),
+
+    Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
+    Dir2 = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
+
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir, 8#755)),
+    verify_stats(Config, Dir, true),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir2, 8#755)),
+    verify_stats(Config, Dir2, true),
+    ct:print("Dirs verified"),
+
+    Children1 = lists:foldl(fun(_W, Acc) ->
+        Level2TmpDir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
+        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Level2TmpDir, 8#755)),
+        [Level2TmpDir | Acc]
+    end, [], Workers),
+    Children2 = lists:foldl(fun(W, Acc) ->
+        Level2TmpDir = <<Dir2/binary, "/", (generator:gen_name())/binary>>,
+        ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId(W), Level2TmpDir, 8#755)),
+        [Level2TmpDir | Acc]
+    end, [], Workers),
+    ct:print("Children created"),
+
+    Test = fun(MainDir, Children, Desc) ->
+        ct:print("Test ~p", [Desc]),
+
+        ChildrenWithUuids = lists:map(fun(Child) ->
+            {Child, verify_stats(Config, Child, true)}
+        end, Children),
+        ct:print("Children verified"),
+
+        Zipped = lists:zip(Workers, ChildrenWithUuids),
+
+        Master = self(),
+        lists:foreach(fun({W, {D, Uuid}}) ->
+            spawn_link(fun() ->
+                RmAns = lfm_proxy:unlink(W, SessId(W), {path, D}),
+                Master ! {rm_ans, W, D, Uuid, RmAns}
+            end)
+        end, Zipped),
+        ct:print("Parallel dirs rm processed spawned"),
+
+        lists:foreach(fun(_) ->
+            RmAnsCheck =
+                receive
+                    {rm_ans, W, D, Uuid, RmAns} ->
+                        {rm_ans, W, D, Uuid, RmAns}
+                after timer:seconds(2*Attempts+2) ->
+                    {error, timeout}
+                end,
+            ?assertMatch({rm_ans, _, _, _, ok}, RmAnsCheck),
+            {rm_ans, RecW, RecDir, RecUuid, ok} = RmAnsCheck,
+            ct:print("Verify spawn ~p", [{RecW, RecDir, RecUuid}]),
+            verify_del(Config, {RecDir, RecUuid, []}),
+            ct:print("Dir rm verified")
+        end, Workers),
+
+        verify_dir_size(Config, MainDir, 0)
+    end,
+
+    Test(Dir, Children1, "single provider created"),
+    Test(Dir2, Children2, "many providers created"),
+    ok.
+
 file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
     timer:sleep(10000), % TODO - connection must appear after mock setup
-    Attempts = 15,
+    Attempts = 60,
     User = <<"user1">>,
 
     SessId = fun(W) -> ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config) end,
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
+    [{SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
     A1 = ?rpc(Worker1, file_meta, get, [{path, <<"/", SpaceName/binary>>}]),
     ?assertMatch({ok, _}, A1),
     {ok, SpaceDoc} = A1,
@@ -417,7 +487,8 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
                 mode = 8#775,
                 owner = User,
                 scope = SpaceKey
-            }
+            },
+            scope = SpaceId
             },
 %%            ct:print("Doc ~p ~p", [Uuid, Name]),
             {Doc, Name}
@@ -857,15 +928,14 @@ echo_and_delete_file_loop_test_base(Config0, IterationsNum, User) ->
 
 init_env(Config) ->
     lists:foreach(fun(Worker) ->
-        test_utils:set_env(Worker, ?APP_NAME, dbsync_flush_queue_interval, timer:seconds(1)),
+        test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
+        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_update_interval, timer:seconds(1)),
+        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_stream_update_interval, timer:seconds(1)),
         test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
-%%        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(2)),
-        % TODO - change to 2 seconds
-        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(1)),
-        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, datastore_pool_queue_flush_delay, 1000)
+        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(1)) % TODO - change to 2 seconds
     end, ?config(op_worker_nodes, Config)),
 
-    application:start(etls),
+    ssl:start(),
     hackney:start(),
     initializer:enable_grpca_based_communication(Config),
     initializer:disable_quota_limit(Config),
@@ -877,7 +947,7 @@ teardown_env(Config) ->
     initializer:unload_quota_mocks(Config),
     initializer:disable_grpca_based_communication(Config),
     hackney:stop(),
-    application:stop(etls).
+    ssl:stop().
 
 
 %%%===================================================================
@@ -929,8 +999,10 @@ get_locations_from_map(Map) ->
     end, [], Map).
 
 create_doc(Doc, _ParentDoc, _LocId, _Path) ->
+    SpaceId = Doc#document.scope,
     {ok, FileUuid} = file_meta:save(Doc),
-    {ok, _} = times:save(#document{key = FileUuid, value = #times{}}),
+    {ok, _} = times:save(#document{key = FileUuid, value = #times{},
+        scope = SpaceId}),
     ok.
 
 set_parent_link(Doc, ParentDoc, _LocId, _Path) ->
@@ -947,6 +1019,7 @@ set_link_to_parent(Doc, ParentDoc, _LocId, _Path) ->
 create_location(Doc, _ParentDoc, LocId, Path) ->
     FDoc = Doc#document.value,
     FileUuid = Doc#document.key,
+    SpaceId = Doc#document.scope,
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(FDoc#file_meta.scope),
 
     {ok, #document{key = StorageId}} = fslogic_storage:select_storage(SpaceId),
@@ -957,7 +1030,7 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
 
     MC = file_location:model_init(),
     {ok, _} = model:execute_with_default_context(MC, save,
-        [#document{key = LocId, value = Location}]),
+        [#document{key = LocId, value = Location, scope = SpaceId}]),
 
     LeafLess = filename:dirname(FileId),
     {ok, #document{key = StorageId} = Storage} = fslogic_storage:select_storage(SpaceId),
@@ -979,15 +1052,16 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
 
 set_link_to_location(Doc, _ParentDoc, LocId, _Path) ->
     FileUuid = Doc#document.key,
+    SpaceId = Doc#document.scope,
     MC = file_meta:model_init(),
     ok = model:execute_with_default_context(MC, add_links,
         [Doc, {file_meta:location_ref(oneprovider:get_provider_id()), {LocId, file_location}}]),
     ok = model:execute_with_default_context(file_location, add_links,
-        [LocId, {file_meta, {FileUuid, file_meta}}]).
+        [LocId, {file_meta, {FileUuid, file_meta}}], [{scope, SpaceId}]).
 
 add_dbsync_state(Doc, _ParentDoc, _LocId, _Path) ->
-    {ok, SID} = dbsync_worker:get_space_id(Doc),
-    {ok, _} = dbsync_state:save(#document{key = dbsync_state:sid_doc_key(file_meta, Doc#document.key), value = #dbsync_state{entry = {ok, SID}}}),
+%%    {ok, SID} = dbsync_worker:get_space_id(Doc),
+%%    {ok, _} = dbsync_state:save(#document{key = dbsync_state:sid_doc_key(file_meta, Doc#document.key), value = #dbsync_state{entry = {ok, SID}}}),
     ok.
 
 extend_config(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts) ->
@@ -1179,7 +1253,7 @@ verify_dir_size(Config, DirToCheck, DSize) ->
 
     VerAns0 = verify(Config, fun(W) ->
         CountChilden = fun() ->
-            LSAns = lfm_proxy:ls(W, SessId(W), {path, DirToCheck}, 0, 200),
+            LSAns = lfm_proxy:ls(W, SessId(W), {path, DirToCheck}, 0, 1000),
             ?assertMatch({ok, _}, LSAns),
             {ok, ListedDirs} = LSAns,
             length(ListedDirs)

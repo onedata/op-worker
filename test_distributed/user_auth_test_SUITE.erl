@@ -60,20 +60,20 @@ token_authentication(Config) ->
         rpc:call(Worker1, user_identity, get, [#token_auth{token = ?MACAROON}])
     ),
     test_utils:mock_validate_and_unload(Workers, oz_endpoint),
-    ok = etls:close(Sock).
+    ok = ssl:close(Sock).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
 
 init_per_testcase(_Case, Config) ->
-    application:start(etls),
+    ssl:start(),
     mock_oz_spaces(Config),
     Config.
 
 end_per_testcase(_Case, Config) ->
     unmock_oz_spaces(Config),
-    application:stop(etls).
+    ssl:stop().
 
 %%%===================================================================
 %%% Internal functions
@@ -97,8 +97,8 @@ connect_via_token(Node, TokenVal, SessionId) ->
     TokenAuthMessageRaw = messages:encode_msg(TokenAuthMessage),
 
     % when
-    {ok, Sock} = etls:connect(utils:get_host(Node), Port, [{packet, 4}, {active, true}]),
-    ok = etls:send(Sock, TokenAuthMessageRaw),
+    {ok, Sock} = ssl:connect(utils:get_host(Node), Port, [binary, {packet, 4}, {active, true}]),
+    ok = ssl:send(Sock, TokenAuthMessageRaw),
 
     % then
     HandshakeResponse = receive_server_message(),

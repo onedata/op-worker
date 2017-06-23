@@ -98,6 +98,9 @@ create(Document) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
+%TODO - luma gets undefined storage
+get(undefined) ->
+    {error, {not_found, ?MODULE}};
 get(Key) ->
     model:execute_with_default_context(?MODULE, get, [Key]).
 

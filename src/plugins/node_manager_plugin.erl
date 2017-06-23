@@ -85,7 +85,9 @@ modules_with_args() -> node_manager:cluster_worker_modules() ++ [
     ]},
     {subscriptions_worker, []},
     {fslogic_worker, []},
-    {singleton, dbsync_worker, []},
+    {dbsync_worker2, [
+        {supervisor_flags, dbsync_worker2:supervisor_flags()}
+    ]},
     {monitoring_worker, []},
     {fslogic_deletion_worker, []},
     {space_sync_worker, []}
@@ -260,7 +262,7 @@ check_node_ip_address() ->
 clear_memory(true) ->
     permissions_cache:invalidate_permissions_cache();
 clear_memory(_) ->
-    ok.
+    permissions_cache:check_permission_cache_size().
 
 %%%===================================================================
 %%% Internal functions

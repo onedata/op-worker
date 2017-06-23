@@ -7,9 +7,7 @@ LDFLAGS += -shared -Wl,-rpath -Wl,\$$ORIGIN/helpers/lib -L ../priv/helpers/lib \
 	-laws-cpp-sdk-core -lcurl -lrados -lSwift -lPocoUtil -lPocoXML -lPocoNet \
 	-lPocoFoundation -lpthread -Wl,-Bstatic -lfolly -Wl,-Bdynamic \
 	-lglog -lnss3 -lnspr4 -lboost_filesystem -lboost_log -lboost_thread \
-	-lboost_context -liberty -levent -ldouble-conversion -lboost_iostreams \
-	../helpers/release/etls/c_src/deps/boringssl/ssl/libssl.a \
-	../helpers/release/etls/c_src/deps/boringssl/crypto/libcrypto.a
+	-lboost_context -liberty -levent -ldouble-conversion -lboost_iostreams
 
 CXXFLAGS += -fPIC -std=c++14 -O3 -Wall -D_FILE_OFFSET_BITS=64 -DASIO_STANDALONE \
     -DWITH_CEPH=1 -DWITH_S3=1 -DWITH_SWIFT=1 \

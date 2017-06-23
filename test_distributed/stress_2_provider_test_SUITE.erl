@@ -51,9 +51,9 @@ stress_test_base(Config) ->
 db_sync_test(Config) ->
     ?PERFORMANCE(Config, [
         {parameters, [
-            [{name, dirs_num}, {value, 25}, {description, "Number of directorines with single parent."}],
-            [{name, files_num}, {value, 50}, {description, "Number of files with single parent."}],
-            [{name, attempts}, {value, 60}, {description, "Attempts param for assertion macros"}]
+            [{name, dirs_num}, {value, 100}, {description, "Number of directorines with single parent."}],
+            [{name, files_num}, {value, 200}, {description, "Number of files with single parent."}],
+            [{name, attempts}, {value, 180}, {description, "Attempts param for assertion macros"}]
         ]},
         {description, "Performs multiple file operations on space 1."}
     ]).
@@ -62,7 +62,8 @@ db_sync_test_base(Config) ->
     Files = ?config(files_num, Config),
     Attempts = ?config(attempts, Config),
     multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {2,0,0}, Attempts, Dirs, Files),
-    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user1">>, {2,0,0}, Attempts).
+    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user1">>, {2,0,0}, Attempts),
+    multi_provider_file_ops_test_base:distributed_delete_test_base(Config, <<"user1">>, {2,0,0}, Attempts).
 
 %%%===================================================================
 
@@ -105,7 +106,7 @@ init_per_suite(Config) ->
 
 
 init_per_testcase(stress_test, Config) ->
-    application:start(etls),
+    ssl:start(),
     hackney:start(),
     initializer:disable_quota_limit(Config),
     initializer:enable_grpca_based_communication(Config),
@@ -122,7 +123,7 @@ end_per_testcase(stress_test, Config) ->
     initializer:disable_grpca_based_communication(Config),
     initializer:unload_quota_mocks(Config),
     hackney:stop(),
-    application:stop(etls);
+    ssl:stop();
 
 end_per_testcase(_Case, Config) ->
     Config.

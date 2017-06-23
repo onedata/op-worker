@@ -61,6 +61,7 @@ request_open_file_deletion(FileCtx) ->
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
+    % TODO - refactor - do not use list
     case file_handles:list() of
         {ok, Docs} ->
             RemovedFiles = lists:filter(fun(#document{value = Handle}) ->

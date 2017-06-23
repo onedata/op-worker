@@ -25,7 +25,7 @@
 
 -export_type([id/0, base/0, type/0, cancellation/0]).
 
--type id() :: integer().
+-type id() :: binary().
 -type base() :: #subscription{}.
 -type type() :: #file_attr_changed_subscription{} |
                 #file_location_changed_subscription{} |
@@ -47,7 +47,7 @@
 %%--------------------------------------------------------------------
 -spec generate_id() -> SubId :: id().
 generate_id() ->
-    erlang:unique_integer([monotonic, positive]).
+    integer_to_binary(erlang:unique_integer([monotonic, positive])).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -56,7 +56,8 @@ generate_id() ->
 %%--------------------------------------------------------------------
 -spec generate_id(Seed :: binary()) -> SubId :: id().
 generate_id(Seed) ->
-    binary:decode_unsigned(crypto:hash(md5, Seed)) rem 16#FFFFFFFFFFFF.
+  integer_to_binary(
+    binary:decode_unsigned(crypto:hash(md5, Seed)) rem 16#FFFFFFFFFFFF).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -139,7 +140,8 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(subscription_bucket, [], ?GLOBAL_ONLY_LEVEL).
+    ?MODEL_CONFIG(subscription_bucket, [], ?GLOBAL_ONLY_LEVEL)#model_config{
+      list_enabled = {true, return_errors}}.
 
 %%--------------------------------------------------------------------
 %% @doc

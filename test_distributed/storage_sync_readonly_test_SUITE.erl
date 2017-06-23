@@ -170,7 +170,7 @@ init_per_testcase(Case, Config) when
     init_per_testcase(default, Config2);
 
 init_per_testcase(_Case, Config) ->
-    application:start(etls),
+    ssl:start(),
     hackney:start(),
     initializer:disable_quota_limit(Config),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(
@@ -207,7 +207,7 @@ end_per_testcase(_Case, Config) ->
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:unload_quota_mocks(Config),
     initializer:disable_grpca_based_communication(Config),
-    ok.
+    ssl:stop().
 
 
 %%%===================================================================
