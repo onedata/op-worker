@@ -3,6 +3,7 @@
 %%% @copyright (C) 2017 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
+%%%-------------------------------------------------------------------
 %%% @doc
 %%% This module contains helper functions for storage_sync_info structure
 %%% which is member of file_meta record and is used by storage_sync.

@@ -3,6 +3,7 @@
 %%% @copyright (C) 2017 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
+%%%-------------------------------------------------------------------
 %%% @doc
 %%% Util functions for fslogic_deletion_worker
 %%% @end
@@ -21,7 +22,6 @@
 -export([remove_file_and_file_meta/3, remove_file_and_file_meta/4,
     remove_file_handles/1]).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% @equiv remove_file_and_file_meta(FileCtx, UserCtx, Silent, true).
@@ -30,7 +30,6 @@
 -spec remove_file_and_file_meta(file_ctx:ctx(), user_ctx:ctx(), boolean()) -> ok.
 remove_file_and_file_meta(FileCtx, UserCtx, Silent) ->
     remove_file_and_file_meta(FileCtx, UserCtx, Silent, true).
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -56,7 +55,7 @@ remove_file_and_file_meta(FileCtx, UserCtx, Silent, RemoveStorageFile) ->
 
     case RemoveStorageFile of
         true ->
-            ok = maybe_remove_file_on_storage(FileCtx3, UserCtx, Type);
+            maybe_remove_file_on_storage(FileCtx3, UserCtx, Type);
         _ -> ok
     end,
 

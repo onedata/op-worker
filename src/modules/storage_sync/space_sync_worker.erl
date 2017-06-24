@@ -59,7 +59,7 @@
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
     start_pools(),
-    storage_sync_monitoring:start_reporter(),   %todo jk move strategy init to modules and define callbacks
+    storage_sync_monitoring:start_reporter(),
     schedule_check_strategy(),
     {ok, #{}}.
 
@@ -99,7 +99,7 @@ handle(_Request) ->
     Error :: timeout | term().
 cleanup() ->
     stop_pools(),
-    storage_sync_monitoring:delete_reporter(), %todo jk move strategy teardown to modules and define callbacks
+    storage_sync_monitoring:delete_reporter(),
     ok.
 
 %%%===================================================================
@@ -278,7 +278,7 @@ log_update_answer(Answer, SpaceId, StorageId) ->
 -spec log_answer([space_strategy:job_result()] | space_strategy:job_result(),
     od_space:id(), storage:id(), atom()) -> ok.
 log_answer({error, Reason}, SpaceId, StorageId, Strategy) ->
-    ?critical("~p of storage: ~p  supporting space: ~p failed due to: ~p",
+    ?error("~p of storage: ~p  supporting space: ~p failed due to: ~p",
         [Strategy, StorageId, SpaceId, Reason]);
 log_answer(Answer, SpaceId, StorageId, Strategy) ->
     ?debug("~p of storage: ~p  supporting space: ~p finished with: ~p",
@@ -310,17 +310,11 @@ run_job(Job = #space_strategy_job{strategy_type = StrategyType}) ->
 %%--------------------------------------------------------------------
 -spec handle_job_result(space_strategy:job(), space_strategy:type(),
     space_strategy:job_merge_type(),
-    {space_strategy:job_result(), [space_strategy:job()]} |
-    {space_strategy:job_result(), [space_strategy:job()], space_strategy:job_posthook()}) ->
+    {space_strategy:job_result(), [space_strategy:job()]}) ->
     space_strategy:job_result().
 handle_job_result(Job, StrategyType, MergeType, {LocalResult, NextJobs}) ->
     ChildrenResult = run({MergeType, NextJobs}),
-    StrategyType:strategy_merge_result(Job, LocalResult, ChildrenResult);
-handle_job_result(Job, StrategyType, MergeType, {LocalResult, NextJobs, Posthook}) ->
-    ChildrenResult = run({MergeType, NextJobs}),
-    Result = StrategyType:strategy_merge_result(Job, LocalResult, ChildrenResult),
-    Posthook(Result).
-
+    StrategyType:strategy_merge_result(Job, LocalResult, ChildrenResult).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -487,7 +481,6 @@ start_pools() ->
 %%--------------------------------------------------------------------
 -spec start_pool(atom(), non_neg_integer()) -> {ok, pid()}.
 start_pool(PoolName, WorkersNum) ->
-%%    {ok, WorkersNum} = application:get_env(?APP_NAME, WorkersNumKey),
     {ok, _ } = wpool:start_sup_pool(PoolName, [{workers, WorkersNum}]).
 
 %%--------------------------------------------------------------------

@@ -43,7 +43,7 @@
     delete_non_empty_directory_update_test/1, delete_empty_directory_update_test/1]).
 
 -define(TEST_CASES, [
-%%    create_directory_import_test,
+    create_directory_import_test,
     create_directory_import_many_test,
     create_file_import_test,
     create_file_in_dir_import_test,

@@ -23,7 +23,8 @@
 -include_lib("ctool/include/logging.hrl").
 
 -export([new_handle/2, new_handle/6]).
--export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/3, link/2, readdir/3, get_child_handle/2]).
+-export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/3, link/2, readdir/3,
+    get_child_handle/2]).
 -export([stat/1, read/3, write/3, create/2, create/3, open/2, release/1,
     truncate/2, unlink/1, fsync/2, rmdir/1]).
 -export([open_at_creation/1]).
@@ -287,11 +288,7 @@ readdir(#sfm_handle{
 -spec get_child_handle(handle(), helpers:file_id()) -> handle().
 get_child_handle(ParentSFMHandle = #sfm_handle{file=ParentFileId}, ChildName) ->
     ParentSFMHandle#sfm_handle{
-        file_handle = undefined,
-        file = filename:join([ParentFileId, ChildName]),
-        file_uuid = undefined,
-        open_flag = undefined,
-        file_size = undefined
+        file = filename:join([ParentFileId, ChildName])
     }.
 
 
@@ -417,7 +414,6 @@ rmdir(#sfm_handle{
 }) ->
     {ok, HelperHandle} = session:get_helper(SessionId, SpaceId, Storage),
     helpers:rmdir(HelperHandle, FileId).
-
 
 %%--------------------------------------------------------------------
 %% @doc

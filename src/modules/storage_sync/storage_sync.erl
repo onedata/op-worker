@@ -12,7 +12,7 @@
 -author("Jakub Kudzia").
 
 -include("modules/fslogic/fslogic_common.hrl").
-
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([start_simple_scan_import/3, modify_storage_import/3,
@@ -43,7 +43,7 @@ modify_storage_import(SpaceId, StrategyName, Args) ->
     {ok, datastore:ext_key()} | datastore:update_error().
 modify_storage_import(SpaceId, StrategyName, StorageId, Args) ->
     file_meta:make_space_exist(SpaceId),
-    turn_counters_on_or_off(SpaceId, StrategyName, StorageId),
+    turn_counters_on_or_off(SpaceId, storage_import, StrategyName, StorageId),
     space_strategies:set_strategy(SpaceId, StorageId, storage_import, StrategyName, Args).
 
 %%--------------------------------------------------------------------
@@ -67,7 +67,6 @@ stop_storage_import(SpaceId) ->
     StorageId = get_supporting_storage(SpaceId),
     modify_storage_import(SpaceId, no_import, StorageId, #{}).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% @equiv modify_storage_update(SpaceId, StrategyName, StorageId, Args).
@@ -79,7 +78,6 @@ modify_storage_update(SpaceId, StrategyName, Args) ->
     StorageId = get_supporting_storage(SpaceId),
     modify_storage_update(SpaceId, StrategyName, StorageId, Args).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Wrapper for starting storage update.
@@ -89,25 +87,26 @@ modify_storage_update(SpaceId, StrategyName, Args) ->
     space_strategy:arguments()) -> {ok, datastore:ext_key()} | datastore:update_error().
 modify_storage_update(SpaceId, StrategyName, StorageId, Args) ->
     file_meta:make_space_exist(SpaceId),
-%%    turn_update_counters_on_or_off(SpaceId, StrategyName, StorageId),
+    turn_counters_on_or_off(SpaceId, storage_update, StrategyName, StorageId),
     space_strategies:set_strategy(SpaceId, StorageId, storage_update, StrategyName, Args).
-
 
 %%--------------------------------------------------------------------
 %% @doc
 %% @equiv modify_storage_update(SpaceId, simple_scan, Args).
 %% @end
 %%--------------------------------------------------------------------
--spec start_simple_scan_update(od_space:id(), storage:id(), non_neg_integer(), non_neg_integer(),
-    boolean(), boolean()) -> {ok, datastore:ext_key()} | datastore:update_error().
-start_simple_scan_update(SpaceId, StorageId, MaxDepth, ScanInterval, WriteOnce, DeleteEnable) ->
+-spec start_simple_scan_update(od_space:id(), storage:id(),
+    non_neg_integer(), non_neg_integer(), boolean(), boolean()) ->
+    {ok, datastore:ext_key()} | datastore:update_error().
+start_simple_scan_update(SpaceId, StorageId, MaxDepth, ScanInterval, WriteOnce,
+    DeleteEnable
+) ->
     modify_storage_update(SpaceId, simple_scan, StorageId, #{
         max_depth => MaxDepth,
         scan_interval => ScanInterval,
         write_once => WriteOnce,
         delete_enable => DeleteEnable
     }).
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -135,19 +134,21 @@ get_supporting_storage(SpaceId) ->
         space_storage:get(SpaceId),
     hd(StorageIds).
 
-
-turn_counters_on_or_off(SpaceId, no_import, StorageId) ->
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Turns suitable counter on or off, according to strategy type.
+%% @end
+%%-------------------------------------------------------------------
+-spec turn_counters_on_or_off(od_space:id(), space_strategy:type(),
+    space_strategy:name(), storage:id()) ->ok.
+turn_counters_on_or_off(SpaceId, storage_import, no_import, StorageId) ->
     storage_sync_monitoring:stop_imported_files_counter(SpaceId, StorageId),
     storage_sync_monitoring:stop_files_to_import_counter(SpaceId, StorageId);
-turn_counters_on_or_off(SpaceId, no_update, StorageId) ->
-    storage_sync_monitoring:stop_imported_files_counter(SpaceId, StorageId),
-    storage_sync_monitoring:stop_files_to_import_counter(SpaceId, StorageId);
-turn_counters_on_or_off(SpaceId, _, StorageId) ->
+turn_counters_on_or_off(SpaceId, storage_update, no_update, StorageId) ->
+    storage_sync_monitoring:stop_files_to_update_counter(SpaceId, StorageId);
+turn_counters_on_or_off(SpaceId, storage_import, _, StorageId) ->
     storage_sync_monitoring:start_imported_files_counter(SpaceId, StorageId),
-    storage_sync_monitoring:start_files_to_import_counter(SpaceId, StorageId).
-
-
-%%turn_update_counters_on_or_off(SpaceId, no_update, StorageId) ->
-%%    storage_sync_monitoring:stop_files_to_update_counter(SpaceId, StorageId);
-%%turn_update_counters_on_or_off(SpaceId, _, StorageId) ->
-%%    storage_sync_monitoring:start_files_to_update_counter(SpaceId, StorageId).
+    storage_sync_monitoring:start_files_to_import_counter(SpaceId, StorageId);
+turn_counters_on_or_off(SpaceId, storage_update, _, StorageId) ->
+    storage_sync_monitoring:start_files_to_update_counter(SpaceId, StorageId).
