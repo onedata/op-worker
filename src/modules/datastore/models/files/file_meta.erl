@@ -956,7 +956,7 @@ remove_share(FileCtx, ShareId) ->
 %% Creates file meta entry for space if not exists
 %% @end
 %%--------------------------------------------------------------------
--spec make_space_exist(SpaceId :: datastore:id()) -> no_return().
+-spec make_space_exist(SpaceId :: datastore:id()) -> ok | no_return().
 make_space_exist(SpaceId) ->
     CTime = erlang:system_time(seconds),
     SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),

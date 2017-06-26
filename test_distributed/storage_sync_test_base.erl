@@ -18,12 +18,13 @@
 -include("storage_sync_test.hrl").
 
 %% util functions
--export([enable_storage_sync/1, disable_storage_sync/1,
-    set_check_locally_enoent_strategy/2, set_check_globally_enoent_strategy/2,
-    reset_enoent_strategies/2, add_workers_storage_mount_points/1,
-    get_mount_point/2, clean_storage/2,
-    get_host_mount_point/2, storage_test_file_path/4
-    , create_init_file/1, enable_storage_import/1, enable_storage_update/1, delete_non_empty_directory_update_test/2]).
+-export([disable_storage_sync/1, set_check_locally_enoent_strategy/2,
+    set_check_globally_enoent_strategy/2, reset_enoent_strategies/2,
+    add_workers_storage_mount_points/1, get_mount_point/2, clean_storage/2,
+    get_host_mount_point/2, storage_test_file_path/4, create_init_file/1,
+    enable_storage_import/1, enable_storage_update/1,
+    delete_non_empty_directory_update_test/2
+]).
 
 %% tests
 -export([
@@ -823,21 +824,6 @@ enable_storage_update(Config) ->
     {ok, [#document{key = StorageId} | _]} = rpc:call(W1, storage, list, []),
     {ok, _} = rpc:call(W1, storage_sync, start_simple_scan_update,
         [?SPACE_ID, StorageId, ?MAX_DEPTH, ScanInterval, WriteOnce, DeleteEnable]).
-
-enable_storage_sync(Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
-
-    UpdateConfig = ?config(update_config, Config, #{}),
-    ScanInterval = maps:get(scan_interval, UpdateConfig, ?SCAN_INTERVAL),
-    WriteOnce = maps:get(write_once, UpdateConfig, ?WRITE_ONCE),
-    DeleteEnable = maps:get(delete_enable, UpdateConfig, ?DELETE_ENABLE),
-
-    {ok, [#document{key = StorageId} | _]} = rpc:call(W1, storage, list, []),
-    {ok, _} = rpc:call(W1, storage_sync, start_simple_scan_import,
-        [?SPACE_ID, StorageId, ?MAX_DEPTH]).
-%%,
-%%    {ok, _} = rpc:call(W1, storage_sync, start_simple_scan_update,
-%%        [?SPACE_ID, StorageId, ?MAX_DEPTH, ScanInterval, WriteOnce, DeleteEnable]).
 
 
 disable_storage_import(Config) ->

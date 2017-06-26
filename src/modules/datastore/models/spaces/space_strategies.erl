@@ -305,8 +305,8 @@ update_last_import_time(SpaceId, StorageId, NewLastImportTime) ->
 %%% Returns space_strategy:config() for given StrategyType.
 %%% @end
 %%%-------------------------------------------------------------------
--spec get_storage_strategy_config(#space_strategies{}, space_strategy:type(),
-    storage:id()) -> space_strategy:config().
+-spec get_storage_strategy_config(#space_strategies{} | datastore:document(),
+    space_strategy:type(), storage:id()) -> space_strategy:config().
 get_storage_strategy_config(#space_strategies{
     storage_strategies = Strategies
 }, storage_import, StorageId

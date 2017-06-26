@@ -11,7 +11,7 @@
 
 -include_lib("ctool/include/test/test_utils.hrl").
 
--define(ATTEMPTS, 25 ).
+-define(ATTEMPTS, 30).
 
 -define(STORAGE(Config, Mnt),
     atom_to_binary(?config(host_path, ?config(Mnt, ?config(posix, ?config(storages, Config)))), latin1)).

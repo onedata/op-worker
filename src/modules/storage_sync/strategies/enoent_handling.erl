@@ -29,9 +29,11 @@
 %% Types
 -export_type([]).
 
-%% Callbacks
--export([available_strategies/0, strategy_init_jobs/3, strategy_handle_job/1, worker_pools_config/0, main_worker_pool/0]).
--export([strategy_merge_result/2, strategy_merge_result/3]).
+%% space_strategy_behaviour callbacks
+-export([available_strategies/0, strategy_init_jobs/3, strategy_handle_job/1,
+    main_worker_pool/0, strategy_merge_result/2, strategy_merge_result/3,
+    worker_pools_config/0
+]).
 
 %% API
 -export([get_canonical_file_entry/2]).

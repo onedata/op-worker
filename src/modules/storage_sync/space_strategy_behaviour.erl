@@ -40,8 +40,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -callback strategy_handle_job(space_strategy:job()) ->
-    {space_strategy:job_result(), [space_strategy:job()]} |
-    {space_strategy:job_result(), [space_strategy:job()], space_strategy:job_posthook()}.
+    {space_strategy:job_result(), [space_strategy:job()]}.
 
 %%--------------------------------------------------------------------
 %% @doc

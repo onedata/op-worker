@@ -23,18 +23,17 @@
 -export_type([hash/0]).
 
 %% API
--export([children_attrs_hash_has_changed/3, mtime_has_changed/2, count_files_attrs_hash/1]).
+-export([children_attrs_hash_has_changed/3, mtime_has_changed/2,
+    count_files_attrs_hash/1]).
 
-%%%-------------------------------------------------------------------
-%%% @private
-%%% @doc
-%%% Checks whether mtime has changed since last synchronization.
-%%% @end
-%%%-------------------------------------------------------------------
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks whether mtime has changed since last synchronization.
+%% @end
+%%-------------------------------------------------------------------
 -spec mtime_has_changed(#file_meta{}, storage_file_ctx:ctx()) -> boolean().
-mtime_has_changed(#file_meta{storage_sync_info = undefined}, _) ->
-    true;
-mtime_has_changed(#file_meta{name=Name, storage_sync_info = StSyncInfo}, StorageFileCtx) ->
+mtime_has_changed(#file_meta{storage_sync_info = StSyncInfo}, StorageFileCtx) ->
     {#statbuf{st_mtime = StMtime}, _} = storage_file_ctx:get_stat_buf(StorageFileCtx),
     case StSyncInfo#storage_sync_info.last_synchronized_mtime of
         StMtime -> false;
@@ -43,19 +42,15 @@ mtime_has_changed(#file_meta{name=Name, storage_sync_info = StSyncInfo}, Storage
 
 
 
-%%%-------------------------------------------------------------------
-%%% @private
-%%% @doc
-%%% Checks whether hash of children attrs has changed since last
-%%% synchronization.
-%%% @end
-%%%-------------------------------------------------------------------
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks whether hash of children attrs has changed since last
+%% synchronization.
+%% @end
+%%-------------------------------------------------------------------
 -spec children_attrs_hash_has_changed(#file_meta{}, hash(), non_neg_integer()) ->
     boolean().
-children_attrs_hash_has_changed(#file_meta{storage_sync_info = undefined},
-    _CurrentChildrenAttrsHash, _Key
-) ->
-    true;
 children_attrs_hash_has_changed(#file_meta{storage_sync_info = StSyncInfo},
     CurrentChildrenAttrsHash, Key
 ) ->
@@ -67,12 +62,12 @@ children_attrs_hash_has_changed(#file_meta{storage_sync_info = StSyncInfo},
     end.
 
 
-%%%-------------------------------------------------------------------
-%%% @private
-%%% @doc
-%%% Counts hash of attributes of files associated with passed contexts.
-%%% @end
-%%%-------------------------------------------------------------------
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Counts hash of attributes of files associated with passed contexts.
+%% @end
+%%-------------------------------------------------------------------
 -spec count_files_attrs_hash([storage_file_ctx:ctx()]) ->
     {hash(), [storage_file_ctx:ctx()]}.
 count_files_attrs_hash(StorageFileCtxs) ->
@@ -85,17 +80,16 @@ count_files_attrs_hash(StorageFileCtxs) ->
     {Hash, StorageFileCtxs2}.
 
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
+%%===================================================================
+%% Internal functions
+%%===================================================================
 
-
-%%%-------------------------------------------------------------------
-%%% @private
-%%% @doc
-%%% Counts hash of attributes of file associated with passed context.
-%%% @end
-%%%-------------------------------------------------------------------
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Counts hash of attributes of file associated with passed context.
+%% @end
+%%-------------------------------------------------------------------
 -spec count_file_attrs_hash(storage_file_ctx:ctx()) -> {hash(), storage_file_ctx:ctx()}.
 count_file_attrs_hash(StorageFileCtx) ->
     {StatBuf, StorageFileCtx2} = storage_file_ctx:get_stat_buf(StorageFileCtx),
@@ -117,12 +111,12 @@ count_file_attrs_hash(StorageFileCtx) ->
 
 
 
-%%%-------------------------------------------------------------------
-%%% @private
-%%% @doc
-%%% Wrapper for crypto:hash function
-%%% @end
-%%%-------------------------------------------------------------------
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Wrapper for crypto:hash function
+%% @end
+%%-------------------------------------------------------------------
 -spec hash([term()]) -> hash().
 hash(Args) ->
     Arg = str_utils:join_binary([str_utils:to_binary(A) || A <- Args], <<"">>),

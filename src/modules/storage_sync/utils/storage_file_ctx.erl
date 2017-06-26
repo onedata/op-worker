@@ -3,6 +3,7 @@
 %%% @copyright (C) 2017 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
+%%%-------------------------------------------------------------------
 %%% @doc
 %%% This module contains definition and functions to operate on
 %%% storage_file_ctx, a utility data structure used by storage sync.
@@ -31,11 +32,11 @@
 -export([get_stat_buf/1, get_handle_const/1, get_file_id_const/1]).
 
 
-%%%-------------------------------------------------------------------
-%%% @doc
-%%% Returns initialized #storage_file_ctx{}.
-%%% @end
-%%%-------------------------------------------------------------------
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns initialized #storage_file_ctx{}.
+%% @end
+%%-------------------------------------------------------------------
 -spec new(file_meta:name(), od_space:id(), storage:id()) -> ctx().
 new(CanonicalPath, SpaceId, StorageId) ->
     FileName = filename:basename(CanonicalPath),
@@ -48,22 +49,20 @@ new(CanonicalPath, SpaceId, StorageId) ->
         handle = SFMHandle
     }.
 
-
-%%%-------------------------------------------------------------------
-%%% @doc
-%%% Returns file_if from storage_file_ctx.
-%%% @end
-%%%-------------------------------------------------------------------
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns file_if from storage_file_ctx.
+%% @end
+%%-------------------------------------------------------------------
 -spec get_file_id_const(ctx()) -> helpers:file_id().
 get_file_id_const(#storage_file_ctx{id = FileId}) ->
     FileId.
 
-
-%%%-------------------------------------------------------------------
-%%% @doc
-%%% Returns children's storage_file_ctxs,
-%%% @end
-%%%-------------------------------------------------------------------
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns children's storage_file_ctxs,
+%% @end
+%%-------------------------------------------------------------------
 -spec get_children_ctxs_batch_const(ctx(), non_neg_integer(),
     non_neg_integer()) -> [ctx()].
 get_children_ctxs_batch_const(StorageFileCtx, Offset, BatchSize) ->
@@ -74,12 +73,11 @@ get_children_ctxs_batch_const(StorageFileCtx, Offset, BatchSize) ->
         storage_file_ctx:get_child_ctx(StorageFileCtx, BaseName)
     end, ChildrenIds).
 
-
-%%%-------------------------------------------------------------------
-%%% @doc
-%%% Returns storage_file_ctx of child with given name.
-%%% @end
-%%%-------------------------------------------------------------------
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns storage_file_ctx of child with given name.
+%% @end
+%%-------------------------------------------------------------------
 -spec get_child_ctx(ctx(), file_meta:name()) -> ctx().
 get_child_ctx(#storage_file_ctx{handle=ParentHandle}, ChildName) ->
     #storage_file_ctx{
@@ -87,12 +85,11 @@ get_child_ctx(#storage_file_ctx{handle=ParentHandle}, ChildName) ->
         handle = storage_file_manager:get_child_handle(ParentHandle, ChildName)
     }.
 
-
-%%%-------------------------------------------------------------------
-%%% @doc
-%%% Returns #statbuf of file associated with StorageFileCtx.
-%%% @end
-%%%-------------------------------------------------------------------
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns #statbuf of file associated with StorageFileCtx.
+%% @end
+%%-------------------------------------------------------------------
 -spec get_stat_buf(ctx()) -> {#statbuf{}, ctx()} | {error, term()}.
 get_stat_buf(StorageFileCtx = #storage_file_ctx{stat=undefined, handle=SFMHandle}) ->
     case storage_file_manager:stat(SFMHandle) of
@@ -104,12 +101,11 @@ get_stat_buf(StorageFileCtx = #storage_file_ctx{stat=undefined, handle=SFMHandle
 get_stat_buf(StorageFileCtx = #storage_file_ctx{stat=StatBuf}) ->
     {StatBuf, StorageFileCtx}.
 
-
-%%%-------------------------------------------------------------------
-%%% @doc
-%%% Returns cached SFMHandle.
-%%% @end
-%%%-------------------------------------------------------------------
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns cached SFMHandle.
+%% @end
+%%-------------------------------------------------------------------
 -spec get_handle_const(ctx()) -> storage_file_manager:handle().
 get_handle_const(#storage_file_ctx{handle = SFMHandle}) ->
     SFMHandle.
