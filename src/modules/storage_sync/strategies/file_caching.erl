@@ -30,7 +30,7 @@
 -export_type([]).
 
 %% Callbacks
--export([available_strategies/0, strategy_init_jobs/3, strategy_handle_job/1]).
+-export([available_strategies/0, strategy_init_jobs/3, strategy_handle_job/1, worker_pools_config/0, main_worker_pool/0]).
 -export([strategy_merge_result/2, strategy_merge_result/3]).
 
 %% API
@@ -94,6 +94,24 @@ strategy_merge_result([_Job | _], [Result | _]) ->
     space_strategy:job_result().
 strategy_merge_result(#space_strategy_job{}, LocalResult, _ChildrenResult) ->
     LocalResult.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link space_strategy_behaviour} callback worker_pools_config/0.
+%% @end
+%%--------------------------------------------------------------------
+-spec worker_pools_config() -> [{worker_pool:name(), non_neg_integer()}].
+worker_pools_config() ->
+    space_strategy:default_worker_pool_config().
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link space_strategy_behaviour} callback main_worker_pool/0.
+%% @end
+%%--------------------------------------------------------------------
+-spec main_worker_pool() -> worker_pool:name().
+main_worker_pool() ->
+    space_strategy:default_main_worker_pool().
 
 %%%===================================================================
 %%% API functions

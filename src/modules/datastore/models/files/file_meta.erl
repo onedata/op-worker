@@ -43,11 +43,12 @@
 -export([get_ancestors/1, attach_location/3, get_local_locations/1,
     get_locations/1, get_locations_by_uuid/1, location_ref/1, rename/4]).
 -export([to_uuid/1]).
--export([fix_parent_links/2, fix_parent_links/1, exists_local_link_doc/1, get_child/2, delete_child_link/2]).
--export([hidden_file_name/1]).
+-export([fix_parent_links/2, fix_parent_links/1, exists_local_link_doc/1,
+    get_child/2, delete_child_link/2, foreach_child/3]).
+-export([hidden_file_name/1, is_hidden/1]).
 -export([add_share/2, remove_share/2]).
 -export([record_struct/1, record_upgrade/2]).
--export([make_space_exist/1, new_doc/5]).
+-export([make_space_exist/1, new_doc/5, type/1]).
 
 -type doc() :: datastore:document().
 -type uuid() :: datastore:key().
@@ -63,9 +64,11 @@
 -type symlink_value() :: binary().
 -type file_meta() :: model_record().
 -type posix_permissions() :: non_neg_integer().
+-type storage_sync_info() :: #storage_sync_info{}.
 
--export_type([doc/0, uuid/0, path/0, name/0, uuid_or_path/0, entry/0, type/0, offset/0,
-    size/0, mode/0, time/0, symlink_value/0, posix_permissions/0, file_meta/0]).
+-export_type([doc/0, uuid/0, path/0, name/0, uuid_or_path/0, entry/0, type/0,
+    offset/0, size/0, mode/0, time/0, symlink_value/0, posix_permissions/0,
+    file_meta/0, storage_sync_info/0]).
 
 
 %%--------------------------------------------------------------------
@@ -115,7 +118,11 @@ record_struct(3) ->
         {provider_id, string},
         {link_value, string},
         {shares, [string]},
-        {deleted, boolean}
+        {deleted, boolean},
+        {storage_sync_info, {record, [
+            {children_attrs_hash, #{integer => binary}},
+            {last_synchronized_mtime, integer}
+        ]}}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -125,15 +132,22 @@ record_struct(3) ->
 %%--------------------------------------------------------------------
 -spec record_upgrade(datastore_json:record_version(), tuple()) ->
     {datastore_json:record_version(), tuple()}.
-record_upgrade(1, {?MODEL_NAME, Name, Type, Mode, Uid, Size, Version, IsScope, Scope, ProviderId, LinkValue, Shares}) ->
+record_upgrade(1, {?MODEL_NAME, Name, Type, Mode, Uid, Size, Version, IsScope,
+    Scope, ProviderId, LinkValue, Shares}
+) ->
     {2, #file_meta{name = Name, type = Type, mode = Mode, owner = Uid, size = Size,
         version = Version, is_scope = IsScope, scope = Scope,
         provider_id = ProviderId, link_value = LinkValue, shares = Shares}};
-record_upgrade(2, {?MODEL_NAME, Name, Type, Mode, Uid, Size, Version, IsScope, Scope, ProviderId, LinkValue, Shares}) ->
-    {3, #file_meta{name = Name, type = Type, mode = Mode, owner = Uid, size = Size,
+record_upgrade(2, {?MODEL_NAME, Name, Type, Mode, Owner, Size, Version, IsScope,
+    Scope, ProviderId, LinkValue, Shares}
+) ->
+    {3, #file_meta{name = Name, type = Type, mode = Mode, owner = Owner, size = Size,
         version = Version, is_scope = IsScope, scope = Scope,
         provider_id = ProviderId, link_value = LinkValue, shares = Shares,
-        deleted = false}}.
+        deleted = false, storage_sync_info = #storage_sync_info{}
+    }}.
+
+
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -575,6 +589,29 @@ tag_children(LinkName, Targets) ->
             end
         end, Targets).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Iterate over all children links and apply Fun.
+%% @end
+%%--------------------------------------------------------------------
+-spec foreach_child(Entry :: entry(),
+    fun((datastore:link_name(), datastore:link_target(), AccIn :: term()) ->
+        Acc :: term()
+    ),
+    AccIn :: term()) -> term().
+foreach_child(Entry, Fun, AccIn) ->
+    ?run(begin
+        {ok, #document{} = File} = get(Entry),
+        model:execute_with_default_context(?MODULE, foreach_link, [File,
+            fun
+                (parent, _LinkTarget, AccIn) ->
+                    AccIn;
+                (LinkName, LinkTarget, AccIn) ->
+                    Fun(LinkName, LinkTarget, AccIn)
+            end, AccIn])
+    end).
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns list of documents of local file locations
@@ -841,7 +878,7 @@ setup_onedata_user(_Client, UserId) ->
             #document{key = FileUuid,
                 value = #file_meta{
                     name = UserId, type = ?DIRECTORY_TYPE, mode = 8#1755,
-                   owner = ?ROOT_USER_ID, is_scope = true
+                    owner = ?ROOT_USER_ID, is_scope = true
                 }
             }) of
             {ok, _RootUuid} ->
@@ -952,7 +989,7 @@ make_space_exist(SpaceId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec new_doc(undefined | file_meta:name(), undefined | file_meta:type(),
-    file_meta:posix_permissions(),  undefined | od_user:id(),
+    file_meta:posix_permissions(), undefined | od_user:id(),
     undefined | file_meta:size()) -> datastore:document().
 new_doc(FileName, FileType, Mode, Owner, Size) ->
     #document{value = #file_meta{
@@ -962,6 +999,20 @@ new_doc(FileName, FileType, Mode, Owner, Size) ->
         owner = Owner,
         size = Size
     }}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Return type of file depending on its posix mode.
+%% @end
+%%--------------------------------------------------------------------
+-spec type(Mode :: non_neg_integer()) -> type().
+type(Mode) ->
+    IsDir = (Mode band 8#100000) == 0,
+    case IsDir of
+        true -> ?DIRECTORY_TYPE;
+        false -> ?REGULAR_FILE_TYPE
+    end.
+
 
 %%%===================================================================
 %%% Internal functions
@@ -990,7 +1041,7 @@ delete_child_link_in_parent(ParentUuid, ChildName, ChildUuid) ->
                         _ -> ok
                     end
                 end, ParentTargets);
-        {error,link_not_found} ->
+        {error, link_not_found} ->
             ok;
         Error -> Error
     end.

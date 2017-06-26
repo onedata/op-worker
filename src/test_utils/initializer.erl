@@ -886,8 +886,8 @@ maybe_mount_in_root(ProviderConfig) ->
 %% Setup test storage.
 %% @end
 %%--------------------------------------------------------------------
--spec setup_storage(atom(), od_space:id(), atom(), proplists:proplist(), list())
-        -> {ok, od_space:id()} | ok.
+-spec setup_storage(atom(), od_space:id(), atom(), proplists:proplist(), list()) ->
+    {ok, od_space:id()} | ok.
 setup_storage(Worker, SpaceId, Domain, ProviderConfig, Config) ->
     case proplists:get_value(<<"storage">>, ProviderConfig) of
         undefined ->

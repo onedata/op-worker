@@ -29,3 +29,6 @@
     strategy_args :: space_strategy:arguments(),
     data :: space_strategy:job_data()
 }).
+
+-define(GENERIC_STRATEGY_POOL_NAME, generic_strategy_worker_pool).
+-define(GENERIC_STRATEGY_WORKERS_NUM_KEY, generic_strategy_workers_num).
