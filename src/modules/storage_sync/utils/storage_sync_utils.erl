@@ -26,7 +26,7 @@
 %% @end
 %%-------------------------------------------------------------------
 -spec take_children_storage_ctxs_for_batch(non_neg_integer(),
-    space_strategy:job_data()) -> {[storage_file_ctx:ctx()], space_strategy:job_data()}.
+    space_strategy:job_data()) -> {undefined | [storage_file_ctx:ctx()], space_strategy:job_data()}.
 take_children_storage_ctxs_for_batch(BatchKey, Data) ->
     recursive_take([children_storage_file_ctxs, BatchKey], Data).
 
@@ -36,7 +36,7 @@ take_children_storage_ctxs_for_batch(BatchKey, Data) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec take_hash_for_batch(non_neg_integer(), space_strategy:job_data()) ->
-    {binary(), space_strategy:job_data()}.
+    {binary() | undefined, space_strategy:job_data()}.
 take_hash_for_batch(BatchKey, Data) ->
     recursive_take([hashes_map, BatchKey], Data).
 
@@ -94,14 +94,15 @@ job_matches_file(#space_strategy_job{data = #{
 %%-------------------------------------------------------------------
 -spec recursive_take(term(), map()) -> {term(), map()}.
 recursive_take([Key], Map) ->
-    maps:take(Key, Map);
-recursive_take([Key | Keys], Map) ->
-    SubMap = maps:get(Key, Map, #{}),
-    case recursive_take(Keys, SubMap) of
+    case maps:take(Key, Map) of
         error ->
             {undefined, Map};
-        {Value, SubMap2} ->
-            {Value, Map#{Key => SubMap2}}
+        {Value, Map2} ->
+            {Value, Map2}
     end;
+recursive_take([Key | Keys], Map) ->
+    SubMap = maps:get(Key, Map, #{}),
+    {Value, SubMap2} = recursive_take(Keys, SubMap),
+    {Value, Map#{Key => SubMap2}};
 recursive_take(Key, Map) ->
     recursive_take([Key], Map).

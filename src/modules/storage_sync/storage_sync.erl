@@ -141,7 +141,7 @@ get_supporting_storage(SpaceId) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec turn_counters_on_or_off(od_space:id(), space_strategy:type(),
-    space_strategy:name(), storage:id()) ->ok.
+    space_strategy:name(), storage:id()) -> ok.
 turn_counters_on_or_off(SpaceId, storage_import, no_import, StorageId) ->
     storage_sync_monitoring:stop_imported_files_counter(SpaceId, StorageId),
     storage_sync_monitoring:stop_files_to_import_counter(SpaceId, StorageId);

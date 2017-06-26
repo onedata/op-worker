@@ -21,6 +21,8 @@
 -define(STORAGE_TABLE_PREFIX, <<"st_children_">>).
 -define(DB_TABLE_PREFIX, <<"db_children_">>).
 
+-type key() :: file_meta:name() | atom().
+
 %% API
 -export([run/2]).
 
@@ -118,8 +120,8 @@ remove_files_not_existing_on_storage(StorageTable, DBTable, FileCtx) ->
 %% have matching files on storage.
 %% @end
 %%-------------------------------------------------------------------
--spec iterate_and_remove(file_meta:name(), atom(), file_meta:name(), atom(),
-    non_neg_integer(), non_neg_integer(), file_ctx:ctx()) -> ok.
+-spec iterate_and_remove(key(), atom(), key(), atom(), non_neg_integer(),
+    non_neg_integer(), file_ctx:ctx()) -> ok.
 iterate_and_remove(StKey, StorageTable, DBKey, DBTable, Offset, BatchSize,
     FileCtx)
 when (Offset + 1) rem BatchSize == 0  ->

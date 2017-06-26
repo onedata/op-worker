@@ -33,8 +33,6 @@
 %% @end
 %%-------------------------------------------------------------------
 -spec mtime_has_changed(#file_meta{}, storage_file_ctx:ctx()) -> boolean().
-mtime_has_changed(#file_meta{storage_sync_info = undefined}, _) ->
-    true;
 mtime_has_changed(#file_meta{storage_sync_info = StSyncInfo}, StorageFileCtx) ->
     {#statbuf{st_mtime = StMtime}, _} = storage_file_ctx:get_stat_buf(StorageFileCtx),
     case StSyncInfo#storage_sync_info.last_synchronized_mtime of
@@ -53,10 +51,6 @@ mtime_has_changed(#file_meta{storage_sync_info = StSyncInfo}, StorageFileCtx) ->
 %%-------------------------------------------------------------------
 -spec children_attrs_hash_has_changed(#file_meta{}, hash(), non_neg_integer()) ->
     boolean().
-children_attrs_hash_has_changed(#file_meta{storage_sync_info = undefined},
-    _CurrentChildrenAttrsHash, _Key
-) ->
-    true;
 children_attrs_hash_has_changed(#file_meta{storage_sync_info = StSyncInfo},
     CurrentChildrenAttrsHash, Key
 ) ->

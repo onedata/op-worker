@@ -102,7 +102,7 @@ strategy_merge_result(#space_strategy_job{}, LocalResult, _ChildrenResult) ->
 %% {@link space_strategy_behaviour} callback worker_pools_config/0.
 %% @end
 %%--------------------------------------------------------------------
--spec main_worker_pool() -> [{worker_pool:name(), non_neg_integer()}].
+-spec worker_pools_config() -> [{worker_pool:name(), non_neg_integer()}].
 worker_pools_config() ->
     space_strategy:default_worker_pool_config().
 
@@ -111,7 +111,7 @@ worker_pools_config() ->
 %% {@link space_strategy_behaviour} callback main_worker_pool/0.
 %% @end
 %%--------------------------------------------------------------------
--spec worker_pools_config() -> worker_pool:name().
+-spec main_worker_pool() -> worker_pool:name().
 main_worker_pool() ->
     space_strategy:default_main_worker_pool().
 

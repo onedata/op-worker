@@ -105,7 +105,8 @@ maybe_import_storage_file_and_children(Job0 = #space_strategy_job{
 %% File is, for sure, not space's dir.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_import_storage_file(space_strategy:job()) -> {ok, file:ctx()} | no_return().
+-spec maybe_import_storage_file(space_strategy:job()) ->
+    {space_strategy:job_result(), file:ctx(), space_strategy:job()} | no_return().
 maybe_import_storage_file(Job = #space_strategy_job{
     data = #{
         file_name := FileName,
@@ -220,7 +221,7 @@ increase_files_to_handle_counter(#space_strategy_job{
 %% @end
 %%--------------------------------------------------------------------
 -spec maybe_import_file_with_existing_metadata(space_strategy:job(), file_ctx:ctx())->
-    {space_strategy:job_result(), file_ctx:ctx()}.
+    {space_strategy:job_result(), file_ctx:ctx(), space_strategy:job()}.
 maybe_import_file_with_existing_metadata(Job = #space_strategy_job{
     data = #{
         file_name := FileName,
