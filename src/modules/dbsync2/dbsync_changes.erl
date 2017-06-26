@@ -112,7 +112,8 @@ foreign_links_save(ModelConfig, Doc = #document{key = Key, value = #links{
     doc_key = MainDocKey
 } = Links}) ->
     Result = model:execute_with_default_context(ModelConfig, save, [Doc], [
-        {hooks_config, no_hooks}, {resolve_conflicts, true}, {links_tree, {true, MainDocKey}}
+        {hooks_config, no_hooks}, {resolve_conflicts, true},
+        {links_tree, {true, MainDocKey}}, {disc_driver_ctx, bucket, <<"default">>}
     ]),
     case Result of
         ok ->

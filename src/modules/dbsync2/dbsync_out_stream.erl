@@ -29,7 +29,8 @@
     code_change/3]).
 
 -type filter() :: fun((datastore:doc()) -> boolean()).
--type handler() :: fun((couchbase_changes:since(), couchbase_changes:until(),
+-type handler() :: fun((couchbase_changes:since(),
+                        couchbase_changes:until() | end_of_stream,
                         [datastore:doc()]) -> any()).
 -type option() :: {register, boolean()} |
                   {filter, filter()} |
@@ -149,7 +150,7 @@ handle_cast({change, {ok, end_of_stream}}, State = #state{
     docs = Docs,
     handler = Handler
 }) ->
-    Handler(Since, Until, lists:reverse(Docs)),
+    Handler(Since, end_of_stream, lists:reverse(Docs)),
     {stop, normal, State#state{since = Until, docs = []}};
 handle_cast({change, {error, Seq, Reason}}, State = #state{
     since = Since,
