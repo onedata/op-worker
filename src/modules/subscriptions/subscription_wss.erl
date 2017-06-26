@@ -64,7 +64,8 @@ start_link() ->
     KeyFile = oz_plugin:get_key_file(),
     CertFile = oz_plugin:get_cert_file(),
     CaCertsDir = oz_plugin:get_cacerts_dir(),
-    {ok, CaCerts} = file_utils:read_files({dir, CaCertsDir}),
+    {ok, CaCertPems} = file_utils:read_files({dir, CaCertsDir}),
+    CaCerts = lists:map(fun cert_decoder:pem_to_der/1, CaCertPems),
 
     Opts = [{keyfile, KeyFile}, {certfile, CertFile}, {cacerts, CaCerts}],
     Opts2 = case application:get_env(?APP_NAME, verify_oz_cert) of
