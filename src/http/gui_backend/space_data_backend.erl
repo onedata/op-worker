@@ -416,11 +416,7 @@ space_user_permission_record(AssocId) ->
         }}} = space_logic:get(UserAuth, SpaceId, CurrentUser),
     UserPermsAtoms = proplists:get_value(UserId, UsersAndPerms),
     UserPerms = [str_utils:to_binary(P) || P <- UserPermsAtoms],
-    PermsMapped = lists:map(
-        fun(SpacePerm) ->
-            HasPerm = lists:member(str_utils:to_binary(SpacePerm), UserPerms),
-            {perm_db_to_gui(SpacePerm), HasPerm}
-        end, privileges:space_privileges()),
+    PermsMapped = perms_db_to_gui(UserPerms),
     PermsMapped ++ [
         {<<"id">>, AssocId},
         {<<"space">>, SpaceId},
@@ -446,11 +442,7 @@ space_group_permission_record(AssocId) ->
         }}} = space_logic:get(UserAuth, SpaceId, CurrentUser),
     GroupPermsAtoms = proplists:get_value(GroupId, GroupsAndPerms),
     GroupPerms = [str_utils:to_binary(P) || P <- GroupPermsAtoms],
-    PermsMapped = lists:map(
-        fun(Perm) ->
-            HasPerm = lists:member(str_utils:to_binary(Perm), GroupPerms),
-            {perm_db_to_gui(Perm), HasPerm}
-        end, privileges:space_privileges()),
+    PermsMapped = perms_db_to_gui(GroupPerms),
     PermsMapped ++ [
         {<<"id">>, AssocId},
         {<<"space">>, SpaceId},
@@ -461,10 +453,30 @@ space_group_permission_record(AssocId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
+%% Converts a list of space permissions from internal form to client-compliant form.
+%% @end
+%%--------------------------------------------------------------------
+-spec perms_db_to_gui(atom()) -> proplists:proplist().
+perms_db_to_gui(Perms) ->
+    lists:foldl(
+        fun(Perm, Acc) ->
+            case perm_db_to_gui(Perm) of
+                undefined ->
+                    Acc;
+                PermBin ->
+                    HasPerm = lists:member(Perm, Perms),
+                    [{PermBin, HasPerm} | Acc]
+            end
+        end, [], privileges:group_privileges()).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
 %% Converts a space permission from internal form to client-compliant form.
 %% @end
 %%--------------------------------------------------------------------
--spec perm_db_to_gui(atom()) -> binary().
+-spec perm_db_to_gui(atom()) -> binary() | undefined.
 perm_db_to_gui(?SPACE_VIEW) -> <<"permViewSpace">>;
 perm_db_to_gui(?SPACE_UPDATE) -> <<"permModifySpace">>;
 perm_db_to_gui(?SPACE_DELETE) -> <<"permRemoveSpace">>;
@@ -476,7 +488,8 @@ perm_db_to_gui(?SPACE_REMOVE_GROUP) -> <<"permRemoveGroup">>;
 perm_db_to_gui(?SPACE_INVITE_PROVIDER) -> <<"permInviteProvider">>;
 perm_db_to_gui(?SPACE_REMOVE_PROVIDER) -> <<"permRemoveProvider">>;
 perm_db_to_gui(?SPACE_MANAGE_SHARES) -> <<"permManageShares">>;
-perm_db_to_gui(?SPACE_WRITE_DATA) -> <<"permWriteFiles">>.
+perm_db_to_gui(?SPACE_WRITE_DATA) -> <<"permWriteFiles">>;
+perm_db_to_gui(_) -> undefined.
 
 
 %%--------------------------------------------------------------------
