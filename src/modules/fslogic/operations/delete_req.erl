@@ -79,8 +79,8 @@ delete_file(UserCtx, FileCtx, Silent) ->
 %% Checks if dir is empty and deletes it.
 %% @end
 %%--------------------------------------------------------------------
--spec check_if_empty_and_delete(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean()) ->
-    fslogic_worker:fuse_response().
+-spec check_if_empty_and_delete(user_ctx:ctx(), file_ctx:ctx(),
+    Silent :: boolean()) -> fslogic_worker:fuse_response().
 check_if_empty_and_delete(UserCtx, FileCtx, Silent)  ->
     case file_ctx:get_file_children(FileCtx, UserCtx, 0, 1) of
         {[], FileCtx2} ->

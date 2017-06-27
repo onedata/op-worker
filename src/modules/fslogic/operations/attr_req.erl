@@ -155,8 +155,8 @@ chmod_insecure(UserCtx, FileCtx, Mode) ->
 %% Changes file permissions (only file_attrs, not on storage)
 %% @end
 %%--------------------------------------------------------------------
--spec chmod_attrs_only_insecure(file_ctx:ctx(), fslogic_worker:posix_permissions())
-        -> ok | {error, term()}.
+-spec chmod_attrs_only_insecure(file_ctx:ctx(),
+    fslogic_worker:posix_permissions()) -> ok | {error, term()}.
 chmod_attrs_only_insecure(FileCtx, Mode) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     {ok, _} = file_meta:update({uuid, FileUuid}, #{mode => Mode}),

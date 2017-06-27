@@ -23,9 +23,10 @@
 -include_lib("ctool/include/logging.hrl").
 
 -export([new_handle/2, new_handle/6]).
--export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/3, link/2, readdir/3]).
+-export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/3, link/2, readdir/3,
+    get_child_handle/2]).
 -export([stat/1, read/3, write/3, create/2, create/3, open/2, release/1,
-    truncate/2, unlink/1, fsync/2]).
+    truncate/2, unlink/1, fsync/2, rmdir/1]).
 -export([open_at_creation/1]).
 
 -type handle() :: #sfm_handle{}.
@@ -262,7 +263,7 @@ stat(#sfm_handle{
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns file attributes, reading them from storage.
+%% Returns list of file's children ids.
 %% @end
 %%--------------------------------------------------------------------
 -spec readdir(FileHandle :: handle(), Offset :: non_neg_integer(),
@@ -276,6 +277,19 @@ readdir(#sfm_handle{
 }, Offset, Count) ->
     {ok, HelperHandle} = session:get_helper(SessionId, SpaceId, Storage),
     helpers:readdir(HelperHandle, FileId, Offset, Count).
+
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file handle for child of given file.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_child_handle(handle(), helpers:file_id()) -> handle().
+get_child_handle(ParentSFMHandle = #sfm_handle{file=ParentFileId}, ChildName) ->
+    ParentSFMHandle#sfm_handle{
+        file = filename:join([ParentFileId, ChildName])
+    }.
 
 
 %%--------------------------------------------------------------------
@@ -373,7 +387,7 @@ truncate(#sfm_handle{
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Removes a file or an empty directory.
+%% Removes a file.
 %% @end
 %%--------------------------------------------------------------------
 -spec unlink(handle()) -> ok | storage_file_manager:error_reply().
@@ -385,6 +399,21 @@ unlink(#sfm_handle{
 }) ->
     {ok, HelperHandle} = session:get_helper(SessionId, SpaceId, Storage),
     helpers:unlink(HelperHandle, FileId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes an empty directory.
+%% @end
+%%--------------------------------------------------------------------
+-spec rmdir(handle()) -> ok | storage_file_manager:error_reply().
+rmdir(#sfm_handle{
+    storage = Storage,
+    file = FileId,
+    space_id = SpaceId,
+    session_id = SessionId
+}) ->
+    {ok, HelperHandle} = session:get_helper(SessionId, SpaceId, Storage),
+    helpers:rmdir(HelperHandle, FileId).
 
 %%--------------------------------------------------------------------
 %% @doc

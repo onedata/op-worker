@@ -121,8 +121,8 @@ get_children_count(Auth, FileKey) ->
 %% @doc Deletes a file or directory recursively.
 %% @end
 %%--------------------------------------------------------------------
--spec rm_recursive(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path())
-        -> ok | error_reply().
+-spec rm_recursive(Auth :: onedata_auth_api:auth(),
+    FileKey :: file_id_or_path()) -> ok | error_reply().
 rm_recursive(Auth, FileKey) ->
     logical_file_manager:rm_recursive(Auth, FileKey).
 
