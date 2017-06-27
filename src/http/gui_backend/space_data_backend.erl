@@ -414,8 +414,7 @@ space_user_permission_record(AssocId) ->
         value = #od_space{
             users = UsersAndPerms
         }}} = space_logic:get(UserAuth, SpaceId, CurrentUser),
-    UserPermsAtoms = proplists:get_value(UserId, UsersAndPerms),
-    UserPerms = [str_utils:to_binary(P) || P <- UserPermsAtoms],
+    UserPerms = proplists:get_value(UserId, UsersAndPerms),
     PermsMapped = perms_db_to_gui(UserPerms),
     PermsMapped ++ [
         {<<"id">>, AssocId},
@@ -440,8 +439,7 @@ space_group_permission_record(AssocId) ->
         value = #od_space{
             groups = GroupsAndPerms
         }}} = space_logic:get(UserAuth, SpaceId, CurrentUser),
-    GroupPermsAtoms = proplists:get_value(GroupId, GroupsAndPerms),
-    GroupPerms = [str_utils:to_binary(P) || P <- GroupPermsAtoms],
+    GroupPerms = proplists:get_value(GroupId, GroupsAndPerms),
     PermsMapped = perms_db_to_gui(GroupPerms),
     PermsMapped ++ [
         {<<"id">>, AssocId},
@@ -467,7 +465,7 @@ perms_db_to_gui(Perms) ->
                     HasPerm = lists:member(Perm, Perms),
                     [{PermBin, HasPerm} | Acc]
             end
-        end, [], privileges:group_privileges()).
+        end, [], privileges:space_privileges()).
 
 
 %%--------------------------------------------------------------------
