@@ -4,6 +4,18 @@
 CHANGELOG
 ---------
 
+### 17.06.0-beta2
+
+* Added GlusterFS support
+* VFS-3344 Improve dbsync changes aggregation
+* VFS-3309 Remove message_id model.
+* VFS-3350 Make sure that new permissions can be safely added to the system without breaking gui compliance
+* VFS-3350 Remove deprecated privilege names
+* VFS-3326 Fix dbsync recovery stream
+* VFS-3183 - refactor of storage_sync
+* Decode cacert from pem into der format, when opening websocket connection.
+
+
 ### 3.0.0-rc16
 
 * Generate empty monitoring events in order to fill null data.
