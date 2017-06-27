@@ -18,6 +18,7 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
 -export([init/0, terminate/0]).
@@ -173,7 +174,7 @@ user_record(Auth, UserId) ->
         fun(SpaceId, Acc) ->
             % Make sure that user is allowed to view shares in this space
             Authorized = space_logic:has_effective_privilege(
-                SpaceId, UserId, space_view_data
+                SpaceId, UserId, ?SPACE_VIEW
             ),
             case Authorized of
                 true ->

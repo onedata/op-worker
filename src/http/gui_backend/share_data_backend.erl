@@ -19,6 +19,7 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
@@ -70,7 +71,7 @@ find_record(ModelType, ShareId) ->
         <<"share">> ->
             UserId = gui_session:get_user_id(),
             space_logic:has_effective_privilege(
-                SpaceId, UserId, space_view_data
+                SpaceId, UserId, ?SPACE_VIEW
             );
         <<"share-public">> ->
             true

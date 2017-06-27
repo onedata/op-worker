@@ -17,6 +17,7 @@
 -include("proto/common/credentials.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/oz/oz_spaces.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -767,7 +768,7 @@ pushing_space_user_write_priv_unlocks_space_for_user(Config) ->
     UpdateFun1 = fun(Node, S1, U1, P1, Priv1, _G1) ->
         push_update(Node, [
             update(1, [<<"r1">>], S1, space(
-                <<"space_name">>, [{U1, ordsets:from_list([space_write_files])}],
+                <<"space_name">>, [{U1, ordsets:from_list([?SPACE_WRITE_DATA])}],
                 [], [{P1, 1000}], [<<"Share1">>]
             )),
             update(2, [<<"r1">>], U1, user(<<"onedata">>, [G1, G2],
@@ -786,7 +787,7 @@ pushing_space_group_write_priv_unlocks_space_for_user(Config) ->
     UpdateFun1 = fun(Node, S1, U1, P1, _Priv1, _G1) ->
         push_update(Node, [
             update(1, [<<"r1">>], S1, space(
-                <<"space_name">>, [], [{G2, ordsets:from_list([space_write_files])}],
+                <<"space_name">>, [], [{G2, ordsets:from_list([?SPACE_WRITE_DATA])}],
                 [{P1, 1000}], [<<"Share1">>]
             )),
             update(2, [<<"r1">>], U1, user(<<"onedata">>, [G1, G2],
@@ -806,7 +807,7 @@ pushing_space_group_write_priv_locks_space_for_user(Config) ->
     UpdateFun1 = fun(Node, S1, U1, P1, _Priv1, _G1) ->
         push_update(Node, [
             update(1, [<<"r1">>], S1, space(
-                <<"space_name">>, [], [{G3, ordsets:from_list([space_write_files])}],
+                <<"space_name">>, [], [{G3, ordsets:from_list([?SPACE_WRITE_DATA])}],
                 [{P1, 1000}], [<<"Share1">>]
             )),
             update(2, [<<"r1">>], U1, user(<<"onedata">>, [G1, G2],
@@ -828,7 +829,7 @@ pushing_space_user_write_priv_locks_space_for_user(Config) ->
     UpdateFun1 = fun(Node, S1, U1, P1, _Priv1, _G1) ->
         push_update(Node, [
             update(1, [<<"r1">>], S1, space(
-                <<"space_name">>, [{<<"other_user">>, ordsets:from_list([space_write_files])}],
+                <<"space_name">>, [{<<"other_user">>, ordsets:from_list([?SPACE_WRITE_DATA])}],
                 [], [{P1, 1000}], [<<"Share1">>]
             )),
             update(2, [<<"r1">>], U1, user(<<"onedata">>, [G1, G2],
@@ -848,7 +849,7 @@ pushing_space_group_write_priv_locks_space_for_user_even_if_owner(Config) ->
     UpdateFun1 = fun(Node, S1, U1, P1, _Priv1, _G1) ->
         push_update(Node, [
             update(1, [<<"r1">>], S1, space(
-                <<"space_name">>, [{U1, ordsets:from_list([space_write_files])}],
+                <<"space_name">>, [{U1, ordsets:from_list([?SPACE_WRITE_DATA])}],
                 [], [{P1, 1000}], [<<"Share1">>]
             )),
             update(2, [<<"r1">>], U1, user(<<"onedata">>, [],
@@ -873,7 +874,7 @@ pushing_space_group_write_priv_locks_space_for_user_even_if_owner(Config) ->
         push_update(Node, [
             update(3, [<<"r2">>, <<"r1">>], S1, space(
                 <<"space_name">>, [{U1, ordsets:subtract(
-                    privileges:space_admin(), ordsets:from_list([space_write_files])
+                    privileges:space_admin(), ordsets:from_list([?SPACE_WRITE_DATA])
                 )}], [], [{P1, 1000}], [<<"Share1">>]
             ))
         ]),
