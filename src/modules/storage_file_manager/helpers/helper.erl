@@ -21,9 +21,9 @@
 
 %% API
 -export([new_ceph_helper/6, new_posix_helper/3, new_s3_helper/6,
-    new_swift_helper/6]).
+    new_swift_helper/6, new_glusterfs_helper/5]).
 -export([new_ceph_user_ctx/2, new_posix_user_ctx/2, new_s3_user_ctx/2,
-    new_swift_user_ctx/2, validate_user_ctx/2]).
+    new_swift_user_ctx/2, new_glusterfs_user_ctx/2, validate_user_ctx/2]).
 -export([get_name/1, get_args/1, is_insecure/1, get_params/2,
     get_proxy_params/2, get_timeout/1]).
 -export([set_user_ctx/2]).
@@ -118,6 +118,24 @@ new_swift_helper(AuthUrl, ContainerName, TenantName, OptArgs, AdminCtx, Insecure
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Constructs GlusterFS storage helper record.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_glusterfs_helper(binary(), binary(), args(), user_ctx(), boolean()) ->
+    helpers:helper().
+new_glusterfs_helper(Volume, Hostname, OptArgs, AdminCtx, Insecure) ->
+    #helper{
+        name = ?GLUSTERFS_HELPER_NAME,
+        args = maps:merge(OptArgs, #{
+            <<"volume">> => Volume,
+            <<"hostname">> => Hostname
+        }),
+        admin_ctx = AdminCtx,
+        insecure = Insecure
+    }.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Constructs Ceph storage helper user context record.
 %% @end
 %%--------------------------------------------------------------------
@@ -166,6 +184,18 @@ new_swift_user_ctx(Username, Password) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Constructs GlusterFS storage helper user context record.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_glusterfs_user_ctx(integer(), integer()) -> user_ctx().
+new_glusterfs_user_ctx(Uid, Gid) ->
+    #{
+        <<"uid">> => integer_to_binary(Uid),
+        <<"gid">> => integer_to_binary(Gid)
+    }.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Checks whether user context is valid for the storage helper.
 %% @end
 %%--------------------------------------------------------------------
@@ -178,7 +208,9 @@ validate_user_ctx(#helper{name = ?POSIX_HELPER_NAME}, UserCtx) ->
 validate_user_ctx(#helper{name = ?S3_HELPER_NAME}, UserCtx) ->
     check_user_ctx_fields([<<"accessKey">>, <<"secretKey">>], UserCtx);
 validate_user_ctx(#helper{name = ?SWIFT_HELPER_NAME}, UserCtx) ->
-    check_user_ctx_fields([<<"username">>, <<"password">>], UserCtx).
+    check_user_ctx_fields([<<"username">>, <<"password">>], UserCtx);
+validate_user_ctx(#helper{name = ?GLUSTERFS_HELPER_NAME}, UserCtx) ->
+    check_user_ctx_fields([<<"uid">>, <<"gid">>], UserCtx).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -303,6 +335,7 @@ translate_arg_name(<<"root_path">>) -> <<"mountPoint">>;
 translate_arg_name(<<"secret_key">>) -> <<"secretKey">>;
 translate_arg_name(<<"tenant_name">>) -> <<"tenantName">>;
 translate_arg_name(<<"user_name">>) -> <<"username">>;
+translate_arg_name(<<"xlator_options">>) -> <<"xlatorOptions">>;
 translate_arg_name(Name) -> Name.
 
 %%%===================================================================
