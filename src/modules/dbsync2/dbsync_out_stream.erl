@@ -18,6 +18,7 @@
 
 -behaviour(gen_server).
 
+-include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 
@@ -43,9 +44,10 @@
 -record(state, {
     since :: couchbase_changes:since(),
     until :: couchbase_changes:until(),
-    docs :: [datastore:doc()],
+    changes :: [datastore:doc()],
     filter :: filter(),
     handler :: handler(),
+    handling_ref :: undefined | reference(),
     handling_interval :: non_neg_integer()
 }).
 
@@ -99,10 +101,10 @@ init([SpaceId, Opts]) ->
         {until, proplists:get_value(until, Opts, infinity)},
         {except_mutator, proplists:get_value(except_mutator, Opts, <<>>)}
     ]),
-    {ok, schedule_handling(#state{
+    {ok, schedule_docs_handling(#state{
         since = proplists:get_value(since, Opts, Since),
         until = proplists:get_value(since, Opts, Since),
-        docs = [],
+        changes = [],
         filter = proplists:get_value(filter, Opts, fun(_) -> true end),
         handler = proplists:get_value(handler, Opts, fun(_, _, _) -> ok end),
         handling_interval = proplists:get_value(handling_interval, Opts, 5000)
@@ -137,28 +139,27 @@ handle_call(Request, _From, #state{} = State) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
 handle_cast({change, {ok, #document{seq = Seq} = Doc}}, State = #state{
-    docs = Docs,
     filter = Filter
 }) ->
     case Filter(Doc) of
-        true -> {noreply, State#state{until = Seq + 1, docs = [Doc | Docs]}};
+        true -> {noreply, aggregate_change(Doc, State)};
         false -> {noreply, State#state{until = Seq + 1}}
     end;
 handle_cast({change, {ok, end_of_stream}}, State = #state{
     since = Since,
     until = Until,
-    docs = Docs,
+    changes = Docs,
     handler = Handler
 }) ->
     Handler(Since, end_of_stream, lists:reverse(Docs)),
-    {stop, normal, State#state{since = Until, docs = []}};
+    {stop, normal, State#state{since = Until, changes = []}};
 handle_cast({change, {error, Seq, Reason}}, State = #state{
     since = Since,
-    docs = Docs,
+    changes = Docs,
     handler = Handler
 }) ->
     Handler(Since, Seq, lists:reverse(Docs)),
-    {stop, Reason, State#state{since = Seq, docs = []}};
+    {stop, Reason, State#state{since = Seq, changes = []}};
 handle_cast(Request, #state{} = State) ->
     ?log_bad_request(Request),
     {noreply, State}.
@@ -173,14 +174,8 @@ handle_cast(Request, #state{} = State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_info(handle_changes, State = #state{
-    since = Since,
-    until = Until,
-    docs = Docs,
-    handler = Handler
-}) ->
-    Handler(Since, Until, lists:reverse(Docs)),
-    {noreply, schedule_handling(State#state{since = Until, docs = []})};
+handle_info(handle_changes, State = #state{}) ->
+    {noreply, handle_changes(State)};
 handle_info(Info, #state{} = State) ->
     ?log_bad_request(Info),
     {noreply, State}.
@@ -217,10 +212,51 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Schedules handling of aggregated changes (broadcast or direct send).
+%% Aggregates change. Handles aggregated changes if batch size is reached.
 %% @end
 %%--------------------------------------------------------------------
--spec schedule_handling(state()) -> state().
-schedule_handling(#state{handling_interval = Interval} = State) ->
-    erlang:send_after(Interval, self(), handle_changes),
-    State.
+-spec aggregate_change(datastore:document(), state()) -> state().
+aggregate_change(Doc = #document{seq = Seq}, State = #state{changes = Docs}) ->
+    State2 = State#state{
+        until = Seq + 1,
+        changes = [Doc | Docs]
+    },
+    Len = application:get_env(?APP_NAME, dbsync_changes_broadcast_batch_size, 25),
+    case erlang:length(Docs) + 1 >= Len of
+        true -> handle_changes(State2);
+        false -> State2
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handles changes by executing provided handler.
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_changes(state()) -> state().
+handle_changes(State = #state{
+    since = Since,
+    until = Until,
+    changes = Docs,
+    handler = Handler
+}) ->
+    Handler(Since, Until, lists:reverse(Docs)),
+    schedule_docs_handling(State#state{since = Until, changes = []}).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Schedules handling of aggregated changes.
+%% @end
+%%--------------------------------------------------------------------
+-spec schedule_docs_handling(state()) -> state().
+schedule_docs_handling(#state{
+    handling_ref = undefined,
+    handling_interval = Interval
+} = State) ->
+    State#state{
+        handling_ref = erlang:send_after(Interval, self(), handle_changes)
+    };
+schedule_docs_handling(State = #state{handling_ref = Ref}) ->
+    erlang:cancel_timer(Ref),
+    schedule_docs_handling(State#state{handling_ref = undefined}).
