@@ -202,13 +202,6 @@
 %%% Records specific for oneprovider
 %%%===================================================================
 
-%% Message ID containing recipient for remote response.
--record(message_id, {
-    issuer :: undefined | client | server,
-    id :: undefined | binary(),
-    recipient :: pid() | undefined
-}).
-
 % State of subscription tracking.
 -record(subscriptions_state, {
     refreshing_node :: node(),

@@ -84,7 +84,7 @@ prepare([{<<"children">>, From, To} | Tail], #{guid := Guid, auth := Auth} = Sta
     {From1, To1} = normalize_childrenrange(From, To, ChildNum, MaxChildren),
     {ok, List} = onedata_file_api:ls(Auth, {guid, Guid}, From1, To1 - From1 + 1),
     Children = lists:map(
-        fun({Guid, Name}) -> distinguish_files(Guid, Name, Auth) end, List),
+        fun({FileGuid, Name}) -> distinguish_files(FileGuid, Name, Auth) end, List),
     (prepare(Tail, State))#{<<"children">> => Children};
 prepare([<<"children">> | Tail], #{guid := Guid, auth := Auth} = State) ->
     {ok, MaxChildren} = application:get_env(?APP_NAME, max_children_per_request),

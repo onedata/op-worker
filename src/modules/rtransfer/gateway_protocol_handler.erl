@@ -16,15 +16,6 @@
 -author("Konrad Zemek").
 -behavior(ranch_protocol).
 
--record(gwproto_state, {
-    socket,
-    transport,
-    ok,
-    closed,
-    error,
-    delay
-}).
-
 -include("modules/rtransfer/gateway.hrl").
 -include("modules/rtransfer/registered_names.hrl").
 -include_lib("clproto/include/messages.hrl").

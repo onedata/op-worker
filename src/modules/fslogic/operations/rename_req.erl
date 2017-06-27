@@ -96,7 +96,7 @@ copy_and_remove(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     SourceGuid = file_ctx:get_guid_const(SourceFileCtx),
     TargetParentGuid = file_ctx:get_guid_const(TargetParentFileCtx),
     case copy_utils:copy(SessId, SourceGuid, TargetParentGuid, TargetName) of
-        {ok, NewGuid, ChildEntries} ->
+        {ok, NewCopiedGuid, ChildEntries} ->
             case logical_file_manager:rm_recursive(SessId, {guid, SourceGuid}) of
                 ok ->
                     RenameChildEntries = lists:map(
@@ -112,7 +112,7 @@ copy_and_remove(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
                     #fuse_response{
                         status = #status{code = ?OK},
                         fuse_response = #file_renamed{
-                            new_guid = NewGuid,
+                            new_guid = NewCopiedGuid,
                             child_entries = RenameChildEntries}
                     };
                 {error, Code} ->
@@ -379,7 +379,7 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentFileCtx0, Targ
 rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId, Offset) ->
     ParentGuid = file_ctx:get_guid_const(ParentFileCtx),
     case file_ctx:get_file_children(ParentFileCtx, UserCtx, Offset, ?LS_CHUNK_SIZE) of
-        {[], FileCtx2} ->
+        {[], _FileCtx2} ->
             [];
         {Children, FileCtx2} ->
             ChildEntries =

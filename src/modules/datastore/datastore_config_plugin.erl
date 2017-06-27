@@ -44,7 +44,6 @@ models() -> [
     space_storage,
     dbsync_state2,
     files_to_chown,
-    message_id,
     space_quota,
     monitoring_state,
     file_handles,

@@ -621,11 +621,11 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
         end, AccIn, Users)
     end, #{}, SpaceUsers),
 
-    UserToSpaces = maps:map(fun(UserId, Spaces) ->
+    UserToSpaces = maps:map(fun(UserId, SpacesList) ->
         UserConfig = proplists:get_value(UserId, UsersSetup),
         DefaultSpaceId = proplists:get_value(<<"default_space">>, UserConfig),
-        DefaultSpace = {DefaultSpaceId, proplists:get_value(DefaultSpaceId, Spaces)},
-        [DefaultSpace | Spaces -- [DefaultSpace]]
+        DefaultSpace = {DefaultSpaceId, proplists:get_value(DefaultSpaceId, SpacesList)},
+        [DefaultSpace | SpacesList -- [DefaultSpace]]
     end, UserToSpaces0),
 
     UserToGroups = lists:foldl(fun({GroupId, Users}, AccIn) ->
@@ -643,7 +643,7 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
         {SpaceId, ProviderSupp}
     end, SpacesSetup),
 
-    Users = maps:fold(fun(UserId, Spaces, AccIn) ->
+    Users = maps:fold(fun(UserId, SpacesList, AccIn) ->
         UserConfig = proplists:get_value(UserId, UsersSetup),
         DefaultSpaceId = proplists:get_value(<<"default_space">>, UserConfig),
         Macaroon = ?DUMMY_MACAROON(UserId),
@@ -652,7 +652,7 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
         AccIn ++ [{Macaroon, #user_config{
             id = UserId,
             name = Name("name", UserId),
-            spaces = Spaces,
+            spaces = SpacesList,
             macaroon = Macaroon,
             default_space = DefaultSpaceId,
             groups = maps:get(UserId, UserToGroups, [])

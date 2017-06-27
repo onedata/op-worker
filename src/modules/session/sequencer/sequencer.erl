@@ -77,7 +77,7 @@ send_message(Msg, StmId, Ref) ->
 %%--------------------------------------------------------------------
 -spec route_message(Msg :: term(), Ref :: sequencer_manager_ref()) ->
     ok | {error, Reason :: term()}.
-route_message(#client_message{session_id = From, proxy_session_id = ProxySessionId, message_body = MsgBody} = Msg, Ref) ->
+route_message(#client_message{session_id = From, proxy_session_id = ProxySessionId} = Msg, _Ref) ->
     case {session_manager:is_provider_session_id(From), is_binary(ProxySessionId)} of
         {true, true} ->
             ProviderId = session_manager:session_id_to_provider_id(From),

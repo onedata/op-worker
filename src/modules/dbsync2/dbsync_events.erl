@@ -210,7 +210,7 @@ links_changed(_Origin, ModelName, MainDocKey, AddedMap, DeletedMap) ->
             lists:foreach(
                 fun({S, VH0, _, _}) ->
                     case VH0 of
-                        {deleted, VH1} ->
+                        {deleted, _VH1} ->
                             ok; %% Ignore deletion of deleted link
                         VH1 ->
                             ok = model:execute_with_default_context(
