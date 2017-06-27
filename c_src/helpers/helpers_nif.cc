@@ -56,7 +56,9 @@ struct HelpersNIF {
                 {{CEPH_HELPER_NAME, "ceph_helper_threads_number"},
                     {POSIX_HELPER_NAME, "posix_helper_threads_number"},
                     {S3_HELPER_NAME, "s3_helper_threads_number"},
-                    {SWIFT_HELPER_NAME, "swift_helper_threads_number"}})) {
+                    {SWIFT_HELPER_NAME, "swift_helper_threads_number"},
+                    {GLUSTERFS_HELPER_NAME,
+                        "glusterfs_helper_threads_number"}})) {
             auto threads = std::stoul(args[entry.second].toStdString());
             services.emplace(entry.first, std::make_unique<HelperIOService>());
             auto &service = services[entry.first]->service;
@@ -71,6 +73,7 @@ struct HelpersNIF {
             services[POSIX_HELPER_NAME]->service,
             services[S3_HELPER_NAME]->service,
             services[SWIFT_HELPER_NAME]->service,
+            services[GLUSTERFS_HELPER_NAME]->service,
             std::stoul(args["buffer_scheduler_threads_number"].toStdString()),
             buffering::BufferLimits{
                 std::stoul(args["read_buffer_min_size"].toStdString()),
