@@ -158,9 +158,9 @@ communicate_async(Msg, Ref) ->
 -spec communicate_async(Msg :: #client_message{} | term(), Ref :: connection:ref(),
     Recipient :: pid() | undefined) -> {ok, #message_id{}} | {error, Reason :: term()}.
 communicate_async(#client_message{} = Msg, Ref, Recipient) ->
-    {ok, MsgId} = message_id:generate(Recipient, client),
+    {ok, MsgId} = message_id:generate(Recipient),
     NewMsg = Msg#client_message{message_id = MsgId},
-    DoSend = case Msg of
+    DoSend = case NewMsg of
         #client_message{message_stream = #message_stream{stream_id = StmId}} when is_integer(StmId) ->
             fun() -> stream(StmId, NewMsg, Ref, 2) end;
         _ ->

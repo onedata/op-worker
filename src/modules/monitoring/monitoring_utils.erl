@@ -160,8 +160,7 @@ update(#monitoring_id{main_subject_type = space, metric_type = remote_transfer} 
 %% @end
 %%--------------------------------------------------------------------
 -spec maybe_update(#monitoring_id{}, #monitoring_state{}, non_neg_integer(), term()) -> ok.
-maybe_update(MonitoringId, #monitoring_state{state_buffer = StateBuffer} = MonitoringState,
-    UpdateTime, UpdateValue) ->
+maybe_update(MonitoringId, MonitoringState, UpdateTime, UpdateValue) ->
     {ok, _} = monitoring_state:update(MonitoringId,
         #{state_buffer => #{previous_value => UpdateValue}}),
 

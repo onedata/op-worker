@@ -91,10 +91,10 @@ strategy_handle_job(#space_strategy_job{strategy_name = check_globally, data = D
     case oneprovider:get_provider_id() == ProviderId of
         true ->
             {MergeType, Jobs} = space_sync_worker:init(?MODULE, SpaceId, undefined, Data),
-            case space_sync_worker:run({MergeType, [Job#space_strategy_job{strategy_name = check_locally} || Job <- Jobs]}) of
+            case space_sync_worker:run({MergeType, [Job_#space_strategy_job{strategy_name = check_locally} || Job_ <- Jobs]}) of
                 #fuse_response{status = #status{code = ?OK}} = Response ->
                     {Response, []};
-                OtherResp ->
+                _OtherResp ->
                     ProviderIds = ProviderIds0 -- [oneprovider:get_provider_id()],
                     SessionId = user_ctx:get_session_id(CTX),
                     {ok, #document{value = #session{proxy_via = ProxyVia}}} = session:get(SessionId),

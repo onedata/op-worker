@@ -91,7 +91,7 @@ parse_objectid(Req, State) ->
     case catch cdmi_id:objectid_to_guid(Id) of
         {ok, Guid} ->
             {State#{id => Guid}, NewReq};
-        Error ->
+        _Error ->
             throw(?ERROR_INVALID_OBJECTID)
     end.
 
@@ -168,7 +168,7 @@ parse_attribute_body(Req, State = #{extended := Extended}) ->
             end;
         {[{_Attr, _Value}], false} ->
             throw(?ERROR_INVALID_ATTRIBUTE);
-        {[{Attr, Value}], true} when not is_binary(Attr) ->
+        {[{Attr, _Value}], true} when not is_binary(Attr) ->
             throw(?ERROR_INVALID_ATTRIBUTE_NAME);
         {[{Attr, Value}], true} ->
             {State#{attribute_body => {Attr, Value}}, Req2};

@@ -99,7 +99,7 @@ update_outdated_local_location_replica(FileCtx,
     Diff = version_vector:version_diff(LocalDoc, ExternalDoc),
     Changes = replica_changes:get_changes(ExternalDoc, Diff),
     case replica_invalidator:invalidate_changes(FileCtx, LocationDocWithNewVersion, Changes, NewSize) of
-        {deleted, FileCtx2} ->
+        {deleted, _FileCtx2} ->
             ok;
         {NewDoc, FileCtx2} ->
             notify_block_change_if_necessary(FileCtx2, LocationDocWithNewVersion, NewDoc),

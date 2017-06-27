@@ -108,21 +108,34 @@ preroute_message(Msg, SessId) ->
     ok | {ok, #server_message{}} | {error, term()}.
 route_message(Msg = #client_message{message_id = undefined}) ->
     route_and_ignore_answer(Msg);
-route_message(Msg = #client_message{message_id = #message_id{issuer = server,
-    recipient = undefined}}) ->
-    route_and_ignore_answer(Msg);
-route_message(Msg = #client_message{message_id = #message_id{issuer = server,
-    recipient = Pid}}) ->
-    Pid ! Msg,
-    ok;
-route_message(Msg = #server_message{message_id = #message_id{issuer = client,
-    recipient = Pid}}) when is_pid(Pid) ->
-    Pid ! Msg,
-    ok;
-route_message(#server_message{message_id = #message_id{issuer = client}}) ->
-    ok;
-route_message(Msg = #client_message{message_id = #message_id{issuer = client}}) ->
-    route_and_send_answer(Msg).
+route_message(Msg = #client_message{message_id = #message_id{
+    issuer = Issuer,
+    recipient = Recipient
+}}) ->
+    case oneprovider:get_provider_id() == Issuer of
+        true when Recipient =:= undefined ->
+            route_and_ignore_answer(Msg);
+        true ->
+            Pid = binary_to_term(Recipient),
+            Pid ! Msg,
+            ok;
+        false ->
+            route_and_send_answer(Msg)
+    end;
+route_message(Msg = #server_message{message_id = #message_id{
+    issuer = Issuer,
+    recipient = Recipient
+}}) ->
+    case oneprovider:get_provider_id() == Issuer of
+        true when Recipient =:= undefined ->
+            ok;
+        true ->
+            Pid = binary_to_term(Recipient),
+            Pid ! Msg,
+            ok;
+        false ->
+            ok
+    end.
 
 %%%===================================================================
 %%% Internal functions

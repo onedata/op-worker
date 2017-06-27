@@ -34,12 +34,12 @@ delete(UserCtx, FileCtx, Silent) ->
     check_permissions:execute(
         [traverse_ancestors],
         [UserCtx, FileCtx, Silent],
-        fun(UserCtx, FileCtx, Silent) ->
-            case file_ctx:is_dir(FileCtx) of
+        fun(UserCtx_, FileCtx_, Silent_) ->
+            case file_ctx:is_dir(FileCtx_) of
                 {true, FileCtx2} ->
-                    delete_dir(UserCtx, FileCtx2, Silent);
+                    delete_dir(UserCtx_, FileCtx2, Silent_);
                 {false, FileCtx2} ->
-                    delete_file(UserCtx, FileCtx2, Silent)
+                    delete_file(UserCtx_, FileCtx2, Silent_)
             end
         end).
 

@@ -224,16 +224,6 @@ handle_call({send, #server_message{} = ServerMsg}, _From, State = #state{socket 
     transport = Transport}) ->
     send_client_message(Socket, Transport, to_client_message(ServerMsg)),
     {reply, ok, State};
-handle_call({send, ClientMsg = #client_message{message_id = #message_id{recipient = Pid, id = MessageId} = MID}},
-    _From, State = #state{socket = Socket, transport = Transport}) when is_pid(Pid) ->
-    {ok, _} = message_id:save(#document{key = MessageId, value = MID}),
-    % TODO - better management of message_id
-    spawn(fun() ->
-        timer:sleep(timer:minutes(5)),
-        message_id:delete(MessageId)
-    end),
-    send_client_message(Socket, Transport, ClientMsg),
-    {reply, ok, State};
 handle_call({send, ClientMsg = #client_message{}},
     _From, State = #state{socket = Socket, transport = Transport}) ->
     send_client_message(Socket, Transport, ClientMsg),
@@ -443,11 +433,13 @@ report_handshake_error(Sock, Transp, _) ->
 -spec handle_normal_message(#state{}, #client_message{} | #server_message{}) ->
     {noreply, NewState :: #state{}, timeout()} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_normal_message(State0 = #state{certificate = Cert, session_id = SessId, socket = Sock,
-    transport = Transp}, Msg1) ->
+handle_normal_message(State = #state{
+    certificate = Cert,
+    session_id = SessId,
+    socket = Sock,
+    transport = Transp
+}, Msg0) ->
     IsProvider = provider_auth_manager:is_provider(Cert),
-    {State, Msg0} = update_message_id(State0, Msg1),
-
     {Msg, EffectiveSessionId} =
         case {IsProvider, Msg0} of
             %% If message comes from provider and proxy session is requested - proceed
@@ -478,31 +470,6 @@ handle_normal_message(State0 = #state{certificate = Cert, session_id = SessId, s
                     {stop, {error, Reason}, State}
             end
     end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% For message that is a response fo earlier request, update its recipient with stored, waiting pid.
-%% @end
-%%--------------------------------------------------------------------
--spec update_message_id(#state{}, #server_message{} | #client_message{}) ->
-    {NewState :: #state{}, NewMsg :: #server_message{} | #client_message{}}.
-update_message_id(State = #state{connection_type = outgoing},
-    Msg = #server_message{message_id = #message_id{id = ID} = MID}) ->
-
-    NewMID = case message_id:get(ID) of
-        {ok, #document{value = NewMID0}} ->
-            message_id:delete(ID),
-            NewMID0;
-        _ ->
-            MID
-    end,
-
-    NewMsg = Msg#server_message{message_id = NewMID},
-    {State, NewMsg};
-update_message_id(State, Msg) ->
-    {State, Msg}.
 
 %%--------------------------------------------------------------------
 %% @private
