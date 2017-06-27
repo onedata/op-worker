@@ -14,8 +14,9 @@
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 
 %% API
 -export([check_normal_or_default_def/3]).
@@ -355,10 +356,9 @@ validate_scope_privs(write, FileCtx, UserCtx, _ShareId) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     {ok, #document{value = #od_space{users = Users, groups = Groups}}} =
         od_space:get(SpaceId, UserId),
-    SpeceWritePriv = space_write_files,
 
     UserPrivs = proplists:get_value(UserId, Users, []),
-    case lists:member(SpeceWritePriv, UserPrivs) of
+    case lists:member(?SPACE_WRITE_DATA, UserPrivs) of
         true -> {ok, FileCtx};
         false ->
             SpaceGroupsSet = sets:from_list(proplists:get_keys(Groups)),
@@ -367,7 +367,7 @@ validate_scope_privs(write, FileCtx, UserCtx, _ShareId) ->
 
             ValidGroups = lists:foldl(fun(GroupId, AccIn) ->
                 GroupPrivs = proplists:get_value(GroupId, Groups, []),
-                case lists:member(SpeceWritePriv, GroupPrivs) of
+                case lists:member(?SPACE_WRITE_DATA, GroupPrivs) of
                     true ->
                         [GroupId | AccIn];
                     false ->

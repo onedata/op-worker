@@ -18,6 +18,7 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
 
@@ -76,7 +77,7 @@ find_record(PermissionsRecord, RecordId) ->
     % Make sure that user is allowed to view requested privileges - he must have
     % view privileges in this group.
     Authorized = group_logic:has_effective_privilege(
-        GroupId, UserId, group_view_data
+        GroupId, UserId, ?GROUP_VIEW
     ),
     case Authorized of
         false ->
@@ -294,7 +295,7 @@ delete_record(<<"group">>, GroupId) ->
 group_record(GroupId) ->
     % Check if that user has view privileges in that group
     HasViewPrivileges = group_logic:has_effective_privilege(
-        GroupId, gui_session:get_user_id(), group_view_data
+        GroupId, gui_session:get_user_id(), ?GROUP_VIEW
     ),
     group_record(GroupId, HasViewPrivileges).
 
@@ -396,11 +397,7 @@ group_user_permission_record(AssocId) ->
             users = UsersAndPerms
         }}} = group_logic:get(UserAuth, GroupId),
     UserPerms = proplists:get_value(UserId, UsersAndPerms),
-    PermsMapped = lists:map(
-        fun(Perm) ->
-            HasPerm = lists:member(Perm, UserPerms),
-            {perm_db_to_gui(Perm), HasPerm}
-        end, privileges:group_privileges()),
+    PermsMapped = perms_db_to_gui(UserPerms),
     PermsMapped ++ [
         {<<"id">>, AssocId},
         {<<"group">>, GroupId},
@@ -424,11 +421,7 @@ group_group_permission_record(AssocId) ->
             children = GroupsAndPerms
         }}} = group_logic:get(UserAuth, ParentGroupId),
     GroupPerms = proplists:get_value(ChildGroupId, GroupsAndPerms),
-    PermsMapped = lists:map(
-        fun(Perm) ->
-            HasPerm = lists:member(Perm, GroupPerms),
-            {perm_db_to_gui(Perm), HasPerm}
-        end, privileges:group_privileges()),
+    PermsMapped = perms_db_to_gui(GroupPerms),
     PermsMapped ++ [
         {<<"id">>, AssocId},
         {<<"group">>, ParentGroupId},
@@ -439,45 +432,66 @@ group_group_permission_record(AssocId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Converts a space permission from internal form to client-compliant form.
+%% Converts a list of group permissions from internal form to client-compliant form.
 %% @end
 %%--------------------------------------------------------------------
--spec perm_db_to_gui(atom()) -> binary().
-perm_db_to_gui(group_view_data) -> <<"permViewGroup">>;
-perm_db_to_gui(group_change_data) -> <<"permModifyGroup">>;
-perm_db_to_gui(group_set_privileges) -> <<"permSetPrivileges">>;
-perm_db_to_gui(group_remove) -> <<"permRemoveGroup">>;
-perm_db_to_gui(group_invite_user) -> <<"permInviteUser">>;
-perm_db_to_gui(group_remove_user) -> <<"permRemoveUser">>;
-perm_db_to_gui(group_invite_group) -> <<"permInviteGroup">>;
-perm_db_to_gui(group_remove_group) -> <<"permRemoveSubgroup">>;
-perm_db_to_gui(group_join_group) -> <<"permJoinGroup">>;
-perm_db_to_gui(group_create_space) -> <<"permCreateSpace">>;
-perm_db_to_gui(group_join_space) -> <<"permJoinSpace">>;
-perm_db_to_gui(group_leave_space) -> <<"permLeaveSpace">>;
-perm_db_to_gui(group_create_space_token) -> <<"permGetSupport">>.
+-spec perms_db_to_gui(atom()) -> proplists:proplist().
+perms_db_to_gui(Perms) ->
+    lists:foldl(
+        fun(Perm, Acc) ->
+            case perm_db_to_gui(Perm) of
+                undefined ->
+                    Acc;
+                PermBin ->
+                    HasPerm = lists:member(Perm, Perms),
+                    [{PermBin, HasPerm} | Acc]
+            end
+    end, [], privileges:group_privileges()).
 
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Converts a space permission from client-compliant form to internal form.
+%% Converts a group permission from internal form to client-compliant form.
+%% @end
+%%--------------------------------------------------------------------
+-spec perm_db_to_gui(atom()) -> binary() | undefined.
+perm_db_to_gui(?GROUP_VIEW) -> <<"permViewGroup">>;
+perm_db_to_gui(?GROUP_UPDATE) -> <<"permModifyGroup">>;
+perm_db_to_gui(?GROUP_SET_PRIVILEGES) -> <<"permSetPrivileges">>;
+perm_db_to_gui(?GROUP_DELETE) -> <<"permRemoveGroup">>;
+perm_db_to_gui(?GROUP_INVITE_USER) -> <<"permInviteUser">>;
+perm_db_to_gui(?GROUP_REMOVE_USER) -> <<"permRemoveUser">>;
+perm_db_to_gui(?GROUP_INVITE_GROUP) -> <<"permInviteGroup">>;
+perm_db_to_gui(?GROUP_REMOVE_GROUP) -> <<"permRemoveSubgroup">>;
+perm_db_to_gui(?GROUP_JOIN_GROUP) -> <<"permJoinGroup">>;
+perm_db_to_gui(?GROUP_LEAVE_GROUP) -> <<"permLeaveGroup">>;
+perm_db_to_gui(?GROUP_CREATE_SPACE) -> <<"permCreateSpace">>;
+perm_db_to_gui(?GROUP_JOIN_SPACE) -> <<"permJoinSpace">>;
+perm_db_to_gui(?GROUP_LEAVE_SPACE) -> <<"permLeaveSpace">>;
+perm_db_to_gui(_) -> undefined.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Converts a group permission from client-compliant form to internal form.
 %% @end
 %%--------------------------------------------------------------------
 -spec perm_gui_to_db(binary()) -> atom().
-perm_gui_to_db(<<"permViewGroup">>) -> group_view_data;
-perm_gui_to_db(<<"permModifyGroup">>) -> group_change_data;
-perm_gui_to_db(<<"permSetPrivileges">>) -> group_set_privileges;
-perm_gui_to_db(<<"permRemoveGroup">>) -> group_remove;
-perm_gui_to_db(<<"permInviteUser">>) -> group_invite_user;
-perm_gui_to_db(<<"permRemoveUser">>) -> group_remove_user;
-perm_gui_to_db(<<"permInviteGroup">>) -> group_invite_group;
-perm_gui_to_db(<<"permRemoveSubgroup">>) -> group_remove_group;
-perm_gui_to_db(<<"permJoinGroup">>) -> group_join_group;
-perm_gui_to_db(<<"permCreateSpace">>) -> group_create_space;
-perm_gui_to_db(<<"permJoinSpace">>) -> group_join_space;
-perm_gui_to_db(<<"permLeaveSpace">>) -> group_leave_space;
-perm_gui_to_db(<<"permGetSupport">>) -> group_create_space_token.
+perm_gui_to_db(<<"permViewGroup">>) -> ?GROUP_VIEW;
+perm_gui_to_db(<<"permModifyGroup">>) -> ?GROUP_UPDATE;
+perm_gui_to_db(<<"permSetPrivileges">>) -> ?GROUP_SET_PRIVILEGES;
+perm_gui_to_db(<<"permRemoveGroup">>) -> ?GROUP_DELETE;
+perm_gui_to_db(<<"permInviteUser">>) -> ?GROUP_INVITE_USER;
+perm_gui_to_db(<<"permRemoveUser">>) -> ?GROUP_REMOVE_USER;
+perm_gui_to_db(<<"permInviteGroup">>) -> ?GROUP_INVITE_GROUP;
+perm_gui_to_db(<<"permRemoveSubgroup">>) -> ?GROUP_REMOVE_GROUP;
+perm_gui_to_db(<<"permJoinGroup">>) -> ?GROUP_JOIN_GROUP;
+perm_gui_to_db(<<"permLeaveGroup">>) -> ?GROUP_LEAVE_GROUP;
+perm_gui_to_db(<<"permCreateSpace">>) -> ?GROUP_CREATE_SPACE;
+perm_gui_to_db(<<"permJoinSpace">>) -> ?GROUP_JOIN_SPACE;
+perm_gui_to_db(<<"permLeaveSpace">>) -> ?GROUP_LEAVE_SPACE.
 
 
 

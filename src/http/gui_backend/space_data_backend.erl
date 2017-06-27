@@ -19,6 +19,7 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
 
@@ -85,7 +86,7 @@ find_record(PermissionsRecord, RecordId) ->
     % Make sure that user is allowed to view requested privileges - he must have
     % view privileges in this space.
     Authorized = space_logic:has_effective_privilege(
-        SpaceId, UserId, space_view_data
+        SpaceId, UserId, ?SPACE_VIEW
     ),
     case Authorized of
         false ->
@@ -305,7 +306,7 @@ delete_record(<<"space">>, SpaceId) ->
 space_record(SpaceId) ->
     % Check if that user has view privileges in that space
     HasViewPrivileges = space_logic:has_effective_privilege(
-        SpaceId, gui_session:get_user_id(), space_view_data
+        SpaceId, gui_session:get_user_id(), ?SPACE_VIEW
     ),
     space_record(SpaceId, HasViewPrivileges).
 
@@ -413,13 +414,8 @@ space_user_permission_record(AssocId) ->
         value = #od_space{
             users = UsersAndPerms
         }}} = space_logic:get(UserAuth, SpaceId, CurrentUser),
-    UserPermsAtoms = proplists:get_value(UserId, UsersAndPerms),
-    UserPerms = [str_utils:to_binary(P) || P <- UserPermsAtoms],
-    PermsMapped = lists:map(
-        fun(SpacePerm) ->
-            HasPerm = lists:member(str_utils:to_binary(SpacePerm), UserPerms),
-            {perm_db_to_gui(SpacePerm), HasPerm}
-        end, privileges:space_privileges()),
+    UserPerms = proplists:get_value(UserId, UsersAndPerms),
+    PermsMapped = perms_db_to_gui(UserPerms),
     PermsMapped ++ [
         {<<"id">>, AssocId},
         {<<"space">>, SpaceId},
@@ -443,13 +439,8 @@ space_group_permission_record(AssocId) ->
         value = #od_space{
             groups = GroupsAndPerms
         }}} = space_logic:get(UserAuth, SpaceId, CurrentUser),
-    GroupPermsAtoms = proplists:get_value(GroupId, GroupsAndPerms),
-    GroupPerms = [str_utils:to_binary(P) || P <- GroupPermsAtoms],
-    PermsMapped = lists:map(
-        fun(Perm) ->
-            HasPerm = lists:member(str_utils:to_binary(Perm), GroupPerms),
-            {perm_db_to_gui(Perm), HasPerm}
-        end, privileges:space_privileges()),
+    GroupPerms = proplists:get_value(GroupId, GroupsAndPerms),
+    PermsMapped = perms_db_to_gui(GroupPerms),
     PermsMapped ++ [
         {<<"id">>, AssocId},
         {<<"space">>, SpaceId},
@@ -460,22 +451,43 @@ space_group_permission_record(AssocId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
+%% Converts a list of space permissions from internal form to client-compliant form.
+%% @end
+%%--------------------------------------------------------------------
+-spec perms_db_to_gui(atom()) -> proplists:proplist().
+perms_db_to_gui(Perms) ->
+    lists:foldl(
+        fun(Perm, Acc) ->
+            case perm_db_to_gui(Perm) of
+                undefined ->
+                    Acc;
+                PermBin ->
+                    HasPerm = lists:member(Perm, Perms),
+                    [{PermBin, HasPerm} | Acc]
+            end
+        end, [], privileges:space_privileges()).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
 %% Converts a space permission from internal form to client-compliant form.
 %% @end
 %%--------------------------------------------------------------------
--spec perm_db_to_gui(atom()) -> binary().
-perm_db_to_gui(space_view_data) -> <<"permViewSpace">>;
-perm_db_to_gui(space_change_data) -> <<"permModifySpace">>;
-perm_db_to_gui(space_remove) -> <<"permRemoveSpace">>;
-perm_db_to_gui(space_set_privileges) -> <<"permSetPrivileges">>;
-perm_db_to_gui(space_invite_user) -> <<"permInviteUser">>;
-perm_db_to_gui(space_remove_user) -> <<"permRemoveUser">>;
-perm_db_to_gui(space_invite_group) -> <<"permInviteGroup">>;
-perm_db_to_gui(space_remove_group) -> <<"permRemoveGroup">>;
-perm_db_to_gui(space_add_provider) -> <<"permInviteProvider">>;
-perm_db_to_gui(space_remove_provider) -> <<"permRemoveProvider">>;
-perm_db_to_gui(space_manage_shares) -> <<"permManageShares">>;
-perm_db_to_gui(space_write_files) -> <<"permWriteFiles">>.
+-spec perm_db_to_gui(atom()) -> binary() | undefined.
+perm_db_to_gui(?SPACE_VIEW) -> <<"permViewSpace">>;
+perm_db_to_gui(?SPACE_UPDATE) -> <<"permModifySpace">>;
+perm_db_to_gui(?SPACE_DELETE) -> <<"permRemoveSpace">>;
+perm_db_to_gui(?SPACE_SET_PRIVILEGES) -> <<"permSetPrivileges">>;
+perm_db_to_gui(?SPACE_INVITE_USER) -> <<"permInviteUser">>;
+perm_db_to_gui(?SPACE_REMOVE_USER) -> <<"permRemoveUser">>;
+perm_db_to_gui(?SPACE_INVITE_GROUP) -> <<"permInviteGroup">>;
+perm_db_to_gui(?SPACE_REMOVE_GROUP) -> <<"permRemoveGroup">>;
+perm_db_to_gui(?SPACE_INVITE_PROVIDER) -> <<"permInviteProvider">>;
+perm_db_to_gui(?SPACE_REMOVE_PROVIDER) -> <<"permRemoveProvider">>;
+perm_db_to_gui(?SPACE_MANAGE_SHARES) -> <<"permManageShares">>;
+perm_db_to_gui(?SPACE_WRITE_DATA) -> <<"permWriteFiles">>;
+perm_db_to_gui(_) -> undefined.
 
 
 %%--------------------------------------------------------------------
@@ -485,15 +497,15 @@ perm_db_to_gui(space_write_files) -> <<"permWriteFiles">>.
 %% @end
 %%--------------------------------------------------------------------
 -spec perm_gui_to_db(binary()) -> atom().
-perm_gui_to_db(<<"permViewSpace">>) -> space_view_data;
-perm_gui_to_db(<<"permModifySpace">>) -> space_change_data;
-perm_gui_to_db(<<"permRemoveSpace">>) -> space_remove;
-perm_gui_to_db(<<"permSetPrivileges">>) -> space_set_privileges;
-perm_gui_to_db(<<"permInviteUser">>) -> space_invite_user;
-perm_gui_to_db(<<"permRemoveUser">>) -> space_remove_user;
-perm_gui_to_db(<<"permInviteGroup">>) -> space_invite_group;
-perm_gui_to_db(<<"permRemoveGroup">>) -> space_remove_group;
-perm_gui_to_db(<<"permInviteProvider">>) -> space_add_provider;
-perm_gui_to_db(<<"permRemoveProvider">>) -> space_remove_provider;
-perm_gui_to_db(<<"permManageShares">>) -> space_manage_shares;
-perm_gui_to_db(<<"permWriteFiles">>) -> space_write_files.
+perm_gui_to_db(<<"permViewSpace">>) -> ?SPACE_VIEW;
+perm_gui_to_db(<<"permModifySpace">>) -> ?SPACE_UPDATE;
+perm_gui_to_db(<<"permRemoveSpace">>) -> ?SPACE_DELETE;
+perm_gui_to_db(<<"permSetPrivileges">>) -> ?SPACE_SET_PRIVILEGES;
+perm_gui_to_db(<<"permInviteUser">>) -> ?SPACE_INVITE_USER;
+perm_gui_to_db(<<"permRemoveUser">>) -> ?SPACE_REMOVE_USER;
+perm_gui_to_db(<<"permInviteGroup">>) -> ?SPACE_INVITE_GROUP;
+perm_gui_to_db(<<"permRemoveGroup">>) -> ?SPACE_REMOVE_GROUP;
+perm_gui_to_db(<<"permInviteProvider">>) -> ?SPACE_INVITE_PROVIDER;
+perm_gui_to_db(<<"permRemoveProvider">>) -> ?SPACE_REMOVE_PROVIDER;
+perm_gui_to_db(<<"permManageShares">>) -> ?SPACE_MANAGE_SHARES;
+perm_gui_to_db(<<"permWriteFiles">>) -> ?SPACE_WRITE_DATA.
