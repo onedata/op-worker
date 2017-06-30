@@ -40,7 +40,8 @@
     create_file_in_dir_import_test/1,
     create_file_in_dir_exceed_batch_update_test/1,
     create_directory_import_many_test/1, create_subfiles_import_many_test/1,
-    delete_non_empty_directory_update_test/1, delete_empty_directory_update_test/1]).
+    delete_non_empty_directory_update_test/1, delete_empty_directory_update_test/1,
+    should_not_detect_timestamp_update_test/1]).
 
 -define(TEST_CASES, [
     create_directory_import_test,
@@ -59,7 +60,8 @@
     truncate_file_update_test,
     chmod_file_update_test,
     chmod_file_update2_test,
-    update_timestamps_file_import_test
+    update_timestamps_file_import_test,
+    should_not_detect_timestamp_update_test
 %%    import_file_by_path_test, %todo uncomment after resolving and merging with VFS-3052
 %%    get_child_attr_by_path_test,
 %%    import_remote_file_by_path_test
@@ -122,6 +124,9 @@ chmod_file_update2_test(Config) ->
 update_timestamps_file_import_test(Config) ->
     storage_sync_test_base:update_timestamps_file_import_test(Config, true).
 
+should_not_detect_timestamp_update_test(Config) ->
+    storage_sync_test_base:should_not_detect_timestamp_update_test(Config, true).
+
 import_file_by_path_test(Config) ->
     storage_sync_test_base:import_file_by_path_test(Config, true).
 
@@ -139,7 +144,9 @@ init_per_suite(Config) ->
     [{?LOAD_MODULES, [initializer]} | Config].
 
 init_per_testcase(Case, Config) when
-    Case =:= create_file_in_dir_update_test ->
+    Case =:= create_file_in_dir_update_test;
+    Case =:= should_not_detect_timestamp_update_test
+->
     Config2 = [
         {update_config, #{
             delete_enable => false,
@@ -161,9 +168,10 @@ init_per_testcase(Case, Config) when
     init_per_testcase(default, Config2);
 
 init_per_testcase(Case, Config) when
-    Case =:= create_file_in_dir_exceed_batch_update_test ->
+    Case =:= create_file_in_dir_exceed_batch_update_test
+->
     [W1 | _] = ?config(op_worker_nodes, Config),
-    OldDirBatchSize = test_utils:get_env(W1, op_worker, dir_batch_size),
+    {ok, OldDirBatchSize} = test_utils:get_env(W1, op_worker, dir_batch_size),
     test_utils:set_env(W1, op_worker, dir_batch_size, 2),
     Config2 = [
         {update_config, #{
@@ -175,9 +183,10 @@ init_per_testcase(Case, Config) when
     init_per_testcase(default, Config2);
 
 init_per_testcase(Case, Config) when
-    Case =:= chmod_file_update2_test ->
+    Case =:= chmod_file_update2_test
+->
     [W1 | _] = ?config(op_worker_nodes, Config),
-    OldDirBatchSize = test_utils:get_env(W1, op_worker, dir_batch_size),
+    {ok, OldDirBatchSize} = test_utils:get_env(W1, op_worker, dir_batch_size),
     test_utils:set_env(W1, op_worker, dir_batch_size, 2),
     Config2 = [{old_dir_batch_size, OldDirBatchSize} | Config],
     init_per_testcase(default, Config2);
@@ -201,8 +210,8 @@ end_per_testcase(Case, Config) when
     end_per_testcase(undefined, Config);
 
 end_per_testcase(Case, Config) when
-    Case =:= chmod_file_update2_test,
-    Case =:= create_file_in_dir_update2_test
+    Case =:= chmod_file_update2_test;
+    Case =:= create_file_in_dir_exceed_batch_update_test
 ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     OldDirBatchSize = ?config(old_dir_batch_size, Config),

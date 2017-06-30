@@ -100,7 +100,12 @@ strategy_init_jobs(StrategyName, StrategyArgs, InitData) ->
 %%--------------------------------------------------------------------
 -spec strategy_handle_job(space_strategy:job()) ->
     {space_strategy:job_result(), [space_strategy:job()]}.
-strategy_handle_job(Job = #space_strategy_job{strategy_name = simple_scan}) ->
+strategy_handle_job(Job = #space_strategy_job{
+    strategy_name = simple_scan,
+    data = #{space_id := SpaceId}
+}) ->
+    storage_sync_monitoring:update_queue_length_spirals(SpaceId, 1),
+    storage_sync_monitoring:update_files_to_import_counter(SpaceId, 1),
     simple_scan:run(Job);
 strategy_handle_job(#space_strategy_job{strategy_name = no_import}) ->
     {ok, []}.

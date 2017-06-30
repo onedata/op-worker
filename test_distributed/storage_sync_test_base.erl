@@ -682,7 +682,7 @@ chmod_file_update2_test(Config, MountSpaceInRoot) ->
     test_utils:mock_new(W1, storage_sync_changes, [passthrough]),
 
     %% Change file permissions
-    file:change_mode(StTestFile1, NewMode),
+    ok = file:change_mode(StTestFile1, NewMode),
     %% Check if file permissions were changed
     ?assertMatch({ok, #file_attr{mode = NewMode}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}), ?ATTEMPTS),
