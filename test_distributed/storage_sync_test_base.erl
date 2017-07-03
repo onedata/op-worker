@@ -168,7 +168,10 @@ create_directory_export_test(Config, MountSpaceInRoot) ->
     ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId, ?SPACE_TEST_DIR_PATH)),
     % Create file in created dir in space as directory won't be created if there
     % is no file in it
-    ?assertMatch({ok, _}, lfm_proxy:create(W1, SessId, ?SPACE_TEST_FILE_IN_DIR_PATH2, 8#777)),
+    {ok, FileGuid} = lfm_proxy:create(W1, SessId, ?SPACE_TEST_FILE_IN_DIR_PATH2, 8#777),
+    {ok, Handle} = lfm_proxy:open(W1, SessId, {guid, FileGuid}, read),
+    ok = lfm_proxy:close(W1, Handle),
+
     % Check if dir was exported
     ?assert(filelib:is_dir(StorageTestDirPath)).
 
@@ -410,8 +413,10 @@ delete_directory_export_test(Config, MountSpaceInRoot) ->
     ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId, ?SPACE_TEST_DIR_PATH)),
     % Create file in created dir in space as directory won't be created if there
     % is no file in it
-    {ok, _} = ?assertMatch({ok, _},
+    {ok, FileGuid} = ?assertMatch({ok, _},
         lfm_proxy:create(W1, SessId, ?SPACE_TEST_FILE_IN_DIR_PATH2, 8#777)),
+    {ok, Handle} = lfm_proxy:open(W1, SessId, {guid, FileGuid}, read),
+    ok = lfm_proxy:close(W1, Handle),
     % Check if dir was exported
     ?assert(filelib:is_dir(StorageTestDirPath)),
     %%    ?assert(file:list_dir(StorageTestDirPath)),
@@ -805,7 +810,9 @@ import_remote_file_by_path_test(Config, MountSpaceInRoot) ->
 create_init_file(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
-    {ok, _} = lfm_proxy:create(W1, SessId, ?SPACE_INIT_FILE_PATH, 8#777).
+    {ok, FileGuid} = lfm_proxy:create(W1, SessId, ?SPACE_INIT_FILE_PATH, 8#777),
+    {ok, Handle} = lfm_proxy:open(W1, SessId, {guid, FileGuid}, read),
+    ok = lfm_proxy:close(W1, Handle).
 
 enable_storage_import(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),

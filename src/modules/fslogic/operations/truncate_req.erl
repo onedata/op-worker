@@ -51,8 +51,13 @@ truncate_insecure(UserCtx, FileCtx, Size) ->
     FileCtx2 = update_quota(FileCtx, Size),
     SessId = user_ctx:get_session_id(UserCtx),
     {SFMHandle, FileCtx3} = storage_file_manager:new_handle(SessId, FileCtx2),
-    {ok, Handle} = storage_file_manager:open(SFMHandle, write),
-    ok = storage_file_manager:truncate(Handle, Size),
+    case storage_file_manager:open(SFMHandle, write) of
+        {ok, Handle} ->
+            ok = storage_file_manager:truncate(Handle, Size),
+            ok = storage_file_manager:release(Handle);
+        {error, ?ENOENT} ->
+            ok
+    end,
     fslogic_times:update_mtime_ctime(FileCtx3),
     #fuse_response{status = #status{code = ?OK}}.
 

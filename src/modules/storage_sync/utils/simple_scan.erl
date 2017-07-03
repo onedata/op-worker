@@ -594,7 +594,8 @@ create_file_location(SpaceId, StorageId, FileUuid, CanonicalPath, Size) ->
         storage_id = StorageId,
         uuid = FileUuid,
         space_id = SpaceId,
-        size = Size
+        size = Size,
+        storage_file_created = true
     },
     {ok, LocId} = file_location:save_and_bump_version(
         #document{

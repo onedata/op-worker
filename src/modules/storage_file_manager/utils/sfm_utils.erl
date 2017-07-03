@@ -24,9 +24,10 @@
 
 %% API
 -export([chmod_storage_file/3, rename_storage_file/6,
-    create_storage_file_if_not_exists/1, create_storage_file_location/1,
-    create_storage_file/2, delete_storage_file/2,
-    delete_storage_file_without_location/2, delete_storage_dir/2]).
+    create_storage_file_if_not_exists/1, create_storage_file_location/2,
+    create_delayed_storage_file/1, create_storage_file/2, delete_storage_file/2,
+    delete_storage_file_without_location/2, delete_storage_dir/2,
+    create_parent_dirs/1]).
 
 %%%===================================================================
 %%% API
@@ -46,7 +47,10 @@ chmod_storage_file(UserCtx, FileCtx, Mode) ->
             ok;
         {false, FileCtx2} ->
             {SFMHandle, _} = storage_file_manager:new_handle(SessId, FileCtx2),
-            ok = storage_file_manager:chmod(SFMHandle, Mode)
+            case storage_file_manager:chmod(SFMHandle, Mode) of
+                ok -> ok;
+                {error, ?ENOENT} -> ok
+            end
     end.
 
 %%--------------------------------------------------------------------
@@ -93,7 +97,7 @@ create_storage_file_if_not_exists(FileCtx) ->
             case file_ctx:get_local_file_location_docs(file_ctx:reset(FileCtx)) of
                 {[], _} ->
                     FileCtx2 = create_storage_file(user_ctx:new(?ROOT_SESS_ID), FileCtx),
-                    {_, FileCtx3} = create_storage_file_location(FileCtx2),
+                    {_, FileCtx3} = create_storage_file_location(FileCtx2, true),
                     files_to_chown:chown_or_schedule_chowning(FileCtx3),
                     ok;
                 _ ->
@@ -103,12 +107,39 @@ create_storage_file_if_not_exists(FileCtx) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Create storage file if it hasn't been created yet (it has been delayed)
+%% @end
+%%--------------------------------------------------------------------
+-spec create_delayed_storage_file(file_ctx:ctx()) -> file_ctx:ctx().
+create_delayed_storage_file(FileCtx) ->
+    {[#document{
+        key = FileLocationId,
+        value = #file_location{storage_file_created = StorageFileCreated}
+    }], FileCtx2} = file_ctx:get_local_file_location_docs(FileCtx),
+
+    case StorageFileCreated of
+        false ->
+            file_location:update(FileLocationId, fun
+                (#file_location{storage_file_created = true}) ->
+                    {error, already_created};
+                (FileLocation = #file_location{storage_file_created = false}) ->
+                    FileCtx3 = create_storage_file(user_ctx:new(?ROOT_SESS_ID), FileCtx2),
+                    files_to_chown:chown_or_schedule_chowning(FileCtx3),
+                    {ok, FileLocation#file_location{storage_file_created = true}}
+            end),
+            FileCtx2;
+        true ->
+            FileCtx2
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Creates file location of storage file
 %% @end
 %%--------------------------------------------------------------------
--spec create_storage_file_location(file_ctx:ctx()) ->
+-spec create_storage_file_location(file_ctx:ctx(), StorageFileCreated :: boolean()) ->
     {#file_location{}, file_ctx:ctx()}.
-create_storage_file_location(FileCtx) ->
+create_storage_file_location(FileCtx, StorageFileCreated) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     {FileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
@@ -119,7 +150,7 @@ create_storage_file_location(FileCtx) ->
         storage_id = StorageId,
         uuid = FileUuid,
         space_id = SpaceId,
-        storage_file_created = true
+        storage_file_created = StorageFileCreated
     },
     {ok, LocId} = file_location:create(#document{value = Location}),
     ok = file_meta:attach_location({uuid, FileUuid}, LocId, oneprovider:get_provider_id()),
@@ -180,10 +211,6 @@ delete_storage_dir(FileCtx, UserCtx) ->
     {SFMHandle, _} = storage_file_manager:new_handle(SessId, FileCtx),
     storage_file_manager:rmdir(SFMHandle).
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates parent dir on storage
@@ -205,3 +232,8 @@ create_parent_dirs(FileCtx) ->
         {error, eexist} ->
             FileCtx3
     end.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+

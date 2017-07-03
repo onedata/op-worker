@@ -136,6 +136,8 @@ local_file_location_should_have_correct_uid_for_local_user(Config) ->
     ?assertMatch({ok, _}, ?rpc(times, create, [#document{key = FileUuid, value = #times{atime = CTime, ctime = CTime, mtime = CTime}}])),
 
     {ok, FileToCompareGUID} = lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/file_to_compare">>, 8#777),
+    {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileToCompareGUID}, read), % open in order to create storage file
+    lfm_proxy:close(W1, Handle),
     FileToCompareUUID = fslogic_uuid:guid_to_uuid(FileToCompareGUID),
 
     [$/ | FileToCompareFID] = binary_to_list(get_storage_file_id_by_uuid(W1, FileToCompareUUID)),
@@ -180,6 +182,8 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
     ?assertMatch({ok, _}, ?rpc(times, create, [#document{key = FileUuid2, value = #times{atime = CTime, ctime = CTime, mtime = CTime}}])),
 
     {ok, FileToCompareGUID} = lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/file_to_compare">>, 8#777),
+    {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileToCompareGUID}, read), % open in order to create storage file
+    lfm_proxy:close(W1, Handle),
     FileToCompareUUID = fslogic_uuid:guid_to_uuid(FileToCompareGUID),
 
     [$/ | FileToCompareFID] = binary_to_list(get_storage_file_id_by_uuid(W1, FileToCompareUUID)),

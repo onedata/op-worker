@@ -22,7 +22,7 @@
     get_xattr/4, get_xattr/5, set_xattr/4, set_xattr/6, remove_xattr/4, list_xattr/5, get_acl/3, set_acl/4,
     write_and_check/4, get_transfer_encoding/3, set_transfer_encoding/4,
     get_cdmi_completion_status/3, set_cdmi_completion_status/4, get_mimetype/3,
-    set_mimetype/4, fsync/2, rm_recursive/3, get_metadata/6, set_metadata/6,
+    set_mimetype/4, fsync/2, fsync/4, rm_recursive/3, get_metadata/6, set_metadata/6,
     has_custom_metadata/3, remove_metadata/4, check_perms/4, create_share/4,
     remove_share/3, remove_share_by_guid/3, resolve_guid/3]).
 
@@ -295,6 +295,11 @@ fsync(Worker, TestHandle) ->
             [{_, Handle}] = ets:lookup(lfm_handles, TestHandle),
             logical_file_manager:fsync(Handle)
         end).
+
+-spec fsync(node(), session:id(), logical_file_manager:file_key(), oneprovider:id()) ->
+    ok | logical_file_manager:error_reply().
+fsync(Worker, SessId, FileKey, OneproviderId) ->
+    ?EXEC(Worker, logical_file_manager:fsync(SessId, FileKey, OneproviderId)).
 
 -spec rm_recursive(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path()) ->
     ok | logical_file_manager:error_reply().

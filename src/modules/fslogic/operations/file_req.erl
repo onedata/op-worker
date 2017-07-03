@@ -85,10 +85,11 @@ open_file(UserCtx, FileCtx, rdwr) ->
     fslogic_worker:open_flag()) -> no_return() | #fuse_response{}.
 open_file_insecure(UserCtx, FileCtx, Flag) ->
     SessId = user_ctx:get_session_id(UserCtx),
-    {SFMHandle, FileCtx2} = storage_file_manager:new_handle(SessId, FileCtx),
+    FileCtx2 = sfm_utils:create_delayed_storage_file(FileCtx),
+    {SFMHandle, FileCtx3} = storage_file_manager:new_handle(SessId, FileCtx2),
     {ok, Handle} = storage_file_manager:open(SFMHandle, Flag),
     {ok, HandleId} = save_handle(SessId, Handle),
-    ok = file_handles:register_open(FileCtx2, SessId, 1),
+    ok = file_handles:register_open(FileCtx3, SessId, 1),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_opened{handle_id = HandleId}
@@ -138,7 +139,7 @@ release(UserCtx, FileCtx, HandleId) ->
 create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
     FileCtx = create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
     FileCtx2 = sfm_utils:create_storage_file(UserCtx, FileCtx),
-    {FileLocation, FileCtx3} = sfm_utils:create_storage_file_location(FileCtx2),
+    {FileLocation, FileCtx3} = sfm_utils:create_storage_file_location(FileCtx2, true),
     fslogic_times:update_mtime_ctime(ParentFileCtx),
 
     % open file on adequate node
@@ -171,10 +172,9 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
     Mode :: file_meta:posix_permissions()) -> fslogic_worker:fuse_response().
 make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     FileCtx = create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
-    FileCtx2 = sfm_utils:create_storage_file(UserCtx, FileCtx),
-    {_, FileCtx3} = sfm_utils:create_storage_file_location(FileCtx2),
+    {_, FileCtx2} = sfm_utils:create_storage_file_location(FileCtx, false),
     fslogic_times:update_mtime_ctime(ParentFileCtx),
-    attr_req:get_file_attr_insecure(UserCtx, FileCtx3).
+    attr_req:get_file_attr_insecure(UserCtx, FileCtx2).
 
 %%--------------------------------------------------------------------
 %% @private

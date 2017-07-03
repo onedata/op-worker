@@ -55,7 +55,10 @@
     share_child_read_test/1,
     share_permission_denied_test/1,
     echo_loop_test/1,
-    echo_loop_test_base/1
+    echo_loop_test_base/1,
+    storage_file_creation_should_be_delayed_until_open/1,
+    delayed_creation_should_not_prevent_mv/1,
+    delayed_creation_should_not_prevent_truncate/1
 ]).
 
 -define(TEST_CASES, [
@@ -84,7 +87,10 @@
     share_child_list_test,
     share_child_read_test,
     share_permission_denied_test,
-    echo_loop_test
+    echo_loop_test,
+    storage_file_creation_should_be_delayed_until_open,
+    delayed_creation_should_not_prevent_mv,
+    delayed_creation_should_not_prevent_truncate
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -446,7 +452,8 @@ fslogic_new_file_test(Config) ->
         file_location = #file_location{
             file_id = FileId11,
             storage_id = StorageId11,
-            provider_id = ProviderId11
+            provider_id = ProviderId11,
+            storage_file_created = true
         }
     }} = Resp11,
 
@@ -454,7 +461,9 @@ fslogic_new_file_test(Config) ->
         file_location = #file_location{
             file_id = FileId21,
             storage_id = StorageId21,
-            provider_id = ProviderId21}
+            provider_id = ProviderId21,
+            storage_file_created = true
+        }
     }} = Resp21,
 
     ?assertNotMatch(undefined, FileId11),
@@ -603,7 +612,7 @@ lfm_basic_rdwr_after_file_delete_test(Config) ->
 
     %remove file
     FileCtx = rpc:call(W, file_ctx, new_by_guid, [FileGuid]),
-    SfmHandle = rpc:call(W, storage_file_manager, new_handle, [SessId1, FileCtx]),
+    {SfmHandle, _} = rpc:call(W, storage_file_manager, new_handle, [SessId1, FileCtx]),
     ok = rpc:call(W, storage_file_manager, unlink, [SfmHandle]),
 
     %read opened file
@@ -938,6 +947,56 @@ share_permission_denied_test(Config) ->
 
     ?assertEqual({error, ?EACCES}, lfm_proxy:stat(W, ?GUEST_SESS_ID, {guid, Guid})).
 
+storage_file_creation_should_be_delayed_until_open(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, 8#755),
+    FileCtx = rpc:call(W, file_ctx, new_by_guid, [FileGuid]),
+    {SfmHandle, _} = rpc:call(W, storage_file_manager, new_handle, [SessId1, FileCtx]),
+
+    % verify that storage file does not exist
+    ?assertEqual({error, ?ENOENT}, rpc:call(W, storage_file_manager, stat, [SfmHandle])),
+
+    % open file
+    {ok, Handle} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr),
+    ?assertEqual({ok, 9}, lfm_proxy:write(W, Handle, 0, <<"test_data">>)),
+
+    % verify that storage file exists
+    ?assertMatch({ok, _}, rpc:call(W, storage_file_manager, stat, [SfmHandle])),
+    ?assertEqual({ok, <<"test_data">>}, lfm_proxy:read(W, Handle, 0, 100)),
+    ?assertEqual(ok, lfm_proxy:close(W, Handle)).
+
+delayed_creation_should_not_prevent_mv(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_move">>, 8#755),
+
+    % move empty file
+    lfm_proxy:mv(W, SessId1, {guid, FileGuid}, <<"/space_name1/test_move2">>),
+
+    % verify rdwr
+    {ok, Handle} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr),
+    ?assertEqual({ok, 9}, lfm_proxy:write(W, Handle, 0, <<"test_data">>)),
+    ?assertEqual({ok, <<"test_data">>}, lfm_proxy:read(W, Handle, 0, 100)),
+    ?assertEqual(ok, lfm_proxy:close(W, Handle)).
+
+delayed_creation_should_not_prevent_truncate(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    ProviderId = rpc:call(W, oneprovider, get_provider_id, []),
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_truncate">>, 8#755),
+
+    % move empty file
+    ?assertEqual(ok, lfm_proxy:truncate(W, SessId1, {guid, FileGuid}, 10)),
+    ?assertEqual(ok, lfm_proxy:fsync(W, SessId1, {guid, FileGuid}, ProviderId)),
+
+    % verify rdwr
+    ?assertMatch({ok, #file_attr{size = 10}}, lfm_proxy:stat(W, SessId1, {guid, FileGuid})),
+    {ok, Handle} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr),
+    ?assertEqual({ok, 9}, lfm_proxy:write(W, Handle, 0, <<"test_data">>)),
+    ?assertEqual({ok, <<"test_data">>}, lfm_proxy:read(W, Handle, 0, 100)),
+    ?assertEqual(ok, lfm_proxy:close(W, Handle)).
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -979,12 +1038,10 @@ end_per_testcase(ShareTest, Config) when
         ShareTest =:= share_child_list_test orelse
         ShareTest =:= share_child_read_test orelse
         ShareTest =:= share_permission_denied_test ->
-    tracer:stop(),
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Workers, oz_shares),
     end_per_testcase(?DEFAULT_CASE(ShareTest), Config);
 end_per_testcase(_Case, Config) ->
-    tracer:stop(),
     Workers = ?config(op_worker_nodes, Config),
     lfm_proxy:teardown(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
