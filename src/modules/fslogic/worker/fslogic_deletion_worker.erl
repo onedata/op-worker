@@ -99,18 +99,28 @@ handle(ping) ->
 handle(healthcheck) ->
     ok;
 handle({fslogic_deletion_request, UserCtx, FileCtx, Silent}) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    case file_handles:exists(FileUuid) of
-        true ->
-            ok = file_handles:mark_to_remove(FileCtx),
-            fslogic_event_emitter:emit_file_removed(FileCtx, [user_ctx:get_session_id(UserCtx)]);
-        false ->
-            fslogic_delete:remove_file_and_file_meta(FileCtx, UserCtx, Silent)
+    try
+        FileUuid = file_ctx:get_uuid_const(FileCtx),
+        case file_handles:exists(FileUuid) of
+            true ->
+                ok = file_handles:mark_to_remove(FileCtx),
+                fslogic_event_emitter:emit_file_removed(FileCtx, [user_ctx:get_session_id(UserCtx)]);
+            false ->
+                fslogic_delete:remove_file_and_file_meta(FileCtx, UserCtx, Silent)
+        end
+    catch
+        _:{badmatch, {error, {not_found, file_meta}}} ->
+            ok
     end,
     ok;
 handle({open_file_deletion_request, FileCtx}) ->
-    UserCtx = user_ctx:new(?ROOT_SESS_ID),
-    fslogic_delete:remove_file_and_file_meta(FileCtx, UserCtx, false);
+    try
+        UserCtx = user_ctx:new(?ROOT_SESS_ID),
+        fslogic_delete:remove_file_and_file_meta(FileCtx, UserCtx, false)
+    catch
+        _:{badmatch, {error, {not_found, file_meta}}} ->
+            ok
+    end;
 handle(_Request) ->
     ?log_bad_request(_Request),
     {error, wrong_request}.

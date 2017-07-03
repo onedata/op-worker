@@ -804,13 +804,19 @@ resolve_path(ParentEntry, <<?DIRECTORY_SEPARATOR, Path/binary>>) ->
                     [Root, Tokens, get_leaf]) of
                     {ok, {Leaf, KeyPath}} ->
                         [_ | [RealParentUuid | _]] = lists:reverse([RootUuid | KeyPath]),
-                        {ok, {ParentUuid, _}} = model:execute_with_default_context(
-                            ?MODULE, fetch_link, [Leaf, parent]),
-                        case ParentUuid of
-                            RealParentUuid ->
-                                {ok, {Leaf, [RootUuid | KeyPath]}};
-                            _ ->
-                                {error, ghost_file}
+                        case model:execute_with_default_context(
+                            ?MODULE, fetch_link, [Leaf, parent]) of
+                            {ok, {ParentUuid, _}} ->
+                                case ParentUuid of
+                                    RealParentUuid ->
+                                        {ok, {Leaf, [RootUuid | KeyPath]}};
+                                    _ ->
+                                        {error, ghost_file}
+                                end;
+                            {error, link_not_found} -> %% Map links errors to document errors
+                                {error, {not_found, ?MODEL_NAME}};
+                            {error, Reason} ->
+                                {error, Reason}
                         end;
                     {error, link_not_found} -> %% Map links errors to document errors
                         {error, {not_found, ?MODEL_NAME}};
