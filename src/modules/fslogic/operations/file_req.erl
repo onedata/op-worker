@@ -85,10 +85,10 @@ open_file(UserCtx, FileCtx, rdwr) ->
     fslogic_worker:open_flag()) -> no_return() | #fuse_response{}.
 open_file_insecure(UserCtx, FileCtx, Flag) ->
     SessId = user_ctx:get_session_id(UserCtx),
-    SFMHandle = storage_file_manager:new_handle(SessId, FileCtx),
+    {SFMHandle, FileCtx2} = storage_file_manager:new_handle(SessId, FileCtx),
     {ok, Handle} = storage_file_manager:open(SFMHandle, Flag),
     {ok, HandleId} = save_handle(SessId, Handle),
-    ok = file_handles:register_open(FileCtx, SessId, 1),
+    ok = file_handles:register_open(FileCtx2, SessId, 1),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_opened{handle_id = HandleId}

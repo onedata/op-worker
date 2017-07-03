@@ -45,7 +45,7 @@ chmod_storage_file(UserCtx, FileCtx, Mode) ->
         {true, _FileCtx2} ->
             ok;
         {false, FileCtx2} ->
-            SFMHandle = storage_file_manager:new_handle(SessId, FileCtx2),
+            {SFMHandle, _} = storage_file_manager:new_handle(SessId, FileCtx2),
             ok = storage_file_manager:chmod(SFMHandle, Mode)
     end.
 
@@ -137,10 +137,10 @@ create_storage_file(UserCtx, FileCtx) ->
     SessId = user_ctx:get_session_id(UserCtx),
     {#document{value = #file_meta{mode = Mode}}, FileCtx3} =
         file_ctx:get_file_doc(FileCtx2),
-    SFMHandle = storage_file_manager:new_handle(SessId, FileCtx3),
+    {SFMHandle, FileCtx4} = storage_file_manager:new_handle(SessId, FileCtx3),
     storage_file_manager:unlink(SFMHandle),
     ok = storage_file_manager:create(SFMHandle, Mode),
-    FileCtx3.
+    FileCtx4.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -164,7 +164,7 @@ delete_storage_file_without_location(FileCtx, UserCtx) ->
     {[#document{key = FileLocationId}], FileCtx2} =
         file_ctx:get_local_file_location_docs(FileCtx),
     SessId = user_ctx:get_session_id(UserCtx),
-    SFMHandle = storage_file_manager:new_handle(SessId, FileCtx2),
+    {SFMHandle, _} = storage_file_manager:new_handle(SessId, FileCtx2),
     storage_file_manager:unlink(SFMHandle),
     FileLocationId.
 
@@ -177,7 +177,7 @@ delete_storage_file_without_location(FileCtx, UserCtx) ->
     datastore:ext_key().
 delete_storage_dir(FileCtx, UserCtx) ->
     SessId = user_ctx:get_session_id(UserCtx),
-    SFMHandle = storage_file_manager:new_handle(SessId, FileCtx),
+    {SFMHandle, _} = storage_file_manager:new_handle(SessId, FileCtx),
     storage_file_manager:rmdir(SFMHandle).
 
 %%%===================================================================
