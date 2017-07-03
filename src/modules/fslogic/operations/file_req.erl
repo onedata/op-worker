@@ -156,7 +156,6 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
         provider_id = oneprovider:get_provider_id(),
         storage_id = StorageId,
         file_id = FileId,
-        blocks = [#file_block{offset = 0, size = 0}],
         space_id = SpaceId
     },
     #fuse_response{
