@@ -14,7 +14,6 @@
 -author("Jakub Kudzia").
 
 -include_lib("ctool/include/logging.hrl").
--include("modules/storage_sync/storage_sync_monitoring.hrl").
 
 -behaviour(exometer_report).
 
@@ -43,6 +42,11 @@
 
 -type state() :: #state{}.
 
+-record(entry, {
+    key :: list() | binary() | atom(),
+    values = [] :: list(),
+    timestamp :: calendar:datetime()
+}).
 
 %%%===================================================================
 %%% exometer_report callback API
@@ -57,7 +61,7 @@
 exometer_init(Opts) ->
     ValuesToKeep = proplists:get_value(values_num, Opts, ?DEFAULT_VALUES_TO_KEEP),
     ?ETS_NAME = ets:new(?ETS_NAME, [public, named_table,
-        {keypos, #metric_info.metric}]),
+        {keypos, #entry.key}]),
     {ok, #state{values_to_keep = ValuesToKeep}}.
 
 %%-------------------------------------------------------------------
@@ -70,8 +74,8 @@ exometer_init(Opts) ->
 exometer_subscribe(Metric, _DataPoint, _Extra, _Interval,
     State = #state{values_to_keep = ValuesToKeep}
 ) ->
-    true = ets:insert(?ETS_NAME, #metric_info{
-        metric = Metric,
+    true = ets:insert(?ETS_NAME, #entry{
+        key = Metric,
         timestamp = calendar:local_time(),
         values = [0 || _ <- lists:seq(1, ValuesToKeep)]
     }),
@@ -142,7 +146,7 @@ exometer_newentry(_Entry, St) ->
 %% {@link exometer_report} callback exometer_setopts/2.
 %% @end
 %%-------------------------------------------------------------------
--spec exometer_setopts(exometer_report:metric(), [term()], exometer:status(),
+-spec exometer_setopts(exometer:entry(), [term()], exometer:status(),
     state()) -> {ok, state()}.
 exometer_setopts(_Metric, _Options, _Status, St) ->
     {ok, St}.
@@ -152,7 +156,7 @@ exometer_setopts(_Metric, _Options, _Status, St) ->
 %% {@link exometer_report} callback exometer_terminate/2.
 %% @end
 %%-------------------------------------------------------------------
--spec exometer_terminate(term(), state()) -> {ok, state()}.
+-spec exometer_terminate(term(), state()) -> true.
 exometer_terminate(_, _) ->
     true = ets:delete(?ETS_NAME).
 
@@ -165,9 +169,17 @@ exometer_terminate(_, _) ->
 %% Returns saved values for given Metric.
 %% @end
 %%-------------------------------------------------------------------
--spec get(exometer_report:metric()) -> [#metric_info{}].
+-spec get(exometer_report:metric()) -> {list(), calendar:datetime()} | undefined.
 get(Metric) ->
-    ets:lookup(?ETS_NAME, Metric).
+    case ets:lookup(?ETS_NAME, Metric) of
+        [] ->
+            undefined;
+        [#entry{
+            values=Values,
+            timestamp = Timestamp
+        } | _] ->
+            {Values, Timestamp}
+    end.
 
 %%%===================================================================
 %%% Internal functions
@@ -193,12 +205,11 @@ report(Metric, NewValue, ValuesToKeep) ->
 %% ValuesToKeep number of values will be saved.
 %% @end
 %%-------------------------------------------------------------------
--spec update(exometer_report:metric(), non_neg_integer(), non_neg_integer()) ->
-    true.
-update(MetricInfo = #metric_info{values=Values}, NewValue, ValuesToKeep) ->
+-spec update(#entry{}, non_neg_integer(), non_neg_integer()) -> #entry{}.
+update(MetricInfo = #entry{values=Values}, NewValue, ValuesToKeep) ->
     Length = length(Values) + 1,
     Values2 = lists:sublist(Values ++ [NewValue], Length - ValuesToKeep + 1, ValuesToKeep),
-    MetricInfo#metric_info{
+    MetricInfo#entry{
         values = Values2,
         timestamp = calendar:local_time()
     }.

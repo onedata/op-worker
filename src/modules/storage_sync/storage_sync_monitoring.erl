@@ -12,7 +12,6 @@
 -author("Jakub Kudzia").
 
 -include_lib("ctool/include/logging.hrl").
--include("modules/storage_sync/storage_sync_monitoring.hrl").
 
 
 %% reporters API
@@ -54,8 +53,8 @@
     storage_sync, spiral, SpaceId, Type, Window
 ]).
 
-
 -define(COUNTER_LOGGING_INTERVAL, timer:minutes(1)).
+-define(SPIRAL_DEFAULT_RESOLUTION, 12).
 
 -define(LAGER_REPORTER_NAME, exometer_report_lager).
 -define(ETS_REPORTER_NAME, exometer_report_rrd_ets).
@@ -90,12 +89,12 @@ start_lager_reporter() ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% @equiv start_ets_reporter(?DEFAULT_RESOLUTION).
+%% @equiv start_ets_reporter(?SPIRAL_DEFAULT_RESOLUTION).
 %% @end
 %%-------------------------------------------------------------------
 -spec start_ets_reporter() -> ok | error().
 start_ets_reporter() ->
-    ok = start_ets_reporter(?DEFAULT_RESOLUTION).
+    ok = start_ets_reporter(?SPIRAL_DEFAULT_RESOLUTION).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -160,7 +159,7 @@ start_files_to_update_counter(SpaceId) ->
 -spec start_queue_length_spirals(od_space:id()) -> ok.
 start_queue_length_spirals(SpaceId) ->
     lists:foreach(fun(Window) ->
-        start_queue_length_spiral(SpaceId, Window, ?DEFAULT_RESOLUTION)
+        start_queue_length_spiral(SpaceId, Window, ?SPIRAL_DEFAULT_RESOLUTION)
     end, ?WINDOWS).
 
 %%-------------------------------------------------------------------
@@ -171,7 +170,7 @@ start_queue_length_spirals(SpaceId) ->
 -spec start_imported_files_spirals(od_space:id()) -> ok.
 start_imported_files_spirals(SpaceId) ->
     lists:foreach(fun(Window) ->
-        start_imported_files_spiral(SpaceId, Window, ?DEFAULT_RESOLUTION)
+        start_imported_files_spiral(SpaceId, Window, ?SPIRAL_DEFAULT_RESOLUTION)
     end, ?WINDOWS).
 
 %%-------------------------------------------------------------------
@@ -182,7 +181,7 @@ start_imported_files_spirals(SpaceId) ->
 -spec start_deleted_files_spirals(od_space:id()) -> ok.
 start_deleted_files_spirals(SpaceId) ->
     lists:foreach(fun(Window) ->
-        start_deleted_files_spiral(SpaceId, Window, ?DEFAULT_RESOLUTION)
+        start_deleted_files_spiral(SpaceId, Window, ?SPIRAL_DEFAULT_RESOLUTION)
     end, ?WINDOWS).
 
 %%-------------------------------------------------------------------
@@ -193,7 +192,7 @@ start_deleted_files_spirals(SpaceId) ->
 -spec start_updated_files_spirals(od_space:id()) -> ok.
 start_updated_files_spirals(SpaceId) ->
     lists:foreach(fun(Window) ->
-        start_updated_files_spiral(SpaceId, Window, ?DEFAULT_RESOLUTION)
+        start_updated_files_spiral(SpaceId, Window, ?SPIRAL_DEFAULT_RESOLUTION)
     end, ?WINDOWS).
 
 %%-------------------------------------------------------------------
@@ -410,20 +409,16 @@ update_in_progress(SpaceId) ->
 %% Returns values and last measurement timestamp for given metric.
 %% @end
 %%-------------------------------------------------------------------
--spec get_metric(od_space:id(), spiral_type(), window()) -> proplists:proplist().
+-spec get_metric(od_space:id(), spiral_type(), window()) -> proplists:proplist() | undefined.
 get_metric(SpaceId, Type, Window) ->
     SpiralName = ?SPIRAL_NAME(SpaceId, Type, Window),
     case exometer_report_rrd_ets:get(SpiralName) of
-        [] ->
-            [];
-        [#metric_info{
-            values=Values,
-            timestamp = Timestamp
-        } | _] ->
+        undefined ->
+            undefined;
+        {Values, Timestamp} ->
             [
                 {values, Values},
                 {timestamp, Timestamp}
-
             ]
     end.
 
