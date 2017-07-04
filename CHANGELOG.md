@@ -4,6 +4,12 @@
 CHANGELOG
 ---------
 
+### 17.06.0-beta4
+
+* VFS-3362 Update web-client
+* Enable storage helper buffering
+
+
 ### 17.06.0-beta3
 
 * Releasing new version 17.06.0-beta3
