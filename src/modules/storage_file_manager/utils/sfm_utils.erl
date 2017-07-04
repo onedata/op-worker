@@ -96,9 +96,7 @@ create_storage_file_if_not_exists(FileCtx) ->
         fun() ->
             case file_ctx:get_local_file_location_docs(file_ctx:reset(FileCtx)) of
                 {[], _} ->
-                    FileCtx2 = create_storage_file(user_ctx:new(?ROOT_SESS_ID), FileCtx),
-                    {_, FileCtx3} = create_storage_file_location(FileCtx2, true),
-                    files_to_chown:chown_or_schedule_chowning(FileCtx3),
+                    {_, _FileCtx2} = create_storage_file_location(FileCtx, false),
                     ok;
                 _ ->
                     ok

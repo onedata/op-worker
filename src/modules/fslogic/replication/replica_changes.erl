@@ -159,7 +159,12 @@ rename_or_delete(FileCtx,
     case lists:member(oneprovider:get_provider_id(), Providers) of
         true ->
             {ok, Storage} = fslogic_storage:select_storage(TargetSpaceId),
-            ok = sfm_utils:rename_storage_file(?ROOT_SESS_ID, TargetSpaceId, Storage, FileUuid, SourceFileId, RemoteTargetFileId),
+            case sfm_utils:rename_storage_file(?ROOT_SESS_ID, TargetSpaceId,
+                Storage, FileUuid, SourceFileId, RemoteTargetFileId)
+            of
+                ok -> ok;
+                {error, ?ENOENT} -> ok
+            end,
             NewFileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, TargetSpaceId)),
             {#document{key = TargetStorageId}, NewFileCtx2} = file_ctx:get_storage_doc(NewFileCtx),
 

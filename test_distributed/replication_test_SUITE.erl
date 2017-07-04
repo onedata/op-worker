@@ -146,6 +146,9 @@ local_file_location_should_have_correct_uid_for_local_user(Config) ->
     %when
     ?rpc(dbsync_events, change_replicated,
         [SpaceId, #document{key = FileUuid, value = FileMeta}]),
+    FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
+    {ok, Handle2} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, read),
+    lfm_proxy:close(W1, Handle2),
 
     %then
     {Uid, _Gid} = rpc:call(W1, luma, get_posix_user_ctx, [UserId, SpaceId]),
@@ -195,8 +198,20 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
         [SpaceId, #document{key = FileUuid, value = FileMeta}]),
     ?rpc(dbsync_events, change_replicated,
         [SpaceId, #document{key = FileUuid2, value = FileMeta2}]),
-    ?rpc(od_user, create, [#document{key = ExternalUser, value = #od_user{name = <<"User">>, space_aliases = [{SpaceId, SpaceName}]}}]),
+    ?rpc(od_user, create, [#document{
+        key = ExternalUser,
+        value = #od_user{
+            name = <<"User">>,
+            space_aliases = [{SpaceId, SpaceName}]
+        }
+    }]),
     timer:sleep(timer:seconds(1)), % need to wait for asynchronous trigger
+    FileGuid1 = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId), % create delayed storage files
+    {ok, Handle1} = lfm_proxy:open(W1, SessionId, {guid, FileGuid1}, read),
+    lfm_proxy:close(W1, Handle1),
+    FileGuid2 = fslogic_uuid:uuid_to_guid(FileUuid2, SpaceId),
+    {ok, Handle2} = lfm_proxy:open(W1, SessionId, {guid, FileGuid2}, read),
+    lfm_proxy:close(W1, Handle2),
 
     %then
     {Uid, _Gid} = rpc:call(W1, luma, get_posix_user_ctx, [ExternalUser, SpaceId]),
