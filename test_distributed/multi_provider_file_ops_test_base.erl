@@ -191,11 +191,13 @@ many_ops_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, No
     Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
     Level2Dir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
 
-    Level3Dirs = lists:map(fun(_) ->
-        <<Level2Dir/binary, "/", (generator:gen_name())/binary>>
+    Level3Dirs = lists:map(fun(N) ->
+        NBin = integer_to_binary(N),
+        <<Level2Dir/binary, "/", NBin/binary, (generator:gen_name())/binary>>
     end, lists:seq(1,DirsNum)),
-    Level3Dirs2 = lists:map(fun(_) ->
-        <<Level2Dir/binary, "/", (generator:gen_name())/binary>>
+    Level3Dirs2 = lists:map(fun(N) ->
+        NBin = integer_to_binary(N),
+        <<Level2Dir/binary, "/", NBin/binary, (generator:gen_name())/binary>>
     end, lists:seq(1,DirsNum)),
 
     Level3Dir = <<Level2Dir/binary, "/", (generator:gen_name())/binary>>,
@@ -209,10 +211,14 @@ many_ops_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, No
     verify_stats(Config, Dir, true),
     verify_stats(Config, Level2Dir, true),
 
+    ct:print("Dirs create"),
     lists:map(fun(D) ->
+        ct:print("Dir ~p", [D]),
         ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), D, 8#755))
     end, Level3Dirs),
     ct:print("Dirs created"),
+
+%%    timer:sleep(timer:minutes(3)),
 
     lists:map(fun(D) ->
         ct:print("Verify dir ~p", [D]),
@@ -220,12 +226,14 @@ many_ops_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, No
     end, Level3Dirs),
 
     lists:map(fun(D) ->
+        ct:print("Dir ~p", [D]),
         ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), D, 8#755))
     end, Level3Dirs2),
     ct:print("Dirs created - second batch"),
 
     ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Level3Dir, 8#755)),
-    lists:map(fun(F) ->
+    lists:map(fun({Num, _} = F) ->
+        ct:print("File ~p", [Num]),
         create_file(Config, FileBeg, F)
     end, Level4Files),
     ct:print("Files created"),
@@ -245,9 +253,11 @@ many_ops_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, No
 
     lists:map(fun({_, F}) ->
         WD = lists:nth(crypto:rand_uniform(1,length(Workers) + 1), Workers),
+        ct:print("Del ~p", [F]),
         ?assertMatch(ok, lfm_proxy:unlink(WD, SessId(WD), {path, F}))
     end, Level4Files),
     lists:map(fun(D) ->
+        ct:print("Del ~p", [D]),
         WD = lists:nth(crypto:rand_uniform(1,length(Workers) + 1), Workers),
         ?assertMatch(ok, lfm_proxy:unlink(WD, SessId(WD), {path, D}))
     end, Level3Dirs2),

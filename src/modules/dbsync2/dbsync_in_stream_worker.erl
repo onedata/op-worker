@@ -207,7 +207,7 @@ stash_changes_batch(Since, Until, Docs, State = #state{
     changes_stash_size = Size
 }) ->
     DocsNum = length(Docs),
-    Max = application:get_env(?APP_NAME, dbsync_changes_stash_max_size, 1000),
+    Max = application:get_env(?APP_NAME, dbsync_changes_stash_max_size, 25000),
     case Size + DocsNum > Max of
         true ->
             State;
@@ -225,27 +225,61 @@ stash_changes_batch(Since, Until, Docs, State = #state{
 %%--------------------------------------------------------------------
 -spec apply_changes_batch(couchbase_changes:since(), couchbase_changes:until(),
     [datastore:doc()], state()) -> state().
-apply_changes_batch(_Since, Until, Docs, State = #state{
+apply_changes_batch(_Since, Until0, Docs0, State0 = #state{
+    changes_stash = Stash
+}) ->
+    ?info("dddddd ~p", [{_Since, Until0}]),
+
+    {Docs, Until, State, Continue} = prepare_batch(Docs0, Until0, State0),
+    A = case dbsync_changes:apply_batch(Docs) of
+        ok ->
+            State2 = update_seq(Until, State),
+            case Continue of
+                {_, NextUntil} = Key ->
+                    NextDocs = ets:lookup_element(Stash, Key, 2),
+                    ets:delete(Stash, Key),
+                    apply_changes_batch(Until, NextUntil, NextDocs, State2);
+                _ ->
+                    State2
+            end;
+        {error, Seq, _} ->
+            update_seq(Seq -1, State)
+    end,
+    ?info("dddddd2 ~p", [{_Since, Until}]),
+    A.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Prepares batch to be applied.
+%% @end
+%%--------------------------------------------------------------------
+-spec prepare_batch([datastore:doc()], couchbase_changes:until(), state()) ->
+    {[datastore:doc()], couchbase_changes:until(), state(),
+        {couchbase_changes:since(), couchbase_changes:until()} | no}.
+prepare_batch(Docs, Until, State = #state{
     changes_stash = Stash,
     changes_stash_size = Size
 }) ->
     State2 = cancel_changes_request(State),
-    lists:foreach(fun(Doc) ->
-        dbsync_changes:apply(Doc)
-    end, Docs),
-    State3 = update_seq(Until, State2),
     case ets:first(Stash) of
         '$end_of_table' ->
-            State3;
+            {Docs, Until, State2, no};
         {Until, NextUntil} = Key ->
-            NextDocs = ets:lookup_element(Stash, Key, 2),
-            ets:delete(Stash, Key),
-            apply_changes_batch(Until, NextUntil, NextDocs, State3#state{
-                changes_stash_size = Size - length(NextDocs)
-            });
+            case length(Docs) > application:get_env(?APP_NAME, dbsync_changes_apply_max_size, 1000) of
+                true ->
+                    {Docs, Until, State2, Key};
+                _ ->
+                    NextDocs = ets:lookup_element(Stash, Key, 2),
+                    ets:delete(Stash, Key),
+                    prepare_batch(Docs ++ NextDocs, NextUntil, State2#state{
+                        changes_stash_size = Size - length(NextDocs)
+                    })
+            end;
         _ ->
-            schedule_changes_request(State3)
+            {Docs, Until, schedule_changes_request(State2), no}
     end.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -272,7 +306,7 @@ schedule_changes_request(State = #state{
     changes_request_ref = undefined
 }) ->
     Delay = application:get_env(
-        ?APP_NAME, dbsync_changes_request_delay, timer:seconds(5)
+        ?APP_NAME, dbsync_changes_request_delay, timer:seconds(15)
     ),
     State#state{changes_request_ref = erlang:send_after(
         Delay, self(), {request_changes, Seq}

@@ -65,10 +65,17 @@ change_replicated_internal(SpaceId, #document{
         file_meta, exists, [FileUuid], [{hooks_config, no_hooks}]
     ) of
         {ok, false} ->
-            FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
-            FileLocationId = sfm_utils:delete_storage_file_without_location(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
-            file_location:delete(FileLocationId, UserId),
-            file_consistency:delete(FileUuid);
+            try
+                FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
+                % TODO - if links delete comes before, it fails!
+                FileLocationId = sfm_utils:delete_storage_file_without_location(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
+                file_location:delete(FileLocationId, UserId),
+                file_consistency:delete(FileUuid)
+            catch
+                _:{badmatch, {error, {not_found, file_meta}}} ->
+                    % TODO - if links delete comes before, this function fails!
+                    ok
+            end;
         _ ->
             ok
     end;
@@ -77,34 +84,37 @@ change_replicated_internal(SpaceId, #document{
         value = #file_meta{type = ?REGULAR_FILE_TYPE}
     } = FileDoc, Master) ->
     ?debug("change_replicated_internal: changed file_meta ~p", [FileUuid]),
-    FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
     ok = file_consistency:wait(FileUuid, SpaceId,
         [times, link_to_parent, parent_links], [SpaceId, FileDoc],
         {Master, FileUuid}),
+    FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
     ok = sfm_utils:create_storage_file_if_not_exists(FileCtx),
     ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []),
     ok = file_consistency:add_components_and_notify(FileUuid,
         [file_meta, local_file_location]);
 change_replicated_internal(SpaceId, #document{
         key = FileUuid,
+        % TODO - emit when file is deleted (for deleted files it fails)
+        deleted = false,
         value = #file_meta{}
     } = FileDoc, Master) ->
     ?debug("change_replicated_internal: changed file_meta ~p", [FileUuid]),
-    FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
     ok = file_consistency:wait(FileUuid, SpaceId, [times, link_to_parent], [SpaceId, FileDoc],
         {Master, FileUuid}),
+    FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
     ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []),
     ok = file_consistency:add_components_and_notify(FileUuid, [file_meta]),
     ok = file_consistency:check_and_add_components(FileUuid, SpaceId, [parent_links]);
 change_replicated_internal(SpaceId, #document{
         key = FileLocationId,
+        deleted = false,
         value = #file_location{uuid = FileUuid}
     } = Doc, Master) ->
     ?debug("change_replicated_internal: changed file_location ~p", [FileUuid]),
-    FileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId)),
     ok = file_consistency:wait(FileUuid, SpaceId,
         [file_meta, times, local_file_location], [SpaceId, Doc],
         {Master, FileLocationId}),
+    FileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId)),
     ok = replica_dbsync_hook:on_file_location_change(FileCtx, Doc);
 change_replicated_internal(SpaceId, #document{
         value = #links{

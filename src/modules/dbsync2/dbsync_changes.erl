@@ -11,12 +11,15 @@
 -module(dbsync_changes).
 -author("Krzysztof Trzepla").
 
+-include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_common_internal.hrl").
 
 %% API
--export([apply/1]).
+-export([apply_batch/1, apply/1]).
+
+-define(SLAVE_TIMEOUT, 30000).
 
 %%%===================================================================
 %%% API
@@ -27,9 +30,62 @@
 %% Applies remote changes.
 %% @end
 %%--------------------------------------------------------------------
--spec apply(datastore:doc()) -> any().
+-spec apply_batch([datastore:doc()]) -> ok | {error, datastore:seq(), term()}.
+apply_batch(Docs) ->
+    DocsGroups = lists:foldl(fun(Doc, Acc) ->
+        ChangeKey = get_change_key(Doc),
+        ChangeList = maps:get(ChangeKey, Acc, []),
+        maps:put(ChangeKey, [Doc | ChangeList], Acc)
+    end, #{}, Docs),
+
+    DocsList = maps:to_list(DocsGroups),
+    Master = self(),
+    lists:foreach(fun({_, DocList}) ->
+        spawn(fun() ->
+            SlaveAns = lists:foldl(fun
+                (Doc, ok) ->
+                    apply(Doc);
+                (_, Acc) ->
+                    Acc
+            end, ok, lists:reverse(DocList)),
+            Master ! {changes_slave_ans, SlaveAns}
+        end)
+    end, DocsList),
+
+    lists:foldl(fun
+        (_, timeout) ->
+            timeout;
+        (_, ok) ->
+            receive
+                {changes_slave_ans, Ans} ->
+                    Ans
+            after
+                ?SLAVE_TIMEOUT ->
+                    timeout
+            end;
+        (_, {error, Seq, _} = Acc) ->
+            receive
+                {changes_slave_ans, ok} ->
+                    Acc;
+                {changes_slave_ans, {error, Seq2, _} = Ans} ->
+                    case Seq2 < Seq of
+                        true -> Ans;
+                        _ -> Acc
+                    end
+            after
+                ?SLAVE_TIMEOUT ->
+                    timeout
+            end
+    end, ok, DocsList).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Applies remote changes.
+%% @end
+%%--------------------------------------------------------------------
+-spec apply(datastore:doc()) -> ok | {error, datastore:seq(), term()}.
 % TODO - do we sync any listed models?
-apply(Doc = #document{key = Key, value = Value, scope = SpaceId}) ->
+apply(Doc = #document{key = Key, value = Value, scope = SpaceId, seq = Seq}) ->
     try
         case Value of
             #links{origin = Origin, doc_key = MainDocKey, model = ModelName} ->
@@ -54,6 +110,7 @@ apply(Doc = #document{key = Key, value = Value, scope = SpaceId}) ->
                     [Doc], [{hooks_config, no_hooks}, {resolve_conflicts, true}])
         end,
 
+        % TODO - delete master
         Master = self(),
         spawn(fun() ->
             try
@@ -66,18 +123,19 @@ apply(Doc = #document{key = Key, value = Value, scope = SpaceId}) ->
                     Master ! {change_replication_error, Key}
             end
         end),
-        receive
-            {change_replicated_ok, Key} -> ok;
-            {file_consistency_wait, Key} -> ok;
-            {change_replication_error, Key} -> ok
-        after
-            500 -> ok
-        end
+        ok
+%%        receive
+%%            {change_replicated_ok, Key} -> ok;
+%%            {file_consistency_wait, Key} -> ok;
+%%            {change_replication_error, Key} -> ok
+%%        after
+%%            500 -> ok
+%%        end
     catch
         _:Reason ->
             ?error_stacktrace("Unable to apply change ~p due to: ~p",
                 [Doc, Reason]),
-            {error, Reason}
+            {error, Seq, Reason}
     end.
 
 %%%===================================================================
@@ -128,3 +186,16 @@ foreign_links_save(ModelConfig, Doc = #document{key = Key, value = #links{
                 [Doc, Error]),
             Error
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns key connected with particular change.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_change_key(datastore:doc()) -> datastore:ext_key().
+get_change_key(#document{value = #file_location{uuid = FileUuid}}) ->
+    FileUuid;
+get_change_key(#document{value = #links{doc_key = DocUuid}}) ->
+    DocUuid;
+get_change_key(#document{key = Uuid}) ->
+    Uuid.

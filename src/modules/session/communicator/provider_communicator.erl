@@ -111,6 +111,7 @@ stream(StmId, Msg, Ref, Retry) ->
 -spec send_async(Msg :: #client_message{} | term(), Ref :: connection:ref()) ->
     ok | {error, Reason :: term()}.
 send_async(#client_message{} = Msg, Ref) ->
+    ensure_connected(Ref),
     connection:send_async(Msg, Ref);
 send_async(Msg, Ref) ->
     send_async(#client_message{message_body = Msg}, Ref).

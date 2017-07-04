@@ -727,8 +727,13 @@ get_parent_uuid(Entry) ->
                 {ok, ?ROOT_DIR_UUID};
             {ok, #document{key = Key}} ->
                 {ok, {ParentKey, ?MODEL_NAME}} =
-                    model:execute_with_default_context(?MODULE, fetch_link, [
-                        Key, parent]),
+                    case model:execute_with_default_context(?MODULE, fetch_link, [
+                        Key, parent]) of
+                        {error, link_not_found} -> %% Map links errors to document errors
+                            {error, {not_found, ?MODEL_NAME}};
+                        Ans ->
+                            Ans
+                    end,
                 {ok, ParentKey}
         end
     end).
@@ -743,8 +748,13 @@ get_parent_uuid(?ROOT_DIR_UUID, _SpaceId) ->
     {ok, ?ROOT_DIR_UUID};
 get_parent_uuid(FileUuid, _SpaceId) ->
     {ok, {ParentKey, ?MODEL_NAME}} =
-        model:execute_with_default_context(?MODULE, fetch_link, [
-            FileUuid, parent]),
+        case model:execute_with_default_context(?MODULE, fetch_link, [
+            FileUuid, parent]) of
+            {error, link_not_found} -> %% Map links errors to document errors
+                {error, {not_found, ?MODEL_NAME}};
+            Ans ->
+                Ans
+        end,
     {ok, ParentKey}.
 
 %%--------------------------------------------------------------------

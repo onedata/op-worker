@@ -138,6 +138,12 @@ handle_call(Request, _From, #state{} = State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
+handle_cast({change, {ok, Docs}}, State0) when is_list(Docs)->
+    FinalState = lists:foldl(fun(Doc, State) ->
+        {noreply, NewState} = handle_cast({change, {ok, Doc}}, State),
+        NewState
+    end, State0, Docs),
+    {noreply, FinalState};
 handle_cast({change, {ok, #document{seq = Seq} = Doc}}, State = #state{
     filter = Filter
 }) ->
@@ -221,10 +227,16 @@ aggregate_change(Doc = #document{seq = Seq}, State = #state{changes = Docs}) ->
         until = Seq + 1,
         changes = [Doc | Docs]
     },
-    Len = application:get_env(?APP_NAME, dbsync_changes_broadcast_batch_size, 25),
+    Len = application:get_env(?APP_NAME, dbsync_changes_broadcast_batch_size, 100),
     case erlang:length(Docs) + 1 >= Len of
-        true -> handle_changes(State2);
-        false -> State2
+        true ->
+            ?info("aaaaa1 ~p", [Seq]),
+            A = handle_changes(State2),
+            ?info("aaaaa2 ~p", [Seq]),
+            A;
+        false ->
+            ?info("aaaaa3 ~p", [Seq]),
+            State2
     end.
 
 %%--------------------------------------------------------------------
@@ -240,7 +252,9 @@ handle_changes(State = #state{
     changes = Docs,
     handler = Handler
 }) ->
-    Handler(Since, Until, lists:reverse(Docs)),
+    spawn(fun() ->
+        Handler(Since, Until, lists:reverse(Docs))
+    end),
     schedule_docs_handling(State#state{since = Until, changes = []}).
 
 %%--------------------------------------------------------------------
