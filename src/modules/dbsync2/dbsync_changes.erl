@@ -19,6 +19,7 @@
 %% API
 -export([apply_batch/1, apply/1]).
 
+%% Time to wait for slave process
 -define(SLAVE_TIMEOUT, 30000).
 
 %%%===================================================================

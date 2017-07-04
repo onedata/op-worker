@@ -228,10 +228,8 @@ stash_changes_batch(Since, Until, Docs, State = #state{
 apply_changes_batch(_Since, Until0, Docs0, State0 = #state{
     changes_stash = Stash
 }) ->
-    ?info("dddddd ~p", [{_Since, Until0}]),
-
     {Docs, Until, State, Continue} = prepare_batch(Docs0, Until0, State0),
-    A = case dbsync_changes:apply_batch(Docs) of
+    case dbsync_changes:apply_batch(Docs) of
         ok ->
             State2 = update_seq(Until, State),
             case Continue of
@@ -244,9 +242,7 @@ apply_changes_batch(_Since, Until0, Docs0, State0 = #state{
             end;
         {error, Seq, _} ->
             update_seq(Seq -1, State)
-    end,
-    ?info("dddddd2 ~p", [{_Since, Until}]),
-    A.
+    end.
 
 %%--------------------------------------------------------------------
 %% @private

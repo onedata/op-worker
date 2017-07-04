@@ -230,12 +230,8 @@ aggregate_change(Doc = #document{seq = Seq}, State = #state{changes = Docs}) ->
     Len = application:get_env(?APP_NAME, dbsync_changes_broadcast_batch_size, 100),
     case erlang:length(Docs) + 1 >= Len of
         true ->
-            ?info("aaaaa1 ~p", [Seq]),
-            A = handle_changes(State2),
-            ?info("aaaaa2 ~p", [Seq]),
-            A;
+            handle_changes(State2);
         false ->
-            ?info("aaaaa3 ~p", [Seq]),
             State2
     end.
 
