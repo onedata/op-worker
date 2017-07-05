@@ -267,7 +267,7 @@ get_provider_id() ->
                     [{_, PeerCertDer, _} | _] = public_key:pem_decode(Bin),
                     PeerCert = public_key:pkix_decode_cert(PeerCertDer, otp),
                     ProviderId = get_provider_id(PeerCert),
-                    application:set_env(?APP_NAME, provider_id, ProviderId),
+                    catch application:set_env(?APP_NAME, provider_id, ProviderId),
                     ProviderId;
                 {error, _} ->
                     ?NON_GLOBAL_PROVIDER_ID
