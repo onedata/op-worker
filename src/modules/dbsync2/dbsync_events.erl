@@ -84,10 +84,10 @@ change_replicated_internal(SpaceId, #document{
         value = #file_meta{type = ?REGULAR_FILE_TYPE}
     } = FileDoc, Master) ->
     ?debug("change_replicated_internal: changed file_meta ~p", [FileUuid]),
+    FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
     ok = file_consistency:wait(FileUuid, SpaceId,
         [times, link_to_parent, parent_links], [SpaceId, FileDoc],
         {Master, FileUuid}),
-    FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
     ok = sfm_utils:create_storage_file_if_not_exists(FileCtx),
     ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []),
     ok = file_consistency:add_components_and_notify(FileUuid,
@@ -99,9 +99,9 @@ change_replicated_internal(SpaceId, #document{
         value = #file_meta{}
     } = FileDoc, Master) ->
     ?debug("change_replicated_internal: changed file_meta ~p", [FileUuid]),
+    FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
     ok = file_consistency:wait(FileUuid, SpaceId, [times, link_to_parent], [SpaceId, FileDoc],
         {Master, FileUuid}),
-    FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
     ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []),
     ok = file_consistency:add_components_and_notify(FileUuid, [file_meta]),
     ok = file_consistency:check_and_add_components(FileUuid, SpaceId, [parent_links]);
@@ -111,10 +111,10 @@ change_replicated_internal(SpaceId, #document{
         value = #file_location{uuid = FileUuid}
     } = Doc, Master) ->
     ?debug("change_replicated_internal: changed file_location ~p", [FileUuid]),
+    FileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId)),
     ok = file_consistency:wait(FileUuid, SpaceId,
         [file_meta, times, local_file_location], [SpaceId, Doc],
         {Master, FileLocationId}),
-    FileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId)),
     ok = replica_dbsync_hook:on_file_location_change(FileCtx, Doc);
 change_replicated_internal(SpaceId, #document{
         value = #links{
