@@ -307,7 +307,7 @@ import_children(Job = #space_strategy_job{
     FilesResults = simple_scan:import_regular_subfiles(FilesJobs),
 
     case StrategyType:strategy_merge_result(FilesJobs, FilesResults) of
-        true ->
+        ok ->
             FileUuid = file_ctx:get_uuid_const(FileCtx),
             case storage_sync_utils:all_subfiles_imported(DirsJobs, FileUuid) of
                 true ->

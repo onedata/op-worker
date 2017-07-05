@@ -38,16 +38,19 @@
     update_timestamps_file_import_test/1,
     create_file_in_dir_update_test/1, create_file_in_dir_exceed_batch_update_test/1,
     chmod_file_update2_test/1, should_not_detect_timestamp_update_test/1,
-    create_directory_import_many_test/1, create_subfiles_import_many_test/1]).
+    create_directory_import_many_test/1, create_subfiles_import_many_test/1, create_directory_import_without_read_permission_test/1, create_subfiles_import_many2_test/1, create_subfiles_and_delete_before_import_is_finished_test/1]).
 
 -define(TEST_CASES, [
     create_directory_import_test,
+    create_directory_import_without_read_permission_test,
     create_directory_import_many_test,
     create_directory_export_test,
     create_file_import_test,
     create_file_export_test,
     create_file_in_dir_import_test,
     create_subfiles_import_many_test,
+    create_subfiles_import_many2_test,
+    create_subfiles_and_delete_before_import_is_finished_test,
     create_file_in_dir_update_test,
     create_file_in_dir_exceed_batch_update_test,
     delete_empty_directory_update_test,
@@ -78,6 +81,9 @@ all() -> ?ALL(?TEST_CASES).
 create_directory_import_test(Config) ->
     storage_sync_test_base:create_directory_import_test(Config, false).
 
+create_directory_import_without_read_permission_test(Config) ->
+    storage_sync_test_base:create_directory_import_without_read_permission_test(Config, false).
+
 create_directory_import_many_test(Config) ->
     storage_sync_test_base:create_directory_import_many_test(Config, false).
 
@@ -95,6 +101,12 @@ create_file_in_dir_import_test(Config) ->
 
 create_subfiles_import_many_test(Config) ->
     storage_sync_test_base:create_subfiles_import_many_test(Config, false).
+
+create_subfiles_import_many2_test(Config) ->
+    storage_sync_test_base:create_subfiles_import_many2_test(Config, false).
+
+create_subfiles_and_delete_before_import_is_finished_test(Config) ->
+    storage_sync_test_base:create_subfiles_and_delete_before_import_is_finished_test(Config, false).
 
 create_file_in_dir_update_test(Config) ->
     storage_sync_test_base:create_file_in_dir_update_test(Config, false).
@@ -175,7 +187,8 @@ init_per_testcase(Case, Config) when
     Case =:= delete_empty_directory_update_test;
     Case =:= delete_non_empty_directory_update_test;
     Case =:= delete_file_update_test;
-    Case =:= move_file_update_test
+    Case =:= move_file_update_test;
+    Case =:= create_subfiles_and_delete_before_import_is_finished_test
 ->
     Config2 = [
         {update_config, #{

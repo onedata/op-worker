@@ -40,7 +40,10 @@
     create_file_in_dir_import_test/2, create_file_in_dir_update_test/2,
     create_file_in_dir_exceed_batch_update_test/2, chmod_file_update2_test/2,
     should_not_detect_timestamp_update_test/2, create_directory_import_many_test/2,
-    create_subfiles_import_many_test/2, verify_file_in_dir/5, verify_dir/5]).
+    create_subfiles_import_many_test/2, verify_file_in_dir/5, verify_dir/5,
+    create_directory_import_without_read_permission_test/2,
+    create_subfiles_import_many2_test/2, verify_file/5,
+    create_subfiles_and_delete_before_import_is_finished_test/2]).
 
 
 -define(assertHashChangedFun(File, ExpectedResult0),
@@ -86,6 +89,23 @@ create_directory_import_test(Config, MountSpaceInRoot) ->
         storage_test_dir_path(W1MountPoint, ?SPACE_ID, ?TEST_DIR, MountSpaceInRoot),
     %% Create dir on storage
     ok = file:make_dir(StorageTestDirPath),
+    storage_sync_test_base:enable_storage_import(Config),
+    %% Check if dir was imported
+    ?assertMatch({ok, #file_attr{}},
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{}},
+        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS).
+
+create_directory_import_without_read_permission_test(Config, MountSpaceInRoot) ->
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    W1MountPoint = get_host_mount_point(W1, Config),
+    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
+    SessId2 = ?config({session_id, {?USER, ?GET_DOMAIN(W2)}}, Config),
+    StorageTestDirPath =
+        storage_test_dir_path(W1MountPoint, ?SPACE_ID, ?TEST_DIR, MountSpaceInRoot),
+    %% Create dir on storage
+    ok = file:make_dir(StorageTestDirPath),
+    ok = file:change_mode(StorageTestDirPath, 8#000),
     storage_sync_test_base:enable_storage_import(Config),
     %% Check if dir was imported
     ?assertMatch({ok, #file_attr{}},
@@ -149,14 +169,53 @@ create_subfiles_import_many_test(Config, MountSpaceInRoot) ->
     DirsNumber = 200,
     utils:pforeach(fun(N) ->
         NBin = integer_to_binary(N),
-        DirPath = storage_test_dir_path(W1MountPoint, ?SPACE_ID,
-            <<"dir", NBin/binary>>, MountSpaceInRoot),
+        DirPath = storage_test_dir_path(W1MountPoint, ?SPACE_ID, NBin, MountSpaceInRoot),
         FilePath = filename:join([DirPath, integer_to_binary(N)]),
         ok = file:make_dir(DirPath),
         ok = file:write_file(FilePath, ?TEST_DATA)
     end, lists:seq(1, DirsNumber)),
     storage_sync_test_base:enable_storage_import(Config),
     parallel_assert(?MODULE, verify_file_in_dir, [W1, SessId, 60], lists:seq(1, DirsNumber), 60).
+
+create_subfiles_import_many2_test(Config, MountSpaceInRoot) ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    W1MountPoint = get_host_mount_point(W1, Config),
+    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
+    %% Create dirs and files on storage
+    RootPath = storage_test_dir_path(W1MountPoint, ?SPACE_ID, <<"">>, MountSpaceInRoot),
+    DirStructure = [10, 10, 10],
+
+    create_nested_directory_tree(DirStructure, RootPath),
+    storage_sync_test_base:enable_storage_import(Config),
+    Files = generate_nested_directory_tree_file_paths(DirStructure, ?SPACE_PATH),
+
+    parallel_assert(?MODULE, verify_file, [W1, SessId, 60], Files, 60).
+
+
+create_subfiles_and_delete_before_import_is_finished_test(Config, MountSpaceInRoot) ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    W1MountPoint = get_host_mount_point(W1, Config),
+    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
+    StorageTestDirPath =
+        storage_test_dir_path(W1MountPoint, ?SPACE_ID, ?TEST_DIR, MountSpaceInRoot),
+    %% Create dir on storage
+    ok = file:make_dir(StorageTestDirPath),
+    storage_sync_test_base:enable_storage_import(Config),
+    %% Check if dir was imported
+    ?assertMatch({ok, #file_attr{}},
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
+
+    %% Create nested tree structure
+    DirStructure = [10, 10, 10],
+    create_nested_directory_tree(DirStructure, StorageTestDirPath),
+    storage_sync_test_base:enable_storage_update(Config),
+    timer:sleep(timer:seconds(?SCAN_INTERVAL)),
+    recursive_rm(StorageTestDirPath),
+    ?assertMatch({ok, []},
+        file:list_dir(storage_test_dir_path(W1MountPoint, ?SPACE_ID, ?TEST_DIR, MountSpaceInRoot))),
+    ?assertMatch({ok, []},
+            lfm_proxy:ls(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}, 0, 100),  2 * ?ATTEMPTS).
+
 
 create_directory_export_test(Config, MountSpaceInRoot) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -905,7 +964,6 @@ get_storage_path(Config, MountPath) when is_atom(MountPath) ->
             ?config(posix,
                 ?config(storages, Config)))), latin1).
 
-
 storage_test_dir_path(MountPath, _SpaceId, Dir, true) ->
     filename:join([MountPath, Dir]);
 storage_test_dir_path(MountPath, SpaceId, Dir, false) ->
@@ -966,7 +1024,7 @@ parallel_assert(M, F, A, List, Attempts) ->
                         ?assertMatch(Acc, [])
                 end
         end
-    end, sets:from_list([integer_to_binary(E) || E <- List]), List).
+    end, sets:from_list([str_utils:to_binary(E) || E <- List]), List).
 
 
 verify_dir(N, Pid, W1, SessId, Attempts) ->
@@ -976,10 +1034,18 @@ verify_dir(N, Pid, W1, SessId, Attempts) ->
         lfm_proxy:stat(W1, SessId, {path, DirPath}), Attempts),
     Pid ! {finished, DirPath}.
 
+verify_file(FilePath, Pid, W1, SessId, Attempts) ->
+    ?assertMatch({ok, #file_attr{}},
+        lfm_proxy:stat(W1, SessId, {path, FilePath}), Attempts),
+    {ok, Handle1} = ?assertMatch({ok, _},
+        lfm_proxy:open(W1, SessId, {path, FilePath}, read)),
+    ?assertMatch({ok, ?TEST_DATA},
+        lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
+    Pid ! {finished, FilePath}.
 
 verify_file_in_dir(N, Pid, W1, SessId, Attempts) ->
     NBin = integer_to_binary(N),
-    FileInDirPath = ?SPACE_TEST_FILE_IN_DIR_PATH(<<"dir", NBin/binary>>, NBin),
+    FileInDirPath = ?SPACE_TEST_FILE_IN_DIR_PATH(NBin, NBin),
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, FileInDirPath}), Attempts),
     {ok, Handle1} = ?assertMatch({ok, _},
@@ -987,3 +1053,29 @@ verify_file_in_dir(N, Pid, W1, SessId, Attempts) ->
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
     Pid ! {finished, NBin}.
+
+
+generate_nested_directory_tree_file_paths([SubFilesNum], Root) ->
+    lists:map(fun(N) ->
+        filename:join([Root, integer_to_binary(N)])
+    end, lists:seq(1, SubFilesNum));
+generate_nested_directory_tree_file_paths([SubDirsNum | Rest], Root) ->
+    lists:flatmap(fun(N) ->
+        NBin = integer_to_binary(N),
+        DirPath = filename:join([Root, NBin]),
+        generate_nested_directory_tree_file_paths(Rest, DirPath)
+    end, lists:seq(1, SubDirsNum)).
+
+
+create_nested_directory_tree([SubFilesNum], Root) ->
+    ok = lists:foreach(fun(N) ->
+        FilePath = filename:join([Root, integer_to_binary(N)]),
+        ok = file:write_file(FilePath, ?TEST_DATA)
+    end, lists:seq(1, SubFilesNum));
+create_nested_directory_tree([SubDirsNum | Rest], Root) ->
+    ok = utils:pforeach(fun(N) ->
+        NBin = integer_to_binary(N),
+        DirPath = filename:join([Root, NBin]),
+        ok = file:make_dir(DirPath),
+        ok = create_nested_directory_tree(Rest, DirPath)
+    end, lists:seq(1, SubDirsNum)).
