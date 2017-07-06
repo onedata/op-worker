@@ -311,6 +311,10 @@ notify(Pid, Ref, {ok, Doc = #document{seq = Seq, value = Value}}) when
     ok;
 notify(_Pid, _Ref, {ok, #document{}}) ->
     ok;
+notify(Pid, Ref, {ok, Docs}) when is_list(Docs) ->
+    lists:foreach(fun(Doc) ->
+        notify(Pid, Ref, {ok, Doc})
+    end, Docs);
 notify(Pid, Ref, {error, _Seq, Reason}) ->
     ?error("Changes stream terminated abnormally due to: ~p", [Reason]),
     Pid ! {Ref, stream_ended},
