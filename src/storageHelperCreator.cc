@@ -150,7 +150,8 @@ std::shared_ptr<StorageHelper> StorageHelperCreator::getStorageHelper(
 
 #if WITH_GLUSTERFS
     if (name == GLUSTERFS_HELPER_NAME)
-        helper = GlusterFSHelperFactory{m_glusterfsService}.createStorageHelper(args);
+        helper = GlusterFSHelperFactory{m_glusterfsService}.createStorageHelper(
+            args);
 #endif
 
     if (!helper)
@@ -158,9 +159,11 @@ std::shared_ptr<StorageHelper> StorageHelperCreator::getStorageHelper(
             std::make_error_code(std::errc::invalid_argument),
             "Invalid storage helper name: '" + name.toStdString() + "'"};
 
-    //if (buffered)
-    //    return std::make_shared<buffering::BufferAgent>(
-    //        m_bufferLimits, helper, *m_scheduler);
+    if (buffered
+        // disable buffering for GlusterFS
+        && (name != GLUSTERFS_HELPER_NAME))
+        return std::make_shared<buffering::BufferAgent>(
+            m_bufferLimits, helper, *m_scheduler);
 
     return helper;
 }
