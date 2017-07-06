@@ -111,7 +111,7 @@ create_directory_import_without_read_permission_test(Config, MountSpaceInRoot) -
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS).
+        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_DIR_PATH}), 2 * ?ATTEMPTS).
 
 create_directory_import_many_test(Config, MountSpaceInRoot) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -211,11 +211,10 @@ create_subfiles_and_delete_before_import_is_finished_test(Config, MountSpaceInRo
     storage_sync_test_base:enable_storage_update(Config),
     timer:sleep(timer:seconds(?SCAN_INTERVAL)),
     recursive_rm(StorageTestDirPath),
-    ?assertMatch({ok, []},
-        file:list_dir(storage_test_dir_path(W1MountPoint, ?SPACE_ID, ?TEST_DIR, MountSpaceInRoot))),
+    ?assertMatch({error, enoent},
+        file:list_dir(StorageTestDirPath)),
     ?assertMatch({ok, []},
             lfm_proxy:ls(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}, 0, 100),  2 * ?ATTEMPTS).
-
 
 create_directory_export_test(Config, MountSpaceInRoot) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
