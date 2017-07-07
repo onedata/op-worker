@@ -124,11 +124,13 @@ change_replicated_internal(SpaceId, #document{
     }, _Master) ->
     ?debug("change_replicated_internal: changed links ~p", [FileUuid]),
     ok = file_consistency:check_and_add_components(FileUuid, SpaceId, [link_to_parent, parent_links]);
-change_replicated_internal(_SpaceId, #document{
+change_replicated_internal(SpaceId, #document{
         key = FileUuid,
         value = #times{}
     }, _Master) ->
     ?debug("change_replicated_internal: changed times ~p", [FileUuid]),
+    FileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId)),
+    (catch fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx)),
     ok = file_consistency:add_components_and_notify(FileUuid, [times]);
 change_replicated_internal(SpaceId, #document{
         deleted = false,
