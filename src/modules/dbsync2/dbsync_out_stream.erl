@@ -138,19 +138,17 @@ handle_call(Request, _From, #state{} = State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_cast({change, {ok, Docs}}, State0) when is_list(Docs)->
-    FinalState = lists:foldl(fun(Doc, State) ->
-        {noreply, NewState} = handle_cast({change, {ok, Doc}}, State),
-        NewState
-    end, State0, Docs),
+handle_cast({change, {ok, Docs}}, State = #state{
+    filter = Filter
+}) when is_list(Docs)->
+    FinalState = lists:foldl(fun(Doc, TmpState) ->
+        handle_doc_change(Doc, Filter, TmpState)
+    end, State, Docs),
     {noreply, FinalState};
-handle_cast({change, {ok, #document{seq = Seq} = Doc}}, State = #state{
+handle_cast({change, {ok, #document{} = Doc}}, State = #state{
     filter = Filter
 }) ->
-    case Filter(Doc) of
-        true -> {noreply, aggregate_change(Doc, State)};
-        false -> {noreply, State#state{until = Seq + 1}}
-    end;
+    {noreply, handle_doc_change(Doc, Filter, State)};
 handle_cast({change, {ok, end_of_stream}}, State = #state{
     since = Since,
     until = Until,
@@ -229,10 +227,8 @@ aggregate_change(Doc = #document{seq = Seq}, State = #state{changes = Docs}) ->
     },
     Len = application:get_env(?APP_NAME, dbsync_changes_broadcast_batch_size, 100),
     case erlang:length(Docs) + 1 >= Len of
-        true ->
-            handle_changes(State2);
-        false ->
-            State2
+        true -> handle_changes(State2);
+        false -> State2
     end.
 
 %%--------------------------------------------------------------------
@@ -270,3 +266,16 @@ schedule_docs_handling(#state{
 schedule_docs_handling(State = #state{handling_ref = Ref}) ->
     erlang:cancel_timer(Ref),
     schedule_docs_handling(State#state{handling_ref = undefined}).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handles change that include document.
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_doc_change(datastore:document(), filter(), state()) -> state().
+handle_doc_change(#document{seq = Seq} = Doc, Filter, State) ->
+    case Filter(Doc) of
+        true -> aggregate_change(Doc, State);
+        false -> State#state{until = Seq + 1}
+    end.

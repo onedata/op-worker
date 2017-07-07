@@ -225,29 +225,30 @@ stash_changes_batch(Since, Until, Docs, State = #state{
 %%--------------------------------------------------------------------
 -spec apply_changes_batch(couchbase_changes:since(), couchbase_changes:until(),
     [datastore:doc()], state()) -> state().
-apply_changes_batch(_Since, Until0, Docs0, State0 = #state{
+apply_changes_batch(_Since, Until, Docs, State = #state{
     changes_stash = Stash
 }) ->
-    {Docs, Until, State, Continue} = prepare_batch(Docs0, Until0, State0),
-    case dbsync_changes:apply_batch(Docs) of
+    {Docs2, Until2, State2, Continue} = prepare_batch(Docs, Until, State),
+    case dbsync_changes:apply_batch(Docs2) of
         ok ->
-            State2 = update_seq(Until, State),
+            State3 = update_seq(Until, State2),
             case Continue of
                 {_, NextUntil} = Key ->
                     NextDocs = ets:lookup_element(Stash, Key, 2),
                     ets:delete(Stash, Key),
-                    apply_changes_batch(Until, NextUntil, NextDocs, State2);
+                    apply_changes_batch(Until2, NextUntil, NextDocs, State3);
                 _ ->
-                    State2
+                    State3
             end;
         {error, Seq, _} ->
-            update_seq(Seq -1, State)
+            update_seq(Seq - 1, State2)
     end.
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Prepares batch to be applied.
+%% Prepares batch to be applied. If there are no missing changes between batches
+%% it merges them.
 %% @end
 %%--------------------------------------------------------------------
 -spec prepare_batch([datastore:doc()], couchbase_changes:until(), state()) ->
@@ -262,7 +263,9 @@ prepare_batch(Docs, Until, State = #state{
         '$end_of_table' ->
             {Docs, Until, State2, no};
         {Until, NextUntil} = Key ->
-            case length(Docs) > application:get_env(?APP_NAME, dbsync_changes_apply_max_size, 1000) of
+            MaxSize = application:get_env(?APP_NAME,
+                dbsync_changes_apply_max_size, 1000),
+            case length(Docs) > MaxSize of
                 true ->
                     {Docs, Until, State2, Key};
                 _ ->

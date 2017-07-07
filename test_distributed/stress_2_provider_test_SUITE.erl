@@ -26,8 +26,7 @@
 
 -define(STRESS_CASES, []).
 -define(STRESS_NO_CLEARING_CASES, [
-%%    proxy_test1, proxy_test2,
-    db_sync_test
+    proxy_test1, proxy_test2, db_sync_test
 ]).
 
 all() ->
@@ -53,7 +52,7 @@ db_sync_test(Config) ->
     ?PERFORMANCE(Config, [
         {parameters, [
             [{name, dirs_num}, {value, 100}, {description, "Number of directorines with single parent."}],
-            [{name, files_num}, {value, 100}, {description, "Number of files with single parent."}],
+            [{name, files_num}, {value, 200}, {description, "Number of files with single parent."}],
             [{name, attempts}, {value, 180}, {description, "Attempts param for assertion macros"}]
         ]},
         {description, "Performs multiple file operations on space 1."}
@@ -62,9 +61,9 @@ db_sync_test_base(Config) ->
     Dirs = ?config(dirs_num, Config),
     Files = ?config(files_num, Config),
     Attempts = ?config(attempts, Config),
-    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {2,0,0}, Attempts, Dirs, Files).
-%%    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user1">>, {2,0,0}, Attempts),
-%%    multi_provider_file_ops_test_base:distributed_delete_test_base(Config, <<"user1">>, {2,0,0}, Attempts).
+    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {2,0,0}, Attempts, Dirs, Files),
+    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user1">>, {2,0,0}, Attempts),
+    multi_provider_file_ops_test_base:distributed_delete_test_base(Config, <<"user1">>, {2,0,0}, Attempts).
 
 %%%===================================================================
 

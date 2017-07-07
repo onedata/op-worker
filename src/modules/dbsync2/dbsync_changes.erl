@@ -111,27 +111,18 @@ apply(Doc = #document{key = Key, value = Value, scope = SpaceId, seq = Seq}) ->
                     [Doc], [{hooks_config, no_hooks}, {resolve_conflicts, true}])
         end,
 
-        % TODO - delete master
+        % TODO - delete master propagation to dbsync_events:change_replicated
         Master = self(),
         spawn(fun() ->
             try
-                dbsync_events:change_replicated(SpaceId, Doc, Master),
-                Master ! {change_replicated_ok, Key}
+                dbsync_events:change_replicated(SpaceId, Doc, Master)
             catch
                 _:Reason ->
                     ?error_stacktrace("Change ~p post-processing failed due "
-                    "to: ~p", [Doc, Reason]),
-                    Master ! {change_replication_error, Key}
+                    "to: ~p", [Doc, Reason])
             end
         end),
         ok
-%%        receive
-%%            {change_replicated_ok, Key} -> ok;
-%%            {file_consistency_wait, Key} -> ok;
-%%            {change_replication_error, Key} -> ok
-%%        after
-%%            500 -> ok
-%%        end
     catch
         _:Reason ->
             ?error_stacktrace("Unable to apply change ~p due to: ~p",
@@ -189,6 +180,7 @@ foreign_links_save(ModelConfig, Doc = #document{key = Key, value = #links{
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Returns key connected with particular change.
 %% @end

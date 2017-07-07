@@ -297,7 +297,7 @@ same(X) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec notify(pid(), reference(),
-    {ok, datastore:document() | end_of_stream} |
+    {ok, [datastore:document()] | datastore:document() | end_of_stream} |
     {error, couchbase_changes:since(), term()}) -> ok.
 notify(Pid, Ref, {ok, end_of_stream}) ->
     Pid ! {Ref, stream_ended},
