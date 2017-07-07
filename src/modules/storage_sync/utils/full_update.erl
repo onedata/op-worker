@@ -17,6 +17,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/storage_sync/storage_sync.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 
 -define(STORAGE_TABLE_PREFIX, <<"st_children_">>).
 -define(DB_TABLE_PREFIX, <<"db_children_">>).
@@ -44,13 +45,14 @@ run(Job = #space_strategy_job{
     DBTable = db_storage_name(FileUuid),
     StorageTable = create_ets(StorageTable),
     DBTable = create_ets(DBTable),
-    save_db_children_names(DBTable, FileCtx),
-    save_storage_children_names(StorageTable, StorageFileCtx),
-
-    ok = remove_files_not_existing_on_storage(StorageTable, DBTable, FileCtx, SpaceId),
-    true = ets:delete(StorageTable),
-    true = ets:delete(DBTable),
-
+    try
+        save_db_children_names(DBTable, FileCtx),
+        save_storage_children_names(StorageTable, StorageFileCtx),
+        ok = remove_files_not_existing_on_storage(StorageTable, DBTable, FileCtx, SpaceId)
+    after
+        true = ets:delete(StorageTable),
+        true = ets:delete(DBTable)
+    end,
     {ok, Job}.
 
 %%-------------------------------------------------------------------
@@ -62,10 +64,15 @@ run(Job = #space_strategy_job{
 delete_imported_file(ChildName, FileCtx, SpaceId) ->
     storage_sync_monitoring:update_queue_length_spirals(SpaceId, -1),
     RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
-    {ChildCtx, _} = file_ctx:get_child(FileCtx, ChildName, RootUserCtx),
-    ok = fslogic_delete:remove_file_and_file_meta(ChildCtx, RootUserCtx, true, false),
-    ok = fslogic_delete:remove_file_handles(ChildCtx),
-    storage_sync_monitoring:increase_deleted_files_spirals(SpaceId).
+    try
+        {ChildCtx, _} = file_ctx:get_child(FileCtx, ChildName, RootUserCtx),
+        ok = fslogic_delete:remove_file_and_file_meta(ChildCtx, RootUserCtx, true, false),
+        ok = fslogic_delete:remove_file_handles(ChildCtx),
+        storage_sync_monitoring:increase_deleted_files_spirals(SpaceId)
+    catch
+        _:_ ->
+            ok
+    end.
 
 %%===================================================================
 %% Internal functions

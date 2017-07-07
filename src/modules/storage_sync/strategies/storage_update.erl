@@ -357,9 +357,15 @@ handle_already_imported_directory(Job = #space_strategy_job{
 -spec handle_already_imported_directory_changed_mtime(space_strategy:job(),
     #file_attr{}, file_ctx:ctx()) -> {ok, space_strategy:job()}.
 handle_already_imported_directory_changed_mtime(Job = #space_strategy_job{
-    strategy_args = #{delete_enable := true}
-}, _FileAttr, FileCtx) ->
-    full_update:run(Job, FileCtx);
+    strategy_args = #{delete_enable := true},
+    data = Data
+}, FileAttr, FileCtx) ->
+    case maps:get(dir_offset, Data, 0) of
+        0 ->
+            full_update:run(Job, FileCtx);
+        _ ->
+            simple_scan:handle_already_imported_file(Job, FileAttr, FileCtx)
+    end;
 handle_already_imported_directory_changed_mtime(Job = #space_strategy_job{
     strategy_args = #{delete_enable := false}
 }, FileAttr, FileCtx) ->
