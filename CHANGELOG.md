@@ -4,6 +4,22 @@
 CHANGELOG
 ---------
 
+### 17.06.0-beta5
+
+* VFS-3361 Emit event on times update.
+* VFS-3409 Handle share requests in user context rather that provider context so all operation can be performed despite lack of support
+* VFS-3224 Update gui reference and adjust code to API changes
+* VFS-3356 Add space_storage/storage accessors
+* VFS-3361 Do not create empty replicated files.
+* VFS-3399 Disabled GlusterFS buffering
+* VFS-3289 - implement tests for importing directory without read permission and for deleting not fully imported files tree
+* VFS-3363 Improve dbsync performance
+* VFS-3361 Delay creation of files until open.
+* VFS-3289 loose coupling between exometer_report_rrd_ets and storage_sync_monitoring
+* VFS-3289 backend for metrics of storage_sync
+* VFS-3363 Fix concurent delete
+
+
 ### 17.06.0-beta4
 
 * VFS-3362 Update web-client
