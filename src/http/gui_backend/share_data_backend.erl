@@ -61,10 +61,11 @@ terminate() ->
 -spec find_record(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find_record(ModelType, ShareId) ->
+    UserAuth = op_gui_utils:get_user_auth(),
     {ok, #document{
         value = #od_share{
             space = SpaceId
-        } = ShareRecord}} = share_logic:get(provider, ShareId),
+        } = ShareRecord}} = share_logic:get(UserAuth, ShareId),
     % Make sure that user is allowed to view requested share - he must have
     % view privileges in this space, or view the share in public view.
     Authorized = case ModelType of
