@@ -45,7 +45,7 @@
 %% Functions operating on directories or files
 -export([mv/3, cp/3, get_file_path/2, rm_recursive/2, unlink/3, replicate_file/3]).
 %% Functions operating on files
--export([create/2, create/3, create/4, open/3, fsync/1, write/3, read/3,
+-export([create/2, create/3, create/4, open/3, fsync/1, fsync/3, write/3, read/3,
     truncate/3, release/1, get_file_distribution/2, create_and_open/4, create_and_open/5]).
 %% Functions concerning file permissions
 -export([set_perms/3, check_perms/3, set_acl/3, get_acl/2, remove_acl/2]).
@@ -246,12 +246,22 @@ open(SessId, FileKey, OpenType) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Flushes waiting events for session connected with handler.
+%% Gets necessary data from handle and executes fsync/3
 %% @end
 %%--------------------------------------------------------------------
 -spec fsync(FileHandle :: handle()) -> ok | {error, Reason :: term()}.
 fsync(FileHandle) ->
     ?run(fun() -> lfm_files:fsync(FileHandle) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Flushes waiting events for session connected with handler.
+%% @end
+%%--------------------------------------------------------------------
+-spec fsync(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
+    oneprovider:id()) -> ok | {error, Reason :: term()}.
+fsync(SessId, FileKey, ProviderId) ->
+    ?run(fun() -> lfm_files:fsync(SessId, FileKey, ProviderId) end).
 
 %%--------------------------------------------------------------------
 %% @doc

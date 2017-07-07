@@ -302,7 +302,7 @@ rename_dir(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) -> no_return() | #fuse_response{}.
 rename_file_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     {SourceParentFileCtx, SourceFileCtx2} = file_ctx:get_parent(SourceFileCtx, UserCtx),
-    {ok, SourceFileCtx3, TargetFileId} = rename_meta_and_storage_file(UserCtx, SourceFileCtx2, TargetParentFileCtx, TargetName),
+    {SourceFileCtx3, TargetFileId} = rename_meta_and_storage_file(UserCtx, SourceFileCtx2, TargetParentFileCtx, TargetName),
     replica_updater:rename(SourceFileCtx, TargetFileId),
     FileGuid = file_ctx:get_guid_const(SourceFileCtx3),
     update_parent_times(SourceParentFileCtx, TargetParentFileCtx),
@@ -324,11 +324,7 @@ rename_file_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) -> no_return() | #fuse_response{}.
 rename_dir_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     {SourceParentFileCtx, SourceFileCtx2} = file_ctx:get_parent(SourceFileCtx, UserCtx),
-    {RenameAns, SourceFileCtx3, TargetFileId} = rename_meta_and_storage_file(UserCtx, SourceFileCtx2, TargetParentFileCtx, TargetName),
-    case RenameAns of
-        ok -> ok;
-        {error, ?ENOENT} -> ok
-    end,
+    {SourceFileCtx3, TargetFileId} = rename_meta_and_storage_file(UserCtx, SourceFileCtx2, TargetParentFileCtx, TargetName),
     ChildEntries = rename_child_locations(UserCtx, SourceFileCtx3, TargetFileId, 0),
     FileGuid = file_ctx:get_guid_const(SourceFileCtx3),
     update_parent_times(SourceParentFileCtx, TargetParentFileCtx),
@@ -348,8 +344,7 @@ rename_dir_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
 %%--------------------------------------------------------------------
 -spec rename_meta_and_storage_file(user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
     TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
-    {ok | {error, term()}, TargetFileCtx :: file_ctx:ctx(),
-        TargetFileId :: helpers:file_id()}.
+    {TargetFileCtx :: file_ctx:ctx(), TargetFileId :: helpers:file_id()}.
 rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentFileCtx0, TargetName) ->
     {SourceFileId, SourceFileCtx} = file_ctx:get_storage_file_id(SourceFileCtx0),
     {TargetParentFileId, TargetParentFileCtx} = file_ctx:get_storage_file_id(TargetParentFileCtx0),
@@ -364,8 +359,14 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentFileCtx0, Targ
 
     SpaceId = file_ctx:get_space_id_const(SourceFileCtx2),
     {ok, Storage} = fslogic_storage:select_storage(SpaceId),
-    Ans = sfm_utils:rename_storage_file(user_ctx:get_session_id(UserCtx), SpaceId, Storage, FileUuid, SourceFileId, TargetFileId),
-    {Ans, SourceFileCtx2, TargetFileId}.
+    case sfm_utils:rename_storage_file(
+        user_ctx:get_session_id(UserCtx), SpaceId, Storage, FileUuid,
+        SourceFileId, TargetFileId)
+    of
+        ok -> ok;
+        {error, ?ENOENT} -> ok
+    end,
+    {SourceFileCtx2, TargetFileId}.
 
 %%--------------------------------------------------------------------
 %% @private

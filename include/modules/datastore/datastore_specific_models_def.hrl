@@ -310,7 +310,8 @@
         OldChanges :: [replica_changes:change()],
         NewChanges :: [replica_changes:change()]
     },
-    last_rename :: replica_changes:last_rename()
+    last_rename :: replica_changes:last_rename(),
+    storage_file_created = false :: boolean()
 }).
 
 -define(DEFAULT_FILENAME_MAPPING_STRATEGY, {simple, #{}}).

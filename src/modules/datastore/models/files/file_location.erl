@@ -51,7 +51,10 @@ record_struct(1) ->
     ]};
 record_struct(2) ->
     {record, Struct} = record_struct(1),
-    {record, proplists:delete(handle_id, Struct)}.
+    {record, proplists:delete(handle_id, Struct)};
+record_struct(3) ->
+    {record, Struct} = record_struct(2),
+    {record, Struct ++ [{storage_file_created, boolean}]}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -67,6 +70,14 @@ record_upgrade(1, {?MODEL_NAME, Uuid, ProviderId, StorageId, FileId, Blocks,
         file_id = FileId, blocks = Blocks, version_vector = VersionVector,
         size = Size, space_id = SpaceId, recent_changes = RecentChanges,
         last_rename = LastRename
+    }};
+record_upgrade(2, {?MODEL_NAME, Uuid, ProviderId, StorageId, FileId, Blocks,
+    VersionVector, Size, SpaceId, RecentChanges, LastRename}) ->
+    {3, #file_location{
+        uuid = Uuid, provider_id = ProviderId, storage_id = StorageId,
+        file_id = FileId, blocks = Blocks, version_vector = VersionVector,
+        size = Size, space_id = SpaceId, recent_changes = RecentChanges,
+        last_rename = LastRename, storage_file_created = true
     }}.
 
 %%%===================================================================
@@ -225,7 +236,7 @@ exists(Key) ->
 model_init() ->
     Config = ?MODEL_CONFIG(file_locations_bucket, [], ?GLOBALLY_CACHED_LEVEL),
     Config#model_config{
-        version = 2,
+        version = 3,
         sync_enabled = true
     }.
 

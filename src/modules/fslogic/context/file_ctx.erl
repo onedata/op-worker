@@ -65,7 +65,7 @@
     get_parent/2, get_storage_file_id/1,
     get_aliased_name/2, get_posix_storage_user_context/1, get_times/1,
     get_parent_guid/2, get_child/3, get_file_children/4, get_logical_path/2,
-    get_storage_doc/1, get_file_location_with_filled_gaps/2,
+    get_storage_id/1, get_storage_doc/1, get_file_location_with_filled_gaps/2,
     get_local_file_location_docs/1, get_file_location_docs/1,
     get_file_location_ids/1, get_acl/1, get_raw_storage_path/1,
     get_child_canonical_path/2]).
@@ -495,6 +495,16 @@ get_file_children(FileCtx, UserCtx, Offset, Limit) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns storage id.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_storage_id(ctx()) -> {storage:id(), ctx()}.
+get_storage_id(FileCtx) ->
+    {#document{key=StorageId}, FileCtx2} = get_storage_doc(FileCtx),
+    {StorageId, FileCtx2}.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Returns storage document of file's space.
 %% @end
 %%--------------------------------------------------------------------
@@ -732,17 +742,6 @@ is_dir(FileCtx) ->
 -spec new_child_by_uuid(file_meta:uuid(), file_meta:name(), od_space:id(), undefined | od_share:id()) -> ctx().
 new_child_by_uuid(Uuid, Name, SpaceId, ShareId) ->
     #file_ctx{guid = fslogic_uuid:uuid_to_share_guid(Uuid, SpaceId, ShareId), file_name = Name}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns storage id.
-%% @end
-%%--------------------------------------------------------------------
--spec get_storage_id(ctx()) -> {storage:id(), ctx()}.
-get_storage_id(FileCtx) ->
-    {#document{key=StorageId}, FileCtx2} = get_storage_doc(FileCtx),
-    {StorageId, FileCtx2}.
 
 %%--------------------------------------------------------------------
 %% @private

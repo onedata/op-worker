@@ -1024,9 +1024,16 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
 
     {ok, #document{key = StorageId}} = fslogic_storage:select_storage(SpaceId),
     FileId = Path,
-    Location = #file_location{blocks = [#file_block{offset = 0, size = 3}], size = 3,
-        provider_id = oneprovider:get_provider_id(), file_id = FileId, storage_id = StorageId, uuid = FileUuid,
-        space_id = SpaceId},
+    Location = #file_location{
+        blocks = [#file_block{offset = 0, size = 3}],
+        size = 3,
+        provider_id = oneprovider:get_provider_id(),
+        file_id = FileId,
+        storage_id = StorageId,
+        uuid = FileUuid,
+        space_id = SpaceId,
+        storage_file_created = true
+    },
 
     MC = file_location:model_init(),
     {ok, _} = model:execute_with_default_context(MC, save,

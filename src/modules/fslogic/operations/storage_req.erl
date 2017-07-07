@@ -101,8 +101,9 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
                 StorageDoc, HelperName),
             HelperParams = helper:get_params(Helper, ClientStorageUserUserCtx),
 
-            {RawStoragePath, _NewFile} = file_ctx:get_raw_storage_path(FileCtx),
+            {RawStoragePath, FileCtx2} = file_ctx:get_raw_storage_path(FileCtx),
             Dirname = filename:dirname(RawStoragePath),
+            _FileCtx3 = sfm_utils:create_parent_dirs(FileCtx2),
             TestFileName = storage_detector:generate_file_id(),
             TestFileId = fslogic_path:join([Dirname, TestFileName]),
             FileContent = storage_detector:create_test_file(Helper, ServerStorageUserUserCtx, TestFileId),

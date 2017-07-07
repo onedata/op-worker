@@ -43,14 +43,14 @@
 %% @equiv new_handle(SessionId, SpaceUuid, FileUuid, Storage, FileId, undefined).
 %% @end
 %%--------------------------------------------------------------------
--spec new_handle(session:id(), file_ctx:ctx()) -> handle().
+-spec new_handle(session:id(), file_ctx:ctx()) -> {handle(), file_ctx:ctx()}.
 new_handle(SessionId, FileCtx) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     {Storage, FileCtx2} = file_ctx:get_storage_doc(FileCtx),
     {FileId, FileCtx3} = file_ctx:get_storage_file_id(FileCtx2),
     ShareId = file_ctx:get_share_id_const(FileCtx3),
-    new_handle(SessionId, SpaceId, FileUuid, Storage, FileId, ShareId).
+    {new_handle(SessionId, SpaceId, FileUuid, Storage, FileId, ShareId), FileCtx3}.
 
 %%--------------------------------------------------------------------
 %% @doc

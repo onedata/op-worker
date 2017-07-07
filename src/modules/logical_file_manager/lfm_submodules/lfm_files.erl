@@ -20,9 +20,10 @@
 %% Functions operating on directories or files
 -export([unlink/3, rm/2, mv/3, cp/3, get_parent/2, get_file_path/2, replicate_file/3]).
 %% Functions operating on files
--export([create/2, create/3, create/4, open/3, fsync/1, write/3, write_without_events/3,
-    read/3, read_without_events/3, silent_read/3, truncate/3, release/1,
-    get_file_distribution/2, create_and_open/5, create_and_open/4]).
+-export([create/2, create/3, create/4, open/3, fsync/1, fsync/3, write/3,
+    write_without_events/3, read/3, read_without_events/3, silent_read/3,
+    truncate/3, release/1, get_file_distribution/2, create_and_open/5,
+    create_and_open/4]).
 
 -compile({no_auto_import, [unlink/1]}).
 
@@ -271,7 +272,7 @@ release(Handle) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Flushes waiting events for session connected with handler.
+%% Gets necessary data from handle and executes fsync/3
 %% @end
 %%--------------------------------------------------------------------
 -spec fsync(FileHandle :: logical_file_manager:handle()) ->
@@ -280,10 +281,21 @@ fsync(Handle) ->
     SessionId = lfm_context:get_session_id(Handle),
     FileGuid = lfm_context:get_guid(Handle),
     ProviderId = lfm_context:get_provider_id(Handle),
+    fsync(SessionId, {guid, FileGuid}, ProviderId).
 
-    lfm_event_utils:flush_event_queue(SessionId, ProviderId,
+%%--------------------------------------------------------------------
+%% @doc
+%% Flushes waiting events for session connected with handler.
+%% @end
+%%--------------------------------------------------------------------
+-spec fsync(session:id(), fslogic_worker:file_guid_or_path(), oneprovider:id()) ->
+    ok | logical_file_manager:error_reply().
+fsync(SessId, FileKey, ProviderId) ->
+    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
+
+    lfm_event_utils:flush_event_queue(SessId, ProviderId,
         fslogic_uuid:guid_to_uuid(FileGuid)),
-    remote_utils:call_fslogic(SessionId, file_request,
+    remote_utils:call_fslogic(SessId, file_request,
         FileGuid, #fsync{data_only = false}, fun(_) -> ok end).
 
 %%--------------------------------------------------------------------
