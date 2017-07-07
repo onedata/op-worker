@@ -84,10 +84,14 @@ reuse_or_create_rest_session(Iden) ->
 -spec reuse_or_create_rest_session(Iden :: session:identity(),
     Auth :: session:auth() | undefined) ->
     {ok, SessId :: session:id()} | {error, Reason :: term()}.
-reuse_or_create_rest_session(Iden, Auth) ->
+reuse_or_create_rest_session(Iden = #user_identity{user_id = UserId}, Auth) ->
     SessId = session:get_rest_session_id(Iden),
-    reuse_or_create_session(SessId, rest, Iden, Auth, []).
-
+    case od_user:exists(UserId) of
+        true ->
+            reuse_or_create_session(SessId, rest, Iden, Auth, []);
+        false ->
+            {error, {invalid_identity, Iden}}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

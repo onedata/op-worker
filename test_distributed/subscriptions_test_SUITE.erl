@@ -96,12 +96,17 @@ registers_for_updates(_) ->
 
 registers_for_updates_with_users(Config) ->
     %% given
-    [Node | _] = ?config(op_worker_nodes, Config),
+    [Node | _] = Nodes = ?config(op_worker_nodes, Config),
     U1 = ?ID(u1),
     U2 = ?ID(u2),
     expect_message([], 0, []),
 
+
     %% when
+    test_utils:mock_expect(Nodes, od_user, exists,
+        fun(User) ->
+            User == U1 orelse User == U2 orelse meck:passthrough()
+        end),
     create_rest_session(Node, U1),
     create_rest_session(Node, U2),
 
@@ -907,6 +912,10 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     initializer:teardown_storage(Config).
 
+init_per_testcase(registers_for_updates_with_users, Config) ->
+    Nodes = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Nodes, od_user),
+    init_per_testcase(?DEFAULT_CASE(registers_for_updates_with_users), Config);
 init_per_testcase(_Case, Config) ->
     Nodes = ?config(op_worker_nodes, Config),
     Self = self(),
@@ -943,6 +952,10 @@ clear_sessions(Nodes) ->
         ok = rpc:call(hd(Nodes), session, delete, [Key])
     end, FilteredDocs).
 
+end_per_testcase(registers_for_updates_with_users, Config) ->
+    Nodes = ?config(op_worker_nodes, Config),
+    test_utils:mock_validate_and_unload(Nodes, od_user),
+    end_per_testcase(?DEFAULT_CASE(registers_for_updates_with_users), Config);
 end_per_testcase(_Case, Config) ->
     Nodes = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Nodes, subscription_wss),
