@@ -16,7 +16,8 @@
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
-
+-include("modules/storage_sync/storage_sync.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 
 -define(STORAGE_TABLE_PREFIX, <<"st_children_">>).
 -define(DB_TABLE_PREFIX, <<"db_children_">>).
@@ -24,7 +25,7 @@
 -type key() :: file_meta:name() | atom().
 
 %% API
--export([run/2]).
+-export([run/2, delete_imported_file/3]).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -35,6 +36,7 @@
 -spec run(space_strategy:job(), file_ctx:ctx()) -> {ok, space_strategy:job()}.
 run(Job = #space_strategy_job{
     data = #{
+        space_id := SpaceId,
         storage_file_ctx := StorageFileCtx
     }}, FileCtx) ->
 
@@ -43,15 +45,34 @@ run(Job = #space_strategy_job{
     DBTable = db_storage_name(FileUuid),
     StorageTable = create_ets(StorageTable),
     DBTable = create_ets(DBTable),
-    save_db_children_names(DBTable, FileCtx),
-    save_storage_children_names(StorageTable, StorageFileCtx),
-
-    ok = remove_files_not_existing_on_storage(StorageTable, DBTable, FileCtx),
-    true = ets:delete(StorageTable),
-    true = ets:delete(DBTable),
-
+    try
+        save_db_children_names(DBTable, FileCtx),
+        save_storage_children_names(StorageTable, StorageFileCtx),
+        ok = remove_files_not_existing_on_storage(StorageTable, DBTable, FileCtx, SpaceId)
+    after
+        true = ets:delete(StorageTable),
+        true = ets:delete(DBTable)
+    end,
     {ok, Job}.
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Remove files that had been earlier imported.
+%% @end
+%%-------------------------------------------------------------------
+-spec delete_imported_file(file_meta:name(), file_ctx:ctx(), od_space:id()) -> ok.
+delete_imported_file(ChildName, FileCtx, SpaceId) ->
+    storage_sync_monitoring:update_queue_length_spirals(SpaceId, -1),
+    RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
+    try
+        {ChildCtx, _} = file_ctx:get_child(FileCtx, ChildName, RootUserCtx),
+        ok = fslogic_delete:remove_file_and_file_meta(ChildCtx, RootUserCtx, true, false),
+        ok = fslogic_delete:remove_file_handles(ChildCtx),
+        storage_sync_monitoring:increase_deleted_files_spirals(SpaceId)
+    catch
+        _:_ ->
+            ok
+    end.
 
 %%===================================================================
 %% Internal functions
@@ -104,13 +125,13 @@ create_ets(Name) ->
 %% files on storage.
 %% @end
 %%-------------------------------------------------------------------
--spec remove_files_not_existing_on_storage(atom(), atom(), file_ctx:ctx()) -> ok.
-remove_files_not_existing_on_storage(StorageTable, DBTable, FileCtx) ->
-    {ok, BatchSize} = application:get_env(?APP_NAME, dir_batch_size),
+-spec remove_files_not_existing_on_storage(atom(), atom(), file_ctx:ctx(),
+    od_space:id()) -> ok.
+remove_files_not_existing_on_storage(StorageTable, DBTable, FileCtx, SpaceId) ->
     StorageFirst = ets:first(StorageTable),
     DBFirst = ets:first(DBTable),
     ok = iterate_and_remove(StorageFirst, StorageTable, DBFirst, DBTable, 0,
-        BatchSize, FileCtx).
+        ?DIR_BATCH, FileCtx, SpaceId).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -121,42 +142,49 @@ remove_files_not_existing_on_storage(StorageTable, DBTable, FileCtx) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec iterate_and_remove(key(), atom(), key(), atom(), non_neg_integer(),
-    non_neg_integer(), file_ctx:ctx()) -> ok.
+    non_neg_integer(), file_ctx:ctx(), od_space:id()) -> ok.
 iterate_and_remove(StKey, StorageTable, DBKey, DBTable, Offset, BatchSize,
-    FileCtx)
+    FileCtx, SpaceId)
 when (Offset + 1) rem BatchSize == 0  ->
     % finished batch
     iterate_and_remove(StKey, StorageTable, DBKey, DBTable, Offset + 1,
-        BatchSize, FileCtx);
+        BatchSize, FileCtx, SpaceId);
 iterate_and_remove('$end_of_table', _, '$end_of_table', _,  _Offset, _BatchSize,
-    _FileCtx
-) ->
+    _FileCtx, _SpaceId) ->
     ok;
 iterate_and_remove(StKey, StorageTable, DBKey = '$end_of_table', DBTable,
-    Offset, BatchSize, FileCtx
+    Offset, BatchSize, FileCtx, SpaceId
 ) ->
     Next = ets:next(StorageTable, StKey),
     iterate_and_remove(Next, StorageTable, DBKey, DBTable, Offset,
-        BatchSize, FileCtx);
+        BatchSize, FileCtx, SpaceId);
 iterate_and_remove(StKey = '$end_of_table', StTable, DBKey, DBTable, Offset,
-    BatchSize, FileCtx
+    BatchSize, FileCtx, SpaceId
 ) ->
     Next = ets:next(DBTable, DBKey),
-    delete_imported_file(DBKey, FileCtx),
+    cast_deletion_of_imported_file(DBKey, FileCtx, SpaceId),
     iterate_and_remove(StKey, StTable, Next, DBTable, Offset,
-        BatchSize, FileCtx);
-iterate_and_remove(Key, StorageTable, Key, DBTable, Offset, BatchSize, FileCtx) ->
+        BatchSize, FileCtx, SpaceId);
+iterate_and_remove(Key, StorageTable, Key, DBTable, Offset, BatchSize, FileCtx,
+    SpaceId
+) ->
     StNext = ets:next(StorageTable, Key),
     DBNext = ets:next(DBTable, Key),
-    iterate_and_remove(StNext, StorageTable, DBNext, DBTable, Offset, BatchSize, FileCtx);
-iterate_and_remove(StKey, StorageTable, DBKey, DBTable, Offset, BatchSize, FileCtx)
+    iterate_and_remove(StNext, StorageTable, DBNext, DBTable, Offset, BatchSize,
+        FileCtx, SpaceId);
+iterate_and_remove(StKey, StorageTable, DBKey, DBTable, Offset, BatchSize,
+    FileCtx, SpaceId)
 when StKey > DBKey ->
     Next = ets:next(DBTable, DBKey),
-    delete_imported_file(DBKey, FileCtx),
-    iterate_and_remove(StKey, StorageTable, Next, DBTable, Offset, BatchSize, FileCtx);
-iterate_and_remove(StKey, StorageTable, DBKey, DBTable, Offset, BatchSize, FileCtx) ->
+    cast_deletion_of_imported_file(DBKey, FileCtx, SpaceId),
+    iterate_and_remove(StKey, StorageTable, Next, DBTable, Offset, BatchSize,
+        FileCtx, SpaceId);
+iterate_and_remove(StKey, StorageTable, DBKey, DBTable, Offset, BatchSize,
+    FileCtx, SpaceId
+) ->
     Next = ets:next(StorageTable, StKey),
-    iterate_and_remove(Next, StorageTable, DBKey, DBTable, Offset, BatchSize, FileCtx).
+    iterate_and_remove(Next, StorageTable, DBKey, DBTable, Offset, BatchSize,
+        FileCtx, SpaceId).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -188,8 +216,7 @@ save_db_children_names(TableName, FileCtx) ->
 %%-------------------------------------------------------------------
 -spec save_storage_children_names(atom(), storage_file_ctx:ctx()) -> term().
 save_storage_children_names(TableName, StorageFileCtx) ->
-    {ok, BatchSize} = application:get_env(?APP_NAME, dir_batch_size),
-    save_storage_children_names(TableName, StorageFileCtx, 0, BatchSize).
+    save_storage_children_names(TableName, StorageFileCtx, 0, ?DIR_BATCH).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -227,9 +254,9 @@ save_storage_children_names(TableName, StorageFileCtx, Offset, BatchSize) ->
 %% Remove files that had been earlier imported.
 %% @end
 %%-------------------------------------------------------------------
--spec delete_imported_file(file_meta:name(), file_ctx:ctx()) -> ok.
-delete_imported_file(ChildName, FileCtx) ->
-    RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
-    {ChildCtx, _} = file_ctx:get_child(FileCtx, ChildName, RootUserCtx),
-    ok = fslogic_delete:remove_file_and_file_meta(ChildCtx, RootUserCtx, true, false),
-    ok = fslogic_delete:remove_file_handles(ChildCtx).
+-spec cast_deletion_of_imported_file(file_meta:name(), file_ctx:ctx(), od_space:id()) -> ok.
+cast_deletion_of_imported_file(ChildName, FileCtx, SpaceId) ->
+    storage_sync_monitoring:update_queue_length_spirals(SpaceId, 1),
+    worker_pool:cast(?STORAGE_SYNC_FILE_POOL_NAME, {?MODULE,
+        delete_imported_file, [ChildName, FileCtx, SpaceId]},
+        worker_pool:default_strategy()).

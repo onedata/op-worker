@@ -70,15 +70,18 @@ children_attrs_hash_has_changed(#file_meta{storage_sync_info = StSyncInfo},
 %%-------------------------------------------------------------------
 -spec count_files_attrs_hash([storage_file_ctx:ctx()]) ->
     {hash(), [storage_file_ctx:ctx()]}.
+count_files_attrs_hash([]) ->
+    {undefined, []};
 count_files_attrs_hash(StorageFileCtxs) ->
-    {Hash, StorageFileCtxs2} = lists:foldr(
-        fun(StorageFileCtx, {Hash0, StorageFileCtxs0}) ->
+    try
+        lists:foldr(fun(StorageFileCtx, {Hash0, StorageFileCtxs0}) ->
             {FileHash, StorageFileCtx2} = count_file_attrs_hash(StorageFileCtx),
             {hash([Hash0, FileHash]), [StorageFileCtx2 | StorageFileCtxs0]}
-        end, {<<"">>, []}, StorageFileCtxs
-    ),
-    {Hash, StorageFileCtxs2}.
-
+        end, {<<"">>, []}, StorageFileCtxs)
+    catch
+        error:_ ->
+            {undefined, StorageFileCtxs}
+    end.
 
 %%===================================================================
 %% Internal functions

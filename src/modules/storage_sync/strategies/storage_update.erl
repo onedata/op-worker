@@ -106,10 +106,14 @@ strategy_init_jobs(simple_scan,
         max_depth := MaxDepth
     },
     Data = #{
-        last_import_time := LastImportTime
-    }) ->
+        last_import_time := LastImportTime,
+        space_id := SpaceId
+    }
+) ->
     case LastImportTime + timer:seconds(ScanIntervalSeconds) < os:system_time(milli_seconds) of
         true ->
+            storage_sync_monitoring:update_queue_length_spirals(SpaceId, 1),
+            storage_sync_monitoring:update_files_to_update_counter(SpaceId, 1),
             [#space_strategy_job{
                 strategy_name = simple_scan,
                 strategy_args = Args,
@@ -304,7 +308,7 @@ import_children(Job = #space_strategy_job{
     FilesResults = simple_scan:import_regular_subfiles(FilesJobs),
 
     case StrategyType:strategy_merge_result(FilesJobs, FilesResults) of
-        true ->
+        ok ->
             FileUuid = file_ctx:get_uuid_const(FileCtx),
             case storage_sync_utils:all_subfiles_imported(DirsJobs, FileUuid) of
                 true ->
@@ -353,9 +357,15 @@ handle_already_imported_directory(Job = #space_strategy_job{
 -spec handle_already_imported_directory_changed_mtime(space_strategy:job(),
     #file_attr{}, file_ctx:ctx()) -> {ok, space_strategy:job()}.
 handle_already_imported_directory_changed_mtime(Job = #space_strategy_job{
-    strategy_args = #{delete_enable := true}
-}, _FileAttr, FileCtx) ->
-    full_update:run(Job, FileCtx);
+    strategy_args = #{delete_enable := true},
+    data = Data
+}, FileAttr, FileCtx) ->
+    case maps:get(dir_offset, Data, 0) of
+        0 ->
+            full_update:run(Job, FileCtx);
+        _ ->
+            simple_scan:handle_already_imported_file(Job, FileAttr, FileCtx)
+    end;
 handle_already_imported_directory_changed_mtime(Job = #space_strategy_job{
     strategy_args = #{delete_enable := false}
 }, FileAttr, FileCtx) ->

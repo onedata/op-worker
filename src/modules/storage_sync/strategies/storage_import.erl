@@ -83,8 +83,12 @@ strategy_init_jobs(no_import, _, _) ->
 strategy_init_jobs(_, _, #{last_import_time := LastImportTime})
     when is_integer(LastImportTime) -> [];
 strategy_init_jobs(simple_scan, Args = #{max_depth := MaxDepth},
-    Data = #{last_import_time := undefined}
-) ->
+    Data = #{
+        last_import_time := undefined,
+        space_id := SpaceId
+}) ->
+    storage_sync_monitoring:update_queue_length_spirals(SpaceId, 1),
+    storage_sync_monitoring:update_files_to_import_counter(SpaceId, 1),
     [#space_strategy_job{
         strategy_name = simple_scan,
         strategy_args = Args,
@@ -135,7 +139,7 @@ strategy_merge_result(#space_strategy_job{
         space_id := SpaceId,
         storage_id := StorageId}
 }, ok, ok) ->
-    space_strategies:update_last_import_time(SpaceId, StorageId, os:system_time(milli_seconds)),
+    {ok, _} = space_strategies:update_last_import_time(SpaceId, StorageId, os:system_time(milli_seconds)),
     ok;
 strategy_merge_result(_Job, Error, ok) ->
     Error;

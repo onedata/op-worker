@@ -266,6 +266,7 @@ file_record(<<"file-shared">>, _, <<"containerDir.", ShareId/binary>>, _, _) ->
         {<<"type">>, <<"dir">>},
         {<<"modificationTime">>, 0},
         {<<"size">>, null},
+        {<<"canViewDir">>, true},
         {<<"totalChildrenCount">>, 1},
         {<<"parent">>, null},
         {<<"children">>, [op_gui_utils:ids_to_association(ShareId, FileId)]},
@@ -288,6 +289,7 @@ file_record(<<"file-public">>, _, <<"containerDir.", ShareId/binary>>, _, _) ->
         {<<"type">>, <<"dir">>},
         {<<"modificationTime">>, 0},
         {<<"size">>, null},
+        {<<"canViewDir">>, true},
         {<<"totalChildrenCount">>, 1},
         {<<"parent">>, null},
         {<<"children">>, [op_gui_utils:ids_to_association(ShareId, RootFile)]},
@@ -341,17 +343,22 @@ file_record(ModelType, SessionId, ResId, ChildrenFromCache, ChildrenLimit) ->
             end,
 
 
-            {Type, Size, ChildrenIds, TotalChildrenCount} = case TypeAttr of
+            {Type, Size, ChildrenIds, TotalChildrenCount, CanViewDir} = case TypeAttr of
                 ?DIRECTORY_TYPE ->
-                    {ChildrenList, TotalCount} = case ChildrenFromCache of
-                        false ->
-                            ls_dir(SessionId, FileId);
-                        true ->
-                            fetch_dir_children(FileId, ChildrenLimit)
-                    end,
-                    {<<"dir">>, null, ChildrenList, TotalCount};
+                    try
+                        {ChildrenList, TotalCount} = case ChildrenFromCache of
+                            false ->
+                                ls_dir(SessionId, FileId);
+                            true ->
+                                fetch_dir_children(FileId, ChildrenLimit)
+                        end,
+                        {<<"dir">>, null, ChildrenList, TotalCount, true}
+                    catch
+                        _:_ ->
+                            {<<"dir">>, null, [], 0, false}
+                    end;
                 _ ->
-                    {<<"file">>, SizeAttr, [], 0}
+                    {<<"file">>, SizeAttr, [], 0, false}
             end,
             % Depending on model name, convert IDs to associations
             Children = case ModelType of
@@ -393,6 +400,7 @@ file_record(ModelType, SessionId, ResId, ChildrenFromCache, ChildrenLimit) ->
                 {<<"type">>, Type},
                 {<<"modificationTime">>, ModificationTime},
                 {<<"size">>, Size},
+                {<<"canViewDir">>, CanViewDir},
                 {<<"totalChildrenCount">>, TotalChildrenCount},
                 {<<"parent">>, Parent},
                 {<<"children">>, Children},

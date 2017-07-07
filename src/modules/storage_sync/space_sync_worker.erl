@@ -59,7 +59,8 @@
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
     start_pools(),
-    storage_sync_monitoring:start_reporter(),
+    storage_sync_monitoring:start_lager_reporter(),
+    storage_sync_monitoring:start_ets_reporter(),
     schedule_check_strategy(),
     {ok, #{}}.
 
@@ -99,7 +100,8 @@ handle(_Request) ->
     Error :: timeout | term().
 cleanup() ->
     stop_pools(),
-    storage_sync_monitoring:delete_reporter(),
+    storage_sync_monitoring:delete_lager_reporter(),
+    storage_sync_monitoring:delete_ets_reporter(),
     ok.
 
 %%%===================================================================
@@ -177,9 +179,12 @@ check_strategies() ->
 -spec check_strategies([od_space:id()]) -> ok.
 check_strategies(SpaceIds) ->
     lists:foreach(fun(SpaceId) ->
-        {ok, #document{value = #space_storage{storage_ids = StorageIds}}} =
-            space_storage:get(SpaceId),
-        check_strategies(SpaceId, StorageIds)
+        case space_storage:get(SpaceId) of
+            {ok, #document{value = #space_storage{storage_ids = StorageIds}}} ->
+                check_strategies(SpaceId, StorageIds);
+            _ ->
+                storage_sync_monitoring:ensure_all_metrics_stopped(SpaceId)
+        end
     end, SpaceIds).
 
 

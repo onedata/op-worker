@@ -28,7 +28,6 @@
     handle_already_imported_file/3, generate_jobs_for_importing_children/4,
     import_regular_subfiles/1, increase_files_to_handle_counter/3]).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Implementation for 'simple_scan' strategy.
@@ -38,10 +37,12 @@
     {space_strategy:job_result(), [space_strategy:job()]}.
 run(Job = #space_strategy_job{
     data = Data = #{
+        space_id := SpaceId,
         parent_ctx := ParentCtx,
         storage_file_ctx := _StorageFileCtx
 }}) ->
     Module = storage_sync_utils:module(Job),
+    storage_sync_monitoring:update_queue_length_spirals(SpaceId, -1),
     delegate(Module, maybe_import_storage_file_and_children,
         [Job#space_strategy_job{data = Data#{parent_ctx => ParentCtx}}], 1);
 run(Job = #space_strategy_job{
@@ -108,6 +109,7 @@ maybe_import_storage_file_and_children(Job0 = #space_strategy_job{
 -spec maybe_import_storage_file(space_strategy:job()) ->
     {space_strategy:job_result(), file:ctx(), space_strategy:job()} | no_return().
 maybe_import_storage_file(Job = #space_strategy_job{
+    strategy_type = StrategyType,
     data = #{
         file_name := FileName,
         space_id := SpaceId,
@@ -120,7 +122,7 @@ maybe_import_storage_file(Job = #space_strategy_job{
     case file_meta_exists(FileName, ParentCtx) of
         false ->
             {LocalResult, FileCtx} = import_file(StorageId, SpaceId, FileStats,
-                SFMHandle#sfm_handle.file, FileName, ParentCtx),
+                SFMHandle#sfm_handle.file, FileName, ParentCtx, StrategyType),
             {LocalResult, FileCtx, Job};
         {true, FileCtx0, _} ->
             maybe_import_file_with_existing_metadata(Job, FileCtx0)
@@ -194,8 +196,7 @@ import_regular_subfiles(FilesJobs) ->
 increase_files_to_handle_counter(#space_strategy_job{
     strategy_type = StrategyType,
     data = #{
-        space_id := SpaceId,
-        storage_id := StorageId
+        space_id := SpaceId
     }},
     FileCtx, {FilesJobs, DirJobs}
 ) ->
@@ -207,7 +208,8 @@ increase_files_to_handle_counter(#space_strategy_job{
             length(FilesJobs) + length(DirJobs) - 1 %not counting base directory
 
     end,
-    storage_sync_monitoring:update_to_do_counter(SpaceId, StorageId, StrategyType, FilesToImportNum).
+    storage_sync_monitoring:update_queue_length_spirals(SpaceId, length(FilesJobs) + length(DirJobs)),
+    storage_sync_monitoring:update_to_do_counter(SpaceId, StrategyType, FilesToImportNum).
 
 %%%===================================================================
 %%% Internal functions
@@ -223,6 +225,7 @@ increase_files_to_handle_counter(#space_strategy_job{
 -spec maybe_import_file_with_existing_metadata(space_strategy:job(), file_ctx:ctx())->
     {space_strategy:job_result(), file_ctx:ctx(), space_strategy:job()}.
 maybe_import_file_with_existing_metadata(Job = #space_strategy_job{
+    strategy_type = StrategyType,
     data = #{
         file_name := FileName,
         space_id := SpaceId,
@@ -247,9 +250,9 @@ maybe_import_file_with_existing_metadata(Job = #space_strategy_job{
                 Job, FileAttr, FileCtx2], 3),
             {LocalResult, FileCtx2, Job2};
         false ->
-            {LocalResult, FileCtx} = import_file(StorageId, SpaceId, FileStats,
-                SFMHandle#sfm_handle.file, FileName, ParentCtx),
-            {LocalResult, FileCtx, Job}
+            {LocalResult, FileCtx3} = import_file(StorageId, SpaceId, FileStats,
+                SFMHandle#sfm_handle.file, FileName, ParentCtx, StrategyType),
+            {LocalResult, FileCtx3, Job}
     end.
 
 %%--------------------------------------------------------------------
@@ -259,8 +262,11 @@ maybe_import_file_with_existing_metadata(Job = #space_strategy_job{
 %% @end
 %%--------------------------------------------------------------------
 -spec import_file(storage:id(), od_space:id(), #statbuf{}, file_meta:path(),
-    file_meta:path(), file_ctx:ctx()) -> {ok, file_ctx:ctx()}| no_return().
-import_file(StorageId, SpaceId, StatBuf, StorageFileId, FileName, ParentCtx) ->
+    file_meta:path(), file_ctx:ctx(), space_strategy:type()) ->
+    {ok, file_ctx:ctx()}| no_return().
+import_file(StorageId, SpaceId, StatBuf, StorageFileId, FileName, ParentCtx,
+    StrategyType
+) ->
     {ParentPath, _} = file_ctx:get_canonical_path(ParentCtx),
     CanonicalPath = filename:join([ParentPath, FileName]),
 
@@ -284,8 +290,9 @@ import_file(StorageId, SpaceId, StatBuf, StorageFileId, FileName, ParentCtx) ->
         _ ->
             ok
     end,
-    storage_sync_monitoring:increase_imported_files_counter(SpaceId, StorageId),
-    storage_sync_monitoring:update_files_to_import_counter(SpaceId, StorageId, -1),
+    storage_sync_monitoring:increase_imported_files_spirals(SpaceId),
+    storage_sync_monitoring:increase_imported_files_counter(SpaceId),
+    storage_sync_monitoring:update_to_do_counter(SpaceId, StrategyType, -1),
     FileCtx = file_ctx:new_by_doc(FileMetaDoc#document{key = FileUuid}, SpaceId, undefined),
     ?debug("Import storage file ~p", [{StorageFileId, CanonicalPath}]),
     {ok, FileCtx}.
@@ -450,13 +457,49 @@ new_job(Job, Data, StorageFileCtx) ->
 -spec handle_already_imported_file(space_strategy:job(), #file_attr{},
     file_ctx:ctx()) -> {ok, space_strategy:job()}.
 handle_already_imported_file(Job = #space_strategy_job{
-    data = #{storage_file_ctx := StorageFileCtx}
-}, FileAttr, FileCtx) ->
-    {FileStat = #statbuf{st_mode = Mode}, _} = storage_file_ctx:get_stat_buf(StorageFileCtx),
-    maybe_update_size(FileAttr, FileStat, FileCtx, file_meta:type(Mode)),
-    maybe_update_mode(FileAttr, FileStat, FileCtx),
-    maybe_update_times(FileAttr, FileStat, FileCtx),
+    strategy_type = StrategyType,
+    data = Data = #{
+        space_id := SpaceId,
+        storage_file_ctx := StorageFileCtx
+}}, FileAttr, FileCtx) ->
+
+    case storage_file_ctx:get_stat_buf(StorageFileCtx) of
+        {FileStat = #statbuf{st_mode = Mode}, _} ->
+            maybe_update_attrs(FileAttr, FileStat, FileCtx, Mode, SpaceId);
+        {error, _} ->
+            ok
+    end,
+
+    case file_ctx:is_dir(FileCtx) of
+        {true, _} ->
+            case maps:get(dir_offset, Data, 0) of
+                0 ->
+                    storage_sync_monitoring:update_to_do_counter(SpaceId, StrategyType, -1);
+                _ ->
+                    ok
+            end;
+        _ ->
+            storage_sync_monitoring:update_to_do_counter(SpaceId, StrategyType, -1)
+    end,
     {ok, Job}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates mode, times and size of already imported file.
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_update_attrs(#file_attr{}, #statbuf{}, file_ctx:ctx(),
+    file_meta:mode(), od_space:id()) -> ok.
+maybe_update_attrs(FileAttr, FileStat, FileCtx, Mode, SpaceId) ->
+    Result1 = maybe_update_size(FileAttr, FileStat, FileCtx, file_meta:type(Mode)),
+    Result2 = maybe_update_mode(FileAttr, FileStat, FileCtx),
+    Result3 = maybe_update_times(FileAttr, FileStat, FileCtx),
+    case {Result1, Result2, Result3}  of
+        {not_updated, not_updated, not_updated} ->
+            ok;
+        _ ->
+            storage_sync_monitoring:increase_updated_files_spirals(SpaceId)
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -480,18 +523,19 @@ get_attr(FileCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec maybe_update_size(#file_attr{}, #statbuf{}, file_ctx:ctx(),
-    file_meta:type()) -> ok | {error, term()}.
+    file_meta:type()) -> updated | not_updated | {error, term()}.
 maybe_update_size(#file_attr{}, #statbuf{}, _FileCtx, ?DIRECTORY_TYPE) ->
-    ok;
+    not_updated;
 maybe_update_size(#file_attr{size = OldSize}, #statbuf{st_size = OldSize},
     _FileCtx, _Type
 ) ->
-    ok;
+    not_updated;
 maybe_update_size(#file_attr{size = _OldSize}, #statbuf{st_size = NewSize},
     FileCtx, ?REGULAR_FILE_TYPE
 ) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
-    ok = lfm_event_utils:emit_file_truncated(FileGuid, NewSize, ?ROOT_SESS_ID).
+    ok = lfm_event_utils:emit_file_truncated(FileGuid, NewSize, ?ROOT_SESS_ID),
+    updated.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -499,13 +543,19 @@ maybe_update_size(#file_attr{size = _OldSize}, #statbuf{st_size = NewSize},
 %% Updates file's mode if it has changed.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_update_mode(#file_attr{}, #statbuf{}, file_ctx:ctx()) -> ok.
+-spec maybe_update_mode(#file_attr{}, #statbuf{}, file_ctx:ctx()) -> updated | not_updated.
 maybe_update_mode(#file_attr{mode = OldMode}, #statbuf{st_mode = Mode}, FileCtx) ->
-    case Mode band 8#1777 of
-        OldMode ->
-            ok;
-        NewMode ->
-            update_mode(FileCtx, NewMode)
+    case file_ctx:is_space_dir_const(FileCtx) of
+        false ->
+            case Mode band 8#1777 of
+                OldMode ->
+                    not_updated;
+                NewMode ->
+                    update_mode(FileCtx, NewMode),
+                    updated
+            end;
+        _ ->
+            not_updated
     end.
 
 %%--------------------------------------------------------------------
@@ -530,12 +580,12 @@ update_mode(FileCtx, NewMode) ->
 %% Updates file's times if they've changed.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_update_times(#file_attr{}, #statbuf{}, file_ctx:ctx()) -> ok.
+-spec maybe_update_times(#file_attr{}, #statbuf{}, file_ctx:ctx()) -> updated | not_updated.
 maybe_update_times(#file_attr{atime = ATime, mtime = MTime, ctime = CTime},
     #statbuf{st_atime = ATime, st_mtime = MTime, st_ctime = CTime},
     _FileCtx
 ) ->
-    ok;
+    not_updated;
 maybe_update_times(#file_attr{atime = _ATime, mtime = _MTime, ctime = _CTime},
     #statbuf{st_atime = StorageATime, st_mtime = StorageMTime, st_ctime = StorageCTime},
     FileCtx
@@ -544,7 +594,8 @@ maybe_update_times(#file_attr{atime = _ATime, mtime = _MTime, ctime = _CTime},
         atime => StorageATime,
         mtime => StorageMTime,
         ctime => StorageCTime
-    }).
+    }),
+    updated.
 
 %%--------------------------------------------------------------------
 %% @private

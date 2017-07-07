@@ -26,6 +26,7 @@
 -define(USER, <<"user1">>).
 -define(SPACE_ID, <<"space1">>).
 -define(SPACE_NAME, <<"space_name1">>).
+-define(SPACE_PATH, <<"/", (?SPACE_NAME)/binary>>).
 -define(TEST_DIR, <<"test_dir">>).
 -define(TEST_DIR2, <<"test_dir2">>).
 -define(TEST_FILE1, <<"test_file">>).
