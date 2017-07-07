@@ -17,7 +17,8 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 
 %% API
--export([add/2, get_storage_ids/1, add/3]).
+-export([add/2, add/3]).
+-export([get_storage_ids/1, get_mounted_in_root/1]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
@@ -55,7 +56,7 @@ record_struct(2) ->
 -spec record_upgrade(datastore_json:record_version(), tuple()) ->
     {datastore_json:record_version(), tuple()}.
 record_upgrade(1, {?MODEL_NAME, StorageIds}) ->
-    {2, #space_storage{storage_ids =  StorageIds}}.
+    {2, #space_storage{storage_ids = StorageIds}}.
 
 
 %%%===================================================================
@@ -216,6 +217,18 @@ get_storage_ids(#space_storage{storage_ids = StorageIds}) ->
 get_storage_ids(#document{value = #space_storage{} = Value}) ->
     get_storage_ids(Value).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of storage IDs attached to the space that have been mounted in
+%% storage root.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_mounted_in_root(model() | doc()) -> [storage:id()].
+get_mounted_in_root(#space_storage{mounted_in_root = StorageIds}) ->
+    StorageIds;
+get_mounted_in_root(#document{value = #space_storage{} = Value}) ->
+    get_mounted_in_root(Value).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -226,7 +239,7 @@ get_storage_ids(#document{value = #space_storage{} = Value}) ->
 %% Returns space_storage document.
 %% @end
 %%--------------------------------------------------------------------
--spec(new(od_space:id(),storage:id(), boolean()) -> doc()).
+-spec(new(od_space:id(), storage:id(), boolean()) -> doc()).
 new(SpaceId, StorageId, true) ->
     #document{key = SpaceId, value = #space_storage{
         storage_ids = [StorageId],

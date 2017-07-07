@@ -24,7 +24,7 @@
     new_swift_helper/6, new_glusterfs_helper/5]).
 -export([new_ceph_user_ctx/2, new_posix_user_ctx/2, new_s3_user_ctx/2,
     new_swift_user_ctx/2, new_glusterfs_user_ctx/2, validate_user_ctx/2]).
--export([get_name/1, get_args/1, is_insecure/1, get_params/2,
+-export([get_name/1, get_args/1, get_admin_ctx/1, is_insecure/1, get_params/2,
     get_proxy_params/2, get_timeout/1]).
 -export([set_user_ctx/2]).
 -export([translate_name/1, translate_arg_name/1]).
@@ -229,6 +229,15 @@ get_name(#helper{name = Name}) ->
 -spec get_args(helpers:helper()) -> args().
 get_args(#helper{args = Args}) ->
     Args.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns helper admin context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_admin_ctx(helpers:helper()) -> user_ctx().
+get_admin_ctx(#helper{admin_ctx = Ctx}) ->
+    Ctx.
 
 %%--------------------------------------------------------------------
 %% @doc

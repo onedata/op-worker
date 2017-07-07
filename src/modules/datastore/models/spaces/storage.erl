@@ -24,8 +24,9 @@
 -define(STORAGE_LOCK_ID, <<"storage_res_id">>).
 
 %% API
--export([new/2, get_id/1, get_name/1, get_helpers/1, select_helper/2,
-    update_helper/3, select/1, new/3]).
+-export([new/2, new/3]).
+-export([get_id/1, get_name/1, is_readonly/1, get_helpers/1]).
+-export([select_helper/2, update_helper/3, select/1]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
@@ -230,7 +231,11 @@ new(Name, Helpers) ->
 %%--------------------------------------------------------------------
 -spec new(name(), [helper()], boolean()) -> doc().
 new(Name, Helpers, ReadOnly) ->
-    #document{value = #storage{name = Name, helpers = Helpers, readonly=ReadOnly}}.
+    #document{value = #storage{
+        name = Name,
+        helpers = Helpers,
+        readonly = ReadOnly
+    }}.
 
 
 %%--------------------------------------------------------------------
@@ -254,6 +259,17 @@ get_name(#storage{name = Name}) ->
     Name;
 get_name(#document{value = #storage{} = Value}) ->
     get_name(Value).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks whether storage is readonly.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_readonly(model() | doc()) -> boolean().
+is_readonly(#storage{readonly = ReadOnly}) ->
+    ReadOnly;
+is_readonly(#document{value = #storage{} = Value}) ->
+    is_readonly(Value).
 
 %%--------------------------------------------------------------------
 %% @doc
