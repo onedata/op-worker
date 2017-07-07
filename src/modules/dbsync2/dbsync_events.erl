@@ -65,10 +65,17 @@ change_replicated_internal(SpaceId, #document{
         file_meta, exists, [FileUuid], [{hooks_config, no_hooks}]
     ) of
         {ok, false} ->
-            FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
-            FileLocationId = sfm_utils:delete_storage_file_without_location(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
-            file_location:delete(FileLocationId, UserId),
-            file_consistency:delete(FileUuid);
+            try
+                FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
+                % TODO - if links delete comes before, it fails!
+                FileLocationId = sfm_utils:delete_storage_file_without_location(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
+                file_location:delete(FileLocationId, UserId),
+                file_consistency:delete(FileUuid)
+            catch
+                _:{badmatch, {error, {not_found, file_meta}}} ->
+                    % TODO - if links delete comes before, this function fails!
+                    ok
+            end;
         _ ->
             ok
     end;
@@ -87,6 +94,8 @@ change_replicated_internal(SpaceId, #document{
         [file_meta, local_file_location]);
 change_replicated_internal(SpaceId, #document{
         key = FileUuid,
+        % TODO - emit when file is deleted (for deleted files it fails)
+        deleted = false,
         value = #file_meta{}
     } = FileDoc, Master) ->
     ?debug("change_replicated_internal: changed file_meta ~p", [FileUuid]),
@@ -98,6 +107,7 @@ change_replicated_internal(SpaceId, #document{
     ok = file_consistency:check_and_add_components(FileUuid, SpaceId, [parent_links]);
 change_replicated_internal(SpaceId, #document{
         key = FileLocationId,
+        deleted = false,
         value = #file_location{uuid = FileUuid}
     } = Doc, Master) ->
     ?debug("change_replicated_internal: changed file_location ~p", [FileUuid]),

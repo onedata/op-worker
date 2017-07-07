@@ -389,30 +389,47 @@ distributed_delete_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWr
     SessId = ?config(session, Config),
     SpaceName = ?config(space_name, Config),
     Worker1 = ?config(worker1, Config),
+    Workers1 = ?config(workers1, Config),
+    WorkersNot1 = ?config(workers_not1, Config),
     Workers = ?config(op_worker_nodes, Config),
 
-    Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
-    Dir2 = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
-
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir, 8#755)),
-    verify_stats(Config, Dir, true),
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir2, 8#755)),
-    verify_stats(Config, Dir2, true),
+    MainDirs = lists:foldl(fun(_, Acc) ->
+        Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
+        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir, 8#755)),
+        verify_stats(Config, Dir, true),
+        [Dir | Acc]
+    end, [], lists:seq(1,6)),
     ct:print("Dirs verified"),
 
-    Children1 = lists:foldl(fun(_W, Acc) ->
-        Level2TmpDir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
-        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Level2TmpDir, 8#755)),
-        [Level2TmpDir | Acc]
-    end, [], Workers),
-    Children2 = lists:foldl(fun(W, Acc) ->
-        Level2TmpDir = <<Dir2/binary, "/", (generator:gen_name())/binary>>,
-        ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId(W), Level2TmpDir, 8#755)),
-        [Level2TmpDir | Acc]
-    end, [], Workers),
+    ChildrenNodes = [
+        [Worker1 || _ <- Workers],
+        [Worker1 || _ <- Workers],
+        [Worker1 || _ <- Workers],
+        Workers,
+        [Worker1 || _ <- Workers],
+        Workers
+    ],
+
+    DelNodes = [
+        Workers1 ++ Workers1,
+        WorkersNot1 ++ WorkersNot1,
+        Workers,
+        Workers1 ++ Workers1,
+        all,
+        all
+    ],
+
+    ChildrenList = lists:foldl(fun({Dir, Nodes}, FinalAcc) ->
+        TmpChildren = lists:foldl(fun(W, Acc) ->
+            Level2TmpDir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
+            ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId(W), Level2TmpDir, 8#755)),
+            [Level2TmpDir | Acc]
+        end, [], Nodes),
+        [{Dir, TmpChildren} | FinalAcc]
+    end, [], lists:zip(MainDirs, ChildrenNodes)),
     ct:print("Children created"),
 
-    Test = fun(MainDir, Children, Desc) ->
+    Test = fun(MainDir, Children, Desc, DelWorkers) ->
         ct:print("Test ~p", [Desc]),
 
         ChildrenWithUuids = lists:map(fun(Child) ->
@@ -420,7 +437,14 @@ distributed_delete_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWr
         end, Children),
         ct:print("Children verified"),
 
-        Zipped = lists:zip(Workers, ChildrenWithUuids),
+        Zipped = case DelWorkers of
+            all ->
+                lists:foldl(fun(CWU, Acc) ->
+                    Acc ++ [{W, CWU} || W <- Workers]
+                end, [], ChildrenWithUuids);
+            _ ->
+                lists:zip(DelWorkers, ChildrenWithUuids)
+        end,
 
         Master = self(),
         lists:foreach(fun({W, {D, Uuid}}) ->
@@ -434,6 +458,8 @@ distributed_delete_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWr
         lists:foreach(fun(_) ->
             RmAnsCheck =
                 receive
+                    {rm_ans, W, D, Uuid, {error, enoent}} ->
+                        {rm_ans, W, D, Uuid, ok};
                     {rm_ans, W, D, Uuid, RmAns} ->
                         {rm_ans, W, D, Uuid, RmAns}
                 after timer:seconds(2*Attempts+2) ->
@@ -444,13 +470,25 @@ distributed_delete_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWr
             ct:print("Verify spawn ~p", [{RecW, RecDir, RecUuid}]),
             verify_del(Config, {RecDir, RecUuid, []}),
             ct:print("Dir rm verified")
-        end, Workers),
+        end, Zipped),
 
         verify_dir_size(Config, MainDir, 0)
     end,
 
-    Test(Dir, Children1, "single provider created"),
-    Test(Dir2, Children2, "many providers created"),
+    TestDescs = [
+        "P1 create, P1 del",
+        "P1 create, P2 del",
+        "P1 create, single random del",
+        "random create, P1 del",
+        "P1 create, P1 and P2 del",
+        "random create, P1 and P2 del"
+    ],
+
+    TestCases = lists:zip(lists:zip(lists:reverse(ChildrenList), DelNodes), TestDescs),
+    lists:foreach(fun({{{MainDir, Children}, DelWorkers}, Desc}) ->
+        Test(MainDir, Children, Desc, DelWorkers)
+    end, TestCases),
+
     ok.
 
 file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
@@ -1074,21 +1112,26 @@ add_dbsync_state(Doc, _ParentDoc, _LocId, _Path) ->
 extend_config(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts) ->
     ProxyNodesWritten = ProxyNodesWritten0 * NodesOfProvider,
     Workers = ?config(op_worker_nodes, Config),
-    Worker1 = lists:foldl(fun(W, Acc) ->
-        case is_atom(Acc) of
+    {Worker1, Workers1, WorkersNot1} = lists:foldl(fun(W, {Acc1, Acc2, Acc3}) ->
+        {NAcc2, NAcc3} = case string:str(atom_to_list(W), "p1") of
+            0 -> {Acc2, [W | Acc3]};
+            _ -> {[W | Acc2], Acc3}
+        end,
+        case is_atom(Acc1) of
             true ->
-                Acc;
+                {Acc1, NAcc2, NAcc3};
             _ ->
                 case string:str(atom_to_list(W), "p1") of
-                    0 -> Acc;
-                    _ -> W
+                    0 -> {Acc1, NAcc2, NAcc3};
+                    _ -> {W, NAcc2, NAcc3}
                 end
         end
-    end, [], Workers),
+    end, {[], [], []}, Workers),
 
     SessId = fun(W) -> ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config) end,
     [{_SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
-    [{worker1, Worker1}, {session, SessId}, {space_name, SpaceName}, {attempts, Attempts},
+    [{worker1, Worker1}, {workers1, Workers1}, {workers_not1, WorkersNot1},
+        {session, SessId}, {space_name, SpaceName}, {attempts, Attempts},
         {nodes_number, {SyncNodes, ProxyNodes, ProxyNodesWritten, ProxyNodesWritten0, NodesOfProvider}} | Config].
 
 verify(Config, TestFun) ->

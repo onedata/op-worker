@@ -45,7 +45,7 @@
 -spec send(od_provider:id(), msg()) -> ok | {error, Reason :: term()}.
 send(ProviderId, Msg) ->
     SessId = session_manager:get_provider_session_id(outgoing, ProviderId),
-    provider_communicator:send(#dbsync_message{message_body = Msg}, SessId, 3).
+    provider_communicator:send_async(#dbsync_message{message_body = Msg}, SessId).
 
 %%--------------------------------------------------------------------
 %% @doc
