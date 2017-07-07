@@ -21,8 +21,7 @@
 -include("storage_sync_test.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, init_per_testcase/2,
-    end_per_testcase/2]).
+-export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
 %% tests
 -export([
@@ -39,8 +38,10 @@
     update_timestamps_file_import_test/1,
     create_file_in_dir_import_test/1,
     create_file_in_dir_exceed_batch_update_test/1,
-    create_directory_import_many_test/1, create_subfiles_import_many_test/1,
-    delete_non_empty_directory_update_test/1, delete_empty_directory_update_test/1,
+    create_directory_import_many_test/1,
+    create_subfiles_import_many_test/1,
+    delete_non_empty_directory_update_test/1,
+    delete_empty_directory_update_test/1,
     should_not_detect_timestamp_update_test/1,
     create_directory_import_without_read_permission_test/1,
     create_subfiles_import_many2_test/1,
@@ -98,11 +99,10 @@ create_subfiles_import_many_test(Config) ->
     storage_sync_test_base:create_subfiles_import_many_test(Config, true).
 
 create_subfiles_import_many2_test(Config) ->
-    storage_sync_test_base:create_subfiles_import_many2_test(Config, false).
+    storage_sync_test_base:create_subfiles_import_many2_test(Config, true).
 
 create_subfiles_and_delete_before_import_is_finished_test(Config) ->
-    storage_sync_test_base:create_subfiles_and_delete_before_import_is_finished_test(Config, false).
-
+    storage_sync_test_base:create_subfiles_and_delete_before_import_is_finished_test(Config, true).
 
 create_file_in_dir_update_test(Config) ->
     storage_sync_test_base:create_file_in_dir_update_test(Config, true).

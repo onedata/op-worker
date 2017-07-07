@@ -35,9 +35,11 @@ update(Uuid, NewMTime, NewHashKey, NewHashValue) ->
         }}) ->
 
                 MTime = utils:ensure_defined(NewMTime, undefined, MTime0),
-                ChildrenAttrsHashes = case NewHashKey of
-                    undefined -> ChildrenAttrsHashes0;
-                    _ ->
+                ChildrenAttrsHashes = case {NewHashKey, NewHashValue} of
+                    {undefined, _} -> ChildrenAttrsHashes0;
+                    {_, undefined} -> ChildrenAttrsHashes0;
+                    {_, <<"">>} -> ChildrenAttrsHashes0;
+                    {_, _} ->
                         ChildrenAttrsHashes0#{NewHashKey => NewHashValue}
                 end,
 

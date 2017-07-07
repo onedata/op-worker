@@ -60,11 +60,11 @@ run(Job = #space_strategy_job{
 %%-------------------------------------------------------------------
 -spec delete_imported_file(file_meta:name(), file_ctx:ctx(), od_space:id()) -> ok.
 delete_imported_file(ChildName, FileCtx, SpaceId) ->
+    storage_sync_monitoring:update_queue_length_spirals(SpaceId, -1),
     RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
     {ChildCtx, _} = file_ctx:get_child(FileCtx, ChildName, RootUserCtx),
     ok = fslogic_delete:remove_file_and_file_meta(ChildCtx, RootUserCtx, true, false),
     ok = fslogic_delete:remove_file_handles(ChildCtx),
-    storage_sync_monitoring:update_queue_length_spirals(SpaceId, -1),
     storage_sync_monitoring:increase_deleted_files_spirals(SpaceId).
 
 %%===================================================================

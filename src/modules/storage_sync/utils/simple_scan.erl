@@ -42,10 +42,9 @@ run(Job = #space_strategy_job{
         storage_file_ctx := _StorageFileCtx
 }}) ->
     Module = storage_sync_utils:module(Job),
-    Result = delegate(Module, maybe_import_storage_file_and_children,
-        [Job#space_strategy_job{data = Data#{parent_ctx => ParentCtx}}], 1),
     storage_sync_monitoring:update_queue_length_spirals(SpaceId, -1),
-    Result;
+    delegate(Module, maybe_import_storage_file_and_children,
+        [Job#space_strategy_job{data = Data#{parent_ctx => ParentCtx}}], 1);
 run(Job = #space_strategy_job{
     data = Data = #{
         parent_ctx := ParentCtx,
@@ -459,17 +458,48 @@ new_job(Job, Data, StorageFileCtx) ->
     file_ctx:ctx()) -> {ok, space_strategy:job()}.
 handle_already_imported_file(Job = #space_strategy_job{
     strategy_type = StrategyType,
-    data = #{
+    data = Data = #{
         space_id := SpaceId,
         storage_file_ctx := StorageFileCtx
 }}, FileAttr, FileCtx) ->
-    {FileStat = #statbuf{st_mode = Mode}, _} = storage_file_ctx:get_stat_buf(StorageFileCtx),
-    maybe_update_size(FileAttr, FileStat, FileCtx, file_meta:type(Mode)),
-    maybe_update_mode(FileAttr, FileStat, FileCtx),
-    maybe_update_times(FileAttr, FileStat, FileCtx),
-    storage_sync_monitoring:increase_updated_files_spirals(SpaceId),
-    storage_sync_monitoring:update_to_do_counter(SpaceId, StrategyType, -1),
+
+    case storage_file_ctx:get_stat_buf(StorageFileCtx) of
+        {FileStat = #statbuf{st_mode = Mode}, _} ->
+            maybe_update_attrs(FileAttr, FileStat, FileCtx, Mode, SpaceId);
+        {error, _} ->
+            ok
+    end,
+
+    case file_ctx:is_dir(FileCtx) of
+        {true, _} ->
+            case maps:get(dir_offset, Data, 0) of
+                0 ->
+                    storage_sync_monitoring:update_to_do_counter(SpaceId, StrategyType, -1);
+                _ ->
+                    ok
+            end;
+        _ ->
+            storage_sync_monitoring:update_to_do_counter(SpaceId, StrategyType, -1)
+    end,
     {ok, Job}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates mode, times and size of already imported file.
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_update_attrs(#file_attr{}, #statbuf{}, file_ctx:ctx(),
+    file_meta:mode(), od_space:id()) -> ok.
+maybe_update_attrs(FileAttr, FileStat, FileCtx, Mode, SpaceId) ->
+    Result1 = maybe_update_size(FileAttr, FileStat, FileCtx, file_meta:type(Mode)),
+    Result2 = maybe_update_mode(FileAttr, FileStat, FileCtx),
+    Result3 = maybe_update_times(FileAttr, FileStat, FileCtx),
+    case {Result1, Result2, Result3}  of
+        {not_updated, not_updated, not_updated} ->
+            ok;
+        _ ->
+            storage_sync_monitoring:increase_updated_files_spirals(SpaceId)
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -493,18 +523,19 @@ get_attr(FileCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec maybe_update_size(#file_attr{}, #statbuf{}, file_ctx:ctx(),
-    file_meta:type()) -> ok | {error, term()}.
+    file_meta:type()) -> updated | not_updated | {error, term()}.
 maybe_update_size(#file_attr{}, #statbuf{}, _FileCtx, ?DIRECTORY_TYPE) ->
-    ok;
+    not_updated;
 maybe_update_size(#file_attr{size = OldSize}, #statbuf{st_size = OldSize},
     _FileCtx, _Type
 ) ->
-    ok;
+    not_updated;
 maybe_update_size(#file_attr{size = _OldSize}, #statbuf{st_size = NewSize},
     FileCtx, ?REGULAR_FILE_TYPE
 ) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
-    ok = lfm_event_utils:emit_file_truncated(FileGuid, NewSize, ?ROOT_SESS_ID).
+    ok = lfm_event_utils:emit_file_truncated(FileGuid, NewSize, ?ROOT_SESS_ID),
+    updated.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -512,13 +543,19 @@ maybe_update_size(#file_attr{size = _OldSize}, #statbuf{st_size = NewSize},
 %% Updates file's mode if it has changed.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_update_mode(#file_attr{}, #statbuf{}, file_ctx:ctx()) -> ok.
+-spec maybe_update_mode(#file_attr{}, #statbuf{}, file_ctx:ctx()) -> updated | not_updated.
 maybe_update_mode(#file_attr{mode = OldMode}, #statbuf{st_mode = Mode}, FileCtx) ->
-    case Mode band 8#1777 of
-        OldMode ->
-            ok;
-        NewMode ->
-            update_mode(FileCtx, NewMode)
+    case file_ctx:is_space_dir_const(FileCtx) of
+        false ->
+            case Mode band 8#1777 of
+                OldMode ->
+                    not_updated;
+                NewMode ->
+                    update_mode(FileCtx, NewMode),
+                    updated
+            end;
+        _ ->
+            not_updated
     end.
 
 %%--------------------------------------------------------------------
@@ -543,12 +580,12 @@ update_mode(FileCtx, NewMode) ->
 %% Updates file's times if they've changed.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_update_times(#file_attr{}, #statbuf{}, file_ctx:ctx()) -> ok.
+-spec maybe_update_times(#file_attr{}, #statbuf{}, file_ctx:ctx()) -> updated | not_updated.
 maybe_update_times(#file_attr{atime = ATime, mtime = MTime, ctime = CTime},
     #statbuf{st_atime = ATime, st_mtime = MTime, st_ctime = CTime},
     _FileCtx
 ) ->
-    ok;
+    not_updated;
 maybe_update_times(#file_attr{atime = _ATime, mtime = _MTime, ctime = _CTime},
     #statbuf{st_atime = StorageATime, st_mtime = StorageMTime, st_ctime = StorageCTime},
     FileCtx
@@ -557,7 +594,8 @@ maybe_update_times(#file_attr{atime = _ATime, mtime = _MTime, ctime = _CTime},
         atime => StorageATime,
         mtime => StorageMTime,
         ctime => StorageCTime
-    }).
+    }),
+    updated.
 
 %%--------------------------------------------------------------------
 %% @private

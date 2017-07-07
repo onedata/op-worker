@@ -108,7 +108,8 @@ strategy_init_jobs(simple_scan,
     Data = #{
         last_import_time := LastImportTime,
         space_id := SpaceId
-    }) ->
+    }
+) ->
     case LastImportTime + timer:seconds(ScanIntervalSeconds) < os:system_time(milli_seconds) of
         true ->
             storage_sync_monitoring:update_queue_length_spirals(SpaceId, 1),

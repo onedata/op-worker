@@ -12,6 +12,7 @@
 -author("Jakub Kudzia").
 
 -include_lib("ctool/include/logging.hrl").
+-include("modules/datastore/datastore_specific_models_def.hrl").
 
 
 %% reporters API
@@ -393,7 +394,15 @@ get_files_to_update_value(SpaceId) ->
 %%-------------------------------------------------------------------
 -spec import_in_progress(od_space:id()) -> boolean().
 import_in_progress(SpaceId) ->
-    get_files_to_import_value(SpaceId) > 0.
+    {ok, #document{
+        value = #space_strategies{
+            storage_strategies = StorageStrategies
+    }}} = space_strategies:get(SpaceId),
+    StorageId = hd(maps:keys(StorageStrategies)),
+    {ok, #storage_strategies{last_import_time = LastImportTime}} =
+        maps:find(StorageId, StorageStrategies), %todo separate function
+
+    (LastImportTime =:= undefined) or (get_files_to_import_value(SpaceId) > 0).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -437,7 +446,6 @@ ensure_all_metrics_stopped(SpaceId) ->
     storage_sync_monitoring:stop_imported_files_spirals(SpaceId),
     storage_sync_monitoring:stop_queue_length_spirals(SpaceId).
 
-
 %%===================================================================
 %% Internal functions
 %%===================================================================
@@ -451,7 +459,7 @@ ensure_all_metrics_stopped(SpaceId) ->
 -spec start_queue_length_spiral(od_space:id(), window(),
     non_neg_integer()) -> ok.
 start_queue_length_spiral(SpaceId, Window, Resolution) ->
-    start_and_subscribe_storage_sync_spiral(SpaceId, ?QUEUE_LENGTH, Window, Resolution).
+    start_and_subscribe_storage_sync_spiral(SpaceId, ?QUEUE_LENGTH, Window, Resolution, count).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -537,6 +545,7 @@ stop_queue_length_spiral(SpaceId, Window) ->
     ok | {error, term()}.
 increase_imported_files_spiral(SpaceId, Window) ->
     update_spiral(SpaceId, ?IMPORTED_FILES, Window, 1).
+
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
@@ -547,6 +556,7 @@ increase_imported_files_spiral(SpaceId, Window) ->
     ok | {error, term()}.
 increase_deleted_files_spiral(SpaceId, Window) ->
     update_spiral(SpaceId, ?DELETED_FILES, Window, 1).
+
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
@@ -580,7 +590,7 @@ update_queue_length_spiral(SpaceId, Window, Value) ->
 start_and_subscribe_storage_sync_counter(SpaceId, CounterType) ->
     CounterName = ?COUNTER_NAME(SpaceId, CounterType),
     ok = exometer:new(CounterName, counter),
-    ok = exometer_report:subscribe(?LAGER_REPORTER_NAME, CounterName,[value],
+    ok = exometer_report:subscribe(?LAGER_REPORTER_NAME, CounterName, [value],
         ?COUNTER_LOGGING_INTERVAL).
 
 %%-------------------------------------------------------------------
@@ -589,13 +599,24 @@ start_and_subscribe_storage_sync_counter(SpaceId, CounterType) ->
 %% Starts and subscribes to given type of spiral.
 %% @end
 %%-------------------------------------------------------------------
--spec start_and_subscribe_storage_sync_spiral(od_space:id(), spiral_type(), 
+-spec start_and_subscribe_storage_sync_spiral(od_space:id(), spiral_type(),
     window(), non_neg_integer()) -> ok | error().
 start_and_subscribe_storage_sync_spiral(SpaceId, Type, Window, Resolution) ->
+    start_and_subscribe_storage_sync_spiral(SpaceId, Type, Window, Resolution, one).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Starts and subscribes to given type of spiral.
+%% @end
+%%-------------------------------------------------------------------
+%%-spec start_and_subscribe_storage_sync_spiral(od_space:id(), spiral_type(),
+%%    window(), non_neg_integer()) -> ok | error().
+start_and_subscribe_storage_sync_spiral(SpaceId, Type, Window, Resolution, Metric) ->
     SpiralName = ?SPIRAL_NAME(SpaceId, Type, Window),
     TimeSpan = resolution_to_time_span(Window, Resolution),
     ok = exometer:new(SpiralName, spiral, [{time_span, TimeSpan}]),
-    ok = exometer_report:subscribe(?ETS_REPORTER_NAME, SpiralName, [one], TimeSpan).
+    ok = exometer_report:subscribe(?ETS_REPORTER_NAME, SpiralName, [Metric], TimeSpan).
 
 %%-------------------------------------------------------------------
 %% @private

@@ -102,16 +102,17 @@ create_directory_import_without_read_permission_test(Config, MountSpaceInRoot) -
     SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER, ?GET_DOMAIN(W2)}}, Config),
     StorageTestDirPath =
-        storage_test_dir_path(W1MountPoint, ?SPACE_ID, ?TEST_DIR, MountSpaceInRoot),
+        storage_test_dir_path(W1MountPoint, ?SPACE_ID, ?TEST_DIR2, MountSpaceInRoot),
     %% Create dir on storage
     ok = file:make_dir(StorageTestDirPath),
     ok = file:change_mode(StorageTestDirPath, 8#000),
     storage_sync_test_base:enable_storage_import(Config),
     %% Check if dir was imported
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
-    ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_DIR_PATH}), 2 * ?ATTEMPTS).
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH2}), ?ATTEMPTS).
+%%todo uncomment after resolving VFS-3410
+%%    ?assertMatch({ok, #file_attr{}},
+%%        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_DIR_PATH2}), ?ATTEMPTS).
 
 create_directory_import_many_test(Config, MountSpaceInRoot) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -143,7 +144,6 @@ create_file_import_test(Config, MountSpaceInRoot) ->
     storage_sync_test_base:enable_storage_import(Config),
 
     %% Check if file was imported on W1
-    {ok, Attr} =
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
     {ok, Handle1} = ?assertMatch({ok, _},
@@ -151,7 +151,7 @@ create_file_import_test(Config, MountSpaceInRoot) ->
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))).
 
-%%todo fix
+%%todo uncomment after resolving VFS-3410
 %%     Check if file was imported on W2
 %%    ?assertMatch({ok, #file_attr{}},
 %%        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}), 5 * ?ATTEMPTS),
@@ -209,12 +209,12 @@ create_subfiles_and_delete_before_import_is_finished_test(Config, MountSpaceInRo
     DirStructure = [10, 10, 10],
     create_nested_directory_tree(DirStructure, StorageTestDirPath),
     storage_sync_test_base:enable_storage_update(Config),
-    timer:sleep(timer:seconds(?SCAN_INTERVAL)),
+    timer:sleep(timer:seconds(2 * ?SCAN_INTERVAL)),
     recursive_rm(StorageTestDirPath),
     ?assertMatch({error, enoent},
         file:list_dir(StorageTestDirPath)),
     ?assertMatch({ok, []},
-            lfm_proxy:ls(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}, 0, 100),  2 * ?ATTEMPTS).
+            lfm_proxy:ls(W1, SessId, {path, ?SPACE_PATH}, 0, 100), ?ATTEMPTS).
 
 create_directory_export_test(Config, MountSpaceInRoot) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -270,7 +270,7 @@ create_file_in_dir_import_test(Config, MountSpaceInRoot) ->
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))).
 
-%%    todo fix
+%%todo uncomment after resolving VFS-3410
 %%    %% Check if file was imported on W2
 %%    ?assertMatch({ok, #file_attr{}},
 %%        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_IN_DIR_PATH2}), 5 * ?ATTEMPTS),
@@ -325,7 +325,7 @@ create_file_in_dir_update_test(Config, MountSpaceInRoot) ->
     assert_num_results(History, ?assertMtimeChangedFun(?TEST_DIR2, true), 0),
     assert_num_results_gte(History, ?assertMtimeChangedFun(?TEST_DIR, true), 1).
 
-%%todo fix
+%%todo uncomment after resolving VFS-3410
 %%    %% Check if file was imported on W2
 %%    ?assertMatch({ok, #file_attr{}},
 %%        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}), 5 * ?ATTEMPTS),
@@ -400,7 +400,7 @@ create_file_in_dir_exceed_batch_update_test(Config, MountSpaceInRoot) ->
     assert_num_results(History, ?assertMtimeChangedFun(?TEST_DIR2, true), 0),
     assert_num_results_gte(History, ?assertMtimeChangedFun(?TEST_DIR, true), 1).
 
-%% todo fix
+%%todo uncomment after resolving VFS-3410
 %%    %% Check if file was imported on W2
 %%    ?assertMatch({ok, #file_attr{}},
 %%        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}), 5 * ?ATTEMPTS),
@@ -626,7 +626,6 @@ move_file_update_test(Config, MountSpaceInRoot) ->
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
     %% Move file
-    %%    tracer:trace_calls(storage_update),
     ok = file:rename(StorageTestFilePath, StorageTestFilePath2),
     %% Check if file was moved
     {ok, Handle2} = ?assertMatch({ok, _},

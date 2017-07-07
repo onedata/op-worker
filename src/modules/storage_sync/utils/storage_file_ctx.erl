@@ -15,6 +15,8 @@
 -include("modules/storage_file_manager/helpers/helpers.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
+
 
 
 -record(storage_file_ctx, {
@@ -67,11 +69,17 @@ get_file_id_const(#storage_file_ctx{id = FileId}) ->
     non_neg_integer()) -> [ctx()].
 get_children_ctxs_batch_const(StorageFileCtx, Offset, BatchSize) ->
     SFMHandle = storage_file_ctx:get_handle_const(StorageFileCtx),
-    {ok, ChildrenIds} = storage_file_manager:readdir(SFMHandle, Offset, BatchSize),
-    lists:map(fun(ChildId) ->
-        BaseName = filename:basename(ChildId),
-        storage_file_ctx:get_child_ctx(StorageFileCtx, BaseName)
-    end, ChildrenIds).
+    case storage_file_manager:readdir(SFMHandle, Offset, BatchSize) of
+        {error, ?ENOENT} ->
+            [];
+        {error, ?EACCES} ->
+            [];
+        {ok, ChildrenIds} ->
+            lists:map(fun(ChildId) ->
+                BaseName = filename:basename(ChildId),
+                storage_file_ctx:get_child_ctx(StorageFileCtx, BaseName)
+            end, ChildrenIds)
+    end.
 
 %%-------------------------------------------------------------------
 %% @doc

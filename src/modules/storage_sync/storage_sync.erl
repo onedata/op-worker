@@ -44,7 +44,7 @@ modify_storage_import(SpaceId, StrategyName, Args) ->
 modify_storage_import(SpaceId, StrategyName, StorageId, Args) ->
     file_meta:make_space_exist(SpaceId),
     {CurrentStrategyName, _} = space_strategies:get_storage_import_details(SpaceId, StorageId),
-    turn_monitoring_on_or_off(SpaceId, storage_import, CurrentStrategyName, StrategyName),
+    switch_monitoring_status(SpaceId, storage_import, CurrentStrategyName, StrategyName),
     space_strategies:set_strategy(SpaceId, StorageId, storage_import,
         StrategyName, Args).
 
@@ -90,7 +90,7 @@ modify_storage_update(SpaceId, StrategyName, Args) ->
 modify_storage_update(SpaceId, StrategyName, StorageId, Args) ->
     file_meta:make_space_exist(SpaceId),
     {CurrentStrategyName, _} = space_strategies:get_storage_update_details(SpaceId, StorageId),
-    turn_monitoring_on_or_off(SpaceId, storage_update, CurrentStrategyName,
+    switch_monitoring_status(SpaceId, storage_update, CurrentStrategyName,
         StrategyName),
     space_strategies:set_strategy(SpaceId, StorageId, storage_update,
         StrategyName, Args).
@@ -145,15 +145,15 @@ get_supporting_storage(SpaceId) ->
 %% Turns import or update metrics on or off.
 %% @end
 %%-------------------------------------------------------------------
--spec turn_monitoring_on_or_off(od_space:id(), space_strategy:type(),
+-spec switch_monitoring_status(od_space:id(), space_strategy:type(),
     space_strategy:name(), space_strategy:name()) -> ok.
-turn_monitoring_on_or_off(SpaceId, storage_import, CurrentStrategyName, 
+switch_monitoring_status(SpaceId, storage_import, CurrentStrategyName,
     NewStrategyName) ->
-    turn_import_monitoring_on_or_off(SpaceId, CurrentStrategyName, 
+    switch_import_monitoring_status(SpaceId, CurrentStrategyName,
         NewStrategyName);
-turn_monitoring_on_or_off(SpaceId, storage_update, CurrentStrategyName, 
+switch_monitoring_status(SpaceId, storage_update, CurrentStrategyName,
     NewStrategyName) ->
-    turn_update_monitoring_on_or_off(SpaceId, CurrentStrategyName, 
+    switch_update_monitoring_status(SpaceId, CurrentStrategyName,
         NewStrategyName).    
 
 %%-------------------------------------------------------------------
@@ -162,15 +162,15 @@ turn_monitoring_on_or_off(SpaceId, storage_update, CurrentStrategyName,
 %% Turns import metrics on or off, according to current and new strategy.
 %% @end
 %%-------------------------------------------------------------------
--spec turn_import_monitoring_on_or_off(od_space:id(), space_strategy:name(), 
+-spec switch_import_monitoring_status(od_space:id(), space_strategy:name(),
     space_strategy:name()) -> ok.
-turn_import_monitoring_on_or_off(_SpaceId, no_import, no_import) ->
+switch_import_monitoring_status(_SpaceId, no_import, no_import) ->
     ok;
-turn_import_monitoring_on_or_off(SpaceId, _, no_import) ->
+switch_import_monitoring_status(SpaceId, _, no_import) ->
     turn_import_monitoring_off(SpaceId);
-turn_import_monitoring_on_or_off(SpaceId, no_import, _) ->
+switch_import_monitoring_status(SpaceId, no_import, _) ->
     turn_import_monitoring_on(SpaceId);
-turn_import_monitoring_on_or_off(_SpaceId, _, _) ->
+switch_import_monitoring_status(_SpaceId, _, _) ->
     ok.
 
 %%-------------------------------------------------------------------
@@ -179,15 +179,15 @@ turn_import_monitoring_on_or_off(_SpaceId, _, _) ->
 %% Turns update metrics on or off, according to current and new strategy.
 %% @end
 %%-------------------------------------------------------------------
--spec turn_update_monitoring_on_or_off(od_space:id(), space_strategy:name(),
+-spec switch_update_monitoring_status(od_space:id(), space_strategy:name(),
     space_strategy:name()) -> ok.
-turn_update_monitoring_on_or_off(_SpaceId, no_update, no_update) ->
+switch_update_monitoring_status(_SpaceId, no_update, no_update) ->
     ok;
-turn_update_monitoring_on_or_off(SpaceId, _, no_update) ->
+switch_update_monitoring_status(SpaceId, _, no_update) ->
     turn_update_monitoring_off(SpaceId);
-turn_update_monitoring_on_or_off(SpaceId, no_update, _) ->
+switch_update_monitoring_status(SpaceId, no_update, _) ->
     turn_update_monitoring_on(SpaceId);
-turn_update_monitoring_on_or_off(_SpaceId, _, _) ->
+switch_update_monitoring_status(_SpaceId, _, _) ->
     ok.
 
 %%-------------------------------------------------------------------
