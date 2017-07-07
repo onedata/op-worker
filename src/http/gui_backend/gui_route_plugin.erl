@@ -65,13 +65,13 @@
 %% {@link gui_route_plugin_behaviour} callback route/1.
 %% @end
 %%--------------------------------------------------------------------
--spec route(Path :: binary()) -> #gui_route{}.
+-spec route(Path :: binary()) -> #gui_route{} | undefined.
 route(<<"/login.html">>) -> ?LOGIN;
 route(<<"/logout.html">>) -> ?LOGOUT;
 route(<<"/validate_login.html">>) -> ?VALIDATE_LOGIN;
 route(<<"/">>) -> ?INDEX;
 route(<<"/index.html">>) -> ?INDEX;
-route(_) -> ?INDEX.
+route(_) -> undefined.
 
 
 %%--------------------------------------------------------------------
