@@ -15,7 +15,7 @@
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 
--type user_ctx() :: helpers:user_ctx().
+-type user_ctx() :: helper:user_ctx().
 -type posix_user_ctx() :: {Uid :: non_neg_integer(), Gid :: non_neg_integer()}.
 
 -export_type([user_ctx/0, posix_user_ctx/0]).
@@ -37,7 +37,7 @@
 %% storages storage admin context is returned.
 %% @end
 %%--------------------------------------------------------------------
--spec get_server_user_ctx(od_user:id(), od_space:id(), storage:doc(), helpers:name()) ->
+-spec get_server_user_ctx(od_user:id(), od_space:id(), storage:doc(), helper:name()) ->
     {ok, user_ctx()} | {error, Reason :: term()}.
 get_server_user_ctx(UserId, SpaceId, StorageDoc, HelperName) ->
     case storage:select_helper(StorageDoc, HelperName) of
@@ -60,7 +60,7 @@ get_server_user_ctx(UserId, SpaceId, StorageDoc, HelperName) ->
 %% storage helper is defined as insecure, storage admin context is returned.
 %% @end
 %%--------------------------------------------------------------------
--spec get_client_user_ctx(od_user:id(), od_space:id(), storage:doc(), helpers:name()) ->
+-spec get_client_user_ctx(od_user:id(), od_space:id(), storage:doc(), helper:name()) ->
     {ok, user_ctx()} | {error, Reason :: term()}.
 get_client_user_ctx(UserId, SpaceId, StorageDoc, HelperName) ->
     case storage:select_helper(StorageDoc, HelperName) of
@@ -92,7 +92,7 @@ get_posix_user_ctx(UserId, SpaceId) ->
     {binary_to_integer(Uid), binary_to_integer(Gid)}.
 
 %%%===================================================================
-%%% API functions
+%%% Internal functions
 %%%===================================================================
 
 %%--------------------------------------------------------------------
@@ -188,7 +188,7 @@ fetch_user_ctx(UserId, SpaceId, StorageDoc, Helper) ->
 %% respectively user ID and space ID. For the other storage returns 'undefined'.
 %% @end
 %%--------------------------------------------------------------------
--spec generate_user_ctx(od_user:id(), od_space:id(), helpers:name()) ->
+-spec generate_user_ctx(od_user:id(), od_space:id(), helper:name()) ->
     {ok, user_ctx()} | undefined.
 generate_user_ctx(?ROOT_USER_ID, _, ?POSIX_HELPER_NAME) ->
     {ok, #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>}};
