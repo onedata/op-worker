@@ -190,7 +190,7 @@ start_slaves(DocsList) ->
 %% Gather changes from slaves.
 %% @end
 %%--------------------------------------------------------------------
--spec start_slaves(list()) -> ok.
+-spec gather_answers(list()) -> ok.
 gather_answers(SlavesList) ->
     lists:foldl(fun
         (_, timeout) ->
