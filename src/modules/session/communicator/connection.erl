@@ -176,14 +176,10 @@ send(Msg, Ref) ->
 -spec send_async(Msg :: #server_message{} | #client_message{}, Ref :: ref()) ->
     ok | {error, Reason :: term()}.
 send_async(Msg, Ref) when is_pid(Ref) ->
-    try
-        gen_server2:cast(Ref, {send, Msg})
-    catch
-        _:Reason -> {error, Reason}
-    end;
+    gen_server2:cast(Ref, {send, Msg});
 send_async(Msg, Ref) ->
     case session:get_random_connection(Ref) of
-        {ok, Con} -> send(Msg, Con);
+        {ok, Con} -> send_async(Msg, Con);
         {error, Reason} -> {error, Reason}
     end.
 
