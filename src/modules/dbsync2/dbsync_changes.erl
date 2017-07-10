@@ -33,51 +33,10 @@
 %%--------------------------------------------------------------------
 -spec apply_batch([datastore:doc()]) -> ok | {error, datastore:seq(), term()}.
 apply_batch(Docs) ->
-    DocsGroups = lists:foldl(fun(Doc, Acc) ->
-        ChangeKey = get_change_key(Doc),
-        ChangeList = maps:get(ChangeKey, Acc, []),
-        maps:put(ChangeKey, [Doc | ChangeList], Acc)
-    end, #{}, Docs),
-
+    DocsGroups = group_changes(Docs),
     DocsList = maps:to_list(DocsGroups),
-    Master = self(),
-    lists:foreach(fun({_, DocList}) ->
-        spawn(fun() ->
-            SlaveAns = lists:foldl(fun
-                (Doc, ok) ->
-                    apply(Doc);
-                (_, Acc) ->
-                    Acc
-            end, ok, lists:reverse(DocList)),
-            Master ! {changes_slave_ans, SlaveAns}
-        end)
-    end, DocsList),
-
-    lists:foldl(fun
-        (_, timeout) ->
-            timeout;
-        (_, ok) ->
-            receive
-                {changes_slave_ans, Ans} ->
-                    Ans
-            after
-                ?SLAVE_TIMEOUT ->
-                    timeout
-            end;
-        (_, {error, Seq, _} = Acc) ->
-            receive
-                {changes_slave_ans, ok} ->
-                    Acc;
-                {changes_slave_ans, {error, Seq2, _} = Ans} ->
-                    case Seq2 < Seq of
-                        true -> Ans;
-                        _ -> Acc
-                    end
-            after
-                ?SLAVE_TIMEOUT ->
-                    timeout
-            end
-    end, ok, DocsList).
+    start_slaves(DocsList),
+    gather_answers(DocsList).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -192,3 +151,69 @@ get_change_key(#document{value = #links{doc_key = DocUuid}}) ->
     DocUuid;
 get_change_key(#document{key = Uuid}) ->
     Uuid.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Group changes - documents connected with single file are grouped together.
+%% @end
+%%--------------------------------------------------------------------
+-spec group_changes([datastore:doc()]) -> #{}.
+group_changes(Docs) ->
+    lists:foldl(fun(Doc, Acc) ->
+        ChangeKey = get_change_key(Doc),
+        ChangeList = maps:get(ChangeKey, Acc, []),
+        maps:put(ChangeKey, [Doc | ChangeList], Acc)
+    end, #{}, Docs).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Starts one slave for each documents' group.
+%% @end
+%%--------------------------------------------------------------------
+-spec start_slaves([{datastore:ext_key(), [datastore:doc()]}]) -> ok.
+start_slaves(DocsList) ->
+    Master = self(),
+    lists:foreach(fun({_, DocList}) ->
+        spawn(fun() ->
+            SlaveAns = lists:foldl(fun
+                (Doc, ok) ->
+                    apply(Doc);
+                (_, Acc) ->
+                    Acc
+            end, ok, lists:reverse(DocList)),
+            Master ! {changes_slave_ans, SlaveAns}
+        end)
+    end, DocsList).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gather changes from slaves.
+%% @end
+%%--------------------------------------------------------------------
+-spec start_slaves(list()) -> ok.
+gather_answers(SlavesList) ->
+    lists:foldl(fun
+        (_, timeout) ->
+            timeout;
+        (_, ok) ->
+            receive
+                {changes_slave_ans, Ans} ->
+                    Ans
+            after
+                ?SLAVE_TIMEOUT ->
+                    timeout
+            end;
+        (_, {error, Seq, _} = Acc) ->
+            receive
+                {changes_slave_ans, ok} ->
+                    Acc;
+                {changes_slave_ans, {error, Seq2, _} = Ans} ->
+                    case Seq2 < Seq of
+                        true -> Ans;
+                        _ -> Acc
+                    end
+            after
+                ?SLAVE_TIMEOUT ->
+                    timeout
+            end
+    end, ok, SlavesList).

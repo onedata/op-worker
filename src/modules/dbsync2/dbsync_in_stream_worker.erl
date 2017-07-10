@@ -253,7 +253,7 @@ apply_changes_batch(_Since, Until, Docs, State = #state{
 %%--------------------------------------------------------------------
 -spec prepare_batch([datastore:doc()], couchbase_changes:until(), state()) ->
     {[datastore:doc()], couchbase_changes:until(), state(),
-        {couchbase_changes:since(), couchbase_changes:until()} | no}.
+        {couchbase_changes:since(), couchbase_changes:until()} | undefined}.
 prepare_batch(Docs, Until, State = #state{
     changes_stash = Stash,
     changes_stash_size = Size
@@ -261,7 +261,7 @@ prepare_batch(Docs, Until, State = #state{
     State2 = cancel_changes_request(State),
     case ets:first(Stash) of
         '$end_of_table' ->
-            {Docs, Until, State2, no};
+            {Docs, Until, State2, undefined};
         {Until, NextUntil} = Key ->
             MaxSize = application:get_env(?APP_NAME,
                 dbsync_changes_apply_max_size, 1000),
@@ -276,7 +276,7 @@ prepare_batch(Docs, Until, State = #state{
                     })
             end;
         _ ->
-            {Docs, Until, schedule_changes_request(State2), no}
+            {Docs, Until, schedule_changes_request(State2), undefined}
     end.
 
 
