@@ -71,8 +71,13 @@ authenticate(Req) ->
         Auth ->
             case user_identity:get_or_fetch(Auth) of
                 {ok, #document{value = Iden}} ->
-                    {ok, SessId} = session_manager:reuse_or_create_rest_session(Iden, Auth),
-                    {ok, SessId};
+                    case session_manager:reuse_or_create_rest_session(Iden, Auth) of
+                        {ok, SessId} ->
+                            {ok, SessId};
+                        {error, {invalid_identity, _}} ->
+                            user_identity:delete(Auth),
+                            authenticate(Req)
+                    end;
                 Error ->
                     Error
             end
