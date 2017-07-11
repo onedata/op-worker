@@ -22,8 +22,8 @@
 -export([account_updates/1, get_missing/0, get_users/0, put_user/1,
     reevaluate_users/0, ensure_initialised/0, get_refreshing_node/0]).
 
--type(seq() :: non_neg_integer()).
--type(rev() :: term()).
+-type seq() :: non_neg_integer().
+-type rev() :: term().
 -type model() :: od_group | od_user | od_space | od_share |
 od_provider | od_handle_service | od_handle.
 -type record() :: #od_space{} | #od_user{} | #od_group{} |

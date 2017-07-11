@@ -59,6 +59,9 @@
 -define(ID(Id, Ext), list_to_binary(
     atom_to_list(Id) ++ " @ " ++ atom_to_list(Ext)
 )).
+-define(REV1, <<"1-r">>).
+-define(REV2, <<"2-r">>).
+-define(REV3, <<"3-r">>).
 
 all() -> ?ALL([
     new_user_with_present_space_triggers_file_meta_creation,
@@ -119,42 +122,42 @@ accounts_incoming_updates(Config) ->
     S1 = ?ID(s1),
 
     push_update(Node, [
-        update(1, [<<"r1">>], S1, space(S1))
+        update(1, [?REV1], S1, space(S1))
     ]),
     expect_message([], 1, []),
 
     push_update(Node, [
-        update(2, [<<"r1">>], S1, space(S1)),
-        update(3, [<<"r1">>], S1, space(S1)),
-        update(4, [<<"r1">>], S1, space(S1))
+        update(2, [?REV1], S1, space(S1)),
+        update(3, [?REV1], S1, space(S1)),
+        update(4, [?REV1], S1, space(S1))
     ]),
     expect_message([], 4, []),
 
     push_update(Node, [
-        update(5, [<<"r1">>], S1, space(S1)),
-        update(7, [<<"r1">>], S1, space(S1)),
-        update(9, [<<"r1">>], S1, space(S1))
+        update(5, [?REV1], S1, space(S1)),
+        update(7, [?REV1], S1, space(S1)),
+        update(9, [?REV1], S1, space(S1))
     ]),
     expect_message([], 9, [6, 8]),
 
     push_update(Node, [
-        update(10, [<<"r1">>], S1, space(S1)),
-        update(11, [<<"r1">>], S1, space(S1)),
-        update(12, [<<"r1">>], S1, space(S1))
+        update(10, [?REV1], S1, space(S1)),
+        update(11, [?REV1], S1, space(S1)),
+        update(12, [?REV1], S1, space(S1))
     ]),
     expect_message([], 12, [6, 8]),
 
     push_update(Node, [
-        update(1, [<<"r1">>], S1, space(S1)),
-        update(2, [<<"r1">>], S1, space(S1)),
-        update(3, [<<"r1">>], S1, space(S1))
+        update(1, [?REV1], S1, space(S1)),
+        update(2, [?REV1], S1, space(S1)),
+        update(3, [?REV1], S1, space(S1))
     ]),
     expect_message([], 12, [6, 8]),
 
     push_update(Node, [
-        update(6, [<<"r1">>], S1, space(S1)),
-        update(8, [<<"r1">>], S1, space(S1)),
-        update(15, [<<"r1">>], S1, space(S1))
+        update(6, [?REV1], S1, space(S1)),
+        update(8, [?REV1], S1, space(S1)),
+        update(15, [?REV1], S1, space(S1))
     ]),
 
     push_update(Node, [
@@ -178,14 +181,14 @@ saves_the_actual_data(Config) ->
 
     %% when
     push_update(Node, [
-        update(1, [<<"r2">>, <<"r1">>], Sp1, space(
+        update(1, [?REV2, ?REV1], Sp1, space(
             <<"space xp">>,
             [{<<"U1">>, Priv1}, {<<"U2">>, []}],
             [{<<"G1">>, Priv2}],
             [{<<"P1">>, 1000}],
             [<<"Share1">>]
         )),
-        update(2, [<<"r2">>, <<"r1">>], G1, group(
+        update(2, [?REV2, ?REV1], G1, group(
             <<"group lol">>,
             [<<"S1">>, <<"S2">>],
             [{<<"U1">>, Priv1}, {<<"U2">>, []}],
@@ -194,25 +197,25 @@ saves_the_actual_data(Config) ->
             [<<"dad">>, <<"mom">>],
             <<"unit">>
         )),
-        update(3, [<<"r2">>, <<"r1">>], P1, provider(
+        update(3, [?REV2, ?REV1], P1, provider(
             <<"diginet rulz">>,
             [<<"url1">>, <<"url2">>],
             [Sp1],
             false
         )),
-        update(4, [<<"r2">>, <<"r1">>], Sh1, share(
+        update(4, [?REV2, ?REV1], Sh1, share(
             <<"Share 1">>,
             Sp1,
             <<"root_file_id">>,
             <<"public_url">>,
             <<"handle">>
         )),
-        update(5, [<<"r2">>, <<"r1">>], HS1, handle_service(
+        update(5, [?REV2, ?REV1], HS1, handle_service(
             <<"Handle Service 1">>,
             [{<<"U1">>, HSPrivs}],
             [{<<"G1">>, HSPrivs}]
         )),
-        update(6, [<<"r2">>, <<"r1">>], H1, handle(
+        update(6, [?REV2, ?REV1], H1, handle(
             HS1,
             <<"share">>,
             [{<<"U2">>, HPrivs}],
@@ -222,11 +225,11 @@ saves_the_actual_data(Config) ->
     expect_message([], 6, []),
 
     push_update(Node, [
-        update(7, [<<"r2">>, <<"r1">>], U1,
+        update(7, [?REV2, ?REV1], U1,
             user(<<"onedata ftw">>, [<<"A">>, <<"B">>, <<"Z">>],
                 [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}], <<"C">>)
         ),
-        update(8, [<<"r2">>, <<"r1">>], U2,
+        update(8, [?REV2, ?REV1], U2,
             public_only_user(<<"bombastic">>)
         )
     ]),
@@ -239,7 +242,7 @@ saves_the_actual_data(Config) ->
         groups = [{<<"G1">>, Priv2}],
         providers_supports = [{<<"P1">>, 1000}],
         shares = [<<"Share1">>],
-        revision_history = [<<"r2">>, <<"r1">>]}})
+        revision_history = [?REV2]}})
     }, fetch(Node, od_space, Sp1)),
     ?assertMatch({ok, (#document{key = Sh1, value = #od_share{
         name = <<"Share 1">>,
@@ -247,7 +250,7 @@ saves_the_actual_data(Config) ->
         root_file = <<"root_file_id">>,
         public_url = <<"public_url">>,
         handle = <<"handle">>,
-        revision_history = [<<"r2">>, <<"r1">>]}})
+        revision_history = [?REV2]}})
     }, fetch(Node, od_share, Sh1)),
     ?assertMatch({ok, #document{key = G1, value = #od_group{
         name = <<"group lol">>,
@@ -257,14 +260,14 @@ saves_the_actual_data(Config) ->
         eff_users = [{<<"U1">>, Priv1}, {<<"U2">>, Priv2}, {<<"U3">>, []}],
         children = [{<<"bastard">>, []}, {<<"sob">>, Priv2}],
         parents = [<<"dad">>, <<"mom">>],
-        revision_history = [<<"r2">>, <<"r1">>]}}
+        revision_history = [?REV2]}}
     }, fetch(Node, od_group, G1)),
     ?assertMatch({ok, #document{key = U1, value = #od_user{
         name = <<"onedata ftw">>,
         space_aliases = [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}],
         default_space = <<"C">>,
         eff_groups = [<<"A">>, <<"B">>, <<"Z">>],
-        revision_history = [<<"r2">>, <<"r1">>]}}
+        revision_history = [?REV2]}}
     }, fetch(Node, od_user, U1)),
     ?assertMatch({ok, #document{key = U2, value = #od_user{
         name = <<"bombastic">>,
@@ -272,7 +275,7 @@ saves_the_actual_data(Config) ->
     }, fetch(Node, od_user, U2)),
     ?assertMatch({ok, #document{key = P1, value = #od_provider{
         client_name = <<"diginet rulz">>,
-        revision_history = [<<"r2">>, <<"r1">>],
+        revision_history = [?REV2],
         urls = [<<"url1">>, <<"url2">>],
         spaces = [Sp1],
         public_only = false}}
@@ -283,7 +286,7 @@ saves_the_actual_data(Config) ->
         service_properties = [],
         users = [{<<"U1">>, HSPrivs}],
         groups = [{<<"G1">>, HSPrivs}],
-        revision_history = [<<"r2">>, <<"r1">>]}}
+        revision_history = [?REV2]}}
     }, fetch(Node, od_handle_service, HS1)),
     ?assertMatch({ok, #document{key = H1, value = #od_handle{
         handle_service = HS1,
@@ -294,7 +297,7 @@ saves_the_actual_data(Config) ->
         users = [{<<"U2">>, HPrivs}],
         groups = [{<<"G2">>, HPrivs}],
         timestamp = {{0, 0, 0}, {0, 0, 0}},
-        revision_history = [<<"r2">>, <<"r1">>]}}
+        revision_history = [?REV2]}}
     }, fetch(Node, od_handle, H1)),
     ok.
 
@@ -328,15 +331,15 @@ check_file_operations_test_base(Config, UpdateFun, IdExt) ->
 new_user_with_present_space_triggers_file_meta_creation(Config) ->
     UpdateFun = fun(Node, S1, U1, P1, Priv1, _G1) ->
         push_update(Node, [
-            update(1, [<<"r2">>, <<"r1">>], S1, space(
+            update(1, [?REV2, ?REV1], S1, space(
                 <<"space_name">>, [{U1, Priv1}], [], [{P1, 1000}], [<<"Share1">>]
             )),
-            update(2, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>))
+            update(2, [?REV2, ?REV1], P1, provider(<<"diginet rulz">>))
         ]),
         expect_message([U1], 2, []),
 
         push_update(Node, [
-            update(3, [<<"r2">>, <<"r1">>], U1,
+            update(3, [?REV2, ?REV1], U1,
                 user(<<"onedata ftw">>, [], [{S1, <<"space_name">>}], S1)
             )
         ]),
@@ -348,19 +351,19 @@ new_user_with_present_space_triggers_file_meta_creation(Config) ->
 new_user_with_present_space_triggers_file_meta_creation2(Config) ->
     UpdateFun = fun(Node, S1, U1, P1, Priv1, _G1) ->
         push_update(Node, [
-            update(1, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>))
+            update(1, [?REV2, ?REV1], P1, provider(<<"diginet rulz">>))
         ]),
         expect_message([U1], 1, []),
 
         push_update(Node, [
-            update(2, [<<"r2">>, <<"r1">>], S1, space(
+            update(2, [?REV2, ?REV1], S1, space(
                 <<"space_name">>, [{U1, Priv1}], [], [{P1, 1000}], [<<"Share1">>]
             ))
         ]),
         expect_message([U1], 2, []),
 
         push_update(Node, [
-            update(3, [<<"r2">>, <<"r1">>], U1,
+            update(3, [?REV2, ?REV1], U1,
                 user(<<"onedata ftw">>, [], [{S1, <<"space_name">>}], S1)
             )
         ]),
@@ -372,11 +375,11 @@ new_user_with_present_space_triggers_file_meta_creation2(Config) ->
 new_user_with_new_space_triggers_file_meta_creation(Config) ->
     UpdateFun = fun(Node, S1, U1, P1, Priv1, _G1) ->
         push_update(Node, [
-            update(1, [<<"r2">>, <<"r1">>], S1, space(
+            update(1, [?REV2, ?REV1], S1, space(
                 <<"space_name">>, [{U1, Priv1}], [], [{P1, 1000}], [<<"Share1">>]
             )),
-            update(2, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>)),
-            update(3, [<<"r2">>, <<"r1">>], U1,
+            update(2, [?REV2, ?REV1], P1, provider(<<"diginet rulz">>)),
+            update(3, [?REV2, ?REV1], U1,
                 user(<<"onedata ftw">>, [], [{S1, <<"space_name">>}], S1)
             )
         ]),
@@ -388,19 +391,19 @@ new_user_with_new_space_triggers_file_meta_creation(Config) ->
 updated_user_with_present_space_triggers_file_meta_creation(Config) ->
     UpdateFun = fun(Node, S1, U1, P1, Priv1, _G1) ->
         push_update(Node, [
-            update(1, [<<"r2">>, <<"r1">>], S1, space(
+            update(1, [?REV2, ?REV1], S1, space(
                 <<"space_name">>, [], [], [{P1, 1000}], [<<"Share1">>]
             )),
-            update(2, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>)),
-            update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [], undefined))
+            update(2, [?REV2, ?REV1], P1, provider(<<"diginet rulz">>)),
+            update(3, [?REV2, ?REV1], U1, user(<<"onedata">>, [], [], undefined))
         ]),
         expect_message([U1], 3, []),
 
         push_update(Node, [
-            update(4, [<<"r3">>, <<"r2">>, <<"r1">>], S1, space(
+            update(4, [?REV3, ?REV2, ?REV1], S1, space(
                 <<"space_name">>, [{U1, Priv1}], [], [{P1, 1000}], [<<"Share1">>]
             )),
-            update(5, [<<"r3">>, <<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [],
+            update(5, [?REV3, ?REV2, ?REV1], U1, user(<<"onedata">>, [],
                 [{S1, <<"space_name">>}], S1))
         ]),
         expect_message([U1], 5, [])
@@ -411,22 +414,22 @@ updated_user_with_present_space_triggers_file_meta_creation(Config) ->
 updated_user_with_present_space_triggers_file_meta_creation2(Config) ->
     UpdateFun = fun(Node, S1, U1, P1, Priv1, _G1) ->
         push_update(Node, [
-            update(1, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [], undefined))
+            update(1, [?REV2, ?REV1], U1, user(<<"onedata">>, [], [], undefined))
         ]),
         expect_message([U1], 1, []),
 
         push_update(Node, [
-            update(2, [<<"r2">>, <<"r1">>], S1, space(
+            update(2, [?REV2, ?REV1], S1, space(
                 <<"space_name">>, [], [], [{P1, 1000}], [<<"Share1">>]
             )),
-            update(3, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>))
+            update(3, [?REV2, ?REV1], P1, provider(<<"diginet rulz">>))
         ]),
         expect_message([U1], 3, []),
 
         push_update(Node, [
-            update(4, [<<"r3">>, <<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [],
+            update(4, [?REV3, ?REV2, ?REV1], U1, user(<<"onedata">>, [],
                 [{S1, <<"space_name">>}], S1)),
-            update(5, [<<"r3">>, <<"r2">>, <<"r1">>], S1, space(
+            update(5, [?REV3, ?REV2, ?REV1], S1, space(
                 <<"space_name">>, [{U1, Priv1}], [], [{P1, 1000}], [<<"Share1">>]
             ))
         ]),
@@ -438,26 +441,26 @@ updated_user_with_present_space_triggers_file_meta_creation2(Config) ->
 updated_user_with_present_space_triggers_file_meta_creation3(Config) ->
     UpdateFun = fun(Node, S1, U1, P1, Priv1, _G1) ->
         push_update(Node, [
-            update(1, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [], undefined))
+            update(1, [?REV2, ?REV1], U1, user(<<"onedata">>, [], [], undefined))
         ]),
         expect_message([U1], 1, []),
 
         push_update(Node, [
-            update(2, [<<"r2">>, <<"r1">>], S1, space(
+            update(2, [?REV2, ?REV1], S1, space(
                 <<"space_name">>, [], [], [{P1, 1000}], [<<"Share1">>]
             )),
-            update(3, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>))
+            update(3, [?REV2, ?REV1], P1, provider(<<"diginet rulz">>))
         ]),
         expect_message([U1], 3, []),
 
         push_update(Node, [
-            update(4, [<<"r3">>, <<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [],
+            update(4, [?REV3, ?REV2, ?REV1], U1, user(<<"onedata">>, [],
                 [{S1, <<"space_name">>}], S1))
         ]),
         expect_message([U1], 4, []),
 
         push_update(Node, [
-            update(5, [<<"r3">>, <<"r2">>, <<"r1">>], S1, space(
+            update(5, [?REV3, ?REV2, ?REV1], S1, space(
                 <<"space_name">>, [{U1, Priv1}], [], [{P1, 1000}], [<<"Share1">>]
             ))
         ]),
@@ -469,17 +472,17 @@ updated_user_with_present_space_triggers_file_meta_creation3(Config) ->
 add_user_to_group_triggers_file_meta_creation(Config) ->
     UpdateFun = fun(Node, S1, U1, P1, Priv1, G1) ->
         push_update(Node, [
-            update(1, [<<"r2">>, <<"r1">>], S1, space(
+            update(1, [?REV2, ?REV1], S1, space(
                 <<"space_name">>, [], [], [{P1, 1000}], [<<"Share1">>]
             )),
-            update(2, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>)),
-            update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [], undefined)),
-            update(4, [<<"r2">>, <<"r1">>], G1, group(<<"onedata_gr">>, [S1], []))
+            update(2, [?REV2, ?REV1], P1, provider(<<"diginet rulz">>)),
+            update(3, [?REV2, ?REV1], U1, user(<<"onedata">>, [], [], undefined)),
+            update(4, [?REV2, ?REV1], G1, group(<<"onedata_gr">>, [S1], []))
         ]),
         expect_message([U1], 4, []),
 
         push_update(Node, [
-            update(5, [<<"r3">>, <<"r2">>, <<"r1">>], G1, group(<<"onedata">>, [], [{U1, Priv1}]))
+            update(5, [?REV3, ?REV2, ?REV1], G1, group(<<"onedata">>, [], [{U1, Priv1}]))
         ]),
         expect_message([U1], 5, [])
     end,
@@ -489,17 +492,17 @@ add_user_to_group_triggers_file_meta_creation(Config) ->
 add_space_to_group_triggers_file_meta_creation(Config) ->
     UpdateFun = fun(Node, S1, U1, P1, Priv1, G1) ->
         push_update(Node, [
-            update(1, [<<"r2">>, <<"r1">>], S1, space(
+            update(1, [?REV2, ?REV1], S1, space(
                 <<"space_name">>, [], [], [{P1, 1000}], [<<"Share1">>]
             )),
-            update(2, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>)),
-            update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [], undefined)),
-            update(4, [<<"r2">>, <<"r1">>], G1, group(<<"onedata_gr">>, [], [{U1, Priv1}]))
+            update(2, [?REV2, ?REV1], P1, provider(<<"diginet rulz">>)),
+            update(3, [?REV2, ?REV1], U1, user(<<"onedata">>, [], [], undefined)),
+            update(4, [?REV2, ?REV1], G1, group(<<"onedata_gr">>, [], [{U1, Priv1}]))
         ]),
         expect_message([U1], 4, []),
 
         push_update(Node, [
-            update(5, [<<"r3">>, <<"r2">>, <<"r1">>], G1, group(<<"onedata">>, [S1], []))
+            update(5, [?REV3, ?REV2, ?REV1], G1, group(<<"onedata">>, [S1], []))
         ]),
         expect_message([U1], 5, [])
     end,
@@ -509,17 +512,17 @@ add_space_to_group_triggers_file_meta_creation(Config) ->
 add_provider_to_space_triggers_file_meta_creation(Config) ->
     UpdateFun = fun(Node, S1, U1, P1, Priv1, _G1) ->
         push_update(Node, [
-            update(1, [<<"r2">>, <<"r1">>], S1, space(
+            update(1, [?REV2, ?REV1], S1, space(
                 <<"space_name">>, [{U1, Priv1}], [], [], []
             )),
-            update(2, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>)),
-            update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [],
+            update(2, [?REV2, ?REV1], P1, provider(<<"diginet rulz">>)),
+            update(3, [?REV2, ?REV1], U1, user(<<"onedata">>, [],
                 [{S1, <<"space_name">>}], S1))
         ]),
         expect_message([U1], 3, []),
 
         push_update(Node, [
-            update(4, [<<"r3">>, <<"r2">>, <<"r1">>], S1, space(
+            update(4, [?REV3, ?REV2, ?REV1], S1, space(
                 <<"space_name">>, [{U1, Priv1}], [], [{P1, 1000}], [<<"Share1">>]
             ))
         ]),
@@ -539,17 +542,17 @@ space_without_support_test(Config) ->
 
     %% when
     push_update(Node, [
-        update(1, [<<"r2">>, <<"r1">>], S1, space(
+        update(1, [?REV2, ?REV1], S1, space(
             <<"space_name">>, [{U1, Priv1}], [], [], []
         )),
-        update(2, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>)),
-        update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [],
+        update(2, [?REV2, ?REV1], P1, provider(<<"diginet rulz">>)),
+        update(3, [?REV2, ?REV1], U1, user(<<"onedata">>, [],
             [{S1, <<"space_name">>}], S1))
     ]),
     expect_message([U1], 3, []),
 
     push_update(Node, [
-        update(4, [<<"r3">>, <<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [S1], S1))
+        update(4, [?REV3, ?REV2, ?REV1], U1, user(<<"onedata">>, [], [S1], S1))
     ]),
     expect_message([U1], 4, []),
 
@@ -567,23 +570,23 @@ updates_with_the_actual_data(Config) ->
     Priv2 = privileges:space_admin(),
 
     push_update(Node, [
-        update(1, [<<"r2">>, <<"r1">>], S1, space(<<"space">>)),
-        update(2, [<<"r2">>, <<"r1">>], G1, group(<<"group">>)),
-        update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [<<"Z">>], [], S1)),
-        update(4, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet">>))
+        update(1, [?REV2, ?REV1], S1, space(<<"space">>)),
+        update(2, [?REV2, ?REV1], G1, group(<<"group">>)),
+        update(3, [?REV2, ?REV1], U1, user(<<"onedata">>, [<<"Z">>], [], S1)),
+        update(4, [?REV2, ?REV1], P1, provider(<<"diginet">>))
     ]),
     expect_message([], 4, []),
 
     %% when
     push_update(Node, [
-        update(5, [<<"r3">>, <<"r2">>, <<"r1">>], S1, space(
+        update(5, [?REV3, ?REV2, ?REV1], S1, space(
             <<"space xp">>,
             [{<<"U1">>, Priv1}, {<<"U2">>, []}],
             [{<<"G1">>, Priv2}],
             [{<<"P1">>, 1000}],
             [<<"Share1">>]
         )),
-        update(6, [<<"r3">>, <<"r2">>, <<"r1">>], G1, group(
+        update(6, [?REV3, ?REV2, ?REV1], G1, group(
             <<"group lol">>,
             [<<"S1">>, <<"S2">>],
             [{<<"U1">>, Priv1}, {<<"U2">>, []}],
@@ -592,14 +595,14 @@ updates_with_the_actual_data(Config) ->
             [<<"dad">>, <<"mom">>],
             <<"team">>
         )),
-        update(7, [<<"r3">>, <<"r2">>, <<"r1">>], U1,
+        update(7, [?REV3, ?REV2, ?REV1], U1,
             user(<<"onedata ftw">>, [<<"A">>, <<"B">>, <<"Y">>],
                 [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}], <<"C">>)
         ),
-        update(8, [<<"r2">>, <<"r1">>], U2,
+        update(8, [?REV2, ?REV1], U2,
             public_only_user(<<"bombastic">>)
         ),
-        update(9, [<<"r3">>, <<"r2">>, <<"r1">>], P1, provider(
+        update(9, [?REV3, ?REV2, ?REV1], P1, provider(
             <<"diginet rulz">>,
             [<<"url1">>, <<"url2">>],
             [S1],
@@ -615,7 +618,7 @@ updates_with_the_actual_data(Config) ->
         groups = [{<<"G1">>, Priv2}],
         providers_supports = [{<<"P1">>, 1000}],
         shares = [<<"Share1">>],
-        revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}})
+        revision_history = [?REV3]}})
     }, fetch(Node, od_space, S1)),
     ?assertMatch({ok, #document{key = G1, value = #od_group{
         name = <<"group lol">>,
@@ -625,14 +628,14 @@ updates_with_the_actual_data(Config) ->
         eff_users = [{<<"U1">>, Priv1}, {<<"U2">>, Priv2}, {<<"U3">>, []}],
         children = [{<<"bastard">>, []}, {<<"sob">>, Priv2}],
         parents = [<<"dad">>, <<"mom">>],
-        revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
+        revision_history = [?REV3]}}
     }, fetch(Node, od_group, G1)),
     ?assertMatch({ok, #document{key = U1, value = #od_user{
         name = <<"onedata ftw">>,
         eff_groups = [<<"A">>, <<"B">>, <<"Y">>],
         default_space = <<"C">>,
         space_aliases = [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}],
-        revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
+        revision_history = [?REV3]}}
     }, fetch(Node, od_user, U1)),
     ?assertMatch({ok, #document{key = U2, value = #od_user{
         name = <<"bombastic">>,
@@ -640,7 +643,7 @@ updates_with_the_actual_data(Config) ->
     }, fetch(Node, od_user, U2)),
     ?assertMatch({ok, #document{key = P1, value = #od_provider{
         client_name = <<"diginet rulz">>,
-        revision_history = [<<"r3">>, <<"r2">>, <<"r1">>],
+        revision_history = [?REV3],
         urls = [<<"url1">>, <<"url2">>],
         spaces = [S1],
         public_only = true}}
@@ -653,14 +656,14 @@ applies_deletion(Config) ->
     {P1, Sp1, Sh1, U1, G1, HS1, H1} =
         {?ID(p1), ?ID(sp1), ?ID(sh1), ?ID(u1), ?ID(g1), ?ID(hs1), ?ID(h1)},
     push_update(Node, [
-        update(1, [<<"r2">>, <<"r1">>], Sp1, space(<<"space">>)),
-        update(2, [<<"r2">>, <<"r1">>], Sh1, share(<<"share">>, Sp1)),
-        update(3, [<<"r2">>, <<"r1">>], G1, group(<<"group">>)),
-        update(4, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [], Sp1)),
-        update(5, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet">>)),
-        update(6, [<<"r3">>, <<"r2">>, <<"r1">>], HS1,
+        update(1, [?REV2, ?REV1], Sp1, space(<<"space">>)),
+        update(2, [?REV2, ?REV1], Sh1, share(<<"share">>, Sp1)),
+        update(3, [?REV2, ?REV1], G1, group(<<"group">>)),
+        update(4, [?REV2, ?REV1], U1, user(<<"onedata">>, [], [], Sp1)),
+        update(5, [?REV2, ?REV1], P1, provider(<<"diginet">>)),
+        update(6, [?REV3, ?REV2, ?REV1], HS1,
             handle_service(<<"handle service first">>, [], [])),
-        update(7, [<<"r3">>, <<"r2">>, <<"r1">>], H1,
+        update(7, [?REV3, ?REV2, ?REV1], H1,
             handle(HS1, <<"someId">>, [], []))
     ]),
     expect_message([], 7, []),
@@ -701,31 +704,31 @@ resolves_conflicts(Config) ->
     {Sp1, Sh1, U1, G1, HS1, H1} =
         {?ID(sp1), ?ID(sh1), ?ID(u1), ?ID(g1), ?ID(hs1), ?ID(h1)},
     push_update(Node, [
-        update(1, [<<"r3">>, <<"r2">>, <<"r1">>], Sp1, space(<<"space xp">>)),
-        update(2, [<<"r3">>, <<"r2">>, <<"r1">>], Sh1, share(<<"share xp">>, Sp1)),
-        update(3, [<<"r3">>, <<"r2">>, <<"r1">>], G1, group(<<"group lol">>)),
-        update(4, [<<"r3">>, <<"r2">>, <<"r1">>], U1,
+        update(1, [?REV3, ?REV2, ?REV1], Sp1, space(<<"space xp">>)),
+        update(2, [?REV3, ?REV2, ?REV1], Sh1, share(<<"share xp">>, Sp1)),
+        update(3, [?REV3, ?REV2, ?REV1], G1, group(<<"group lol">>)),
+        update(4, [?REV3, ?REV2, ?REV1], U1,
             user(<<"onedata ftw">>, [<<"A">>, <<"B">>],
                 [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}], <<"C">>)
         ),
-        update(5, [<<"r3">>, <<"r2">>, <<"r1">>], HS1,
+        update(5, [?REV3, ?REV2, ?REV1], HS1,
             handle_service(<<"handle service first">>, [], [])),
-        update(6, [<<"r3">>, <<"r2">>, <<"r1">>], H1,
+        update(6, [?REV3, ?REV2, ?REV1], H1,
             handle(HS1, <<"someId">>, [], []))
     ]),
     expect_message([], 6, []),
 
     %% when
     push_update(Node, [
-        update(7, [<<"r2">>, <<"r1">>], Sp1, space(<<"space">>)),
-        update(8, [<<"r2">>, <<"r1">>], Sh1, share(<<"share">>, Sp1)),
-        update(9, [<<"r3">>], G1, group(<<"group">>)),
-        update(10, [<<"r3">>, <<"r2">>, <<"r1">>], U1,
+        update(7, [?REV2, ?REV1], Sp1, space(<<"space">>)),
+        update(8, [?REV2, ?REV1], Sh1, share(<<"share">>, Sp1)),
+        update(9, [?REV3], G1, group(<<"group">>)),
+        update(10, [?REV3, ?REV2, ?REV1], U1,
             user(<<"onedata">>, [], [], Sp1)
         ),
-        update(11, [<<"r2">>, <<"r1">>], HS1,
+        update(11, [?REV2, ?REV1], HS1,
             handle_service(<<"handle service second">>, [], [])),
-        update(12, [<<"r2">>, <<"r1">>], H1,
+        update(12, [?REV2, ?REV1], H1,
             handle(HS1, <<"someOtherId">>, [], []))
     ]),
     expect_message([], 12, []),
@@ -733,27 +736,27 @@ resolves_conflicts(Config) ->
     %% then
     ?assertMatch({ok, #document{key = Sp1, value = #od_space{
         name = <<"space xp">>,
-        revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
+        revision_history = [?REV3]}}
     }, fetch(Node, od_space, Sp1)),
     ?assertMatch({ok, #document{key = Sh1, value = #od_share{
         name = <<"share xp">>,
-        revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
+        revision_history = [?REV3]}}
     }, fetch(Node, od_share, Sh1)),
     ?assertMatch({ok, #document{key = G1, value = #od_group{
         name = <<"group lol">>,
-        revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
+        revision_history = [?REV3]}}
     }, fetch(Node, od_group, G1)),
     ?assertMatch({ok, #document{key = U1, value = #od_user{
         name = <<"onedata ftw">>, default_space = <<"C">>,
         eff_groups = [<<"A">>, <<"B">>],
         space_aliases = [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}],
-        revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
+        revision_history = [?REV3]}}
     }, fetch(Node, od_user, U1)),
     ?assertMatch({ok, #document{key = HS1, value = #od_handle_service{
         name = <<"handle service first">>,
         users = [],
         groups = [],
-        revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
+        revision_history = [?REV3]}}
     }, fetch(Node, od_handle_service, HS1)),
     ?assertMatch({ok, #document{key = H1, value = #od_handle{
         handle_service = HS1,
@@ -761,7 +764,7 @@ resolves_conflicts(Config) ->
         users = [],
         groups = [],
         timestamp = {{0, 0, 0}, {0, 0, 0}},
-        revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
+        revision_history = [?REV3]}}
     }, fetch(Node, od_handle, H1)),
     ok.
 
@@ -770,13 +773,13 @@ pushing_space_user_write_priv_unlocks_space_for_user(Config) ->
     G1 = <<"group1">>,
     G2 = <<"group2">>,
 
-    UpdateFun1 = fun(Node, S1, U1, P1, Priv1, _G1) ->
+    UpdateFun1 = fun(Node, S1, U1, P1, _Priv1, _G1) ->
         push_update(Node, [
-            update(1, [<<"r1">>], S1, space(
+            update(1, [?REV1], S1, space(
                 <<"space_name">>, [{U1, ordsets:from_list([?SPACE_WRITE_DATA])}],
                 [], [{P1, 1000}], [<<"Share1">>]
             )),
-            update(2, [<<"r1">>], U1, user(<<"onedata">>, [G1, G2],
+            update(2, [?REV1], U1, user(<<"onedata">>, [G1, G2],
                 [{S1, <<"space_name">>}], S1))
         ]),
         expect_message([U1], 2, [])
@@ -791,11 +794,11 @@ pushing_space_group_write_priv_unlocks_space_for_user(Config) ->
 
     UpdateFun1 = fun(Node, S1, U1, P1, _Priv1, _G1) ->
         push_update(Node, [
-            update(1, [<<"r1">>], S1, space(
+            update(1, [?REV1], S1, space(
                 <<"space_name">>, [], [{G2, ordsets:from_list([?SPACE_WRITE_DATA])}],
                 [{P1, 1000}], [<<"Share1">>]
             )),
-            update(2, [<<"r1">>], U1, user(<<"onedata">>, [G1, G2],
+            update(2, [?REV1], U1, user(<<"onedata">>, [G1, G2],
                 [{S1, <<"space_name">>}], S1))
         ]),
         expect_message([U1], 2, [])
@@ -811,11 +814,11 @@ pushing_space_group_write_priv_locks_space_for_user(Config) ->
 
     UpdateFun1 = fun(Node, S1, U1, P1, _Priv1, _G1) ->
         push_update(Node, [
-            update(1, [<<"r1">>], S1, space(
+            update(1, [?REV1], S1, space(
                 <<"space_name">>, [], [{G3, ordsets:from_list([?SPACE_WRITE_DATA])}],
                 [{P1, 1000}], [<<"Share1">>]
             )),
-            update(2, [<<"r1">>], U1, user(<<"onedata">>, [G1, G2],
+            update(2, [?REV1], U1, user(<<"onedata">>, [G1, G2],
                 [{S1, <<"space_name">>}], S1))
         ]),
         expect_message([U1], 2, [])
@@ -833,11 +836,11 @@ pushing_space_user_write_priv_locks_space_for_user(Config) ->
 
     UpdateFun1 = fun(Node, S1, U1, P1, _Priv1, _G1) ->
         push_update(Node, [
-            update(1, [<<"r1">>], S1, space(
+            update(1, [?REV1], S1, space(
                 <<"space_name">>, [{<<"other_user">>, ordsets:from_list([?SPACE_WRITE_DATA])}],
                 [], [{P1, 1000}], [<<"Share1">>]
             )),
-            update(2, [<<"r1">>], U1, user(<<"onedata">>, [G1, G2],
+            update(2, [?REV1], U1, user(<<"onedata">>, [G1, G2],
                 [{S1, <<"space_name">>}], S1))
         ]),
         expect_message([U1], 2, [])
@@ -853,11 +856,11 @@ pushing_space_user_write_priv_locks_space_for_user(Config) ->
 pushing_space_group_write_priv_locks_space_for_user_even_if_owner(Config) ->
     UpdateFun1 = fun(Node, S1, U1, P1, _Priv1, _G1) ->
         push_update(Node, [
-            update(1, [<<"r1">>], S1, space(
+            update(1, [?REV1], S1, space(
                 <<"space_name">>, [{U1, ordsets:from_list([?SPACE_WRITE_DATA])}],
                 [], [{P1, 1000}], [<<"Share1">>]
             )),
-            update(2, [<<"r1">>], U1, user(<<"onedata">>, [],
+            update(2, [?REV1], U1, user(<<"onedata">>, [],
                 [{S1, <<"space_name">>}], S1))
         ]),
         expect_message([U1], 2, [])
@@ -877,7 +880,7 @@ pushing_space_group_write_priv_locks_space_for_user_even_if_owner(Config) ->
 
     UpdateFun2 = fun(Node, S1, U1, P1, _Priv1, _G1) ->
         push_update(Node, [
-            update(3, [<<"r2">>, <<"r1">>], S1, space(
+            update(3, [?REV2, ?REV1], S1, space(
                 <<"space_name">>, [{U1, ordsets:subtract(
                     privileges:space_admin(), ordsets:from_list([?SPACE_WRITE_DATA])
                 )}], [], [{P1, 1000}], [<<"Share1">>]
