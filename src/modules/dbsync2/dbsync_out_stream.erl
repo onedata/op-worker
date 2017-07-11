@@ -94,9 +94,9 @@ init([SpaceId, Opts]) ->
     Callback = fun(Change) -> gen_server:cast(Stream, {change, Change}) end,
     case proplists:get_value(register, Opts, false) of
         true ->
-            {ok, GC_Pid} = couchbase_changes_worker_gc:start_link(Bucket, SpaceId),
-            {ok, _} = couchbase_changes_worker:start_link(Bucket, SpaceId, GC_Pid);
-        false -> ok
+            {ok, _} = couchbase_changes_worker:start_link(Bucket, SpaceId);
+        false ->
+            ok
     end,
     {ok, _} = couchbase_changes_stream:start_link(Bucket, SpaceId, Callback, [
         {since, proplists:get_value(since, Opts, Since)},
