@@ -260,7 +260,7 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, NewCons, ProxyVia) ->
                     subscribe_user(Iden),
                     {ok, SessId};
                 {error, already_exists} ->
-                    reuse_or_create_session(SessId, SessType, Iden, Auth, NewCons);
+                    reuse_or_create_session(SessId, SessType, Iden, Auth, NewCons, ProxyVia);
                 {error, Reason} ->
                     {error, Reason}
             end;
