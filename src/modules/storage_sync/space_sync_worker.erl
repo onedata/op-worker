@@ -159,10 +159,10 @@ run({return_none, Jobs}) ->
 %%--------------------------------------------------------------------
 -spec check_strategies() -> ok.
 check_strategies() ->
-    try
-        {ok, #document{value = #od_provider{spaces = SpaceIds}}} =
-            od_provider:get_or_fetch(oneprovider:get_provider_id()),
-        check_strategies(SpaceIds)
+    try od_provider:get_or_fetch(oneprovider:get_provider_id()) of
+        {ok, #document{value = #od_provider{spaces = SpaceIds}}} ->
+            check_strategies(SpaceIds);
+        {error, _} -> ok
     catch
         _:TReason ->
             ?error_stacktrace("Unable to check space strategies due to: ~p", [TReason])
@@ -237,10 +237,7 @@ maybe_start_storage_import_and_update(SpaceId, StorageId, StorageStrategies) ->
 -spec start_storage_import_and_update(od_space:id(), storage:id(),
     integer() | undefined) -> ok.
 start_storage_import_and_update(SpaceId, StorageId, LastImportTime) ->
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-    SpaceCtx = file_ctx:new_by_guid(SpaceGuid),
-    {RootDirCtx, _} = file_ctx:get_parent(SpaceCtx, user_ctx:new(?ROOT_SESS_ID)),
-
+    RootDirCtx = file_ctx:new_root_ctx(),
     ImportAns = storage_import:start(SpaceId, StorageId, LastImportTime,
         RootDirCtx, SpaceId),
     log_import_answer(ImportAns, SpaceId, StorageId),
