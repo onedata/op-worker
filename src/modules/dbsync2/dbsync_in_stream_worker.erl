@@ -231,7 +231,7 @@ apply_changes_batch(_Since, Until, Docs, State = #state{
     {Docs2, Until2, State2, Continue} = prepare_batch(Docs, Until, State),
     case dbsync_changes:apply_batch(Docs2) of
         ok ->
-            State3 = update_seq(Until, State2),
+            State3 = update_seq(Until2, State2),
             case Continue of
                 {_, NextUntil} = Key ->
                     NextDocs = ets:lookup_element(Stash, Key, 2),
