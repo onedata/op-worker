@@ -300,6 +300,7 @@ update_seq(Seq, State = #state{space_id = SpaceId, provider_id = ProviderId}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_changes_request(state()) -> state().
+% TODO - VFS-3422
 schedule_changes_request(State = #state{
     seq = Seq,
     changes_request_ref = undefined
