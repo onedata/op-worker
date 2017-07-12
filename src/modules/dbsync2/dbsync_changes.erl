@@ -31,53 +31,12 @@
 %% Applies remote changes.
 %% @end
 %%--------------------------------------------------------------------
--spec apply_batch([datastore:doc()]) -> ok | {error, datastore:seq(), term()}.
+-spec apply_batch([datastore:doc()]) -> ok | timeout | {error, datastore:seq(), term()}.
 apply_batch(Docs) ->
-    DocsGroups = lists:foldl(fun(Doc, Acc) ->
-        ChangeKey = get_change_key(Doc),
-        ChangeList = maps:get(ChangeKey, Acc, []),
-        maps:put(ChangeKey, [Doc | ChangeList], Acc)
-    end, #{}, Docs),
-
+    DocsGroups = group_changes(Docs),
     DocsList = maps:to_list(DocsGroups),
-    Master = self(),
-    lists:foreach(fun({_, DocList}) ->
-        spawn(fun() ->
-            SlaveAns = lists:foldl(fun
-                (Doc, ok) ->
-                    apply(Doc);
-                (_, Acc) ->
-                    Acc
-            end, ok, lists:reverse(DocList)),
-            Master ! {changes_slave_ans, SlaveAns}
-        end)
-    end, DocsList),
-
-    lists:foldl(fun
-        (_, timeout) ->
-            timeout;
-        (_, ok) ->
-            receive
-                {changes_slave_ans, Ans} ->
-                    Ans
-            after
-                ?SLAVE_TIMEOUT ->
-                    timeout
-            end;
-        (_, {error, Seq, _} = Acc) ->
-            receive
-                {changes_slave_ans, ok} ->
-                    Acc;
-                {changes_slave_ans, {error, Seq2, _} = Ans} ->
-                    case Seq2 < Seq of
-                        true -> Ans;
-                        _ -> Acc
-                    end
-            after
-                ?SLAVE_TIMEOUT ->
-                    timeout
-            end
-    end, ok, DocsList).
+    start_slaves(DocsList),
+    gather_answers(DocsList).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -192,3 +151,72 @@ get_change_key(#document{value = #links{doc_key = DocUuid}}) ->
     DocUuid;
 get_change_key(#document{key = Uuid}) ->
     Uuid.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Group changes - documents connected with single file are grouped together.
+%% @end
+%%--------------------------------------------------------------------
+-spec group_changes([datastore:doc()]) -> #{}.
+group_changes(Docs) ->
+    lists:foldl(fun(Doc, Acc) ->
+        ChangeKey = get_change_key(Doc),
+        ChangeList = maps:get(ChangeKey, Acc, []),
+        maps:put(ChangeKey, [Doc | ChangeList], Acc)
+    end, #{}, Docs).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Starts one slave for each documents' group.
+%% @end
+%%--------------------------------------------------------------------
+-spec start_slaves([{datastore:ext_key(), [datastore:doc()]}]) -> ok.
+start_slaves(DocsList) ->
+    Master = self(),
+    lists:foreach(fun({_, DocList}) ->
+        spawn(fun() ->
+            SlaveAns = lists:foldl(fun
+                (Doc, ok) ->
+                    apply(Doc);
+                (_, Acc) ->
+                    Acc
+            end, ok, lists:reverse(DocList)),
+            Master ! {changes_slave_ans, SlaveAns}
+        end)
+    end, DocsList).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Gather answers from slaves.
+%% @end
+%%--------------------------------------------------------------------
+-spec gather_answers(list()) -> ok | timeout | {error, datastore:seq(), term()}.
+gather_answers(SlavesList) ->
+    gather_answers(length(SlavesList), ok).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Gather appropriate number of slaves' answers.
+%% @end
+%%--------------------------------------------------------------------
+-spec gather_answers(non_neg_integer(), ok | {error, datastore:seq(), term()}) ->
+    ok | timeout | {error, datastore:seq(), term()}.
+gather_answers(0, TmpAns) ->
+    TmpAns;
+gather_answers(N, TmpAns) ->
+    receive
+        {changes_slave_ans, Ans} ->
+            Merged = case {Ans, TmpAns} of
+                {ok, _} -> TmpAns;
+                {{error, Seq, _}, {error, Seq2, _}} when Seq < Seq2 -> Ans;
+                {{error, _, _}, {error, _, _}} -> TmpAns;
+                _ -> Ans
+            end,
+            gather_answers(N - 1, Merged)
+    after
+        ?SLAVE_TIMEOUT -> timeout
+    end.

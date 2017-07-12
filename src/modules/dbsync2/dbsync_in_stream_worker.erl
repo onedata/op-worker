@@ -125,7 +125,7 @@ handle_cast(Request, #state{} = State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_info({request_changes, Seq}, State = #state{
+handle_info(request_changes, State = #state{
     space_id = SpaceId,
     provider_id = ProviderId,
     seq = Seq,
@@ -133,6 +133,8 @@ handle_info({request_changes, Seq}, State = #state{
 }) ->
     case ets:first(Stash) of
         '$end_of_table' ->
+            {noreply, State#state{changes_request_ref = undefined}};
+        {Until, _} when Until =< Seq ->
             {noreply, State#state{changes_request_ref = undefined}};
         {Until, _} ->
             dbsync_communicator:request_changes(
@@ -142,7 +144,8 @@ handle_info({request_changes, Seq}, State = #state{
                 changes_request_ref = undefined
             })}
     end;
-handle_info(_Info, #state{} = State) ->
+handle_info(Info, #state{} = State) ->
+    ?log_bad_request(Info),
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -228,20 +231,24 @@ stash_changes_batch(Since, Until, Docs, State = #state{
 apply_changes_batch(_Since, Until, Docs, State = #state{
     changes_stash = Stash
 }) ->
-    {Docs2, Until2, State2, Continue} = prepare_batch(Docs, Until, State),
+    State2 = cancel_changes_request(State),
+    {Docs2, Until2, State3, Continue} = prepare_batch(Docs, Until, State2),
     case dbsync_changes:apply_batch(Docs2) of
         ok ->
-            State3 = update_seq(Until, State2),
+            State4 = update_seq(Until2, State3),
             case Continue of
                 {_, NextUntil} = Key ->
                     NextDocs = ets:lookup_element(Stash, Key, 2),
                     ets:delete(Stash, Key),
-                    apply_changes_batch(Until2, NextUntil, NextDocs, State3);
+                    apply_changes_batch(Until2, NextUntil, NextDocs, State4);
                 _ ->
-                    State3
+                    State4
             end;
         {error, Seq, _} ->
-            update_seq(Seq - 1, State2)
+            State4 = update_seq(Seq - 1, State3),
+            schedule_changes_request(State4);
+        timeout ->
+            schedule_changes_request(State3)
     end.
 
 %%--------------------------------------------------------------------
@@ -253,30 +260,29 @@ apply_changes_batch(_Since, Until, Docs, State = #state{
 %%--------------------------------------------------------------------
 -spec prepare_batch([datastore:doc()], couchbase_changes:until(), state()) ->
     {[datastore:doc()], couchbase_changes:until(), state(),
-        {couchbase_changes:since(), couchbase_changes:until()} | no}.
+        {couchbase_changes:since(), couchbase_changes:until()} | undefined}.
 prepare_batch(Docs, Until, State = #state{
     changes_stash = Stash,
     changes_stash_size = Size
 }) ->
-    State2 = cancel_changes_request(State),
     case ets:first(Stash) of
         '$end_of_table' ->
-            {Docs, Until, State2, no};
+            {Docs, Until, State, undefined};
         {Until, NextUntil} = Key ->
             MaxSize = application:get_env(?APP_NAME,
                 dbsync_changes_apply_max_size, 1000),
             case length(Docs) > MaxSize of
                 true ->
-                    {Docs, Until, State2, Key};
+                    {Docs, Until, State, Key};
                 _ ->
                     NextDocs = ets:lookup_element(Stash, Key, 2),
                     ets:delete(Stash, Key),
-                    prepare_batch(Docs ++ NextDocs, NextUntil, State2#state{
+                    prepare_batch(Docs ++ NextDocs, NextUntil, State#state{
                         changes_stash_size = Size - length(NextDocs)
                     })
             end;
         _ ->
-            {Docs, Until, schedule_changes_request(State2), no}
+            {Docs, Until, schedule_changes_request(State), undefined}
     end.
 
 
@@ -308,7 +314,7 @@ schedule_changes_request(State = #state{
         ?APP_NAME, dbsync_changes_request_delay, timer:seconds(15)
     ),
     State#state{changes_request_ref = erlang:send_after(
-        Delay, self(), {request_changes, Seq}
+        Delay, self(), request_changes
     )};
 schedule_changes_request(State = #state{}) ->
     State.
