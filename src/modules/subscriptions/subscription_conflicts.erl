@@ -33,13 +33,14 @@
 update_model(Model, UpdateDoc, UpdateRevs) ->
     try
         Key = UpdateDoc#document.key,
+        UpdateRevs2 = [hd(lists:reverse(lists:sort(UpdateRevs)))],
         Update = UpdateDoc#document{
-            value = set_revisions(Model, UpdateDoc#document.value, UpdateRevs)
+            value = set_revisions(Model, UpdateDoc#document.value, UpdateRevs2)
         },
 
         {ok, Key} = Model:create_or_update(Update, fun(Record) ->
             RevisionHistory = get_revisions(Model, Record),
-            UpdatedRecord = case should_update(RevisionHistory, UpdateRevs) of
+            UpdatedRecord = case should_update(RevisionHistory, UpdateRevs2) of
                 {false, UpdatedHistory} ->
                     set_revisions(Model, Record, UpdatedHistory);
                 {true, UpdatedHistory} ->
@@ -81,22 +82,15 @@ delete_model(Model, ID) ->
 -spec should_update(HistoryRevs :: [subscriptions:rev()],
     UpdateRevs :: [subscriptions:rev()]) ->
     {boolean(), UpdatedHistoryRevs :: [subscriptions:rev()]}.
+should_update([], UpdateRevs) ->
+    {true, UpdateRevs};
 should_update(HistoryRevs, UpdateRevs) ->
     UpdateCurrent = hd(UpdateRevs),
-    NewRevs = UpdateRevs -- HistoryRevs,
-    {Result, Revs} = case lists:member(UpdateCurrent, HistoryRevs) of
-        true ->
-            %% including revs of rejected (already seen) update
-            {false, HistoryRevs ++ NewRevs};
-        false ->
-            %% revs of accepted update are newer than history
-            {true, NewRevs ++ HistoryRevs}
-    end,
-
-    {ok, HistoryMaxLength} = application:get_env(?APP_NAME,
-        subscriptions_history_lenght_limit),
-
-    {Result, lists:sublist(Revs, HistoryMaxLength)}.
+    UpdateLast = hd(HistoryRevs),
+    case get_generation(UpdateCurrent) > get_generation(UpdateLast) of
+        true -> {true, [UpdateCurrent]};
+        false -> {false, [UpdateLast]}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc @private
@@ -105,7 +99,7 @@ should_update(HistoryRevs, UpdateRevs) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_revisions(Model :: atom(), Record :: subscriptions:record()) ->
-    Record2 :: subscriptions:record() | {error, term()}.
+    Revs :: [subscriptions:rev()].
 get_revisions(od_space, Record) ->
     Record#od_space.revision_history;
 get_revisions(od_share, Record) ->
@@ -119,9 +113,7 @@ get_revisions(od_provider, Record) ->
 get_revisions(od_handle, Record) ->
     Record#od_handle.revision_history;
 get_revisions(od_handle_service, Record) ->
-    Record#od_handle_service.revision_history;
-get_revisions(_Model, _Record) ->
-    {error, get_revisions_not_implemented}.
+    Record#od_handle_service.revision_history.
 
 %%--------------------------------------------------------------------
 %% @doc @private
@@ -130,7 +122,7 @@ get_revisions(_Model, _Record) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_revisions(Model :: atom(), Record :: subscriptions:record(),
-    Revs :: [term()]) -> Record2 :: subscriptions:record().
+    Revs :: [subscriptions:rev()]) -> Record2 :: subscriptions:record().
 set_revisions(od_space, Record, Revisions) ->
     Record#od_space{revision_history = Revisions};
 set_revisions(od_share, Record, Revisions) ->
@@ -148,6 +140,14 @@ set_revisions(od_provider, Record, Revisions) ->
 set_revisions(od_handle, Record, Revisions) ->
     Record#od_handle{revision_history = Revisions};
 set_revisions(od_handle_service, Record, Revisions) ->
-    Record#od_handle_service{revision_history = Revisions};
-set_revisions(_Model, _Record, _Revisions) ->
-    {error, get_revisions_not_implemented}.
+    Record#od_handle_service{revision_history = Revisions}.
+
+%%--------------------------------------------------------------------
+%% @doc @private
+%% Returns revision generation.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_generation(Rev :: binary()) -> non_neg_integer().
+get_generation(Rev) ->
+    [Gen, _] = binary:split(Rev, <<"-">>, [global]),
+    binary_to_integer(Gen).
