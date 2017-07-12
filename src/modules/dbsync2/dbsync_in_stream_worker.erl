@@ -247,7 +247,7 @@ apply_changes_batch(_Since, Until, Docs, State = #state{
         {error, Seq, _} ->
             State4 = update_seq(Seq - 1, State3),
             schedule_changes_request(State4);
-        {error, timeout} ->
+        timeout ->
             schedule_changes_request(State3)
     end.
 
