@@ -190,26 +190,33 @@ start_slaves(DocsList) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Gather changes from slaves.
+%% Gather answers from slaves.
 %% @end
 %%--------------------------------------------------------------------
 -spec gather_answers(list()) -> ok | timeout | {error, datastore:seq(), term()}.
 gather_answers(SlavesList) ->
-    lists:foldl(fun
-        (_, timeout) ->
-            timeout;
-        (_, ok) ->
-            receive
-                {changes_slave_ans, Ans} -> Ans
-            after
-                ?SLAVE_TIMEOUT -> timeout
-            end;
-        (_, {error, Seq, _} = Acc) ->
-            receive
-                {changes_slave_ans, ok} -> Acc;
-                {changes_slave_ans, {error, Seq2, _} = Ans} when Seq2 < Seq -> Ans;
-                {changes_slave_ans, {error, Seq2, _} = Ans} -> Acc
-            after
-                ?SLAVE_TIMEOUT -> timeout
-            end
-    end, ok, SlavesList).
+    gather_answers(length(SlavesList), ok).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Gather appropriate number of slaves' answers.
+%% @end
+%%--------------------------------------------------------------------
+-spec gather_answers(non_neg_integer(), ok | {error, datastore:seq(), term()}) ->
+    ok | timeout | {error, datastore:seq(), term()}.
+gather_answers(0, TmpAns) ->
+    TmpAns;
+gather_answers(N, TmpAns) ->
+    receive
+        {changes_slave_ans, Ans} ->
+            Merged = case {Ans, TmpAns} of
+                {ok, _} -> TmpAns;
+                {{error, Seq, _}, {error, Seq2, _}} when Seq < Seq2 -> Ans;
+                {{error, _, _}, {error, _, _}} -> TmpAns;
+                _ -> Ans
+            end,
+            gather_answers(N - 1, Merged)
+    after
+        ?SLAVE_TIMEOUT -> timeout
+    end.
