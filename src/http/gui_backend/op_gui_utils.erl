@@ -47,7 +47,7 @@ get_user_auth() ->
 %%--------------------------------------------------------------------
 -spec ids_to_association(FirstId :: binary(), SecondId :: binary()) -> binary().
 ids_to_association(FirstId, SecondId) ->
-    <<FirstId/binary, ".", SecondId/binary>>.
+    <<FirstId/binary, "|", SecondId/binary>>.
 
 
 %%--------------------------------------------------------------------
@@ -57,7 +57,7 @@ ids_to_association(FirstId, SecondId) ->
 %%--------------------------------------------------------------------
 -spec association_to_ids(AssocId :: binary()) -> {binary(), binary()}.
 association_to_ids(AssocId) ->
-    [FirstId, SecondId] = binary:split(AssocId, <<".">>, [global]),
+    [FirstId, SecondId] = binary:split(AssocId, <<"|">>, [global]),
     {FirstId, SecondId}.
 
 
