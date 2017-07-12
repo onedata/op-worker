@@ -31,7 +31,7 @@
 %% Applies remote changes.
 %% @end
 %%--------------------------------------------------------------------
--spec apply_batch([datastore:doc()]) -> ok | {error, datastore:seq(), term()}.
+-spec apply_batch([datastore:doc()]) -> ok | timeout | {error, datastore:seq(), term()}.
 apply_batch(Docs) ->
     DocsGroups = group_changes(Docs),
     DocsList = maps:to_list(DocsGroups),
@@ -190,7 +190,7 @@ start_slaves(DocsList) ->
 %% Gather changes from slaves.
 %% @end
 %%--------------------------------------------------------------------
--spec gather_answers(list()) -> ok | {error, datastore:seq(), term()}.
+-spec gather_answers(list()) -> ok | timeout | {error, datastore:seq(), term()}.
 gather_answers(SlavesList) ->
     lists:foldl(fun
         (_, timeout) ->
