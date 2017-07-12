@@ -153,6 +153,7 @@ get_change_key(#document{key = Uuid}) ->
     Uuid.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Group changes - documents connected with single file are grouped together.
 %% @end
@@ -166,6 +167,7 @@ group_changes(Docs) ->
     end, #{}, Docs).
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Starts one slave for each documents' group.
 %% @end
@@ -186,6 +188,7 @@ start_slaves(DocsList) ->
     end, DocsList).
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Gather changes from slaves.
 %% @end
@@ -197,23 +200,16 @@ gather_answers(SlavesList) ->
             timeout;
         (_, ok) ->
             receive
-                {changes_slave_ans, Ans} ->
-                    Ans
+                {changes_slave_ans, Ans} -> Ans
             after
-                ?SLAVE_TIMEOUT ->
-                    timeout
+                ?SLAVE_TIMEOUT -> timeout
             end;
         (_, {error, Seq, _} = Acc) ->
             receive
-                {changes_slave_ans, ok} ->
-                    Acc;
-                {changes_slave_ans, {error, Seq2, _} = Ans} ->
-                    case Seq2 < Seq of
-                        true -> Ans;
-                        _ -> Acc
-                    end
+                {changes_slave_ans, ok} -> Acc;
+                {changes_slave_ans, {error, Seq2, _} = Ans} when Seq2 < Seq -> Ans;
+                {changes_slave_ans, {error, Seq2, _} = Ans} -> Acc
             after
-                ?SLAVE_TIMEOUT ->
-                    timeout
+                ?SLAVE_TIMEOUT -> timeout
             end
     end, ok, SlavesList).
