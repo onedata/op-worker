@@ -22,7 +22,7 @@
 
 %% API
 -export([get_server_user_ctx/4, get_client_user_ctx/4, get_posix_user_ctx/2]).
-
+%TODO - wprowadzic zmiany z _2
 %%%===================================================================
 %%% API functions
 %%%===================================================================
