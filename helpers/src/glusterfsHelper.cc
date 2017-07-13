@@ -101,17 +101,11 @@ folly::Future<folly::IOBufQueue> GlusterFSFileHandle::read(
     folly::IOBufQueue buffer{folly::IOBufQueue::cacheChainLength()};
     char *raw = static_cast<char *>(buffer.preallocate(size, size).first);
 
-    std::size_t readBytesCountTotal = 0;
-    while (readBytesCountTotal < size) {
-        auto readBytesCount =
-            glfs_pread(m_glfsFd.get(), raw + readBytesCountTotal,
-                size - readBytesCountTotal, offset + readBytesCountTotal, 0);
-        if (readBytesCount < 0)
-            return makeFuturePosixException<folly::IOBufQueue>(readBytesCount);
-        readBytesCountTotal += readBytesCount;
-    }
+    auto readBytesCount = glfs_pread(m_glfsFd.get(), raw, size, offset, 0);
+    if (readBytesCount < 0)
+        return makeFuturePosixException<folly::IOBufQueue>(readBytesCount);
 
-    buffer.postallocate(readBytesCountTotal);
+    buffer.postallocate(readBytesCount);
     return folly::makeFuture(std::move(buffer));
 }
 
