@@ -24,16 +24,22 @@
 %% API
 %% export for tests
 -export([
-    basic_opts_test_base/4, many_ops_test_base/6, distributed_modification_test_base/4, multi_space_test_base/3,
-    file_consistency_test_skeleton/5, permission_cache_invalidate_test_base/2, get_links/1,
-    mkdir_and_rmdir_loop_test_base/3, echo_and_delete_file_loop_test_base/3,
-    create_and_delete_file_loop_test_base/3, distributed_delete_test_base/4
+    basic_opts_test_base/4,
+    many_ops_test_base/6,
+    distributed_modification_test_base/4,
+    multi_space_test_base/3,
+    file_consistency_test_skeleton/5,
+    get_links/1,
+    mkdir_and_rmdir_loop_test_base/3,
+    echo_and_delete_file_loop_test_base/3,
+    create_and_delete_file_loop_test_base/3,
+    distributed_delete_test_base/4
 ]).
 -export([init_env/1, teardown_env/1]).
 
 % for file consistency testing
--export([create_doc/4, set_parent_link/4, set_link_to_parent/4, create_location/4, set_link_to_location/4,
-    add_dbsync_state/4]).
+-export([create_doc/4, set_parent_link/4, set_link_to_parent/4, create_location/4,
+    set_link_to_location/4, add_dbsync_state/4]).
 
 -export([extend_config/4]).
 
@@ -59,65 +65,6 @@
 %%%===================================================================
 %%% Test skeletons
 %%%===================================================================
-
-permission_cache_invalidate_test_base(Config, Attempts) ->
-    InvalidateFun = fun(Worker, SessId, TestDir) ->
-        ?assertMatch(ok, lfm_proxy:set_perms(Worker, SessId, {path, TestDir}, 0))
-    end,
-
-    InvalidateFun2 = fun(Worker, SessId, TestDir) ->
-        ?assertEqual(ok, lfm_proxy:set_acl(Worker, SessId, {path, TestDir}, [?deny_user(<<"user1">>)]))
-    end,
-
-    permission_cache_invalidate_test_skeleton(Config, Attempts, file_meta, InvalidateFun),
-    permission_cache_invalidate_test_skeleton(Config, Attempts, custom_metadata, InvalidateFun2).
-
-permission_cache_invalidate_test_skeleton(Config, Attempts, CheckedModule, InvalidateFun) ->
-    [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
-    [SessId1 | _] = SessIds = lists:map(fun(Worker) ->
-        ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config)
-    end, Workers),
-    WS = lists:zip(Workers, SessIds),
-
-    [LastTreeDir | _] = TreeDirsReversed = lists:foldl(fun(_, [H | _] = Acc) ->
-        NewDir = <<H/binary, "/", (generator:gen_name())/binary>>,
-        [NewDir | Acc]
-    end, [<<"/space1">>], lists:seq(1,10)),
-    [_ | TreeDirs] = lists:reverse(TreeDirsReversed),
-
-    lists:foreach(fun(D) ->
-        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId1, D, 8#755))
-    end, TreeDirs),
-
-    [_, _, TestDir | _] = TreeDirs,
-
-    lists:foreach(fun({Worker, SessId}) ->
-        ?assertEqual({ok, []}, lfm_proxy:ls(Worker, SessId, {path, LastTreeDir}, 0, 10), Attempts)
-    end, WS),
-
-    StatAns = lfm_proxy:stat(Worker1, SessId1, {path, TestDir}),
-    ?assertMatch({ok, #file_attr{}}, StatAns),
-    {ok, #file_attr{guid = FileGuid}} = StatAns,
-    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
-    ControllerUUID = base64:encode(term_to_binary({CheckedModule, FileUuid})),
-
-    InvalidateFun(Worker1, SessId1, TestDir),
-    lists:foreach(fun({Worker, SessId}) ->
-        ?assertEqual({error, ?EACCES}, lfm_proxy:ls(Worker, SessId, {path, LastTreeDir}, 0, 10), Attempts)
-    end, WS),
-
-    lists:foreach(fun(Worker) ->
-        ?assertMatch({error,{not_found, _}}, ?rpc(Worker, change_propagation_controller, get,
-            [ControllerUUID]), Attempts * length(Workers)),
-
-        ListFun = fun(LinkName, _LinkTarget, Acc) ->
-            [LinkName | Acc]
-        end,
-        ?assertEqual({ok, []}, ?rpc(Worker, model, execute_with_default_context,
-            [change_propagation_controller, foreach_link, [ControllerUUID, ListFun, []]]), Attempts)
-    end, Workers),
-
-    ok.
 
 
 basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts) ->

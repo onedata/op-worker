@@ -21,7 +21,7 @@
 
 %% API
 -export([wait/4, wait/5, add_components_and_notify/2, check_and_add_components/3,
-    check_missing_components/2, check_missing_components/3, verify_revision/3]).
+    check_missing_components/2, check_missing_components/3]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
@@ -204,14 +204,6 @@ notify_waiting(Doc = #document{key = FileUuid,
                     _ ->
                         true
                 end;
-            [{rev, Model, Rev}] ->
-                case verify_revision(FileUuid, Model, Rev) of
-                    ok ->
-                        notify_pid(Pid, RestartPosthookData),
-                        false;
-                    _ ->
-                        true
-                end;
             _ ->
                 true
         end
@@ -314,36 +306,6 @@ check_missing_components(FileUuid, SpaceId, [link_to_parent | RestMissing], Foun
             check_missing_components(FileUuid, SpaceId, RestMissing, [link_to_parent | Found]);
         _ ->
             check_missing_components(FileUuid, SpaceId, RestMissing, Found)
-    end;
-check_missing_components(FileUuid, SpaceId, [{rev, Model, Rev} | RestMissing], Found) ->
-    case verify_revision(FileUuid, Model, Rev) of
-        ok ->
-            check_missing_components(FileUuid, SpaceId, RestMissing, [{rev, Model, Rev} | Found]);
-        _ ->
-            check_missing_components(FileUuid, SpaceId, RestMissing, Found)
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks if revision of document is present.
-%% @end
-%%--------------------------------------------------------------------
--spec verify_revision(file_meta:uuid(), atom(), non_neg_integer()) ->
-    ok | younger_revision | not_found.
-verify_revision(FileUuid, Model, Rev) ->
-    % TODO - what if document has been deleted in parallel by other provider?
-    % TODO - get all revisions simmilar to process_raw_doc
-    case catch model:execute_with_default_context(Model, get, [FileUuid]) of
-        {ok, #document{rev = [CurrentRev | _]}} ->
-            {GetRev, _} = memory_store_driver:rev_to_info(CurrentRev),
-            case GetRev >= Rev of
-                true ->
-                    ok;
-                _ ->
-                    younger_revision
-            end;
-        _ ->
-            not_found
     end.
 
 %%%===================================================================

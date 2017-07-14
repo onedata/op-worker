@@ -160,7 +160,7 @@ chmod_insecure(UserCtx, FileCtx, Mode) ->
 chmod_attrs_only_insecure(FileCtx, Mode) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     {ok, _} = file_meta:update({uuid, FileUuid}, #{mode => Mode}),
-    ok = permissions_cache:invalidate(file_meta, FileCtx),
+    ok = permissions_cache:invalidate(),
     fslogic_event_emitter:emit_file_perm_changed(FileCtx).
 
 %%--------------------------------------------------------------------

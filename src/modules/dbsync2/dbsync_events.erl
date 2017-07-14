@@ -132,22 +132,6 @@ change_replicated_internal(SpaceId, #document{
     FileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId)),
     (catch fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx)),
     ok = file_consistency:add_components_and_notify(FileUuid, [times]);
-change_replicated_internal(SpaceId, #document{
-        deleted = false,
-        value = #links{
-            model = change_propagation_controller,
-            doc_key = DocKey
-        }
-    }, _Master) ->
-    ?debug("change_replicated_internal: change_propagation_controller links ~p", [DocKey]),
-    ok = change_propagation_controller:verify_propagation(DocKey, SpaceId, false);
-change_replicated_internal(_SpaceId, #document{
-        deleted = false,
-        key = Key,
-        value = #change_propagation_controller{}
-    } = Doc, _Master) ->
-    ?debug("change_replicated_internal: change_propagation_controller ~p", [Key]),
-    ok = change_propagation_controller:mark_change_propagated(Doc);
 change_replicated_internal(_SpaceId, #document{
         key = FileUuid,
         value = #custom_metadata{}
