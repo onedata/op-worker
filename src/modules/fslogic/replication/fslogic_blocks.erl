@@ -93,16 +93,12 @@ get_file_size(#document{value = #file_location{size = undefined, blocks = Blocks
     upper(Blocks);
 get_file_size(#document{value = #file_location{size = Size}}) ->
     Size;
-get_file_size(FileUuid) when is_binary(FileUuid) ->
-    [LocalLocation] = file_meta:get_local_locations(FileUuid),
-    get_file_size(LocalLocation);
 get_file_size(FileCtx) ->
-    case file_ctx:is_dir(FileCtx) of
-        {true, _FileCtx2} -> %todo return FileCtx from this funciton
-            0;
-        {false, FileCtx2} ->
-            {[LocalLocation], _FileCtx3} = file_ctx:get_local_file_location_docs(FileCtx2),
-            get_file_size(LocalLocation)
+    case file_ctx:get_local_file_location_docs(FileCtx) of
+        {[LocalLocation], _FileCtx2} ->
+            get_file_size(LocalLocation);
+        {[], _FileCtx2} ->
+            0
     end.
 
 %%--------------------------------------------------------------------

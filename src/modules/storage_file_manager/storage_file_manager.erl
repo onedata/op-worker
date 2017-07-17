@@ -64,7 +64,7 @@ new_handle(SessionId, FileCtx) ->
     Storage :: datastore:document(), FileId :: helpers:file_id(),
     ShareId :: od_share:id() | undefined) -> handle().
 new_handle(SessionId, SpaceId, FileUuid, #document{key = StorageId} = Storage, FileId, ShareId) ->
-    FSize = get_size({uuid, FileUuid}),
+    FSize = get_size(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId)),
     StorageFileId = filename_mapping:to_storage_path(SpaceId, StorageId, FileId),
     #sfm_handle{
         session_id = SessionId,
@@ -504,10 +504,12 @@ open_insecure(#sfm_handle{
 %% Returns size of file, or 0 in case of error.
 %% @end
 %%--------------------------------------------------------------------
--spec get_size({uuid, file_meta:uuid()}) -> non_neg_integer().
-get_size({uuid, FileUuid}) ->
-    case catch fslogic_blocks:get_file_size(FileUuid) of %todo use FileCtx
-        Size0 when is_integer(Size0) ->
-            Size0;
-        _ -> 0
+-spec get_size(fslogic_worker:file_guid()) -> non_neg_integer().
+get_size(FileGuid) ->
+    try fslogic_blocks:get_file_size(file_ctx:new_by_guid(FileGuid)) of
+        Size ->
+            Size
+    catch
+        _:_ ->
+            0
     end.
