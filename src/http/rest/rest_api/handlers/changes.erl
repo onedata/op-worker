@@ -18,10 +18,8 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include("http/rest/http_status.hrl").
--include("modules/dbsync/common.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
-
 
 %% API
 -export([rest_init/2, terminate/3, allowed_methods/2, is_authorized/2,
@@ -29,6 +27,12 @@
 
 %% resource functions
 -export([get_space_changes/2]).
+
+-record(change, {
+    seq :: non_neg_integer(),
+    doc :: datastore:document(),
+    model :: model_behaviour:model_type()
+}).
 
 %%%===================================================================
 %%% API
@@ -46,10 +50,10 @@ rest_init(Req, State) ->
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: term(), req(), maps:map()) -> ok.
 terminate(_, _, #{changes_stream := Stream, loop_pid := Pid, ref := Ref}) ->
-    gen_changes:stop(Stream),
+    couchbase_changes:cancel_stream(Stream),
     Pid ! {Ref, stream_ended};
 terminate(_, _, #{changes_stream := Stream}) ->
-    gen_changes:stop(Stream);
+    couchbase_changes:cancel_stream(Stream);
 terminate(_, _, #{}) ->
     ok.
 
@@ -112,18 +116,22 @@ get_space_changes(Req, State) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Init couchbeam changes stream
+%% Init changes stream.
 %% @end
 %%--------------------------------------------------------------------
 -spec init_stream(State :: maps:map()) -> maps:map().
-init_stream(State = #{last_seq := Since}) ->
+init_stream(State = #{last_seq := Since, space_id := SpaceId}) ->
     ?info("[ changes ]: Starting stream ~p", [Since]),
     Ref = make_ref(),
     Pid = self(),
 
     % todo limit to admin only (when we will have admin users)
-    {ok, Stream} = couchdb_datastore_driver:changes_start_link(
-        couchbeam_callbacks:notify_function(Pid, Ref), Since, infinity, couchdb_datastore_driver:sync_enabled_bucket()),
+    Node = consistent_hasing:get_node({dbsync_out_stream, SpaceId}),
+    {ok, Stream} = rpc:call(Node, couchbase_changes, stream,
+        [<<"sync">>, SpaceId, fun(Feed) ->
+            notify(Pid, Ref, Feed)
+        end, [{since, Since}]]),
+
     State#{changes_stream => Stream, ref => Ref, loop_pid => Pid}.
 
 %%--------------------------------------------------------------------
@@ -163,15 +171,25 @@ send_change(SendChunk, #change{seq = Seq, doc = #document{
     {ok, FileDoc} = file_meta:get({uuid, FileUuid}),
     send_change(SendChunk, #change{seq = Seq, doc = FileDoc, model = file_meta},
         RequestedSpaceId);
+send_change(SendChunk, #change{seq = Seq, doc = #document{
+    value = #file_location{uuid = FileUuid, provider_id = ProviderId}}}, RequestedSpaceId) ->
+    case ProviderId =:= oneprovider:get_provider_id() of
+        true ->
+            {ok, FileDoc} = file_meta:get({uuid, FileUuid}),
+            send_change(SendChunk, #change{seq = Seq, doc = FileDoc, model = file_meta},
+                RequestedSpaceId);
+        false ->
+            ok
+    end;
 send_change(SendChunk, Change, RequestedSpaceId) ->
-    Scope =
+    SpaceDirUuid =
         case Change#change.doc#document.value#file_meta.is_scope of
             true ->
                 Change#change.doc#document.key;
             false ->
                 Change#change.doc#document.value#file_meta.scope
         end,
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(Scope),
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirUuid),
 
     case SpaceId =:= RequestedSpaceId of
         true ->
@@ -188,9 +206,8 @@ send_change(SendChunk, Change, RequestedSpaceId) ->
 prepare_response(#change{seq = Seq, doc = FileDoc = #document{
     key = Uuid, deleted = Deleted,
     value = #file_meta{
-        is_scope = IsScope, mode = Mode, type = Type, uid = Uid,
+        is_scope = IsScope, mode = Mode, type = Type, owner = Uid,
         version = Version, name = Name}}}, SpaceId) ->
-    Ctx = fslogic_context:new(?ROOT_SESS_ID),
     #times{atime = Atime, ctime = Ctime, mtime = Mtime} =
         try
             {ok, #document{value = TimesValue}} = times:get(Uuid),
@@ -202,7 +219,7 @@ prepare_response(#change{seq = Seq, doc = FileDoc = #document{
         end,
     Guid =
         try
-            {ok, Val} = cdmi_id:uuid_to_objectid(fslogic_uuid:uuid_to_guid(Uuid)),
+            {ok, Val} = cdmi_id:guid_to_objectid(fslogic_uuid:uuid_to_guid(Uuid, SpaceId)),
             Val
         catch
             _:Error1 ->
@@ -211,7 +228,7 @@ prepare_response(#change{seq = Seq, doc = FileDoc = #document{
         end,
     Path =
         try
-            fslogic_uuid:uuid_to_path(Ctx, Uuid)
+            fslogic_uuid:uuid_to_path(?ROOT_SESS_ID, Uuid)
         catch
             _:Error2 ->
                 ?error("Cannot fetch Path for changes, error: ~p", [Error2]),
@@ -232,7 +249,8 @@ prepare_response(#change{seq = Seq, doc = FileDoc = #document{
         end,
     Size =
         try
-            fslogic_blocks:get_file_size(FileDoc)
+            FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
+            fslogic_blocks:get_file_size(FileCtx)
         catch
             _:Error4 ->
                 ?error("Cannot fetch size for changes, error: ~p", [Error4]),
@@ -272,3 +290,34 @@ prepare_response(#change{seq = Seq, doc = FileDoc = #document{
 same(X) ->
     put(x, X),
     get(x).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Forwards changes feed to a streaming process.
+%% @end
+%%--------------------------------------------------------------------
+-spec notify(pid(), reference(),
+    {ok, [datastore:document()] | datastore:document() | end_of_stream} |
+    {error, couchbase_changes:since(), term()}) -> ok.
+notify(Pid, Ref, {ok, end_of_stream}) ->
+    Pid ! {Ref, stream_ended},
+    ok;
+notify(Pid, Ref, {ok, Doc = #document{seq = Seq, value = Value}}) when
+    is_record(Value, file_meta);
+    is_record(Value, custom_metadata);
+    is_record(Value, times);
+    is_record(Value, file_location) ->
+    Pid ! {Ref, #change{seq = Seq, doc = Doc, model = element(1, Value)}},
+    ok;
+notify(_Pid, _Ref, {ok, #document{}}) ->
+    ok;
+notify(Pid, Ref, {ok, Docs}) when is_list(Docs) ->
+    lists:foreach(fun(Doc) ->
+        notify(Pid, Ref, {ok, Doc})
+    end, Docs);
+notify(Pid, Ref, {error, _Seq, Reason}) ->
+    ?error("Changes stream terminated abnormally due to: ~p", [Reason]),
+    Pid ! {Ref, stream_ended},
+    ok.

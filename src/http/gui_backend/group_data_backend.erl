@@ -18,12 +18,13 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
 
 %% API
 -export([init/0, terminate/0]).
--export([find/2, find_all/1, find_query/2]).
+-export([find_record/2, find_all/1, query/2, query_record/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
 
 -export([group_record/1, group_record/2]).
@@ -54,13 +55,13 @@ terminate() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link data_backend_behaviour} callback find/2.
+%% {@link data_backend_behaviour} callback find_record/2.
 %% @end
 %%--------------------------------------------------------------------
--spec find(ResourceType :: binary(), Id :: binary()) ->
+-spec find_record(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find(<<"group">>, GroupId) ->
-    UserId = g_session:get_user_id(),
+find_record(<<"group">>, GroupId) ->
+    UserId = gui_session:get_user_id(),
     % Check if the user belongs to this group
     case group_logic:has_effective_user(GroupId, UserId) of
         false ->
@@ -69,24 +70,28 @@ find(<<"group">>, GroupId) ->
             {ok, group_record(GroupId)}
     end;
 
-% PermissionsRecord matches <<"group-(user|group)-permission">>
-find(PermissionsRecord, AssocId) ->
-    {_, GroupId} = op_gui_utils:association_to_ids(AssocId),
-    UserId = g_session:get_user_id(),
+% PermissionsRecord matches <<"group-(user|group)-(list|permission)">>
+find_record(PermissionsRecord, RecordId) ->
+    GroupId = permission_record_to_group_id(PermissionsRecord, RecordId),
+    UserId = gui_session:get_user_id(),
     % Make sure that user is allowed to view requested privileges - he must have
     % view privileges in this group.
     Authorized = group_logic:has_effective_privilege(
-        GroupId, UserId, group_view_data
+        GroupId, UserId, ?GROUP_VIEW
     ),
     case Authorized of
         false ->
             gui_error:unauthorized();
         true ->
             case PermissionsRecord of
+                <<"group-user-list">> ->
+                    {ok, group_user_list_record(RecordId)};
+                <<"group-group-list">> ->
+                    {ok, group_group_list_record(RecordId)};
                 <<"group-user-permission">> ->
-                    {ok, group_user_permission_record(AssocId)};
+                    {ok, group_user_permission_record(RecordId)};
                 <<"group-group-permission">> ->
-                    {ok, group_group_permission_record(AssocId)}
+                    {ok, group_group_permission_record(RecordId)}
             end
     end.
 
@@ -98,25 +103,28 @@ find(PermissionsRecord, AssocId) ->
 -spec find_all(ResourceType :: binary()) ->
     {ok, [proplists:proplist()]} | gui_error:error_result().
 find_all(<<"group">>) ->
-    UserAuth = op_gui_utils:get_user_auth(),
-    UserId = g_session:get_user_id(),
-    GroupIds = op_gui_utils:find_all_groups(UserAuth, UserId),
-    Res = lists:map(
-        fun(GroupId) ->
-            {ok, GroupData} = find(<<"group">>, GroupId),
-            GroupData
-        end, GroupIds),
-    {ok, Res}.
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link data_backend_behaviour} callback find_query/2.
+%% {@link data_backend_behaviour} callback query/2.
 %% @end
 %%--------------------------------------------------------------------
--spec find_query(ResourceType :: binary(), Data :: proplists:proplist()) ->
+-spec query(ResourceType :: binary(), Data :: proplists:proplist()) ->
+    {ok, [proplists:proplist()]} | gui_error:error_result().
+query(<<"group">>, _Data) ->
+    gui_error:report_error(<<"Not implemented">>).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link data_backend_behaviour} callback query_record/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec query_record(ResourceType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find_query(<<"group">>, _Data) ->
+query_record(<<"group">>, _Data) ->
     gui_error:report_error(<<"Not implemented">>).
 
 
@@ -129,6 +137,7 @@ find_query(<<"group">>, _Data) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 create_record(<<"group">>, Data) ->
     UserAuth = op_gui_utils:get_user_auth(),
+    UserId = gui_session:get_user_id(),
     Name = proplists:get_value(<<"name">>, Data),
     case Name of
         <<"">> ->
@@ -137,6 +146,9 @@ create_record(<<"group">>, Data) ->
         _ ->
             case group_logic:create(UserAuth, #od_group{name = Name}) of
                 {ok, GroupId} ->
+                    user_data_backend:push_modified_user(
+                        UserAuth, UserId, <<"groups">>, add, GroupId
+                    ),
                     % This group was created by this user -> he has view privs.
                     GroupRecord = group_record(GroupId, true),
                     {ok, GroupRecord};
@@ -238,7 +250,10 @@ update_record(<<"group-group-permission">>, AssocId, Data) ->
         {error, _} ->
             gui_error:report_warning(
                 <<"Cannot change group privileges due to unknown error.">>)
-    end.
+    end;
+
+update_record(_ResourceType, _Id, _Data) ->
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -250,8 +265,12 @@ update_record(<<"group-group-permission">>, AssocId, Data) ->
     ok | gui_error:error_result().
 delete_record(<<"group">>, GroupId) ->
     UserAuth = op_gui_utils:get_user_auth(),
+    UserId = gui_session:get_user_id(),
     case group_logic:delete(UserAuth, GroupId) of
         ok ->
+            user_data_backend:push_modified_user(
+                UserAuth, UserId, <<"groups">>, remove, GroupId
+            ),
             ok;
         {error, {403, <<>>, <<>>}} ->
             gui_error:report_warning(
@@ -276,7 +295,7 @@ delete_record(<<"group">>, GroupId) ->
 group_record(GroupId) ->
     % Check if that user has view privileges in that group
     HasViewPrivileges = group_logic:has_effective_privilege(
-        GroupId, g_session:get_user_id(), group_view_data
+        GroupId, gui_session:get_user_id(), ?GROUP_VIEW
     ),
     group_record(GroupId, HasViewPrivileges).
 
@@ -289,49 +308,78 @@ group_record(GroupId) ->
 %%--------------------------------------------------------------------
 -spec group_record(GroupId :: binary(), HasViewPrivileges :: boolean()) ->
     proplists:proplist().
-group_record(GroupId, HasViewPrivileges) ->
+group_record(GroupId, HasViewPrivs) ->
     UserAuth = op_gui_utils:get_user_auth(),
+    UserId = gui_session:get_user_id(),
     {ok, #document{
         value = #od_group{
             name = Name,
-            users = UsersAndPerms,
-            children = GroupsAndPerms,
+            children = ChildrenWithPerms,
             parents = ParentGroups
         }}} = group_logic:get(UserAuth, GroupId),
+    {ChildGroups, _} = lists:unzip(ChildrenWithPerms),
 
-    % Make sure that user is allowed to view requested group - he must have
-    % view privileges in this group. If not, return only public data.
-    case HasViewPrivileges of
-        false ->
-            [
-                {<<"id">>, GroupId},
-                {<<"name">>, Name},
-                {<<"hasViewPrivilege">>, false},
-                {<<"userPermissions">>, []},
-                {<<"groupPermissions">>, []},
-                {<<"parentGroups">>, []},
-                {<<"childGroups">>, []}
-            ];
+    % Depending on view privileges, show or hide info about members and privs
+    {GroupUserListId, GroupGroupListId, Parents, Children} = case HasViewPrivs of
         true ->
-            {ChildGroups, _} = lists:unzip(GroupsAndPerms),
-            UserPermissions = lists:map(
-                fun({UsId, _UsPerms}) ->
-                    op_gui_utils:ids_to_association(UsId, GroupId)
-                end, UsersAndPerms),
-            GroupPermissions = lists:map(
-                fun({ChildGroupId, _GroupPerms}) ->
-                    op_gui_utils:ids_to_association(ChildGroupId, GroupId)
-                end, GroupsAndPerms),
-            [
-                {<<"id">>, GroupId},
-                {<<"name">>, Name},
-                {<<"hasViewPrivilege">>, true},
-                {<<"userPermissions">>, UserPermissions},
-                {<<"groupPermissions">>, GroupPermissions},
-                {<<"parentGroups">>, ParentGroups},
-                {<<"childGroups">>, ChildGroups}
-            ]
-    end.
+            {GroupId, GroupId, ParentGroups, ChildGroups};
+        false ->
+            {null, null, [], []}
+    end,
+    [
+        {<<"id">>, GroupId},
+        {<<"name">>, Name},
+        {<<"hasViewPrivilege">>, HasViewPrivs},
+        {<<"userList">>, GroupUserListId},
+        {<<"groupList">>, GroupGroupListId},
+        {<<"parentGroups">>, Parents},
+        {<<"childGroups">>, Children},
+        {<<"user">>, UserId}
+    ].
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns a client-compliant space-user-list record based on group id.
+%% @end
+%%--------------------------------------------------------------------
+-spec group_user_list_record(SpaceId :: binary()) -> proplists:proplist().
+group_user_list_record(GroupId) ->
+    UserAuth = op_gui_utils:get_user_auth(),
+    {ok, #document{value = #od_group{
+        users = UsersWithPerms
+    }}} = group_logic:get(UserAuth, GroupId),
+    UserPermissions = lists:map(
+        fun({UsId, _UsPerms}) ->
+            op_gui_utils:ids_to_association(UsId, GroupId)
+        end, UsersWithPerms),
+    [
+        {<<"id">>, GroupId},
+        {<<"group">>, GroupId},
+        {<<"permissions">>, UserPermissions}
+    ].
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns a client-compliant space-group-list record based on group id.
+%% @end
+%%--------------------------------------------------------------------
+-spec group_group_list_record(SpaceId :: binary()) -> proplists:proplist().
+group_group_list_record(GroupId) ->
+    UserAuth = op_gui_utils:get_user_auth(),
+    {ok, #document{value = #od_group{
+        children = GroupsWithPerms
+    }}} = group_logic:get(UserAuth, GroupId),
+    GroupPermissions = lists:map(
+        fun({GrId, _GrPerms}) ->
+            op_gui_utils:ids_to_association(GrId, GroupId)
+        end, GroupsWithPerms),
+    [
+        {<<"id">>, GroupId},
+        {<<"group">>, GroupId},
+        {<<"permissions">>, GroupPermissions}
+    ].
 
 
 %%--------------------------------------------------------------------
@@ -349,15 +397,11 @@ group_user_permission_record(AssocId) ->
             users = UsersAndPerms
         }}} = group_logic:get(UserAuth, GroupId),
     UserPerms = proplists:get_value(UserId, UsersAndPerms),
-    PermsMapped = lists:map(
-        fun(Perm) ->
-            HasPerm = lists:member(Perm, UserPerms),
-            {perm_db_to_gui(Perm), HasPerm}
-        end, privileges:group_privileges()),
+    PermsMapped = perms_db_to_gui(UserPerms),
     PermsMapped ++ [
         {<<"id">>, AssocId},
         {<<"group">>, GroupId},
-        {<<"systemUser">>, UserId}
+        {<<"systemUserId">>, UserId}
     ].
 
 
@@ -377,59 +421,86 @@ group_group_permission_record(AssocId) ->
             children = GroupsAndPerms
         }}} = group_logic:get(UserAuth, ParentGroupId),
     GroupPerms = proplists:get_value(ChildGroupId, GroupsAndPerms),
-    PermsMapped = lists:map(
-        fun(Perm) ->
-            HasPerm = lists:member(Perm, GroupPerms),
-            {perm_db_to_gui(Perm), HasPerm}
-        end, privileges:group_privileges()),
+    PermsMapped = perms_db_to_gui(GroupPerms),
     PermsMapped ++ [
         {<<"id">>, AssocId},
         {<<"group">>, ParentGroupId},
-        {<<"systemGroup">>, ChildGroupId}
+        {<<"systemGroupId">>, ChildGroupId}
     ].
 
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Converts a space permission from internal form to client-compliant form.
+%% Converts a list of group permissions from internal form to client-compliant form.
 %% @end
 %%--------------------------------------------------------------------
--spec perm_db_to_gui(atom()) -> binary().
-perm_db_to_gui(group_view_data) -> <<"permViewGroup">>;
-perm_db_to_gui(group_change_data) -> <<"permModifyGroup">>;
-perm_db_to_gui(group_set_privileges) -> <<"permSetPrivileges">>;
-perm_db_to_gui(group_remove) -> <<"permRemoveGroup">>;
-perm_db_to_gui(group_invite_user) -> <<"permInviteUser">>;
-perm_db_to_gui(group_remove_user) -> <<"permRemoveUser">>;
-perm_db_to_gui(group_invite_group) -> <<"permInviteGroup">>;
-perm_db_to_gui(group_remove_group) -> <<"permRemoveSubgroup">>;
-perm_db_to_gui(group_join_group) -> <<"permJoinGroup">>;
-perm_db_to_gui(group_create_space) -> <<"permCreateSpace">>;
-perm_db_to_gui(group_join_space) -> <<"permJoinSpace">>;
-perm_db_to_gui(group_leave_space) -> <<"permLeaveSpace">>;
-perm_db_to_gui(group_create_space_token) -> <<"permGetSupport">>.
+-spec perms_db_to_gui(atom()) -> proplists:proplist().
+perms_db_to_gui(Perms) ->
+    lists:foldl(
+        fun(Perm, Acc) ->
+            case perm_db_to_gui(Perm) of
+                undefined ->
+                    Acc;
+                PermBin ->
+                    HasPerm = lists:member(Perm, Perms),
+                    [{PermBin, HasPerm} | Acc]
+            end
+    end, [], privileges:group_privileges()).
 
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Converts a space permission from client-compliant form to internal form.
+%% Converts a group permission from internal form to client-compliant form.
+%% @end
+%%--------------------------------------------------------------------
+-spec perm_db_to_gui(atom()) -> binary() | undefined.
+perm_db_to_gui(?GROUP_VIEW) -> <<"permViewGroup">>;
+perm_db_to_gui(?GROUP_UPDATE) -> <<"permModifyGroup">>;
+perm_db_to_gui(?GROUP_SET_PRIVILEGES) -> <<"permSetPrivileges">>;
+perm_db_to_gui(?GROUP_DELETE) -> <<"permRemoveGroup">>;
+perm_db_to_gui(?GROUP_INVITE_USER) -> <<"permInviteUser">>;
+perm_db_to_gui(?GROUP_REMOVE_USER) -> <<"permRemoveUser">>;
+perm_db_to_gui(?GROUP_INVITE_GROUP) -> <<"permInviteGroup">>;
+perm_db_to_gui(?GROUP_REMOVE_GROUP) -> <<"permRemoveSubgroup">>;
+perm_db_to_gui(?GROUP_JOIN_GROUP) -> <<"permJoinGroup">>;
+perm_db_to_gui(?GROUP_LEAVE_GROUP) -> <<"permLeaveGroup">>;
+perm_db_to_gui(?GROUP_CREATE_SPACE) -> <<"permCreateSpace">>;
+perm_db_to_gui(?GROUP_JOIN_SPACE) -> <<"permJoinSpace">>;
+perm_db_to_gui(?GROUP_LEAVE_SPACE) -> <<"permLeaveSpace">>;
+perm_db_to_gui(_) -> undefined.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Converts a group permission from client-compliant form to internal form.
 %% @end
 %%--------------------------------------------------------------------
 -spec perm_gui_to_db(binary()) -> atom().
-perm_gui_to_db(<<"permViewGroup">>) -> group_view_data;
-perm_gui_to_db(<<"permModifyGroup">>) -> group_change_data;
-perm_gui_to_db(<<"permSetPrivileges">>) -> group_set_privileges;
-perm_gui_to_db(<<"permRemoveGroup">>) -> group_remove;
-perm_gui_to_db(<<"permInviteUser">>) -> group_invite_user;
-perm_gui_to_db(<<"permRemoveUser">>) -> group_remove_user;
-perm_gui_to_db(<<"permInviteGroup">>) -> group_invite_group;
-perm_gui_to_db(<<"permRemoveSubgroup">>) -> group_remove_group;
-perm_gui_to_db(<<"permJoinGroup">>) -> group_join_group;
-perm_gui_to_db(<<"permCreateSpace">>) -> group_create_space;
-perm_gui_to_db(<<"permJoinSpace">>) -> group_join_space;
-perm_gui_to_db(<<"permLeaveSpace">>) -> group_leave_space;
-perm_gui_to_db(<<"permGetSupport">>) -> group_create_space_token.
+perm_gui_to_db(<<"permViewGroup">>) -> ?GROUP_VIEW;
+perm_gui_to_db(<<"permModifyGroup">>) -> ?GROUP_UPDATE;
+perm_gui_to_db(<<"permSetPrivileges">>) -> ?GROUP_SET_PRIVILEGES;
+perm_gui_to_db(<<"permRemoveGroup">>) -> ?GROUP_DELETE;
+perm_gui_to_db(<<"permInviteUser">>) -> ?GROUP_INVITE_USER;
+perm_gui_to_db(<<"permRemoveUser">>) -> ?GROUP_REMOVE_USER;
+perm_gui_to_db(<<"permInviteGroup">>) -> ?GROUP_INVITE_GROUP;
+perm_gui_to_db(<<"permRemoveSubgroup">>) -> ?GROUP_REMOVE_GROUP;
+perm_gui_to_db(<<"permJoinGroup">>) -> ?GROUP_JOIN_GROUP;
+perm_gui_to_db(<<"permLeaveGroup">>) -> ?GROUP_LEAVE_GROUP;
+perm_gui_to_db(<<"permCreateSpace">>) -> ?GROUP_CREATE_SPACE;
+perm_gui_to_db(<<"permJoinSpace">>) -> ?GROUP_JOIN_SPACE;
+perm_gui_to_db(<<"permLeaveSpace">>) -> ?GROUP_LEAVE_SPACE.
 
 
+
+
+permission_record_to_group_id(<<"group-user-list">>, RecordId) ->
+    RecordId;
+permission_record_to_group_id(<<"group-group-list">>, RecordId) ->
+    RecordId;
+permission_record_to_group_id(_, RecordId) ->
+    % covers <<"group-(user|group)-permission">>
+    {_, Id} = op_gui_utils:association_to_ids(RecordId),
+    Id.

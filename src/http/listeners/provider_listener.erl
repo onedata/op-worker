@@ -48,26 +48,23 @@ start() ->
     {ok, Port} = application:get_env(?APP_NAME, provider_protocol_handler_port),
     {ok, DispatcherPoolSize} =
         application:get_env(?APP_NAME, protocol_handler_pool_size),
+    {ok, KeyFile} =
+        application:get_env(?APP_NAME, protocol_handler_ssl_key_file),
     {ok, CertFile} =
-        application:get_env(?APP_NAME, protocol_handler_ssl_cert_path),
-
-    Ip = {0, 0, 0, 0},
-    CACerts = lists:map(
-        fun(Path) ->
-            {ok, Data} = file:read_file(Path),
-            Data
-        end, [oz_plugin:get_cacert_path()]),
+        application:get_env(?APP_NAME, protocol_handler_ssl_cert_file),
+    {ok, CaCertsDir} = application:get_env(?APP_NAME, cacerts_dir),
+    {ok, CaCertPems} = file_utils:read_files({dir, CaCertsDir}),
+    CaCerts = lists:map(fun cert_decoder:pem_to_der/1, CaCertPems),
 
     Result = ranch:start_listener(?TCP_PROTO_LISTENER, DispatcherPoolSize,
-        ranch_etls, [
-            {ip, Ip},
+        ranch_ssl, [
             {port, Port},
+            {keyfile, KeyFile},
             {certfile, CertFile},
-            {cacerts, CACerts},
-            {verify_type, verify_peer},
+            {cacerts, CaCerts},
+            {verify, verify_peer},
             {fail_if_no_peer_cert, true},
-            {ciphers, ssl:cipher_suites() -- weak_ciphers()},
-            {versions, ['tlsv1.2', 'tlsv1.1']}
+            {ciphers, ssl:cipher_suites() -- ssl_utils:weak_ciphers()}
         ],
         connection, []
     ),
@@ -110,17 +107,3 @@ healthcheck() ->
         {error, Reason} ->
             {error, Reason}
     end.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns list of weak ciphers.
-%% @end
--spec weak_ciphers() -> list().
-%%--------------------------------------------------------------------
-weak_ciphers() ->
-    [{dhe_rsa, des_cbc, sha}, {rsa, des_cbc, sha}].

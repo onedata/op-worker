@@ -21,6 +21,7 @@
 -include("proto/oneclient/handshake_messages.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
 -include("proto/oneprovider/dbsync_messages.hrl").
+-include("proto/oneprovider/dbsync_messages2.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -39,9 +40,14 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec route_proxy_message(Msg :: #client_message{}, TargetSessionId :: session:id()) -> ok.
-route_proxy_message(#client_message{message_body = #events{events = Evts}} = Msg, TargetSessionId) ->
+route_proxy_message(#client_message{message_body = #events{events = Events}} = Msg, TargetSessionId) ->
     ?debug("route_proxy_message ~p ~p", [TargetSessionId, Msg]),
-    lists:foreach(fun(#event{} = Evt) -> event:emit(Evt, TargetSessionId) end, Evts),
+    lists:foreach(fun(Evt) ->
+        event:emit(Evt, TargetSessionId)
+    end, Events);
+route_proxy_message(#client_message{message_body = #event{} = Evt} = Msg, TargetSessionId) ->
+    ?debug("route_proxy_message ~p ~p", [TargetSessionId, Msg]),
+    event:emit(Evt, TargetSessionId),
     ok.
 
 %%--------------------------------------------------------------------
@@ -102,22 +108,34 @@ preroute_message(Msg, SessId) ->
     ok | {ok, #server_message{}} | {error, term()}.
 route_message(Msg = #client_message{message_id = undefined}) ->
     route_and_ignore_answer(Msg);
-route_message(Msg = #client_message{message_id = #message_id{issuer = server,
-    recipient = undefined}}) ->
-    route_and_ignore_answer(Msg);
-route_message(Msg = #client_message{message_id = #message_id{issuer = server,
-    recipient = Pid}}) ->
-    Pid ! Msg,
-    ok;
-route_message(Msg = #server_message{message_id = #message_id{issuer = client,
-    recipient = Pid}}) when is_pid(Pid) ->
-    Pid ! Msg,
-    ok;
-route_message(Msg = #server_message{message_id = #message_id{issuer = client,
-    recipient = Pid}}) ->
-    ok;
-route_message(Msg = #client_message{message_id = #message_id{issuer = client}}) ->
-    route_and_send_answer(Msg).
+route_message(Msg = #client_message{message_id = #message_id{
+    issuer = Issuer,
+    recipient = Recipient
+}}) ->
+    case oneprovider:get_provider_id() == Issuer of
+        true when Recipient =:= undefined ->
+            route_and_ignore_answer(Msg);
+        true ->
+            Pid = binary_to_term(Recipient),
+            Pid ! Msg,
+            ok;
+        false ->
+            route_and_send_answer(Msg)
+    end;
+route_message(Msg = #server_message{message_id = #message_id{
+    issuer = Issuer,
+    recipient = Recipient
+}}) ->
+    case oneprovider:get_provider_id() == Issuer of
+        true when Recipient =:= undefined ->
+            ok;
+        true ->
+            Pid = binary_to_term(Recipient),
+            Pid ! Msg,
+            ok;
+        false ->
+            ok
+    end.
 
 %%%===================================================================
 %%% Internal functions
@@ -139,7 +157,7 @@ route_and_ignore_answer(#client_message{message_body = #subscription{} = Sub} = 
     case session_manager:is_provider_session_id(effective_session_id(Msg)) of
         true -> ok; %% Do not route subscriptions from other providers (route only subscriptions from users)
         false ->
-            event:subscribe(event_utils:inject_event_stream_definition(Sub), effective_session_id(Msg)),
+            event:subscribe(Sub, effective_session_id(Msg)),
             ok
     end;
 route_and_ignore_answer(#client_message{message_body = #subscription_cancellation{} = SubCan} = Msg) ->
@@ -149,14 +167,21 @@ route_and_ignore_answer(#client_message{message_body = #subscription_cancellatio
             event:unsubscribe(SubCan, effective_session_id(Msg)),
             ok
     end;
-% Message that updates the #token_auth{} record in given session (originates from
+% Message that updates the #macaroon_auth{} record in given session (originates from
 % #'Token' client message).
-route_and_ignore_answer(#client_message{message_body = #token_auth{} = Auth} = Msg) ->
+route_and_ignore_answer(#client_message{message_body = Auth} = Msg)
+    when is_record(Auth, macaroon_auth) orelse is_record(Auth, token_auth) ->
     % This function performs an async call to session manager worker.
-    {ok, SessId} = session:update(effective_session_id(Msg), #{auth => Auth}),
+    {ok, _} = session:update(effective_session_id(Msg), #{auth => Auth}),
     ok;
 route_and_ignore_answer(#client_message{message_body = #fuse_request{} = FuseRequest} = Msg) ->
-    ok = worker_proxy:cast(fslogic_worker, {fuse_request, effective_session_id(Msg), FuseRequest}).
+    ok = worker_proxy:cast(fslogic_worker, {fuse_request, effective_session_id(Msg), FuseRequest});
+route_and_ignore_answer(ClientMsg = #client_message{
+    message_body = #dbsync_message{message_body = Msg}
+}) ->
+    ok = worker_proxy:cast(
+        dbsync_worker2, {dbsync_message, effective_session_id(ClientMsg), Msg}
+    ).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -166,76 +191,75 @@ route_and_ignore_answer(#client_message{message_body = #fuse_request{} = FuseReq
 %%--------------------------------------------------------------------
 -spec route_and_send_answer(#client_message{}) ->
     ok | {ok, #server_message{}} | {error, term()}.
-route_and_send_answer(#client_message{session_id = OriginSessId, message_id = MsgId,
-    message_body = #flush_events{} = FlushMsg} = Msg) ->
+route_and_send_answer(Msg = #client_message{
+    session_id = OriginSessId,
+    message_id = MsgId,
+    message_body = FlushMsg = #flush_events{}
+}) ->
     event:flush(FlushMsg#flush_events{notify =
         fun(Result) ->
             communicator:send(Result#server_message{message_id = MsgId}, OriginSessId)
         end
     }, effective_session_id(Msg)),
     ok;
-route_and_send_answer(#client_message{message_id = Id,
-    message_body = #ping{data = Data}}) ->
+route_and_send_answer(#client_message{
+    message_id = Id,
+    message_body = #ping{data = Data}
+}) ->
     {ok, #server_message{message_id = Id, message_body = #pong{data = Data}}};
-route_and_send_answer(#client_message{message_id = Id,
-    message_body = #get_protocol_version{}}) ->
+route_and_send_answer(#client_message{
+    message_id = Id,
+    message_body = #get_protocol_version{}
+}) ->
     {ok, #server_message{message_id = Id, message_body = #protocol_version{}}};
-route_and_send_answer(#client_message{message_id = Id, session_id = OriginSessId,
-    message_body = #get_configuration{}}) ->
-    spawn(fun() ->
-        Configuration = fuse_config_manager:get_configuration(),
-        communicator:send(#server_message{
-            message_id = Id, message_body = Configuration
-        }, OriginSessId)
-    end),
-    ok;
-route_and_send_answer(Msg = #client_message{message_id = Id, session_id = OriginSessId,
-    message_body = #fuse_request{} = FuseRequest}) ->
-    ?debug("Fuse request: ~p ~p", [FuseRequest, effective_session_id(Msg)]),
-    spawn(fun() ->
-        FuseResponse = worker_proxy:call(fslogic_worker, {fuse_request, effective_session_id(Msg), FuseRequest}),
-        ?debug("Fuse response: ~p", [FuseResponse]),
-        communicator:send(#server_message{
-            message_id = Id, message_body = FuseResponse
-        }, OriginSessId)
-    end),
-    ok;
-route_and_send_answer(Msg = #client_message{message_id = Id, session_id = OriginSessId,
-    message_body = #provider_request{} = ProviderRequest}) ->
-    ?debug("Provider request ~p ~p", [ProviderRequest, effective_session_id(Msg)]),
-    spawn(fun() ->
-        ProviderResponse = worker_proxy:call(fslogic_worker,
-            {provider_request, effective_session_id(Msg), ProviderRequest}),
-        ?debug("Provider response ~p", [ProviderResponse]),
-        communicator:send(#server_message{message_id = Id,
-            message_body = ProviderResponse}, OriginSessId)
-    end),
-    ok;
-route_and_send_answer(Msg = #client_message{message_id = Id, session_id = OriginSessId,
-    message_body = #proxyio_request{} = ProxyIORequest}) ->
-    ?debug("ProxyIO request ~p", [ProxyIORequest]),
-    spawn(fun() ->
-        ProxyIOResponse = worker_proxy:call(fslogic_worker,
-            {proxyio_request, effective_session_id(Msg), ProxyIORequest}),
-
-        ?debug("ProxyIO response ~p", [ProxyIOResponse]),
-        communicator:send(#server_message{message_id = Id,
-            message_body = ProxyIOResponse
-        }, OriginSessId)
-    end),
-    ok;
-route_and_send_answer(#client_message{message_id = Id, session_id = OriginSessId,
-    message_body = #dbsync_request{} = DBSyncRequest} = Msg) ->
-    ?debug("DBSync request ~p", [DBSyncRequest]),
-    spawn(fun() ->
-        DBSyncResponse = worker_proxy:call(dbsync_worker,
-            {dbsync_request, effective_session_id(Msg), DBSyncRequest}),
-
-        ?debug("DBSync response ~p", [DBSyncResponse]),
-        communicator:send(#server_message{message_id = Id,
-            message_body = DBSyncResponse}, OriginSessId)
-    end),
-    ok.
+route_and_send_answer(Msg = #client_message{
+    message_id = Id,
+    message_body = #get_configuration{}
+}) ->
+    Configuration = storage_req:get_configuration(effective_session_id(Msg)),
+    {ok, #server_message{message_id = Id, message_body = Configuration}};
+route_and_send_answer(Msg = #client_message{
+    message_id = Id,
+    message_body = FuseRequest = #fuse_request{
+         fuse_request = #file_request{
+             context_guid = FileGuid,
+             file_request = Req
+        }}
+}) when is_record(Req, open_file) orelse is_record(Req, release) ->
+    Node = consistent_hasing:get_node(FileGuid),
+    {ok, FuseResponse} = worker_proxy:call({fslogic_worker, Node},
+        {fuse_request, effective_session_id(Msg), FuseRequest}),
+    {ok, #server_message{message_id = Id, message_body = FuseResponse}};
+route_and_send_answer(Msg = #client_message{
+    message_id = Id,
+    message_body = FuseRequest = #fuse_request{}
+}) ->
+    {ok, FuseResponse} = worker_proxy:call(fslogic_worker, {fuse_request, effective_session_id(Msg), FuseRequest}),
+    {ok, #server_message{message_id = Id, message_body = FuseResponse}};
+route_and_send_answer(Msg = #client_message{
+    message_id = Id,
+    message_body = ProviderRequest = #provider_request{}
+}) ->
+    {ok, ProviderResponse} = worker_proxy:call(fslogic_worker,
+        {provider_request, effective_session_id(Msg), ProviderRequest}),
+    {ok, #server_message{message_id = Id, message_body = ProviderResponse}};
+route_and_send_answer(Msg = #client_message{
+    message_id = Id,
+    message_body = ProxyIORequest = #proxyio_request{
+        parameters = #{?PROXYIO_PARAMETER_FILE_GUID := FileGuid}
+    }
+}) ->
+    Node = consistent_hasing:get_node(FileGuid),
+    {ok, ProxyIOResponse} = worker_proxy:call({fslogic_worker, Node},
+        {proxyio_request, effective_session_id(Msg), ProxyIORequest}),
+    {ok, #server_message{message_id = Id, message_body = ProxyIOResponse}};
+route_and_send_answer(Msg = #client_message{
+    message_id = Id,
+    message_body = #dbsync_request{} = DBSyncRequest
+}) ->
+    {ok, DBSyncResponse} = worker_proxy:call(dbsync_worker,
+        {dbsync_request, effective_session_id(Msg), DBSyncRequest}),
+    {ok, #server_message{message_id = Id, message_body = DBSyncResponse}}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -246,5 +270,5 @@ route_and_send_answer(#client_message{message_id = Id, session_id = OriginSessId
     session:id().
 effective_session_id(#client_message{session_id = SessionId, proxy_session_id = undefined}) ->
     SessionId;
-effective_session_id(#client_message{session_id = _SessionId, proxy_session_id = ProxySessionId}) ->
+effective_session_id(#client_message{proxy_session_id = ProxySessionId}) ->
     ProxySessionId.

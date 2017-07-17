@@ -1,0 +1,79 @@
+{
+    "dirs_config": {
+        "cluster_manager": {
+            "input_dir": "_build/default/rel/cluster_manager",
+            "target_dir": "_build/default/rel/test_cluster"
+        },
+        "op_worker": {
+            "input_dir": "_build/default/rel/op_worker",
+            "target_dir": "_build/default/rel/test_cluster"
+        }
+    },
+    "os_configs": {
+        "cfg1": {
+            "storages": [],
+            "users": [],
+            "groups": {}
+        }
+    },
+    "provider_domains": {
+        "p1": {
+            "db_driver": "couchdb",
+            "os_config": "cfg1",
+            "cluster_manager": {
+                "cm": {
+                    "vm.args": {
+                        "setcookie": "test_cookie"
+                    },
+                    "sys.config": {
+                        "cm_nodes": [
+                            "cm"
+                        ],
+                        "worker_num": 3
+                    }
+                }
+            },
+            "op_worker": {
+                "worker1": {
+                    "vm.args": {
+                        "setcookie": "test_cookie"
+                    },
+                    "sys.config": {
+                        "cm_nodes": [
+                            "cm"
+                        ],
+                        "db_nodes": [
+                            "127.0.0.1:49161"
+                        ]
+                    }
+                },
+                "worker2": {
+                    "vm.args": {
+                        "setcookie": "test_cookie"
+                    },
+                    "sys.config": {
+                        "cm_nodes": [
+                            "cm"
+                        ],
+                        "db_nodes": [
+                            "127.0.0.1:49161"
+                        ]
+                    }
+                },
+                "worker3": {
+                    "vm.args": {
+                        "setcookie": "test_cookie"
+                    },
+                    "sys.config": {
+                        "cm_nodes": [
+                            "cm"
+                        ],
+                        "db_nodes": [
+                            "127.0.0.1:49161"
+                        ]
+                    }
+                }
+            }
+        }
+    }
+}

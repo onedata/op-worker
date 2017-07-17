@@ -46,8 +46,7 @@
                             "127.0.0.1:49161"
                         ],
                         "subscription_renew_seconds": 2,
-                        "zone_domain": "oz",
-                        "verify_oz_cert": false
+                        "zone_domain": "oz"
                     }
                 }
             }

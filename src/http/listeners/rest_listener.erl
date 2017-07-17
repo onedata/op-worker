@@ -50,22 +50,26 @@ start() ->
     {ok, Timeout} =
         application:get_env(?APP_NAME, rest_socket_timeout_seconds),
     {ok, RestPort} = application:get_env(?APP_NAME, rest_port),
-    {ok, Cert} = application:get_env(?APP_NAME, web_ssl_cert_path),
+    {ok, KeyFile} = application:get_env(?APP_NAME, web_ssl_key_file),
+    {ok, CertFile} = application:get_env(?APP_NAME, web_ssl_cert_file),
+    {ok, CaCertsDir} = application:get_env(?APP_NAME, cacerts_dir),
+    {ok, CaCertPems} = file_utils:read_files({dir, CaCertsDir}),
+    CaCerts = lists:map(fun cert_decoder:pem_to_der/1, CaCertPems),
 
-    RestDispatch = [
+    Dispatch = cowboy_router:compile([
         {'_', rest_router:top_level_routing()}
-    ],
+    ]),
 
     % Start the listener for REST handler
     Result = ranch:start_listener(?REST_LISTENER, NbAcceptors,
-        ranch_etls, [
-            {ip, {127, 0, 0, 1}},
+        ranch_ssl, [
             {port, RestPort},
-            {certfile, Cert},
-            {ciphers, ssl:cipher_suites() -- weak_ciphers()},
-            {versions, ['tlsv1.2', 'tlsv1.1']}
+            {keyfile, KeyFile},
+            {certfile, CertFile},
+            {cacerts, CaCerts},
+            {ciphers, ssl:cipher_suites() -- ssl_utils:weak_ciphers()}
         ], cowboy_protocol, [
-            {env, [{dispatch, cowboy_router:compile(RestDispatch)}]},
+            {env, [{dispatch, Dispatch}]},
             {max_keepalive, 1},
             {timeout, timer:seconds(Timeout)}
         ]),
@@ -100,21 +104,7 @@ stop() ->
 -spec healthcheck() -> ok | {error, server_not_responding}.
 healthcheck() ->
     Endpoint = "https://127.0.0.1:" ++ integer_to_list(port()),
-    case http_client:get(Endpoint, [], <<>>, [insecure]) of
+    case http_client:get(Endpoint, #{}, <<>>, [insecure]) of
         {ok, _, _, _} -> ok;
         _ -> {error, server_not_responding}
     end.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns list of weak ciphers.
-%% @end
--spec weak_ciphers() -> list().
-%%--------------------------------------------------------------------
-weak_ciphers() ->
-    [{dhe_rsa, des_cbc, sha}, {rsa, des_cbc, sha}].

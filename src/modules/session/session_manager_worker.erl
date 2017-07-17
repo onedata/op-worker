@@ -24,7 +24,7 @@
 -export([init/1, handle/1, cleanup/0]).
 
 %% API
--export([supervisor_spec/0, supervisor_child_spec/0]).
+-export([supervisor_flags/0, supervisor_children_spec/0]).
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -61,6 +61,10 @@ handle(healthcheck) ->
 handle({remove_session, SessId}) ->
     remove_session(SessId);
 
+handle({apply, Fun}) ->
+    Fun(),
+    ok;
+
 handle(_Request) ->
     ?log_bad_request(_Request).
 
@@ -81,29 +85,28 @@ cleanup() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns a supervisor spec for a session manager worker supervisor.
+%% Returns a session supervisor flags.
 %% @end
 %%--------------------------------------------------------------------
--spec supervisor_spec() ->
-    {RestartStrategy :: supervisor:strategy(), MaxR :: integer(), MaxT :: integer()}.
-supervisor_spec() ->
-    RestartStrategy = simple_one_for_one,
-    MaxRestarts = 0,
-    RestartTimeWindowSecs = 1,
-    {RestartStrategy, MaxRestarts, RestartTimeWindowSecs}.
+-spec supervisor_flags() -> supervisor:sup_flags().
+supervisor_flags() ->
+    #{strategy => simple_one_for_one, intensity => 0, period => 1}.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns a supervisor child_spec for a session supervisor.
+%% Returns a children spec for a session supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec supervisor_child_spec() -> [supervisor:child_spec()].
-supervisor_child_spec() ->
-    Id = Module = session_sup,
-    Restart = temporary,
-    Shutdown = infinity,
-    Type = supervisor,
-    [{Id, {Module, start_link, []}, Restart, Shutdown, Type, [Module]}].
+-spec supervisor_children_spec() -> [supervisor:child_spec()].
+supervisor_children_spec() ->
+    [#{
+        id => session_sup,
+        start => {session_sup, start_link, []},
+        restart => temporary,
+        shutdown => infinity,
+        type => supervisor,
+        modules => [session_sup]
+    }].
 
 %%%===================================================================
 %%% Internal functions

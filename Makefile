@@ -13,8 +13,9 @@ PKG_BUILD        = 1
 BASE_DIR         = $(shell pwd)
 ERLANG_BIN       = $(shell dirname $(shell which erl))
 REBAR           ?= $(BASE_DIR)/rebar3
-LIB_DIR          = _build/default/lib
-REL_DIR          = _build/default/rel
+BUILD_DIR        = _build
+LIB_DIR          = $(BUILD_DIR)/default/lib
+REL_DIR          = $(BUILD_DIR)/default/rel
 PKG_VARS_CONFIG  = pkg.vars.config
 OVERLAY_VARS    ?= --overlay_vars=rel/vars.config
 TEMPLATE_SCRIPT := ./rel/overlay.escript
@@ -34,7 +35,6 @@ all: test_rel
 
 compile:
 	$(REBAR) compile
-	make -C $(LIB_DIR)/cluster_worker/ priv/sync_gateway
 
 deps:
 	$(LIB_DIR)/gui/pull-gui.sh gui-config.sh
@@ -48,6 +48,12 @@ generate: compile deps template
 
 clean: relclean pkgclean
 	$(REBAR) clean
+
+clean_all: clean distclean
+	rm -rf $(BUILD_DIR)
+	rm -rf test_distributed/logs/*
+	rm -rf priv/*
+	rm -rf rebar.lock
 
 distclean:
 	$(REBAR) clean --all
@@ -85,13 +91,13 @@ relclean:
 ##
 
 eunit:
-	$(REBAR) do eunit skip_deps=true suites=${SUITES}, cover
+	$(REBAR) do eunit skip_deps=true --suite=${SUITES}, cover
 ## Rename all tests in order to remove duplicated names (add _(++i) suffix to each test)
 	@for tout in `find test -name "TEST-*.xml"`; do awk '/testcase/{gsub("_[0-9]+\"", "_" ++i "\"")}1' $$tout > $$tout.tmp; mv $$tout.tmp $$tout; done
 
 coverage:
 ## Set on_bamboo=true so that coverage.escript will collect coverdata from all ct_logs directories
-	$(BASE_DIR)/bamboos/docker/coverage.escript $(BASE_DIR) ${on_bamboo}
+	$(BASE_DIR)/bamboos/docker/coverage.escript $(BASE_DIR) $(on_bamboo)
 
 ##
 ## Dialyzer targets local

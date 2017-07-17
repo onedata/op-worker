@@ -13,6 +13,12 @@
 -ifndef(MESSAGE_ID_HRL).
 -define(MESSAGE_ID_HRL, 1).
 
--include("modules/datastore/datastore_specific_models_def.hrl").
+%% Message ID containing recipient for remote response.
+-record(message_id, {
+    issuer :: undefined | message_id:issuer(),
+    id :: undefined | binary(),
+    recipient :: binary() | undefined % pid encoded with term_to_binary,
+    % decode only if pid is local
+}).
 
 -endif.

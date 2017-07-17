@@ -18,20 +18,20 @@
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_common_internal.hrl").
+-include_lib("cluster_worker/include/global_definitions.hrl").
 
 %% API
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
-    end_per_testcase/2]).
+-export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
 -export([
     db_sync_basic_opts_test/1, db_sync_many_ops_test/1, db_sync_distributed_modification_test/1,
     file_consistency_test/1, db_sync_many_ops_test_base/1, file_consistency_test_base/1,
-    permission_cache_invalidate_test/1
+    permission_cache_invalidate_test/1, multi_space_test/1
 ]).
 
 -define(TEST_CASES, [
     db_sync_basic_opts_test, db_sync_many_ops_test, db_sync_distributed_modification_test, file_consistency_test,
-    permission_cache_invalidate_test
+    permission_cache_invalidate_test, multi_space_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -115,32 +115,49 @@ file_consistency_test_base(Config) ->
 permission_cache_invalidate_test(Config) ->
     multi_provider_file_ops_test_base:permission_cache_invalidate_test_base(Config, 120).
 
+multi_space_test(Config) ->
+    User = <<"user1">>,
+    Spaces = ?config({spaces, User}, Config),
+    Attempts = 120,
+
+    SpaceConfigs = lists:foldl(fun({_, SN}, Acc) ->
+        {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider} = case SN of
+            <<"space1">> ->
+                {4,2,0,1};
+            <<"space2">> ->
+                {2,4,0,1};
+            _ ->
+                {0,6,1,1}
+        end,
+        EC = multi_provider_file_ops_test_base:extend_config(Config, User,
+            {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts),
+        [{SN, EC} | Acc]
+    end, [], Spaces),
+
+    multi_provider_file_ops_test_base:multi_space_test_base(Config, SpaceConfigs, User).
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer, multi_provider_file_ops_test_base]).
+    Posthook = fun(NewConfig) -> multi_provider_file_ops_test_base:init_env(NewConfig) end,
+    [{?LOAD_MODULES, [initializer, multi_provider_file_ops_test_base]}, {?ENV_UP_POSTHOOK, Posthook} | Config].
 
 end_per_suite(Config) ->
-    ?TEST_STOP(Config).
+    multi_provider_file_ops_test_base:teardown_env(Config).
 
-init_per_testcase(Case, Config) ->
-    ?CASE_START(Case),
+init_per_testcase(file_consistency_test, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, file_meta, [passthrough]),
+    init_per_testcase(?DEFAULT_CASE(file_consistency_test), Config);
+init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 60}),
-    application:start(etls),
-    hackney:start(),
-    initializer:enable_grpca_based_communication(Config),
-    initializer:disable_quota_limit(Config),
-    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
-    lfm_proxy:init(ConfigWithSessionInfo).
+    lfm_proxy:init(Config).
 
-end_per_testcase(Case, Config) ->
-    ?CASE_STOP(Case),
-    lfm_proxy:teardown(Config),
-     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
-    initializer:clean_test_users_and_spaces_no_validate(Config),
-    initializer:unload_quota_mocks(Config),
-    initializer:disable_grpca_based_communication(Config),
-    hackney:stop(),
-    application:stop(etls).
+end_per_testcase(file_consistency_test, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, file_meta),
+    end_per_testcase(?DEFAULT_CASE(file_consistency_test), Config);
+end_per_testcase(_Case, Config) ->
+    lfm_proxy:teardown(Config).

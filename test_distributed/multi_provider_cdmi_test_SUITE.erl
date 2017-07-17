@@ -24,6 +24,7 @@
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
+-include_lib("cluster_worker/include/global_definitions.hrl").
 
 %% API
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -80,12 +81,11 @@ all() ->
         errors_test,
         accept_header_test,
         move_copy_conflict_test,
-        move_test
-%%        copy_test %todo implement copy
+        move_test,
+        copy_test
 ]).
 
 -define(TIMEOUT, timer:seconds(5)).
-
 
 -define(CDMI_VERSION_HEADER, {<<"X-CDMI-Specification-Version">>, <<"1.1.1">>}).
 -define(CONTAINER_CONTENT_TYPE_HEADER, {<<"content-type">>, <<"application/cdmi-container">>}).
@@ -94,7 +94,6 @@ all() ->
 -define(DEFAULT_FILE_MODE, 8#664).
 -define(FILE_BEGINNING, 0).
 -define(INFINITY, 9999).
-
 
 %%%===================================================================
 %%% Test functions
@@ -178,37 +177,44 @@ accept_header_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
-    initializer:setup_storage(ConfigWithNodes).
+    Posthook = fun(NewConfig) ->
+        NewConfig2 = initializer:setup_storage(NewConfig),
+        lists:foreach(fun(Worker) ->
+            test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
+            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_update_interval, timer:seconds(1)),
+            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_stream_update_interval, timer:seconds(1)),
+            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
+            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(1)) % TODO - change to 2 seconds
+        end, ?config(op_worker_nodes, NewConfig2)),
+
+        ssl:start(),
+        hackney:start(),
+        initializer:enable_grpca_based_communication(NewConfig2),
+        initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2)
+    end,
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
 end_per_suite(Config) ->
-    initializer:teardown_storage(Config),
-    ?TEST_STOP(Config).
+    %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
+    initializer:clean_test_users_and_spaces_no_validate(Config),
+    initializer:disable_grpca_based_communication(Config),
+    hackney:stop(),
+    ssl:stop(),
+    initializer:teardown_storage(Config).
 
 init_per_testcase(choose_adequate_handler_test = Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, [cdmi_object_handler, cdmi_container_handler], [passthrough]),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
-init_per_testcase(Case, Config) ->
-    ?CASE_START(Case),
-    application:start(etls),
-    hackney:start(),
-    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
-    initializer:enable_grpca_based_communication(Config),
-    lfm_proxy:init(ConfigWithSessionInfo).
+init_per_testcase(_Case, Config) ->
+    lfm_proxy:init(Config).
 
 end_per_testcase(choose_adequate_handler_test = Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, [cdmi_object_handler, cdmi_container_handler]),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
-end_per_testcase(Case, Config) ->
-    ?CASE_STOP(Case),
-    lfm_proxy:teardown(Config),
-     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
-    initializer:clean_test_users_and_spaces_no_validate(Config),
-    initializer:disable_grpca_based_communication(Config),
-    hackney:stop(),
-    application:stop(etls).
+end_per_testcase(_Case, Config) ->
+    lfm_proxy:teardown(Config).
 
 %%%===================================================================
 %%% Internal functions

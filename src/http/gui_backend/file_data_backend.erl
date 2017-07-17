@@ -29,7 +29,7 @@
 
 %% data_backend_behaviour callbacks
 -export([init/0, terminate/0]).
--export([find/2, find_all/1, find_query/2]).
+-export([find_record/2, find_all/1, query/2, query_record/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
 %% API
 -export([file_record/2, file_record/3, file_record/5]).
@@ -48,9 +48,7 @@
 -spec init() -> ok.
 init() ->
     NewETS = ets:new(?LS_SUB_CACHE_ETS, [
-        set, public,
-        {read_concurrency, true},
-        {write_concurrency, true}
+        set, public
     ]),
     ets:insert(?LS_CACHE_ETS, {self(), NewETS}),
     ok.
@@ -69,13 +67,13 @@ terminate() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link data_backend_behaviour} callback find/2.
+%% {@link data_backend_behaviour} callback find_record/2.
 %% @end
 %%--------------------------------------------------------------------
--spec find(ResourceType :: binary(), Id :: binary()) ->
+-spec find_record(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find(<<"file">>, FileId) ->
-    SessionId = g_session:get_session_id(),
+find_record(<<"file">>, FileId) ->
+    SessionId = gui_session:get_session_id(),
     try
         file_record(SessionId, FileId)
     catch T:M ->
@@ -84,10 +82,10 @@ find(<<"file">>, FileId) ->
         ]),
         {ok, [{<<"id">>, FileId}, {<<"type">>, <<"broken">>}]}
     end;
-find(<<"file-shared">>, AssocId) ->
-    SessionId = g_session:get_session_id(),
+find_record(<<"file-shared">>, AssocId) ->
+    SessionId = gui_session:get_session_id(),
     file_record(<<"file-shared">>, SessionId, AssocId);
-find(<<"file-public">>, AssocId) ->
+find_record(<<"file-public">>, AssocId) ->
     SessionId = ?GUEST_SESS_ID,
     file_record(<<"file-public">>, SessionId, AssocId).
 
@@ -109,16 +107,31 @@ find_all(<<"file-public">>) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link data_backend_behaviour} callback find_query/2.
+%% {@link data_backend_behaviour} callback query/2.
 %% @end
 %%--------------------------------------------------------------------
--spec find_query(ResourceType :: binary(), Data :: proplists:proplist()) ->
+-spec query(ResourceType :: binary(), Data :: proplists:proplist()) ->
+    {ok, [proplists:proplist()]} | gui_error:error_result().
+query(<<"file">>, _Data) ->
+    gui_error:report_error(<<"Not implemented">>);
+query(<<"file-shared">>, _Data) ->
+    gui_error:report_error(<<"Not implemented">>);
+query(<<"file-public">>, _Data) ->
+    gui_error:report_error(<<"Not implemented">>).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link data_backend_behaviour} callback query_record/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec query_record(ResourceType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find_query(<<"file">>, _Data) ->
+query_record(<<"file">>, _Data) ->
     gui_error:report_error(<<"Not implemented">>);
-find_query(<<"file-shared">>, _Data) ->
+query_record(<<"file-shared">>, _Data) ->
     gui_error:report_error(<<"Not implemented">>);
-find_query(<<"file-public">>, _Data) ->
+query_record(<<"file-public">>, _Data) ->
     gui_error:report_error(<<"Not implemented">>).
 
 
@@ -150,31 +163,31 @@ update_record(<<"file-shared">>, _Id, _Data) ->
     gui_error:report_error(<<"Not implemented">>);
 update_record(<<"file-public">>, _Id, _Data) ->
     gui_error:report_error(<<"Not implemented">>);
-update_record(<<"file">>, FileId, Data) ->
+update_record(<<"file">>, FileId, [{<<"name">>, NewName}]) ->
     try
-        SessionId = g_session:get_session_id(),
-        case proplists:get_value(<<"permissions">>, Data, undefined) of
-            undefined ->
+        SessionId = gui_session:get_session_id(),
+        {ok, OldPath} = logical_file_manager:get_file_path(
+            SessionId, FileId
+        ),
+        DirPathTokens = fslogic_path:split(filename:dirname(OldPath)),
+        NewPath = fslogic_path:join(DirPathTokens ++ [NewName]),
+        case logical_file_manager:mv(SessionId, {guid, FileId}, NewPath) of
+            {ok, _} ->
                 ok;
-            NewPerms ->
-                Perms = case is_integer(NewPerms) of
-                    true ->
-                        binary_to_integer(integer_to_binary(NewPerms), 8);
-                    false ->
-                        binary_to_integer(NewPerms, 8)
-                end,
-                case Perms >= 0 andalso Perms =< 8#777 of
-                    true ->
-                        ok = logical_file_manager:set_perms(
-                            SessionId, {guid, FileId}, Perms);
-                    false ->
-                        gui_error:report_warning(<<"Cannot change permissions, "
-                        "invalid octal value.">>)
-                end
+            {error, ?EPERM} ->
+                gui_error:report_warning(<<"Permission denied.">>);
+            {error, ?EACCES} ->
+                gui_error:report_warning(<<"Access denied.">>)
         end
-    catch _:_ ->
-        gui_error:report_warning(<<"Cannot change permissions.">>)
-    end.
+    catch Error:Message ->
+        ?error_stacktrace("Cannot rename file via GUI - ~p:~p", [
+            Error, Message
+        ]),
+        gui_error:report_warning(
+            <<"Cannot rename file due to unknown error.">>)
+    end;
+update_record(<<"file">>, _Id, _Data) ->
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -189,7 +202,7 @@ delete_record(<<"file-shared">>, _Id) ->
 delete_record(<<"file-public">>, _Id) ->
     gui_error:report_error(<<"Not implemented">>);
 delete_record(<<"file">>, FileId) ->
-    SessionId = g_session:get_session_id(),
+    SessionId = gui_session:get_session_id(),
     {ok, ParentId} = logical_file_manager:get_parent(SessionId, {guid, FileId}),
     case logical_file_manager:rm_recursive(SessionId, {guid, FileId}) of
         ok ->
@@ -251,13 +264,13 @@ file_record(<<"file-shared">>, _, <<"containerDir.", ShareId/binary>>, _, _) ->
         {<<"id">>, <<"containerDir.", ShareId/binary>>},
         {<<"name">>, Name},
         {<<"type">>, <<"dir">>},
-        {<<"permissions">>, 0},
         {<<"modificationTime">>, 0},
-        {<<"size">>, 0},
+        {<<"size">>, null},
+        {<<"canViewDir">>, true},
         {<<"totalChildrenCount">>, 1},
         {<<"parent">>, null},
         {<<"children">>, [op_gui_utils:ids_to_association(ShareId, FileId)]},
-        {<<"fileAcl">>, null},
+        {<<"filePermission">>, null},
         {<<"share">>, null},
         {<<"provider">>, null},
         {<<"fileProperty">>, null}
@@ -274,13 +287,13 @@ file_record(<<"file-public">>, _, <<"containerDir.", ShareId/binary>>, _, _) ->
         {<<"id">>, <<"containerDir.", ShareId/binary>>},
         {<<"name">>, Name},
         {<<"type">>, <<"dir">>},
-        {<<"permissions">>, 0},
         {<<"modificationTime">>, 0},
-        {<<"size">>, 0},
+        {<<"size">>, null},
+        {<<"canViewDir">>, true},
         {<<"totalChildrenCount">>, 1},
         {<<"parent">>, null},
         {<<"children">>, [op_gui_utils:ids_to_association(ShareId, RootFile)]},
-        {<<"fileAcl">>, null},
+        {<<"filePermission">>, null},
         {<<"share">>, null},
         {<<"provider">>, null},
         {<<"fileProperty">>, null}
@@ -304,7 +317,6 @@ file_record(ModelType, SessionId, ResId, ChildrenFromCache, ChildrenLimit) ->
                 type = TypeAttr,
                 size = SizeAttr,
                 mtime = ModificationTime,
-                mode = PermissionsAttr,
                 shares = Shares,
                 provider_id = ProviderId
             } = FileAttr,
@@ -330,19 +342,23 @@ file_record(ModelType, SessionId, ResId, ChildrenFromCache, ChildrenLimit) ->
                     end
             end,
 
-            Permissions = integer_to_binary((PermissionsAttr rem 1000), 8),
 
-            {Type, Size, ChildrenIds, TotalChildrenCount} = case TypeAttr of
+            {Type, Size, ChildrenIds, TotalChildrenCount, CanViewDir} = case TypeAttr of
                 ?DIRECTORY_TYPE ->
-                    {ChildrenList, TotalCount} = case ChildrenFromCache of
-                        false ->
-                            ls_dir(SessionId, FileId);
-                        true ->
-                            fetch_dir_children(FileId, ChildrenLimit)
-                    end,
-                    {<<"dir">>, 0, ChildrenList, TotalCount};
+                    try
+                        {ChildrenList, TotalCount} = case ChildrenFromCache of
+                            false ->
+                                ls_dir(SessionId, FileId);
+                            true ->
+                                fetch_dir_children(FileId, ChildrenLimit)
+                        end,
+                        {<<"dir">>, null, ChildrenList, TotalCount, true}
+                    catch
+                        _:_ ->
+                            {<<"dir">>, null, [], 0, false}
+                    end;
                 _ ->
-                    {<<"file">>, SizeAttr, [], 0}
+                    {<<"file">>, SizeAttr, [], 0, false}
             end,
             % Depending on model name, convert IDs to associations
             Children = case ModelType of
@@ -353,6 +369,13 @@ file_record(ModelType, SessionId, ResId, ChildrenFromCache, ChildrenLimit) ->
                         fun(FId) ->
                             op_gui_utils:ids_to_association(ShareId, FId)
                         end, ChildrenIds)
+            end,
+            % Depending on model name, properly set the ACL field
+            FileAcl = case ModelType of
+                <<"file">> ->
+                    FileId;
+                _ ->
+                    null
             end,
 
             % Currently only one share per file is allowed.
@@ -375,13 +398,13 @@ file_record(ModelType, SessionId, ResId, ChildrenFromCache, ChildrenLimit) ->
                 {<<"id">>, ResId},
                 {<<"name">>, Name},
                 {<<"type">>, Type},
-                {<<"permissions">>, Permissions},
                 {<<"modificationTime">>, ModificationTime},
                 {<<"size">>, Size},
+                {<<"canViewDir">>, CanViewDir},
                 {<<"totalChildrenCount">>, TotalChildrenCount},
                 {<<"parent">>, Parent},
                 {<<"children">>, Children},
-                {<<"fileAcl">>, FileId},
+                {<<"filePermission">>, FileAcl},
                 {<<"share">>, Share},
                 {<<"provider">>, ProviderId},
                 {<<"fileProperty">>, Metadata}
@@ -404,20 +427,25 @@ create_file(SessionId, Name, ParentId, Type) ->
         {ok, ParentPath} = logical_file_manager:get_file_path(
             SessionId, ParentId),
         Path = filename:join([ParentPath, Name]),
-        FileId = case Type of
+        Result = case Type of
             <<"file">> ->
-                {ok, FId} = logical_file_manager:create(SessionId, Path),
-                FId;
+                logical_file_manager:create(SessionId, Path);
             <<"dir">> ->
-                {ok, DirId} = logical_file_manager:mkdir(SessionId, Path),
-                DirId
+                logical_file_manager:mkdir(SessionId, Path)
         end,
-        NewChildrenCount = modify_ls_cache(add, FileId, ParentId),
-        {ok, FileData} = file_record(
-            <<"file">>, SessionId, ParentId, true, NewChildrenCount
-        ),
-        gui_async:push_updated(<<"file">>, FileData),
-        {ok, FileId}
+        case Result of
+            {ok, FileId} ->
+                NewChildrenCount = modify_ls_cache(add, FileId, ParentId),
+                {ok, FileData} = file_record(
+                    <<"file">>, SessionId, ParentId, true, NewChildrenCount
+                ),
+                gui_async:push_updated(<<"file">>, FileData),
+                {ok, FileId};
+            {error, ?EPERM} ->
+                gui_error:report_warning(<<"Permission denied.">>);
+            {error, ?EACCES} ->
+                gui_error:report_warning(<<"Access denied.">>)
+        end
     catch Error:Message ->
         ?error_stacktrace(
             "Cannot create file via GUI - ~p:~p", [Error, Message]
@@ -452,7 +480,7 @@ report_file_upload(FileId, ParentId) ->
 %%--------------------------------------------------------------------
 -spec report_file_batch_complete(DirId :: fslogic_worker:file_guid()) -> ok.
 report_file_batch_complete(DirId) ->
-    SessionId = g_session:get_session_id(),
+    SessionId = gui_session:get_session_id(),
     LsSubCacheName = ls_sub_cache_name(),
     [{{DirId, last_children_count}, LastChCount}] = ets:lookup(
         LsSubCacheName, {DirId, last_children_count}
@@ -503,9 +531,7 @@ fetch_more_dir_children(SessionId, Props) ->
 %%--------------------------------------------------------------------
 -spec get_user_root_dir_uuid() -> fslogic_worker:file_guid().
 get_user_root_dir_uuid() ->
-    fslogic_uuid:uuid_to_guid(
-        fslogic_uuid:user_root_dir_uuid(
-            g_session:get_user_id())).
+    fslogic_uuid:user_root_dir_guid(gui_session:get_user_id()).
 
 
 %%--------------------------------------------------------------------
@@ -634,32 +660,81 @@ fetch_dir_children(DirId, ChildrenLimit) ->
     DirId :: fslogic_worker:file_guid()) -> non_neg_integer().
 modify_ls_cache(Operation, FileId, DirId) ->
     LsSubCacheName = ls_sub_cache_name(),
-    % Lookup current values in cache
-    [{{DirId, children}, CurrentChildren}] = ets:lookup(
-        LsSubCacheName, {DirId, children}
-    ),
-    [{{DirId, last_children_count}, LastChCount}] = ets:lookup(
-        LsSubCacheName, {DirId, last_children_count}
-    ),
-    [{{DirId, size}, CurrentSize}] = ets:lookup(
-        LsSubCacheName, {DirId, size}
-    ),
-    % Modify the values according to operation
-    {NewChildren, NewSize, NewLastChildrenCount} = case Operation of
-        add ->
-            {[FileId | CurrentChildren], CurrentSize + 1, LastChCount + 1};
-        remove ->
-            {CurrentChildren -- [FileId], CurrentSize - 1, LastChCount - 1}
+    % ETS does not offer atomic updates, so a lock is required here
+    acquire_lock(),
+    % Try-catch will prevent the process from unexpectedly crashing and taking
+    % the lock to the grave.
+    NewLastChildrenCount = try
+        % Lookup current values in cache
+        [{{DirId, children}, CurrentChildren}] = ets:lookup(
+            LsSubCacheName, {DirId, children}
+        ),
+        [{{DirId, last_children_count}, LastChCount}] = ets:lookup(
+            LsSubCacheName, {DirId, last_children_count}
+        ),
+        [{{DirId, size}, CurrentSize}] = ets:lookup(
+            LsSubCacheName, {DirId, size}
+        ),
+        % Modify the values according to operation
+        {NewChildren, NewSize, NewLastChCount} = case Operation of
+            add ->
+                {[FileId | CurrentChildren], CurrentSize + 1, LastChCount + 1};
+            remove ->
+                {CurrentChildren -- [FileId], CurrentSize - 1, LastChCount - 1}
+        end,
+        ets:insert(LsSubCacheName, {{DirId, children}, NewChildren}),
+        % Update directory size
+        ets:insert(LsSubCacheName, {{DirId, size}, NewSize}),
+        % Update last known children count
+        ets:insert(
+            LsSubCacheName, {{DirId, last_children_count}, NewLastChCount}
+        ),
+        NewLastChCount
+    catch Type:Message ->
+        ?error_stacktrace("Unexpected error in ~p:modify_ls_cache - ~p:~p", [
+            ?MODULE, Type, Message
+        ]),
+        0
+    after
+        release_lock()
     end,
-
-    ets:insert(LsSubCacheName, {{DirId, children}, NewChildren}),
-    % Update directory size
-    ets:insert(LsSubCacheName, {{DirId, size}, NewSize}),
-    % Update last known children count
-    ets:insert(
-        LsSubCacheName, {{DirId, last_children_count}, NewLastChildrenCount}
-    ),
     NewLastChildrenCount.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Acquires a lock on ets by synchronizing on a counter {lock, Value}.
+%% Tries to increment the value by 2, but if it exceeds 2, the value is reset
+%% to 1. Hence, only when current value is 0 the process can increment it to two
+%% and 'acquires' the lock. Other processes will wait until the acquiring process
+%% releases the lock (zeroes the value).
+%% @end
+%%--------------------------------------------------------------------
+-spec acquire_lock() -> ok.
+acquire_lock() ->
+    % args are: (Tab, Key, {Pos, Increment, Threshold, SetValue}, Default)
+    % If Threshold is exceeded, the value is set to SetValue
+    case ets:update_counter(ls_sub_cache_name(), lock, {2, 2, 2, 1}, {lock, 0}) of
+        2 ->
+            ok;
+        1 ->
+            timer:sleep(50),
+            acquire_lock()
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Releases the lock on ets by zeroing the counter in ets. From now, other
+%% processes will be able to acquire the lock.
+%% @end
+%%--------------------------------------------------------------------
+-spec release_lock() -> ok.
+release_lock() ->
+    ets:update_counter(ls_sub_cache_name(), lock, {2, -2, 0, 0}, {lock, 0}),
+    ok.
 
 
 %%--------------------------------------------------------------------

@@ -31,9 +31,11 @@
     basic_session_setup/5, basic_session_teardown/2, remove_pending_messages/0, create_test_users_and_spaces/2,
     remove_pending_messages/1, clear_models/2, space_storage_mock/2,
     communicator_mock/1, clean_test_users_and_spaces_no_validate/1,
-    domain_to_provider_id/1, assume_all_files_in_space/2, clear_assume_all_files_in_space/1]).
+    domain_to_provider_id/1, mock_test_file_context/2, unmock_test_file_context/1]).
 -export([enable_grpca_based_communication/1, disable_grpca_based_communication/1]).
 -export([unload_quota_mocks/1, disable_quota_limit/1]).
+
+-define(DUMMY_MACAROON(__UserId), <<"DUMMY-MACAROON-", __UserId/binary>>).
 
 -record(user_config, {
     id :: od_user:id(),
@@ -41,86 +43,86 @@
     default_space :: binary(),
     spaces :: [],
     groups :: [],
-    macaroon :: macaroon:macaroon()
+    macaroon :: binary()
 }).
 
 -define(TIMEOUT, timer:seconds(5)).
 -define(DEFAULT_GLOBAL_SETUP, [
-        {<<"users">>, [
-            {<<"user1">>, [
-                {<<"default_space">>, <<"space_id1">>}
-            ]},
-            {<<"user2">>, [
-                {<<"default_space">>, <<"space_id2">>}
-            ]},
-            {<<"user3">>, [
-                {<<"default_space">>, <<"space_id3">>}
-            ]},
-            {<<"user4">>, [
-                {<<"default_space">>, <<"space_id4">>}
-            ]}
+    {<<"users">>, [
+        {<<"user1">>, [
+            {<<"default_space">>, <<"space_id1">>}
         ]},
-        {<<"groups">>, [
-            {<<"group1">>, [
-                {<<"users">>, [<<"user1">>]}
-            ]},
-            {<<"group2">>, [
-                {<<"users">>, [<<"user1">>, <<"user2">>]}
-            ]},
-            {<<"group3">>, [
-                {<<"users">>, [<<"user1">>, <<"user2">>, <<"user3">>]}
-            ]},
-            {<<"group4">>, [
-                {<<"users">>, [<<"user1">>, <<"user2">>, <<"user3">>, <<"user4">>]}
-            ]}
+        {<<"user2">>, [
+            {<<"default_space">>, <<"space_id2">>}
         ]},
-        {<<"spaces">>, [
-            {<<"space_id1">>, [
-                {<<"displayed_name">>, <<"space_name1">>},
-                {<<"users">>, [<<"user1">>]},
-                {<<"groups">>, [<<"group1">>]},
-                {<<"providers">>, [
-                    {<<"p1">>, [
-                        {<<"supported_size">>, 1000000000}
+        {<<"user3">>, [
+            {<<"default_space">>, <<"space_id3">>}
+        ]},
+        {<<"user4">>, [
+            {<<"default_space">>, <<"space_id4">>}
+        ]}
+    ]},
+    {<<"groups">>, [
+        {<<"group1">>, [
+            {<<"users">>, [<<"user1">>]}
+        ]},
+        {<<"group2">>, [
+            {<<"users">>, [<<"user1">>, <<"user2">>]}
+        ]},
+        {<<"group3">>, [
+            {<<"users">>, [<<"user1">>, <<"user2">>, <<"user3">>]}
+        ]},
+        {<<"group4">>, [
+            {<<"users">>, [<<"user1">>, <<"user2">>, <<"user3">>, <<"user4">>]}
+        ]}
+    ]},
+    {<<"spaces">>, [
+        {<<"space_id1">>, [
+            {<<"displayed_name">>, <<"space_name1">>},
+            {<<"users">>, [<<"user1">>]},
+            {<<"groups">>, [<<"group1">>]},
+            {<<"providers">>, [
+                {<<"p1">>, [
+                    {<<"supported_size">>, 1000000000}
 %%                        {<<"storage">>, <<"/mnt/st1">>}
-                    ]}
                 ]}
-            ]},
-            {<<"space_id2">>, [
-                {<<"displayed_name">>, <<"space_name2">>},
-                {<<"users">>, [<<"user1">>, <<"user2">>]},
-                {<<"groups">>, [<<"group1">>, <<"group2">>]},
-                {<<"providers">>, [
-                    {<<"p1">>, [
-                        {<<"supported_size">>, 1000000000}
+            ]}
+        ]},
+        {<<"space_id2">>, [
+            {<<"displayed_name">>, <<"space_name2">>},
+            {<<"users">>, [<<"user1">>, <<"user2">>]},
+            {<<"groups">>, [<<"group1">>, <<"group2">>]},
+            {<<"providers">>, [
+                {<<"p1">>, [
+                    {<<"supported_size">>, 1000000000}
 %%                        {<<"storage">>, <<"/mnt/st1">>}
 
-                    ]}
                 ]}
-            ]},
-            {<<"space_id3">>, [
-                {<<"displayed_name">>, <<"space_name3">>},
-                {<<"users">>, [<<"user1">>, <<"user2">>, <<"user3">>]},
-                {<<"groups">>, [<<"group1">>, <<"group2">>, <<"group3">>]},
-                {<<"providers">>, [
-                    {<<"p1">>, [
-                        {<<"supported_size">>, 1000000000}
+            ]}
+        ]},
+        {<<"space_id3">>, [
+            {<<"displayed_name">>, <<"space_name3">>},
+            {<<"users">>, [<<"user1">>, <<"user2">>, <<"user3">>]},
+            {<<"groups">>, [<<"group1">>, <<"group2">>, <<"group3">>]},
+            {<<"providers">>, [
+                {<<"p1">>, [
+                    {<<"supported_size">>, 1000000000}
 %%                        {<<"storage">>, <<"/mnt/st1">>}
-                    ]}
                 ]}
-            ]},
-            {<<"space_id4">>, [
-                {<<"displayed_name">>, <<"space_name4">>},
-                {<<"users">>, [<<"user1">>, <<"user2">>, <<"user3">>, <<"user4">>]},
-                {<<"groups">>, [<<"group1">>, <<"group2">>, <<"group3">>, <<"group4">>]},
-                {<<"providers">>, [
-                    {<<"p1">>, [
-                        {<<"supported_size">>, 1000000000}
+            ]}
+        ]},
+        {<<"space_id4">>, [
+            {<<"displayed_name">>, <<"space_name4">>},
+            {<<"users">>, [<<"user1">>, <<"user2">>, <<"user3">>, <<"user4">>]},
+            {<<"groups">>, [<<"group1">>, <<"group2">>, <<"group3">>, <<"group4">>]},
+            {<<"providers">>, [
+                {<<"p1">>, [
+                    {<<"supported_size">>, 1000000000}
 %%                        {<<"storage">>, <<"/mnt/st1">>}
-                    ]}
                 ]}
             ]}
         ]}
+    ]}
 ]).
 
 %%%===================================================================
@@ -128,45 +130,27 @@
 %%%===================================================================
 
 %%-------------------------------------------------------------------
-%% @doc Makes workers 'think' that all files belong to given SpaceId.
-%%--------------------------------------------------------------------
--spec assume_all_files_in_space(Config :: list(), SpaceId :: binary()) -> ok.
-assume_all_files_in_space(Config, SpaceId) ->
-    SpaceDoc = #document{key = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId), value = #file_meta{}},
-    Workers = ?config(op_worker_nodes, Config),
-    catch test_utils:mock_new(Workers, fslogic_spaces),
-    test_utils:mock_expect(Workers, fslogic_spaces, get_space,
-        fun(_, _) ->
-            {ok, SpaceDoc}
-        end).
-
-
-%%-------------------------------------------------------------------
-%% @doc Reverses assume_all_files_in_space/2
-%%--------------------------------------------------------------------
--spec clear_assume_all_files_in_space(Config :: list()) -> ok.
-clear_assume_all_files_in_space(Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, [fslogic_spaces]).
-
-
-%%-------------------------------------------------------------------
-%% @doc Returns provider id based on worker's domain
+%% @doc
+%% Returns provider id based on worker's domain
+%% @end
 %%--------------------------------------------------------------------
 -spec domain_to_provider_id(Domain :: atom()) -> binary().
 domain_to_provider_id(Domain) ->
     atom_to_binary(Domain, unicode).
 
 %%-------------------------------------------------------------------
-%% @doc Returns domain based on worker's provider id
+%% @doc
+%% Returns domain based on worker's provider id
+%% @end
 %%--------------------------------------------------------------------
 -spec provider_id_to_domain(ProviderId :: binary()) -> atom().
 provider_id_to_domain(ProviderId) ->
     binary_to_atom(ProviderId, unicode).
 
-
 %%--------------------------------------------------------------------
-%% @doc Setup and mocking related with users and spaces, done on each provider
+%% @doc
+%% Setup and mocking related with users and spaces, done on each provider
+%% @end
 %%--------------------------------------------------------------------
 -spec create_test_users_and_spaces(ConfigPath :: string(), JsonConfig :: list()) -> list().
 create_test_users_and_spaces(ConfigPath, Config) ->
@@ -174,7 +158,9 @@ create_test_users_and_spaces(ConfigPath, Config) ->
     create_test_users_and_spaces(Workers, ConfigPath, Config).
 
 %%--------------------------------------------------------------------
-%% @doc Cleanup and unmocking related with users and spaces
+%% @doc
+%% Cleanup and unmocking related with users and spaces
+%% @end
 %%--------------------------------------------------------------------
 -spec clean_test_users_and_spaces(Config :: list()) -> term().
 clean_test_users_and_spaces(Config) ->
@@ -185,14 +171,15 @@ clean_test_users_and_spaces(Config) ->
         initializer:teardown_sesion(W, Config),
         clear_cache(W)
     end, DomainWorkers),
-    test_utils:mock_validate_and_unload(Workers, [file_meta, oz_spaces, oz_users,
+    test_utils:mock_validate_and_unload(Workers, [oz_spaces, oz_users,
         oz_groups, space_storage, oneprovider, oz_providers]).
-
 
 %%TODO this function can be deleted after resolving VFS-1811 and replacing call
 %%to this function in cdmi_test_SUITE with call to clean_test_users_and_spaces.
 %%--------------------------------------------------------------------
-%% @doc Cleanup and unmocking related with users and spaces
+%% @doc
+%% Cleanup and unmocking related with users and spaces
+%% @end
 %%--------------------------------------------------------------------
 -spec clean_test_users_and_spaces_no_validate(Config :: list()) -> term().
 clean_test_users_and_spaces_no_validate(Config) ->
@@ -202,11 +189,11 @@ clean_test_users_and_spaces_no_validate(Config) ->
         initializer:teardown_sesion(W, Config),
         clear_cache(W)
     end, Workers),
-    test_utils:mock_unload(Workers, [file_meta, oz_spaces, oz_groups, space_storage, oneprovider, oz_providers]).
+    test_utils:mock_unload(Workers, [od_user, oz_spaces, oz_groups, space_storage, oneprovider, oz_providers]).
 
 
 clear_cache(W) ->
-    A1 = rpc:call(W, caches_controller, wait_for_cache_dump, []),
+    _A1 = rpc:call(W, caches_controller, wait_for_cache_dump, []),
 %%     A2 = gen_server2:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000),
 %%     A3 = gen_server2:call({?NODE_MANAGER_NAME, W}, force_clear_node, 60000),
 %%     ?assertMatch({ok, ok, {ok, ok}}, {A1, A2, A3}).
@@ -272,15 +259,19 @@ clear_models(Worker, Names) ->
     end, Names).
 
 %%--------------------------------------------------------------------
-%% @doc Setup test users' sessions on server
+%% @doc
+%% Setup test users' sessions on server
+%% @end
 %%--------------------------------------------------------------------
 -spec setup_session(Worker :: node(), [#user_config{}], Config :: term()) -> NewConfig :: term().
-setup_session(_Worker, [], Config) ->
+setup_session(Worker, [], Config) ->
+    test_utils:mock_unload(Worker, [od_user]),
     Config;
 setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
     macaroon = Macaroon, groups = Groups, name = UserName}} | R], Config) ->
 
-    Name = fun(Text, User) -> list_to_binary(Text ++ "_" ++ binary_to_list(User))  end,
+    Name = fun(Text, User) ->
+        list_to_binary(Text ++ "_" ++ binary_to_list(User)) end,
 
     SessId = Name(atom_to_list(?GET_DOMAIN(Worker)) ++ "_session_id", UserId),
     UserId = UserId,
@@ -293,12 +284,12 @@ setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
         end
     end, Spaces),
 
-    Auth = #token_auth{macaroon = Macaroon},
+    Auth = #macaroon_auth{macaroon = Macaroon},
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
         reuse_or_create_session, [SessId, fuse, Iden, Auth, []])),
-    {ok, #document{value = Session}} = rpc:call(Worker, session, get, [SessId]),
-    {ok, _} = rpc:call(Worker, od_user, fetch, [#token_auth{macaroon = Macaroon}]),
-    ?assertReceivedMatch(onedata_user_setup, ?TIMEOUT),
+    Ctx = rpc:call(Worker, user_ctx, new, [SessId]),
+    {ok, _} = rpc:call(Worker, od_user, fetch, [#macaroon_auth{macaroon = Macaroon}]),
+    ?assertReceivedMatch(onedata_user_after, ?TIMEOUT),
     [
         {{spaces, UserId}, Spaces},
         {{groups, UserId}, Groups},
@@ -306,12 +297,14 @@ setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
         {{auth, UserId}, Auth},
         {{user_name, UserId}, UserName},
         {{session_id, {UserId, ?GET_DOMAIN(Worker)}}, SessId},
-        {{fslogic_ctx, UserId}, #fslogic_ctx{session = Session}}
+        {{fslogic_ctx, UserId}, Ctx}
         | setup_session(Worker, R, Config)
     ].
 
 %%--------------------------------------------------------------------
-%% @doc Removes test users' sessions from server.
+%% @doc
+%% Removes test users' sessions from server.
+%% @end
 %%--------------------------------------------------------------------
 -spec teardown_sesion(Worker :: node(), Config :: term()) -> NewConfig :: term().
 teardown_sesion(Worker, Config) ->
@@ -337,7 +330,9 @@ teardown_sesion(Worker, Config) ->
     end, [], Config).
 
 %%--------------------------------------------------------------------
-%% @doc Setups test storage on server and creates test storage dir on each provider
+%% @doc
+%% Setups test storage on server and creates test storage dir on each provider
+%% @end
 %%--------------------------------------------------------------------
 -spec setup_storage(Config :: list()) -> list().
 setup_storage(Config) ->
@@ -345,7 +340,9 @@ setup_storage(Config) ->
     setup_storage(DomainWorkers, Config).
 
 %%--------------------------------------------------------------------
-%% @doc Setups test storage on server and creates test storage dir on one provider
+%% @doc
+%% Setups test storage on server and creates test storage dir on one provider
+%% @end
 %%--------------------------------------------------------------------
 -spec setup_storage([node()], Config :: list()) -> list().
 setup_storage([], Config) ->
@@ -354,20 +351,22 @@ setup_storage([Worker | Rest], Config) ->
     TmpDir = generator:gen_storage_dir(),
     %% @todo: use shared storage
     "" = rpc:call(Worker, os, cmd, ["mkdir -p " ++ TmpDir]),
-    {ok, StorageId} = rpc:call(
-        Worker, storage, create, [
-            #document{value = fslogic_storage:new_storage(
-                <<"Test", (list_to_binary(atom_to_list(?GET_DOMAIN(Worker))))/binary>>,
-                [fslogic_storage:new_helper_init(
-                    <<"DirectIO">>,
-                    #{<<"root_path">> => list_to_binary(TmpDir)}
-                )]
-            )}]),
+    StorageDoc = storage:new(
+        <<"Test", (list_to_binary(atom_to_list(?GET_DOMAIN(Worker))))/binary>>,
+        [helper:new_posix_helper(
+            list_to_binary(TmpDir),
+            #{},
+            helper:new_posix_user_ctx(0, 0)
+        )]
+    ),
+    {ok, StorageId} = rpc:call(Worker, storage, create, [StorageDoc]),
     [{{storage_id, ?GET_DOMAIN(Worker)}, StorageId}, {{storage_dir, ?GET_DOMAIN(Worker)}, TmpDir}] ++
     setup_storage(Rest, Config).
 
 %%--------------------------------------------------------------------
-%% @doc Removes test storage dir on each provider
+%% @doc
+%% Removes test storage dir on each provider
+%% @end
 %%--------------------------------------------------------------------
 -spec teardown_storage(Config :: list()) -> ok.
 teardown_storage(Config) ->
@@ -376,24 +375,38 @@ teardown_storage(Config) ->
         teardown_storage(Worker, Config) end, DomainWorkers).
 
 %%--------------------------------------------------------------------
-%% @doc Mocks space_storage module, so that it returns default storage for all spaces.
+%% @doc
+%% Mocks space_storage module, so that it returns default storage for all spaces.
+%% @end
 %%--------------------------------------------------------------------
 -spec space_storage_mock(Workers :: node() | [node()], StorageId :: storage:id()) -> ok.
 space_storage_mock(Workers, StorageId) ->
     test_utils:mock_new(Workers, space_storage),
+    test_utils:mock_new(Workers, space_strategies),
     test_utils:mock_expect(Workers, space_storage, get, fun(_) ->
         {ok, #document{value = #space_storage{storage_ids = [StorageId]}}}
+    end),
+    test_utils:mock_expect(Workers, space_storage, get_storage_ids,
+        fun(_) -> [StorageId] end),
+    test_utils:mock_expect(Workers, space_strategies, get, fun(_) ->
+        {ok, #document{
+            value = #space_strategies{
+                storage_strategies =
+                maps:put(StorageId, #storage_strategies{}, #{})
+            }
+        }}
     end).
 
 %%--------------------------------------------------------------------
-%% @doc Mocks communicator module, so that it ignores all messages.
+%% @doc
+%% Mocks communicator module, so that it ignores all messages.
+%% @end
 %%--------------------------------------------------------------------
 -spec communicator_mock(Workers :: node() | [node()]) -> ok.
 communicator_mock(Workers) ->
-    catch test_utils:mock_new(Workers, communicator),
+        catch test_utils:mock_new(Workers, communicator),
     test_utils:mock_expect(Workers, communicator, send, fun(_, _) -> ok end),
     test_utils:mock_expect(Workers, communicator, send, fun(_, _, _) -> ok end).
-
 
 -spec enable_grpca_based_communication(Config :: list()) -> ok.
 enable_grpca_based_communication(Config) ->
@@ -405,13 +418,13 @@ enable_grpca_based_communication(Config) ->
     CertMappings = lists:map(fun({ProvKey, Domain}) ->
         CertPath0 = ?TEST_FILE(Config, binary_to_list(ProvKey) ++ "_" ++ "cert.pem"),
         KeyPath0 = ?TEST_FILE(Config, binary_to_list(ProvKey) ++ "_" ++ "key.pem"),
-        CertPath = re:replace(CertPath0, ".*/test_distributed/", "../../build/test_distributed/", [{return,list}]),
-        KeyPath = re:replace(KeyPath0, ".*/test_distributed/", "../../build/test_distributed/", [{return,list}]),
+        CertPath = re:replace(CertPath0, ".*/test_distributed/", "../../build/test_distributed/", [{return, list}]),
+        KeyPath = re:replace(KeyPath0, ".*/test_distributed/", "../../build/test_distributed/", [{return, list}]),
 
 
-        test_utils:mock_expect(get_same_domain_workers(Config, Domain), oz_plugin, get_cert_path,
+        test_utils:mock_expect(get_same_domain_workers(Config, Domain), oz_plugin, get_cert_file,
             fun() -> CertPath end),
-        test_utils:mock_expect(get_same_domain_workers(Config, Domain), oz_plugin, get_key_path,
+        test_utils:mock_expect(get_same_domain_workers(Config, Domain), oz_plugin, get_key_file,
             fun() -> KeyPath end),
 
         {ok, PEMBin} = file:read_file(CertPath0),
@@ -425,26 +438,24 @@ enable_grpca_based_communication(Config) ->
         fun(CertToCheck) ->
             case lists:keyfind(CertToCheck, 1, CertMappings) of
                 false -> false;
-                _     -> true
+                _ -> true
             end
         end),
 
     test_utils:mock_expect(AllWorkers, provider_auth_manager, get_provider_id,
         fun(CertToCheck) ->
             domain_to_provider_id(proplists:get_value(CertToCheck, CertMappings))
-        end),
-
-    ok.
+        end).
 
 -spec disable_grpca_based_communication(Config :: list()) -> ok.
 disable_grpca_based_communication(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, [oz_plugin, provider_auth_manager]).
 
-
-
 %%--------------------------------------------------------------------
-%% @doc Disables all quota checks. Should be unloaded via unload_quota_mocks/1.
+%% @doc
+%% Disables all quota checks. Should be unloaded via unload_quota_mocks/1.
+%% @end
 %%--------------------------------------------------------------------
 -spec disable_quota_limit(Config :: list()) -> ok.
 disable_quota_limit(Config) ->
@@ -460,26 +471,64 @@ disable_quota_limit(Config) ->
     test_utils:mock_expect(Workers, space_quota, available_size,
         fun(_) -> 100000000000000000 end),
     test_utils:mock_expect(Workers, space_quota, apply_size_change,
-        fun(ID, _) -> {ok, ID} end),
-
-    ok.
-
+        fun(ID, _) -> {ok, ID} end).
 
 %%--------------------------------------------------------------------
-%% @doc Unloads space_quota mock.
+%% @doc
+%% Unloads space_quota mock.
+%% @end
 %%--------------------------------------------------------------------
 -spec unload_quota_mocks(Config :: list()) -> ok.
 unload_quota_mocks(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, [space_quota]).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Mocks file context for test files with uuids that begin with given prefix.
+%% The files will be seen as existing and non-root.
+%% @end
+%%--------------------------------------------------------------------
+-spec mock_test_file_context(proplists:proplist(), binary()) -> ok.
+mock_test_file_context(Config, UuidPrefix) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, file_ctx),
+    test_utils:mock_expect(Workers, file_ctx, is_root_dir_const,
+        fun(FileCtx) ->
+            Uuid = file_ctx:get_uuid_const(FileCtx),
+            case str_utils:binary_starts_with(Uuid, UuidPrefix) of
+                true -> false;
+                false -> meck:passthrough([FileCtx])
+            end
+        end),
+    test_utils:mock_expect(Workers, file_ctx, file_exists_const,
+        fun(FileCtx) ->
+            Uuid = file_ctx:get_uuid_const(FileCtx),
+            case str_utils:binary_starts_with(Uuid, UuidPrefix) of
+                true -> true;
+                false -> meck:passthrough([FileCtx])
+            end
+        end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Unmocks file context for test files
+%% @end
+%%--------------------------------------------------------------------
+-spec unmock_test_file_context(proplists:proplist()) -> ok.
+unmock_test_file_context(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_validate_and_unload(Workers, file_ctx).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Setup and mocking related with users and spaces on all given providers.
+%% @private
+%% @doc
+%% Setup and mocking related with users and spaces on all given providers.
+%% @end
 %%--------------------------------------------------------------------
 -spec create_test_users_and_spaces([Worker :: node()], ConfigPath :: string(), Config :: list()) -> list().
 create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
@@ -492,7 +541,7 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
     UsersSetup = proplists:get_value(<<"users">>, GlobalSetup),
     Domains = lists:usort([?GET_DOMAIN(W) || W <- AllWorkers]),
 
-    catch test_utils:mock_new(AllWorkers, oneprovider),
+        catch test_utils:mock_new(AllWorkers, oneprovider),
     MasterWorkers = lists:map(fun(Domain) ->
         [MWorker | _] = CWorkers = get_same_domain_workers(Config, Domain),
         ProviderId = domain_to_provider_id(Domain),
@@ -501,16 +550,17 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
                 ProviderId
             end),
 
-        case ?config({storage_id, Domain}, Config) of %% If storage mock was configured, mock space_storage model
+        case ?config({storage_id, Domain}, Config) of
             undefined -> ok;
             StorageId ->
+                %% If storage mock was configured, mock space_storage model
                 initializer:space_storage_mock(CWorkers, StorageId)
         end,
 
         MWorker
     end, Domains),
 
-    catch test_utils:mock_new(AllWorkers, oz_providers),
+        catch test_utils:mock_new(AllWorkers, oz_providers),
 
     %% Setup storage
     lists:foreach(fun({SpaceId, _}) ->
@@ -519,19 +569,11 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
     lists:foreach(fun({SpaceId, SpaceConfig}) ->
         Providers0 = proplists:get_value(<<"providers">>, SpaceConfig),
         lists:foreach(fun({PID, ProviderConfig}) ->
-            case proplists:get_value(<<"storage">>, ProviderConfig) of
-                undefined -> ok; %% Skip if not configured
-                StorageName ->
-                    Domain = proplists:get_value(PID, DomainMappings),
-                    case get_same_domain_workers(Config, Domain) of
-                        [Worker | _] ->
-                            {ok, Storage} = ?assertMatch({ok, _}, rpc:call(Worker,
-                                storage, get_by_name, [StorageName])),
-                            StorageId = rpc:call(Worker, storage, id, [Storage]),
-                            {ok, _} = ?assertMatch({ok, _}, rpc:call(Worker,
-                                space_storage, add, [SpaceId, StorageId]));
-                        _ -> ok
-                    end
+            Domain = proplists:get_value(PID, DomainMappings),
+            case get_same_domain_workers(Config, Domain) of
+                [Worker | _] ->
+                    setup_storage(Worker, SpaceId, Domain, ProviderConfig, Config);
+                _ -> ok
             end
         end, Providers0)
     end, SpacesSetup),
@@ -558,11 +600,10 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
         end),
 
 
-
     Spaces = lists:map(fun({SpaceId, SpaceConfig}) ->
         DisplayName = proplists:get_value(<<"displayed_name">>, SpaceConfig),
         {SpaceId, DisplayName}
-        end, SpacesSetup),
+    end, SpacesSetup),
 
     Groups = [{GroupId, GroupId} || {GroupId, _} <- proplists:get_value(<<"groups">>, GlobalSetup)],
 
@@ -580,11 +621,11 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
         end, AccIn, Users)
     end, #{}, SpaceUsers),
 
-    UserToSpaces = maps:map(fun(UserId, Spaces) ->
+    UserToSpaces = maps:map(fun(UserId, SpacesList) ->
         UserConfig = proplists:get_value(UserId, UsersSetup),
         DefaultSpaceId = proplists:get_value(<<"default_space">>, UserConfig),
-        DefaultSpace = {DefaultSpaceId, proplists:get_value(DefaultSpaceId, Spaces)},
-        [DefaultSpace | Spaces -- [DefaultSpace]]
+        DefaultSpace = {DefaultSpaceId, proplists:get_value(DefaultSpaceId, SpacesList)},
+        [DefaultSpace | SpacesList -- [DefaultSpace]]
     end, UserToSpaces0),
 
     UserToGroups = lists:foldl(fun({GroupId, Users}, AccIn) ->
@@ -602,23 +643,24 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
         {SpaceId, ProviderSupp}
     end, SpacesSetup),
 
-    Users = maps:fold(fun(UserId, Spaces, AccIn) ->
+    Users = maps:fold(fun(UserId, SpacesList, AccIn) ->
         UserConfig = proplists:get_value(UserId, UsersSetup),
         DefaultSpaceId = proplists:get_value(<<"default_space">>, UserConfig),
-        Macaroon = macaroon:create(<<"test">>, <<"key">>, UserId),
-        Name = fun(Text, User) -> list_to_binary(Text ++ "_" ++ binary_to_list(User))  end,
+        Macaroon = ?DUMMY_MACAROON(UserId),
+        Name = fun(Text, User) ->
+            list_to_binary(Text ++ "_" ++ binary_to_list(User)) end,
         AccIn ++ [{Macaroon, #user_config{
-                id = UserId,
-                name = Name("name", UserId),
-                spaces = Spaces,
-                macaroon = Macaroon,
-                default_space = DefaultSpaceId,
-                groups = maps:get(UserId, UserToGroups, [])
-            }}
+            id = UserId,
+            name = Name("name", UserId),
+            spaces = SpacesList,
+            macaroon = Macaroon,
+            default_space = DefaultSpaceId,
+            groups = maps:get(UserId, UserToGroups, [])
+        }}
         ]
     end, [], UserToSpaces),
 
-    file_meta_mock_setup(AllWorkers, Config),
+    od_user_mock_setup(AllWorkers),
     oz_users_mock_setup(AllWorkers, Users),
     oz_spaces_mock_setup(AllWorkers, Spaces, SpaceUsers, SpacesToProviders),
     oz_groups_mock_setup(AllWorkers, Groups, GroupUsers),
@@ -630,11 +672,19 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
     %% Set expiration time for session to 1d.
     {_, []} = rpc:multicall(AllWorkers, application, set_env, [?APP_NAME, fuse_session_ttl_seconds, 240 * 60 * 60]),
 
+    lists:foreach(fun(Worker) ->
+        test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
+        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_update_interval, timer:seconds(1)),
+        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_stream_update_interval, timer:seconds(1))
+    end, AllWorkers),
+    rpc:multicall(AllWorkers, worker_proxy, call, [dbsync_worker2, streams_healthcheck]),
+
     proplists:compact(
         lists:flatten([{spaces, Spaces}] ++ [initializer:setup_session(W, Users, Config) || W <- MasterWorkers])
     ).
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Get one worker from each provider domain.
 %% @end
@@ -646,6 +696,7 @@ get_different_domain_workers(Config) ->
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Get workers with given domain
 %% @end
@@ -656,7 +707,10 @@ get_same_domain_workers(Config, Domain) ->
     lists:filter(fun(W) -> ?GET_DOMAIN(W) =:= Domain end, Workers).
 
 %%--------------------------------------------------------------------
-%% @doc Removes test storage dir on given node
+%% @private
+%% @doc
+%% Removes test storage dir on given node
+%% @end
 %%--------------------------------------------------------------------
 -spec teardown_storage(Worker :: node(), Config :: list()) -> string().
 teardown_storage(Worker, Config) ->
@@ -675,30 +729,45 @@ teardown_storage(Worker, Config) ->
     ok.
 oz_users_mock_setup(Workers, Users) ->
     test_utils:mock_new(Workers, oz_users),
-    test_utils:mock_expect(Workers, oz_users, get_details, fun(#token_auth{macaroon = Macaroon}) ->
-        {_, #user_config{name = UName, id = UID}} = lists:keyfind(Macaroon, 1, Users),
-        {ok, #user_details{
-            id = UID,
-            name = UName
-        }}
+    test_utils:mock_expect(Workers, oz_users, get_details, fun
+        F(#token_auth{token = Macaroon}) ->
+            F(#macaroon_auth{macaroon = Macaroon});
+        F(#macaroon_auth{macaroon = Macaroon}) ->
+            {_, #user_config{name = UName, id = UID}} = lists:keyfind(Macaroon, 1, Users),
+            {ok, #user_details{
+                id = UID,
+                name = UName,
+                connected_accounts = [],
+                email_list = [],
+                alias = <<>>
+            }}
     end),
 
-    test_utils:mock_expect(Workers, oz_users, get_spaces, fun(#token_auth{macaroon = Macaroon}) ->
-        {_, #user_config{spaces = Spaces, default_space = DefaultSpaceId}} = lists:keyfind(Macaroon, 1, Users),
-        {SpaceIds, _} = lists:unzip(Spaces),
-        {ok, #user_spaces{ids = SpaceIds, default = DefaultSpaceId}}
+    test_utils:mock_expect(Workers, oz_users, get_spaces, fun
+        F(#token_auth{token = Macaroon}) ->
+            F(#macaroon_auth{macaroon = Macaroon});
+        F(#macaroon_auth{macaroon = Macaroon}) ->
+            {_, #user_config{spaces = Spaces, default_space = DefaultSpaceId}} = lists:keyfind(Macaroon, 1, Users),
+            {SpaceIds, _} = lists:unzip(Spaces),
+            {ok, #user_spaces{ids = SpaceIds, default = DefaultSpaceId}}
     end),
 
-    test_utils:mock_expect(Workers, oz_users, get_groups, fun(#token_auth{macaroon = Macaroon}) ->
-        {_, #user_config{groups = Groups}} = lists:keyfind(Macaroon, 1, Users),
-        {GroupIds, _} = lists:unzip(Groups),
-        {ok, GroupIds}
+    test_utils:mock_expect(Workers, oz_users, get_groups, fun
+        F(#token_auth{token = Macaroon}) ->
+            F(#macaroon_auth{macaroon = Macaroon});
+        F(#macaroon_auth{macaroon = Macaroon}) ->
+            {_, #user_config{groups = Groups}} = lists:keyfind(Macaroon, 1, Users),
+            {GroupIds, _} = lists:unzip(Groups),
+            {ok, GroupIds}
     end),
 
-    test_utils:mock_expect(Workers, oz_users, get_effective_groups, fun(#token_auth{macaroon = Macaroon}) ->
-        {_, #user_config{groups = Groups}} = lists:keyfind(Macaroon, 1, Users),
-        {GroupIds, _} = lists:unzip(Groups),
-        {ok, GroupIds}
+    test_utils:mock_expect(Workers, oz_users, get_effective_groups, fun
+        F(#token_auth{token = Macaroon}) ->
+            F(#macaroon_auth{macaroon = Macaroon});
+        F(#macaroon_auth{macaroon = Macaroon}) ->
+            {_, #user_config{groups = Groups}} = lists:keyfind(Macaroon, 1, Users),
+            {GroupIds, _} = lists:unzip(Groups),
+            {ok, GroupIds}
     end).
 
 %%--------------------------------------------------------------------
@@ -783,19 +852,74 @@ oz_groups_mock_setup(Workers, Groups, Users) ->
 
 %%--------------------------------------------------------------------
 %% @private
-%% @doc Mocks file_meta module, so that creation of onedata user sends notification.
+%% @doc
+%% Mocks od_user module, so that its 'after' posthook sends notification.
+%% @end
 %%--------------------------------------------------------------------
--spec file_meta_mock_setup(Workers :: node() | [node()], Config :: list()) -> ok.
-file_meta_mock_setup(Workers, Config) ->
+-spec od_user_mock_setup(Workers :: node() | [node()]) -> ok.
+od_user_mock_setup(Workers) ->
     Self = self(),
-    case ?config(file_meta_mock_options, Config) of
-        undefined ->
-            test_utils:mock_new(Workers, file_meta);
-        Opts ->
-            test_utils:mock_new(Workers, file_meta, Opts)
-    end,
-    test_utils:mock_expect(Workers, file_meta, 'after', fun
+    test_utils:mock_new(Workers, od_user),
+    test_utils:mock_expect(Workers, od_user, 'after', fun
         (ModelName, Method, Level, Context, ReturnValue) ->
             meck:passthrough([ModelName, Method, Level, Context, ReturnValue]),
-            Self ! onedata_user_setup
+            Self ! onedata_user_after
     end).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns true if space configured by ProviderConfig should be mounted
+%% in root.
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_mount_in_root(proplists:proplist()) -> boolean().
+maybe_mount_in_root(ProviderConfig) ->
+    case proplists:get_value(<<"mounted_in_root">>, ProviderConfig) of
+        <<"true">> -> true;
+        _ -> false
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Setup test storage.
+%% @end
+%%--------------------------------------------------------------------
+-spec setup_storage(atom(), od_space:id(), atom(), proplists:proplist(), list()) ->
+    {ok, od_space:id()} | ok.
+setup_storage(Worker, SpaceId, Domain, ProviderConfig, Config) ->
+    case proplists:get_value(<<"storage">>, ProviderConfig) of
+        undefined ->
+            case ?config({storage_id, Domain}, Config) of
+                undefined ->
+                    ok;
+                StorageId ->
+                    add_space_storage(Worker, SpaceId, StorageId,
+                        maybe_mount_in_root(ProviderConfig))
+            end;
+        StorageName ->
+            StorageId = case ?config({storage_id, Domain}, Config) of
+                %if storage is not mocked, get StorageId
+                undefined ->
+                    {ok, Storage} = ?assertMatch({ok, _},
+                        rpc:call(Worker, storage, select, [StorageName])),
+                    rpc:call(Worker, storage, get_id, [Storage]);
+                StId ->
+                    StId
+            end,
+            add_space_storage(Worker, SpaceId, StorageId,
+                maybe_mount_in_root(ProviderConfig))
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Add space storage mapping
+%% @end
+%%--------------------------------------------------------------------
+-spec add_space_storage(atom(), od_space:id(), storage:id(), boolean()) -> any().
+add_space_storage(Worker, SpaceId, StorageId, MountInRoot) ->
+    ?assertMatch({ok, _},
+        rpc:call(Worker, space_storage, add, [SpaceId, StorageId, MountInRoot])
+    ).

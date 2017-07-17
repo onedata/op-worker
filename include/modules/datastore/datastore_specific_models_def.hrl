@@ -16,11 +16,7 @@
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
 
--type active_descriptors() :: #{session:id() => non_neg_integer()}.
--type ceph_user_ctx() :: #{storage:id() => ceph_user:ctx()}.
--type posix_user_ctx() :: #{storage:id() => posix_user:ctx()}.
--type s3_user_ctx() :: #{storage:id() => s3_user:ctx()}.
--type swift_user_ctx() :: #{storage:id() => swift_user:ctx()}.
+-type file_descriptors() :: #{session:id() => non_neg_integer()}.
 -type indexes_value() :: #{indexes:index_id() => indexes:index()}.
 
 %%%===================================================================
@@ -61,7 +57,7 @@
     connected_accounts = [] :: [od_user:connected_account()], % TODO currently always empty
     default_space :: binary() | undefined,
     % List of user's aliases for spaces
-    space_aliases = [] :: [{od_space:id(), SpaceName :: binary()}],
+    space_aliases = [] :: [{od_space:id(), SpaceName :: od_space:alias()}],
 
     % Direct relations to other entities
     groups = [] :: [od_group:id()],
@@ -206,13 +202,6 @@
 %%% Records specific for oneprovider
 %%%===================================================================
 
-%% Message ID containing recipient for remote response.
--record(message_id, {
-    issuer :: undefined | client | server,
-    id :: undefined | binary(),
-    recipient :: pid() | undefined
-}).
-
 % State of subscription tracking.
 -record(subscriptions_state, {
     refreshing_node :: node(),
@@ -224,6 +213,10 @@
 %% Identity containing user_id
 -record(user_identity, {
     user_id :: undefined | od_user:id(),
+    provider_id :: undefined | oneprovider:id()
+}).
+
+-record(file_force_proxy, {
     provider_id :: undefined | oneprovider:id()
 }).
 
@@ -240,36 +233,39 @@
     watcher :: undefined | pid(),
     sequencer_manager :: undefined | pid(),
     connections = [] :: [pid()],
-    proxy_via :: session:id() | undefined,
+    proxy_via :: oneprovider:id() | undefined,
     response_map = #{} :: maps:map(),
     % Key-value in-session memory
-    memory = [] :: [{Key :: term(), Value :: term()}],
-    open_files = sets:new() :: sets:set(file_meta:uuid()),
+    memory = #{} :: maps:map(),
+    open_files = sets:new() :: sets:set(fslogic_worker:file_guid()),
     transfers = [] :: [transfer:id()]
 }).
 
 %% File handle used by the module
 -record(sfm_handle, {
-    helper_handle :: undefined | helpers:handle(),
-    file :: undefined | helpers:file(),
+    file_handle :: undefined | helpers:file_handle(),
+    file :: undefined | helpers:file_id(),
     session_id :: undefined | session:id(),
     file_uuid :: file_meta:uuid(),
-    space_uuid :: file_meta:uuid(),
-    storage :: datastore:document() | undefined,
+    space_id :: undefined | od_space:id(),
+    storage :: undefined | storage:doc(),
     storage_id :: undefined | storage:id(),
-    open_mode :: undefined | helpers:open_mode(),
+    open_flag :: undefined | helpers:open_flag(),
     needs_root_privileges :: undefined | boolean(),
-    is_local = false :: boolean(),
-    provider_id :: undefined | oneprovider:id(),
-    file_size :: undefined | non_neg_integer(), %% Available only if file is_local
+    file_size :: undefined | non_neg_integer(),
     share_id :: undefined | od_share:id()
+}).
+
+-record(storage_sync_info, {
+    children_attrs_hashes = #{} :: #{non_neg_integer() => binary()},
+    last_synchronized_mtime = undefined :: undefined | non_neg_integer()
 }).
 
 -record(file_meta, {
     name :: undefined | file_meta:name(),
     type :: undefined | file_meta:type(),
     mode = 0 :: file_meta:posix_permissions(),
-    uid :: undefined | od_user:id(), %% Reference to od_user that owns this file
+    owner :: undefined | od_user:id(),
     size = 0 :: undefined | file_meta:size(),
     version = 0, %% Snapshot version
     is_scope = false :: boolean(),
@@ -277,67 +273,74 @@
     provider_id :: undefined | oneprovider:id(), %% ID of provider that created this file
     %% symlink_value for symlinks, file_guid for phantom files (redirection)
     link_value :: undefined | file_meta:symlink_value() | fslogic_worker:file_guid(),
-    shares = [] :: [od_share:id()]
+    shares = [] :: [od_share:id()],
+    deleted = false :: boolean(),
+    storage_sync_info = #storage_sync_info{} :: file_meta:storage_sync_info()
 }).
 
-%% Helper name and its arguments
--record(helper_init, {
-    name :: helpers:name(),
-    args :: helpers:args()
-}).
 
-%% Model for storing storage information
 -record(storage, {
-    name :: undefined | storage:name(),
-    helpers :: undefined | [helpers:init()]
-}).
-
-%% Model for storing file's location data
--record(file_location, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
-    provider_id :: undefined | oneprovider:id(),
-    storage_id :: undefined | storage:id(),
-    file_id :: undefined | helpers:file(),
-    blocks = [] :: [fslogic_blocks:block()],
-    version_vector = #{},
-    size = 0 :: non_neg_integer() | undefined,
-    handle_id :: binary() | undefined,
-    space_id :: undefined | od_space:id(),
-    recent_changes = {[], []} :: {
-        OldChanges :: [fslogic_file_location:change()],
-        NewChanges :: [fslogic_file_location:change()]
-    },
-    last_rename :: fslogic_file_location:last_rename()
+    name = <<>> :: storage:name(),
+    helpers = [] :: [storage:helper()],
+    readonly = false :: boolean()
 }).
 
 %% Model that maps space to storage
 -record(space_storage, {
-    storage_ids = [] :: [storage:id()]
+    storage_ids = [] :: [storage:id()],
+    mounted_in_root = [] :: [storage:id()]
 }).
 
-%% Model that maps onedata user to Ceph user
--record(ceph_user, {
-    ctx = #{} :: ceph_user_ctx()
+-record(helper_handle, {
+    handle :: helpers_nif:helper_handle(),
+    timeout = infinity :: timeout()
 }).
 
-%% Model that maps onedata user to POSIX user
--record(posix_user, {
-    ctx = #{} :: posix_user_ctx()
+%% Model for storing file's location data
+-record(file_location, {
+    uuid :: file_meta:uuid(),
+    provider_id :: undefined | oneprovider:id(),
+    storage_id :: undefined | storage:id(),
+    file_id :: undefined | helpers:file_id(),
+    blocks = [] :: [fslogic_blocks:block()],
+    version_vector = #{},
+    size = 0 :: non_neg_integer() | undefined,
+    space_id :: undefined | od_space:id(),
+    recent_changes = {[], []} :: {
+        OldChanges :: [replica_changes:change()],
+        NewChanges :: [replica_changes:change()]
+    },
+    last_rename :: replica_changes:last_rename(),
+    storage_file_created = false :: boolean()
 }).
 
-%% Model that maps onedata user to Amazon S3 user
--record(s3_user, {
-    ctx = #{} :: s3_user_ctx()
+-define(DEFAULT_FILENAME_MAPPING_STRATEGY, {simple, #{}}).
+-define(DEFAULT_STORAGE_IMPORT_STRATEGY, {no_import, #{}}).
+-define(DEFAULT_STORAGE_UPDATE_STRATEGY, {no_update, #{}}).
+
+%% Model that maps space to storage strategies
+-record(storage_strategies, {
+    filename_mapping = ?DEFAULT_FILENAME_MAPPING_STRATEGY :: space_strategy:config(),
+    storage_import = ?DEFAULT_STORAGE_IMPORT_STRATEGY :: space_strategy:config(),
+    storage_update = ?DEFAULT_STORAGE_UPDATE_STRATEGY :: space_strategy:config(),
+    last_import_time :: integer() | undefined
 }).
 
-%% Model that maps onedata user to Openstack Swift user
--record(swift_user, {
-    ctx = #{} :: swift_user_ctx()
+-define(DEFAULT_FILE_CONFLICT_RESOLUTION_STRATEGY, {ignore_conflicts, #{}}).
+-define(DEFAULT_FILE_CACHING_STRATEGY, {no_cache, #{}}).
+-define(DEFAULT_ENOENT_HANDLING_STRATEGY, {error_passthrough, #{}}).
+
+%% Model that maps space to storage strategies
+-record(space_strategies, {
+    storage_strategies = #{} :: maps:map(), %todo dializer crashes on: #{storage:id() => #storage_strategies{}},
+    file_conflict_resolution = ?DEFAULT_FILE_CONFLICT_RESOLUTION_STRATEGY :: space_strategy:config(),
+    file_caching = ?DEFAULT_FILE_CACHING_STRATEGY :: space_strategy:config(),
+    enoent_handling = ?DEFAULT_ENOENT_HANDLING_STRATEGY :: space_strategy:config()
 }).
 
-%% Model that holds state entries for DBSync worker
--record(dbsync_state, {
-    entry :: term()
+%% Model that holds synchronization state for a space
+-record(dbsync_state2, {
+    seq = #{} :: maps:map([{od_provider:id(), couchbase_changes:seq()}])
 }).
 
 %% Model that holds state entries for DBSync worker
@@ -349,7 +352,7 @@
 %% the user will be present in current provider.
 %% The Key of this document is UserId.
 -record(files_to_chown, {
-    file_uuids = [] :: [file_meta:uuid()]
+    file_guids = [] :: [fslogic_worker:file_guid()]
 }).
 
 %% Model for holding current quota state for spaces
@@ -370,20 +373,21 @@
 %% Model for holding state of monitoring
 -record(monitoring_state, {
     monitoring_id = #monitoring_id{} :: #monitoring_id{},
-    rrd_path :: undefined | binary(),
+    rrd_guid :: undefined | binary(),
     state_buffer = #{} :: maps:map(),
     last_update_time :: undefined | non_neg_integer()
 }).
 
-%% Model that stores open file
--record(open_file, {
-    is_removed = false :: true | false,
-    active_descriptors = #{} :: active_descriptors()
+%% Model that stores file handles
+-record(file_handles, {
+    is_removed = false :: boolean(),
+    descriptors = #{} :: file_descriptors()
 }).
 
 %% Model that holds file's custom metadata
 -record(custom_metadata, {
     space_id :: undefined | od_space:id(),
+    file_objectid :: undefined | cdmi_id:object_id(), % undefined only for upgraded docs
     value = #{} :: maps:map()
 }).
 
@@ -411,7 +415,7 @@
 %% Record that controls change propagation
 -record(change_propagation_controller, {
     change_revision = 0 :: non_neg_integer(),
-    space_id = <<"">> :: binary(),
+    space_id = <<"">> :: od_space:id(),
     verify_module :: atom(),
     verify_function :: atom()
 }).

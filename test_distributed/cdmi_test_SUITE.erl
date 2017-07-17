@@ -1,14 +1,14 @@
-%-------------------------------------
+%%%-------------------------------------
 %%% @author Tomasz Lichon
 %%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
-%-------------------------------------
+%%%-------------------------------------
 %%% @doc
 %%% CDMI tests
 %%% @end
-%-------------------------------------
+%%%-------------------------------------
 -module(cdmi_test_SUITE).
 -author("Tomasz Lichon").
 
@@ -26,7 +26,7 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
+-export([all/0, init_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
 
 -export([
@@ -53,7 +53,11 @@
     accept_header_test/1,
     move_copy_conflict_test/1,
     move_test/1,
-    copy_test/1
+    copy_test/1,
+    create_raw_file_with_cdmi_version_header_should_succeed_test/1,
+    create_raw_dir_with_cdmi_version_header_should_succeed_test/1,
+    create_cdmi_file_without_cdmi_version_header_should_fail_test/1,
+    create_cdmi_dir_without_cdmi_version_header_should_fail_test/1
 ]).
 
 all() ->
@@ -81,7 +85,11 @@ all() ->
         accept_header_test,
         move_copy_conflict_test,
         move_test,
-        copy_test
+        copy_test,
+        create_raw_file_with_cdmi_version_header_should_succeed_test,
+        create_raw_dir_with_cdmi_version_header_should_succeed_test,
+        create_cdmi_file_without_cdmi_version_header_should_fail_test,
+        create_cdmi_dir_without_cdmi_version_header_should_fail_test
 ]).
 
 -define(TIMEOUT, timer:seconds(5)).
@@ -170,23 +178,31 @@ errors_test(Config) ->
 accept_header_test(Config) ->
     cdmi_test_base:accept_header(Config).
 
+create_raw_file_with_cdmi_version_header_should_succeed_test(Config) ->
+    cdmi_test_base:create_raw_file_with_cdmi_version_header_should_succeed(Config).
+
+create_raw_dir_with_cdmi_version_header_should_succeed_test(Config) ->
+    cdmi_test_base:create_raw_dir_with_cdmi_version_header_should_succeed(Config).
+
+create_cdmi_file_without_cdmi_version_header_should_fail_test(Config) ->
+    cdmi_test_base:create_cdmi_file_without_cdmi_version_header_should_fail(Config).
+
+create_cdmi_dir_without_cdmi_version_header_should_fail_test(Config) ->
+    cdmi_test_base:create_cdmi_dir_without_cdmi_version_header_should_fail(Config).
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]).
-
-end_per_suite(Config) ->
-    ?TEST_STOP(Config).
+    [{?LOAD_MODULES, [initializer]} | Config].
 
 init_per_testcase(choose_adequate_handler_test = Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, [cdmi_object_handler, cdmi_container_handler], [passthrough]),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
-init_per_testcase(Case, Config) ->
-    ?CASE_START(Case),
-    application:start(etls),
+init_per_testcase(_Case, Config) ->
+    ssl:start(),
     hackney:start(),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo).
@@ -195,13 +211,12 @@ end_per_testcase(choose_adequate_handler_test = Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, [cdmi_object_handler, cdmi_container_handler]),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
-end_per_testcase(Case, Config) ->
-    ?CASE_STOP(Case),
+end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config),
      %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
     hackney:stop(),
-    application:stop(etls).
+    ssl:stop().
 
 %%%===================================================================
 %%% Internal functions

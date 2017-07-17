@@ -61,12 +61,19 @@ start_link() ->
     Address = "wss://" ++ oneprovider:get_oz_domain() ++
         ":" ++ integer_to_list(Port) ++ "/subscriptions",
 
-    CACertFile = oz_plugin:get_cacert_path(),
-    KeyFile = oz_plugin:get_key_path(),
-    CertFile = oz_plugin:get_cert_path(),
-    Options = [{keyfile, KeyFile}, {certfile, CertFile}, {cacertfile, CACertFile}],
+    KeyFile = oz_plugin:get_key_file(),
+    CertFile = oz_plugin:get_cert_file(),
+    CaCertsDir = oz_plugin:get_cacerts_dir(),
+    {ok, CaCertPems} = file_utils:read_files({dir, CaCertsDir}),
+    CaCerts = lists:map(fun cert_decoder:pem_to_der/1, CaCertPems),
 
-    case websocket_client:start_link(Address, ?MODULE, [], Options) of
+    Opts = [{keyfile, KeyFile}, {certfile, CertFile}, {cacerts, CaCerts}],
+    Opts2 = case application:get_env(?APP_NAME, verify_oz_cert) of
+        {ok, true} -> [{verify, verify_peer} | Opts];
+        _ -> [{verify, verify_none} | Opts]
+    end,
+
+    case websocket_client:start_link(Address, ?MODULE, [], Opts2) of
         {ok, Pid} ->
             Pid ! register,
             {ok, Pid};

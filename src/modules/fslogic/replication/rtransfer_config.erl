@@ -12,7 +12,6 @@
 -module(rtransfer_config).
 -author("Tomasz Lichon").
 
--include("modules/fslogic/lfm_internal.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/oz/oz_providers.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -57,8 +56,8 @@ rtransfer_opts() ->
                     end, URLs)
             end},
         {open_fun,
-            fun(FileGUID, OpenMode) ->
-                lfm_files:open(?ROOT_SESS_ID, {guid, FileGUID}, OpenMode)
+            fun(FileGUID, OpenFlag) ->
+                lfm_files:open(?ROOT_SESS_ID, {guid, FileGUID}, OpenFlag)
             end},
         {read_fun,
             fun(Handle, Offset, MaxSize) ->
@@ -69,11 +68,14 @@ rtransfer_opts() ->
                 lfm_files:write_without_events(Handle, Offset, Buffer)
             end},
         {close_fun,
-            fun
-                (Handle = #lfm_handle{fslogic_ctx = #fslogic_ctx{session_id = ?ROOT_SESS_ID}, open_mode = write}) ->
-                    lfm_files:fsync(Handle);
-                (_) ->
-                    ok
+            fun(Handle) ->
+                case {lfm_context:get_session_id(Handle), lfm_context:get_open_flag(Handle)} of
+                    {?ROOT_SESS_ID, write} ->
+                        ok = lfm_files:fsync(Handle);
+                    _ ->
+                        ok
+                end,
+                lfm_files:release(Handle)
             end},
         {ranch_opts,
             [

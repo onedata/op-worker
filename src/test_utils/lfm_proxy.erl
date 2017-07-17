@@ -13,18 +13,18 @@
 -author("Tomasz Lichon").
 
 -include_lib("common_test/include/ct.hrl").
--include("modules/fslogic/lfm_internal.hrl").
--include("modules/fslogic/fslogic_common.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
+
 
 %% API
 -export([init/1, teardown/1, stat/3, truncate/4, create/4, unlink/3, open/4, close/2, close_all/1,
     read/4, write/4, mkdir/3, mkdir/4, mv/4, ls/5, set_perms/4, update_times/6,
-    get_xattr/4, get_xattr/5, set_xattr/4, remove_xattr/4, list_xattr/5, get_acl/3, set_acl/4,
+    get_xattr/4, get_xattr/5, set_xattr/4, set_xattr/6, remove_xattr/4, list_xattr/5, get_acl/3, set_acl/4,
     write_and_check/4, get_transfer_encoding/3, set_transfer_encoding/4,
     get_cdmi_completion_status/3, set_cdmi_completion_status/4, get_mimetype/3,
-    set_mimetype/4, fsync/2, rm_recursive/3, get_metadata/6, set_metadata/6,
+    set_mimetype/4, fsync/2, fsync/4, rm_recursive/3, get_metadata/6, set_metadata/6,
     has_custom_metadata/3, remove_metadata/4, check_perms/4, create_share/4,
-    remove_share/3, remove_share_by_guid/3]).
+    remove_share/3, remove_share_by_guid/3, resolve_guid/3]).
 
 -define(EXEC(Worker, Function),
     exec(Worker,
@@ -98,11 +98,11 @@ unlink(Worker, SessId, FileKey) ->
     ?EXEC(Worker, logical_file_manager:unlink(SessId, uuid_to_guid(Worker, FileKey), false)).
 
 -spec open(node(), session:id(), FileKey :: fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(),
-    OpenType :: helpers:open_mode()) ->
+    OpenType :: helpers:open_flag()) ->
     {ok, logical_file_manager:handle()} | logical_file_manager:error_reply().
-open(Worker, SessId, FileKey, OpenMode) ->
+open(Worker, SessId, FileKey, OpenFlag) ->
     ?EXEC(Worker,
-        case logical_file_manager:open(SessId, uuid_to_guid(Worker, FileKey), OpenMode) of
+        case logical_file_manager:open(SessId, uuid_to_guid(Worker, FileKey), OpenFlag) of
             {ok, Handle} ->
                 TestHandle = crypto:rand_bytes(10),
                 ets:insert(lfm_handles, {TestHandle, Handle}),
@@ -169,14 +169,14 @@ write_and_check(Worker, TestHandle, Offset, Bytes) ->
     ?EXEC(Worker,
         begin
             [{_, Handle}] = ets:lookup(lfm_handles, TestHandle),
-            #lfm_handle{file_guid = GUID,
-                fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle,
+            Guid = lfm_context:get_guid(Handle),
+            SessId = lfm_context:get_session_id(Handle),
             case logical_file_manager:write(Handle, Offset, Bytes) of
                 {ok, NewHandle, Res}  ->
                     ets:insert(lfm_handles, {TestHandle, NewHandle}),
                     case logical_file_manager:fsync(NewHandle) of
                         ok ->
-                            {ok, Res, logical_file_manager:stat(SessId, {guid, GUID})};
+                            {ok, Res, logical_file_manager:stat(SessId, {guid, Guid})};
                         Other2 ->
                             Other2
                     end;
@@ -190,12 +190,12 @@ mkdir(Worker, SessId, Path) ->
     ?EXEC(Worker, logical_file_manager:mkdir(SessId, Path)).
 
 -spec mkdir(node(), session:id(), binary(), file_meta:posix_permissions()) ->
-    {ok, DirUUID :: file_meta:uuid()} | logical_file_manager:error_reply().
+    {ok, DirUuid :: file_meta:uuid()} | logical_file_manager:error_reply().
 mkdir(Worker, SessId, Path, Mode) ->
     ?EXEC(Worker, logical_file_manager:mkdir(SessId, Path, Mode)).
 
 -spec ls(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), integer(), integer()) ->
-    {ok, [{fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), file_meta:name()}]} | logical_file_manager:error_reply().
+    {ok, [{fslogic_worker:file_guid(), file_meta:name()}]} | logical_file_manager:error_reply().
 ls(Worker, SessId, FileKey, Offset, Limit) ->
     ?EXEC(Worker, logical_file_manager:ls(SessId, uuid_to_guid(Worker, FileKey), Offset, Limit)).
 
@@ -228,7 +228,13 @@ get_xattr(Worker, SessId, FileKey, XattrKey, Inherited) ->
 -spec set_xattr(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), #xattr{}) ->
     ok | logical_file_manager:error_reply().
 set_xattr(Worker, SessId, FileKey, Xattr) ->
-    ?EXEC(Worker, logical_file_manager:set_xattr(SessId, uuid_to_guid(Worker, FileKey), Xattr)).
+    set_xattr(Worker, SessId, FileKey, Xattr, false, false).
+
+-spec set_xattr(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), #xattr{},
+    Create :: boolean(), Replace :: boolean()) ->
+    ok | logical_file_manager:error_reply().
+set_xattr(Worker, SessId, FileKey, Xattr, Create, Replace) ->
+    ?EXEC(Worker, logical_file_manager:set_xattr(SessId, uuid_to_guid(Worker, FileKey), Xattr, Create, Replace)).
 
 -spec remove_xattr(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), xattr:name()) ->
     ok | logical_file_manager:error_reply().
@@ -290,6 +296,11 @@ fsync(Worker, TestHandle) ->
             logical_file_manager:fsync(Handle)
         end).
 
+-spec fsync(node(), session:id(), logical_file_manager:file_key(), oneprovider:id()) ->
+    ok | logical_file_manager:error_reply().
+fsync(Worker, SessId, FileKey, OneproviderId) ->
+    ?EXEC(Worker, logical_file_manager:fsync(SessId, FileKey, OneproviderId)).
+
 -spec rm_recursive(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path()) ->
     ok | logical_file_manager:error_reply().
 rm_recursive(Worker, SessId, FileKey) ->
@@ -317,10 +328,10 @@ has_custom_metadata(Worker, SessId, FileKey) ->
 remove_metadata(Worker, SessId, FileKey, Type) ->
     ?EXEC(Worker, logical_file_manager:remove_metadata(SessId, FileKey, Type)).
 
--spec check_perms(node(), session:id(), logical_file_manager:file_key(), helpers:open_mode()) ->
+-spec check_perms(node(), session:id(), logical_file_manager:file_key(), helpers:open_flag()) ->
     {ok, boolean()} | {error, term()}.
-check_perms(Worker, SessId, FileKey, OpenMode) ->
-    ?EXEC(Worker, logical_file_manager:check_perms(SessId, FileKey, OpenMode)).
+check_perms(Worker, SessId, FileKey, OpenFlag) ->
+    ?EXEC(Worker, logical_file_manager:check_perms(SessId, FileKey, OpenFlag)).
 
 -spec create_share(node(), session:id(), logical_file_manager:file_key(), od_share:name()) ->
     {ok, {od_share:id(), od_share:share_guid()}} | {error, term()}.
@@ -336,6 +347,14 @@ remove_share(Worker, SessId, FileKey) ->
     ok | {error, term()}.
 remove_share_by_guid(Worker, SessId, ShareGuid) ->
     ?EXEC(Worker, logical_file_manager:remove_share_by_guid(SessId, ShareGuid)).
+
+-spec resolve_guid(node(), session:id(), file_ctx:path()) ->
+    {ok, fslogic_worker:file_guid()} | {error, term()}.
+resolve_guid(Worker, SessId, Path) ->
+    ?EXEC(Worker, remote_utils:call_fslogic(SessId, fuse_request, #resolve_guid{path = Path},
+        fun(#guid{guid = Guid}) ->
+            {ok, Guid}
+        end)).
 
 %%%===================================================================
 %%% Internal functions
@@ -362,9 +381,9 @@ exec(Worker, Fun, Timeout) ->
     end.
 
 
-uuid_to_guid(W, {uuid, UUID}) ->
-    {guid, uuid_to_guid(W, UUID)};
-uuid_to_guid(W, UUID) when is_binary(UUID) ->
-    rpc:call(W, fslogic_uuid, uuid_to_guid, [UUID]);
+uuid_to_guid(W, {uuid, Uuid}) ->
+    {guid, uuid_to_guid(W, Uuid)};
+uuid_to_guid(W, Uuid) when is_binary(Uuid) ->
+    rpc:call(W, fslogic_uuid, uuid_to_guid, [Uuid]);
 uuid_to_guid(_, Other) ->
     Other.

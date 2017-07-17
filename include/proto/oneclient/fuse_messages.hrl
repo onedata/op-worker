@@ -18,12 +18,21 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
+-record(child_link_uuid, {
+    uuid :: file_meta:uuid(),
+    name :: binary()
+}).
+
 -record(child_link, {
-    uuid :: binary() | fslogic_worker:file_guid(),
+    guid :: fslogic_worker:file_guid(),
     name :: binary()
 }).
 
 -record(get_file_attr, {
+}).
+
+-record(get_child_attr, {
+    name :: file_meta:name()
 }).
 
 -record(get_file_children, {
@@ -51,19 +60,26 @@
 }).
 
 -record(rename, {
-    target_path :: file_meta:path()
+    target_parent_guid :: fslogic_worker:file_guid(),
+    target_name :: file_meta:name()
 }).
 
--record(get_new_file_location, {
+-record(create_file, {
     name :: file_meta:name(),
-    flags :: atom(),
     mode = 8#644 :: file_meta:posix_permissions(),
-    create_handle = true :: boolean()
+    flag = rdwr :: fslogic_worker:open_flag()
+}).
+
+-record(make_file, {
+    name :: file_meta:name(),
+    mode = 8#644 :: file_meta:posix_permissions()
+}).
+
+-record(open_file, {
+    flag :: fslogic_worker:open_flag()
 }).
 
 -record(get_file_location, {
-    flags :: fslogic_worker:open_flags(),
-    create_handle = true :: boolean()
 }).
 
 -record(release, {
@@ -83,15 +99,42 @@
     block :: #file_block{}
 }).
 
--type file_request() ::
+-record(get_xattr, {
+    name :: xattr:name(),
+    inherited = false :: boolean()
+}).
+
+-record(set_xattr, {
+    xattr :: #xattr{},
+    create :: boolean(),
+    replace :: boolean()
+}).
+
+-record(remove_xattr, {
+    name :: xattr:name()
+}).
+
+-record(list_xattr, {
+    inherited = false :: boolean(),
+    show_internal = true :: boolean()
+}).
+
+-record(fsync, {
+    data_only :: boolean(),
+    handle_id :: undefined | binary()
+}).
+
+-type file_request_type() ::
     #get_file_attr{} | #get_file_children{} | #create_dir{} | #delete_file{} |
-    #update_times{} | #change_mode{} | #rename{} | #get_new_file_location{} |
-    #get_file_location{} | #release{} | #truncate{} | #synchronize_block{} |
-    #synchronize_block_and_compute_checksum{}.
+    #update_times{} | #change_mode{} | #rename{} | #create_file{} | #make_file{} |
+    #open_file{} | #get_file_location{} | #release{} | #truncate{} |
+    #synchronize_block{} | #synchronize_block_and_compute_checksum{} |
+    #get_child_attr{} | #get_xattr{} | #set_xattr{} | #remove_xattr{} |
+    #list_xattr{} | #fsync{}.
 
 -record(file_request, {
     context_guid :: fslogic_worker:file_guid(),
-    file_request :: file_request()
+    file_request :: file_request_type()
 }).
 
 -record(resolve_guid, {
@@ -105,22 +148,22 @@
 
 -record(create_storage_test_file, {
     storage_id :: storage:id(),
-    file_uuid :: file_meta:uuid() | fslogic_worker:file_guid()
+    file_guid :: fslogic_worker:file_guid()
 }).
 
 -record(verify_storage_test_file, {
     storage_id :: storage:id(),
-    space_uuid :: file_meta:uuid(),
-    file_id :: helpers:file(),
+    space_id :: od_space:id(),
+    file_id :: helpers:file_id(),
     file_content :: binary()
 }).
 
--type fuse_request() ::
+-type fuse_request_type() ::
     #resolve_guid{} | #get_helper_params{} | #create_storage_test_file{} |
     #verify_storage_test_file{} | #file_request{}.
 
 -record(fuse_request, {
-    fuse_request :: fuse_request()
+    fuse_request :: fuse_request_type()
 }).
 
 -record(file_children, {
@@ -133,33 +176,54 @@
 }).
 
 -record(helper_params, {
-    helper_name :: binary(),
+    helper_name :: helper:name(),
     helper_args :: [#helper_arg{}]
 }).
 
 -record(storage_test_file, {
     helper_params :: #helper_params{},
-    space_uuid :: file_meta:uuid(),
-    file_id :: helpers:file(),
+    space_id :: od_space:id(),
+    file_id :: helpers:file_id(),
     file_content :: binary()
 }).
 
--record(checksum, {
-    value :: binary()
+-record(sync_response, {
+    checksum :: binary(),
+    file_location :: #file_location{}
+}).
+
+-record(file_created, {
+    handle_id :: binary(),
+    file_attr :: #file_attr{},
+    file_location :: #file_location{}
+}).
+
+-record(file_opened, {
+    handle_id :: binary()
 }).
 
 -record(file_renamed, {
-    new_uuid :: fslogic_worker:file_guid(),
+    new_guid :: fslogic_worker:file_guid(),
     child_entries :: undefined | [#file_renamed_entry{}]
 }).
 
--type fuse_response() ::
+-record(guid, {
+    guid :: fslogic_worker:file_guid()
+}).
+
+-record(xattr_list, {
+    names :: [xattr:name()]
+}).
+
+-type fuse_response_type() ::
     #file_attr{} | #file_children{} | #file_location{} | #helper_params{} |
-    #storage_test_file{} | #dir{} | #checksum{} | #file_renamed{} | undefined.
+    #storage_test_file{} | #dir{} | #sync_response{} | #file_created{} |
+    #file_opened{} | #file_renamed{} | #guid{} | #xattr_list{} | #xattr{} |
+    undefined.
 
 -record(fuse_response, {
     status :: undefined | #status{},
-    fuse_response :: fuse_response()
+    fuse_response :: fuse_response_type()
 }).
 
 -endif.

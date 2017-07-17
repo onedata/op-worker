@@ -54,7 +54,11 @@ start() ->
         application:get_env(?APP_NAME, gui_max_keepalive),
     {ok, Timeout} =
         application:get_env(?APP_NAME, gui_socket_timeout_seconds),
-    {ok, Cert} = application:get_env(?APP_NAME, web_ssl_cert_path),
+    {ok, KeyFile} = application:get_env(?APP_NAME, web_ssl_key_file),
+    {ok, CertFile} = application:get_env(?APP_NAME, web_ssl_cert_file),
+    {ok, CaCertsDir} = application:get_env(?APP_NAME, cacerts_dir),
+    {ok, CaCertPems} = file_utils:read_files({dir, CaCertsDir}),
+    CaCerts = lists:map(fun cert_decoder:pem_to_der/1, CaCertPems),
 
     % Resolve static files root. First, check if there is a non-empty dir
     % located in gui_custom_static_root. If not, use default.
@@ -67,7 +71,7 @@ start() ->
     end,
 
     % Setup GUI dispatch opts for cowboy
-    GUIDispatch = [
+    Dispatch = cowboy_router:compile([
         % Matching requests will be redirected
         % to the same address without leading 'www.'
         % Cowboy does not have a mechanism to match
@@ -79,28 +83,29 @@ start() ->
             {'_', redirector_handler, []}
         ]},
         % Proper requests are routed to handler modules
-        {'_', [
+        {'_', lists:flatten([
             {?provider_id_path, get_provider_id_handler, []},
             {"/nagios/[...]", nagios_handler, []},
             {"/upload", upload_handler, []},
             {"/download/:id", download_handler, []},
             {?WEBSOCKET_PREFIX_PATH ++ "[...]", gui_ws_handler, []},
+            rest_router:top_level_routing(),
             {"/[...]", gui_static_handler, {dir, DocRoot}}
-        ]}
-    ],
+        ])}
+    ]),
 
     % Call gui init, which will call init on all modules that might need state.
     gui:init(),
     % Start the listener for web gui and nagios handler
     Result = ranch:start_listener(?HTTPS_LISTENER, GuiNbAcceptors,
-        ranch_etls, [
-            {ip, {127, 0, 0, 1}},
+        ranch_ssl, [
             {port, GuiPort},
-            {certfile, Cert},
-            {ciphers, ssl:cipher_suites() -- weak_ciphers()},
-            {versions, ['tlsv1.2', 'tlsv1.1']}
+            {keyfile, KeyFile},
+            {certfile, CertFile},
+            {cacerts, CaCerts},
+            {ciphers, ssl:cipher_suites() -- ssl_utils:weak_ciphers()}
         ], cowboy_protocol, [
-            {env, [{dispatch, cowboy_router:compile(GUIDispatch)}]},
+            {env, [{dispatch, Dispatch}]},
             {max_keepalive, MaxKeepAlive},
             {timeout, timer:seconds(Timeout)},
             % On every request, add headers that improve
@@ -141,21 +146,7 @@ stop() ->
 -spec healthcheck() -> ok | {error, server_not_responding}.
 healthcheck() ->
     Endpoint = "https://127.0.0.1:" ++ integer_to_list(port()),
-    case http_client:get(Endpoint, [], <<>>, [insecure]) of
+    case http_client:get(Endpoint, #{}, <<>>, [insecure]) of
         {ok, _, _, _} -> ok;
         _ -> {error, server_not_responding}
     end.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns list of weak ciphers.
-%% @end
--spec weak_ciphers() -> list().
-%%--------------------------------------------------------------------
-weak_ciphers() ->
-    [{dhe_rsa, des_cbc, sha}, {rsa, des_cbc, sha}].

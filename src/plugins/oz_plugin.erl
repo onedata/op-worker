@@ -21,7 +21,7 @@
 
 %% oz_plugin_behaviour API
 -export([get_oz_url/0, get_oz_rest_port/0, get_oz_rest_api_prefix/0]).
--export([get_key_path/0, get_csr_path/0, get_cert_path/0, get_cacert_path/0]).
+-export([get_key_file/0, get_csr_file/0, get_cert_file/0, get_cacerts_dir/0]).
 -export([auth_to_rest_client/1]).
 
 %%%===================================================================
@@ -64,9 +64,9 @@ get_oz_rest_api_prefix() ->
 %% Should return a path to file containing provider's private key.
 %% @end
 %%--------------------------------------------------------------------
--spec get_key_path() -> file:name_all().
-get_key_path() ->
-    {ok, KeyFile} = application:get_env(?APP_NAME, oz_provider_key_path),
+-spec get_key_file() -> file:name_all().
+get_key_file() ->
+    {ok, KeyFile} = application:get_env(?APP_NAME, oz_provider_key_file),
     KeyFile.
 
 %%--------------------------------------------------------------------
@@ -74,9 +74,9 @@ get_key_path() ->
 %% Should return a path to file containing provider's private key.
 %% @end
 %%--------------------------------------------------------------------
--spec get_csr_path() -> file:name_all().
-get_csr_path() ->
-    {ok, CSRFile} = application:get_env(?APP_NAME, oz_provider_csr_path),
+-spec get_csr_file() -> file:name_all().
+get_csr_file() ->
+    {ok, CSRFile} = application:get_env(?APP_NAME, oz_provider_csr_file),
     CSRFile.
 
 %%--------------------------------------------------------------------
@@ -85,9 +85,9 @@ get_csr_path() ->
 %% public certificate signed by Global Registry.
 %% @end
 %%--------------------------------------------------------------------
--spec get_cert_path() -> file:name_all().
-get_cert_path() ->
-    {ok, CertFile} = application:get_env(?APP_NAME, oz_provider_cert_path),
+-spec get_cert_file() -> file:name_all().
+get_cert_file() ->
+    {ok, CertFile} = application:get_env(?APP_NAME, oz_provider_cert_file),
     CertFile.
 
 %%--------------------------------------------------------------------
@@ -96,10 +96,10 @@ get_cert_path() ->
 %% CA certificate.
 %% @end
 %%--------------------------------------------------------------------
--spec get_cacert_path() -> file:name_all().
-get_cacert_path() ->
-    {ok, CACertFile} = application:get_env(?APP_NAME, oz_ca_cert_path),
-    CACertFile.
+-spec get_cacerts_dir() -> file:name_all().
+get_cacerts_dir() ->
+    {ok, CACertsDir} = application:get_env(?APP_NAME, cacerts_dir),
+    CACertsDir.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -109,9 +109,14 @@ get_cacert_path() ->
 %% when request is done.
 %% @end
 %%--------------------------------------------------------------------
--spec auth_to_rest_client(Auth :: term()) -> file:name_all().
-auth_to_rest_client(#token_auth{macaroon = Mac, disch_macaroons = DMacs}) ->
-    {user, token, {Mac, DMacs}};
+-spec auth_to_rest_client(Auth :: term()) -> {user, token, binary()} |
+{user, macaroon, {Macaroon :: binary(), DischargeMacaroons :: [binary()]}} |
+{user, basic, binary()} | provider.
+auth_to_rest_client(#macaroon_auth{macaroon = Mac, disch_macaroons = DMacs}) ->
+    {user, macaroon, {Mac, DMacs}};
+
+auth_to_rest_client(#token_auth{token = Token}) ->
+    {user, token, Token};
 
 auth_to_rest_client(#basic_auth{credentials = Credentials}) ->
     {user, basic, Credentials};

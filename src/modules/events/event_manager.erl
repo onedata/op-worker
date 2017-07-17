@@ -7,8 +7,8 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements gen_server behaviour and is responsible
-%%% for dispatching events to event streams. Whenever an event arrives it it
-%%% forwarded to all registered event streams. Event manager is supervised by
+%%% for dispatching events to event streams. Whenever an event arrives it is
+%%% forwarded to an associated event stream. Event manager is supervised by
 %%% event manager supervisor and initialized on session creation.
 %%% @end
 %%%-------------------------------------------------------------------
@@ -31,26 +31,26 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
 
--type streams() :: #{event_stream:id() => pid()}.
--type subscriptions() :: #{subscription:id() => event_stream:id()}.
+-type streams() :: #{event_stream:key() => pid()}.
+-type subscriptions() :: #{subscription:id() => {local, event_stream:key()} |
+{remote, oneprovider:id()}}.
+-type providers() :: #{file_meta:uuid() => oneprovider:id()}.
+-type ctx() :: event_type:ctx() | subscription_type:ctx().
 
 %% event manager state:
-%% session_id               - ID of a session associated with this event manager
-%% event_manager_sup        - pid of an event manager supervisor
-%% event_stream_sup         - pid of an event stream supervisor
-%% event_streams            - mapping from a subscription ID to an event stream pid
-%% entry_to_provider_map    - cache that maps file to provider that shall handle the event
+%% session_id        - ID of a session associated with this event manager
+%% event_manager_sup - pid of an event manager supervisor
+%% event_stream_sup  - pid of an event stream supervisor
+%% event_streams     - mapping from a subscription ID to an event stream pid
+%% providers         - cache that maps file to provider that shall handle the event
 -record(state, {
     session_id :: undefined | session:id(),
-    event_manager_sup :: undefined | pid(),
-    event_stream_sup :: undefined | pid(),
-    event_streams = #{} :: streams(),
+    manager_sup :: undefined | pid(),
+    streams_sup :: undefined | pid(),
+    streams = #{} :: streams(),
     subscriptions = #{} :: subscriptions(),
-    entry_to_provider_map = #{} :: maps:map()
+    providers = #{} :: providers()
 }).
-
-%% Lifetime in seconds of #state.entry_to_provider_map entry
--define(ENTRY_TO_PROVIDER_MAPPING_CACHE_LIFETIME_SECONDS, 5).
 
 %%%===================================================================
 %%% API
@@ -61,10 +61,10 @@
 %% Starts the event manager.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(EvtManSup :: pid(), SessId :: session:id()) ->
-    {ok, EvtMan :: pid()} | ignore | {error, Reason :: term()}.
-start_link(EvtManSup, SessId) ->
-    gen_server2:start_link(?MODULE, [EvtManSup, SessId], []).
+-spec start_link(MgrSup :: pid(), SessId :: session:id()) ->
+    {ok, Mgr :: pid()} | ignore | {error, Reason :: term()}.
+start_link(MgrSup, SessId) ->
+    gen_server2:start_link(?MODULE, [MgrSup, SessId], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -83,11 +83,11 @@ start_link(EvtManSup, SessId) ->
 -spec init(Args :: term()) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
-init([EvtManSup, SessId]) ->
+init([MgrSup, SessId]) ->
     ?debug("Initializing event manager for session ~p", [SessId]),
     process_flag(trap_exit, true),
     {ok, SessId} = session:update(SessId, #{event_manager => self()}),
-    {ok, #state{event_manager_sup = EvtManSup, session_id = SessId}, 0}.
+    {ok, #state{manager_sup = MgrSup, session_id = SessId}, 0}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -117,112 +117,21 @@ handle_call(Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_cast(Request, State) ->
-    try do_handle_cast(Request, State)
+handle_cast(Request, State = #state{session_id = SessId}) ->
+    try
+        ProviderId = oneprovider:get_provider_id(),
+        {ok, #document{value = #session{proxy_via = ProxyVia}}} = session:get(SessId),
+        case get_provider(Request, State, ProxyVia) of
+            {ProviderId, NewState} ->
+                handle_locally(Request, NewState);
+            {RemoteProviderId, NewState} ->
+                handle_remotely(Request, RemoteProviderId, NewState)
+        end
     catch
-        Error:Reason ->
-            ?error_stacktrace("~p handler of ~p (state: ~p) failed with ~p:~p",
-                              [?MODULE, Request, State, Error, Reason]),
+        _:Reason2 ->
+            ?error_stacktrace("Cannot process request ~p due to: ~p", [Request, Reason2]),
             {noreply, State}
     end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handles cast messages.
-%% @end
-%%--------------------------------------------------------------------
--spec do_handle_cast(Request :: term(), State :: #state{}) ->
-    {noreply, NewState :: #state{}} |
-    {noreply, NewState :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: #state{}}.
-do_handle_cast({register_stream, StmId, EvtStm}, #state{event_streams = EvtStms} = State) ->
-    {noreply, State#state{event_streams = maps:put(StmId, EvtStm, EvtStms)}};
-
-do_handle_cast({unregister_stream, StmId}, #state{event_streams = EvtStms} = State) ->
-    {noreply, State#state{event_streams = maps:remove(StmId, EvtStms)}};
-
-do_handle_cast({flush_stream, SubId, Notify}, #state{event_streams = EvtStms,
-    session_id = SessId, subscriptions = Subs} = State) ->
-    case get_stream(SubId, Subs, EvtStms) of
-        {ok, Stm} ->
-            gen_server2:cast(Stm, {flush, Notify});
-        error ->
-            ?warning("Event stream flush error: stream for subscription ~p and "
-            "session ~p not found", [SubId, SessId])
-    end,
-    {noreply, State};
-
-do_handle_cast(#event{} = Evt, #state{session_id = SessId, event_streams = EvtStms, entry_to_provider_map = ProvMap} = State) ->
-    ?debug("Handling event ~p in session ~p", [Evt, SessId]),
-    HandleLocally =
-        fun
-            (#events{events = [#event{stream_id = StmId} = Event]}, NewProvMap, false) -> %% Request should be handled locally only
-                gen_server2:cast(maps:get(StmId, EvtStms, undefined), Event),
-                {noreply, State#state{entry_to_provider_map = NewProvMap, event_streams = EvtStms}};
-            (_, NewProvMap, true) -> %% Request was already handled remotely
-                {noreply, State#state{entry_to_provider_map = NewProvMap}}
-        end,
-
-    handle_or_reroute(#events{events = [Evt]}, request_to_file_entry_or_provider(Evt), SessId, HandleLocally, ProvMap);
-
-do_handle_cast(#flush_events{provider_id = ProviderId, subscription_id = SubId, notify = NotifyFun} = Evt,
-    #state{session_id = SessId, event_streams = EvtStms, entry_to_provider_map = ProvMap,
-        subscriptions = Subs} = State) ->
-    ?debug("Handling event ~p in session ~p", [Evt, SessId]),
-    HandleLocally =
-        fun
-            (_, NewProvMap, false) -> %% Request should be handled locally only
-                case get_stream(SubId, Subs, EvtStms) of
-                    {ok, Stm} ->
-                        gen_server2:cast(Stm, {flush, NotifyFun});
-                    error ->
-                        ?warning("Event stream flush error: stream for subscription ~p and "
-                        "session ~p not found", [SubId, SessId])
-                end,
-                {noreply, State#state{entry_to_provider_map = NewProvMap}};
-            (_, NewProvMap, true) -> %% Request was already handled remotely
-                {noreply, State#state{entry_to_provider_map = NewProvMap}}
-        end,
-
-    handle_or_reroute(Evt, {provider, ProviderId}, SessId, HandleLocally, ProvMap);
-
-do_handle_cast(#subscription{id = SubId, event_stream = #event_stream_definition{id = StmId}} = Sub,
-    #state{event_stream_sup = EvtStmSup, session_id = SessId, event_streams = EvtStms,
-        entry_to_provider_map = ProvMap, subscriptions = Subs} = State) ->
-    HandleLocally =
-        fun(_, NewProvMap, _) ->
-            ?debug("Adding subscription ~p to session ~p", [SubId, SessId]),
-            NewEvtStms = case maps:find(StmId, EvtStms) of
-                {ok, EvtStm} ->
-                    gen_server2:cast(EvtStm, {add_subscription, Sub}),
-                    EvtStms;
-                error ->
-                    {ok, EvtStm} = event_stream_sup:start_event_stream(EvtStmSup, self(), Sub, SessId),
-                    maps:put(StmId, EvtStm, EvtStms)
-            end,
-            {noreply, State#state{entry_to_provider_map = NewProvMap,
-                event_streams = NewEvtStms, subscriptions = maps:put(SubId, StmId, Subs)}}
-        end,
-
-    handle_or_reroute(Sub, request_to_file_entry_or_provider(Sub), SessId, HandleLocally, ProvMap);
-
-do_handle_cast(#subscription_cancellation{id = SubId}, #state{
-    event_streams = EvtStms, session_id = SessId, subscriptions = Subs} = State) ->
-    ?debug("Removing subscription ~p from session ~p", [SubId, SessId]),
-    case get_stream(SubId, Subs, EvtStms) of
-        {ok, EvtStm} ->
-            gen_server2:cast(EvtStm, {remove_subscription, SubId});
-        error ->
-            ?warning("Cannot remove subscription ~p from session ~p: "
-            "stream doesn't exist", [SubId, SessId])
-    end,
-    {noreply, State#state{subscriptions = maps:remove(SubId, Subs)}};
-
-do_handle_cast(Request, State) ->
-    ?log_bad_request(Request),
-    {noreply, State}.
-
 
 %%--------------------------------------------------------------------
 %% @private
@@ -234,15 +143,15 @@ do_handle_cast(Request, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_info({'EXIT', EvtManSup, shutdown}, #state{event_manager_sup = EvtManSup} = State) ->
+handle_info({'EXIT', MgrSup, shutdown}, #state{manager_sup = MgrSup} = State) ->
     {stop, normal, State};
 
-handle_info(timeout, #state{event_manager_sup = EvtManSup, session_id = SessId} = State) ->
-    {ok, EvtStmSup} = event_manager_sup:get_event_stream_sup(EvtManSup),
-    {EvtStms, Subs} = start_event_streams(EvtStmSup, SessId),
+handle_info(timeout, #state{manager_sup = MgrSup, session_id = SessId} = State) ->
+    {ok, StmsSup} = event_manager_sup:get_event_stream_sup(MgrSup),
+    {Stms, Subs} = start_event_streams(StmsSup, SessId),
     {noreply, State#state{
-        event_stream_sup = EvtStmSup,
-        event_streams = EvtStms,
+        streams_sup = StmsSup,
+        streams = Stms,
         subscriptions = Subs
     }};
 
@@ -281,18 +190,214 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @todo remove and use get_provider/2
 %% @private
 %% @doc
-%% Returns event stream for the subscription.
+%% Returns ID of a provider responsible for request handling in given context.
+%% Handles cases of events that should be handled even if file is not supported
+%% locally
 %% @end
 %%--------------------------------------------------------------------
--spec get_stream(SubId :: subscription:id(), Subs :: subscriptions(), EvtStms :: streams()) ->
-    {ok, EvtStm :: pid()} | error.
-get_stream(SubId, Subs, EvtStms) ->
-    case maps:find(SubId, Subs) of
-        {ok, StmId} -> maps:find(StmId, EvtStms);
-        error -> error
+-spec get_provider(Request :: term(), State :: #state{}, oneprovider:id() | undefined) ->
+    {ProviderId :: oneprovider:id(), NewState :: #state{}} |
+    no_return().
+get_provider(#flush_events{provider_id = ProviderId}, State, _ProxyVia) ->
+    {ProviderId, State};
+get_provider(#event{type = Type}, State, ProxyVia)
+    when is_record(Type, file_attr_changed_event)
+    orelse is_record(Type, file_location_changed_event)
+    orelse is_record(Type, file_perm_changed_event)
+    orelse is_record(Type, file_removed_event)
+    orelse is_record(Type, file_renamed_event)
+    orelse is_record(Type, quota_exceeded_event) ->
+    {
+        utils:ensure_defined(ProxyVia, undefined, oneprovider:get_provider_id()),
+        State
+    };
+get_provider(Req, State, _ProxyVia) ->
+    get_provider(Req, State).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns ID of a provider responsible for request handling in given context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_provider(Request :: term(), State :: #state{}) ->
+    {ProviderId :: oneprovider:id(), NewState :: #state{}} |
+    no_return().
+get_provider(Request, #state{providers = Providers} = State) ->
+    RequestCtx = get_context(Request),
+    case RequestCtx of
+        undefined ->
+            {oneprovider:get_provider_id(), State};
+        {file, FileCtx} ->
+            FileGuid = file_ctx:get_guid_const(FileCtx),
+            case maps:find(FileGuid, Providers) of
+                {ok, Provider} ->
+                    {Provider, State};
+                error ->
+                    Provider = get_provider_for_file(FileCtx, State),
+                    {Provider, State#state{
+                        providers = maps:put(FileGuid, Provider, Providers)
+                    }}
+            end
     end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns ID of a provider responsible for handling request associated with
+%% a file.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_provider_for_file(file_ctx:ctx(), #state{}) ->
+    ProviderId :: oneprovider:id() | no_return().
+get_provider_for_file(FileCtx, #state{session_id = SessId}) ->
+    ProviderId = oneprovider:get_provider_id(),
+    case file_ctx:is_root_dir_const(FileCtx) of
+        true ->
+            ProviderId;
+        false ->
+            SpaceId = file_ctx:get_space_id_const(FileCtx),
+            {ok, UserId} = session:get_user_id(SessId),
+            {ok, #document{value = #od_space{providers = ProviderIds}}} =
+                od_space:get_or_fetch(SessId, SpaceId, UserId),
+            case {ProviderIds, lists:member(ProviderId, ProviderIds)} of
+                {_, true} -> ProviderId;
+                {[RemoteProviderId | _], _} -> RemoteProviderId;
+                {[], _} -> throw(unsupported_space)
+            end
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handles request locally.
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_locally(Request :: term(), State :: #state{}) ->
+    {noreply, NewState :: #state{}}.
+handle_locally({register_stream, StmKey, Stm}, #state{streams = Stms} = State) ->
+    {noreply, State#state{streams = maps:put(StmKey, Stm, Stms)}};
+
+handle_locally({unregister_stream, StmKey}, #state{streams = Stms} = State) ->
+    {noreply, State#state{streams = maps:remove(StmKey, Stms)}};
+
+handle_locally(#event{} = Evt, #state{streams = Stms} = State) ->
+    StmKey = event_type:get_stream_key(Evt),
+    Stm = maps:get(StmKey, Stms, undefined),
+    gen_server2:cast(Stm, Evt),
+    {noreply, State};
+
+handle_locally(#flush_events{} = Request, #state{} = State) ->
+    #flush_events{subscription_id = SubId, notify = NotifyFun} = Request,
+    #state{streams = Stms, subscriptions = Subs} = State,
+    {_, StmKey} = maps:get(SubId, Subs, {local, undefined}),
+    Stm = maps:get(StmKey, Stms, undefined),
+    gen_server2:cast(Stm, {flush, NotifyFun}),
+    {noreply, State};
+
+handle_locally(#subscription{id = Id} = Sub, #state{} = State) ->
+    #state{
+        streams_sup = StmsSup,
+        streams = Stms,
+        subscriptions = Subs,
+        session_id = SessId
+    } = State,
+    StmKey = subscription_type:get_stream_key(Sub),
+    NewStms = case maps:find(StmKey, Stms) of
+        {ok, Stm} ->
+            gen_server2:cast(Stm, {add_subscription, Sub}),
+            Stms;
+        error ->
+            {ok, Stm} = event_stream_sup:start_stream(StmsSup, self(), Sub, SessId),
+            maps:put(StmKey, Stm, Stms)
+    end,
+    {noreply, State#state{
+        streams = NewStms,
+        subscriptions = maps:put(Id, {local, StmKey}, Subs)
+    }};
+
+handle_locally(#subscription_cancellation{id = SubId} = Can, #state{} = State) ->
+    #state{streams = Stms, subscriptions = Subs} = State,
+    case maps:get(SubId, Subs, {local, undefined}) of
+        {local, StmKey} ->
+            Stm = maps:get(StmKey, Stms, undefiend),
+            gen_server2:cast(Stm, {remove_subscription, SubId});
+        {remote, ProviderId} ->
+            handle_remotely(Can, ProviderId, State)
+    end,
+    {noreply, State#state{subscriptions = maps:remove(SubId, Subs)}};
+
+handle_locally(Request, State) ->
+    ?log_bad_request(Request),
+    {noreply, State}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Forwards request to the remote provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_remotely(Request :: term(), ProviderId :: oneprovider:id(),
+    State :: #state{}) -> {noreply, NewState :: #state{}}.
+handle_remotely(#flush_events{} = Request, ProviderId, #state{} = State) ->
+    #flush_events{context = Context, notify = Notify} = Request,
+    #state{session_id = SessId} = State,
+    {ok, Auth} = session:get_auth(SessId),
+    ClientMsg = #client_message{
+        message_stream = #message_stream{
+            stream_id = sequencer:term_to_stream_id(Context)
+        },
+        message_body = Request,
+        proxy_session_id = SessId,
+        proxy_session_auth = Auth
+    },
+    Ref = session_manager:get_provider_session_id(outgoing, ProviderId),
+    RequestTranslator = spawn(fun() ->
+        receive
+            #server_message{message_body = #status{}} = Msg ->
+                Notify(Msg)
+        after timer:minutes(10) ->
+            ok
+        end
+    end),
+    provider_communicator:communicate_async(ClientMsg, Ref, RequestTranslator),
+    {noreply, State};
+
+handle_remotely(#event{} = Evt, ProviderId, State) ->
+    handle_remotely(#events{events = [Evt]}, ProviderId, State);
+
+handle_remotely(Request, ProviderId, #state{session_id = SessId} = State) ->
+    {file, FileUuid} = get_context(Request),
+    StreamId = sequencer:term_to_stream_id(FileUuid),
+    {ok, Auth} = session:get_auth(SessId),
+    provider_communicator:stream(StreamId, #client_message{
+        message_body = Request,
+        proxy_session_id = SessId,
+        proxy_session_auth = Auth
+    }, session_manager:get_provider_session_id(outgoing, ProviderId), 1),
+    {noreply, State}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns request context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_context(Request :: term()) -> Ctx :: ctx().
+get_context(#event{} = Evt) ->
+    event_type:get_context(Evt);
+
+get_context(#events{events = [Evt]}) ->
+    get_context(Evt);
+
+get_context(#subscription{} = Sub) ->
+    subscription_type:get_context(Sub);
+
+get_context(_) ->
+    undefined.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -300,143 +405,13 @@ get_stream(SubId, Subs, EvtStms) ->
 %% Starts event streams for durable subscriptions.
 %% @end
 %%--------------------------------------------------------------------
--spec start_event_streams(EvtStmSup :: pid(), SessId :: session:id()) ->
+-spec start_event_streams(StmsSup :: pid(), SessId :: session:id()) ->
     {Stms :: streams(), Subs :: subscriptions()}.
-start_event_streams(EvtStmSup, SessId) ->
+start_event_streams(StmsSup, SessId) ->
     {ok, Docs} = subscription:list(),
-    FilteredDocs = lists:filter(fun(#document{value = #subscription{object = Object}}) ->
-        Object =/= undefined
-    end, Docs),
 
-    lists:foldl(fun(#document{value = #subscription{
-        id = SubId, event_stream = #event_stream_definition{id = StmId}
-    } = Sub}, {EvtStms, Subs}) ->
-        {ok, EvtStm} = event_stream_sup:start_event_stream(EvtStmSup, self(), Sub, SessId),
-        {maps:put(StmId, EvtStm, EvtStms), maps:put(SubId, StmId, Subs)}
-    end, {#{}, #{}}, FilteredDocs).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Map given request to file-scope not if the request should be always handled locally.
-%% @end
-%%--------------------------------------------------------------------
--spec request_to_file_entry_or_provider(#event{} | #subscription{}) ->
-    {file, fslogic_worker:file_guid_or_path()} | not_file_context.
-request_to_file_entry_or_provider(#event{object = #read_event{file_uuid = FileUUID}}) ->
-    {file, {guid, FileUUID}};
-request_to_file_entry_or_provider(#event{object = #write_event{file_uuid = FileUUID}}) ->
-    {file, {guid, FileUUID}};
-request_to_file_entry_or_provider(#event{object = #update_event{}}) ->
-    not_file_context;
-request_to_file_entry_or_provider(#event{object = #permission_changed_event{file_uuid = _FileUUID}}) ->
-    not_file_context;
-request_to_file_entry_or_provider(#subscription{object = #file_attr_subscription{file_uuid = FileUUID}}) ->
-    {file, {guid, FileUUID}};
-request_to_file_entry_or_provider(#subscription{object = #file_location_subscription{file_uuid = FileUUID}}) ->
-    {file, {guid, FileUUID}};
-request_to_file_entry_or_provider(#subscription{object = #permission_changed_subscription{file_uuid = FileUUID}}) ->
-    {file, {guid, FileUUID}};
-request_to_file_entry_or_provider(_) ->
-    not_file_context.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handle request locally using given function or reroute to remote provider.
-%% @end
-%%--------------------------------------------------------------------
--spec handle_or_reroute(RequestMessage :: term(),
-    RequestContext :: {file, fslogic_worker:file_guid_or_path()} | {provider, oneprovider:id()} | not_file_context,
-    SessId :: (session:id() | undefined),
-    HandleLocallyFun :: fun((RequestMessage :: term(), NewProvMap :: maps:map(),
-    IsRerouted :: boolean()) -> term()), ProvMap :: maps:map()) -> term().
-handle_or_reroute(Msg, _, undefined, HandleLocallyFun, ProvMap) ->
-    HandleLocallyFun(Msg, ProvMap, false);
-handle_or_reroute(#flush_events{context = Context, notify = NotifyFun} = RequestMessage,
-    {provider, ProviderId}, SessId, HandleLocallyFun, ProvMap) ->
-    {ok, #document{value = #session{auth = Auth, identity = #user_identity{}}}} = session:get(SessId),
-    case oneprovider:get_provider_id() of
-        ProviderId ->
-            HandleLocallyFun(RequestMessage, ProvMap, false);
-        _ ->
-            ClientMsg =
-                #client_message{
-                    message_stream = #message_stream{stream_id = sequencer:term_to_stream_id(Context)},
-                    message_body = RequestMessage,
-                    proxy_session_id = SessId,
-                    proxy_session_auth = Auth
-                },
-            Ref = session_manager:get_provider_session_id(outgoing, ProviderId),
-            RequestTranslator = spawn(
-                fun() ->
-                    receive
-                        #server_message{message_body = #status{}} = Msg ->
-                            NotifyFun(Msg)
-                    after timer:minutes(10) ->
-                        ok
-                    end
-                end),
-            provider_communicator:communicate_async(ClientMsg, Ref, RequestTranslator),
-            HandleLocallyFun(RequestMessage, ProvMap, true)
-    end;
-handle_or_reroute(RequestMessage, {file, Entry}, SessId, HandleLocallyFun, ProvMap) ->
-    {ok, #document{value = #session{auth = Auth, identity = #user_identity{user_id = UserId}}}} = session:get(SessId),
-    UserRootDir = fslogic_uuid:user_root_dir_uuid(UserId),
-    case file_meta:to_uuid(Entry) of
-        {ok, UserRootDir} ->
-            HandleLocallyFun(RequestMessage, ProvMap, false);
-        {ok, FileUUID} ->
-            CurrentTime = erlang:system_time(seconds),
-            {NewProvMap, ProviderIdsFinal} =
-                case maps:get(Entry, ProvMap, undefined) of
-                    {CachedTime, Mapped} when CachedTime + ?ENTRY_TO_PROVIDER_MAPPING_CACHE_LIFETIME_SECONDS > CurrentTime ->
-                        {ProvMap, Mapped};
-                    _ ->
-                        SpaceId = fslogic_spaces:get_space_id(Entry),
-                        {ok, #document{value = #od_space{providers = ProviderIds}}} = od_space:get_or_fetch(SessId, SpaceId, UserId),
-                        {maps:put(Entry, {erlang:system_time(seconds), ProviderIds}, ProvMap), ProviderIds}
-                end,
-            case {ProviderIdsFinal, lists:member(oneprovider:get_provider_id(), ProviderIdsFinal)} of
-                {_, true} ->
-                    case file_meta:get(FileUUID) of
-                        {error, {not_found, file_meta}} ->
-                            {ok, NewGuid} = file_meta:get_guid_from_phantom_file(FileUUID),
-                            UpdatedRequest = change_file_in_message(RequestMessage, NewGuid),
-                            handle_or_reroute(UpdatedRequest, {file, {guid, NewGuid}},
-                                SessId, HandleLocallyFun, ProvMap);
-                        _ ->
-                            HandleLocallyFun(RequestMessage, NewProvMap, false)
-                    end;
-                {[H | _], false} ->
-                    provider_communicator:stream(sequencer:term_to_stream_id(FileUUID), #client_message{
-                        message_body = RequestMessage,
-                        proxy_session_id = SessId,
-                        proxy_session_auth = Auth
-                    }, session_manager:get_provider_session_id(outgoing, H), 1),
-                    HandleLocallyFun(RequestMessage, NewProvMap, true);
-                {[], _} ->
-                    throw(unsupported_space)
-            end
-    end;
-handle_or_reroute(Msg, _, _, HandleLocallyFun, ProvMap) ->
-    HandleLocallyFun(Msg, ProvMap, false).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Changes target GUID of given event
-%% @end
-%%--------------------------------------------------------------------
--spec change_file_in_message(any(), fslogic_worker:file_guid()) -> any().
-change_file_in_message(#events{events = [#event{object = #read_event{} = Object} = Msg]}, GUID) ->
-    #events{events = [Msg#event{key = GUID, object = Object#read_event{file_uuid = GUID}}]};
-change_file_in_message(#events{events = [#event{object = #write_event{} = Object} = Msg]}, GUID) ->
-    #events{events = [Msg#event{key = GUID, object = Object#write_event{file_uuid = GUID}}]};
-change_file_in_message(#subscription{object = #file_attr_subscription{} = Object} = Sub, GUID) ->
-    Sub#subscription{object = Object#file_attr_subscription{file_uuid = GUID}};
-change_file_in_message(#subscription{object = #file_location_subscription{} = Object} = Sub, GUID) ->
-    Sub#subscription{object = Object#file_location_subscription{file_uuid = GUID}};
-change_file_in_message(#subscription{object = #permission_changed_subscription{} = Object} = Sub, GUID) ->
-    Sub#subscription{object = Object#permission_changed_subscription{file_uuid = GUID}}.
+    lists:foldl(fun(#document{value = #subscription{id = Id} = Sub}, {Stms, Subs}) ->
+        StmKey = subscription_type:get_stream_key(Sub),
+        {ok, Stm} = event_stream_sup:start_stream(StmsSup, self(), Sub, SessId),
+        {maps:put(StmKey, Stm, Stms), maps:put(Id, {local, StmKey}, Subs)}
+    end, {#{}, #{}}, Docs).

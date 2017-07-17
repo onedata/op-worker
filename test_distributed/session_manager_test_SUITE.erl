@@ -19,11 +19,9 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("annotations/include/annotations.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
-    end_per_testcase/2]).
+-export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
 %% tests
 -export([
@@ -261,22 +259,20 @@ session_supervisor_child_crash_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    NewConfig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
-    [Worker | _] = ?config(op_worker_nodes, NewConfig),
-    initializer:clear_models(Worker, [subscription]),
-    NewConfig.
+    Posthook = fun(NewConfig) ->
+        [Worker | _] = ?config(op_worker_nodes, NewConfig),
+        initializer:clear_models(Worker, [subscription]),
+        NewConfig
+    end,
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
-end_per_suite(Config) ->
-    ?TEST_STOP(Config).
 
-init_per_testcase(session_manager_session_creation_and_reuse_test = Case, Config) ->
-    ?CASE_START(Case),
+init_per_testcase(session_manager_session_creation_and_reuse_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Workers),
     Config;
 
-init_per_testcase(session_getters_test = Case, Config) ->
-    ?CASE_START(Case),
+init_per_testcase(session_getters_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Self = self(),
     SessId = <<"session_id">>,
@@ -284,8 +280,7 @@ init_per_testcase(session_getters_test = Case, Config) ->
     initializer:communicator_mock(Worker),
     initializer:basic_session_setup(Worker, SessId, Iden, Self, Config);
 
-init_per_testcase(session_supervisor_child_crash_test = Case, Config) ->
-    ?CASE_START(Case),
+init_per_testcase(session_supervisor_child_crash_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     initializer:communicator_mock(Worker),
@@ -301,7 +296,6 @@ init_per_testcase(Case, Config) when
     Case =:= session_manager_session_components_running_test;
     Case =:= session_manager_supervision_tree_structure_test;
     Case =:= session_manager_session_removal_test ->
-    ?CASE_START(Case),
     Workers = ?config(op_worker_nodes, Config),
     Self = self(),
     SessId1 = <<"session_id_1">>,
@@ -321,28 +315,24 @@ init_per_testcase(Case, Config) when
 
     [{session_ids, [SessId1, SessId2]}, {identities, [Iden1, Iden2]} | Config].
 
-end_per_testcase(session_getters_test = Case, Config) ->
-    ?CASE_STOP(Case),
+end_per_testcase(session_getters_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     initializer:basic_session_teardown(Worker, Config),
     test_utils:mock_validate_and_unload(Worker, communicator);
 
-end_per_testcase(session_supervisor_child_crash_test = Case, Config) ->
-    ?CASE_STOP(Case),
+end_per_testcase(session_supervisor_child_crash_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Worker, logger);
 
 end_per_testcase(Case, Config) when
     Case =:= session_manager_session_creation_and_reuse_test;
     Case =:= session_manager_session_removal_test ->
-    ?CASE_STOP(Case),
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Workers, communicator);
 
 end_per_testcase(Case, Config) when
     Case =:= session_manager_session_components_running_test;
     Case =:= session_manager_supervision_tree_structure_test ->
-    ?CASE_STOP(Case),
     Workers = ?config(op_worker_nodes, Config),
     SessIds = ?config(session_ids, Config),
     lists:foreach(fun(SessId) ->

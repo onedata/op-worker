@@ -57,9 +57,10 @@ upload_map_insert(undefined, _FileId) ->
     error(badarg);
 
 upload_map_insert(UploadId, FileId) ->
-    Map = g_session:get_value(?UPLOAD_MAP, #{}),
-    NewMap = maps:put(UploadId, FileId, Map),
-    g_session:put_value(?UPLOAD_MAP, NewMap).
+    MapUpdateFun = fun(Map) ->
+        maps:put(UploadId, FileId, Map)
+    end,
+    gui_session:update_value(?UPLOAD_MAP, MapUpdateFun, #{}).
 
 
 %%--------------------------------------------------------------------
@@ -73,7 +74,7 @@ upload_map_insert(UploadId, FileId) ->
 %%--------------------------------------------------------------------
 -spec upload_map_lookup(UploadId :: term()) -> FileId :: term() | undefined.
 upload_map_lookup(UploadId) ->
-    Map = g_session:get_value(?UPLOAD_MAP, #{}),
+    Map = gui_session:get_value(?UPLOAD_MAP, #{}),
     maps:get(UploadId, Map, undefined).
 
 
@@ -87,9 +88,10 @@ upload_map_lookup(UploadId) ->
 %%--------------------------------------------------------------------
 -spec upload_map_delete(UploadId :: term()) -> ok.
 upload_map_delete(UploadId) ->
-    Map = g_session:get_value(?UPLOAD_MAP, #{}),
-    NewMap = maps:remove(UploadId, Map),
-    g_session:put_value(?UPLOAD_MAP, NewMap).
+    MapUpdateFun = fun(Map) ->
+        maps:remove(UploadId, Map)
+    end,
+    gui_session:update_value(?UPLOAD_MAP, MapUpdateFun, #{}).
 
 
 %%--------------------------------------------------------------------
@@ -125,7 +127,7 @@ wait_for_file_new_file_id(UploadId, Timeout) ->
 %%--------------------------------------------------------------------
 -spec clean_upload_map() -> ok.
 clean_upload_map() ->
-    g_session:put_value(?UPLOAD_MAP, #{}).
+    gui_session:put_value(?UPLOAD_MAP, #{}).
 
 
 %% ====================================================================
@@ -182,36 +184,36 @@ handle_http_upload(Req) ->
     % Try to retrieve user's session
     InitSession =
         try
-            g_ctx:init(Req, false)
+            gui_ctx:init(Req, false)
         catch _:_ ->
-            % Error logging is done inside g_ctx:init
+            % Error logging is done inside gui_ctx:init
             error
         end,
     case InitSession of
         error ->
-            g_ctx:reply(500, [{<<"connection">>, <<"close">>}], <<"">>);
+            gui_ctx:reply(500, #{<<"connection">> => <<"close">>}, <<"">>);
         ok ->
             try
                 NewReq = multipart(Req, []),
-                g_ctx:set_cowboy_req(NewReq),
-                g_ctx:reply(200, [], <<"">>)
+                gui_ctx:set_cowboy_req(NewReq),
+                gui_ctx:reply(200, #{}, <<"">>)
             catch
                 throw:{missing_param, _} ->
-                    g_ctx:reply(500, [{<<"connection">>, <<"close">>}], <<"">>);
+                    gui_ctx:reply(500, #{<<"connection">> => <<"close">>}, <<"">>);
                 throw:stream_file_error ->
-                    g_ctx:reply(500, [{<<"connection">>, <<"close">>}], <<"">>);
+                    gui_ctx:reply(500, #{<<"connection">> => <<"close">>}, <<"">>);
                 Type:Message ->
                     ?error_stacktrace("Error while processing file upload "
                     "from user ~p - ~p:~p",
-                        [g_session:get_user_id(), Type, Message]),
+                        [gui_session:get_user_id(), Type, Message]),
                     % @todo VFS-1815 for now return 500,
                     % because retries are not stable
 %%                    % Return 204 - resumable will retry the upload
-%%                    g_ctx:reply(204, [], <<"">>)
-                    g_ctx:reply(500, [{<<"connection">>, <<"close">>}], <<"">>)
+%%                    gui_ctx:reply(204, [], <<"">>)
+                    gui_ctx:reply(500, #{<<"connection">> => <<"close">>}, <<"">>)
             end
     end,
-    g_ctx:finish().
+    gui_ctx:finish().
 
 
 %%--------------------------------------------------------------------
@@ -235,7 +237,7 @@ multipart(Req, Params) ->
                     multipart(Req3, [{FieldName, FieldValue} | Params]);
                 {file, _FieldName, _Filename, _CType, _CTransferEncoding} ->
                     FileId = get_new_file_id(Params),
-                    SessionId = g_session:get_session_id(),
+                    SessionId = gui_session:get_session_id(),
                     {ok, FileHandle} = logical_file_manager:open(
                         SessionId, {guid, FileId}, write),
                     ChunkNumber = get_int_param(
@@ -262,7 +264,7 @@ multipart(Req, Params) ->
                     catch Type:Message ->
                         ?error_stacktrace("Error while streaming file upload "
                         "from user ~p - ~p:~p",
-                            [g_session:get_user_id(), Type, Message]),
+                            [gui_session:get_user_id(), Type, Message]),
                         logical_file_manager:release(FileHandle), % release if possible
                         logical_file_manager:unlink(SessionId, {guid, FileId}, false),
                         throw(stream_file_error)
@@ -313,7 +315,7 @@ get_new_file_id(Params) ->
     % or have to wait until it is created.
     case ChunkNumber of
         1 ->
-            SessionId = g_session:get_session_id(),
+            SessionId = gui_session:get_session_id(),
             ParentId = get_bin_param(<<"parentId">>, Params),
             FileName = get_bin_param(<<"resumableFilename">>, Params),
             {ok, ParentPath} = logical_file_manager:get_file_path(

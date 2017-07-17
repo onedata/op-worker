@@ -19,7 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([invalidate_changes/3]).
+-export([invalidate_changes/4]).
 
 %%%===================================================================
 %%% API
@@ -30,36 +30,51 @@
 %% Invalidate given list of changes in blocks of file_location.
 %% @end
 %%--------------------------------------------------------------------
--spec invalidate_changes(file_location:doc(), Changes :: list(), Size :: non_neg_integer()) ->
-    file_location:doc() | deleted.
-invalidate_changes(Doc = #document{value = Loc}, [], NewSize) ->
+-spec invalidate_changes(file_ctx:ctx(), file_location:doc(), Changes :: list(),
+    Size :: non_neg_integer()) -> {file_location:doc() | deleted, file_ctx:ctx()}.
+invalidate_changes(FileCtx, Doc = #document{value = Loc}, [], NewSize) ->
     NewDoc = Doc#document{value = Loc#file_location{size = NewSize}},
     {ok, _} = file_location:save(NewDoc),
-    NewDoc;
-invalidate_changes(Doc = #document{value = Loc}, [{rename, Rename}], NewSize) ->
+    {NewDoc, file_ctx:reset(FileCtx)};
+invalidate_changes(FileCtx, Doc = #document{value = Loc}, [{rename, Rename}], NewSize) ->
     % if rename is present, it is always last element of changes list
     NewDoc = Doc#document{value = Loc#file_location{size = NewSize}},
-    case fslogic_file_location:rename_or_delete(NewDoc, Rename) of
-        deleted ->
-            deleted;
-        skipped ->
+    case replica_changes:rename_or_delete(FileCtx, NewDoc, Rename) of
+        {deleted, FileCtx2} ->
+            {deleted, FileCtx2};
+        {skipped, FileCtx2} ->
             {ok, _} = file_location:save(NewDoc),
-            NewDoc;
-        {renamed, RenamedDoc, UUID, UserId, TargetSpaceId} ->
+            {NewDoc, file_ctx:reset(FileCtx2)};
+        {{renamed, RenamedDoc, _FileUuid, _TargetSpaceId}, FileCtx2} ->
             {ok, _} = file_location:save(RenamedDoc),
-            fslogic_file_location:chown_file(UUID, UserId, TargetSpaceId),
-            RenamedDoc
+            {RenamedDoc, file_ctx:reset(FileCtx2)}
     end;
-invalidate_changes(Doc = #document{value = Loc = #file_location{blocks = OldBlocks, size = OldSize}}, [{shrink, ShrinkSize} | Rest], Size) when OldSize > ShrinkSize ->
+invalidate_changes(FileCtx, Doc = #document{
+    value = Loc = #file_location{
+        blocks = OldBlocks,
+        size = OldSize
+    }}, [{shrink, ShrinkSize} | Rest], Size
+) when OldSize > ShrinkSize ->
     NewBlocks = fslogic_blocks:invalidate(OldBlocks, [#file_block{offset = ShrinkSize, size = OldSize - ShrinkSize}]),
     NewBlocks1 = fslogic_blocks:consolidate(NewBlocks),
-    invalidate_changes(Doc#document{value = Loc#file_location{blocks = NewBlocks1}}, Rest, Size);
-invalidate_changes(Doc, [{shrink, _} | Rest], Size) ->
-    invalidate_changes(Doc, Rest, Size);
-invalidate_changes(Doc = #document{value = Loc = #file_location{blocks = OldBlocks}}, [Blocks | Rest], Size) ->
+    invalidate_changes(FileCtx, Doc#document{
+        value = Loc#file_location{
+            blocks = NewBlocks1
+        }}, Rest, Size);
+invalidate_changes(FileCtx, Doc, [{shrink, _} | Rest], Size) ->
+    invalidate_changes(FileCtx, Doc, Rest, Size);
+invalidate_changes(FileCtx, Doc = #document{
+    value = Loc = #file_location{
+        blocks = OldBlocks
+    }}, [Blocks | Rest], Size
+) ->
     NewBlocks = fslogic_blocks:invalidate(OldBlocks, Blocks),
     NewBlocks1 = fslogic_blocks:consolidate(NewBlocks),
-    invalidate_changes(Doc#document{value = Loc#file_location{blocks = NewBlocks1}}, Rest, Size).
+    invalidate_changes(FileCtx, Doc#document{
+        value = Loc#file_location{
+            blocks = NewBlocks1
+        }
+    }, Rest, Size).
 
 %%%===================================================================
 %%% Internal functions

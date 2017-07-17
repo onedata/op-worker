@@ -33,6 +33,7 @@
 -record(get_configuration, {}).
 
 -record(configuration, {
+    root_guid :: binary(),
     subscriptions = [] :: [#subscription{}],
     disabled_spaces = [] :: [od_space:id()]
 }).

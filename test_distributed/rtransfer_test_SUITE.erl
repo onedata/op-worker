@@ -18,8 +18,7 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% API
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
-    end_per_testcase/2]).
+-export([all/0, init_per_testcase/2, end_per_testcase/2, init_per_suite/1]).
 
 -export([less_than_block_fetch_test/1, exact_block_size_fetch_test/1,
     more_than_block_fetch_test/1, more_than_block_fetch_test2/1, cancel_fetch_test/1,
@@ -434,28 +433,23 @@ request_bigger_than_file_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    Config.
+    [{?CTH_ENV_UP, ?DISABLE} | Config].
 
-end_per_suite(_Config) ->
-    ok.
-
-init_per_testcase(Case, Config) ->
-    NewConfig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
-    ?CASE_START(Case),
-    application:start(etls),
+init_per_testcase(_Case, Config) ->
+    NewConfig = test_node_starter:prepare_test_environment(Config, ?MODULE),
+    ssl:start(),
     hackney:start(),
     [Worker1, Worker2 | _] = ?config(op_worker_nodes, NewConfig),
     start_applier(Worker1, ?REMOTE_APPLIER),
     start_applier(Worker2, ?REMOTE_APPLIER),
     NewConfig.
 
-end_per_testcase(Case, Config) ->
-    ?CASE_STOP(Case),
+end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lists:foreach(fun stop_applier/1, Workers),
     hackney:stop(),
-    application:stop(etls),
-    ?TEST_STOP(Config).
+    ssl:stop(),
+    test_node_starter:clean_environment(Config).
 
 %%%===================================================================
 %%% Internal functions

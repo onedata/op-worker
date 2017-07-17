@@ -26,7 +26,8 @@
     content_types_accepted/2, delete_resource/2]).
 
 %% Content type routing functions
--export([get_cdmi/2, get_binary/2, put_cdmi/2, put_binary/2, error_wrong_path/2]).
+-export([get_cdmi/2, get_binary/2, put_cdmi/2, put_binary/2, error_wrong_path/2,
+    error_no_version/2]).
 
 %% the default json response for get/put cdmi_object will contain this entities,
 %% they can be choosed selectively by appending '?name1;name2' list to the
@@ -52,79 +53,93 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:rest_init/2
+%% @equiv pre_handler:rest_init/2
+%% @end
 %%--------------------------------------------------------------------
 -spec rest_init(req(), term()) -> {ok, req(), maps:map()} | {shutdown, req()}.
 rest_init(Req, _Opts) ->
     {ok, Req, #{}}.
 
 %%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:terminate/3
+%% @equiv pre_handler:terminate/3
+%% @end
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: term(), req(), maps:map()) -> ok.
 terminate(_, _, _) ->
     ok.
 
 %%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:allowed_methods/2
+%% @equiv pre_handler:allowed_methods/2
+%% @end
 %%--------------------------------------------------------------------
 -spec allowed_methods(req(), maps:map() | {error, term()}) -> {[binary()], req(), maps:map()}.
 allowed_methods(Req, State) ->
     {[<<"PUT">>, <<"GET">>, <<"DELETE">>], Req, State}.
 
 %%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:malformed_request/2
+%% @equiv pre_handler:malformed_request/2
+%% @end
 %%--------------------------------------------------------------------
 -spec malformed_request(req(), maps:map()) -> {boolean(), req(), maps:map()}.
 malformed_request(Req, State) ->
     cdmi_arg_parser:malformed_request(Req, State).
 
 %%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:is_authorized/2
+%% @equiv pre_handler:is_authorized/2
+%% @end
 %%--------------------------------------------------------------------
 -spec is_authorized(req(), maps:map()) -> {boolean(), req(), maps:map()}.
 is_authorized(Req, State) ->
     onedata_auth_api:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:resource_exists/2
+%% @equiv pre_handler:resource_exists/2
+%% @end
 %%--------------------------------------------------------------------
 -spec resource_exists(req(), maps:map()) -> {boolean(), req(), maps:map()}.
 resource_exists(Req, State) ->
     cdmi_existence_checker:object_resource_exists(Req, State).
 
 %%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:content_types_provided/2
+%% @equiv pre_handler:content_types_provided/2
+%% @end
 %%--------------------------------------------------------------------
 -spec content_types_provided(req(), maps:map()) ->
     {[{binary(), atom()}], req(), maps:map()}.
 content_types_provided(Req, #{cdmi_version := undefined} = State) ->
     {[
-        {<<"application/binary">>, get_binary}
+        {<<"application/binary">>, get_binary},
+        {<<"application/cdmi-object">>, error_no_version}
     ], Req, State};
 content_types_provided(Req, State) ->
     {[
-        {<<"application/cdmi-object">>, get_cdmi}
+        {<<"application/cdmi-object">>, get_cdmi},
+        {<<"application/binary">>, get_binary}
     ], Req, State}.
 
 
 %%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:content_types_accepted/2
+%% @equiv pre_handler:content_types_accepted/2
+%% @end
 %%--------------------------------------------------------------------
 -spec content_types_accepted(req(), maps:map()) ->
     {[{binary(), atom()}], req(), maps:map()}.
 content_types_accepted(Req, #{cdmi_version := undefined} = State) ->
     {[
+        {<<"application/cdmi-object">>, error_no_version},
+        {<<"application/cdmi-container">>, error_no_version},
         {'*', put_binary}
     ], Req, State};
 content_types_accepted(Req, State) ->
     {[
         {<<"application/cdmi-object">>, put_cdmi},
-        {<<"application/cdmi-container">>, error_wrong_path}
+        {<<"application/cdmi-container">>, error_wrong_path},
+        {'*', put_binary}
     ], Req, State}.
 
 %%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:delete_resource/2
+%% @equiv pre_handler:delete_resource/2
+%% @end
 %%--------------------------------------------------------------------
 -spec delete_resource(req(), maps:map()) -> {term(), req(), maps:map()}.
 delete_resource(Req, #{path := Path, auth := Auth} = State) ->
@@ -142,10 +157,10 @@ delete_resource(Req, #{path := Path, auth := Auth} = State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_binary(req(), maps:map()) -> {term(), req(), maps:map()}.
-get_binary(Req, #{auth := Auth, attributes := #file_attr{size = Size, uuid = FileGUID}} = State) ->
+get_binary(Req, #{auth := Auth, attributes := #file_attr{size = Size, guid = FileGuid}} = State) ->
     % prepare response
     {Ranges, Req1} = cdmi_arg_parser:get_ranges(Req, Size),
-    Mimetype = cdmi_metadata:get_mimetype(Auth, {guid, FileGUID}),
+    Mimetype = cdmi_metadata:get_mimetype(Auth, {guid, FileGuid}),
     Req2 = cowboy_req:set_resp_header(<<"content-type">>, Mimetype, Req1),
     HttpStatus =
         case Ranges of
@@ -167,7 +182,7 @@ get_binary(Req, #{auth := Auth, attributes := #file_attr{size = Size, uuid = Fil
 %% @end
 %%--------------------------------------------------------------------
 -spec get_cdmi(req(), maps:map()) -> {term(), req(), maps:map()}.
-get_cdmi(Req, State = #{options := Opts, auth := Auth, attributes := #file_attr{size = Size, uuid = FileGUID}}) ->
+get_cdmi(Req, State = #{options := Opts, auth := Auth, attributes := #file_attr{size = Size, guid = FileGuid}}) ->
     NonEmptyOpts = utils:ensure_defined(Opts, [], ?DEFAULT_GET_FILE_OPTS),
     Answer = cdmi_object_answer:prepare(NonEmptyOpts, State#{options := NonEmptyOpts}),
 
@@ -175,7 +190,7 @@ get_cdmi(Req, State = #{options := Opts, auth := Auth, attributes := #file_attr{
         {range, Range} ->
             % prepare response
             BodyWithoutValue = maps:remove(<<"value">>, Answer),
-            ValueTransferEncoding = cdmi_metadata:get_encoding(Auth, {guid, FileGUID}),
+            ValueTransferEncoding = cdmi_metadata:get_encoding(Auth, {guid, FileGuid}),
             JsonBodyWithoutValue = json_utils:encode_map(BodyWithoutValue),
             JsonBodyPrefix =
                 case BodyWithoutValue of
@@ -210,11 +225,11 @@ put_binary(ReqArg, State = #{auth := Auth, path := Path}) ->
     {ok, DefaultMode} = application:get_env(?APP_NAME, default_file_mode),
     case onedata_file_api:stat(Auth, {path, Path}) of
         {error, ?ENOENT} ->
-            {ok, FileGUID} = onedata_file_api:create(Auth, Path, DefaultMode),
-            cdmi_metadata:update_mimetype(Auth, {guid, FileGUID}, Mimetype),
-            cdmi_metadata:update_encoding(Auth, {guid, FileGUID}, Encoding),
+            {ok, FileGuid} = onedata_file_api:create(Auth, Path, DefaultMode),
+            cdmi_metadata:update_mimetype(Auth, {guid, FileGuid}, Mimetype),
+            cdmi_metadata:update_encoding(Auth, {guid, FileGuid}, Encoding),
             {ok, FileHandle} = onedata_file_api:open(Auth, {path, Path}, write),
-            cdmi_metadata:update_cdmi_completion_status(Auth, {guid, FileGUID}, <<"Processing">>),
+            cdmi_metadata:update_cdmi_completion_status(Auth, {guid, FileGuid}, <<"Processing">>),
             {ok, Req1} = cdmi_streamer:write_body_to_file(Req, 0, FileHandle),
             onedata_file_api:fsync(FileHandle),
             onedata_file_api:release(FileHandle),
@@ -222,33 +237,33 @@ put_binary(ReqArg, State = #{auth := Auth, path := Path}) ->
                 Auth, {path, Path}, CdmiPartialFlag
             ),
             {true, Req1, State};
-        {ok, #file_attr{uuid = FileGUID, size = Size}} ->
-            cdmi_metadata:update_mimetype(Auth, {guid, FileGUID}, Mimetype),
-            cdmi_metadata:update_encoding(Auth, {guid, FileGUID}, Encoding),
+        {ok, #file_attr{guid = FileGuid, size = Size}} ->
+            cdmi_metadata:update_mimetype(Auth, {guid, FileGuid}, Mimetype),
+            cdmi_metadata:update_encoding(Auth, {guid, FileGuid}, Encoding),
             {RawRange, Req1} = cowboy_req:header(<<"content-range">>, Req),
             case RawRange of
                 undefined ->
-                    {ok, FileHandle} = onedata_file_api:open(Auth, {guid, FileGUID}, write),
-                    cdmi_metadata:update_cdmi_completion_status(Auth, {guid, FileGUID}, <<"Processing">>),
-                    ok = onedata_file_api:truncate(FileHandle, 0),
+                    {ok, FileHandle} = onedata_file_api:open(Auth, {guid, FileGuid}, write),
+                    cdmi_metadata:update_cdmi_completion_status(Auth, {guid, FileGuid}, <<"Processing">>),
+                    ok = onedata_file_api:truncate(Auth, {guid, FileGuid}, 0),
                     {ok, Req2} = cdmi_streamer:write_body_to_file(Req1, 0, FileHandle),
                     onedata_file_api:fsync(FileHandle),
                     onedata_file_api:release(FileHandle),
                     cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(
-                        Auth, {guid, FileGUID}, CdmiPartialFlag
+                        Auth, {guid, FileGuid}, CdmiPartialFlag
                     ),
                     {true, Req2, State};
                 _ ->
                     {Length, Req2} = cowboy_req:body_length(Req1),
-                    case cdmi_arg_parser:parse_byte_range(RawRange, Size) of
-                        [{From, To}] when Length =:= undefined orelse Length =:= To - From + 1 ->
-                            {ok, FileHandle} = onedata_file_api:open(Auth, {guid, FileGUID}, write),
-                            cdmi_metadata:update_cdmi_completion_status(Auth, {guid, FileGUID}, <<"Processing">>),
+                    case cdmi_arg_parser:parse_content_range(RawRange, Size) of
+                        {{From, To}, _ExpectedSize} when Length =:= undefined orelse Length =:= To - From + 1 ->
+                            {ok, FileHandle} = onedata_file_api:open(Auth, {guid, FileGuid}, write),
+                            cdmi_metadata:update_cdmi_completion_status(Auth, {guid, FileGuid}, <<"Processing">>),
                             {ok, Req3} = cdmi_streamer:write_body_to_file(Req2, From, FileHandle),
                             onedata_file_api:fsync(FileHandle),
                             onedata_file_api:release(FileHandle),
                             cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(
-                                Auth, {guid, FileGUID}, CdmiPartialFlag
+                                Auth, {guid, FileGuid}, CdmiPartialFlag
                             ),
                             {true, Req3, State};
                         _ ->
@@ -288,7 +303,7 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
             {undefined, undefined, undefined} ->
                 {ok, NewGuid} = onedata_file_api:create(Auth, Path, DefaultMode),
                 {ok, created, NewGuid};
-            {#file_attr{uuid = NewGuid}, undefined, undefined} ->
+            {#file_attr{guid = NewGuid}, undefined, undefined} ->
                 {ok, none, NewGuid};
             {undefined, CopyURI, undefined} ->
                 {ok, NewGuid} = onedata_file_api:cp(Auth, {path, filepath_utils:ensure_begins_with_slash(CopyURI)}, Path),
@@ -342,7 +357,7 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
                 undefined when is_binary(Value) ->
                     {ok, FileHandler} = onedata_file_api:open(Auth, {guid, Guid}, write),
                     cdmi_metadata:update_cdmi_completion_status(Auth, {guid, Guid}, <<"Processing">>),
-                    ok = onedata_file_api:truncate(FileHandler, 0),
+                    ok = onedata_file_api:truncate(Auth, {guid, Guid}, 0),
                     {ok, _, RawValueSize} = onedata_file_api:write(FileHandler, 0, RawValue),
                     onedata_file_api:fsync(FileHandler),
                     onedata_file_api:release(FileHandler),
@@ -365,12 +380,23 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
 error_wrong_path(_Req, _State) ->
     throw(?ERROR_WRONG_PATH).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Handles PUT with cdmi content type, without CDMI version given
+%% @end
+%%--------------------------------------------------------------------
+-spec error_no_version(req(), maps:map()) -> no_return().
+error_no_version(_Req, _State) ->
+    throw(?ERROR_NO_VERSION_GIVEN).
+
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Same as lists:keyfind/3, but returns Default when key is undefined
+%% @doc
+%% Same as lists:keyfind/3, but returns Default when key is undefined
+%% @end
 %%--------------------------------------------------------------------
 -spec get_range(Opts :: list()) -> {non_neg_integer(), non_neg_integer()} | undefined.
 get_range(Opts) ->
@@ -380,7 +406,9 @@ get_range(Opts) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @doc Gets attributes of file, returns undefined when file does not exist
+%% @doc
+%% Gets attributes of file, returns undefined when file does not exist
+%% @end
 %%--------------------------------------------------------------------
 -spec get_attr(onedata_auth_api:auth(), onedata_file_api:file_path()) ->
     onedata_file_api:file_attributes() | undefined.

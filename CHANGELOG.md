@@ -4,6 +4,171 @@
 CHANGELOG
 ---------
 
+### 17.06.0-beta6
+
+* VFS-3366 Repair lost changes scheduling
+* VFS-3376 Use pipe character instead of dot to join and split associative ids in gui ids
+* VFS-3416 Change subscriptions updates
+* VFS-3415 Make shares in public mode be fetched using provider authorization
+* fix errors in space_sync_worker check_strategies
+* VFS-3415 Fix a routing bug causing public share links malfuntion
+* VFS-3363 Use in-memory changes counter in streams
+* Add mising proxy_via field in recursive invocation.
+* Fix provider_communicator:send_async/2
+* VFS-3361 Emit event on times update.
+* VFS-3409 Handle share requests in user context rather that provider context so all operation can be performed despite lack of support
+* VFS-3356 Add space_storage/storage accessors
+* VFS-3361 Do not create empty replicated files.
+* VFS-3363 Improve dbsync performance
+* VFS-3289 backend for metrics of storage_sync
+* VFS-3363 Fix concurent delete
+* VFS-3361 Return updated file_ctx from storage_file_manager:new_handle.
+* VFS-3361 Add 'storage_file_created' field to file_location. Split sfm_utils_create_storage file into two functions creating file and location.
+* VFS-3361 Remove empty block from file_location response.
+
+
+### 17.06.0-beta4
+
+* VFS-3362 Update web-client
+* Enable storage helper buffering
+
+
+### 17.06.0-beta3
+
+* Releasing new version 17.06.0-beta3
+
+
+### 17.06.0-beta2
+
+* Added GlusterFS support
+* VFS-3344 Improve dbsync changes aggregation
+* VFS-3309 Remove message_id model.
+* VFS-3350 Make sure that new permissions can be safely added to the system without breaking gui compliance
+* VFS-3350 Remove deprecated privilege names
+* VFS-3326 Fix dbsync recovery stream
+* VFS-3183 - refactor of storage_sync
+* Decode cacert from pem into der format, when opening websocket connection.
+
+
+### 3.0.0-rc16
+
+* Generate empty monitoring events in order to fill null data.
+* Send size of event in read/write events.
+* VFS-3183 Add fsync operation to fslogic
+* VFS-3233 Add support for sig v2 to AWS S3 helper
+* VFS-3248 Move xattrs from provider to fuse messages. Add create and replace flags to setxattr.
+* VFS-3017 Fix wrong index encoding.
+* VFS-3017 Emit file_removed event when file removal is requested.
+* VFS-3187 Execute requests synchronously in connection process.
+* VFS-3187 Add trap_exit flag to connection.
+* VFS-3017 Copy/remove files during move when non posix storage is used
+* VFS-3017 Enable file garbage collection, adjust tests to the new rename implemenetation
+* VFS-3025 Implement rename operation.
+* VFS-3025 Rewrite current remove implementation and delete rename operation.
+
+
+### 3.0.0-rc15
+
+* Add token_auth translator.
+* Disable storage helpers buffering
+* VFS-3233 Add support for sig v2 to AWS S3 helper
+* VFS-3244 Switch level of dbsync periodic status logs to debug
+* VFS-3244 Do not fail on deletion_worker's init when we cannot list file handles for cleanup.
+* VFS-3244 Add file_objectid to custom_metadata document.
+* VFS-3251 Updating GUI to 3.0.0-rc15
+* VFS-3181 Add onezone URL to sessionDetails
+* Add service version info to sessionDetails in GUI
+* VFS-3213 Update cberl reference
+* VFS-3213 Add libcouchbase package dependency
+* VFS-3146 Update models specyfications
+* VFS-3146 Update hooks after datastore update
+* VFS-3146 Update datastore models to use new datastore API
+* VFS-3116 Handle chmod, truncate and updating timestamps in storage_sync
+* VFS-3088 Update dbsync state and events
+* VFS-3116 Refactor storage_import and space_sync_worker
+* VFS-3088 Integrate with refactored datastore
+
+
+### 3.0.0-rc14
+
+* Dbsync uses datastore_pool to dump documents to db
+* Update cluster_worker reference
+* Do not fail dbsync posthook when we cannot chown file on storage.
+* Refactor event_manager:get_provider function.
+* Fix event proxying.
+
+
+### 3.0.0-rc13
+
+* VFS-3118 Change default env value for custom gui root
+* VFS-3025 Add create_and_open operation to sfm and use it during file copying.
+* VFS-3097 Do not deserialize macaroons when it is not necessary
+* VFS-3025 Do not open file in logical_file_manager, use provided handle.
+* VFS-2961 Refactor functions duplicating code in od_user module.
+
+
+### 3.0.0-rc12
+
+* Update datastore caching mechanism - use dedicated processed instead of transactions
+* VFS-2991 Add consistent_hashing library.
+* VFS-2719 Introduce limits to the frequency of reconnect attempts in subscriptions websocket client
+* VFS-2496 Fix a bug causing user updates not to include new spaces / groups
+* VFS-2496 Make sure new spaces and groups appear after creation despite not being yet synchronized from onezone
+* VFS-2496 Change relations in space-user|group-permissions models
+* VFS-2910 Reduce number of helper system threads
+* VFS-2910 Update storage detection logic
+* VFS-2496 Allow updating default space in user data backend
+* VFS-2496 Migrate to fully relational model in gui backend
+* VFS-2909 Adjust code to updated ceph lib
+* VFS-2871 Update file_consistency and dbsync
+* VFS-2835 Update change propagation controller
+* VFS-2793 Implement several simple space strategies
+* VFS-2808 Integrate new helpers.
+* VFS-2522 Do not fail when trash file index is found.
+* VFS-2829 Exclude root and guest sessions from file handles
+* VFS-2829 Use hidden file prefix for rename
+* VFS-2696 Add better error logging to backend for file acl update
+* VFS-2696 Rework file ACL model in GUI backend
+* VFS-2696 Fix a bug in GUI file rename that was breaking file paths
+* VFS-2723 Fix events routing for file subscriptions
+* VFS-2755 Send SyncResponse message with checksum and file_location instead of sending solely checksum.
+* VFS-2860 Updating frontend to 3.0.0-rc12
+* VFS-2934 Enable storage helper buffering configuration
+* VFS-2856 Improve caching of rules result, inject modified file context into function arguments.
+* VFS-2856 Permission refactoring.
+* VFS-2856 Configure new log layout in lager.
+* VFS-2496 Push update of user record on every relation update
+* VFS-2496 Change relations in group-user|group-permissions models
+* VFS-2496 Return unauthorized when trying to update a user other than the one with current session
+* VFS-2931 Reduce number of kept rotated log files
+* VFS-2910 Refactor LUMA modules
+* VFS-2856 Synchronize file before moving it between spaces.
+* VFS-2696 Refactor fslogic
+* VFS-2808 Integrate new helpers.
+* VFS-2696 Rework file permissions in GUI into one record containing POSIX and ACL perms
+* VFS-2696 Rework file ACL model in GUI backend
+* VFS-1959 Add and handle OpenFile, CreateFile and MakeFile msgs
+* VFS-2696 Implement file rename in GUI backend
+* VFS-2807 Repair mnesia overload by session_watcher
+* VFS-2522 Add support for spatial queries.
+* VFS-2773 Subscribe for monitoring events on root session only.
+* VFS-2755 Do not send location update to the client who provoked the sync.
+* VFS-2742 Change API to work with GUID-based protocol.
+* VFS-2755 Send SyncResponse message with checksum and file_location instead of sending solely checksum.
+
+
+### 3.0.0-rc11
+
+* VFS-2773 Listen to more changes in /changes api and add a few new tests.
+* VFS-2764 Fix directories having 0B size in GUI
+* VFS-2764 Fix size of files being zero right after upload
+* VFS-2696 Change text/javascript to applicaiton/javascript
+* VFS-2696 Reroute events through proxy for open files.
+* VFS-2696 Fix wrong aggregarion of file_attr event.
+* VFS-2733 Add REST routes to GUI listener
+* VFS-2733 Standarize app listeners
+
+
 ### 3.0.0-rc10
 
 * VFS-2742 Fix aggregation for update_attr events.

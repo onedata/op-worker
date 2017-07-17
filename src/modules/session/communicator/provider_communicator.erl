@@ -111,6 +111,7 @@ stream(StmId, Msg, Ref, Retry) ->
 -spec send_async(Msg :: #client_message{} | term(), Ref :: connection:ref()) ->
     ok | {error, Reason :: term()}.
 send_async(#client_message{} = Msg, Ref) ->
+    ensure_connected(Ref),
     connection:send_async(Msg, Ref);
 send_async(Msg, Ref) ->
     send_async(#client_message{message_body = Msg}, Ref).
@@ -158,9 +159,9 @@ communicate_async(Msg, Ref) ->
 -spec communicate_async(Msg :: #client_message{} | term(), Ref :: connection:ref(),
     Recipient :: pid() | undefined) -> {ok, #message_id{}} | {error, Reason :: term()}.
 communicate_async(#client_message{} = Msg, Ref, Recipient) ->
-    {ok, MsgId} = message_id:generate(Recipient, client),
+    {ok, MsgId} = message_id:generate(Recipient),
     NewMsg = Msg#client_message{message_id = MsgId},
-    DoSend = case Msg of
+    DoSend = case NewMsg of
         #client_message{message_stream = #message_stream{stream_id = StmId}} when is_integer(StmId) ->
             fun() -> stream(StmId, NewMsg, Ref, 2) end;
         _ ->
@@ -196,16 +197,15 @@ ensure_connected(SessId) ->
                 _ ->
                     session_manager:session_id_to_provider_id(SessId)
             end,
-            %% @todo: use OZ subscription based solution when available
-            URLs = dbsync_utils:get_provider_urls(ProviderId),
+            {ok, #document{value = #od_provider{urls = URLs}}} = od_provider:get_or_fetch(ProviderId),
             lists:foreach(
                 fun(URL) ->
                     {ok, Port} = application:get_env(?APP_NAME, provider_protocol_handler_port),
-                    connection:start_link(SessId, URL, Port, ranch_etls, timer:seconds(5))
+                    connection:start_link(SessId, URL, Port, ranch_ssl, timer:seconds(5))
                 end, URLs),
             ok;
         {ok, Pid} ->
-            case utils:process_info(Pid) of
+            case utils:process_info(Pid, initial_call) of
                 undefined ->
                     ok = session:remove_connection(SessId, Pid),
                     ensure_connected(SessId);

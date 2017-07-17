@@ -19,13 +19,14 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
 
 %% API
 -export([init/0, terminate/0]).
--export([find/2, find_all/1, find_query/2]).
+-export([find_record/2, find_all/1, query/2, query_record/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
 
 %%%===================================================================
@@ -54,26 +55,30 @@ terminate() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link data_backend_behaviour} callback find/2.
+%% {@link data_backend_behaviour} callback find_record/2.
 %% @end
 %%--------------------------------------------------------------------
--spec find(ResourceType :: binary(), Id :: binary()) ->
+-spec find_record(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find(ModelType, ShareId) ->
-    {ok, #document{
-        value = #od_share{
-            space = SpaceId
-        } = ShareRecord}} = share_logic:get(provider, ShareId),
+find_record(ModelType, ShareId) ->
     % Make sure that user is allowed to view requested share - he must have
     % view privileges in this space, or view the share in public view.
-    Authorized = case ModelType of
+    {Authorized, ShareRecord} = case ModelType of
         <<"share">> ->
-            UserId = g_session:get_user_id(),
-            space_logic:has_effective_privilege(
-                SpaceId, UserId, space_view_data
-            );
+            UserAuth = op_gui_utils:get_user_auth(),
+            {ok, #document{
+                value = #od_share{space = SpaceId} = ShRecord
+            }} = share_logic:get(UserAuth, ShareId),
+            UserId = gui_session:get_user_id(),
+            HasPriv = space_logic:has_effective_privilege(
+                SpaceId, UserId, ?SPACE_VIEW
+            ),
+            {HasPriv, ShRecord};
         <<"share-public">> ->
-            true
+            {ok, #document{
+                value = #od_share{space = SpaceId} = ShRecord
+            }} = share_logic:get(provider, ShareId),
+            {true, ShRecord}
     end,
     case Authorized of
         false ->
@@ -93,43 +98,28 @@ find(ModelType, ShareId) ->
 find_all(<<"share-public">>) ->
     gui_error:report_error(<<"Not implemented">>);
 find_all(<<"share">>) ->
-    UserAuth = op_gui_utils:get_user_auth(),
-    UserId = g_session:get_user_id(),
-    SpaceIds = op_gui_utils:find_all_spaces(UserAuth, UserId),
-    ShareIds = lists:foldl(
-        fun(SpaceId, Acc) ->
-            % Make sure that user is allowed to view shares in this space -
-            % he must have view privileges in this space.
-            Authorized = space_logic:has_effective_privilege(
-                SpaceId, UserId, space_view_data
-            ),
-            case Authorized of
-                true ->
-                    {ok, #document{
-                        value = #od_space{
-                            shares = Shares
-                        }}} = od_space:get(SpaceId),
-                    Shares ++ Acc;
-                false ->
-                    Acc
-            end
-        end, [], SpaceIds),
-    Res = lists:map(
-        fun(ShareId) ->
-            {ok, ShareData} = find(<<"share">>, ShareId),
-            ShareData
-        end, ShareIds),
-    {ok, Res}.
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link data_backend_behaviour} callback find_query/2.
+%% {@link data_backend_behaviour} callback query/2.
 %% @end
 %%--------------------------------------------------------------------
--spec find_query(ResourceType :: binary(), Data :: proplists:proplist()) ->
+-spec query(ResourceType :: binary(), Data :: proplists:proplist()) ->
+    {ok, [proplists:proplist()]} | gui_error:error_result().
+query(_, _Data) ->
+    gui_error:report_error(<<"Not implemented">>).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link data_backend_behaviour} callback query_record/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec query_record(ResourceType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find_query(_, _Data) ->
+query_record(_, _Data) ->
     gui_error:report_error(<<"Not implemented">>).
 
 
@@ -166,7 +156,7 @@ update_record(<<"share">>, ShareId, [{<<"name">>, Name}]) ->
             case share_logic:set_name(UserAuth, ShareId, NewName) of
                 ok ->
                     % Push container dir as its name has also changed.
-                    {ok, FileData} = file_data_backend:find(
+                    {ok, FileData} = file_data_backend:find_record(
                         <<"file-shared">>, <<"containerDir.", ShareId/binary>>
                     ),
                     FileDataNewName = lists:keyreplace(
@@ -194,7 +184,7 @@ update_record(<<"share">>, ShareId, [{<<"name">>, Name}]) ->
 delete_record(<<"share-public">>, _ShareId) ->
     gui_error:report_error(<<"Not implemented">>);
 delete_record(<<"share">>, ShareId) ->
-    SessionId = g_session:get_session_id(),
+    SessionId = gui_session:get_session_id(),
     case logical_file_manager:remove_share(SessionId, ShareId) of
         ok ->
             ok;
@@ -232,6 +222,12 @@ share_record(ModelType, ShareId, ShareRecord) ->
         <<"share-public">> ->
             RootFileId
     end,
+    UserEntry = case ModelType of
+        <<"share">> ->
+            [{<<"user">>, gui_session:get_user_id()}];
+        <<"share-public">> ->
+            []
+    end,
     {ok, [
         {<<"id">>, ShareId},
         {<<"name">>, Name},
@@ -240,4 +236,4 @@ share_record(ModelType, ShareId, ShareRecord) ->
         {<<"dataSpace">>, SpaceId},
         {<<"publicUrl">>, PublicURL},
         {<<"handle">>, HandleVal}
-    ]}.
+    ] ++ UserEntry}.

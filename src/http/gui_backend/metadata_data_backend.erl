@@ -21,7 +21,7 @@
 
 %% API
 -export([init/0, terminate/0]).
--export([find/2, find_all/1, find_query/2]).
+-export([find_record/2, find_all/1, query/2, query_record/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
 -export([metadata_record/2, metadata_record/3]).
 
@@ -51,18 +51,18 @@ terminate() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link data_backend_behaviour} callback find/2.
+%% {@link data_backend_behaviour} callback find_record/2.
 %% @end
 %%--------------------------------------------------------------------
--spec find(ResourceType :: binary(), Id :: binary()) ->
+-spec find_record(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find(ModelType, ResourceId) ->
+find_record(ModelType, ResourceId) ->
     SessionId = case ModelType of
         <<"file-property-public">> ->
             ?GUEST_SESS_ID;
         _ ->
             % covers: file-property, file-property-shared
-            g_session:get_session_id()
+            gui_session:get_session_id()
     end,
     try
         metadata_record(ModelType, SessionId, ResourceId)
@@ -88,13 +88,25 @@ find_all(_ModelType) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link data_backend_behaviour} callback find_query/2.
+%% {@link data_backend_behaviour} callback query/2.
 %% @end
 %%--------------------------------------------------------------------
--spec find_query(ResourceType :: binary(), Data :: proplists:proplist()) ->
+-spec query(ResourceType :: binary(), Data :: proplists:proplist()) ->
+    {ok, [proplists:proplist()]} | gui_error:error_result().
+%% ModelType covers: file-property, file-property-shared.
+query(_ModelType, _Data) ->
+    gui_error:report_error(<<"Not implemented">>).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link data_backend_behaviour} callback query_record/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec query_record(ResourceType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 %% ModelType covers: file-property, file-property-shared.
-find_query(_ModelType, _Data) ->
+query_record(_ModelType, _Data) ->
     gui_error:report_error(<<"Not implemented">>).
 
 
@@ -111,7 +123,7 @@ create_record(<<"file-property-public">>, _Data) ->
 create_record(ModelType, Data) ->
     ResourceId = proplists:get_value(<<"file">>, Data),
     ok = update_record(ModelType, ResourceId, Data),
-    metadata_record(ModelType, g_session:get_session_id(), ResourceId).
+    metadata_record(ModelType, gui_session:get_session_id(), ResourceId).
 
 
 %%--------------------------------------------------------------------
@@ -134,7 +146,7 @@ update_record(ModelType, ResourceId, Data) ->
             {_ShareId, FId} = op_gui_utils:association_to_ids(ResourceId),
             FId
     end,
-    SessionId = g_session:get_session_id(),
+    SessionId = gui_session:get_session_id(),
     case proplists:get_value(<<"basic">>, Data) of
         undefined ->
             ok;
@@ -210,7 +222,7 @@ delete_record(ModelType, ResourceId) ->
             {_ShareId, FId} = op_gui_utils:association_to_ids(ResourceId),
             FId
     end,
-    SessionId = g_session:get_session_id(),
+    SessionId = gui_session:get_session_id(),
     {ok, XattrKeys} = logical_file_manager:list_xattr(
         SessionId, {guid, FileId}, false, false
     ),

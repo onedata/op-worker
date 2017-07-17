@@ -11,7 +11,7 @@
 {application, op_worker,
     [
         {description, "Application starts node of oneprovider cluster"},
-        {vsn, "3.0.0-rc10"},
+        {vsn, "17.06.0-beta6"},
         {registered, [op_worker_sup]},
         {applications, [
             kernel,
@@ -26,11 +26,13 @@
             % for awareness of them being used in the project and
             % to make sure they are started before the application.
             lager,
-            etls,
+            ssl,
             hackney,
             web_client,
             cowboy,
-            cluster_worker
+            cluster_worker,
+            exometer_core,
+            exometer_lager
         ]},
         {mod, {op_worker_app, []}},
         {env, []}

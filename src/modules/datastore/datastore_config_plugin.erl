@@ -14,8 +14,10 @@
 
 -behaviour(datastore_config_behaviour).
 
+-include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
+
 %% datastore_config_behaviour callbacks
--export([models/0, throttled_models/0]).
+-export([models/0, throttled_models/0, get_mutator/0]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -40,16 +42,11 @@ models() -> [
     storage,
     file_location,
     space_storage,
-    ceph_user,
-    s3_user,
-    dbsync_state,
+    dbsync_state2,
     files_to_chown,
-    posix_user,
-    message_id,
     space_quota,
     monitoring_state,
-    open_file,
-    swift_user,
+    file_handles,
     sfm_handle,
     dbsync_batches,
     custom_metadata,
@@ -58,7 +55,10 @@ models() -> [
     permissions_cache,
     permissions_cache_helper,
     change_propagation_controller,
-    times
+    times,
+    helper_handle,
+    space_strategies,
+    file_force_proxy
 ].
 
 %%--------------------------------------------------------------------
@@ -68,3 +68,12 @@ models() -> [
 %%--------------------------------------------------------------------
 -spec throttled_models() -> Models :: [model_behaviour:model_type()].
 throttled_models() -> [file_meta].
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link datastore_config_behaviour} callback get_mutator/0.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_mutator() -> datastore:mutator() | undefined.
+get_mutator() ->
+    oneprovider:get_provider_id().

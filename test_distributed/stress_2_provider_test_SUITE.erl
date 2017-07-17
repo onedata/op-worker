@@ -16,7 +16,7 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
+-export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 -export([stress_test/1, stress_test_base/1]).
 
 -export([
@@ -39,7 +39,7 @@ all() ->
 stress_test(Config) ->
     ?STRESS(Config,[
             {description, "Main stress test function. Links together all cases to be done multiple times as one continous test."},
-            {success_rate, 95},
+            {success_rate, 75}, % TODO - check error i proxy test
             {config, [{name, stress}, {description, "Basic config for stress test"}]}
         ]
     ).
@@ -51,9 +51,9 @@ stress_test_base(Config) ->
 db_sync_test(Config) ->
     ?PERFORMANCE(Config, [
         {parameters, [
-            [{name, dirs_num}, {value, 25}, {description, "Number of directorines with single parent."}],
-            [{name, files_num}, {value, 50}, {description, "Number of files with single parent."}],
-            [{name, attempts}, {value, 60}, {description, "Attempts param for assertion macros"}]
+            [{name, dirs_num}, {value, 100}, {description, "Number of directorines with single parent."}],
+            [{name, files_num}, {value, 200}, {description, "Number of files with single parent."}],
+            [{name, attempts}, {value, 180}, {description, "Attempts param for assertion macros"}]
         ]},
         {description, "Performs multiple file operations on space 1."}
     ]).
@@ -62,7 +62,8 @@ db_sync_test_base(Config) ->
     Files = ?config(files_num, Config),
     Attempts = ?config(attempts, Config),
     multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {2,0,0}, Attempts, Dirs, Files),
-    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user1">>, {2,0,0}, Attempts).
+    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user1">>, {2,0,0}, Attempts),
+    multi_provider_file_ops_test_base:distributed_delete_test_base(Config, <<"user1">>, {2,0,0}, Attempts).
 
 %%%===================================================================
 
@@ -101,34 +102,28 @@ proxy_test2_base(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer, multi_provider_file_ops_test_base]).
+    [{?LOAD_MODULES, [initializer, multi_provider_file_ops_test_base]} | Config].
 
-end_per_suite(Config) ->
-    ?TEST_STOP(Config).
 
-init_per_testcase(stress_test = Case, Config) ->
-    ?CASE_START(Case),
-    application:start(etls),
+init_per_testcase(stress_test, Config) ->
+    ssl:start(),
     hackney:start(),
     initializer:disable_quota_limit(Config),
     initializer:enable_grpca_based_communication(Config),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo);
 
-init_per_testcase(Case, Config) ->
-    ?CASE_START(Case),
+init_per_testcase(_Case, Config) ->
     Config.
 
-end_per_testcase(stress_test = Case, Config) ->
-    ?CASE_STOP(Case),
+end_per_testcase(stress_test, Config) ->
     lfm_proxy:teardown(Config),
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:disable_grpca_based_communication(Config),
     initializer:unload_quota_mocks(Config),
     hackney:stop(),
-    application:stop(etls);
+    ssl:stop();
 
-end_per_testcase(Case, Config) ->
-    ?CASE_STOP(Case),
+end_per_testcase(_Case, Config) ->
     Config.

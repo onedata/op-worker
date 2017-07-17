@@ -18,7 +18,7 @@
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, create_or_update/2,
-    list/0, model_init/0, 'after'/5, before/4]).
+    list/0, count/0, model_init/0, 'after'/5, before/4]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -29,9 +29,10 @@
 %% {@link model_behaviour} callback save/1.
 %% @end
 %%--------------------------------------------------------------------
--spec save(datastore:document()) -> {ok, datastore:ext_key()} | datastore:generic_error().
+-spec save(datastore:document()) ->
+    {ok, datastore:ext_key()} | datastore:generic_error().
 save(Document) ->
-    datastore:save(?STORE_LEVEL, Document).
+    model:execute_with_default_context(?MODULE, save, [Document]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -41,16 +42,17 @@ save(Document) ->
 -spec update(datastore:ext_key(), Diff :: datastore:document_diff()) ->
     {ok, datastore:ext_key()} | datastore:update_error().
 update(Key, Diff) ->
-    datastore:update(?STORE_LEVEL, ?MODULE, Key, Diff).
+    model:execute_with_default_context(?MODULE, update, [Key, Diff]).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link model_behaviour} callback create/1.
 %% @end
 %%--------------------------------------------------------------------
--spec create(datastore:document()) -> {ok, datastore:ext_key()} | datastore:create_error().
+-spec create(datastore:document()) ->
+    {ok, datastore:ext_key()} | datastore:create_error().
 create(Document) ->
-    datastore:create(?STORE_LEVEL, Document).
+    model:execute_with_default_context(?MODULE, create, [Document]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -59,9 +61,9 @@ create(Document) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_or_update(datastore:document(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
+    {ok, datastore:ext_key()} | datastore:generic_error().
 create_or_update(Doc, Diff) ->
-    datastore:create_or_update(?STORE_LEVEL, Doc, Diff).
+    model:execute_with_default_context(?MODULE, create_or_update, [Doc, Diff]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -70,7 +72,7 @@ create_or_update(Doc, Diff) ->
 %%--------------------------------------------------------------------
 -spec get(datastore:ext_key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
-    datastore:get(?STORE_LEVEL, ?MODULE, Key).
+    model:execute_with_default_context(?MODULE, get, [Key]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -79,7 +81,7 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec delete(datastore:ext_key()) -> ok | datastore:generic_error().
 delete(Key) ->
-    datastore:delete(?STORE_LEVEL, ?MODULE, Key).
+    model:execute_with_default_context(?MODULE, delete, [Key]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -88,7 +90,7 @@ delete(Key) ->
 %%--------------------------------------------------------------------
 -spec exists(datastore:ext_key()) -> datastore:exists_return().
 exists(Key) ->
-    ?RESPONSE(datastore:exists(?STORE_LEVEL, ?MODULE, Key)).
+    ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [Key])).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -100,10 +102,25 @@ list() ->
     Filter = fun
                  ('$end_of_table', Acc) ->
                      {abort, Acc};
-                 (#document{key = Uuid}, Acc) ->
+                 (Uuid, Acc) ->
                      {next, [Uuid | Acc]}
              end,
-    datastore:list(?STORE_LEVEL, ?MODULE, Filter, []).
+    model:execute_with_default_context(?MODULE, list_keys, [Filter, []]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns count of all records.
+%% @end
+%%--------------------------------------------------------------------
+-spec count() -> {ok, non_neg_integer()} | datastore:generic_error() | no_return().
+count() ->
+    Filter = fun
+        ('$end_of_table', Acc) ->
+            {abort, Acc};
+        (_Uuid, Acc) ->
+            {next, Acc + 1}
+    end,
+    model:execute_with_default_context(?MODULE, list_keys, [Filter, 0]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -112,7 +129,8 @@ list() ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(permissions_cache_helper_bucket, [], ?GLOBAL_ONLY_LEVEL).
+    ?MODEL_CONFIG(permissions_cache_helper_bucket, [], ?GLOBAL_ONLY_LEVEL)#model_config{
+        list_enabled = {true, return_errors}, volatile = true}.
 
 %%--------------------------------------------------------------------
 %% @doc

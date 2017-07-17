@@ -34,8 +34,7 @@
                         "cm_nodes": [
                             "cm"
                         ],
-                        "worker_num": 1,
-                        "verify_oz_cert": false
+                        "worker_num": 1
                     }
                 }
             },
@@ -50,8 +49,7 @@
                         ],
                         "db_nodes": [
                             "127.0.0.1:49161"
-                        ],
-                        "verify_oz_cert": false
+                        ]
                     }
                 }
             }

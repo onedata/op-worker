@@ -71,7 +71,7 @@ content_types_provided(Req, State) ->
     {[{binary(), atom()}], req(), maps:map()}.
 content_types_accepted(Req, State) ->
     {[
-        {<<"text/javascript">>, create_index}
+        {<<"application/javascript">>, create_index}
     ], Req, State}.
 
 %%%===================================================================
@@ -116,10 +116,10 @@ list_indexes(Req, State) ->
     IndexList = maps:values(maps:map(fun(K, V) -> V#{id => K} end, Indexes)),
     RawResponse =
         lists:filtermap(fun
-            (#{id := Id, space_id := SID, name := undefined}) when SpaceId =:= undefined orelse SID =:= SpaceId ->
-                {true, #{<<"spaceId">> => SID, <<"indexId">> => Id}};
-            (#{id := Id, space_id := SID, name := Name}) when SpaceId =:= undefined orelse SID =:= SpaceId ->
-                {true, #{<<"spaceId">> => SID, <<"name">> => Name, <<"indexId">> => Id}};
+            (#{id := Id, space_id := SID, spatial := Value, name := undefined}) when SpaceId =:= undefined orelse SID =:= SpaceId ->
+                {true, #{<<"spaceId">> => SID, <<"spatial">> => Value, <<"indexId">> => Id}};
+            (#{id := Id, space_id := SID, spatial := Value, name := Name}) when SpaceId =:= undefined orelse SID =:= SpaceId ->
+                {true, #{<<"spaceId">> => SID, <<"spatial">> => Value, <<"indexId">> => Id, <<"name">> => Name}};
             (_) ->
                 false
         end, IndexList),
@@ -159,8 +159,9 @@ create_index(Req, State) ->
     {State1, Req1} = validator:parse_query_space_id(Req, State),
     {State2, Req2} = validator:parse_name(Req1, State1),
     {State3, Req3} = validator:parse_function(Req2, State2),
+    {State4, Req4} = validator:parse_spatial(Req3, State3),
 
-    #{auth := Auth, name := Name, space_id := SpaceId, function := Function} = State3,
+    #{auth := Auth, name := Name, space_id := SpaceId, function := Function, spatial := Spatial} = State4,
     {ok, UserId} = session:get_user_id(Auth),
     case SpaceId of
         undefined ->
@@ -169,10 +170,9 @@ create_index(Req, State) ->
             ok
     end,
     space_membership:check_with_user(UserId, SpaceId),
+    {ok, Id} = indexes:add_index(UserId, Name, Function, SpaceId, Spatial),
 
-    {ok, Id} = indexes:add_index(UserId, Name, Function, SpaceId),
-
-    {{true, <<"/api/v3/oneprovider/index/", Id/binary>>}, Req3, State3}.
+    {{true, <<"/api/v3/oneprovider/index/", Id/binary>>}, Req4, State4}.
 
 
 

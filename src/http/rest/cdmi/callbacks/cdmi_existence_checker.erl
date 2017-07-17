@@ -85,9 +85,9 @@ redirect_to(Req, State, Path) ->
 %%--------------------------------------------------------------------
 resource_exists(Req, State = #{path := Path, auth := Auth}, Type) ->
     case logical_file_manager:stat(Auth, {path, Path}) of
-        {ok, Attr = #file_attr{type = ?DIRECTORY_TYPE, uuid = Guid}} when Type == container ->
+        {ok, Attr = #file_attr{type = ?DIRECTORY_TYPE, guid = Guid}} when Type == container ->
             {true, Req, State#{attributes => Attr, guid => Guid}};
-        {ok, Attr = #file_attr{type = ?REGULAR_FILE_TYPE, uuid = Guid}} when Type == object ->
+        {ok, Attr = #file_attr{type = ?REGULAR_FILE_TYPE, guid = Guid}} when Type == object ->
             {true, Req, State#{attributes => Attr, guid => Guid}};
         {ok, #file_attr{type = ?DIRECTORY_TYPE}} when Type == object ->
             redirect_to_container(Req, State);

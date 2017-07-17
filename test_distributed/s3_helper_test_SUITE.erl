@@ -11,26 +11,26 @@
 -module(s3_helper_test_SUITE).
 -author("Krzysztof Trzepla").
 
--include("modules/fslogic/helpers.hrl").
+-include("modules/storage_file_manager/helpers/helpers.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
+-export([all/0]).
 
 %% tests
--export([set_user_ctx_test/1, write_test/1, multipart_write_test/1,
+-export([write_test/1, multipart_write_test/1,
     truncate_test/1, write_read_test/1, multipart_read_test/1,
     write_unlink_test/1, write_read_truncate_unlink_test/1]).
 
 %% test_bases
--export([set_user_ctx_test_base/1, write_test_base/1, multipart_write_test_base/1,
+-export([write_test_base/1, multipart_write_test_base/1,
     truncate_test_base/1, write_read_test_base/1, multipart_read_test_base/1,
     write_unlink_test_base/1, write_read_truncate_unlink_test_base/1]).
 
 -define(TEST_CASES, [
-    set_user_ctx_test, write_test, multipart_write_test, truncate_test,
+    write_test, multipart_write_test, truncate_test,
     write_read_test, multipart_read_test, write_unlink_test,
     write_read_truncate_unlink_test
 ]).
@@ -78,23 +78,6 @@ all() -> ?ALL(?TEST_CASES, ?TEST_CASES).
 %%% Test functions
 %%%===================================================================
 
-set_user_ctx_test(Config) ->
-    ?PERFORMANCE(Config, [
-        {repeats, 10},
-        {success_rate, 100},
-        {parameters, [?OP_NUM(set_user_ctx, 1)]},
-        {description, "Multiple user context changes."},
-        ?PERF_CFG(small, [?OP_NUM(set_user_ctx, 10)]),
-        ?PERF_CFG(medium, [?OP_NUM(set_user_ctx, 20)]),
-        ?PERF_CFG(large, [?OP_NUM(set_user_ctx, 50)])
-    ]).
-set_user_ctx_test_base(Config) ->
-    Helper = new_helper(Config),
-    lists:foreach(fun(_) ->
-        ?assertEqual(ok, set_user_ctx(Helper, Config))
-    end, lists:seq(1, ?config(set_user_ctx_num, Config))),
-    delete_helper(Helper).
-
 write_test(Config) ->
     ?PERFORMANCE(Config, [
         {repeats, 10},
@@ -108,7 +91,9 @@ write_test(Config) ->
 write_test_base(Config) ->
     Helper = new_helper(Config),
     lists:foreach(fun(_) ->
-        write(Helper, ?config(write_size, Config) * ?MB)
+        FileId = random_file_id(),
+        {ok, Handle} = open(Helper, FileId, write),
+        write(Handle, ?config(write_size, Config) * ?MB)
     end, lists:seq(1, ?config(write_num, Config))),
     delete_helper(Helper).
 
@@ -124,9 +109,11 @@ multipart_write_test(Config) ->
     ]).
 multipart_write_test_base(Config) ->
     Helper = new_helper(Config),
+    FileId = random_file_id(),
+    {ok, Handle} = open(Helper, FileId, write),
     Size = ?config(write_size, Config) * ?MB,
     BlockSize = ?config(write_blk_size, Config) * ?KB,
-    multipart(Helper, fun write/4, Size, BlockSize),
+    multipart(Handle, fun write/3, Size, BlockSize),
     delete_helper(Helper).
 
 truncate_test(Config) ->
@@ -158,10 +145,11 @@ write_read_test(Config) ->
     ]).
 write_read_test_base(Config) ->
     Helper = new_helper(Config),
-    FileId = random_file_id(),
     lists:foreach(fun(_) ->
-        Content = write(Helper, FileId, 0, ?config(op_size, Config) * ?MB),
-        ?assertEqual(Content, read(Helper, FileId, size(Content)))
+        FileId = random_file_id(),
+        {ok, Handle} = open(Helper, FileId, rdwr),
+        Content = write(Handle, 0, ?config(op_size, Config) * ?MB),
+        ?assertEqual(Content, read(Handle, size(Content)))
     end, lists:seq(1, ?config(op_num, Config))),
     delete_helper(Helper).
 
@@ -178,11 +166,12 @@ multipart_read_test(Config) ->
 multipart_read_test_base(Config) ->
     Helper = new_helper(Config),
     FileId = random_file_id(),
+    {ok, Handle} = open(Helper, FileId, read),
     Size = ?config(read_size, Config) * ?MB,
     BlockSize = ?config(read_blk_size, Config) * ?KB,
-    write(Helper, FileId, 0, 0),
+    write(Handle, 0, 0),
     truncate(Helper, FileId, Size),
-    multipart(Helper, fun read/4, FileId, 0, Size, BlockSize),
+    multipart(Handle, fun read/3, 0, Size, BlockSize),
     delete_helper(Helper).
 
 write_unlink_test(Config) ->
@@ -197,9 +186,10 @@ write_unlink_test(Config) ->
     ]).
 write_unlink_test_base(Config) ->
     Helper = new_helper(Config),
-    FileId = random_file_id(),
     lists:foreach(fun(_) ->
-        write(Helper, FileId, 0, ?config(op_size, Config) * ?MB),
+        FileId = random_file_id(),
+        {ok, Handle} = open(Helper, FileId, write),
+        write(Handle, 0, ?config(op_size, Config) * ?MB),
         unlink(Helper, FileId)
     end, lists:seq(1, ?config(op_num, Config))),
     delete_helper(Helper).
@@ -217,31 +207,15 @@ write_read_truncate_unlink_test(Config) ->
     ]).
 write_read_truncate_unlink_test_base(Config) ->
     Helper = new_helper(Config),
-    FileId = random_file_id(),
     lists:foreach(fun(_) ->
-        Content = write(Helper, FileId, 0, ?config(op_size, Config) * ?MB),
-        ?assertEqual(Content, read(Helper, FileId, size(Content))),
+        FileId = random_file_id(),
+        {ok, Handle} = open(Helper, FileId, rdwr),
+        Content = write(Handle, 0, ?config(op_size, Config) * ?MB),
+        ?assertEqual(Content, read(Handle, size(Content))),
         truncate(Helper, FileId, 0),
         unlink(Helper, FileId)
     end, lists:seq(1, ?config(op_num, Config))),
     delete_helper(Helper).
-
-%%%===================================================================
-%%% SetUp and TearDown functions
-%%%===================================================================
-
-init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
-
-end_per_suite(Config) ->
-    ?TEST_STOP(Config).
-
-init_per_testcase(Case, Config) ->
-    ?CASE_START(Case),
-    Config.
-
-end_per_testcase(Case, _Config) ->
-    ?CASE_STOP(Case).
 
 %%%===================================================================
 %%% Internal functions
@@ -251,36 +225,57 @@ new_helper(Config) ->
     process_flag(trap_exit, true),
     [Node | _] = ?config(op_worker_nodes, Config),
     S3Config = ?config(s3, ?config(s3, ?config(storages, Config))),
-    HelperArgs = #{
-        <<"scheme">> => <<"http">>,
-        <<"host_name">> => atom_to_binary(?config(host_name, S3Config), utf8),
-        <<"bucket_name">> => ?S3_BUCKET_NAME
-    },
-    UserCtx = #s3_user_ctx{
-        access_key = atom_to_binary(?config(access_key, S3Config), utf8),
-        secret_key = atom_to_binary(?config(secret_key, S3Config), utf8)
-    },
 
-    spawn_link(Node, fun() ->
-        helper_loop(?S3_HELPER_NAME, HelperArgs, UserCtx)
+    UserCtx = helper:new_s3_user_ctx(
+        atom_to_binary(?config(access_key, S3Config), utf8),
+        atom_to_binary(?config(secret_key, S3Config), utf8)
+    ),
+    Helper = helper:new_s3_helper(
+        atom_to_binary(?config(host_name, S3Config), utf8),
+        ?S3_BUCKET_NAME,
+        false,
+        #{},
+        UserCtx,
+        false
+    ),
+
+    spawn(Node, fun() ->
+        helper_loop(Helper, UserCtx)
     end).
 
 delete_helper(Helper) ->
     Helper ! exit.
 
-helper_loop(HelperName, HelperArgs, UserCtx) ->
-    Ctx = helpers:new_handle(HelperName, HelperArgs),
-    helpers:set_user_ctx(Ctx, UserCtx),
-    helper_loop(Ctx).
+helper_loop(Helper, UserCtx) ->
+    Handle = helpers:get_helper_handle(Helper, UserCtx),
+    helper_loop(Handle).
 
-helper_loop(Ctx) ->
+helper_loop(Handle) ->
     receive
         exit ->
-            exit(normal);
+            ok;
+
+        {Pid, {run_helpers, open, Args}} ->
+            {ok, FileHandle} = apply(helpers, open, [Handle | Args]),
+            HandlePid = spawn_link(fun() -> helper_handle_loop(FileHandle) end),
+            Pid ! {self(), {ok, HandlePid}},
+            helper_loop(Handle);
+
         {Pid, {run_helpers, Method, Args}} ->
-            Pid ! {self(), apply(helpers, Method, [Ctx | Args])}
-    end,
-    helper_loop(Ctx).
+            Pid ! {self(), apply(helpers, Method, [Handle | Args])},
+            helper_loop(Handle)
+    end.
+
+helper_handle_loop(FileHandle) ->
+    process_flag(trap_exit, true),
+    receive
+        {'EXIT', _, _} ->
+            helpers:release(FileHandle);
+
+        {Pid, {run_helpers, Method, Args}} ->
+            Pid ! {self(), apply(helpers, Method, [FileHandle | Args])},
+            helper_handle_loop(FileHandle)
+    end.
 
 call(Helper, Method, Args) ->
     Helper ! {self(), {run_helpers, Method, Args}},
@@ -296,37 +291,27 @@ receive_result(Helper) ->
     end.
 
 random_file_id() ->
-    re:replace(http_utils:base64url_encode(crypto:rand_bytes(?FILE_ID_SIZE)),
+    re:replace(http_utils:base64url_encode(crypto:strong_rand_bytes(?FILE_ID_SIZE)),
         "\\W", "", [global, {return, binary}]).
 
-set_user_ctx(Helper, Config) ->
-    S3Config = ?config(s3, ?config(s3, ?config(storages, Config))),
-    S3UserCtx = #s3_user_ctx{
-        access_key = atom_to_binary(?config(access_key, S3Config), utf8),
-        secret_key = atom_to_binary(?config(secret_key, S3Config), utf8)
-    },
-    call(Helper, set_user_ctx, [S3UserCtx]).
+open(Helper, FileId, Flag) ->
+    call(Helper, open, [FileId, Flag]).
 
-read(Helper, FileId, Size) ->
-    read(Helper, FileId, 0, Size).
+read(FileHandle, Size) ->
+    read(FileHandle, 0, Size).
 
-read(Helper, FileId, Offset, Size) ->
+read(FileHandle, Offset, Size) ->
     {ok, Content} =
-        ?assertMatch({ok, _}, call(Helper, read, [FileId, Offset, Size])),
+        ?assertMatch({ok, _}, call(FileHandle, read, [Offset, Size])),
     Content.
 
-write(Helper, Size) ->
-    write(Helper, 0, Size).
+write(FileHandle, Size) ->
+    write(FileHandle, 0, Size).
 
-write(Helper, Offset, Size) ->
-    FileId = random_file_id(),
-    write(Helper, FileId, Offset, Size).
-
-write(Helper, FileId, Offset, Size) ->
-    Content = crypto:rand_bytes(Size),
+write(FileHandle, Offset, Size) ->
+    Content = crypto:strong_rand_bytes(Size),
     ActualSize = size(Content),
-    ?assertEqual({ok, ActualSize},
-        call(Helper, write, [FileId, Offset, Content])),
+    ?assertEqual({ok, ActualSize}, call(FileHandle, write, [Offset, Content])),
     Content.
 
 truncate(Helper, Size) ->
@@ -342,18 +327,12 @@ unlink(Helper, FileId) ->
 multipart(Helper, Method, Size, BlockSize) ->
     multipart(Helper, Method, 0, Size, BlockSize).
 
-multipart(Helper, Method, Offset, Size, BlockSize) ->
-    FileId = random_file_id(),
-    multipart(Helper, Method, FileId, Offset, Size, BlockSize),
-    FileId.
-
-multipart(_Helper, _Method, _FileId, _Offset, 0, _BlockSize) ->
+multipart(_Helper, _Method, _Offset, 0, _BlockSize) ->
     ok;
-multipart(Helper, Method, FileId, Offset, Size, BlockSize)
+multipart(Helper, Method, Offset, Size, BlockSize)
     when Size >= BlockSize ->
-    Method(Helper, FileId, Offset, BlockSize),
-    multipart(Helper, Method, FileId, Offset + BlockSize, Size - BlockSize,
-        BlockSize);
-multipart(Helper, Method, FileId, Offset, Size, BlockSize) ->
-    Method(Helper, FileId, Offset, Size),
-    multipart(Helper, Method, FileId, Offset + Size, 0, BlockSize).
+    Method(Helper, Offset, BlockSize),
+    multipart(Helper, Method, Offset + BlockSize, Size - BlockSize, BlockSize);
+multipart(Helper, Method, Offset, Size, BlockSize) ->
+    Method(Helper, Offset, Size),
+    multipart(Helper, Method, Offset + Size, 0, BlockSize).

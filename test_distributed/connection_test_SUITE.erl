@@ -27,38 +27,64 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
+-export([all/0, init_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
 
 %%tests
--export([cert_connection_test/1, token_connection_test/1, protobuf_msg_test/1,
-    multi_message_test/1, client_send_test/1, client_communicate_test/1,
-    client_communicate_async_test/1, multi_ping_pong_test/1,
-    sequential_ping_pong_test/1, multi_connection_test/1, bandwidth_test/1,
-    python_client_test/1, proto_version_test/1]).
+-export([
+    cert_connection_test/1,
+    token_connection_test/1,
+    protobuf_msg_test/1,
+    multi_message_test/1,
+    client_send_test/1,
+    client_communicate_test/1,
+    client_communicate_async_test/1,
+    multi_ping_pong_test/1,
+    sequential_ping_pong_test/1,
+    multi_connection_test/1,
+    bandwidth_test/1,
+    python_client_test/1,
+    proto_version_test/1
+]).
 
 %%test_bases
--export([multi_message_test_base/1, multi_ping_pong_test_base/1,
-    sequential_ping_pong_test_base/1, multi_connection_test_base/1,
-    bandwidth_test_base/1, python_client_test_base/1]).
+-export([
+    multi_message_test_base/1,
+    multi_ping_pong_test_base/1,
+    sequential_ping_pong_test_base/1,
+    multi_connection_test_base/1,
+    bandwidth_test_base/1,
+    python_client_test_base/1
+]).
 
 -define(NORMAL_CASES_NAMES, [
-    token_connection_test, cert_connection_test, protobuf_msg_test,
-    multi_message_test, client_send_test, client_communicate_test,
-    client_communicate_async_test, multi_ping_pong_test,
-    sequential_ping_pong_test, multi_connection_test, bandwidth_test,
-    python_client_test, proto_version_test
+    token_connection_test,
+    cert_connection_test,
+    protobuf_msg_test,
+    multi_message_test,
+    client_send_test,
+    client_communicate_test,
+    client_communicate_async_test,
+    multi_ping_pong_test,
+    sequential_ping_pong_test,
+    multi_connection_test,
+    bandwidth_test,
+    python_client_test,
+    proto_version_test
 ]).
 
 -define(PERFORMANCE_CASES_NAMES, [
-    multi_message_test, multi_ping_pong_test, sequential_ping_pong_test,
-    multi_connection_test, bandwidth_test, python_client_test
+    multi_message_test,
+    multi_ping_pong_test,
+    sequential_ping_pong_test,
+    multi_connection_test,
+    bandwidth_test,
+    python_client_test
 ]).
 
 all() -> ?ALL(?NORMAL_CASES_NAMES, ?PERFORMANCE_CASES_NAMES).
 
--define(MACAROON, macaroon:create("a", "b", "c")).
--define(MACAROON_TOKEN, element(2, token_utils:serialize62(?MACAROON))).
+-define(MACAROON, <<"DUMMY-MACAROON">>).
 -define(TIMEOUT, timer:seconds(5)).
 
 %%%===================================================================
@@ -71,7 +97,7 @@ token_connection_test(Config) ->
 
     % then
     {ok, {Sock, _}} = connect_via_token(Worker1),
-    ok = etls:close(Sock).
+    ok = ssl:close(Sock).
 
 % todo VFS-1158 Modify & enable the test after veryfing client certificate.
 cert_connection_test(_Config) ->
@@ -96,23 +122,23 @@ cert_connection_test(_Config) ->
 %%         end),
 %%
 %%     % when
-%%     {ok, Sock} = etls:connect(utils:get_host_as_atom(Worker1), 5555, [binary, {packet, 4},
+%%     {ok, Sock} = ssl:connect(utils:get_host_as_atom(Worker1), 5555, [binary, {packet, 4},
 %%         {active, true}, {certfile, Cert}, {cacertfile, Cert}]),
 %%
 %%     {ok, Pid} = ?assertReceivedMatch(_, ?TIMEOUT),
 %%     State = sys:get_state(Pid),
 %%     #'OTPCertificate'{} = Cert = erlang:element(2, State),
 %%
-%%     ok = etls:send(Sock, HandshakeReqRaw),
+%%     ok = ssl:send(Sock, HandshakeReqRaw),
 %%     ?assertReceivedMatch({ssl, _, RawHandshakeResponse}, ?TIMEOUT),
 %%
 %%     % then
-%%     ?assertEqual(CertDer, etls:peercert(Sock)),
+%%     ?assertEqual(CertDer, ssl:peercert(Sock)),
 %%     HandshakeResponse = messages:decode_msg(RawHandshakeResponse, 'ServerMessage'),
 %%     #'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{session_id =
 %%     SessionId}}} = HandshakeResponse,
 %%     ?assert(is_binary(SessionId)),
-%%     ok = etls:close(Sock),
+%%     ok = ssl:close(Sock),
     ok.
 
 protobuf_msg_test(Config) ->
@@ -120,14 +146,14 @@ protobuf_msg_test(Config) ->
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_expect(Workers, router, preroute_message, fun
         (#client_message{message_body = #events{events = [#event{
-            object = #read_event{}
+            type = #file_read_event{}
         }]}}, _) -> ok
     end),
     Msg = #'ClientMessage'{
         message_id = <<"0">>,
         message_body = {events, #'Events'{events = [#'Event'{
-            counter = 1, object = {read_event, #'ReadEvent'{
-                file_uuid = <<"id">>, size = 1, blocks = []
+            type = {file_read, #'FileReadEvent'{
+                counter = 1, file_uuid = <<"id">>, size = 1, blocks = []
             }}
         }]}}
     },
@@ -135,26 +161,25 @@ protobuf_msg_test(Config) ->
 
     % when
     {ok, {Sock, _}} = connect_via_token(Worker1),
-    ok = etls:send(Sock, RawMsg),
+    ok = ssl:send(Sock, RawMsg),
 
 % then
-    ok = etls:close(Sock).
+    ok = ssl:close(Sock).
 
 multi_message_test(Config) ->
     ?PERFORMANCE(Config, [
-            {repeats, 5},
-            {success_rate, 90},
+        {repeats, 5},
+        {success_rate, 90},
+        {parameters, [
+            [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}],
+            [{name, transport}, {value, ssl}, {description, "Connection transport type."}]
+        ]},
+        {config, [{name, ssl},
             {parameters, [
-                [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}],
-                [{name, transport}, {value, ssl}, {description, "Connection transport type."}]
-            ]},
-            {config, [{name, ssl},
-                {parameters, [
-                    [{name, msg_num}, {value, 100000}]
-                ]}
+                [{name, msg_num}, {value, 100000}]
             ]}
-        ]
-    ).
+        ]}
+    ]).
 multi_message_test_base(Config) ->
     % given
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
@@ -163,8 +188,8 @@ multi_message_test_base(Config) ->
     MsgNumbers = lists:seq(1, MsgNum),
     Events = lists:map(fun(N) ->
         #'ClientMessage'{message_body = {events, #'Events'{events = [#'Event'{
-            counter = N,
-            object = {read_event, #'ReadEvent'{
+            type = {file_read, #'FileReadEvent'{
+                counter = N,
                 file_uuid = <<"id">>,
                 size = 1,
                 blocks = []
@@ -175,7 +200,7 @@ multi_message_test_base(Config) ->
     initializer:remove_pending_messages(),
     test_utils:mock_expect(Workers, router, route_message, fun
         (#client_message{message_body = #events{events = [#event{
-            counter = Counter, object = #read_event{}
+            type = #file_read_event{counter = Counter}
         }]}}) ->
             Self ! Counter,
             ok
@@ -184,7 +209,7 @@ multi_message_test_base(Config) ->
     % when
     {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}]),
     T1 = erlang:monotonic_time(milli_seconds),
-    lists:foreach(fun(E) -> ok = etls:send(Sock, E) end, RawEvents),
+    lists:foreach(fun(E) -> ok = ssl:send(Sock, E) end, RawEvents),
     T2 = erlang:monotonic_time(milli_seconds),
 
     % then
@@ -192,7 +217,7 @@ multi_message_test_base(Config) ->
         ?assertReceivedMatch(N, ?TIMEOUT)
     end, MsgNumbers),
     T3 = erlang:monotonic_time(milli_seconds),
-    ok = etls:close(Sock),
+    ok = ssl:close(Sock),
     [
         #parameter{name = sending_time, value = T2 - T1, unit = "ms"},
         #parameter{name = receiving_time, value = T3 - T2, unit = "ms"},
@@ -222,7 +247,7 @@ client_send_test(Config) ->
 
     % then
     ?assertEqual(ServerMessageProtobuf, receive_server_message()),
-    ok = etls:close(Sock).
+    ok = ssl:close(Sock).
 
 client_communicate_test(Config) ->
     % given
@@ -237,7 +262,7 @@ client_communicate_test(Config) ->
 
     % then
     ?assertMatch({ok, #client_message{message_body = Status}}, CommunicateResult),
-    ok = etls:close(Sock).
+    ok = ssl:close(Sock).
 
 client_communicate_async_test(Config) ->
     % given
@@ -261,8 +286,9 @@ client_communicate_async_test(Config) ->
 
     % given
     test_utils:mock_expect(Workers, router, route_message, fun
-        (#client_message{message_id = Id = #message_id{issuer = server,
+        (#client_message{message_id = Id = #message_id{issuer = Issuer,
             recipient = undefined}}) ->
+            Issuer = oneprovider:get_provider_id(),
             Self ! {router_message_called, Id},
             ok
     end),
@@ -273,26 +299,26 @@ client_communicate_async_test(Config) ->
 
     % then
     ?assertReceivedMatch({router_message_called, MsgId2}, ?TIMEOUT),
-    ok = etls:close(Sock).
+    ok = ssl:close(Sock).
 
 multi_ping_pong_test(Config) ->
     ?PERFORMANCE(Config, [
-            {repeats, 5},
-            {success_rate, 90},
+        {repeats, 5},
+        {success_rate, 90},
+        {parameters, [
+            [{name, connections_num}, {value, 10}, {description, "Number of connections."}],
+            [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}],
+            [{name, transport}, {value, ssl}, {description, "Connection transport type."}]
+        ]},
+        {description, "Opens 'connections_num' connections and for each connection, "
+        "then sends 'msg_num' ping messages and finally receives 'msg_num' pong "
+        "messages."},
+        {config, [{name, ssl},
             {parameters, [
-                [{name, connections_num}, {value, 10}, {description, "Number of connections."}],
-                [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}],
-                [{name, transport}, {value, ssl}, {description, "Connection transport type."}]
-            ]},
-            {description, "Opens 'connections_num' connections and for each connection, "
-            "then sends 'msg_num' ping messages and finally receives 'msg_num' pong "
-            "messages."},
-            {config, [{name, ssl},
-                {parameters, [
-                    [{name, msg_num}, {value, 100000}]
-                ]}
+                [{name, msg_num}, {value, 100000}]
             ]}
-        ]
+        ]}
+    ]
     ).
 multi_ping_pong_test_base(Config) ->
     % given
@@ -315,7 +341,7 @@ multi_ping_pong_test_base(Config) ->
             % when
             {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}]),
             lists:foreach(fun(E) ->
-                ok = etls:send(Sock, E)
+                ok = ssl:send(Sock, E)
             end, RawPings),
             Received = lists:map(fun(_) ->
                 Pong = receive_server_message(),
@@ -329,7 +355,7 @@ multi_ping_pong_test_base(Config) ->
             lists:foreach(fun({Id, #'ServerMessage'{message_id = MsgId}}) ->
                 ?assertEqual(Id, MsgId)
             end, IdToMessage),
-            ok = etls:close(Sock),
+            ok = ssl:close(Sock),
             Self ! success
         end) || _ <- ConnNumbersList
     ],
@@ -341,18 +367,18 @@ multi_ping_pong_test_base(Config) ->
 
 sequential_ping_pong_test(Config) ->
     ?PERFORMANCE(Config, [
-            {repeats, 5},
-            {success_rate, 80},
+        {repeats, 5},
+        {success_rate, 80},
+        {parameters, [
+            [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}]
+        ]},
+        {description, "Opens connection and then sends and receives ping/pong message 'msg_num' times."},
+        {config, [{name, sequential_ping_pong},
             {parameters, [
-                [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}]
-            ]},
-            {description, "Opens connection and then sends and receives ping/pong message 'msg_num' times."},
-            {config, [{name, sequential_ping_pong},
-                {parameters, [
-                    [{name, msg_num}, {value, 100000}]
-                ]}
+                [{name, msg_num}, {value, 100000}]
             ]}
-        ]
+        ]}
+    ]
     ).
 sequential_ping_pong_test_base(Config) ->
     % given
@@ -371,7 +397,7 @@ sequential_ping_pong_test_base(Config) ->
     T1 = erlang:monotonic_time(milli_seconds),
     lists:foldl(fun(E, N) ->
         % send ping
-        ok = etls:send(Sock, E),
+        ok = ssl:send(Sock, E),
 
         % receive & validate pong
         BinaryN = integer_to_binary(N),
@@ -383,25 +409,25 @@ sequential_ping_pong_test_base(Config) ->
     T2 = erlang:monotonic_time(milli_seconds),
 
     % then
-    ok = etls:close(Sock),
+    ok = ssl:close(Sock),
 
     #parameter{name = full_time, value = T2 - T1, unit = "ms"}.
 
 multi_connection_test(Config) ->
-    ?PERFORMANCE(Config,[
-            {repeats, 10},
-            {success_rate, 90},
+    ?PERFORMANCE(Config, [
+        {repeats, 10},
+        {success_rate, 90},
+        {parameters, [
+            [{name, connections_num}, {value, 100}, {description, "Number of connections."}]
+        ]},
+        {description, "Opens 'connections_num' connections to the server, checks "
+        "their state, and closes them."},
+        {config, [{name, multi_connection},
             {parameters, [
-                [{name, connections_num}, {value, 100}, {description, "Number of connections."}]
-            ]},
-            {description, "Opens 'connections_num' connections to the server, checks "
-            "their state, and closes them."},
-            {config, [{name, multi_connection},
-                {parameters, [
-                    [{name, connections_num}, {value, 1000}]
-                ]}
+                [{name, connections_num}, {value, 1000}]
             ]}
-        ]
+        ]}
+    ]
     ).
 multi_connection_test_base(Config) ->
     % given
@@ -421,30 +447,30 @@ multi_connection_test_base(Config) ->
         {ok, {_Sock, SessId}} = ConnectionAns,
         ?assert(is_binary(SessId))
     end, Connections),
-    lists:foreach(fun({ok, {Sock, _}}) -> etls:close(Sock) end, Connections).
+    lists:foreach(fun({ok, {Sock, _}}) -> ssl:close(Sock) end, Connections).
 
 bandwidth_test(Config) ->
     ?PERFORMANCE(Config, [
-            {repeats, 5},
-            {success_rate, 80},
+        {repeats, 5},
+        {success_rate, 80},
+        {parameters, [
+            [{name, packet_size}, {value, 1024}, {unit, "kB"}, {description, "Size of packet."}],
+            [{name, packet_num}, {value, 10}, {description, "Number of packets."}],
+            [{name, transport}, {value, ssl}, {description, "Connection transport type."}]
+        ]},
+        {config, [{name, ssl},
             {parameters, [
-                [{name, packet_size}, {value, 1024}, {unit, "kB"}, {description, "Size of packet."}],
-                [{name, packet_num}, {value, 10}, {description, "Number of packets."}],
-                [{name, transport}, {value, ssl}, {description, "Connection transport type."}]
-            ]},
-            {config, [{name, ssl},
-                {parameters, [
-                    [{name, packet_num}, {value, 1000}]
-                ]}
+                [{name, packet_num}, {value, 1000}]
             ]}
-        ]
+        ]}
+    ]
     ).
 bandwidth_test_base(Config) ->
     % given
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
     PacketSize = ?config(packet_size, Config),
     PacketNum = ?config(packet_num, Config),
-    Data = crypto:rand_bytes(PacketSize * 1024),
+    Data = crypto:strong_rand_bytes(PacketSize * 1024),
     Packet = #'ClientMessage'{message_body = {ping, #'Ping'{data = Data}}},
     PacketRaw = messages:encode_msg(Packet),
 
@@ -461,7 +487,7 @@ bandwidth_test_base(Config) ->
     {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}]),
     T1 = erlang:monotonic_time(milli_seconds),
     lists:foreach(fun(_) ->
-        ok = etls:send(Sock, PacketRaw)
+        ok = ssl:send(Sock, PacketRaw)
     end, lists:seq(1, PacketNum)),
     T2 = erlang:monotonic_time(milli_seconds),
 
@@ -470,7 +496,7 @@ bandwidth_test_base(Config) ->
         ?assertReceivedMatch(router_message_called, ?TIMEOUT)
     end, lists:seq(1, PacketNum)),
     T3 = erlang:monotonic_time(milli_seconds),
-    etls:close(Sock),
+    ssl:close(Sock),
     [
         #parameter{name = sending_time, value = T2 - T1, unit = "ms"},
         #parameter{name = receiving_time, value = T3 - T2, unit = "ms"},
@@ -479,19 +505,19 @@ bandwidth_test_base(Config) ->
 
 python_client_test(Config) ->
     ?PERFORMANCE(Config, [
-            {repeats, 5},
-            {success_rate, 80},
+        {repeats, 5},
+        {success_rate, 80},
+        {parameters, [
+            [{name, packet_size}, {value, 1024}, {unit, "kB"}, {description, "Size of packet."}],
+            [{name, packet_num}, {value, 10}, {description, "Number of packets."}]
+        ]},
+        {description, "Same as bandwidth_test, but with ssl client written in python."},
+        {config, [{name, python_client},
             {parameters, [
-                [{name, packet_size}, {value, 1024}, {unit, "kB"}, {description, "Size of packet."}],
-                [{name, packet_num}, {value, 10}, {description, "Number of packets."}]
-            ]},
-            {description, "Same as bandwidth_test, but with ssl client written in python."},
-            {config, [{name, python_client},
-                {parameters, [
-                    [{name, packet_num}, {value, 1000}]
-                ]}
+                [{name, packet_num}, {value, 1000}]
             ]}
-        ]
+        ]}
+    ]
     ).
 python_client_test_base(Config) ->
     % given
@@ -499,13 +525,13 @@ python_client_test_base(Config) ->
     PacketSize = ?config(packet_size, Config),
     PacketNum = ?config(packet_num, Config),
 
-    Data = crypto:rand_bytes(PacketSize * 1024),
+    Data = crypto:strong_rand_bytes(PacketSize * 1024),
     Packet = #'ClientMessage'{message_body = {ping, #'Ping'{data = Data}}},
     PacketRaw = messages:encode_msg(Packet),
 
     HandshakeMessage = #'ClientMessage'{message_body = {handshake_request,
         #'HandshakeRequest'{session_id = <<"session_id">>, token = #'Token'{
-            value = ?MACAROON_TOKEN
+            value = ?MACAROON
         }}
     }},
     HandshakeMessageRaw = messages:encode_msg(HandshakeMessage),
@@ -557,7 +583,7 @@ proto_version_test(Config) ->
     {ok, {Sock, _}} = connect_via_token(Worker1),
 
     % when
-    ok = etls:send(Sock, GetProtoVersionRaw),
+    ok = ssl:send(Sock, GetProtoVersionRaw),
 
     %then
     #'ServerMessage'{message_body = {_, #'ProtocolVersion'{
@@ -568,23 +594,19 @@ proto_version_test(Config) ->
     }, receive_server_message()),
     ?assert(is_integer(Major)),
     ?assert(is_integer(Minor)),
-    ok = etls:close(Sock).
+    ok = ssl:close(Sock).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]).
+    [{?LOAD_MODULES, [initializer]} | Config].
 
-end_per_suite(Config) ->
-    ?TEST_STOP(Config).
-
-init_per_testcase(cert_connection_test = Case, Config) ->
-    ?CASE_START(Case),
-    initializer:remove_pending_messages(),
+init_per_testcase(cert_connection_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    application:ensure_started(etls),
+    ssl:start(),
+    initializer:remove_pending_messages(),
     test_utils:mock_new(Workers, serializator),
     mock_identity(Workers),
     Config;
@@ -595,47 +617,45 @@ init_per_testcase(Case, Config) when
     Case =:= client_communicate_async_test;
     Case =:= bandwidth_test;
     Case =:= python_client_test ->
-    ?CASE_START(Case),
     Workers = ?config(op_worker_nodes, Config),
+    ssl:start(),
     initializer:remove_pending_messages(),
-    application:ensure_started(etls),
     test_utils:mock_new(Workers, router),
     mock_identity(Workers),
     Config;
 
-init_per_testcase(Case, Config) ->
-    ?CASE_START(Case),
+init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
+    ssl:start(),
     initializer:remove_pending_messages(),
     mock_identity(Workers),
-    application:ensure_started(etls),
     Config.
 
-end_per_testcase(cert_connection_test = Case, Config) ->
-    ?CASE_STOP(Case),
+end_per_testcase(cert_connection_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, [user_identity, serializator]);
+    test_utils:mock_validate_and_unload(Workers, [user_identity, serializator]),
+    ssl:stop();
 
 end_per_testcase(Case, Config) when
     Case =:= protobuf_msg_test;
     Case =:= multi_message_test;
     Case =:= client_communicate_async_test;
     Case =:= bandwidth_test ->
-    ?CASE_STOP(Case),
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, [user_identity, router]);
+    test_utils:mock_validate_and_unload(Workers, [user_identity, router]),
+    ssl:stop();
 
-end_per_testcase(python_client_test = Case, Config) ->
-    ?CASE_STOP(Case),
+end_per_testcase(python_client_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     file:delete(?TEST_FILE(Config, "handshake.arg")),
     file:delete(?TEST_FILE(Config, "message.arg")),
-    test_utils:mock_validate_and_unload(Workers, [user_identity, router]);
+    test_utils:mock_validate_and_unload(Workers, [user_identity, router]),
+    ssl:stop();
 
-end_per_testcase(Case, Config) ->
-    ?CASE_STOP(Case),
+end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, user_identity).
+    test_utils:mock_validate_and_unload(Workers, user_identity),
+    ssl:stop().
 
 %%%===================================================================
 %%% Internal functions
@@ -648,12 +668,12 @@ end_per_testcase(Case, Config) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec connect_via_token(Node :: node()) ->
-    {ok, {Sock :: etls:socket(), SessId :: session:id()}} | no_return().
+    {ok, {Sock :: ssl:socket(), SessId :: session:id()}} | no_return().
 connect_via_token(Node) ->
     connect_via_token(Node, [{active, true}]).
 
 connect_via_token(Node, SocketOpts) ->
-    connect_via_token(Node, SocketOpts, crypto:rand_bytes(10)).
+    connect_via_token(Node, SocketOpts, crypto:strong_rand_bytes(10)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -666,7 +686,7 @@ connect_via_token(Node, SocketOpts, SessId) ->
     % given
     TokenAuthMessage = #'ClientMessage'{message_body = {handshake_request,
         #'HandshakeRequest'{session_id = SessId, token = #'Token'{
-            value = ?MACAROON_TOKEN
+            value = ?MACAROON
         }}
     }},
     TokenAuthMessageRaw = messages:encode_msg(TokenAuthMessage),
@@ -678,10 +698,10 @@ connect_via_token(Node, SocketOpts, SessId) ->
     {ok, Port} = test_utils:get_env(Node, ?APP_NAME, protocol_handler_port),
 
     % when
-    {ok, Sock} = (catch etls:connect(utils:get_host(Node), Port, [binary,
+    {ok, Sock} = (catch ssl:connect(utils:get_host(Node), Port, [binary,
         {packet, 4}, {active, once}, {reuse_sessions, false} | NewSocketOpts
     ], timer:minutes(1))),
-    ok = etls:send(Sock, TokenAuthMessageRaw),
+    ok = ssl:send(Sock, TokenAuthMessageRaw),
 
     % then
     #'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{
@@ -689,7 +709,7 @@ connect_via_token(Node, SocketOpts, SessId) ->
     }}} = ?assertMatch(#'ServerMessage'{message_body = {handshake_response, _}},
         receive_server_message()
     ),
-    etls:setopts(Sock, ActiveOpt),
+    ssl:setopts(Sock, ActiveOpt),
     {ok, {Sock, SessId}}.
 
 %%--------------------------------------------------------------------
@@ -698,13 +718,13 @@ connect_via_token(Node, SocketOpts, SessId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec spawn_ssl_echo_client(NodeToConnect :: node()) ->
-    {ok, {Sock :: etls:socket(), SessId :: session:id()}}.
+    {ok, {Sock :: ssl:socket(), SessId :: session:id()}}.
 spawn_ssl_echo_client(NodeToConnect) ->
     {ok, {Sock, SessionId}} = connect_via_token(NodeToConnect, []),
     SslEchoClient =
         fun Loop() ->
             % receive data from server
-            case etls:recv(Sock, 0) of
+            case ssl:recv(Sock, 0) of
                 {ok, Data} ->
                     % decode
                     #'ServerMessage'{message_id = Id, message_body = Body} =
@@ -717,7 +737,7 @@ spawn_ssl_echo_client(NodeToConnect) ->
                         _ ->
                             ClientAnsProtobuf = #'ClientMessage'{message_id = Id, message_body = Body},
                             ClientAnsRaw = messages:encode_msg(ClientAnsProtobuf),
-                            ?assertEqual(ok, etls:send(Sock, ClientAnsRaw))
+                            ?assertEqual(ok, ssl:send(Sock, ClientAnsRaw))
                     end,
 
                     %loop back
@@ -730,10 +750,9 @@ spawn_ssl_echo_client(NodeToConnect) ->
     {ok, {Sock, SessionId}}.
 
 mock_identity(Workers) ->
-    Macaroon = ?MACAROON,
     test_utils:mock_new(Workers, user_identity),
     test_utils:mock_expect(Workers, user_identity, get_or_fetch,
-        fun(#token_auth{macaroon = M}) when M =:= Macaroon ->
+        fun(#token_auth{token = ?MACAROON}) ->
             {ok, #document{value = #user_identity{}}}
         end
     ).

@@ -21,7 +21,7 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
+-export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([stress_test/1, file_meta_basic_operations_test/1, file_meta_basic_operations_test_base/1, stress_test_base/1,
     many_files_creation_test/1, many_files_creation_test_base/1]).
 
@@ -53,7 +53,7 @@ all() ->
 stress_test(Config) ->
     ?STRESS(Config,[
             {description, "Main stress test function. Links together all cases to be done multiple times as one continous test."},
-            {success_rate, 95},
+            {success_rate, 90}, % Allow errors because of throttling
             {config, [{name, stress}, {description, "Basic config for stress test"}]}
         ]
     ).
@@ -68,7 +68,15 @@ file_meta_basic_operations_test(Config) ->
       ]
     ).
 file_meta_basic_operations_test_base(Config) ->
-  model_file_meta_test_SUITE:basic_operations_test_core(Config, 50).
+    LastFails = ?config(last_fails, Config),
+    case LastFails of
+        0 ->
+            ok;
+        _ ->
+            ct:print("file_meta_basic_operations_test_base: Sleep because of failures: 1 min"),
+            timer:sleep(timer:minutes(1))
+    end,
+    model_file_meta_test_base:basic_operations_test_core(Config, 50).
 
 %%%===================================================================
 
@@ -94,8 +102,8 @@ many_files_creation_test_base(Config) ->
         0 ->
             ok;
         _ ->
-            ct:print("many_files_creation_test_base: Sleep because of failures: ~p sek", [2 * LastFails]),
-            timer:sleep(timer:seconds(2 * LastFails))
+            ct:print("many_files_creation_test_base: Sleep because of failures: 1 min"),
+            timer:sleep(timer:minutes(1))
     end,
 
     [Worker1, Worker2] = Workers = ?config(op_worker_nodes, Config),
@@ -194,28 +202,19 @@ many_files_creation_test_base(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    NewCongig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [model_file_meta_test_SUITE]),
-    Workers = ?config(op_worker_nodes, NewCongig),
+    Posthook = fun(NewConfig) ->
+        Workers = ?config(op_worker_nodes, NewConfig),
+        test_utils:mock_new(Workers, [dbsync_utils]),
+        test_utils:mock_expect(Workers, dbsync_utils, get_providers_for_space,
+            fun(_) -> [] end),
+        NewConfig
+    end,
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [model_file_meta_test_base]} | Config].
 
-    test_utils:mock_new(Workers, [dbsync_utils]),
-    test_utils:mock_expect(Workers, dbsync_utils, get_providers_for_space,
-        fun(_) ->
-            []
-        end),
-
-    NewCongig.
 
 end_per_suite(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, [oneprovider]),
-    ?TEST_STOP(Config).
-
-init_per_testcase(Case, Config) ->
-    ?CASE_START(Case),
-    Config.
-
-end_per_testcase(Case, _Config) ->
-    ?CASE_STOP(Case).
+    test_utils:mock_unload(Workers, [oneprovider]).
 
 %%%===================================================================
 %%% Internal functions
@@ -287,7 +286,7 @@ get_random_string() ->
 
 get_random_string(Length, AllowedChars) ->
     lists:foldl(fun(_, Acc) ->
-        [lists:nth(random:uniform(length(AllowedChars)),
+        [lists:nth(rand:uniform(length(AllowedChars)),
             AllowedChars)]
         ++ Acc
     end, [], lists:seq(1, Length)).

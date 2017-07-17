@@ -92,11 +92,11 @@ stream_cdmi(#{path := Path, auth := Auth} = State, Range, ValueTransferEncoding,
   JsonBodyPrefix, JsonBodySuffix) ->
     {ok, FileHandle} = onedata_file_api:open(Auth, {path, Path} ,read),
     fun(Socket, Transport) ->
-            Transport:send(Socket, JsonBodyPrefix),
-            {ok, BufferSize} = application:get_env(?APP_NAME, download_buffer_size),
-            stream_range(Socket, Transport, State, Range,
-                ValueTransferEncoding, BufferSize, FileHandle),
-            Transport:send(Socket,JsonBodySuffix)
+        Transport:send(Socket, JsonBodyPrefix),
+        {ok, BufferSize} = application:get_env(?APP_NAME, download_buffer_size),
+        stream_range(Socket, Transport, State, Range,
+            ValueTransferEncoding, BufferSize, FileHandle),
+        Transport:send(Socket,JsonBodySuffix)
     end.
 
 %%--------------------------------------------------------------------
@@ -146,11 +146,11 @@ stream_range(Socket, Transport, State, {From, To}, Encoding, BufferSize, FileHan
 -spec write_body_to_file(req(), integer(), onedata_file_api:file_handle()) ->
     {ok, req()}.
 write_body_to_file(Req, Offset, FileHandle) ->
-    WriteFun = fun Write(Req, Offset, FileHandle) ->
+    WriteFun = fun Write(Req, Offset, Handle) ->
         {Status, Chunk, Req1} = cowboy_req:body(Req),
-        {ok, _NewHandle, Bytes} = onedata_file_api:write(FileHandle, Offset, Chunk),
+        {ok, _NewHandle, Bytes} = onedata_file_api:write(Handle, Offset, Chunk),
         case Status of
-            more -> Write(Req1, Offset + Bytes, FileHandle);
+            more -> Write(Req1, Offset + Bytes, Handle);
             ok -> {ok, Req1}
         end
     end,

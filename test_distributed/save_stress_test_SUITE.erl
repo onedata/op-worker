@@ -22,7 +22,7 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
+-export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 -export([stress_test/1, stress_test_base/1, many_files_creation_tree_test/1, many_files_creation_tree_test_base/1,
     single_dir_creation_test/1, single_dir_creation_test_base/1]).
 -export([create_single_call/3]).
@@ -32,7 +32,7 @@
     many_files_creation_tree_test
 ]).
 
--define(TIMEOUT, timer:minutes(5)).
+-define(TIMEOUT, timer:minutes(20)).
 
 all() ->
     ?STRESS_ALL(?STRESS_CASES, ?STRESS_NO_CLEARING_CASES).
@@ -44,7 +44,7 @@ all() ->
 stress_test(Config) ->
     ?STRESS(Config,[
             {description, "Main stress test function. Links together all cases to be done multiple times as one continous test."},
-            {success_rate, 95},
+            {success_rate, 90},
             {config, [{name, stress}, {description, "Basic config for stress test"}]}
         ]
     ).
@@ -56,7 +56,7 @@ stress_test_base(Config) ->
 single_dir_creation_test(Config) ->
     ?PERFORMANCE(Config, [
         {parameters, [
-            [{name, files_num}, {value, 10000}, {description, "Numer of files in dir"}]
+            [{name, files_num}, {value, 1000}, {description, "Numer of files in dir"}]
         ]},
         {description, "Creates files in dir using single process"}
     ]).
@@ -70,7 +70,7 @@ single_dir_creation_test_base(Config) ->
     [{_SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
 
     MainDir = generator:gen_name(),
-    Dir = <<SpaceName/binary, "/", MainDir/binary>>,
+    Dir = <<"/", SpaceName/binary, "/", MainDir/binary>>,
 
     case lfm_proxy:mkdir(Worker, SessId, Dir, 8#755) of
         {ok, _} ->
@@ -95,6 +95,8 @@ single_dir_creation_test_base(Config) ->
             SErrorAvgTime = get_avg(SError, SErrorTime),
             DelAvgTime = get_avg(DelOk, DelTime),
             DErrorAvgTime = get_avg(DError, DErrorTime),
+
+            ct:print("Save num ~p, del num ~p", [SaveOk, DelOk]),
 
             get_final_ans(SaveOk, SaveAvgTime, SError, SErrorAvgTime, DelOk, DelAvgTime, DError, DErrorAvgTime, 0);
         _ ->
@@ -142,7 +144,7 @@ many_files_creation_tree_test_base(Config) ->
         N2 = integer_to_binary(N),
         NewDir = <<H/binary, "/", N2/binary>>,
         [{NewDir, C} | Acc]
-    end, [{SpaceName, false}], Levels),
+    end, [{<<"/", SpaceName/binary>>, false}], Levels),
     [_ | BaseDirs] = lists:reverse(BaseDirsReversed),
 
     BaseCreationAns = lists:foldl(fun
@@ -238,6 +240,17 @@ many_files_creation_tree_test_base(Config) ->
             FinalAns = get_final_ans_tree(Worker, FilesSaved, FilesAvgTime, DirsSaved,
                 DirsAvgTime, OtherAns, OtherAvgTime, 0, Timeout),
 
+            Sum = case get(ok_sum) of
+                undefined ->
+                    0;
+                S ->
+                    S
+            end,
+            NewSum = Sum + FilesSaved + DirsSaved,
+            put(ok_sum, NewSum),
+
+            ct:print("Files num ~p, dirs num ~p, agg ~p", [FilesSaved, DirsSaved, NewSum]),
+
             case NewLevels of
                 StartList ->
                     [stop | FinalAns];
@@ -255,34 +268,27 @@ many_files_creation_tree_test_base(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]).
+    [{?LOAD_MODULES, [initializer]} | Config].
 
-end_per_suite(Config) ->
-    ?TEST_STOP(Config).
-
-init_per_testcase(stress_test = Case, Config) ->
-    ?CASE_START(Case),
-    application:start(etls),
+init_per_testcase(stress_test, Config) ->
+    ssl:start(),
     hackney:start(),
     initializer:disable_quota_limit(Config),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo);
 
-init_per_testcase(Case, Config) ->
-    ?CASE_START(Case),
+init_per_testcase(_Case, Config) ->
     Config.
 
-end_per_testcase(stress_test = Case, Config) ->
-    ?CASE_STOP(Case),
+end_per_testcase(stress_test, Config) ->
     lfm_proxy:teardown(Config),
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:unload_quota_mocks(Config),
     hackney:stop(),
-    application:stop(etls);
+    ssl:stop();
 
-end_per_testcase(Case, Config) ->
-    ?CASE_STOP(Case),
+end_per_testcase(_Case, Config) ->
     Config.
 
 %%%===================================================================
@@ -324,6 +330,13 @@ spawn_workers({Dir, Children}, Fun, Fun2, Level, EndSpawnLevel) ->
 gather_answers(Answers, 0) ->
     {ok, Answers};
 gather_answers(Answers, Num) ->
+    case Num rem 1000 of
+        0 ->
+            ct:print("Gather answers num ~p", [Num]);
+        _ ->
+            ok
+    end,
+
     receive
         {worker_ans, Ans, ToAddV} ->
             {K, _} = ToAdd = case proplists:lookup(Ans, Answers) of

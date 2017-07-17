@@ -65,13 +65,15 @@
 %% {@link gui_route_plugin_behaviour} callback route/1.
 %% @end
 %%--------------------------------------------------------------------
--spec route(Path :: binary()) -> #gui_route{}.
+-spec route(Path :: binary()) -> #gui_route{} | undefined.
 route(<<"/login.html">>) -> ?LOGIN;
 route(<<"/logout.html">>) -> ?LOGOUT;
 route(<<"/validate_login.html">>) -> ?VALIDATE_LOGIN;
 route(<<"/">>) -> ?INDEX;
 route(<<"/index.html">>) -> ?INDEX;
-route(_) -> ?INDEX.
+% Ember-style URLs also point to index file
+route(<<"/#/", _/binary>>) -> ?INDEX;
+route(_) -> undefined.
 
 
 %%--------------------------------------------------------------------
@@ -81,39 +83,43 @@ route(_) -> ?INDEX.
 %%--------------------------------------------------------------------
 -spec data_backend(HasSession :: boolean(), Identifier :: binary()) ->
     HandlerModule :: module().
-data_backend(true, <<"file">>) -> file_data_backend;
-data_backend(true, <<"file-shared">>) -> file_data_backend;
-data_backend(_, <<"file-public">>) -> file_data_backend;
+data_backend(true, <<"user">>) -> user_data_backend;
 
-data_backend(true, <<"file-acl">>) -> file_acl_data_backend;
-
-data_backend(true, <<"file-distribution">>) -> file_distribution_data_backend;
-
-data_backend(true, <<"file-property">>) -> metadata_data_backend;
-data_backend(_, <<"file-property-public">>) -> metadata_data_backend;
-data_backend(true, <<"file-property-shared">>) -> metadata_data_backend;
-
-data_backend(true, <<"data-space">>) -> data_space_data_backend;
+data_backend(true, <<"group">>) -> group_data_backend;
+data_backend(true, <<"group-user-list">>) -> group_data_backend;
+data_backend(true, <<"group-group-list">>) -> group_data_backend;
+data_backend(true, <<"group-user-permission">>) -> group_data_backend;
+data_backend(true, <<"group-group-permission">>) -> group_data_backend;
 
 data_backend(true, <<"space">>) -> space_data_backend;
+data_backend(true, <<"space-user-list">>) -> space_data_backend;
+data_backend(true, <<"space-group-list">>) -> space_data_backend;
 data_backend(true, <<"space-user-permission">>) -> space_data_backend;
 data_backend(true, <<"space-group-permission">>) -> space_data_backend;
 
 data_backend(true, <<"share">>) -> share_data_backend;
 data_backend(_, <<"share-public">>) -> share_data_backend;
 
-data_backend(true, <<"group">>) -> group_data_backend;
-data_backend(true, <<"group-user-permission">>) -> group_data_backend;
-data_backend(true, <<"group-group-permission">>) -> group_data_backend;
+data_backend(true, <<"handle-service">>) -> handle_service_data_backend;
 
 data_backend(true, <<"handle">>) -> handle_data_backend;
 data_backend(_, <<"handle-public">>) -> handle_data_backend;
 
-data_backend(true, <<"handle-service">>) -> handle_service_data_backend;
-
 data_backend(true, <<"system-provider">>) -> system_data_backend;
 data_backend(true, <<"system-user">>) -> system_data_backend;
-data_backend(true, <<"system-group">>) -> system_data_backend.
+data_backend(true, <<"system-group">>) -> system_data_backend;
+
+data_backend(true, <<"file">>) -> file_data_backend;
+data_backend(true, <<"file-shared">>) -> file_data_backend;
+data_backend(_, <<"file-public">>) -> file_data_backend;
+
+data_backend(true, <<"file-permission">>) -> file_permissions_data_backend;
+
+data_backend(true, <<"file-distribution">>) -> file_distribution_data_backend;
+
+data_backend(true, <<"file-property">>) -> metadata_data_backend;
+data_backend(_, <<"file-property-public">>) -> metadata_data_backend;
+data_backend(true, <<"file-property-shared">>) -> metadata_data_backend.
 
 
 %%--------------------------------------------------------------------
@@ -142,14 +148,25 @@ public_rpc_backend() -> public_rpc_backend.
 -spec session_details() ->
     {ok, proplists:proplist()} | gui_error:error_result().
 session_details() ->
+    ProviderId = oneprovider:get_provider_id(),
     {ok, #document{
-        value = #od_user{
-            name = Name
-        }}} = od_user:get(g_session:get_user_id()),
+        value = #od_provider{
+            client_name = ProviderName
+        }}} = od_provider:get_or_fetch(ProviderId),
+    {_AppId, _AppName, AppVersion} = lists:keyfind(
+        ?APP_NAME, 1, application:loaded_applications()
+    ),
     Res = [
-        {<<"userName">>, Name},
+        {<<"userId">>, gui_session:get_user_id()},
+        {<<"providerId">>, ProviderId},
+        {<<"providerName">>, ProviderName},
+        {<<"onezoneURL">>,
+            str_utils:to_binary(oneprovider:get_oz_url())
+        },
         {<<"manageProvidersURL">>,
-            str_utils:to_binary(oneprovider:get_oz_providers_page())}
+            str_utils:to_binary(oneprovider:get_oz_providers_page())
+        },
+        {<<"serviceVersion">>, str_utils:to_binary(AppVersion)}
     ],
     {ok, Res}.
 

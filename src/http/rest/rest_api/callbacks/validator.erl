@@ -22,6 +22,7 @@
 -define(DEFAULT_TIMEOUT, <<"infinity">>).
 -define(DEFAULT_LAST_SEQ, <<"now">>).
 -define(DEFAULT_OFFSET, <<"0">>).
+-define(DEFAULT_SPATIAL, <<"false">>).
 
 -define(MAX_LIMIT, 1000).
 
@@ -33,7 +34,8 @@
     parse_status/2, parse_metadata_type/2, parse_name/2, parse_query_space_id/2,
     parse_function/2, parse_bbox/2, parse_descending/2, parse_endkey/2, parse_key/2,
     parse_keys/2, parse_skip/2, parse_stale/2, parse_limit/2, parse_inclusive_end/2,
-    parse_startkey/2, parse_filter/2, parse_filter_type/2, parse_inherited/2]).
+    parse_startkey/2, parse_filter/2, parse_filter_type/2, parse_inherited/2,
+    parse_spatial/2, parse_start_range/2, parse_end_range/2]).
 
 %% TODO VFS-2574 Make validation of result map
 -type parse_result() :: maps:map().
@@ -86,10 +88,10 @@ parse_id(Req, State) ->
     {parse_result(), cowboy_req:req()}.
 parse_objectid(Req, State) ->
     {Id, NewReq} = cowboy_req:binding(id, Req),
-    case catch cdmi_id:objectid_to_uuid(Id) of
+    case catch cdmi_id:objectid_to_guid(Id) of
         {ok, Guid} ->
             {State#{id => Guid}, NewReq};
-        Error ->
+        _Error ->
             throw(?ERROR_INVALID_OBJECTID)
     end.
 
@@ -166,7 +168,7 @@ parse_attribute_body(Req, State = #{extended := Extended}) ->
             end;
         {[{_Attr, _Value}], false} ->
             throw(?ERROR_INVALID_ATTRIBUTE);
-        {[{Attr, Value}], true} when not is_binary(Attr) ->
+        {[{Attr, _Value}], true} when not is_binary(Attr) ->
             throw(?ERROR_INVALID_ATTRIBUTE_NAME);
         {[{Attr, Value}], true} ->
             {State#{attribute_body => {Attr, Value}}, Req2};
@@ -251,11 +253,12 @@ parse_timeout(Req, State) ->
 %%--------------------------------------------------------------------
 -spec parse_last_seq(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
-parse_last_seq(Req, State) ->
+parse_last_seq(Req, #{space_id := SpaceId} = State) ->
     {RawLastSeq, NewReq} = cowboy_req:qs_val(<<"last_seq">>, Req, ?DEFAULT_LAST_SEQ),
     case RawLastSeq of
         <<"now">> ->
-            {State#{last_seq => dbsync_worker:state_get(global_resume_seq)}, NewReq};
+            LastSeq = dbsync_state2:get_seq(SpaceId, oneprovider:get_provider_id()),
+            {State#{last_seq => LastSeq}, NewReq};
         Number ->
             try binary_to_integer(Number) of
                 LastSeq ->
@@ -377,6 +380,24 @@ parse_function(Req, State) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Retrieves request's spatial param and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_spatial(cowboy_req:req(), maps:map()) ->
+    {parse_result(), cowboy_req:req()}.
+parse_spatial(Req, State) ->
+    {Spatial, NewReq} = cowboy_req:qs_val(<<"spatial">>, Req, ?DEFAULT_SPATIAL),
+    case Spatial of
+        <<"true">> ->
+            {State#{spatial => true}, NewReq};
+        <<"false">> ->
+            {State#{spatial => false}, NewReq};
+        _ ->
+            throw(?ERROR_INVALID_EXTENDED_FLAG)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Retrieves request's bbox param and adds it to State.
 %% @end
 %%--------------------------------------------------------------------
@@ -384,6 +405,21 @@ parse_function(Req, State) ->
     {parse_result(), cowboy_req:req()}.
 parse_bbox(Req, State) ->
     {Val, NewReq} = cowboy_req:qs_val(<<"bbox">>, Req),
+    try
+        case Val of
+            undefined ->
+                ok;
+            _ ->
+                [W, S, E, N] = binary:split(Val, <<",">>, [global]),
+                true = is_float(catch binary_to_float(W)) orelse is_integer(catch binary_to_integer(W)),
+                true = is_float(catch binary_to_float(S)) orelse is_integer(catch binary_to_integer(S)),
+                true = is_float(catch binary_to_float(E)) orelse is_integer(catch binary_to_integer(E)),
+                true = is_float(catch binary_to_float(N)) orelse is_integer(catch binary_to_integer(N))
+        end
+    catch
+        _:_  ->
+            throw(?ERROR_INVALID_BBOX)
+    end,
     {State#{bbox => Val}, NewReq}.
 
 %%--------------------------------------------------------------------
@@ -485,6 +521,28 @@ parse_stale(Req, State) ->
 parse_startkey(Req, State) ->
     {Val, NewReq} = cowboy_req:qs_val(<<"startkey">>, Req),
     {State#{startkey => Val}, NewReq}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's start_range param and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_start_range(cowboy_req:req(), maps:map()) ->
+    {parse_result(), cowboy_req:req()}.
+parse_start_range(Req, State) ->
+    {Val, NewReq} = cowboy_req:qs_val(<<"start_range">>, Req),
+    {State#{start_range => Val}, NewReq}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's end_range param and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_end_range(cowboy_req:req(), maps:map()) ->
+    {parse_result(), cowboy_req:req()}.
+parse_end_range(Req, State) ->
+    {Val, NewReq} = cowboy_req:qs_val(<<"end_range">>, Req),
+    {State#{end_range => Val}, NewReq}.
 
 %%--------------------------------------------------------------------
 %% @doc
