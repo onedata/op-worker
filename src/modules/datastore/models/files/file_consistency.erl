@@ -265,10 +265,11 @@ check_missing_components(FileUuid, SpaceId, [times | RestMissing], Found) ->
             check_missing_components(FileUuid, SpaceId, RestMissing, Found)
     end;
 check_missing_components(FileUuid, SpaceId, [local_file_location | RestMissing], Found) ->
-    case catch file_meta:get_local_locations(FileUuid) of
-        [#document{}] ->
+    FileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId)),
+    case catch file_ctx:get_local_file_location_docs(FileCtx) of
+        {[#document{}], _FileCtx2} ->
             check_missing_components(FileUuid, SpaceId, RestMissing, [local_file_location | Found]);
-        _ ->
+        {_, _FileCtx2} ->
             check_missing_components(FileUuid, SpaceId, RestMissing, Found)
     end;
 check_missing_components(FileUuid, SpaceId, [parent_links | RestMissing], Found) ->

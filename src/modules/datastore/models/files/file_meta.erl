@@ -40,7 +40,7 @@
 -export([resolve_path/1, resolve_path/2, create/2, create/3, get_scope/1,
     get_scope_id/1, list_children/3, get_parent/1, get_parent_uuid/1,
     get_parent_uuid/2, setup_onedata_user/2, get_name/1, get_including_deleted/1]).
--export([get_ancestors/1, attach_location/3, get_local_locations/1,
+-export([get_ancestors/1, attach_location/3,
     get_locations_by_uuid/1, location_ref/1, rename/4]).
 -export([to_uuid/1]).
 -export([fix_parent_links/2, fix_parent_links/1, exists_local_link_doc/1,
@@ -611,22 +611,6 @@ foreach_child(Entry, Fun, AccIn) ->
                     Fun(LinkName, LinkTarget, AccIn)
             end, AccIn])
     end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of documents of local file locations
-%% @end
-%%--------------------------------------------------------------------
--spec get_local_locations(file_meta:uuid()) ->
-    [datastore:document()] | no_return().
-get_local_locations(FileUuid) ->
-    LProviderId = oneprovider:get_provider_id(),
-    {ok, LocIds} = file_meta:get_locations_by_uuid(FileUuid),
-    Locations = [file_location:get(LocId) || LocId <- LocIds],
-    [Location ||
-        {ok, Location = #document{value = #file_location{provider_id = ProviderId}}}
-            <- Locations, LProviderId =:= ProviderId
-    ].
 
 %%--------------------------------------------------------------------
 %% @doc
