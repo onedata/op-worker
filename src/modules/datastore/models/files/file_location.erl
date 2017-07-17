@@ -17,10 +17,12 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+% API
+-export([local_id/1, critical_section/2, save_and_bump_version/1]).
+
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, delete/2, update/2, create/1, model_init/0,
     'after'/5, before/4]).
--export([critical_section/2, save_and_bump_version/1]).
 -export([record_struct/1, record_upgrade/2]).
 
 -type id() :: binary().
@@ -83,6 +85,15 @@ record_upgrade(2, {?MODEL_NAME, Uuid, ProviderId, StorageId, FileId, Blocks,
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Return id of local file location
+%% @end
+%%--------------------------------------------------------------------
+-spec local_id(file_meta:uuid()) -> file_location:id().
+local_id(FileUuid) ->
+    datastore_utils2:gen_key(oneprovider:get_provider_id(), FileUuid).
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -41,7 +41,7 @@
     get_scope_id/1, list_children/3, get_parent/1, get_parent_uuid/1,
     get_parent_uuid/2, setup_onedata_user/2, get_name/1, get_including_deleted/1]).
 -export([get_ancestors/1, attach_location/3, get_local_locations/1,
-    get_locations/1, get_locations_by_uuid/1, location_ref/1, rename/4]).
+    get_locations_by_uuid/1, location_ref/1, rename/4]).
 -export([to_uuid/1]).
 -export([fix_parent_links/2, fix_parent_links/1, exists_local_link_doc/1,
     get_child/2, delete_child_link/2, foreach_child/3]).
@@ -617,13 +617,11 @@ foreach_child(Entry, Fun, AccIn) ->
 %% Returns list of documents of local file locations
 %% @end
 %%--------------------------------------------------------------------
--spec get_local_locations(fslogic_worker:ext_file()) ->
+-spec get_local_locations(file_meta:uuid()) ->
     [datastore:document()] | no_return().
-get_local_locations({guid, FileGUID}) ->
-    get_local_locations({uuid, fslogic_uuid:guid_to_uuid(FileGUID)});
-get_local_locations(Entry) ->
+get_local_locations(FileUuid) ->
     LProviderId = oneprovider:get_provider_id(),
-    {ok, LocIds} = file_meta:get_locations(Entry),
+    {ok, LocIds} = file_meta:get_locations_by_uuid(FileUuid),
     Locations = [file_location:get(LocId) || LocId <- LocIds],
     [Location ||
         {ok, Location = #document{value = #file_location{provider_id = ProviderId}}}
@@ -635,38 +633,21 @@ get_local_locations(Entry) ->
 %% Returns file's locations attached with attach_location/3.
 %% @end
 %%--------------------------------------------------------------------
--spec get_locations(entry()) -> {ok, [file_location:id()]} | datastore:get_error().
-get_locations(Entry) ->
-    ?run(begin
-        case get(Entry) of
-            {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}}} ->
-                {ok, []};
-            {ok, File} ->
-                model:execute_with_default_context(?MODULE, foreach_link, [File,
-                    fun
-                        (<<?LOCATION_PREFIX, _/binary>>, {_V, [{_, _, Key, file_location}]}, AccIn) ->
-                            [Key | AccIn];
-                        (_LinkName, _LinkTarget, AccIn) ->
-                            AccIn
-                    end, []])
-        end
-    end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns file's locations attached with attach_location/3.
-%% @end
-%%--------------------------------------------------------------------
 -spec get_locations_by_uuid(uuid()) -> {ok, [file_location:id()]} | datastore:get_error().
 get_locations_by_uuid(Uuid) ->
     ?run(begin
-        model:execute_with_default_context(?MODULE, foreach_link, [Uuid,
-            fun
-                (<<?LOCATION_PREFIX, _/binary>>, {_V, [{_, _, Key, file_location}]}, AccIn) ->
-                    [Key | AccIn];
-                (_LinkName, _LinkTarget, AccIn) ->
-                    AccIn
-            end, []])
+        case get(Uuid) of
+            {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}}} ->
+                {ok, []};
+            _ ->
+                model:execute_with_default_context(?MODULE, foreach_link, [Uuid,
+                fun
+                    (<<?LOCATION_PREFIX, _/binary>>, {_V, [{_, _, Key, file_location}]}, AccIn) ->
+                        [Key | AccIn];
+                    (_LinkName, _LinkTarget, AccIn) ->
+                        AccIn
+                end, []])
+        end
     end).
 
 %%--------------------------------------------------------------------

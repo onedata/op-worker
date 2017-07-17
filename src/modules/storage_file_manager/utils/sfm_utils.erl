@@ -150,7 +150,10 @@ create_storage_file_location(FileCtx, StorageFileCreated) ->
         space_id = SpaceId,
         storage_file_created = StorageFileCreated
     },
-    {ok, LocId} = file_location:create(#document{value = Location}),
+    {ok, LocId} = file_location:create(#document{
+        key = file_location:local_id(FileUuid),
+        value = Location
+    }),
     ok = file_meta:attach_location({uuid, FileUuid}, LocId, oneprovider:get_provider_id()),
     {Location, file_ctx:add_file_location(FileCtx3, LocId)}.
 

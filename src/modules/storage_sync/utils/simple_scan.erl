@@ -334,7 +334,7 @@ is_imported(StorageId, CanonicalPath, ?REGULAR_FILE_TYPE, #fuse_response{
     status = #status{code = ?OK},
     fuse_response = #file_attr{type = ?REGULAR_FILE_TYPE, guid = FileGuid}
 }) ->
-    case file_meta:get_local_locations({guid, FileGuid}) of
+    case file_meta:get_local_locations(fslogic_uuid:guid_to_uuid(FileGuid)) of
         [] ->
             false;
         [#document{

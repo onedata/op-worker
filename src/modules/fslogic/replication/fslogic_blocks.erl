@@ -87,38 +87,22 @@ lower([]) ->
 %% For given file / location or multiple locations, reads file size assigned to those locations.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_size(file_ctx:ctx() | datastore:document() | [datastore:document()]
-| #file_location{} | [#file_location{}] | fslogic_worker:file()) ->
+-spec get_file_size(file_ctx:ctx() | file_meta:uuid()) ->
     Size :: non_neg_integer() | no_return().
-get_file_size(#document{value = #file_location{} = Value}) ->
-    get_file_size(Value);
-get_file_size(#document{value = #file_meta{type = ?DIRECTORY_TYPE}}) ->
-    0;
-get_file_size(#document{value = #file_meta{type = ?SYMLINK_TYPE}}) ->
-    0;
-get_file_size(#file_location{size = undefined, blocks = Blocks}) ->
+get_file_size(#document{value = #file_location{size = undefined, blocks = Blocks}}) ->
     upper(Blocks);
-get_file_size(#file_location{size = Size}) ->
+get_file_size(#document{value = #file_location{size = Size}}) ->
     Size;
-get_file_size([Location]) ->
-    get_file_size(Location);
-get_file_size([Location | T]) ->
-    max(get_file_size(Location), get_file_size(T));
-get_file_size([]) ->
-    throw(locations_not_found);
-get_file_size(Entry) ->
-    case file_ctx:is_file_ctx_const(Entry) of
-        true ->
-            case file_ctx:is_dir(Entry) of
-                {true, _FileCtx2} -> %todo return FileCtx from this funciton
-                    0;
-                {false, FileCtx2} ->
-                    {LocalLocations, _FileCtx3} = file_ctx:get_local_file_location_docs(FileCtx2),
-                    get_file_size(LocalLocations)
-            end;
-        false ->
-            LocalLocations = file_meta:get_local_locations(Entry),
-            get_file_size(LocalLocations)
+get_file_size(FileUuid) when is_binary(FileUuid) ->
+    [LocalLocation] = file_meta:get_local_locations(FileUuid),
+    get_file_size(LocalLocation);
+get_file_size(FileCtx) ->
+    case file_ctx:is_dir(FileCtx) of
+        {true, _FileCtx2} -> %todo return FileCtx from this funciton
+            0;
+        {false, FileCtx2} ->
+            {[LocalLocation], _FileCtx3} = file_ctx:get_local_file_location_docs(FileCtx2),
+            get_file_size(LocalLocation)
     end.
 
 %%--------------------------------------------------------------------

@@ -506,7 +506,7 @@ open_insecure(#sfm_handle{
 %%--------------------------------------------------------------------
 -spec get_size({uuid, file_meta:uuid()}) -> non_neg_integer().
 get_size({uuid, FileUuid}) ->
-    case catch fslogic_blocks:get_file_size({uuid, FileUuid}) of %todo use FileCtx
+    case catch fslogic_blocks:get_file_size(FileUuid) of %todo use FileCtx
         Size0 when is_integer(Size0) ->
             Size0;
         _ -> 0
