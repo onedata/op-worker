@@ -22,8 +22,7 @@
 -export_type([block/0, blocks/0]).
 
 %% API
--export([merge/2, aggregate/2, consolidate/1, invalidate/2, get_file_size/1, upper/1,
-    lower/1]).
+-export([merge/2, aggregate/2, consolidate/1, invalidate/2, upper/1, lower/1]).
 
 %%%===================================================================
 %%% API
@@ -81,25 +80,6 @@ lower([_ | _] = Blocks) ->
     lists:min([lower(Block) || Block <- Blocks]);
 lower([]) ->
     0.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% For given file / location or multiple locations, reads file size assigned to those locations.
-%% @end
-%%--------------------------------------------------------------------
--spec get_file_size(file_ctx:ctx() | file_meta:uuid()) ->
-    Size :: non_neg_integer() | no_return().
-get_file_size(#document{value = #file_location{size = undefined, blocks = Blocks}}) ->
-    upper(Blocks);
-get_file_size(#document{value = #file_location{size = Size}}) ->
-    Size;
-get_file_size(FileCtx) ->
-    case file_ctx:get_local_file_location_docs(FileCtx) of
-        {[LocalLocation], _FileCtx2} ->
-            get_file_size(LocalLocation);
-        {[], _FileCtx2} ->
-            0
-    end.
 
 %%--------------------------------------------------------------------
 %% @doc

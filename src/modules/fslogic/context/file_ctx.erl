@@ -68,7 +68,7 @@
     get_storage_id/1, get_storage_doc/1, get_file_location_with_filled_gaps/2,
     get_local_file_location_docs/1, get_file_location_docs/1,
     get_file_location_ids/1, get_acl/1, get_raw_storage_path/1,
-    get_child_canonical_path/2]).
+    get_child_canonical_path/2, get_file_size/1]).
 -export([is_dir/1]).
 
 %%%===================================================================
@@ -627,6 +627,27 @@ get_acl(FileCtx = #file_ctx{acl = undefined}) ->
     {Acl, FileCtx#file_ctx{acl = Acl}};
 get_acl(FileCtx = #file_ctx{acl = Acl}) ->
     {Acl, FileCtx}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% For given file / location or multiple locations, reads file size assigned to those locations.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_size(file_ctx:ctx() | file_meta:uuid()) ->
+    Size :: non_neg_integer() | no_return().
+get_file_size(#document{value = #file_location{size = undefined, blocks = Blocks}}) ->
+    fslogic_blocks:upper(Blocks);
+get_file_size(#document{value = #file_location{size = Size}}) ->
+    Size;
+get_file_size(FileCtx) ->
+    case file_ctx:get_local_file_location_docs(FileCtx) of
+        {[#document{value = #file_location{size = undefined, blocks = Blocks}}], FileCtx2} ->
+            {fslogic_blocks:upper(Blocks), FileCtx2};
+        {[#document{value = #file_location{size = Size}}], FileCtx2} ->
+            {Size, FileCtx2};
+        {[], FileCtx2} ->
+            {0 ,FileCtx2}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

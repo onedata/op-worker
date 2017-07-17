@@ -70,6 +70,6 @@ truncate_insecure(UserCtx, FileCtx, Size) ->
 -spec update_quota(file_ctx:ctx(), file_meta:size()) -> NewFileCtx :: file_ctx:ctx().
 update_quota(FileCtx, Size) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    OldSize = fslogic_blocks:get_file_size(FileCtx),
+    {OldSize, FileCtx2} = file_ctx:get_file_size(FileCtx),
     ok = space_quota:assert_write(SpaceId, Size - OldSize),
-    FileCtx.
+    FileCtx2.

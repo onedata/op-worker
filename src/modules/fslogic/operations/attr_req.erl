@@ -69,9 +69,9 @@ get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles) ->
     {FileName, FileCtx3} = file_ctx:get_aliased_name(FileCtx2, UserCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx3),
     {{Uid, Gid}, FileCtx4} = file_ctx:get_posix_storage_user_context(FileCtx3),
-    Size = fslogic_blocks:get_file_size(FileCtx4),
-    {ParentGuid, FileCtx5} = file_ctx:get_parent_guid(FileCtx4, UserCtx),
-    {{ATime, CTime, MTime}, _FileCtx6} = file_ctx:get_times(FileCtx5),
+    {Size, FileCtx5} = file_ctx:get_file_size(FileCtx4),
+    {ParentGuid, FileCtx6} = file_ctx:get_parent_guid(FileCtx5, UserCtx),
+    {{ATime, CTime, MTime}, _FileCtx7} = file_ctx:get_times(FileCtx6),
 
     #fuse_response{status = #status{code = ?OK}, fuse_response = #file_attr{
         uid = Uid, gid = Gid, parent_uuid = ParentGuid,

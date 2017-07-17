@@ -34,7 +34,7 @@
 -spec synchronize_block(user_ctx:ctx(), file_ctx:ctx(), fslogic_blocks:block(), Prefetch :: boolean()) ->
     fslogic_worker:fuse_response().
 synchronize_block(UserCtx, FileCtx, undefined, Prefetch) ->
-    Size = fslogic_blocks:get_file_size(FileCtx),
+    {Size, _FileCtx2} = file_ctx:get_file_size(FileCtx),
     synchronize_block(UserCtx, FileCtx, #file_block{offset = 0, size = Size}, Prefetch);
 synchronize_block(UserCtx, FileCtx, Block, Prefetch) ->
     ok = replica_synchronizer:synchronize(UserCtx, FileCtx, Block, Prefetch),
