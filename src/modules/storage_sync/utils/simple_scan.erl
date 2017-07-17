@@ -335,14 +335,14 @@ is_imported(StorageId, CanonicalPath, ?REGULAR_FILE_TYPE, #fuse_response{
     fuse_response = #file_attr{type = ?REGULAR_FILE_TYPE, guid = FileGuid}
 }) ->
     FileCtx = file_ctx:new_by_guid(FileGuid),
-    case file_ctx:get_local_file_location_docs(FileCtx) of
-        {[], _FileCtx2} ->
+    case file_ctx:get_local_file_location_doc(FileCtx) of
+        {undefined, _FileCtx2} ->
             false;
-        {[#document{
+        {#document{
             value = #file_location{
                 storage_id = SID,
                 file_id = FID
-        }}], _FileCtx2} ->
+        }}, _FileCtx2} ->
             (StorageId == SID) andalso (CanonicalPath == FID)
     end;
 is_imported(_StorageId, _CanonicalPath, _FileType, #fuse_response{

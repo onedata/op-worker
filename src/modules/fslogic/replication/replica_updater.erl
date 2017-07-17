@@ -40,11 +40,11 @@ update(FileCtx, Blocks, FileSize, BumpVersion) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     file_location:critical_section(FileUuid,
         fun() ->
-            {[Location = #document{ %todo VFS-2813 support multi location, get location as argument, instead of operating on first one
+            {Location = #document{
                 value = #file_location{
                     size = OldSize
                 }
-            }], _FileCtx2} = file_ctx:get_local_file_location_docs(file_ctx:reset(FileCtx)), % TODO - better reset in ALL critical sections
+            }, _FileCtx2} = file_ctx:get_local_file_location_doc(file_ctx:reset(FileCtx)), % TODO - better reset in ALL critical sections
             UpdatedLocation = append(Location, Blocks, BumpVersion),
 
             case FileSize of
@@ -59,7 +59,6 @@ update(FileCtx, Blocks, FileSize, BumpVersion) ->
                     file_location:save(TruncatedLocation),
                     {ok, size_changed}
             end
-            % todo VFS-2813 support multi location, reconcile other local replicas according to this one
         end).
 
 
@@ -76,7 +75,7 @@ rename(FileCtx, TargetFileId) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     file_location:critical_section(FileUuid,
         fun() ->
-            {[LocationDoc], _FileCtx2} = file_ctx:get_local_file_location_docs(file_ctx:reset(FileCtx)),
+            {LocationDoc, _FileCtx2} = file_ctx:get_local_file_location_doc(file_ctx:reset(FileCtx)),
 
             replica_changes:set_last_rename(
                 version_vector:bump_version(

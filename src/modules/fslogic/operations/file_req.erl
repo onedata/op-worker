@@ -187,9 +187,11 @@ make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
 get_file_location_insecure(_UserCtx, FileCtx) ->
     throw_if_not_exists(FileCtx),
     {#document{key = StorageId}, FileCtx2} = file_ctx:get_storage_doc(FileCtx),
-    {[#document{value = #file_location{
-        blocks = Blocks, file_id = FileId
-    }}], FileCtx3} = file_ctx:get_local_file_location_docs(FileCtx2),
+    {#document{
+        value = #file_location{
+            blocks = Blocks,
+            file_id = FileId
+    }}, FileCtx3} = file_ctx:get_local_file_location_doc(FileCtx2),
     FileUuid = file_ctx:get_uuid_const(FileCtx3),
     SpaceId = file_ctx:get_space_id_const(FileCtx3),
 

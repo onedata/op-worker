@@ -94,8 +94,8 @@ create_storage_file_if_not_exists(FileCtx) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     file_location:critical_section(FileUuid,
         fun() ->
-            case file_ctx:get_local_file_location_docs(file_ctx:reset(FileCtx)) of
-                {[], _} ->
+            case file_ctx:get_local_file_location_doc(file_ctx:reset(FileCtx)) of
+                {undefined, _} ->
                     {_, _FileCtx2} = create_storage_file_location(FileCtx, false),
                     ok;
                 _ ->
@@ -110,10 +110,10 @@ create_storage_file_if_not_exists(FileCtx) ->
 %%--------------------------------------------------------------------
 -spec create_delayed_storage_file(file_ctx:ctx()) -> file_ctx:ctx().
 create_delayed_storage_file(FileCtx) ->
-    {[#document{
+    {#document{
         key = FileLocationId,
         value = #file_location{storage_file_created = StorageFileCreated}
-    }], FileCtx2} = file_ctx:get_local_file_location_docs(FileCtx),
+    }, FileCtx2} = file_ctx:get_local_file_location_doc(FileCtx),
 
     case StorageFileCreated of
         false ->
@@ -182,8 +182,9 @@ create_storage_file(UserCtx, FileCtx) ->
 -spec delete_storage_file(file_ctx:ctx(), user_ctx:ctx()) ->
     ok | {error, term()}.
 delete_storage_file(FileCtx, UserCtx) ->
-    FileLocationId = delete_storage_file_without_location(FileCtx, UserCtx),
-    file_location:delete(FileLocationId).
+    delete_storage_file_without_location(FileCtx, UserCtx),
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    file_location:delete(file_location:local_id(FileUuid)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -191,14 +192,11 @@ delete_storage_file(FileCtx, UserCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_storage_file_without_location(file_ctx:ctx(), user_ctx:ctx()) ->
-    datastore:ext_key().
+    ok | {error, term()}.
 delete_storage_file_without_location(FileCtx, UserCtx) ->
-    {[#document{key = FileLocationId}], FileCtx2} =
-        file_ctx:get_local_file_location_docs(FileCtx),
     SessId = user_ctx:get_session_id(UserCtx),
-    {SFMHandle, _} = storage_file_manager:new_handle(SessId, FileCtx2),
-    storage_file_manager:unlink(SFMHandle),
-    FileLocationId.
+    {SFMHandle, _} = storage_file_manager:new_handle(SessId, FileCtx),
+    storage_file_manager:unlink(SFMHandle).
 
 %%--------------------------------------------------------------------
 %% @doc

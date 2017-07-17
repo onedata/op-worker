@@ -66,7 +66,7 @@
     get_aliased_name/2, get_posix_storage_user_context/1, get_times/1,
     get_parent_guid/2, get_child/3, get_file_children/4, get_logical_path/2,
     get_storage_id/1, get_storage_doc/1, get_file_location_with_filled_gaps/2,
-    get_local_file_location_docs/1, get_file_location_docs/1,
+    get_local_file_location_doc/1, get_file_location_docs/1,
     get_file_location_ids/1, get_acl/1, get_raw_storage_path/1,
     get_child_canonical_path/2, get_file_size/1]).
 -export([is_dir/1]).
@@ -536,11 +536,11 @@ get_storage_doc(FileCtx = #file_ctx{storage_doc = StorageDoc}) ->
 get_file_location_with_filled_gaps(FileCtx, ReqRange) ->
     % get locations
     {Locations, FileCtx2} = file_ctx:get_file_location_docs(FileCtx),
-    {[#document{value = FileLocation = #file_location{
+    {#document{value = FileLocation = #file_location{
             blocks = Blocks,
             size = Size
         }
-    }], FileCtx3} = file_ctx:get_local_file_location_docs(FileCtx2),
+    }, FileCtx3} = file_ctx:get_local_file_location_doc(FileCtx2),
 
     % find gaps
     AllRanges = lists:foldl(
@@ -566,20 +566,22 @@ get_file_location_with_filled_gaps(FileCtx, ReqRange) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns local file location docs.
+%% Returns local file location doc.
 %% @end
 %%--------------------------------------------------------------------
--spec get_local_file_location_docs(ctx()) ->
-    {[file_location:doc()], ctx()}.
-get_local_file_location_docs(FileCtx) ->
-    LocalProviderId = oneprovider:get_provider_id(),
-    {FileLocationDocs, FileCtx2} = get_file_location_docs(FileCtx),
-    LocalFileLocationDocs = lists:filter(fun(#document{
-        value = #file_location{provider_id = ProviderId}
-    }) ->
-        ProviderId =:= LocalProviderId
-    end, FileLocationDocs),
-    {LocalFileLocationDocs, FileCtx2}.
+-spec get_local_file_location_doc(ctx()) ->
+    {file_location:doc() | undefined, ctx()}.
+get_local_file_location_doc(FileCtx) ->
+    FileUuid = get_uuid_const(FileCtx),
+    LocalLocationId = file_location:local_id(FileUuid),
+    LocalLocationDoc =
+        case file_location:get(LocalLocationId) of
+            {ok, Location} ->
+                Location;
+            {error, {not_found, _}} ->
+                undefined
+        end,
+    {LocalLocationDoc, FileCtx}. %todo consider caching local location
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -640,12 +642,12 @@ get_file_size(#document{value = #file_location{size = undefined, blocks = Blocks
 get_file_size(#document{value = #file_location{size = Size}}) ->
     Size;
 get_file_size(FileCtx) ->
-    case file_ctx:get_local_file_location_docs(FileCtx) of
-        {[#document{value = #file_location{size = undefined, blocks = Blocks}}], FileCtx2} ->
+    case file_ctx:get_local_file_location_doc(FileCtx) of
+        {#document{value = #file_location{size = undefined, blocks = Blocks}}, FileCtx2} ->
             {fslogic_blocks:upper(Blocks), FileCtx2};
-        {[#document{value = #file_location{size = Size}}], FileCtx2} ->
+        {#document{value = #file_location{size = Size}}, FileCtx2} ->
             {Size, FileCtx2};
-        {[], FileCtx2} ->
+        {undefined, FileCtx2} ->
             {0 ,FileCtx2}
     end.
 

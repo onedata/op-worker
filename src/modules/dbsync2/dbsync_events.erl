@@ -68,8 +68,8 @@ change_replicated_internal(SpaceId, #document{
             try
                 FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
                 % TODO - if links delete comes before, it fails!
-                FileLocationId = sfm_utils:delete_storage_file_without_location(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
-                file_location:delete(FileLocationId, UserId),
+                sfm_utils:delete_storage_file_without_location(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
+                file_location:delete(file_location:local_id(FileUuid), UserId),
                 file_consistency:delete(FileUuid)
             catch
                 _:{badmatch, {error, {not_found, file_meta}}} ->
