@@ -4,6 +4,29 @@
 CHANGELOG
 ---------
 
+### 17.06.0-beta6
+
+* VFS-3366 Repair lost changes scheduling
+* VFS-3376 Use pipe character instead of dot to join and split associative ids in gui ids
+* VFS-3416 Change subscriptions updates
+* VFS-3415 Make shares in public mode be fetched using provider authorization
+* fix errors in space_sync_worker check_strategies
+* VFS-3415 Fix a routing bug causing public share links malfuntion
+* VFS-3363 Use in-memory changes counter in streams
+* Add mising proxy_via field in recursive invocation.
+* Fix provider_communicator:send_async/2
+* VFS-3361 Emit event on times update.
+* VFS-3409 Handle share requests in user context rather that provider context so all operation can be performed despite lack of support
+* VFS-3356 Add space_storage/storage accessors
+* VFS-3361 Do not create empty replicated files.
+* VFS-3363 Improve dbsync performance
+* VFS-3289 backend for metrics of storage_sync
+* VFS-3363 Fix concurent delete
+* VFS-3361 Return updated file_ctx from storage_file_manager:new_handle.
+* VFS-3361 Add 'storage_file_created' field to file_location. Split sfm_utils_create_storage file into two functions creating file and location.
+* VFS-3361 Remove empty block from file_location response.
+
+
 ### 17.06.0-beta4
 
 * VFS-3362 Update web-client
