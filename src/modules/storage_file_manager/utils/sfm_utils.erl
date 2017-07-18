@@ -150,12 +150,21 @@ create_storage_file_location(FileCtx, StorageFileCreated) ->
         space_id = SpaceId,
         storage_file_created = StorageFileCreated
     },
-    {ok, LocId} = file_location:create(#document{
-        key = file_location:local_id(FileUuid),
+    LocId = file_location:local_id(FileUuid),
+    case file_location:create(#document{
+        key = LocId,
         value = Location
-    }),
-    ok = file_meta:attach_location({uuid, FileUuid}, LocId, oneprovider:get_provider_id()),
-    {Location, file_ctx:add_file_location(FileCtx3, LocId)}.
+    }) of
+        {ok, _LocId} ->
+            ok = file_meta:attach_location({uuid, FileUuid},
+                LocId, oneprovider:get_provider_id()),
+            FileCtx4 = file_ctx:add_file_location(FileCtx3, LocId),
+            {Location, FileCtx4};
+        {error, already_exists} ->
+            {#document{value = FileLocation}, FileCtx4} =
+                file_ctx:get_local_file_location_doc(FileCtx3),
+            {FileLocation, FileCtx4}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
