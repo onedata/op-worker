@@ -74,7 +74,7 @@ apply(Doc = #document{key = Key, value = Value, scope = SpaceId, seq = Seq}) ->
         Master = self(),
         spawn(fun() ->
             try
-                dbsync_events:change_replicated(SpaceId, Doc, Master)
+                dbsync_events:change_replicated(SpaceId, Doc)
             catch
                 _:Reason ->
                     ?error_stacktrace("Change ~p post-processing failed due "

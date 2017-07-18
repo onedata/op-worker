@@ -579,14 +579,14 @@ get_or_create_local_file_location_doc(FileCtx) ->
         {false, FileCtx2} ->
             case get_local_file_location_doc(FileCtx2) of
                 {undefined, FileCtx3} ->
-                    {CreatedLocation, FileCtx3} =
-                        sfm_utils:create_storage_file_location(FileCtx2, false),
+                    {CreatedLocation, FileCtx4} =
+                        sfm_utils:create_storage_file_location(FileCtx3, false),
                     {
                         #document{
                             key = file_location:local_id(FileUuid),
                             value = CreatedLocation
                         },
-                        FileCtx3
+                        FileCtx4
                     };
                 {Location, FileCtx3} ->
                     {Location, FileCtx3}
