@@ -72,13 +72,13 @@ synchronize_block_and_compute_checksum(UserCtx, FileCtx, Range = #file_block{off
 -spec get_file_distribution(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 get_file_distribution(_UserCtx, FileCtx) ->
-    {Locations, _FileCtx2} = file_ctx:get_file_location_ids(FileCtx),
-    ProviderDistributions = lists:map(fun(LocationId) ->
-        {ok, #document{value = #file_location{
+    {Locations, _FileCtx2} = file_ctx:get_file_location_docs(FileCtx),
+    ProviderDistributions = lists:map(fun(#document{
+        value = #file_location{
             provider_id = ProviderId,
             blocks = Blocks
-        }}} = file_location:get(LocationId),
-
+        }
+    }) ->
         #provider_file_distribution{
             provider_id = ProviderId,
             blocks = Blocks

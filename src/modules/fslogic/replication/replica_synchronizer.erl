@@ -47,10 +47,11 @@ synchronize(UserCtx, FileCtx, Block = #file_block{size = RequestedSize}, Prefetc
                 Block
         end,
     trigger_prefetching(UserCtx, FileCtx, EnlargedBlock, Prefetch),
-    {LocationDocs, FileCtx2} = file_ctx:get_file_location_docs(FileCtx),
+    {_LocalDoc, FileCtx2} = file_ctx:get_local_file_location_doc(FileCtx), %trigger creation of local file location
+    {LocationDocs, FileCtx3} = file_ctx:get_file_location_docs(FileCtx2),
     ProvidersAndBlocks = replica_finder:get_blocks_for_sync(LocationDocs, [EnlargedBlock]),
-    FileGuid = file_ctx:get_guid_const(FileCtx2),
-    SpaceId = file_ctx:get_space_id_const(FileCtx2),
+    FileGuid = file_ctx:get_guid_const(FileCtx3),
+    SpaceId = file_ctx:get_space_id_const(FileCtx3),
     UserId = user_ctx:get_user_id(UserCtx),
     lists:foreach(
         fun({ProviderId, Blocks}) ->
@@ -60,12 +61,12 @@ synchronize(UserCtx, FileCtx, Block = #file_block{size = RequestedSize}, Prefetc
                     NewRef = rtransfer:fetch(Ref, fun notify_fun/3, on_complete_fun()),
                     {ok, Size} = receive_rtransfer_notification(NewRef, ?SYNC_TIMEOUT),
                     monitoring_event:emit_rtransfer_statistics(SpaceId, UserId, Size),
-                    replica_updater:update(FileCtx2,
+                    replica_updater:update(FileCtx3,
                         [BlockToSync#file_block{size = Size}], undefined, false)
                 end, Blocks)
         end, ProvidersAndBlocks),
     SessId = user_ctx:get_session_id(UserCtx),
-    fslogic_event_emitter:emit_file_location_changed(FileCtx2, [SessId], Block).
+    fslogic_event_emitter:emit_file_location_changed(FileCtx3, [SessId], Block).
 
 %%%===================================================================
 %%% Internal functions

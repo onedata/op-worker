@@ -66,9 +66,8 @@
     get_aliased_name/2, get_posix_storage_user_context/1, get_times/1,
     get_parent_guid/2, get_child/3, get_file_children/4, get_logical_path/2,
     get_storage_id/1, get_storage_doc/1, get_file_location_with_filled_gaps/2,
-    get_local_file_location_doc/1, get_file_location_docs/1,
-    get_file_location_ids/1, get_acl/1, get_raw_storage_path/1,
-    get_child_canonical_path/2, get_file_size/1]).
+    get_local_file_location_doc/1, get_file_location_docs/1, get_acl/1,
+    get_raw_storage_path/1, get_child_canonical_path/2, get_file_size/1]).
 -export([is_dir/1]).
 
 %%%===================================================================
@@ -574,14 +573,25 @@ get_file_location_with_filled_gaps(FileCtx, ReqRange) ->
 get_local_file_location_doc(FileCtx) ->
     FileUuid = get_uuid_const(FileCtx),
     LocalLocationId = file_location:local_id(FileUuid),
-    LocalLocationDoc =
-        case file_location:get(LocalLocationId) of
-            {ok, Location} ->
-                Location;
-            {error, {not_found, _}} ->
-                undefined
-        end,
-    {LocalLocationDoc, FileCtx}. %todo consider caching local location
+    case is_dir(FileCtx) of
+        {true, FileCtx2} ->
+            {undefined, FileCtx2};
+        {false, FileCtx2} ->
+            case file_location:get(LocalLocationId) of
+                {ok, Location} ->
+                    {Location, FileCtx2}; %todo consider caching local location
+                {error, {not_found, _}} ->
+                    {CreatedLocation, FileCtx3} =
+                        sfm_utils:create_storage_file_location(FileCtx2, false),
+                    {
+                        #document{
+                            key = file_location:local_id(FileUuid),
+                            value = CreatedLocation
+                        },
+                        FileCtx3
+                    }
+            end
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -603,20 +613,6 @@ get_file_location_docs(FileCtx = #file_ctx{file_location_docs = undefined}) ->
     {LocationDocs, FileCtx2#file_ctx{file_location_docs = LocationDocs}};
 get_file_location_docs(FileCtx = #file_ctx{file_location_docs = LocationDocs}) ->
     {LocationDocs, FileCtx}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns file location IDs.
-%% @end
-%%--------------------------------------------------------------------
--spec get_file_location_ids(ctx()) ->
-    {[file_location:id()], ctx()}.
-get_file_location_ids(FileCtx = #file_ctx{file_location_ids = undefined}) ->
-    FileUuid = get_uuid_const(FileCtx),
-    {ok, Locations} = file_meta:get_locations_by_uuid(FileUuid),
-    {Locations, FileCtx#file_ctx{file_location_ids = Locations}};
-get_file_location_ids(FileCtx = #file_ctx{file_location_ids = Locations}) ->
-    {Locations, FileCtx}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -811,3 +807,18 @@ get_name_of_nonspace_file(FileCtx = #file_ctx{file_name = undefined}) ->
     {Name, FileCtx2#file_ctx{file_name = Name}};
 get_name_of_nonspace_file(FileCtx = #file_ctx{file_name = FileName}) ->
     {FileName, FileCtx}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns file location IDs.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_location_ids(ctx()) ->
+    {[file_location:id()], ctx()}.
+get_file_location_ids(FileCtx = #file_ctx{file_location_ids = undefined}) ->
+    FileUuid = get_uuid_const(FileCtx),
+    {ok, Locations} = file_meta:get_locations_by_uuid(FileUuid),
+    {Locations, FileCtx#file_ctx{file_location_ids = Locations}};
+get_file_location_ids(FileCtx = #file_ctx{file_location_ids = Locations}) ->
+    {Locations, FileCtx}.
