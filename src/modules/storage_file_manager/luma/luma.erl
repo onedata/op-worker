@@ -14,14 +14,25 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/datastore/datastore_specific_models_def.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 
+-type model() :: #luma{}.
 -type user_ctx() :: helper:user_ctx().
 -type posix_user_ctx() :: {Uid :: non_neg_integer(), Gid :: non_neg_integer()}.
 
--export_type([user_ctx/0, posix_user_ctx/0]).
+-export_type([model/0, user_ctx/0, posix_user_ctx/0]).
 
 %% API
--export([get_server_user_ctx/4, get_client_user_ctx/4, get_posix_user_ctx/2]).
+-export([get_server_user_ctx/4, get_client_user_ctx/4, get_posix_user_ctx/2,
+    invalidate_cache/0]).
+
+%% model_behaviour callbacks
+-export([save/1, get/1, exists/1, delete/1, update/2, create/1,
+    model_init/0, 'after'/5, before/4, list/0]).
+
+%% luma_cache callbacks
+-export([last_timestamp/1, get_value/1, new/2]).
 
 %%%===================================================================
 %%% API functions
@@ -90,6 +101,150 @@ get_posix_user_ctx(UserId, SpaceId) ->
     end,
     #{<<"uid">> := Uid, <<"gid">> := Gid} = UserCtx,
     {binary_to_integer(Uid), binary_to_integer(Gid)}.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Invalidates cached entries
+%% @end
+%%-------------------------------------------------------------------
+-spec invalidate_cache() -> ok.
+invalidate_cache() ->
+    luma_cache:invalidate(?MODULE).
+
+%%%===================================================================
+%%% model_behaviour callbacks
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link model_behaviour} callback save/1.
+%% @end
+%%--------------------------------------------------------------------
+-spec save(datastore:document()) ->
+    {ok, datastore:ext_key()} | datastore:generic_error().
+save(Document) ->
+    model:execute_with_default_context(?MODULE, save, [Document]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link model_behaviour} callback update/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec update(datastore:ext_key(), Diff :: datastore:document_diff()) ->
+    {ok, datastore:ext_key()} | datastore:update_error().
+update(Key, Diff) ->
+    model:execute_with_default_context(?MODULE, update, [Key, Diff]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link model_behaviour} callback create/1.
+%% @end
+%%--------------------------------------------------------------------
+-spec create(datastore:document()) ->
+    {ok, datastore:ext_key()} | datastore:create_error().
+create(Document) ->
+    model:execute_with_default_context(?MODULE, create, [Document]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link model_behaviour} callback get/1.
+%% @end
+%%--------------------------------------------------------------------
+-spec get(datastore:ext_key()) -> {ok, datastore:document()} | datastore:get_error().
+get(Key) ->
+    model:execute_with_default_context(?MODULE, get, [Key]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link model_behaviour} callback delete/1.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete(datastore:ext_key()) -> ok | datastore:generic_error().
+delete(Key) ->
+    model:execute_with_default_context(?MODULE, delete, [Key]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link model_behaviour} callback exists/1.
+%% @end
+%%--------------------------------------------------------------------
+-spec exists(datastore:ext_key()) -> datastore:exists_return().
+exists(Key) ->
+    ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [Key])).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link model_behaviour} callback model_init/0.
+%% @end
+%%--------------------------------------------------------------------
+-spec model_init() -> model_behaviour:model_config().
+model_init() ->
+    ?MODEL_CONFIG(luma_bucket, [], ?LOCAL_ONLY_LEVEL)#model_config{
+        list_enabled = {true, return_errors}}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link model_behaviour} callback 'after'/5.
+%% @end
+%%--------------------------------------------------------------------
+-spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
+    Level :: datastore:store_level(), Context :: term(),
+    ReturnValue :: term()) -> ok.
+'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
+    ok.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link model_behaviour} callback before/4.
+%% @end
+%%--------------------------------------------------------------------
+-spec before(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
+    Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
+before(_ModelName, _Method, _Level, _Context) ->
+    ok.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of all records.
+%% @end
+%%--------------------------------------------------------------------
+-spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
+list() ->
+    model:execute_with_default_context(?MODULE, list, [?GET_ALL, []]).
+
+%%%===================================================================
+%%% luma_cache callbacks
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link luma_cache_behaviour} callback last_timestamp/1.
+%% @end
+%%--------------------------------------------------------------------
+-spec last_timestamp(luma_cache:model()) -> luma_cache:timestamp().
+last_timestamp(#luma{timestamp = Timestamp}) ->
+    Timestamp.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link luma_cache_behaviour} callback get_value/1.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_value(luma_cache:model()) -> luma_cache:value().
+get_value(#luma{user_ctx = UserCtx}) ->
+    UserCtx.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link luma_cache_behaviour} callback new/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec new(luma_cache:value(), luma_cache:timestamp()) -> luma_cache:model().
+new(UserCtx, Timestamp) ->
+    #luma{
+        user_ctx = UserCtx,
+        timestamp = Timestamp
+    }.
 
 %%%===================================================================
 %%% Internal functions
@@ -160,25 +315,31 @@ get_nobody_ctx(_Helper) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Queries external, third party LUMA service for the user context if enabled or
-%% enforced. Fails with an error if the service is enforced and the response is
-%% erroneous, otherwise returns 'undefined'.
+%% Queries external, third party LUMA service for the user context if enabled.
+%% Fails with an error if the response is erroneous.
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch_user_ctx(od_user:id(), od_space:id(), storage:doc(), storage:helper()) ->
     {ok, user_ctx()} | {error, Reason :: term()} | undefined.
 fetch_user_ctx(UserId, SpaceId, StorageDoc, Helper) ->
-    Mode = application:get_env(?APP_NAME, luma_mode, enabled),
+    case storage:is_luma_enabled(StorageDoc) of
+        false ->
+            undefined;
+        true ->
+            LumaConfig = storage:get_luma_config(StorageDoc),
+            LumaCacheTimeout = luma_config:get_timeout(LumaConfig),
+            Result = luma_cache:get(?MODULE, UserId,
+                fun luma_proxy:get_user_ctx/4,
+                [UserId, SpaceId, StorageDoc, Helper],
+                LumaCacheTimeout
+            ),
 
-    Result = case Mode of
-        disabled -> undefined;
-        _ -> luma_proxy:get_user_ctx(UserId, SpaceId, StorageDoc, Helper)
-    end,
-
-    case {Mode, Result} of
-        {enforced, {error, Reason}} -> {error, {luma_server, Reason}};
-        {_, {ok, UserCtx}} -> {ok, UserCtx};
-        {_, _} -> undefined
+            case Result of
+                {error, Reason} ->
+                    {error, {luma_server, Reason}};
+                Other ->
+                    Other
+            end
     end.
 
 %%--------------------------------------------------------------------

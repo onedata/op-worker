@@ -29,20 +29,18 @@
 %%--------------------------------------------------------------------
 -spec get_user_ctx(od_user:id(), od_space:id(), storage:doc(), storage:helper()) ->
     {ok, luma:user_ctx()} | {error, Reason :: term()}.
-get_user_ctx(UserId, SpaceId, StorageDoc, Helper) ->
-    {ok, Scheme} = application:get_env(?APP_NAME, luma_scheme),
-    {ok, Hostname} = application:get_env(?APP_NAME, luma_hostname),
-    {ok, Port} = application:get_env(?APP_NAME, luma_port),
-    {ok, APIKey} = application:get_env(?APP_NAME, luma_api_key),
+get_user_ctx(UserId, SpaceId, StorageDoc = #document{
+    value = #storage{
+        luma_config = #luma_config{
+            url = LumaUrl,
+            api_key = APIKey
+}}}, Helper) ->
 
-    Url = lists:flatten(io_lib:format("~s://~s:~B/map_user_credentials",
-        [Scheme, Hostname, Port])),
-
+    Url = lists:flatten(io_lib:format("~s/map_user_credentials", [LumaUrl])),
     ReqHeaders = #{
         <<"X-Auth-Token">> => APIKey,
         <<"Content-Type">> => <<"application/json">>
     },
-
     ReqBody = get_request_body(UserId, SpaceId, StorageDoc, Helper),
 
     case http_client:post(Url, ReqHeaders, ReqBody) of

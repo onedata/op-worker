@@ -278,11 +278,17 @@
     storage_sync_info = #storage_sync_info{} :: file_meta:storage_sync_info()
 }).
 
-
 -record(storage, {
     name = <<>> :: storage:name(),
     helpers = [] :: [storage:helper()],
-    readonly = false :: boolean()
+    readonly = false :: boolean(),
+    luma_config = undefined :: undefined | luma_config:config()
+}).
+
+-record(luma_config, {
+    url :: binary(),
+    cache_timeout :: non_neg_integer(),
+    api_key :: binary()
 }).
 
 %% Model that maps space to storage
@@ -425,6 +431,18 @@
     atime = 0 :: times:time(),
     ctime = 0 :: times:time(),
     mtime = 0 :: times:time()
+}).
+
+%% Model that caches mapping from storage user credentials to od_user:id()
+-record(reverse_luma, {
+    user_id = <<"">> :: od_user:id(),
+    timestamp = 0 :: luma_cache:timestamp() % time of last update, in milliseconds since epoch
+}).
+
+%% Model that caches mapping from od_user:id() to storage user credentials
+-record(luma, {
+    user_ctx = #{} :: luma:user_ctx(),
+    timestamp = 0 :: luma_cache:timestamp()% time of last update, in milliseconds since epoch
 }).
 
 -endif.

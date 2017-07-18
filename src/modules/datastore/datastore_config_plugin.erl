@@ -58,7 +58,9 @@ models() -> [
     times,
     helper_handle,
     space_strategies,
-    file_force_proxy
+    file_force_proxy,
+    reverse_luma,
+    luma
 ].
 
 %%--------------------------------------------------------------------
