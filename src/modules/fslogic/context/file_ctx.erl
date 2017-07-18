@@ -636,14 +636,15 @@ get_acl(FileCtx = #file_ctx{acl = Acl}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_size(file_ctx:ctx() | file_meta:uuid()) ->
-    Size :: non_neg_integer() | no_return().
-get_file_size(#document{value = #file_location{size = undefined, blocks = Blocks}}) ->
-    fslogic_blocks:upper(Blocks);
-get_file_size(#document{value = #file_location{size = Size}}) ->
-    Size;
+    {Size :: non_neg_integer(), file_ctx:ctx()}.
 get_file_size(FileCtx) ->
     case file_ctx:get_local_file_location_doc(FileCtx) of
-        {#document{value = #file_location{size = undefined, blocks = Blocks}}, FileCtx2} ->
+        {#document{
+            value = #file_location{
+                size = undefined,
+                blocks = Blocks
+            }
+        }, FileCtx2} ->
             {fslogic_blocks:upper(Blocks), FileCtx2};
         {#document{value = #file_location{size = Size}}, FileCtx2} ->
             {Size, FileCtx2};
