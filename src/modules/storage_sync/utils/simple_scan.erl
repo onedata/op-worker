@@ -335,7 +335,7 @@ is_imported(StorageId, CanonicalPath, ?REGULAR_FILE_TYPE, #fuse_response{
     fuse_response = #file_attr{type = ?REGULAR_FILE_TYPE, guid = FileGuid}
 }) ->
     FileCtx = file_ctx:new_by_guid(FileGuid),
-    case file_ctx:get_local_file_location_doc(FileCtx) of
+    case file_ctx:get_or_create_local_file_location_doc(FileCtx) of
         {undefined, _FileCtx2} ->
             false;
         {#document{

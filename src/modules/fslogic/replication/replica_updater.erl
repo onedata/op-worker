@@ -44,7 +44,7 @@ update(FileCtx, Blocks, FileSize, BumpVersion) ->
                 value = #file_location{
                     size = OldSize
                 }
-            }, _FileCtx2} = file_ctx:get_local_file_location_doc(file_ctx:reset(FileCtx)), % TODO - better reset in ALL critical sections
+            }, _FileCtx2} = file_ctx:get_or_create_local_file_location_doc(file_ctx:reset(FileCtx)), % TODO - better reset in ALL critical sections
             UpdatedLocation = append(Location, Blocks, BumpVersion),
 
             case FileSize of
@@ -75,7 +75,7 @@ rename(FileCtx, TargetFileId) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     file_location:critical_section(FileUuid,
         fun() ->
-            {LocationDoc, _FileCtx2} = file_ctx:get_local_file_location_doc(file_ctx:reset(FileCtx)),
+            {LocationDoc, _FileCtx2} = file_ctx:get_or_create_local_file_location_doc(file_ctx:reset(FileCtx)),
 
             replica_changes:set_last_rename(
                 version_vector:bump_version(

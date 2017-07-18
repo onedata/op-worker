@@ -113,7 +113,7 @@ create_delayed_storage_file(FileCtx) ->
     {#document{
         key = FileLocationId,
         value = #file_location{storage_file_created = StorageFileCreated}
-    }, FileCtx2} = file_ctx:get_local_file_location_doc(FileCtx),
+    }, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
 
     case StorageFileCreated of
         false ->
@@ -222,9 +222,8 @@ create_parent_dirs(FileCtx) ->
     {Storage, FileCtx3} = file_ctx:get_storage_doc(FileCtx2),
 
     LeafLess = filename:dirname(StorageFileId),
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
     SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceId,
-        FileUuid, Storage, LeafLess, undefined),
+        undefined, Storage, LeafLess, undefined),
     case storage_file_manager:mkdir(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
         ok ->
             FileCtx3;

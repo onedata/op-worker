@@ -43,7 +43,7 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
             case oneprovider:get_provider_id() =/= ProviderId of
                 true ->
                     {LocalLocation, FileCtx2} =
-                        file_ctx:get_local_file_location_doc(file_ctx:reset(FileCtx)),
+                        file_ctx:get_or_create_local_file_location_doc(file_ctx:reset(FileCtx)),
                     update_local_location_replica(FileCtx2, LocalLocation, ChangedLocationDoc);
                 false ->
                     ok

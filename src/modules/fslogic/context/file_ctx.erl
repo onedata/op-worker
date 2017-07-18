@@ -66,8 +66,9 @@
     get_aliased_name/2, get_posix_storage_user_context/1, get_times/1,
     get_parent_guid/2, get_child/3, get_file_children/4, get_logical_path/2,
     get_storage_id/1, get_storage_doc/1, get_file_location_with_filled_gaps/2,
-    get_local_file_location_doc/1, get_file_location_docs/1, get_acl/1,
-    get_raw_storage_path/1, get_child_canonical_path/2, get_file_size/1]).
+    get_or_create_local_file_location_doc/1, get_local_file_location_doc/1,
+    get_file_location_docs/1, get_acl/1, get_raw_storage_path/1,
+    get_child_canonical_path/2, get_file_size/1]).
 -export([is_dir/1]).
 
 %%%===================================================================
@@ -539,7 +540,7 @@ get_file_location_with_filled_gaps(FileCtx, ReqRange) ->
             blocks = Blocks,
             size = Size
         }
-    }, FileCtx3} = file_ctx:get_local_file_location_doc(FileCtx2),
+    }, FileCtx3} = file_ctx:get_or_create_local_file_location_doc(FileCtx2),
 
     % find gaps
     AllRanges = lists:foldl(
@@ -568,19 +569,16 @@ get_file_location_with_filled_gaps(FileCtx, ReqRange) ->
 %% Returns local file location doc.
 %% @end
 %%--------------------------------------------------------------------
--spec get_local_file_location_doc(ctx()) ->
+-spec get_or_create_local_file_location_doc(ctx()) ->
     {file_location:doc() | undefined, ctx()}.
-get_local_file_location_doc(FileCtx) ->
+get_or_create_local_file_location_doc(FileCtx) ->
     FileUuid = get_uuid_const(FileCtx),
-    LocalLocationId = file_location:local_id(FileUuid),
     case is_dir(FileCtx) of
         {true, FileCtx2} ->
             {undefined, FileCtx2};
         {false, FileCtx2} ->
-            case file_location:get(LocalLocationId) of
-                {ok, Location} ->
-                    {Location, FileCtx2}; %todo consider caching local location
-                {error, {not_found, _}} ->
+            case get_local_file_location_doc(FileCtx2) of
+                {undefined, FileCtx3} ->
                     {CreatedLocation, FileCtx3} =
                         sfm_utils:create_storage_file_location(FileCtx2, false),
                     {
@@ -589,8 +587,27 @@ get_local_file_location_doc(FileCtx) ->
                             value = CreatedLocation
                         },
                         FileCtx3
-                    }
+                    };
+                {Location, FileCtx3} ->
+                    {Location, FileCtx3}
             end
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns local file location doc.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_local_file_location_doc(ctx()) ->
+    {file_location:doc() | undefined, ctx()}.
+get_local_file_location_doc(FileCtx) ->
+    FileUuid = get_uuid_const(FileCtx),
+    LocalLocationId = file_location:local_id(FileUuid),
+    case file_location:get(LocalLocationId) of
+        {ok, Location} ->
+            {Location, FileCtx}; %todo consider caching local location
+        {error, {not_found, _}} ->
+            {undefined, FileCtx}
     end.
 
 %%--------------------------------------------------------------------
