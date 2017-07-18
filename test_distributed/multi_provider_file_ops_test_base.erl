@@ -482,17 +482,17 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
         {Doc1, Name1} = GenerateDoc(?DIRECTORY_TYPE),
         {Doc2, Name2} = GenerateDoc(?DIRECTORY_TYPE),
         {Doc3, Name3} = GenerateDoc(?REGULAR_FILE_TYPE),
-        Loc3ID = datastore_utils:gen_uuid(),
+        Loc3ID = rpc:call(Worker1, file_location, local_id, [Doc3#document.key]),
         {Doc4, Name4} = GenerateDoc(?REGULAR_FILE_TYPE),
-        Loc4ID = datastore_utils:gen_uuid(),
+        Loc4ID = rpc:call(Worker1, file_location, local_id, [Doc4#document.key]),
 
         D1Path = <<"/", SpaceName/binary, "/",  Name1/binary>>,
         D2Path = <<D1Path/binary, "/",  Name2/binary>>,
         D3Path = <<D2Path/binary, "/",  Name3/binary>>,
         D4Path = <<D2Path/binary, "/",  Name4/binary>>,
 
-        Doc1Args = [Doc1, SpaceDoc, non, D1Path],
-        Doc2Args = [Doc2, Doc1, non, D2Path],
+        Doc1Args = [Doc1, SpaceDoc, undefined, D1Path],
+        Doc2Args = [Doc2, Doc1, undefined, D2Path],
         Doc3Args = [Doc3, Doc2, Loc3ID, D3Path],
         Doc4Args = [Doc4, Doc2, Loc4ID, D4Path],
 

@@ -651,7 +651,7 @@ create_file_location(SpaceId, StorageId, FileUuid, CanonicalPath, Size) ->
     },
     {ok, LocId} = file_location:save_and_bump_version(
         #document{
-            key = datastore_utils:gen_uuid(),
+            key = file_location:local_id(FileUuid),
             value = Location,
             scope = SpaceId
     }),

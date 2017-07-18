@@ -275,7 +275,6 @@ model_init() ->
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns total size used by given file_location.
