@@ -16,6 +16,7 @@
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("kernel/include/file.hrl").
 -include("storage_sync_test.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 
 %% util functions
 -export([disable_storage_sync/1, set_check_locally_enoent_strategy/2,
@@ -43,7 +44,12 @@
     create_subfiles_import_many_test/2, verify_file_in_dir/5, verify_dir/5,
     create_directory_import_without_read_permission_test/2,
     create_subfiles_import_many2_test/2, verify_file/5,
-    create_subfiles_and_delete_before_import_is_finished_test/2]).
+    create_subfiles_and_delete_before_import_is_finished_test/2,
+    create_directory_import_check_user_id_test/2,
+    create_directory_import_check_user_id_error_test/2,
+    create_file_import_check_user_id_test/2,
+    create_file_import_check_user_id_error_test/2,
+    clean_reverse_luma_cache/1]).
 
 
 -define(assertHashChangedFun(File, ExpectedResult0),
@@ -95,6 +101,36 @@ create_directory_import_test(Config, MountSpaceInRoot) ->
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS).
+
+create_directory_import_check_user_id_test(Config, MountSpaceInRoot) ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    W1MountPoint = get_host_mount_point(W1, Config),
+    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
+    StorageTestDirPath =
+        storage_test_dir_path(W1MountPoint, ?SPACE_ID, ?TEST_DIR, MountSpaceInRoot),
+    %% Create dir on storage
+    ok = file:make_dir(StorageTestDirPath),
+    ok = file:change_owner(StorageTestDirPath, ?TEST_UID, ?TEST_GID),
+    tracer:start(W1),
+    tracer:trace_calls(reverse_luma_proxy),
+    storage_sync_test_base:enable_storage_import(Config),
+    %% Check if dir was imported
+    ?assertMatch({ok, #file_attr{owner_id = ?TEST_OD_USER_ID}},
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS).
+
+create_directory_import_check_user_id_error_test(Config, MountSpaceInRoot) ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    W1MountPoint = get_host_mount_point(W1, Config),
+    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
+    StorageTestDirPath =
+        storage_test_dir_path(W1MountPoint, ?SPACE_ID, ?TEST_DIR, MountSpaceInRoot),
+    %% Create dir on storage
+    ok = file:make_dir(StorageTestDirPath),
+    ok = file:change_owner(StorageTestDirPath, ?TEST_UID, ?TEST_GID),
+    storage_sync_test_base:enable_storage_import(Config),
+    %% Check if dir was not imported
+    ?assertMatch({error, ?ENOENT},
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS).
 
 create_directory_import_without_read_permission_test(Config, MountSpaceInRoot) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
@@ -160,6 +196,42 @@ create_file_import_test(Config, MountSpaceInRoot) ->
 %%    ?assertMatch({ok, ?TEST_DATA},
 %%        lfm_proxy:read(W2, Handle2, 0, byte_size(?TEST_DATA))).
 
+create_file_import_check_user_id_test(Config, MountSpaceInRoot) ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    W1MountPoint = get_host_mount_point(W1, Config),
+    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
+
+    StorageTestFilePath =
+        storage_test_file_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+    %% Create file on storage
+    ok = file:write_file(StorageTestFilePath, ?TEST_DATA),
+    ok = file:change_owner(StorageTestFilePath, ?TEST_UID, ?TEST_GID),
+
+    storage_sync_test_base:enable_storage_import(Config),
+
+    %% Check if file was imported on W1
+    ?assertMatch({ok, #file_attr{owner_id = ?TEST_OD_USER_ID}},
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+    {ok, Handle1} = ?assertMatch({ok, _},
+        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
+    ?assertMatch({ok, ?TEST_DATA},
+        lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))).
+
+create_file_import_check_user_id_error_test(Config, MountSpaceInRoot) ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    W1MountPoint = get_host_mount_point(W1, Config),
+    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
+
+    StorageTestFilePath =
+        storage_test_file_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+    %% Create file on storage
+    ok = file:write_file(StorageTestFilePath, ?TEST_DATA),
+    ok = file:change_owner(StorageTestFilePath, ?TEST_UID, ?TEST_GID),
+    storage_sync_test_base:enable_storage_import(Config),
+
+    %% Check if file was imported on W1
+    ?assertMatch({error, ?ENOENT},
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS).
 
 create_subfiles_import_many_test(Config, MountSpaceInRoot) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -211,7 +283,7 @@ create_subfiles_and_delete_before_import_is_finished_test(Config, MountSpaceInRo
     storage_sync_test_base:enable_storage_update(Config),
     timer:sleep(timer:seconds(2 * ?SCAN_INTERVAL)),
     recursive_rm(StorageTestDirPath),
-    ?assertMatch({error, enoent},
+    ?assertMatch({error, ?ENOENT},
         file:list_dir(StorageTestDirPath)),
     ?assertMatch({ok, []},
             lfm_proxy:ls(W1, SessId, {path, ?SPACE_PATH}, 0, 100), ?ATTEMPTS).
@@ -431,7 +503,7 @@ delete_empty_directory_update_test(Config, MountSpaceInRoot) ->
 
     %% Check if dir was deleted in space
 
-    ?assertMatch({error, enoent},
+    ?assertMatch({error, ?ENOENT},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS).
 
 delete_non_empty_directory_update_test(Config, MountSpaceInRoot) ->
@@ -459,7 +531,7 @@ delete_non_empty_directory_update_test(Config, MountSpaceInRoot) ->
     recursive_rm(StorageTestDirPath),
     %% Check if dir was deleted in space
 
-    ?assertMatch({error, enoent},
+    ?assertMatch({error, ?ENOENT},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS).
 
 delete_directory_export_test(Config, MountSpaceInRoot) ->
@@ -479,10 +551,10 @@ delete_directory_export_test(Config, MountSpaceInRoot) ->
     ?assert(filelib:is_dir(StorageTestDirPath)),
     %%    ?assert(file:list_dir(StorageTestDirPath)),
     ok = lfm_proxy:rm_recursive(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}),
-    ?assertMatch({error, enoent},
+    ?assertMatch({error, ?ENOENT},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
     %% Check if dir was deleted on storage
-    ?assertMatch({error, enoent}, file:list_dir(StorageTestDirPath)).
+    ?assertMatch({error, ?ENOENT}, file:list_dir(StorageTestDirPath)).
 
 delete_file_update_test(Config, MountSpaceInRoot) ->
     [W1, _] = ?config(op_worker_nodes, Config),
@@ -504,7 +576,7 @@ delete_file_update_test(Config, MountSpaceInRoot) ->
     %% Delete file on storage
     ok = file:delete(StorageTestFilePath),
     %% Check if file was deleted in space
-    ?assertMatch({error, enoent},
+    ?assertMatch({error, ?ENOENT},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS).
 
 delete_file_export_test(Config, MountSpaceInRoot) ->
@@ -527,7 +599,7 @@ delete_file_export_test(Config, MountSpaceInRoot) ->
     lfm_proxy:close(W1, FileHandle),
     ok = lfm_proxy:unlink(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}),
     %% Check if file was deleted on storage
-    ?assertMatch({error, enoent}, file:read_file(StorageTestFilePath), ?ATTEMPTS).
+    ?assertMatch({error, ?ENOENT}, file:read_file(StorageTestFilePath), ?ATTEMPTS).
 
 append_file_update_test(Config, MountSpaceInRoot) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -637,7 +709,7 @@ move_file_update_test(Config, MountSpaceInRoot) ->
         lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH2}, read), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle2, 0, byte_size(?TEST_DATA))),
-    ?assertMatch({error, enoent},
+    ?assertMatch({error, ?ENOENT},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH})).
 
 truncate_file_update_test(Config, MountSpaceInRoot) ->
@@ -810,7 +882,7 @@ import_file_by_path_test(Config, MountSpaceInRoot) ->
     ok = file:write_file(StorageTestFilePath, ?TEST_DATA),
     storage_sync_test_base:enable_storage_import(Config),
     storage_sync_test_base:enable_storage_update(Config),
-    ?assertMatch({error, enoent},
+    ?assertMatch({error, ?ENOENT},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH})),
     set_check_locally_enoent_strategy(W1, ?SPACE_ID),
     %% Check if file will be imported on demand
@@ -918,8 +990,10 @@ clean_storage(Config, Readonly) ->
                 os:cmd("rm -r " ++ binary_to_list(HostMountPoint) ++ "/" ++ binary_to_list(?SPACE_ID))
         end
     end, Workers),
-    timer:sleep(timer:seconds(3))
-.
+    timer:sleep(timer:seconds(3)).
+
+clean_reverse_luma_cache(Worker) ->
+    ok = rpc:call(Worker, reverse_luma, invalidate_cache, []).
 
 set_check_locally_enoent_strategy(Worker, SpaceId) ->
     {ok, _} = rpc:call(Worker, storage_sync, set_check_locally_enoent_strategy, [SpaceId]).

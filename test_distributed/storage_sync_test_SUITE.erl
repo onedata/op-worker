@@ -13,7 +13,6 @@
 -author("Rafal Slota").
 -author("Jakub Kudzia").
 
--include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -31,21 +30,39 @@
     delete_empty_directory_update_test/1,
     delete_non_empty_directory_update_test/1,
     delete_directory_export_test/1,
-    delete_file_update_test/1, delete_file_export_test/1,
-    append_file_update_test/1, append_file_export_test/1,
-    copy_file_update_test/1, move_file_update_test/1,
-    truncate_file_update_test/1, chmod_file_update_test/1,
+    delete_file_update_test/1,
+    delete_file_export_test/1,
+    append_file_update_test/1,
+    append_file_export_test/1,
+    copy_file_update_test/1,
+    move_file_update_test/1,
+    truncate_file_update_test/1,
+    chmod_file_update_test/1,
     update_timestamps_file_import_test/1,
-    create_file_in_dir_update_test/1, create_file_in_dir_exceed_batch_update_test/1,
-    chmod_file_update2_test/1, should_not_detect_timestamp_update_test/1,
-    create_directory_import_many_test/1, create_subfiles_import_many_test/1, create_directory_import_without_read_permission_test/1, create_subfiles_import_many2_test/1, create_subfiles_and_delete_before_import_is_finished_test/1]).
+    create_file_in_dir_update_test/1,
+    create_file_in_dir_exceed_batch_update_test/1,
+    chmod_file_update2_test/1,
+    should_not_detect_timestamp_update_test/1,
+    create_directory_import_many_test/1,
+    create_subfiles_import_many_test/1,
+    create_directory_import_without_read_permission_test/1,
+    create_subfiles_import_many2_test/1,
+    create_subfiles_and_delete_before_import_is_finished_test/1,
+    create_directory_import_check_user_id_test/1,
+    create_directory_import_check_user_id_error_test/1,
+    create_file_import_check_user_id_test/1,
+    create_file_import_check_user_id_error_test/1]).
 
 -define(TEST_CASES, [
     create_directory_import_test,
+    create_directory_import_check_user_id_test,
+    create_directory_import_check_user_id_error_test,
     create_directory_import_without_read_permission_test,
     create_directory_import_many_test,
     create_directory_export_test,
     create_file_import_test,
+    create_file_import_check_user_id_test,
+    create_file_import_check_user_id_error_test,
     create_file_export_test,
     create_file_in_dir_import_test,
     create_subfiles_import_many_test,
@@ -81,6 +98,12 @@ all() -> ?ALL(?TEST_CASES).
 create_directory_import_test(Config) ->
     storage_sync_test_base:create_directory_import_test(Config, false).
 
+create_directory_import_check_user_id_test(Config) ->
+    storage_sync_test_base:create_directory_import_check_user_id_test(Config, false).
+
+create_directory_import_check_user_id_error_test(Config) ->
+    storage_sync_test_base:create_directory_import_check_user_id_error_test(Config, false).
+
 create_directory_import_without_read_permission_test(Config) ->
     storage_sync_test_base:create_directory_import_without_read_permission_test(Config, false).
 
@@ -92,6 +115,12 @@ create_directory_export_test(Config) ->
 
 create_file_import_test(Config) ->
     storage_sync_test_base:create_file_import_test(Config, false).
+
+create_file_import_check_user_id_test(Config) ->
+    storage_sync_test_base:create_file_import_check_user_id_test(Config, false).
+
+create_file_import_check_user_id_error_test(Config) ->
+    storage_sync_test_base:create_file_import_check_user_id_error_test(Config, false).
 
 create_file_export_test(Config) ->
     storage_sync_test_base:create_file_export_test(Config, false).
@@ -172,10 +201,41 @@ import_remote_file_by_path_test(Config) ->
 init_per_suite(Config) ->
     [{?LOAD_MODULES, [initializer]} | Config].
 
+
+init_per_testcase(Case, Config) when
+    Case =:= create_directory_import_check_user_id_test;
+    Case =:= create_file_import_check_user_id_test ->
+
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, [reverse_luma_proxy, storage_file_ctx]),
+    test_utils:mock_expect(Workers, storage_file_ctx, get_storage_doc_const, fun(Ctx) ->
+        Doc = #document{value = Storage = #storage{}} = meck:passthrough([Ctx]),
+        Doc#document{value = Storage#storage{luma_config = ?LUMA_CONFIG}}
+    end),
+    test_utils:mock_expect(Workers, reverse_luma_proxy, get_user_id, fun(_, _, _, _, _) ->
+        {ok, ?TEST_OD_USER_ID}
+    end),
+    init_per_testcase(default, Config);
+
+init_per_testcase(Case, Config) when
+    Case =:= create_directory_import_check_user_id_error_test;
+    Case =:= create_file_import_check_user_id_error_test ->
+
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, [reverse_luma_proxy, storage_file_ctx]),
+    test_utils:mock_expect(Workers, storage_file_ctx, get_storage_doc_const, fun(Ctx) ->
+        Doc = #document{value = Storage = #storage{}} = meck:passthrough([Ctx]),
+        Doc#document{value = Storage#storage{luma_config = ?LUMA_CONFIG}}
+    end),
+    test_utils:mock_expect(Workers, reverse_luma_proxy, get_user_id, fun(_, _, _, _, _) ->
+        error(test_reason)
+    end),
+    init_per_testcase(default, Config);
+
 init_per_testcase(Case, Config) when
     Case =:= create_file_in_dir_update_test;
-    Case =:= should_not_detect_timestamp_update_test
-->
+    Case =:= should_not_detect_timestamp_update_test ->
+
     Config2 = [
         {update_config, #{
             delete_enable => false,
@@ -214,8 +274,6 @@ init_per_testcase(Case, Config) when
 
 init_per_testcase(Case, Config) when
     Case =:= chmod_file_update2_test
-%%    ;
-%%    Case =:= create_file_in_dir_exceed_batch_update_test
 ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     {ok, OldDirBatchSize} = test_utils:get_env(W1, op_worker, dir_batch_size),
@@ -224,6 +282,7 @@ init_per_testcase(Case, Config) when
     init_per_testcase(default, Config2);
 
 init_per_testcase(_Case, Config) ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
     ssl:start(),
     hackney:start(),
     initializer:disable_quota_limit(Config),
@@ -232,7 +291,6 @@ init_per_testcase(_Case, Config) ->
     initializer:enable_grpca_based_communication(Config),
     ConfigWithProxy = lfm_proxy:init(ConfigWithSessionInfo),
     Config2 = storage_sync_test_base:add_workers_storage_mount_points(ConfigWithProxy),
-%%    storage_sync_test_base:enable_storage_sync(Config2),
     storage_sync_test_base:create_init_file(Config2),
     Config2.
 
@@ -252,6 +310,18 @@ end_per_testcase(Case, Config) when
     OldDirBatchSize = ?config(old_dir_batch_size, Config),
     test_utils:set_env(W1, op_worker, dir_batch_size, OldDirBatchSize),
     end_per_testcase(default, Config);
+
+end_per_testcase(Case, Config) when
+    Case =:= create_directory_import_check_user_id_test;
+    Case =:= create_directory_import_check_user_id_error_test;
+    Case =:= create_file_import_check_user_id_test;
+    Case =:= create_file_import_check_user_id_error_test ->
+
+    Workers = [W1 | _] = ?config(op_worker_nodes, Config),
+    storage_sync_test_base:clean_reverse_luma_cache(W1),
+    ok = test_utils:mock_unload(Workers, [reverse_luma_proxy, storage_file_ctx]),
+    end_per_testcase(default, Config);
+
 
 end_per_testcase(_Case, Config) ->
     storage_sync_test_base:disable_storage_sync(Config),

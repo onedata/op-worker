@@ -45,13 +45,21 @@
     should_not_detect_timestamp_update_test/1,
     create_directory_import_without_read_permission_test/1,
     create_subfiles_import_many2_test/1,
-    create_subfiles_and_delete_before_import_is_finished_test/1]).
+    create_subfiles_and_delete_before_import_is_finished_test/1,
+    create_directory_import_check_user_id_test/1,
+    create_directory_import_check_user_id_error_test/1,
+    create_file_import_check_user_id_test/1,
+    create_file_import_check_user_id_error_test/1]).
 
 -define(TEST_CASES, [
     create_directory_import_test,
+    create_directory_import_check_user_id_test,
+    create_directory_import_check_user_id_error_test,
     create_directory_import_without_read_permission_test,
     create_directory_import_many_test,
     create_file_import_test,
+    create_file_import_check_user_id_test,
+    create_file_import_check_user_id_error_test,
     create_file_in_dir_import_test,
     create_subfiles_import_many_test,
     create_subfiles_import_many2_test,
@@ -83,6 +91,12 @@ all() -> ?ALL(?TEST_CASES).
 create_directory_import_test(Config) ->
     storage_sync_test_base:create_directory_import_test(Config, true).
 
+create_directory_import_check_user_id_test(Config) ->
+    storage_sync_test_base:create_directory_import_check_user_id_test(Config, true).
+
+create_directory_import_check_user_id_error_test(Config) ->
+    storage_sync_test_base:create_directory_import_check_user_id_error_test(Config, true).
+
 create_directory_import_without_read_permission_test(Config) ->
     storage_sync_test_base:create_directory_import_without_read_permission_test(Config, true).
 
@@ -91,6 +105,12 @@ create_directory_import_many_test(Config) ->
 
 create_file_import_test(Config) ->
     storage_sync_test_base:create_file_import_test(Config, true).
+
+create_file_import_check_user_id_test(Config) ->
+    storage_sync_test_base:create_file_import_check_user_id_test(Config, true).
+
+create_file_import_check_user_id_error_test(Config) ->
+    storage_sync_test_base:create_file_import_check_user_id_error_test(Config, true).
 
 create_file_in_dir_import_test(Config) ->
     storage_sync_test_base:create_file_in_dir_import_test(Config, true).
@@ -158,6 +178,36 @@ import_remote_file_by_path_test(Config) ->
 
 init_per_suite(Config) ->
     [{?LOAD_MODULES, [initializer]} | Config].
+
+init_per_testcase(Case, Config) when
+    Case =:= create_directory_import_check_user_id_test;
+    Case =:= create_file_import_check_user_id_test ->
+
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, [reverse_luma_proxy, storage_file_ctx]),
+    test_utils:mock_expect(Workers, storage_file_ctx, get_storage_doc_const, fun(Ctx) ->
+        Doc = #document{value = Storage = #storage{}} = meck:passthrough([Ctx]),
+        Doc#document{value = Storage#storage{luma_config = ?LUMA_CONFIG}}
+    end),
+    test_utils:mock_expect(Workers, reverse_luma_proxy, get_user_id, fun(_, _, _, _, _) ->
+        {ok, ?TEST_OD_USER_ID}
+    end),
+    init_per_testcase(default, Config);
+
+init_per_testcase(Case, Config) when
+    Case =:= create_directory_import_check_user_id_error_test;
+    Case =:= create_file_import_check_user_id_error_test ->
+
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, [reverse_luma_proxy, storage_file_ctx]),
+    test_utils:mock_expect(Workers, storage_file_ctx, get_storage_doc_const, fun(Ctx) ->
+        Doc = #document{value = Storage = #storage{}} = meck:passthrough([Ctx]),
+        Doc#document{value = Storage#storage{luma_config = ?LUMA_CONFIG}}
+    end),
+    test_utils:mock_expect(Workers, reverse_luma_proxy, get_user_id, fun(_, _, _, _, _) ->
+        error(test_reason)
+    end),
+    init_per_testcase(default, Config);
 
 init_per_testcase(Case, Config) when
     Case =:= create_file_in_dir_update_test;
@@ -235,9 +285,20 @@ end_per_testcase(Case, Config) when
     test_utils:set_env(W1, op_worker, dir_batch_size, OldDirBatchSize),
     end_per_testcase(default, Config);
 
+end_per_testcase(Case, Config) when
+    Case =:= create_directory_import_check_user_id_test;
+    Case =:= create_directory_import_check_user_id_error_test;
+    Case =:= create_file_import_check_user_id_test;
+    Case =:= create_file_import_check_user_id_error_test ->
+
+    Workers = [W1 | _] = ?config(op_worker_nodes, Config),
+    ok = storage_sync_test_base:clean_reverse_luma_cache(W1),
+    ok = test_utils:mock_unload(Workers, [reverse_luma_proxy, storage_file_ctx]),
+    end_per_testcase(default, Config);
+
 end_per_testcase(_Case, Config) ->
-    storage_sync_test_base:clean_storage(Config, true),
     storage_sync_test_base:disable_storage_sync(Config),
+    storage_sync_test_base:clean_storage(Config, true),
     lfm_proxy:teardown(Config),
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
