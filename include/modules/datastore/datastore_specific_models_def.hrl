@@ -396,12 +396,6 @@
     value = #{} :: indexes_value()
 }).
 
-%% Model that keeps track of consistency of file metadata
--record(file_consistency, {
-    components_present = [] :: [file_consistency:component()],
-    waiting = [] :: [file_consistency:waiting()]
-}).
-
 %% Model that caches files' permissions
 -record(permissions_cache, {
     value = undefined :: term()

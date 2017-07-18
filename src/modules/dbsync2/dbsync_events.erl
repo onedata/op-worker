@@ -69,8 +69,7 @@ change_replicated_internal(SpaceId, #document{
                 FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
                 % TODO - if links delete comes before, it fails!
                 sfm_utils:delete_storage_file_without_location(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
-                file_location:delete(file_location:local_id(FileUuid), UserId),
-                file_consistency:delete(FileUuid)
+                file_location:delete(file_location:local_id(FileUuid), UserId)
             catch
                 _:{badmatch, {error, {not_found, file_meta}}} ->
                     % TODO - if links delete comes before, this function fails!
@@ -85,13 +84,8 @@ change_replicated_internal(SpaceId, #document{
     } = FileDoc, Master) ->
     ?debug("change_replicated_internal: changed file_meta ~p", [FileUuid]),
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
-    ok = file_consistency:wait(FileUuid, SpaceId,
-        [times, link_to_parent, parent_links], [SpaceId, FileDoc],
-        {Master, FileUuid}),
     ok = sfm_utils:create_storage_file_if_not_exists(FileCtx),
-    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []),
-    ok = file_consistency:add_components_and_notify(FileUuid,
-        [file_meta, local_file_location]);
+    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []);
 change_replicated_internal(SpaceId, #document{
         key = FileUuid,
         % TODO - emit when file is deleted (for deleted files it fails)
@@ -100,11 +94,7 @@ change_replicated_internal(SpaceId, #document{
     } = FileDoc, Master) ->
     ?debug("change_replicated_internal: changed file_meta ~p", [FileUuid]),
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
-    ok = file_consistency:wait(FileUuid, SpaceId, [times, link_to_parent], [SpaceId, FileDoc],
-        {Master, FileUuid}),
-    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []),
-    ok = file_consistency:add_components_and_notify(FileUuid, [file_meta]),
-    ok = file_consistency:check_and_add_components(FileUuid, SpaceId, [parent_links]);
+    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []);
 change_replicated_internal(SpaceId, #document{
         key = FileLocationId,
         deleted = false,
@@ -112,9 +102,6 @@ change_replicated_internal(SpaceId, #document{
     } = Doc, Master) ->
     ?debug("change_replicated_internal: changed file_location ~p", [FileUuid]),
     FileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId)),
-    ok = file_consistency:wait(FileUuid, SpaceId,
-        [file_meta, times, local_file_location], [SpaceId, Doc],
-        {Master, FileLocationId}),
     ok = replica_dbsync_hook:on_file_location_change(FileCtx, Doc);
 change_replicated_internal(SpaceId, #document{
         value = #links{
@@ -122,22 +109,19 @@ change_replicated_internal(SpaceId, #document{
             doc_key = FileUuid
         }
     }, _Master) ->
-    ?debug("change_replicated_internal: changed links ~p", [FileUuid]),
-    ok = file_consistency:check_and_add_components(FileUuid, SpaceId, [link_to_parent, parent_links]);
+    ?debug("change_replicated_internal: changed links ~p", [FileUuid]);
 change_replicated_internal(SpaceId, #document{
         key = FileUuid,
         value = #times{}
     }, _Master) ->
     ?debug("change_replicated_internal: changed times ~p", [FileUuid]),
     FileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId)),
-    (catch fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx)),
-    ok = file_consistency:add_components_and_notify(FileUuid, [times]);
+    (catch fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx));
 change_replicated_internal(_SpaceId, #document{
         key = FileUuid,
         value = #custom_metadata{}
     }, _Master) ->
-    ?debug("change_replicated_internal: changed custom_metadata ~p", [FileUuid]),
-    ok = file_consistency:add_components_and_notify(FileUuid, [custom_metadata]);
+    ?debug("change_replicated_internal: changed custom_metadata ~p", [FileUuid]);
 change_replicated_internal(_SpaceId, _Change, _Master) ->
     ok.
 

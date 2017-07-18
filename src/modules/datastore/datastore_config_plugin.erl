@@ -51,7 +51,6 @@ models() -> [
     dbsync_batches,
     custom_metadata,
     indexes,
-    file_consistency,
     permissions_cache,
     permissions_cache_helper,
     times,
