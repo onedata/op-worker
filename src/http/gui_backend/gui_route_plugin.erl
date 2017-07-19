@@ -71,6 +71,8 @@ route(<<"/logout.html">>) -> ?LOGOUT;
 route(<<"/validate_login.html">>) -> ?VALIDATE_LOGIN;
 route(<<"/">>) -> ?INDEX;
 route(<<"/index.html">>) -> ?INDEX;
+% Ember-style URLs also point to index file
+route(<<"/#/", _/binary>>) -> ?INDEX;
 route(_) -> undefined.
 
 

@@ -257,7 +257,8 @@ handle_changes_request(ProviderId, #changes_request2{
             ?APP_NAME, dbsync_changes_resend_interval, timer:seconds(1)
         )}
     ]),
-    supervisor:start_child(?DBSYNC_WORKER_SUP, Spec).
+    Node = consistent_hasing:get_node({dbsync_out_stream, SpaceId}),
+    rpc:call(Node, supervisor, start_child, [?DBSYNC_WORKER_SUP, Spec]).
 
 %%--------------------------------------------------------------------
 %% @private

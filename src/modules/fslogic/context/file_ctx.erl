@@ -50,7 +50,7 @@
 -type ctx() :: #file_ctx{}.
 
 %% Functions creating context and filling its data
--export([new_by_canonical_path/2, new_by_guid/1, new_by_doc/3]).
+-export([new_by_canonical_path/2, new_by_guid/1, new_by_doc/3, new_root_ctx/0]).
 -export([reset/1, new_by_partial_context/1, add_file_location/2]).
 
 %% Functions that do not modify context
@@ -74,6 +74,15 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates new root directory file context.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_root_ctx() -> ctx().
+new_root_ctx() ->
+    new_by_guid(fslogic_uuid:uuid_to_guid(?ROOT_DIR_UUID, undefined)).
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -19,6 +19,13 @@
 
 -define(MOCKED_MODELS, [od_space, od_group, od_user]).
 
+-define(REV1, <<"1-r">>).
+-define(REV2, <<"2-r">>).
+-define(REV3, <<"3-r">>).
+-define(REV4, <<"4-r">>).
+-define(REV5, <<"5-r">>).
+-define(REV6, <<"6-r">>).
+
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
@@ -35,20 +42,20 @@ creates_docs_with_proper_value_test_() ->
             },
             UpdateDoc = #document{
                 key = <<"some key">>,
-                rev = <<"r4">>,
+                rev = ?REV4,
                 value = Space
             },
 
             % when
             subscription_conflicts:update_model(od_space, UpdateDoc,
-                [<<"r4">>, <<"r3">>, <<"r2">>, <<"r1">>]),
+                [?REV4, ?REV3, ?REV2, ?REV1]),
 
             %then
             {CreateDoc, _} = last_create_or_update(od_space),
             Expectation = UpdateDoc#document{
                 key = <<"some key">>,
                 value = Space#od_space{
-                    revision_history = [<<"r4">>, <<"r3">>, <<"r2">>, <<"r1">>]
+                    revision_history = [?REV4]
                 }},
             ?assertMatch(Expectation, CreateDoc)
         end]}.
@@ -64,11 +71,11 @@ accepts_unseen_revs_test_() ->
                 value = #od_space{name = <<"space1-up">>}
             },
             subscription_conflicts:update_model(od_space, UpdateDoc,
-                [<<"r4">>, <<"r3">>, <<"r2">>, <<"r1">>]),
+                [?REV4, ?REV3, ?REV2, ?REV1]),
             {_, UpdateFun} = last_create_or_update(od_space),
             CurrentRecord = #od_space{
                 name = <<"space1">>,
-                revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]
+                revision_history = [?REV3, ?REV2, ?REV1]
             },
 
             % when
@@ -77,7 +84,7 @@ accepts_unseen_revs_test_() ->
             %then
             ?assertMatch({ok, #od_space{
                 name = <<"space1-up">>,
-                revision_history = [<<"r4">>, <<"r3">>, <<"r2">>, <<"r1">>]
+                revision_history = [?REV4]
             }}, Result)
         end]}.
 
@@ -92,11 +99,11 @@ includes_all_unseen_revs_on_accept_test_() ->
                 value = #od_space{name = <<"space1-up">>}
             },
             subscription_conflicts:update_model(od_space, UpdateDoc,
-                [<<"r4">>, <<"r3">>, <<"r2">>, <<"r1">>]),
+                [?REV4, ?REV3, ?REV2, ?REV1]),
             {_, UpdateFun} = last_create_or_update(od_space),
             CurrentRecord = #od_space{
                 name = <<"space1">>,
-                revision_history = [<<"r3">>]
+                revision_history = [?REV3]
             },
 
             % when
@@ -105,7 +112,7 @@ includes_all_unseen_revs_on_accept_test_() ->
             %then
             ?assertMatch({ok, #od_space{
                 name = <<"space1-up">>,
-                revision_history = [<<"r4">>, <<"r2">>, <<"r1">>, <<"r3">>]
+                revision_history = [?REV4]
             }}, Result)
         end]}.
 
@@ -120,11 +127,11 @@ ignores_seen_revs_test_() ->
                 value = #od_space{name = <<"space1-up">>}
             },
             subscription_conflicts:update_model(od_space, UpdateDoc,
-                [<<"r2">>, <<"r1">>]),
+                [?REV2, ?REV1]),
             {_, UpdateFun} = last_create_or_update(od_space),
             CurrentRecord = #od_space{
                 name = <<"space1">>,
-                revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]
+                revision_history = [?REV3, ?REV2, ?REV1]
             },
 
             % when
@@ -133,7 +140,7 @@ ignores_seen_revs_test_() ->
             %then
             ?assertMatch({ok, #od_space{
                 name = <<"space1">>,
-                revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]
+                revision_history = [?REV3]
             }}, Result)
         end]}.
 
@@ -148,11 +155,11 @@ includes_all_unseen_revs_on_ignore_test_() ->
                 value = #od_space{name = <<"space1-up">>}
             },
             subscription_conflicts:update_model(od_space, UpdateDoc,
-                [<<"r6">>, <<"r5">>, <<"r1">>]),
+                [?REV6, ?REV5, ?REV1]),
             {_, UpdateFun} = last_create_or_update(od_space),
             CurrentRecord = #od_space{
                 name = <<"space1">>,
-                revision_history = [<<"r6">>, <<"r4">>, <<"r3">>]
+                revision_history = [?REV6, ?REV4, ?REV3]
             },
 
             % when
@@ -161,7 +168,7 @@ includes_all_unseen_revs_on_ignore_test_() ->
             %then
             ?assertMatch({ok, #od_space{
                 name = <<"space1">>,
-                revision_history = [<<"r6">>, <<"r4">>, <<"r3">>, <<"r5">>, <<"r1">>]
+                revision_history = [?REV6]
             }}, Result)
         end]}.
 
