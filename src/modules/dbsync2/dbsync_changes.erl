@@ -104,8 +104,7 @@ apply(Doc = #document{key = Key, value = Value, scope = SpaceId, seq = Seq}) ->
     {ok, datastore:document()} | {error, Reason :: any()}.
 foreign_links_get(ModelConfig, Key, MainDocKey) ->
     model:execute_with_default_context(ModelConfig, get,
-        [Key], [{hooks_config, no_hooks}, {links_tree, {true, MainDocKey}},
-            {disc_driver_ctx, bucket, <<"default">>}]).
+        [Key], [{hooks_config, no_hooks}, {links_tree, {true, MainDocKey}}]).
 
 
 %%--------------------------------------------------------------------
@@ -120,10 +119,11 @@ foreign_links_get(ModelConfig, Key, MainDocKey) ->
 foreign_links_save(ModelConfig, Doc = #document{key = Key, value = #links{
     doc_key = MainDocKey
 } = Links}) ->
-    Result = model:execute_with_default_context(ModelConfig, save, [Doc], [
-        {hooks_config, no_hooks}, {resolve_conflicts, true},
-        {links_tree, {true, MainDocKey}}, {disc_driver_ctx, bucket, <<"default">>}
-    ]),
+    Result = model:execute_with_default_context(ModelConfig, save,
+        [Doc#document{seq = null}], [{hooks_config, no_hooks},
+            {resolve_conflicts, true}, {links_tree, {true, MainDocKey}},
+            {disc_driver_ctx, no_seq, true}
+        ]),
     case Result of
         ok ->
             case foreign_links_get(ModelConfig, Key, MainDocKey) of
