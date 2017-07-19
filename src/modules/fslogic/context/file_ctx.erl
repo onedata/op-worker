@@ -581,6 +581,10 @@ get_or_create_local_file_location_doc(FileCtx) ->
                 {undefined, FileCtx3} ->
                     {CreatedLocation, FileCtx4} =
                         sfm_utils:create_storage_file_location(FileCtx3, false),
+                    {LocationDocs, FileCtx5} = get_file_location_docs(FileCtx4),
+                    lists:map(fun(ChangedLocation) ->
+                        replica_dbsync_hook:on_file_location_change(FileCtx5, ChangedLocation)
+                        end, LocationDocs),
                     {
                         #document{
                             key = file_location:local_id(FileUuid),
