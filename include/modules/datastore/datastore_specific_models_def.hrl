@@ -288,7 +288,7 @@
 -record(luma_config, {
     url :: binary(),
     cache_timeout :: non_neg_integer(),
-    api_key :: binary()
+    api_key = undefined :: undefined | binary()
 }).
 
 %% Model that maps space to storage

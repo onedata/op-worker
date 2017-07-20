@@ -37,13 +37,17 @@ get_user_ctx(UserId, SpaceId, StorageDoc = #document{
 }}}, Helper) ->
 
     Url = lists:flatten(io_lib:format("~s/map_user_credentials", [LumaUrl])),
-    ReqHeaders = #{
-        <<"X-Auth-Token">> => APIKey,
-        <<"Content-Type">> => <<"application/json">>
-    },
+    ReqHeaders = #{<<"Content-Type">> => <<"application/json">>},
+    ReqHeaders2 = case APIKey of
+        undefined ->
+            ReqHeaders;
+        _ ->
+            ReqHeaders#{<<"X-Auth-Token">> => APIKey}
+
+    end,
     ReqBody = get_request_body(UserId, SpaceId, StorageDoc, Helper),
 
-    case http_client:post(Url, ReqHeaders, ReqBody) of
+    case http_client:post(Url, ReqHeaders2, ReqBody) of
         {ok, 200, _RespHeaders, RespBody} ->
             UserCtx = json_utils:decode_map(RespBody),
             case helper:validate_user_ctx(Helper, UserCtx) of

@@ -36,15 +36,16 @@ get_user_id(Uid, Gid, StorageName, HelperName, #luma_config{
     api_key = LumaApiKey
 }) ->
     Url = lists:flatten(io_lib:format("~s/resolve_user_identity", [LumaUrl])),
+    ReqHeaders = #{<<"Content-Type">> => <<"application/json">>},
+    ReqHeaders2 = case LumaApiKey of
+        undefined ->
+            ReqHeaders;
+        _ ->
+            ReqHeaders#{<<"X-Auth-Token">> => LumaApiKey}
 
-    ReqHeaders = #{
-        <<"X-Auth-Token">> => LumaApiKey,
-        <<"Content-Type">> => <<"application/json">>
-    },
-
-    StorageCredentials = get_request_body(Uid, Gid, StorageName, HelperName),
-    ReqBody = json_utils:encode_map(StorageCredentials),
-    {ok, 200, _RespHeaders, RespBody} = http_client:post(Url, ReqHeaders, ReqBody),
+    end,
+    ReqBody = get_request_body(Uid, Gid, StorageName, HelperName),
+    {ok, 200, _RespHeaders, RespBody} = http_client:post(Url, ReqHeaders2, ReqBody),
     Response = json_utils:decode_map(RespBody),
     {ok, maps:get(<<"id">>, Response)}.
 
@@ -59,17 +60,17 @@ get_user_id(Uid, Gid, StorageName, HelperName, #luma_config{
 %% by given storage.
 %% @end
 %%-------------------------------------------------------------------
--spec get_request_body(binary(), binary(), storage:name(), helper:name()) -> map().
+-spec get_request_body(binary(), binary(), storage:name(), helper:name()) -> binary().
 get_request_body(Uid, Gid, StorageName, ?POSIX_HELPER_NAME) ->
-    get_posix_request_body(Uid, Gid, StorageName);
+    json_utils:encode_map(get_posix_request_body(Uid, Gid, StorageName));
 get_request_body(Uid, Gid, StorageName, ?CEPH_HELPER_NAME) ->
-    get_ceph_request_body_(Uid, Gid, StorageName);
+    json_utils:encode_map(get_ceph_request_body_(Uid, Gid, StorageName));
 get_request_body(Uid, Gid, StorageName, ?S3_HELPER_NAME) ->
-    get_s3_request_body(Uid, Gid, StorageName);
+    json_utils:encode_map(get_s3_request_body(Uid, Gid, StorageName));
 get_request_body(Uid, Gid, StorageName, ?SWIFT_HELPER_NAME) ->
-    get_swift_request_body(Uid, Gid, StorageName);
+    json_utils:encode_map(get_swift_request_body(Uid, Gid, StorageName));
 get_request_body(Uid, Gid, StorageName, ?GLUSTERFS_HELPER_NAME) ->
-    get_glusterfs_request_body(Uid, Gid, StorageName).
+    json_utils:encode_map(get_glusterfs_request_body(Uid, Gid, StorageName)).
 
 %%-------------------------------------------------------------------
 %% @private

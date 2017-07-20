@@ -111,8 +111,6 @@ create_directory_import_check_user_id_test(Config, MountSpaceInRoot) ->
     %% Create dir on storage
     ok = file:make_dir(StorageTestDirPath),
     ok = file:change_owner(StorageTestDirPath, ?TEST_UID, ?TEST_GID),
-    tracer:start(W1),
-    tracer:trace_calls(reverse_luma_proxy),
     storage_sync_test_base:enable_storage_import(Config),
     %% Check if dir was imported
     ?assertMatch({ok, #file_attr{owner_id = ?TEST_OD_USER_ID}},
@@ -746,10 +744,7 @@ chmod_file_update_test(Config, MountSpaceInRoot) ->
     StorageTestFileinDirPath1 =
         storage_test_file_path(W1MountPoint, ?SPACE_ID, filename:join([?TEST_DIR, ?TEST_FILE1]), MountSpaceInRoot),
 
-    %%    StorageTestFilePath =
-    %%        storage_test_file_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
     NewMode = 8#600,
-
     %% Create dirs on storage
     ok = file:make_dir(StorageTestDirPath),
     %% Create file on storage

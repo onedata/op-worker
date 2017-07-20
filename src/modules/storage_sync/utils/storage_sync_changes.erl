@@ -55,8 +55,10 @@ children_attrs_hash_has_changed(#file_meta{storage_sync_info = StSyncInfo},
     CurrentChildrenAttrsHash, Key
 ) ->
     PreviousHashes = StSyncInfo#storage_sync_info.children_attrs_hashes,
-    PreviousHash = maps:get(Key, PreviousHashes, <<"">>),
-    case PreviousHash of
+    PreviousHash = maps:get(Key, PreviousHashes, undefined),
+    case {PreviousHash, CurrentChildrenAttrsHash} of
+        {Hash, Hash} -> false;
+        {undefined, <<"">>} -> false;
         CurrentChildrenAttrsHash -> false;
         _ -> true
     end.

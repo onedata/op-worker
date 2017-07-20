@@ -157,8 +157,27 @@ strategy_merge_result(Jobs, Results) ->
     LocalResult :: space_strategy:job_result(),
     ChildrenResult :: space_strategy:job_result()) ->
     space_strategy:job_result().
-strategy_merge_result(Job, LocalResult, ChildrenResult) ->
-    storage_import:strategy_merge_result(Job, LocalResult, ChildrenResult).
+strategy_merge_result(#space_strategy_job{strategy_name = no_update}, ok, ok) ->
+    ok;
+strategy_merge_result(#space_strategy_job{
+    data = #{
+        space_id := SpaceId,
+        storage_id := StorageId
+}}, ok, ok) ->
+    case storage_sync_monitoring:update_in_progress(SpaceId) of
+        false ->
+            {ok, _} = space_strategies:update_last_import_time(SpaceId,
+                StorageId, os:system_time(milli_seconds)),
+            ok;
+        _ ->
+            ok
+    end;
+strategy_merge_result(_Job, Error, ok) ->
+    Error;
+strategy_merge_result(_Job, ok, Error) ->
+    Error;
+strategy_merge_result(_Job, {error, Reason1}, {error, Reason2}) ->
+    {error, [Reason1, Reason2]}.
 
 %%--------------------------------------------------------------------
 %% @doc

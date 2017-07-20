@@ -274,7 +274,7 @@ end_per_testcase(Case, Config) when
 ->
     Workers = ?config(op_worker_nodes, Config),
     storage_sync_test_base:reset_enoent_strategies(Workers, ?SPACE_ID),
-    end_per_testcase(undefined, Config);
+    end_per_testcase(default, Config);
 
 end_per_testcase(Case, Config) when
     Case =:= chmod_file_update2_test;

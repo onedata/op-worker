@@ -381,7 +381,7 @@ generate_jobs_for_importing_children(Job = #space_strategy_job{data = Data},
         false ->
             {FileJobs, [
                 Job#space_strategy_job{
-                    data = Data#{
+                    data = DataClean#{
                         dir_offset => Offset + length(ChildrenStorageCtxsBatch)
                     }
                 } | DirJobs

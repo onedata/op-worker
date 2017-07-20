@@ -77,10 +77,11 @@ record_struct(3) ->
             {insecure, boolean}
         ]}]},
         {readonly, boolean},
-        {luma_config, [{record, [
+        {luma_config, {record, [
             {url, string},
-            {cache_timeout, integer}
-        ]}]}
+            {cache_timeout, integer},
+            {api_key, string}
+        ]}}
     ]}.
 
 %%--------------------------------------------------------------------

@@ -22,7 +22,7 @@
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Returns new luma_config record. CacheTimeout is in minutes
+%% Returns new luma_config record. CacheTimeout is passed in minutes
 %% @end
 %%-------------------------------------------------------------------
 -spec new(binary(), non_neg_integer(), binary()) -> config().
@@ -33,5 +33,10 @@ new(URL, CacheTimeout, ApiKey) ->
         api_key = ApiKey
     }.
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns value of cache_timeout field.
+%%-------------------------------------------------------------------
+-spec get_timeout(config() | undefined) -> undefined | non_neg_integer().
 get_timeout(undefined) -> undefined;
 get_timeout(#luma_config{cache_timeout = Timeout}) -> Timeout.
