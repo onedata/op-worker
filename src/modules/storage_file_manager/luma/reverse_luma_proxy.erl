@@ -31,23 +31,17 @@
 %%--------------------------------------------------------------------
 -spec get_user_id(binary(), binary(), storage:name(), helper:name(),
     luma_config:config()) -> {ok, od_user:id()}.
-get_user_id(Uid, Gid, StorageName, HelperName, #luma_config{
-    url = LumaUrl,
-    api_key = LumaApiKey
-}) ->
+get_user_id(Uid, Gid, StorageName, HelperName, LumaConfig = #luma_config{url = LumaUrl}) ->
     Url = lists:flatten(io_lib:format("~s/resolve_user_identity", [LumaUrl])),
-    ReqHeaders = #{<<"Content-Type">> => <<"application/json">>},
-    ReqHeaders2 = case LumaApiKey of
-        undefined ->
-            ReqHeaders;
-        _ ->
-            ReqHeaders#{<<"X-Auth-Token">> => LumaApiKey}
-
-    end,
+    ReqHeaders = luma_proxy:get_request_headers(LumaConfig),
     ReqBody = get_request_body(Uid, Gid, StorageName, HelperName),
-    {ok, 200, _RespHeaders, RespBody} = http_client:post(Url, ReqHeaders2, ReqBody),
+    {ok, 200, _RespHeaders, RespBody} = http_client:post(Url, ReqHeaders, ReqBody),
     Response = json_utils:decode_map(RespBody),
-    {ok, maps:get(<<"id">>, Response)}.
+    ProviderId = maps:get(<<"providerId">>, Response),
+    ProviderUserId = maps:get(<<"userId">>, Response),
+    UserId = datastore_utils2:gen_key(<<"">>, str_utils:format_bin("~p:~s",
+        [ProviderId, ProviderUserId])),
+    {ok, UserId}.
 
 %%%===================================================================
 %%% Internal functions

@@ -284,7 +284,7 @@ create_subfiles_and_delete_before_import_is_finished_test(Config, MountSpaceInRo
     ?assertMatch({error, ?ENOENT},
         file:list_dir(StorageTestDirPath)),
     ?assertMatch({ok, []},
-            lfm_proxy:ls(W1, SessId, {path, ?SPACE_PATH}, 0, 100), ?ATTEMPTS).
+            lfm_proxy:ls(W1, SessId, {path, ?SPACE_PATH}, 0, 100), 2 * ?ATTEMPTS).
 
 create_directory_export_test(Config, MountSpaceInRoot) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -1147,7 +1147,8 @@ create_nested_directory_tree([SubFilesNum], Root) ->
         ok = file:write_file(FilePath, ?TEST_DATA)
     end, lists:seq(1, SubFilesNum));
 create_nested_directory_tree([SubDirsNum | Rest], Root) ->
-    ok = utils:pforeach(fun(N) ->
+%%    ok = utils:pforeach(fun(N) ->
+    ok = lists:foreach(fun(N) ->
         NBin = integer_to_binary(N),
         DirPath = filename:join([Root, NBin]),
         ok = file:make_dir(DirPath),

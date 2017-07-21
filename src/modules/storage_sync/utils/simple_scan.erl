@@ -195,7 +195,8 @@ import_regular_subfiles(FilesJobs) ->
 increase_files_to_handle_counter(#space_strategy_job{
     strategy_type = StrategyType,
     data = #{
-        space_id := SpaceId
+        space_id := SpaceId,
+        file_name := FileName
     }},
     FileCtx, {FilesJobs, DirJobs}
 ) ->
@@ -456,6 +457,7 @@ new_job(Job, Data, StorageFileCtx) ->
 handle_already_imported_file(Job = #space_strategy_job{
     strategy_type = StrategyType,
     data = Data = #{
+        file_name := FileName,
         space_id := SpaceId,
         storage_file_ctx := StorageFileCtx
 }}, FileAttr, FileCtx) ->

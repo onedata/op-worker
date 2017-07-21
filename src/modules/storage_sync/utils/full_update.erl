@@ -51,7 +51,8 @@ run(Job = #space_strategy_job{
         ok = remove_files_not_existing_on_storage(StorageTable, DBTable, FileCtx, SpaceId)
     after
         true = ets:delete(StorageTable),
-        true = ets:delete(DBTable)
+        true = ets:delete(DBTable),
+        storage_sync_monitoring:update_files_to_update_counter(SpaceId, -1)
     end,
     {ok, Job}.
 

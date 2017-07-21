@@ -32,7 +32,7 @@
 %% will be saved.
 %% @end
 %%-------------------------------------------------------------------
--spec get(module(), key(), function(), [term()], timestamp()) ->
+-spec get(module(), key(), function(), [term()], luma_config:cache_timeout()) ->
     {ok, Value :: value()} | {error, Reason :: term()}.
 get(Module, Key, QueryFun, QueryArgs, LumaCacheTimeout) ->
     CurrentTimestamp = erlang:system_time(milli_seconds),
@@ -97,6 +97,6 @@ query_and_cache_value(Module, Key, QueryFun, QueryArgs, CurrentTimestamp) ->
 %% Checks whether cache should be renewed.
 %% @end
 %%-------------------------------------------------------------------
--spec cache_should_be_renewed(timestamp(), timestamp(), timestamp()) -> boolean().
+-spec cache_should_be_renewed(timestamp(), timestamp(), luma_config:cache_timeout()) -> boolean().
 cache_should_be_renewed(CurrentTimestamp, LastTimestamp, CacheTimeout) ->
     (CurrentTimestamp - LastTimestamp) > CacheTimeout.

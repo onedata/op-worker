@@ -221,8 +221,13 @@ check_strategies(SpaceId, StorageIds) ->
     maps:map()) -> ok.
 maybe_start_storage_import_and_update(SpaceId, StorageId, StorageStrategies) ->
     case maps:find(StorageId, StorageStrategies) of
-        {ok, #storage_strategies{last_import_time = LastImportTime}} ->
-            start_storage_import_and_update(SpaceId, StorageId, LastImportTime);
+        {ok, #storage_strategies{
+            import_finish_time = ImportFinishTime,
+            last_update_start_time = LastUpdateStartTime,
+            last_update_finish_time = LastUpdateFinishTime
+        }} ->
+            start_storage_import_and_update(SpaceId, StorageId, ImportFinishTime,
+                LastUpdateStartTime, LastUpdateFinishTime);
         error ->
             ok
     end.
@@ -235,15 +240,18 @@ maybe_start_storage_import_and_update(SpaceId, StorageId, StorageStrategies) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec start_storage_import_and_update(od_space:id(), storage:id(),
-    integer() | undefined) -> ok.
-start_storage_import_and_update(SpaceId, StorageId, LastImportTime) ->
+    space_strategy:timestamp(), space_strategy:timestamp(),
+    space_strategy:timestamp()) -> ok.
+start_storage_import_and_update(SpaceId, StorageId, ImportFinishTime,
+    LastUpdateStartTime, LastUpdateFinishTime
+) ->
     RootDirCtx = file_ctx:new_root_ctx(),
-    ImportAns = storage_import:start(SpaceId, StorageId, LastImportTime,
+    ImportAns = storage_import:start(SpaceId, StorageId, ImportFinishTime,
         RootDirCtx, SpaceId),
     log_import_answer(ImportAns, SpaceId, StorageId),
 
-    UpdateAns = storage_update:start(SpaceId, StorageId, LastImportTime,
-        RootDirCtx, SpaceId),
+    UpdateAns = storage_update:start(SpaceId, StorageId, ImportFinishTime,
+        LastUpdateStartTime, LastUpdateFinishTime, RootDirCtx, SpaceId),
     log_update_answer(UpdateAns, SpaceId, StorageId).
 
 

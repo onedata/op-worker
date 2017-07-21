@@ -66,7 +66,9 @@ get_user_id_on_posix_storage(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Result = rpc:call(Worker, reverse_luma, get_user_id,
         [<<"0">>, <<"0">>, ?STORAGE_ID, ?STORAGE]),
-    ?assertEqual({ok, <<"test_user_id">>}, Result).
+    ExpectedUserId = datastore_utils2:gen_key(<<"">>, str_utils:format_bin("~p:~s",
+        [<<"test_provider_id">>, <<"test_user_id">>])),
+    ?assertEqual({ok, ExpectedUserId}, Result).
 
 get_user_id_on_posix_storage_should_return_error_when_reverse_luma_is_disabled(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -91,14 +93,16 @@ get_user_id_should_fail_with_not_supported_storage_error(Config) ->
 get_user_id_on_posix_storage_should_query_reverse_luma_once(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, reverse_luma_proxy, [passthrough]),
+    ExpectedUserId = datastore_utils2:gen_key(<<"">>, str_utils:format_bin("~p:~s",
+        [<<"test_provider_id">>, <<"test_user_id">>])),
 
     Result = rpc:call(Worker, reverse_luma, get_user_id,
         [<<"0">>, <<"0">>, ?STORAGE_ID, ?STORAGE]),
-    ?assertEqual({ok, <<"test_user_id">>}, Result),
+    ?assertEqual({ok, ExpectedUserId}, Result),
 
     Result2 = rpc:call(Worker, reverse_luma, get_user_id,
         [<<"0">>, <<"0">>, ?STORAGE_ID, ?STORAGE]),
-    ?assertEqual({ok, <<"test_user_id">>}, Result2),
+    ?assertEqual({ok, ExpectedUserId}, Result2),
 
     test_utils:mock_assert_num_calls(Worker, reverse_luma_proxy, get_user_id,
         ['_', '_', '_', '_', '_'], 1).
@@ -108,16 +112,19 @@ get_user_id_on_posix_storage_should_query_reverse_luma_twice(Config) ->
     CacheTimeout = 5,
     LumaConfig = ?LUMA_CONFIG(CacheTimeout),
     test_utils:mock_new(Worker, reverse_luma_proxy, [passthrough]),
+    ExpectedUserId = datastore_utils2:gen_key(<<"">>, str_utils:format_bin("~p:~s",
+        [<<"test_provider_id">>, <<"test_user_id">>])),
 
-    Result = rpc:call(Worker, reverse_luma, get_user_id,
+        Result = rpc:call(Worker, reverse_luma, get_user_id,
         [<<"0">>, <<"0">>, ?STORAGE_ID, ?STORAGE(LumaConfig)]),
-    ?assertEqual({ok, <<"test_user_id">>}, Result),
+    ?assertEqual({ok, ExpectedUserId}, Result),
 
     timer:sleep(timer:seconds(CacheTimeout + 1)),
 
     Result2 = rpc:call(Worker, reverse_luma, get_user_id,
         [<<"0">>, <<"0">>, ?STORAGE_ID, ?STORAGE(LumaConfig)]),
-    ?assertEqual({ok, <<"test_user_id">>}, Result2),
+
+    ?assertEqual({ok, ExpectedUserId}, Result2),
 
     test_utils:mock_assert_num_calls(Worker, reverse_luma_proxy, get_user_id,
         ['_', '_', '_', '_', '_'], 2).
@@ -132,7 +139,11 @@ init_per_testcase(Case, Config) when
 
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, [http_client, storage]),
-    mock_resolve_user_identity_post(Worker, {ok, 200, [], <<"{\"id\": \"test_user_id\"\}">>}),
+    mock_resolve_user_identity_post(Worker,
+        {ok, 200, [], <<"{
+        \"providerId\": \"test_provider_id\",
+        \"userId\": \"test_user_id\"
+        \}">>}),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(Case, Config) when
@@ -140,7 +151,11 @@ init_per_testcase(Case, Config) when
 
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, [http_client, reverse_luma_proxy]),
-    mock_resolve_user_identity_post(Worker, {ok, 200, [], <<"{\"id\": \"test_user_id\"\}">>}),
+    mock_resolve_user_identity_post(Worker,
+        {ok, 200, [], <<"{
+        \"providerId\": \"test_provider_id\",
+        \"userId\": \"test_user_id\"
+        \}">>}),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(Case, Config) when

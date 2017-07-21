@@ -286,9 +286,9 @@
 }).
 
 -record(luma_config, {
-    url :: binary(),
-    cache_timeout :: non_neg_integer(),
-    api_key = undefined :: undefined | binary()
+    url :: luma_config:url(),
+    cache_timeout :: luma_config:cache_timeout(),
+    api_key :: luma_config:api_key()
 }).
 
 %% Model that maps space to storage
@@ -329,7 +329,10 @@
     filename_mapping = ?DEFAULT_FILENAME_MAPPING_STRATEGY :: space_strategy:config(),
     storage_import = ?DEFAULT_STORAGE_IMPORT_STRATEGY :: space_strategy:config(),
     storage_update = ?DEFAULT_STORAGE_UPDATE_STRATEGY :: space_strategy:config(),
-    last_import_time :: integer() | undefined
+    import_start_time :: space_strategy:timestamp(),
+    import_finish_time :: space_strategy:timestamp(),
+    last_update_start_time :: space_strategy:timestamp(),
+    last_update_finish_time :: space_strategy:timestamp()
 }).
 
 -define(DEFAULT_FILE_CONFLICT_RESOLUTION_STRATEGY, {ignore_conflicts, #{}}).

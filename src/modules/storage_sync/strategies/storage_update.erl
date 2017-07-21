@@ -41,7 +41,7 @@
 -export([handle_already_imported_file/3, maybe_import_storage_file_and_children/1]).
 
 %% API
--export([start/5]).
+-export([start/7]).
 
 %%%===================================================================
 %%% space_strategy_behaviour callbacks
@@ -98,27 +98,26 @@ available_strategies() ->
     space_strategy:job_data()) -> [space_strategy:job()].
 strategy_init_jobs(no_update, _, _) ->
     [];
-strategy_init_jobs(_, _, #{last_import_time := undefined}) ->
-    [];
+strategy_init_jobs(_, _, #{import_finish_time := undefined}) ->
+    []; % import hasn't been started yet
+strategy_init_jobs(_, Args, Data = #{last_update_start_time := undefined}) ->
+    % it will be first update
+    CurrentTimestamp = os:system_time(milli_seconds),
+    init_update_job(CurrentTimestamp, Args, Data);
+strategy_init_jobs(simple_scan, _, #{last_update_finish_time := undefined}) ->
+    []; %update is in progress
 strategy_init_jobs(simple_scan,
-    Args = #{
-        scan_interval := ScanIntervalSeconds,
-        max_depth := MaxDepth
-    },
+    Args = #{scan_interval := ScanIntervalSeconds},
     Data = #{
-        last_import_time := LastImportTime,
-        space_id := SpaceId
-    }
-) ->
-    case LastImportTime + timer:seconds(ScanIntervalSeconds) < os:system_time(milli_seconds) of
+        last_update_start_time := LastUpdateStartTime,
+        last_update_finish_time := LastUpdateFinishTime
+}) ->
+    CurrentTimestamp = os:system_time(milli_seconds),
+    case should_init_update_job(LastUpdateStartTime, LastUpdateFinishTime,
+        ScanIntervalSeconds, CurrentTimestamp)
+    of
         true ->
-            storage_sync_monitoring:update_queue_length_spirals(SpaceId, 1),
-            storage_sync_monitoring:update_files_to_update_counter(SpaceId, 1),
-            [#space_strategy_job{
-                strategy_name = simple_scan,
-                strategy_args = Args,
-                data = Data#{max_depth => MaxDepth}
-            }];
+            init_update_job(CurrentTimestamp, Args, Data);
         false ->
             []
     end;
@@ -164,14 +163,7 @@ strategy_merge_result(#space_strategy_job{
         space_id := SpaceId,
         storage_id := StorageId
 }}, ok, ok) ->
-    case storage_sync_monitoring:update_in_progress(SpaceId) of
-        false ->
-            {ok, _} = space_strategies:update_last_import_time(SpaceId,
-                StorageId, os:system_time(milli_seconds)),
-            ok;
-        _ ->
-            ok
-    end;
+    update_last_update_finish_time_if_update_finished(SpaceId, StorageId);
 strategy_merge_result(_Job, Error, ok) ->
     Error;
 strategy_merge_result(_Job, ok, Error) ->
@@ -212,12 +204,17 @@ main_worker_pool() ->
 %% Function responsible for starting storage update.
 %% @end
 %%--------------------------------------------------------------------
--spec start(od_space:id(), storage:id(), integer() | undefined, file_ctx:ctx(),
-    file_meta:path()) ->
+-spec start(od_space:id(), storage:id(), space_strategy:timestamp(),
+    space_strategy:timestamp(), space_strategy:timestamp(),
+    file_ctx:ctx(), file_meta:path()) ->
     [space_strategy:job_result()] | space_strategy:job_result().
-start(SpaceId, StorageId, LastImportTime, ParentCtx, FileName) ->
+start(SpaceId, StorageId, ImportFinishTime, LastUpdateStartTime, LastUpdateFinishTime,
+    ParentCtx, FileName
+) ->
     InitialImportJobData = #{
-        last_import_time => LastImportTime,
+        import_finish_time => ImportFinishTime,
+        last_update_start_time => LastUpdateStartTime,
+        last_update_finish_time => LastUpdateFinishTime,
         space_id => SpaceId,
         storage_id => StorageId,
         file_name => FileName,
@@ -515,3 +512,58 @@ get_children_ctxs_batch(Offset, BatchSize, Data0, StorageFileCtx) ->
         storage_file_ctx:get_children_ctxs_batch_const(
             StorageFileCtx, Offset, BatchSize),
     {ChildrenStorageCtxsBatch0, Data0}.
+
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Checks whether update scan should be initiated.
+%% @end
+%%-------------------------------------------------------------------
+-spec should_init_update_job(space_strategy:timestamp(), space_strategy:timestamp(),
+    non_neg_integer(), space_strategy:timestamp()) -> boolean().
+should_init_update_job(LastUpdateStartTime, LastUpdateFinishTime,
+    ScanIntervalSeconds, CurrentTimestamp
+) ->
+    case LastUpdateStartTime > LastUpdateFinishTime of
+        true -> %update is in progress
+            false;
+        _ ->
+            LastUpdateFinishTime + timer:seconds(ScanIntervalSeconds) < CurrentTimestamp
+    end.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Initiates first update job.
+%% @end
+%%-------------------------------------------------------------------
+-spec init_update_job(space_strategy:timestamp(), space_strategy:arguments(),
+    space_strategy:job_data()) -> [space_strategy:job()].
+init_update_job(CurrentTimestamp, Args = #{max_depth := MaxDepth}, Data = #{
+    space_id := SpaceId,
+    storage_id := StorageId
+}) ->
+    space_strategies:update_last_update_start_time(SpaceId, StorageId, CurrentTimestamp),
+    storage_sync_monitoring:update_queue_length_spirals(SpaceId, 1),
+    storage_sync_monitoring:update_files_to_update_counter(SpaceId, 1),
+    [#space_strategy_job{
+        strategy_name = simple_scan,
+        strategy_args = Args,
+        data = Data#{max_depth => MaxDepth}
+    }].
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks if update has finished. If true, updates last_update_finish_time.
+%% @end
+%%-------------------------------------------------------------------
+-spec update_last_update_finish_time_if_update_finished(od_space:id(), storage:id()) -> ok.
+update_last_update_finish_time_if_update_finished(SpaceId, StorageId) ->
+    case storage_sync_monitoring:update_in_progress(SpaceId) of
+        false ->
+            {ok, _} = space_strategies:update_last_update_finish_time(SpaceId,
+                StorageId, os:system_time(milli_seconds)),
+            ok;
+        _ ->
+            ok
+    end.

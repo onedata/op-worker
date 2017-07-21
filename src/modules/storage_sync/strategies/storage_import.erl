@@ -23,13 +23,13 @@
 %%%===================================================================
 %%% Types
 %%%===================================================================
-
+-type state() :: not_started | in_progress | finished.
 %%%===================================================================
 %%% Exports
 %%%===================================================================
 
 %% Types
--export_type([]).
+-export_type([state/0]).
 
 %% space_strategy_behaviour callbacks
 -export([available_strategies/0, strategy_init_jobs/3, strategy_handle_job/1,
@@ -80,13 +80,15 @@ available_strategies() ->
     space_strategy:job_data()) -> [space_strategy:job()].
 strategy_init_jobs(no_import, _, _) ->
     [];
-strategy_init_jobs(_, _, #{last_import_time := LastImportTime})
-    when is_integer(LastImportTime) -> [];
+strategy_init_jobs(_, _, #{import_finish_time := ImportFinishTime})
+    when is_integer(ImportFinishTime) -> [];
 strategy_init_jobs(simple_scan, Args = #{max_depth := MaxDepth},
     Data = #{
-        last_import_time := undefined,
-        space_id := SpaceId
+        import_finish_time := undefined,
+        space_id := SpaceId,
+        storage_id := StorageId
 }) ->
+    space_strategies:update_import_start_time(SpaceId, StorageId, os:system_time(milli_seconds)),
     storage_sync_monitoring:update_queue_length_spirals(SpaceId, 1),
     storage_sync_monitoring:update_files_to_import_counter(SpaceId, 1),
     [#space_strategy_job{
@@ -141,14 +143,7 @@ strategy_merge_result(#space_strategy_job{
         space_id := SpaceId,
         storage_id := StorageId
 }}, ok, ok) ->
-    case storage_sync_monitoring:get_files_to_import_value(SpaceId) > 0 of
-        false ->
-            {ok, _} = space_strategies:update_last_import_time(SpaceId,
-                StorageId, os:system_time(milli_seconds)),
-            ok;
-        _ ->
-            ok
-    end;
+    update_import_finish_time_if_import_finished(SpaceId, StorageId);
 strategy_merge_result(_Job, Error, ok) ->
     Error;
 strategy_merge_result(_Job, ok, Error) ->
@@ -193,9 +188,9 @@ main_worker_pool() ->
 -spec start(od_space:id(), storage:id(), integer() | undefined, file_ctx:ctx(),
     file_meta:path()) ->
     [space_strategy:job_result()] | space_strategy:job_result().
-start(SpaceId, StorageId, LastImportTime, ParentCtx, FileName) ->
+start(SpaceId, StorageId, ImportFinishTime, ParentCtx, FileName) ->
     InitialImportJobData = #{
-        last_import_time => LastImportTime,
+        import_finish_time => ImportFinishTime,
         space_id => SpaceId,
         storage_id => StorageId,
         file_name => FileName,
@@ -208,3 +203,20 @@ start(SpaceId, StorageId, LastImportTime, ParentCtx, FileName) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks if import has finished. If true, updates import_finish_time.
+%% @end
+%%-------------------------------------------------------------------
+-spec update_import_finish_time_if_import_finished(od_space:id(), storage:id()) -> ok.
+update_import_finish_time_if_import_finished(SpaceId, StorageId) ->
+    case storage_sync_monitoring:import_state(SpaceId) of
+        finished ->
+            {ok, _} = space_strategies:update_import_finish_time(SpaceId,
+                StorageId, os:system_time(milli_seconds)),
+            ok;
+        _ ->
+            ok
+    end.
