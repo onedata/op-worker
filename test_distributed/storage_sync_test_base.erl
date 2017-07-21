@@ -918,7 +918,7 @@ clean_storage(Config, Readonly) ->
                 os:cmd("rm -r " ++ binary_to_list(HostMountPoint) ++ "/" ++ binary_to_list(?SPACE_ID))
         end
     end, Workers),
-    timer:sleep(timer:seconds(3))
+    timer:sleep(timer:seconds(10))
 .
 
 set_check_locally_enoent_strategy(Worker, SpaceId) ->

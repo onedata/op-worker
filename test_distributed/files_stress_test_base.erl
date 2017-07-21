@@ -42,6 +42,7 @@ single_dir_creation_test_base(Config, Clear) ->
     [{_SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
     RepeatNum = ?config(rep_num, Config),
 
+    % Generate test setup
     {Dir, CheckAns, NameExt} = case {Clear, RepeatNum} of
         {true, _} ->
             MainDir = generator:gen_name(),
@@ -61,10 +62,12 @@ single_dir_creation_test_base(Config, Clear) ->
 
     case CheckAns of
         {ok, _} ->
+            % Create all
             {SaveOk, SaveTime, SError, SErrorTime} =
                 rpc:call(Worker, ?MODULE, create_single_call,
                     [SessId, Dir, FilesNum, NameExtBin]),
 
+            % Delete all is clearing is active
             {DelOk, DelTime, DError, DErrorTime} =
                 case Clear of
                     true ->
@@ -85,11 +88,13 @@ single_dir_creation_test_base(Config, Clear) ->
                         {0,0,0,0}
                 end,
 
+            % Gather test results
             SaveAvgTime = get_avg(SaveOk, SaveTime),
             SErrorAvgTime = get_avg(SError, SErrorTime),
             DelAvgTime = get_avg(DelOk, DelTime),
             DErrorAvgTime = get_avg(DError, DErrorTime),
 
+            % Print statistics
             case Clear of
                 true ->
                     ct:print("Save num ~p, del num ~p", [SaveOk, DelOk]);
@@ -120,6 +125,7 @@ many_files_creation_tree_test_base(Config, WriteToFile) ->
     DirsPerParent = ?config(dirs_per_parent, Config),
     FilesPerDir = ?config(files_per_dir, Config),
 
+    % Setup test
     [Worker | _] = ?config(op_worker_nodes, Config),
     User = <<"user1">>,
 
@@ -137,6 +143,7 @@ many_files_creation_tree_test_base(Config, WriteToFile) ->
 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+    % Create dirs used during main test part (performance not measured)
     [{BaseDir, _} | _] = BaseDirsReversed = lists:foldl(fun({N, C}, [{H, _} | _] = Acc) ->
         N2 = integer_to_binary(N),
         NewDir = <<H/binary, "/", N2/binary>>,
@@ -153,6 +160,7 @@ many_files_creation_tree_test_base(Config, WriteToFile) ->
             Acc
     end, {ok, ok}, BaseDirs),
 
+    % Check if dirs are ready
     Proceed = case BaseCreationAns of
         {ok, _} ->
             ok;
@@ -165,6 +173,7 @@ many_files_creation_tree_test_base(Config, WriteToFile) ->
         ok ->
             Dirs = create_dirs_names(BaseDir, SpawnBegLevel, DirLevel, DirsPerParent),
 
+            % Function that creates test directories and measures performance
             Fun = fun(D) ->
                 {T, A} = measure_execution_time(fun() ->
                     case lfm_proxy:mkdir(Worker, SessId, D, 8#755) of
@@ -177,6 +186,7 @@ many_files_creation_tree_test_base(Config, WriteToFile) ->
                 Master ! {worker_ans, A, T}
             end,
 
+            % Function that creates test files and measures performance
             Fun2 = fun(D) ->
                 lists:foreach(fun(N) ->
                     N2 = integer_to_binary(N),
@@ -184,6 +194,7 @@ many_files_creation_tree_test_base(Config, WriteToFile) ->
                     {T, A} = measure_execution_time(fun() ->
                         try
                             {ok, _} = lfm_proxy:create(Worker, SessId, F, 8#755),
+                            % Fill file if needed (depends on test config)
                             case WriteToFile of
                                 true ->
                                     {ok, Handle} = lfm_proxy:open(Worker, SessId, {path, F}, rdwr),
@@ -204,12 +215,15 @@ many_files_creation_tree_test_base(Config, WriteToFile) ->
                 end, lists:seq(1, FilesPerDir))
             end,
 
+            % Spawn processes that execute both test functions
             spawn_workers(Dirs, Fun, Fun2, SpawnBegLevel, SpawnEndLevel),
             LastLevelDirs = math:pow(DirsPerParent, DirLevel - SpawnBegLevel + 1),
             DirsToDo = DirsPerParent * (1 - LastLevelDirs) / (1 - DirsPerParent),
             FilesToDo = LastLevelDirs * FilesPerDir,
+            % Gather test results
             GatherAns = gather_answers([{file_ok, {0,0}}, {dir_ok, {0,0}}], round(DirsToDo + FilesToDo)),
 
+            % Calculate and log output
             NewLevels = lists:foldl(fun
                 ({N, _}, []) ->
                     case N of
