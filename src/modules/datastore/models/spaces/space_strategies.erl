@@ -20,8 +20,11 @@
 
 %% API
 -export([new/1, add_storage/2, add_storage/3]).
--export([set_strategy/4, set_strategy/5, update_last_import_time/3,
-    get_storage_import_details/2, get_storage_update_details/2]).
+-export([set_strategy/4, set_strategy/5, update_import_finish_time/3,
+    get_storage_import_details/2, get_storage_update_details/2,
+    update_import_start_time/3, get_import_finish_time/2,
+    get_import_start_time/2, update_last_update_start_time/3, update_last_update_finish_time/3,
+    get_last_update_finish_time/2, get_last_update_start_time/2]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
@@ -57,6 +60,21 @@ record_struct(2) ->
         {file_conflict_resolution, {atom, #{atom => term}}},
         {file_caching, {atom, #{atom => term}}},
         {enoent_handling, {atom, #{atom => term}}}
+    ]};
+record_struct(3) ->
+    {record, [
+        {storage_strategies, #{string => {record, [
+            {filename_mapping, {atom, #{atom => term}}},
+            {storage_import, {atom, #{atom => term}}},
+            {storage_update, {atom, #{atom => term}}},
+            {import_start_time, integer},
+            {import_finish_time, integer},
+            {last_update_start_time, integer},
+            {last_update_finish_time, integer}
+        ]}}},
+        {file_conflict_resolution, {atom, #{atom => term}}},
+        {file_caching, {atom, #{atom => term}}},
+        {enoent_handling, {atom, #{atom => term}}}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -73,14 +91,32 @@ record_upgrade(1, R = {?MODEL_NAME, StorageStrategies, _,  _, _}) ->
         {storage_update, StorageUpdateStrategies},
         {last_import_time, LastImportTime}
     }) ->
+        {storage_strategies,
+            {filename_mapping, FilenameMappingStrategy},
+            {storage_import, StorageImportStrategy},
+            {storage_update, hd(StorageUpdateStrategies)},
+            {last_import_time, LastImportTime}
+        }
+    end, StorageStrategies),
+    {2, R#space_strategies{storage_strategies = NewStorageStrategies}};
+record_upgrade(2, R = {?MODEL_NAME, StorageStrategies, _,  _, _}) ->
+    NewStorageStrategies = maps:map(fun(_, {storage_strategies,
+        {filename_mapping, FilenameMappingStrategy},
+        {storage_import, StorageImportStrategy},
+        {storage_update, StorageUpdateStrategy},
+        {last_import_time, LastImportTime}
+    }) ->
         #storage_strategies{
             filename_mapping = FilenameMappingStrategy,
             storage_import = StorageImportStrategy,
-            storage_update = hd(StorageUpdateStrategies),
-            last_import_time = LastImportTime
+            storage_update = StorageUpdateStrategy,
+            import_start_time = undefined,
+            import_finish_time = LastImportTime,
+            last_update_start_time = undefined,
+            last_update_finish_time = undefined
         }
     end, StorageStrategies),
-    {2, R#space_strategies{storage_strategies = NewStorageStrategies}}.
+    {3, R#space_strategies{storage_strategies = NewStorageStrategies}}.
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -151,7 +187,7 @@ exists(Key) ->
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
     Config = ?MODEL_CONFIG(space_strategies_bucket, [], ?GLOBALLY_CACHED_LEVEL),
-    Config#model_config{version = 2}.
+    Config#model_config{version = 3}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -279,21 +315,121 @@ get_storage_update_details(SpaceId, StorageId) ->
     {ok, Doc} = get(SpaceId),
     get_storage_strategy_config(Doc, storage_update, StorageId).
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns value of import_finish_time for given SpaceId and StorageId.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_import_finish_time(od_space:id(), storage:id()) -> space_strategy:timestamp().
+get_import_finish_time(SpaceId, StorageId) ->
+    {ok, #document{
+        value = #space_strategies{
+            storage_strategies = Strategies
+    }}} = get(SpaceId),
+    storage_strategies:get_import_finish_time(StorageId, Strategies).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns value of import_start_time for given SpaceId and StorageId.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_import_start_time(od_space:id(), storage:id()) -> space_strategy:timestamp().
+get_import_start_time(SpaceId, StorageId) ->
+    {ok, #document{
+        value = #space_strategies{
+            storage_strategies = Strategies
+        }}} = get(SpaceId),
+    storage_strategies:get_import_start_time(StorageId, Strategies).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns value of last_update_start_time for given SpaceId and StorageId.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_last_update_start_time(od_space:id(), storage:id()) -> space_strategy:timestamp().
+get_last_update_start_time(SpaceId, StorageId) ->
+    {ok, #document{
+        value = #space_strategies{
+            storage_strategies = Strategies
+        }}} = get(SpaceId),
+    storage_strategies:get_last_update_start_time(StorageId, Strategies).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns value of last_update_finish_time for given SpaceId and StorageId.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_last_update_finish_time(od_space:id(), storage:id()) -> space_strategy:timestamp().
+get_last_update_finish_time(SpaceId, StorageId) ->
+    {ok, #document{
+        value = #space_strategies{
+            storage_strategies = Strategies
+        }}} = get(SpaceId),
+    storage_strategies:get_last_update_finish_time(StorageId, Strategies).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sets last_import_time to new value.
+%% Sets import_finish_time to new value.
 %% @end
 %%--------------------------------------------------------------------
--spec update_last_import_time(od_space:id(), storage:id(), integer() | undefined) ->
+-spec update_import_finish_time(od_space:id(), storage:id(), integer() | undefined) ->
     {ok, datastore:ext_key()} | datastore:update_error().
-update_last_import_time(SpaceId, StorageId, NewLastImportTime) ->
-    update(SpaceId, fun(#space_strategies{storage_strategies = Strategies} = OldValue) ->
-        OldSS = maps:get(StorageId, Strategies),
-        NewSS = OldSS#storage_strategies{last_import_time = NewLastImportTime},
-        {ok, OldValue#space_strategies{storage_strategies = maps:put(StorageId, NewSS, Strategies)}}
+update_import_finish_time(SpaceId, StorageId, NewImportFinishTime) ->
+    update(SpaceId, fun(#space_strategies{
+        storage_strategies = Strategies} = OldValue
+    ) ->
+        NewStrategies = storage_strategies:update_import_finish_time(StorageId,
+            NewImportFinishTime, Strategies),
+        {ok, OldValue#space_strategies{storage_strategies = NewStrategies}}
     end).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets import_start_time to new value.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_import_start_time(od_space:id(), storage:id(), integer() | undefined) ->
+    {ok, datastore:ext_key()} | datastore:update_error().
+update_import_start_time(SpaceId, StorageId, NewStartImportTime) ->
+    {ok, _} = update(SpaceId, fun(#space_strategies{
+        storage_strategies = Strategies} = OldValue
+    ) ->
+        NewStrategies = storage_strategies:update_import_start_time(
+            StorageId, NewStartImportTime, Strategies),
+        {ok, OldValue#space_strategies{storage_strategies = NewStrategies}}
+    end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets update_start_time to new value.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_last_update_start_time(od_space:id(), storage:id(), integer() | undefined) ->
+    {ok, datastore:ext_key()} | datastore:update_error().
+update_last_update_start_time(SpaceId, StorageId, NewStartUpdateTime) ->
+    {ok, _} = update(SpaceId, fun(#space_strategies{
+        storage_strategies = Strategies} = OldValue
+    ) ->
+        NewStrategies = storage_strategies:update_last_update_start_time(
+            StorageId, NewStartUpdateTime, Strategies),
+        {ok, OldValue#space_strategies{storage_strategies = NewStrategies}}
+    end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets update_start_time to new value.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_last_update_finish_time(od_space:id(), storage:id(), integer() | undefined) ->
+    {ok, datastore:ext_key()} | datastore:update_error().
+update_last_update_finish_time(SpaceId, StorageId, NewStartUpdateTime) ->
+    {ok, _} = update(SpaceId, fun(#space_strategies{
+        storage_strategies = Strategies} = OldValue
+    ) ->
+        NewStrategies = storage_strategies:update_last_update_finish_time(
+            StorageId, NewStartUpdateTime, Strategies),
+        {ok, OldValue#space_strategies{storage_strategies = NewStrategies}}
+    end).
 
 %%%===================================================================
 %%% Internal functions

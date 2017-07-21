@@ -22,7 +22,7 @@
 -record(storage_file_ctx, {
     id :: helpers:file_id(),
     handle = undefined :: undefined | storage_file_manager:handle(),
-    stat  = undefined :: undefined | #statbuf{}
+    stat = undefined :: undefined | #statbuf{}
 }).
 
 -type ctx() :: #storage_file_ctx{}.
@@ -31,7 +31,8 @@
 
 %% API
 -export([new/3, get_child_ctx/2, get_children_ctxs_batch_const/3]).
--export([get_stat_buf/1, get_handle_const/1, get_file_id_const/1]).
+-export([get_stat_buf/1, get_handle_const/1, get_file_id_const/1,
+    get_storage_doc_const/1]).
 
 
 %%-------------------------------------------------------------------
@@ -87,7 +88,7 @@ get_children_ctxs_batch_const(StorageFileCtx, Offset, BatchSize) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec get_child_ctx(ctx(), file_meta:name()) -> ctx().
-get_child_ctx(#storage_file_ctx{handle=ParentHandle}, ChildName) ->
+get_child_ctx(#storage_file_ctx{handle = ParentHandle}, ChildName) ->
     #storage_file_ctx{
         id = ChildName,
         handle = storage_file_manager:get_child_handle(ParentHandle, ChildName)
@@ -99,14 +100,14 @@ get_child_ctx(#storage_file_ctx{handle=ParentHandle}, ChildName) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec get_stat_buf(ctx()) -> {#statbuf{}, ctx()} | {error, term()}.
-get_stat_buf(StorageFileCtx = #storage_file_ctx{stat=undefined, handle=SFMHandle}) ->
+get_stat_buf(StorageFileCtx = #storage_file_ctx{stat = undefined, handle = SFMHandle}) ->
     case storage_file_manager:stat(SFMHandle) of
         {ok, StatBuf} ->
-            {StatBuf, StorageFileCtx#storage_file_ctx{stat=StatBuf}};
+            {StatBuf, StorageFileCtx#storage_file_ctx{stat = StatBuf}};
         Error ->
             Error
     end;
-get_stat_buf(StorageFileCtx = #storage_file_ctx{stat=StatBuf}) ->
+get_stat_buf(StorageFileCtx = #storage_file_ctx{stat = StatBuf}) ->
     {StatBuf, StorageFileCtx}.
 
 %%-------------------------------------------------------------------
@@ -117,3 +118,15 @@ get_stat_buf(StorageFileCtx = #storage_file_ctx{stat=StatBuf}) ->
 -spec get_handle_const(ctx()) -> storage_file_manager:handle().
 get_handle_const(#storage_file_ctx{handle = SFMHandle}) ->
     SFMHandle.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns #storage{} record for storage associated with given context.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_storage_doc_const(ctx()) -> storage:doc().
+get_storage_doc_const(#storage_file_ctx{
+    handle = #sfm_handle{
+        storage = StorageDoc = #document{}
+}}) ->
+    StorageDoc.

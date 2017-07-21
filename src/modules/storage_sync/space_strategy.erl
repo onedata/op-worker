@@ -29,6 +29,7 @@
 -type argument_type()   :: integer   | float   | string   | boolean.
 -type argument_value()  :: integer() | float() | binary() | boolean().
 -type description()     :: binary().
+-type timestamp()       :: non_neg_integer() | undefined.
 
 -type job()             :: #space_strategy_job{}.
 -type job_result()      :: term().
@@ -45,7 +46,7 @@
 
 %% Types
 -export_type([definition/0, name/0, description/0, argument_name/0,
-    argument_type/0, argument_value/0]).
+    argument_type/0, argument_value/0, timestamp/0]).
 -export_type([job/0, arguments/0, job_result/0, job_data/0, config/0, type/0]).
 -export_type([job_merge_type/0, runnable/0]).
 
