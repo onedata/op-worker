@@ -66,7 +66,7 @@ def _cluster_nodes(containers, cluster_name, master_hostname, uid):
                  stdout=sys.stderr)
 
 
-def up(image, dns, uid, cluster_name, nodes, buckets={'default':512}, cluster_ramsize=1024):
+def up(image, dns, uid, cluster_name, nodes, buckets={'onedata':512}, cluster_ramsize=1024):
 
     dns_servers, dns_output = dns_mod.maybe_start(dns, uid)
     couchbase_output = {}
