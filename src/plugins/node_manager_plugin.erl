@@ -24,7 +24,7 @@
 -export([before_init/1, after_init/1, on_terminate/2, on_code_change/3,
     handle_call_extension/3, handle_cast_extension/2, handle_info_extension/2,
     modules_with_args/0, modules_hooks/0, listeners/0, cm_nodes/0, db_nodes/0, check_node_ip_address/0,
-    app_name/0, clear_memory/1, renamed_models/0]).
+    app_name/0, invalidate_permission_cache/0, renamed_models/0]).
 
 %%%===================================================================
 %%% node_manager_plugin_behaviour callbacks
@@ -254,15 +254,12 @@ check_node_ip_address() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Clears permissions cache during clearing of memory
-%% (when node_manager sees that usage of memory is too high).
+%% Invalidates permission cache.
 %% @end
 %%--------------------------------------------------------------------
--spec clear_memory(HighMemUse :: boolean()) -> ok.
-clear_memory(true) ->
-    permissions_cache:invalidate();
-clear_memory(_) ->
-    permissions_cache:check_size_and_invalidate().
+-spec invalidate_permission_cache() -> ok.
+invalidate_permission_cache() ->
+    permissions_cache:invalidate().
 
 %%%===================================================================
 %%% Internal functions

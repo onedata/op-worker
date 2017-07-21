@@ -70,17 +70,13 @@ apply(Doc = #document{key = Key, value = Value, scope = SpaceId, seq = Seq}) ->
                     [Doc], [{hooks_config, no_hooks}, {resolve_conflicts, true}])
         end,
 
-        % TODO - delete master propagation to dbsync_events:change_replicated
-        Master = self(),
-        spawn(fun() ->
-            try
-                dbsync_events:change_replicated(SpaceId, Doc)
-            catch
-                _:Reason ->
-                    ?error_stacktrace("Change ~p post-processing failed due "
-                    "to: ~p", [Doc, Reason])
-            end
-        end),
+        try
+            dbsync_events:change_replicated(SpaceId, Doc)
+        catch
+            _:Reason_ ->
+                ?error_stacktrace("Change ~p post-processing failed due "
+                "to: ~p", [Doc, Reason_])
+        end,
         ok
     catch
         _:Reason ->

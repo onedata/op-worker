@@ -309,9 +309,6 @@ file_consistency_test_base(Config) ->
 
     multi_provider_file_ops_test_base:file_consistency_test_skeleton(Config, Worker1, Worker2, Worker1, ConfigsNum).
 
-permission_cache_invalidate_test(Config) ->
-    multi_provider_file_ops_test_base:permission_cache_invalidate_test_base(Config, 30).
-
 multi_space_test(Config) ->
     User = <<"user1">>,
     Spaces = ?config({spaces, User}, Config),

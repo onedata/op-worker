@@ -1168,8 +1168,8 @@ create_file(Config, FileBeg, {Offset, File}) ->
 verify_file(Config, FileBeg, {Offset, File}) ->
     SessId = ?config(session, Config),
     Attempts = ?config(attempts, Config),
-    {SyncNodes, ProxyNodes, ProxyNodesWritten, _ProxyNodesWritten0, NodesOfProvider} = ?config(nodes_number, Config),
-    SyncProvidersCount = max(1, round(SyncNodes / NodesOfProvider)),
+    {SyncNodes, ProxyNodes, ProxyNodesWritten, _ProxyNodesWritten0, _NodesOfProvider} =
+        ?config(nodes_number, Config),
 
     Offset2 = Offset rem 5 + 1,
     Size = 2*Offset2,
@@ -1208,7 +1208,7 @@ verify_file(Config, FileBeg, {Offset, File}) ->
         Flattened = lists:flatten(VerAns),
 
         ZerosList = lists:filter(fun(S) -> S == 0 end, Flattened),
-        LocationsList = lists:filter(fun(S) -> S == SyncProvidersCount end, Flattened),
+        LocationsList = lists:filter(fun(S) -> S >= 1 end, Flattened),
 %%            ct:print("Locations1 ~p", [{{length(ZerosList), length(LocationsList)}, ToMatch}]),
         {length(ZerosList), length(LocationsList)}
     end,

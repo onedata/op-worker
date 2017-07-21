@@ -130,7 +130,7 @@ save(Document = #document{key = Key, value = #file_location{
     space_id = SpaceId
 }}) ->
     NewSize = count_bytes(Document),
-    UserId = get_owner_id(FileUuid),
+    {ok, UserId} = get_owner_id(FileUuid),
     case get(Key) of
         {ok, #document{value = #file_location{space_id = SpaceId}} = OldDoc} ->
             OldSize = count_bytes(OldDoc),
@@ -173,10 +173,13 @@ create(Document = #document{value = #file_location{
     space_id = SpaceId
 }}) ->
     NewSize = count_bytes(Document),
-    UserId = get_owner_id(FileUuid),
-
     space_quota:apply_size_change_and_maybe_emit(SpaceId, NewSize),
-    monitoring_event:emit_storage_used_updated(SpaceId, UserId, NewSize),
+    case get_owner_id(FileUuid) of
+        {ok, UserId} ->
+            monitoring_event:emit_storage_used_updated(SpaceId, UserId, NewSize);
+        {error, {not_found, _}} ->
+            ok
+    end,
 
     model:execute_with_default_context(?MODULE, create, [Document#document{scope = SpaceId}]).
 
@@ -198,12 +201,12 @@ get(Key) ->
 delete(Key) ->
     case get(Key) of
         {ok, Doc = #document{value = #file_location{
-            uuid = Uuid,
+            uuid = FileUuid,
             space_id = SpaceId
         }}} ->
             Size = count_bytes(Doc),
             space_quota:apply_size_change_and_maybe_emit(SpaceId, -1 * Size),
-            UserId = get_owner_id(Uuid),
+            {ok, UserId} = get_owner_id(FileUuid),
             monitoring_event:emit_storage_used_updated(SpaceId, UserId, -1 * Size);
         _ ->
             ok
@@ -295,8 +298,11 @@ count_bytes([#file_block{size = Size} | T], TotalSize) ->
 %% Return user id for given file uuid.
 %% @end
 %%--------------------------------------------------------------------
--spec get_owner_id(file_meta:uuid()) -> datastore:id().
+-spec get_owner_id(file_meta:uuid()) -> {ok, datastore:id()} | {error, term()}.
 get_owner_id(FileUuid) ->
-    {ok, #document{value = #file_meta{owner = UserId}}} =
-        file_meta:get_including_deleted(FileUuid),
-    UserId.
+    case file_meta:get_including_deleted(FileUuid) of
+        {ok, #document{value = #file_meta{owner = UserId}}} ->
+            {ok, UserId};
+        Error ->
+            Error
+    end.

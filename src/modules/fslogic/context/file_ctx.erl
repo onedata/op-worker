@@ -44,14 +44,16 @@
     storage_doc :: undefined | storage:doc(),
     file_location_docs :: undefined | [file_location:doc()],
     file_location_ids :: undefined | [file_location:id()],
-    acl :: undefined | acl:acl()
+    acl :: undefined | acl:acl(),
+    is_dir :: undefined | boolean()
 }).
 
 -type ctx() :: #file_ctx{}.
 
 %% Functions creating context and filling its data
 -export([new_by_canonical_path/2, new_by_guid/1, new_by_doc/3, new_root_ctx/0]).
--export([reset/1, new_by_partial_context/1, add_file_location/2]).
+-export([reset/1, new_by_partial_context/1, add_file_location/2, set_file_id/2,
+    set_is_dir/2]).
 
 %% Functions that do not modify context
 -export([get_share_id_const/1, get_space_id_const/1, get_space_dir_uuid_const/1,
@@ -151,6 +153,24 @@ add_file_location(FileCtx = #file_ctx{file_location_ids = Locations}, LocationId
         file_location_ids = [LocationId | Locations],
         file_location_docs = undefined
     }.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets file_id in context record
+%% @end
+%%--------------------------------------------------------------------
+-spec set_file_id(ctx(), helpers:file_id()) -> ctx().
+set_file_id(FileCtx, FileId) ->
+    FileCtx#file_ctx{storage_file_id = FileId}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets is_dir flag in context record
+%% @end
+%%--------------------------------------------------------------------
+-spec set_is_dir(ctx(), boolean()) -> ctx().
+set_is_dir(FileCtx, IsDir) ->
+    FileCtx#file_ctx{is_dir = IsDir}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -774,10 +794,13 @@ equals(FileCtx1, FileCtx2) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec is_dir(ctx()) -> {boolean(), ctx()}.
-is_dir(FileCtx) ->
+is_dir(FileCtx = #file_ctx{is_dir = undefined}) ->
     {#document{value = #file_meta{type = Type}}, FileCtx2} =
         get_file_doc_including_deleted(FileCtx),
-    {Type =:= ?DIRECTORY_TYPE, FileCtx2}.
+    IsDir = Type =:= ?DIRECTORY_TYPE,
+    {IsDir, FileCtx2#file_ctx{is_dir = IsDir}};
+is_dir(FileCtx = #file_ctx{is_dir = IsDir}) ->
+    {IsDir, FileCtx}.
 
 %%%===================================================================
 %%% Internal functions

@@ -74,7 +74,7 @@ change_replicated_internal(SpaceId, #document{
     } = FileDoc) ->
     ?debug("change_replicated_internal: changed file_meta ~p", [FileUuid]),
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
-    (catch fslogic_event_emitter:emit_file_attr_changed(FileCtx, []));
+    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []);
 change_replicated_internal(SpaceId, #document{
         key = FileUuid,
         % TODO - emit when file is deleted (for deleted files it fails)
@@ -83,14 +83,14 @@ change_replicated_internal(SpaceId, #document{
     } = FileDoc) ->
     ?debug("change_replicated_internal: changed file_meta ~p", [FileUuid]),
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
-    (catch fslogic_event_emitter:emit_file_attr_changed(FileCtx, []));
+    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []);
 change_replicated_internal(SpaceId, #document{
         deleted = false,
         value = #file_location{uuid = FileUuid}
     } = Doc) ->
     ?debug("change_replicated_internal: changed file_location ~p", [FileUuid]),
     FileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId)),
-    (catch replica_dbsync_hook:on_file_location_change(FileCtx, Doc));
+    ok = replica_dbsync_hook:on_file_location_change(FileCtx, Doc);
 change_replicated_internal(_SpaceId, #document{
         value = #links{
             model = file_meta,
