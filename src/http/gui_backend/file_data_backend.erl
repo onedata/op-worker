@@ -429,7 +429,6 @@ create_file(SessionId, Name, ParentId, Type) ->
         Path = filename:join([ParentPath, Name]),
         Result = case Type of
             <<"file">> ->
-                % TODO - z GUID sciezka zeby wewnatrz create dostac GUID? wtf?
                 logical_file_manager:create(SessionId, Path);
             <<"dir">> ->
                 logical_file_manager:mkdir(SessionId, Path)

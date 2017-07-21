@@ -62,8 +62,8 @@
 
 %% Functions modifying context
 -export([get_canonical_path/1, get_file_doc/1, get_file_doc_including_deleted/1,
-    get_parent/2, set_parent/2, get_storage_file_id/1,
-    get_aliased_name/2, get_posix_storage_user_context/1, get_times/1, set_times/2,
+    get_parent/2, get_storage_file_id/1,
+    get_aliased_name/2, get_posix_storage_user_context/1, get_times/1,
     get_parent_guid/2, get_child/3, get_file_children/4, get_logical_path/2,
     get_storage_id/1, get_storage_doc/1, get_file_location_with_filled_gaps/2,
     get_local_file_location_docs/1, get_file_location_docs/1,
@@ -304,8 +304,6 @@ get_parent(FileCtx = #file_ctx{parent = undefined}, UserCtx) ->
 get_parent(FileCtx = #file_ctx{parent = Parent}, _UserCtx) ->
     {Parent, FileCtx}.
 
-set_parent(FileCtx, Parent) ->
-    FileCtx#file_ctx{parent = Parent}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -331,7 +329,6 @@ get_parent_guid(FileCtx, UserCtx) ->
 %%--------------------------------------------------------------------
 -spec get_storage_file_id(ctx()) -> {StorageFileId :: helpers:file_id(), ctx()}.
 get_storage_file_id(FileCtx = #file_ctx{storage_file_id = undefined}) ->
-    % TODO - na ile tu wykorzystujemy ojca?
     {FileId, FileCtx2} = get_canonical_path(FileCtx),
     {FileId, FileCtx2#file_ctx{storage_file_id = FileId}};
 get_storage_file_id(FileCtx = #file_ctx{storage_file_id = StorageFileId}) ->
@@ -396,8 +393,6 @@ get_aliased_name(FileCtx = #file_ctx{file_name = FileName}, _UserCtx) ->
 %%--------------------------------------------------------------------
 -spec get_posix_storage_user_context(ctx()) ->
     {luma:posix_user_ctx(), ctx()}.
-% TODO - cache LUMA answers in datastore model, faster calls when luma is off
-% TODO - wciagnac zmiany z _2
 get_posix_storage_user_context(FileCtx) ->
     IsSpaceDir = is_space_dir_const(FileCtx),
     IsUserRootDir = is_root_dir_const(FileCtx),
@@ -426,9 +421,6 @@ get_times(FileCtx = #file_ctx{times = undefined}) ->
 get_times(
     FileCtx = #file_ctx{times = Times}) ->
     {Times, FileCtx}.
-
-set_times(FileCtx, Times) ->
-    FileCtx#file_ctx{times = Times}.
 
 %%--------------------------------------------------------------------
 %% @doc

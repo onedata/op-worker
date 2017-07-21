@@ -321,7 +321,6 @@ get_new_file_id(Params) ->
             {ok, ParentPath} = logical_file_manager:get_file_path(
                 SessionId, ParentId),
             ProposedPath = filename:join([ParentPath, FileName]),
-            % TODO - use parentID
             FileId = create_unique_file(SessionId, ProposedPath),
             upload_map_insert(UploadId, FileId),
             FileId;
