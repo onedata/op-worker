@@ -24,8 +24,8 @@
 -define(STORAGE_LOCK_ID, <<"storage_res_id">>).
 
 %% API
--export([new/2, new/3]).
--export([get_id/1, get_name/1, is_readonly/1, get_helpers/1]).
+-export([new/2, new/4]).
+-export([get_id/1, get_name/1, is_readonly/1, get_helpers/1, is_luma_enabled/1, get_luma_config/1]).
 -export([select_helper/2, update_helper/3, select/1]).
 
 %% model_behaviour callbacks
@@ -66,6 +66,22 @@ record_struct(2) ->
             {insecure, boolean}
         ]}]},
         {readonly, boolean}
+    ]};
+record_struct(3) ->
+    {record, [
+        {name, string},
+        {helpers, [{record, [
+            {name, string},
+            {args, #{string => string}},
+            {admin_ctx, #{string => string}},
+            {insecure, boolean}
+        ]}]},
+        {readonly, boolean},
+        {luma_config, {record, [
+            {url, string},
+            {cache_timeout, integer},
+            {api_key, string}
+        ]}}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -86,6 +102,13 @@ record_upgrade(1, {?MODEL_NAME, Name, Helpers}) ->
                 end, #{}, HelperArgs)
             } || {_, HelperName, HelperArgs} <- Helpers
         ]
+    }};
+record_upgrade(2, {?MODEL_NAME, Name, Helpers, Readonly}) ->
+    {3, #storage{
+        name = Name,
+        helpers = Helpers,
+        readonly = Readonly,
+        luma_config = undefined
     }}.
 
 
@@ -176,7 +199,7 @@ exists(Key) ->
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
     Config = ?MODEL_CONFIG(system_config_bucket, [], ?GLOBALLY_CACHED_LEVEL),
-    Config#model_config{version = 2}.
+    Config#model_config{version = 3}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -222,19 +245,20 @@ list() ->
 %%--------------------------------------------------------------------
 -spec new(name(), [helper()]) -> doc().
 new(Name, Helpers) ->
-    new(Name, Helpers, false).
+    new(Name, Helpers, false, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Constructs storage record.
 %% @end
 %%--------------------------------------------------------------------
--spec new(name(), [helper()], boolean()) -> doc().
-new(Name, Helpers, ReadOnly) ->
+-spec new(name(), [helper()], boolean(), undefined | luma_config:config()) -> doc().
+new(Name, Helpers, ReadOnly, LumaConfig) ->
     #document{value = #storage{
         name = Name,
         helpers = Helpers,
-        readonly = ReadOnly
+        readonly = ReadOnly,
+        luma_config = LumaConfig
     }}.
 
 
@@ -334,3 +358,29 @@ select(Name) ->
                 [Doc] -> {ok, Doc}
             end
     end.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns luma_config field for given storage.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_luma_config(model() | doc()) -> undefined | luma_config:config().
+get_luma_config(#storage{luma_config = LumaConfig}) ->
+    LumaConfig;
+get_luma_config(#document{value = Storage = #storage{}}) ->
+    get_luma_config(Storage).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks whether luma is enabled for given storage.
+%% @end
+%%-------------------------------------------------------------------
+-spec is_luma_enabled(model() | doc()) -> boolean().
+is_luma_enabled(#storage{luma_config = undefined}) ->
+    false;
+is_luma_enabled(#storage{luma_config = #luma_config{}}) ->
+    true;
+is_luma_enabled(#document{value = #storage{} = Storage})->
+    is_luma_enabled(Storage).

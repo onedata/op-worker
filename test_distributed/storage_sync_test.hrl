@@ -10,6 +10,7 @@
 -author("Jakub Kudzia").
 
 -include_lib("ctool/include/test/test_utils.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 
 -define(ATTEMPTS, 30).
 
@@ -48,3 +49,18 @@
 -define(SPACE_INIT_FILE_PATH, filename:join(["/", ?SPACE_NAME, ?INIT_FILE])).
 -define(TEST_DATA, <<"test_data">>).
 -define(TEST_DATA2, <<"test_data2">>).
+
+-define(TEST_UID, 1000).
+-define(TEST_GID, 1000).
+-define(TEST_OD_USER_ID, <<"0123456789abcdef">>).
+
+-define(TEST_URL, <<"http://127.0.0.1:5000">>).
+
+-define(DEFAULT_TIMEOUT, timer:minutes(5)).
+
+-define(LUMA_CONFIG, ?LUMA_CONFIG(?DEFAULT_TIMEOUT)).
+-define(LUMA_CONFIG(CacheTimeout), #luma_config{
+    url = ?TEST_URL,
+    cache_timeout = CacheTimeout,
+    api_key = <<"test_api_key">>
+}).

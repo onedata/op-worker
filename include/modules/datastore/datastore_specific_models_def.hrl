@@ -278,11 +278,17 @@
     storage_sync_info = #storage_sync_info{} :: file_meta:storage_sync_info()
 }).
 
-
 -record(storage, {
     name = <<>> :: storage:name(),
     helpers = [] :: [storage:helper()],
-    readonly = false :: boolean()
+    readonly = false :: boolean(),
+    luma_config = undefined :: undefined | luma_config:config()
+}).
+
+-record(luma_config, {
+    url :: luma_config:url(),
+    cache_timeout :: luma_config:cache_timeout(),
+    api_key :: luma_config:api_key()
 }).
 
 %% Model that maps space to storage
@@ -323,7 +329,10 @@
     filename_mapping = ?DEFAULT_FILENAME_MAPPING_STRATEGY :: space_strategy:config(),
     storage_import = ?DEFAULT_STORAGE_IMPORT_STRATEGY :: space_strategy:config(),
     storage_update = ?DEFAULT_STORAGE_UPDATE_STRATEGY :: space_strategy:config(),
-    last_import_time :: integer() | undefined
+    import_start_time :: space_strategy:timestamp(),
+    import_finish_time :: space_strategy:timestamp(),
+    last_update_start_time :: space_strategy:timestamp(),
+    last_update_finish_time :: space_strategy:timestamp()
 }).
 
 -define(DEFAULT_FILE_CONFLICT_RESOLUTION_STRATEGY, {ignore_conflicts, #{}}).
@@ -425,6 +434,18 @@
     atime = 0 :: times:time(),
     ctime = 0 :: times:time(),
     mtime = 0 :: times:time()
+}).
+
+%% Model that caches mapping from storage user credentials to od_user:id()
+-record(reverse_luma, {
+    user_id = <<"">> :: od_user:id(),
+    timestamp = 0 :: luma_cache:timestamp() % time of last update, in milliseconds since epoch
+}).
+
+%% Model that caches mapping from od_user:id() to storage user credentials
+-record(luma, {
+    user_ctx = #{} :: luma:user_ctx(),
+    timestamp = 0 :: luma_cache:timestamp()% time of last update, in milliseconds since epoch
 }).
 
 -endif.

@@ -16,7 +16,7 @@
 -include("global_definitions.hrl").
 
 %% API
--export([get_user_ctx/4]).
+-export([get_user_ctx/4, get_request_headers/1]).
 
 %%%===================================================================
 %%% API functions
@@ -29,22 +29,14 @@
 %%--------------------------------------------------------------------
 -spec get_user_ctx(od_user:id(), od_space:id(), storage:doc(), storage:helper()) ->
     {ok, luma:user_ctx()} | {error, Reason :: term()}.
-get_user_ctx(UserId, SpaceId, StorageDoc, Helper) ->
-    {ok, Scheme} = application:get_env(?APP_NAME, luma_scheme),
-    {ok, Hostname} = application:get_env(?APP_NAME, luma_hostname),
-    {ok, Port} = application:get_env(?APP_NAME, luma_port),
-    {ok, APIKey} = application:get_env(?APP_NAME, luma_api_key),
+get_user_ctx(UserId, SpaceId, StorageDoc = #document{
+    value = #storage{
+        luma_config = LumaConfig = #luma_config{url = LumaUrl}
+}}, Helper) ->
 
-    Url = lists:flatten(io_lib:format("~s://~s:~B/map_user_credentials",
-        [Scheme, Hostname, Port])),
-
-    ReqHeaders = #{
-        <<"X-Auth-Token">> => APIKey,
-        <<"Content-Type">> => <<"application/json">>
-    },
-
+    Url = lists:flatten(io_lib:format("~s/map_user_credentials", [LumaUrl])),
+    ReqHeaders = get_request_headers(LumaConfig),
     ReqBody = get_request_body(UserId, SpaceId, StorageDoc, Helper),
-
     case http_client:post(Url, ReqHeaders, ReqBody) of
         {ok, 200, _RespHeaders, RespBody} ->
             UserCtx = json_utils:decode_map(RespBody),
@@ -57,6 +49,20 @@ get_user_ctx(UserId, SpaceId, StorageDoc, Helper) ->
         {error, Reason} ->
             {error, Reason}
     end.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns LUMA request headers based on #luma_config.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_request_headers(luma_config:config()) -> map().
+get_request_headers(#luma_config{api_key = undefined}) ->
+    #{<<"Content-Type">> => <<"application/json">>};
+get_request_headers(#luma_config{api_key = APIKey}) ->
+    #{
+        <<"Content-Type">> => <<"application/json">>,
+        <<"X-Auth-Token">> => APIKey
+    }.
 
 %%%===================================================================
 %%% Internal functions
@@ -116,9 +122,12 @@ get_user_details(UserId) ->
 -spec format_user_accounts(Accounts :: [proplists:proplist()]) ->
     FormattedAccounts :: [proplists:proplist()].
 format_user_accounts(Accounts) ->
-    Keys = [<<"providerId">>, <<"userId">>, <<"login">>, <<"name">>, <<"emailList">>],
+    Keys = [
+        <<"providerId">>, <<"userId">>, <<"login">>, <<"name">>,
+        <<"emailList">>, <<"groups">>
+    ],
     lists:map(fun(Account) ->
         Values = utils:get_values([<<"provider_id">>, <<"user_id">>, <<"login">>,
-            <<"name">>, <<"email_list">>], Account),
+            <<"name">>, <<"email_list">>, <<"groups">>], Account),
         lists:zip(Keys, Values)
     end, Accounts).
