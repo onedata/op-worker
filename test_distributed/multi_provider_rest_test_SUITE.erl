@@ -675,16 +675,18 @@ changes_stream_file_location_test(Config) ->
 changes_stream_on_multi_provider_test(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    SessionIdP2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
     [_, _, {_SpaceId, SpaceName}] = ?config({spaces, <<"user1">>}, Config),
     File =  list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file4_csompt"])),
     Mode = 8#700,
     % when
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
     spawn(fun() ->
         timer:sleep(500),
-        {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
         {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
         lfm_proxy:write(WorkerP1, Handle, 0, <<"data">>)
     end),
+    ?assertMatch({ok, _}, lfm_proxy:open(WorkerP2, SessionIdP2, {guid, FileGuid}, write), 20),
     {ok, 200, _, Body} = do_request(WorkerP2, <<"changes/metadata/space3?timeout=20000">>,
         get, [user_1_token_header(Config)], [], [insecure, {recv_timeout, 60000}]),
 
