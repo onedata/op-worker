@@ -304,6 +304,8 @@ end_per_testcase(_Case, Config) ->
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:unload_quota_mocks(Config),
     initializer:disable_grpca_based_communication(Config),
+    % TODO VFS-3461
+    timer:sleep(5000),
     ssl:stop().
 
 

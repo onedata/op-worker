@@ -53,6 +53,7 @@ synchronize_block_and_compute_checksum(UserCtx, FileCtx, Range = #file_block{off
     FileGuid = file_ctx:get_guid_const(FileCtx),
     {ok, Handle} = lfm_files:open(SessId, {guid, FileGuid}, read), %todo do not use lfm, operate on fslogic directly
     {ok, _, Data} = lfm_files:read_without_events(Handle, Offset, Size), % does sync internally
+    lfm_files:release(Handle),
 
     Checksum = crypto:hash(md4, Data),
     {LocationToSend, _FileCtx2} = file_ctx:get_file_location_with_filled_gaps(FileCtx, Range),

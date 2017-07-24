@@ -636,7 +636,7 @@ create_file_meta(FileMetaDoc, ParentPath) ->
     od_space:id()) ->
     {ok, datastore:key()}.
 create_times(FileUuid, MTime, ATime, CTime, SpaceId) ->
-    times:create(#document{
+    times:save_new(#document{
         key = FileUuid,
         value = #times{
             mtime = MTime,

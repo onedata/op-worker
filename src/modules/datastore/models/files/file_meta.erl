@@ -975,7 +975,7 @@ make_space_exist(SpaceId) ->
                         mode = 8#1775, owner = ?ROOT_USER_ID, is_scope = true
                     }}) of
                 {ok, _} ->
-                    case times:create(#document{key = SpaceDirUuid, value =
+                    case times:save_new(#document{key = SpaceDirUuid, value =
                     #times{mtime = CTime, atime = CTime, ctime = CTime},
                         scope = SpaceId}) of
                         {ok, _} -> ok;

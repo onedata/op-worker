@@ -225,7 +225,7 @@ create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
 
     CTime = erlang:system_time(seconds),
     SpaceId = file_ctx:get_space_id_const(ParentFileCtx),
-    {ok, _} = times:create(#document{key = FileUuid, value = #times{
+    {ok, _} = times:save_new(#document{key = FileUuid, value = #times{
         mtime = CTime, atime = CTime, ctime = CTime
     }, scope = SpaceId}),
 
