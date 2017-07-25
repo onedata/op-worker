@@ -123,7 +123,7 @@ strategy_handle_job(#space_strategy_job{strategy_name = check_locally, data = Da
             FileId = filename_mapping:to_storage_path(SpaceId, StorageId, LogicalPath),
             InitialImportJobData =
                 #{
-                    last_import_time => 0,
+                    import_finish_time => 0,
                     space_id => SpaceId,
                     storage_id => StorageId,
                     storage_logical_file_id => FileId,

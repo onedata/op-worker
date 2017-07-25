@@ -29,8 +29,8 @@
     update_to_do_counter/3
 ]).
 
--export([update_in_progress/1, import_in_progress/1, get_metric/3,
-    ensure_all_metrics_stopped/1]).
+-export([update_in_progress/1, get_metric/3, ensure_all_metrics_stopped/1,
+    import_state/1]).
 
 -export([start_imported_files_spirals/1, increase_imported_files_spirals/1,
     stop_imported_files_spirals/1, start_updated_files_spirals/1,
@@ -389,20 +389,26 @@ get_files_to_update_value(SpaceId) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Checks if storage_import is in progress
+%% Returns state of import. Can be not_started, in_progress, finished.
 %% @end
-%%-------------------------------------------------------------------
--spec import_in_progress(od_space:id()) -> boolean().
-import_in_progress(SpaceId) ->
+%%-------------------------------------------
+-spec import_state(od_space:id()) -> storage_import:state().
+import_state(SpaceId) ->
     {ok, #document{
         value = #space_strategies{
             storage_strategies = StorageStrategies
-    }}} = space_strategies:get(SpaceId),
+        }}} = space_strategies:get(SpaceId),
     StorageId = hd(maps:keys(StorageStrategies)),
-    {ok, #storage_strategies{last_import_time = LastImportTime}} =
-        maps:find(StorageId, StorageStrategies), %todo separate function
-
-    (LastImportTime =:= undefined) or (get_files_to_import_value(SpaceId) > 0).
+    ImportStartTime = space_strategies:get_import_start_time(SpaceId, StorageId),
+    FilesToImport = get_files_to_import_value(SpaceId),
+    case {ImportStartTime, FilesToImport} of
+        {undefined, 0} ->
+            not_started;
+        {_, FilesToImport} when FilesToImport > 0 ->
+            in_progress;
+        {_, 0} ->
+            finished
+    end.
 
 %%-------------------------------------------------------------------
 %% @doc

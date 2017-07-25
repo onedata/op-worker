@@ -25,7 +25,7 @@
     get_server_user_ctx_should_skip_fetch_when_luma_server_disabled/1,
     get_server_user_ctx_should_fetch_user_ctx_from_luma_server/1,
     get_server_user_ctx_should_fail_with_invalid_fetch_user_ctx/1,
-    get_server_user_ctx_should_fail_when_luma_server_enforced_and_ctx_not_fetched/1,
+    get_server_user_ctx_should_fail_when_luma_server_enabled_and_ctx_not_fetched/1,
     get_server_user_ctx_should_generate_user_ctx/1,
     get_server_user_ctx_should_fallback_to_admin_ctx/1,
     get_client_user_ctx_should_fetch_user_ctx_from_luma_server/1,
@@ -42,7 +42,7 @@ all() ->
         get_server_user_ctx_should_skip_fetch_when_luma_server_disabled,
         get_server_user_ctx_should_fetch_user_ctx_from_luma_server,
         get_server_user_ctx_should_fail_with_invalid_fetch_user_ctx,
-        get_server_user_ctx_should_fail_when_luma_server_enforced_and_ctx_not_fetched,
+        get_server_user_ctx_should_fail_when_luma_server_enabled_and_ctx_not_fetched,
         get_server_user_ctx_should_generate_user_ctx,
         get_server_user_ctx_should_fallback_to_admin_ctx,
         get_client_user_ctx_should_fetch_user_ctx_from_luma_server,
@@ -52,6 +52,31 @@ all() ->
         get_posix_user_ctx_should_generate_user_ctx
     ]).
 
+-define(TEST_URL, <<"http://127.0.0.1:5000">>).
+-define(DEFAULT_TIMEOUT, timer:minutes(5)).
+
+
+-define(LUMA_CONFIG, ?LUMA_CONFIG(?DEFAULT_TIMEOUT)).
+-define(LUMA_CONFIG(CacheTimeout), #luma_config{
+    url = ?TEST_URL,
+    cache_timeout = CacheTimeout,
+    api_key = <<"test_api_key">>
+}).
+
+
+-define(POSIX_STORAGE_DOC_DISABLED_LUMA, #document{
+    key = <<"posixStorageId">>,
+    value = #storage{
+        name = <<"POSIX">>,
+        helpers = [helper:new_posix_helper(
+            <<"mountPoint">>,
+            #{},
+            helper:new_posix_user_ctx(0, 0)
+        )],
+        luma_config = undefined
+    }
+}).
+
 -define(POSIX_STORAGE_DOC, #document{
     key = <<"posixStorageId">>,
     value = #storage{
@@ -60,7 +85,8 @@ all() ->
             <<"mountPoint">>,
             #{},
             helper:new_posix_user_ctx(0, 0)
-        )]
+        )],
+        luma_config = ?LUMA_CONFIG
     }
 }).
 
@@ -75,7 +101,24 @@ all() ->
             #{},
             helper:new_ceph_user_ctx(<<"username">>, <<"key">>),
             Insecure
-        )]
+        )],
+        luma_config = ?LUMA_CONFIG
+    }
+}).
+
+-define(CEPH_STORAGE_DOC_LUMA_DISABLED(Insecure), #document{
+    key = <<"cephStorageId">>,
+    value = #storage{
+        name = <<"CEPH">>,
+        helpers = [helper:new_ceph_helper(
+            <<"monitorHostname">>,
+            <<"clusterName">>,
+            <<"poolName">>,
+            #{},
+            helper:new_ceph_user_ctx(<<"username">>, <<"key">>),
+            Insecure
+        )],
+        luma_config = undefined
     }
 }).
 
@@ -106,12 +149,11 @@ get_server_user_ctx_should_return_admin_ctx(Config) ->
 
 get_server_user_ctx_should_skip_fetch_when_luma_server_disabled(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:set_env(Worker, op_worker, luma_mode, disabled),
     test_utils:mock_new(Worker, http_client, [passthrough]),
     rpc:call(Worker, luma, get_server_user_ctx, [
         <<"userId">>,
         <<"spaceId">>,
-        ?POSIX_STORAGE_DOC,
+        ?POSIX_STORAGE_DOC_DISABLED_LUMA,
         ?POSIX_HELPER_NAME
     ]),
     test_utils:mock_assert_num_calls(Worker, http_client, post, ['_', '_', '_'], 0).
@@ -133,7 +175,6 @@ get_server_user_ctx_should_fetch_user_ctx_from_luma_server(Config) ->
 
 get_server_user_ctx_should_fail_with_invalid_fetch_user_ctx(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:set_env(Worker, op_worker, luma_mode, enforced),
     test_utils:mock_new(Worker, http_client),
     lists:foreach(fun({ResponseBody, Reason}) ->
         test_utils:mock_expect(Worker, http_client, post, fun(_, _, _) ->
@@ -153,9 +194,8 @@ get_server_user_ctx_should_fail_with_invalid_fetch_user_ctx(Config) ->
             {invalid_additional_fields, #{<<"other">> => <<"value">>}}}
     ]).
 
-get_server_user_ctx_should_fail_when_luma_server_enforced_and_ctx_not_fetched(Config) ->
+get_server_user_ctx_should_fail_when_luma_server_enabled_and_ctx_not_fetched(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:set_env(Worker, op_worker, luma_mode, enforced),
     Result = rpc:call(Worker, luma, get_server_user_ctx, [
         <<"userId">>,
         <<"spaceId">>,
@@ -169,7 +209,7 @@ get_server_user_ctx_should_generate_user_ctx(Config) ->
     Result = rpc:call(Worker, luma, get_server_user_ctx, [
         <<"userId">>,
         <<"spaceId">>,
-        ?POSIX_STORAGE_DOC,
+        ?POSIX_STORAGE_DOC_DISABLED_LUMA,
         ?POSIX_HELPER_NAME
     ]),
     ?assertMatch({ok, #{<<"uid">> := _, <<"gid">> := _}}, Result).
@@ -179,7 +219,7 @@ get_server_user_ctx_should_fallback_to_admin_ctx(Config) ->
     Result = rpc:call(Worker, luma, get_server_user_ctx, [
         <<"userId">>,
         <<"spaceId">>,
-        ?CEPH_STORAGE_DOC(false),
+        ?CEPH_STORAGE_DOC_LUMA_DISABLED(false),
         ?CEPH_HELPER_NAME
     ]),
     ?assertMatch({ok, #{<<"username">> := <<"username">>}}, Result),
@@ -205,7 +245,7 @@ get_client_user_ctx_should_return_insecure_user_ctx(Config) ->
     Result = rpc:call(Worker, luma, get_client_user_ctx, [
         <<"userId">>,
         <<"spaceId">>,
-        ?CEPH_STORAGE_DOC(true),
+        ?CEPH_STORAGE_DOC_LUMA_DISABLED(true),
         ?CEPH_HELPER_NAME
     ]),
     ?assertMatch({ok, #{<<"username">> := <<"username">>}}, Result),
@@ -216,7 +256,7 @@ get_client_user_ctx_should_fail_with_undefined_user_ctx(Config) ->
     Result = rpc:call(Worker, luma, get_client_user_ctx, [
         <<"userId">>,
         <<"spaceId">>,
-        ?CEPH_STORAGE_DOC(false),
+        ?CEPH_STORAGE_DOC_LUMA_DISABLED(false),
         ?CEPH_HELPER_NAME
     ]),
     ?assertEqual({error, undefined_user_context}, Result).
@@ -225,7 +265,7 @@ get_posix_user_ctx_should_return_server_user_ctx(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, luma, [passthrough]),
     test_utils:mock_expect(Worker, storage, get, fun(_) ->
-        {ok, ?POSIX_STORAGE_DOC}
+        {ok, ?POSIX_STORAGE_DOC_DISABLED_LUMA}
     end),
     Result = rpc:call(Worker, luma, get_posix_user_ctx, [
         <<"userId">>,
@@ -265,8 +305,6 @@ init_per_testcase(Case, Config) when
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(_Case, Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:set_env(Worker, op_worker, luma_mode, enabled),
     Config.
 
 end_per_testcase(Case, Config) when
@@ -277,5 +315,9 @@ end_per_testcase(Case, Config) when
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(_Case, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
+    Workers = [Worker | _] = ?config(op_worker_nodes, Config),
+    {ok, Docs} = rpc:call(Worker, luma, list, []),
+    lists:foreach(fun(#document{key = Key}) ->
+        rpc:call(Worker, luma, delete, [Key])
+    end, Docs),
     test_utils:mock_unload(Workers, [http_client, luma]).
