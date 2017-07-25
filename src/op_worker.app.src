@@ -11,7 +11,7 @@
 {application, op_worker,
     [
         {description, "Application starts node of oneprovider cluster"},
-        {vsn, "17.06.0-beta6"},
+        {vsn, "17.06.0-rc1"},
         {registered, [op_worker_sup]},
         {applications, [
             kernel,
