@@ -934,7 +934,26 @@ import_remote_file_by_path_test(Config, MountSpaceInRoot) ->
 create_init_file(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     MountPoint = get_host_mount_point(W1, Config),
-    ok = file:make_dir(filename:join([MountPoint, ?SPACE_ID])).
+    Name = filename:join([MountPoint, ?SPACE_ID]),
+    case file:make_dir(Name) of
+        ok -> ok;
+        {error,eexist} ->
+            clean_dir(Name)
+    end.
+
+clean_dir(Name) ->
+    ok = file:change_mode(Name, 8#777),
+    {ok, Names} = file:list_dir(Name),
+    lists:foreach(fun(N) ->
+        ChildName = filename:join([Name, N]),
+        case filelib:is_dir(ChildName) of
+            true ->
+                ok = clean_dir(ChildName),
+                ok = file:del_dir(ChildName);
+            _ ->
+                ok = file:delete(ChildName)
+        end
+    end, Names).
 
 enable_storage_import(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
