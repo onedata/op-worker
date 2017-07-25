@@ -4,6 +4,17 @@
 CHANGELOG
 ---------
 
+### 17.06.0-rc1
+
+* VFS-3384 save last_update_start_time and last_update_finish_time in storage_strategies
+* VFS-3384 save luma_api_key in luma_config, fix storage_sync chmod_file_update2 test
+* VFS-3448 Use single 'onedata' bucket
+* VFS-3384 implementation of reverse_luma and luma_cache_behaviour, update of luma tests
+* VFS-3378 Enabled native GlusterFS support on OSX
+* VFS-3363 Use no_seq for saves to default bucket
+* Reconfigure couchbase pools
+
+
 ### 17.06.0-beta6
 
 * VFS-3366 Repair lost changes scheduling
