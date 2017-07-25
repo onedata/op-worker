@@ -58,6 +58,7 @@ run(Job = #space_strategy_job{
 
     case storage_file_ctx:get_stat_buf(StorageFileCtx) of
         Error = {error, _} ->
+            storage_sync_monitoring:update_queue_length_spirals(SpaceId, -1),
             {Error, []};
         {_StatBuf, StorageFileCtx2} ->
             Data2 = Data#{

@@ -190,6 +190,8 @@ update(Key, Diff) ->
 %%--------------------------------------------------------------------
 -spec create(datastore:document()) ->
     {ok, uuid()} | datastore:create_error().
+create(#document{value = #file_meta{is_scope = true}} = Document) ->
+    model:execute_with_default_context(?MODULE, save, [Document]);
 create(Document) ->
     model:execute_with_default_context(?MODULE, save, [Document],
         [{generated_uuid, true}]).
@@ -1033,8 +1035,8 @@ type(Mode) ->
     AllowConflicts :: boolean(), od_space:id()) ->
     {ok, datastore:document()} | datastore:create_error().
 create_with_no_path_validation(Parent,
-    FileDoc0 = #document{value = FileMeta = #file_meta{name = FileName}},
-    AllowConflicts, ScopeId0) ->
+    FileDoc0 = #document{value = FileMeta = #file_meta{name = FileName,
+        is_scope = IsScope}}, AllowConflicts, ScopeId0) ->
     {ok, ScopeDocID} = get_scope_id(Parent),
     FileMeta1 = FileMeta#file_meta{scope = ScopeDocID,
         provider_id = oneprovider:get_provider_id()},
@@ -1058,8 +1060,14 @@ create_with_no_path_validation(Parent,
         ok ->
             case create(FileDoc) of
                 {ok, _} ->
-                    ok = model:execute_with_default_context(?MODULE, add_links,
-                        [FileDoc, [{parent, Parent}]], [{generated_uuid, true}]),
+                    case IsScope of
+                        true ->
+                            ok = model:execute_with_default_context(?MODULE, add_links,
+                                [FileDoc, [{parent, Parent}]]);
+                        _ ->
+                            ok = model:execute_with_default_context(?MODULE, add_links,
+                                [FileDoc, [{parent, Parent}]], [{generated_uuid, true}])
+                    end,
                     {ok, FileDoc};
                 {error, Reason} ->
                     {error, Reason}
