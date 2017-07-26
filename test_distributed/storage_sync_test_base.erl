@@ -936,7 +936,8 @@ create_init_file(Config) ->
     MountPoint = get_host_mount_point(W1, Config),
     Name = filename:join([MountPoint, ?SPACE_ID]),
     case file:make_dir(Name) of
-        ok -> ok;
+        ok ->
+            file:change_mode(Name, 8#777);
         {error,eexist} ->
             clean_dir(Name)
     end.
@@ -948,10 +949,10 @@ clean_dir(Name) ->
         ChildName = filename:join([Name, N]),
         case filelib:is_dir(ChildName) of
             true ->
-                ok = clean_dir(ChildName),
-                ok = file:del_dir(ChildName);
+                clean_dir(ChildName),
+                file:del_dir(ChildName);
             _ ->
-                ok = file:delete(ChildName)
+                file:delete(ChildName)
         end
     end, Names).
 
