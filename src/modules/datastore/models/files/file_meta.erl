@@ -31,13 +31,14 @@
 %% Prefix for link name for #file_location link
 -define(LOCATION_PREFIX, "location_").
 
--define(SET_LINK_SCOPE(ScopeID), [{scope, ScopeID}]).
+-define(SET_LINK_SCOPE(ScopeId), [{scope, ScopeId}]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4]).
 
--export([resolve_path/1, resolve_path/2, create/2, create/3, get_scope/1,
+-export([resolve_path/1, resolve_path/2, create/2, create/3, create/4,
+    create_and_return_doc/4, get_scope/1,
     get_scope_id/1, list_children/3, get_parent/1, get_parent_uuid/1,
     get_parent_uuid/2, setup_onedata_user/2, get_name/1, get_including_deleted/1]).
 -export([get_ancestors/1, attach_location/3, get_local_locations/1,
@@ -189,14 +190,11 @@ update(Key, Diff) ->
 %%--------------------------------------------------------------------
 -spec create(datastore:document()) ->
     {ok, uuid()} | datastore:create_error().
-create(#document{value = #file_meta{name = FileName}} = Document) ->
-    case is_valid_filename(FileName) of
-        true ->
-            model:execute_with_default_context(?MODULE, create, [Document],
-                [{generated_uuid, true}]);
-        false ->
-            {error, invalid_filename}
-    end.
+create(#document{value = #file_meta{is_scope = true}} = Document) ->
+    model:execute_with_default_context(?MODULE, save, [Document]);
+create(Document) ->
+    model:execute_with_default_context(?MODULE, save, [Document],
+        [{generated_uuid, true}]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -205,74 +203,65 @@ create(#document{value = #file_meta{name = FileName}} = Document) ->
 %%--------------------------------------------------------------------
 -spec create(entry(), file_meta() | datastore:document()) -> {ok, uuid()} | datastore:create_error().
 create(Parent, File) ->
-    create(Parent, File, false).
+    create(Parent, File, false, <<>>).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates new #file_meta and links it as a new child of given as first argument existing #file_meta.
 %% @end
 %%--------------------------------------------------------------------
--spec create(entry(), file_meta() | datastore:document(), AllowConflicts :: boolean()) -> {ok, uuid()} | datastore:create_error().
-create({uuid, ParentUuid}, File, AllowConflicts) ->
+-spec create(entry(), file_meta() | datastore:document(),
+    AllowConflicts :: boolean()) -> {ok, uuid()} | datastore:create_error().
+create(Parent, File, AllowConflicts) ->
+    create(Parent, File, AllowConflicts, <<>>).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates new #file_meta and links it as a new child of given as first argument existing #file_meta.
+%% @end
+%%--------------------------------------------------------------------
+-spec create(entry(), file_meta() | datastore:document(),
+    AllowConflicts :: boolean(), od_space:id()) ->
+    {ok, uuid()} | datastore:create_error().
+create({uuid, ParentUuid}, File, AllowConflicts, ScopeId) ->
     ?run(begin
         {ok, Parent} = get(ParentUuid),
-        create(Parent, File, AllowConflicts)
+        create(Parent, File, AllowConflicts, ScopeId)
     end);
-create({path, Path}, File, AllowConflicts) ->
+create({path, Path}, File, AllowConflicts, ScopeId) ->
     ?run(begin
         {ok, {Parent, _}} = resolve_path(Path),
-        create(Parent, File, AllowConflicts)
+        create(Parent, File, AllowConflicts, ScopeId)
     end);
-create(#document{} = Parent, #file_meta{} = File, AllowConflicts) ->
-    create(Parent, #document{value = File}, AllowConflicts);
-create(#document{key = ParentUuid} = Parent, #document{value = #file_meta{name = FileName} = FM} = FileDoc0, AllowConflicts) ->
+create(#document{} = Parent, #file_meta{} = File, AllowConflicts, ScopeId) ->
+    create(Parent, #document{value = File}, AllowConflicts, ScopeId);
+create(#document{} = Parent, #document{value = #file_meta{}} = FileDoc,
+    AllowConflicts, ScopeId) ->
+    case create_and_return_doc(Parent, FileDoc, AllowConflicts, ScopeId) of
+        {ok, #document{key = Key}} -> {ok, Key};
+        Other -> Other
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates new #file_meta and links it as a new child of given as first
+%% argument existing #document.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_and_return_doc(datastore:document(), datastore:document(),
+    AllowConflicts :: boolean(), od_space:id()) ->
+    {ok, datastore:document()} | datastore:create_error().
+create_and_return_doc(Parent,
+    #document{value = #file_meta{name = FileName}} = FileDoc,
+    AllowConflicts, ScopeId) ->
     ?run(begin
-        {ok, Scope} = get_scope(Parent),
-        FM1 = FM#file_meta{scope = Scope#document.key, provider_id = oneprovider:get_provider_id()},
-        FileDoc00 =
-            case FileDoc0 of
-                #document{key = undefined} = Doc ->
-                    NewUuid = gen_file_uuid(),
-                    Doc#document{key = NewUuid, value = FM1};
-                _ ->
-                    FileDoc0#document{value = FM1}
-            end,
-        {ok, DocScope} = get_scope(FileDoc00),
-        ScopeID = fslogic_uuid:space_dir_uuid_to_spaceid_no_error(DocScope#document.key),
-        FileDoc = FileDoc00#document{value = FM1, scope = ScopeID},
-        critical_section:run([?MODEL_NAME, ParentUuid],
-            fun() ->
-                Exists = case AllowConflicts of
-                    true -> false;
-                    false ->
-                        case resolve_path({uuid, ParentUuid}, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, FileName])) of
-                            {error, {not_found, _}} ->
-                                false;
-                            {ok, _Value} ->
-                                true
-                        end
-                end,
-
-                case Exists of
-                    false ->
-                        case create(FileDoc) of
-                            {ok, Uuid} ->
-                                SavedDoc = FileDoc#document{key = Uuid},
-                                ok = model:execute_with_default_context(?MODULE, add_links,
-                                    [Parent, [{FileName, SavedDoc}]]),
-                                ok = model:execute_with_default_context(?MODULE, add_links,
-                                    [SavedDoc, [{parent, Parent}]], [{generated_uuid, true}]),
-                                {ok, Uuid};
-                            {error, Reason} ->
-                                {error, Reason}
-                        end;
-                    true ->
-                        {error, already_exists}
-                end
-            end)
-
+        case is_valid_filename(FileName) of
+            true ->
+                create_with_no_path_validation(Parent, FileDoc, AllowConflicts, ScopeId);
+            false ->
+                {error, invalid_filename}
+        end
     end).
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -310,10 +299,10 @@ fix_parent_links(Entry) ->
 fix_parent_links(Parent, Entry) ->
     {ok, #document{} = ParentDoc} = get(Parent),
     {ok, #document{value = #file_meta{name = FileName}} = FileDoc} = get(Entry),
-    {ok, Scope} = get_scope(Parent),
+    {ok, ScopeId} = get_scope_id(Parent),
     ok = model:execute_with_default_context(?MODULE, set_links,
         [ParentDoc, {FileName, FileDoc}]),
-    ok = set_scope(FileDoc, Scope#document.key),
+    ok = set_scope(FileDoc, ScopeId),
     ok = model:execute_with_default_context(?MODULE, set_links,
         [FileDoc, [{parent, ParentDoc}]]).
 
@@ -889,7 +878,7 @@ setup_onedata_user(_Client, UserId) ->
         end, Spaces),
 
         FileUuid = fslogic_uuid:user_root_dir_uuid(UserId),
-        ScopeID = <<>>, % TODO - do we need scope for user dir
+        ScopeId = <<>>, % TODO - do we need scope for user dir
         case create({uuid, ?ROOT_DIR_UUID},
             #document{key = FileUuid,
                 value = #file_meta{
@@ -900,7 +889,7 @@ setup_onedata_user(_Client, UserId) ->
             {ok, _RootUuid} ->
                 {ok, _} = times:save(#document{key = FileUuid, value =
                     #times{mtime = CTime, atime = CTime, ctime = CTime},
-                    scope = ScopeID}),
+                    scope = ScopeId}),
                 ok;
             {error, already_exists} -> ok
         end
@@ -917,11 +906,11 @@ setup_onedata_user(_Client, UserId) ->
 attach_location(Entry, #document{key = LocId}, ProviderId) ->
     attach_location(Entry, LocId, ProviderId);
 attach_location(Entry, LocId, ProviderId) ->
-    {ok, #document{key = FileId, scope = ScopeID} = FDoc} = get(Entry),
+    {ok, #document{key = FileId, scope = ScopeId} = FDoc} = get(Entry),
     ok = model:execute_with_default_context(?MODULE, add_links, [
         FDoc, {location_ref(ProviderId), {LocId, file_location}}]),
     ok = model:execute_with_default_context(?MODULE, add_links, [
-        LocId, {file_meta, {FileId, file_meta}}], ?SET_LINK_SCOPE(ScopeID)).
+        LocId, {file_meta, {FileId, file_meta}}], ?SET_LINK_SCOPE(ScopeId)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -988,7 +977,7 @@ make_space_exist(SpaceId) ->
                         mode = 8#1775, owner = ?ROOT_USER_ID, is_scope = true
                     }}) of
                 {ok, _} ->
-                    case times:create(#document{key = SpaceDirUuid, value =
+                    case times:save_new(#document{key = SpaceDirUuid, value =
                     #times{mtime = CTime, atime = CTime, ctime = CTime},
                         scope = SpaceId}) of
                         {ok, _} -> ok;
@@ -1036,6 +1025,75 @@ type(Mode) ->
 
 
 %%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates new #file_meta and links it as a new child of given as first
+%% argument existing #document. Does not validate file path.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_with_no_path_validation(datastore:document(), datastore:document(),
+    AllowConflicts :: boolean(), od_space:id()) ->
+    {ok, datastore:document()} | datastore:create_error().
+create_with_no_path_validation(Parent,
+    FileDoc0 = #document{value = FileMeta = #file_meta{name = FileName,
+        is_scope = IsScope}}, AllowConflicts, ScopeId0) ->
+    {ok, ScopeDocID} = get_scope_id(Parent),
+    FileMeta1 = FileMeta#file_meta{scope = ScopeDocID,
+        provider_id = oneprovider:get_provider_id()},
+    FileDoc00 = attach_file_meta(FileDoc0, FileMeta1),
+    {ok, ScopeDocID2} = get_scope_id(FileDoc00),
+    ScopeId = case ScopeId0 of
+        <<>> ->
+            fslogic_uuid:space_dir_uuid_to_spaceid_no_error(ScopeDocID2);
+        _ ->
+            ScopeId0
+    end,
+    FileDoc = FileDoc00#document{value = FileMeta1, scope = ScopeId},
+
+    AddFun = case AllowConflicts of
+        true -> add_links;
+        false -> create_link
+    end,
+
+    case model:execute_with_default_context(?MODULE, AddFun,
+        [Parent, {FileName, FileDoc}]) of
+        ok ->
+            case create(FileDoc) of
+                {ok, _} ->
+                    case IsScope of
+                        true ->
+                            ok = model:execute_with_default_context(?MODULE, add_links,
+                                [FileDoc, [{parent, Parent}]]);
+                        _ ->
+                            ok = model:execute_with_default_context(?MODULE, add_links,
+                                [FileDoc, [{parent, Parent}]], [{generated_uuid, true}])
+                    end,
+                    {ok, FileDoc};
+                {error, Reason} ->
+                    {error, Reason}
+            end;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Puts file_meta in document. Generates uuid if needed.
+%% @end
+%%--------------------------------------------------------------------
+-spec attach_file_meta(datastore:document(), file_meta()) ->
+    datastore:document().
+attach_file_meta(FileDoc, FileMeta) ->
+    case FileDoc of
+        #document{key = undefined} = Doc ->
+            NewUuid = gen_file_uuid(),
+            Doc#document{key = NewUuid, value = FileMeta};
+        _ ->
+            FileDoc#document{value = FileMeta}
+    end.
+
+%%--------------------------------------------------------------------
 %% @doc
 %% Remove the child's links in given parent that corresponds to given child's Name and UUID.
 %% @end
@@ -1046,7 +1104,7 @@ delete_child_link_in_parent(ParentUuid, ChildName, ChildUuid) ->
     case model:execute_with_default_context(?MODULE, fetch_full_link,
         [ParentUuid, ChildName]) of
         {ok, {_, ParentTargets}} ->
-            {ok, #document{scope = Scope}} = get_scope(ParentUuid),
+            {ok, #document{scope = Scope}} = get(ParentUuid),
             lists:foreach(
                 fun({Scope0, VHash0, Key0, _}) ->
                     case Key0 of

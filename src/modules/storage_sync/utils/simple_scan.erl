@@ -58,6 +58,7 @@ run(Job = #space_strategy_job{
 
     case storage_file_ctx:get_stat_buf(StorageFileCtx) of
         Error = {error, _} ->
+            storage_sync_monitoring:update_queue_length_spirals(SpaceId, -1),
             {Error, []};
         {_StatBuf, StorageFileCtx2} ->
             Data2 = Data#{
@@ -636,7 +637,7 @@ create_file_meta(FileMetaDoc, ParentPath) ->
     od_space:id()) ->
     {ok, datastore:key()}.
 create_times(FileUuid, MTime, ATime, CTime, SpaceId) ->
-    times:create(#document{
+    times:save_new(#document{
         key = FileUuid,
         value = #times{
             mtime = MTime,

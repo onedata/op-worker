@@ -21,7 +21,7 @@
 -include_lib("ctool/include/posix/errors.hrl").
 
 %% API
--export([get_or_default/1]).
+-export([get_or_default/1, save_new/1]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
@@ -101,7 +101,17 @@ update(Key, Diff) ->
 -spec create(datastore:document()) ->
     {ok, datastore:key()} | datastore:create_error().
 create(Document) ->
-    model:execute_with_default_context(?MODULE, create, [Document],
+    model:execute_with_default_context(?MODULE, create, [Document]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Saves newly generated document (does not fetch older versions for revisions).
+%% @end
+%%--------------------------------------------------------------------
+-spec save_new(datastore:document()) ->
+    {ok, datastore:key()} | datastore:create_error().
+save_new(Document) ->
+    model:execute_with_default_context(?MODULE, save, [Document],
         [{generated_uuid, true}]).
 
 %%--------------------------------------------------------------------
