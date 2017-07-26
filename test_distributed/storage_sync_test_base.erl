@@ -943,18 +943,22 @@ create_init_file(Config) ->
     end.
 
 clean_dir(Name) ->
-    ok = file:change_mode(Name, 8#777),
-    {ok, Names} = file:list_dir(Name),
-    lists:foreach(fun(N) ->
-        ChildName = filename:join([Name, N]),
-        case filelib:is_dir(ChildName) of
-            true ->
-                clean_dir(ChildName),
-                file:del_dir(ChildName);
-            _ ->
-                file:delete(ChildName)
-        end
-    end, Names).
+    file:change_mode(Name, 8#777),
+    case file:list_dir(Name) of
+        {ok, Names} ->
+            lists:foreach(fun(N) ->
+                ChildName = filename:join([Name, N]),
+                case filelib:is_dir(ChildName) of
+                    true ->
+                        clean_dir(ChildName),
+                        file:del_dir(ChildName);
+                    _ ->
+                        file:delete(ChildName)
+                end
+            end, Names);
+        _ ->
+            ok
+    end.
 
 enable_storage_import(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
