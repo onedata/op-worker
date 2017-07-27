@@ -384,8 +384,10 @@ handle_proxyio_request(UserCtx, #remote_read{offset = Offset, size = Size}, File
 %% @end
 %%--------------------------------------------------------------------
 -spec process_response(user_ctx:ctx(), request(), response()) -> response().
-process_response(UserCtx, #fuse_request{fuse_request = #file_request{file_request = #get_child_attr{name = FileName}, context_guid = ParentGuid}} = Request,
-    #fuse_response{status = #status{code = ?ENOENT}} = Response) ->
+process_response(UserCtx, #fuse_request{fuse_request = #file_request{
+    file_request = #get_child_attr{name = FileName},
+    context_guid = ParentGuid
+}} = Request, #fuse_response{status = #status{code = ?ENOENT}} = Response) ->
     SessId = user_ctx:get_session_id(UserCtx),
     Path0 = fslogic_uuid:uuid_to_path(SessId, fslogic_uuid:guid_to_uuid(ParentGuid)),
     {ok, Tokens0} = fslogic_path:split_skipping_dots(Path0),

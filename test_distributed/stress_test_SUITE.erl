@@ -42,9 +42,6 @@ all() ->
 
 -define(REQUEST_TIMEOUT, timer:minutes(5)).
 -define(TIMEOUT, timer:minutes(5)).
--define(call_store(Fun, Args), erlang:apply(file_meta, Fun, Args)).
--define(call(N, M, A), ?call(N, file_meta, M, A)).
--define(call(N, Mod, M, A), rpc:call(N, Mod, M, A, ?TIMEOUT)).
 
 %%%===================================================================
 %%% Test functions
@@ -110,16 +107,15 @@ many_files_creation_test_base(Config) ->
     ThreadsNum = ?config(threads_num, Config),
     FilesPerThead = ?config(files_per_thead, Config),
 
-    % TODO - check why this does not work (function clause in resolve_path):
-%%     put(file_beg, binary_to_list(term_to_binary(os:timestamp()))),
     put(file_beg, get_random_string()),
     Master = self(),
     AnswerDesc = get(file_beg),
+    RootUuid = <<>>,
 
     case RepNum of
         1 ->
-            ?assertMatch({ok, _}, ?call(Worker1, create,
-                [{path, <<"/">>}, #file_meta{name = <<"spaces">>, is_scope = true}]));
+            ?assertMatch({ok, _}, rpc:call(Worker1, file_meta, create,
+                [{uuid, RootUuid}, #file_meta{name = <<"spaces">>, is_scope = true}]));
         _ ->
             ok
     end,
@@ -128,15 +124,14 @@ many_files_creation_test_base(Config) ->
     ct:print("Space name: ~p", [SpaceNameString]),
     SpaceName = list_to_binary(SpaceNameString),
     FullSpaceNameString = "/" ++ SpaceNameString,
-    FullSpaceName = list_to_binary(FullSpaceNameString),
-    ?assertMatch({ok, _}, ?call(Worker2, create, [{path, <<"/">>},
+    {ok, SpaceUuid} = ?assertMatch({ok, _}, rpc:call(Worker2, file_meta, create, [{uuid, RootUuid},
             #document{key = fslogic_uuid:spaceid_to_space_dir_uuid(list_to_binary(SpaceNameString)),
                 value = #file_meta{name = SpaceName, is_scope = true}}])),
 
     CreateFiles = fun(DocsSet) ->
         for(1, FilesPerThead, fun(I) ->
             BeforeProcessing = os:timestamp(),
-            Ans = ?call_store(create, [{path, FullSpaceName}, #file_meta{name = list_to_binary(DocsSet ++ integer_to_list(I))}]),
+            Ans = file_meta:create(SpaceUuid, #file_meta{name = list_to_binary(DocsSet ++ integer_to_list(I))}),
             AfterProcessing = os:timestamp(),
             Master ! {store_ans, AnswerDesc, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}
         end)
@@ -150,7 +145,7 @@ many_files_creation_test_base(Config) ->
     Get = fun(DocsSet) ->
         for(1, FilesPerThead, fun(I) ->
             BeforeProcessing = os:timestamp(),
-            Ans = ?call_store(get, [{path, list_to_binary(FullSpaceNameString ++ "/" ++ DocsSet ++ integer_to_list(I))}]),
+            Ans = file_meta:get({path, list_to_binary(FullSpaceNameString ++ "/" ++ DocsSet ++ integer_to_list(I))}),
             AfterProcessing = os:timestamp(),
             Master ! {store_ans, AnswerDesc, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}
         end)
@@ -169,7 +164,7 @@ many_files_creation_test_base(Config) ->
     ClearMany = fun(DocsSet) ->
         for(1, FilesPerThead, fun(I) ->
             BeforeProcessing = os:timestamp(),
-            Ans = ?call_store(delete, [{path, list_to_binary(FullSpaceNameString ++ "/" ++ DocsSet ++ integer_to_list(I))}]),
+            Ans = file_meta:delete({path, list_to_binary(FullSpaceNameString ++ "/" ++ DocsSet ++ integer_to_list(I))}),
             AfterProcessing = os:timestamp(),
             Master ! {store_ans, AnswerDesc, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}
         end)

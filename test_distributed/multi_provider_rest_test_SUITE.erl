@@ -147,7 +147,7 @@ replicate_file(Config) ->
     lfm_proxy:fsync(WorkerP1, Handle),
 
     % when
-    timer:sleep(timer:seconds(20)), % for hooks
+    timer:sleep(timer:seconds(20)), % for hooks todo VFS-3462
     {ok, 200, _, Body0} = do_request(WorkerP1, <<"replicas/space3/file?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
     DecodedBody0 = json_utils:decode_map(Body0),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody0),
@@ -159,7 +159,7 @@ replicate_file(Config) ->
     ]),
     ?assertMatch({ok, 200, _, ExpectedTransferStatus},
         do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []), 5),
-    timer:sleep(timer:seconds(20)), % TODO - reorganize tests to remove sleeps
+    timer:sleep(timer:seconds(20)), % todo VFS-3462 - reorganize tests to remove sleeps
     {ok, 200, _, Body} = do_request(WorkerP2, <<"replicas/space3/file">>, get, [user_1_token_header(Config)], []),
     {ok, 200, _, Body2} = do_request(WorkerP1, <<"replicas/space3/file">>, get, [user_1_token_header(Config)], []),
     DecodedBody = json_utils:decode_map(Body),
@@ -199,7 +199,7 @@ replicate_dir(Config) ->
     lfm_proxy:fsync(WorkerP1, Handle3),
 
     % when
-    timer:sleep(timer:seconds(20)), % for hooks
+    timer:sleep(timer:seconds(20)), % for hooks todo  VFS-3462
     {ok, 200, _, Body} = do_request(WorkerP1, <<"replicas/space3/dir1_rd?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
     DecodedBody = json_utils:decode_map(Body),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
@@ -212,7 +212,7 @@ replicate_dir(Config) ->
     ?assertMatch({ok, 200, _, ExpectedTransferStatus},
         do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []), 5),
 
-    timer:sleep(timer:seconds(20)), % for hooks
+    timer:sleep(timer:seconds(20)), % for hooks todo  VFS-3462
     {ok, 200, _, Body1} = do_request(WorkerP2, <<"replicas/space3/dir1_rd/file1">>, get, [user_1_token_header(Config)], []),
     {ok, 200, _, Body2} = do_request(WorkerP2, <<"replicas/space3/dir1_rd/file2">>, get, [user_1_token_header(Config)], []),
     {ok, 200, _, Body3} = do_request(WorkerP2, <<"replicas/space3/dir1_rd/dir2/file3">>, get, [user_1_token_header(Config)], []),
@@ -237,7 +237,7 @@ replicate_file_by_id(Config) ->
     lfm_proxy:fsync(WorkerP1, Handle),
 
     % when
-    timer:sleep(timer:seconds(20)), % for hooks
+    timer:sleep(timer:seconds(20)), % for hooks todo  VFS-3462
     {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
     {ok, 200, _, Body0} = do_request(WorkerP1, <<"replicas-id/", FileObjectId/binary,"?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
     DecodedBody0 = json_utils:decode_map(Body0),
@@ -248,7 +248,7 @@ replicate_file_by_id(Config) ->
         <<"{\"targetProviderId\":\"">>, domain(WorkerP2),
         <<"\",\"status\":\"completed\",\"path\":\"/space3/replicate_file_by_id\"}">>
     ]),
-    timer:sleep(timer:seconds(20)), % for hooks
+    timer:sleep(timer:seconds(20)), % for hooks todo  VFS-3462
     ?assertMatch({ok, 200, _, ExpectedTransferStatus},
         do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []), 5),
     {ok, 200, _, Body} = do_request(WorkerP2, <<"replicas-id/", FileObjectId/binary>>, get, [user_1_token_header(Config)], []),
@@ -269,7 +269,7 @@ replicate_to_missing_provider(Config) ->
     lfm_proxy:fsync(WorkerP1, Handle),
 
     % when
-    timer:sleep(timer:seconds(30)), % for hooks
+    timer:sleep(timer:seconds(30)), % for hooks todo VFS-3462
     {ok, 200, _, Body0} = do_request(WorkerP1, <<"replicas/space3/replicate_to_missing_provider?provider_id=missing_id">>, post, [user_1_token_header(Config)], []),
     DecodedBody0 = json_utils:decode_map(Body0),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody0),
@@ -939,7 +939,7 @@ query_geospatial_index(Config) ->
         do_request(WorkerP1, <<"index?space_id=space1&name=name&spatial=true">>, post,
             [user_1_token_header(Config), {<<"content-type">>,<<"application/javascript">>}], Function)),
     <<"/api/v3/oneprovider/index/", Id/binary>> = proplists:get_value(<<"location">>, Headers),
-    timer:sleep(timer:seconds(5)), % let the data be stored in db
+    timer:sleep(timer:seconds(5)), % let the data be stored in db todo VFS-3462
 
     % when
     {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1, <<"query-index/", Id/binary, "?spatial=true&stale=false">>, get, [user_1_token_header(Config)], [])),

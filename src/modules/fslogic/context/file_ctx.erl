@@ -126,10 +126,9 @@ new_by_partial_context(FileCtx = #file_ctx{}) ->
     FileCtx;
 new_by_partial_context(FilePartialCtx) ->
     {CanonicalPath, FilePartialCtx2} = file_partial_ctx:get_canonical_path(FilePartialCtx),
-    {ok, Uuid} = file_meta:to_uuid({path, CanonicalPath}),
+    {ok, {FileDoc, _}} = file_meta:resolve_path(CanonicalPath),
     SpaceId = file_partial_ctx:get_space_id_const(FilePartialCtx2),
-    Guid = fslogic_uuid:uuid_to_guid(Uuid, SpaceId),
-    new_by_guid(Guid).
+    new_by_doc(FileDoc, SpaceId, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -592,29 +591,11 @@ get_file_location_with_filled_gaps(FileCtx, ReqRange) ->
 -spec get_or_create_local_file_location_doc(ctx()) ->
     {file_location:doc() | undefined, ctx()}.
 get_or_create_local_file_location_doc(FileCtx) ->
-    FileUuid = get_uuid_const(FileCtx),
     case is_dir(FileCtx) of
         {true, FileCtx2} ->
             {undefined, FileCtx2};
         {false, FileCtx2} ->
-            case get_local_file_location_doc(FileCtx2) of
-                {undefined, FileCtx3} ->
-                    {CreatedLocation, FileCtx4} =
-                        sfm_utils:create_storage_file_location(FileCtx3, false),
-                    {LocationDocs, FileCtx5} = get_file_location_docs(FileCtx4),
-                    lists:map(fun(ChangedLocation) ->
-                        replica_dbsync_hook:on_file_location_change(FileCtx5, ChangedLocation)
-                        end, LocationDocs),
-                    {
-                        #document{
-                            key = file_location:local_id(FileUuid),
-                            value = CreatedLocation
-                        },
-                        FileCtx4
-                    };
-                {Location, FileCtx3} ->
-                    {Location, FileCtx3}
-            end
+            get_or_create_local_regular_file_location_doc(FileCtx2)
     end.
 
 %%--------------------------------------------------------------------
@@ -629,7 +610,7 @@ get_local_file_location_doc(FileCtx) ->
     LocalLocationId = file_location:local_id(FileUuid),
     case file_location:get(LocalLocationId) of
         {ok, Location} ->
-            {Location, FileCtx}; %todo consider caching local location
+            {Location, FileCtx};
         {error, {not_found, _}} ->
             {undefined, FileCtx}
     end.
@@ -866,3 +847,33 @@ get_file_location_ids(FileCtx = #file_ctx{file_location_ids = undefined}) ->
     {Locations, FileCtx#file_ctx{file_location_ids = Locations}};
 get_file_location_ids(FileCtx = #file_ctx{file_location_ids = Locations}) ->
     {Locations, FileCtx}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns local file location doc, creates it if it's not present
+%% @end
+%%--------------------------------------------------------------------
+-spec get_or_create_local_regular_file_location_doc(ctx()) ->
+    {file_location:doc() | undefined, ctx()}.
+get_or_create_local_regular_file_location_doc(FileCtx) ->
+    case get_local_file_location_doc(FileCtx) of
+        {undefined, FileCtx2} ->
+            {CreatedLocation, FileCtx3} =
+                sfm_utils:create_storage_file_location(FileCtx2, false),
+            {LocationDocs, FileCtx4} = get_file_location_docs(FileCtx3),
+            lists:map(fun(ChangedLocation) ->
+                replica_dbsync_hook:on_file_location_change(FileCtx4, ChangedLocation)
+            end, LocationDocs),
+            FileUuid = get_uuid_const(FileCtx),
+
+            {
+                #document{
+                    key = file_location:local_id(FileUuid),
+                    value = CreatedLocation
+                },
+                FileCtx4
+            };
+        {Location, FileCtx2} ->
+            {Location, FileCtx2}
+    end.

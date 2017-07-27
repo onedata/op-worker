@@ -31,24 +31,22 @@
 %% Prefix for link name for #file_location link
 -define(LOCATION_PREFIX, "location_").
 
--define(SET_LINK_SCOPE(ScopeID), [{scope, ScopeID}]).
+-define(SET_LINK_SCOPE(ScopeId), [{scope, ScopeId}]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4]).
 
 -export([resolve_path/1, resolve_path/2, create/2, create/3, get_scope/1,
-    get_scope_id/1, list_children/3, get_parent/1, get_parent_uuid/1,
-    get_parent_uuid/2, setup_onedata_user/2, get_name/1, get_including_deleted/1]).
+    list_children/3, get_parent/1, get_parent_uuid/1,
+    setup_onedata_user/2, get_including_deleted/1]).
 -export([get_ancestors/1, attach_location/3,
     get_locations_by_uuid/1, location_ref/1, rename/4]).
--export([to_uuid/1]).
--export([fix_parent_links/2, fix_parent_links/1, exists_local_link_doc/1,
-    get_child/2, delete_child_link/2, foreach_child/3]).
+-export([delete_child_link/2, foreach_child/3]).
 -export([hidden_file_name/1, is_hidden/1]).
 -export([add_share/2, remove_share/2]).
 -export([record_struct/1, record_upgrade/2]).
--export([make_space_exist/1, new_doc/5, type/1]).
+-export([make_space_exist/1, new_doc/6, type/1]).
 
 -type doc() :: datastore:document().
 -type uuid() :: datastore:key().
@@ -69,7 +67,6 @@
 -export_type([doc/0, uuid/0, path/0, name/0, uuid_or_path/0, entry/0, type/0,
     offset/0, size/0, mode/0, time/0, symlink_value/0, posix_permissions/0,
     file_meta/0, storage_sync_info/0]).
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -123,6 +120,26 @@ record_struct(3) ->
             {children_attrs_hash, #{integer => binary}},
             {last_synchronized_mtime, integer}
         ]}}
+    ]};
+record_struct(4) ->
+    {record, [
+        {name, string},
+        {type, atom},
+        {mode, integer},
+        {owner, string},
+        {size, integer},
+        {version, integer},
+        {is_scope, boolean},
+        {scope, string},
+        {provider_id, string},
+        {link_value, string},
+        {shares, [string]},
+        {deleted, boolean},
+        {storage_sync_info, {record, [
+            {children_attrs_hash, #{integer => binary}},
+            {last_synchronized_mtime, integer}
+        ]}},
+        {parent_uuid, string}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -145,9 +162,16 @@ record_upgrade(2, {?MODEL_NAME, Name, Type, Mode, Owner, Size, Version, IsScope,
         version = Version, is_scope = IsScope, scope = Scope,
         provider_id = ProviderId, link_value = LinkValue, shares = Shares,
         deleted = false, storage_sync_info = #storage_sync_info{}
+    }};
+record_upgrade(3, {?MODEL_NAME, Name, Type, Mode, Owner, Size, Version, IsScope,
+    Scope, ProviderId, LinkValue, Shares, StorageSyncInfo}
+) ->
+    {4, #file_meta{name = Name, type = Type, mode = Mode, owner = Owner, size = Size,
+        version = Version, is_scope = IsScope, scope = Scope,
+        provider_id = ProviderId, link_value = LinkValue, shares = Shares,
+        deleted = false, storage_sync_info = StorageSyncInfo,
+        parent_uuid = undefined
     }}.
-
-
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -199,47 +223,43 @@ create(#document{value = #file_meta{name = FileName}} = Document) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Creates new #file_meta and links it as a new child of given as first argument existing #file_meta.
+%% @equiv create({uuid, ParentUuid}, FileDoc, false).
 %% @end
 %%--------------------------------------------------------------------
--spec create(entry(), file_meta() | datastore:document()) -> {ok, uuid()} | datastore:create_error().
-create(Parent, File) ->
-    create(Parent, File, false).
+-spec create({uuid, uuid()}, doc()) ->
+    {ok, uuid()} | datastore:create_error().
+create({uuid, ParentUuid}, FileDoc) ->
+    create({uuid, ParentUuid}, FileDoc, false).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates new #file_meta and links it as a new child of given as first argument existing #file_meta.
+%% Creates new #file_meta and links it as a new child of given as first argument
+%% existing #file_meta.
 %% @end
 %%--------------------------------------------------------------------
--spec create(entry(), file_meta() | datastore:document(), AllowConflicts :: boolean()) -> {ok, uuid()} | datastore:create_error().
-create({uuid, ParentUuid}, File, AllowConflicts) ->
+-spec create({uuid, ParentUuid :: uuid()}, doc(), AllowConflicts :: boolean()) ->
+    {ok, uuid()} | datastore:create_error().
+create({uuid, ParentUuid}, FileDoc = #document{
+    value = FileMeta = #file_meta{
+        name = FileName
+    }
+}, AllowConflicts) ->
     ?run(begin
-        {ok, Parent} = get(ParentUuid),
-        create(Parent, File, AllowConflicts)
-    end);
-create({path, Path}, File, AllowConflicts) ->
-    ?run(begin
-        {ok, {Parent, _}} = resolve_path(Path),
-        create(Parent, File, AllowConflicts)
-    end);
-create(#document{} = Parent, #file_meta{} = File, AllowConflicts) ->
-    create(Parent, #document{value = File}, AllowConflicts);
-create(#document{key = ParentUuid} = Parent, #document{value = #file_meta{name = FileName} = FM} = FileDoc0, AllowConflicts) ->
-    ?run(begin
-        {ok, Scope} = get_scope(Parent),
-        FM1 = FM#file_meta{scope = Scope#document.key, provider_id = oneprovider:get_provider_id()},
-        FileDoc00 =
-            case FileDoc0 of
+        {ok, ParentDoc} = get(ParentUuid),
+        {ok, Scope} = get_scope(ParentDoc),
+        NewFileMeta = FileMeta#file_meta{scope = Scope#document.key,
+            provider_id = oneprovider:get_provider_id(), parent_uuid = ParentUuid},
+        FileDoc2 =
+            case FileDoc of
                 #document{key = undefined} = Doc ->
                     NewUuid = gen_file_uuid(),
-                    Doc#document{key = NewUuid, value = FM1};
+                    Doc#document{key = NewUuid, value = NewFileMeta};
                 _ ->
-                    FileDoc0#document{value = FM1}
+                    FileDoc#document{value = NewFileMeta}
             end,
-        {ok, DocScope} = get_scope(FileDoc00),
-        ScopeID = fslogic_uuid:space_dir_uuid_to_spaceid_no_error(DocScope#document.key),
-        FileDoc = FileDoc00#document{value = FM1, scope = ScopeID},
+        {ok, DocScope} = get_scope(FileDoc2),
+        ScopeId = fslogic_uuid:space_dir_uuid_to_spaceid_no_error(DocScope#document.key),
+        FileDoc3 = FileDoc2#document{value = NewFileMeta, scope = ScopeId},
         critical_section:run([?MODEL_NAME, ParentUuid],
             fun() ->
                 Exists = case AllowConflicts of
@@ -255,13 +275,11 @@ create(#document{key = ParentUuid} = Parent, #document{value = #file_meta{name =
 
                 case Exists of
                     false ->
-                        case create(FileDoc) of
+                        case create(FileDoc3) of
                             {ok, Uuid} ->
-                                SavedDoc = FileDoc#document{key = Uuid},
+                                SavedDoc = FileDoc3#document{key = Uuid},
                                 ok = model:execute_with_default_context(?MODULE, add_links,
-                                    [Parent, [{FileName, SavedDoc}]]),
-                                ok = model:execute_with_default_context(?MODULE, add_links,
-                                    [SavedDoc, [{parent, Parent}]], [{generated_uuid, true}]),
+                                    [ParentDoc, [{FileName, SavedDoc}]]),
                                 {ok, Uuid};
                             {error, Reason} ->
                                 {error, Reason}
@@ -270,52 +288,7 @@ create(#document{key = ParentUuid} = Parent, #document{value = #file_meta{name =
                         {error, already_exists}
                 end
             end)
-
     end).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Retrieves name of the file.
-%% @end
-%%--------------------------------------------------------------------
--spec get_name(entry()) -> {ok, file_meta:name()} | {datastore:get_error()}.
-get_name(Entry) ->
-    case file_meta:get(Entry) of
-        {ok, #document{value = #file_meta{name = Name}}} -> {ok, Name};
-        {error, Reason} -> {error, Reason}
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Fixes links to given document in its parent. Assumes that link to parent is valid.
-%% If the parent entry() is known its safer to use fix_parent_links/2.
-%% @end
-%%--------------------------------------------------------------------
--spec fix_parent_links(entry()) ->
-    ok | no_return().
-fix_parent_links(Entry) ->
-    {ok, Parent} = get_parent(Entry),
-    fix_parent_links(Parent, Entry).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Fixes links to given document in its parent. Also fixes 'parent' link.
-%% @end
-%%--------------------------------------------------------------------
--spec fix_parent_links(Parent :: entry(), File :: entry()) ->
-    ok | no_return().
-fix_parent_links(Parent, Entry) ->
-    {ok, #document{} = ParentDoc} = get(Parent),
-    {ok, #document{value = #file_meta{name = FileName}} = FileDoc} = get(Entry),
-    {ok, Scope} = get_scope(Parent),
-    ok = model:execute_with_default_context(?MODULE, set_links,
-        [ParentDoc, {FileName, FileDoc}]),
-    ok = set_scope(FileDoc, Scope#document.key),
-    ok = model:execute_with_default_context(?MODULE, set_links,
-        [FileDoc, [{parent, ParentDoc}]]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -371,14 +344,12 @@ get_including_deleted(FileUuid) ->
 -spec delete(uuid() | entry()) -> ok | datastore:generic_error().
 delete({uuid, Key}) ->
     delete(Key);
-delete(#document{value = #file_meta{name = FileName}, key = Key} = Doc) ->
+delete(Doc = #document{value = #file_meta{
+    name = FileName,
+    parent_uuid = ParentUuid
+}, key = Key}) ->
     ?run(begin
-        case model:execute_with_default_context(?MODULE, fetch_link, [Key, parent]) of
-            {ok, {ParentKey, ?MODEL_NAME}} ->
-                ok = delete_child_link_in_parent(ParentKey, FileName, Key);
-            _ ->
-                ok
-        end,
+        ok = delete_child_link_in_parent(ParentUuid, FileName, Key),
         case model:execute_with_default_context(?MODULE, fetch_link,
             [Doc, location_ref(oneprovider:get_provider_id())]) of
             {ok, {LocKey, LocationModel}} ->
@@ -436,38 +407,6 @@ exists(Key) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Checks if local link doc exists for key/
-%% @end
-%%--------------------------------------------------------------------
--spec exists_local_link_doc(uuid()) -> datastore:exists_return().
-exists_local_link_doc(Key) ->
-    ?RESPONSE(model:execute_with_default_context(?MODULE, exists_link_doc,
-        [Key, oneprovider:get_provider_id()])).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns child UUIDs
-%% @end
-%%--------------------------------------------------------------------
--spec get_child(datastore:document() | {uuid, uuid()}, name()) ->
-    {ok, [uuid()]} | datastore:link_error() | datastore:generic_error().
-get_child({uuid, Uuid}, Name) ->
-    case get({uuid, Uuid}) of
-        {ok, #document{} = Doc} ->
-            get_child(Doc, Name);
-        Error ->
-            Error
-    end;
-get_child(Doc, Name) ->
-    case model:execute_with_default_context(?MODULE, fetch_full_link, [Doc, Name]) of
-        {ok, {_, Targets}} ->
-            {ok, [Uuid || {_, _, Uuid, _} <- Targets]};
-        Other ->
-            Other
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
 %% {@link model_behaviour} callback model_init/0.
 %% @end
 %%--------------------------------------------------------------------
@@ -475,7 +414,7 @@ get_child(Doc, Name) ->
 model_init() ->
     Config = ?MODEL_CONFIG(files, [], ?GLOBALLY_CACHED_LEVEL,
         ?GLOBALLY_CACHED_LEVEL, true, false, oneprovider:get_provider_id(), true),
-    Config#model_config{sync_enabled = true, version = 3}.
+    Config#model_config{sync_enabled = true, version = 4}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -558,40 +497,6 @@ list_children(Entry, Offset, Count) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Tag each given link with its scope.
-%% @end
-%%--------------------------------------------------------------------
--spec tag_children(LinkName :: datastore:link_name(), [datastore:link_final_target()]) ->
-    [{datastore:link_name(), datastore:ext_key()}].
-tag_children(LinkName, [{_Scope, _VH, Key, _Model}]) ->
-    [{LinkName, Key}];
-
-tag_children(LinkName, Targets) ->
-    MPID = oneprovider:get_provider_id(),
-    Scopes = lists:map(
-        fun({Scope, _VH, _Key, _Model}) ->
-            Scope
-        end, Targets),
-    MinScope = lists:min([4 | lists:map(fun size/1, Scopes)]),
-    LongestPrefix = max(MinScope, binary:longest_common_prefix(Scopes)),
-    lists:map(
-        fun({Scope, VH, Key, _}) ->
-            case MPID of
-                Scope ->
-                    {LinkName, Key};
-                _ ->
-                    case LongestPrefix >= size(Scope) of
-                        true ->
-                            {links_utils:make_scoped_link_name(LinkName, Scope, VH, size(Scope)), Key};
-                        false ->
-                            {links_utils:make_scoped_link_name(LinkName, Scope, undefined, LongestPrefix + 1), Key}
-                    end
-            end
-        end, Targets).
-
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Iterate over all children links and apply Fun.
 %% @end
 %%--------------------------------------------------------------------
@@ -605,10 +510,8 @@ foreach_child(Entry, Fun, AccIn) ->
         {ok, #document{} = File} = get(Entry),
         model:execute_with_default_context(?MODULE, foreach_link, [File,
             fun
-                (parent, _LinkTarget, AccIn) ->
-                    AccIn;
-                (LinkName, LinkTarget, AccIn) ->
-                    Fun(LinkName, LinkTarget, AccIn)
+                (LinkName, LinkTarget, Acc) ->
+                    Fun(LinkName, LinkTarget, Acc)
             end, AccIn])
     end).
 
@@ -650,14 +553,12 @@ rename(SourceDoc, SourceParentDoc, TargetParentDoc, TargetName) ->
     TargetDoc = SourceDoc#document{
         value = SourceFileMeta#file_meta{name = TargetName}
     },
-    {ok, _} = file_meta:update(FileUuid, #{name => TargetName}),
+    {ok, _} = file_meta:update(FileUuid,
+        #{name => TargetName, parent_uuid => TargetParentDoc#document.key}),
     ok = file_meta:delete_child_link(SourceParentDoc, SourceName),
 
     ok = model:execute_with_default_context(?MODULE, add_links, [
         TargetParentDoc, {TargetName, TargetDoc}
-    ]),
-    ok = model:execute_with_default_context(?MODULE, add_links, [
-        TargetDoc, [{parent, TargetParentDoc}]
     ]).
 
 %%--------------------------------------------------------------------
@@ -667,17 +568,12 @@ rename(SourceDoc, SourceParentDoc, TargetParentDoc, TargetName) ->
 %%--------------------------------------------------------------------
 -spec get_parent(Entry :: entry()) -> {ok, datastore:document()} | datastore:get_error().
 get_parent(Entry) ->
-    ?run(begin
-        case get(Entry) of
-            {ok, #document{key = ?ROOT_DIR_UUID}} = RootResp ->
-                RootResp;
-            {ok, #document{key = Key}} ->
-                {ok, {ParentKey, ?MODEL_NAME}} =
-                    model:execute_with_default_context(?MODULE, fetch_link, [
-                        Key, parent]),
-                get({uuid, ParentKey})
-        end
-    end).
+    case get_parent_uuid(Entry) of
+        {ok, ParentUuid} ->
+            get({uuid, ParentUuid});
+        Error ->
+            Error
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -690,37 +586,10 @@ get_parent_uuid(Entry) ->
         case get(Entry) of
             {ok, #document{key = ?ROOT_DIR_UUID}} ->
                 {ok, ?ROOT_DIR_UUID};
-            {ok, #document{key = Key}} ->
-                {ok, {ParentKey, ?MODEL_NAME}} =
-                    case model:execute_with_default_context(?MODULE, fetch_link, [
-                        Key, parent]) of
-                        {error, link_not_found} -> %% Map links errors to document errors
-                            {error, {not_found, ?MODEL_NAME}};
-                        Ans ->
-                            Ans
-                    end,
-                {ok, ParentKey}
+            {ok, #document{value = #file_meta{parent_uuid = ParentUuid}}} ->
+                {ok, ParentUuid}
         end
     end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns file's parent uuid.
-%% @end
-%%--------------------------------------------------------------------
--spec get_parent_uuid(file_meta:uuid(), od_space:id()) -> {ok, datastore:key()} | datastore:get_error().
-get_parent_uuid(?ROOT_DIR_UUID, _SpaceId) ->
-    {ok, ?ROOT_DIR_UUID};
-get_parent_uuid(FileUuid, _SpaceId) ->
-    {ok, {ParentKey, ?MODEL_NAME}} =
-        case model:execute_with_default_context(?MODULE, fetch_link, [
-            FileUuid, parent]) of
-            {error, link_not_found} -> %% Map links errors to document errors
-                {error, {not_found, ?MODEL_NAME}};
-            Ans ->
-                Ans
-        end,
-    {ok, ParentKey}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -735,11 +604,9 @@ get_ancestors(FileUuid) ->
     end).
 get_ancestors2(?ROOT_DIR_UUID, Acc) ->
     Acc;
-get_ancestors2(Key, Acc) ->
-    {ok, {ParentKey, ?MODEL_NAME}} =
-        model:execute_with_default_context(?MODULE, fetch_link, [
-            Key, parent]),
-    get_ancestors2(ParentKey, [ParentKey | Acc]).
+get_ancestors2(FileUuid, Acc) ->
+    {ok, ParentUuid} = get_parent_uuid(FileUuid),
+    get_ancestors2(ParentUuid, [ParentUuid | Acc]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -779,19 +646,12 @@ resolve_path(ParentEntry, <<?DIRECTORY_SEPARATOR, Path/binary>>) ->
                     [Root, Tokens, get_leaf]) of
                     {ok, {Leaf, KeyPath}} ->
                         [_ | [RealParentUuid | _]] = lists:reverse([RootUuid | KeyPath]),
-                        case model:execute_with_default_context(
-                            ?MODULE, fetch_link, [Leaf, parent]) of
-                            {ok, {ParentUuid, _}} ->
-                                case ParentUuid of
-                                    RealParentUuid ->
-                                        {ok, {Leaf, [RootUuid | KeyPath]}};
-                                    _ ->
-                                        {error, ghost_file}
-                                end;
-                            {error, link_not_found} -> %% Map links errors to document errors
-                                {error, {not_found, ?MODEL_NAME}};
-                            {error, Reason} ->
-                                {error, Reason}
+                        {ok, #document{value = #file_meta{parent_uuid = ParentUuid}}} = get(Leaf),
+                        case ParentUuid of
+                            RealParentUuid ->
+                                {ok, {Leaf, [RootUuid | KeyPath]}};
+                            _ ->
+                                {error, ghost_file}
                         end;
                     {error, link_not_found} -> %% Map links errors to document errors
                         {error, {not_found, ?MODEL_NAME}};
@@ -819,22 +679,6 @@ get_scope(Entry) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets "scope" document of given document. "Scope" document is the nearest ancestor with #file_meta.is_scope == true.
-%% @end
-%%--------------------------------------------------------------------
--spec get_scope_id(Entry :: entry()) -> {ok, ScopeId :: datastore:ext_key()} | datastore:generic_error().
-get_scope_id(#document{key = K, value = #file_meta{is_scope = true}}) ->
-    {ok, K};
-get_scope_id(#document{value = #file_meta{is_scope = false, scope = Scope}}) ->
-    {ok, Scope};
-get_scope_id(Entry) ->
-    ?run(begin
-        {ok, Doc} = get(Entry),
-        get_scope_id(Doc)
-    end).
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Initializes files metadata for onedata user.
 %% This function can and should be used to ensure that user's FS is fully synchronised. Normally
 %% this function is called asynchronously automatically after user's document is updated.
@@ -854,18 +698,18 @@ setup_onedata_user(_Client, UserId) ->
         end, Spaces),
 
         FileUuid = fslogic_uuid:user_root_dir_uuid(UserId),
-        ScopeID = <<>>, % TODO - do we need scope for user dir
+        ScopeId = <<>>, % TODO - do we need scope for user dir
         case create({uuid, ?ROOT_DIR_UUID},
             #document{key = FileUuid,
                 value = #file_meta{
                     name = UserId, type = ?DIRECTORY_TYPE, mode = 8#1755,
-                    owner = ?ROOT_USER_ID, is_scope = true
+                    owner = ?ROOT_USER_ID, is_scope = true, parent_uuid = ?ROOT_DIR_UUID
                 }
             }) of
             {ok, _RootUuid} ->
                 {ok, _} = times:save(#document{key = FileUuid, value =
                     #times{mtime = CTime, atime = CTime, ctime = CTime},
-                    scope = ScopeID}),
+                    scope = ScopeId}),
                 ok;
             {error, already_exists} -> ok
         end
@@ -882,29 +726,11 @@ setup_onedata_user(_Client, UserId) ->
 attach_location(Entry, #document{key = LocId}, ProviderId) ->
     attach_location(Entry, LocId, ProviderId);
 attach_location(Entry, LocId, ProviderId) ->
-    {ok, #document{key = FileId, scope = ScopeID} = FDoc} = get(Entry),
+    {ok, #document{key = FileId, scope = ScopeId} = FDoc} = get(Entry),
     ok = model:execute_with_default_context(?MODULE, add_links, [
         FDoc, {location_ref(ProviderId), {LocId, file_location}}]),
     ok = model:execute_with_default_context(?MODULE, add_links, [
-        LocId, {file_meta, {FileId, file_meta}}], ?SET_LINK_SCOPE(ScopeID)).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns uuid() for given file_meta:entry(). Providers for example path() -> uuid() conversion.
-%% @end
-%%--------------------------------------------------------------------
--spec to_uuid(entry() | {guid, fslogic_worker:file_guid()}) -> {ok, uuid()} | datastore:generic_error().
-to_uuid({uuid, Uuid}) ->
-    {ok, Uuid};
-to_uuid({guid, FileGUID}) ->
-    {ok, fslogic_uuid:guid_to_uuid(FileGUID)};
-to_uuid(#document{key = Uuid}) ->
-    {ok, Uuid};
-to_uuid({path, Path}) ->
-    ?run(begin
-        {ok, {Doc, _}} = resolve_path(Path),
-        to_uuid(Doc)
-    end).
+        LocId, {file_meta, {FileId, file_meta}}], ?SET_LINK_SCOPE(ScopeId)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -943,14 +769,15 @@ make_space_exist(SpaceId) ->
     SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     case file_meta:exists({uuid, SpaceDirUuid}) of
         true ->
-            file_meta:fix_parent_links({uuid, ?ROOT_DIR_UUID},
+            fix_parent_links({uuid, ?ROOT_DIR_UUID},
                 {uuid, SpaceDirUuid});
         false ->
             case file_meta:create({uuid, ?ROOT_DIR_UUID},
                 #document{key = SpaceDirUuid,
                     value = #file_meta{
                         name = SpaceId, type = ?DIRECTORY_TYPE,
-                        mode = 8#1775, owner = ?ROOT_USER_ID, is_scope = true
+                        mode = 8#1775, owner = ?ROOT_USER_ID, is_scope = true,
+                        parent_uuid = ?ROOT_DIR_UUID
                     }}) of
                 {ok, _} ->
                     case times:create(#document{key = SpaceDirUuid, value =
@@ -971,14 +798,15 @@ make_space_exist(SpaceId) ->
 %%--------------------------------------------------------------------
 -spec new_doc(undefined | file_meta:name(), undefined | file_meta:type(),
     file_meta:posix_permissions(), undefined | od_user:id(),
-    undefined | file_meta:size()) -> datastore:document().
-new_doc(FileName, FileType, Mode, Owner, Size) ->
+    undefined | file_meta:size(), uuid()) -> datastore:document().
+new_doc(FileName, FileType, Mode, Owner, Size, ParentUuid) ->
     #document{value = #file_meta{
         name = FileName,
         type = FileType,
         mode = Mode,
         owner = Owner,
-        size = Size
+        size = Size,
+        parent_uuid = ParentUuid
     }}.
 
 %%--------------------------------------------------------------------
@@ -994,74 +822,6 @@ type(Mode) ->
         false -> ?REGULAR_FILE_TYPE
     end.
 
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Remove the child's links in given parent that corresponds to given child's Name and UUID.
-%% @end
-%%--------------------------------------------------------------------
--spec delete_child_link_in_parent(ParentUuid :: uuid(), ChildName :: name(), ChildUuid :: uuid()) ->
-    ok | {error, Reason :: any()}.
-delete_child_link_in_parent(ParentUuid, ChildName, ChildUuid) ->
-    case model:execute_with_default_context(?MODULE, fetch_full_link,
-        [ParentUuid, ChildName]) of
-        {ok, {_, ParentTargets}} ->
-            {ok, #document{scope = Scope}} = get_scope(ParentUuid),
-            lists:foreach(
-                fun({Scope0, VHash0, Key0, _}) ->
-                    case Key0 of
-                        ChildUuid ->
-                            ok = model:execute_with_default_context(?MODULE, delete_links,
-                                [ParentUuid, [links_utils:make_scoped_link_name(ChildName,
-                                    Scope0, VHash0, size(Scope0))]], ?SET_LINK_SCOPE(Scope));
-                        _ -> ok
-                    end
-                end, ParentTargets);
-        {error, link_not_found} ->
-            ok;
-        Error -> Error
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets scope for single entry
-%% @end
-%%--------------------------------------------------------------------
--spec set_scope(Entry :: entry(), Scope :: datastore:key()) -> ok | datastore:generic_error().
-set_scope(Entry, Scope) ->
-    Diff = #{scope => Scope},
-    case update(Entry, Diff) of
-        {ok, _} ->
-            ok;
-        Error ->
-            Error
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Check if given term is valid path()
-%% @end
-%%--------------------------------------------------------------------
--spec is_valid_filename(term()) -> boolean().
-is_valid_filename(<<"">>) ->
-    false;
-is_valid_filename(<<".">>) ->
-    false;
-is_valid_filename(<<"..">>) ->
-    false;
-is_valid_filename(FileName) when not is_binary(FileName) ->
-    false;
-is_valid_filename(FileName) when is_binary(FileName) ->
-    case binary:matches(FileName, <<?DIRECTORY_SEPARATOR>>) of
-        [] -> true;
-        _ -> false
-    end.
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates location reference (that is used to name link) using provider ID.
@@ -1070,7 +830,6 @@ is_valid_filename(FileName) when is_binary(FileName) ->
 -spec location_ref(ProviderID :: oneprovider:id()) -> LocationReference :: binary().
 location_ref(ProviderId) ->
     <<?LOCATION_PREFIX, ProviderId/binary>>.
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1090,6 +849,137 @@ hidden_file_name(FileName) ->
 is_hidden(FileName) ->
     case FileName of
         <<?HIDDEN_FILE_PREFIX, _/binary>> -> true;
+        _ -> false
+    end.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Fixes links to given document in its parent. Also fixes 'parent' link.
+%% @end
+%%--------------------------------------------------------------------
+-spec fix_parent_links(Parent :: entry(), File :: entry()) ->
+    ok | no_return().
+fix_parent_links(Parent, Entry) ->
+    {ok, ParentDoc = #document{key = ParentUuid}} = get(Parent),
+    {ok, FileDoc = #document{
+        key = FileUuid,
+        value = #file_meta{
+            name = FileName,
+            parent_uuid = ParentUuidInDoc
+        }
+    }} = get(Entry),
+    {ok, Scope} = get_scope(Parent),
+    ok = model:execute_with_default_context(?MODULE, set_links,
+        [ParentDoc, {FileName, FileDoc}]),
+    ok = set_scope(FileDoc, Scope#document.key),
+    case ParentUuidInDoc =/= ParentUuid of
+        true ->
+            update(FileUuid, #{parent_uuid => ParentUuid});
+        false ->
+            ok
+    end,
+    ok.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Tag each given link with its scope.
+%% @end
+%%--------------------------------------------------------------------
+-spec tag_children(LinkName :: datastore:link_name(), [datastore:link_final_target()]) ->
+    [{datastore:link_name(), datastore:ext_key()}].
+tag_children(LinkName, [{_Scope, _VH, Key, _Model}]) ->
+    [{LinkName, Key}];
+tag_children(LinkName, Targets) ->
+    MPID = oneprovider:get_provider_id(),
+    Scopes = lists:map(
+        fun({Scope, _VH, _Key, _Model}) ->
+            Scope
+        end, Targets),
+    MinScope = lists:min([4 | lists:map(fun size/1, Scopes)]),
+    LongestPrefix = max(MinScope, binary:longest_common_prefix(Scopes)),
+    lists:map(
+        fun({Scope, VH, Key, _}) ->
+            case MPID of
+                Scope ->
+                    {LinkName, Key};
+                _ ->
+                    case LongestPrefix >= size(Scope) of
+                        true ->
+                            {links_utils:make_scoped_link_name(LinkName, Scope, VH, size(Scope)), Key};
+                        false ->
+                            {links_utils:make_scoped_link_name(LinkName, Scope, undefined, LongestPrefix + 1), Key}
+                    end
+            end
+        end, Targets).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Remove the child's links in given parent that corresponds to given child's Name and UUID.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_child_link_in_parent(ParentUuid :: uuid(), ChildName :: name(), ChildUuid :: uuid()) ->
+    ok | {error, Reason :: any()}.
+delete_child_link_in_parent(ParentUuid, ChildName, ChildUuid) ->
+    case model:execute_with_default_context(?MODULE, fetch_full_link,
+        [ParentUuid, ChildName]) of
+        {ok, {_, ParentTargets}} ->
+            {ok, #document{scope = Scope}} = get_scope({uuid, ParentUuid}),
+            lists:foreach(
+                fun({Scope0, VHash0, Key0, _}) ->
+                    case Key0 of
+                        ChildUuid ->
+                            ok = model:execute_with_default_context(?MODULE, delete_links,
+                                [ParentUuid, [links_utils:make_scoped_link_name(ChildName,
+                                    Scope0, VHash0, size(Scope0))]], ?SET_LINK_SCOPE(Scope));
+                        _ -> ok
+                    end
+                end, ParentTargets);
+        {error, link_not_found} ->
+            ok;
+        Error -> Error
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Sets scope for single entry
+%% @end
+%%--------------------------------------------------------------------
+-spec set_scope(Entry :: entry(), Scope :: datastore:key()) -> ok | datastore:generic_error().
+set_scope(Entry, Scope) ->
+    Diff = #{scope => Scope},
+    case update(Entry, Diff) of
+        {ok, _} ->
+            ok;
+        Error ->
+            Error
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Check if given term is valid path()
+%% @end
+%%--------------------------------------------------------------------
+-spec is_valid_filename(term()) -> boolean().
+is_valid_filename(<<"">>) ->
+    false;
+is_valid_filename(<<".">>) ->
+    false;
+is_valid_filename(<<"..">>) ->
+    false;
+is_valid_filename(FileName) when not is_binary(FileName) ->
+    false;
+is_valid_filename(FileName) when is_binary(FileName) ->
+    case binary:matches(FileName, <<?DIRECTORY_SEPARATOR>>) of
+        [] -> true;
         _ -> false
     end.
 

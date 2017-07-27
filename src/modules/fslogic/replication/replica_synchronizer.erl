@@ -47,7 +47,8 @@ synchronize(UserCtx, FileCtx, Block = #file_block{size = RequestedSize}, Prefetc
                 Block
         end,
     trigger_prefetching(UserCtx, FileCtx, EnlargedBlock, Prefetch),
-    {_LocalDoc, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx), %trigger creation of local file location
+    % trigger creation of local file location
+    {_LocalDoc, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
     {LocationDocs, FileCtx3} = file_ctx:get_file_location_docs(FileCtx2),
     ProvidersAndBlocks = replica_finder:get_blocks_for_sync(LocationDocs, [EnlargedBlock]),
     FileGuid = file_ctx:get_guid_const(FileCtx3),

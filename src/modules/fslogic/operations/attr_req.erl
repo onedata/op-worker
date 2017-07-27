@@ -57,10 +57,16 @@ get_file_attr_insecure(UserCtx, FileCtx) ->
     AllowDeletedFiles :: boolean()) ->
 fslogic_worker:fuse_response().
 get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles) ->
-    {#document{key = Uuid, value = #file_meta{
-        type = Type, mode = Mode, provider_id = ProviderId, owner = OwnerId,
-        shares = Shares}}, FileCtx2
-    } = case AllowDeletedFiles of
+    {#document{
+        key = Uuid,
+        value = #file_meta{
+            type = Type,
+            mode = Mode,
+            provider_id = ProviderId,
+            owner = OwnerId,
+            shares = Shares
+        }
+    }, FileCtx2} = case AllowDeletedFiles of
         true ->
             file_ctx:get_file_doc_including_deleted(FileCtx);
         false ->
@@ -72,14 +78,7 @@ get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles) ->
     {{Uid, Gid}, FileCtx4} = file_ctx:get_posix_storage_user_context(FileCtx3),
     {Size, FileCtx5} = file_ctx:get_file_size(FileCtx4),
     {{ATime, CTime, MTime}, FileCtx6} = file_ctx:get_times(FileCtx5),
-
-    % getting parent may fail if links are not synced yet,
-    % we can ignore it as it's not essential
-    {ParentGuid, _FileCtx7} =
-        try file_ctx:get_parent_guid(FileCtx6, UserCtx) of
-            {ParentGuid_, FileCtx7}  -> {ParentGuid_, FileCtx7}
-        catch _:_ -> {undefined, FileCtx6}
-        end,
+    {ParentGuid, _FileCtx7} = file_ctx:get_parent_guid(FileCtx6, UserCtx),
 
     #fuse_response{
         status = #status{code = ?OK},

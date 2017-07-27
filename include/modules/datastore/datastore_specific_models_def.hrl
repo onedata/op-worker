@@ -275,7 +275,8 @@
     link_value :: undefined | file_meta:symlink_value() | fslogic_worker:file_guid(),
     shares = [] :: [od_share:id()],
     deleted = false :: boolean(),
-    storage_sync_info = #storage_sync_info{} :: file_meta:storage_sync_info()
+    storage_sync_info = #storage_sync_info{} :: file_meta:storage_sync_info(),
+    parent_uuid :: undefined | file_meta:uuid()
 }).
 
 -record(storage, {

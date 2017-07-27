@@ -195,8 +195,7 @@ import_regular_subfiles(FilesJobs) ->
 increase_files_to_handle_counter(#space_strategy_job{
     strategy_type = StrategyType,
     data = #{
-        space_id := SpaceId,
-        file_name := FileName
+        space_id := SpaceId
     }},
     FileCtx, {FilesJobs, DirJobs}
 ) ->
@@ -275,10 +274,11 @@ import_file(StorageId, SpaceId, FileName, ParentCtx,
     } = StatBuf,
     SFMHandle = storage_file_ctx:get_handle_const(StorageFileCtx2),
     OwnerId = get_owner_id(StorageFileCtx2),
+    ParentUuid = file_ctx:get_uuid_const(ParentCtx),
     FileMetaDoc = file_meta:new_doc(FileName, file_meta:type(Mode),
-        Mode band 8#1777, OwnerId, FSize),
+        Mode band 8#1777, OwnerId, FSize, ParentUuid),
     {ParentPath, _} = file_ctx:get_canonical_path(ParentCtx),
-    {ok, FileUuid} = create_file_meta(FileMetaDoc, ParentPath),
+    {ok, FileUuid} = create_file_meta(FileMetaDoc, ParentUuid),
     {ok, _} = create_times(FileUuid, MTime, ATime, CTime, SpaceId),
     CanonicalPath = filename:join([ParentPath, FileName]),
     case file_meta:type(Mode) of
@@ -623,9 +623,9 @@ maybe_update_owner(#file_attr{owner_id = OldOwnerId}, StorageFileCtx, FileCtx) -
 %% Creates file meta
 %% @end
 %%--------------------------------------------------------------------
--spec create_file_meta(datastore:document(), file_meta:path()) -> {ok, file_meta:uuid()}.
-create_file_meta(FileMetaDoc, ParentPath) ->
-    file_meta:create({path, ParentPath}, FileMetaDoc, true).
+-spec create_file_meta(datastore:document(), file_meta:uuid()) -> {ok, file_meta:uuid()}.
+create_file_meta(FileMetaDoc, ParentUuid) ->
+    file_meta:create({uuid, ParentUuid}, FileMetaDoc, true).
 
 %%--------------------------------------------------------------------
 %% @private
