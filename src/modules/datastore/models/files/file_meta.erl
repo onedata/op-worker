@@ -37,7 +37,7 @@
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4]).
 
--export([resolve_path/1, resolve_path/2, create/2, create/3, get_scope/1,
+-export([resolve_path/1, resolve_path/2, create/2, create/3,
     get_scope_id/1, list_children/3, get_parent/1, get_parent_uuid/1,
     setup_onedata_user/2, get_including_deleted/1, make_space_exist/1,
     new_doc/6, type/1, get_ancestors/1, attach_location/3,
@@ -669,22 +669,6 @@ resolve_path(ParentEntry, <<?DIRECTORY_SEPARATOR, Path/binary>>) ->
                         {error, Reason}
                 end
         end
-    end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets "scope" document of given document. "Scope" document is the nearest ancestor with #file_meta.is_scope == true.
-%% @end
-%%--------------------------------------------------------------------
--spec get_scope(Entry :: entry()) -> {ok, ScopeDoc :: datastore:document()} | datastore:generic_error().
-get_scope(#document{value = #file_meta{is_scope = true}} = Document) ->
-    {ok, Document};
-get_scope(#document{value = #file_meta{is_scope = false, scope = Scope}}) ->
-    get(Scope);
-get_scope(Entry) ->
-    ?run(begin
-        {ok, Doc} = get(Entry),
-        get_scope(Doc)
     end).
 
 %%--------------------------------------------------------------------

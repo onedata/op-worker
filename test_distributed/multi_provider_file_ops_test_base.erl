@@ -499,11 +499,11 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
         DocsKeys = [Doc1#document.key, Doc2#document.key, Doc3#document.key, Doc4#document.key],
 
         % to allow adding location and link before document
-        test_utils:mock_expect([Worker1], file_meta, get_scope,
+        test_utils:mock_expect([Worker1], file_meta, get_scope_id,
             fun(Arg) ->
                 case lists:member(Arg, DocsKeys) of
                     true ->
-                        {ok, SpaceDoc};
+                        {ok, SpaceDoc#document.key};
                     _ ->
                         meck:passthrough([Arg])
                 end

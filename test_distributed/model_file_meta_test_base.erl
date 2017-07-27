@@ -121,17 +121,21 @@ basic_operations_test_core(Config, LastLevel) ->
     ?assertMatch(Level20Path, UL20_2),
     test_utils:mock_unload(Workers, [od_space, fslogic_uuid]),
 
-    {{A9, U9}, GetScopeLevel0} = ?call_with_time(Worker1, get_scope, [U14]),
-    {{A11, U11}, GetScopeLevel2} = ?call_with_time(Worker2, get_scope, [U6]),
-    {A12, U12} = rpc:call(Worker1, file_meta, get_scope, [U7]),
-    {A13, U13} = rpc:call(Worker2, file_meta, get_scope, [U8]),
-    ?assertMatch({ok, #document{key = <<"">>}}, {A9, U9}),
-    ?assertMatch({ok, #document{key = Space1Uuid}}, {A11, U11}),
-    ?assertMatch({ok, #document{key = Space1Uuid}}, {A12, U12}),
-    ?assertMatch({ok, #document{key = Space1Uuid}}, {A13, U13}),
+    {_, GetScopeLevel0} = ?assertMatch(
+        {{ok, <<>>}, _},
+        ?call_with_time(Worker1, get_scope_id, [U14])
+    ),
+    {_, GetScopeLevel2} = ?assertMatch(
+        {{ok, Space1Uuid}, _},
+        ?call_with_time(Worker2, get_scope_id, [U6])
+    ),
+    ?assertEqual({ok, Space1Uuid}, rpc:call(Worker1, file_meta, get_scope_id, [U7])),
+    ?assertEqual({ok, Space1Uuid}, rpc:call(Worker2, file_meta, get_scope_id, [U8])),
 
-    {{AL20_3, UL20_3}, GetScopeLevel20} = ?call_with_time(Worker2, get_scope, [UL20]),
-    ?assertMatch({ok, #document{key = Space1Uuid}}, {AL20_3, UL20_3}),
+    {_, GetScopeLevel20} = ?assertMatch(
+        {{ok, Space1Uuid}, _},
+        ?call_with_time(Worker2, get_scope_id, [UL20])
+    ),
 
     ?assertMatch({ok, [#child_link_uuid{uuid = Space1Uuid}]}, rpc:call(Worker1, file_meta, list_children, [{path, <<"/">>}, 0, 10])),
     ?assertMatch({ok, []}, rpc:call(Worker1, file_meta, list_children, [{path, <<"/Space 1/dir2/file3">>}, 0, 10])),
