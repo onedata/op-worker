@@ -37,7 +37,8 @@
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4]).
 
--export([resolve_path/1, resolve_path/2, create/2, create/3, get_scope/1,
+-export([resolve_path/1, resolve_path/2, create/2, create/3, create/4,
+create_and_return_doc/4, get_scope/1,
     list_children/3, get_parent/1, get_parent_uuid/1,
     setup_onedata_user/2, get_including_deleted/1]).
 -export([get_ancestors/1, attach_location/3,
@@ -213,14 +214,11 @@ update(Key, Diff) ->
 %%--------------------------------------------------------------------
 -spec create(datastore:document()) ->
     {ok, uuid()} | datastore:create_error().
-create(#document{value = #file_meta{name = FileName}} = Document) ->
-    case is_valid_filename(FileName) of
-        true ->
-            model:execute_with_default_context(?MODULE, create, [Document],
-                [{generated_uuid, true}]);
-        false ->
-            {error, invalid_filename}
-    end.
+create(#document{value = #file_meta{is_scope = true}} = Document) ->
+    model:execute_with_default_context(?MODULE, save, [Document]);
+create(Document) ->
+    model:execute_with_default_context(?MODULE, save, [Document],
+        [{generated_uuid, true}]).
 
 %%--------------------------------------------------------------------
 %% @equiv create({uuid, ParentUuid}, FileDoc, false).
@@ -229,7 +227,7 @@ create(#document{value = #file_meta{name = FileName}} = Document) ->
 -spec create({uuid, uuid()}, doc()) ->
     {ok, uuid()} | datastore:create_error().
 create({uuid, ParentUuid}, FileDoc) ->
-    create({uuid, ParentUuid}, FileDoc, false).
+    create({uuid, ParentUuid}, FileDoc, false, <<>>).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -243,7 +241,7 @@ create({uuid, ParentUuid}, FileDoc = #document{
     value = FileMeta = #file_meta{
         name = FileName
     }
-}, AllowConflicts) ->
+}, AllowConflicts, ScopeId) ->
     ?run(begin
         {ok, ParentDoc} = get(ParentUuid),
         {ok, Scope} = get_scope(ParentDoc),
@@ -780,7 +778,7 @@ make_space_exist(SpaceId) ->
                         parent_uuid = ?ROOT_DIR_UUID
                     }}) of
                 {ok, _} ->
-                    case times:create(#document{key = SpaceDirUuid, value =
+                    case times:save_new(#document{key = SpaceDirUuid, value =
                     #times{mtime = CTime, atime = CTime, ctime = CTime},
                         scope = SpaceId}) of
                         {ok, _} -> ok;
@@ -930,7 +928,7 @@ delete_child_link_in_parent(ParentUuid, ChildName, ChildUuid) ->
     case model:execute_with_default_context(?MODULE, fetch_full_link,
         [ParentUuid, ChildName]) of
         {ok, {_, ParentTargets}} ->
-            {ok, #document{scope = Scope}} = get_scope({uuid, ParentUuid}),
+            {ok, #document{scope = Scope}} = get({uuid, ParentUuid}),
             lists:foreach(
                 fun({Scope0, VHash0, Key0, _}) ->
                     case Key0 of

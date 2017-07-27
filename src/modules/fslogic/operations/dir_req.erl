@@ -71,7 +71,7 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     ParentUuid = file_ctx:get_uuid_const(ParentFileCtx),
     {ok, DirUuid} = file_meta:create({uuid, ParentUuid}, File), %todo maybe pass file_ctx inside
     SpaceId = file_ctx:get_space_id_const(ParentFileCtx),
-    {ok, _} = times:create(#document{
+    {ok, _} = times:save_new(#document{
         key = DirUuid,
         value = #times{mtime = CTime, atime = CTime, ctime = CTime},
         scope = SpaceId

@@ -274,7 +274,7 @@ get_file_doc(FileCtx = #file_ctx{file_doc = FileDoc}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_doc_including_deleted(ctx()) -> {file_meta:doc(), ctx()}.
-get_file_doc_including_deleted(FileCtx) ->
+get_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = undefined}) ->
     FileUuid = get_uuid_const(FileCtx),
     {ok, Doc} = file_meta:get_including_deleted(FileUuid),
     case Doc#document.value#file_meta.deleted of
@@ -282,7 +282,9 @@ get_file_doc_including_deleted(FileCtx) ->
             {Doc, FileCtx};
         false ->
             {Doc, FileCtx#file_ctx{file_doc = Doc}}
-    end.
+    end;
+get_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = FileDoc}) ->
+    {FileDoc, FileCtx}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -431,10 +433,13 @@ get_posix_storage_user_context(FileCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_times(ctx()) -> {times:times(), ctx()}.
-get_times(FileCtx) ->
+get_times(FileCtx = #file_ctx{times = undefined}) ->
     FileUuid = get_uuid_const(FileCtx),
     {ok, Times} = times:get_or_default(FileUuid),
-    {Times, FileCtx#file_ctx{times = Times}}.
+    {Times, FileCtx#file_ctx{times = Times}};
+get_times(
+    FileCtx = #file_ctx{times = Times}) ->
+    {Times, FileCtx}.
 
 %%--------------------------------------------------------------------
 %% @doc
