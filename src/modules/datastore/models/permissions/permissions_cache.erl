@@ -24,8 +24,7 @@
     list/0, count/0, model_init/0, 'after'/5, before/4]).
 
 %% API
--export([check_permission/1, cache_permission/2, invalidate/0,
-    check_size_and_invalidate/0]).
+-export([check_permission/1, cache_permission/2, invalidate/0]).
 
 %% Key of document that keeps information about whole cache status.
 -define(STATUS_UUID, <<"status">>).
@@ -256,27 +255,6 @@ invalidate() ->
                 {error, parallel_cleaning} ->
                     ok
             end
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks size of cache and clears all permissions from cache if needed.
-%% @end
-%%--------------------------------------------------------------------
--spec check_size_and_invalidate() -> ok.
-check_size_and_invalidate() ->
-    CurrentModel = case get(?STATUS_UUID) of
-        {ok, #document{value = #permissions_cache{value = {Model, _}}}} ->
-            Model;
-        {error, {not_found, _}} ->
-            ?MODULE
-    end,
-    {ok, Count} = erlang:apply(CurrentModel, count, []),
-    case Count > application:get_env(?APP_NAME, permission_cache_size, 50000) of
-        true ->
-            invalidate();
-        _ ->
-            ok
     end.
 
 %%%===================================================================

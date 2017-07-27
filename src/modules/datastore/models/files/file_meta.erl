@@ -211,7 +211,7 @@ update(Key, Diff) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create(datastore:document()) ->
-    {ok, uuid()} | datastore:create_error().
+    {ok, doc()} | datastore:create_error().
 create(#document{value = #file_meta{is_scope = true}} = Document) ->
     model:execute_with_default_context(?MODULE, save, [Document]);
 create(Document) ->
@@ -244,7 +244,6 @@ create({uuid, ParentUuid}, FileDoc = #document{
     ?run(begin
         true = is_valid_filename(FileName),
         {ok, ParentDoc} = get(ParentUuid),
-
         FileDoc2 = fill_uuid(FileDoc),
         FileDoc3 = case IsScope of
             true ->
@@ -270,34 +269,17 @@ create({uuid, ParentUuid}, FileDoc = #document{
                     }
                 }
         end,
-        critical_section:run([?MODEL_NAME, ParentUuid],
-            fun() ->
-                Exists = case AllowConflicts of
-                    true -> false;
-                    false ->
-                        case resolve_path({uuid, ParentUuid}, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, FileName])) of
-                            {error, {not_found, _}} ->
-                                false;
-                            {ok, _Value} ->
-                                true
-                        end
-                end,
-
-                case Exists of
-                    false ->
-                        case create(FileDoc3) of
-                            {ok, Uuid} ->
-                                SavedDoc = FileDoc3#document{key = Uuid},
-                                ok = model:execute_with_default_context(?MODULE, add_links,
-                                    [ParentDoc, [{FileName, SavedDoc}]]),
-                                {ok, Uuid};
-                            {error, Reason} ->
-                                {error, Reason}
-                        end;
-                    true ->
-                        {error, already_exists}
-                end
-            end)
+        AddFun = case AllowConflicts of
+            true -> add_links;
+            false -> create_link
+        end,
+        ok = model:execute_with_default_context(?MODULE, AddFun,
+            [ParentDoc, {FileName, FileDoc3}]),
+        case create(FileDoc3) of
+            {ok, #document{key = FileUuid}} ->
+                {ok, FileUuid};
+            Error -> Error
+        end
     end).
 
 %%--------------------------------------------------------------------
