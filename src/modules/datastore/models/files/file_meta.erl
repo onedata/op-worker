@@ -37,17 +37,15 @@
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4]).
 
--export([resolve_path/1, resolve_path/2, create/2, create/3, create/4,
-create_and_return_doc/4, get_scope/1,
-    list_children/3, get_parent/1, get_parent_uuid/1,
-    setup_onedata_user/2, get_including_deleted/1]).
--export([get_ancestors/1, attach_location/3,
+-export([resolve_path/1, resolve_path/2, create/2, create/3, get_scope/1,
+    get_scope_id/1, list_children/3, get_parent/1, get_parent_uuid/1,
+    setup_onedata_user/2, get_including_deleted/1, make_space_exist/1,
+    new_doc/6, type/1, get_ancestors/1, attach_location/3,
     get_locations_by_uuid/1, location_ref/1, rename/4]).
 -export([delete_child_link/2, foreach_child/3]).
 -export([hidden_file_name/1, is_hidden/1]).
 -export([add_share/2, remove_share/2]).
 -export([record_struct/1, record_upgrade/2]).
--export([make_space_exist/1, new_doc/6, type/1]).
 
 -type doc() :: datastore:document().
 -type uuid() :: datastore:key().
@@ -227,7 +225,7 @@ create(Document) ->
 -spec create({uuid, uuid()}, doc()) ->
     {ok, uuid()} | datastore:create_error().
 create({uuid, ParentUuid}, FileDoc) ->
-    create({uuid, ParentUuid}, FileDoc, false, <<>>).
+    create({uuid, ParentUuid}, FileDoc, false).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -239,25 +237,39 @@ create({uuid, ParentUuid}, FileDoc) ->
     {ok, uuid()} | datastore:create_error().
 create({uuid, ParentUuid}, FileDoc = #document{
     value = FileMeta = #file_meta{
-        name = FileName
+        name = FileName,
+        is_scope = IsScope
     }
-}, AllowConflicts, ScopeId) ->
+}, AllowConflicts) ->
     ?run(begin
+        true = is_valid_filename(FileName),
         {ok, ParentDoc} = get(ParentUuid),
-        {ok, Scope} = get_scope(ParentDoc),
-        NewFileMeta = FileMeta#file_meta{scope = Scope#document.key,
-            provider_id = oneprovider:get_provider_id(), parent_uuid = ParentUuid},
-        FileDoc2 =
-            case FileDoc of
-                #document{key = undefined} = Doc ->
-                    NewUuid = gen_file_uuid(),
-                    Doc#document{key = NewUuid, value = NewFileMeta};
-                _ ->
-                    FileDoc#document{value = NewFileMeta}
-            end,
-        {ok, DocScope} = get_scope(FileDoc2),
-        ScopeId = fslogic_uuid:space_dir_uuid_to_spaceid_no_error(DocScope#document.key),
-        FileDoc3 = FileDoc2#document{value = NewFileMeta, scope = ScopeId},
+
+        FileDoc2 = fill_uuid(FileDoc),
+        FileDoc3 = case IsScope of
+            true ->
+                SpaceDirUuid = FileDoc2#document.key,
+                SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid_no_error(SpaceDirUuid),
+                FileDoc2#document{
+                    scope = SpaceId,
+                    value = FileMeta#file_meta{
+                        scope = SpaceDirUuid,
+                        provider_id = oneprovider:get_provider_id(),
+                        parent_uuid = ParentUuid
+                    }};
+            false ->
+                {ok, ScopeId} = get_scope_id(ParentDoc),
+                SpaceDirUuid = ScopeId,
+                SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid_no_error(SpaceDirUuid),
+                FileDoc2#document{
+                    scope = SpaceId,
+                    value = FileMeta#file_meta{
+                        scope = SpaceDirUuid,
+                        provider_id = oneprovider:get_provider_id(),
+                        parent_uuid = ParentUuid
+                    }
+                }
+        end,
         critical_section:run([?MODEL_NAME, ParentUuid],
             fun() ->
                 Exists = case AllowConflicts of
@@ -677,6 +689,22 @@ get_scope(Entry) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Gets "scope" id of given document. "Scope" document is the nearest ancestor with #file_meta.is_scope == true.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_scope_id(Entry :: entry()) -> {ok, ScopeId :: datastore:ext_key()} | datastore:generic_error().
+get_scope_id(#document{key = FileUuid, value = #file_meta{is_scope = true}}) ->
+    {ok, FileUuid};
+get_scope_id(#document{value = #file_meta{is_scope = false, scope = Scope}}) ->
+    {ok, Scope};
+get_scope_id(Entry) ->
+    ?run(begin
+        {ok, Doc} = get(Entry),
+        get_scope_id(Doc)
+    end).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Initializes files metadata for onedata user.
 %% This function can and should be used to ensure that user's FS is fully synchronised. Normally
 %% this function is called asynchronously automatically after user's document is updated.
@@ -857,6 +885,19 @@ is_hidden(FileName) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
+%% Generates uuid if needed.
+%% @end
+%%--------------------------------------------------------------------
+-spec fill_uuid(doc()) -> doc().
+fill_uuid(Doc = #document{key = undefined}) ->
+    NewUuid = gen_file_uuid(),
+    Doc#document{key = NewUuid};
+fill_uuid(Doc) ->
+    Doc.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
 %% Fixes links to given document in its parent. Also fixes 'parent' link.
 %% @end
 %%--------------------------------------------------------------------
@@ -871,10 +912,10 @@ fix_parent_links(Parent, Entry) ->
             parent_uuid = ParentUuidInDoc
         }
     }} = get(Entry),
-    {ok, Scope} = get_scope(Parent),
+    {ok, ScopeId} = get_scope_id(Parent),
     ok = model:execute_with_default_context(?MODULE, set_links,
         [ParentDoc, {FileName, FileDoc}]),
-    ok = set_scope(FileDoc, Scope#document.key),
+    ok = set_scope(FileDoc, ScopeId),
     case ParentUuidInDoc =/= ParentUuid of
         true ->
             update(FileUuid, #{parent_uuid => ParentUuid});
