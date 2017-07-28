@@ -46,6 +46,9 @@
 -export_type([request/0, response/0, file/0, ext_file/0, open_flag/0,
     posix_permissions/0, file_guid/0, file_guid_or_path/0]).
 
+-define(INVALIDATE_PERMISSIONS_CACHE_INTERVAL_SECONDS, application:get_env(?APP_NAME,
+    invalidate_permissions_cache_interval_seconds, timer:seconds(30))).
+
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
 %%%===================================================================
@@ -62,6 +65,10 @@ init(_Args) ->
         {ok, true} -> rtransfer_config:start_rtransfer();
         _ -> ok
     end,
+
+    erlang:send_after(?INVALIDATE_PERMISSIONS_CACHE_INTERVAL_SECONDS, self(),
+        {sync_timer, invalidate_permissions_cache}
+    ),
 
     lists:foreach(fun({Fun, Args}) ->
         case apply(Fun, Args) of
@@ -94,6 +101,17 @@ init(_Args) ->
 handle(ping) ->
     pong;
 handle(healthcheck) ->
+    ok;
+handle(invalidate_permissions_cache) ->
+    try
+        permissions_cache:invalidate()
+    catch
+        _:Reason ->
+            ?error_stacktrace("Failed to invalidate permissions cache due to: ~p", [Reason])
+    end,
+    erlang:send_after(?INVALIDATE_PERMISSIONS_CACHE_INTERVAL_SECONDS, self(),
+        {sync_timer, invalidate_permissions_cache}
+    ),
     ok;
 handle({fuse_request, SessId, FuseRequest}) ->
     ?debug("fuse_request(~p): ~p", [SessId, FuseRequest]),
@@ -384,8 +402,10 @@ handle_proxyio_request(UserCtx, #remote_read{offset = Offset, size = Size}, File
 %% @end
 %%--------------------------------------------------------------------
 -spec process_response(user_ctx:ctx(), request(), response()) -> response().
-process_response(UserCtx, #fuse_request{fuse_request = #file_request{file_request = #get_child_attr{name = FileName}, context_guid = ParentGuid}} = Request,
-    #fuse_response{status = #status{code = ?ENOENT}} = Response) ->
+process_response(UserCtx, #fuse_request{fuse_request = #file_request{
+    file_request = #get_child_attr{name = FileName},
+    context_guid = ParentGuid
+}} = Request, #fuse_response{status = #status{code = ?ENOENT}} = Response) ->
     SessId = user_ctx:get_session_id(UserCtx),
     Path0 = fslogic_uuid:uuid_to_path(SessId, fslogic_uuid:guid_to_uuid(ParentGuid)),
     {ok, Tokens0} = fslogic_path:split_skipping_dots(Path0),

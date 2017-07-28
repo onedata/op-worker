@@ -24,16 +24,22 @@
 %% API
 %% export for tests
 -export([
-    basic_opts_test_base/4, many_ops_test_base/6, distributed_modification_test_base/4, multi_space_test_base/3,
-    file_consistency_test_skeleton/5, permission_cache_invalidate_test_base/2, get_links/1,
-    mkdir_and_rmdir_loop_test_base/3, echo_and_delete_file_loop_test_base/3,
-    create_and_delete_file_loop_test_base/3, distributed_delete_test_base/4
+    basic_opts_test_base/4,
+    many_ops_test_base/6,
+    distributed_modification_test_base/4,
+    multi_space_test_base/3,
+    file_consistency_test_skeleton/5,
+    get_links/1,
+    mkdir_and_rmdir_loop_test_base/3,
+    echo_and_delete_file_loop_test_base/3,
+    create_and_delete_file_loop_test_base/3,
+    distributed_delete_test_base/4
 ]).
 -export([init_env/1, teardown_env/1]).
 
 % for file consistency testing
--export([create_doc/4, set_parent_link/4, set_link_to_parent/4, create_location/4, set_link_to_location/4,
-    add_dbsync_state/4]).
+-export([create_doc/4, set_parent_link/4, create_location/4,
+    set_link_to_location/4, add_dbsync_state/4]).
 
 -export([extend_config/4]).
 
@@ -45,7 +51,6 @@
             ?assertMatch(Expect, Expr, Attempts)
     end
 ).
--define(rpc(W, Module, Function, Args), rpc:call(W, Module, Function, Args)).
 -define(rpcTest(W, Function, Args), rpc:call(W, ?MODULE, Function, Args)).
 
 -define(deny_user(UserId),
@@ -59,65 +64,6 @@
 %%%===================================================================
 %%% Test skeletons
 %%%===================================================================
-
-permission_cache_invalidate_test_base(Config, Attempts) ->
-    InvalidateFun = fun(Worker, SessId, TestDir) ->
-        ?assertMatch(ok, lfm_proxy:set_perms(Worker, SessId, {path, TestDir}, 0))
-    end,
-
-    InvalidateFun2 = fun(Worker, SessId, TestDir) ->
-        ?assertEqual(ok, lfm_proxy:set_acl(Worker, SessId, {path, TestDir}, [?deny_user(<<"user1">>)]))
-    end,
-
-    permission_cache_invalidate_test_skeleton(Config, Attempts, file_meta, InvalidateFun),
-    permission_cache_invalidate_test_skeleton(Config, Attempts, custom_metadata, InvalidateFun2).
-
-permission_cache_invalidate_test_skeleton(Config, Attempts, CheckedModule, InvalidateFun) ->
-    [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
-    [SessId1 | _] = SessIds = lists:map(fun(Worker) ->
-        ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config)
-    end, Workers),
-    WS = lists:zip(Workers, SessIds),
-
-    [LastTreeDir | _] = TreeDirsReversed = lists:foldl(fun(_, [H | _] = Acc) ->
-        NewDir = <<H/binary, "/", (generator:gen_name())/binary>>,
-        [NewDir | Acc]
-    end, [<<"/space1">>], lists:seq(1,10)),
-    [_ | TreeDirs] = lists:reverse(TreeDirsReversed),
-
-    lists:foreach(fun(D) ->
-        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId1, D, 8#755))
-    end, TreeDirs),
-
-    [_, _, TestDir | _] = TreeDirs,
-
-    lists:foreach(fun({Worker, SessId}) ->
-        ?assertEqual({ok, []}, lfm_proxy:ls(Worker, SessId, {path, LastTreeDir}, 0, 10), Attempts)
-    end, WS),
-
-    StatAns = lfm_proxy:stat(Worker1, SessId1, {path, TestDir}),
-    ?assertMatch({ok, #file_attr{}}, StatAns),
-    {ok, #file_attr{guid = FileGuid}} = StatAns,
-    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
-    ControllerUUID = base64:encode(term_to_binary({CheckedModule, FileUuid})),
-
-    InvalidateFun(Worker1, SessId1, TestDir),
-    lists:foreach(fun({Worker, SessId}) ->
-        ?assertEqual({error, ?EACCES}, lfm_proxy:ls(Worker, SessId, {path, LastTreeDir}, 0, 10), Attempts)
-    end, WS),
-
-    lists:foreach(fun(Worker) ->
-        ?assertMatch({error,{not_found, _}}, ?rpc(Worker, change_propagation_controller, get,
-            [ControllerUUID]), Attempts * length(Workers)),
-
-        ListFun = fun(LinkName, _LinkTarget, Acc) ->
-            [LinkName | Acc]
-        end,
-        ?assertEqual({ok, []}, ?rpc(Worker, model, execute_with_default_context,
-            [change_propagation_controller, foreach_link, [ControllerUUID, ListFun, []]]), Attempts)
-    end, Workers),
-
-    ok.
 
 
 basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts) ->
@@ -498,7 +444,7 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
 
     SessId = fun(W) -> ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config) end,
     [{SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
-    A1 = ?rpc(Worker1, file_meta, get, [{path, <<"/", SpaceName/binary>>}]),
+    A1 = rpc:call(Worker1, file_meta, get, [{path, <<"/", SpaceName/binary>>}]),
     ?assertMatch({ok, _}, A1),
     {ok, SpaceDoc} = A1,
     SpaceKey = SpaceDoc#document.key,
@@ -535,17 +481,17 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
         {Doc1, Name1} = GenerateDoc(?DIRECTORY_TYPE),
         {Doc2, Name2} = GenerateDoc(?DIRECTORY_TYPE),
         {Doc3, Name3} = GenerateDoc(?REGULAR_FILE_TYPE),
-        Loc3ID = datastore_utils:gen_uuid(),
+        Loc3ID = rpc:call(Worker1, file_location, local_id, [Doc3#document.key]),
         {Doc4, Name4} = GenerateDoc(?REGULAR_FILE_TYPE),
-        Loc4ID = datastore_utils:gen_uuid(),
+        Loc4ID = rpc:call(Worker1, file_location, local_id, [Doc4#document.key]),
 
         D1Path = <<"/", SpaceName/binary, "/",  Name1/binary>>,
         D2Path = <<D1Path/binary, "/",  Name2/binary>>,
         D3Path = <<D2Path/binary, "/",  Name3/binary>>,
         D4Path = <<D2Path/binary, "/",  Name4/binary>>,
 
-        Doc1Args = [Doc1, SpaceDoc, non, D1Path],
-        Doc2Args = [Doc2, Doc1, non, D2Path],
+        Doc1Args = [Doc1, SpaceDoc, undefined, D1Path],
+        Doc2Args = [Doc2, Doc1, undefined, D2Path],
         Doc3Args = [Doc3, Doc2, Loc3ID, D3Path],
         Doc4Args = [Doc4, Doc2, Loc4ID, D4Path],
 
@@ -553,11 +499,11 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
         DocsKeys = [Doc1#document.key, Doc2#document.key, Doc3#document.key, Doc4#document.key],
 
         % to allow adding location and link before document
-        test_utils:mock_expect([Worker1], file_meta, get_scope,
+        test_utils:mock_expect([Worker1], file_meta, get_scope_id,
             fun(Arg) ->
                 case lists:member(Arg, DocsKeys) of
                     true ->
-                        {ok, SpaceDoc};
+                        {ok, SpaceDoc#document.key};
                     _ ->
                         meck:passthrough([Arg])
                 end
@@ -599,19 +545,13 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
             {sleep, SleepTime},
             {set_parent_link, 1},
             {sleep, SleepTime},
-            {set_link_to_parent, 1},
-            {sleep, SleepTime},
             {create_doc, 2},
             {sleep, SleepTime},
             {set_parent_link, 2},
             {sleep, SleepTime},
-            {set_link_to_parent, 2},
-            {sleep, SleepTime},
             {create_doc, 3},
             {sleep, SleepTime},
             {set_parent_link, 3},
-            {sleep, SleepTime},
-            {set_link_to_parent, 3},
             {sleep, SleepTime},
             {create_location, 3},
             {sleep, SleepTime},
@@ -621,13 +561,10 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
         _T2 = [
             {create_doc, 1},
             {set_parent_link, 1},
-            {set_link_to_parent, 1},
             {create_doc, 2},
             {set_parent_link, 2},
-            {set_link_to_parent, 2},
             {create_doc, 3},
             {set_parent_link, 3},
-            {set_link_to_parent, 3},
             {create_location, 3},
             {set_link_to_location, 3}
         ],
@@ -635,44 +572,35 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
         _T3 = [
             {create_doc, 1},
             {set_parent_link, 1},
-            {set_link_to_parent, 1},
             {create_doc, 3},
             {set_parent_link, 3},
-            {set_link_to_parent, 3},
             {create_location, 3},
             {set_link_to_location, 3},
             {sleep, SleepTime},
             {create_doc, 2},
-            {set_parent_link, 2},
-            {set_link_to_parent, 2}
+            {set_parent_link, 2}
         ],
 
         _T4 = [
             {create_doc, 3},
             {set_parent_link, 3},
-            {set_link_to_parent, 3},
             {create_location, 3},
             {set_link_to_location, 3},
             {sleep, SleepTime},
             {create_doc, 2},
             {set_parent_link, 2},
-            {set_link_to_parent, 2},
             {sleep, SleepTime},
             {create_doc, 1},
-            {set_parent_link, 1},
-            {set_link_to_parent, 1}
+            {set_parent_link, 1}
         ],
 
         _T5 = [
             {create_doc, 1},
             {set_parent_link, 1},
-            {set_link_to_parent, 1},
             {create_doc, 2},
             {set_parent_link, 2},
-            {set_link_to_parent, 2},
             {add_dbsync_state, 3},
             {set_parent_link, 3},
-            {set_link_to_parent, 3},
             {sleep, SleepTime},
             {create_doc, 3},
             {sleep, SleepTime},
@@ -683,13 +611,10 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
         _T6 = [
             {create_doc, 1},
             {set_parent_link, 1},
-            {set_link_to_parent, 1},
             {create_doc, 2},
             {set_parent_link, 2},
-            {set_link_to_parent, 2},
             {add_dbsync_state, 3},
             {set_parent_link, 3},
-            {set_link_to_parent, 3},
             {create_location, 3},
             {sleep, SleepTime},
             {create_doc, 3},
@@ -700,13 +625,10 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
         _T7 = [
             {create_doc, 1},
             {set_parent_link, 1},
-            {set_link_to_parent, 1},
             {create_doc, 2},
             {set_parent_link, 2},
-            {set_link_to_parent, 2},
             {add_dbsync_state, 3},
             {set_parent_link, 3},
-            {set_link_to_parent, 3},
             {set_link_to_location, 3},
             {sleep, SleepTime},
             {create_doc, 3},
@@ -717,13 +639,10 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
         _T8 = [
             {create_doc, 1},
             {set_parent_link, 1},
-            {set_link_to_parent, 1},
             {create_doc, 2},
             {set_parent_link, 2},
-            {set_link_to_parent, 2},
             {add_dbsync_state, 3},
             {set_parent_link, 3},
-            {set_link_to_parent, 3},
             {create_location, 3},
             {set_link_to_location, 3},
             {sleep, SleepTime},
@@ -733,12 +652,9 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
         _T9 = [
             {create_doc, 1},
             {set_parent_link, 1},
-            {set_link_to_parent, 1},
             {create_doc, 2},
             {set_parent_link, 2},
-            {set_link_to_parent, 2},
             {create_doc, 3},
-            {set_link_to_parent, 3},
             {create_location, 3},
             {set_link_to_location, 3},
             {sleep, SleepTime},
@@ -748,28 +664,22 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
         _T10 = [
             {create_doc, 1},
             {set_parent_link, 1},
-            {set_link_to_parent, 1},
             {create_doc, 2},
             {set_parent_link, 2},
-            {set_link_to_parent, 2},
             {create_doc, 3},
             {set_parent_link, 3},
             {create_location, 3},
             {set_link_to_location, 3},
-            {sleep, SleepTime},
-            {set_link_to_parent, 3}
+            {sleep, SleepTime}
         ],
 
         _T11 = [
             {create_doc, 1},
             {set_parent_link, 1},
-            {set_link_to_parent, 1},
             {create_doc, 2},
             {set_parent_link, 2},
-            {set_link_to_parent, 2},
             {create_doc, 3},
             {set_parent_link, 3},
-            {set_link_to_parent, 3},
             {set_link_to_location, 3},
             {sleep, SleepTime},
             {create_location, 3}
@@ -778,16 +688,12 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
         _T12 = [
             {create_doc, 1},
             {set_parent_link, 1},
-            {set_link_to_parent, 1},
             {create_doc, 2},
             {set_parent_link, 2},
-            {set_link_to_parent, 2},
             {add_dbsync_state, 3},
             {set_link_to_location, 3},
             {sleep, SleepTime},
             {create_location, 3},
-            {sleep, SleepTime},
-            {set_link_to_parent, 3},
             {sleep, SleepTime},
             {set_parent_link, 3},
             {sleep, SleepTime},
@@ -800,8 +706,6 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
             {sleep, SleepTime},
             {create_location, 3},
             {sleep, SleepTime},
-            {set_link_to_parent, 3},
-            {sleep, SleepTime},
             {set_parent_link, 3},
             {sleep, SleepTime},
             {create_doc, 3},
@@ -809,14 +713,10 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
             {add_dbsync_state, 2},
             {set_parent_link, 2},
             {sleep, SleepTime},
-            {set_link_to_parent, 2},
-            {sleep, SleepTime},
             {create_doc, 2},
             {sleep, SleepTime},
             {add_dbsync_state, 1},
             {set_parent_link, 1},
-            {sleep, SleepTime},
-            {set_link_to_parent, 1},
             {sleep, SleepTime},
             {create_doc, 1}
         ],
@@ -824,20 +724,16 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
         _T14 = [
             {create_doc, 1},
             {set_parent_link, 1},
-            {set_link_to_parent, 1},
             {create_doc, 2},
             {set_parent_link, 2},
-            {set_link_to_parent, 2},
             {create_doc, 3},
             {sleep, SleepTime},
             {create_doc, 4, Worker3},
             {set_parent_link, 4, Worker3},
-            {set_link_to_parent, 4, Worker3},
             {create_location, 4, Worker3},
             {set_link_to_location, 4, Worker3},
             {sleep, SleepTime},
             {set_parent_link, 3},
-            {set_link_to_parent, 3},
             {create_location, 3},
             {set_link_to_location, 3}
         ]
@@ -1036,9 +932,10 @@ get_locations_from_map(Map) ->
         end
     end, [], Map).
 
-create_doc(Doc, _ParentDoc, _LocId, _Path) ->
+create_doc(Doc = #document{value = FileMeta}, #document{key = ParentUuid}, _LocId, _Path) ->
     SpaceId = Doc#document.scope,
-    {ok, FileUuid} = file_meta:save(Doc),
+    DocWithParentUuid = Doc#document{value = FileMeta#file_meta{parent_uuid = ParentUuid}},
+    {ok, FileUuid} = file_meta:save(DocWithParentUuid),
     {ok, _} = times:save(#document{key = FileUuid, value = #times{},
         scope = SpaceId}),
     ok.
@@ -1048,11 +945,6 @@ set_parent_link(Doc, ParentDoc, _LocId, _Path) ->
     MC = file_meta:model_init(),
     ok = model:execute_with_default_context(MC, add_links,
         [ParentDoc, {FDoc#file_meta.name, Doc}]).
-
-set_link_to_parent(Doc, ParentDoc, _LocId, _Path) ->
-    MC = file_meta:model_init(),
-    ok = model:execute_with_default_context(MC, add_links,
-        [Doc, {parent, ParentDoc}]).
 
 create_location(Doc, _ParentDoc, LocId, Path) ->
     FDoc = Doc#document.value,
@@ -1221,8 +1113,8 @@ create_file(Config, FileBeg, {Offset, File}) ->
 verify_file(Config, FileBeg, {Offset, File}) ->
     SessId = ?config(session, Config),
     Attempts = ?config(attempts, Config),
-    {SyncNodes, ProxyNodes, ProxyNodesWritten, _ProxyNodesWritten0, NodesOfProvider} = ?config(nodes_number, Config),
-    SyncProvidersCount = max(1, round(SyncNodes / NodesOfProvider)),
+    {SyncNodes, ProxyNodes, ProxyNodesWritten, _ProxyNodesWritten0, _NodesOfProvider} =
+        ?config(nodes_number, Config),
 
     Offset2 = Offset rem 5 + 1,
     Size = 2*Offset2,
@@ -1261,7 +1153,7 @@ verify_file(Config, FileBeg, {Offset, File}) ->
         Flattened = lists:flatten(VerAns),
 
         ZerosList = lists:filter(fun(S) -> S == 0 end, Flattened),
-        LocationsList = lists:filter(fun(S) -> S == SyncProvidersCount end, Flattened),
+        LocationsList = lists:filter(fun(S) -> S >= 1 end, Flattened),
 %%            ct:print("Locations1 ~p", [{{length(ZerosList), length(LocationsList)}, ToMatch}]),
         {length(ZerosList), length(LocationsList)}
     end,
@@ -1324,8 +1216,14 @@ verify_dir_size(Config, DirToCheck, DSize) ->
 %%        ct:print("Links ~lp", [{DSize, VerAns}]),
 
         ZerosList = lists:filter(fun(S) -> S == 0 end, VerAns),
-        SList = lists:filter(fun(S) -> S == DSize + 1 end, VerAns),
+        SList = lists:filter(fun(S) -> S == DSize end, VerAns),
+
         {length(ZerosList), length(SList)}
     end,
-    ToMatch = {ProxyNodes - ProxyNodesWritten, SyncNodes + ProxyNodesWritten},
+    ToMatch = case DSize of
+        0 ->
+            {ProxyNodes + SyncNodes, ProxyNodes + SyncNodes};
+        _ ->
+            {ProxyNodes - ProxyNodesWritten, SyncNodes + ProxyNodesWritten}
+    end,
     ?match(ToMatch, AssertLinks(), Attempts).

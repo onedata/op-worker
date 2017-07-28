@@ -250,7 +250,8 @@ prepare_response(#change{seq = Seq, doc = FileDoc = #document{
     Size =
         try
             FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
-            fslogic_blocks:get_file_size(FileCtx)
+            {FileSize, _FileCtx2} = file_ctx:get_file_size(FileCtx),
+            FileSize
         catch
             _:Error4 ->
                 ?error("Cannot fetch size for changes, error: ~p", [Error4]),

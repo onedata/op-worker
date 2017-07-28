@@ -275,7 +275,8 @@
     link_value :: undefined | file_meta:symlink_value() | fslogic_worker:file_guid(),
     shares = [] :: [od_share:id()],
     deleted = false :: boolean(),
-    storage_sync_info = #storage_sync_info{} :: file_meta:storage_sync_info()
+    storage_sync_info = #storage_sync_info{} :: file_meta:storage_sync_info(),
+    parent_uuid :: undefined | file_meta:uuid()
 }).
 
 -record(storage, {
@@ -405,12 +406,6 @@
     value = #{} :: indexes_value()
 }).
 
-%% Model that keeps track of consistency of file metadata
--record(file_consistency, {
-    components_present = [] :: [file_consistency:component()],
-    waiting = [] :: [file_consistency:waiting()]
-}).
-
 %% Model that caches files' permissions
 -record(permissions_cache, {
     value = undefined :: term()
@@ -419,14 +414,6 @@
 %% Helper model for caching files' permissions
 -record(permissions_cache_helper, {
     value = undefined :: term()
-}).
-
-%% Record that controls change propagation
--record(change_propagation_controller, {
-    change_revision = 0 :: non_neg_integer(),
-    space_id = <<"">> :: od_space:id(),
-    verify_module :: atom(),
-    verify_function :: atom()
 }).
 
 %% Model that holds file timestamps

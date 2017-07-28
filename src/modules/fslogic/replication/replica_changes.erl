@@ -109,7 +109,7 @@ get_merged_changes(Doc, N) ->
 set_last_rename(Doc = #document{value = Loc = #file_location{uuid = FileUuid}},
     TargetFileId, TargetSpaceId) ->
     critical_section:run([set_last_rename, FileUuid], fun() ->
-        {ok, Locations} = file_meta:get_locations({uuid, FileUuid}),
+        {ok, Locations} = file_meta:get_locations_by_uuid(FileUuid),
         RenameNumbers = lists:map(fun(LocationId) ->
             {ok, #document{value = #file_location{last_rename = LastRename}}} =
                 file_location:get(LocationId),

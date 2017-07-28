@@ -68,15 +68,15 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
         mode = Mode,
         owner = user_ctx:get_user_id(UserCtx)
     }},
-    {ParentDoc, ParentFileCtx2} = file_ctx:get_file_doc(ParentFileCtx),
-    SpaceId = file_ctx:get_space_id_const(ParentFileCtx2),
-    {ok, DirUuid} = file_meta:create(ParentDoc, File), %todo maybe pass file_ctx inside
+    ParentUuid = file_ctx:get_uuid_const(ParentFileCtx),
+    {ok, DirUuid} = file_meta:create({uuid, ParentUuid}, File), %todo maybe pass file_ctx inside
+    SpaceId = file_ctx:get_space_id_const(ParentFileCtx),
     {ok, _} = times:save_new(#document{
         key = DirUuid,
         value = #times{mtime = CTime, atime = CTime, ctime = CTime},
         scope = SpaceId
     }),
-    fslogic_times:update_mtime_ctime(ParentFileCtx2),
+    fslogic_times:update_mtime_ctime(ParentFileCtx),
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #dir{guid = fslogic_uuid:uuid_to_guid(DirUuid, SpaceId)}
     }.

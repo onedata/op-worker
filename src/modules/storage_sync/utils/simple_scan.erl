@@ -196,8 +196,7 @@ import_regular_subfiles(FilesJobs) ->
 increase_files_to_handle_counter(#space_strategy_job{
     strategy_type = StrategyType,
     data = #{
-        space_id := SpaceId,
-        file_name := FileName
+        space_id := SpaceId
     }},
     FileCtx, {FilesJobs, DirJobs}
 ) ->
@@ -276,10 +275,11 @@ import_file(StorageId, SpaceId, FileName, ParentCtx,
     } = StatBuf,
     SFMHandle = storage_file_ctx:get_handle_const(StorageFileCtx2),
     OwnerId = get_owner_id(StorageFileCtx2),
+    ParentUuid = file_ctx:get_uuid_const(ParentCtx),
     FileMetaDoc = file_meta:new_doc(FileName, file_meta:type(Mode),
-        Mode band 8#1777, OwnerId, FSize),
+        Mode band 8#1777, OwnerId, FSize, ParentUuid),
     {ParentPath, _} = file_ctx:get_canonical_path(ParentCtx),
-    {ok, FileUuid} = create_file_meta(FileMetaDoc, ParentPath),
+    {ok, FileUuid} = create_file_meta(FileMetaDoc, ParentUuid),
     {ok, _} = create_times(FileUuid, MTime, ATime, CTime, SpaceId),
     CanonicalPath = filename:join([ParentPath, FileName]),
     case file_meta:type(Mode) of
@@ -333,14 +333,15 @@ is_imported(StorageId, CanonicalPath, ?REGULAR_FILE_TYPE, #fuse_response{
     status = #status{code = ?OK},
     fuse_response = #file_attr{type = ?REGULAR_FILE_TYPE, guid = FileGuid}
 }) ->
-    case file_meta:get_local_locations({guid, FileGuid}) of
-        [] ->
+    FileCtx = file_ctx:new_by_guid(FileGuid),
+    case file_ctx:get_or_create_local_file_location_doc(FileCtx) of
+        {undefined, _FileCtx2} ->
             false;
-        [#document{
+        {#document{
             value = #file_location{
                 storage_id = SID,
                 file_id = FID
-        }}] ->
+        }}, _FileCtx2} ->
             (StorageId == SID) andalso (CanonicalPath == FID)
     end;
 is_imported(_StorageId, _CanonicalPath, _FileType, #fuse_response{
@@ -623,9 +624,9 @@ maybe_update_owner(#file_attr{owner_id = OldOwnerId}, StorageFileCtx, FileCtx) -
 %% Creates file meta
 %% @end
 %%--------------------------------------------------------------------
--spec create_file_meta(datastore:document(), file_meta:path()) -> {ok, file_meta:uuid()}.
-create_file_meta(FileMetaDoc, ParentPath) ->
-    file_meta:create({path, ParentPath}, FileMetaDoc, true).
+-spec create_file_meta(datastore:document(), file_meta:uuid()) -> {ok, file_meta:uuid()}.
+create_file_meta(FileMetaDoc, ParentUuid) ->
+    file_meta:create({uuid, ParentUuid}, FileMetaDoc, true).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -670,7 +671,7 @@ create_file_location(SpaceId, StorageId, FileUuid, CanonicalPath, Size) ->
     },
     {ok, LocId} = file_location:save_and_bump_version(
         #document{
-            key = datastore_utils:gen_uuid(),
+            key = file_location:local_id(FileUuid),
             value = Location,
             scope = SpaceId
     }),

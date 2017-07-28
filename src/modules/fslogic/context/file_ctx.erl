@@ -44,14 +44,16 @@
     storage_doc :: undefined | storage:doc(),
     file_location_docs :: undefined | [file_location:doc()],
     file_location_ids :: undefined | [file_location:id()],
-    acl :: undefined | acl:acl()
+    acl :: undefined | acl:acl(),
+    is_dir :: undefined | boolean()
 }).
 
 -type ctx() :: #file_ctx{}.
 
 %% Functions creating context and filling its data
 -export([new_by_canonical_path/2, new_by_guid/1, new_by_doc/3, new_root_ctx/0]).
--export([reset/1, new_by_partial_context/1, add_file_location/2]).
+-export([reset/1, new_by_partial_context/1, add_file_location/2, set_file_id/2,
+    set_is_dir/2]).
 
 %% Functions that do not modify context
 -export([get_share_id_const/1, get_space_id_const/1, get_space_dir_uuid_const/1,
@@ -66,9 +68,9 @@
     get_aliased_name/2, get_posix_storage_user_context/1, get_times/1,
     get_parent_guid/2, get_child/3, get_file_children/4, get_logical_path/2,
     get_storage_id/1, get_storage_doc/1, get_file_location_with_filled_gaps/2,
-    get_local_file_location_docs/1, get_file_location_docs/1,
-    get_file_location_ids/1, get_acl/1, get_raw_storage_path/1,
-    get_child_canonical_path/2]).
+    get_or_create_local_file_location_doc/1, get_local_file_location_doc/1,
+    get_file_location_docs/1, get_acl/1, get_raw_storage_path/1,
+    get_child_canonical_path/2, get_file_size/1]).
 -export([is_dir/1]).
 
 %%%===================================================================
@@ -124,10 +126,9 @@ new_by_partial_context(FileCtx = #file_ctx{}) ->
     FileCtx;
 new_by_partial_context(FilePartialCtx) ->
     {CanonicalPath, FilePartialCtx2} = file_partial_ctx:get_canonical_path(FilePartialCtx),
-    {ok, Uuid} = file_meta:to_uuid({path, CanonicalPath}),
+    {ok, {FileDoc, _}} = file_meta:resolve_path(CanonicalPath),
     SpaceId = file_partial_ctx:get_space_id_const(FilePartialCtx2),
-    Guid = fslogic_uuid:uuid_to_guid(Uuid, SpaceId),
-    new_by_guid(Guid).
+    new_by_doc(FileDoc, SpaceId, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -151,6 +152,24 @@ add_file_location(FileCtx = #file_ctx{file_location_ids = Locations}, LocationId
         file_location_ids = [LocationId | Locations],
         file_location_docs = undefined
     }.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets file_id in context record
+%% @end
+%%--------------------------------------------------------------------
+-spec set_file_id(ctx(), helpers:file_id()) -> ctx().
+set_file_id(FileCtx, FileId) ->
+    FileCtx#file_ctx{storage_file_id = FileId}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets is_dir flag in context record
+%% @end
+%%--------------------------------------------------------------------
+-spec set_is_dir(ctx(), boolean()) -> ctx().
+set_is_dir(FileCtx, IsDir) ->
+    FileCtx#file_ctx{is_dir = IsDir}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -541,11 +560,11 @@ get_storage_doc(FileCtx = #file_ctx{storage_doc = StorageDoc}) ->
 get_file_location_with_filled_gaps(FileCtx, ReqRange) ->
     % get locations
     {Locations, FileCtx2} = file_ctx:get_file_location_docs(FileCtx),
-    {[#document{value = FileLocation = #file_location{
+    {#document{value = FileLocation = #file_location{
             blocks = Blocks,
             size = Size
         }
-    }], FileCtx3} = file_ctx:get_local_file_location_docs(FileCtx2),
+    }, FileCtx3} = file_ctx:get_or_create_local_file_location_doc(FileCtx2),
 
     % find gaps
     AllRanges = lists:foldl(
@@ -571,20 +590,35 @@ get_file_location_with_filled_gaps(FileCtx, ReqRange) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns local file location docs.
+%% Returns local file location doc.
 %% @end
 %%--------------------------------------------------------------------
--spec get_local_file_location_docs(ctx()) ->
-    {[file_location:doc()], ctx()}.
-get_local_file_location_docs(FileCtx) ->
-    LocalProviderId = oneprovider:get_provider_id(),
-    {FileLocationDocs, FileCtx2} = get_file_location_docs(FileCtx),
-    LocalFileLocationDocs = lists:filter(fun(#document{
-        value = #file_location{provider_id = ProviderId}
-    }) ->
-        ProviderId =:= LocalProviderId
-    end, FileLocationDocs),
-    {LocalFileLocationDocs, FileCtx2}.
+-spec get_or_create_local_file_location_doc(ctx()) ->
+    {file_location:doc() | undefined, ctx()}.
+get_or_create_local_file_location_doc(FileCtx) ->
+    case is_dir(FileCtx) of
+        {true, FileCtx2} ->
+            {undefined, FileCtx2};
+        {false, FileCtx2} ->
+            get_or_create_local_regular_file_location_doc(FileCtx2)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns local file location doc.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_local_file_location_doc(ctx()) ->
+    {file_location:doc() | undefined, ctx()}.
+get_local_file_location_doc(FileCtx) ->
+    FileUuid = get_uuid_const(FileCtx),
+    LocalLocationId = file_location:local_id(FileUuid),
+    case file_location:get(LocalLocationId) of
+        {ok, Location} ->
+            {Location, FileCtx};
+        {error, {not_found, _}} ->
+            {undefined, FileCtx}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -609,20 +643,6 @@ get_file_location_docs(FileCtx = #file_ctx{file_location_docs = LocationDocs}) -
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns file location IDs.
-%% @end
-%%--------------------------------------------------------------------
--spec get_file_location_ids(ctx()) ->
-    {[file_location:id()], ctx()}.
-get_file_location_ids(FileCtx = #file_ctx{file_location_ids = undefined}) ->
-    FileUuid = get_uuid_const(FileCtx),
-    {ok, Locations} = file_meta:get_locations_by_uuid(FileUuid),
-    {Locations, FileCtx#file_ctx{file_location_ids = Locations}};
-get_file_location_ids(FileCtx = #file_ctx{file_location_ids = Locations}) ->
-    {Locations, FileCtx}.
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Returns file Access Control List.
 %% @end
 %%--------------------------------------------------------------------
@@ -632,6 +652,28 @@ get_acl(FileCtx = #file_ctx{acl = undefined}) ->
     {Acl, FileCtx#file_ctx{acl = Acl}};
 get_acl(FileCtx = #file_ctx{acl = Acl}) ->
     {Acl, FileCtx}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% For given file / location or multiple locations, reads file size assigned to those locations.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_size(file_ctx:ctx() | file_meta:uuid()) ->
+    {Size :: non_neg_integer(), file_ctx:ctx()}.
+get_file_size(FileCtx) ->
+    case file_ctx:get_local_file_location_doc(FileCtx) of
+        {#document{
+            value = #file_location{
+                size = undefined,
+                blocks = Blocks
+            }
+        }, FileCtx2} ->
+            {fslogic_blocks:upper(Blocks), FileCtx2};
+        {#document{value = #file_location{size = Size}}, FileCtx2} ->
+            {Size, FileCtx2};
+        {undefined, FileCtx2} ->
+            {0 ,FileCtx2}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -738,10 +780,13 @@ equals(FileCtx1, FileCtx2) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec is_dir(ctx()) -> {boolean(), ctx()}.
-is_dir(FileCtx) ->
+is_dir(FileCtx = #file_ctx{is_dir = undefined}) ->
     {#document{value = #file_meta{type = Type}}, FileCtx2} =
         get_file_doc_including_deleted(FileCtx),
-    {Type =:= ?DIRECTORY_TYPE, FileCtx2}.
+    IsDir = Type =:= ?DIRECTORY_TYPE,
+    {IsDir, FileCtx2#file_ctx{is_dir = IsDir}};
+is_dir(FileCtx = #file_ctx{is_dir = IsDir}) ->
+    {IsDir, FileCtx}.
 
 %%%===================================================================
 %%% Internal functions
@@ -792,3 +837,48 @@ get_name_of_nonspace_file(FileCtx = #file_ctx{file_name = undefined}) ->
     {Name, FileCtx2#file_ctx{file_name = Name}};
 get_name_of_nonspace_file(FileCtx = #file_ctx{file_name = FileName}) ->
     {FileName, FileCtx}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns file location IDs.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_location_ids(ctx()) ->
+    {[file_location:id()], ctx()}.
+get_file_location_ids(FileCtx = #file_ctx{file_location_ids = undefined}) ->
+    FileUuid = get_uuid_const(FileCtx),
+    {ok, Locations} = file_meta:get_locations_by_uuid(FileUuid),
+    {Locations, FileCtx#file_ctx{file_location_ids = Locations}};
+get_file_location_ids(FileCtx = #file_ctx{file_location_ids = Locations}) ->
+    {Locations, FileCtx}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns local file location doc, creates it if it's not present
+%% @end
+%%--------------------------------------------------------------------
+-spec get_or_create_local_regular_file_location_doc(ctx()) ->
+    {file_location:doc() | undefined, ctx()}.
+get_or_create_local_regular_file_location_doc(FileCtx) ->
+    case get_local_file_location_doc(FileCtx) of
+        {undefined, FileCtx2} ->
+            {CreatedLocation, FileCtx3} =
+                sfm_utils:create_storage_file_location(FileCtx2, false),
+            {LocationDocs, FileCtx4} = get_file_location_docs(FileCtx3),
+            lists:map(fun(ChangedLocation) ->
+                replica_dbsync_hook:on_file_location_change(FileCtx4, ChangedLocation)
+            end, LocationDocs),
+            FileUuid = get_uuid_const(FileCtx),
+
+            {
+                #document{
+                    key = file_location:local_id(FileUuid),
+                    value = CreatedLocation
+                },
+                FileCtx4
+            };
+        {Location, FileCtx2} ->
+            {Location, FileCtx2}
+    end.

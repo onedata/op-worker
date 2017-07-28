@@ -26,30 +26,59 @@
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
 -export([
-    db_sync_basic_opts_test/1, db_sync_many_ops_test/1, db_sync_distributed_modification_test/1,
-    proxy_basic_opts_test1/1, proxy_many_ops_test1/1, proxy_distributed_modification_test1/1,
-    proxy_basic_opts_test2/1, proxy_many_ops_test2/1, proxy_distributed_modification_test2/1,
-    db_sync_many_ops_test_base/1, proxy_many_ops_test1_base/1, proxy_many_ops_test2_base/1,
-    file_consistency_test/1, file_consistency_test_base/1, concurrent_create_test/1,
-    permission_cache_invalidate_test/1, multi_space_test/1,
-    mkdir_and_rmdir_loop_test/1, mkdir_and_rmdir_loop_test_base/1,
-    create_and_delete_file_loop_test/1, create_and_delete_file_loop_test_base/1,
-    echo_and_delete_file_loop_test/1, echo_and_delete_file_loop_test_base/1,
-    distributed_delete_test/1]).
+    db_sync_basic_opts_test/1,
+    db_sync_many_ops_test/1,
+    db_sync_many_ops_test_base/1,
+    db_sync_distributed_modification_test/1,
+    proxy_basic_opts_test1/1,
+    proxy_many_ops_test1/1,
+    proxy_distributed_modification_test1/1,
+    proxy_basic_opts_test2/1,
+    proxy_many_ops_test2/1,
+    proxy_distributed_modification_test2/1,
+    proxy_many_ops_test1_base/1,
+    proxy_many_ops_test2_base/1,
+    file_consistency_test/1,
+    file_consistency_test_base/1,
+    concurrent_create_test/1,
+    multi_space_test/1,
+    mkdir_and_rmdir_loop_test/1,
+    mkdir_and_rmdir_loop_test_base/1,
+    create_and_delete_file_loop_test/1,
+    create_and_delete_file_loop_test_base/1,
+    echo_and_delete_file_loop_test/1,
+    echo_and_delete_file_loop_test_base/1,
+    distributed_delete_test/1
+
+]).
 
 -define(TEST_CASES, [
-    db_sync_basic_opts_test, db_sync_many_ops_test, db_sync_distributed_modification_test,
-    proxy_basic_opts_test1, proxy_many_ops_test1, proxy_distributed_modification_test1,
-    proxy_basic_opts_test2, proxy_many_ops_test2, proxy_distributed_modification_test2,
-    file_consistency_test, concurrent_create_test, permission_cache_invalidate_test,
-    multi_space_test,  mkdir_and_rmdir_loop_test, create_and_delete_file_loop_test,
-    echo_and_delete_file_loop_test, distributed_delete_test
+    db_sync_basic_opts_test,
+    db_sync_many_ops_test,
+    db_sync_distributed_modification_test,
+    proxy_basic_opts_test1,
+    proxy_many_ops_test1,
+    proxy_distributed_modification_test1,
+    proxy_basic_opts_test2,
+    proxy_many_ops_test2,
+    proxy_distributed_modification_test2,
+    file_consistency_test,
+    concurrent_create_test,
+    multi_space_test,
+    mkdir_and_rmdir_loop_test,
+    create_and_delete_file_loop_test,
+    echo_and_delete_file_loop_test,
+    distributed_delete_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
-    db_sync_many_ops_test, proxy_many_ops_test1, proxy_many_ops_test2,
-    mkdir_and_rmdir_loop_test, file_consistency_test,
-    create_and_delete_file_loop_test, echo_and_delete_file_loop_test
+    db_sync_many_ops_test,
+    proxy_many_ops_test1,
+    proxy_many_ops_test2,
+    mkdir_and_rmdir_loop_test,
+    file_consistency_test,
+    create_and_delete_file_loop_test,
+    echo_and_delete_file_loop_test
 ]).
 
 all() ->
@@ -279,9 +308,6 @@ file_consistency_test_base(Config) ->
     end, {[], []}, Workers),
 
     multi_provider_file_ops_test_base:file_consistency_test_skeleton(Config, Worker1, Worker2, Worker1, ConfigsNum).
-
-permission_cache_invalidate_test(Config) ->
-    multi_provider_file_ops_test_base:permission_cache_invalidate_test_base(Config, 30).
 
 multi_space_test(Config) ->
     User = <<"user1">>,

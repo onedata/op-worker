@@ -44,7 +44,10 @@ get_file_attr(UserCtx, FileCtx) ->
 -spec get_file_attr_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:fuse_response().
 get_file_attr_insecure(UserCtx, FileCtx) ->
-    get_file_attr_insecure(UserCtx, FileCtx, false).
+    % trigger location create
+    {_LocalLocation, FileCtx2} =
+        file_ctx:get_or_create_local_file_location_doc(FileCtx),
+    get_file_attr_insecure(UserCtx, FileCtx2, false).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -56,10 +59,16 @@ get_file_attr_insecure(UserCtx, FileCtx) ->
     AllowDeletedFiles :: boolean()) ->
 fslogic_worker:fuse_response().
 get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles) ->
-    {#document{key = Uuid, value = #file_meta{
-        type = Type, mode = Mode, provider_id = ProviderId, owner = OwnerId,
-        shares = Shares}}, FileCtx2
-    } = case AllowDeletedFiles of
+    {#document{
+        key = Uuid,
+        value = #file_meta{
+            type = Type,
+            mode = Mode,
+            provider_id = ProviderId,
+            owner = OwnerId,
+            shares = Shares
+        }
+    }, FileCtx2} = case AllowDeletedFiles of
         true ->
             file_ctx:get_file_doc_including_deleted(FileCtx);
         false ->
@@ -69,17 +78,29 @@ get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles) ->
     {FileName, FileCtx3} = file_ctx:get_aliased_name(FileCtx2, UserCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx3),
     {{Uid, Gid}, FileCtx4} = file_ctx:get_posix_storage_user_context(FileCtx3),
-    Size = fslogic_blocks:get_file_size(FileCtx4),
-    {ParentGuid, FileCtx5} = file_ctx:get_parent_guid(FileCtx4, UserCtx),
-    {{ATime, CTime, MTime}, _FileCtx6} = file_ctx:get_times(FileCtx5),
+    {Size, FileCtx5} = file_ctx:get_file_size(FileCtx4),
+    {{ATime, CTime, MTime}, FileCtx6} = file_ctx:get_times(FileCtx5),
+    {ParentGuid, _FileCtx7} = file_ctx:get_parent_guid(FileCtx6, UserCtx),
 
-    #fuse_response{status = #status{code = ?OK}, fuse_response = #file_attr{
-        uid = Uid, gid = Gid, parent_uuid = ParentGuid,
-        guid = fslogic_uuid:uuid_to_share_guid(Uuid, SpaceId, ShareId),
-        type = Type, mode = Mode, atime = ATime, mtime = MTime,
-        ctime = CTime, size = Size, name = FileName, provider_id = ProviderId,
-        shares = Shares, owner_id = OwnerId
-    }}.
+    #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = #file_attr{
+            uid = Uid,
+            gid = Gid,
+            parent_uuid = ParentGuid,
+            guid = fslogic_uuid:uuid_to_share_guid(Uuid, SpaceId, ShareId),
+            type = Type,
+            mode = Mode,
+            atime = ATime,
+            mtime = MTime,
+            ctime = CTime,
+            size = Size,
+            name = FileName,
+            provider_id = ProviderId,
+            shares = Shares,
+            owner_id = OwnerId
+        }
+    }.
 
 %%--------------------------------------------------------------------
 %% @equiv get_child_attr_insecure/3 with permission checks
@@ -160,7 +181,7 @@ chmod_insecure(UserCtx, FileCtx, Mode) ->
 chmod_attrs_only_insecure(FileCtx, Mode) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     {ok, _} = file_meta:update({uuid, FileUuid}, #{mode => Mode}),
-    ok = permissions_cache:invalidate(file_meta, FileCtx),
+    ok = permissions_cache:invalidate(),
     fslogic_event_emitter:emit_file_perm_changed(FileCtx).
 
 %%--------------------------------------------------------------------

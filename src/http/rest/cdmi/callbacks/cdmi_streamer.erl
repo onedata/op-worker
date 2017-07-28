@@ -145,14 +145,14 @@ stream_range(Socket, Transport, State, {From, To}, Encoding, BufferSize, FileHan
 %%--------------------------------------------------------------------
 -spec write_body_to_file(req(), integer(), onedata_file_api:file_handle()) ->
     {ok, req()}.
-write_body_to_file(Req, Offset, FileHandle) ->
-    WriteFun = fun Write(Req, Offset, Handle) ->
+write_body_to_file(Req0, Offset, FileHandle) ->
+    WriteFun = fun Write(Req, WriteOffset, Handle) ->
         {Status, Chunk, Req1} = cowboy_req:body(Req),
-        {ok, _NewHandle, Bytes} = onedata_file_api:write(Handle, Offset, Chunk),
+        {ok, _NewHandle, Bytes} = onedata_file_api:write(Handle, WriteOffset, Chunk),
         case Status of
-            more -> Write(Req1, Offset + Bytes, Handle);
+            more -> Write(Req1, WriteOffset + Bytes, Handle);
             ok -> {ok, Req1}
         end
     end,
 
-    WriteFun(Req, Offset, FileHandle).
+    WriteFun(Req0, Offset, FileHandle).

@@ -85,5 +85,5 @@ remove_share_insecure(UserCtx, FileCtx) ->
     Auth = user_ctx:get_auth(UserCtx),
     ok = share_logic:delete(Auth, ShareId),
     {ok, _} = file_meta:remove_share(FileCtx, ShareId),
-    ok = permissions_cache:invalidate(file_meta, FileCtx),
+    ok = permissions_cache:invalidate(),
     #provider_response{status = #status{code = ?OK}}.

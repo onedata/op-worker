@@ -96,7 +96,7 @@ get_acl_insecure(_UserCtx, FileCtx) ->
 set_acl_insecure(_UserCtx, FileCtx, #acl{value = Val}, Create, Replace) ->
     case xattr:set(FileCtx, ?ACL_KEY, acl_logic:from_acl_to_json_format(Val), Create, Replace) of
         {ok, _} ->
-            ok = permissions_cache:invalidate(custom_metadata, FileCtx),
+            ok = permissions_cache:invalidate(),
             ok = sfm_utils:chmod_storage_file(
                 user_ctx:new(?ROOT_SESS_ID),
                 FileCtx, 8#000
@@ -117,7 +117,7 @@ set_acl_insecure(_UserCtx, FileCtx, #acl{value = Val}, Create, Replace) ->
 remove_acl_insecure(_UserCtx, FileCtx) ->
     case xattr:delete_by_name(FileCtx, ?ACL_KEY) of
         ok ->
-            ok = permissions_cache:invalidate(custom_metadata, FileCtx),
+            ok = permissions_cache:invalidate(),
             {#document{value = #file_meta{mode = Mode}}, FileCtx2} =
                 file_ctx:get_file_doc(FileCtx),
             ok = sfm_utils:chmod_storage_file(

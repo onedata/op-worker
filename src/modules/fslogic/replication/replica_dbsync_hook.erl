@@ -35,16 +35,24 @@
 on_file_location_change(FileCtx, ChangedLocationDoc = #document{
     value = #file_location{
         uuid = Uuid,
-        provider_id = ProviderId
+        provider_id = ProviderId,
+        file_id = FileId
     }}
 ) ->
     file_location:critical_section(Uuid,
         fun() ->
             case oneprovider:get_provider_id() =/= ProviderId of
                 true ->
-                    {[LocalLocation], FileCtx2} =
-                        file_ctx:get_local_file_location_docs(file_ctx:reset(FileCtx)), %todo VFS-2813 support multi location
-                    update_local_location_replica(FileCtx2, LocalLocation, ChangedLocationDoc);
+                    % set file_id as the same as for remote file, because
+                    % computing it requires parent links which may be not here yet.
+                    FileCtx2 = file_ctx:set_file_id(file_ctx:reset(FileCtx), FileId),
+                    FileCtx3 = file_ctx:set_is_dir(FileCtx2, false),
+                    case file_ctx:get_local_file_location_doc(FileCtx3) of
+                        {undefined, _FileCtx4} ->
+                            ok;
+                        {LocalLocation, FileCtx4} ->
+                            update_local_location_replica(FileCtx4, LocalLocation, ChangedLocationDoc)
+                    end;
                 false ->
                     ok
             end
