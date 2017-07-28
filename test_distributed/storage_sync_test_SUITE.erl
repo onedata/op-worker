@@ -20,7 +20,7 @@
 -include("storage_sync_test.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, init_per_testcase/2,
+-export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
     end_per_testcase/2, create_file_in_dir_import_test/1]).
 
 %% tests
@@ -199,7 +199,19 @@ import_remote_file_by_path_test(Config) ->
 %===================================================================
 
 init_per_suite(Config) ->
-    [{?LOAD_MODULES, [initializer]} | Config].
+    Posthook = fun(NewConfig) ->
+        ssl:start(),
+        hackney:start(),
+        initializer:disable_quota_limit(NewConfig),
+        initializer:enable_grpca_based_communication(NewConfig),
+        NewConfig
+    end,
+    [{?LOAD_MODULES, [initializer]}, {?ENV_UP_POSTHOOK, Posthook} | Config].
+
+end_per_suite(Config) ->
+    initializer:unload_quota_mocks(Config),
+    initializer:disable_grpca_based_communication(Config),
+    ssl:stop().
 
 
 init_per_testcase(Case, Config) when
@@ -282,13 +294,8 @@ init_per_testcase(Case, Config) when
     init_per_testcase(default, Config2);
 
 init_per_testcase(_Case, Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
-    ssl:start(),
-    hackney:start(),
-    initializer:disable_quota_limit(Config),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(
         ?TEST_FILE(Config, "env_desc.json"), Config),
-    initializer:enable_grpca_based_communication(Config),
     ConfigWithProxy = lfm_proxy:init(ConfigWithSessionInfo),
     Config2 = storage_sync_test_base:add_workers_storage_mount_points(ConfigWithProxy),
     storage_sync_test_base:create_init_file(Config2),
@@ -328,11 +335,7 @@ end_per_testcase(_Case, Config) ->
     storage_sync_test_base:clean_storage(Config, false),
     lfm_proxy:teardown(Config),
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
-    initializer:clean_test_users_and_spaces_no_validate(Config),
-    initializer:unload_quota_mocks(Config),
-    initializer:disable_grpca_based_communication(Config),
-    ssl:stop().
-
+    initializer:clean_test_users_and_spaces_no_validate(Config).
 
 %%%===================================================================
 %%% Internal functions

@@ -17,10 +17,12 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+% API
+-export([local_id/1, critical_section/2, save_and_bump_version/1]).
+
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, delete/2, update/2, create/1, model_init/0,
     'after'/5, before/4]).
--export([critical_section/2, save_and_bump_version/1]).
 -export([record_struct/1, record_upgrade/2]).
 
 -type id() :: binary().
@@ -86,6 +88,15 @@ record_upgrade(2, {?MODEL_NAME, Uuid, ProviderId, StorageId, FileId, Blocks,
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Return id of local file location
+%% @end
+%%--------------------------------------------------------------------
+-spec local_id(file_meta:uuid()) -> file_location:id().
+local_id(FileUuid) ->
+    datastore_utils2:gen_key(oneprovider:get_provider_id(), FileUuid).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Runs given function within locked ResourceId. This function makes sure that
 %% 2 funs with same ResourceId won't run at the same time.
 %% @end
@@ -119,7 +130,7 @@ save(Document = #document{key = Key, value = #file_location{
     space_id = SpaceId
 }}) ->
     NewSize = count_bytes(Document),
-    UserId = get_owner_id(FileUuid),
+    {ok, UserId} = get_owner_id(FileUuid),
     case get(Key) of
         {ok, #document{value = #file_location{space_id = SpaceId}} = OldDoc} ->
             OldSize = count_bytes(OldDoc),
@@ -162,10 +173,13 @@ create(Document = #document{value = #file_location{
     space_id = SpaceId
 }}) ->
     NewSize = count_bytes(Document),
-    UserId = get_owner_id(FileUuid),
-
     space_quota:apply_size_change_and_maybe_emit(SpaceId, NewSize),
-    monitoring_event:emit_storage_used_updated(SpaceId, UserId, NewSize),
+    case get_owner_id(FileUuid) of
+        {ok, UserId} ->
+            monitoring_event:emit_storage_used_updated(SpaceId, UserId, NewSize);
+        {error, {not_found, _}} ->
+            ok
+    end,
 
     model:execute_with_default_context(?MODULE, create, [Document#document{scope = SpaceId}]).
 
@@ -187,12 +201,12 @@ get(Key) ->
 delete(Key) ->
     case get(Key) of
         {ok, Doc = #document{value = #file_location{
-            uuid = Uuid,
+            uuid = FileUuid,
             space_id = SpaceId
         }}} ->
             Size = count_bytes(Doc),
             space_quota:apply_size_change_and_maybe_emit(SpaceId, -1 * Size),
-            UserId = get_owner_id(Uuid),
+            {ok, UserId} = get_owner_id(FileUuid),
             monitoring_event:emit_storage_used_updated(SpaceId, UserId, -1 * Size);
         _ ->
             ok
@@ -264,7 +278,6 @@ model_init() ->
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns total size used by given file_location.
@@ -285,8 +298,11 @@ count_bytes([#file_block{size = Size} | T], TotalSize) ->
 %% Return user id for given file uuid.
 %% @end
 %%--------------------------------------------------------------------
--spec get_owner_id(file_meta:uuid()) -> datastore:id().
+-spec get_owner_id(file_meta:uuid()) -> {ok, datastore:id()} | {error, term()}.
 get_owner_id(FileUuid) ->
-    {ok, #document{value = #file_meta{owner = UserId}}} =
-        file_meta:get_including_deleted(FileUuid),
-    UserId.
+    case file_meta:get_including_deleted(FileUuid) of
+        {ok, #document{value = #file_meta{owner = UserId}}} ->
+            {ok, UserId};
+        Error ->
+            Error
+    end.

@@ -143,18 +143,18 @@ model_init() ->
     ReturnValue :: term()) -> ok.
 'after'(?MODULE, create, _, _, {ok, SpaceId}) ->
     space_strategies:create(space_strategies:new(SpaceId)),
-    ok = permissions_cache:invalidate_permissions_cache(),
+    ok = permissions_cache:invalidate(),
     emit_monitoring_event(SpaceId);
 'after'(?MODULE, create_or_update, _, _, {ok, SpaceId}) ->
     space_strategies:create(space_strategies:new(SpaceId)),
-    ok = permissions_cache:invalidate_permissions_cache(),
+    ok = permissions_cache:invalidate(),
     emit_monitoring_event(SpaceId);
 'after'(?MODULE, save, _, _, {ok, SpaceId}) ->
     space_strategies:create(space_strategies:new(SpaceId)),
-    ok = permissions_cache:invalidate_permissions_cache(),
+    ok = permissions_cache:invalidate(),
     emit_monitoring_event(SpaceId);
 'after'(?MODULE, update, _, _, {ok, SpaceId}) ->
-    ok = permissions_cache:invalidate_permissions_cache(),
+    ok = permissions_cache:invalidate(),
     emit_monitoring_event(SpaceId);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.

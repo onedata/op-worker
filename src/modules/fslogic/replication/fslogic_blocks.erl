@@ -22,8 +22,7 @@
 -export_type([block/0, blocks/0]).
 
 %% API
--export([merge/2, aggregate/2, consolidate/1, invalidate/2, get_file_size/1, upper/1,
-    lower/1]).
+-export([merge/2, aggregate/2, consolidate/1, invalidate/2, upper/1, lower/1]).
 
 %%%===================================================================
 %%% API
@@ -81,45 +80,6 @@ lower([_ | _] = Blocks) ->
     lists:min([lower(Block) || Block <- Blocks]);
 lower([]) ->
     0.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% For given file / location or multiple locations, reads file size assigned to those locations.
-%% @end
-%%--------------------------------------------------------------------
--spec get_file_size(file_ctx:ctx() | datastore:document() | [datastore:document()]
-| #file_location{} | [#file_location{}] | fslogic_worker:file()) ->
-    Size :: non_neg_integer() | no_return().
-get_file_size(#document{value = #file_location{} = Value}) ->
-    get_file_size(Value);
-get_file_size(#document{value = #file_meta{type = ?DIRECTORY_TYPE}}) ->
-    0;
-get_file_size(#document{value = #file_meta{type = ?SYMLINK_TYPE}}) ->
-    0;
-get_file_size(#file_location{size = undefined, blocks = Blocks}) ->
-    upper(Blocks);
-get_file_size(#file_location{size = Size}) ->
-    Size;
-get_file_size([Location]) ->
-    get_file_size(Location);
-get_file_size([Location | T]) ->
-    max(get_file_size(Location), get_file_size(T));
-get_file_size([]) ->
-    throw(locations_not_found);
-get_file_size(Entry) ->
-    case file_ctx:is_file_ctx_const(Entry) of
-        true ->
-            case file_ctx:is_dir(Entry) of
-                {true, _FileCtx2} -> %todo return FileCtx from this funciton
-                    0;
-                {false, FileCtx2} ->
-                    {LocalLocations, _FileCtx3} = file_ctx:get_local_file_location_docs(FileCtx2),
-                    get_file_size(LocalLocations)
-            end;
-        false ->
-            LocalLocations = file_meta:get_local_locations(Entry),
-            get_file_size(LocalLocations)
-    end.
 
 %%--------------------------------------------------------------------
 %% @doc

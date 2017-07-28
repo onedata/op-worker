@@ -94,8 +94,8 @@ create_storage_file_if_not_exists(FileCtx) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     file_location:critical_section(FileUuid,
         fun() ->
-            case file_ctx:get_local_file_location_docs(file_ctx:reset(FileCtx)) of
-                {[], _} ->
+            case file_ctx:get_local_file_location_doc(file_ctx:reset(FileCtx)) of
+                {undefined, _} ->
                     {_, _FileCtx2} = create_storage_file_location(FileCtx, false),
                     ok;
                 _ ->
@@ -110,10 +110,10 @@ create_storage_file_if_not_exists(FileCtx) ->
 %%--------------------------------------------------------------------
 -spec create_delayed_storage_file(file_ctx:ctx()) -> file_ctx:ctx().
 create_delayed_storage_file(FileCtx) ->
-    {[#document{
+    {#document{
         key = FileLocationId,
         value = #file_location{storage_file_created = StorageFileCreated}
-    }], FileCtx2} = file_ctx:get_local_file_location_docs(FileCtx),
+    }, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
 
     case StorageFileCreated of
         false ->
@@ -150,9 +150,21 @@ create_storage_file_location(FileCtx, StorageFileCreated) ->
         space_id = SpaceId,
         storage_file_created = StorageFileCreated
     },
-    {ok, LocId} = file_location:create(#document{value = Location}),
-    ok = file_meta:attach_location({uuid, FileUuid}, LocId, oneprovider:get_provider_id()),
-    {Location, file_ctx:add_file_location(FileCtx3, LocId)}.
+    LocId = file_location:local_id(FileUuid),
+    case file_location:create(#document{
+        key = LocId,
+        value = Location
+    }) of
+        {ok, _LocId} ->
+            ok = file_meta:attach_location({uuid, FileUuid},
+                LocId, oneprovider:get_provider_id()),
+            FileCtx4 = file_ctx:add_file_location(FileCtx3, LocId),
+            {Location, FileCtx4};
+        {error, already_exists} ->
+            {#document{value = FileLocation}, FileCtx4} =
+                file_ctx:get_local_file_location_doc(FileCtx3),
+            {FileLocation, FileCtx4}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -179,8 +191,9 @@ create_storage_file(UserCtx, FileCtx) ->
 -spec delete_storage_file(file_ctx:ctx(), user_ctx:ctx()) ->
     ok | {error, term()}.
 delete_storage_file(FileCtx, UserCtx) ->
-    FileLocationId = delete_storage_file_without_location(FileCtx, UserCtx),
-    file_location:delete(FileLocationId).
+    delete_storage_file_without_location(FileCtx, UserCtx),
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    file_location:delete(file_location:local_id(FileUuid)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -188,14 +201,11 @@ delete_storage_file(FileCtx, UserCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_storage_file_without_location(file_ctx:ctx(), user_ctx:ctx()) ->
-    datastore:ext_key().
+    ok | {error, term()}.
 delete_storage_file_without_location(FileCtx, UserCtx) ->
-    {[#document{key = FileLocationId}], FileCtx2} =
-        file_ctx:get_local_file_location_docs(FileCtx),
     SessId = user_ctx:get_session_id(UserCtx),
-    {SFMHandle, _} = storage_file_manager:new_handle(SessId, FileCtx2),
-    storage_file_manager:unlink(SFMHandle),
-    FileLocationId.
+    {SFMHandle, _} = storage_file_manager:new_handle(SessId, FileCtx),
+    storage_file_manager:unlink(SFMHandle).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -221,9 +231,8 @@ create_parent_dirs(FileCtx) ->
     {Storage, FileCtx3} = file_ctx:get_storage_doc(FileCtx2),
 
     LeafLess = filename:dirname(StorageFileId),
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
     SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceId,
-        FileUuid, Storage, LeafLess, undefined),
+        undefined, Storage, LeafLess, undefined),
     case storage_file_manager:mkdir(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
         ok ->
             FileCtx3;

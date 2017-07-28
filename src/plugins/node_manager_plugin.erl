@@ -259,10 +259,8 @@ check_node_ip_address() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec clear_memory(HighMemUse :: boolean()) -> ok.
-clear_memory(true) ->
-    permissions_cache:invalidate_permissions_cache();
 clear_memory(_) ->
-    permissions_cache:check_permission_cache_size().
+    ok.
 
 %%%===================================================================
 %%% Internal functions

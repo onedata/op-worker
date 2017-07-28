@@ -34,8 +34,9 @@
 -spec synchronize_block(user_ctx:ctx(), file_ctx:ctx(), fslogic_blocks:block(), Prefetch :: boolean()) ->
     fslogic_worker:fuse_response().
 synchronize_block(UserCtx, FileCtx, undefined, Prefetch) ->
-    Size = fslogic_blocks:get_file_size(FileCtx),
-    synchronize_block(UserCtx, FileCtx, #file_block{offset = 0, size = Size}, Prefetch);
+    {_, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx), % trigger file_location creation
+    {Size, FileCtx3} = file_ctx:get_file_size(FileCtx2),
+    synchronize_block(UserCtx, FileCtx3, #file_block{offset = 0, size = Size}, Prefetch);
 synchronize_block(UserCtx, FileCtx, Block, Prefetch) ->
     ok = replica_synchronizer:synchronize(UserCtx, FileCtx, Block, Prefetch),
     #fuse_response{status = #status{code = ?OK}}.
@@ -53,6 +54,7 @@ synchronize_block_and_compute_checksum(UserCtx, FileCtx, Range = #file_block{off
     FileGuid = file_ctx:get_guid_const(FileCtx),
     {ok, Handle} = lfm_files:open(SessId, {guid, FileGuid}, read), %todo do not use lfm, operate on fslogic directly
     {ok, _, Data} = lfm_files:read_without_events(Handle, Offset, Size), % does sync internally
+    lfm_files:release(Handle),
 
     Checksum = crypto:hash(md4, Data),
     {LocationToSend, _FileCtx2} = file_ctx:get_file_location_with_filled_gaps(FileCtx, Range),
@@ -72,13 +74,13 @@ synchronize_block_and_compute_checksum(UserCtx, FileCtx, Range = #file_block{off
 -spec get_file_distribution(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 get_file_distribution(_UserCtx, FileCtx) ->
-    {Locations, _FileCtx2} = file_ctx:get_file_location_ids(FileCtx),
-    ProviderDistributions = lists:map(fun(LocationId) ->
-        {ok, #document{value = #file_location{
+    {Locations, _FileCtx2} = file_ctx:get_file_location_docs(FileCtx),
+    ProviderDistributions = lists:map(fun(#document{
+        value = #file_location{
             provider_id = ProviderId,
             blocks = Blocks
-        }}} = file_location:get(LocationId),
-
+        }
+    }) ->
         #provider_file_distribution{
             provider_id = ProviderId,
             blocks = Blocks

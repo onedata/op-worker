@@ -187,9 +187,11 @@ make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
 get_file_location_insecure(_UserCtx, FileCtx) ->
     throw_if_not_exists(FileCtx),
     {#document{key = StorageId}, FileCtx2} = file_ctx:get_storage_doc(FileCtx),
-    {[#document{value = #file_location{
-        blocks = Blocks, file_id = FileId
-    }}], FileCtx3} = file_ctx:get_local_file_location_docs(FileCtx2),
+    {#document{
+        value = #file_location{
+            blocks = Blocks,
+            file_id = FileId
+    }}, FileCtx3} = file_ctx:get_or_create_local_file_location_doc(FileCtx2),
     FileUuid = file_ctx:get_uuid_const(FileCtx3),
     SpaceId = file_ctx:get_space_id_const(FileCtx3),
 
@@ -225,7 +227,7 @@ create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
 
     CTime = erlang:system_time(seconds),
     SpaceId = file_ctx:get_space_id_const(ParentFileCtx),
-    {ok, _} = times:create(#document{key = FileUuid, value = #times{
+    {ok, _} = times:save_new(#document{key = FileUuid, value = #times{
         mtime = CTime, atime = CTime, ctime = CTime
     }, scope = SpaceId}),
 

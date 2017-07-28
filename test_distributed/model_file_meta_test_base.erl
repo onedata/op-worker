@@ -19,9 +19,6 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 
--define(call(N, F, A), ?call(N, file_meta, F, A)).
--define(call(N, M, F, A), rpc:call(N, M, F, A)).
-
 -define(call_with_time(N, F, A), ?call_with_time(N, file_meta, F, A)).
 -define(call_with_time(N, M, F, A), rpc:call(N, ?MODULE, exec_and_check_time, [M, F, A])).
 
@@ -37,7 +34,7 @@ basic_operations_test_core(Config, LastLevel) ->
     % Clear for stress test (if previous run crashed)
     BigDirDel =
         fun Loop(File) when File < 99 ->
-            ?call(Worker1, delete, [{path, list_to_binary("/Space 1/dir1/" ++ integer_to_list(1000 + File))}]),
+            rpc:call(Worker1, file_meta, delete, [{path, list_to_binary("/Space 1/dir1/" ++ integer_to_list(1000 + File))}]),
             Loop(File + 1);
             Loop(_) ->
                 ok
@@ -45,30 +42,46 @@ basic_operations_test_core(Config, LastLevel) ->
     BigDirDel(0),
 
     delete_deep_tree(Worker2, LastLevel),
-    [?call(Worker1, delete, [{path, D}]) || D <- ["/Space 1", "/Space 1/dir1", "/Space 1/dir1/file1",
+    [rpc:call(Worker1, file_meta, delete, [{path, D}]) || D <- ["/Space 1", "/Space 1/dir1", "/Space 1/dir1/file1",
         "/Space 1/dir2", "/Space 1/dir2/file1", "/Space 1/dir2/file2", "/Space 1/dir2/file3"]],
 
     % Test
-    {{A2, U2}, CreateLevel1} = ?call_with_time(Worker2, create, [{path, <<"/">>}, #file_meta{name = <<"Space 1">>, is_scope = true}]),
-    {{A3, U3}, CreateLevel2} = ?call_with_time(Worker1, create, [{path, <<"/Space 1">>}, #file_meta{name = <<"dir1">>}]),
-    {A4, U4} = ?call(Worker1, create, [{path, <<"/Space 1/dir1">>}, #file_meta{name = <<"file1">>}]),
-    {A20, U20} = ?call(Worker1, create, [{path, <<"/Space 1">>}, #file_meta{name = <<"dir2">>}]),
-    {A21, U21} = ?call(Worker1, create, [{path, <<"/Space 1/dir2">>}, #file_meta{name = <<"file1">>}]),
-    {A22, U22} = ?call(Worker1, create, [{path, <<"/Space 1/dir2">>}, #file_meta{name = <<"file2">>}]),
-    {A23, U23} = ?call(Worker1, create, [{path, <<"/Space 1/dir2">>}, #file_meta{name = <<"file3">>}]),
-    ?assertMatch({ok, _}, {A2, U2}),
-    ?assertMatch({ok, _}, {A3, U3}),
-    ?assertMatch({ok, _}, {A4, U4}),
-    ?assertMatch({ok, _}, {A20, U20}),
-    ?assertMatch({ok, _}, {A21, U21}),
-    ?assertMatch({ok, _}, {A22, U22}),
-    ?assertMatch({ok, _}, {A23, U23}),
+    RootUuid = <<>>,
+    {{ok, Space1Uuid}, CreateLevel1} = ?assertMatch(
+        {{ok, _}, _},
+        ?call_with_time(Worker2, create, [{uuid, RootUuid}, #document{value = #file_meta{name = <<"Space 1">>, is_scope = true}}])
+    ),
+    {{ok, Dir1Uuid}, CreateLevel2} = ?assertMatch(
+        {{ok, _}, _},
+        ?call_with_time(Worker1, create, [{uuid, Space1Uuid}, #document{value = #file_meta{name = <<"dir1">>}}])
+    ),
+    {ok, Dir1File1Uuid} = ?assertMatch(
+        {ok, _},
+        rpc:call(Worker1, file_meta, create, [{uuid, Dir1Uuid}, #document{value = #file_meta{name = <<"file1">>}}])
+    ),
+    {ok, Dir2Uuid} = ?assertMatch(
+        {ok, _},
+        rpc:call(Worker1, file_meta, create, [{uuid, Space1Uuid}, #document{value = #file_meta{name = <<"dir2">>}}])
+    ),
+    {ok, Dir2File1Uuid} = ?assertMatch(
+        {ok, _},
+        rpc:call(Worker1, file_meta, create, [{uuid, Dir2Uuid}, #document{value = #file_meta{name = <<"file1">>}}])
+    ),
+    {ok, Dir2File2Uuid} = ?assertMatch(
+        {ok, _},
+        rpc:call(Worker1, file_meta, create, [{uuid, Dir2Uuid}, #document{value = #file_meta{name = <<"file2">>}}])
+    ),
+    {ok, Dir2File3Uuid} = ?assertMatch(
+        {ok, _},
+        rpc:call(Worker1, file_meta, create, [{uuid, Dir2Uuid}, #document{value = #file_meta{name = <<"file3">>}}])
+    ),
 
-    {Level20Path, CreateLevel20} = create_deep_tree(Worker2, LastLevel),
+    {Level20Uuid, Level20Path, CreateLevel20} = create_deep_tree(Worker2, <<"/Space 1">>, Space1Uuid, LastLevel - 2),
 
     BigDir =
         fun Loop(File) when File < 99 ->
-            ?assertMatch({ok, _}, ?call(Worker1, create, [{path, <<"/Space 1/dir1">>}, #file_meta{name = integer_to_binary(1000 + File)}])),
+            ?assertMatch({ok, _}, rpc:call(Worker1, file_meta, create, [{uuid, Dir1Uuid},
+                #document{value = #file_meta{name = integer_to_binary(1000 + File)}}])),
             Loop(File + 1);
             Loop(_) ->
                 ok
@@ -77,22 +90,21 @@ basic_operations_test_core(Config, LastLevel) ->
 
     {{A14, U14}, GetLevel0} = ?call_with_time(Worker1, get, [{path, <<"/">>}]),
     {{A6, U6}, GetLevel2} = ?call_with_time(Worker2, get, [{path, <<"/Space 1">>}]),
-    {A7, U7} = ?call(Worker1, get, [{path, <<"/Space 1/dir1">>}]),
-    {A8, U8} = ?call(Worker2, get, [{path, <<"/Space 1/dir1/file1">>}]),
+    {A7, U7} = rpc:call(Worker1, file_meta, get, [{path, <<"/Space 1/dir1">>}]),
+    {A8, U8} = rpc:call(Worker2, file_meta, get, [{path, <<"/Space 1/dir1/file1">>}]),
     ?assertMatch({ok, #document{value = #file_meta{name = <<"">>}}}, {A14, U14}),
     ?assertMatch({ok, #document{value = #file_meta{name = <<"Space 1">>}}}, {A6, U6}),
     ?assertMatch({ok, #document{value = #file_meta{name = <<"dir1">>}}}, {A7, U7}),
     ?assertMatch({ok, #document{value = #file_meta{name = <<"file1">>}}}, {A8, U8}),
 
-    {{AL20, UL20}, GetLevel20} = ?call_with_time(Worker1, get, [{path, Level20Path}]),
+    {{AL20, UL20}, GetLevel20} = ?call_with_time(Worker1, get, [{uuid, Level20Uuid}]),
     ?assertMatch({ok, #document{value = #file_meta{name = <<"1">>}}}, {AL20, UL20}),
     #document{key = Level20Key} = UL20,
 
     space_info_mock(Workers, <<"Space 1">>),
-    {U30, GenPathLevel1} = ?call_with_time(Worker1, fslogic_uuid, uuid_to_path, [?ROOT_SESS_ID, U21]),
-    ct:print("Err ~p", [{U30, GenPathLevel1}]),
-    {U31, GenPathLevel2} = ?call_with_time(Worker2, fslogic_uuid, uuid_to_path, [?ROOT_SESS_ID, U22]),
-    {U32, GenPathLevel3} = ?call_with_time(Worker2, fslogic_uuid, uuid_to_path, [?ROOT_SESS_ID, U23]),
+    {U30, GenPathLevel1} = ?call_with_time(Worker1, fslogic_uuid, uuid_to_path, [?ROOT_SESS_ID, Dir2File1Uuid]),
+    {U31, GenPathLevel2} = ?call_with_time(Worker2, fslogic_uuid, uuid_to_path, [?ROOT_SESS_ID, Dir2File2Uuid]),
+    {U32, GenPathLevel3} = ?call_with_time(Worker2, fslogic_uuid, uuid_to_path, [?ROOT_SESS_ID, Dir2File3Uuid]),
     ?assertMatch(<<"/Space 1/dir2/file1">>, U30),
     ?assertMatch(<<"/Space 1/dir2/file2">>, U31),
     ?assertMatch(<<"/Space 1/dir2/file3">>, U32),
@@ -100,8 +112,8 @@ basic_operations_test_core(Config, LastLevel) ->
     {{A41, U41}, ResolveLevel2} = ?call_with_time(Worker1, resolve_path, [<<"/Space 1/">>]),
     {{A42, U42}, ResolveLevel3} = ?call_with_time(Worker1, resolve_path, [<<"/Space 1/dir2">>]),
     {{A43, U43}, ResolveLevel20} = ?call_with_time(Worker1, resolve_path, [Level20Path]),
-    ?assertMatch({ok, {#document{key = U2}, _}}, {A41, U41}),
-    ?assertMatch({ok, {#document{key = U20}, _}}, {A42, U42}),
+    ?assertMatch({ok, {#document{key = Space1Uuid}, _}}, {A41, U41}),
+    ?assertMatch({ok, {#document{key = Dir2Uuid}, _}}, {A42, U42}),
     ?assertMatch({ok, {#document{key = Level20Key}, _}}, {A43, U43}),
 
 
@@ -109,20 +121,24 @@ basic_operations_test_core(Config, LastLevel) ->
     ?assertMatch(Level20Path, UL20_2),
     test_utils:mock_unload(Workers, [od_space, fslogic_uuid]),
 
-    {{A9, U9}, GetScopeLevel0} = ?call_with_time(Worker1, get_scope, [U14]),
-    {{A11, U11}, GetScopeLevel2} = ?call_with_time(Worker2, get_scope, [U6]),
-    {A12, U12} = ?call(Worker1, get_scope, [U7]),
-    {A13, U13} = ?call(Worker2, get_scope, [U8]),
-    ?assertMatch({ok, #document{key = <<"">>}}, {A9, U9}),
-    ?assertMatch({ok, #document{key = U2}}, {A11, U11}),
-    ?assertMatch({ok, #document{key = U2}}, {A12, U12}),
-    ?assertMatch({ok, #document{key = U2}}, {A13, U13}),
+    {_, GetScopeLevel0} = ?assertMatch(
+        {{ok, <<>>}, _},
+        ?call_with_time(Worker1, get_scope_id, [U14])
+    ),
+    {_, GetScopeLevel2} = ?assertMatch(
+        {{ok, Space1Uuid}, _},
+        ?call_with_time(Worker2, get_scope_id, [U6])
+    ),
+    ?assertEqual({ok, Space1Uuid}, rpc:call(Worker1, file_meta, get_scope_id, [U7])),
+    ?assertEqual({ok, Space1Uuid}, rpc:call(Worker2, file_meta, get_scope_id, [U8])),
 
-    {{AL20_3, UL20_3}, GetScopeLevel20} = ?call_with_time(Worker2, get_scope, [UL20]),
-    ?assertMatch({ok, #document{key = U2}}, {AL20_3, UL20_3}),
+    {_, GetScopeLevel20} = ?assertMatch(
+        {{ok, Space1Uuid}, _},
+        ?call_with_time(Worker2, get_scope_id, [UL20])
+    ),
 
-    ?assertMatch({ok, [#child_link_uuid{uuid = U2}]}, ?call(Worker1, list_children, [{path, <<"/">>}, 0, 10])),
-    ?assertMatch({ok, []}, ?call(Worker1, list_children, [{path, <<"/Space 1/dir2/file3">>}, 0, 10])),
+    ?assertMatch({ok, [#child_link_uuid{uuid = Space1Uuid}]}, rpc:call(Worker1, file_meta, list_children, [{path, <<"/">>}, 0, 10])),
+    ?assertMatch({ok, []}, rpc:call(Worker1, file_meta, list_children, [{path, <<"/Space 1/dir2/file3">>}, 0, 10])),
 
     {{A15, U15}, ListUuids20_100} = ?call_with_time(Worker1, list_children, [{path, <<"/Space 1/dir1">>}, 0, 20]),
     {{A15_2, U15_2}, ListUuids100_100} = ?call_with_time(Worker1, list_children, [{path, <<"/Space 1/dir1">>}, 0, 100]),
@@ -147,33 +163,33 @@ basic_operations_test_core(Config, LastLevel) ->
 
     {AE1, ExistsFalseLevel4} = ?call_with_time(Worker1, exists, [{path, <<"/Space 1/dir2/file4">>}]),
     ?assertMatch(false, AE1),
-    ?assertMatch(false, ?call(Worker1, exists, [{path, <<"/Space 2/dir2/file1">>}])),
+    ?assertMatch(false, rpc:call(Worker1, file_meta, exists, [{path, <<"/Space 2/dir2/file1">>}])),
     {AE2, ExistsTrueLevel1} = ?call_with_time(Worker1, exists, [{path, <<"/">>}]),
     ?assertMatch(true, AE2),
     {AE3, ExistsTrueLevel4} = ?call_with_time(Worker1, exists, [{path, <<"/Space 1/dir2/file1">>}]),
     ?assertMatch(true, AE3),
     {AE4, ExistsTrueLevel20} = ?call_with_time(Worker1, exists, [{path, Level20Path}]),
     ?assertMatch(true, AE4),
-    ?assertMatch({ok, [_, _, _]}, ?call(Worker1, list_children, [{path, <<"/Space 1/dir2">>}, 0, 10])),
+    ?assertMatch({ok, [_, _, _]}, rpc:call(Worker1, file_meta, list_children, [{path, <<"/Space 1/dir2">>}, 0, 10])),
 
     {AD1, DeleteOkPathLevel4} = ?call_with_time(Worker1, delete, [{path, <<"/Space 1/dir2/file1">>}]),
     ?assertMatch(ok, AD1),
-    {AD2, DeleteOkUuidLevel4} = ?call_with_time(Worker1, delete, [{uuid, U22}]),
+    {AD2, DeleteOkUuidLevel4} = ?call_with_time(Worker1, delete, [{uuid, Dir2File2Uuid}]),
     ?assertMatch(ok, AD2),
     {AD3, DeleteErrorPathLevel4} = ?call_with_time(Worker1, delete, [{path, <<"/Space 1/dir2/file4">>}]),
     ?assertMatch({error, _}, AD3),
     {AD4, DeleteOkPathLevel20} = ?call_with_time(Worker1, delete, [{path, Level20Path}]),
     ?assertMatch(ok, AD4),
 
-    ?assertMatch(false, ?call(Worker1, exists, [{path, <<"/Space 1/dir2/file1">>}])),
-    ?assertMatch(false, ?call(Worker1, exists, [{path, <<"/Space 1/dir2/file2">>}])),
+    ?assertMatch(false, rpc:call(Worker1, file_meta, exists, [{path, <<"/Space 1/dir2/file1">>}])),
+    ?assertMatch(false, rpc:call(Worker1, file_meta, exists, [{path, <<"/Space 1/dir2/file2">>}])),
 
-    ?assertMatch({ok, [#child_link_uuid{uuid = U23}]}, ?call(Worker1, list_children, [{path, <<"/Space 1/dir2">>}, 0, 10])),
+    ?assertMatch({ok, [#child_link_uuid{uuid = Dir2File3Uuid}]}, rpc:call(Worker1, file_meta, list_children, [{path, <<"/Space 1/dir2">>}, 0, 10])),
 
     BigDirDel(0),
 
     delete_deep_tree(Worker2, LastLevel),
-    [?call(Worker1, delete, [{uuid, D}]) || D <- [U2, U3, U4, U20, U21, U22, U23]],
+    [rpc:call(Worker1, file_meta, delete, [{uuid, D}]) || D <- [Space1Uuid, Dir1Uuid, Dir1File1Uuid, Dir2Uuid, Dir2File1Uuid, Dir2File2Uuid, Dir2File3Uuid]],
 
     [
         #parameter{name = create_level_1, value = CreateLevel1, unit = "us",
@@ -257,27 +273,28 @@ exec_and_check_time(Mod, M, A) ->
     AfterProcessing = os:timestamp(),
     {Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}.
 
-create_deep_tree(Worker, Level) ->
-    create_deep_tree(Worker, "/Space 1", Level - 2).
+create_deep_tree(Worker, ParentPath, ParentUuid, 1) ->
+    {{ok, FileUuid}, Time} = ?assertMatch(
+        {{ok, _}, _},
+        ?call_with_time(Worker, create, [{uuid, ParentUuid}, #document{value = #file_meta{name = <<"1">>}}])
+    ),
+    {FileUuid, <<ParentPath/binary, "/", "1">>, Time};
+create_deep_tree(Worker, ParentPath, ParentUuid, Num) ->
+    BinaryNum = integer_to_binary(Num),
 
-create_deep_tree(Worker, Prefix, 1) ->
-    {{A, U}, Time} = ?call_with_time(Worker, create, [{path, list_to_binary(Prefix)}, #file_meta{name = <<"1">>}]),
-    ?assertMatch({ok, _}, {A, U}),
-    {list_to_binary(Prefix ++ "/1"), Time};
-
-create_deep_tree(Worker, Prefix, Num) ->
-    StringNum = integer_to_list(Num),
-    {A, U} = ?call(Worker, create, [{path, list_to_binary(Prefix)}, #file_meta{name = list_to_binary(StringNum)}]),
-    ?assertMatch({ok, _}, {A, U}),
-    create_deep_tree(Worker, Prefix ++ "/" ++ StringNum, Num - 1).
+    {ok, FileUuid} = ?assertMatch(
+        {ok, _},
+        rpc:call(Worker, file_meta, create, [{uuid, ParentUuid}, #document{value = #file_meta{name = BinaryNum}}])
+    ),
+    create_deep_tree(Worker, <<ParentPath/binary, "/", BinaryNum/binary>>, FileUuid, Num - 1).
 
 delete_deep_tree(Worker, Level) ->
     delete_deep_tree(Worker, "/Space 1", Level - 2).
 
 delete_deep_tree(Worker, Prefix, 1) ->
-    ?call(Worker, delete, [{path, list_to_binary(Prefix)}]);
+    rpc:call(Worker, file_meta, delete, [{path, list_to_binary(Prefix)}]);
 
 delete_deep_tree(Worker, Prefix, Num) ->
     StringNum = integer_to_list(Num),
     delete_deep_tree(Worker, Prefix ++ "/" ++ StringNum, Num - 1),
-    ?call(Worker, delete, [{path, list_to_binary(Prefix)}]).
+    rpc:call(Worker, file_meta, delete, [{path, list_to_binary(Prefix)}]).

@@ -91,7 +91,7 @@ prepare([<<"children">> | Tail], #{guid := Guid, auth := Auth} = State) ->
     {ok, List} = onedata_file_api:ls(Auth, {guid, Guid}, 0, MaxChildren + 1),
     terminate_if_too_many_children(List, MaxChildren),
     Children = lists:map(
-        fun({Guid, Name}) -> distinguish_files(Guid, Name, Auth) end, List),
+        fun({FileGuid, Name}) -> distinguish_files(FileGuid, Name, Auth) end, List),
     (prepare(Tail, State))#{<<"children">> => Children};
 prepare([_Other | Tail], State) ->
     prepare(Tail, State).

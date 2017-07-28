@@ -75,9 +75,7 @@ find_record(ModelType, ShareId) ->
             ),
             {HasPriv, ShRecord};
         <<"share-public">> ->
-            {ok, #document{
-                value = #od_share{space = SpaceId} = ShRecord
-            }} = share_logic:get(provider, ShareId),
+            {ok, #document{value = ShRecord}} = share_logic:get(provider, ShareId),
             {true, ShRecord}
     end,
     case Authorized of

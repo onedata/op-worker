@@ -157,13 +157,13 @@ model_init() ->
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
 'after'(?MODEL_NAME, create, _, _, {ok, _}) ->
-    ok = permissions_cache:invalidate_permissions_cache();
+    ok = permissions_cache:invalidate();
 'after'(?MODEL_NAME, create_or_update, _, _, {ok, _}) ->
-    ok = permissions_cache:invalidate_permissions_cache();
+    ok = permissions_cache:invalidate();
 'after'(?MODEL_NAME, save, _, _, {ok, _}) ->
-    ok = permissions_cache:invalidate_permissions_cache();
+    ok = permissions_cache:invalidate();
 'after'(?MODEL_NAME, update, _, _, {ok, _}) ->
-    ok = permissions_cache:invalidate_permissions_cache();
+    ok = permissions_cache:invalidate();
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 

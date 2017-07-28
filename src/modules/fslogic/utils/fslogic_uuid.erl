@@ -299,6 +299,6 @@ uuid_to_space_id(FileUuid) ->
         ?ROOT_DIR_UUID ->
             undefined;
         _ ->
-            {ok, #document{key = SpaceUuid}} = file_meta:get_scope({uuid, FileUuid}),
+            {ok, SpaceUuid} = file_meta:get_scope_id({uuid, FileUuid}),
             fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUuid)
     end.

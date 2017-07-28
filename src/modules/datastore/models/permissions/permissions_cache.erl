@@ -24,8 +24,7 @@
     list/0, count/0, model_init/0, 'after'/5, before/4]).
 
 %% API
--export([check_permission/1, cache_permission/2, invalidate_permissions_cache/0, invalidate/2,
-    remote_invalidation/4, check_permission_cache_size/0]).
+-export([check_permission/1, cache_permission/2, invalidate/0]).
 
 %% Key of document that keeps information about whole cache status.
 -define(STATUS_UUID, <<"status">>).
@@ -227,8 +226,8 @@ cache_permission(Rule, Value) ->
 %% Clears all permissions from cache.
 %% @end
 %%--------------------------------------------------------------------
--spec invalidate_permissions_cache() -> ok.
-invalidate_permissions_cache() ->
+-spec invalidate() -> ok.
+invalidate() ->
     CurrentModel = case get(?STATUS_UUID) of
         {ok, #document{value = #permissions_cache{value = {Model, _}}}} ->
             Model;
@@ -258,91 +257,9 @@ invalidate_permissions_cache() ->
             end
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks size of cache and clears all permissions from cache if needed.
-%% @end
-%%--------------------------------------------------------------------
--spec check_permission_cache_size() -> ok.
-check_permission_cache_size() ->
-    CurrentModel = case get(?STATUS_UUID) of
-        {ok, #document{value = #permissions_cache{value = {Model, _}}}} ->
-            Model;
-        {error, {not_found, _}} ->
-            ?MODULE
-    end,
-    {ok, Count} = erlang:apply(CurrentModel, count, []),
-    case Count > application:get_env(?APP_NAME, permission_cache_size, 50000) of
-        true ->
-            invalidate_permissions_cache();
-        _ ->
-            ok
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Clears all permissions from cache and inits process of invalidating
-%% permissions by other providers when change of a document is propagated.
-%% @end
-%%--------------------------------------------------------------------
--spec invalidate(Model :: model_behaviour:model_type(), FileCtx :: file_ctx:ctx()) -> ok.
-invalidate(Model, FileCtx) ->
-    invalidate_permissions_cache(),
-    Key = file_ctx:get_uuid_const(FileCtx),
-
-    {ok, #document{rev = [RevInfo | _], scope = Scope}} =
-        model:execute_with_default_context(Model, get, [Key]),
-    {Rev, _} = memory_store_driver:rev_to_info(RevInfo),
-
-    case Scope of
-        <<>> ->
-            ok;
-        _ ->
-            SpaceId = file_ctx:get_space_id_const(FileCtx),
-            ok = change_propagation_controller:save_change(Model, Key, Rev, SpaceId, ?MODEL_NAME, remote_invalidation)
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Waits until cache invalidation by remote provider can be done and invalidates cache.
-%% @end
-%%--------------------------------------------------------------------
--spec remote_invalidation(Model :: model_behaviour:model_type(), Key :: datastore:ext_key(),
-    Rev :: non_neg_integer(), SpaceId :: binary()) -> ok.
-remote_invalidation(Model, Key, Rev, SpaceId) ->
-    % TODO - tmp solution before memory store manages processes
-    spawn(fun() ->
-        active_rev_check(Key, SpaceId, Model, Rev, 15, not_checked)
-    end),
-    ok = file_consistency:wait(Key, SpaceId, [{rev, Model, Rev}],
-        {?MODULE, remote_invalidation, [Model, Key, Rev, SpaceId]}),
-    invalidate_permissions_cache().
-
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Active check if revison appeared.
-%% @end
-%%--------------------------------------------------------------------
--spec active_rev_check(Key :: datastore:ext_key(), SpaceId :: binary(),
-    Model :: model_behaviour:model_type(), Rev :: non_neg_integer(),
-    Num :: non_neg_integer(), Status :: ok | younger_revision | not_found
-    | not_checked) -> ok.
-active_rev_check(_Key, _SpaceId, _Model, _Rev, 0, _) ->
-    ok;
-active_rev_check(_Key, _SpaceId, _Model, _Rev, _, ok) ->
-    ok;
-active_rev_check(Key, SpaceId, Model, Rev, Num, _) ->
-    timer:sleep(2000),
-    file_consistency:check_and_add_components(Key, SpaceId, [file_meta]),
-    Check = file_consistency:verify_revision(Key, Model, Rev),
-    active_rev_check(Key, SpaceId, Model, Rev, Num - 1, Check).
-
 
 %%--------------------------------------------------------------------
 %% @private
