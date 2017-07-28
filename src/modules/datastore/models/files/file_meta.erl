@@ -245,30 +245,22 @@ create({uuid, ParentUuid}, FileDoc = #document{
         true = is_valid_filename(FileName),
         {ok, ParentDoc} = get(ParentUuid),
         FileDoc2 = fill_uuid(FileDoc),
-        FileDoc3 = case IsScope of
+        SpaceDirUuid = case IsScope of
             true ->
-                SpaceDirUuid = FileDoc2#document.key,
-                SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid_no_error(SpaceDirUuid),
-                FileDoc2#document{
-                    scope = SpaceId,
-                    value = FileMeta#file_meta{
-                        scope = SpaceDirUuid,
-                        provider_id = oneprovider:get_provider_id(),
-                        parent_uuid = ParentUuid
-                    }};
+                FileDoc2#document.key;
             false ->
                 {ok, ScopeId} = get_scope_id(ParentDoc),
-                SpaceDirUuid = ScopeId,
-                SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid_no_error(SpaceDirUuid),
-                FileDoc2#document{
-                    scope = SpaceId,
-                    value = FileMeta#file_meta{
-                        scope = SpaceDirUuid,
-                        provider_id = oneprovider:get_provider_id(),
-                        parent_uuid = ParentUuid
-                    }
-                }
+                ScopeId
         end,
+        SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid_no_error(SpaceDirUuid),
+        FileDoc3 = FileDoc2#document{
+            scope = SpaceId,
+            value = FileMeta#file_meta{
+                scope = SpaceDirUuid,
+                provider_id = oneprovider:get_provider_id(),
+                parent_uuid = ParentUuid
+            }
+        },
         AddFun = case AllowConflicts of
             true -> add_links;
             false -> create_link
@@ -309,8 +301,16 @@ get({path, Path}) ->
         {ok, Doc}
     end);
 get(?ROOT_DIR_UUID) ->
-    {ok, #document{key = ?ROOT_DIR_UUID, value =
-    #file_meta{name = ?ROOT_DIR_NAME, is_scope = true, mode = 8#111, owner = ?ROOT_USER_ID}}};
+    {ok, #document{
+        key = ?ROOT_DIR_UUID,
+        value = #file_meta{
+            name = ?ROOT_DIR_NAME,
+            is_scope = true,
+            mode = 8#111,
+            owner = ?ROOT_USER_ID,
+            parent_uuid = ?ROOT_DIR_UUID
+        }
+    }};
 get(Key) ->
     case get_including_deleted(Key) of
         {ok, #document{value = #file_meta{deleted = true}}} ->
@@ -575,12 +575,8 @@ get_parent(Entry) ->
 -spec get_parent_uuid(Entry :: entry()) -> {ok, datastore:key()} | datastore:get_error().
 get_parent_uuid(Entry) ->
     ?run(begin
-        case get(Entry) of
-            {ok, #document{key = ?ROOT_DIR_UUID}} ->
-                {ok, ?ROOT_DIR_UUID};
-            {ok, #document{value = #file_meta{parent_uuid = ParentUuid}}} ->
-                {ok, ParentUuid}
-        end
+        {ok, #document{value = #file_meta{parent_uuid = ParentUuid}}} = get(Entry),
+        {ok, ParentUuid}
     end).
 
 %%--------------------------------------------------------------------
@@ -864,7 +860,7 @@ fill_uuid(Doc) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Fixes links to given document in its parent. Also fixes 'parent' link.
+%% Fixes links to given document in its parent. Also fixes 'parent' field.
 %% @end
 %%--------------------------------------------------------------------
 -spec fix_parent_links(Parent :: entry(), File :: entry()) ->
