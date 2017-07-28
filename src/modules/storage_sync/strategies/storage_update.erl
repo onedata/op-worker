@@ -99,7 +99,7 @@ available_strategies() ->
 strategy_init_jobs(no_update, _, _) ->
     [];
 strategy_init_jobs(_, _, #{import_finish_time := undefined}) ->
-    []; % import hasn't been started yet
+    []; % import hasn't been finished yet
 strategy_init_jobs(_, Args, Data = #{last_update_start_time := undefined}) ->
     % it will be first update
     CurrentTimestamp = os:system_time(milli_seconds),
@@ -405,7 +405,7 @@ handle_already_imported_directory_unchanged_mtime(Job = #space_strategy_job{
 ) ->
     Offset = maps:get(dir_offset, Data0, 0),
     {#document{value = FileMeta}, FileCtx2} = file_ctx:get_file_doc(FileCtx),
-    ChildrenStorageCtxsBatch = storage_file_ctx:get_children_ctxs_batch_const(
+    {ChildrenStorageCtxsBatch, _} = storage_file_ctx:get_children_ctxs_batch_const(
         StorageFileCtx, Offset, ?DIR_BATCH),
     {BatchHash, ChildrenStorageCtxsBatch2} =
         storage_sync_changes:count_files_attrs_hash(ChildrenStorageCtxsBatch),
@@ -508,7 +508,7 @@ count_batch_hash(Offset, BatchSize, Data0, StorageFileCtx) ->
     space_strategy:job_data(), storage_file_ctx:ctx()) ->
     {[storage_file_ctx:ctx()], space_strategy:job_data()}.
 get_children_ctxs_batch(Offset, BatchSize, Data0, StorageFileCtx) ->
-    ChildrenStorageCtxsBatch0 =
+    {ChildrenStorageCtxsBatch0, _} =
         storage_file_ctx:get_children_ctxs_batch_const(
             StorageFileCtx, Offset, BatchSize),
     {ChildrenStorageCtxsBatch0, Data0}.

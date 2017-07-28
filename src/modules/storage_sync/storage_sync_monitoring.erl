@@ -54,7 +54,7 @@
     storage_sync, spiral, SpaceId, Type, Window
 ]).
 
--define(COUNTER_LOGGING_INTERVAL, timer:minutes(1)).
+-define(COUNTER_LOGGING_INTERVAL, timer:seconds(30)).
 -define(SPIRAL_DEFAULT_RESOLUTION, 12).
 
 -define(LAGER_REPORTER_NAME, exometer_report_lager).
@@ -683,9 +683,12 @@ update_spiral(SpaceId, Type, Window, Value) ->
 %%-------------------------------------------------------------------
 -spec get_value(od_space:id(), counter_type()) -> integer().
 get_value(SpaceId, CounterType) ->
-    {ok, [{value, Value}]} = exometer:get_value(
-        ?COUNTER_NAME(SpaceId, CounterType), [value]),
-    Value.
+    case exometer:get_value(?COUNTER_NAME(SpaceId, CounterType), [value]) of
+        {ok, [{value, Value}]} ->
+            Value;
+        {error, not_found} ->
+            0
+    end.
 
 %%-------------------------------------------------------------------
 %% @private

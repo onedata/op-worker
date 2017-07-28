@@ -933,10 +933,8 @@ import_remote_file_by_path_test(Config, MountSpaceInRoot) ->
 
 create_init_file(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
-    {ok, FileGuid} = lfm_proxy:create(W1, SessId, ?SPACE_INIT_FILE_PATH, 8#777),
-    {ok, Handle} = lfm_proxy:open(W1, SessId, {guid, FileGuid}, read),
-    ok = lfm_proxy:close(W1, Handle).
+    MountPoint = get_host_mount_point(W1, Config),
+    ok = file:make_dir(filename:join([MountPoint, ?SPACE_ID])).
 
 enable_storage_import(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
