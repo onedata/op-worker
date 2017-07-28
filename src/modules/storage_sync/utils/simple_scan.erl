@@ -669,14 +669,13 @@ create_file_location(SpaceId, StorageId, FileUuid, CanonicalPath, Size) ->
         size = Size,
         storage_file_created = true
     },
-    {ok, LocId} = file_location:save_and_bump_version(
+    {ok, _LocId} = file_location:save_and_bump_version(
         #document{
             key = file_location:local_id(FileUuid),
             value = Location,
             scope = SpaceId
     }),
-    ok = file_meta:attach_location({uuid, FileUuid}, LocId,
-        oneprovider:get_provider_id()).
+    ok.
 
 %%-------------------------------------------------------------------
 %% @private

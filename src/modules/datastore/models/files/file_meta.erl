@@ -28,9 +28,6 @@
 %% How many entries shall be processed in one batch for set_scope operation.
 -define(SET_SCOPE_BATCH_SIZE, 100).
 
-%% Prefix for link name for #file_location link
--define(LOCATION_PREFIX, "location_").
-
 -define(SET_LINK_SCOPE(ScopeId), [{scope, ScopeId}]).
 
 %% model_behaviour callbacks
@@ -40,8 +37,7 @@
 -export([resolve_path/1, resolve_path/2, create/2, create/3,
     get_scope_id/1, list_children/3, get_parent/1, get_parent_uuid/1,
     setup_onedata_user/2, get_including_deleted/1, make_space_exist/1,
-    new_doc/6, type/1, get_ancestors/1, attach_location/3,
-    get_locations_by_uuid/1, location_ref/1, rename/4]).
+    new_doc/6, type/1, get_ancestors/1, get_locations_by_uuid/1, rename/4]).
 -export([delete_child_link/2, foreach_child/3]).
 -export([hidden_file_name/1, is_hidden/1]).
 -export([add_share/2, remove_share/2]).
@@ -336,29 +332,27 @@ get_including_deleted(FileUuid) ->
 -spec delete(uuid() | entry()) -> ok | datastore:generic_error().
 delete({uuid, Key}) ->
     delete(Key);
-delete(Doc = #document{value = #file_meta{
-    name = FileName,
-    parent_uuid = ParentUuid
-}, key = Key}) ->
+delete(#document{
+    key = FileUuid,
+    value = #file_meta{
+        name = FileName,
+        parent_uuid = ParentUuid
+    }
+}) ->
     ?run(begin
-        ok = delete_child_link_in_parent(ParentUuid, FileName, Key),
-        case model:execute_with_default_context(?MODULE, fetch_link,
-            [Doc, location_ref(oneprovider:get_provider_id())]) of
-            {ok, {LocKey, LocationModel}} ->
-                LocationModel:delete(LocKey);
-            _Other ->
-                ok
-        end,
-        model:execute_with_default_context(?MODULE, delete, [Key])
+        ok = delete_child_link_in_parent(ParentUuid, FileName, FileUuid),
+        LocalLocaitonId = file_location:local_id(FileUuid),
+        file_location:delete(LocalLocaitonId),
+        model:execute_with_default_context(?MODULE, delete, [FileUuid])
     end);
 delete({path, Path}) ->
     ?run(begin
         {ok, {#document{} = Document, _}} = resolve_path(Path),
         delete(Document)
     end);
-delete(Key) ->
+delete(FileUuid) ->
     ?run(begin
-        case get(Key) of
+        case get(FileUuid) of
             {ok, #document{} = Document} ->
                 delete(Document);
             {error, {not_found, _}} ->
@@ -509,7 +503,7 @@ foreach_child(Entry, Fun, AccIn) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns file's locations attached with attach_location/3.
+%% Returns file's locations for given file
 %% @end
 %%--------------------------------------------------------------------
 -spec get_locations_by_uuid(uuid()) -> {ok, [file_location:id()]} | datastore:get_error().
@@ -518,14 +512,15 @@ get_locations_by_uuid(Uuid) ->
         case get(Uuid) of
             {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}}} ->
                 {ok, []};
-            _ ->
-                model:execute_with_default_context(?MODULE, foreach_link, [Uuid,
-                fun
-                    (<<?LOCATION_PREFIX, _/binary>>, {_V, [{_, _, Key, file_location}]}, AccIn) ->
-                        [Key | AccIn];
-                    (_LinkName, _LinkTarget, AccIn) ->
-                        AccIn
-                end, []])
+            {ok, #document{scope = SpaceId}} ->
+                {ok, #document{value = #od_space{providers = Providers}}} =
+                    od_space:get(SpaceId),
+                Locations = lists:map(fun(ProviderId) ->
+                    file_location:id(Uuid, ProviderId)
+                end, Providers),
+                {ok, Locations};
+            {error, {not_found, file_meta}} ->
+                {ok, []}
         end
     end).
 
@@ -703,23 +698,6 @@ setup_onedata_user(_Client, UserId) ->
         end
     end).
 
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Adds links between given file_meta and given location document.
-%% @end
-%%--------------------------------------------------------------------
--spec attach_location(entry(), Location :: datastore:document() | datastore:key(), ProviderId :: oneprovider:id()) ->
-    ok.
-attach_location(Entry, #document{key = LocId}, ProviderId) ->
-    attach_location(Entry, LocId, ProviderId);
-attach_location(Entry, LocId, ProviderId) ->
-    {ok, #document{key = FileId, scope = ScopeId} = FDoc} = get(Entry),
-    ok = model:execute_with_default_context(?MODULE, add_links, [
-        FDoc, {location_ref(ProviderId), {LocId, file_location}}]),
-    ok = model:execute_with_default_context(?MODULE, add_links, [
-        LocId, {file_meta, {FileId, file_meta}}], ?SET_LINK_SCOPE(ScopeId)).
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Add shareId to file meta
@@ -809,15 +787,6 @@ type(Mode) ->
         true -> ?DIRECTORY_TYPE;
         false -> ?REGULAR_FILE_TYPE
     end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates location reference (that is used to name link) using provider ID.
-%% @end
-%%--------------------------------------------------------------------
--spec location_ref(ProviderID :: oneprovider:id()) -> LocationReference :: binary().
-location_ref(ProviderId) ->
-    <<?LOCATION_PREFIX, ProviderId/binary>>.
 
 %%--------------------------------------------------------------------
 %% @doc

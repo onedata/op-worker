@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 % API
--export([local_id/1, critical_section/2, save_and_bump_version/1]).
+-export([local_id/1, id/2, critical_section/2, save_and_bump_version/1]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, delete/2, update/2, create/1, model_init/0,
@@ -93,7 +93,16 @@ record_upgrade(2, {?MODEL_NAME, Uuid, ProviderId, StorageId, FileId, Blocks,
 %%--------------------------------------------------------------------
 -spec local_id(file_meta:uuid()) -> file_location:id().
 local_id(FileUuid) ->
-    datastore_utils2:gen_key(oneprovider:get_provider_id(), FileUuid).
+    id(FileUuid, oneprovider:get_provider_id()).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Return id of local file location
+%% @end
+%%--------------------------------------------------------------------
+-spec id(file_meta:uuid(), od_provider:id()) -> file_location:id().
+id(FileUuid, ProviderId) ->
+    datastore_utils2:gen_key(ProviderId, FileUuid).
 
 %%--------------------------------------------------------------------
 %% @doc
