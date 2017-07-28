@@ -82,6 +82,7 @@ handle(healthcheck) ->
 handle(check_strategies) ->
     ?debug("Check strategies"),
     check_strategies(),
+    log_pool_stats(storage_sync_dir_worker_pool),
     schedule_check_strategy();
 handle(Request = {run_job, _, Job = #space_strategy_job{}}) ->
     ?debug("Run job: ~p", [Request]),
@@ -223,11 +224,12 @@ maybe_start_storage_import_and_update(SpaceId, StorageId, StorageStrategies) ->
     case maps:find(StorageId, StorageStrategies) of
         {ok, #storage_strategies{
             import_finish_time = ImportFinishTime,
+            import_start_time = ImportStartTime,
             last_update_start_time = LastUpdateStartTime,
             last_update_finish_time = LastUpdateFinishTime
         }} ->
-            start_storage_import_and_update(SpaceId, StorageId, ImportFinishTime,
-                LastUpdateStartTime, LastUpdateFinishTime);
+            start_storage_import_and_update(SpaceId, StorageId, ImportStartTime,
+                ImportFinishTime, LastUpdateStartTime, LastUpdateFinishTime);
         error ->
             ok
     end.
@@ -241,12 +243,12 @@ maybe_start_storage_import_and_update(SpaceId, StorageId, StorageStrategies) ->
 %%--------------------------------------------------------------------
 -spec start_storage_import_and_update(od_space:id(), storage:id(),
     space_strategy:timestamp(), space_strategy:timestamp(),
-    space_strategy:timestamp()) -> ok.
-start_storage_import_and_update(SpaceId, StorageId, ImportFinishTime,
+    space_strategy:timestamp(), space_strategy:timestamp()) -> ok.
+start_storage_import_and_update(SpaceId, StorageId, ImportStartTime, ImportFinishTime,
     LastUpdateStartTime, LastUpdateFinishTime
 ) ->
     RootDirCtx = file_ctx:new_root_ctx(),
-    ImportAns = storage_import:start(SpaceId, StorageId, ImportFinishTime,
+    ImportAns = storage_import:start(SpaceId, StorageId, ImportStartTime, ImportFinishTime,
         RootDirCtx, SpaceId),
     log_import_answer(ImportAns, SpaceId, StorageId),
 
@@ -351,8 +353,13 @@ run_and_merge_all(Jobs = [
 | _]) ->
     PoolName = StrategyType:main_worker_pool(),
     Responses = utils:pmap(fun(Job) ->
-        worker_proxy:call_pool(?MODULE, {run_job, undefined, Job},
-            PoolName, ?SYNC_JOB_TIMEOUT)
+        case (StrategyType =:= storage_import) or (StrategyType =:= storage_update) of
+            true ->
+                worker_proxy:call_pool(?MODULE, {run_job, undefined, Job},
+                    PoolName, ?SYNC_JOB_TIMEOUT);
+            false ->
+                worker_proxy:call_direct(?MODULE, {run_job, undefined, Job}, ?SYNC_JOB_TIMEOUT)
+        end
     end, Jobs),
     StrategyType:strategy_merge_result(Jobs, Responses).
 
@@ -392,7 +399,12 @@ run_and_return_first(Jobs) ->
 -spec run_and_return_none([space_strategy:job()]) ->
     space_strategy:job_result().
 run_and_return_none(Jobs) ->
-    utils:pforeach(fun(Job = #space_strategy_job{strategy_type = StrategyType}) ->
+    case Jobs of
+        [] -> ok;
+        _ ->
+            log_job_size(hd(Jobs))
+    end,
+    lists:foreach(fun(Job = #space_strategy_job{strategy_type = StrategyType}) ->
         PoolName = StrategyType:main_worker_pool(),
         worker_proxy:cast_pool(?MODULE, {run_job, undefined, Job}, PoolName)
     end, Jobs),
@@ -491,7 +503,7 @@ start_pools() ->
 %%--------------------------------------------------------------------
 -spec start_pool(atom(), non_neg_integer()) -> {ok, pid()}.
 start_pool(PoolName, WorkersNum) ->
-    {ok, _ } = wpool:start_sup_pool(PoolName, [{workers, WorkersNum}]).
+    {ok, _ } = wpool:start_sup_pool(PoolName, [{workers, WorkersNum}, {queue_type, lifo}]).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -520,3 +532,104 @@ schedule_check_strategy() ->
     {ok, Interval} = application:get_env(?APP_NAME, ?SPACE_STRATEGIES_CHECK_INTERVAL),
     timer:apply_after(timer:seconds(Interval), worker_proxy, cast,
         [?MODULE, check_strategies]).
+
+log_pool_stats(PoolName) ->
+    Stats = wpool:stats(PoolName),
+    Pid = whereis('wpool_pool-storage_sync_dir_worker_pool-queue-manager'),
+    ?critical("
+    Pool ~p total_message_queue_len = ~p
+    Processinfo of ~p: ~p~n",
+        [PoolName, proplists:get_value(total_message_queue_len, Stats),
+            Pid, process_info(Pid, [memory, heap_size, total_heap_size])]).
+
+log_job_size(Job = #space_strategy_job{data = Data}) ->
+    Sizes = lists:map(fun(Key) ->
+        {Key, byte_size(term_to_binary(maps:get(Key, Data)))}
+    end, maps:keys(Data)),
+
+    StorageFileCtxSizes = case maps:get(storage_file_ctx, Data, undefined) of
+        {storage_file_ctx, Id, CanonicalPath, SpaceId0, StorageId0, Handle, Stat} ->
+            
+            HandleSizes = case Handle of
+                #sfm_handle{
+                    file_handle = FileHandle,
+                    file = File,
+                    session_id = Sessionid,
+                    file_uuid = FileUuid,
+                    space_id = SpaceId,
+                    storage = Storage,
+                    storage_id = StorageId,
+                    open_flag = OpenFlag,
+                    needs_root_privileges = NeedsRootPrivileges,
+                    file_size = FileSize,
+                    share_id = ShareId
+                } ->
+                    [
+                        {file_handle, byte_size(term_to_binary(FileHandle))},
+                        {file, byte_size(term_to_binary(File))},
+                        {session_id, byte_size(term_to_binary(Sessionid))},
+                        {file_uuid, byte_size(term_to_binary(FileUuid))},
+                        {space_id, byte_size(term_to_binary(SpaceId))},
+                        {storage, byte_size(term_to_binary(Storage))},
+                        {storage_id, byte_size(term_to_binary(StorageId))},
+                        {open_flag, byte_size(term_to_binary(OpenFlag))},
+                        {needs_root_privileges, byte_size(term_to_binary(NeedsRootPrivileges))},
+                        {file_size, byte_size(term_to_binary(FileSize))},
+                        {share_id, byte_size(term_to_binary(ShareId))}
+                    ];
+                undefined -> []
+            end,
+            
+            
+            [
+                {id, byte_size(term_to_binary(Id))},
+                {canonical_path, byte_size(term_to_binary(CanonicalPath))},
+                {space_id, byte_size(term_to_binary(SpaceId0))},
+                {storage_id, byte_size(term_to_binary(StorageId0))},
+                {handle, [{size, byte_size(term_to_binary(Handle))} | HandleSizes]},
+                {stat, byte_size(term_to_binary(Stat))}
+            ];
+        undefined ->
+            []
+    end,
+
+    ParentFileCtxSizes =  case maps:get(parent_ctx, Data, undefined) of
+        undefined ->
+            [];
+        {file_ctx, CanonicalPath2, Guid, FileDoc, Parent, StorageFileid,
+            SpaceName, StoragePosixUserCtx, Times, FileName, StorageDoc,
+            FileLocationDocs, FileLocationIds, Acl
+        }->
+            [
+                {canonical_path, byte_size(term_to_binary(CanonicalPath2))},
+                {guid, byte_size(term_to_binary(Guid))},
+                {file_doc, byte_size(term_to_binary(FileDoc))},
+                {parent, byte_size(term_to_binary(Parent))},
+                {storage_file_id, byte_size(term_to_binary(StorageFileid))},
+                {space_name, byte_size(term_to_binary(SpaceName))},
+                {storage_posix_user_context, byte_size(term_to_binary(StoragePosixUserCtx))},
+                {times, byte_size(term_to_binary(Times))},
+                {file_name, byte_size(term_to_binary(FileName))},
+                {storage_doc, byte_size(term_to_binary(StorageDoc))},
+                {file_location_docs, byte_size(term_to_binary(FileLocationDocs))},
+                {file_location_ids, byte_size(term_to_binary(FileLocationIds))},
+                {acl, byte_size(term_to_binary(Acl))}
+            ]
+    end,
+
+    ?critical("
+    Job size: ~p
+    Job data size: ~p
+    Job data fields sizes: ~p
+    StorageFileCtx fields sizes: ~p
+    ParentFileCtx fields sizes: ~p
+    For job: ~p~n", [
+        byte_size(term_to_binary(Job)),
+        byte_size(term_to_binary(Data)),
+        Sizes,
+        StorageFileCtxSizes,
+        ParentFileCtxSizes,
+        Job
+    ]).
+
+
