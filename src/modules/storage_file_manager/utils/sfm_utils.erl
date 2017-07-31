@@ -156,8 +156,6 @@ create_storage_file_location(FileCtx, StorageFileCreated) ->
         value = Location
     }) of
         {ok, _LocId} ->
-            ok = file_meta:attach_location({uuid, FileUuid},
-                LocId, oneprovider:get_provider_id()),
             FileCtx4 = file_ctx:add_file_location(FileCtx3, LocId),
             {Location, FileCtx4};
         {error, already_exists} ->

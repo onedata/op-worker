@@ -111,11 +111,14 @@ set_last_rename(Doc = #document{value = Loc = #file_location{uuid = FileUuid}},
     critical_section:run([set_last_rename, FileUuid], fun() ->
         {ok, Locations} = file_meta:get_locations_by_uuid(FileUuid),
         RenameNumbers = lists:map(fun(LocationId) ->
-            {ok, #document{value = #file_location{last_rename = LastRename}}} =
-                file_location:get(LocationId),
-            case LastRename of
-                undefined -> 0;
-                {_, N} -> N
+            case file_location:get(LocationId) of
+                {ok, #document{value = #file_location{last_rename = LastRename}}} ->
+                    case LastRename of
+                        undefined -> 0;
+                        {_, N} -> N
+                    end;
+                {error, {not_found, _}} ->
+                    0
             end
         end, Locations),
         Max = lists:max(RenameNumbers),

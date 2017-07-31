@@ -908,8 +908,8 @@ count_links(W, FileUuid) ->
     Links = get_links(W, FileUuid),
     maps:size(Links).
 
-verify_locations(W, FileUuid) ->
-    IDs = get_locations(W, FileUuid),
+verify_locations(W, FileUuid, SpaceId) ->
+    IDs = get_locations(W, FileUuid, SpaceId),
     lists:foldl(fun(ID, Acc) ->
         case rpc:call(W, file_location, get, [ID]) of
             {ok, _} ->
@@ -918,19 +918,10 @@ verify_locations(W, FileUuid) ->
         end
     end, 0, IDs).
 
-get_locations(W, FileUuid) ->
-    Links = get_links(W, FileUuid),
-    get_locations_from_map(Links).
-
-get_locations_from_map(Map) ->
-    maps:fold(fun(_, V, Acc) ->
-        case V of
-            {_Version, [{_, _, ID, file_location}]} ->
-                [ID | Acc];
-            _ ->
-                Acc
-        end
-    end, [], Map).
+get_locations(W, FileUuid, SpaceId) ->
+    FileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId)),
+    {LocationIds, _} = rpc:call(W, file_ctx, get_file_location_ids, [FileCtx]),
+    LocationIds.
 
 create_doc(Doc = #document{value = FileMeta}, #document{key = ParentUuid}, _LocId, _Path) ->
     SpaceId = Doc#document.scope,
@@ -988,13 +979,8 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
     ok.
 
 set_link_to_location(Doc, _ParentDoc, LocId, _Path) ->
-    FileUuid = Doc#document.key,
-    SpaceId = Doc#document.scope,
-    MC = file_meta:model_init(),
-    ok = model:execute_with_default_context(MC, add_links,
-        [Doc, {file_meta:location_ref(oneprovider:get_provider_id()), {LocId, file_location}}]),
-    ok = model:execute_with_default_context(file_location, add_links,
-        [LocId, {file_meta, {FileUuid, file_meta}}], [{scope, SpaceId}]).
+    %todo remove this funciton
+    ok.
 
 add_dbsync_state(Doc, _ParentDoc, _LocId, _Path) ->
 %%    {ok, SID} = dbsync_worker:get_space_id(Doc),
@@ -1126,7 +1112,8 @@ verify_file(Config, FileBeg, {Offset, File}) ->
 
     VerifyLocation = fun() ->
         verify(Config, fun(W) ->
-            verify_locations(W, FileUuid)
+            [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+            verify_locations(W, FileUuid, SpaceId)
         end)
     end,
 
@@ -1165,7 +1152,8 @@ verify_file(Config, FileBeg, {Offset, File}) ->
         {ok, #file_attr{guid = FileGuid}} = StatAns,
         FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
 
-        {W, get_locations(W, FileUuid)}
+        [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+        {W, get_locations(W, FileUuid, SpaceId)}
     end),
     {File, FileUuid, LocToAns}.
 

@@ -69,8 +69,8 @@
     get_parent_guid/2, get_child/3, get_file_children/4, get_logical_path/2,
     get_storage_id/1, get_storage_doc/1, get_file_location_with_filled_gaps/2,
     get_or_create_local_file_location_doc/1, get_local_file_location_doc/1,
-    get_file_location_docs/1, get_acl/1, get_raw_storage_path/1,
-    get_child_canonical_path/2, get_file_size/1]).
+    get_file_location_ids/1, get_file_location_docs/1, get_acl/1,
+    get_raw_storage_path/1, get_child_canonical_path/2, get_file_size/1]).
 -export([is_dir/1]).
 
 %%%===================================================================
@@ -622,6 +622,20 @@ get_local_file_location_doc(FileCtx) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns file location IDs.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_location_ids(ctx()) ->
+    {[file_location:id()], ctx()}.
+get_file_location_ids(FileCtx = #file_ctx{file_location_ids = undefined}) ->
+    FileUuid = get_uuid_const(FileCtx),
+    {ok, Locations} = file_meta:get_locations_by_uuid(FileUuid),
+    {Locations, FileCtx#file_ctx{file_location_ids = Locations}};
+get_file_location_ids(FileCtx = #file_ctx{file_location_ids = Locations}) ->
+    {Locations, FileCtx}.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Returns file location docs.
 %% @end
 %%--------------------------------------------------------------------
@@ -837,21 +851,6 @@ get_name_of_nonspace_file(FileCtx = #file_ctx{file_name = undefined}) ->
     {Name, FileCtx2#file_ctx{file_name = Name}};
 get_name_of_nonspace_file(FileCtx = #file_ctx{file_name = FileName}) ->
     {FileName, FileCtx}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns file location IDs.
-%% @end
-%%--------------------------------------------------------------------
--spec get_file_location_ids(ctx()) ->
-    {[file_location:id()], ctx()}.
-get_file_location_ids(FileCtx = #file_ctx{file_location_ids = undefined}) ->
-    FileUuid = get_uuid_const(FileCtx),
-    {ok, Locations} = file_meta:get_locations_by_uuid(FileUuid),
-    {Locations, FileCtx#file_ctx{file_location_ids = Locations}};
-get_file_location_ids(FileCtx = #file_ctx{file_location_ids = Locations}) ->
-    {Locations, FileCtx}.
 
 %%--------------------------------------------------------------------
 %% @private
