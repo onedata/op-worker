@@ -223,11 +223,12 @@ maybe_start_storage_import_and_update(SpaceId, StorageId, StorageStrategies) ->
     case maps:find(StorageId, StorageStrategies) of
         {ok, #storage_strategies{
             import_finish_time = ImportFinishTime,
+            import_start_time = ImportStartTime,
             last_update_start_time = LastUpdateStartTime,
             last_update_finish_time = LastUpdateFinishTime
         }} ->
-            start_storage_import_and_update(SpaceId, StorageId, ImportFinishTime,
-                LastUpdateStartTime, LastUpdateFinishTime);
+            start_storage_import_and_update(SpaceId, StorageId, ImportStartTime,
+                ImportFinishTime, LastUpdateStartTime, LastUpdateFinishTime);
         error ->
             ok
     end.
@@ -241,12 +242,12 @@ maybe_start_storage_import_and_update(SpaceId, StorageId, StorageStrategies) ->
 %%--------------------------------------------------------------------
 -spec start_storage_import_and_update(od_space:id(), storage:id(),
     space_strategy:timestamp(), space_strategy:timestamp(),
-    space_strategy:timestamp()) -> ok.
-start_storage_import_and_update(SpaceId, StorageId, ImportFinishTime,
+    space_strategy:timestamp(), space_strategy:timestamp()) -> ok.
+start_storage_import_and_update(SpaceId, StorageId, ImportStartTime, ImportFinishTime,
     LastUpdateStartTime, LastUpdateFinishTime
 ) ->
     RootDirCtx = file_ctx:new_root_ctx(),
-    ImportAns = storage_import:start(SpaceId, StorageId, ImportFinishTime,
+    ImportAns = storage_import:start(SpaceId, StorageId, ImportStartTime, ImportFinishTime,
         RootDirCtx, SpaceId),
     log_import_answer(ImportAns, SpaceId, StorageId),
 
@@ -351,8 +352,13 @@ run_and_merge_all(Jobs = [
 | _]) ->
     PoolName = StrategyType:main_worker_pool(),
     Responses = utils:pmap(fun(Job) ->
-        worker_proxy:call_pool(?MODULE, {run_job, undefined, Job},
-            PoolName, ?SYNC_JOB_TIMEOUT)
+        case (StrategyType =:= storage_import) or (StrategyType =:= storage_update) of
+            true ->
+                worker_proxy:call_pool(?MODULE, {run_job, undefined, Job},
+                    PoolName, ?SYNC_JOB_TIMEOUT);
+            false ->
+                worker_proxy:call_direct(?MODULE, {run_job, undefined, Job}, ?SYNC_JOB_TIMEOUT)
+        end
     end, Jobs),
     StrategyType:strategy_merge_result(Jobs, Responses).
 
@@ -392,7 +398,7 @@ run_and_return_first(Jobs) ->
 -spec run_and_return_none([space_strategy:job()]) ->
     space_strategy:job_result().
 run_and_return_none(Jobs) ->
-    utils:pforeach(fun(Job = #space_strategy_job{strategy_type = StrategyType}) ->
+    lists:foreach(fun(Job = #space_strategy_job{strategy_type = StrategyType}) ->
         PoolName = StrategyType:main_worker_pool(),
         worker_proxy:cast_pool(?MODULE, {run_job, undefined, Job}, PoolName)
     end, Jobs),
@@ -491,7 +497,7 @@ start_pools() ->
 %%--------------------------------------------------------------------
 -spec start_pool(atom(), non_neg_integer()) -> {ok, pid()}.
 start_pool(PoolName, WorkersNum) ->
-    {ok, _ } = wpool:start_sup_pool(PoolName, [{workers, WorkersNum}]).
+    {ok, _ } = wpool:start_sup_pool(PoolName, [{workers, WorkersNum}, {queue_type, lifo}]).
 
 %%--------------------------------------------------------------------
 %% @private

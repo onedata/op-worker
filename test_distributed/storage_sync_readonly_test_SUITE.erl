@@ -198,9 +198,9 @@ init_per_testcase(Case, Config) when
 
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, [reverse_luma_proxy, storage_file_ctx]),
-    test_utils:mock_expect(Workers, storage_file_ctx, get_storage_doc_const, fun(Ctx) ->
-        Doc = #document{value = Storage = #storage{}} = meck:passthrough([Ctx]),
-        Doc#document{value = Storage#storage{luma_config = ?LUMA_CONFIG}}
+    test_utils:mock_expect(Workers, storage_file_ctx, get_storage_doc, fun(Ctx) ->
+        {StorageDoc = #document{value = Storage = #storage{}}, Ctx} = meck:passthrough([Ctx]),
+        {StorageDoc#document{value = Storage#storage{luma_config = ?LUMA_CONFIG}}, Ctx}
     end),
     test_utils:mock_expect(Workers, reverse_luma_proxy, get_user_id, fun(_, _, _, _, _) ->
         {ok, ?TEST_OD_USER_ID}
@@ -213,9 +213,9 @@ init_per_testcase(Case, Config) when
 
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, [reverse_luma_proxy, storage_file_ctx]),
-    test_utils:mock_expect(Workers, storage_file_ctx, get_storage_doc_const, fun(Ctx) ->
-        Doc = #document{value = Storage = #storage{}} = meck:passthrough([Ctx]),
-        Doc#document{value = Storage#storage{luma_config = ?LUMA_CONFIG}}
+    test_utils:mock_expect(Workers, storage_file_ctx, get_storage_doc, fun(Ctx) ->
+        {StorageDoc = #document{value = Storage = #storage{}}, Ctx} = meck:passthrough([Ctx]),
+        {StorageDoc#document{value = Storage#storage{luma_config = ?LUMA_CONFIG}}, Ctx}
     end),
     test_utils:mock_expect(Workers, reverse_luma_proxy, get_user_id, fun(_, _, _, _, _) ->
         error(test_reason)

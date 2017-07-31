@@ -229,7 +229,7 @@ save_storage_children_names(TableName, StorageFileCtx) ->
 -spec save_storage_children_names(atom(), storage_file_ctx:ctx(),
     non_neg_integer(), non_neg_integer()) -> term().
 save_storage_children_names(TableName, StorageFileCtx, Offset, BatchSize) ->
-    SFMHandle = storage_file_ctx:get_handle_const(StorageFileCtx),
+    {SFMHandle, StorageFileCtx2} = storage_file_ctx:get_handle(StorageFileCtx),
     {ok, ChildrenIds} = storage_file_manager:readdir(SFMHandle, Offset, BatchSize),
 
     lists:foreach(fun(ChildId) ->
@@ -245,7 +245,7 @@ save_storage_children_names(TableName, StorageFileCtx, Offset, BatchSize) ->
         true ->
             ok;
         _ ->
-            save_storage_children_names(TableName, StorageFileCtx,
+            save_storage_children_names(TableName, StorageFileCtx2,
                 Offset + ListedChildrenNumber, BatchSize)
     end.
 

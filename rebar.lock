@@ -41,7 +41,7 @@
   2},
  {<<"ctool">>,
   {git,"ssh://git@git.plgrid.pl:7999/vfs/ctool.git",
-       {ref,"b5ad841e47b2bc2aeda513137c84717b3443cfb4"}},
+       {ref,"27f9122b1c4b158fdb978409d44379ec8b2c2aae"}},
   0},
  {<<"dht_ring">>,
   {git,"git://github.com/RoXeon/dht_ring.git",
@@ -165,6 +165,6 @@
        {ref,"b2018870eab6d3734831774e0c324e616a39fd2f"}},
   1},
  {<<"worker_pool">>,
-  {git,"https://github.com/inaka/worker_pool.git",
-       {ref,"edff5aead77231377d09eb59c055bf7c8c236aef"}},
+  {git,"https://github.com/jakud/worker_pool",
+       {ref,"d195bc59219e218fadb898ef2943671a54303c9a"}},
   1}].

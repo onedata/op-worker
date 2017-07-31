@@ -36,15 +36,14 @@
 -spec run(space_strategy:job()) ->
     {space_strategy:job_result(), [space_strategy:job()]}.
 run(Job = #space_strategy_job{
-    data = Data = #{
+    data = #{
         space_id := SpaceId,
-        parent_ctx := ParentCtx,
-        storage_file_ctx := _StorageFileCtx
-}}) ->
+        storage_file_ctx := StorageFileCtx
+}}) when StorageFileCtx =/= undefined ->
+
     Module = storage_sync_utils:module(Job),
     storage_sync_monitoring:update_queue_length_spirals(SpaceId, -1),
-    delegate(Module, maybe_import_storage_file_and_children,
-        [Job#space_strategy_job{data = Data#{parent_ctx => ParentCtx}}], 1);
+    delegate(Module, maybe_import_storage_file_and_children, [Job], 1);
 run(Job = #space_strategy_job{
     data = Data = #{
         parent_ctx := ParentCtx,
@@ -148,8 +147,8 @@ import_children(Job = #space_strategy_job{
 ) when MaxDepth > 0 ->
 
     BatchKey = Offset div BatchSize,
-    ChildrenStorageCtxsBatch1 =
-        storage_file_ctx:get_children_ctxs_batch_const(StorageFileCtx, Offset, BatchSize),
+    {ChildrenStorageCtxsBatch1, _} =
+        storage_file_ctx:get_children_ctxs_batch(StorageFileCtx, Offset, BatchSize),
     {BatchHash, ChildrenStorageCtxsBatch2} =
         storage_sync_changes:count_files_attrs_hash(ChildrenStorageCtxsBatch1),
     SubJobs = {FilesJobs, DirsJobs} = generate_jobs_for_importing_children(Job, Offset,
@@ -273,8 +272,8 @@ import_file(StorageId, SpaceId, FileName, ParentCtx,
         st_mtime = MTime,
         st_size = FSize
     } = StatBuf,
-    SFMHandle = storage_file_ctx:get_handle_const(StorageFileCtx2),
-    OwnerId = get_owner_id(StorageFileCtx2),
+    {SFMHandle, StorageFileCtx3} = storage_file_ctx:get_handle(StorageFileCtx2),
+    OwnerId = get_owner_id(StorageFileCtx3),
     ParentUuid = file_ctx:get_uuid_const(ParentCtx),
     FileMetaDoc = file_meta:new_doc(FileName, file_meta:type(Mode),
         Mode band 8#1777, OwnerId, FSize, ParentUuid),
@@ -412,21 +411,25 @@ generate_jobs_for_subfiles(Job = #space_strategy_job{
     },
 
     lists:foldr(fun(ChildStorageCtx, AccIn = {FileJobsIn, DirJobsIn}) ->
-        FileName = storage_file_ctx:get_file_id_const(ChildStorageCtx),
-        {#statbuf{st_mode = Mode}, ChildStorageCtx2} =
-            storage_file_ctx:get_stat_buf(ChildStorageCtx),
-        FileName = storage_file_ctx:get_file_id_const(ChildStorageCtx2),
-        case file_meta:is_hidden(FileName) of
-            false ->
-                case file_meta:type(Mode) of
-                    ?DIRECTORY_TYPE ->
-                        {FileJobsIn, [new_job(Job, ChildrenData, ChildStorageCtx) | DirJobsIn]};
-                    ?REGULAR_FILE_TYPE when DirsOnly ->
-                        AccIn;
-                    ?REGULAR_FILE_TYPE ->
-                        {[new_job(Job, ChildrenData, ChildStorageCtx) | FileJobsIn], DirJobsIn}
+        case storage_file_ctx:get_stat_buf(ChildStorageCtx) of
+            {#statbuf{st_mode = Mode}, ChildStorageCtx2} ->
+                FileName = storage_file_ctx:get_file_id_const(ChildStorageCtx2),
+                case file_meta:is_hidden(FileName) of
+                    false ->
+                        case file_meta:type(Mode) of
+                            ?DIRECTORY_TYPE ->
+                                ChildStorageCtx3 = storage_file_ctx:reset_sfm_handle(ChildStorageCtx2),
+                                {FileJobsIn, [new_job(Job, ChildrenData, ChildStorageCtx3) | DirJobsIn]};
+                            ?REGULAR_FILE_TYPE when DirsOnly ->
+                                AccIn;
+                            ?REGULAR_FILE_TYPE ->
+                                ChildStorageCtx3 = storage_file_ctx:reset_sfm_handle(ChildStorageCtx2),
+                                {[new_job(Job, ChildrenData, ChildStorageCtx3) | FileJobsIn], DirJobsIn}
+                        end;
+                    _ ->
+                        AccIn
                 end;
-            _ ->
+            {error, _} ->
                 AccIn
         end
     end, {[], []}, ChildrenStorageCtxsBatch).
@@ -459,7 +462,6 @@ new_job(Job, Data, StorageFileCtx) ->
 handle_already_imported_file(Job = #space_strategy_job{
     strategy_type = StrategyType,
     data = Data = #{
-        file_name := FileName,
         space_id := SpaceId,
         storage_file_ctx := StorageFileCtx
 }}, FileAttr, FileCtx) ->
@@ -705,6 +707,6 @@ delegate(Module, Function, Args, Arity) ->
 get_owner_id(StorageFileCtx) ->
     {StatBuf, _} = storage_file_ctx:get_stat_buf(StorageFileCtx),
     #statbuf{st_uid = Uid, st_gid = Gid} = StatBuf,
-    StorageDoc = storage_file_ctx:get_storage_doc_const(StorageFileCtx),
+    {StorageDoc, _} = storage_file_ctx:get_storage_doc(StorageFileCtx),
     {ok, OwnerId} = reverse_luma:get_user_id(Uid, Gid, StorageDoc),
     OwnerId.
