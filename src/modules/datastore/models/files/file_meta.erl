@@ -261,12 +261,17 @@ create({uuid, ParentUuid}, FileDoc = #document{
             true -> add_links;
             false -> create_link
         end,
-        ok = model:execute_with_default_context(?MODULE, AddFun,
-            [ParentDoc, {FileName, FileDoc3}]),
-        case create(FileDoc3) of
-            {ok, #document{key = FileUuid}} ->
-                {ok, FileUuid};
-            Error -> Error
+        case model:execute_with_default_context(?MODULE, AddFun,
+            [ParentDoc, {FileName, FileDoc3}])
+        of
+            ok ->
+                case create(FileDoc3) of
+                    {ok, #document{key = FileUuid}} ->
+                        {ok, FileUuid};
+                    Error -> Error
+                end;
+            Error ->
+                Error
         end
     end).
 
