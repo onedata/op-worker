@@ -33,7 +33,7 @@
 -export_type([ctx/0]).
 
 %% API
--export([new/3, get_child_ctx/2, get_children_ctxs_batch_const/3, reset_sfm_handle/1]).
+-export([new/3, get_child_ctx/2, get_children_ctxs_batch/3, reset_sfm_handle/1]).
 -export([get_stat_buf/1, get_handle/1, get_file_id_const/1,
     get_storage_doc/1]).
 
@@ -52,8 +52,7 @@ new(CanonicalPath, SpaceId, StorageId) ->
         space_id = SpaceId,
         storage_id = StorageId
     },
-    set_sfm_handle(Ctx)
-.
+    set_sfm_handle(Ctx).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -78,9 +77,9 @@ get_file_id_const(#storage_file_ctx{id = FileId}) ->
 %% Returns children's storage_file_ctxs,
 %% @end
 %%-------------------------------------------------------------------
--spec get_children_ctxs_batch_const(ctx(), non_neg_integer(),
-    non_neg_integer()) -> {[ctx()], ctx()}.
-get_children_ctxs_batch_const(StorageFileCtx, Offset, BatchSize) ->
+-spec get_children_ctxs_batch(ctx(), non_neg_integer(),
+    non_neg_integer()) -> {ChildrenCtxs :: [ctx()], NewParentCtx :: ctx()}.
+get_children_ctxs_batch(StorageFileCtx, Offset, BatchSize) ->
     {SFMHandle, StorageFileCtx2} = storage_file_ctx:get_handle(StorageFileCtx),
     case storage_file_manager:readdir(SFMHandle, Offset, BatchSize) of
         {error, ?ENOENT} ->

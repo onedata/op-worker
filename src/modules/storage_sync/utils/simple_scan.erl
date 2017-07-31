@@ -148,7 +148,7 @@ import_children(Job = #space_strategy_job{
 
     BatchKey = Offset div BatchSize,
     {ChildrenStorageCtxsBatch1, _} =
-        storage_file_ctx:get_children_ctxs_batch_const(StorageFileCtx, Offset, BatchSize),
+        storage_file_ctx:get_children_ctxs_batch(StorageFileCtx, Offset, BatchSize),
     {BatchHash, ChildrenStorageCtxsBatch2} =
         storage_sync_changes:count_files_attrs_hash(ChildrenStorageCtxsBatch1),
     SubJobs = {FilesJobs, DirsJobs} = generate_jobs_for_importing_children(Job, Offset,
