@@ -512,7 +512,7 @@ stop_pools() ->
     end, space_strategy:types()),
     Pools = [PoolName || {PoolName, _} <- PoolsConfigs],
     lists:foreach(fun(PoolName) ->
-        ok = worker_pool:stop_pool(PoolName)
+        true = worker_pool:stop_pool(PoolName)
     end, sets:to_list(sets:from_list(Pools))).
 
 %%--------------------------------------------------------------------
