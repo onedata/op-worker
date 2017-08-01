@@ -274,8 +274,14 @@ schedule_docs_handling(State = #state{handling_ref = Ref}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_doc_change(datastore:document(), filter(), state()) -> state().
-handle_doc_change(#document{seq = Seq} = Doc, Filter, State) ->
+handle_doc_change(#document{seq = Seq} = Doc, Filter,
+    State = #state{until = Until}) when Seq >= Until ->
     case Filter(Doc) of
         true -> aggregate_change(Doc, State);
         false -> State#state{until = Seq + 1}
-    end.
+    end;
+handle_doc_change(#document{seq = Seq} = _Doc, _Filter,
+    State = #state{until = Until}) ->
+    ?error("Received change with old sequence ~p. Expected sequences"
+    " greater than or equal to ~p", [Seq, Until]),
+    State.
