@@ -41,9 +41,11 @@
 -export_type([handle/0, file_key/0, error_reply/0]).
 
 %% Functions operating on directories
--export([mkdir/2, mkdir/3, mkdir/4, ls/4, get_child_attr/3, get_children_count/2, get_parent/2]).
+-export([mkdir/2, mkdir/3, mkdir/4, ls/4, get_child_attr/3, get_children_count/2,
+    get_parent/2]).
 %% Functions operating on directories or files
--export([mv/3, cp/3, get_file_path/2, rm_recursive/2, unlink/3, replicate_file/3]).
+-export([mv/3, cp/3, get_file_path/2, rm_recursive/2, unlink/3, replicate_file/3,
+    invalidate_file_replica/4]).
 %% Functions operating on files
 -export([create/2, create/3, create/4, open/3, fsync/1, fsync/3, write/3, read/3,
     truncate/3, release/1, get_file_distribution/2, create_and_open/4, create_and_open/5]).
@@ -190,6 +192,18 @@ unlink(SessId, FileEntry, Silent) ->
     ok | error_reply().
 replicate_file(SessId, FileKey, ProviderId) ->
     ?run(fun() -> lfm_files:replicate_file(SessId, FileKey, ProviderId) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Invalidates file replica on given provider, migrates unique data to provider
+%% given as MigrateProviderId
+%% @end
+%%--------------------------------------------------------------------
+-spec invalidate_file_replica(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
+    ProviderId :: oneprovider:id(), MigrationProviderId :: undefined | oneprovider:id()) ->
+    ok | error_reply().
+invalidate_file_replica(SessId, FileKey, ProviderId, MigrationProviderId) ->
+    ?run(fun() -> lfm_files:invalidate_file_replica(SessId, FileKey, ProviderId, MigrationProviderId) end).
 
 %%--------------------------------------------------------------------
 %% @doc

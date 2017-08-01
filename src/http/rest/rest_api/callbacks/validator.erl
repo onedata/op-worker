@@ -29,7 +29,7 @@
 %% API
 -export([malformed_request/2, parse_path/2,
     parse_id/2, parse_objectid/2, parse_attribute/2, parse_extended/2, parse_attribute_body/2,
-    parse_provider_id/2, parse_callback/2, parse_space_id/2, parse_user_id/2,
+    parse_provider_id/2, parse_migration_provider_id/2, parse_callback/2, parse_space_id/2, parse_user_id/2,
     parse_timeout/2, parse_last_seq/2, parse_offset/2, parse_dir_limit/2,
     parse_status/2, parse_metadata_type/2, parse_name/2, parse_query_space_id/2,
     parse_function/2, parse_bbox/2, parse_descending/2, parse_endkey/2, parse_key/2,
@@ -186,6 +186,17 @@ parse_attribute_body(Req, State = #{extended := Extended}) ->
 parse_provider_id(Req, State) ->
     {ProviderId, NewReq} = cowboy_req:qs_val(<<"provider_id">>, Req, oneprovider:get_provider_id()),
     {State#{provider_id => ProviderId}, NewReq}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's migration_provider_id parameter and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_migration_provider_id(cowboy_req:req(), maps:map()) ->
+    {parse_result(), cowboy_req:req()}.
+parse_migration_provider_id(Req, State) ->
+    {ProviderId, NewReq} = cowboy_req:qs_val(<<"migration_provider_id">>, Req, undefined),
+    {State#{migration_provider_id => ProviderId}, NewReq}.
 
 %%--------------------------------------------------------------------
 %% @doc

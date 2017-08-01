@@ -20,7 +20,7 @@
 
 %% API
 -export([synchronize_block/4, synchronize_block_and_compute_checksum/3,
-    get_file_distribution/2, replicate_file/3]).
+    get_file_distribution/2, replicate_file/3, invalidate_file_replica/3]).
 
 %%%===================================================================
 %%% API
@@ -105,6 +105,18 @@ replicate_file(UserCtx, FileCtx, Block) ->
         [UserCtx, FileCtx, Block, 0],
         fun replicate_file_insecure/4).
 
+%%--------------------------------------------------------------------
+%% @equiv invalidate_file_replica_insecure/3 with permission check
+%% @end
+%%--------------------------------------------------------------------
+-spec invalidate_file_replica(user_ctx:ctx(), file_ctx:ctx(), undefined | oneprovider:id()) ->
+    fslogic_worker:provider_response().
+invalidate_file_replica(UserCtx, FileCtx, MigrationProviderId) ->
+    check_permissions:execute(
+        [traverse_ancestors, ?write_object],
+        [UserCtx, FileCtx, MigrationProviderId, 0],
+        fun invalidate_file_replica_insecure/4).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -149,3 +161,65 @@ replicate_children(UserCtx, Children, Block) ->
     utils:pforeach(fun(ChildCtx) ->
         replicate_file(UserCtx, ChildCtx, Block)
     end, Children).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Invalidates replica of given dir or file on current provider
+%% (the space has to be locally supported).
+%% @end
+%%--------------------------------------------------------------------
+-spec invalidate_file_replica_insecure(user_ctx:ctx(), file_ctx:ctx(),
+    oneprovider:id(), non_neg_integer()) ->
+    fslogic_worker:provider_response().
+invalidate_file_replica_insecure(UserCtx, FileCtx, undefined, Offset) ->
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    {ok, #document{value = #od_space{providers = Providers}}} =
+        od_space:get(SpaceId),
+    case Providers -- [oneprovider:get_provider_id()] of
+        [] ->
+            #provider_response{status = #status{code = ?OK}};
+        ExternalProviders ->
+            MigrationProviderId = utils:random_element(ExternalProviders),
+            invalidate_file_replica_insecure(UserCtx, FileCtx, MigrationProviderId, Offset)
+    end;
+invalidate_file_replica_insecure(UserCtx, FileCtx, MigrationProviderId, Offset) ->
+    {ok, Chunk} = application:get_env(?APP_NAME, ls_chunk_size),
+    case file_ctx:is_dir(FileCtx) of
+        {true, FileCtx2} ->
+            case file_ctx:get_file_children(FileCtx2, UserCtx, Offset, Chunk) of
+                {Children, _FileCtx3} when length(Children) < Chunk ->
+                    invalidate_children_replicas(UserCtx, Children, MigrationProviderId),
+                    #provider_response{status = #status{code = ?OK}};
+                {Children, FileCtx3} ->
+                    invalidate_children_replicas(UserCtx, Children, MigrationProviderId),
+                    invalidate_file_replica_insecure(UserCtx, FileCtx3, MigrationProviderId, Offset + Chunk)
+            end;
+        {false, FileCtx2} ->
+            SessionId = user_ctx:get_session_id(UserCtx),
+            FileGuid = file_ctx:get_guid_const(FileCtx),
+            ok = logical_file_manager:replicate_file(SessionId, {guid, FileGuid}, MigrationProviderId),
+            #fuse_response{status = #status{code = ?OK}} =
+                truncate_req:truncate_insecure(UserCtx, FileCtx, 0, false),
+            FileUuid = file_ctx:get_uuid_const(FileCtx2),
+            LocalFileId = file_location:local_id(FileUuid),
+            case file_location:update(LocalFileId, #{blocks => []}) of
+                {ok, _} -> ok;
+                {error, {not_found, _}} -> ok
+            end,
+            #provider_response{status = #status{code = ?OK}}
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Invalidates replicas of children list.
+%% @end
+%%--------------------------------------------------------------------
+-spec invalidate_children_replicas(user_ctx:ctx(), [file_ctx:ctx()],
+    oneprovider:id()) -> ok.
+invalidate_children_replicas(UserCtx, Children, MigrationProviderId) ->
+    utils:pforeach(fun(ChildCtx) ->
+        invalidate_file_replica(UserCtx, ChildCtx, MigrationProviderId)
+    end, Children).
+

@@ -65,6 +65,11 @@
     block :: #file_block{} | undefined
 }).
 
+-record(invalidate_file_replica, {
+    provider_id :: oneprovider:id(),
+    migration_provider_id :: undefined | oneprovider:id()
+}).
+
 -record(get_metadata, {
     type :: custom_metadata:type(),
     names = [] :: custom_metadata:names(),
@@ -96,8 +101,9 @@
 #get_transfer_encoding{} | #set_transfer_encoding{} |
 #get_cdmi_completion_status{} | #set_cdmi_completion_status{} |
 #get_mimetype{} | #set_mimetype{} | #get_file_path{} |
-#get_file_distribution{} | #replicate_file{} | #get_metadata{} | #remove_metadata{} |
-#set_metadata{} | #check_perms{} | #create_share{} | #remove_share{}.
+#get_file_distribution{} | #replicate_file{} | #invalidate_file_replica{} |
+#get_metadata{} | #remove_metadata{} | #set_metadata{} | #check_perms{} |
+#create_share{} | #remove_share{}.
 
 -record(transfer_encoding, {
     value :: binary()

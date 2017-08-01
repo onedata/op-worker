@@ -415,6 +415,14 @@ translate_from_protobuf(#'ReplicateFile'{provider_id = ProviderId,
     block = Block}) ->
     #replicate_file{provider_id = ProviderId,
         block = translate_from_protobuf(Block)};
+translate_from_protobuf(#'InvalidateFileReplica'{
+    provider_id = ProviderId,
+    migration_provider_id = MigrationProviderId
+}) ->
+    #invalidate_file_replica{
+        provider_id = ProviderId,
+        migration_provider_id = MigrationProviderId
+    };
 translate_from_protobuf(#'ReadMetadata'{type = Type, names = Names, inherited = Inherited}) ->
     #get_metadata{type = binary_to_existing_atom(Type, utf8), names = Names, inherited = Inherited};
 translate_from_protobuf(#'WriteMetadata'{metadata = Metadata, names = Names}) ->
@@ -865,6 +873,14 @@ translate_to_protobuf(#replicate_file{provider_id = ProviderId,
     block = Block}) ->
     {replicate_file, #'ReplicateFile'{provider_id = ProviderId,
         block = translate_to_protobuf(Block)}};
+translate_to_protobuf(#invalidate_file_replica{
+    provider_id = ProviderId,
+    migration_provider_id = MigrationProviderId
+}) ->
+    {invalidate_file_replica, #'InvalidateFileReplica'{
+        provider_id = ProviderId,
+        migration_provider_id = MigrationProviderId
+    }};
 translate_to_protobuf(#get_metadata{type = Type, names = Names, inherited = Inherited}) ->
     {read_metadata, #'ReadMetadata'{type = atom_to_binary(Type, utf8), names = Names, inherited = Inherited}};
 translate_to_protobuf(#set_metadata{metadata = Metadata, names = Names}) ->
