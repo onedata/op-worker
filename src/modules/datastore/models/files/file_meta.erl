@@ -826,7 +826,7 @@ is_hidden(FileName) ->
 %%--------------------------------------------------------------------
 -spec fill_uuid(doc()) -> doc().
 fill_uuid(Doc = #document{key = undefined}) ->
-    NewUuid = gen_file_uuid(),
+    NewUuid = datastore_utils:gen_uuid(),
     Doc#document{key = NewUuid};
 fill_uuid(Doc) ->
     Doc.
@@ -957,15 +957,3 @@ is_valid_filename(FileName) when is_binary(FileName) ->
         [] -> true;
         _ -> false
     end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Generates generic file's Uuid that will be not placed in any Space.
-%% @end
-%%--------------------------------------------------------------------
--spec gen_file_uuid() -> file_meta:uuid().
-gen_file_uuid() ->
-    PID = oneprovider:get_provider_id(),
-    Rand = crypto:rand_bytes(16),
-    http_utils:base64url_encode(<<PID/binary, "##", Rand/binary>>).
