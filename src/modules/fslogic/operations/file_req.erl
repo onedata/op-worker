@@ -90,6 +90,7 @@ open_file_insecure(UserCtx, FileCtx, Flag) ->
     {ok, Handle} = storage_file_manager:open(SFMHandle, Flag),
     {ok, HandleId} = save_handle(SessId, Handle),
     ok = file_handles:register_open(FileCtx3, SessId, 1),
+    ok = file_popularity:increment_open(FileCtx3),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_opened{handle_id = HandleId}

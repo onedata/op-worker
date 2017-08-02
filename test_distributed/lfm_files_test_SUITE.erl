@@ -58,7 +58,10 @@
     echo_loop_test_base/1,
     storage_file_creation_should_be_delayed_until_open/1,
     delayed_creation_should_not_prevent_mv/1,
-    delayed_creation_should_not_prevent_truncate/1
+    delayed_creation_should_not_prevent_truncate/1,
+    new_file_should_not_have_popularity_doc/1,
+    new_file_should_have_zero_popularity/1,
+    opening_file_should_increase_file_popularity/1
 ]).
 
 -define(TEST_CASES, [
@@ -90,7 +93,10 @@
     echo_loop_test,
     storage_file_creation_should_be_delayed_until_open,
     delayed_creation_should_not_prevent_mv,
-    delayed_creation_should_not_prevent_truncate
+    delayed_creation_should_not_prevent_truncate,
+    new_file_should_not_have_popularity_doc,
+    new_file_should_have_zero_popularity,
+    opening_file_should_increase_file_popularity
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -996,6 +1002,86 @@ delayed_creation_should_not_prevent_truncate(Config) ->
     ?assertEqual({ok, 9}, lfm_proxy:write(W, Handle, 0, <<"test_data">>)),
     ?assertEqual({ok, <<"test_data">>}, lfm_proxy:read(W, Handle, 0, 100)),
     ?assertEqual(ok, lfm_proxy:close(W, Handle)).
+
+new_file_should_not_have_popularity_doc(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+
+    % when
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_no_popularity">>, 8#755),
+    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+
+    % then
+    ?assertEqual(
+        {error, {not_found, file_popularity}},
+        rpc:call(W, file_popularity, get, [FileUuid])
+    ).
+
+new_file_should_have_zero_popularity(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+
+    % when
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_zero_popularity">>, 8#755),
+    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+    SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
+
+    % then
+    ?assertMatch(
+        {ok, #document{
+            key = FileUuid,
+            value = #file_popularity{
+                file_uuid = FileUuid,
+                space_id = SpaceId,
+                last_open_time = 0,
+                open_count = 0
+            }
+        }},
+        rpc:call(W, file_popularity, get_or_default, [FileUuid, SpaceId])
+    ).
+
+opening_file_should_increase_file_popularity(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_increased_popularity">>, 8#755),
+    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+    SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
+
+    % when
+    TimeBeforeFirstOpen = erlang:system_time(seconds),
+    {ok, Handle1} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, read),
+    lfm_proxy:close(W, Handle1),
+
+    % then
+    {ok, Doc} = ?assertMatch(
+        {ok, #document{
+            key = FileUuid,
+            value = #file_popularity{
+                file_uuid = FileUuid,
+                space_id = SpaceId,
+                open_count = 1
+            }
+        }},
+        rpc:call(W, file_popularity, get_or_default, [FileUuid, SpaceId])
+    ),
+    ?assert(TimeBeforeFirstOpen =< Doc#document.value#file_popularity.last_open_time),
+
+    % when
+    TimeBeforeSecondOpen = erlang:system_time(seconds),
+    {ok, Handle2} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, read),
+    lfm_proxy:close(W, Handle2),
+
+    % then
+    {ok, Doc2} = ?assertMatch(
+        {ok, #document{
+            value = #file_popularity{
+                open_count = 2
+            }
+        }},
+        rpc:call(W, file_popularity, get_or_default, [FileUuid, SpaceId])
+    ),
+    ?assert(TimeBeforeSecondOpen =< Doc2#document.value#file_popularity.last_open_time).
+
 
 %%%===================================================================
 %%% SetUp and TearDown functions

@@ -435,4 +435,12 @@
     timestamp = 0 :: luma_cache:timestamp()% time of last update, in milliseconds since epoch
 }).
 
+%% Model that tracks popularity of file
+-record(file_popularity, {
+    file_uuid = undefined :: file_meta:uuid(),
+    space_id = undefined :: od_space:id(),
+    open_count = 0 :: non_neg_integer(),
+    last_open_time = 0 :: non_neg_integer()
+}).
+
 -endif.
