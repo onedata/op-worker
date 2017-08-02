@@ -522,6 +522,34 @@ ERL_NIF_TERM truncate(
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
+ERL_NIF_TERM setxattr(NifCTX ctx, helper_ptr helper, folly::fbstring file,
+    folly::fbstring name, folly::fbstring value, const bool create,
+    const bool replace)
+{
+    handle_result(ctx, helper->setxattr(file, name, value, create, replace));
+    return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
+}
+
+ERL_NIF_TERM getxattr(
+    NifCTX ctx, helper_ptr helper, folly::fbstring file, folly::fbstring name)
+{
+    handle_result(ctx, helper->getxattr(file, name));
+    return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
+}
+
+ERL_NIF_TERM removexattr(
+    NifCTX ctx, helper_ptr helper, folly::fbstring file, folly::fbstring name)
+{
+    handle_result(ctx, helper->removexattr(file, name));
+    return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
+}
+
+ERL_NIF_TERM listxattr(NifCTX ctx, helper_ptr helper, folly::fbstring file)
+{
+    handle_result(ctx, helper->listxattr(file));
+    return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
+}
+
 ERL_NIF_TERM open(NifCTX ctx, helper_ptr helper, folly::fbstring file,
     folly::fbvector<nifpp::str_atom> flags)
 {
@@ -654,6 +682,30 @@ static ERL_NIF_TERM sh_truncate(
     return wrap(truncate, env, argv);
 }
 
+static ERL_NIF_TERM sh_setxattr(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    return wrap(setxattr, env, argv);
+}
+
+static ERL_NIF_TERM sh_getxattr(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    return wrap(getxattr, env, argv);
+}
+
+static ERL_NIF_TERM sh_removexattr(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    return wrap(removexattr, env, argv);
+}
+
+static ERL_NIF_TERM sh_listxattr(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    return wrap(listxattr, env, argv);
+}
+
 static ERL_NIF_TERM sh_open(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     return wrap(open, env, argv);
@@ -694,7 +746,9 @@ static ErlNifFunc nif_funcs[] = {{"get_handle", 2, get_handle},
     {"unlink", 2, sh_unlink}, {"rmdir", 2, sh_rmdir},
     {"symlink", 3, sh_symlink}, {"rename", 3, sh_rename}, {"link", 3, sh_link},
     {"chmod", 3, sh_chmod}, {"chown", 4, sh_chown},
-    {"truncate", 3, sh_truncate}, {"open", 3, sh_open}, {"read", 3, sh_read},
+    {"truncate", 3, sh_truncate}, {"setxattr", 6, sh_setxattr},
+    {"getxattr", 3, sh_getxattr}, {"removexattr", 3, sh_removexattr},
+    {"listxattr", 2, sh_listxattr}, {"open", 3, sh_open}, {"read", 3, sh_read},
     {"write", 3, sh_write}, {"release", 1, sh_release}, {"flush", 1, sh_flush},
     {"fsync", 2, sh_fsync}};
 

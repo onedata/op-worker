@@ -22,7 +22,8 @@
 %% tests
 -export([create_test/1, mkdir_test/1, getattr_test/1, rmdir_test/1,
     unlink_test/1, symlink_test/1, rename_test/1, chmod_test/1,
-    chown_test/1, flush_test/1, fsync_test/1, write_test/1,
+    chown_test/1, flush_test/1, fsync_test/1, setxattr_test/1,
+    removexattr_test/1, listxattr_test/1, write_test/1,
     multipart_write_test/1, truncate_test/1, write_read_test/1,
     multipart_read_test/1, write_unlink_test/1,
     write_read_truncate_unlink_test/1]).
@@ -39,8 +40,9 @@
 ]).
 
 -define(TEST_CASES, [
-    getattr_test, mkdir_test, rmdir_test, unlink_test, symlink_test, 
-    rename_test, chmod_test, chown_test, flush_test, fsync_test
+    getattr_test, mkdir_test, rmdir_test, unlink_test, symlink_test,
+    rename_test, chmod_test, chown_test, flush_test, fsync_test,
+    setxattr_test, listxattr_test, removexattr_test
 ]).
 
 all() -> ?ALL(?TEST_CASES, ?PERF_TEST_CASES).
@@ -315,6 +317,45 @@ chown_test(Config) ->
     create(Helper, FileId),
     ?assertMatch(ok, call(Helper, chown, [FileId, -1, -1])).
 
+setxattr_test(Config) ->
+    Helper = new_helper(Config),
+    FileId = random_file_id(),
+    XattrName = str_utils:join_binary([<<"user.">>, random_file_id()]),
+    XattrValue = random_file_id(),
+    create(Helper, FileId),
+    ?assertMatch(ok,
+        call(Helper, setxattr, [FileId, XattrName, XattrValue, false, false])),
+    ?assertMatch({ok, XattrValue}, call(Helper, getxattr, [FileId, XattrName])).
+
+listxattr_test(Config) ->
+    Helper = new_helper(Config),
+    FileId = random_file_id(),
+    create(Helper, FileId),
+    ?assertMatch(ok,
+        call(Helper, setxattr,
+            [FileId, <<"user.XATTR1">>, random_file_id(), false, false])),
+    ?assertMatch(ok,
+        call(Helper, setxattr,
+            [FileId, <<"user.XATTR2">>, random_file_id(), false, false])),
+    ?assertMatch(ok,
+        call(Helper, setxattr,
+            [FileId, <<"user.XATTR3">>, random_file_id(), false, false])),
+    {ok, XattrNames} = call(Helper, listxattr, [FileId]),
+    ?assertEqual(3, length(XattrNames)).
+
+removexattr_test(Config) ->
+    Helper = new_helper(Config),
+    FileId = random_file_id(),
+    XattrName = str_utils:join_binary([<<"user.">>, random_file_id()]),
+    XattrValue = random_file_id(),
+    create(Helper, FileId),
+    ?assertMatch(ok,
+        call(Helper, setxattr, [FileId, XattrName, XattrValue, false, false])),
+    {ok, XattrNames} = call(Helper, listxattr, [FileId]),
+    ?assertEqual(1, length(XattrNames)),
+    ?assertMatch(ok, call(Helper, removexattr, [FileId, XattrName])),
+    ?assertMatch({ok, []}, call(Helper, listxattr, [FileId])).
+
 flush_test(Config) ->
     Helper = new_helper(Config),
     FileId = random_file_id(),
@@ -345,10 +386,10 @@ new_helper(Config) ->
         ?GLUSTERFS_VOLUME,
         atom_to_binary(?config(host_name, GlusterFSConfig), utf8),
         #{
-          <<"port">> => integer_to_binary(?GLUSTERFS_PORT),
-          <<"transport">> => atom_to_binary(?config(transport, GlusterFSConfig), utf8),
-          <<"mountPoint">> => atom_to_binary(?config(mountpoint, GlusterFSConfig), utf8),
-          <<"xlatorOptions">> => <<"cluster.write-freq-threshold=100;">>
+            <<"port">> => integer_to_binary(?GLUSTERFS_PORT),
+            <<"transport">> => atom_to_binary(?config(transport, GlusterFSConfig), utf8),
+            <<"mountPoint">> => atom_to_binary(?config(mountpoint, GlusterFSConfig), utf8),
+            <<"xlatorOptions">> => <<"cluster.write-freq-threshold=100;">>
         },
         UserCtx,
         true),
@@ -411,7 +452,7 @@ run(Fun, ThreadsNum) ->
     ?assert(lists:all(fun(Result) -> Result =:= ok end, Results)).
 
 random_file_id() ->
-   http_utils:url_encode(base64:encode(crypto:strong_rand_bytes(?FILE_ID_SIZE))).
+    http_utils:url_encode(base64:encode(crypto:strong_rand_bytes(?FILE_ID_SIZE))).
 
 create(Helper, FileId) ->
     call(Helper, mknod, [FileId, 8#644, reg]).
