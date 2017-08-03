@@ -16,7 +16,7 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([truncate/3]).
+-export([truncate/3, truncate_insecure/4]).
 
 %%%===================================================================
 %%% API
@@ -31,12 +31,8 @@
 truncate(UserCtx, FileCtx, Size) ->
     check_permissions:execute(
         [traverse_ancestors, ?write_object],
-        [UserCtx, FileCtx, Size],
-        fun truncate_insecure/3).
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
+        [UserCtx, FileCtx, Size, true],
+        fun truncate_insecure/4).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -45,9 +41,10 @@ truncate(UserCtx, FileCtx, Size) ->
 %% changed by write events.
 %% @end
 %%--------------------------------------------------------------------
--spec truncate_insecure(user_ctx:ctx(), file_ctx:ctx(), Size :: non_neg_integer()) ->
+-spec truncate_insecure(user_ctx:ctx(), file_ctx:ctx(),
+    Size :: non_neg_integer(), UpdateTimes :: boolean()) ->
     fslogic_worker:fuse_response().
-truncate_insecure(UserCtx, FileCtx, Size) ->
+truncate_insecure(UserCtx, FileCtx, Size, UpdateTimes) ->
     FileCtx2 = update_quota(FileCtx, Size),
     SessId = user_ctx:get_session_id(UserCtx),
     {SFMHandle, FileCtx3} = storage_file_manager:new_handle(SessId, FileCtx2),
@@ -58,8 +55,17 @@ truncate_insecure(UserCtx, FileCtx, Size) ->
         {error, ?ENOENT} ->
             ok
     end,
-    fslogic_times:update_mtime_ctime(FileCtx3),
+    case UpdateTimes of
+        true ->
+            fslogic_times:update_mtime_ctime(FileCtx3);
+        false ->
+            ok
+    end,
     #fuse_response{status = #status{code = ?OK}}.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @private

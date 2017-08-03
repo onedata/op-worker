@@ -22,7 +22,7 @@
 -export([mv/3, cp/3, get_file_path/2, rm_recursive/2]).
 %% Functions operating on files
 -export([create/3, create/4, open/3, write/3, read/3, truncate/3, unlink/2, fsync/1,
-    release/1, get_file_distribution/2, replicate_file/3]).
+    release/1, get_file_distribution/2, replicate_file/3, invalidate_file_replica/4]).
 %% Functions concerning file permissions
 -export([set_perms/3, check_perms/3, set_acl/3, get_acl/2, remove_acl/2]).
 %% Functions concerning file attributes
@@ -246,6 +246,18 @@ get_file_distribution(Auth, FileKey) ->
     ok | error_reply().
 replicate_file(Auth, FileKey, ProviderId) ->
     logical_file_manager:replicate_file(Auth, FileKey, ProviderId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Invalidates file replica on given provider, migrates unique data to provider
+%% given as MigrateProviderId
+%% @end
+%%--------------------------------------------------------------------
+-spec invalidate_file_replica(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path(),
+    ProviderId :: oneprovider:id(), MigrationProviderId :: undefined | oneprovider:id()) ->
+    ok | error_reply().
+invalidate_file_replica(Auth, FileKey, ProviderId, MigrationProviderId) ->
+    logical_file_manager:invalidate_file_replica(Auth, FileKey, ProviderId, MigrationProviderId).
 
 %%--------------------------------------------------------------------
 %% @doc Changes the permissions of a file.

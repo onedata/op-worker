@@ -18,7 +18,8 @@
 
 %% API
 %% Functions operating on directories or files
--export([unlink/3, rm/2, mv/3, cp/3, get_parent/2, get_file_path/2, replicate_file/3]).
+-export([unlink/3, rm/2, mv/3, cp/3, get_parent/2, get_file_path/2,
+    replicate_file/3, invalidate_file_replica/4]).
 %% Functions operating on files
 -export([create/2, create/3, create/4, open/3, fsync/1, fsync/3, write/3,
     write_without_events/3, read/3, read_without_events/3, silent_read/3,
@@ -132,6 +133,24 @@ replicate_file(SessId, FileKey, ProviderId) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
         #replicate_file{provider_id = ProviderId},
+        fun(_) -> ok end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Invalidates file replica on given provider, migrates unique data to provider
+%% given as MigrateProviderId
+%% @end
+%%--------------------------------------------------------------------
+-spec invalidate_file_replica(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
+    ProviderId :: oneprovider:id(), MigrationProviderId :: undefined | oneprovider:id()) ->
+    ok | logical_file_manager:error_reply().
+invalidate_file_replica(SessId, FileKey, ProviderId, MigrationProviderId) ->
+    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
+    remote_utils:call_fslogic(SessId, provider_request, FileGuid,
+        #invalidate_file_replica{
+            provider_id = ProviderId,
+            migration_provider_id = MigrationProviderId
+        },
         fun(_) -> ok end).
 
 %%--------------------------------------------------------------------

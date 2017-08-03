@@ -15,6 +15,7 @@
 -include("modules/dbsync/common.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("modules/storage_file_manager/helpers/helpers.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -44,7 +45,10 @@
     remote_change_of_blocks_should_notify_clients/1,
     remote_irrelevant_change_should_not_notify_clients/1,
     conflicting_remote_changes_should_be_reconciled/1,
-    rtransfer_config_should_work/1
+    rtransfer_config_should_work/1,
+    replica_invalidate_should_migrate_unique_data/1,
+    replica_invalidate_should_truncate_storage_file_to_zero_size/1,
+    dir_replica_invalidate_should_invalidate_all_children/1
 ]).
 
 all() ->
@@ -65,7 +69,10 @@ all() ->
         remote_change_of_blocks_should_notify_clients,
         remote_irrelevant_change_should_not_notify_clients,
         conflicting_remote_changes_should_be_reconciled,
-        rtransfer_config_should_work
+        rtransfer_config_should_work,
+        replica_invalidate_should_migrate_unique_data,
+        replica_invalidate_should_truncate_storage_file_to_zero_size,
+        dir_replica_invalidate_should_invalidate_all_children
     ]).
 
 
@@ -1117,6 +1124,261 @@ rtransfer_config_should_work(Config) ->
             ok = Close(ReadHandle2)
         end, []
     ])).
+
+replica_invalidate_should_migrate_unique_data(Config) ->
+    [W1 | _] = Workers = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
+    [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    LocalProviderId = rpc:call(W1, oneprovider, get_provider_id, []),
+    ExternalProviderId = <<"external_provider_id">>,
+    ExternalFileId = <<"external_file_id">>,
+
+    % create test file
+    {ok, FileGuid} =
+        lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>, 8#777),
+    {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, write),
+    {ok, 10} = lfm_proxy:write(W1, Handle, 0, <<"0123456789">>),
+    ok = lfm_proxy:close(W1, Handle),
+
+    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+
+    % attach external location
+    ExternalBlocks = [],
+    RemoteLocationId = file_location:id(FileUuid, ExternalProviderId),
+    RemoteLocation = #document{
+        key = RemoteLocationId,
+        value = #file_location{
+            size = 10,
+            space_id = SpaceId,
+            storage_id = <<"external_storage_id">>,
+            provider_id = ExternalProviderId,
+            blocks = ExternalBlocks,
+            file_id = ExternalFileId,
+            uuid = FileUuid,
+            version_vector = #{}
+        }
+    },
+    ?assertMatch(
+        {ok, _},
+        rpc:call(W1, file_location, create, [RemoteLocation])
+    ),
+
+    % mock spaces
+    test_utils:mock_new(Workers, od_space, [passthrough]),
+    test_utils:mock_expect(Workers, od_space, get,
+        fun(Id) when Id =:= SpaceId ->
+            case meck:passthrough([Id]) of
+                {ok, Doc = #document{value = Space}} ->
+                    {ok, Doc#document{
+                        value = Space#od_space{
+                            providers = [LocalProviderId, ExternalProviderId],
+                            providers_supports = [
+                                {LocalProviderId, 999999999},
+                                {ExternalProviderId, 999999999}
+                            ]
+                        }
+                    }};
+                Error ->
+                    Error
+            end;
+            (OtherId) ->
+                meck:passthrough([OtherId])
+        end
+    ),
+    test_utils:mock_new(Workers, logical_file_manager, [passthrough]),
+    test_utils:mock_expect(Workers, logical_file_manager, replicate_file,
+        fun(_SessId, _FileKey, _ProviderId) -> ok end),
+
+    % when
+    ok = lfm_proxy:invalidate_file_replica(W1, SessionId, {guid, FileGuid}, LocalProviderId, ExternalProviderId),
+    ok = lfm_proxy:invalidate_file_replica(W1, SessionId, {guid, FileGuid}, LocalProviderId, undefined),
+
+    % then
+    test_utils:mock_assert_num_calls(W1, logical_file_manager, replicate_file, [SessionId, {guid, FileGuid}, ExternalProviderId], 2),
+    test_utils:mock_validate_and_unload(Workers, [od_space, logical_file_manager]).
+
+replica_invalidate_should_truncate_storage_file_to_zero_size(Config) ->
+    [W1 | _] = Workers = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
+    [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    LocalProviderId = rpc:call(W1, oneprovider, get_provider_id, []),
+    ExternalProviderId = <<"external_provider_id">>,
+    ExternalFileId = <<"external_file_id">>,
+
+    % create test file
+    {ok, FileGuid} =
+        lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>, 8#777),
+    {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, write),
+    {ok, 10} = lfm_proxy:write(W1, Handle, 0, <<"0123456789">>),
+    ok = lfm_proxy:close(W1, Handle),
+    FileCtx = file_ctx:new_by_guid(FileGuid),
+    {SfmHandle, _} = rpc:call(W1, storage_file_manager, new_handle, [SessionId, FileCtx]),
+    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+
+    % attach external location
+    ExternalBlocks = [#file_block{offset = 0, size = 10}],
+    RemoteLocationId = file_location:id(FileUuid, ExternalProviderId),
+    RemoteLocation = #document{
+        key = RemoteLocationId,
+        value = #file_location{
+            size = 10,
+            space_id = SpaceId,
+            storage_id = <<"external_storage_id">>,
+            provider_id = ExternalProviderId,
+            blocks = ExternalBlocks,
+            file_id = ExternalFileId,
+            uuid = FileUuid,
+            version_vector = #{}
+        }
+    },
+    ?assertMatch(
+        {ok, _},
+        rpc:call(W1, file_location, create, [RemoteLocation])
+    ),
+
+    % mock spaces
+    test_utils:mock_new(Workers, od_space, [passthrough]),
+    test_utils:mock_expect(Workers, od_space, get,
+        fun(Id) when Id =:= SpaceId ->
+            case meck:passthrough([Id]) of
+                {ok, Doc = #document{value = Space}} ->
+                    {ok, Doc#document{
+                        value = Space#od_space{
+                            providers = [LocalProviderId, ExternalProviderId],
+                            providers_supports = [
+                                {LocalProviderId, 999999999},
+                                {ExternalProviderId, 999999999}
+                            ]
+                        }
+                    }};
+                Error ->
+                    Error
+            end;
+            (OtherId) ->
+                meck:passthrough([OtherId])
+        end
+    ),
+    test_utils:mock_new(Workers, logical_file_manager, [passthrough]),
+    test_utils:mock_expect(Workers, logical_file_manager, replicate_file,
+        fun(_SessId, _FileKey, _ProviderId) -> ok end),
+
+    % when
+    ?assertMatch({ok, #statbuf{st_size = 10}}, rpc:call(W1, storage_file_manager, stat, [SfmHandle])),
+    ok = lfm_proxy:invalidate_file_replica(W1, SessionId, {guid, FileGuid}, LocalProviderId, ExternalProviderId),
+
+    % then
+    ?assertMatch(
+        {#document{value = #file_location{
+            size = 10,
+            blocks = []
+        }}, _},
+        rpc:call(W1, file_ctx, get_local_file_location_doc, [FileCtx])
+    ),
+    ?assertMatch({ok, #statbuf{st_size = 0}}, rpc:call(W1, storage_file_manager, stat, [SfmHandle])),
+    test_utils:mock_validate_and_unload(W1, [od_space, logical_file_manager]).
+
+dir_replica_invalidate_should_invalidate_all_children(Config) ->
+    [W1 | _] = Workers = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
+    [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    LocalProviderId = rpc:call(W1, oneprovider, get_provider_id, []),
+    ExternalProviderId = <<"external_provider_id">>,
+    ExternalFileId = <<"external_file_id">>,
+
+    % create test files
+    {ok, DirGuid} = lfm_proxy:mkdir(W1, SessionId, <<SpaceName/binary, "/dir">>),
+
+    {ok, FileGuid1} = lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/dir/file1">>, 8#777),
+    {ok, Handle1} = lfm_proxy:open(W1, SessionId, {guid, FileGuid1}, write),
+    {ok, 10} = lfm_proxy:write(W1, Handle1, 0, <<"0123456789">>),
+    ok = lfm_proxy:close(W1, Handle1),
+
+    {ok, _Dir2Guid} = lfm_proxy:mkdir(W1, SessionId, <<SpaceName/binary, "/dir/dir2">>),
+
+    {ok, FileGuid2} = lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/dir/dir2/file2">>, 8#777),
+    {ok, Handle2} = lfm_proxy:open(W1, SessionId, {guid, FileGuid2}, write),
+    {ok, 10} = lfm_proxy:write(W1, Handle2, 0, <<"0123456789">>),
+    ok = lfm_proxy:close(W1, Handle2),
+
+    FileCtx1 = file_ctx:new_by_guid(FileGuid1),
+    FileCtx2 = file_ctx:new_by_guid(FileGuid2),
+    {SfmHandle1, _} = rpc:call(W1, storage_file_manager, new_handle, [SessionId, FileCtx1]),
+    {SfmHandle2, _} = rpc:call(W1, storage_file_manager, new_handle, [SessionId, FileCtx2]),
+    FileUuid1 = fslogic_uuid:guid_to_uuid(FileGuid1),
+    FileUuid2 = fslogic_uuid:guid_to_uuid(FileGuid2),
+
+    % attach external location
+    ExternalBlocks = [#file_block{offset = 0, size = 10}],
+    RemoteLocation1 = #document{
+        key = file_location:id(FileUuid1, ExternalProviderId),
+        value = #file_location{
+            size = 10,
+            space_id = SpaceId,
+            storage_id = <<"external_storage_id">>,
+            provider_id = ExternalProviderId,
+            blocks = ExternalBlocks,
+            file_id = ExternalFileId,
+            uuid = FileUuid1,
+            version_vector = #{}
+        }
+    },
+    RemoteLocation2 = #document{
+        key = file_location:id(FileUuid2, ExternalProviderId),
+        value = #file_location{
+            size = 10,
+            space_id = SpaceId,
+            storage_id = <<"external_storage_id">>,
+            provider_id = ExternalProviderId,
+            blocks = ExternalBlocks,
+            file_id = ExternalFileId,
+            uuid = FileUuid1,
+            version_vector = #{}
+        }
+    },
+    ?assertMatch(
+        {ok, _},
+        rpc:call(W1, file_location, create, [RemoteLocation1])
+    ),
+    ?assertMatch(
+        {ok, _},
+        rpc:call(W1, file_location, create, [RemoteLocation2])
+    ),
+
+    % mock spaces
+    test_utils:mock_new(Workers, od_space, [passthrough]),
+    test_utils:mock_expect(Workers, od_space, get,
+        fun(Id) when Id =:= SpaceId ->
+            case meck:passthrough([Id]) of
+                {ok, Doc = #document{value = Space}} ->
+                    {ok, Doc#document{
+                        value = Space#od_space{
+                            providers = [LocalProviderId, ExternalProviderId],
+                            providers_supports = [
+                                {LocalProviderId, 999999999},
+                                {ExternalProviderId, 999999999}
+                            ]
+                        }
+                    }};
+                Error ->
+                    Error
+            end;
+            (OtherId) ->
+                meck:passthrough([OtherId])
+        end
+    ),
+    test_utils:mock_new(Workers, logical_file_manager, [passthrough]),
+    test_utils:mock_expect(Workers, logical_file_manager, replicate_file,
+        fun(_SessId, _FileKey, _ProviderId) -> ok end),
+
+    % when
+    ?assertMatch({ok, #statbuf{st_size = 10}}, rpc:call(W1, storage_file_manager, stat, [SfmHandle1])),
+    ?assertMatch({ok, #statbuf{st_size = 10}}, rpc:call(W1, storage_file_manager, stat, [SfmHandle2])),
+    ok = lfm_proxy:invalidate_file_replica(W1, SessionId, {guid, DirGuid}, LocalProviderId, ExternalProviderId),
+
+    % then
+    ?assertMatch({ok, #statbuf{st_size = 0}}, rpc:call(W1, storage_file_manager, stat, [SfmHandle1])),
+    ?assertMatch({ok, #statbuf{st_size = 0}}, rpc:call(W1, storage_file_manager, stat, [SfmHandle2])),
+    test_utils:mock_validate_and_unload(W1, [od_space, logical_file_manager]).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

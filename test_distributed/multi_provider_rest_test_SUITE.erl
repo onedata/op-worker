@@ -37,6 +37,8 @@
     replicate_file_by_id/1,
     replicate_to_missing_provider/1,
     replicate_to_nunsupporting_provider/1,
+    invalidate_file_replica/1,
+    invalidate_dir_replica/1,
     posix_mode_get/1,
     posix_mode_put/1,
     attributes_list/1,
@@ -78,6 +80,8 @@ all() ->
         replicate_file_by_id,
         replicate_to_missing_provider,
         replicate_to_nunsupporting_provider,
+        invalidate_file_replica,
+        invalidate_dir_replica,
         posix_mode_get,
         posix_mode_put,
         attributes_list,
@@ -309,6 +313,109 @@ replicate_to_nunsupporting_provider(Config) ->
         [
             #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0,4]]}
         ], DecodedBody2).
+
+invalidate_file_replica(Config) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    File = <<"/space3/file_invalidate">>,
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
+    {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
+    lfm_proxy:write(WorkerP1, Handle, 0, <<"test">>),
+    lfm_proxy:fsync(WorkerP1, Handle),
+
+    % when
+    timer:sleep(timer:seconds(20)), % for hooks todo VFS-3462
+    {ok, 200, _, Body0} = do_request(WorkerP1, <<"replicas/space3/file?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
+    DecodedBody0 = json_utils:decode_map(Body0),
+    #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody0),
+    ExpectedTransferStatus = erlang:iolist_to_binary([
+        <<"{\"targetProviderId\":\"">>, domain(WorkerP2),
+        <<"\",\"status\":\"completed\",\"path\":\"/space3/file\"}">>
+    ]),
+    ?assertMatch({ok, 200, _, ExpectedTransferStatus},
+        do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []), 5),
+    {ok, 200, _, Body} = do_request(WorkerP2, <<"replicas/space3/file">>, get, [user_1_token_header(Config)], []),
+    DecodedBody = json_utils:decode_map(Body),
+    ?assertEqual(
+        lists:sort([
+            #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0,4]]},
+            #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0,4]]}
+        ]), lists:sort(DecodedBody)),
+
+    % then
+    {ok, 204, _, _} = do_request(WorkerP1, <<"replicas/space3/file?provider_id=", (domain(WorkerP2))/binary>>, delete, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body3} = do_request(WorkerP2, <<"replicas/space3/file">>, get, [user_1_token_header(Config)], []),
+    DecodedBody3 = json_utils:decode_map(Body3),
+    ?assertEqual(
+        lists:sort([
+            #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0,4]]},
+            #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => []}
+        ]), lists:sort(DecodedBody3)).
+
+invalidate_dir_replica(Config) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    Dir1 = <<"/space3/dir1_invalidate">>,
+    Dir2 = <<"/space3/dir1_invalidate/dir2">>,
+    File1 = <<"/space3/dir1_invalidate/file1">>,
+    File2 = <<"/space3/dir1_invalidate/file2">>,
+    File3 = <<"/space3/dir1_invalidate/dir2/file3">>,
+    {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, Dir1),
+    {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, Dir2),
+    {ok, File1Guid} = lfm_proxy:create(WorkerP1, SessionId, File1, 8#700),
+    {ok, Handle1} = lfm_proxy:open(WorkerP1, SessionId, {guid, File1Guid}, write),
+    lfm_proxy:write(WorkerP1, Handle1, 0, <<"test">>),
+    lfm_proxy:fsync(WorkerP1, Handle1),
+    {ok, File2Guid} = lfm_proxy:create(WorkerP1, SessionId, File2, 8#700),
+    {ok, Handle2} = lfm_proxy:open(WorkerP1, SessionId, {guid, File2Guid}, write),
+    lfm_proxy:write(WorkerP1, Handle2, 0, <<"test">>),
+    lfm_proxy:fsync(WorkerP1, Handle2),
+    {ok, File3Guid} = lfm_proxy:create(WorkerP1, SessionId, File3, 8#700),
+    {ok, Handle3} = lfm_proxy:open(WorkerP1, SessionId, {guid, File3Guid}, write),
+    lfm_proxy:write(WorkerP1, Handle3, 0, <<"test">>),
+    lfm_proxy:fsync(WorkerP1, Handle3),
+
+    % when
+    timer:sleep(timer:seconds(20)), % for hooks todo  VFS-3462
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"replicas/space3/dir1_rd?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
+    DecodedBody = json_utils:decode_map(Body),
+    #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
+    ExpectedTransferStatus = erlang:iolist_to_binary([
+        <<"{\"targetProviderId\":\"">>, domain(WorkerP2),
+        <<"\",\"status\":\"completed\",\"path\":\"/space3/dir1_rd\"}">>
+    ]),
+    ?assertMatch({ok, 200, _, ExpectedTransferStatus},
+        do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []), 5),
+    timer:sleep(timer:seconds(20)), % for hooks todo  VFS-3462
+    {ok, 200, _, Body1} = do_request(WorkerP2, <<"replicas/space3/dir1_rd/file1">>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body2} = do_request(WorkerP2, <<"replicas/space3/dir1_rd/file2">>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body3} = do_request(WorkerP2, <<"replicas/space3/dir1_rd/dir2/file3">>, get, [user_1_token_header(Config)], []),
+    DecodedBody1 = json_utils:decode_map(Body1),
+    DecodedBody2 = json_utils:decode_map(Body2),
+    DecodedBody3 = json_utils:decode_map(Body3),
+    Distribution = lists:sort([
+        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0,4]]},
+        #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0,4]]}
+    ]),
+    ?assertEqual(Distribution, lists:sort(DecodedBody1)),
+    ?assertEqual(Distribution, lists:sort(DecodedBody2)),
+    ?assertEqual(Distribution, lists:sort(DecodedBody3)),
+    {ok, 204, _, _} = do_request(WorkerP1, <<"replicas/space3/dir1_rd?provider_id=", (domain(WorkerP2))/binary>>, delete, [user_1_token_header(Config)], []),
+
+    %then
+    {ok, 200, _, NewBody1} = do_request(WorkerP2, <<"replicas/space3/dir1_rd/file1">>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, NewBody2} = do_request(WorkerP2, <<"replicas/space3/dir1_rd/file2">>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, NewBody3} = do_request(WorkerP2, <<"replicas/space3/dir1_rd/dir2/file3">>, get, [user_1_token_header(Config)], []),
+    DecodedNewBody1 = json_utils:decode_map(NewBody1),
+    DecodedNewBody2 = json_utils:decode_map(NewBody2),
+    DecodedNewBody3 = json_utils:decode_map(NewBody3),
+    Distribution2 = lists:sort([
+        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0,4]]},
+        #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => []}
+    ]),
+    ?assertEqual(Distribution2, lists:sort(DecodedNewBody1)),
+    ?assertEqual(Distribution2, lists:sort(DecodedNewBody2)),
+    ?assertEqual(Distribution2, lists:sort(DecodedNewBody3)).
 
 posix_mode_get(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),

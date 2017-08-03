@@ -336,6 +336,10 @@ handle_provider_request(UserCtx, #get_file_distribution{}, FileCtx) ->
     sync_req:get_file_distribution(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #replicate_file{block = Block}, FileCtx) ->
     sync_req:replicate_file(UserCtx, FileCtx, Block);
+handle_provider_request(UserCtx, #invalidate_file_replica{
+    migration_provider_id = MigrationProviderId
+}, FileCtx) ->
+    sync_req:invalidate_file_replica(UserCtx, FileCtx, MigrationProviderId);
 handle_provider_request(UserCtx, #get_parent{}, FileCtx) ->
     guid_req:get_parent(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #get_file_path{}, FileCtx) ->

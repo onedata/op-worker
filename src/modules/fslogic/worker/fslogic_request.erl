@@ -69,6 +69,10 @@ get_target_providers(_UserCtx, _File, #provider_request{provider_request = #repl
     provider_id = ProviderId
 }}) ->
     [ProviderId];
+get_target_providers(_UserCtx, _File, #provider_request{provider_request = #invalidate_file_replica{
+    provider_id = ProviderId
+}}) ->
+    [ProviderId];
 get_target_providers(UserCtx, File, _Req) ->
     get_target_providers_for_file(UserCtx, File).
 
