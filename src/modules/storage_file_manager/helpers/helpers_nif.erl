@@ -28,8 +28,9 @@
 -export([init/0]).
 -export([get_handle/2]).
 -export([getattr/2, access/3, mknod/5, mkdir/3, unlink/2, rmdir/2, symlink/3,
-    rename/3, link/3, chmod/3, chown/4, truncate/3, open/3, read/3, write/3,
-    release/1, flush/1, fsync/2, readdir/4]).
+    rename/3, link/3, chmod/3, chown/4, truncate/3, setxattr/6, getxattr/3,
+    removexattr/3, listxattr/2, open/3, read/3, write/3, release/1, flush/1,
+    fsync/2, readdir/4]).
 
 %%%===================================================================
 %%% API
@@ -123,6 +124,31 @@ chown(_Handle, _FileId, _Uid, _Gid) ->
 -spec truncate(helper_handle(), helpers:file_id(), Size :: non_neg_integer()) ->
     {ok, response_ref()} | {error, Reason :: term()}.
 truncate(_Handle, _FileId, _Size) ->
+    erlang:nif_error(helpers_nif_not_loaded).
+
+
+-spec setxattr(helper_handle(), helpers:file_id(), Name :: binary(),
+    Value :: binary(), Create :: boolean(), Replace :: boolean()) ->
+    {ok, response_ref()} | {error, Reason :: term()}.
+setxattr(_Handle, _FileId, _Name, _Value, _Create, _Replace) ->
+    erlang:nif_error(helpers_nif_not_loaded).
+
+
+-spec getxattr(helper_handle(), helpers:file_id(), Name :: binary()) ->
+    {ok, response_ref()} | {error, Reason :: term()}.
+getxattr(_Handle, _FileId, _Name) ->
+    erlang:nif_error(helpers_nif_not_loaded).
+
+
+-spec removexattr(helper_handle(), helpers:file_id(), Name :: binary()) ->
+    {ok, response_ref()} | {error, Reason :: term()}.
+removexattr(_Handle, _FileId, _Name) ->
+    erlang:nif_error(helpers_nif_not_loaded).
+
+
+-spec listxattr(helper_handle(), helpers:file_id()) ->
+    {ok, response_ref()} | {error, Reason :: term()}.
+listxattr(_Handle, _FileId) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 

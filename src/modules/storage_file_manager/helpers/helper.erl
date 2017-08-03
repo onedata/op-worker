@@ -323,6 +323,7 @@ translate_name(<<"DirectIO">>) -> ?POSIX_HELPER_NAME;
 translate_name(<<"ProxyIO">>) -> ?PROXY_HELPER_NAME;
 translate_name(<<"AmazonS3">>) -> ?S3_HELPER_NAME;
 translate_name(<<"Swift">>) -> ?SWIFT_HELPER_NAME;
+translate_name(<<"GlusterFS">>) -> ?GLUSTERFS_HELPER_NAME;
 translate_name(Name) -> Name.
 
 %%--------------------------------------------------------------------

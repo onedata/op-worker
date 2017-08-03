@@ -22,8 +22,9 @@
 %% API
 -export([get_helper_handle/2]).
 -export([getattr/2, access/3, mknod/4, mkdir/3, unlink/2, rmdir/2, symlink/3,
-    rename/3, link/3, chmod/3, chown/4, truncate/3, open/3, read/3, write/3,
-    release/1, flush/1, fsync/2, readdir/4]).
+    rename/3, link/3, chmod/3, chown/4, truncate/3, setxattr/6, getxattr/3,
+    removexattr/3, listxattr/2, open/3, read/3, write/3, release/1, flush/1,
+    fsync/2, readdir/4]).
 
 -record(file_handle, {
     handle :: helpers_nif:file_handle(),
@@ -185,6 +186,47 @@ chown(Handle, FileId, UID, GID) ->
     ok | {error, Reason :: term()}.
 truncate(Handle, FileId, Size) ->
     apply_helper_nif(Handle, truncate, [FileId, Size]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Calls {@link helpers_nif:setxattr/6} function.
+%% @end
+%%--------------------------------------------------------------------
+-spec setxattr(helper_handle(), file_id(), Name :: binary(),
+    Value :: binary(), Create :: boolean(), Replace :: boolean()) ->
+    ok | {error, Reason :: term()}.
+setxattr(Handle, FileId, Name, Value, Create, Replace) ->
+    apply_helper_nif(Handle, setxattr, [FileId, Name, Value, Create, Replace]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Calls {@link helpers_nif:getxattr/3} function.
+%% @end
+%%--------------------------------------------------------------------
+-spec getxattr(helper_handle(), file_id(), Name :: binary()) ->
+    {ok, binary()} | {error, Reason :: term()}.
+getxattr(Handle, FileId, Name) ->
+    apply_helper_nif(Handle, getxattr, [FileId, Name]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Calls {@link helpers_nif:removexattr/3} function.
+%% @end
+%%--------------------------------------------------------------------
+-spec removexattr(helper_handle(), file_id(), Name :: binary()) ->
+    ok | {error, Reason :: term()}.
+removexattr(Handle, FileId, Name) ->
+    apply_helper_nif(Handle, removexattr, [FileId, Name]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Calls {@link helpers_nif:listxattr/2} function.
+%% @end
+%%--------------------------------------------------------------------
+-spec listxattr(helper_handle(), file_id()) ->
+    {ok, [binary()]} | {error, Reason :: term()}.
+listxattr(Handle, FileId) ->
+    apply_helper_nif(Handle, listxattr, [FileId]).
 
 %%--------------------------------------------------------------------
 %% @doc
