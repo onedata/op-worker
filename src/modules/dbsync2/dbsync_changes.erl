@@ -183,7 +183,7 @@ parallel_apply(DocsList, Ref) ->
         spawn(fun() ->
             SlaveAns = lists:foldl(fun
                 (Doc, ok) ->
-                    apply(Doc);
+                    dbsync_changes:apply(Doc);
                 (_, Acc) ->
                     Acc
             end, ok, lists:reverse(DocList)),
