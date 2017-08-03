@@ -56,30 +56,36 @@ record_struct(1) ->
 -spec increment_open(FileCtx :: file_ctx:ctx()) ->
     {ok, id()} | datastore:generic_error().
 increment_open(FileCtx) ->
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    ToCreate = #document{
-        key = FileUuid,
-        value = #file_popularity{
-            file_uuid = FileUuid,
-            space_id = SpaceId,
-            last_open_time = erlang:system_time(seconds),
-            open_count = 1
-        }
-    },
-    case
-        create_or_update(ToCreate, fun(FilePopularity = #file_popularity{
-            open_count = OpenCount
-        }) ->
-            {ok, FilePopularity#file_popularity{
-                last_open_time = erlang:system_time(seconds),
-                open_count = OpenCount + 1
-            }}
-        end)
-    of
-        {ok, _} ->
-            ok;
-        Error -> Error
+    {StorageDoc, _FileCtx2} = file_ctx:get_storage_doc(FileCtx),
+    case StorageDoc#document.value#storage.cleanup_enabled of
+        true ->
+            SpaceId = file_ctx:get_space_id_const(FileCtx),
+            FileUuid = file_ctx:get_uuid_const(FileCtx),
+            ToCreate = #document{
+                key = FileUuid,
+                value = #file_popularity{
+                    file_uuid = FileUuid,
+                    space_id = SpaceId,
+                    last_open_time = erlang:system_time(seconds),
+                    open_count = 1
+                }
+            },
+            case
+                create_or_update(ToCreate, fun(FilePopularity = #file_popularity{
+                    open_count = OpenCount
+                }) ->
+                    {ok, FilePopularity#file_popularity{
+                        last_open_time = erlang:system_time(seconds),
+                        open_count = OpenCount + 1
+                    }}
+                end)
+            of
+                {ok, _} ->
+                    ok;
+                Error -> Error
+            end;
+        false ->
+             ok
     end.
 
 %%--------------------------------------------------------------------

@@ -283,7 +283,8 @@
     name = <<>> :: storage:name(),
     helpers = [] :: [storage:helper()],
     readonly = false :: boolean(),
-    luma_config = undefined :: undefined | luma_config:config()
+    luma_config = undefined :: undefined | luma_config:config(),
+    cleanup_enabled = false :: boolean()
 }).
 
 -record(luma_config, {

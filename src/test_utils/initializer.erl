@@ -357,7 +357,10 @@ setup_storage([Worker | Rest], Config) ->
             list_to_binary(TmpDir),
             #{},
             helper:new_posix_user_ctx(0, 0)
-        )]
+        )],
+        false,
+        undefined,
+        true
     ),
     {ok, StorageId} = rpc:call(Worker, storage, create, [StorageDoc]),
     [{{storage_id, ?GET_DOMAIN(Worker)}, StorageId}, {{storage_dir, ?GET_DOMAIN(Worker)}, TmpDir}] ++
