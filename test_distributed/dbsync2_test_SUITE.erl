@@ -63,7 +63,7 @@ all() ->
 -define(TIMEOUT, timer:seconds(30)).
 -define(ATTEMPTS, 30).
 
--define(call(Worker, ProviderId, Request), worker_proxy:cast(
+-define(call(Worker, ProviderId, Request), worker_proxy:call(
     {dbsync_worker2, Worker},
     {dbsync_message, get_provider_session(ProviderId), Request}
 )).
