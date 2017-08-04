@@ -283,8 +283,7 @@
     name = <<>> :: storage:name(),
     helpers = [] :: [storage:helper()],
     readonly = false :: boolean(),
-    luma_config = undefined :: undefined | luma_config:config(),
-    cleanup_enabled = false :: boolean()
+    luma_config = undefined :: undefined | luma_config:config()
 }).
 
 -record(luma_config, {
@@ -296,7 +295,8 @@
 %% Model that maps space to storage
 -record(space_storage, {
     storage_ids = [] :: [storage:id()],
-    mounted_in_root = [] :: [storage:id()]
+    mounted_in_root = [] :: [storage:id()],
+    cleanup_enabled = false :: boolean()
 }).
 
 -record(helper_handle, {

@@ -18,7 +18,7 @@
 
 %% API
 -export([add/2, add/3]).
--export([get_storage_ids/1, get_mounted_in_root/1]).
+-export([get_storage_ids/1, get_mounted_in_root/1, is_cleanup_enabled/1]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
@@ -228,6 +228,17 @@ get_mounted_in_root(#space_storage{mounted_in_root = StorageIds}) ->
     StorageIds;
 get_mounted_in_root(#document{value = #space_storage{} = Value}) ->
     get_mounted_in_root(Value).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of storage IDs attached to the space that have been mounted in
+%% storage root.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_cleanup_enabled(od_space:id()) -> boolean().
+is_cleanup_enabled(SpaceId) ->
+    {ok, Doc} = get(SpaceId),
+    Doc#document.value#space_storage.cleanup_enabled.
 
 %%%===================================================================
 %%% Internal functions

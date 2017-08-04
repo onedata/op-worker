@@ -357,10 +357,7 @@ setup_storage([Worker | Rest], Config) ->
             list_to_binary(TmpDir),
             #{},
             helper:new_posix_user_ctx(0, 0)
-        )],
-        false,
-        undefined,
-        true
+        )]
     ),
     {ok, StorageId} = rpc:call(Worker, storage, create, [StorageDoc]),
     [{{storage_id, ?GET_DOMAIN(Worker)}, StorageId}, {{storage_dir, ?GET_DOMAIN(Worker)}, TmpDir}] ++
@@ -387,7 +384,10 @@ space_storage_mock(Workers, StorageId) ->
     test_utils:mock_new(Workers, space_storage),
     test_utils:mock_new(Workers, space_strategies),
     test_utils:mock_expect(Workers, space_storage, get, fun(_) ->
-        {ok, #document{value = #space_storage{storage_ids = [StorageId]}}}
+        {ok, #document{value = #space_storage{
+            storage_ids = [StorageId],
+            cleanup_enabled = true
+        }}}
     end),
     test_utils:mock_expect(Workers, space_storage, get_storage_ids,
         fun(_) -> [StorageId] end),

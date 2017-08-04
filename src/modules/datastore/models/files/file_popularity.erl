@@ -56,8 +56,8 @@ record_struct(1) ->
 -spec increment_open(FileCtx :: file_ctx:ctx()) ->
     {ok, id()} | datastore:generic_error().
 increment_open(FileCtx) ->
-    {StorageDoc, _FileCtx2} = file_ctx:get_storage_doc(FileCtx),
-    case StorageDoc#document.value#storage.cleanup_enabled of
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    case space_storage:is_cleanup_enabled(SpaceId) of
         true ->
             SpaceId = file_ctx:get_space_id_const(FileCtx),
             FileUuid = file_ctx:get_uuid_const(FileCtx),
