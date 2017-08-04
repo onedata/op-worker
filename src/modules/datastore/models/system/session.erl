@@ -33,7 +33,7 @@
     get_connections/1, get_connections/2, get_auth/1, remove_connection/2, get_rest_session_id/1,
     all_with_user/0, get_user_id/1, add_open_file/2, remove_open_file/2,
     get_transfers/1, remove_transfer/2, add_transfer/2, add_handle/3, remove_handle/2, get_handle/2,
-    is_special/1, is_root/1, is_guest/1]).
+    is_special/1, is_root/1, is_guest/1, root_session_id/0]).
 
 -type id() :: binary().
 -type model() :: #session{}.
@@ -568,6 +568,15 @@ is_guest(?GUEST_SESS_ID) ->
     true;
 is_guest(_) ->
     false.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns root session id
+%% @end
+%%--------------------------------------------------------------------
+-spec root_session_id() -> id().
+root_session_id() ->
+    ?ROOT_SESS_ID.
 
 %%%===================================================================
 %%% Internal functions
