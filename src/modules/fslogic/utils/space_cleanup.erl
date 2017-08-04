@@ -31,7 +31,7 @@
 initialize(SpaceId) ->
     case space_storage:is_cleanup_enabled(SpaceId) of
         true ->
-            create_popularity_view(SpaceId);
+            file_popularity_view:create_popularity_view(SpaceId);
         false ->
             ok
     end.
@@ -54,33 +54,13 @@ periodic_cleanup() ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Creates view on space files capable of ordering files by their popularity
-%% @end
-%%--------------------------------------------------------------------
--spec create_popularity_view(od_space:id()) -> ok.
-create_popularity_view(SpaceId) ->
-    ok.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
 %% Cleanups unpopular files from space
 %% @end
 %%--------------------------------------------------------------------
 -spec cleanup_space(od_space:id()) -> ok.
 cleanup_space(SpaceId) ->
-    FilesToClean = get_unpopular_files(SpaceId),
+    FilesToClean = file_popularity_view:get_unpopular_files(SpaceId),
     lists:foreach(fun cleanup_replica/1, FilesToClean).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Finds unpopular files in space
-%% @end
-%%--------------------------------------------------------------------
--spec get_unpopular_files(od_space:id()) -> [file_ctx:ctx()].
-get_unpopular_files(SpaceId) ->
-    [].
 
 %%--------------------------------------------------------------------
 %% @private

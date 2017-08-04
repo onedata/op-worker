@@ -61,7 +61,8 @@
     delayed_creation_should_not_prevent_truncate/1,
     new_file_should_not_have_popularity_doc/1,
     new_file_should_have_zero_popularity/1,
-    opening_file_should_increase_file_popularity/1
+    opening_file_should_increase_file_popularity/1,
+    file_popularity_view_should_return_unpopular_files/1
 ]).
 
 -define(TEST_CASES, [
@@ -96,7 +97,8 @@
     delayed_creation_should_not_prevent_truncate,
     new_file_should_not_have_popularity_doc,
     new_file_should_have_zero_popularity,
-    opening_file_should_increase_file_popularity
+    opening_file_should_increase_file_popularity,
+    file_popularity_view_should_return_unpopular_files
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -1082,6 +1084,33 @@ opening_file_should_increase_file_popularity(Config) ->
     ),
     ?assert(TimeBeforeSecondOpen =< Doc2#document.value#file_popularity.last_open_time).
 
+file_popularity_view_should_return_unpopular_files(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+    {ok, PopularFileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/popular_file">>, 8#755),
+    {ok, UnpopularFileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/unpopular_file">>, 8#755),
+    SpaceId = fslogic_uuid:guid_to_space_id(PopularFileGuid),
+    PopularHandle = lfm_proxy:open(W, SessId1, {guid, PopularFileGuid}, read),
+    lfm_proxy:close(W, PopularHandle),
+    UnpopularHandle = lfm_proxy:open(W, SessId1, {guid, UnpopularFileGuid}, read),
+    lfm_proxy:close(W, UnpopularHandle),
+
+    timer:sleep(timer:seconds(10)),
+
+    ?assertEqual(
+        lists:sort([PopularFileGuid, UnpopularFileGuid]),
+        lists:sort(rpc:call(W, file_popularity_view, get_unpopular_files, [SpaceId]))
+    ),
+
+    Handles = [lfm_proxy:open(W, SessId1, {guid, PopularFileGuid}, read) || _ <- lists:seq(0,10)],
+    [lfm_proxy:close(W, Handle) || Handle <- Handles],
+
+    timer:sleep(timer:seconds(10)),
+
+    ?assertEqual(
+        lists:sort([UnpopularFileGuid]),
+        lists:sort(rpc:call(W, file_popularity_view, get_unpopular_files, [SpaceId]))
+    ).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
