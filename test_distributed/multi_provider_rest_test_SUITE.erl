@@ -17,6 +17,7 @@
 -include("http/rest/cdmi/cdmi_capabilities.hrl").
 -include("http/rest/http_status.hrl").
 -include("proto/common/credentials.hrl").
+-include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -39,6 +40,7 @@
     replicate_to_nunsupporting_provider/1,
     invalidate_file_replica/1,
     invalidate_dir_replica/1,
+    periodic_cleanup_should_invalidate_unpopular_files/1,
     posix_mode_get/1,
     posix_mode_put/1,
     attributes_list/1,
@@ -82,6 +84,7 @@ all() ->
         replicate_to_nunsupporting_provider,
         invalidate_file_replica,
         invalidate_dir_replica,
+        periodic_cleanup_should_invalidate_unpopular_files,
         posix_mode_get,
         posix_mode_put,
         attributes_list,
@@ -416,6 +419,88 @@ invalidate_dir_replica(Config) ->
     ?assertEqual(Distribution2, lists:sort(DecodedNewBody1)),
     ?assertEqual(Distribution2, lists:sort(DecodedNewBody2)),
     ?assertEqual(Distribution2, lists:sort(DecodedNewBody3)).
+
+periodic_cleanup_should_invalidate_unpopular_files(Config) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionIdP1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    SessionIdP2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
+    File1 = <<"/space3/file1_popular">>,
+    File2 = <<"/space3/file2_unpopular">>,
+    File3 = <<"/space3/file3_unpopular">>,
+    {ok, File1Guid} = lfm_proxy:create(WorkerP1, SessionIdP1, File1, 8#777),
+    {ok, Handle1} = lfm_proxy:open(WorkerP1, SessionIdP1, {guid, File1Guid}, write),
+    lfm_proxy:write(WorkerP1, Handle1, 0, <<"test">>),
+    lfm_proxy:fsync(WorkerP1, Handle1),
+    {ok, File2Guid} = lfm_proxy:create(WorkerP1, SessionIdP1, File2, 8#777),
+    {ok, Handle2} = lfm_proxy:open(WorkerP1, SessionIdP1, {guid, File2Guid}, write),
+    lfm_proxy:write(WorkerP1, Handle2, 0, <<"test">>),
+    lfm_proxy:fsync(WorkerP1, Handle2),
+    {ok, File3Guid} = lfm_proxy:create(WorkerP1, SessionIdP1, File3, 8#777),
+    {ok, Handle3} = lfm_proxy:open(WorkerP1, SessionIdP1, {guid, File3Guid}, write),
+    lfm_proxy:write(WorkerP1, Handle3, 0, <<"test">>),
+    lfm_proxy:fsync(WorkerP1, Handle3),
+
+    % synchronize files
+    timer:sleep(timer:seconds(10)), % for hooks todo  VFS-3462
+    {ok, ReadHandle1} = lfm_proxy:open(WorkerP2, SessionIdP2, {guid, File1Guid}, read),
+    {ok, <<"test">>} = lfm_proxy:read(WorkerP2, ReadHandle1, 0, 4),
+    {ok, ReadHandle2} = lfm_proxy:open(WorkerP2, SessionIdP2, {guid, File2Guid}, read),
+    {ok, <<"test">>} = lfm_proxy:read(WorkerP2, ReadHandle2, 0, 4),
+    {ok, ReadHandle3} = lfm_proxy:open(WorkerP2, SessionIdP2, {guid, File3Guid}, read),
+    {ok, <<"test">>} = lfm_proxy:read(WorkerP2, ReadHandle3, 0, 4),
+    % open popular file
+    Handles = [lfm_proxy:open(WorkerP2, SessionIdP2, {guid, File1Guid}, read) || _ <- lists:seq(0,10)],
+    [lfm_proxy:close(WorkerP2, Handle) || Handle <- Handles],
+    % trigger cleanup
+    timer:sleep(timer:seconds(10)),
+    rpc:call(WorkerP2, space_cleanup, periodic_cleanup, []),
+
+
+    % then
+    Provider1Id = rpc:call(WorkerP1, oneprovider, get_provider_id, []),
+    Provider2Id = rpc:call(WorkerP2, oneprovider, get_provider_id, []),
+    {ok, File1Blocks} =lfm_proxy:get_file_distribution(WorkerP2, SessionIdP2, {guid, File1Guid}),
+    ?assertEqual(
+        lists:sort([
+            #{
+                <<"providerId">> => Provider1Id,
+                <<"blocks">> => [[0, 4]]
+            },
+            #{
+                <<"providerId">> => Provider2Id,
+                <<"blocks">> => [[0, 4]]
+            }
+        ]),
+        lists:sort(File1Blocks)
+    ),
+    {ok, File2Blocks} =lfm_proxy:get_file_distribution(WorkerP2, SessionIdP2, {guid, File2Guid}),
+    ?assertEqual(
+        lists:sort([
+            #{
+                <<"providerId">> => Provider1Id,
+                <<"blocks">> => [[0, 4]]
+            },
+            #{
+                <<"providerId">> => Provider2Id,
+                <<"blocks">> => []
+            }
+        ]),
+        lists:sort(File2Blocks)
+    ),
+    {ok, File3Blocks} =lfm_proxy:get_file_distribution(WorkerP2, SessionIdP2, {guid, File3Guid}),
+    ?assertEqual(
+        lists:sort([
+            #{
+                <<"providerId">> => Provider1Id,
+                <<"blocks">> => [[0, 4]]
+            },
+            #{
+                <<"providerId">> => Provider2Id,
+                <<"blocks">> => []
+            }
+        ]),
+        lists:sort(File3Blocks)
+    ).
 
 posix_mode_get(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),

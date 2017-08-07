@@ -62,7 +62,7 @@ get_unpopular_files(SpaceId) ->
     {ok, {Rows}} = couchbase_driver:query_view(Ctx, SpaceId, SpaceId, Options),
     lists:map(fun(Row) ->
         {<<"value">>, [FileUuid, SpaceId]} = lists:keyfind(<<"value">>, 1, Row),
-        fslogic_uuid:uuid_to_guid(FileUuid, SpaceId)
+        file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId))
     end, Rows).
 
 %%%===================================================================

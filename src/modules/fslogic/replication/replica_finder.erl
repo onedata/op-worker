@@ -13,10 +13,11 @@
 -author("Tomasz Lichon").
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
+-include("proto/oneclient/common_messages.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 
 %% API
--export([get_blocks_for_sync/2]).
+-export([get_blocks_for_sync/2, get_unique_blocks/1]).
 
 %%%===================================================================
 %%% API
@@ -65,10 +66,36 @@ get_blocks_for_sync(Locations, Blocks) ->
 
     minimize_present_blocks(PresentBlocks, []).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns lists of blocks that are unique in local locations (no other provider has them)
+%% @end
+%%--------------------------------------------------------------------
+-spec get_unique_blocks(file_ctx:ctx()) -> {fslogic_blocks:blocks(), file_ctx:ctx()}.
+get_unique_blocks(FileCtx) ->
+    {LocationDocs, FileCtx2} = file_ctx:get_file_location_docs(FileCtx),
+    LocalProviderId = oneprovider:get_provider_id(),
+    LocalLocations = [Loc || Loc = #document{value = #file_location{provider_id = Id}} <- LocationDocs, Id =:= LocalProviderId],
+    RemoteLocations = LocationDocs -- LocalLocations,
+    LocalBlocksList = get_all_blocks(LocalLocations),
+    RemoteBlocksList = get_all_blocks(RemoteLocations),
+    {fslogic_blocks:invalidate(LocalBlocksList, RemoteBlocksList), FileCtx2}.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns all blocks from given location list
+%% @end
+%%--------------------------------------------------------------------
+-spec get_all_blocks([file_location:doc()]) -> fslogic_blocks:blocks().
+get_all_blocks(LocationList) ->
+    fslogic_blocks:consolidate(lists:sort([Block ||
+        #document{value = #file_location{blocks = Blocks}} <- LocationList,
+        Block <- Blocks
+    ])).
 
 %%--------------------------------------------------------------------
 %% @doc

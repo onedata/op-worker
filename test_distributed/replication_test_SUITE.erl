@@ -1191,6 +1191,9 @@ replica_invalidate_should_migrate_unique_data(Config) ->
 
     % when
     ok = lfm_proxy:invalidate_file_replica(W1, SessionId, {guid, FileGuid}, LocalProviderId, ExternalProviderId),
+    {ok, Handle2} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, write),
+    {ok, 10} = lfm_proxy:write(W1, Handle2, 0, <<"0123456789">>),
+    ok = lfm_proxy:close(W1, Handle2),
     ok = lfm_proxy:invalidate_file_replica(W1, SessionId, {guid, FileGuid}, LocalProviderId, undefined),
 
     % then

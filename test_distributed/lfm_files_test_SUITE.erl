@@ -1098,7 +1098,7 @@ file_popularity_view_should_return_unpopular_files(Config) ->
     timer:sleep(timer:seconds(10)),
 
     ?assertEqual(
-        lists:sort([PopularFileGuid, UnpopularFileGuid]),
+        lists:sort([file_ctx:new_by_guid(PopularFileGuid), file_ctx:new_by_guid(UnpopularFileGuid)]),
         lists:sort(rpc:call(W, file_popularity_view, get_unpopular_files, [SpaceId]))
     ),
 
@@ -1108,7 +1108,7 @@ file_popularity_view_should_return_unpopular_files(Config) ->
     timer:sleep(timer:seconds(10)),
 
     ?assertEqual(
-        lists:sort([UnpopularFileGuid]),
+        lists:sort([file_ctx:new_by_guid(UnpopularFileGuid)]),
         lists:sort(rpc:call(W, file_popularity_view, get_unpopular_files, [SpaceId]))
     ).
 
