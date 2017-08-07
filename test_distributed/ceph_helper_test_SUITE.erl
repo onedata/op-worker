@@ -22,20 +22,26 @@
 %% tests
 -export([write_test/1, multipart_write_test/1,
     truncate_test/1, write_read_test/1, multipart_read_test/1,
-    write_unlink_test/1, write_read_truncate_unlink_test/1]).
+    write_unlink_test/1, write_read_truncate_unlink_test/1,
+    setxattr_test/1, listxattr_test/1, removexattr_test/1]).
 
 %% test_bases
 -export([write_test_base/1, multipart_write_test_base/1,
     truncate_test_base/1, write_read_test_base/1, multipart_read_test_base/1,
     write_unlink_test_base/1, write_read_truncate_unlink_test_base/1]).
 
--define(TEST_CASES, [
+-define(PERF_TEST_CASES, [
     write_test, multipart_write_test, truncate_test,
     write_read_test, multipart_read_test, write_unlink_test,
     write_read_truncate_unlink_test
 ]).
 
-all() -> ?ALL(?TEST_CASES, ?TEST_CASES).
+-define(XATTR_TEST_CASES, [
+    setxattr_test, listxattr_test, removexattr_test]).
+
+-define(TEST_CASES, ?PERF_TEST_CASES ++ ?XATTR_TEST_CASES).
+
+all() -> ?ALL(?TEST_CASES, ?PERF_TEST_CASES).
 
 -define(CEPH_STORAGE_NAME, ceph).
 -define(CEPH_CLUSTER_NAME, <<"ceph">>).
@@ -230,6 +236,45 @@ write_read_truncate_unlink_test_base(Config) ->
         end, lists:seq(1, ?config(op_num, Config))),
         delete_helper(Helper)
     end, ?config(threads_num, Config)).
+
+setxattr_test(Config) ->
+    Helper = new_helper(Config),
+    FileId = random_file_id(),
+    XattrName = str_utils:join_binary([<<"user.">>, random_file_id()]),
+    XattrValue = random_file_id(),
+    {ok, _} = open(Helper, FileId, rdwr),
+    ?assertMatch(ok,
+        call(Helper, setxattr, [FileId, XattrName, XattrValue, false, false])),
+    ?assertMatch({ok, XattrValue}, call(Helper, getxattr, [FileId, XattrName])).
+
+listxattr_test(Config) ->
+    Helper = new_helper(Config),
+    FileId = random_file_id(),
+    {ok, _} = open(Helper, FileId, rdwr),
+    ?assertMatch(ok,
+        call(Helper, setxattr,
+            [FileId, <<"user.XATTR1">>, random_file_id(), false, false])),
+    ?assertMatch(ok,
+        call(Helper, setxattr,
+            [FileId, <<"user.XATTR2">>, random_file_id(), false, false])),
+    ?assertMatch(ok,
+        call(Helper, setxattr,
+            [FileId, <<"user.XATTR3">>, random_file_id(), false, false])),
+    {ok, XattrNames} = call(Helper, listxattr, [FileId]),
+    ?assertEqual(3, length(XattrNames)).
+
+removexattr_test(Config) ->
+    Helper = new_helper(Config),
+    FileId = random_file_id(),
+    XattrName = str_utils:join_binary([<<"user.">>, random_file_id()]),
+    XattrValue = random_file_id(),
+    {ok, _} = open(Helper, FileId, rdwr),
+    ?assertMatch(ok,
+        call(Helper, setxattr, [FileId, XattrName, XattrValue, false, false])),
+    {ok, XattrNames} = call(Helper, listxattr, [FileId]),
+    ?assertEqual(1, length(XattrNames)),
+    ?assertMatch(ok, call(Helper, removexattr, [FileId, XattrName])),
+    ?assertMatch({ok, []}, call(Helper, listxattr, [FileId])).
 
 
 %%%===================================================================

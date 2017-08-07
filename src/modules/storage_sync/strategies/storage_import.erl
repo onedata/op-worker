@@ -80,11 +80,11 @@ available_strategies() ->
     space_strategy:job_data()) -> [space_strategy:job()].
 strategy_init_jobs(no_import, _, _) ->
     [];
-strategy_init_jobs(_, _, #{import_finish_time := ImportFinishTime})
-    when is_integer(ImportFinishTime) -> [];
+strategy_init_jobs(_, _, #{import_start_time := ImportStartTime})
+    when is_integer(ImportStartTime) -> [];
 strategy_init_jobs(simple_scan, Args = #{max_depth := MaxDepth},
     Data = #{
-        import_finish_time := undefined,
+        import_start_time := undefined,
         space_id := SpaceId,
         storage_id := StorageId
 }) ->

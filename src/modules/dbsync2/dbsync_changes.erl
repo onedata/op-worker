@@ -17,10 +17,10 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_common_internal.hrl").
 
 %% API
--export([apply_batch/1, apply/1]).
+-export([apply_batch/2, apply/1]).
 
-%% Time to wait for slave process
--define(SLAVE_TIMEOUT, 30000).
+%% Time to wait for worker process
+-define(WORKER_TIMEOUT, 90000).
 
 %%%===================================================================
 %%% API
@@ -31,12 +31,19 @@
 %% Applies remote changes.
 %% @end
 %%--------------------------------------------------------------------
--spec apply_batch([datastore:doc()]) -> ok | timeout | {error, datastore:seq(), term()}.
-apply_batch(Docs) ->
-    DocsGroups = group_changes(Docs),
-    DocsList = maps:to_list(DocsGroups),
-    start_slaves(DocsList),
-    gather_answers(DocsList).
+-spec apply_batch([datastore:doc()], {couchbase_changes:since(),
+    couchbase_changes:until()}) -> ok.
+apply_batch(Docs, BatchRange) ->
+    Master = self(),
+    spawn_link(fun() ->
+        DocsGroups = group_changes(Docs),
+        DocsList = maps:to_list(DocsGroups),
+        Ref = make_ref(),
+        parallel_apply(DocsList, Ref),
+        Ans = gather_answers(DocsList, Ref),
+        Master ! {batch_applied, BatchRange, Ans}
+    end),
+    ok.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -165,54 +172,57 @@ group_changes(Docs) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Starts one slave for each documents' group.
+%% Starts one worker for each documents' group.
 %% @end
 %%--------------------------------------------------------------------
--spec start_slaves([{datastore:ext_key(), [datastore:doc()]}]) -> ok.
-start_slaves(DocsList) ->
+-spec parallel_apply([{datastore:ext_key(),
+    [datastore:doc()]}], reference()) -> ok.
+parallel_apply(DocsList, Ref) ->
     Master = self(),
     lists:foreach(fun({_, DocList}) ->
         spawn(fun() ->
             SlaveAns = lists:foldl(fun
                 (Doc, ok) ->
-                    apply(Doc);
+                    dbsync_changes:apply(Doc);
                 (_, Acc) ->
                     Acc
             end, ok, lists:reverse(DocList)),
-            Master ! {changes_slave_ans, SlaveAns}
+            Master ! {changes_worker_ans, Ref, SlaveAns}
         end)
     end, DocsList).
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Gather answers from slaves.
+%% Gather answers from workers.
 %% @end
 %%--------------------------------------------------------------------
--spec gather_answers(list()) -> ok | timeout | {error, datastore:seq(), term()}.
-gather_answers(SlavesList) ->
-    gather_answers(length(SlavesList), ok).
+-spec gather_answers(list(), reference()) ->
+    ok | timeout | {error, datastore:seq(), term()}.
+gather_answers(SlavesList, Ref) ->
+    gather_answers(length(SlavesList), Ref, ok).
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Gather appropriate number of slaves' answers.
+%% Gather appropriate number of workers' answers.
 %% @end
 %%--------------------------------------------------------------------
--spec gather_answers(non_neg_integer(), ok | {error, datastore:seq(), term()}) ->
+-spec gather_answers(non_neg_integer(), reference(),
+    ok | {error, datastore:seq(), term()}) ->
     ok | timeout | {error, datastore:seq(), term()}.
-gather_answers(0, TmpAns) ->
-    TmpAns;
-gather_answers(N, TmpAns) ->
+gather_answers(0, _Ref, Ans) ->
+    Ans;
+gather_answers(N, Ref, TmpAns) ->
     receive
-        {changes_slave_ans, Ans} ->
+        {changes_worker_ans, Ref, Ans} ->
             Merged = case {Ans, TmpAns} of
                 {ok, _} -> TmpAns;
                 {{error, Seq, _}, {error, Seq2, _}} when Seq < Seq2 -> Ans;
                 {{error, _, _}, {error, _, _}} -> TmpAns;
                 _ -> Ans
             end,
-            gather_answers(N - 1, Merged)
+            gather_answers(N - 1, Ref, Merged)
     after
-        ?SLAVE_TIMEOUT -> timeout
+        ?WORKER_TIMEOUT -> timeout
     end.

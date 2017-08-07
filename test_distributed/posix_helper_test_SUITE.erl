@@ -22,7 +22,8 @@
 -define(call(N, Mod, M, A), rpc:call(N, Mod, M, A)).
 
 -define(dio_root(Config), ?TEMP_DIR).
--define(path(Config, File), list_to_binary(filename:join(?dio_root(Config), str_utils:to_list(File)))).
+-define(path(Config, File),
+    list_to_binary(filename:join(?dio_root(Config), str_utils:to_list(File)))).
 
 -define(CALL_TIMEOUT_MILLIS, timer:minutes(3)).
 
@@ -30,9 +31,11 @@
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([helper_handle_server/1, helper_handle_server/2]).
 -export([
-    getattr_test/1, access_test/1, mknod_test/1, mkdir_test/1, unlink_test/1, rmdir_test/1, symlink_test/1,
-    rename_test/1, chmod_test/1, chown_test/1, truncate_test/1, open_test/1, read_test/1, write_test/1,
-    big_write_test/1, release_test/1, flush_test/1, fsync_test/1
+    getattr_test/1, access_test/1, mknod_test/1, mkdir_test/1, unlink_test/1,
+    rmdir_test/1, symlink_test/1, rename_test/1, chmod_test/1, chown_test/1,
+    truncate_test/1, open_test/1, read_test/1, write_test/1, big_write_test/1,
+    release_test/1, flush_test/1, fsync_test/1, setxattr_test/1,
+    removexattr_test/1, listxattr_test/1
 ]).
 
 all() ->
@@ -40,7 +43,8 @@ all() ->
         getattr_test, access_test, mknod_test, mkdir_test, unlink_test,
         rmdir_test, symlink_test, rename_test, chmod_test, chown_test,
         truncate_test, open_test, read_test, write_test, release_test,
-        flush_test, fsync_test
+        flush_test, fsync_test, setxattr_test, removexattr_test,
+        listxattr_test
     ]).
 
 
@@ -64,10 +68,13 @@ mknod_test(Config) ->
     lists:foreach(fun({ExpectedType, Type}) ->
         File = gen_filename(),
         ?assertMatch(ok, call(Config, mknod, [File, 8#644, Type])),
-        {ok, FileInfo} = ?assertMatch({ok, _}, call(Config, file, read_file_info, [?path(Config, File)])),
+        {ok, FileInfo} =
+            ?assertMatch({ok, _},
+                call(Config, file, read_file_info, [?path(Config, File)])),
         ?assertMatch(ExpectedType, element(3, FileInfo)),
         ?assertMatch(ok, call(Config, file, delete, [?path(Config, File)]))
-    end, [{regular, reg}, {device, chr}, {device, blk}, {other, fifo}, {other, sock}]).
+    end, [{regular, reg}, {device, chr}, {device, blk}, {other, fifo},
+        {other, sock}]).
 
 mkdir_test(Config) ->
     File = gen_filename(),
@@ -120,6 +127,49 @@ truncate_test(Config) ->
 
     {ok, _} = call(Config, file, open, [?path(Config, File), write]),
     ?assertMatch(ok, call(Config, truncate, [File, 10])).
+
+setxattr_test(Config) ->
+    File = gen_filename(),
+    XattrName = str_utils:join_binary([<<"user.">>, random_str()]),
+    XattrValue = random_str(),
+
+    {ok, _} = call(Config, file, open, [?path(Config, File), write]),
+
+    ?assertMatch(ok,
+        call(Config, setxattr, [File, XattrName, XattrValue, false, false])),
+    ?assertMatch({ok, XattrValue},
+        call(Config, getxattr, [File, XattrName])).
+
+listxattr_test(Config) ->
+    File = gen_filename(),
+
+    {ok, _} = call(Config, file, open, [?path(Config, File), write]),
+
+    ?assertMatch(ok,
+        call(Config, setxattr,
+            [File, <<"user.XATTR1">>, random_str(), false, false])),
+    ?assertMatch(ok,
+        call(Config, setxattr,
+            [File, <<"user.XATTR2">>, random_str(), false, false])),
+    ?assertMatch(ok,
+        call(Config, setxattr,
+            [File, <<"user.XATTR3">>, random_str(), false, false])),
+    {ok, XattrNames} = call(Config, listxattr, [File]),
+    ?assertEqual(3, length(XattrNames)).
+
+removexattr_test(Config) ->
+    File = gen_filename(),
+    XattrName = str_utils:join_binary([<<"user.">>, random_str()]),
+    XattrValue = random_str(),
+
+    {ok, _} = call(Config, file, open, [?path(Config, File), write]),
+
+    ?assertMatch(ok,
+        call(Config, setxattr, [File, XattrName, XattrValue, false, false])),
+    {ok, XattrNames} = call(Config, listxattr, [File]),
+    ?assertEqual(1, length(XattrNames)),
+    ?assertMatch(ok, call(Config, removexattr, [File, XattrName])),
+    ?assertMatch({ok, []}, call(Config, listxattr, [File])).
 
 open_test(Config) ->
     File = gen_filename(),
@@ -219,8 +269,12 @@ end_per_testcase(_Case, Config) ->
 %%% Internal functions
 %%%===================================================================
 
+random_str() ->
+    http_utils:url_encode(base64:encode(crypto:strong_rand_bytes(30))).
+
 gen_filename() ->
-    http_utils:url_encode(<<"posix_helper_test_", (base64:encode(crypto:strong_rand_bytes(20)))/binary>>).
+    http_utils:url_encode(<<"posix_helper_test_",
+        (base64:encode(crypto:strong_rand_bytes(20)))/binary>>).
 
 helper_handle_server(Config) ->
     UserCtx = helper:new_posix_user_ctx(0, 0),

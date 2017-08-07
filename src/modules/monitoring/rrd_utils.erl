@@ -96,7 +96,7 @@ update_rrd(MonitoringId, MonitoringState, UpdateTime, UpdateValues) ->
     ),
 
     {ok, Handle} = logical_file_manager:open(?ROOT_SESS_ID, {guid, RRDGuid}, rdwr),
-    {ok, Handle2, RRDFile} = lfm_files:read_without_events(Handle, 0, ?RRD_READ_SIZE),
+    {ok, Handle2, RRDFile} = lfm_files:silent_read(Handle, 0, ?RRD_READ_SIZE),
 
     {ok, TmpPath} = write_rrd_to_file(RRDFile),
     poolboy:transaction(?RRDTOOL_POOL_NAME, fun(Pid) ->

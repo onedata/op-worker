@@ -27,6 +27,7 @@
     get_child_handle/2]).
 -export([stat/1, read/3, write/3, create/2, create/3, open/2, release/1,
     truncate/2, unlink/1, fsync/2, rmdir/1]).
+-export([setxattr/5, getxattr/2, removexattr/2, listxattr/1]).
 -export([open_at_creation/1]).
 
 -type handle() :: #sfm_handle{}.
@@ -63,7 +64,8 @@ new_handle(SessionId, FileCtx) ->
 -spec new_handle(session:id(), od_space:id(), file_meta:uuid(),
     Storage :: datastore:document(), FileId :: helpers:file_id(),
     ShareId :: od_share:id() | undefined) -> handle().
-new_handle(SessionId, SpaceId, FileUuid, #document{key = StorageId} = Storage, FileId, ShareId) ->
+new_handle(SessionId, SpaceId, FileUuid, #document{key = StorageId} = Storage,
+    FileId, ShareId) ->
     FSize = get_size(FileUuid, SpaceId),
     StorageFileId = filename_mapping:to_storage_path(SpaceId, StorageId, FileId),
     #sfm_handle{
@@ -84,7 +86,7 @@ new_handle(SessionId, SpaceId, FileUuid, #document{key = StorageId} = Storage, F
 %% @end
 %%--------------------------------------------------------------------
 -spec open(handle(), OpenFlag :: helpers:open_flag()) ->
-    {ok, handle()} | storage_file_manager:error_reply().
+    {ok, handle()} | error_reply().
 open(SFMHandle, read) ->
     open_for_read(SFMHandle);
 open(SFMHandle, write) ->
@@ -100,8 +102,7 @@ open(SFMHandle, rdwr) ->
 %% Bypasses permissions check to allow to open file at creation.
 %% @end
 %%--------------------------------------------------------------------
--spec open_at_creation(handle()) ->
-    {ok, handle()} | storage_file_manager:error_reply().
+-spec open_at_creation(handle()) -> {ok, handle()} | error_reply().
 open_at_creation(SFMHandle) ->
     open_insecure(SFMHandle#sfm_handle{session_id = ?ROOT_SESS_ID}, rdwr).
 
@@ -110,8 +111,7 @@ open_at_creation(SFMHandle) ->
 %% Closes the file.
 %% @end
 %%--------------------------------------------------------------------
--spec release(handle()) ->
-    ok | storage_file_manager:error_reply().
+-spec release(handle()) -> ok | error_reply().
 release(#sfm_handle{file_handle = FileHandle}) ->
     helpers:release(FileHandle).
 
@@ -120,8 +120,7 @@ release(#sfm_handle{file_handle = FileHandle}) ->
 %% Creates a directory on storage.
 %% @end
 %%--------------------------------------------------------------------
--spec mkdir(handle(), Mode :: non_neg_integer()) ->
-    ok | storage_file_manager:error_reply().
+-spec mkdir(handle(), Mode :: non_neg_integer()) -> ok | error_reply().
 mkdir(Handle, Mode) ->
     mkdir(Handle, Mode, false).
 
@@ -132,7 +131,7 @@ mkdir(Handle, Mode) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec mkdir(handle(), Mode :: non_neg_integer(), Recursive :: boolean()) ->
-    ok | storage_file_manager:error_reply().
+    ok | error_reply().
 mkdir(#sfm_handle{
     storage = Storage,
     file = FileId,
@@ -181,7 +180,7 @@ mkdir(#sfm_handle{
 %% @end
 %%--------------------------------------------------------------------
 -spec mv(FileHandleFrom :: handle(), FileTo :: helpers:file_id()) ->
-    ok | storage_file_manager:error_reply().
+    ok | error_reply().
 mv(#sfm_handle{
     storage = Storage,
     file = FileFrom,
@@ -198,7 +197,7 @@ mv(#sfm_handle{
 %% @end
 %%--------------------------------------------------------------------
 -spec chmod(handle(), NewMode :: file_meta:posix_permissions()) ->
-    ok | storage_file_manager:error_reply().
+    ok | error_reply().
 chmod(#sfm_handle{
     storage = Storage,
     file = FileId,
@@ -214,8 +213,7 @@ chmod(#sfm_handle{
 %% Changes owner of a file on storage.
 %% @end
 %%--------------------------------------------------------------------
--spec chown(FileHandle :: handle(), user_id(), group_id()) ->
-    ok | storage_file_manager:error_reply().
+-spec chown(FileHandle :: handle(), user_id(), group_id()) -> ok | error_reply().
 chown(#sfm_handle{
     storage = Storage,
     file = FileId,
@@ -234,7 +232,7 @@ chown(_, _, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec link(FileHandleFrom :: handle(), FileTo :: helpers:file_id()) ->
-    ok | storage_file_manager:error_reply().
+    ok | error_reply().
 link(#sfm_handle{
     storage = Storage,
     file = FileFrom,
@@ -249,8 +247,7 @@ link(#sfm_handle{
 %% Returns file attributes, reading them from storage.
 %% @end
 %%--------------------------------------------------------------------
--spec stat(FileHandle :: handle()) ->
-    {ok, #statbuf{}} | storage_file_manager:error_reply().
+-spec stat(FileHandle :: handle()) -> {ok, #statbuf{}} | error_reply().
 stat(#sfm_handle{
     storage = Storage,
     file = FileId,
@@ -268,7 +265,7 @@ stat(#sfm_handle{
 %%--------------------------------------------------------------------
 -spec readdir(FileHandle :: handle(), Offset :: non_neg_integer(),
     Count :: non_neg_integer()) ->
-    {ok, [helpers:file_id()]} | storage_file_manager:error_reply().
+    {ok, [helpers:file_id()]} | error_reply().
 readdir(#sfm_handle{
     storage = Storage,
     file = FileId,
@@ -279,14 +276,13 @@ readdir(#sfm_handle{
     helpers:readdir(HelperHandle, FileId, Offset, Count).
 
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns file handle for child of given file.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_child_handle(handle(), helpers:file_id()) -> handle().
-get_child_handle(ParentSFMHandle = #sfm_handle{file=ParentFileId}, ChildName) ->
+get_child_handle(ParentSFMHandle = #sfm_handle{file = ParentFileId}, ChildName) ->
     ParentSFMHandle#sfm_handle{
         file = filename:join([ParentFileId, ChildName])
     }.
@@ -297,8 +293,9 @@ get_child_handle(ParentSFMHandle = #sfm_handle{file=ParentFileId}, ChildName) ->
 %% Writes data to a file on storage. Returns number of written bytes.
 %% @end
 %%--------------------------------------------------------------------
--spec write(FileHandle :: handle(), Offset :: non_neg_integer(), Buffer :: binary()) ->
-    {ok, non_neg_integer()} | storage_file_manager:error_reply().
+-spec write(FileHandle :: handle(), Offset :: non_neg_integer(),
+    Buffer :: binary()) ->
+    {ok, non_neg_integer()} | error_reply().
 write(#sfm_handle{open_flag = undefined}, _, _) ->
     throw(?EPERM);
 write(#sfm_handle{open_flag = read}, _, _) ->
@@ -319,7 +316,7 @@ write(#sfm_handle{
 %%--------------------------------------------------------------------
 -spec read(FileHandle :: handle(), Offset :: non_neg_integer(),
     MaxSize :: non_neg_integer()) ->
-    {ok, binary()} | storage_file_manager:error_reply().
+    {ok, binary()} | error_reply().
 read(#sfm_handle{open_flag = undefined}, _, _) ->
     throw(?EPERM);
 read(#sfm_handle{open_flag = write}, _, _) ->
@@ -332,12 +329,11 @@ read(#sfm_handle{file_handle = FileHandle}, Offset, MaxSize) ->
 %% Creates a new file on storage.
 %% @end
 %%--------------------------------------------------------------------
--spec create(handle(), Mode :: non_neg_integer()) ->
-    ok | storage_file_manager:error_reply().
+-spec create(handle(), Mode :: non_neg_integer()) -> ok | error_reply().
 create(Handle, Mode) ->
     create(Handle, Mode, false).
 -spec create(handle(), Mode :: non_neg_integer(), Recursive :: boolean()) ->
-    ok | storage_file_manager:error_reply().
+    ok | error_reply().
 create(#sfm_handle{
     storage = Storage,
     file = FileId,
@@ -370,8 +366,7 @@ create(#sfm_handle{
 %% Truncates a file on storage.
 %% @end
 %%--------------------------------------------------------------------
--spec truncate(handle(), Size :: integer()) ->
-    ok | storage_file_manager:error_reply().
+-spec truncate(handle(), Size :: integer()) -> ok | error_reply().
 truncate(#sfm_handle{open_flag = undefined}, _) ->
     throw(?EPERM);
 truncate(#sfm_handle{open_flag = read}, _) -> throw(?EPERM);
@@ -384,13 +379,73 @@ truncate(#sfm_handle{
     {ok, HelperHandle} = session:get_helper(SessionId, SpaceId, Storage),
     helpers:truncate(HelperHandle, FileId, Size).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets an extended attribute on a file.
+%% @end
+%%--------------------------------------------------------------------
+-spec setxattr(handle(), Name :: binary(), Value :: binary(),
+    Create :: boolean(), Replace :: boolean()) -> ok | error_reply().
+setxattr(#sfm_handle{
+    storage = Storage,
+    file = FileId,
+    space_id = SpaceId,
+    session_id = SessionId
+}, Name, Value, Create, Replace) ->
+    {ok, HelperHandle} = session:get_helper(SessionId, SpaceId, Storage),
+    helpers:setxattr(HelperHandle, FileId, Name, Value, Create, Replace).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns a value of an extended attribute for a specific file.
+%% @end
+%%--------------------------------------------------------------------
+-spec getxattr(handle(), Name :: binary()) -> {ok, binary()} | error_reply().
+getxattr(#sfm_handle{
+    storage = Storage,
+    file = FileId,
+    space_id = SpaceId,
+    session_id = SessionId
+}, Name) ->
+    {ok, HelperHandle} = session:get_helper(SessionId, SpaceId, Storage),
+    helpers:getxattr(HelperHandle, FileId, Name).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes an extended attribute from a file.
+%% @end
+%%--------------------------------------------------------------------
+-spec removexattr(handle(), Name :: binary()) -> ok | error_reply().
+removexattr(#sfm_handle{
+    storage = Storage,
+    file = FileId,
+    space_id = SpaceId,
+    session_id = SessionId
+}, Name) ->
+    {ok, HelperHandle} = session:get_helper(SessionId, SpaceId, Storage),
+    helpers:removexattr(HelperHandle, FileId, Name).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% List extended attribute names for a specific file.
+%% @end
+%%--------------------------------------------------------------------
+-spec listxattr(handle()) -> {ok, [binary()]} | error_reply().
+listxattr(#sfm_handle{
+    storage = Storage,
+    file = FileId,
+    space_id = SpaceId,
+    session_id = SessionId
+}) ->
+    {ok, HelperHandle} = session:get_helper(SessionId, SpaceId, Storage),
+    helpers:listxattr(HelperHandle, FileId).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Removes a file.
 %% @end
 %%--------------------------------------------------------------------
--spec unlink(handle()) -> ok | storage_file_manager:error_reply().
+-spec unlink(handle()) -> ok | error_reply().
 unlink(#sfm_handle{
     storage = Storage,
     file = FileId,
@@ -405,7 +460,7 @@ unlink(#sfm_handle{
 %% Removes an empty directory.
 %% @end
 %%--------------------------------------------------------------------
--spec rmdir(handle()) -> ok | storage_file_manager:error_reply().
+-spec rmdir(handle()) -> ok | error_reply().
 rmdir(#sfm_handle{
     storage = Storage,
     file = FileId,
@@ -420,7 +475,7 @@ rmdir(#sfm_handle{
 %% Assures that changes made on file are persistent.
 %% @end
 %%--------------------------------------------------------------------
--spec fsync(handle(), boolean()) -> ok | storage_file_manager:error_reply().
+-spec fsync(handle(), boolean()) -> ok | error_reply().
 fsync(#sfm_handle{file_handle = FileHandle}, DataOnly) ->
     helpers:fsync(FileHandle, DataOnly).
 
@@ -434,8 +489,7 @@ fsync(#sfm_handle{file_handle = FileHandle}, DataOnly) ->
 %% Opens file in read mode and checks necessary permissions.
 %% @end
 %%--------------------------------------------------------------------
--spec open_for_read(handle()) ->
-    {ok, handle()} | storage_file_manager:error_reply().
+-spec open_for_read(handle()) -> {ok, handle()} | error_reply().
 open_for_read(SFMHandle) ->
     check_permissions:execute(
         [?read_object],
@@ -449,8 +503,7 @@ open_for_read(SFMHandle) ->
 %% Opens file in write mode and checks necessary permissions.
 %% @end
 %%--------------------------------------------------------------------
--spec open_for_write(handle()) ->
-    {ok, handle()} | storage_file_manager:error_reply().
+-spec open_for_write(handle()) -> {ok, handle()} | error_reply().
 open_for_write(SFMHandle) ->
     check_permissions:execute(
         [?write_object],
@@ -464,8 +517,7 @@ open_for_write(SFMHandle) ->
 %% Opens file in rdwr mode and checks necessary permissions.
 %% @end
 %%--------------------------------------------------------------------
--spec open_for_rdwr(handle()) ->
-    {ok, handle()} | storage_file_manager:error_reply().
+-spec open_for_rdwr(handle()) -> {ok, handle()} | error_reply().
 open_for_rdwr(SFMHandle) ->
     check_permissions:execute(
         [?read_object, ?write_object],
@@ -479,7 +531,7 @@ open_for_rdwr(SFMHandle) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec open_insecure(handle(), OpenFlag :: helpers:open_flag()) ->
-    {ok, handle()} | storage_file_manager:error_reply().
+    {ok, handle()} | error_reply().
 open_insecure(#sfm_handle{
     storage = Storage,
     file = FileId,

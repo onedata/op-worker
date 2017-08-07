@@ -63,7 +63,7 @@ all() ->
 -define(TIMEOUT, timer:seconds(30)).
 -define(ATTEMPTS, 30).
 
--define(call(Worker, ProviderId, Request), worker_proxy:cast(
+-define(call(Worker, ProviderId, Request), worker_proxy:call(
     {dbsync_worker2, Worker},
     {dbsync_message, get_provider_session(ProviderId), Request}
 )).
@@ -415,7 +415,9 @@ init_per_testcase(_Case, Config) ->
         (ProviderId, Msg) -> Self ! {send, ProviderId, Msg}, ok
     end),
     test_utils:mock_expect(Worker, dbsync_changes, apply, fun
-        (Doc) -> Self ! {apply, Doc}
+        (Doc) ->
+            Self ! {apply, Doc},
+            ok
     end),
 
     lists:foreach(fun({Name, Value}) ->
@@ -437,7 +439,7 @@ end_per_testcase(_Case, Config) ->
             exit(Pid, kill)
         end, [dbsync_in_stream, dbsync_out_stream])
     end, ?config(spaces, Config)),
-    test_utils:mock_validate_and_unload(Worker, [
+    test_utils:mock_unload(Worker, [
         oneprovider, dbsync_changes, dbsync_communicator
     ]).
 
