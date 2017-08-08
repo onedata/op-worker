@@ -16,7 +16,7 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([mkdir/4, read_dir/4]).
+-export([mkdir/4, read_dir/4, read_dir_plus/4]).
 
 %%%===================================================================
 %%% API
@@ -47,6 +47,19 @@ read_dir(UserCtx, FileCtx, Offset, Limit) ->
         [traverse_ancestors, ?list_container],
         [UserCtx, FileCtx, Offset, Limit],
         fun read_dir_insecure/4).
+
+%%--------------------------------------------------------------------
+%% @equiv read_dir_plus_insecure/4 with permission checks
+%% @end
+%%--------------------------------------------------------------------
+-spec read_dir_plus(user_ctx:ctx(), file_ctx:ctx(),
+    Offset :: non_neg_integer(), Limit :: non_neg_integer()) ->
+    fslogic_worker:fuse_response().
+read_dir_plus(UserCtx, FileCtx, Offset, Limit) ->
+    check_permissions:execute(
+        [traverse_ancestors, ?list_container],
+        [UserCtx, FileCtx, Offset, Limit],
+        fun read_dir_plus_insecure/4).
 
 %%%===================================================================
 %%% Internal functions
@@ -101,5 +114,45 @@ read_dir_insecure(UserCtx, FileCtx, Offset, Limit) ->
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_children{
             child_links = ChildrenLinks
+        }
+    }.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Lists directory with stats of each file.
+%% Starts with ROffset entity and limits returned list to RCount size.
+%% @end
+%%--------------------------------------------------------------------
+-spec read_dir_plus_insecure(user_ctx:ctx(), file_ctx:ctx(),
+    Offset :: non_neg_integer(), Limit :: non_neg_integer()) ->
+    fslogic_worker:fuse_response().
+read_dir_plus_insecure(UserCtx, FileCtx, Offset, Limit) ->
+    {Children, FileCtx2} = file_ctx:get_file_children(FileCtx, UserCtx, Offset, Limit),
+    ChildrenWithNum = lists:zip(lists:seq(1, length(Children)), Children),
+
+    GetAttrAns = utils:pmap(
+        fun({Num, ChildCtx}) ->
+            try
+                #fuse_response{
+                    status = #status{code = ?OK},
+                    fuse_response = Attrs
+                } = attr_req:get_file_attr_insecure(UserCtx, ChildCtx),
+                {Num, Attrs}
+            catch
+                _:_ ->
+                    % File can be not synchronized with other provider
+                    {Num, error}
+            end
+        end, ChildrenWithNum),
+
+    ChildrenAttrs = lists:filtermap(fun
+        ({_, error}) -> false;
+        ({_, Attrs}) -> {true, Attrs}
+    end, lists:sort(GetAttrAns)),
+
+    fslogic_times:update_atime(FileCtx2),
+    #fuse_response{status = #status{code = ?OK},
+        fuse_response = #file_children_attrs{
+            child_attrs = ChildrenAttrs
         }
     }.

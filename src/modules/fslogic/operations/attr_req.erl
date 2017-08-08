@@ -20,6 +20,8 @@
 %% API
 -export([get_file_attr/2, get_file_attr_insecure/2, get_file_attr_insecure/3,
     get_child_attr/3, chmod/3, update_times/5, chmod_attrs_only_insecure/2]).
+%% For read_dir_plus
+-export([get_file_attr_insecure/2]).
 
 %%%===================================================================
 %%% API
