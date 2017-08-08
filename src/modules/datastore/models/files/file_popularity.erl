@@ -25,10 +25,19 @@
     model_init/0, 'after'/5, before/4]).
 -export([record_struct/1]).
 
--export_type([id/0]).
+-define(HOUR_TIME_WINDOW, 1).
+-define(DAY_TIME_WINDOW, 24).
+-define(MONTH_TIME_WINDOW, 720). % 30*24
+
+-define(HOUR_HISTOGRAM_SIZE, 24).
+-define(DAY_HISTOGRAM_SIZE, 30).
+-define(MONTH_HISTOGRAM_SIZE, 12). % 30*24
 
 -type id() :: file_meta:uuid().
--type doc() :: #document{value :: #file_popularity{}}.
+-type file_popularity() :: #file_popularity{}.
+-type doc() :: #document{value :: file_popularity()}.
+
+-export_type([id/0]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -40,8 +49,14 @@ record_struct(1) ->
     {record, [
         {file_uuid, string},
         {space_id, string},
-        {open_count, integer},
-        {last_open_time, integer}
+        {total_open_count, integer},
+        {last_open, integer},
+        {hourly_histogram, [integer]},
+        {daily_histogram, [integer]},
+        {monthly_histogram, [integer]},
+        {hourly_moving_average, integer},
+        {daily_moving_average, integer},
+        {monthly_moving_average, integer}
     ]}.
 
 %%%===================================================================
@@ -53,31 +68,21 @@ record_struct(1) ->
 %% Updates file's popularity with information about open.
 %% @end
 %%--------------------------------------------------------------------
--spec increment_open(FileCtx :: file_ctx:ctx()) ->
-    {ok, id()} | datastore:generic_error().
+-spec increment_open(FileCtx :: file_ctx:ctx()) -> ok | datastore:generic_error().
 increment_open(FileCtx) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     case space_storage:is_cleanup_enabled(SpaceId) of
         true ->
             SpaceId = file_ctx:get_space_id_const(FileCtx),
             FileUuid = file_ctx:get_uuid_const(FileCtx),
+            DefaultFilePopularity = empty_file_popularity(FileUuid, SpaceId),
             ToCreate = #document{
                 key = FileUuid,
-                value = #file_popularity{
-                    file_uuid = FileUuid,
-                    space_id = SpaceId,
-                    last_open_time = erlang:system_time(seconds),
-                    open_count = 1
-                }
+                value = increase_popularity(DefaultFilePopularity)
             },
             case
-                create_or_update(ToCreate, fun(FilePopularity = #file_popularity{
-                    open_count = OpenCount
-                }) ->
-                    {ok, FilePopularity#file_popularity{
-                        last_open_time = erlang:system_time(seconds),
-                        open_count = OpenCount + 1
-                    }}
+                create_or_update(ToCreate, fun(FilePopularity) ->
+                    {ok, increase_popularity(FilePopularity)}
                 end)
             of
                 {ok, _} ->
@@ -102,12 +107,7 @@ get_or_default(FileUuid, SpaceId) ->
         {error, {not_found, _}} ->
             {ok, #document{
                 key = FileUuid,
-                value = #file_popularity{
-                    file_uuid = FileUuid,
-                    space_id = SpaceId,
-                    open_count = 0,
-                    last_open_time = 0
-                }
+                value = empty_file_popularity(FileUuid, SpaceId)
             }};
         Error ->
             Error
@@ -217,3 +217,83 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file_popularity record with zero popularity.
+%% @end
+%%--------------------------------------------------------------------
+-spec empty_file_popularity(file_meta:uuid(), od_space:id()) -> file_popularity().
+empty_file_popularity(FileUuid, SpaceId) ->
+    HourlyHistogram = time_slot_histogram:new(?HOUR_TIME_WINDOW, ?HOUR_HISTOGRAM_SIZE),
+    DailyHistogram = time_slot_histogram:new(?DAY_TIME_WINDOW, ?DAY_HISTOGRAM_SIZE),
+    MonthlyHistogram = time_slot_histogram:new(?MONTH_TIME_WINDOW, ?MONTH_HISTOGRAM_SIZE),
+    histograms_to_file_popularity(HourlyHistogram, DailyHistogram, MonthlyHistogram, FileUuid, SpaceId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file_popularity record with popularity increased by one open
+%% @end
+%%--------------------------------------------------------------------
+-spec increase_popularity(file_popularity()) -> file_popularity().
+increase_popularity(FilePopularity = #file_popularity{
+    file_uuid = FileUuid,
+    space_id = SpaceId
+}) ->
+    {HourlyHistogram, DailyHistogram, MonthlyHistogram} =
+        file_popularity_to_histograms(FilePopularity),
+    CurrentTimestampHours = erlang:system_time(seconds) div 3600,
+    histograms_to_file_popularity(
+        time_slot_histogram:increment(HourlyHistogram, CurrentTimestampHours),
+        time_slot_histogram:increment(DailyHistogram, CurrentTimestampHours),
+        time_slot_histogram:increment(MonthlyHistogram, CurrentTimestampHours),
+        FileUuid,
+        SpaceId
+    ).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Converts given histograms into file_popularity record
+%% @end
+%%--------------------------------------------------------------------
+-spec histograms_to_file_popularity(
+    HourlyHistogram :: time_slot_histogram:histogram(),
+    DailyHistogram :: time_slot_histogram:histogram(),
+    MonthlyHistogram :: time_slot_histogram:histogram(),
+    file_meta:uuid(), od_space:id()) -> file_popularity().
+histograms_to_file_popularity(HourlyHistogram, DailyHistogram, MonthlyHistogram, FileUuid, SpaceId) ->
+    #file_popularity{
+        file_uuid = FileUuid,
+        space_id = SpaceId,
+        total_open_count = time_slot_histogram:get_sum(MonthlyHistogram),
+        last_open = time_slot_histogram:get_last_update(HourlyHistogram),
+        hourly_histogram = time_slot_histogram:get_histogram_values(HourlyHistogram),
+        daily_histogram = time_slot_histogram:get_histogram_values(DailyHistogram),
+        monthly_histogram = time_slot_histogram:get_histogram_values(MonthlyHistogram),
+        hourly_moving_average = time_slot_histogram:get_average(HourlyHistogram),
+        daily_moving_average = time_slot_histogram:get_average(DailyHistogram),
+        monthly_moving_average = time_slot_histogram:get_average(MonthlyHistogram)
+    }.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Converts file_popularity record into histograms
+%% @end
+%%--------------------------------------------------------------------
+-spec file_popularity_to_histograms(file_popularity()) ->
+    {
+        HourlyHistogram :: time_slot_histogram:histogram(),
+        DailyHistogram :: time_slot_histogram:histogram(),
+        MonthlyHistogram :: time_slot_histogram:histogram()
+    }.
+file_popularity_to_histograms(#file_popularity{
+    last_open = LastUpdate,
+    hourly_histogram = HourlyHistogram,
+    daily_histogram = DailyHistogram,
+    monthly_histogram = MonthlyHistogram
+}) ->
+    {
+        time_slot_histogram:new(LastUpdate, ?HOUR_TIME_WINDOW, HourlyHistogram),
+        time_slot_histogram:new(LastUpdate, ?DAY_TIME_WINDOW, DailyHistogram),
+        time_slot_histogram:new(LastUpdate, ?MONTH_TIME_WINDOW, MonthlyHistogram)
+    }.

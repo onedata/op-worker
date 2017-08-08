@@ -1035,8 +1035,11 @@ new_file_should_have_zero_popularity(Config) ->
             value = #file_popularity{
                 file_uuid = FileUuid,
                 space_id = SpaceId,
-                last_open_time = 0,
-                open_count = 0
+                last_open = 0,
+                total_open_count = 0,
+                hourly_moving_average = 0,
+                daily_moving_average = 0,
+                monthly_moving_average = 0
             }
         }},
         rpc:call(W, file_popularity, get_or_default, [FileUuid, SpaceId])
@@ -1050,7 +1053,7 @@ opening_file_should_increase_file_popularity(Config) ->
     SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
 
     % when
-    TimeBeforeFirstOpen = erlang:system_time(seconds),
+    TimeBeforeFirstOpen = erlang:system_time(seconds) div 3600,
     {ok, Handle1} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, read),
     lfm_proxy:close(W, Handle1),
 
@@ -1061,28 +1064,42 @@ opening_file_should_increase_file_popularity(Config) ->
             value = #file_popularity{
                 file_uuid = FileUuid,
                 space_id = SpaceId,
-                open_count = 1
+                total_open_count = 1,
+                hourly_histogram = [1 | _],
+                daily_histogram = [1 | _],
+                monthly_histogram = [1 | _]
             }
         }},
         rpc:call(W, file_popularity, get_or_default, [FileUuid, SpaceId])
     ),
-    ?assert(TimeBeforeFirstOpen =< Doc#document.value#file_popularity.last_open_time),
+    ?assert(TimeBeforeFirstOpen =< Doc#document.value#file_popularity.last_open),
 
     % when
-    TimeBeforeSecondOpen = erlang:system_time(seconds),
-    {ok, Handle2} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, read),
-    lfm_proxy:close(W, Handle2),
+    TimeBeforeSecondOpen = erlang:system_time(seconds) div 3600,
+    lists:foreach(fun(_) ->
+        {ok, Handle2} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, read),
+        lfm_proxy:close(W, Handle2)
+    end, lists:seq(1,23)),
 
     % then
     {ok, Doc2} = ?assertMatch(
         {ok, #document{
             value = #file_popularity{
-                open_count = 2
+                total_open_count = 24,
+                hourly_moving_average = 1,
+                daily_moving_average = 0,
+                monthly_moving_average = 2
             }
         }},
         rpc:call(W, file_popularity, get_or_default, [FileUuid, SpaceId])
     ),
-    ?assert(TimeBeforeSecondOpen =< Doc2#document.value#file_popularity.last_open_time).
+    ?assert(TimeBeforeSecondOpen =< Doc2#document.value#file_popularity.last_open),
+    [FirstHour, SecondHour | _] = Doc2#document.value#file_popularity.hourly_histogram,
+    [FirstDay, SecondDay | _] = Doc2#document.value#file_popularity.hourly_histogram,
+    [FirstMonth, SecondMonth | _] = Doc2#document.value#file_popularity.hourly_histogram,
+    ?assertEqual(24, FirstHour + SecondHour),
+    ?assertEqual(24, FirstDay + SecondDay),
+    ?assertEqual(24, FirstMonth + SecondMonth).
 
 file_popularity_view_should_return_unpopular_files(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),

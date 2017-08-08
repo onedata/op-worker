@@ -18,7 +18,7 @@
 -define(POPULAR_FILE_OPEN_COUNT, 10).
 
 %% API
--export([create_popularity_view/1, get_unpopular_files/1]).
+-export([create/1, get_unpopular_files/1]).
 
 %%%===================================================================
 %%% API
@@ -30,13 +30,19 @@
 %% Creates view on space files capable of ordering files by their popularity
 %% @end
 %%--------------------------------------------------------------------
--spec create_popularity_view(od_space:id()) -> ok | {error, term()}.
-create_popularity_view(SpaceId) ->
+-spec create(od_space:id()) -> ok | {error, term()}.
+create(SpaceId) ->
     ViewFunction =
         <<"function (doc, meta) {"
         "   if(doc['_record'] == 'file_popularity' && doc['space_id'] == '", SpaceId/binary , "') { "
         "      emit("
-        "         [doc['open_count'], doc['last_open_time']],"
+        "         ["
+        "             doc['total_open_count'],",
+        "             doc['last_open'],",
+        "             doc['hourly_moving_average'],",
+        "             doc['daily_moving_average'],",
+        "             doc['monthly_moving_average']",
+        "         ],"
         "         [doc['file_uuid'], doc['space_id']]"
         "      );"
         "   }"
@@ -56,8 +62,8 @@ get_unpopular_files(SpaceId) ->
     Options = [
         {spatial, true},
         {stale, false},
-        {start_range, [0, null]},
-        {end_range, [?POPULAR_FILE_OPEN_COUNT, null]}
+        {start_range, [0, null, null, null, null]},
+        {end_range, [?POPULAR_FILE_OPEN_COUNT, null, null, null, null]}
     ],
     {ok, {Rows}} = couchbase_driver:query_view(Ctx, SpaceId, SpaceId, Options),
     lists:map(fun(Row) ->

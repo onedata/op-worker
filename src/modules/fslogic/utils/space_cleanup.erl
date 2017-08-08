@@ -31,7 +31,7 @@
 initialize(SpaceId) ->
     case space_storage:is_cleanup_enabled(SpaceId) of
         true ->
-            file_popularity_view:create_popularity_view(SpaceId);
+            file_popularity_view:create(SpaceId);
         false ->
             ok
     end.
