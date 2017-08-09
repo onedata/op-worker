@@ -197,12 +197,14 @@ ensure_connected(SessId) ->
                 _ ->
                     session_manager:session_id_to_provider_id(SessId)
             end,
-            {ok, URLs} = provider_logic:get_urls(ProviderId),
+            {ok, IPs} = provider_logic:resolve_ips(ProviderId),
+            IPBinaries = lists:map(fun(IP) ->
+                list_to_binary(inet:ntoa(IP)) end, IPs),
             lists:foreach(
-                fun(URL) ->
+                fun(IPBinary) ->
                     {ok, Port} = application:get_env(?APP_NAME, provider_protocol_handler_port),
-                    connection:start_link(SessId, URL, Port, ranch_ssl, timer:seconds(5))
-                end, URLs),
+                    connection:start_link(SessId, IPBinary, Port, ranch_ssl, timer:seconds(5))
+                end, IPBinaries),
             ok;
         {ok, Pid} ->
             case utils:process_info(Pid, initial_call) of

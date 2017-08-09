@@ -33,6 +33,10 @@ mock_gs_client(Config) ->
     ok = test_utils:mock_new(Nodes, gs_client, []),
     ok = test_utils:mock_expect(Nodes, gs_client, start_link, fun mock_start_link/5),
     ok = test_utils:mock_expect(Nodes, gs_client, sync_request, fun mock_sync_request/2),
+
+    % gs_client requires successful setting of subdomain delegation IPs, but it cannot
+    % be achieved in test environemnt
+    ok = test_utils:mock_expect(Nodes, provider_logic, update_subdomain_delegation_ips, fun () -> ok end),
     ok.
 
 

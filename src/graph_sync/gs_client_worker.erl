@@ -148,6 +148,10 @@ init([]) ->
         {ok, ClientRef, #gs_resp_handshake{identity = {provider, _}}} ->
             ?info("Started connection to OneZone: ~p", [ClientRef]),
             oneprovider:on_connection_to_oz(),
+
+            % when connection is established onezone should be notified about
+            % current provider ips
+            gen_server2:cast(self(), update_subdomain_delegation_ips),
             {ok, #state{client_ref = ClientRef}};
         {error, {options, {keyfile, _, {error, enoent}}}} ->
             ?warning("Cannot start connection to OneZone - provider certificate not found"),
@@ -177,6 +181,9 @@ handle_call(#gs_req{} = GsReq, _From, #state{client_ref = ClientRef} = State) ->
     Result = gs_client:sync_request(ClientRef, GsReq),
     {reply, Result, State};
 
+handle_call({terminate, Reason}, _From, State) ->
+    {stop, Reason, State};
+
 handle_call(Request, _From, #state{} = State) ->
     ?log_bad_request(Request),
     {noreply, State}.
@@ -190,6 +197,21 @@ handle_call(Request, _From, #state{} = State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
+handle_cast(update_subdomain_delegation_ips, State) ->
+    % To check if updating ips is necessary a graph sync request is made,
+    % causing a deadlock if not for the spawn.
+    spawn(fun() ->
+        case provider_logic:update_subdomain_delegation_ips() of
+            ok ->
+                ok;
+            error ->
+                % Kill the connection to OneZone in case provider IPs cannot be
+                % updated, which will cause a reconnection and update retry.
+                gen_server2:call({global, ?GS_CLIENT_WORKER_GLOBAL_NAME},
+                    {terminate, normal})
+        end
+    end),
+    {noreply, State};
 handle_cast(Request, #state{} = State) ->
     ?log_bad_request(Request),
     {noreply, State}.

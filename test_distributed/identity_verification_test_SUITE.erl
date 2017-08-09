@@ -142,13 +142,23 @@ certs_should_be_cached_after_successful_publishing(Config) ->
 
 init_per_suite(RunConfig) ->
     Posthook = fun(NewConfig) ->
-        %% ensure some provider certs present as ctool requires them
         Workers = ?config(op_worker_nodes, NewConfig),
+
+        % mock provider_logic:get_domain
+        test_utils:mock_new(Workers, provider_logic),
+        GetDomainFun = fun() ->
+            StrNode = erlang:atom_to_list(node()),
+            [_Name, Host] = string:tokens(StrNode, "@"),
+            {ok, list_to_binary(Host)}
+        end,
+        test_utils:mock_expect(Workers, provider_logic, get_domain, GetDomainFun),
+
+        %% ensure some provider certs present as ctool requires them
         lists:foreach(fun(Worker) ->
             {ok, Key} = rpc:call(Worker, application, get_env, [?APP_NAME, oz_provider_key_file]),
             {ok, Cert} = rpc:call(Worker, application, get_env, [?APP_NAME, oz_provider_cert_file]),
-            Domain = rpc:call(Worker, oneprovider, get_provider_domain, []),
-            ok = rpc:call(Worker, identity_utils, ensure_synced_cert_present, [Key, Cert, Domain]),
+            {ok, Domain} = rpc:call(Worker, provider_logic, get_domain, []),
+            ok = rpc:call(Worker, identity_utils, ensure_synced_cert_present, [Key, Cert, binary_to_list(Domain)]),
             % Appmock does not have a valid certificate, turn on insecure mode
             rpc:call(Worker, application, set_env, [web_client, force_insecure_connections, true])
         end, Workers),

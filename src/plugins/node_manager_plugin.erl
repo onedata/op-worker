@@ -113,7 +113,6 @@ renamed_models() ->
 before_init([]) ->
     try
         op_worker_sup:start_link(),
-        ensure_correct_hostname(),
         ok = helpers_nif:init()
     catch
         _:Error ->
@@ -137,7 +136,7 @@ on_cluster_initialized() ->
 %% Overrides {@link node_manager_plugin_default:check_node_ip_address/0}.
 %% @end
 %%--------------------------------------------------------------------
--spec check_node_ip_address() -> IPV4Addr :: {A :: byte(), B :: byte(), C :: byte(), D :: byte()}.
+-spec check_node_ip_address() -> inet:ip4_address().
 check_node_ip_address() ->
     try
         {ok, IPBin} = oz_providers:check_ip_address(provider),
@@ -151,26 +150,6 @@ check_node_ip_address() ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Makes sure node hostname belongs to provider domain.
-%% @end
-%%--------------------------------------------------------------------
--spec ensure_correct_hostname() -> ok | no_return().
-ensure_correct_hostname() ->
-    Hostname = oneprovider:get_node_hostname(),
-    Domain = oneprovider:get_provider_domain(),
-    case string:join(tl(string:tokens(Hostname, ".")), ".") of
-        Domain ->
-            ok;
-        _ ->
-            ?error("Node hostname must be in provider domain. Check env conf. "
-            "Current configuration:~nHostname: ~p~nDomain: ~p",
-                [Hostname, Domain]),
-            throw(wrong_hostname)
-    end.
 
 %%--------------------------------------------------------------------
 %% @private

@@ -47,12 +47,8 @@ rtransfer_opts() ->
     [
         {get_nodes_fun,
             fun(ProviderId) ->
-                {ok, URLs} = provider_logic:get_urls(ProviderId),
-                lists:map(
-                    fun(URL) ->
-                        {ok, Ip} = inet:ip(binary_to_list(URL)),
-                        {Ip, ?RTRANSFER_PORT}
-                    end, URLs)
+                {ok, IPs} = provider_logic:resolve_ips(ProviderId),
+                [{IP, ?RTRANSFER_PORT} || IP <- IPs]
             end},
         {open_fun,
             fun(FileGUID, OpenFlag) ->

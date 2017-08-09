@@ -154,7 +154,9 @@ translate(#gri{type = od_provider, id = Id, aspect = instance, scope = private},
         key = Id,
         value = #od_provider{
             name = maps:get(<<"name">>, Result),
-            urls = maps:get(<<"urls">>, Result),
+            subdomain_delegation = maps:get(<<"subdomainDelegation">>, Result),
+            domain = maps:get(<<"domain">>, Result),
+            subdomain = maps:get(<<"subdomain">>, Result),
             spaces = maps:get(<<"spaces">>, Result),
             eff_users = maps:get(<<"effectiveUsers">>, Result),
             eff_groups = maps:get(<<"effectiveGroups">>, Result)
@@ -166,9 +168,21 @@ translate(#gri{type = od_provider, id = Id, aspect = instance, scope = protected
         key = Id,
         value = #od_provider{
             name = maps:get(<<"name">>, Result),
-            urls = maps:get(<<"urls">>, Result)
+            domain = maps:get(<<"domain">>, Result)
         }
     };
+
+translate(#gri{type = od_provider, id = _Id, aspect = domain_config}, Result) ->
+    case maps:find(<<"ipList">>, Result) of
+        {ok, IPBinaries} ->
+            IPTuples = lists:map(fun(IPBin) ->
+                {ok, IP} = inet:parse_ipv4strict_address(binary_to_list(IPBin)),
+                IP
+            end, IPBinaries),
+            Result#{<<"ipList">> := IPTuples};
+        error ->
+            Result
+    end;
 
 translate(#gri{type = od_handle_service, id = Id, aspect = instance, scope = private}, Result) ->
     #document{
