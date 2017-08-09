@@ -1087,7 +1087,7 @@ opening_file_should_increase_file_popularity(Config) ->
             value = #file_popularity{
                 total_open_count = 24,
                 hourly_moving_average = 1,
-                daily_moving_average = 0,
+                daily_moving_average = 1,
                 monthly_moving_average = 2
             }
         }},
@@ -1116,9 +1116,8 @@ file_popularity_view_should_return_unpopular_files(Config) ->
 
     ?assertEqual(
         lists:sort([file_ctx:new_by_guid(PopularFileGuid), file_ctx:new_by_guid(UnpopularFileGuid)]),
-        lists:sort(rpc:call(W, file_popularity_view, get_unpopular_files, [SpaceId]))
+        lists:sort(rpc:call(W, file_popularity_view, get_unpopular_files, [SpaceId, null, 10, null, null, null]))
     ),
-
     Handles = [lfm_proxy:open(W, SessId1, {guid, PopularFileGuid}, read) || _ <- lists:seq(0,10)],
     [lfm_proxy:close(W, Handle) || Handle <- Handles],
 
@@ -1126,7 +1125,7 @@ file_popularity_view_should_return_unpopular_files(Config) ->
 
     ?assertEqual(
         lists:sort([file_ctx:new_by_guid(UnpopularFileGuid)]),
-        lists:sort(rpc:call(W, file_popularity_view, get_unpopular_files, [SpaceId]))
+        lists:sort(rpc:call(W, file_popularity_view, get_unpopular_files, [SpaceId, null, 10, null, null, null]))
     ).
 
 %%%===================================================================

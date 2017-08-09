@@ -12,7 +12,19 @@
 -module(space_cleanup).
 -author("Tomasz Lichon").
 
+-include("global_definitions.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
+
+-define(HOURS_SINCE_LAST_OPEN_LIMIT,
+    application:get_env(?APP_NAME, hours_since_last_open_limit, 24)).
+-define(TOTAL_OPEN_LIMIT,
+    application:get_env(?APP_NAME, total_open_limit, null)).
+-define(HOUR_AVERAGE_LIMIT,
+    application:get_env(?APP_NAME, hour_average_limit, null)).
+-define(DAY_AVERAGE_LIMIT,
+    application:get_env(?APP_NAME, day_average_limit, 3)).
+-define(MONTH_AVERAGE_LIMIT,
+    application:get_env(?APP_NAME, month_average_limit, null)).
 
 %% API
 -export([initialize/1, periodic_cleanup/0]).
@@ -59,7 +71,10 @@ periodic_cleanup() ->
 %%--------------------------------------------------------------------
 -spec cleanup_space(od_space:id()) -> ok.
 cleanup_space(SpaceId) ->
-    FilesToClean = file_popularity_view:get_unpopular_files(SpaceId),
+    FilesToClean = file_popularity_view:get_unpopular_files(
+        SpaceId, ?HOURS_SINCE_LAST_OPEN_LIMIT, ?TOTAL_OPEN_LIMIT,
+        ?HOUR_AVERAGE_LIMIT, ?DAY_AVERAGE_LIMIT, ?MONTH_AVERAGE_LIMIT
+    ),
     lists:foreach(fun cleanup_replica/1, FilesToClean).
 
 %%--------------------------------------------------------------------

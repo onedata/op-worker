@@ -15,10 +15,8 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--define(POPULAR_FILE_OPEN_COUNT, 10).
-
 %% API
--export([create/1, get_unpopular_files/1]).
+-export([create/1, get_unpopular_files/6]).
 
 %%%===================================================================
 %%% API
@@ -37,8 +35,8 @@ create(SpaceId) ->
         "   if(doc['_record'] == 'file_popularity' && doc['space_id'] == '", SpaceId/binary , "') { "
         "      emit("
         "         ["
-        "             doc['total_open_count'],",
         "             doc['last_open'],",
+        "             doc['total_open_count'],",
         "             doc['hourly_moving_average'],",
         "             doc['daily_moving_average'],",
         "             doc['monthly_moving_average']",
@@ -56,14 +54,32 @@ create(SpaceId) ->
 %% Finds unpopular files in space
 %% @end
 %%--------------------------------------------------------------------
--spec get_unpopular_files(od_space:id()) -> [file_ctx:ctx()].
-get_unpopular_files(SpaceId) ->
+-spec get_unpopular_files(od_space:id(), HoursSinceLastOpen :: Limit,
+    TotalOpenLimit :: Limit, HourAverageLimit :: Limit,
+    DayAverageLimit :: Limit, MonthAverageLimit :: Limit) -> [file_ctx:ctx()] when
+    Limit :: null | non_neg_integer().
+get_unpopular_files(SpaceId, HoursSinceLastOpenLimit, TotalOpenLimit,
+    HourAverageLimit, DayAverageLimit, MonthAverageLimit
+) ->
     Ctx = model:make_disk_ctx(file_popularity:model_init()),
+    CurrentTimeInHours = erlang:system_time(seconds) div 3600,
+    HoursTimestampLimit = case HoursSinceLastOpenLimit of
+        null ->
+            null;
+        _ ->
+            CurrentTimeInHours - HoursSinceLastOpenLimit
+    end,
     Options = [
         {spatial, true},
         {stale, false},
-        {start_range, [0, null, null, null, null]},
-        {end_range, [?POPULAR_FILE_OPEN_COUNT, null, null, null, null]}
+        {start_range, [0, 0, 0, 0, 0]},
+        {end_range, [
+            HoursTimestampLimit,
+            TotalOpenLimit,
+            HourAverageLimit,
+            DayAverageLimit,
+            MonthAverageLimit
+        ]}
     ],
     {ok, {Rows}} = couchbase_driver:query_view(Ctx, SpaceId, SpaceId, Options),
     lists:map(fun(Row) ->
