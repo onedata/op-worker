@@ -190,7 +190,7 @@ create_or_update(Doc, Diff) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    Config = ?MODEL_CONFIG(files_to_chown_bucket, [], ?GLOBALLY_CACHED_LEVEL),
+    Config = ?MODEL_CONFIG(file_popularity_bucket, [], ?GLOBALLY_CACHED_LEVEL),
     Config#model_config{version = 1}.
 
 %%--------------------------------------------------------------------
@@ -242,7 +242,7 @@ increase_popularity(FilePopularity = #file_popularity{
 }) ->
     {HourlyHistogram, DailyHistogram, MonthlyHistogram} =
         file_popularity_to_histograms(FilePopularity),
-    CurrentTimestampHours = erlang:system_time(seconds) div 3600,
+    CurrentTimestampHours = utils:system_time_seconds() div 3600,
     histograms_to_file_popularity(
         time_slot_histogram:increment(HourlyHistogram, CurrentTimestampHours),
         time_slot_histogram:increment(DailyHistogram, CurrentTimestampHours),

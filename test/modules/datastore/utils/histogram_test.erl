@@ -18,7 +18,7 @@
 new_histogram_should_be_filled_with_zeroes_test() ->
     ?assertEqual([0, 0, 0, 0, 0], histogram:new(5)).
 
-fist_value_should_be_incremented_on_inclrement_test() ->
+first_value_should_be_incremented_on_increment_test() ->
     Histogram = histogram:new(3),
     IncrementedHistogram1 = histogram:increment(Histogram),
     IncrementedHistogram2 = histogram:increment(IncrementedHistogram1),
@@ -46,7 +46,7 @@ shift_by_lenght_should_zero_histogram_test() ->
 
     ?assertEqual([0, 0, 0, 0, 0], histogram:shift(Histogram, 5)).
 
-shift_by_more_than_lenght_should_zero_histogram_test() ->
+shift_by_more_than_length_should_zero_histogram_test() ->
     Histogram = histogram:increment(histogram:new(5)),
 
     ?assertEqual([0, 0, 0, 0, 0], histogram:shift(Histogram, 10)).

@@ -23,7 +23,6 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% Creates view on space files capable of ordering files by their popularity
 %% @end
@@ -41,7 +40,7 @@ create(SpaceId) ->
         "             doc['daily_moving_average'],",
         "             doc['monthly_moving_average']",
         "         ],"
-        "         [doc['file_uuid'], doc['space_id']]"
+        "         null"
         "      );"
         "   }"
         "}">>,
@@ -49,20 +48,18 @@ create(SpaceId) ->
     couchbase_driver:save_spatial_view_doc(Ctx, SpaceId, ViewFunction).
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% Finds unpopular files in space
 %% @end
 %%--------------------------------------------------------------------
--spec get_unpopular_files(od_space:id(), HoursSinceLastOpen :: Limit,
-    TotalOpenLimit :: Limit, HourAverageLimit :: Limit,
-    DayAverageLimit :: Limit, MonthAverageLimit :: Limit) -> [file_ctx:ctx()] when
-    Limit :: null | non_neg_integer().
+-spec get_unpopular_files(od_space:id(), HoursSinceLastOpen :: null | non_neg_integer(),
+    TotalOpenLimit :: null | non_neg_integer(), HourAverageLimit :: null | non_neg_integer(),
+    DayAverageLimit :: null | non_neg_integer(), MonthAverageLimit :: null | non_neg_integer()) -> [file_ctx:ctx()].
 get_unpopular_files(SpaceId, HoursSinceLastOpenLimit, TotalOpenLimit,
     HourAverageLimit, DayAverageLimit, MonthAverageLimit
 ) ->
     Ctx = model:make_disk_ctx(file_popularity:model_init()),
-    CurrentTimeInHours = erlang:system_time(seconds) div 3600,
+    CurrentTimeInHours = utils:system_time_seconds() div 3600,
     HoursTimestampLimit = case HoursSinceLastOpenLimit of
         null ->
             null;
@@ -81,12 +78,23 @@ get_unpopular_files(SpaceId, HoursSinceLastOpenLimit, TotalOpenLimit,
             MonthAverageLimit
         ]}
     ],
-    {ok, {Rows}} = couchbase_driver:query_view(Ctx, SpaceId, SpaceId, Options),
+    {ok, {Rows}} = query([Ctx, SpaceId, SpaceId, Options]),
     lists:map(fun(Row) ->
-        {<<"value">>, [FileUuid, SpaceId]} = lists:keyfind(<<"value">>, 1, Row),
+        {<<"id">>, <<"file_popularity-", FileUuid/binary>>} =
+            lists:keyfind(<<"id">>, 1, Row),
         file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId))
     end, Rows).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc This function silences dialyzer "no local return" errors.
+%% @equiv apply(fun couchbase_driver:query_view/4, Args).
+%% @end
+%%--------------------------------------------------------------------
+-spec query(list()) -> {ok, datastore_json2:ejson()} | {error, term()}.
+query(Args) ->
+    apply(fun couchbase_driver:query_view/4, Args).

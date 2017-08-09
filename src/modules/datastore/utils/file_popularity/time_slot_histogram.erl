@@ -92,18 +92,4 @@ get_sum({_, _, Histogram}) ->
 %%--------------------------------------------------------------------
 -spec get_average(histogram()) -> non_neg_integer().
 get_average({_, _, Histogram}) ->
-    ceil(lists:sum(Histogram) / length(Histogram)).
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Math ceil function (works on positive values).
-%% @end
-%%--------------------------------------------------------------------
--spec ceil(N :: number()) -> integer().
-ceil(N) when trunc(N) == N -> trunc(N);
-ceil(N) -> trunc(N + 1).
+    utils:ceil(lists:sum(Histogram) / length(Histogram)).

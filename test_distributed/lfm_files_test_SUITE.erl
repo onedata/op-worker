@@ -1053,7 +1053,7 @@ opening_file_should_increase_file_popularity(Config) ->
     SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
 
     % when
-    TimeBeforeFirstOpen = erlang:system_time(seconds) div 3600,
+    TimeBeforeFirstOpen = utils:system_time_seconds() div 3600,
     {ok, Handle1} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, read),
     lfm_proxy:close(W, Handle1),
 
@@ -1075,7 +1075,7 @@ opening_file_should_increase_file_popularity(Config) ->
     ?assert(TimeBeforeFirstOpen =< Doc#document.value#file_popularity.last_open),
 
     % when
-    TimeBeforeSecondOpen = erlang:system_time(seconds) div 3600,
+    TimeBeforeSecondOpen = utils:system_time_seconds() div 3600,
     lists:foreach(fun(_) ->
         {ok, Handle2} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, read),
         lfm_proxy:close(W, Handle2)
@@ -1114,19 +1114,17 @@ file_popularity_view_should_return_unpopular_files(Config) ->
 
     timer:sleep(timer:seconds(10)),
 
-    ?assertEqual(
-        lists:sort([file_ctx:new_by_guid(PopularFileGuid), file_ctx:new_by_guid(UnpopularFileGuid)]),
-        lists:sort(rpc:call(W, file_popularity_view, get_unpopular_files, [SpaceId, null, 10, null, null, null]))
-    ),
+    UnpopularFiles1 = rpc:call(W, file_popularity_view, get_unpopular_files, [SpaceId, null, 10, null, null, null]),
+    ?assert(lists:member(file_ctx:new_by_guid(PopularFileGuid), UnpopularFiles1)),
+    ?assert(lists:member(file_ctx:new_by_guid(UnpopularFileGuid), UnpopularFiles1)),
+
     Handles = [lfm_proxy:open(W, SessId1, {guid, PopularFileGuid}, read) || _ <- lists:seq(0,10)],
     [lfm_proxy:close(W, Handle) || Handle <- Handles],
 
     timer:sleep(timer:seconds(10)),
-
-    ?assertEqual(
-        lists:sort([file_ctx:new_by_guid(UnpopularFileGuid)]),
-        lists:sort(rpc:call(W, file_popularity_view, get_unpopular_files, [SpaceId, null, 10, null, null, null]))
-    ).
+    UnpopularFiles2 = rpc:call(W, file_popularity_view, get_unpopular_files, [SpaceId, null, 10, null, null, null]),
+    ?assertNot(lists:member(file_ctx:new_by_guid(PopularFileGuid), UnpopularFiles2)),
+    ?assert(lists:member(file_ctx:new_by_guid(UnpopularFileGuid), UnpopularFiles2)).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

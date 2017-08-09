@@ -449,12 +449,16 @@ periodic_cleanup_should_invalidate_unpopular_files(Config) ->
     {ok, ReadHandle3} = lfm_proxy:open(WorkerP2, SessionIdP2, {guid, File3Guid}, read),
     {ok, <<"test">>} = lfm_proxy:read(WorkerP2, ReadHandle3, 0, 4),
     % open popular file
-    Handles = [lfm_proxy:open(WorkerP2, SessionIdP2, {guid, File1Guid}, read) || _ <- lists:seq(0,10)],
+    Handles = [lfm_proxy:open(WorkerP2, SessionIdP2, {guid, File1Guid}, read) || _ <- lists:seq(0,100)],
     [lfm_proxy:close(WorkerP2, Handle) || Handle <- Handles],
-    % trigger cleanup
-    timer:sleep(timer:seconds(10)),
-    rpc:call(WorkerP2, space_cleanup, periodic_cleanup, []),
 
+    % trigger cleanup advancing 24 hours into future
+    test_utils:mock_new(WorkerP2, utils),
+    test_utils:mock_expect(WorkerP2, utils, system_time_seconds, fun() ->
+        meck:passthrough([]) + 25*3600
+    end),
+    rpc:call(WorkerP2, space_cleanup, periodic_cleanup, []),
+    test_utils:mock_validate_and_unload(WorkerP2, utils),
 
     % then
     Provider1Id = rpc:call(WorkerP1, oneprovider, get_provider_id, []),
@@ -659,7 +663,7 @@ metric_get(Config) ->
         provider_id = Prov1ID
     },
 
-    ?assertMatch(ok, rpc:call(WorkerP1, monitoring_utils, create, [<<"space3">>, MonitoringId, erlang:system_time(seconds)])),
+    ?assertMatch(ok, rpc:call(WorkerP1, monitoring_utils, create, [<<"space3">>, MonitoringId, utils:system_time_seconds()])),
     {ok, #document{value = State}} = rpc:call(WorkerP1, monitoring_state, get, [MonitoringId]),
     ?assertMatch({ok, _}, rpc:call(WorkerP1, monitoring_state, save,
         [#document{key = MonitoringId#monitoring_id{provider_id = Prov2ID}, value =  State}])),

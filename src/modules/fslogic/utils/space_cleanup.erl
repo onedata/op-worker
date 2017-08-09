@@ -15,14 +15,27 @@
 -include("global_definitions.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 
+% file which was not opened for this period of hours is invalidated,
+% regardless of other factors
+-define(HOURS_SINCE_LAST_OPEN_HARD_LIMIT,
+    application:get_env(?APP_NAME, hours_since_last_open_hard_limit, 7*24)).
+
+% Factors for file cleanup (all of them must be satisfied in order to schedule
+% file for cleanup):
+
+% how many hours since last open must have passed so the file should be considered unpopular
 -define(HOURS_SINCE_LAST_OPEN_LIMIT,
     application:get_env(?APP_NAME, hours_since_last_open_limit, 24)).
+% how much opens at maximum has been made on file in total so the file should be considered unpopular
 -define(TOTAL_OPEN_LIMIT,
     application:get_env(?APP_NAME, total_open_limit, null)).
+% what is the maximal hourly average open count over past 24 hours so the file should be considered unpopular
 -define(HOUR_AVERAGE_LIMIT,
     application:get_env(?APP_NAME, hour_average_limit, null)).
+% what is the maximal daily average open count over past 30 days so the file should be considered unpopular
 -define(DAY_AVERAGE_LIMIT,
     application:get_env(?APP_NAME, day_average_limit, 3)).
+% what is the maximal monthly average open count over past 12 months so the file should be considered unpopular
 -define(MONTH_AVERAGE_LIMIT,
     application:get_env(?APP_NAME, month_average_limit, null)).
 
@@ -71,10 +84,14 @@ periodic_cleanup() ->
 %%--------------------------------------------------------------------
 -spec cleanup_space(od_space:id()) -> ok.
 cleanup_space(SpaceId) ->
-    FilesToClean = file_popularity_view:get_unpopular_files(
+    FilesToCleanSoftCheck = file_popularity_view:get_unpopular_files(
         SpaceId, ?HOURS_SINCE_LAST_OPEN_LIMIT, ?TOTAL_OPEN_LIMIT,
         ?HOUR_AVERAGE_LIMIT, ?DAY_AVERAGE_LIMIT, ?MONTH_AVERAGE_LIMIT
     ),
+    FilesToCleanHardCheck = file_popularity_view:get_unpopular_files(
+        SpaceId, ?HOURS_SINCE_LAST_OPEN_HARD_LIMIT, null, null, null, null
+    ),
+    FilesToClean = lists:usort(FilesToCleanSoftCheck ++ FilesToCleanHardCheck),
     lists:foreach(fun cleanup_replica/1, FilesToClean).
 
 %%--------------------------------------------------------------------
