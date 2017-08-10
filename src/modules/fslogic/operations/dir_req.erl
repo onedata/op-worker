@@ -57,7 +57,7 @@ read_dir(UserCtx, FileCtx, Offset, Limit) ->
     fslogic_worker:fuse_response().
 read_dir_plus(UserCtx, FileCtx, Offset, Limit) ->
     check_permissions:execute(
-        [traverse_ancestors, ?list_container],
+        [traverse_ancestors, ?traverse_container, ?list_container],
         [UserCtx, FileCtx, Offset, Limit],
         fun read_dir_plus_insecure/4).
 
@@ -133,6 +133,8 @@ read_dir_plus_insecure(UserCtx, FileCtx, Offset, Limit) ->
     GetAttrAns = utils:pmap(
         fun({Num, ChildCtx}) ->
             try
+                % czy mozemy dac insecure?
+                % czy traverse ancestors dla pliku moze zwrocic cos innego niz dla katalogu nadrzednego?
                 #fuse_response{
                     status = #status{code = ?OK},
                     fuse_response = Attrs
