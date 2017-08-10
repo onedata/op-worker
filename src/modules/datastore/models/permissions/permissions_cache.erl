@@ -151,6 +151,7 @@ count() ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
+    % TODO - use LOCAL_ONLY_LEVEL
     ?MODEL_CONFIG(permissions_cache_bucket, [], ?GLOBAL_ONLY_LEVEL)#model_config{
         list_enabled = {true, return_errors}, volatile = true}.
 

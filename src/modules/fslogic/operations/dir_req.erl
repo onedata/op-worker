@@ -66,6 +66,7 @@ read_dir_plus(UserCtx, FileCtx, Offset, Limit) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Creates new directory.
 %% @end
@@ -95,8 +96,9 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     }.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Lists directory. Starts with ROffset entity and limits returned list to RCount size.
+%% Lists directory. Starts with Offset entity and limits returned list to Limit size.
 %% @end
 %%--------------------------------------------------------------------
 -spec read_dir_insecure(user_ctx:ctx(), file_ctx:ctx(),
@@ -118,9 +120,10 @@ read_dir_insecure(UserCtx, FileCtx, Offset, Limit) ->
     }.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Lists directory with stats of each file.
-%% Starts with ROffset entity and limits returned list to RCount size.
+%% Starts with Offset entity and limits returned list to Limit size.
 %% @end
 %%--------------------------------------------------------------------
 -spec read_dir_plus_insecure(user_ctx:ctx(), file_ctx:ctx(),
@@ -133,8 +136,6 @@ read_dir_plus_insecure(UserCtx, FileCtx, Offset, Limit) ->
     GetAttrAns = utils:pmap(
         fun({Num, ChildCtx}) ->
             try
-                % czy mozemy dac insecure?
-                % czy traverse ancestors dla pliku moze zwrocic cos innego niz dla katalogu nadrzednego?
                 #fuse_response{
                     status = #status{code = ?OK},
                     fuse_response = Attrs

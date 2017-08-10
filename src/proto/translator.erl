@@ -697,6 +697,8 @@ translate_to_protobuf(#get_child_attr{name = Name}) ->
     {get_child_attr, #'GetChildAttr'{name = Name}};
 translate_to_protobuf(#get_file_children{offset = Offset, size = Size}) ->
     {get_file_children, #'GetFileChildren'{offset = Offset, size = Size}};
+translate_to_protobuf(#get_file_children_attrs{offset = Offset, size = Size}) ->
+    {get_file_children_attrs, #'GetFileChildrenAttrs'{offset = Offset, size = Size}};
 translate_to_protobuf(#create_dir{name = Name, mode = Mode}) ->
     {create_dir, #'CreateDir'{name = Name, mode = Mode}};
 translate_to_protobuf(#delete_file{silent = Silent}) ->
@@ -757,7 +759,7 @@ translate_to_protobuf(#file_children{child_links = FileEntries}) ->
         translate_to_protobuf(ChildLink)
     end, FileEntries)}};
 translate_to_protobuf(#file_children_attrs{child_attrs = Children}) ->
-    {file_children, #'FileChildrenAttrs'{child_attrs = lists:map(fun(Child) ->
+    {file_children_attrs, #'FileChildrenAttrs'{child_attrs = lists:map(fun(Child) ->
         translate_to_protobuf(Child)
     end, Children)}};
 translate_to_protobuf(#file_location{} = Record) ->
