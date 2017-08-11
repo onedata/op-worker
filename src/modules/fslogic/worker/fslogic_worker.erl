@@ -46,8 +46,11 @@
 -export_type([request/0, response/0, file/0, ext_file/0, open_flag/0,
     posix_permissions/0, file_guid/0, file_guid_or_path/0]).
 
--define(INVALIDATE_PERMISSIONS_CACHE_INTERVAL_SECONDS, application:get_env(?APP_NAME,
-    invalidate_permissions_cache_interval_seconds, timer:seconds(30))).
+-define(INVALIDATE_PERMISSIONS_CACHE_INTERVAL, application:get_env(?APP_NAME,
+    invalidate_permissions_cache_interval, timer:seconds(30))).
+
+-define(SPACES_CLEANUP_INTERVAL, application:get_env(?APP_NAME,
+    spaces_cleanup_interval, timer:hours(1))).
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -66,8 +69,12 @@ init(_Args) ->
         _ -> ok
     end,
 
-    erlang:send_after(?INVALIDATE_PERMISSIONS_CACHE_INTERVAL_SECONDS, self(),
+    erlang:send_after(?INVALIDATE_PERMISSIONS_CACHE_INTERVAL, self(),
         {sync_timer, invalidate_permissions_cache}
+    ),
+
+    erlang:send_after(?SPACES_CLEANUP_INTERVAL, self(),
+        {sync_timer, spaces_cleanup}
     ),
 
     lists:foreach(fun({Fun, Args}) ->
@@ -109,7 +116,13 @@ handle(invalidate_permissions_cache) ->
         _:Reason ->
             ?error_stacktrace("Failed to invalidate permissions cache due to: ~p", [Reason])
     end,
-    erlang:send_after(?INVALIDATE_PERMISSIONS_CACHE_INTERVAL_SECONDS, self(),
+    erlang:send_after(?INVALIDATE_PERMISSIONS_CACHE_INTERVAL, self(),
+        {sync_timer, invalidate_permissions_cache}
+    ),
+    ok;
+handle(spaces_cleanup) ->
+    space_cleanup:periodic_cleanup(),
+    erlang:send_after(?INVALIDATE_PERMISSIONS_CACHE_INTERVAL, self(),
         {sync_timer, invalidate_permissions_cache}
     ),
     ok;

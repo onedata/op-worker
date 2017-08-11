@@ -295,7 +295,8 @@
 %% Model that maps space to storage
 -record(space_storage, {
     storage_ids = [] :: [storage:id()],
-    mounted_in_root = [] :: [storage:id()]
+    mounted_in_root = [] :: [storage:id()],
+    cleanup_enabled = false :: boolean()
 }).
 
 -record(helper_handle, {
@@ -433,6 +434,20 @@
 -record(luma, {
     user_ctx = #{} :: luma:user_ctx(),
     timestamp = 0 :: luma_cache:timestamp()% time of last update, in milliseconds since epoch
+}).
+
+%% Model that tracks popularity of file
+-record(file_popularity, {
+    file_uuid :: undefined | file_meta:uuid(),
+    space_id :: undefined  | od_space:id(),
+    total_open_count = 0 :: non_neg_integer(),
+    last_open = 0 :: non_neg_integer(),
+    hourly_histogram = [] :: list(),
+    daily_histogram = [] :: list(),
+    monthly_histogram = [] :: list(),
+    hourly_moving_average = 0 :: non_neg_integer(),
+    daily_moving_average = 0 :: non_neg_integer(),
+    monthly_moving_average = 0 :: non_neg_integer()
 }).
 
 -endif.

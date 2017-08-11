@@ -58,7 +58,11 @@
     echo_loop_test_base/1,
     storage_file_creation_should_be_delayed_until_open/1,
     delayed_creation_should_not_prevent_mv/1,
-    delayed_creation_should_not_prevent_truncate/1
+    delayed_creation_should_not_prevent_truncate/1,
+    new_file_should_not_have_popularity_doc/1,
+    new_file_should_have_zero_popularity/1,
+    opening_file_should_increase_file_popularity/1,
+    file_popularity_view_should_return_unpopular_files/1
 ]).
 
 -define(TEST_CASES, [
@@ -90,7 +94,11 @@
     echo_loop_test,
     storage_file_creation_should_be_delayed_until_open,
     delayed_creation_should_not_prevent_mv,
-    delayed_creation_should_not_prevent_truncate
+    delayed_creation_should_not_prevent_truncate,
+    new_file_should_not_have_popularity_doc,
+    new_file_should_have_zero_popularity,
+    opening_file_should_increase_file_popularity,
+    file_popularity_view_should_return_unpopular_files
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -996,6 +1004,127 @@ delayed_creation_should_not_prevent_truncate(Config) ->
     ?assertEqual({ok, 9}, lfm_proxy:write(W, Handle, 0, <<"test_data">>)),
     ?assertEqual({ok, <<"test_data">>}, lfm_proxy:read(W, Handle, 0, 100)),
     ?assertEqual(ok, lfm_proxy:close(W, Handle)).
+
+new_file_should_not_have_popularity_doc(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+
+    % when
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_no_popularity">>, 8#755),
+    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+
+    % then
+    ?assertEqual(
+        {error, {not_found, file_popularity}},
+        rpc:call(W, file_popularity, get, [FileUuid])
+    ).
+
+new_file_should_have_zero_popularity(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+
+    % when
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_zero_popularity">>, 8#755),
+    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+    SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
+
+    % then
+    ?assertMatch(
+        {ok, #document{
+            key = FileUuid,
+            value = #file_popularity{
+                file_uuid = FileUuid,
+                space_id = SpaceId,
+                last_open = 0,
+                total_open_count = 0,
+                hourly_moving_average = 0,
+                daily_moving_average = 0,
+                monthly_moving_average = 0
+            }
+        }},
+        rpc:call(W, file_popularity, get_or_default, [FileUuid, SpaceId])
+    ).
+
+opening_file_should_increase_file_popularity(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_increased_popularity">>, 8#755),
+    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+    SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
+
+    % when
+    TimeBeforeFirstOpen = utils:system_time_seconds() div 3600,
+    {ok, Handle1} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, read),
+    lfm_proxy:close(W, Handle1),
+
+    % then
+    {ok, Doc} = ?assertMatch(
+        {ok, #document{
+            key = FileUuid,
+            value = #file_popularity{
+                file_uuid = FileUuid,
+                space_id = SpaceId,
+                total_open_count = 1,
+                hourly_histogram = [1 | _],
+                daily_histogram = [1 | _],
+                monthly_histogram = [1 | _]
+            }
+        }},
+        rpc:call(W, file_popularity, get_or_default, [FileUuid, SpaceId])
+    ),
+    ?assert(TimeBeforeFirstOpen =< Doc#document.value#file_popularity.last_open),
+
+    % when
+    TimeBeforeSecondOpen = utils:system_time_seconds() div 3600,
+    lists:foreach(fun(_) ->
+        {ok, Handle2} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, read),
+        lfm_proxy:close(W, Handle2)
+    end, lists:seq(1,23)),
+
+    % then
+    {ok, Doc2} = ?assertMatch(
+        {ok, #document{
+            value = #file_popularity{
+                total_open_count = 24,
+                hourly_moving_average = 1,
+                daily_moving_average = 1,
+                monthly_moving_average = 2
+            }
+        }},
+        rpc:call(W, file_popularity, get_or_default, [FileUuid, SpaceId])
+    ),
+    ?assert(TimeBeforeSecondOpen =< Doc2#document.value#file_popularity.last_open),
+    [FirstHour, SecondHour | _] = Doc2#document.value#file_popularity.hourly_histogram,
+    [FirstDay, SecondDay | _] = Doc2#document.value#file_popularity.hourly_histogram,
+    [FirstMonth, SecondMonth | _] = Doc2#document.value#file_popularity.hourly_histogram,
+    ?assertEqual(24, FirstHour + SecondHour),
+    ?assertEqual(24, FirstDay + SecondDay),
+    ?assertEqual(24, FirstMonth + SecondMonth).
+
+file_popularity_view_should_return_unpopular_files(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+    {ok, PopularFileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/popular_file">>, 8#755),
+    {ok, UnpopularFileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/unpopular_file">>, 8#755),
+    SpaceId = fslogic_uuid:guid_to_space_id(PopularFileGuid),
+    PopularHandle = lfm_proxy:open(W, SessId1, {guid, PopularFileGuid}, read),
+    lfm_proxy:close(W, PopularHandle),
+    UnpopularHandle = lfm_proxy:open(W, SessId1, {guid, UnpopularFileGuid}, read),
+    lfm_proxy:close(W, UnpopularHandle),
+
+    timer:sleep(timer:seconds(10)),
+
+    UnpopularFiles1 = rpc:call(W, file_popularity_view, get_unpopular_files, [SpaceId, null, 10, null, null, null]),
+    ?assert(lists:member(file_ctx:new_by_guid(PopularFileGuid), UnpopularFiles1)),
+    ?assert(lists:member(file_ctx:new_by_guid(UnpopularFileGuid), UnpopularFiles1)),
+
+    Handles = [lfm_proxy:open(W, SessId1, {guid, PopularFileGuid}, read) || _ <- lists:seq(0,10)],
+    [lfm_proxy:close(W, Handle) || Handle <- Handles],
+
+    timer:sleep(timer:seconds(10)),
+    UnpopularFiles2 = rpc:call(W, file_popularity_view, get_unpopular_files, [SpaceId, null, 10, null, null, null]),
+    ?assertNot(lists:member(file_ctx:new_by_guid(PopularFileGuid), UnpopularFiles2)),
+    ?assert(lists:member(file_ctx:new_by_guid(UnpopularFileGuid), UnpopularFiles2)).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
