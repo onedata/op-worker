@@ -67,6 +67,7 @@
     remove_index/1,
     create_geospatial_index/1,
     query_geospatial_index/1,
+    query_file_popularity_index/1,
     set_get_json_metadata_inherited/1,
     set_get_xattr_inherited/1,
     set_get_json_metadata_using_filter/1,
@@ -111,6 +112,7 @@ all() ->
         create_list_index,
         create_geospatial_index,
         query_geospatial_index,
+        query_file_popularity_index,
         set_get_json_metadata_inherited,
         set_get_xattr_inherited,
         set_get_json_metadata_using_filter,
@@ -1150,6 +1152,12 @@ query_geospatial_index(Config) ->
     % then
     Guids2 = lists:map(fun(X) -> {ok, ObjId} = cdmi_id:objectid_to_guid(X), ObjId end, json_utils:decode_map(Body2)),
     ?assertEqual(lists:sort([Guid1, Guid2]), lists:sort(Guids2)).
+
+query_file_popularity_index(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+
+    ?assertMatch({ok, 200, _, _}, do_request(WorkerP1, <<"query-index/file-popularity-", SpaceId/binary, "?spatial=true&stale=false">>, get, [user_1_token_header(Config)], [])).
 
 set_get_json_metadata_inherited(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),

@@ -15,6 +15,8 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+-define(VIEW_NAME(SpaceId), <<"file-popularity-", SpaceId/binary>>).
+
 %% API
 -export([create/1, get_unpopular_files/6]).
 
@@ -45,7 +47,7 @@ create(SpaceId) ->
         "   }"
         "}">>,
     Ctx = model:make_disk_ctx(file_popularity:model_init()),
-    couchbase_driver:save_spatial_view_doc(Ctx, SpaceId, ViewFunction).
+    couchbase_driver:save_spatial_view_doc(Ctx, ?VIEW_NAME(SpaceId), ViewFunction).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -78,7 +80,7 @@ get_unpopular_files(SpaceId, HoursSinceLastOpenLimit, TotalOpenLimit,
             MonthAverageLimit
         ]}
     ],
-    {ok, {Rows}} = query([Ctx, SpaceId, SpaceId, Options]),
+    {ok, {Rows}} = query([Ctx, ?VIEW_NAME(SpaceId), ?VIEW_NAME(SpaceId), Options]),
     lists:map(fun(Row) ->
         {<<"id">>, <<"file_popularity-", FileUuid/binary>>} =
             lists:keyfind(<<"id">>, 1, Row),
