@@ -170,19 +170,8 @@ replicate_children(UserCtx, Children, Block) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec invalidate_file_replica_insecure(user_ctx:ctx(), file_ctx:ctx(),
-    oneprovider:id(), non_neg_integer()) ->
+    oneprovider:id() | undefined, non_neg_integer()) ->
     fslogic_worker:provider_response().
-invalidate_file_replica_insecure(UserCtx, FileCtx, undefined, Offset) ->
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-    {ok, #document{value = #od_space{providers = Providers}}} =
-        od_space:get(SpaceId),
-    case Providers -- [oneprovider:get_provider_id()] of
-        [] ->
-            #provider_response{status = #status{code = ?OK}};
-        ExternalProviders ->
-            MigrationProviderId = utils:random_element(ExternalProviders),
-            invalidate_file_replica_insecure(UserCtx, FileCtx, MigrationProviderId, Offset)
-    end;
 invalidate_file_replica_insecure(UserCtx, FileCtx, MigrationProviderId, Offset) ->
     {ok, Chunk} = application:get_env(?APP_NAME, ls_chunk_size),
     case file_ctx:is_dir(FileCtx) of
@@ -205,25 +194,24 @@ invalidate_file_replica_insecure(UserCtx, FileCtx, MigrationProviderId, Offset) 
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Invalidates replica of file whose data is partially unique
 %% (stored locally in one copy)
 %% @end
 %%--------------------------------------------------------------------
 -spec invalidate_partially_unique_file_replica(user_ctx:ctx(), file_ctx:ctx(),
-    oneprovider:id()) -> fslogic_worker:provider_response().
+    oneprovider:id() | undefined) -> fslogic_worker:provider_response().
+invalidate_partially_unique_file_replica(_UserCtx, _FileCtx, undefined) ->
+    #provider_response{status = #status{code = ?OK}};
 invalidate_partially_unique_file_replica(UserCtx, FileCtx, MigrationProviderId) ->
     SessionId = user_ctx:get_session_id(UserCtx),
     FileGuid = file_ctx:get_guid_const(FileCtx),
-    case session:is_special(SessionId) of
-        true -> % cannot synchronize file using special session, do not invalidate
-            #provider_response{status = #status{code = ?OK}};
-        false ->
-            ok = logical_file_manager:replicate_file(SessionId, {guid, FileGuid}, MigrationProviderId),
-            invalidate_fully_redundant_file_replica(UserCtx, FileCtx)
-    end.
+    ok = logical_file_manager:replicate_file(SessionId, {guid, FileGuid}, MigrationProviderId),
+    invalidate_fully_redundant_file_replica(UserCtx, FileCtx).
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Invalidates replica of file whose data is not unique
 %% (it is stored also on other providers)
