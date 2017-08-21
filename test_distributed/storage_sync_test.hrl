@@ -11,6 +11,8 @@
 
 -include_lib("ctool/include/test/test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
+-include_lib("ctool/include/posix/acl.hrl").
 
 -define(ATTEMPTS, 30).
 
@@ -25,6 +27,8 @@
 
 %% test data
 -define(USER, <<"user1">>).
+-define(USER2, <<"user2">>).
+-define(GROUP, <<"group1">>).
 -define(SPACE_ID, <<"space1">>).
 -define(SPACE_NAME, <<"space_name1">>).
 -define(SPACE_PATH, <<"/", (?SPACE_NAME)/binary>>).
@@ -52,7 +56,6 @@
 
 -define(TEST_UID, 1000).
 -define(TEST_GID, 1000).
--define(TEST_OD_USER_ID, <<"0123456789abcdef">>).
 
 -define(TEST_URL, <<"http://127.0.0.1:5000">>).
 
@@ -63,4 +66,43 @@
     url = ?TEST_URL,
     cache_timeout = CacheTimeout,
     api_key = <<"test_api_key">>
+}).
+
+-define(ACL, #acl{
+    value = [
+        #access_control_entity{
+            acetype = ?allow_mask,
+            aceflags = ?no_flags_mask,
+            identifier = <<"OWNER@">>,
+            acemask = ?read_acl_mask
+        },
+        #access_control_entity{
+            acetype = ?deny_mask,
+            aceflags = ?no_flags_mask,
+            identifier = <<"GROUP@">>,
+            acemask = ?write_acl_mask
+        },
+        #access_control_entity{
+            acetype = ?allow_mask,
+            aceflags = ?no_flags_mask,
+            identifier = <<"EVERYONE@">>,
+            acemask = ?read_acl_mask
+        }
+        %todo jk add group and user nfs ids after expanding luma
+
+    ]
+}).
+
+
+-define(ACL2, #acl{
+    value = [
+        #access_control_entity{
+            acetype = ?deny_mask,
+            aceflags = ?no_flags_mask,
+            identifier = <<"EVERYONE@">>,
+            acemask = ?read_acl_mask
+        }
+        %todo jk add group and user nfs ids after expanding luma
+
+    ]
 }).

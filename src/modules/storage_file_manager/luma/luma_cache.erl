@@ -17,7 +17,7 @@
 
 -type key() :: binary().
 -type model() :: reverse_luma:model() | luma:model().
--type value() :: od_user:id() | luma:user_ctx().
+-type value() :: od_user:id() | od_group:id()| luma:user_ctx().
 -type timestamp() :: non_neg_integer().
 
 -export_type([model/0, value/0, timestamp/0]).

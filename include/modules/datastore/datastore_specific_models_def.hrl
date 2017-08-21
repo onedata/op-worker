@@ -266,6 +266,7 @@
     type :: undefined | file_meta:type(),
     mode = 0 :: file_meta:posix_permissions(),
     owner :: undefined | od_user:id(),
+    group_owner :: undefined | od_group:id(),
     size = 0 :: undefined | file_meta:size(),
     version = 0, %% Snapshot version
     is_scope = false :: boolean(),

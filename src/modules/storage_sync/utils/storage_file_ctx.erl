@@ -25,7 +25,8 @@
     space_id :: od_space:id(),
     storage_id :: storage:id(),
     handle = undefined :: undefined | storage_file_manager:handle(),
-    stat = undefined :: undefined | #statbuf{}
+    stat = undefined :: undefined | #statbuf{},
+    xattr = undefined :: undefined | binary()
 }).
 
 -type ctx() :: #storage_file_ctx{}.
@@ -33,9 +34,9 @@
 -export_type([ctx/0]).
 
 %% API
--export([new/3, get_child_ctx/2, get_children_ctxs_batch/3, reset_sfm_handle/1]).
+-export([new/3, get_child_ctx/2, get_children_ctxs_batch/3, reset/1]).
 -export([get_stat_buf/1, get_handle/1, get_file_id_const/1,
-    get_storage_doc/1]).
+    get_storage_doc/1, get_nfs4_acl/1]).
 
 
 %%-------------------------------------------------------------------
@@ -59,9 +60,12 @@ new(CanonicalPath, SpaceId, StorageId) ->
 %% Resets handle field.
 %% @end
 %%-------------------------------------------------------------------
--spec reset_sfm_handle(ctx()) -> ctx().
-reset_sfm_handle(Ctx = #storage_file_ctx{}) ->
-    Ctx#storage_file_ctx{handle = undefined}.
+-spec reset(ctx()) -> ctx().
+reset(Ctx = #storage_file_ctx{}) ->
+    Ctx#storage_file_ctx{
+        handle = undefined,
+        xattr = undefined
+    }.
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -99,7 +103,7 @@ get_children_ctxs_batch(StorageFileCtx, Offset, BatchSize) ->
 %% Returns storage_file_ctx of child with given name.
 %% @end
 %%-------------------------------------------------------------------
--spec get_child_ctx(ctx(), file_meta:name()) -> {ctx(), ctx()}.
+-spec get_child_ctx(ctx(), file_meta:name()) -> {ChildCtx :: ctx(), ParentCtx :: ctx()}.
 get_child_ctx(ParentCtx = #storage_file_ctx{handle = undefined}, ChildName) ->
     get_child_ctx(set_sfm_handle(ParentCtx), ChildName);
 get_child_ctx(ParentCtx = #storage_file_ctx{
@@ -158,6 +162,39 @@ get_storage_doc(StorageFileCtx = #storage_file_ctx{
         storage = StorageDoc = #document{}
 }}) ->
     {StorageDoc, StorageFileCtx}.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns binary representation of nfs4 acl.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_nfs4_acl(ctx()) -> {binary(), ctx()} | {error, Reason :: term()}.
+get_nfs4_acl(StorageFileCtx) ->
+    get_xattr(StorageFileCtx, <<"system.nfs4_acl">>).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns binary representation of given xattr.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_xattr(ctx(), binary()) -> {binary(), ctx()} | {error, Reason :: term()}.
+get_xattr(StorageFileCtx = #storage_file_ctx{
+    xattr = undefined,
+    handle = undefined
+}, XattrName) ->
+    get_xattr(set_sfm_handle(StorageFileCtx), XattrName);
+get_xattr(StorageFileCtx = #storage_file_ctx{
+    xattr = Xattr,
+    handle = undefined
+}, _XattrName) ->
+    {Xattr, StorageFileCtx};
+get_xattr(StorageFileCtx = #storage_file_ctx{handle = SFMHandle}, XattrName) ->
+    case storage_file_manager:getxattr(SFMHandle, XattrName) of
+        {ok, Xattr} ->
+            {Xattr, StorageFileCtx#storage_file_ctx{xattr = Xattr}};
+        Error ->
+            Error
+    end.
 
 %%%===================================================================
 %%% Internal functions

@@ -103,17 +103,27 @@
         "users": {
             "user1": {
                 "default_space": "space1"
+            },
+            "user2": {
+                "default_space": "space1"
             }
         },
         "groups": {
+            "group1": {
+                "users": [
+                "user1"
+                ]
+            }
         },
         "spaces": {
             "space1": {
                 "displayed_name": "space_name1",
                 "users": [
-                    "user1"
+                    "user1",
+                    "user2"
                 ],
                 "groups": [
+                    "group1"
                 ],
                 "providers": {
                     "p1": {

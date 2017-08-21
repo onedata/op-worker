@@ -97,10 +97,7 @@ set_acl_insecure(_UserCtx, FileCtx, #acl{value = Val}, Create, Replace) ->
     case xattr:set(FileCtx, ?ACL_KEY, acl_logic:from_acl_to_json_format(Val), Create, Replace) of
         {ok, _} ->
             ok = permissions_cache:invalidate(),
-            ok = sfm_utils:chmod_storage_file(
-                user_ctx:new(?ROOT_SESS_ID),
-                FileCtx, 8#000
-            ),
+            maybe_chmod_storage_file(FileCtx, 8#000),
             fslogic_times:update_ctime(FileCtx),
             #provider_response{status = #status{code = ?OK}};
         {error, {not_found, custom_metadata}} ->
@@ -129,4 +126,27 @@ remove_acl_insecure(_UserCtx, FileCtx) ->
             #provider_response{status = #status{code = ?OK}};
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOENT}}
+    end.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Tries to chmod file on storage. Succeeds if chmod succeeds or
+%% if chmod returns {error, ?EROFS} succeeds.
+%% @end
+%%-------------------------------------------------------------------
+-spec maybe_chmod_storage_file(file_ctx:ctx(), file_meta:mode()) -> ok.
+maybe_chmod_storage_file(FileCtx, Mode) ->
+    try
+        ok = sfm_utils:chmod_storage_file(user_ctx:new(?ROOT_SESS_ID), FileCtx,
+            Mode)
+    catch
+        error:{case_clause, {error, ?EROFS}} ->
+            ok;
+        Error:Reason ->
+            Error(Reason)
     end.

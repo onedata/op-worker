@@ -134,7 +134,8 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(onedata_group_bucket, [], ?GLOBALLY_CACHED_LEVEL).
+    ?MODEL_CONFIG(onedata_group_bucket, [], ?GLOBALLY_CACHED_LEVEL)#model_config{
+        list_enabled = {true, return_errors}}.
 
 %%--------------------------------------------------------------------
 %% @doc

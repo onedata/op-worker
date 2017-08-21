@@ -17,14 +17,14 @@
 -include_lib("kernel/include/file.hrl").
 -include("storage_sync_test.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% util functions
 -export([disable_storage_sync/1, set_check_locally_enoent_strategy/2,
     set_check_globally_enoent_strategy/2, reset_enoent_strategies/2,
     add_workers_storage_mount_points/1, get_mount_point/2, clean_storage/2,
     get_host_mount_point/2, storage_test_file_path/4, create_init_file/1,
-    enable_storage_import/1, enable_storage_update/1,
-    delete_non_empty_directory_update_test/2
+    enable_storage_import/1, enable_storage_update/1, clean_reverse_luma_cache/1
 ]).
 
 %% tests
@@ -49,7 +49,8 @@
     create_directory_import_check_user_id_error_test/2,
     create_file_import_check_user_id_test/2,
     create_file_import_check_user_id_error_test/2,
-    clean_reverse_luma_cache/1]).
+    delete_non_empty_directory_update_test/2,
+    import_nfs_acl_test/2, update_nfs_acl_test/2]).
 
 
 -define(assertHashChangedFun(File, ExpectedResult0),
@@ -113,7 +114,7 @@ create_directory_import_check_user_id_test(Config, MountSpaceInRoot) ->
     ok = file:change_owner(StorageTestDirPath, ?TEST_UID, ?TEST_GID),
     storage_sync_test_base:enable_storage_import(Config),
     %% Check if dir was imported
-    ?assertMatch({ok, #file_attr{owner_id = ?TEST_OD_USER_ID}},
+    ?assertMatch({ok, #file_attr{owner_id = ?USER}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS).
 
 create_directory_import_check_user_id_error_test(Config, MountSpaceInRoot) ->
@@ -208,7 +209,7 @@ create_file_import_check_user_id_test(Config, MountSpaceInRoot) ->
     storage_sync_test_base:enable_storage_import(Config),
 
     %% Check if file was imported on W1
-    ?assertMatch({ok, #file_attr{owner_id = ?TEST_OD_USER_ID}},
+    ?assertMatch({ok, #file_attr{owner_id = ?USER}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
     {ok, Handle1} = ?assertMatch({ok, _},
         lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
@@ -866,6 +867,80 @@ should_not_detect_timestamp_update_test(Config, MountSpaceInRoot) ->
     ?assertNotMatch({ok, #file_attr{atime = 1, mtime = 1}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH})).
 
+import_nfs_acl_test(Config, MountSpaceInRoot) ->
+    [W1, _] = ?config(op_worker_nodes, Config),
+    W1MountPoint = get_host_mount_point(W1, Config),
+    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
+    SessId2 = ?config({session_id, {?USER2, ?GET_DOMAIN(W1)}}, Config),
+    StorageTestFilePath =
+        storage_test_file_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+
+    %% Create file on storage
+    ok = file:write_file(StorageTestFilePath, ?TEST_DATA),
+    storage_sync_test_base:enable_storage_import(Config),
+    %% Check if file was imported
+    ?assertMatch({ok, #file_attr{}},
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+
+    %% User1 should be allowed to read acl
+    {ok, #xattr{value = Value}} = ?assertMatch({ok, #xattr{}},
+        lfm_proxy:get_xattr(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, <<"cdmi_acl">>)),
+    ?assertMatch(Value, acl_logic:from_acl_to_json_format(?ACL#acl.value)),
+
+    %% User1 should not be allowed to set acl
+    ?assertMatch({error, ?EACCES},
+        lfm_proxy:set_xattr(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, #xattr{})),
+
+    %% User2 should be allowed to read acl
+    {ok, #xattr{value = Value}} = ?assertMatch({ok, #xattr{}},
+        lfm_proxy:get_xattr(W1, SessId2, {path, ?SPACE_TEST_FILE_PATH}, <<"cdmi_acl">>)).
+
+update_nfs_acl_test(Config, MountSpaceInRoot) ->
+    Workers = [W1, _] = ?config(op_worker_nodes, Config),
+    W1MountPoint = get_host_mount_point(W1, Config),
+    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
+    SessId2 = ?config({session_id, {?USER2, ?GET_DOMAIN(W1)}}, Config),
+    StorageTestFilePath =
+        storage_test_file_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+
+    %% Create file on storage
+    ok = file:write_file(StorageTestFilePath, ?TEST_DATA),
+    storage_sync_test_base:enable_storage_import(Config),
+
+%%    %% Check if file was imported
+    ?assertMatch({ok, #file_attr{}},
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+
+    %% User1 should be allowed to read acl
+    {ok, #xattr{value = Value}} = ?assertMatch({ok, #xattr{}},
+        lfm_proxy:get_xattr(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, <<"cdmi_acl">>)),
+    ?assertMatch(Value, acl_logic:from_acl_to_json_format(?ACL#acl.value)),
+
+    %% User1 should not be allowed to set acl
+    ?assertMatch({error, ?EACCES},
+        lfm_proxy:set_xattr(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, #xattr{})),
+
+    %% User2 should be allowed to read acl
+    {ok, #xattr{value = Value}} = ?assertMatch({ok, #xattr{}},
+        lfm_proxy:get_xattr(W1, SessId2, {path, ?SPACE_TEST_FILE_PATH}, <<"cdmi_acl">>)),
+
+    EncACL = nfs4_acl:encode(?ACL2),
+    ok = test_utils:mock_expect(Workers, storage_file_manager, getxattr, fun
+        (Handle = #sfm_handle{file = <<"/">>}, Name) ->
+            meck:passthrough([Handle, Name]);
+        (Handle = #sfm_handle{file = <<"/space1">>}, Name) ->
+            meck:passthrough([Handle, Name]);
+        (#sfm_handle{}, _) ->
+            {ok, EncACL}
+    end),
+    storage_sync_test_base:enable_storage_update(Config),
+    %% User1 should not be allowed to read acl
+    ?assertMatch({error, ?EACCES},
+        lfm_proxy:get_xattr(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, <<"cdmi_acl">>), ?ATTEMPTS),
+
+    %% User2 should not be allowed to read acl
+    ?assertMatch({error, ?EACCES},
+        lfm_proxy:get_xattr(W1, SessId2, {path, ?SPACE_TEST_FILE_PATH}, <<"cdmi_acl">>)).
 
 import_file_by_path_test(Config, MountSpaceInRoot) ->
     [W1, _] = ?config(op_worker_nodes, Config),
