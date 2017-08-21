@@ -154,9 +154,8 @@ echo_loop_test_base(Config) ->
 
     {WriteTime, _} = measure_execution_time(fun() ->
         lists:foldl(fun(N, Offset) ->
-            OpenAns = lfm_proxy:open(Worker, SessId1, {path, FilePath}, write),
-            ?assertMatch({ok, _}, OpenAns),
-            {ok, Handle} = OpenAns,
+            {ok, Handle} = ?assertMatch({ok, _},
+                lfm_proxy:open(Worker, SessId1, {path, FilePath}, write)),
             Bytes = integer_to_binary(N),
             BufSize = size(Bytes),
             ?assertMatch({ok, BufSize}, lfm_proxy:write(Worker, Handle, Offset, Bytes)),
@@ -292,9 +291,8 @@ ls_with_stats_test_base(Config) ->
 
     % List directory
     {LsTime, LSDirs} = measure_execution_time(fun() ->
-        LSAns = lfm_proxy:ls(Worker, SessId1, {path, LastTreeDir}, 0, DirsNumPerProc*ProcNum),
-        ?assertMatch({ok, _}, LSAns),
-        {ok, ListedDirs} = LSAns,
+        {ok, ListedDirs} = ?assertMatch({ok, _},
+            lfm_proxy:ls(Worker, SessId1, {path, LastTreeDir}, 0, DirsNumPerProc*ProcNum)),
         ?assertEqual(DirsNumPerProc*ProcNum, length(ListedDirs)),
         ListedDirs
     end),
@@ -303,8 +301,7 @@ ls_with_stats_test_base(Config) ->
     {StatTime, _} = measure_execution_time(fun() ->
         Fun = fun(Dirs) ->
             lists:foreach(fun({D, _}) ->
-                StatAns = lfm_proxy:stat(Worker, SessId1,  {guid, D}),
-                ?assertMatch({ok, #file_attr{}}, StatAns)
+                ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Worker, SessId1,  {guid, D}))
             end, Dirs)
         end,
         case ProcNum of
@@ -382,15 +379,12 @@ ls_test_base(Config) ->
     VerifyLS = fun(Offset0, Limit0, ElementsList) ->
         Offset = Offset0 * DSM,
         Limit = Limit0 * DSM,
-        LSAns = lfm_proxy:ls(Worker, SessId1, {path, MainDirPath}, Offset, Limit),
-        LSAns2 = lfm_proxy:ls(Worker, SessId1, {path, MainDirPath}, 0, Offset),
-        LSAns3 = lfm_proxy:ls(Worker, SessId1, {path, MainDirPath}, Offset + Limit, length(ElementsList)),
-        ?assertMatch({ok, _}, LSAns),
-        ?assertMatch({ok, _}, LSAns2),
-        ?assertMatch({ok, _}, LSAns3),
-        {_, ListedElements} = LSAns,
-        {_, ListedElements2} = LSAns2,
-        {_, ListedElements3} = LSAns3,
+        {ok, ListedElements} = ?assertMatch({ok, _},
+            lfm_proxy:ls(Worker, SessId1, {path, MainDirPath}, Offset, Limit)),
+        {ok, ListedElements2} = ?assertMatch({ok, _},
+            lfm_proxy:ls(Worker, SessId1, {path, MainDirPath}, 0, Offset)),
+        {ok, ListedElements3} = ?assertMatch({ok, _},
+            lfm_proxy:ls(Worker, SessId1, {path, MainDirPath}, Offset + Limit, length(ElementsList))),
 
         ?assertEqual({min(Limit, max(length(ElementsList) - Offset, 0)), min(Offset, length(ElementsList)),
             max(length(ElementsList) - Offset - Limit, 0)},
@@ -778,10 +772,8 @@ lfm_acl_test(Config) ->
         #access_control_entity{acetype = ?allow_mask, identifier = UserId1, aceflags = ?no_flags_mask, acemask = ?read_mask bor ?write_mask},
         #access_control_entity{acetype = ?deny_mask, identifier = GroupId1, aceflags = ?identifier_group_mask, acemask = ?write_mask}
     ],
-    Ans1 = lfm_proxy:set_acl(W, SessId1, {guid, FileGUID}, Acl),
-    ?assertEqual(ok, Ans1),
-    Ans2 = lfm_proxy:get_acl(W, SessId1, {guid, FileGUID}),
-    ?assertEqual({ok, Acl}, Ans2).
+    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId1, {guid, FileGUID}, Acl)),
+    ?assertEqual({ok, Acl}, lfm_proxy:get_acl(W, SessId1, {guid, FileGUID})).
 
 rm_recursive_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -1107,10 +1099,11 @@ file_popularity_view_should_return_unpopular_files(Config) ->
     {ok, PopularFileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/popular_file">>, 8#755),
     {ok, UnpopularFileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/unpopular_file">>, 8#755),
     SpaceId = fslogic_uuid:guid_to_space_id(PopularFileGuid),
-    PopularHandle = lfm_proxy:open(W, SessId1, {guid, PopularFileGuid}, read),
-    lfm_proxy:close(W, PopularHandle),
-    UnpopularHandle = lfm_proxy:open(W, SessId1, {guid, UnpopularFileGuid}, read),
-    lfm_proxy:close(W, UnpopularHandle),
+
+    {ok, PopularHandle} = lfm_proxy:open(W, SessId1, {guid, PopularFileGuid}, read),
+    ok = lfm_proxy:close(W, PopularHandle),
+    {ok, UnpopularHandle} = lfm_proxy:open(W, SessId1, {guid, UnpopularFileGuid}, read),
+    ok = lfm_proxy:close(W, UnpopularHandle),
 
     timer:sleep(timer:seconds(10)),
 
@@ -1123,7 +1116,7 @@ file_popularity_view_should_return_unpopular_files(Config) ->
     ?assert(lists:member(file_ctx:new_by_guid(UnpopularFileGuid), UnpopularFiles1)),
 
     Handles = [lfm_proxy:open(W, SessId1, {guid, PopularFileGuid}, read) || _ <- lists:seq(0,10)],
-    [lfm_proxy:close(W, Handle) || Handle <- Handles],
+    [lfm_proxy:close(W, Handle) || {ok, Handle} <- Handles],
 
     timer:sleep(timer:seconds(10)),
     UnpopularFiles2 = ?assertMatch([_ | _],
