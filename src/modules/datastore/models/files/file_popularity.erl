@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([increment_open/1, get_or_default/2]).
+-export([increment_open/1, get_or_default/1]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, create_or_update/2,
@@ -49,6 +49,7 @@ record_struct(1) ->
     {record, [
         {file_uuid, string},
         {space_id, string},
+        {size, integer},
         {open_count, integer},
         {last_open, integer},
         {hr_hist, [integer]},
@@ -75,14 +76,14 @@ increment_open(FileCtx) ->
         true ->
             SpaceId = file_ctx:get_space_id_const(FileCtx),
             FileUuid = file_ctx:get_uuid_const(FileCtx),
-            DefaultFilePopularity = empty_file_popularity(FileUuid, SpaceId),
+            DefaultFilePopularity = empty_file_popularity(FileCtx),
             ToCreate = #document{
                 key = FileUuid,
-                value = increase_popularity(DefaultFilePopularity)
+                value = increase_popularity(FileCtx, DefaultFilePopularity)
             },
             case
                 create_or_update(ToCreate, fun(FilePopularity) ->
-                    {ok, increase_popularity(FilePopularity)}
+                    {ok, increase_popularity(FileCtx, FilePopularity)}
                 end)
             of
                 {ok, _} ->
@@ -98,16 +99,17 @@ increment_open(FileCtx) ->
 %% Returns file_popularity doc, or default doc if its not present.
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_default(file_meta:uuid(), od_space:id()) ->
+-spec get_or_default(file_ctx:ctx()) ->
     {ok, doc()} | datastore:get_error().
-get_or_default(FileUuid, SpaceId) ->
+get_or_default(FileCtx) ->
+    FileUuid= file_ctx:get_uuid_const(FileCtx),
     case get(FileUuid) of
         {ok, Doc} ->
             {ok, Doc};
         {error, {not_found, _}} ->
             {ok, #document{
                 key = FileUuid,
-                value = empty_file_popularity(FileUuid, SpaceId)
+                value = empty_file_popularity(FileCtx)
             }};
         Error ->
             Error
@@ -223,23 +225,20 @@ before(_ModelName, _Method, _Level, _Context) ->
 %% Returns file_popularity record with zero popularity.
 %% @end
 %%--------------------------------------------------------------------
--spec empty_file_popularity(file_meta:uuid(), od_space:id()) -> file_popularity().
-empty_file_popularity(FileUuid, SpaceId) ->
+-spec empty_file_popularity(file_ctx:ctx()) -> file_popularity().
+empty_file_popularity(FileCtx) ->
     HourlyHistogram = time_slot_histogram:new(?HOUR_TIME_WINDOW, ?HOUR_HISTOGRAM_SIZE),
     DailyHistogram = time_slot_histogram:new(?DAY_TIME_WINDOW, ?DAY_HISTOGRAM_SIZE),
     MonthlyHistogram = time_slot_histogram:new(?MONTH_TIME_WINDOW, ?MONTH_HISTOGRAM_SIZE),
-    histograms_to_file_popularity(HourlyHistogram, DailyHistogram, MonthlyHistogram, FileUuid, SpaceId).
+    histograms_to_file_popularity(HourlyHistogram, DailyHistogram, MonthlyHistogram, FileCtx).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns file_popularity record with popularity increased by one open
 %% @end
 %%--------------------------------------------------------------------
--spec increase_popularity(file_popularity()) -> file_popularity().
-increase_popularity(FilePopularity = #file_popularity{
-    file_uuid = FileUuid,
-    space_id = SpaceId
-}) ->
+-spec increase_popularity(file_ctx:ctx(), file_popularity()) -> file_popularity().
+increase_popularity(FileCtx, FilePopularity) ->
     {HourlyHistogram, DailyHistogram, MonthlyHistogram} =
         file_popularity_to_histograms(FilePopularity),
     CurrentTimestampHours = utils:system_time_seconds() div 3600,
@@ -247,8 +246,7 @@ increase_popularity(FilePopularity = #file_popularity{
         time_slot_histogram:increment(HourlyHistogram, CurrentTimestampHours),
         time_slot_histogram:increment(DailyHistogram, CurrentTimestampHours),
         time_slot_histogram:increment(MonthlyHistogram, CurrentTimestampHours),
-        FileUuid,
-        SpaceId
+        FileCtx
     ).
 
 %%--------------------------------------------------------------------
@@ -260,11 +258,13 @@ increase_popularity(FilePopularity = #file_popularity{
     HourlyHistogram :: time_slot_histogram:histogram(),
     DailyHistogram :: time_slot_histogram:histogram(),
     MonthlyHistogram :: time_slot_histogram:histogram(),
-    file_meta:uuid(), od_space:id()) -> file_popularity().
-histograms_to_file_popularity(HourlyHistogram, DailyHistogram, MonthlyHistogram, FileUuid, SpaceId) ->
+    file_ctx:ctx()) -> file_popularity().
+histograms_to_file_popularity(HourlyHistogram, DailyHistogram, MonthlyHistogram, FileCtx) ->
+    {LocalSize, _FileCtx2} = file_ctx:get_local_storage_file_size(FileCtx),
     #file_popularity{
-        file_uuid = FileUuid,
-        space_id = SpaceId,
+        file_uuid = file_ctx:get_uuid_const(FileCtx),
+        space_id = file_ctx:get_space_id_const(FileCtx),
+        size = LocalSize,
         open_count = time_slot_histogram:get_sum(MonthlyHistogram),
         last_open = time_slot_histogram:get_last_update(HourlyHistogram),
         hr_hist = time_slot_histogram:get_histogram_values(HourlyHistogram),

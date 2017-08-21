@@ -1034,7 +1034,7 @@ new_file_should_have_zero_popularity(Config) ->
                 mth_mov_avg = 0
             }
         }},
-        rpc:call(W, file_popularity, get_or_default, [FileUuid, SpaceId])
+        rpc:call(W, file_popularity, get_or_default, [file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId))])
     ).
 
 opening_file_should_increase_file_popularity(Config) ->
@@ -1062,7 +1062,7 @@ opening_file_should_increase_file_popularity(Config) ->
                 mth_hist = [1 | _]
             }
         }},
-        rpc:call(W, file_popularity, get_or_default, [FileUuid, SpaceId])
+        rpc:call(W, file_popularity, get_or_default, [file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId))])
     ),
     ?assert(TimeBeforeFirstOpen =< Doc#document.value#file_popularity.last_open),
 
@@ -1083,7 +1083,7 @@ opening_file_should_increase_file_popularity(Config) ->
                 mth_mov_avg = 2
             }
         }},
-        rpc:call(W, file_popularity, get_or_default, [FileUuid, SpaceId])
+        rpc:call(W, file_popularity, get_or_default, [file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId))])
     ),
     ?assert(TimeBeforeSecondOpen =< Doc2#document.value#file_popularity.last_open),
     [FirstHour, SecondHour | _] = Doc2#document.value#file_popularity.hr_hist,
@@ -1109,7 +1109,7 @@ file_popularity_view_should_return_unpopular_files(Config) ->
 
     UnpopularFiles1 = ?assertMatch([_ | _],
         rpc:call(W, file_popularity_view, get_unpopular_files,
-            [SpaceId, null, 10, null, null, null]
+            [SpaceId, null, null, 10, null, null, null]
         )
     ),
     ?assert(lists:member(file_ctx:new_by_guid(PopularFileGuid), UnpopularFiles1)),
@@ -1121,7 +1121,7 @@ file_popularity_view_should_return_unpopular_files(Config) ->
     timer:sleep(timer:seconds(10)),
     UnpopularFiles2 = ?assertMatch([_ | _],
         rpc:call(W, file_popularity_view, get_unpopular_files,
-            [SpaceId, null, 10, null, null, null]
+            [SpaceId, null, null, 10, null, null, null]
         )
     ),
     ?assertNot(lists:member(file_ctx:new_by_guid(PopularFileGuid), UnpopularFiles2)),

@@ -440,6 +440,7 @@
 -record(file_popularity, {
     file_uuid :: undefined | file_meta:uuid(),
     space_id :: undefined  | od_space:id(),
+    size = 0 :: non_neg_integer(),
     open_count = 0 :: non_neg_integer(),
     last_open = 0 :: non_neg_integer(),
     hr_hist = [] :: list(),

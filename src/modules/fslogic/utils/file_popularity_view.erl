@@ -18,7 +18,9 @@
 -define(VIEW_NAME(SpaceId), <<"file-popularity-", SpaceId/binary>>).
 
 %% API
--export([create/1, get_unpopular_files/6]).
+-export([create/1, get_unpopular_files/7]).
+
+-define(INFINITY, 100000000000000000). % 100PB
 
 %%%===================================================================
 %%% API
@@ -36,6 +38,7 @@ create(SpaceId) ->
         "   if(doc['_record'] == 'file_popularity' && doc['space_id'] == '", SpaceId/binary , "') { "
         "      emit("
         "         ["
+        "             doc['size'],",
         "             doc['last_open'],",
         "             doc['open_count'],",
         "             doc['hr_mov_avg'],",
@@ -54,11 +57,12 @@ create(SpaceId) ->
 %% Finds unpopular files in space
 %% @end
 %%--------------------------------------------------------------------
--spec get_unpopular_files(od_space:id(), HoursSinceLastOpen :: null | non_neg_integer(),
-    TotalOpenLimit :: null | non_neg_integer(), HourAverageLimit :: null | non_neg_integer(),
-    DayAverageLimit :: null | non_neg_integer(), MonthAverageLimit :: null | non_neg_integer()) -> [file_ctx:ctx()].
-get_unpopular_files(SpaceId, HoursSinceLastOpenLimit, TotalOpenLimit,
-    HourAverageLimit, DayAverageLimit, MonthAverageLimit
+-spec get_unpopular_files(od_space:id(), SizeLowerLimit :: null | non_neg_integer(),
+    HoursSinceLastOpen :: null | non_neg_integer(), TotalOpenLimit :: null | non_neg_integer(),
+    HourAverageLimit :: null | non_neg_integer(), DayAverageLimit :: null | non_neg_integer(),
+    MonthAverageLimit :: null | non_neg_integer()) -> [file_ctx:ctx()].
+get_unpopular_files(SpaceId, SizeLowerLimit, HoursSinceLastOpenLimit,
+    TotalOpenLimit, HourAverageLimit, DayAverageLimit, MonthAverageLimit
 ) ->
     Ctx = model:make_disk_ctx(file_popularity:model_init()),
     CurrentTimeInHours = utils:system_time_seconds() div 3600,
@@ -71,8 +75,9 @@ get_unpopular_files(SpaceId, HoursSinceLastOpenLimit, TotalOpenLimit,
     Options = [
         {spatial, true},
         {stale, false},
-        {start_range, [0, 0, 0, 0, 0]},
+        {start_range, [SizeLowerLimit, 0, 0, 0, 0, 0]},
         {end_range, [
+            ?INFINITY,
             HoursTimestampLimit,
             TotalOpenLimit,
             HourAverageLimit,
