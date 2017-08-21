@@ -49,14 +49,14 @@ record_struct(1) ->
     {record, [
         {file_uuid, string},
         {space_id, string},
-        {total_open_count, integer},
+        {open_count, integer},
         {last_open, integer},
-        {hourly_histogram, [integer]},
-        {daily_histogram, [integer]},
-        {monthly_histogram, [integer]},
-        {hourly_moving_average, integer},
-        {daily_moving_average, integer},
-        {monthly_moving_average, integer}
+        {hr_hist, [integer]},
+        {dy_hist, [integer]},
+        {mth_hist, [integer]},
+        {hr_mov_avg, integer},
+        {dy_mov_avg, integer},
+        {mth_mov_avg, integer}
     ]}.
 
 %%%===================================================================
@@ -265,14 +265,14 @@ histograms_to_file_popularity(HourlyHistogram, DailyHistogram, MonthlyHistogram,
     #file_popularity{
         file_uuid = FileUuid,
         space_id = SpaceId,
-        total_open_count = time_slot_histogram:get_sum(MonthlyHistogram),
+        open_count = time_slot_histogram:get_sum(MonthlyHistogram),
         last_open = time_slot_histogram:get_last_update(HourlyHistogram),
-        hourly_histogram = time_slot_histogram:get_histogram_values(HourlyHistogram),
-        daily_histogram = time_slot_histogram:get_histogram_values(DailyHistogram),
-        monthly_histogram = time_slot_histogram:get_histogram_values(MonthlyHistogram),
-        hourly_moving_average = time_slot_histogram:get_average(HourlyHistogram),
-        daily_moving_average = time_slot_histogram:get_average(DailyHistogram),
-        monthly_moving_average = time_slot_histogram:get_average(MonthlyHistogram)
+        hr_hist = time_slot_histogram:get_histogram_values(HourlyHistogram),
+        dy_hist = time_slot_histogram:get_histogram_values(DailyHistogram),
+        mth_hist = time_slot_histogram:get_histogram_values(MonthlyHistogram),
+        hr_mov_avg = time_slot_histogram:get_average(HourlyHistogram),
+        dy_mov_avg = time_slot_histogram:get_average(DailyHistogram),
+        mth_mov_avg = time_slot_histogram:get_average(MonthlyHistogram)
     }.
 
 %%--------------------------------------------------------------------
@@ -288,9 +288,9 @@ histograms_to_file_popularity(HourlyHistogram, DailyHistogram, MonthlyHistogram,
     }.
 file_popularity_to_histograms(#file_popularity{
     last_open = LastUpdate,
-    hourly_histogram = HourlyHistogram,
-    daily_histogram = DailyHistogram,
-    monthly_histogram = MonthlyHistogram
+    hr_hist = HourlyHistogram,
+    dy_hist = DailyHistogram,
+    mth_hist = MonthlyHistogram
 }) ->
     {
         time_slot_histogram:new(LastUpdate, ?HOUR_TIME_WINDOW, HourlyHistogram),

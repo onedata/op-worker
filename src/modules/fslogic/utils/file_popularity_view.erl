@@ -35,10 +35,10 @@ create(SpaceId) ->
         "      emit("
         "         ["
         "             doc['last_open'],",
-        "             doc['total_open_count'],",
-        "             doc['hourly_moving_average'],",
-        "             doc['daily_moving_average'],",
-        "             doc['monthly_moving_average']",
+        "             doc['open_count'],",
+        "             doc['hr_mov_avg'],",
+        "             doc['dy_mov_avg'],",
+        "             doc['mth_mov_avg']",
         "         ],"
         "         null"
         "      );"

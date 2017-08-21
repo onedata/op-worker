@@ -1036,10 +1036,10 @@ new_file_should_have_zero_popularity(Config) ->
                 file_uuid = FileUuid,
                 space_id = SpaceId,
                 last_open = 0,
-                total_open_count = 0,
-                hourly_moving_average = 0,
-                daily_moving_average = 0,
-                monthly_moving_average = 0
+                open_count = 0,
+                hr_mov_avg = 0,
+                dy_mov_avg = 0,
+                mth_mov_avg = 0
             }
         }},
         rpc:call(W, file_popularity, get_or_default, [FileUuid, SpaceId])
@@ -1064,10 +1064,10 @@ opening_file_should_increase_file_popularity(Config) ->
             value = #file_popularity{
                 file_uuid = FileUuid,
                 space_id = SpaceId,
-                total_open_count = 1,
-                hourly_histogram = [1 | _],
-                daily_histogram = [1 | _],
-                monthly_histogram = [1 | _]
+                open_count = 1,
+                hr_hist = [1 | _],
+                dy_hist = [1 | _],
+                mth_hist = [1 | _]
             }
         }},
         rpc:call(W, file_popularity, get_or_default, [FileUuid, SpaceId])
@@ -1085,18 +1085,18 @@ opening_file_should_increase_file_popularity(Config) ->
     {ok, Doc2} = ?assertMatch(
         {ok, #document{
             value = #file_popularity{
-                total_open_count = 24,
-                hourly_moving_average = 1,
-                daily_moving_average = 1,
-                monthly_moving_average = 2
+                open_count = 24,
+                hr_mov_avg = 1,
+                dy_mov_avg = 1,
+                mth_mov_avg = 2
             }
         }},
         rpc:call(W, file_popularity, get_or_default, [FileUuid, SpaceId])
     ),
     ?assert(TimeBeforeSecondOpen =< Doc2#document.value#file_popularity.last_open),
-    [FirstHour, SecondHour | _] = Doc2#document.value#file_popularity.hourly_histogram,
-    [FirstDay, SecondDay | _] = Doc2#document.value#file_popularity.hourly_histogram,
-    [FirstMonth, SecondMonth | _] = Doc2#document.value#file_popularity.hourly_histogram,
+    [FirstHour, SecondHour | _] = Doc2#document.value#file_popularity.hr_hist,
+    [FirstDay, SecondDay | _] = Doc2#document.value#file_popularity.hr_hist,
+    [FirstMonth, SecondMonth | _] = Doc2#document.value#file_popularity.hr_hist,
     ?assertEqual(24, FirstHour + SecondHour),
     ?assertEqual(24, FirstDay + SecondDay),
     ?assertEqual(24, FirstMonth + SecondMonth).
@@ -1114,7 +1114,11 @@ file_popularity_view_should_return_unpopular_files(Config) ->
 
     timer:sleep(timer:seconds(10)),
 
-    UnpopularFiles1 = rpc:call(W, file_popularity_view, get_unpopular_files, [SpaceId, null, 10, null, null, null]),
+    UnpopularFiles1 = ?assertMatch([_ | _],
+        rpc:call(W, file_popularity_view, get_unpopular_files,
+            [SpaceId, null, 10, null, null, null]
+        )
+    ),
     ?assert(lists:member(file_ctx:new_by_guid(PopularFileGuid), UnpopularFiles1)),
     ?assert(lists:member(file_ctx:new_by_guid(UnpopularFileGuid), UnpopularFiles1)),
 
@@ -1122,7 +1126,11 @@ file_popularity_view_should_return_unpopular_files(Config) ->
     [lfm_proxy:close(W, Handle) || Handle <- Handles],
 
     timer:sleep(timer:seconds(10)),
-    UnpopularFiles2 = rpc:call(W, file_popularity_view, get_unpopular_files, [SpaceId, null, 10, null, null, null]),
+    UnpopularFiles2 = ?assertMatch([_ | _],
+        rpc:call(W, file_popularity_view, get_unpopular_files,
+            [SpaceId, null, 10, null, null, null]
+        )
+    ),
     ?assertNot(lists:member(file_ctx:new_by_guid(PopularFileGuid), UnpopularFiles2)),
     ?assert(lists:member(file_ctx:new_by_guid(UnpopularFileGuid), UnpopularFiles2)).
 
