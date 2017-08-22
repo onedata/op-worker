@@ -47,6 +47,8 @@ handle(Req, State, error, {error, no_peer_certificate}) ->
     {halt, Req2, State};
 handle(Req, State, error, {error,{not_found, _}}) ->
     handle(Req, State, error, ?ERROR_NOT_FOUND);
+handle(Req, State, error, {error,{<<"not_found">>, _}}) ->
+    handle(Req, State, error, ?ERROR_NOT_FOUND);
 handle(Req, State, _, {error,{_, invalid_json}}) ->
     handle(Req, State, error, invalid_json);
 handle(Req, State, _, invalid_json) ->
@@ -64,6 +66,9 @@ handle(Req, State, error, {error, ?EEXIST}) ->
 handle(Req, State, _Type, Status) when is_integer(Status) ->
     {ok, Req2} = cowboy_req:reply(Status, [], [], Req),
     {halt, Req2, State};
+handle(Req, State, _Type, {error, {Type, Error}})
+    when is_binary(Type), is_binary(Error) ->
+    handle(Req, State, error, ?ERROR_REPLY(?INTERNAL_SERVER_ERROR, Type, Error));
 handle(Req, State, _Type, {Status, BodyBinary})
     when is_integer(Status) andalso is_binary(BodyBinary) ->
     {ok, Req2} = cowboy_req:reply(Status, [], BodyBinary, Req),

@@ -15,8 +15,12 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+-define(VIEW_NAME(SpaceId), <<"file-popularity-", SpaceId/binary>>).
+
 %% API
--export([create/1, get_unpopular_files/6]).
+-export([create/1, get_unpopular_files/7]).
+
+-define(INFINITY, 100000000000000000). % 100PB
 
 %%%===================================================================
 %%% API
@@ -34,29 +38,31 @@ create(SpaceId) ->
         "   if(doc['_record'] == 'file_popularity' && doc['space_id'] == '", SpaceId/binary , "') { "
         "      emit("
         "         ["
+        "             doc['size'],",
         "             doc['last_open'],",
-        "             doc['total_open_count'],",
-        "             doc['hourly_moving_average'],",
-        "             doc['daily_moving_average'],",
-        "             doc['monthly_moving_average']",
+        "             doc['open_count'],",
+        "             doc['hr_mov_avg'],",
+        "             doc['dy_mov_avg'],",
+        "             doc['mth_mov_avg']",
         "         ],"
         "         null"
         "      );"
         "   }"
         "}">>,
     Ctx = model:make_disk_ctx(file_popularity:model_init()),
-    couchbase_driver:save_spatial_view_doc(Ctx, SpaceId, ViewFunction).
+    couchbase_driver:save_spatial_view_doc(Ctx, ?VIEW_NAME(SpaceId), ViewFunction).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Finds unpopular files in space
 %% @end
 %%--------------------------------------------------------------------
--spec get_unpopular_files(od_space:id(), HoursSinceLastOpen :: null | non_neg_integer(),
-    TotalOpenLimit :: null | non_neg_integer(), HourAverageLimit :: null | non_neg_integer(),
-    DayAverageLimit :: null | non_neg_integer(), MonthAverageLimit :: null | non_neg_integer()) -> [file_ctx:ctx()].
-get_unpopular_files(SpaceId, HoursSinceLastOpenLimit, TotalOpenLimit,
-    HourAverageLimit, DayAverageLimit, MonthAverageLimit
+-spec get_unpopular_files(od_space:id(), SizeLowerLimit :: null | non_neg_integer(),
+    HoursSinceLastOpen :: null | non_neg_integer(), TotalOpenLimit :: null | non_neg_integer(),
+    HourAverageLimit :: null | non_neg_integer(), DayAverageLimit :: null | non_neg_integer(),
+    MonthAverageLimit :: null | non_neg_integer()) -> [file_ctx:ctx()].
+get_unpopular_files(SpaceId, SizeLowerLimit, HoursSinceLastOpenLimit,
+    TotalOpenLimit, HourAverageLimit, DayAverageLimit, MonthAverageLimit
 ) ->
     Ctx = model:make_disk_ctx(file_popularity:model_init()),
     CurrentTimeInHours = utils:system_time_seconds() div 3600,
@@ -69,8 +75,9 @@ get_unpopular_files(SpaceId, HoursSinceLastOpenLimit, TotalOpenLimit,
     Options = [
         {spatial, true},
         {stale, false},
-        {start_range, [0, 0, 0, 0, 0]},
+        {start_range, [SizeLowerLimit, 0, 0, 0, 0, 0]},
         {end_range, [
+            ?INFINITY,
             HoursTimestampLimit,
             TotalOpenLimit,
             HourAverageLimit,
@@ -78,7 +85,7 @@ get_unpopular_files(SpaceId, HoursSinceLastOpenLimit, TotalOpenLimit,
             MonthAverageLimit
         ]}
     ],
-    {ok, {Rows}} = query([Ctx, SpaceId, SpaceId, Options]),
+    {ok, {Rows}} = query([Ctx, ?VIEW_NAME(SpaceId), ?VIEW_NAME(SpaceId), Options]),
     lists:map(fun(Row) ->
         {<<"id">>, <<"file_popularity-", FileUuid/binary>>} =
             lists:keyfind(<<"id">>, 1, Row),
