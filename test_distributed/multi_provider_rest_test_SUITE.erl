@@ -72,7 +72,8 @@
     set_get_xattr_inherited/1,
     set_get_json_metadata_using_filter/1,
     primitive_json_metadata_test/1,
-    empty_metadata_invalid_json_test/1
+    empty_metadata_invalid_json_test/1,
+    spatial_flag_test/1
 ]).
 
 all() ->
@@ -117,7 +118,8 @@ all() ->
         set_get_xattr_inherited,
         set_get_json_metadata_using_filter,
         primitive_json_metadata_test,
-        empty_metadata_invalid_json_test
+        empty_metadata_invalid_json_test,
+        spatial_flag_test
     ]).
 
 %%%===================================================================
@@ -1300,6 +1302,14 @@ empty_metadata_invalid_json_test(Config) ->
             do_request(WorkerP1, <<"metadata/space3?metadata_type=json">>, put,
                 [user_1_token_header(Config), {<<"content-type">>, <<"application/json">>}], InvalidJson))
     end, InvalidJsons).
+
+spatial_flag_test(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+
+    ?assertMatch({ok, 404, _, _}, do_request(WorkerP1, <<"query-index/file-popularity-", SpaceId/binary>>, get, [user_1_token_header(Config)], [])),
+    ?assertMatch({ok, 400, _, _}, do_request(WorkerP1, <<"query-index/file-popularity-", SpaceId/binary, "?spatial">>, get, [user_1_token_header(Config)], [])),
+    ?assertMatch({ok, 200, _, _}, do_request(WorkerP1, <<"query-index/file-popularity-", SpaceId/binary, "?spatial=true">>, get, [user_1_token_header(Config)], [])).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
