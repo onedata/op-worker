@@ -23,6 +23,9 @@
 % Factors for file cleanup (all of them must be satisfied in order to schedule
 % file for cleanup):
 
+% what is the lower limit of size for a file so it should be considered
+-define(SIZE_LOWER_LIMIT,
+    application:get_env(?APP_NAME, size_lower_limit, 1)).
 % how many hours since last open must have passed so the file should be considered unpopular
 -define(HOURS_SINCE_LAST_OPEN_LIMIT,
     application:get_env(?APP_NAME, hours_since_last_open_limit, 24)).
@@ -85,11 +88,12 @@ periodic_cleanup() ->
 -spec cleanup_space(od_space:id()) -> ok.
 cleanup_space(SpaceId) ->
     FilesToCleanSoftCheck = file_popularity_view:get_unpopular_files(
-        SpaceId, ?HOURS_SINCE_LAST_OPEN_LIMIT, ?TOTAL_OPEN_LIMIT,
+        SpaceId, ?SIZE_LOWER_LIMIT, ?HOURS_SINCE_LAST_OPEN_LIMIT, ?TOTAL_OPEN_LIMIT,
         ?HOUR_AVERAGE_LIMIT, ?DAY_AVERAGE_LIMIT, ?MONTH_AVERAGE_LIMIT
     ),
     FilesToCleanHardCheck = file_popularity_view:get_unpopular_files(
-        SpaceId, ?HOURS_SINCE_LAST_OPEN_HARD_LIMIT, null, null, null, null
+        SpaceId, ?SIZE_LOWER_LIMIT, ?HOURS_SINCE_LAST_OPEN_HARD_LIMIT, null,
+        null, null, null
     ),
     FilesToClean = lists:usort(FilesToCleanSoftCheck ++ FilesToCleanHardCheck),
     lists:foreach(fun cleanup_replica/1, FilesToClean).
