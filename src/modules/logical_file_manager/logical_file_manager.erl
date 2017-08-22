@@ -44,7 +44,7 @@
 -export([mkdir/2, mkdir/3, mkdir/4, ls/4, get_child_attr/3, get_children_count/2,
     get_parent/2]).
 %% Functions operating on directories or files
--export([mv/3, cp/3, get_file_path/2, rm_recursive/2, unlink/3, replicate_file/3,
+-export([mv/3, cp/3, get_file_path/2, get_file_guid/2, rm_recursive/2, unlink/3, replicate_file/3,
     invalidate_file_replica/4]).
 %% Functions operating on files
 -export([create/2, create/3, create/4, open/3, fsync/1, fsync/3, write/3, read/3,
@@ -167,10 +167,20 @@ cp(SessId, FileEntry, TargetPath) ->
 %% Returns full path of file
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_path(session:id(), FileGUID :: fslogic_worker:file_guid()) ->
+-spec get_file_path(session:id(), fslogic_worker:file_guid()) ->
     {ok, file_meta:path()}.
-get_file_path(SessId, FileGUID) ->
-    ?run(fun() -> lfm_files:get_file_path(SessId, FileGUID) end).
+get_file_path(SessId, FileGuid) ->
+    ?run(fun() -> lfm_files:get_file_path(SessId, FileGuid) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns guid of file
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_guid(session:id(), fslogic_worker:file_guid_or_path()) ->
+    {ok, fslogic_worker:file_guid()}.
+get_file_guid(SessId, FilePath) ->
+    ?run(fun() -> lfm_files:get_file_guid(SessId, FilePath) end).
 
 %%--------------------------------------------------------------------
 %% @doc

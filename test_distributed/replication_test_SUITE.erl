@@ -502,7 +502,8 @@ read_should_synchronize_file(Config) ->
         end
     ),
     test_utils:mock_expect(Workers, rtransfer, fetch,
-        fun(ref, _NotifyFun, OnCompleteFun) ->
+        fun(ref, NotifyFun, OnCompleteFun) ->
+            NotifyFun(ref, 1, 3),
             OnCompleteFun(ref, {ok, 3}),
             ref
         end
@@ -535,6 +536,7 @@ read_should_synchronize_file(Config) ->
 
     % then
     ?assertEqual({ok, <<>>}, Ans),
+    ct:print("~p", [rpc:call(W1, meck, history, [rtransfer])]),
     ?assertEqual(1, rpc:call(W1, meck, num_calls, [rtransfer, prepare_request, '_'])),
     ?assert(rpc:call(W1, meck, called,
         [rtransfer, prepare_request, [ExternalProviderId, FileGuid, 1, '_']])),

@@ -451,4 +451,23 @@
     mth_mov_avg = 0 :: non_neg_integer()
 }).
 
+%% Model holds information about ongoing transfer
+-record(transfer, {
+    file_uuid :: undefined | file_meta:uuid(),
+    space_id :: undefined | od_space:id(),
+    path :: undefined | file_meta:path(),
+    session_id :: undefined | session:id(),
+    callback :: undefined | transfer:callback(),
+    transfer_status :: undefined | transfer:status(),
+    invalidation_status :: undefined | transfer:status(),
+    source_provider_id :: undefined | oneprovider:id(),
+    target_provider_id :: undefined | oneprovider:id(),
+    invalidate_source_replica :: undefined | boolean(),
+
+    files_to_transfer = 0 :: non_neg_integer(),
+    files_transferred = 0 :: non_neg_integer(),
+    bytes_to_transfer = 0 :: non_neg_integer(),
+    bytes_transferred = 0 :: non_neg_integer()
+}).
+
 -endif.

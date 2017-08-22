@@ -73,7 +73,10 @@ initialize(SpaceId) ->
 periodic_cleanup() ->
     {ok, #document{value = #od_provider{spaces = Spaces}}} =
         od_provider:get_or_fetch(oneprovider:get_provider_id()),
-    lists:foreach(fun cleanup_space/1, Spaces).
+    SpacesToCleanup = lists:filter(fun(SpaceId) ->
+        space_storage:is_cleanup_enabled(SpaceId)
+    end, Spaces),
+    lists:foreach(fun cleanup_space/1, SpacesToCleanup).
 
 %%%===================================================================
 %%% Internal functions
@@ -107,4 +110,4 @@ cleanup_space(SpaceId) ->
 -spec cleanup_replica(file_ctx:ctx()) -> ok.
 cleanup_replica(FileCtx) ->
     RootUserCtx = user_ctx:new(session:root_session_id()),
-    sync_req:invalidate_file_replica(RootUserCtx, FileCtx, undefined).
+    sync_req:invalidate_file_replica(RootUserCtx, FileCtx, undefined, undefined).

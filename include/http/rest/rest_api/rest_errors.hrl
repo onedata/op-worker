@@ -191,6 +191,26 @@
     <<"error_invalid_bbox">>,
     <<"Bounding box is invalid, it needs to be bbox=W,S,E,N where each direction is a number.">>)
 ).
+-define(ERROR_SPACE_NOT_SUPPORTED, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"error_space_not_supported">>,
+    <<"The space of requested file is not locally supported.">>)
+).
+-define(ERROR_PROVIDER_NOT_FOUND, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"error_provider_not_found">>,
+    <<"Given provider could not be found.">>)
+).
+-define(ERROR_PROVIDER_NOT_SUPPORTING_SPACE, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"error_provider_not_supporting_space">>,
+    <<"Given provider does not support requested space.">>)
+).
+-define(ERROR_NON_LOCAL_PROVIDER, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"error_non_local_provider">>,
+    <<"The given provider is not the local one. Currently invalidation is only supported on provider handling the request.">>)
+).
 
 %% HTTP 401 errors
 -define(ERROR_UNAUTHORIZED, ?ERROR_REPLY(
