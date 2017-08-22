@@ -62,7 +62,8 @@
     new_file_should_not_have_popularity_doc/1,
     new_file_should_have_zero_popularity/1,
     opening_file_should_increase_file_popularity/1,
-    file_popularity_view_should_return_unpopular_files/1
+    file_popularity_view_should_return_unpopular_files/1,
+    file_popularity_should_have_correct_file_size/1
 ]).
 
 -define(TEST_CASES, [
@@ -98,7 +99,8 @@
     new_file_should_not_have_popularity_doc,
     new_file_should_have_zero_popularity,
     opening_file_should_increase_file_popularity,
-    file_popularity_view_should_return_unpopular_files
+    file_popularity_view_should_return_unpopular_files,
+    file_popularity_should_have_correct_file_size
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -1126,6 +1128,39 @@ file_popularity_view_should_return_unpopular_files(Config) ->
     ),
     ?assertNot(lists:member(file_ctx:new_by_guid(PopularFileGuid), UnpopularFiles2)),
     ?assert(lists:member(file_ctx:new_by_guid(UnpopularFileGuid), UnpopularFiles2)).
+
+file_popularity_should_have_correct_file_size(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/file_to_check_size">>, 8#755),
+
+    {ok, Handle} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, write),
+    {ok, 5} = lfm_proxy:write(W, Handle, 0, <<"01234">>),
+    ok = lfm_proxy:close(W, Handle),
+
+    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+    ?assertMatch(
+        {ok, #document{value = #file_popularity{size = 5}}},
+        rpc:call(W, file_popularity, get, [FileUuid])
+    ),
+
+    {ok, Handle2} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, write),
+    {ok, 5} = lfm_proxy:write(W, Handle2, 5, <<"01234">>),
+    ok = lfm_proxy:close(W, Handle2),
+
+    ?assertMatch(
+        {ok, #document{value = #file_popularity{size = 10}}},
+        rpc:call(W, file_popularity, get, [FileUuid])
+    ),
+
+    ok = lfm_proxy:truncate(W, SessId1, {guid, FileGuid}, 1),
+    {ok, Handle3} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, write),
+    ok = lfm_proxy:close(W, Handle3),
+
+    ?assertMatch(
+        {ok, #document{value = #file_popularity{size = 1}}},
+        rpc:call(W, file_popularity, get, [FileUuid])
+    ).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
