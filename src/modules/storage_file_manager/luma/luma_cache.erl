@@ -13,7 +13,12 @@
 -module(luma_cache).
 -author("Jakub Kudzia").
 
+-behaviour(model_behaviour).
+
 -include("global_definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
+-include("modules/datastore/datastore_specific_models_def.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 
 -type key() :: binary().
 -type model() :: reverse_luma:model() | luma:model().
@@ -23,7 +28,12 @@
 -export_type([model/0, value/0, timestamp/0]).
 
 %% API
--export([get/5, invalidate/1]).
+-export([get/4, invalidate/0]).
+
+%% model_behaviour callbacks
+-export([save/1, get/1, exists/1, delete/1, update/2, create/1,
+    model_init/0, 'after'/5, before/4, list/0]).
+
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -32,24 +42,26 @@
 %% will be saved.
 %% @end
 %%-------------------------------------------------------------------
--spec get(module(), key(), function(), [term()], luma_config:cache_timeout()) ->
+-spec get(key(), function(), [term()], luma_config:cache_timeout()) ->
     {ok, Value :: value()} | {error, Reason :: term()}.
-get(Module, Key, QueryFun, QueryArgs, LumaCacheTimeout) ->
+get(Key, QueryFun, QueryArgs, LumaCacheTimeout) ->
     CurrentTimestamp = utils:system_time_milli_seconds(),
-    case Module:get(Key) of
+    case ?MODULE:get(Key) of
         {error, {not_found, _}} ->
-            query_and_cache_value(Module, Key, QueryFun, QueryArgs,
+            query_and_cache_value(Key, QueryFun, QueryArgs,
                 CurrentTimestamp);
-        {ok, #document{value = ModelRecord}} ->
-            LastTimestamp = Module:last_timestamp(ModelRecord),
+        {ok, #document{
+            value = #luma_cache{
+                timestamp = LastTimestamp,
+                value = Value
+            }}} ->
             case cache_should_be_renewed(CurrentTimestamp, LastTimestamp,
                 LumaCacheTimeout)
             of
                 false ->
-                    Value = Module:get_value(ModelRecord),
                     {ok, Value};
                 true ->
-                    query_and_cache_value(Module, Key, QueryFun, QueryArgs,
+                    query_and_cache_value(Key, QueryFun, QueryArgs,
                         CurrentTimestamp)
             end
     end.
@@ -59,12 +71,113 @@ get(Module, Key, QueryFun, QueryArgs, LumaCacheTimeout) ->
 %% Deletes all cached entries.
 %% @end
 %%-------------------------------------------------------------------
--spec invalidate(module()) -> ok.
-invalidate(Module) ->
-    {ok, Docs} = Module:list(),
+-spec invalidate() -> ok.
+invalidate() ->
+    {ok, Docs} = list(),
     lists:foreach(fun(#document{key = Key}) ->
-        Module:delete(Key)
+        delete(Key)
     end, Docs).
+
+%%%===================================================================
+%%% model_behaviour callbacks
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link model_behaviour} callback save/1.
+%% @end
+%%--------------------------------------------------------------------
+-spec save(datastore:document()) ->
+    {ok, datastore:ext_key()} | datastore:generic_error().
+save(Document) ->
+    model:execute_with_default_context(?MODULE, save, [Document]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link model_behaviour} callback update/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec update(datastore:ext_key(), Diff :: datastore:document_diff()) ->
+    {ok, datastore:ext_key()} | datastore:update_error().
+update(Key, Diff) ->
+    model:execute_with_default_context(?MODULE, update, [Key, Diff]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link model_behaviour} callback create/1.
+%% @end
+%%--------------------------------------------------------------------
+-spec create(datastore:document()) ->
+    {ok, datastore:ext_key()} | datastore:create_error().
+create(Document) ->
+    model:execute_with_default_context(?MODULE, create, [Document]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link model_behaviour} callback get/1.
+%% @end
+%%--------------------------------------------------------------------
+-spec get(datastore:ext_key()) -> {ok, datastore:document()} | datastore:get_error().
+get(Key) ->
+    model:execute_with_default_context(?MODULE, get, [Key]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link model_behaviour} callback delete/1.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete(datastore:ext_key()) -> ok | datastore:generic_error().
+delete(Key) ->
+    model:execute_with_default_context(?MODULE, delete, [Key]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link model_behaviour} callback exists/1.
+%% @end
+%%--------------------------------------------------------------------
+-spec exists(datastore:ext_key()) -> datastore:exists_return().
+exists(Key) ->
+    ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [Key])).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link model_behaviour} callback model_init/0.
+%% @end
+%%--------------------------------------------------------------------
+-spec model_init() -> model_behaviour:model_config().
+model_init() ->
+    ?MODEL_CONFIG(reverse_luma_bucket, [], ?LOCAL_ONLY_LEVEL)#model_config{
+        list_enabled = {true, return_errors}}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link model_behaviour} callback 'after'/5.
+%% @end
+%%--------------------------------------------------------------------
+-spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
+    Level :: datastore:store_level(), Context :: term(),
+    ReturnValue :: term()) -> ok.
+'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
+    ok.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link model_behaviour} callback before/4.
+%% @end
+%%--------------------------------------------------------------------
+-spec before(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
+    Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
+before(_ModelName, _Method, _Level, _Context) ->
+    ok.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of all records.
+%% @end
+%%--------------------------------------------------------------------
+-spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
+list() ->
+    model:execute_with_default_context(?MODULE, list, [?GET_ALL, []]).
 
 %%%===================================================================
 %%% Internal functions
@@ -76,19 +189,23 @@ invalidate(Module) ->
 %% Calls QueryFun and saves acquired value with CurrentTimestamp.
 %% @end
 %%-------------------------------------------------------------------
--spec query_and_cache_value(module(), key(), function(), [term()], timestamp()) ->
+-spec query_and_cache_value(key(), function(), [term()], timestamp()) ->
     {ok, Value :: value()} | {error, Reason :: term()}.
-query_and_cache_value(Module, Key, QueryFun, QueryArgs, CurrentTimestamp) ->
-    case erlang:apply(QueryFun, QueryArgs) of
+query_and_cache_value(Key, QueryFun, QueryArgs, CurrentTimestamp) ->
+    try erlang:apply(QueryFun, QueryArgs) of
         {ok, Value} ->
             Doc = #document{
                 key = Key,
-                value = Module:new(Value, CurrentTimestamp)
+                value = #luma_cache{
+                    value = Value,
+                    timestamp = CurrentTimestamp
+                }
             },
-            {ok, Key} = Module:save(Doc),
-            {ok, Value};
-        Error ->
-            Error
+            {ok, Key} = ?MODULE:save(Doc),
+            {ok, Value}
+    catch
+        _:Reason ->
+            {error, Reason}
     end.
 
 %%-------------------------------------------------------------------

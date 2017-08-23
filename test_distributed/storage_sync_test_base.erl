@@ -1085,7 +1085,7 @@ clean_storage(Config, Readonly) ->
     timer:sleep(timer:seconds(3)).
 
 clean_reverse_luma_cache(Worker) ->
-    ok = rpc:call(Worker, reverse_luma, invalidate_cache, []).
+    ok = rpc:call(Worker, luma_cache, invalidate, []).
 
 set_check_locally_enoent_strategy(Worker, SpaceId) ->
     {ok, _} = rpc:call(Worker, storage_sync, set_check_locally_enoent_strategy, [SpaceId]).

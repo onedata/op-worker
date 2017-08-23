@@ -12,9 +12,6 @@
 -module(reverse_luma).
 -author("Jakub Kudzia").
 
--behaviour(model_behaviour).
--behaviour(luma_cache_behaviour).
-
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
@@ -25,15 +22,12 @@
 -export_type([model/0]).
 
 %% API
--export([get_user_id/3, get_user_id/4, invalidate_cache/0,
-    get_group_id/3, get_group_id/2]).
-
-%% model_behaviour callbacks
--export([save/1, get/1, exists/1, delete/1, update/2, create/1,
-    model_init/0, 'after'/5, before/4, list/0]).
-
-%% luma_cache callbacks
--export([last_timestamp/1, get_value/1, new/2]).
+-export([
+    get_user_id/3, get_user_id/4,
+    get_user_id_by_name/2, get_user_id_by_name/3,
+    get_group_id/3, get_group_id/2,
+    get_group_id_by_name/2, get_group_id_by_name/3
+]).
 
 -define(KEY_SEPARATOR, <<"::">>).
 -define(DEFAULT_CACHE_TIMEOUT, timer:minutes(5)).
@@ -58,7 +52,10 @@ get_user_id(Uid, Gid, StorageId, Storage = #storage{}) ->
         false ->
             {ok, ?ROOT_USER_ID};
         true ->
-            get_user_id_internal(Uid, Gid, StorageId, Storage)
+            get_user_id_internal(#{
+                <<"uid">> => Uid,
+                <<"gid">> => Gid
+            }, StorageId, Storage)
     end.
 
 %%--------------------------------------------------------------------
@@ -76,6 +73,37 @@ get_user_id(Uid, Gid, StorageId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns od_user:id() for storage user associated with given
+%% NFSv4 ACL name which is appropriate for the local server operations.
+%% Ids are cached for timeout defined in #luma_config{} record.
+%% If reverse LUMA is disabled, function returns ?ROOT USER_ID.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_user_id_by_name(binary(), storage:id(), storage:model()) ->
+    {ok, od_user:id()} | {error, Reason :: term()}.
+get_user_id_by_name(Name, StorageId, Storage = #storage{}) ->
+    case storage:is_luma_enabled(Storage) of
+        false ->
+            {ok, ?ROOT_USER_ID};
+        true ->
+            get_user_id_internal(#{<<"username">> => Name}, StorageId, Storage)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv get_user_id_by_name(Name, StorageId, Storage = #storage{}).
+%% @end
+%%--------------------------------------------------------------------
+-spec get_user_id_by_name(binary(), storage:id() | storage:doc()) ->
+    {ok, od_user:id()} | {error, Reason :: term()}.
+get_user_id_by_name(Name, #document{key = StorageId, value = Storage = #storage{}}) ->
+    get_user_id_by_name(Name, StorageId, Storage);
+get_user_id_by_name(Name, StorageId) ->
+    {ok, StorageDoc} = storage:get(StorageId),
+    get_user_id_by_name(Name, StorageDoc).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Returns od_group:id() for storage group associated with given Gid.
 %% which is appropriate for the local server operations.
 %% Ids are cached for timeout defined in #luma_config{} record.
@@ -89,7 +117,7 @@ get_group_id(Gid, StorageId, Storage = #storage{}) ->
         false ->
             {ok, undefined};
         true ->
-            get_group_id_internal(Gid, StorageId, Storage)
+            get_group_id_internal(#{<<"gid">> => Gid}, StorageId, Storage)
     end.
 
 %%--------------------------------------------------------------------
@@ -105,149 +133,38 @@ get_group_id(Gid, StorageId) ->
     {ok, StorageDoc} = storage:get(StorageId),
     get_group_id(Gid, StorageDoc).
 
-%%-------------------------------------------------------------------
-%% @doc
-%% Invalidates cached entries
-%% @end
-%%-------------------------------------------------------------------
--spec invalidate_cache() -> ok.
-invalidate_cache() ->
-    luma_cache:invalidate(?MODULE).
-
-%%%===================================================================
-%%% model_behaviour callbacks
-%%%===================================================================
-
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback save/1.
+%% Returns od_group:id() for storage group associated with given
+%% NFSv4 ACL name which is appropriate for the local server operations.
+%% Ids are cached for timeout defined in #luma_config{} record.
+%% If reverse LUMA is disabled, function returns ?ROOT USER_ID.
 %% @end
 %%--------------------------------------------------------------------
--spec save(datastore:document()) ->
-    {ok, datastore:ext_key()} | datastore:generic_error().
-save(Document) ->
-    model:execute_with_default_context(?MODULE, save, [Document]).
+-spec get_group_id_by_name(binary(), storage:id(), storage:model()) ->
+    {ok, od_group:id() | undefined} | {error, Reason :: term()}.
+get_group_id_by_name(Name, StorageId, Storage = #storage{}) ->
+    case storage:is_luma_enabled(Storage) of
+        false ->
+            {ok, undefined};
+        true ->
+            get_group_id_internal(#{<<"groupname">> => Name}, StorageId, Storage)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback update/2.
+%% @equiv get_group_id_by_name(Name, StorageId, Storage = #storage{}).
 %% @end
 %%--------------------------------------------------------------------
--spec update(datastore:ext_key(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
-update(Key, Diff) ->
-    model:execute_with_default_context(?MODULE, update, [Key, Diff]).
+-spec get_group_id_by_name(binary(), storage:id() | storage:doc()) ->
+    {ok, od_group:id()} | {error, Reason :: term()}.
+get_group_id_by_name(Name, #document{key = StorageId, value = Storage = #storage{}}) ->
+    get_group_id_by_name(Name, StorageId, Storage);
+get_group_id_by_name(Name, StorageId) ->
+    {ok, StorageDoc} = storage:get(StorageId),
+    get_group_id_by_name(Name, StorageDoc).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback create/1.
-%% @end
-%%--------------------------------------------------------------------
--spec create(datastore:document()) ->
-    {ok, datastore:ext_key()} | datastore:create_error().
-create(Document) ->
-    model:execute_with_default_context(?MODULE, create, [Document]).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback get/1.
-%% @end
-%%--------------------------------------------------------------------
--spec get(datastore:ext_key()) -> {ok, datastore:document()} | datastore:get_error().
-get(Key) ->
-    model:execute_with_default_context(?MODULE, get, [Key]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback delete/1.
-%% @end
-%%--------------------------------------------------------------------
--spec delete(datastore:ext_key()) -> ok | datastore:generic_error().
-delete(Key) ->
-    model:execute_with_default_context(?MODULE, delete, [Key]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback exists/1.
-%% @end
-%%--------------------------------------------------------------------
--spec exists(datastore:ext_key()) -> datastore:exists_return().
-exists(Key) ->
-    ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [Key])).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback model_init/0.
-%% @end
-%%--------------------------------------------------------------------
--spec model_init() -> model_behaviour:model_config().
-model_init() ->
-    ?MODEL_CONFIG(reverse_luma_bucket, [], ?LOCAL_ONLY_LEVEL)#model_config{
-        list_enabled = {true, return_errors}}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback 'after'/5.
-%% @end
-%%--------------------------------------------------------------------
--spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term(),
-    ReturnValue :: term()) -> ok.
-'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
-    ok.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback before/4.
-%% @end
-%%--------------------------------------------------------------------
--spec before(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
-before(_ModelName, _Method, _Level, _Context) ->
-    ok.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of all records.
-%% @end
-%%--------------------------------------------------------------------
--spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
-list() ->
-    model:execute_with_default_context(?MODULE, list, [?GET_ALL, []]).
-
-%%%===================================================================
-%%% luma_cache callbacks
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link luma_cache_behaviour} callback last_timestamp/1.
-%% @end
-%%--------------------------------------------------------------------
--spec last_timestamp(luma_cache:model()) -> luma_cache:timestamp().
-last_timestamp(#reverse_luma{timestamp = Timestamp}) ->
-    Timestamp.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link luma_cache_behaviour} callback get_value/1.
-%% @end
-%%--------------------------------------------------------------------
--spec get_value(luma_cache:model()) -> luma_cache:value().
-get_value(#reverse_luma{user_id = UserId}) ->
-    UserId.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link luma_cache_behaviour} callback new/2.
-%% @end
-%%--------------------------------------------------------------------
--spec new(luma_cache:value(), luma_cache:timestamp()) -> luma_cache:model().
-new(UserId, Timestamp) ->
-    #reverse_luma{
-        user_id = UserId,
-        timestamp = Timestamp
-    }.
 
 %%%===================================================================
 %%% Internal functions
@@ -259,14 +176,14 @@ new(UserId, Timestamp) ->
 %% internal helper function for get_user_id/3 function
 %% @end
 %%--------------------------------------------------------------------
--spec get_user_id_internal(binary(), binary(), storage:id(), storage:model()) ->
+-spec get_user_id_internal(map(), storage:id(), storage:model()) ->
     {ok, od_user:id()} | {error, Reason :: term()}.
-get_user_id_internal(Uid, Gid, StorageId, Storage = #storage{}) ->
+get_user_id_internal(Args, StorageId, Storage = #storage{}) ->
     case is_storage_supported(Storage) of
         false ->
             {error, not_supported_storage_type};
         true ->
-            get_user_id_from_supported_storage_credentials(Uid, Gid, StorageId, Storage)
+            get_user_id_from_supported_storage_credentials(Args, StorageId, Storage)
     end.
 
 %%--------------------------------------------------------------------
@@ -275,14 +192,14 @@ get_user_id_internal(Uid, Gid, StorageId, Storage = #storage{}) ->
 %% internal helper function for get_user_id/3 function
 %% @end
 %%--------------------------------------------------------------------
--spec get_group_id_internal(binary(), storage:id(), storage:model()) ->
+-spec get_group_id_internal(map(), storage:id(), storage:model()) ->
     {ok, od_group:id()} | {error, Reason :: term()}.
-get_group_id_internal(Gid, StorageId, Storage = #storage{}) ->
+get_group_id_internal(Args, StorageId, Storage = #storage{}) ->
     case is_storage_supported(Storage) of
         false ->
             {error, not_supported_storage_type};
         true ->
-            get_group_id_from_supported_storage_credentials(Gid, StorageId, Storage)
+            get_group_id_from_supported_storage_credentials(Args, StorageId, Storage)
     end.
 
 
@@ -292,9 +209,9 @@ get_group_id_internal(Gid, StorageId, Storage = #storage{}) ->
 %% Maps user credentials on supported storage to onedata user id.
 %% @end
 %%--------------------------------------------------------------------
--spec get_user_id_from_supported_storage_credentials(binary(), binary(),
-    storage:id(), storage:model()) -> {ok, od_user:id()}.
-get_user_id_from_supported_storage_credentials(Uid, Gid, StorageId,
+-spec get_user_id_from_supported_storage_credentials(map(), storage:id(),
+    storage:model()) -> {ok, od_user:id()}.
+get_user_id_from_supported_storage_credentials(Args, StorageId,
     #storage{
         name = StorageName,
         helpers = [#helper{name = HelperName} | _],
@@ -302,10 +219,10 @@ get_user_id_from_supported_storage_credentials(Uid, Gid, StorageId,
             cache_timeout = CacheTimeout
 }}) ->
 
-    Key = to_user_key(StorageId, Uid, Gid),
-    luma_cache:get(?MODULE, Key,
-        fun reverse_luma_proxy:get_user_id/5,
-        [Uid, Gid, StorageName, HelperName, LumaConfig],
+    Key = to_user_key(StorageId, Args), %todo jaki klucz?
+    luma_cache:get(Key,
+        fun reverse_luma_proxy:get_user_id/4,
+        [Args, StorageName, HelperName, LumaConfig],
         CacheTimeout
     ).
 
@@ -317,7 +234,7 @@ get_user_id_from_supported_storage_credentials(Uid, Gid, StorageId,
 %%--------------------------------------------------------------------
 -spec get_group_id_from_supported_storage_credentials(binary(),
     storage:id(), storage:model()) -> {ok, od_group:id()}.
-get_group_id_from_supported_storage_credentials(Gid, StorageId,
+get_group_id_from_supported_storage_credentials(Args, StorageId,
     #storage{
         name = StorageName,
         helpers = [#helper{name = HelperName} | _],
@@ -325,10 +242,10 @@ get_group_id_from_supported_storage_credentials(Gid, StorageId,
             cache_timeout = CacheTimeout
         }}) ->
 
-    Key = to_group_key(StorageId, Gid),
-    luma_cache:get(?MODULE, Key,
+    Key = to_group_key(StorageId, Args),
+    luma_cache:get(Key,
         fun reverse_luma_proxy:get_group_id/4,
-        [Gid, StorageName, HelperName, LumaConfig],
+        [Args, StorageName, HelperName, LumaConfig],
         CacheTimeout
     ).
 
@@ -361,9 +278,16 @@ supported_storages() -> [
 %% Concatenates helper name uid, and guid to create unique key for given user
 %% @end
 %%-------------------------------------------------------------------
--spec to_user_key(storage:id(), binary(), binary()) -> binary().
-to_user_key(StorageId, Uid, Gid) ->
-    Args = [StorageId, Uid, Gid],
+-spec to_user_key(storage:id(), map()) -> binary().
+to_user_key(StorageId, #{
+    <<"uid">> := Uid,
+    <<"gid">> := Gid
+}) ->
+    Args = [<<"user">>, StorageId, Uid, Gid],
+    Binaries = [str_utils:to_binary(E) || E <- Args],
+    str_utils:join_binary(Binaries, ?KEY_SEPARATOR);
+to_user_key(StorageId, #{<<"username">> := Name}) ->
+    Args = [<<"user">>, StorageId, Name],
     Binaries = [str_utils:to_binary(E) || E <- Args],
     str_utils:join_binary(Binaries, ?KEY_SEPARATOR).
 
@@ -373,8 +297,16 @@ to_user_key(StorageId, Uid, Gid) ->
 %% Concatenates helper name and guid to create unique key for given group
 %% @end
 %%-------------------------------------------------------------------
--spec to_group_key(storage:id(), binary()) -> binary().
-to_group_key(StorageId, Gid) ->
-    Args = [StorageId, Gid],
+-spec to_group_key(storage:id(), map()) -> binary().
+to_group_key(StorageId, #{
+    <<"gid">> := Gid
+}) ->
+    to_group_key(StorageId, Gid);
+to_group_key(StorageId, #{
+    <<"username">> := Name
+}) ->
+    to_group_key(StorageId, Name);
+to_group_key(StorageId, GidOrName) ->
+    Args = [<<"group">>, StorageId, GidOrName],
     Binaries = [str_utils:to_binary(E) || E <- Args],
     str_utils:join_binary(Binaries, ?KEY_SEPARATOR).

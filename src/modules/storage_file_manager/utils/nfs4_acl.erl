@@ -13,9 +13,10 @@
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
+-include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([decode/1, encode/1]).
+-export([decode/1, encode/1, normalize/2]).
 
 %%%===================================================================
 %%% API
@@ -25,14 +26,28 @@
 %% @doc
 %% Converts ACL from binary form to list of #access_control_entity
 %% records.
+%% ATTENTION!!! 'who' field will not be resolved to onedata user/group id.
+%% ?MODULE/normalize/2 must be called on decoded ACL to resolve
+%% user/group ids.
 %% @end
 %%-------------------------------------------------------------------
 -spec decode(binary()) -> {ok, acl_logic:acl()}.
 decode(ACLBin) ->
     {ACLLen, {ACLBin, Pos1}} = xdrlib:dec_unsigned_int({ACLBin, 1}),
     ACLBin2 = binary:part(ACLBin, Pos1 - 1, byte_size(ACLBin) - Pos1 + 1),
-    ACEs = decode_acl(ACLBin2, ACLLen, []),
+    ACEs = decode(ACLBin2, ACLLen, []),
     {ok, #acl{value = ACEs}}.
+
+
+-spec normalize(acl_logic:acl(), storage_file_ctx:ctx()) ->
+    {ok, acl_logic:acl()} | {error, Reason :: term()}.
+normalize(ACL, StorageFileCtx) ->
+    try
+        {ok, normalize(ACL, [], StorageFileCtx)}
+    catch
+        _Error:Reason ->
+            {error, Reason}
+    end.
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -41,7 +56,7 @@ decode(ACLBin) ->
 %%-------------------------------------------------------------------
 -spec encode(acl_logic:acl()) -> binary().
 encode(#acl{value = ACEs}) ->
-    encode_acl(ACEs, []).
+    encode(ACEs, []).
 
 %%%===================================================================
 %%% Internal functions
@@ -53,12 +68,12 @@ encode(#acl{value = ACEs}) ->
 %% Tail-recursive helper function for decode_acl/1.
 %% @end
 %%-------------------------------------------------------------------
--spec decode_acl(binary(), non_neg_integer(), [acl_logic:ace()]) -> [acl_logic:ace()].
-decode_acl(_, 0, DecodedACL) ->
+-spec decode(binary(), non_neg_integer(), [acl_logic:ace()]) -> [acl_logic:ace()].
+decode(_, 0, DecodedACL) ->
     lists:reverse(DecodedACL);
-decode_acl(ACLBin, N, DecodedACL) ->
+decode(ACLBin, N, DecodedACL) ->
     {ACE, ACLBin2} = decode_ace(ACLBin),
-    decode_acl(ACLBin2, N - 1, [ACE | DecodedACL]).
+    decode(ACLBin2, N - 1, [ACE | DecodedACL]).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -66,13 +81,13 @@ decode_acl(ACLBin, N, DecodedACL) ->
 %% Tail-recursive helper function for encode_acl/1.
 %% @end
 %%-------------------------------------------------------------------
--spec encode_acl([acl_logic:ace()], [binary()]) -> binary().
-encode_acl([], EncodedACL) ->
+-spec encode([acl_logic:ace()], [binary()]) -> binary().
+encode([], EncodedACL) ->
     LengthBin = xdrlib:enc_unsigned_int(length(EncodedACL)),
     <<LengthBin/binary, (list_to_binary(lists:reverse(EncodedACL)))/binary>>;
-encode_acl([ACE | ACLRest], EncodedACL) ->
+encode([ACE | ACLRest], EncodedACL) ->
     EncodedACE = encode_ace(ACE),
-    encode_acl(ACLRest, [EncodedACE | EncodedACL]).
+    encode(ACLRest, [EncodedACE | EncodedACL]).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -115,5 +130,35 @@ encode_ace(#access_control_entity{
     WhoBin = xdrlib:enc_string(Who),
     <<TypeBin/binary, FlagsBin/binary, MaskBin/binary, WhoBin/binary>>.
 
+normalize([], NormalizedACL, _StorageFileCtx) ->
+    lists:reverse(NormalizedACL);
+normalize([ACE | Rest], NormalizedACL, StorageFileCtx) ->
+    {NormalizedACE, StorageFileCtx2} = normalize_ace(ACE, StorageFileCtx),
+    normalize(Rest, [NormalizedACE | NormalizedACL], StorageFileCtx2).
+
+normalize_ace(ACE = #access_control_entity{identifier = ?owner}, StorageFileCtx) ->
+    {ACE, StorageFileCtx};
+normalize_ace(ACE = #access_control_entity{identifier = ?group}, StorageFileCtx) ->
+    {ACE, StorageFileCtx};
+normalize_ace(ACE = #access_control_entity{identifier = ?everyone}, StorageFileCtx) ->
+    {ACE, StorageFileCtx};
+normalize_ace(ACE = #access_control_entity{
+    aceflags = Flags,
+    identifier = Who
+}, StorageFileCtx) ->
+    {NormalizedWho, StorageFileCtx2} = normalize_who(Flags, Who, StorageFileCtx),
+    {ACE#access_control_entity{identifier = NormalizedWho}, StorageFileCtx2}.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% WRITEME
+%% @end
+%%-------------------------------------------------------------------
+-spec normalize_who(non_neg_integer(), binary(), storage_file_ctx:ctx()) ->ok.
+normalize_who(Flags, Who, StorageFileCtx) when ?has_flag(Flags, ?identifier_group_mask) ->
+    reverse_luma:get_group_id_by_name(Who, StorageFileCtx);
+normalize_who(_, Who, StorageFileCtx) ->
+    reverse_luma:get_user_id_by_name(Who, StorageFileCtx).
 
 

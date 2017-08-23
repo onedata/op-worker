@@ -431,6 +431,17 @@
     timestamp = 0 :: luma_cache:timestamp() % time of last update, in milliseconds since epoch
 }).
 
+%% Model that caches mapping from storage user credentials to od_user:id()
+-record(reverse_luma_user, {
+    user_id = <<"">> :: od_user:id(),
+    timestamp = 0 :: luma_cache:timestamp() % time of last update, in milliseconds since epoch
+}).
+
+-record(luma_cache, {
+    timestamp = 0 :: luma_cache:timestamp(),
+    value :: luma_cache:value()
+}).
+
 %% Model that caches mapping from od_user:id() to storage user credentials
 -record(luma, {
     user_ctx = #{} :: luma:user_ctx(),
