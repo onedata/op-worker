@@ -14,12 +14,6 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
-
--type model() :: #reverse_luma{}.
-
--export_type([model/0]).
 
 %% API
 -export([
@@ -86,7 +80,7 @@ get_user_id_by_name(Name, StorageId, Storage = #storage{}) ->
         false ->
             {ok, ?ROOT_USER_ID};
         true ->
-            get_user_id_internal(#{<<"username">> => Name}, StorageId, Storage)
+            get_user_id_internal(#{<<"name">> => Name}, StorageId, Storage)
     end.
 
 %%--------------------------------------------------------------------
@@ -148,7 +142,7 @@ get_group_id_by_name(Name, StorageId, Storage = #storage{}) ->
         false ->
             {ok, undefined};
         true ->
-            get_group_id_internal(#{<<"groupname">> => Name}, StorageId, Storage)
+            get_group_id_internal(#{<<"name">> => Name}, StorageId, Storage)
     end.
 
 %%--------------------------------------------------------------------
@@ -157,14 +151,12 @@ get_group_id_by_name(Name, StorageId, Storage = #storage{}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_group_id_by_name(binary(), storage:id() | storage:doc()) ->
-    {ok, od_group:id()} | {error, Reason :: term()}.
+    {ok, od_group:id() | undefined} | {error, Reason :: term()}.
 get_group_id_by_name(Name, #document{key = StorageId, value = Storage = #storage{}}) ->
     get_group_id_by_name(Name, StorageId, Storage);
 get_group_id_by_name(Name, StorageId) ->
     {ok, StorageDoc} = storage:get(StorageId),
     get_group_id_by_name(Name, StorageDoc).
-
-
 
 %%%===================================================================
 %%% Internal functions
@@ -213,7 +205,6 @@ get_group_id_internal(Args, StorageId, Storage = #storage{}) ->
     storage:model()) -> {ok, od_user:id()}.
 get_user_id_from_supported_storage_credentials(Args, StorageId,
     #storage{
-        name = StorageName,
         helpers = [#helper{name = HelperName} | _],
         luma_config = LumaConfig = #luma_config{
             cache_timeout = CacheTimeout
@@ -222,7 +213,7 @@ get_user_id_from_supported_storage_credentials(Args, StorageId,
     Key = to_user_key(StorageId, Args), %todo jaki klucz?
     luma_cache:get(Key,
         fun reverse_luma_proxy:get_user_id/4,
-        [Args, StorageName, HelperName, LumaConfig],
+        [Args, StorageId, HelperName, LumaConfig],
         CacheTimeout
     ).
 
@@ -232,11 +223,10 @@ get_user_id_from_supported_storage_credentials(Args, StorageId,
 %% Maps user credentials on supported storage to onedata user id.
 %% @end
 %%--------------------------------------------------------------------
--spec get_group_id_from_supported_storage_credentials(binary(),
+-spec get_group_id_from_supported_storage_credentials(map(),
     storage:id(), storage:model()) -> {ok, od_group:id()}.
 get_group_id_from_supported_storage_credentials(Args, StorageId,
     #storage{
-        name = StorageName,
         helpers = [#helper{name = HelperName} | _],
         luma_config = LumaConfig = #luma_config{
             cache_timeout = CacheTimeout
@@ -245,7 +235,7 @@ get_group_id_from_supported_storage_credentials(Args, StorageId,
     Key = to_group_key(StorageId, Args),
     luma_cache:get(Key,
         fun reverse_luma_proxy:get_group_id/4,
-        [Args, StorageName, HelperName, LumaConfig],
+        [Args, StorageId, HelperName, LumaConfig],
         CacheTimeout
     ).
 
@@ -286,7 +276,7 @@ to_user_key(StorageId, #{
     Args = [<<"user">>, StorageId, Uid, Gid],
     Binaries = [str_utils:to_binary(E) || E <- Args],
     str_utils:join_binary(Binaries, ?KEY_SEPARATOR);
-to_user_key(StorageId, #{<<"username">> := Name}) ->
+to_user_key(StorageId, #{<<"name">> := Name}) ->
     Args = [<<"user">>, StorageId, Name],
     Binaries = [str_utils:to_binary(E) || E <- Args],
     str_utils:join_binary(Binaries, ?KEY_SEPARATOR).
@@ -303,7 +293,7 @@ to_group_key(StorageId, #{
 }) ->
     to_group_key(StorageId, Gid);
 to_group_key(StorageId, #{
-    <<"username">> := Name
+    <<"name">> := Name
 }) ->
     to_group_key(StorageId, Name);
 to_group_key(StorageId, GidOrName) ->

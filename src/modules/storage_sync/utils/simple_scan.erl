@@ -290,7 +290,7 @@ import_file(StorageId, SpaceId, FileName, ParentCtx,
             ok
     end,
     FileCtx = file_ctx:new_by_doc(FileMetaDoc#document{key = FileUuid}, SpaceId, undefined),
-    import_nfs4_acl(FileCtx, StorageFileCtx3),
+    ok = import_nfs4_acl(FileCtx, StorageFileCtx3),
     storage_sync_monitoring:increase_imported_files_spirals(SpaceId),
     storage_sync_monitoring:increase_imported_files_counter(SpaceId),
     storage_sync_monitoring:update_to_do_counter(SpaceId, StrategyType, -1),
@@ -746,8 +746,9 @@ import_nfs4_acl(FileCtx, StorageFileCtx) ->
             ok;
         {ACLHex, _}  ->
             {ok,  ACL} = nfs4_acl:decode(ACLHex),
+            {ok, NormalizedACL} = nfs4_acl:normalize(ACL, StorageFileCtx),
             #provider_response{status = #status{code = ?OK}} =
-                acl_req:set_acl(UserCtx, FileCtx, ACL, true, false),
+                acl_req:set_acl(UserCtx, FileCtx, NormalizedACL, true, false),
             ok
     end.
 
@@ -768,12 +769,13 @@ maybe_update_nfs4_acl(StorageFileCtx, FileCtx) ->
             not_updated;
         {ACLHex, _ } ->
             {ok, NewACL} = nfs4_acl:decode(ACLHex),
-            case NewACL of
+            {ok, NormalizedNewAcl} = nfs4_acl:normalize(NewACL, StorageFileCtx),
+            case NormalizedNewAcl of
                 ACL ->
                     not_updated;
                 _ ->
                     #provider_response{status = #status{code = ?OK}} =
-                        acl_req:set_acl(UserCtx, FileCtx, NewACL, false, false),
+                        acl_req:set_acl(UserCtx, FileCtx, NormalizedNewAcl, false, false),
                     updated
             end
     end.

@@ -255,12 +255,12 @@ create_subfiles_import_many2_test(Config, MountSpaceInRoot) ->
     %% Create dirs and files on storage
     RootPath = storage_test_dir_path(W1MountPoint, ?SPACE_ID, <<"">>, MountSpaceInRoot),
     DirStructure = [10, 10, 10],
-
     create_nested_directory_tree(DirStructure, RootPath),
     storage_sync_test_base:enable_storage_import(Config),
     Files = generate_nested_directory_tree_file_paths(DirStructure, ?SPACE_PATH),
 
-    parallel_assert(?MODULE, verify_file, [W1, SessId, 60], Files, 60).
+    Timeout = 120,
+    parallel_assert(?MODULE, verify_file, [W1, SessId, Timeout], Files, Timeout).
 
 
 create_subfiles_and_delete_before_import_is_finished_test(Config, MountSpaceInRoot) ->
@@ -885,11 +885,15 @@ import_nfs_acl_test(Config, MountSpaceInRoot) ->
     %% User1 should be allowed to read acl
     {ok, #xattr{value = Value}} = ?assertMatch({ok, #xattr{}},
         lfm_proxy:get_xattr(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, <<"cdmi_acl">>)),
-    ?assertMatch(Value, acl_logic:from_acl_to_json_format(?ACL#acl.value)),
+    ?assertMatch(Value, ?ACL_JSON),
 
     %% User1 should not be allowed to set acl
     ?assertMatch({error, ?EACCES},
         lfm_proxy:set_xattr(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, #xattr{})),
+
+    %% User1 should not be allowed to modify file attrs
+    ?assertMatch({error, ?EACCES},
+        lfm_proxy:truncate(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, 100)),
 
     %% User2 should be allowed to read acl
     {ok, #xattr{value = Value}} = ?assertMatch({ok, #xattr{}},
@@ -907,14 +911,14 @@ update_nfs_acl_test(Config, MountSpaceInRoot) ->
     ok = file:write_file(StorageTestFilePath, ?TEST_DATA),
     storage_sync_test_base:enable_storage_import(Config),
 
-%%    %% Check if file was imported
+    %% Check if file was imported
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
 
     %% User1 should be allowed to read acl
     {ok, #xattr{value = Value}} = ?assertMatch({ok, #xattr{}},
         lfm_proxy:get_xattr(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, <<"cdmi_acl">>)),
-    ?assertMatch(Value, acl_logic:from_acl_to_json_format(?ACL#acl.value)),
+    ?assertMatch(Value, ?ACL_JSON),
 
     %% User1 should not be allowed to set acl
     ?assertMatch({error, ?EACCES},
@@ -923,6 +927,10 @@ update_nfs_acl_test(Config, MountSpaceInRoot) ->
     %% User2 should be allowed to read acl
     {ok, #xattr{value = Value}} = ?assertMatch({ok, #xattr{}},
         lfm_proxy:get_xattr(W1, SessId2, {path, ?SPACE_TEST_FILE_PATH}, <<"cdmi_acl">>)),
+
+    %% User2 should not be allowed to set acl
+    ?assertMatch({error, ?EACCES},
+        lfm_proxy:set_xattr(W1, SessId2, {path, ?SPACE_TEST_FILE_PATH}, #xattr{})),
 
     EncACL = nfs4_acl:encode(?ACL2),
     ok = test_utils:mock_expect(Workers, storage_file_manager, getxattr, fun
@@ -934,13 +942,15 @@ update_nfs_acl_test(Config, MountSpaceInRoot) ->
             {ok, EncACL}
     end),
     storage_sync_test_base:enable_storage_update(Config),
+
     %% User1 should not be allowed to read acl
     ?assertMatch({error, ?EACCES},
         lfm_proxy:get_xattr(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, <<"cdmi_acl">>), ?ATTEMPTS),
 
-    %% User2 should not be allowed to read acl
-    ?assertMatch({error, ?EACCES},
-        lfm_proxy:get_xattr(W1, SessId2, {path, ?SPACE_TEST_FILE_PATH}, <<"cdmi_acl">>)).
+    %% User2 should be allowed to read acl
+    {ok, #xattr{value = Value2}} = ?assertMatch({ok, #xattr{}},
+        lfm_proxy:get_xattr(W1, SessId2, {path, ?SPACE_TEST_FILE_PATH}, <<"cdmi_acl">>)),
+    ?assertMatch(Value2, ?ACL2_JSON).
 
 import_file_by_path_test(Config, MountSpaceInRoot) ->
     [W1, _] = ?config(op_worker_nodes, Config),

@@ -137,13 +137,13 @@ get_user_id_on_posix_storage_should_fail_with_404_error(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Result = rpc:call(Worker, reverse_luma, get_user_id,
         [<<"0">>, <<"0">>, ?STORAGE_ID, ?STORAGE]),
-    ?assertMatch({error, {badmatch, {ok, 404, _, _}}}, Result).
+    ?assertMatch({error, {ok, 404, _, _}}, Result).
 
 get_user_id_on_posix_storage_by_acl_username_should_fail_with_404_error(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Result = rpc:call(Worker, reverse_luma, get_user_id_by_name,
         [<<"user@nfsdomain.org">>, ?STORAGE_ID, ?STORAGE]),
-    ?assertMatch({error, {badmatch, {ok, 404, _, _}}}, Result).
+    ?assertMatch({error,{ok, 404, _, _}}, Result).
 
 get_user_id_should_fail_with_not_supported_storage_error(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -265,13 +265,13 @@ get_group_id_on_posix_storage_should_fail_with_404_error(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Result = rpc:call(Worker, reverse_luma, get_group_id,
         [<<"0">>, ?STORAGE_ID, ?STORAGE]),
-    ?assertMatch({error, {badmatch, {ok, 404, _, _}}}, Result).
+    ?assertMatch({error, {ok, 404, _, _}}, Result).
 
 get_group_id_on_posix_storage_by_acl_groupname_should_fail_with_404_error(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Result = rpc:call(Worker, reverse_luma, get_group_id_by_name,
         [<<"group@nfsdomain.org">>, ?STORAGE_ID, ?STORAGE]),
-    ?assertMatch({error, {badmatch, {ok, 404, _, _}}}, Result).
+    ?assertMatch({error, {ok, 404, _, _}}, Result).
 
 get_group_id_should_fail_with_not_supported_storage_error(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -370,7 +370,7 @@ init_per_testcase(Case, Config) when
 
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, [http_client, storage]),
-    mock_resolve_user_identity_post(Worker,
+    mock_resolve_user_post(Worker,
         {ok, 200, [], str_utils:format_bin("{
         \"idp\": \"~s\",
         \"userId\": \"~s\"
@@ -383,7 +383,7 @@ init_per_testcase(Case, Config) when
 
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, [http_client, reverse_luma_proxy]),
-    mock_resolve_user_identity_post(Worker,
+    mock_resolve_user_post(Worker,
         {ok, 200, [], str_utils:format_bin("{
         \"idp\": \"~s\",
         \"userId\": \"~s\"
@@ -395,7 +395,7 @@ init_per_testcase(Case, Config) when
     Case =:= get_user_id_on_posix_storage_should_fail_with_404_error ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, [http_client]),
-    mock_resolve_user_identity_post(Worker, {ok, 404, [], <<"{\"error\": \"reason\"\}">>}),
+    mock_resolve_user_post(Worker, {ok, 404, [], <<"{\"error\": \"reason\"\}">>}),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(Case, Config) when
@@ -406,7 +406,7 @@ init_per_testcase(Case, Config) when
 
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, [http_client, storage]),
-    mock_resolve_group_identity_post(Worker,
+    mock_resolve_group_post(Worker,
         {
             ok, 200, [], str_utils:format_bin("{
                 \"idp\": \"~s\",
@@ -425,7 +425,7 @@ init_per_testcase(Case, Config) when
 
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, [http_client, reverse_luma_proxy]),
-    mock_resolve_group_identity_post(Worker,
+    mock_resolve_group_post(Worker,
         {
             ok, 200, [], str_utils:format_bin("{
             \"idp\": \"~s\",
@@ -443,7 +443,7 @@ init_per_testcase(Case, Config) when
     Case =:= get_group_id_on_posix_storage_should_fail_with_404_error ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, [http_client]),
-    mock_resolve_group_identity_post(Worker, {ok, 404, [], <<"{\"error\": \"reason\"\}">>}, undefined),
+    mock_resolve_group_post(Worker, {ok, 404, [], <<"{\"error\": \"reason\"\}">>}, undefined),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(_Case, Config) ->
@@ -454,18 +454,18 @@ end_per_testcase(_Case, Config) ->
     ok = rpc:call(Worker, luma_cache, invalidate, []),
     test_utils:mock_unload(Workers, [http_client, reverse_luma_proxy]).
 
-mock_resolve_user_identity_post(Worker, Expected) ->
+mock_resolve_user_post(Worker, Expected) ->
     test_utils:mock_expect(Worker, http_client, post, fun
         (Url, Headers, Body) when is_binary(Url) ->
             case binary:split(Url, <<"/">>, [global]) of
-                <<"resolve_user_identity">> ->
+                <<"resolve_user">> ->
                     Expected;
                 _ ->
                     meck:passthrough([Url, Headers, Body])
             end;
         (Url, Headers, Body) when is_list(Url) ->
             case lists:last(string:tokens(Url, "/")) of
-                "resolve_user_identity" ->
+                "resolve_user" ->
                     Expected;
                 _ ->
                     meck:passthrough([Url, Headers, Body])
@@ -474,7 +474,7 @@ mock_resolve_user_identity_post(Worker, Expected) ->
             meck:passthrough([Url, Headers, Body])
     end).
 
-mock_resolve_group_identity_post(Worker, ExpectedLuma, ExpectedOz) ->
+mock_resolve_group_post(Worker, ExpectedLuma, ExpectedOz) ->
     test_utils:mock_expect(Worker, http_client, post, fun
         (Url, Headers, Body) when is_binary(Url) ->
             case binary:split(Url, <<"/">>, [global]) of

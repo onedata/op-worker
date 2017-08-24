@@ -14,6 +14,8 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
+-include_lib("ctool/include/logging.hrl").
+
 
 %% API
 -export([decode/1, encode/1, normalize/2]).
@@ -38,12 +40,19 @@ decode(ACLBin) ->
     ACEs = decode(ACLBin2, ACLLen, []),
     {ok, #acl{value = ACEs}}.
 
-
+%%-------------------------------------------------------------------
+%% @doc
+%% Resolves 'who' fields in all ACEs in given ACL
+%% form user@nfsdomain.org or group@nfsdomain.org to onedata user/group id.
+%% Whether given identifier is associated with user or group is
+%% determined by identifier_group_mask in acemask field.
+%% @end
+%%-------------------------------------------------------------------
 -spec normalize(acl_logic:acl(), storage_file_ctx:ctx()) ->
     {ok, acl_logic:acl()} | {error, Reason :: term()}.
-normalize(ACL, StorageFileCtx) ->
+normalize(Acl = #acl{value = ACEs}, StorageFileCtx) ->
     try
-        {ok, normalize(ACL, [], StorageFileCtx)}
+        {ok, Acl#acl{value = normalize(ACEs, [], StorageFileCtx)}}
     catch
         _Error:Reason ->
             {error, Reason}
@@ -110,7 +119,6 @@ decode_ace(ACLBin) ->
     ACLBin2 = binary:part(ACLBin, P4 - 1, byte_size(ACLBin) - P4 + 1),
     {ACE, ACLBin2}.
 
-
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
@@ -130,12 +138,28 @@ encode_ace(#access_control_entity{
     WhoBin = xdrlib:enc_string(Who),
     <<TypeBin/binary, FlagsBin/binary, MaskBin/binary, WhoBin/binary>>.
 
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Tail-recursive helper function for normalize/2.
+%% @end
+%%-------------------------------------------------------------------
+-spec normalize([acl_logic:ace()], [acl_logic:ace()], storage_file_ctx:ctx()) ->
+    [acl_logic:ace()].
 normalize([], NormalizedACL, _StorageFileCtx) ->
     lists:reverse(NormalizedACL);
 normalize([ACE | Rest], NormalizedACL, StorageFileCtx) ->
     {NormalizedACE, StorageFileCtx2} = normalize_ace(ACE, StorageFileCtx),
     normalize(Rest, [NormalizedACE | NormalizedACL], StorageFileCtx2).
 
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Normalizes given #access_control_entity.
+%% @end
+%%-------------------------------------------------------------------
+-spec normalize_ace(acl_logic:ace(), storage_file_ctx:ctx()) ->
+    {acl_logic:ace(), storage_file_ctx:ctx()}.
 normalize_ace(ACE = #access_control_entity{identifier = ?owner}, StorageFileCtx) ->
     {ACE, StorageFileCtx};
 normalize_ace(ACE = #access_control_entity{identifier = ?group}, StorageFileCtx) ->
@@ -146,19 +170,28 @@ normalize_ace(ACE = #access_control_entity{
     aceflags = Flags,
     identifier = Who
 }, StorageFileCtx) ->
-    {NormalizedWho, StorageFileCtx2} = normalize_who(Flags, Who, StorageFileCtx),
-    {ACE#access_control_entity{identifier = NormalizedWho}, StorageFileCtx2}.
+    case normalize_who(Flags, Who, StorageFileCtx) of
+        {{ok, NormalizedWho}, StorageFileCtx2} ->
+            {ACE#access_control_entity{identifier = NormalizedWho}, StorageFileCtx2};
+        {{error, _}, StorageFileCtx2} ->
+            {ACE, StorageFileCtx2}
+    end.
 
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% WRITEME
+%% Resolves 'who' fields in form user@nfsdomain.org or group@nfsdomain.org
+%% to onedata user/group id. Whether given identifier is associated with
+%% user or group is determined by identifier_group_mask in acemask field.
 %% @end
 %%-------------------------------------------------------------------
--spec normalize_who(non_neg_integer(), binary(), storage_file_ctx:ctx()) ->ok.
+-spec normalize_who(non_neg_integer(), binary(), storage_file_ctx:ctx()) ->
+    {{ok, od_user:id() | od_group:id() | undefined} | {error, Reason :: term()}, storage_file_ctx:ctx()}.
 normalize_who(Flags, Who, StorageFileCtx) when ?has_flag(Flags, ?identifier_group_mask) ->
-    reverse_luma:get_group_id_by_name(Who, StorageFileCtx);
+    {StorageDoc, StorageFileCtx2} = storage_file_ctx:get_storage_doc(StorageFileCtx),
+    {reverse_luma:get_group_id_by_name(Who, StorageDoc), StorageFileCtx2};
 normalize_who(_, Who, StorageFileCtx) ->
-    reverse_luma:get_user_id_by_name(Who, StorageFileCtx).
+    {StorageDoc, StorageFileCtx2} = storage_file_ctx:get_storage_doc(StorageFileCtx),
+    {reverse_luma:get_user_id_by_name(Who, StorageDoc), StorageFileCtx2}.
 
 

@@ -29,6 +29,7 @@
 -define(USER, <<"user1">>).
 -define(USER2, <<"user2">>).
 -define(GROUP, <<"group1">>).
+-define(GROUP2, <<"group2">>).
 -define(SPACE_ID, <<"space1">>).
 -define(SPACE_NAME, <<"space_name1">>).
 -define(SPACE_PATH, <<"/", (?SPACE_NAME)/binary>>).
@@ -87,22 +88,74 @@
             aceflags = ?no_flags_mask,
             identifier = <<"EVERYONE@">>,
             acemask = ?read_acl_mask
+        },
+        #access_control_entity{
+            acetype = ?deny_mask,
+            aceflags = ?no_flags_mask,
+            identifier = <<"ala@nfsdomain.org">>,
+            acemask = ?write_attributes_mask
         }
-        %todo jk add group and user nfs ids after expanding luma
-
     ]
 }).
+
+-define(BITMASK_TO_BINARY(Mask), <<"0x", (integer_to_binary(Mask, 16))/binary>>).
+
+-define(ACL_JSON, [
+    #{
+        <<"acetype">> => ?BITMASK_TO_BINARY(?allow_mask),
+        <<"aceflags">> => ?BITMASK_TO_BINARY(?no_flags_mask),
+        <<"identifier">> => <<"OWNER@">>,
+        <<"acemask">> => ?BITMASK_TO_BINARY(?read_acl_mask)
+    },
+    #{
+        <<"acetype">> => ?BITMASK_TO_BINARY(?deny_mask),
+        <<"aceflags">> => ?BITMASK_TO_BINARY(?no_flags_mask),
+        <<"identifier">> => <<"GROUP@">>,
+        <<"acemask">> => ?BITMASK_TO_BINARY(?write_acl_mask)
+    },
+    #{
+        <<"acetype">> => ?BITMASK_TO_BINARY(?allow_mask),
+        <<"aceflags">> => ?BITMASK_TO_BINARY(?no_flags_mask),
+        <<"identifier">> => <<"EVERYONE@">>,
+        <<"acemask">> => ?BITMASK_TO_BINARY(?read_acl_mask)
+    },
+    #{
+        <<"acetype">> => ?BITMASK_TO_BINARY(?deny_mask),
+        <<"aceflags">> => ?BITMASK_TO_BINARY(?no_flags_mask),
+        <<"identifier">> => <<"name_user1#user1">>,
+        <<"acemask">> => ?BITMASK_TO_BINARY(?write_attributes_mask)
+    }
+]).
 
 
 -define(ACL2, #acl{
     value = [
+        #access_control_entity{
+            acetype = ?allow_mask,
+            aceflags = ?identifier_group_mask,
+            identifier = <<"group2@nfsdomain.org">>,
+            acemask = ?read_acl_mask
+        },
         #access_control_entity{
             acetype = ?deny_mask,
             aceflags = ?no_flags_mask,
             identifier = <<"EVERYONE@">>,
             acemask = ?read_acl_mask
         }
-        %todo jk add group and user nfs ids after expanding luma
-
     ]
 }).
+
+-define(ACL2_JSON, [
+    #{
+        <<"acetype">> => ?BITMASK_TO_BINARY(?allow_mask),
+        <<"aceflags">> => ?BITMASK_TO_BINARY(?identifier_group_mask),
+        <<"identifier">> => <<"group2#group2">>,
+        <<"acemask">> => ?BITMASK_TO_BINARY(?read_acl_mask)
+    },
+    #{
+        <<"acetype">> => ?BITMASK_TO_BINARY(?deny_mask),
+        <<"aceflags">> => ?BITMASK_TO_BINARY(?no_flags_mask),
+        <<"identifier">> => <<"EVERYONE@">>,
+        <<"acemask">> => ?BITMASK_TO_BINARY(?read_acl_mask)
+    }
+]).

@@ -14,18 +14,14 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 
--type model() :: #luma{}.
 -type user_ctx() :: helper:user_ctx().
 -type posix_user_ctx() :: {Uid :: non_neg_integer(), Gid :: non_neg_integer()}.
 
--export_type([model/0, user_ctx/0, posix_user_ctx/0]).
+-export_type([user_ctx/0, posix_user_ctx/0]).
 
 %% API
--export([get_server_user_ctx/4, get_client_user_ctx/4, get_posix_user_ctx/2
-]).
+-export([get_server_user_ctx/4, get_client_user_ctx/4, get_posix_user_ctx/2]).
 
 
 %%%===================================================================

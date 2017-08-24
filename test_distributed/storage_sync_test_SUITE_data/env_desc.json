@@ -113,6 +113,11 @@
                 "users": [
                 "user1"
                 ]
+            },
+            "group2": {
+                "users": [
+                    "user2"
+                ]
             }
         },
         "spaces": {
@@ -123,7 +128,8 @@
                     "user2"
                 ],
                 "groups": [
-                    "group1"
+                    "group1",
+                    "group2"
                 ],
                 "providers": {
                     "p1": {

@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% WRITEME
+%%% This module contains utility functions for managing luma_config
 %%% @end
 %%%-------------------------------------------------------------------
 -module(luma_config).

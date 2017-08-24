@@ -19,13 +19,14 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
+-include_lib("ctool/include/logging.hrl").
+
 
 -type key() :: binary().
--type model() :: reverse_luma:model() | luma:model().
 -type value() :: od_user:id() | od_group:id()| luma:user_ctx().
 -type timestamp() :: non_neg_integer().
 
--export_type([model/0, value/0, timestamp/0]).
+-export_type([value/0, timestamp/0]).
 
 %% API
 -export([get/4, invalidate/0]).
@@ -146,7 +147,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(reverse_luma_bucket, [], ?LOCAL_ONLY_LEVEL)#model_config{
+    ?MODEL_CONFIG(luma_cache_bucket, [], ?LOCAL_ONLY_LEVEL)#model_config{
         list_enabled = {true, return_errors}}.
 
 %%--------------------------------------------------------------------
@@ -202,9 +203,11 @@ query_and_cache_value(Key, QueryFun, QueryArgs, CurrentTimestamp) ->
                 }
             },
             {ok, Key} = ?MODULE:save(Doc),
-            {ok, Value}
+            {ok, Value};
+        {error, Reason} ->
+            {error, Reason}
     catch
-        _:Reason ->
+        error:{badmatch, Reason} ->
             {error, Reason}
     end.
 
