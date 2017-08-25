@@ -48,10 +48,8 @@ check_permission([ACE = #access_control_entity{
 } | Rest],
     User = #document{key = UserId}, Operation, FileCtx
 ) ->
-    {#document{
-        value = #file_meta{
-            owner = OwnerId
-        }}, FileCtx2} = file_ctx:get_file_doc(FileCtx),
+
+    {OwnerId, FileCtx2} = file_ctx:get_owner(FileCtx),
     case UserId of
         OwnerId ->
             check_permission([ACE#access_control_entity{identifier = OwnerId} | Rest],
@@ -65,10 +63,7 @@ check_permission([ACE = #access_control_entity{
 } | Rest],
     User, Operation, FileCtx
 ) ->
-    {#document{
-        value = #file_meta{
-            group_owner = GroupOwnerId
-        }}, FileCtx2} = file_ctx:get_file_doc(FileCtx),
+    {GroupOwnerId, FileCtx2} = file_ctx:get_group_owner(FileCtx),
     check_permission([ACE#access_control_entity{
         identifier = GroupOwnerId,
         aceflags = Flags bor ?identifier_group_mask

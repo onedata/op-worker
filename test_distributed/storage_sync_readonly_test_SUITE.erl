@@ -55,7 +55,8 @@
     create_file_import_check_user_id_test/1,
     create_file_import_check_user_id_error_test/1,
     import_nfs_acl_test/1,
-    update_nfs_acl_test/1]).
+    update_nfs_acl_test/1,
+    import_nfs_acl_with_disabled_luma_should_fail_test/1]).
 
 -define(TEST_CASES, [
     create_directory_import_test,
@@ -84,7 +85,8 @@
     update_timestamps_file_import_test,
     should_not_detect_timestamp_update_test,
     import_nfs_acl_test,
-    update_nfs_acl_test
+    update_nfs_acl_test,
+    import_nfs_acl_with_disabled_luma_should_fail_test
 %%    import_file_by_path_test, %todo uncomment after resolving and merging with VFS-3052
 %%    get_child_attr_by_path_test,
 %%    import_remote_file_by_path_test
@@ -185,6 +187,9 @@ get_child_attr_by_path_test(Config) ->
 
 import_remote_file_by_path_test(Config) ->
     storage_sync_test_base:import_remote_file_by_path_test(Config, true).
+
+import_nfs_acl_with_disabled_luma_should_fail_test(Config) ->
+    storage_sync_test_base:import_nfs_acl_with_disabled_luma_should_fail_test(Config, true).
 
 %===================================================================
 % SetUp and TearDown functions
@@ -323,6 +328,22 @@ init_per_testcase(Case, Config) when
             {ok, EncACL}
     end),
     init_per_testcase(default, Config);
+
+init_per_testcase(Case, Config) when
+    Case =:= import_nfs_acl_with_disabled_luma_should_fail_test ->
+
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, [storage_file_manager]),
+
+    EncACL = nfs4_acl:encode(?ACL),
+    test_utils:mock_expect(Workers, storage_file_manager, getxattr, fun
+        (Handle = #sfm_handle{file = <<"/space1">>}, Ctx) ->
+            meck:passthrough([Handle, Ctx]);
+        (#sfm_handle{}, _) ->
+            {ok, EncACL}
+    end),
+    init_per_testcase(default, Config);
+
 
 init_per_testcase(_Case, Config) ->
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(

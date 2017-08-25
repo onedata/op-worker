@@ -23,7 +23,7 @@
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
-    model_init/0, 'after'/5, before/4, list/0]).
+    model_init/0, 'after'/5, before/4]).
 
 %% API
 -export([fetch/1, get_or_fetch/2, create_or_update/2]).
@@ -75,15 +75,6 @@ record_struct(1) ->
 %%%===================================================================
 %%% model_behaviour callbacks
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of all records.
-%% @end
-%%--------------------------------------------------------------------
--spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
-list() ->
-    model:execute_with_default_context(?MODULE, list, [?GET_ALL, []]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -154,8 +145,10 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(onedata_user_bucket, [{?MODEL_NAME, create}, {?MODEL_NAME, save},
-        {?MODEL_NAME, create_or_update}, {?MODEL_NAME, update}], ?GLOBALLY_CACHED_LEVEL)#model_config{list_enabled = {true, return_errors}}.
+    ?MODEL_CONFIG(onedata_user_bucket, [
+        {?MODEL_NAME, create}, {?MODEL_NAME, save},
+        {?MODEL_NAME, create_or_update}, {?MODEL_NAME, update}
+    ], ?GLOBALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc

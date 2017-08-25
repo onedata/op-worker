@@ -141,12 +141,9 @@ remove_acl_insecure(_UserCtx, FileCtx) ->
 %%-------------------------------------------------------------------
 -spec maybe_chmod_storage_file(file_ctx:ctx(), file_meta:mode()) -> ok.
 maybe_chmod_storage_file(FileCtx, Mode) ->
-    try
-        ok = sfm_utils:chmod_storage_file(user_ctx:new(?ROOT_SESS_ID), FileCtx,
-            Mode)
-    catch
-        error:{case_clause, {error, ?EROFS}} ->
+    case sfm_utils:chmod_storage_file(user_ctx:new(?ROOT_SESS_ID), FileCtx, Mode) of
+        ok ->
             ok;
-        Error:Reason ->
-            Error(Reason)
+        {error, ?EROFS} ->
+            ok
     end.

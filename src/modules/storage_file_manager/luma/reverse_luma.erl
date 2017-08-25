@@ -78,7 +78,7 @@ get_user_id(Uid, Gid, StorageId) ->
 get_user_id_by_name(Name, StorageId, Storage = #storage{}) ->
     case storage:is_luma_enabled(Storage) of
         false ->
-            {ok, ?ROOT_USER_ID};
+            {error, luma_disabled};
         true ->
             get_user_id_internal(#{<<"name">> => Name}, StorageId, Storage)
     end.
@@ -140,7 +140,7 @@ get_group_id(Gid, StorageId) ->
 get_group_id_by_name(Name, StorageId, Storage = #storage{}) ->
     case storage:is_luma_enabled(Storage) of
         false ->
-            {ok, undefined};
+            {error, luma_disabled};
         true ->
             get_group_id_internal(#{<<"name">> => Name}, StorageId, Storage)
     end.
@@ -210,7 +210,7 @@ get_user_id_from_supported_storage_credentials(Args, StorageId,
             cache_timeout = CacheTimeout
 }}) ->
 
-    Key = to_user_key(StorageId, Args), %todo jaki klucz?
+    Key = to_user_key(StorageId, Args),
     luma_cache:get(Key,
         fun reverse_luma_proxy:get_user_id/4,
         [Args, StorageId, HelperName, LumaConfig],

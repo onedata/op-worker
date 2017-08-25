@@ -170,12 +170,8 @@ normalize_ace(ACE = #access_control_entity{
     aceflags = Flags,
     identifier = Who
 }, StorageFileCtx) ->
-    case normalize_who(Flags, Who, StorageFileCtx) of
-        {{ok, NormalizedWho}, StorageFileCtx2} ->
-            {ACE#access_control_entity{identifier = NormalizedWho}, StorageFileCtx2};
-        {{error, _}, StorageFileCtx2} ->
-            {ACE, StorageFileCtx2}
-    end.
+    {NormalizedWho, StorageFileCtx2} = normalize_who(Flags, Who, StorageFileCtx),
+    {ACE#access_control_entity{identifier = NormalizedWho}, StorageFileCtx2}.
 
 %%-------------------------------------------------------------------
 %% @private
@@ -186,12 +182,12 @@ normalize_ace(ACE = #access_control_entity{
 %% @end
 %%-------------------------------------------------------------------
 -spec normalize_who(non_neg_integer(), binary(), storage_file_ctx:ctx()) ->
-    {{ok, od_user:id() | od_group:id() | undefined} | {error, Reason :: term()}, storage_file_ctx:ctx()}.
+    {ok, od_user:id() | od_group:id(), storage_file_ctx:ctx()} | no_return().
 normalize_who(Flags, Who, StorageFileCtx) when ?has_flag(Flags, ?identifier_group_mask) ->
     {StorageDoc, StorageFileCtx2} = storage_file_ctx:get_storage_doc(StorageFileCtx),
-    {reverse_luma:get_group_id_by_name(Who, StorageDoc), StorageFileCtx2};
+    {ok, GroupId} = reverse_luma:get_group_id_by_name(Who, StorageDoc),
+    {GroupId, StorageFileCtx2};
 normalize_who(_, Who, StorageFileCtx) ->
     {StorageDoc, StorageFileCtx2} = storage_file_ctx:get_storage_doc(StorageFileCtx),
-    {reverse_luma:get_user_id_by_name(Who, StorageDoc), StorageFileCtx2}.
-
-
+    {ok, UserId} = reverse_luma:get_user_id_by_name(Who, StorageDoc),
+    {UserId, StorageFileCtx2}.

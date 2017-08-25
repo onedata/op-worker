@@ -47,7 +47,7 @@
     {ok, Value :: value()} | {error, Reason :: term()}.
 get(Key, QueryFun, QueryArgs, LumaCacheTimeout) ->
     CurrentTimestamp = utils:system_time_milli_seconds(),
-    case ?MODULE:get(Key) of
+    case get(Key) of
         {error, {not_found, _}} ->
             query_and_cache_value(Key, QueryFun, QueryArgs,
                 CurrentTimestamp);
@@ -202,7 +202,7 @@ query_and_cache_value(Key, QueryFun, QueryArgs, CurrentTimestamp) ->
                     timestamp = CurrentTimestamp
                 }
             },
-            {ok, Key} = ?MODULE:save(Doc),
+            {ok, Key} = save(Doc),
             {ok, Value};
         {error, Reason} ->
             {error, Reason}

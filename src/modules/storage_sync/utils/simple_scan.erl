@@ -739,17 +739,22 @@ get_group_owner_id(StorageFileCtx) ->
 -spec import_nfs4_acl(file_ctx:ctx(), storage_file_ctx:ctx()) -> ok.
 import_nfs4_acl(FileCtx, StorageFileCtx) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
-    case storage_file_ctx:get_nfs4_acl(StorageFileCtx) of
-        {error, ?ENOTSUP} ->
+    case file_ctx:is_space_dir_const(FileCtx) of
+        true ->
             ok;
-        {error, ?ENOENT} ->
-            ok;
-        {ACLHex, _}  ->
-            {ok,  ACL} = nfs4_acl:decode(ACLHex),
-            {ok, NormalizedACL} = nfs4_acl:normalize(ACL, StorageFileCtx),
-            #provider_response{status = #status{code = ?OK}} =
-                acl_req:set_acl(UserCtx, FileCtx, NormalizedACL, true, false),
-            ok
+        false ->
+            case storage_file_ctx:get_nfs4_acl(StorageFileCtx) of
+                {error, ?ENOTSUP} ->
+                    ok;
+                {error, ?ENOENT} ->
+                    ok;
+                {ACLHex, _}  ->
+                    {ok,  ACL} = nfs4_acl:decode(ACLHex),
+                    {ok, NormalizedACL} = nfs4_acl:normalize(ACL, StorageFileCtx),
+                    #provider_response{status = #status{code = ?OK}} =
+                        acl_req:set_acl(UserCtx, FileCtx, NormalizedACL, true, false),
+                    ok
+            end
     end.
 
 %%-------------------------------------------------------------------
@@ -761,21 +766,26 @@ import_nfs4_acl(FileCtx, StorageFileCtx) ->
 -spec maybe_update_nfs4_acl(storage_file_ctx:ctx(), file_ctx:ctx()) -> updated | not_updated.
 maybe_update_nfs4_acl(StorageFileCtx, FileCtx) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
-    #provider_response{provider_response = ACL} = acl_req:get_acl(UserCtx, FileCtx),
-    case storage_file_ctx:get_nfs4_acl(StorageFileCtx) of
-        {error, ?ENOTSUP} ->
-            not_updated;
-        {error, ?ENOENT} ->
-            not_updated;
-        {ACLHex, _ } ->
-            {ok, NewACL} = nfs4_acl:decode(ACLHex),
-            {ok, NormalizedNewAcl} = nfs4_acl:normalize(NewACL, StorageFileCtx),
-            case NormalizedNewAcl of
-                ACL ->
+    case file_ctx:is_space_dir_const(FileCtx) of
+        true ->
+            not_udpated;
+        false ->
+            #provider_response{provider_response = ACL} = acl_req:get_acl(UserCtx, FileCtx),
+            case storage_file_ctx:get_nfs4_acl(StorageFileCtx) of
+                {error, ?ENOTSUP} ->
                     not_updated;
-                _ ->
-                    #provider_response{status = #status{code = ?OK}} =
-                        acl_req:set_acl(UserCtx, FileCtx, NormalizedNewAcl, false, false),
-                    updated
+                {error, ?ENOENT} ->
+                    not_updated;
+                {ACLHex, _ } ->
+                    {ok, NewACL} = nfs4_acl:decode(ACLHex),
+                    {ok, NormalizedNewAcl} = nfs4_acl:normalize(NewACL, StorageFileCtx),
+                    case NormalizedNewAcl of
+                        ACL ->
+                            not_updated;
+                        _ ->
+                            #provider_response{status = #status{code = ?OK}} =
+                                acl_req:set_acl(UserCtx, FileCtx, NormalizedNewAcl, false, false),
+                            updated
+                    end
             end
     end.

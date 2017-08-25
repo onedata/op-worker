@@ -50,7 +50,8 @@
     create_file_import_check_user_id_test/2,
     create_file_import_check_user_id_error_test/2,
     delete_non_empty_directory_update_test/2,
-    import_nfs_acl_test/2, update_nfs_acl_test/2]).
+    import_nfs_acl_test/2, update_nfs_acl_test/2,
+    import_nfs_acl_with_disabled_luma_should_fail_test/2]).
 
 
 -define(assertHashChangedFun(File, ExpectedResult0),
@@ -285,7 +286,7 @@ create_subfiles_and_delete_before_import_is_finished_test(Config, MountSpaceInRo
     ?assertMatch({error, ?ENOENT},
         file:list_dir(StorageTestDirPath)),
     ?assertMatch({ok, []},
-            lfm_proxy:ls(W1, SessId, {path, ?SPACE_PATH}, 0, 100), 2 * ?ATTEMPTS).
+        lfm_proxy:ls(W1, SessId, {path, ?SPACE_PATH}, 0, 100), 2 * ?ATTEMPTS).
 
 create_directory_export_test(Config, MountSpaceInRoot) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -952,6 +953,21 @@ update_nfs_acl_test(Config, MountSpaceInRoot) ->
         lfm_proxy:get_xattr(W1, SessId2, {path, ?SPACE_TEST_FILE_PATH}, <<"cdmi_acl">>)),
     ?assertMatch(Value2, ?ACL2_JSON).
 
+import_nfs_acl_with_disabled_luma_should_fail_test(Config, MountSpaceInRoot) ->
+    [W1, _] = ?config(op_worker_nodes, Config),
+    W1MountPoint = get_host_mount_point(W1, Config),
+    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
+    SessId2 = ?config({session_id, {?USER2, ?GET_DOMAIN(W1)}}, Config),
+    StorageTestFilePath =
+        storage_test_file_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+
+    %% Create file on storage
+    ok = file:write_file(StorageTestFilePath, ?TEST_DATA),
+    storage_sync_test_base:enable_storage_import(Config),
+    %% File shouldn't have been imported
+    ?assertMatch({error, ?ENOENT},
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS).
+
 import_file_by_path_test(Config, MountSpaceInRoot) ->
     [W1, _] = ?config(op_worker_nodes, Config),
     W1MountPoint = get_host_mount_point(W1, Config),
@@ -1023,7 +1039,7 @@ create_init_file(Config) ->
     case file:make_dir(Name) of
         ok ->
             file:change_mode(Name, 8#777);
-        {error,eexist} ->
+        {error, eexist} ->
             clean_dir(Name)
     end.
 
@@ -1193,7 +1209,7 @@ parallel_assert(M, F, A, List, Attempts) ->
 
     lists:foldl(fun(_, AccIn) ->
         case sets:size(AccIn) of
-            0  -> ok;
+            0 -> ok;
             _ ->
                 receive
                     {finished, Ans} ->
@@ -1211,7 +1227,7 @@ parallel_assert(M, F, A, List, Attempts) ->
 verify_dir(N, Pid, W1, SessId, Attempts) ->
     NBin = integer_to_binary(N),
     DirPath = ?SPACE_TEST_DIR_PATH(NBin),
-    ?assertMatch({ok, #file_attr{}}, 
+    ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, DirPath}), Attempts),
     Pid ! {finished, DirPath}.
 
@@ -1254,7 +1270,7 @@ create_nested_directory_tree([SubFilesNum], Root) ->
         ok = file:write_file(FilePath, ?TEST_DATA)
     end, lists:seq(1, SubFilesNum));
 create_nested_directory_tree([SubDirsNum | Rest], Root) ->
-%%    ok = utils:pforeach(fun(N) ->
+    %%    ok = utils:pforeach(fun(N) ->
     ok = lists:foreach(fun(N) ->
         NBin = integer_to_binary(N),
         DirPath = filename:join([Root, NBin]),
