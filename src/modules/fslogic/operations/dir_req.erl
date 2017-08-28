@@ -131,27 +131,25 @@ read_dir_insecure(UserCtx, FileCtx, Offset, Limit) ->
     fslogic_worker:fuse_response().
 read_dir_plus_insecure(UserCtx, FileCtx, Offset, Limit) ->
     {Children, FileCtx2} = file_ctx:get_file_children(FileCtx, UserCtx, Offset, Limit),
-    ChildrenWithNum = lists:zip(lists:seq(1, length(Children)), Children),
 
-    GetAttrAns = utils:pmap(
-        fun({Num, ChildCtx}) ->
-            try
-                #fuse_response{
-                    status = #status{code = ?OK},
-                    fuse_response = Attrs
-                } = attr_req:get_file_attr_insecure(UserCtx, ChildCtx),
-                {Num, Attrs}
-            catch
-                _:_ ->
-                    % File can be not synchronized with other provider
-                    {Num, error}
-            end
-        end, ChildrenWithNum),
-
-    ChildrenAttrs = lists:filtermap(fun
-        ({_, error}) -> false;
-        ({_, Attrs}) -> {true, Attrs}
-    end, lists:sort(GetAttrAns)),
+    MapFun = fun(ChildCtx) ->
+        try
+            #fuse_response{
+                status = #status{code = ?OK},
+                fuse_response = Attrs
+            } = attr_req:get_file_attr_insecure(UserCtx, ChildCtx),
+            Attrs
+        catch
+            _:_ ->
+                % File can be not synchronized with other provider
+                error
+        end
+    end,
+    FilterFun = fun
+        (error) -> false;
+        (_Attrs) -> true
+    end,
+    ChildrenAttrs = filtermap(MapFun, FilterFun, Children),
 
     fslogic_times:update_atime(FileCtx2),
     #fuse_response{status = #status{code = ?OK},
@@ -159,3 +157,29 @@ read_dir_plus_insecure(UserCtx, FileCtx, Offset, Limit) ->
             child_attrs = ChildrenAttrs
         }
     }.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% A parallel function similar to lists:filtermap/2. See {@link lists:filtermap/2}.
+%% However, Filter and Map functions are separeted.
+%% @end
+%%--------------------------------------------------------------------
+-spec filtermap(Map :: fun((X :: A) -> B), Filter :: fun((X :: A) -> boolean()),
+    L :: [A]) -> [B].
+filtermap(Map, Filter, L) ->
+    LWithNum = lists:zip(lists:seq(1, length(L)), L),
+    Mapped = utils:pmap(fun({Num, Element}) ->
+        {Num, Map(Element)}
+    end, LWithNum),
+
+    lists:filtermap(fun
+        ({_, error}) -> false;
+        ({_, Ans}) ->
+            case Filter(Ans) of
+                true ->
+                    {true, Ans};
+                _ ->
+                    false
+            end
+    end, lists:sort(Mapped)).
