@@ -18,7 +18,7 @@
 
 %% API
 -export([add/2, add/3]).
--export([get_storage_ids/1, get_mounted_in_root/1]).
+-export([get_storage_ids/1, get_mounted_in_root/1, is_cleanup_enabled/1]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
@@ -46,6 +46,12 @@ record_struct(2) ->
     {record, [
         {storage_ids, [string]},
         {mounted_in_root, [string]}
+    ]};
+record_struct(3) ->
+    {record, [
+        {storage_ids, [string]},
+        {mounted_in_root, [string]},
+        {cleanup_enabled, boolean}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -56,8 +62,9 @@ record_struct(2) ->
 -spec record_upgrade(datastore_json:record_version(), tuple()) ->
     {datastore_json:record_version(), tuple()}.
 record_upgrade(1, {?MODEL_NAME, StorageIds}) ->
-    {2, #space_storage{storage_ids = StorageIds}}.
-
+    {2, #space_storage{storage_ids = StorageIds}};
+record_upgrade(2, {?MODEL_NAME, StorageIds, MountedInRoot}) ->
+    {3, #space_storage{storage_ids = StorageIds, mounted_in_root = MountedInRoot}}.
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -131,7 +138,7 @@ exists(Key) ->
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
     Config = ?MODEL_CONFIG(space_storage_bucket, [], ?GLOBALLY_CACHED_LEVEL),
-    Config#model_config{version = 2}.
+    Config#model_config{version = 3}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -228,6 +235,17 @@ get_mounted_in_root(#space_storage{mounted_in_root = StorageIds}) ->
     StorageIds;
 get_mounted_in_root(#document{value = #space_storage{} = Value}) ->
     get_mounted_in_root(Value).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of storage IDs attached to the space that have been mounted in
+%% storage root.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_cleanup_enabled(od_space:id()) -> boolean().
+is_cleanup_enabled(SpaceId) ->
+    {ok, Doc} = space_storage:get(SpaceId),
+    Doc#document.value#space_storage.cleanup_enabled.
 
 %%%===================================================================
 %%% Internal functions

@@ -1191,10 +1191,18 @@ replica_invalidate_should_migrate_unique_data(Config) ->
 
     % when
     ok = lfm_proxy:invalidate_file_replica(W1, SessionId, {guid, FileGuid}, LocalProviderId, ExternalProviderId),
+    {ok, Handle2} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, write),
+    {ok, 10} = lfm_proxy:write(W1, Handle2, 0, <<"0123456789">>),
+    ok = lfm_proxy:close(W1, Handle2),
+
+    % then
+    test_utils:mock_assert_num_calls(W1, logical_file_manager, replicate_file, [SessionId, {guid, FileGuid}, ExternalProviderId], 1),
+
+    % when
     ok = lfm_proxy:invalidate_file_replica(W1, SessionId, {guid, FileGuid}, LocalProviderId, undefined),
 
     % then
-    test_utils:mock_assert_num_calls(W1, logical_file_manager, replicate_file, [SessionId, {guid, FileGuid}, ExternalProviderId], 2),
+    test_utils:mock_assert_num_calls(W1, logical_file_manager, replicate_file, [SessionId, {guid, FileGuid}, ExternalProviderId], 1),
     test_utils:mock_validate_and_unload(Workers, [od_space, logical_file_manager]).
 
 replica_invalidate_should_truncate_storage_file_to_zero_size(Config) ->

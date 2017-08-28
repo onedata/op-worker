@@ -116,7 +116,7 @@ reuse_or_create_proxy_session(SessId, ProxyVia, Auth, SessionType) ->
 create_gui_session(Iden, Auth) ->
     SessId = datastore_utils:gen_uuid(),
     Sess = #session{status = active, identity = Iden, auth = Auth, type = gui,
-        accessed = erlang:system_time(seconds), connections = []},
+        accessed = utils:system_time_seconds(), connections = []},
     case session:create(#document{key = SessId, value = Sess}) of
         {ok, SessId} ->
             supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, gui]),
@@ -135,7 +135,7 @@ create_gui_session(Iden, Auth) ->
     {error, Reason :: term()}.
 create_root_session() ->
     Sess = #session{status = active, type = root, connections = [],
-        accessed = erlang:system_time(seconds),
+        accessed = utils:system_time_seconds(),
         identity = #user_identity{user_id = ?ROOT_USER_ID}},
     case session:create(#document{key = ?ROOT_SESS_ID, value = Sess}) of
         {ok, ?ROOT_SESS_ID} ->
@@ -233,7 +233,7 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, NewCons) ->
     {ok, SessId :: session:id()} | {error, Reason :: term()}.
 reuse_or_create_session(SessId, SessType, Iden, Auth, NewCons, ProxyVia) ->
     Sess = #session{status = active, identity = Iden, auth = Auth,
-        accessed = erlang:system_time(seconds), connections = NewCons,
+        accessed = utils:system_time_seconds(), connections = NewCons,
         type = SessType, proxy_via = ProxyVia},
     Diff = fun
         (#session{status = inactive}) ->
@@ -242,7 +242,7 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, NewCons, ProxyVia) ->
             case Iden of
                 ValidIden ->
                     {ok, ExistingSess#session{
-                        accessed = erlang:system_time(seconds),
+                        accessed = utils:system_time_seconds(),
                         connections = NewCons ++ Cons
                     }};
                 _ ->

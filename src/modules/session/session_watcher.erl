@@ -249,7 +249,7 @@ get_session_ttl(_) ->
 is_session_ttl_exceeded(SessId, TTL) ->
     Diff = fun
         (#session{status = active, accessed = Accessed} = Sess) ->
-            InactivityPeriod = erlang:system_time(seconds) - Accessed,
+            InactivityPeriod = utils:system_time_seconds() - Accessed,
             case InactivityPeriod >= TTL of
                 true -> {ok, Sess#session{status = inactive}};
                 false -> {error, {ttl_not_exceeded, TTL - InactivityPeriod}}

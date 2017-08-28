@@ -404,7 +404,7 @@ parse_spatial(Req, State) ->
         <<"false">> ->
             {State#{spatial => false}, NewReq};
         _ ->
-            throw(?ERROR_INVALID_EXTENDED_FLAG)
+            throw(?ERROR_INVALID_SPATIAL_FLAG)
     end.
 
 %%--------------------------------------------------------------------

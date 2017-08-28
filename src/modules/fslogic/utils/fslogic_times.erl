@@ -30,7 +30,7 @@
 %%--------------------------------------------------------------------
 -spec update_atime(file_ctx:ctx()) -> ok.
 update_atime(FileCtx) ->
-    CurrentTime = erlang:system_time(seconds),
+    CurrentTime = utils:system_time_seconds(),
     case calculate_atime(FileCtx, CurrentTime) of
         actual ->
             ok;
@@ -39,12 +39,12 @@ update_atime(FileCtx) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @equiv update_ctime(FileCtx, erlang:system_time(seconds)).
+%% @equiv update_ctime(FileCtx, utils:system_time_seconds()).
 %% @end
 %%--------------------------------------------------------------------
 -spec update_ctime(file_ctx:ctx()) -> ok.
 update_ctime(FileCtx) ->
-    update_ctime(FileCtx, erlang:system_time(seconds)).
+    update_ctime(FileCtx, utils:system_time_seconds()).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -56,13 +56,13 @@ update_ctime(FileCtx, CurrentTime) ->
     ok = update_times_and_emit(FileCtx, #{ctime => CurrentTime}).
 
 %%--------------------------------------------------------------------
-%% @equiv update_mtime_ctime(FileCtx, erlang:system_time(seconds)).
+%% @equiv update_mtime_ctime(FileCtx, utils:system_time_seconds()).
 %% @end
 %%--------------------------------------------------------------------
 -spec update_mtime_ctime(file_ctx:ctx()) ->
     ok.
 update_mtime_ctime(FileCtx) ->
-    update_mtime_ctime(FileCtx, erlang:system_time(seconds)).
+    update_mtime_ctime(FileCtx, utils:system_time_seconds()).
 
 %%--------------------------------------------------------------------
 %% @doc

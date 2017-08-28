@@ -170,19 +170,8 @@ replicate_children(UserCtx, Children, Block) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec invalidate_file_replica_insecure(user_ctx:ctx(), file_ctx:ctx(),
-    oneprovider:id(), non_neg_integer()) ->
+    oneprovider:id() | undefined, non_neg_integer()) ->
     fslogic_worker:provider_response().
-invalidate_file_replica_insecure(UserCtx, FileCtx, undefined, Offset) ->
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-    {ok, #document{value = #od_space{providers = Providers}}} =
-        od_space:get(SpaceId),
-    case Providers -- [oneprovider:get_provider_id()] of
-        [] ->
-            #provider_response{status = #status{code = ?OK}};
-        ExternalProviders ->
-            MigrationProviderId = utils:random_element(ExternalProviders),
-            invalidate_file_replica_insecure(UserCtx, FileCtx, MigrationProviderId, Offset)
-    end;
 invalidate_file_replica_insecure(UserCtx, FileCtx, MigrationProviderId, Offset) ->
     {ok, Chunk} = application:get_env(?APP_NAME, ls_chunk_size),
     case file_ctx:is_dir(FileCtx) of
@@ -196,19 +185,50 @@ invalidate_file_replica_insecure(UserCtx, FileCtx, MigrationProviderId, Offset) 
                     invalidate_file_replica_insecure(UserCtx, FileCtx3, MigrationProviderId, Offset + Chunk)
             end;
         {false, FileCtx2} ->
-            SessionId = user_ctx:get_session_id(UserCtx),
-            FileGuid = file_ctx:get_guid_const(FileCtx),
-            ok = logical_file_manager:replicate_file(SessionId, {guid, FileGuid}, MigrationProviderId),
-            #fuse_response{status = #status{code = ?OK}} =
-                truncate_req:truncate_insecure(UserCtx, FileCtx, 0, false),
-            FileUuid = file_ctx:get_uuid_const(FileCtx2),
-            LocalFileId = file_location:local_id(FileUuid),
-            case file_location:update(LocalFileId, #{blocks => []}) of
-                {ok, _} -> ok;
-                {error, {not_found, _}} -> ok
-            end,
-            #provider_response{status = #status{code = ?OK}}
+            case replica_finder:get_unique_blocks(FileCtx2) of
+                {[], FileCtx3} ->
+                    invalidate_fully_redundant_file_replica(UserCtx, FileCtx3);
+                {_Other, FileCtx3} ->
+                    invalidate_partially_unique_file_replica(UserCtx, FileCtx3, MigrationProviderId)
+            end
     end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Invalidates replica of file whose data is partially unique
+%% (stored locally in one copy)
+%% @end
+%%--------------------------------------------------------------------
+-spec invalidate_partially_unique_file_replica(user_ctx:ctx(), file_ctx:ctx(),
+    oneprovider:id() | undefined) -> fslogic_worker:provider_response().
+invalidate_partially_unique_file_replica(_UserCtx, _FileCtx, undefined) ->
+    #provider_response{status = #status{code = ?OK}};
+invalidate_partially_unique_file_replica(UserCtx, FileCtx, MigrationProviderId) ->
+    SessionId = user_ctx:get_session_id(UserCtx),
+    FileGuid = file_ctx:get_guid_const(FileCtx),
+    ok = logical_file_manager:replicate_file(SessionId, {guid, FileGuid}, MigrationProviderId),
+    invalidate_fully_redundant_file_replica(UserCtx, FileCtx).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Invalidates replica of file whose data is not unique
+%% (it is stored also on other providers)
+%% @end
+%%--------------------------------------------------------------------
+-spec invalidate_fully_redundant_file_replica(user_ctx:ctx(), file_ctx:ctx()) ->
+    fslogic_worker:provider_response().
+invalidate_fully_redundant_file_replica(UserCtx, FileCtx) ->
+    #fuse_response{status = #status{code = ?OK}} =
+        truncate_req:truncate_insecure(UserCtx, FileCtx, 0, false),
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    LocalFileId = file_location:local_id(FileUuid),
+    case file_location:update(LocalFileId, #{blocks => []}) of
+        {ok, _} -> ok;
+        {error, {not_found, _}} -> ok
+    end,
+    #provider_response{status = #status{code = ?OK}}.
 
 %%--------------------------------------------------------------------
 %% @private

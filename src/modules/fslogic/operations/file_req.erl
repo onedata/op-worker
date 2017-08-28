@@ -120,6 +120,7 @@ release(UserCtx, FileCtx, HandleId) ->
     ok = session:remove_handle(SessId, HandleId),
     ok = file_handles:register_release(FileCtx, SessId, 1),
     ok = storage_file_manager:release(SfmHandle),
+    ok = file_popularity:increment_open(FileCtx),
     #fuse_response{status = #status{code = ?OK}}.
 
 %%%===================================================================
@@ -225,7 +226,7 @@ create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
     ParentFileUuid = file_ctx:get_uuid_const(ParentFileCtx),
     {ok, FileUuid} = file_meta:create({uuid, ParentFileUuid}, File), %todo pass file_ctx
 
-    CTime = erlang:system_time(seconds),
+    CTime = utils:system_time_seconds(),
     SpaceId = file_ctx:get_space_id_const(ParentFileCtx),
     {ok, _} = times:save_new(#document{key = FileUuid, value = #times{
         mtime = CTime, atime = CTime, ctime = CTime

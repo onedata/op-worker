@@ -75,7 +75,7 @@ read_dir_plus(UserCtx, FileCtx, Offset, Limit) ->
     Name :: file_meta:name(), Mode :: file_meta:posix_permissions()) ->
     fslogic_worker:fuse_response().
 mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
-    CTime = erlang:system_time(seconds),
+    CTime = utils:system_time_seconds(),
     File = #document{value = #file_meta{
         name = Name,
         type = ?DIRECTORY_TYPE,
