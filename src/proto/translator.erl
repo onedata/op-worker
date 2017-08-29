@@ -760,7 +760,8 @@ translate_to_protobuf(#file_children{child_links = FileEntries}) ->
     end, FileEntries)}};
 translate_to_protobuf(#file_children_attrs{child_attrs = Children}) ->
     {file_children_attrs, #'FileChildrenAttrs'{child_attrs = lists:map(fun(Child) ->
-        translate_to_protobuf(Child)
+        {file_attr, Translated} = translate_to_protobuf(Child),
+        Translated
     end, Children)}};
 translate_to_protobuf(#file_location{} = Record) ->
     {file_location, #'FileLocation'{
