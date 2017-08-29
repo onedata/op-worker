@@ -39,7 +39,7 @@ all() ->
 stress_test(Config) ->
     ?STRESS(Config,[
             {description, "Main stress test function. Links together all cases to be done multiple times as one continous test."},
-            {success_rate, 75}, % TODO - check error i proxy test
+            {success_rate, 90}, % TODO - check error i proxy test
             {config, [{name, stress}, {description, "Basic config for stress test"}]}
         ]
     ).
