@@ -180,9 +180,12 @@ query_view(Id, Options) ->
     Ctx = model:make_disk_ctx(custom_metadata:model_init()),
     {ok, {Rows}} = couchbase_driver:query_view(Ctx, Id, Id, Options),
     FileUuids = lists:map(fun(Row) ->
-        {<<"id">>, <<"custom_metadata-", FileUuid/binary>>} =
-            lists:keyfind(<<"id">>, 1, Row),
-        FileUuid
+        case lists:keyfind(<<"id">>, 1, Row) of
+            {<<"id">>, <<"custom_metadata-", FileUuid/binary>>} ->
+                FileUuid;
+            {<<"id">>, <<"file_popularity-", FileUuid/binary>>} ->
+                FileUuid
+        end
     end, Rows),
     {ok, lists:filtermap(fun(Uuid) ->
         try

@@ -35,7 +35,7 @@
 -spec get(module(), key(), function(), [term()], luma_config:cache_timeout()) ->
     {ok, Value :: value()} | {error, Reason :: term()}.
 get(Module, Key, QueryFun, QueryArgs, LumaCacheTimeout) ->
-    CurrentTimestamp = erlang:system_time(milli_seconds),
+    CurrentTimestamp = utils:system_time_milli_seconds(),
     case Module:get(Key) of
         {error, {not_found, _}} ->
             query_and_cache_value(Module, Key, QueryFun, QueryArgs,

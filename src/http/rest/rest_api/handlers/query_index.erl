@@ -212,19 +212,23 @@ prepare_options([{spatial, false} | Rest]) ->
 prepare_options([{start_range, undefined} | Rest]) ->
     prepare_options(Rest);
 prepare_options([{start_range, Endkey} | Rest]) ->
-    try
-        [{start_range, couchbeam_ejson:decode(Endkey)} | prepare_options(Rest)]
-    catch
-        _:_ ->
-            throw(?ERROR_INVALID_ENDKEY)
-    end;
+    StartRange =
+        try
+            {start_range, couchbeam_ejson:decode(Endkey)}
+        catch
+            _:_ ->
+                throw(?ERROR_INVALID_START_RANGE)
+        end,
+    [StartRange | prepare_options(Rest)];
 
 prepare_options([{end_range, undefined} | Rest]) ->
     prepare_options(Rest);
 prepare_options([{end_range, Endkey} | Rest]) ->
-    try
-        [{end_range, couchbeam_ejson:decode(Endkey)} | prepare_options(Rest)]
-    catch
-        _:_ ->
-            throw(?ERROR_INVALID_ENDKEY)
-    end.
+    EndRange =
+        try
+            {end_range, couchbeam_ejson:decode(Endkey)}
+        catch
+            _:_ ->
+                throw(?ERROR_INVALID_END_RANGE)
+        end,
+    [EndRange | prepare_options(Rest)].

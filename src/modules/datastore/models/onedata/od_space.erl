@@ -32,8 +32,8 @@
 -export([record_struct/1]).
 
 %% model_behaviour callbacks
--export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
-    'after'/5, before/4]).
+-export([save/1, get/1, exists/1, delete/1, update/2, create/1,
+    model_init/0, 'after'/5, before/4]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -142,14 +142,17 @@ model_init() ->
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
 'after'(?MODULE, create, _, _, {ok, SpaceId}) ->
+    space_cleanup:initialize(SpaceId),
     space_strategies:create(space_strategies:new(SpaceId)),
     ok = permissions_cache:invalidate(),
     emit_monitoring_event(SpaceId);
 'after'(?MODULE, create_or_update, _, _, {ok, SpaceId}) ->
+    space_cleanup:initialize(SpaceId),
     space_strategies:create(space_strategies:new(SpaceId)),
     ok = permissions_cache:invalidate(),
     emit_monitoring_event(SpaceId);
 'after'(?MODULE, save, _, _, {ok, SpaceId}) ->
+    space_cleanup:initialize(SpaceId),
     space_strategies:create(space_strategies:new(SpaceId)),
     ok = permissions_cache:invalidate(),
     emit_monitoring_event(SpaceId);

@@ -13,86 +13,214 @@
 
 -ifndef(REST_ERRORS_HRL).
 -define(REST_ERRORS_HRL, 1).
+
+-define(ERROR_REPLY(Code, Error, ErrorDescription), {Code, #{
+    <<"error">> => Error,
+    <<"error_description">> => ErrorDescription
+}}).
+
 %% HTTP 400 errors
--define(ERROR_INVALID_ATTRIBUTE, {?BAD_REQUEST, #{<<"error">> => <<"invalid_attribute">>,
-    <<"error_description">> => <<"Given attribute is not valid">>}}).
--define(ERROR_UNDEFINED_ATTRIBUTE, {?BAD_REQUEST, #{<<"error">> => <<"undefined_attribute">>,
-    <<"error_description">> => <<"You must define attribute name when requesting for extended attribute.">>}}).
--define(ERROR_INVALID_ATTRIBUTE_BODY, {?BAD_REQUEST, #{<<"error">> => <<"invalid_attribute_body">>,
-    <<"error_description">> => <<"Request's body is malformed, provide one valid attribute with its value.">>}}).
--define(ERROR_INVALID_ATTRIBUTE_NAME, {?BAD_REQUEST, #{<<"error">> => <<"invalid_attribute_name">>,
-    <<"error_description">> => <<"Request's attribute name is invalid.">>}}).
--define(ERROR_INVALID_EXTENDED_FLAG, {?BAD_REQUEST, #{<<"error">> => <<"invalid_extended_flag">>,
-    <<"error_description">> => <<"Given extended flag is not a valid boolean.">>}}).
--define(ERROR_INVALID_INHERITED_FLAG, {?BAD_REQUEST, #{<<"error">> => <<"invalid_inherited_flag">>,
-    <<"error_description">> => <<"Given inherited flag is not a valid boolean.">>}}).
--define(ERROR_INVALID_MODE, {?BAD_REQUEST, #{<<"error">> => <<"invalid_mode">>,
-    <<"error_description">> => <<"Given mode is invalid, it should be provided in octal form.">>}}).
--define(ERROR_TOO_MANY_ENTRIES, {?BAD_REQUEST, #{<<"error">> => <<"too_many_entries">>,
-    <<"error_description">> => <<"The directory contains too many entries to list them all, ask for specific range.">>}}).
--define(ERROR_INVALID_METRIC, {?BAD_REQUEST, #{<<"error">> => <<"invalid_metric">>,
-    <<"error_description">> => <<"Requested metric is invalid.">>}}).
--define(ERROR_INVALID_STEP, {?BAD_REQUEST, #{<<"error">> => <<"invalid_step">>,
-    <<"error_description">> => <<"Requested step is invalid.">>}}).
--define(ERROR_INVALID_TIMEOUT, {?BAD_REQUEST, #{<<"error">> => <<"invalid_timeout">>,
-    <<"error_description">> => <<"Requested timeout is invalid, it must be of integer type.">>}}).
--define(ERROR_INVALID_LAST_SEQ, {?BAD_REQUEST, #{<<"error">> => <<"invalid_last_seq">>,
-    <<"error_description">> => <<"Requested last_seq is invalid, it must be of integer type.">>}}).
--define(ERROR_INVALID_OFFSET, {?BAD_REQUEST, #{<<"error">> => <<"invalid_offset">>,
-    <<"error_description">> => <<"Requested offset is invalid, it must be of integer type.">>}}).
--define(ERROR_INVALID_LIMIT, {?BAD_REQUEST, #{<<"error">> => <<"invalid_limit">>,
-    <<"error_description">> => <<"Requested limit is invalid, it must be of integer type.">>}}).
--define(ERROR_LIMIT_TOO_LARGE(Max), {?BAD_REQUEST, #{<<"error">> => <<"limit_too_large">>,
-    <<"error_description">> => <<"Requested limit exceeds maximal value of ", (integer_to_binary(Max))/binary, ".">>}}).
--define(ERROR_INVALID_STATUS, {?BAD_REQUEST, #{<<"error">> => <<"invalid_status">>,
-    <<"error_description">> => <<"Requested transfer status is invalid.">>}}).
--define(ERROR_INVALID_METADATA_TYPE, {?BAD_REQUEST, #{<<"error">> => <<"invalid_metadata_type">>,
-    <<"error_description">> => <<"Given metadatadata type is invalid for selected contentent type.">>}}).
--define(ERROR_SPACE_NOT_PROVIDED, {?BAD_REQUEST, #{<<"error">> => <<"space_not_provided">>,
-    <<"error_description">> => <<"Required space_id was not provided.">>}}).
--define(ERROR_INVALID_DESCENDING, {?BAD_REQUEST, #{<<"error">> => <<"invalid_descending">>,
-    <<"error_description">> => <<"The descending parameter is invalid, it must be of boolean type.">>}}).
--define(ERROR_INVALID_INCLUSIVE_END, {?BAD_REQUEST, #{<<"error">> => <<"invalid_inclusive_end">>,
-    <<"error_description">> => <<"The inclusive_end parameter is invalid, it must be of boolean type.">>}}).
--define(ERROR_INVALID_STALE, {?BAD_REQUEST, #{<<"error">> => <<"invalid_stale">>,
-    <<"error_description">> => <<"The stale parameter is invalid, it must be one of: 'ok', 'update_after'.">>}}).
--define(ERROR_INVALID_SKIP, {?BAD_REQUEST, #{<<"error">> => <<"invalid_skip">>,
-    <<"error_description">> => <<"The skip parameter is invalid, it must be of integer type.">>}}).
--define(ERROR_INVALID_FILTER_TYPE, {?BAD_REQUEST, #{<<"error">> => <<"invalid_filter_type">>,
-    <<"error_description">> => <<"The filter_type parameter is invalid.">>}}).
--define(ERROR_INVALID_FILTER, {?BAD_REQUEST, #{<<"error">> => <<"invalid_filter">>,
-    <<"error_description">> => <<"The filter parameter is invalid.">>}}).
--define(ERROR_MISSING_FILTER, {?BAD_REQUEST, #{<<"error">> => <<"missing_filter">>,
-    <<"error_description">> => <<"The filter parameter is missing.">>}}).
--define(ERROR_INVALID_OBJECTID, {?BAD_REQUEST, #{<<"error">> => <<"invalid_objectid">>,
-    <<"error_description">> => <<"Given id is invalid.">>}}).
--define(ERROR_INVALID_ENDKEY, {?BAD_REQUEST, #{<<"error">> => <<"invalid_endkey">>,
-    <<"error_description">> => <<"The endkey parameter is invalid, it must be a valid json.">>}}).
--define(ERROR_INVALID_STARTKEY, {?BAD_REQUEST, #{<<"error">> => <<"invalid_startkey">>,
-    <<"error_description">> => <<"The startkey parameter is invalid, it must be a valid json.">>}}).
--define(ERROR_INVALID_KEY, {?BAD_REQUEST, #{<<"error">> => <<"invalid_key">>,
-    <<"error_description">> => <<"The key parameter is invalid, it must be a valid json.">>}}).
--define(ERROR_INVALID_KEYS, {?BAD_REQUEST, #{<<"error">> => <<"invalid_keys">>,
-    <<"error_description">> => <<"The keys parameter is invalid, it must be a valid json list.">>}}).
--define(ERROR_INVALID_SPATIAL_FLAG, {?BAD_REQUEST, #{<<"error">> => <<"invalid_spatial_flag">>,
-    <<"error_description">> => <<"Given spatial flag is not a valid boolean.">>}}).
--define(ERROR_INVALID_BBOX, {?BAD_REQUEST, #{<<"error">> => <<"error_invalid_bbox">>,
-    <<"error_description">> => <<"Bounding box is invalid, it needs to be bbox=W,S,E,N where each direction is a number.">>}}).
+-define(ERROR_INVALID_ATTRIBUTE, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"invalid_attribute">>,
+    <<"Given attribute is not valid">>)
+).
+-define(ERROR_UNDEFINED_ATTRIBUTE, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"undefined_attribute">>,
+    <<"You must define attribute name when requesting for extended attribute.">>)
+).
+-define(ERROR_INVALID_ATTRIBUTE_BODY, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"invalid_attribute_body">>,
+    <<"Request's body is malformed, provide one valid attribute with its value.">>)
+).
+-define(ERROR_INVALID_ATTRIBUTE_NAME, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"invalid_attribute_name">>,
+    <<"Request's attribute name is invalid.">>)
+).
+-define(ERROR_INVALID_EXTENDED_FLAG, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"invalid_extended_flag">>,
+    <<"Given extended flag is not a valid boolean.">>)
+).
+-define(ERROR_INVALID_INHERITED_FLAG, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"invalid_inherited_flag">>,
+    <<"Given inherited flag is not a valid boolean.">>)
+).
+-define(ERROR_INVALID_MODE, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"invalid_mode">>,
+    <<"Given mode is invalid, it should be provided in octal form.">>)
+).
+-define(ERROR_TOO_MANY_ENTRIES, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"too_many_entries">>,
+    <<"The directory contains too many entries to list them all, ask for specific range.">>)
+).
+-define(ERROR_INVALID_METRIC, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"invalid_metric">>,
+    <<"Requested metric is invalid.">>)
+).
+-define(ERROR_INVALID_STEP, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"invalid_step">>,
+    <<"Requested step is invalid.">>)
+).
+-define(ERROR_INVALID_TIMEOUT, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"invalid_timeout">>,
+    <<"Requested timeout is invalid, it must be of integer type.">>)
+).
+-define(ERROR_INVALID_LAST_SEQ, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"invalid_last_seq">>,
+    <<"Requested last_seq is invalid, it must be of integer type.">>)
+).
+-define(ERROR_INVALID_OFFSET, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"invalid_offset">>,
+    <<"Requested offset is invalid, it must be of integer type.">>)
+).
+-define(ERROR_INVALID_LIMIT, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"invalid_limit">>,
+    <<"Requested limit is invalid, it must be of integer type.">>)
+).
+
+-define(ERROR_LIMIT_TOO_LARGE(Max), ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"limit_too_large">>,
+    <<"Requested limit exceeds maximal value of ", (integer_to_binary(Max))/binary, ".">>)
+).
+-define(ERROR_INVALID_STATUS, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"invalid_status">>,
+    <<"Requested transfer status is invalid.">>)
+).
+-define(ERROR_INVALID_METADATA_TYPE, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"invalid_metadata_type">>,
+    <<"Given metadatadata type is invalid for selected contentent type.">>)
+).
+-define(ERROR_SPACE_NOT_PROVIDED, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"space_not_provided">>,
+    <<"Required space_id was not provided.">>)
+).
+-define(ERROR_INVALID_DESCENDING, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"invalid_descending">>,
+    <<"The descending parameter is invalid, it must be of boolean type.">>)
+).
+-define(ERROR_INVALID_INCLUSIVE_END, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"invalid_inclusive_end">>,
+    <<"The inclusive_end parameter is invalid, it must be of boolean type.">>)
+).
+-define(ERROR_INVALID_STALE, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"invalid_stale">>,
+    <<"The stale parameter is invalid, it must be one of: 'ok', 'update_after', 'false'.">>)
+).
+-define(ERROR_INVALID_SKIP, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"invalid_skip">>,
+    <<"The skip parameter is invalid, it must be of integer type.">>)
+).
+-define(ERROR_INVALID_FILTER_TYPE, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"invalid_filter_type">>,
+    <<"The filter_type parameter is invalid.">>)
+).
+-define(ERROR_INVALID_FILTER, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"invalid_filter">>,
+    <<"The filter parameter is invalid.">>)
+).
+-define(ERROR_MISSING_FILTER, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"missing_filter">>,
+    <<"The filter parameter is missing.">>)
+).
+-define(ERROR_INVALID_OBJECTID, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"invalid_objectid">>,
+    <<"Given id is invalid.">>)
+).
+-define(ERROR_INVALID_ENDKEY, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"invalid_endkey">>,
+    <<"The endkey parameter is invalid, it must be a valid json.">>)
+).
+-define(ERROR_INVALID_STARTKEY, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"invalid_startkey">>,
+    <<"The startkey parameter is invalid, it must be a valid json.">>)
+).
+-define(ERROR_INVALID_END_RANGE, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"invalid_end_range">>,
+    <<"The end_range parameter is invalid, it must be a valid json.">>)
+).
+-define(ERROR_INVALID_START_RANGE, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"invalid_start_range">>,
+    <<"The start_range parameter is invalid, it must be a valid json.">>)
+).
+-define(ERROR_INVALID_KEY, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"invalid_key">>,
+    <<"The key parameter is invalid, it must be a valid json.">>)
+).
+-define(ERROR_INVALID_KEYS, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"invalid_keys">>,
+    <<"The keys parameter is invalid, it must be a valid json list.">>)
+).
+-define(ERROR_INVALID_SPATIAL_FLAG, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"invalid_spatial_flag">>,
+    <<"Given spatial flag is not a valid boolean.">>)
+).
+-define(ERROR_INVALID_BBOX, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"error_invalid_bbox">>,
+    <<"Bounding box is invalid, it needs to be bbox=W,S,E,N where each direction is a number.">>)
+).
 
 %% HTTP 401 errors
--define(ERROR_UNAUTHORIZED, {?NOT_AUTHORIZED, #{<<"error">> => <<"unauthorized">>,
-    <<"error_description">> => <<"Error unauthorized.">>}}).
+-define(ERROR_UNAUTHORIZED, ?ERROR_REPLY(
+    ?NOT_AUTHORIZED,
+    <<"unauthorized">>,
+    <<"Error unauthorized.">>)
+).
 
 %% HTTP 403 errors
--define(ERROR_PERMISSION_DENIED, {?FORBIDDEN, #{<<"error">> => <<"permission_denied">>,
-    <<"error_description">> => <<"Permission denied.">>}}).
--define(ERROR_FORBIDDEN, {?FORBIDDEN, #{<<"error">> => <<"forbidden">>,
-    <<"error_description">> => <<"Operation not permitted.">>}}).
+-define(ERROR_PERMISSION_DENIED, ?ERROR_REPLY(
+    ?FORBIDDEN,
+    <<"permission_denied">>,
+    <<"Permission denied.">>)
+).
+-define(ERROR_FORBIDDEN, ?ERROR_REPLY(
+    ?FORBIDDEN,
+    <<"forbidden">>,
+    <<"Operation not permitted.">>)
+).
 
 %% HTTP 404 errors
--define(ERROR_NOT_FOUND, {?NOT_FOUND, #{<<"error">> => <<"not_found">>,
-    <<"error_description">> => <<"The resource could not be found.">>}}).
--define(ERROR_SPACE_NOT_FOUND, {?NOT_FOUND, #{<<"error">> => <<"space_not_found">>,
-    <<"error_description">> => <<"The space could not be found.">>}}).
+-define(ERROR_NOT_FOUND, ?ERROR_REPLY(
+    ?NOT_FOUND,
+    <<"not_found">>,
+    <<"The resource could not be found.">>)
+).
+-define(ERROR_SPACE_NOT_FOUND, ?ERROR_REPLY(
+    ?NOT_FOUND,
+    <<"space_not_found">>,
+    <<"The space could not be found.">>)
+).
 
 -endif.

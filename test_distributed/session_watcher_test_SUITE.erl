@@ -108,7 +108,7 @@ session_save_should_update_session_access_time(Config) ->
 session_create_should_set_session_access_time(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = base64:encode(crypto:strong_rand_bytes(20)),
-    Accessed1 = erlang:system_time(seconds),
+    Accessed1 = utils:system_time_seconds(),
     ?call(Worker, create, [#document{key = SessId, value = #session{}}]),
     Accessed2 = get_session_access_time([{session_id, SessId} | Config]),
     ?call(Worker, delete, [SessId]),
