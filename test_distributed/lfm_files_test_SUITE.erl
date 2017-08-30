@@ -63,7 +63,13 @@
     new_file_should_have_zero_popularity/1,
     opening_file_should_increase_file_popularity/1,
     file_popularity_view_should_return_unpopular_files/1,
-    file_popularity_should_have_correct_file_size/1
+    file_popularity_should_have_correct_file_size/1,
+    delayed_creation_should_not_prevent_truncate/1,
+    readdir_plus_should_return_empty_result_for_empty_dir/1,
+    readdir_plus_should_return_empty_result_zero_size/1,
+    readdir_plus_should_work_with_zero_offset/1,
+    readdir_plus_should_work_with_non_zero_offset/1,
+    readdir_plus_should_work_with_size_greater_than_dir_size/1
 ]).
 
 -define(TEST_CASES, [
@@ -100,7 +106,13 @@
     new_file_should_have_zero_popularity,
     opening_file_should_increase_file_popularity,
     file_popularity_view_should_return_unpopular_files,
-    file_popularity_should_have_correct_file_size
+    file_popularity_should_have_correct_file_size,
+    delayed_creation_should_not_prevent_truncate,
+    readdir_plus_should_return_empty_result_for_empty_dir,
+    readdir_plus_should_return_empty_result_zero_size,
+    readdir_plus_should_work_with_zero_offset,
+    readdir_plus_should_work_with_non_zero_offset,
+    readdir_plus_should_work_with_size_greater_than_dir_size
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -125,6 +137,26 @@ all() ->
 %%%====================================================================
 %%% Test function
 %%%====================================================================
+
+readdir_plus_should_return_empty_result_for_empty_dir(Config) ->
+    MainDirPath = generate_dir(Config, 0),
+    verify_attrs(Config, MainDirPath, 10, 0).
+
+readdir_plus_should_return_empty_result_zero_size(Config) ->
+    MainDirPath = generate_dir(Config, 10),
+    verify_attrs(Config, MainDirPath, 0, 0).
+
+readdir_plus_should_work_with_zero_offset(Config) ->
+    MainDirPath = generate_dir(Config, 5),
+    verify_attrs(Config, MainDirPath, 5, 5).
+
+readdir_plus_should_work_with_non_zero_offset(Config) ->
+    MainDirPath = generate_dir(Config, 5),
+    verify_attrs(Config, MainDirPath, 3, 3, 2).
+
+readdir_plus_should_work_with_size_greater_than_dir_size(Config) ->
+    MainDirPath = generate_dir(Config, 5),
+    verify_attrs(Config, MainDirPath, 10, 5).
 
 echo_loop_test(Config) ->
     ?PERFORMANCE(Config, [
@@ -1260,3 +1292,40 @@ wait_for_cache_dump(Workers) ->
     lists:foreach(fun(W) ->
         rpc:call(W, caches_controller, wait_for_cache_dump, [])
     end, Workers).
+
+generate_dir(Config, Size) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+
+    MainDir = generator:gen_name(),
+    MainDirPath = <<"/space_name1/", MainDir/binary, "/">>,
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, MainDirPath, 8#755)),
+
+    case Size of
+        0 ->
+            MainDirPath;
+        _ ->
+            Files = lists:sort(lists:map(fun(_) ->
+                generator:gen_name() end, lists:seq(1, Size))),
+            lists:foreach(fun(F) ->
+                ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId1, <<MainDirPath/binary, F/binary>>, 8#755))
+            end, Files),
+
+            MainDirPath
+    end.
+
+verify_attrs(Config, MainDirPath, Limit, ExpectedSize) ->
+    verify_attrs(Config, MainDirPath, Limit, ExpectedSize, 0).
+
+verify_attrs(Config, MainDirPath, Limit, ExpectedSize, Offset) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+
+    Ans = lfm_proxy:read_dir_plus(Worker, SessId1, {path, MainDirPath}, Offset, Limit),
+    ?assertMatch({ok, _}, Ans),
+    {ok, List} = Ans,
+    ?assertEqual(ExpectedSize, length(List)).

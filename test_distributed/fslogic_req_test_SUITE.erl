@@ -31,6 +31,7 @@
 %% tests
 -export([
     fslogic_get_file_attr_test/1,
+    fslogic_get_file_children_attrs_test/1,
     fslogic_get_child_attr_test/1,
     fslogic_mkdir_and_rmdir_test/1,
     fslogic_read_dir_test/1,
@@ -45,6 +46,7 @@
 all() ->
     ?ALL([
         fslogic_get_file_attr_test,
+        fslogic_get_file_children_attrs_test,
         fslogic_get_child_attr_test,
         fslogic_mkdir_and_rmdir_test,
         fslogic_read_dir_test,
@@ -114,6 +116,105 @@ fslogic_get_file_attr_test(Config) ->
         #fuse_response{status = #status{code = ?ENOENT}},
         ?req(Worker, SessId1, #resolve_guid{path = <<"/space_name1/t1_dir">>}
     )).
+
+fslogic_get_file_children_attrs_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    ProviderID = rpc:call(Worker, oneprovider, get_provider_id, []),
+
+    {SessId1, UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId2, UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user2">>}, Config)},
+    {SessId3, UserId3} = {?config({session_id, {<<"user3">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user3">>}, Config)},
+    {SessId4, UserId4} = {?config({session_id, {<<"user4">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user4">>}, Config)},
+
+    UserRootGuid1 = fslogic_uuid:uuid_to_guid(fslogic_uuid:user_root_dir_uuid(UserId1), undefined),
+    UserRootGuid2 = fslogic_uuid:uuid_to_guid(fslogic_uuid:user_root_dir_uuid(UserId2), undefined),
+    UserRootGuid3 = fslogic_uuid:uuid_to_guid(fslogic_uuid:user_root_dir_uuid(UserId3), undefined),
+    UserRootGuid4 = fslogic_uuid:uuid_to_guid(fslogic_uuid:user_root_dir_uuid(UserId4), undefined),
+
+    ValidateReadDirPlus = fun({SessId, Path, AttrsList}) ->
+        #fuse_response{fuse_response = #guid{guid = FileGuid}} =
+            ?assertMatch(
+                #fuse_response{status = #status{code = ?OK}},
+                ?req(Worker, SessId, #resolve_guid{path = Path})
+            ),
+
+        lists:foreach( %% Size
+            fun(Size) ->
+                lists:foreach( %% Offset step
+                    fun(OffsetStep) ->
+                        {_, Attrs} = lists:foldl( %% foreach Offset
+                            fun(_, {Offset, CurrentChildren}) ->
+                                Response = ?file_req(Worker, SessId, FileGuid,
+                                    #get_file_children_attrs{offset = Offset, size = Size}),
+
+                                ?assertMatch(#fuse_response{status = #status{code = ?OK}}, Response),
+                                #fuse_response{fuse_response = #file_children_attrs{
+                                    child_attrs = ChildrenAttrs}} = Response,
+
+
+                                ?assertEqual(min(max(0, length(AttrsList) - Offset), Size), length(ChildrenAttrs)),
+
+                                {Offset + OffsetStep, lists:usort(ChildrenAttrs ++ CurrentChildren)}
+                            end, {0, []}, lists:seq(1, 2 * round(length(AttrsList) / OffsetStep))),
+
+                        lists:foreach(fun({A1, A2}) ->
+                            #file_attr{
+                                guid = Guid, name = Name, type = Type, mode = Mode,
+                                uid = UID, parent_uuid = ParentGuid, provider_id = ProviderID,
+                                owner_id = OwnerID
+                            } = A1,
+                            #file_attr{
+                                guid = Guid2, name = Name2, type = Type2, mode = Mode2,
+                                uid = UID2, parent_uuid = ParentGuid2, provider_id = ProviderID2,
+                                owner_id = OwnerID2
+                            } = A2,
+
+                            ?assertMatch(Guid, Guid2),
+                            ?assertMatch(Name, Name2),
+                            ?assertMatch(Type, Type2),
+                            ?assertMatch(Mode, Mode2),
+                            ?assertMatch(UID, UID2),
+                            ?assertMatch(ParentGuid, ParentGuid2),
+                            ?assertMatch(ProviderID, ProviderID2),
+                            ?assertMatch(OwnerID, OwnerID2)
+                        end, lists:zip(AttrsList, Attrs))
+                    end, lists:seq(1, Size))
+
+            end, lists:seq(1, length(AttrsList) + 1))
+    end,
+
+    TestFun = fun({SessId, Path, NameList, UserRootGuid}) ->
+        Files = lists:map(fun(Name) ->
+            {SessId, Name, 8#1775, 0, <<"/", Name/binary>>, UserRootGuid}
+        end, NameList),
+
+        FilesAttrs = lists:map(fun({SessId, Name, Mode, UID, Path, ParentGuid}) ->
+            #fuse_response{fuse_response = #guid{guid = Guid}} =
+                ?assertMatch(
+                    #fuse_response{status = #status{code = ?OK}},
+                    ?req(Worker, SessId, #resolve_guid{path = Path})
+                ),
+
+            #file_attr{
+                guid = Guid, name = Name, type = ?DIRECTORY_TYPE, mode = Mode,
+                uid = UID, parent_uuid = ParentGuid, provider_id = ProviderID,
+                owner_id = <<"0">>
+            }
+        end, Files),
+
+        ValidateReadDirPlus({SessId, Path, FilesAttrs})
+    end,
+
+    lists:foreach(TestFun, [
+        {SessId1, <<"/">>, [<<"space_name1">>, <<"space_name2">>,
+            <<"space_name3">>, <<"space_name4">>], UserRootGuid1},
+        {SessId2, <<"/">>, [<<"space_name2">>, <<"space_name3">>,
+            <<"space_name4">>], UserRootGuid2},
+        {SessId3, <<"/">>, [<<"space_name3">>, <<"space_name4">>], UserRootGuid3},
+        {SessId4, <<"/">>, [<<"space_name4">>], UserRootGuid4}
+    ]),
+
+    ok.
 
 
 fslogic_get_child_attr_test(Config) ->

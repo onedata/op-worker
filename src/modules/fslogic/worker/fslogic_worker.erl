@@ -291,6 +291,8 @@ handle_file_request(UserCtx, #create_dir{name = Name, mode = Mode}, ParentFileCt
     dir_req:mkdir(UserCtx, ParentFileCtx, Name, Mode);
 handle_file_request(UserCtx, #get_file_children{offset = Offset, size = Size}, FileCtx) ->
     dir_req:read_dir(UserCtx, FileCtx, Offset, Size);
+handle_file_request(UserCtx, #get_file_children_attrs{offset = Offset, size = Size}, FileCtx) ->
+    dir_req:read_dir_plus(UserCtx, FileCtx, Offset, Size);
 handle_file_request(UserCtx, #rename{
     target_parent_guid = TargetParentGuid,
     target_name = TargetName
