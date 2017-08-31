@@ -19,24 +19,12 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_common_internal.hrl").
-
--define(TIMEOUT, timer:minutes(5)).
--define(call_store(N, F, A), ?call(N, datastore, F, A)).
--define(call_store(N, Model, F, A), ?call(N,
-    model, execute_with_default_context, [Model, F, A])).
--define(call_store(N, Model, F, A, Override), ?call(N,
-    model, execute_with_default_context, [Model, F, A, Override])).
--define(call_disk(N, Model, F, A), ?call(N,
-    model, execute_with_default_context, [Model, F, A, [{level, ?DIRECT_DISK_LEVEL}]])).
--define(call(N, M, F, A), ?call(N, M, F, A, ?TIMEOUT)).
--define(call(N, M, F, A, T), rpc:call(N, M, F, A, T)).
 
 %% export for ct
 -export([all/0]).
--export([nagios_test/1, test_models/1]).
+-export([nagios_test/1]).
 
-all() -> ?ALL([nagios_test, test_models]).
+all() -> ?ALL([nagios_test]).
 
 % Path to nagios endpoint
 -define(HEALTHCHECK_PATH, "http://127.0.0.1:6666/nagios").
@@ -48,44 +36,6 @@ all() -> ?ALL([nagios_test, test_models]).
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
-
-test_models(Config) ->
-    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
-    Models = ?call(Worker, datastore_config, models, []),
-
-    lists:foreach(fun(Worker) ->
-        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
-        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(1)) % TODO - change to 2 seconds
-    end, Workers),
-
-    lists:foreach(fun(ModelName) ->
-%%        ct:print("Module ~p", [ModelName]),
-
-        #model_config{store_level = SL} = MC = ?call(Worker, ModelName, model_init, []),
-        Cache = case SL of
-            ?GLOBALLY_CACHED_LEVEL -> true;
-            ?LOCALLY_CACHED_LEVEL -> true;
-            _ -> false
-        end,
-
-        Key = list_to_binary("key_tm_" ++ atom_to_list(ModelName)),
-        Doc =  #document{
-            key = Key,
-            value = MC#model_config.defaults
-        },
-        ?assertMatch({ok, _}, ?call_store(Worker, ModelName, save, [Doc])),
-        ?assertMatch({ok, _}, ?call_store(Worker, ModelName, get, [Key])),
-
-%%        ct:print("Module ok ~p", [ModelName]),
-
-        case Cache of
-            true ->
-                ?assertMatch({ok, _, _}, ?call_disk(Worker, ModelName, get, [Key]), 10);
-%%                ct:print("Module caching ok ~p", [ModelName]);
-            _ ->
-                ok
-        end
-    end, Models).
 
 nagios_test(Config) ->
     [Worker1, _, _] = WorkerNodes = ?config(op_worker_nodes, Config),
@@ -120,7 +70,7 @@ nagios_test(Config) ->
         fun({WNode, WName}) ->
             WorkersOnNode = proplists:get_value(atom_to_list(WNode), WorkersByNodeXML),
             ?assertEqual(true, lists:member(WName, WorkersOnNode))
-        end, [{Node, Worker} || Node <- Nodes, Worker <- node_manager:modules()]),
+        end, [{Node, Worker} || Node <- Nodes, Worker <- rpc:call(Worker1, node_manager, modules, [])]),
 
     % Check if every node's status contains dispatcher and node manager status
     lists:foreach(

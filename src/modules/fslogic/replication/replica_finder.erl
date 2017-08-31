@@ -12,9 +12,8 @@
 -module(replica_finder).
 -author("Tomasz Lichon").
 
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("proto/oneclient/common_messages.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 
 %% API
 -export([get_blocks_for_sync/2, get_unique_blocks/1]).

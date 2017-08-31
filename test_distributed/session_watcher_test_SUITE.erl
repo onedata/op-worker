@@ -168,7 +168,6 @@ stop_session_watcher(Worker, Pid, SessId) ->
     ?call(Worker, delete, [SessId]),
     exit(Pid, shutdown).
 
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -193,7 +192,9 @@ mock_worker_proxy(Worker) ->
 set_session_status(Config, Status) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
-    ?call(Worker, update, [SessId, #{status => Status}]),
+    ?call(Worker, update, [SessId, fun(Sess = #session{}) ->
+        {ok, Sess#session{status = Status}}
+    end]),
     ok.
 
 %%--------------------------------------------------------------------

@@ -16,8 +16,7 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 
 %% API
 -export([read/7, write/6]).

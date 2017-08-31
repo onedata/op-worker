@@ -66,7 +66,7 @@ get_user_id_on_posix_storage(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Result = rpc:call(Worker, reverse_luma, get_user_id,
         [<<"0">>, <<"0">>, ?STORAGE_ID, ?STORAGE]),
-    ExpectedUserId = datastore_utils2:gen_key(<<"">>, str_utils:format_bin("~p:~s",
+    ExpectedUserId = datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
         [<<"test_provider_id">>, <<"test_user_id">>])),
     ?assertEqual({ok, ExpectedUserId}, Result).
 
@@ -93,7 +93,7 @@ get_user_id_should_fail_with_not_supported_storage_error(Config) ->
 get_user_id_on_posix_storage_should_query_reverse_luma_once(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, reverse_luma_proxy, [passthrough]),
-    ExpectedUserId = datastore_utils2:gen_key(<<"">>, str_utils:format_bin("~p:~s",
+    ExpectedUserId = datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
         [<<"test_provider_id">>, <<"test_user_id">>])),
 
     Result = rpc:call(Worker, reverse_luma, get_user_id,
@@ -112,7 +112,7 @@ get_user_id_on_posix_storage_should_query_reverse_luma_twice(Config) ->
     CacheTimeout = 5,
     LumaConfig = ?LUMA_CONFIG(CacheTimeout),
     test_utils:mock_new(Worker, reverse_luma_proxy, [passthrough]),
-    ExpectedUserId = datastore_utils2:gen_key(<<"">>, str_utils:format_bin("~p:~s",
+    ExpectedUserId = datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
         [<<"test_provider_id">>, <<"test_user_id">>])),
 
         Result = rpc:call(Worker, reverse_luma, get_user_id,

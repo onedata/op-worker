@@ -14,12 +14,13 @@
 -module(simple_scan).
 -author("Jakub Kudzia").
 
+-include("global_definitions.hrl").
 -include("modules/storage_sync/strategy_config.hrl").
 -include("modules/storage_sync/storage_sync.hrl").
+-include("modules/storage_file_manager/helpers/helpers.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
--include("global_definitions.hrl").
 
 
 %% API
@@ -39,7 +40,7 @@ run(Job = #space_strategy_job{
     data = #{
         space_id := SpaceId,
         storage_file_ctx := StorageFileCtx
-}}) when StorageFileCtx =/= undefined ->
+    }}) when StorageFileCtx =/= undefined ->
 
     Module = storage_sync_utils:module(Job),
     storage_sync_monitoring:update_queue_length_spirals(SpaceId, -1),
@@ -50,7 +51,7 @@ run(Job = #space_strategy_job{
         file_name := FileName,
         space_id := SpaceId,
         storage_id := StorageId
-}}) ->
+    }}) ->
 
     {CanonicalPath, ParentCtx2} = file_ctx:get_child_canonical_path(ParentCtx, FileName),
     StorageFileCtx = storage_file_ctx:new(CanonicalPath, SpaceId, StorageId),
@@ -94,7 +95,7 @@ maybe_import_storage_file_and_children(Job0 = #space_strategy_job{
     Job3 = case Offset of
         0 ->
             Data3 = Data2#{mtime => StorageMtime},  %remember mtime to save after importing all subfiles
-            Job2#space_strategy_job{data=Data3};
+            Job2#space_strategy_job{data = Data3};
         _ -> Job2
     end,
     SubJobs = import_children(Job3, Type, Offset, FileCtx, ?DIR_BATCH),
@@ -221,7 +222,7 @@ increase_files_to_handle_counter(#space_strategy_job{
 %% (.i.e. for regular files checks if its file_location exists).
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_import_file_with_existing_metadata(space_strategy:job(), file_ctx:ctx())->
+-spec maybe_import_file_with_existing_metadata(space_strategy:job(), file_ctx:ctx()) ->
     {space_strategy:job_result(), file_ctx:ctx(), space_strategy:job()}.
 maybe_import_file_with_existing_metadata(Job = #space_strategy_job{
     strategy_type = StrategyType,
@@ -340,7 +341,7 @@ is_imported(StorageId, CanonicalPath, ?REGULAR_FILE_TYPE, #fuse_response{
             value = #file_location{
                 storage_id = SID,
                 file_id = FID
-        }}, _FileCtx2} ->
+            }}, _FileCtx2} ->
             (StorageId == SID) andalso (CanonicalPath == FID)
     end;
 is_imported(_StorageId, _CanonicalPath, _FileType, #fuse_response{
@@ -464,7 +465,7 @@ handle_already_imported_file(Job = #space_strategy_job{
     data = Data = #{
         space_id := SpaceId,
         storage_file_ctx := StorageFileCtx
-}}, FileAttr, FileCtx) ->
+    }}, FileAttr, FileCtx) ->
 
     case storage_file_ctx:get_stat_buf(StorageFileCtx) of
         {#statbuf{st_mode = Mode}, StorageFileCtx2} ->
@@ -499,7 +500,7 @@ maybe_update_attrs(FileAttr, FileCtx, StorageFileCtx, Mode, SpaceId) ->
     Result2 = maybe_update_mode(FileAttr, FileStat, FileCtx),
     Result3 = maybe_update_times(FileAttr, FileStat, FileCtx),
     Result4 = maybe_update_owner(FileAttr, StorageFileCtx2, FileCtx),
-    case {Result1, Result2, Result3, Result4}  of
+    case {Result1, Result2, Result3, Result4} of
         {not_updated, not_updated, not_updated, not_updated} ->
             ok;
         _ ->
@@ -595,11 +596,13 @@ maybe_update_times(#file_attr{atime = _ATime, mtime = _MTime, ctime = _CTime},
     #statbuf{st_atime = StorageATime, st_mtime = StorageMTime, st_ctime = StorageCTime},
     FileCtx
 ) ->
-    ok = fslogic_times:update_times_and_emit(FileCtx, #{
-        atime => StorageATime,
-        mtime => StorageMTime,
-        ctime => StorageCTime
-    }),
+    ok = fslogic_times:update_times_and_emit(FileCtx, fun(Times = #times{}) ->
+        {ok, Times#times{
+            atime = StorageATime,
+            mtime = StorageMTime,
+            ctime = StorageCTime
+        }}
+    end),
     updated.
 
 %%--------------------------------------------------------------------
@@ -616,7 +619,9 @@ maybe_update_owner(#file_attr{owner_id = OldOwnerId}, StorageFileCtx, FileCtx) -
             not_updated;
         NewOwnerId ->
             FileUuid = file_ctx:get_uuid_const(FileCtx),
-            {ok, FileUuid} = file_meta:update(FileUuid, #{owner => NewOwnerId}),
+            {ok, _} = file_meta:update(FileUuid, fun(FileMeta = #file_meta{}) ->
+                {ok, FileMeta#file_meta{owner = NewOwnerId}}
+            end),
             updated
     end.
 
@@ -626,9 +631,9 @@ maybe_update_owner(#file_attr{owner_id = OldOwnerId}, StorageFileCtx, FileCtx) -
 %% Creates file meta
 %% @end
 %%--------------------------------------------------------------------
--spec create_file_meta(datastore:document(), file_meta:uuid()) -> {ok, file_meta:uuid()}.
+-spec create_file_meta(datastore:doc(), file_meta:uuid()) -> {ok, file_meta:uuid()}.
 create_file_meta(FileMetaDoc, ParentUuid) ->
-    file_meta:create({uuid, ParentUuid}, FileMetaDoc, true).
+    file_meta:create({uuid, ParentUuid}, FileMetaDoc).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -640,14 +645,15 @@ create_file_meta(FileMetaDoc, ParentUuid) ->
     od_space:id()) ->
     {ok, datastore:key()}.
 create_times(FileUuid, MTime, ATime, CTime, SpaceId) ->
-    times:save_new(#document{
+    times:save(#document{
         key = FileUuid,
         value = #times{
             mtime = MTime,
             atime = ATime,
             ctime = CTime
         },
-        scope=SpaceId}).
+        scope = SpaceId}
+    ).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -676,7 +682,7 @@ create_file_location(SpaceId, StorageId, FileUuid, CanonicalPath, Size) ->
             key = file_location:local_id(FileUuid),
             value = Location,
             scope = SpaceId
-    }),
+        }),
     ok.
 
 %%-------------------------------------------------------------------

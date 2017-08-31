@@ -81,7 +81,7 @@ get_acl_insecure(_UserCtx, FileCtx) ->
                     value = acl_logic:from_json_format_to_acl(Val)
                 }
             };
-        {error, {not_found, custom_metadata}} ->
+        {error, not_found} ->
             #provider_response{status = #status{code = ?ENOATTR}}
     end.
 
@@ -103,7 +103,7 @@ set_acl_insecure(_UserCtx, FileCtx, #acl{value = Val}, Create, Replace) ->
             ),
             fslogic_times:update_ctime(FileCtx),
             #provider_response{status = #status{code = ?OK}};
-        {error, {not_found, custom_metadata}} ->
+        {error, not_found} ->
             #provider_response{status = #status{code = ?ENOENT}}
     end.
 
@@ -127,6 +127,6 @@ remove_acl_insecure(_UserCtx, FileCtx) ->
             ok = fslogic_event_emitter:emit_file_perm_changed(FileCtx2),
             fslogic_times:update_ctime(FileCtx2),
             #provider_response{status = #status{code = ?OK}};
-        {error, {not_found, custom_metadata}} ->
+        {error, not_found} ->
             #provider_response{status = #status{code = ?ENOENT}}
     end.

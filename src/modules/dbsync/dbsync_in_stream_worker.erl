@@ -66,7 +66,7 @@ init([SpaceId, ProviderId]) ->
     {ok, #state{
         space_id = SpaceId,
         provider_id = ProviderId,
-        seq = dbsync_state2:get_seq(SpaceId, ProviderId),
+        seq = dbsync_state:get_seq(SpaceId, ProviderId),
         changes_stash = ets:new(changes_stash, [ordered_set, private])
     }}.
 
@@ -102,7 +102,7 @@ handle_cast({changes_batch, Since, Until, Docs}, State = #state{
     space_id = SpaceId,
     provider_id = ProviderId
 }) ->
-    Supported = dbsync_utils2:is_supported(SpaceId, [
+    Supported = dbsync_utils:is_supported(SpaceId, [
         oneprovider:get_provider_id(),
         ProviderId
     ]),
@@ -148,7 +148,7 @@ handle_info(request_changes, State = #state{
     case ets:first(Stash) of
         '$end_of_table' ->
             {noreply, State#state{changes_request_ref = undefined}};
-        {Since, Until} = Key when Since == Seq ->
+        {Since, _} when Since == Seq ->
             gen_server2:cast(self(), check_batch_stash),
             {noreply, State#state{changes_request_ref = undefined}};
         {Since, _} = Key when Since < Seq ->
@@ -215,7 +215,7 @@ code_change(_OldVsn, State, _Extra) ->
 handle_changes_batch(Since, Until, Docs,
     State = #state{seq = Seq, apply_batch = Apply}) ->
     case {Since, Apply} of
-        {Seq, _} ->
+        {Seq, undefined} ->
             apply_changes_batch(Since, Until, Docs, State);
         {Higher, undefined} when Higher > Seq ->
             State2 = stash_changes_batch(Since, Until, Docs, State),
@@ -284,12 +284,12 @@ change_applied(_Since, Until, Ans, State) ->
     case Ans of
         ok ->
             gen_server2:cast(self(), check_batch_stash),
-            update_seq(Until, State);
+            update_seq(Until, State2);
         {error, Seq, _} ->
-            State2 = update_seq(Seq - 1, State),
-            schedule_changes_request(State2);
+            State3 = update_seq(Seq - 1, State2),
+            schedule_changes_request(State3);
         timeout ->
-            schedule_changes_request(State)
+            schedule_changes_request(State2)
     end.
 
 %%--------------------------------------------------------------------
@@ -333,7 +333,7 @@ prepare_batch(Docs, Until, State = #state{
 update_seq(Seq, State = #state{seq = Seq}) ->
     State;
 update_seq(Seq, State = #state{space_id = SpaceId, provider_id = ProviderId}) ->
-    dbsync_state2:set_seq(SpaceId, ProviderId, Seq),
+    dbsync_state:set_seq(SpaceId, ProviderId, Seq),
     State#state{seq = Seq}.
 
 %%--------------------------------------------------------------------

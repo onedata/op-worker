@@ -12,6 +12,8 @@
 -module(session_sup).
 -author("Krzysztof Trzepla").
 
+-include("modules/datastore/datastore_models.hrl").
+
 -behaviour(supervisor).
 
 %% API
@@ -51,7 +53,11 @@ start_link(SessId, SessType) ->
     {ok, {SupFlags :: supervisor:sup_flags(), [ChildSpec :: supervisor:child_spec()]}}.
 init([SessId, SessType]) ->
     SupFlags = #{strategy => one_for_all, intensity => 0, period => 1},
-    {ok, SessId} = session:update(SessId, #{supervisor => self(), node => node()}),
+    Self = self(),
+    Node = node(),
+    {ok, _} = session:update(SessId, fun(Session = #session{}) ->
+        {ok, Session#session{supervisor = Self, node = Node}}
+    end),
 
     SequencerEnabled = [fuse, provider_outgoing],
 

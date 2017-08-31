@@ -15,7 +15,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
-
+-include("modules/storage_file_manager/helpers/helpers.hrl").
 
 %% API
 -export([get_user_id/5]).
@@ -32,14 +32,14 @@
 -spec get_user_id(binary(), binary(), storage:name(), helper:name(),
     luma_config:config()) -> {ok, od_user:id()}.
 get_user_id(Uid, Gid, StorageName, HelperName, LumaConfig = #luma_config{url = LumaUrl}) ->
-    Url = lists:flatten(io_lib:format("~s/resolve_user_identity", [LumaUrl])),
+    Url = str_utils:format_bin("~s/resolve_user_identity", [LumaUrl]),
     ReqHeaders = luma_proxy:get_request_headers(LumaConfig),
     ReqBody = get_request_body(Uid, Gid, StorageName, HelperName),
     {ok, 200, _RespHeaders, RespBody} = http_client:post(Url, ReqHeaders, ReqBody),
     Response = json_utils:decode_map(RespBody),
     ProviderId = maps:get(<<"providerId">>, Response),
     ProviderUserId = maps:get(<<"userId">>, Response),
-    UserId = datastore_utils2:gen_key(<<"">>, str_utils:format_bin("~p:~s",
+    UserId = datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
         [ProviderId, ProviderUserId])),
     {ok, UserId}.
 

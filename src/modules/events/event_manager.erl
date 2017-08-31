@@ -33,7 +33,7 @@
 
 -type streams() :: #{event_stream:key() => pid()}.
 -type subscriptions() :: #{subscription:id() => {local, event_stream:key()} |
-{remote, oneprovider:id()}}.
+                                                {remote, oneprovider:id()}}.
 -type providers() :: #{file_meta:uuid() => oneprovider:id()}.
 -type ctx() :: event_type:ctx() | subscription_type:ctx().
 
@@ -86,7 +86,10 @@ start_link(MgrSup, SessId) ->
 init([MgrSup, SessId]) ->
     ?debug("Initializing event manager for session ~p", [SessId]),
     process_flag(trap_exit, true),
-    {ok, SessId} = session:update(SessId, #{event_manager => self()}),
+    Self = self(),
+    {ok, SessId} = session:update(SessId, fun(Session = #session{}) ->
+        {ok, Session#session{event_manager = Self}}
+    end),
     {ok, #state{manager_sup = MgrSup, session_id = SessId}, 0}.
 
 %%--------------------------------------------------------------------
@@ -172,7 +175,9 @@ handle_info(Info, State) ->
     State :: #state{}) -> term().
 terminate(Reason, #state{session_id = SessId} = State) ->
     ?log_terminate(Reason, State),
-    session:update(SessId, #{event_manager => undefined}).
+    session:update(SessId, fun(Session = #session{}) ->
+        {ok, Session#session{event_manager = undefined}}
+    end).
 
 %%--------------------------------------------------------------------
 %% @private

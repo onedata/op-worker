@@ -13,7 +13,7 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 
 % file which was not opened for this period of hours is invalidated,
 % regardless of other factors

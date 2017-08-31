@@ -29,14 +29,11 @@
 %% Starts application by supervisor initialization.
 %% @end
 %%--------------------------------------------------------------------
--spec start(_StartType :: application:start_type(), _StartArgs :: term()) ->
+-spec start(StartType :: application:start_type(), StartArgs :: term()) ->
     {ok, Pid :: pid()} | {ok, Pid :: pid(), State :: term()} |
     {error, Reason ::term()}.
 start(_StartType, _StartArgs) ->
-    test_node_starter:maybe_start_cover(),
-    application:set_env(ctool, verify_oz_cert,
-        application:get_env(?APP_NAME, verify_oz_cert, true)),
-    op_worker_sup:start_link().
+    {error, not_supported}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -45,5 +42,4 @@ start(_StartType, _StartArgs) ->
 %%--------------------------------------------------------------------
 -spec stop(State :: term()) -> ok.
 stop(_State) ->
-    test_node_starter:maybe_stop_cover(),
     ok.

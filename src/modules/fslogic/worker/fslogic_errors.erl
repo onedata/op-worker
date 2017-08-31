@@ -66,7 +66,7 @@ gen_status_message(#fuse_response{status = Status}) ->
     Status;
 gen_status_message({not_a_space, _}) ->
     #status{code = ?ENOENT, description = describe_error(?ENOENT)};
-gen_status_message({not_found, _}) ->
+gen_status_message(not_found) ->
     #status{code = ?ENOENT, description = describe_error(?ENOENT)};
 gen_status_message(already_exists) ->
     #status{code = ?EEXIST, description = describe_error(?EEXIST)};

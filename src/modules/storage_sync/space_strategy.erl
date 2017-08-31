@@ -20,7 +20,7 @@
 %%% Types
 %%%===================================================================
 
--type type()            :: storage_update | storage_import | filename_mapping|
+-type type()            :: storage_update | storage_import | filename_mapping |
                            file_caching | enoent_handling | file_conflict_resolution.
 -type definition()      :: #space_strategy{}.
 -type name()            :: atom().

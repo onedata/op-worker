@@ -172,7 +172,9 @@ route_and_ignore_answer(#client_message{message_body = #subscription_cancellatio
 route_and_ignore_answer(#client_message{message_body = Auth} = Msg)
     when is_record(Auth, macaroon_auth) orelse is_record(Auth, token_auth) ->
     % This function performs an async call to session manager worker.
-    {ok, _} = session:update(effective_session_id(Msg), #{auth => Auth}),
+    {ok, _} = session:update(effective_session_id(Msg), fun(Session = #session{}) ->
+        {ok, Session#session{auth = Auth}}
+    end),
     ok;
 route_and_ignore_answer(#client_message{message_body = #fuse_request{} = FuseRequest} = Msg) ->
     ok = worker_proxy:cast(fslogic_worker, {fuse_request, effective_session_id(Msg), FuseRequest});
@@ -180,7 +182,7 @@ route_and_ignore_answer(ClientMsg = #client_message{
     message_body = #dbsync_message{message_body = Msg}
 }) ->
     ok = worker_proxy:cast(
-        dbsync_worker2, {dbsync_message, effective_session_id(ClientMsg), Msg}
+        dbsync_worker, {dbsync_message, effective_session_id(ClientMsg), Msg}
     ).
 
 %%--------------------------------------------------------------------

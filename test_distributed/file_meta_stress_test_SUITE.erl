@@ -48,7 +48,6 @@ all() ->
 %%%===================================================================
 
 stress_test(Config) ->
-    ct:print("s1"),
     ?STRESS(Config,[
             {description, "Main stress test function. Links together all cases to be done multiple times as one continous test."},
             {success_rate, 90}, % Allow errors because of throttling
@@ -56,7 +55,6 @@ stress_test(Config) ->
         ]
     ).
 stress_test_base(Config) ->
-    ct:print("s2"),
     ?STRESS_TEST_BASE(Config).
 
 %%%===================================================================
@@ -203,20 +201,17 @@ many_files_creation_test_base(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ct:print("1"),
     Posthook = fun(NewConfig) ->
         Workers = ?config(op_worker_nodes, NewConfig),
         test_utils:mock_new(Workers, [dbsync_utils]),
-        test_utils:mock_expect(Workers, dbsync_utils, get_providers_for_space,
+        test_utils:mock_expect(Workers, dbsync_utils, get_providers,
             fun(_) -> [] end),
         NewConfig
     end,
-    ct:print("2"),
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [model_file_meta_test_base]} | Config].
 
 
 end_per_suite(Config) ->
-    ct:print("3"),
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, [oneprovider]).
 

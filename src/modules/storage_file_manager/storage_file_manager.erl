@@ -12,13 +12,12 @@
 %%%-------------------------------------------------------------------
 -module(storage_file_manager).
 
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
 -include("modules/storage_file_manager/helpers/helpers.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("storage_file_manager_errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -62,7 +61,7 @@ new_handle(SessionId, FileCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec new_handle(session:id(), od_space:id(), file_meta:uuid(),
-    Storage :: datastore:document(), FileId :: helpers:file_id(),
+    Storage :: datastore:doc(), FileId :: helpers:file_id(),
     ShareId :: od_share:id() | undefined) -> handle().
 new_handle(SessionId, SpaceId, FileUuid, #document{key = StorageId} = Storage,
     FileId, ShareId) ->

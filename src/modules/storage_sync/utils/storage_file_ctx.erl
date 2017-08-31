@@ -12,12 +12,11 @@
 -module(storage_file_ctx).
 -author("Jakub Kudzia").
 
--include("modules/storage_file_manager/helpers/helpers.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/storage_file_manager/helpers/helpers.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
-
-
 
 -record(storage_file_ctx, {
     id :: helpers:file_id(),

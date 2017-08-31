@@ -11,7 +11,7 @@
 -module(json_metadata).
 -author("Tomasz Lichon").
 
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/metadata.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 
@@ -42,7 +42,7 @@ get(FileCtx, Names, false) ->
         {ok, #document{value = #custom_metadata{value = #{?JSON_METADATA_KEY := Json}}}} ->
             {ok, custom_meta_manipulation:find(Json, Names)};
         {ok, #document{value = #custom_metadata{}}} ->
-            {error, {not_found,custom_metadata}};
+            {error, not_found};
         Error ->
             Error
     end;
@@ -56,7 +56,7 @@ get(FileCtx, Names, true) ->
                 case get(AncestorCtx, Names, false) of
                     {ok, Json} ->
                         Json;
-                    {error, {not_found,custom_metadata}} ->
+                    {error, not_found} ->
                         #{}
                 end
             end, [FileUuid | Uuids]),
@@ -83,17 +83,23 @@ get(FileCtx, Names, true) ->
 set(FileCtx, JsonToInsert, Names, Create, Replace) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     {ok, FileObjectid} = cdmi_id:guid_to_objectid(file_ctx:get_guid_const(FileCtx)),
-    ToCreate = #document{key = FileUuid, value = #custom_metadata{
-        space_id = file_ctx:get_space_id_const(FileCtx),
-        file_objectid = FileObjectid,
-        value = #{?JSON_METADATA_KEY => custom_meta_manipulation:insert(undefined, JsonToInsert, Names)}
-    }},
+    ToCreate = #document{
+        key = FileUuid,
+        value = #custom_metadata{
+            space_id = file_ctx:get_space_id_const(FileCtx),
+            file_objectid = FileObjectid,
+            value = #{
+                ?JSON_METADATA_KEY => custom_meta_manipulation:insert(undefined, JsonToInsert, Names)
+            }
+        },
+        scope = file_ctx:get_space_id_const(FileCtx)
+    },
     UpdatingFunction = update_custom_meta_fun(JsonToInsert, Names, Create, Replace),
 
     case Replace of
         true ->
             case custom_metadata:update(FileUuid, UpdatingFunction) of
-                {error, {not_found, _}} ->
+                {error, not_found} ->
                     {error, ?ENODATA};
                 OtherAns ->
                     OtherAns

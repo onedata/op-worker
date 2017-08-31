@@ -12,13 +12,13 @@
 -module(storage_update).
 -author("Rafal Slota").
 
--include("modules/storage_sync/strategy_config.hrl").
--include("modules/storage_sync/storage_sync.hrl").
+-include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/storage_sync/storage_sync.hrl").
+-include("modules/storage_sync/strategy_config.hrl").
+-include("modules/storage_file_manager/helpers/helpers.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
--include("global_definitions.hrl").
-
 
 %%%===================================================================
 %%% Types

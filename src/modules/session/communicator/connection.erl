@@ -18,10 +18,9 @@
 -include("global_definitions.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("proto/oneclient/handshake_messages.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -307,9 +306,12 @@ handle_info(_Info, State) ->
     State :: #state{}) -> term().
 terminate(Reason, #state{session_id = SessId, socket = Socket} = State) ->
     ?log_terminate(Reason, State),
-    session:remove_connection(SessId, self()),
+    case SessId of
+        undefined -> ok;
+        _ -> session:remove_connection(SessId, self())
+    end,
     ssl:close(Socket),
-    ok.
+    State.
 
 %%--------------------------------------------------------------------
 %% @private

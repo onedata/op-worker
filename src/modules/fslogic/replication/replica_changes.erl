@@ -105,7 +105,7 @@ get_merged_changes(Doc, N) ->
 %% Sets last_rename field in given file_location
 %% @end
 %%--------------------------------------------------------------------
--spec set_last_rename(datastore:document(), helpers:file(), binary()) -> ok.
+-spec set_last_rename(datastore:doc(), helpers:file(), binary()) -> ok.
 set_last_rename(Doc = #document{value = Loc = #file_location{uuid = FileUuid}},
     TargetFileId, TargetSpaceId) ->
     critical_section:run([set_last_rename, FileUuid], fun() ->
@@ -117,7 +117,7 @@ set_last_rename(Doc = #document{value = Loc = #file_location{uuid = FileUuid}},
                         undefined -> 0;
                         {_, N} -> N
                     end;
-                {error, {not_found, _}} ->
+                {error, not_found} ->
                     0
             end
         end, Locations),

@@ -12,8 +12,7 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
--include("modules/dbsync/common.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/storage_file_manager/helpers/helpers.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -22,7 +21,6 @@
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("kernel/include/file.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_common_internal.hrl").
 
 %% API
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -123,7 +121,7 @@ dbsync_trigger_should_not_create_local_file_location(Config) ->
         {ok, [_]},
         rpc:call(W1, file_meta, get_locations_by_uuid, [FileUuid])
     ),
-    ?assertMatch({error, {not_found, _}}, rpc:call(W1, file_location, get, [LocationId])),
+    ?assertMatch({error, not_found}, rpc:call(W1, file_location, get, [LocationId])),
     {ok, Handle} = ?assertMatch(
         {ok, _},
         lfm_proxy:open(W1, SessionId, {uuid, FileUuid}, rdwr)

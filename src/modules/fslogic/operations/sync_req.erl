@@ -224,9 +224,12 @@ invalidate_fully_redundant_file_replica(UserCtx, FileCtx) ->
         truncate_req:truncate_insecure(UserCtx, FileCtx, 0, false),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     LocalFileId = file_location:local_id(FileUuid),
-    case file_location:update(LocalFileId, #{blocks => []}) of
+    Diff = fun(FileLocation = #file_location{}) ->
+        {ok, FileLocation#file_location{blocks = []}}
+    end,
+    case file_location:update(LocalFileId, Diff) of
         {ok, _} -> ok;
-        {error, {not_found, _}} -> ok
+        {error, not_found} -> ok
     end,
     #provider_response{status = #status{code = ?OK}}.
 

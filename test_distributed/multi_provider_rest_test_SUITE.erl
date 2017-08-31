@@ -271,7 +271,7 @@ replicate_file_by_id(Config) ->
         ]), lists:sort(DecodedBody)).
 
 replicate_to_missing_provider(Config) ->
-    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     File = <<"/space3/replicate_to_missing_provider">>,
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
@@ -460,6 +460,7 @@ periodic_cleanup_should_invalidate_unpopular_files(Config) ->
     [lfm_proxy:close(WorkerP2, Handle) || {ok, Handle} <- Handles],
 
     % trigger cleanup advancing 24 hours into future
+    timer:sleep(timer:seconds(10)),
     test_utils:mock_new(WorkerP2, utils),
     test_utils:mock_expect(WorkerP2, utils, system_time_seconds, fun() ->
         meck:passthrough([]) + 25 * 3600
@@ -672,8 +673,14 @@ metric_get(Config) ->
 
     ?assertMatch(ok, rpc:call(WorkerP1, monitoring_utils, create, [<<"space3">>, MonitoringId, utils:system_time_seconds()])),
     {ok, #document{value = State}} = rpc:call(WorkerP1, monitoring_state, get, [MonitoringId]),
-    ?assertMatch({ok, _}, rpc:call(WorkerP1, monitoring_state, save,
-        [#document{key = MonitoringId#monitoring_id{provider_id = Prov2ID}, value = State}])),
+    ?assertMatch({ok, _}, rpc:call(WorkerP1, monitoring_state, save, [
+        #document{
+            key = monitoring_state:encode_id(MonitoringId#monitoring_id{
+                provider_id = Prov2ID
+            }),
+            value =  State
+        }
+    ])),
 
     % when
     {ok, 200, _, Body} = do_request(WorkerP1, <<"metrics/space/space3?metric=storage_quota">>, get, [user_1_token_header(Config)], []),
@@ -1148,8 +1155,10 @@ query_geospatial_index(Config) ->
     {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1, <<"query-index/", Id/binary, "?spatial=true&stale=false">>, get, [user_1_token_header(Config)], [])),
 
     % then
-    Guids = lists:map(fun(X) -> {ok, ObjId} = cdmi_id:objectid_to_guid(X),
-        ObjId end, json_utils:decode_map(Body)),
+    Guids = lists:map(fun(X) ->
+        {ok, ObjId} = cdmi_id:objectid_to_guid(X),
+        ObjId
+    end, json_utils:decode_map(Body)),
     ?assertEqual(lists:sort([Guid1, Guid2, Guid3]), lists:sort(Guids)),
 
     % when

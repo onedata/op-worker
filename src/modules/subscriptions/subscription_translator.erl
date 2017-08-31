@@ -15,7 +15,7 @@
 -include("global_definitions.hrl").
 -include("proto/common/credentials.hrl").
 -include("modules/subscriptions/subscriptions.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API

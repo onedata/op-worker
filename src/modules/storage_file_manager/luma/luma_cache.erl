@@ -37,7 +37,7 @@
 get(Module, Key, QueryFun, QueryArgs, LumaCacheTimeout) ->
     CurrentTimestamp = utils:system_time_milli_seconds(),
     case Module:get(Key) of
-        {error, {not_found, _}} ->
+        {error, not_found} ->
             query_and_cache_value(Module, Key, QueryFun, QueryArgs,
                 CurrentTimestamp);
         {ok, #document{value = ModelRecord}} ->

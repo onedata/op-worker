@@ -14,25 +14,33 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
-
--type model() :: #luma{}.
--type user_ctx() :: helper:user_ctx().
--type posix_user_ctx() :: {Uid :: non_neg_integer(), Gid :: non_neg_integer()}.
-
--export_type([model/0, user_ctx/0, posix_user_ctx/0]).
+-include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore_runner.hrl").
+-include("modules/storage_file_manager/helpers/helpers.hrl").
 
 %% API
 -export([get_server_user_ctx/4, get_client_user_ctx/4, get_posix_user_ctx/2,
     invalidate_cache/0]).
-
-%% model_behaviour callbacks
--export([save/1, get/1, exists/1, delete/1, update/2, create/1,
-    model_init/0, 'after'/5, before/4, list/0]).
+-export([save/1, get/1, exists/1, delete/1, update/2, create/1, list/0]).
 
 %% luma_cache callbacks
 -export([last_timestamp/1, get_value/1, new/2]).
+
+-type key() :: datastore:key().
+-type record() :: #luma{}.
+-type doc() :: datastore_doc:doc(record()).
+-type diff() :: datastore_doc:diff(record()).
+-type user_ctx() :: helper:user_ctx().
+-type posix_user_ctx() :: {Uid :: non_neg_integer(), Gid :: non_neg_integer()}.
+
+-export_type([record/0, user_ctx/0, posix_user_ctx/0]).
+
+-define(CTX, #{
+    model => ?MODULE,
+    routing => local,
+    disc_driver => undefined,
+    fold_enabled => true
+}).
 
 %%%===================================================================
 %%% API functions
@@ -96,7 +104,7 @@ get_posix_user_ctx(UserId, SpaceId) ->
     {ok, UserCtx} = case select_posix_storage(SpaceId) of
         {ok, StorageDoc} ->
             luma:get_server_user_ctx(UserId, SpaceId, StorageDoc, ?POSIX_HELPER_NAME);
-        {error, {not_found, _}} ->
+        {error, not_found} ->
             generate_user_ctx(UserId, SpaceId, ?POSIX_HELPER_NAME)
     end,
     #{<<"uid">> := Uid, <<"gid">> := Gid} = UserCtx,
@@ -111,106 +119,69 @@ get_posix_user_ctx(UserId, SpaceId) ->
 invalidate_cache() ->
     luma_cache:invalidate(?MODULE).
 
-%%%===================================================================
-%%% model_behaviour callbacks
-%%%===================================================================
+%%--------------------------------------------------------------------
+%% @doc
+%% Saves permission cache.
+%% @end
+%%--------------------------------------------------------------------
+-spec save(doc()) -> {ok, key()} | {error, term()}.
+save(Doc) ->
+    ?extract_key(datastore_model:save(?CTX, Doc)).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback save/1.
+%% Updates permission cache.
 %% @end
 %%--------------------------------------------------------------------
--spec save(datastore:document()) ->
-    {ok, datastore:ext_key()} | datastore:generic_error().
-save(Document) ->
-    model:execute_with_default_context(?MODULE, save, [Document]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback update/2.
-%% @end
-%%--------------------------------------------------------------------
--spec update(datastore:ext_key(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
+-spec update(key(), diff()) -> {ok, key()} | {error, term()}.
 update(Key, Diff) ->
-    model:execute_with_default_context(?MODULE, update, [Key, Diff]).
+    ?extract_key(datastore_model:update(?CTX, Key, Diff)).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback create/1.
+%% Creates permission cache.
 %% @end
 %%--------------------------------------------------------------------
--spec create(datastore:document()) ->
-    {ok, datastore:ext_key()} | datastore:create_error().
-create(Document) ->
-    model:execute_with_default_context(?MODULE, create, [Document]).
+-spec create(doc()) -> {ok, key()} | {error, term()}.
+create(Doc) ->
+    ?extract_key(datastore_model:create(?CTX, Doc)).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback get/1.
+%% Returns permission cache.
 %% @end
 %%--------------------------------------------------------------------
--spec get(datastore:ext_key()) -> {ok, datastore:document()} | datastore:get_error().
+-spec get(key()) -> {ok, doc()} | {error, term()}.
 get(Key) ->
-    model:execute_with_default_context(?MODULE, get, [Key]).
+    datastore_model:get(?CTX, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback delete/1.
+%% Deletes permission cache.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(datastore:ext_key()) -> ok | datastore:generic_error().
+-spec delete(key()) -> ok | {error, term()}.
 delete(Key) ->
-    model:execute_with_default_context(?MODULE, delete, [Key]).
+    datastore_model:delete(?CTX, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback exists/1.
+%% Checks whether permission cache exists.
 %% @end
 %%--------------------------------------------------------------------
--spec exists(datastore:ext_key()) -> datastore:exists_return().
+-spec exists(key()) -> boolean().
 exists(Key) ->
-    ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [Key])).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback model_init/0.
-%% @end
-%%--------------------------------------------------------------------
--spec model_init() -> model_behaviour:model_config().
-model_init() ->
-    ?MODEL_CONFIG(luma_bucket, [], ?LOCAL_ONLY_LEVEL)#model_config{
-        list_enabled = {true, return_errors}}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback 'after'/5.
-%% @end
-%%--------------------------------------------------------------------
--spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term(),
-    ReturnValue :: term()) -> ok.
-'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
-    ok.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback before/4.
-%% @end
-%%--------------------------------------------------------------------
--spec before(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
-before(_ModelName, _Method, _Level, _Context) ->
-    ok.
+    {ok, Exists} = datastore_model:exists(?CTX, Key),
+    Exists.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns list of all records.
 %% @end
 %%--------------------------------------------------------------------
--spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
+-spec list() -> {ok, [key()]} | {error, term()}.
 list() ->
-    model:execute_with_default_context(?MODULE, list, [?GET_ALL, []]).
+    datastore_model:fold(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
 
 %%%===================================================================
 %%% luma_cache callbacks
@@ -390,19 +361,19 @@ generate_posix_identifier(Id, {Low, High}) ->
 select_posix_storage(SpaceId) ->
     StorageIds = case space_storage:get(SpaceId) of
         {ok, Doc} -> space_storage:get_storage_ids(Doc);
-        {error, {not_found, _}} -> []
+        {error, not_found} -> []
     end,
     StorageDocs = lists:filtermap(fun(StorageId) ->
         case storage:get(StorageId) of
             {ok, StorageDoc} ->
                 case storage:select_helper(StorageDoc, ?POSIX_HELPER_NAME) of
                     {ok, _} -> {true, StorageDoc};
-                    {error, {not_found, _}} -> false
+                    {error, not_found} -> false
                 end;
-            {error, {not_found, _}} -> false
+            {error, not_found} -> false
         end
     end, StorageIds),
     case StorageDocs of
-        [] -> {error, {not_found, storage}};
+        [] -> {error, not_found};
         [StorageDoc | _] -> {ok, StorageDoc}
     end.

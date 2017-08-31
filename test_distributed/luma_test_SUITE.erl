@@ -134,7 +134,7 @@ get_server_user_ctx_should_fail_with_missing_helper_error(Config) ->
         ?POSIX_STORAGE_DOC,
         <<"helperName">>
     ]),
-    ?assertEqual({error, {not_found, helper}}, Result).
+    ?assertEqual({error, not_found}, Result).
 
 get_server_user_ctx_should_return_admin_ctx(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),

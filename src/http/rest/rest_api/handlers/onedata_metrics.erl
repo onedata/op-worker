@@ -14,7 +14,7 @@
 
 -include("global_definitions.hrl").
 -include("http/http_common.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("http/rest/http_status.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
@@ -123,7 +123,7 @@ get_metric(Req, State) ->
                 end, Providers),
             Response = json_utils:encode_map(Json),
             {Response, Req5, State3};
-        {error, {not_found, _}} ->
+        {error, not_found} ->
             throw(?ERROR_NOT_FOUND)
     end.
 

@@ -11,29 +11,14 @@
     },
     "os_configs": {
         "cfg1": {
-            "storages": [
-                {
-                    "type": "posix",
-                    "name": "/mnt/st1"
-                }
-            ],
-            "users": [],
-            "groups": {}
-        },
-        "cfg2": {
-            "storages": [
-                {
-                    "type": "posix",
-                    "name": "/mnt/st2"
-                }
-            ],
+            "storages": [],
             "users": [],
             "groups": {}
         }
     },
     "provider_domains": {
         "p1": {
-            "db_driver": "couchdb",
+            "db_driver": "couchbase",
             "os_config": "cfg1",
             "cluster_manager": {
                 "cm": {
@@ -59,88 +44,7 @@
                         ],
                         "db_nodes": [
                             "127.0.0.1:49161"
-                        ],
-                        "verify_gr_cert": false
-                    }
-                }
-            }
-        },
-        "p2": {
-            "db_driver": "couchdb",
-            "os_config": "cfg2",
-            "cluster_manager": {
-                "cm": {
-                    "vm.args": {
-                        "setcookie": "test_cookie2"
-                    },
-                    "sys.config": {
-                        "cm_nodes": [
-                            "cm"
-                        ],
-                        "worker_num": 1
-                    }
-                }
-            },
-            "op_worker": {
-                "worker1": {
-                    "vm.args": {
-                        "setcookie": "test_cookie2"
-                    },
-                    "sys.config": {
-                        "cm_nodes": [
-                            "cm"
-                        ],
-                        "db_nodes": [
-                            "127.0.0.1:49162"
-                        ],
-                        "verify_gr_cert": false
-                    }
-                }
-            }
-        }
-    },
-    "test_global_setup": {
-        "users": {
-            "user1": {
-                "default_space": "space1"
-            }
-        },
-        "groups": {
-        },
-        "spaces": {
-            "space_id1": {
-                "displayed_name": "space_name1",
-                "users": [
-                    "user1"
-                ],
-                "groups": [
-                ],
-                "providers": {
-                    "p1": {
-                        "storage": "/mnt/st1",
-                        "supported_size": 10000000000
-                    },
-                    "p2": {
-                        "storage": "/mnt/st2",
-                        "supported_size": 10000000000
-                    }
-                }
-            },
-            "space_id2": {
-                "displayed_name": "space_name2",
-                "users": [
-                    "user1"
-                ],
-                "groups": [
-                ],
-                "providers": {
-                    "p1": {
-                        "storage": "/mnt/st1",
-                        "supported_size": 10000000000
-                    },
-                    "p2": {
-                        "storage": "/mnt/st2",
-                        "supported_size": 10000000000
+                        ]
                     }
                 }
             }

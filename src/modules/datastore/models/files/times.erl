@@ -10,44 +10,40 @@
 %%%-------------------------------------------------------------------
 -module(times).
 -author("Tomasz Lichon").
--behaviour(model_behaviour).
 
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore_runner.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/metadata.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 
 %% API
--export([get_or_default/1, save_new/1]).
+-export([get_or_default/1, save/1, get/1, exists/1, delete/1, update/2, create/1,
+    create_or_update/2]).
 
-%% model_behaviour callbacks
--export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
-    create_or_update/2, 'after'/5, before/4]).
--export([record_struct/1]).
+%% datastore_model callbacks
+-export([get_ctx/0, get_record_struct/1]).
 
+-type key() :: datastore:key().
+-type record() :: #times{}.
+-type doc() :: datastore_doc:doc(record()).
+-type diff() :: datastore_doc:diff(record()).
 -type time() :: non_neg_integer().
 -type a_time() :: time().
 -type c_time() :: time().
 -type m_time() :: time().
 -type times() :: {a_time(), c_time(), m_time()}.
 
--export_type([time/0, a_time/0, c_time/0, m_time/0, times/0]).
+-export_type([time/0, a_time/0, c_time/0, m_time/0, times/0, diff/0]).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns structure of the record in specified version.
-%% @end
-%%--------------------------------------------------------------------
--spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
-record_struct(1) ->
-    {record, [
-        {atime, integer},
-        {ctime, integer},
-        {mtime, integer}
-    ]}.
+-define(CTX, #{
+    model => ?MODULE,
+    sync_enabled => true,
+    mutator => oneprovider:get_provider_id(),
+    local_links_tree_id => oneprovider:get_provider_id()
+}).
 
 %%%===================================================================
 %%% API
@@ -58,88 +54,45 @@ record_struct(1) ->
 %% Get times or return zeroes.
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_default(file_meta:uuid()) -> {ok, times()} | datastore:get_error().
+-spec get_or_default(file_meta:uuid()) -> {ok, times()} | {error, term()}.
 get_or_default(FileUuid) ->
-    case get(FileUuid) of
-        {ok, #document{value = #times{atime = ATime, ctime = CTime, mtime = Mtime}}} ->
-            {ok, {ATime, CTime, Mtime}};
-        {error, {not_found, _}} ->
+    case times:get(FileUuid) of
+        {ok, #document{value = #times{
+            atime = ATime, ctime = CTime, mtime = MTime
+        }}} ->
+            {ok, {ATime, CTime, MTime}};
+        {error, not_found} ->
             {ok, {0, 0, 0}};
         Error ->
             Error
     end.
 
-%%%===================================================================
-%%% model_behaviour callbacks
-%%%===================================================================
+%%--------------------------------------------------------------------
+%% @doc
+%% Saves permission cache.
+%% @end
+%%--------------------------------------------------------------------
+-spec save(doc()) -> {ok, key()} | {error, term()}.
+save(Doc) ->
+    ?extract_key(datastore_model:save(?CTX, Doc)).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback save/1.
+%% Updates permission cache.
 %% @end
 %%--------------------------------------------------------------------
--spec save(datastore:document()) ->
-    {ok, datastore:key()} | datastore:generic_error().
-save(Document) ->
-    model:execute_with_default_context(?MODULE, save, [Document]).
+-spec update(key(), diff()) -> {ok, key()} | {error, term()}.
+update(FileUuid, Diff) ->
+    ?extract_key(datastore_model:update(?CTX, FileUuid, Diff)).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback update/2.
+%% Creates permission cache.
 %% @end
 %%--------------------------------------------------------------------
--spec update(datastore:key(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:key()} | datastore:update_error().
-update(Key, Diff) ->
-    model:execute_with_default_context(?MODULE, update, [Key, Diff]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback create/1.
-%% @end
-%%--------------------------------------------------------------------
--spec create(datastore:document()) ->
-    {ok, datastore:key()} | datastore:create_error().
-create(Document) ->
-    model:execute_with_default_context(?MODULE, create, [Document]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Saves newly generated document (does not fetch older versions for revisions).
-%% @end
-%%--------------------------------------------------------------------
--spec save_new(datastore:document()) ->
-    {ok, datastore:key()} | datastore:create_error().
-save_new(Document) ->
-    model:execute_with_default_context(?MODULE, save, [Document],
-        [{generated_uuid, true}]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback get/1.
-%% @end
-%%--------------------------------------------------------------------
--spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
-get(Key) ->
-    model:execute_with_default_context(?MODULE, get, [Key]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback delete/1.
-%% @end
-%%--------------------------------------------------------------------
--spec delete(datastore:key()) -> ok | datastore:generic_error().
-delete(Key) ->
-    model:execute_with_default_context(?MODULE, delete, [Key]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback exists/1.
-%% @end
-%%--------------------------------------------------------------------
--spec exists(datastore:key()) -> datastore:exists_return().
-exists(Key) ->
-    ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [Key])).
+-spec create(doc()) -> {ok, key()} | {error, term()}.
+create(Doc) ->
+    ?extract_key(datastore_model:create(?CTX, Doc)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -147,46 +100,62 @@ exists(Key) ->
 %% it initialises the object with the document.
 %% @end
 %%--------------------------------------------------------------------
--spec create_or_update(datastore:document(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:key()} | datastore:generic_error().
-create_or_update(Doc, Diff) ->
-    model:execute_with_default_context(?MODULE, create_or_update, [Doc, Diff]).
+-spec create_or_update(doc(), diff()) ->
+    {ok, key()} | {error, term()}.
+create_or_update(#document{key = Key, value = Default}, Diff) ->
+    ?extract_key(datastore_model:update(?CTX, Key, Diff, Default)).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback model_init/0.
+%% Returns permission cache.
 %% @end
 %%--------------------------------------------------------------------
--spec model_init() -> model_behaviour:model_config().
-model_init() ->
-    ?MODEL_CONFIG(times_bucket, [{file_meta, delete}], ?GLOBALLY_CACHED_LEVEL)#model_config{sync_enabled = true}.
+-spec get(key()) -> {ok, doc()} | {error, term()}.
+get(FileUuid) ->
+    datastore_model:get(?CTX, FileUuid).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback 'after'/5.
+%% Deletes permission cache.
 %% @end
 %%--------------------------------------------------------------------
--spec 'after'(ModelName :: model_behaviour:model_type(),
-    Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term(),
-    ReturnValue :: term()) -> ok.
-'after'(file_meta, delete, _, [Key, _], ok) ->
-    delete(Key);
-'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
-    ok.
+-spec delete(key()) -> ok | {error, term()}.
+delete(FileUuid) ->
+    datastore_model:delete(?CTX, FileUuid).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback before/4.
+%% Checks whether permission cache exists.
 %% @end
 %%--------------------------------------------------------------------
--spec before(ModelName :: model_behaviour:model_type(),
-    Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term()) ->
-    ok | datastore:generic_error().
-before(_ModelName, _Method, _Level, _Context) ->
-    ok.
+-spec exists(key()) -> boolean().
+exists(FileUuid) ->
+    {ok, Exists} = datastore_model:exists(?CTX, FileUuid),
+    Exists.
 
 %%%===================================================================
-%%% Internal functions
-%%%==================================================================
+%%% datastore_model callbacks
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_ctx() -> datastore:ctx().
+get_ctx() ->
+    ?CTX.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's record structure in provided version.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_record_struct(datastore_model:record_version()) ->
+    datastore_model:record_struct().
+get_record_struct(1) ->
+    {record, [
+        {atime, integer},
+        {ctime, integer},
+        {mtime, integer}
+    ]}.

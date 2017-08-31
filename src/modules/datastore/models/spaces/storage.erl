@@ -11,228 +11,102 @@
 %%%-------------------------------------------------------------------
 -module(storage).
 -author("Rafal Slota").
--behaviour(model_behaviour).
 
+-include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore_runner.hrl").
 -include("modules/storage_file_manager/helpers/helpers.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
-
-%% ID of root storage which links to all registered storage to simplify list/1 operation
--define(ROOT_STORAGE, <<"root_storage">>).
-
-%% Resource ID used to sync all operations on this model
--define(STORAGE_LOCK_ID, <<"storage_res_id">>).
 
 %% API
 -export([new/2, new/4]).
 -export([get_id/1, get_name/1, is_readonly/1, get_helpers/1, is_luma_enabled/1, get_luma_config/1]).
 -export([select_helper/2, update_helper/3, select/1]).
+-export([save/1, get/1, exists/1, delete/1, update/2, create/1, list/0]).
 
-%% model_behaviour callbacks
--export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
-    'after'/5, before/4, list/0]).
--export([record_struct/1, record_upgrade/2]).
+%% datastore_model callbacks
+-export([get_ctx/0]).
+-export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
 
 -type id() :: datastore:key().
--type model() :: #storage{}.
--type doc() :: #document{value :: model()}.
+-type record() :: #storage{}.
+-type doc() :: datastore_doc:doc(record()).
+-type diff() :: datastore_doc:diff(record()).
 -type name() :: binary().
 -type helper() :: helpers:helper().
 
--export_type([id/0, model/0, doc/0, name/0, helper/0]).
+-export_type([id/0, record/0, doc/0, name/0, helper/0]).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns structure of the record in specified version.
-%% @end
-%%--------------------------------------------------------------------
--spec record_struct(datastore_json:record_version()) ->
-    datastore_json:record_struct().
-record_struct(1) ->
-    {record, [
-        {name, binary},
-        {helpers, [{record, [
-            {name, string},
-            {args, #{string => string}}
-        ]}]}
-    ]};
-record_struct(2) ->
-    {record, [
-        {name, string},
-        {helpers, [{record, [
-            {name, string},
-            {args, #{string => string}},
-            {admin_ctx, #{string => string}},
-            {insecure, boolean}
-        ]}]},
-        {readonly, boolean}
-    ]};
-record_struct(3) ->
-    {record, [
-        {name, string},
-        {helpers, [{record, [
-            {name, string},
-            {args, #{string => string}},
-            {admin_ctx, #{string => string}},
-            {insecure, boolean}
-        ]}]},
-        {readonly, boolean},
-        {luma_config, {record, [
-            {url, string},
-            {cache_timeout, integer},
-            {api_key, string}
-        ]}}
-    ]}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Upgrades record from specified version.
-%% @end
-%%--------------------------------------------------------------------
--spec record_upgrade(datastore_json:record_version(), tuple()) ->
-    {datastore_json:record_version(), tuple()}.
-record_upgrade(1, {?MODEL_NAME, Name, Helpers}) ->
-    {2, #storage{
-        name = Name,
-        helpers = [
-            #helper{
-                name = helper:translate_name(HelperName),
-                args = maps:fold(fun(K, V, Args) ->
-                    maps:put(helper:translate_arg_name(K), V, Args)
-                end, #{}, HelperArgs)
-            } || {_, HelperName, HelperArgs} <- Helpers
-        ]
-    }};
-record_upgrade(2, {?MODEL_NAME, Name, Helpers, Readonly}) ->
-    {3, #storage{
-        name = Name,
-        helpers = Helpers,
-        readonly = Readonly,
-        luma_config = undefined
-    }}.
-
+-define(CTX, #{
+    model => ?MODULE,
+    fold_enabled => true
+}).
 
 %%%===================================================================
-%%% model_behaviour callbacks
+%%% API
 %%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback save/1.
+%% Saves storage.
 %% @end
 %%--------------------------------------------------------------------
--spec save(datastore:document()) ->
-    {ok, datastore:key()} | datastore:generic_error().
-save(Document) ->
-    model:execute_with_default_context(?MODULE, save, [Document]).
+-spec save(doc()) -> {ok, id()} | {error, term()}.
+save(Doc) ->
+    ?extract_key(datastore_model:save(?CTX, Doc)).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback update/2.
+%% Updates storage.
 %% @end
 %%--------------------------------------------------------------------
--spec update(datastore:key(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:key()} | datastore:update_error().
+-spec update(id(), diff()) -> {ok, id()} | {error, term()}.
 update(Key, Diff) ->
-    model:execute_with_default_context(?MODULE, update, [Key, Diff]).
+    ?extract_key(datastore_model:update(?CTX, Key, Diff)).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback create/1.
+%% Creates storage.
 %% @end
 %%--------------------------------------------------------------------
--spec create(datastore:document()) ->
-    {ok, datastore:key()} | datastore:create_error().
-create(#document{value = #storage{name = Name}} = Document) ->
-    critical_section:run([?MODEL_NAME, ?STORAGE_LOCK_ID], fun() ->
-        case model:execute_with_default_context(?MODULE, fetch_link, [?ROOT_STORAGE, Name]) of
-            {ok, _} ->
-                {error, already_exists};
-            {error, link_not_found} ->
-                model:execute_with_default_context(?MODULE, create,
-                    [#document{
-                        key = ?ROOT_STORAGE, value = #storage{name = ?ROOT_STORAGE}
-                    }]),
-                case model:execute_with_default_context(?MODULE, create, [Document]) of
-                    {error, Reason} ->
-                        {error, Reason};
-                    {ok, Key} ->
-                        ok = model:execute_with_default_context(?MODULE,
-                            add_links, [?ROOT_STORAGE, {Name, {Key, ?MODEL_NAME}}]),
-                        {ok, Key}
-                end
-        end
-    end).
+-spec create(doc()) -> {ok, id()} | {error, term()}.
+create(#document{value = #storage{}} = Doc) ->
+    ?extract_key(datastore_model:create(?CTX, Doc)).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback get/1.
+%% Returns storage.
 %% @end
 %%--------------------------------------------------------------------
--spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
+-spec get(id()) -> {ok, doc()} | {error, term()}.
 get(Key) ->
-    model:execute_with_default_context(?MODULE, get, [Key]).
+    datastore_model:get(?CTX, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback delete/1.
+%% Deletes storage.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(datastore:key()) -> ok | datastore:generic_error().
+-spec delete(id()) -> ok | {error, term()}.
 delete(Key) ->
-    model:execute_with_default_context(?MODULE, delete, [Key]).
+    datastore_model:delete(?CTX, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback exists/1.
+%% Checks whether storage exists.
 %% @end
 %%--------------------------------------------------------------------
--spec exists(datastore:key()) -> datastore:exists_return().
+-spec exists(id()) -> boolean().
 exists(Key) ->
-    ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [Key])).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback model_init/0.
-%% @end
-%%--------------------------------------------------------------------
--spec model_init() -> model_behaviour:model_config().
-model_init() ->
-    Config = ?MODEL_CONFIG(system_config_bucket, [], ?GLOBALLY_CACHED_LEVEL),
-    Config#model_config{version = 3}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback 'after'/5.
-%% @end
-%%--------------------------------------------------------------------
--spec 'after'(model_behaviour:model_type(), model_behaviour:model_action(),
-    datastore:store_level(), Context :: term(), ReturnValue :: term()) -> ok.
-'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
-    ok.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback before/4.
-%% @end
-%%--------------------------------------------------------------------
--spec before(model_behaviour:model_type(), model_behaviour:model_action(),
-    datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
-before(_ModelName, _Method, _Level, _Context) ->
-    ok.
+    {ok, Exists} = datastore_model:exists(?CTX, Key),
+    Exists.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns list of all records.
 %% @end
 %%--------------------------------------------------------------------
--spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
+-spec list() -> {ok, [doc()]} | {error, term()}.
 list() ->
-    model:execute_with_default_context(?MODULE, foreach_link, [?ROOT_STORAGE,
-        fun(_LinkName, {_V, [{_, _, Key, storage}]}, AccIn) ->
-            {ok, Doc} = storage:get(Key),
-            [Doc | AccIn]
-        end, []]).
+    datastore_model:fold(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
 
 %%%===================================================================
 %%% API functions
@@ -278,7 +152,7 @@ get_id(#document{key = StorageId, value = #storage{}}) ->
 %% Returns storage name.
 %% @end
 %%--------------------------------------------------------------------
--spec get_name(model() | doc()) -> name().
+-spec get_name(record() | doc()) -> name().
 get_name(#storage{name = Name}) ->
     Name;
 get_name(#document{value = #storage{} = Value}) ->
@@ -289,7 +163,7 @@ get_name(#document{value = #storage{} = Value}) ->
 %% Checks whether storage is readonly.
 %% @end
 %%--------------------------------------------------------------------
--spec is_readonly(model() | doc()) -> boolean().
+-spec is_readonly(record() | doc()) -> boolean().
 is_readonly(#storage{readonly = ReadOnly}) ->
     ReadOnly;
 is_readonly(#document{value = #storage{} = Value}) ->
@@ -300,7 +174,7 @@ is_readonly(#document{value = #storage{} = Value}) ->
 %% Returns list of storage helpers.
 %% @end
 %%--------------------------------------------------------------------
--spec get_helpers(model() | doc()) -> [helper()].
+-spec get_helpers(record() | doc()) -> [helper()].
 get_helpers(#storage{helpers = Helpers}) ->
     Helpers;
 get_helpers(#document{value = #storage{} = Value}) ->
@@ -311,14 +185,14 @@ get_helpers(#document{value = #storage{} = Value}) ->
 %% Selects storage helper by its name form the list of configured storage helpers.
 %% @end
 %%--------------------------------------------------------------------
--spec select_helper(model() | doc(), helpers:name()) ->
+-spec select_helper(record() | doc(), helpers:name()) ->
     {ok, helper()} | {error, Reason :: term()}.
 select_helper(Storage, HelperName) ->
     Helpers = lists:filter(fun(Helper) ->
         helper:get_name(Helper) =:= HelperName
     end, get_helpers(Storage)),
     case Helpers of
-        [] -> {error, {not_found, helper}};
+        [] -> {error, not_found};
         [Helper] -> {ok, Helper}
     end.
 
@@ -328,7 +202,7 @@ select_helper(Storage, HelperName) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec update_helper(storage:id(), helper:name(), helpers:args()) ->
-    ok | datastore:update_error().
+    {ok, id()} | {error, term()}.
 update_helper(StorageId, HelperName, NewArgs) ->
     update(StorageId, fun(#storage{helpers = Helpers} = Storage) ->
         case select_helper(Storage, HelperName) of
@@ -346,7 +220,7 @@ update_helper(StorageId, HelperName, NewArgs) ->
 %% Selects storage by its name form the list of configured storages.
 %% @end
 %%--------------------------------------------------------------------
--spec select(name()) -> {ok, doc()} | datastore:get_error().
+-spec select(name()) -> {ok, doc()} | {error, term()}.
 select(Name) ->
     case storage:list() of
         {ok, Docs} ->
@@ -354,7 +228,7 @@ select(Name) ->
                 get_name(Doc) =:= Name
             end, Docs),
             case Docs2 of
-                [] -> {error, {not_found, ?MODULE}};
+                [] -> {error, not_found};
                 [Doc] -> {ok, Doc}
             end
     end.
@@ -365,7 +239,7 @@ select(Name) ->
 %% Returns luma_config field for given storage.
 %% @end
 %%-------------------------------------------------------------------
--spec get_luma_config(model() | doc()) -> undefined | luma_config:config().
+-spec get_luma_config(record() | doc()) -> undefined | luma_config:config().
 get_luma_config(#storage{luma_config = LumaConfig}) ->
     LumaConfig;
 get_luma_config(#document{value = Storage = #storage{}}) ->
@@ -377,10 +251,102 @@ get_luma_config(#document{value = Storage = #storage{}}) ->
 %% Checks whether luma is enabled for given storage.
 %% @end
 %%-------------------------------------------------------------------
--spec is_luma_enabled(model() | doc()) -> boolean().
+-spec is_luma_enabled(record() | doc()) -> boolean().
 is_luma_enabled(#storage{luma_config = undefined}) ->
     false;
 is_luma_enabled(#storage{luma_config = #luma_config{}}) ->
     true;
-is_luma_enabled(#document{value = #storage{} = Storage})->
+is_luma_enabled(#document{value = #storage{} = Storage}) ->
     is_luma_enabled(Storage).
+
+%%%===================================================================
+%%% datastore_model callbacks
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_ctx() -> datastore:ctx().
+get_ctx() ->
+    ?CTX.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's record version.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_record_version() -> datastore_model:record_version().
+get_record_version() ->
+    3.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's record structure in provided version.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_record_struct(datastore_model:record_version()) ->
+    datastore_model:record_struct().
+get_record_struct(1) ->
+    {record, [
+        {name, binary},
+        {helpers, [{record, [
+            {name, string},
+            {args, #{string => string}}
+        ]}]}
+    ]};
+get_record_struct(2) ->
+    {record, [
+        {name, string},
+        {helpers, [{record, [
+            {name, string},
+            {args, #{string => string}},
+            {admin_ctx, #{string => string}},
+            {insecure, boolean}
+        ]}]},
+        {readonly, boolean}
+    ]};
+get_record_struct(3) ->
+    {record, [
+        {name, string},
+        {helpers, [{record, [
+            {name, string},
+            {args, #{string => string}},
+            {admin_ctx, #{string => string}},
+            {insecure, boolean}
+        ]}]},
+        {readonly, boolean},
+        {luma_config, {record, [
+            {url, string},
+            {cache_timeout, integer},
+            {api_key, string}
+        ]}}
+    ]}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Upgrades model's record from provided version to the next one.
+%% @end
+%%--------------------------------------------------------------------
+-spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
+    {datastore_model:record_version(), datastore_model:record()}.
+upgrade_record(1, {?MODULE, Name, Helpers}) ->
+    {2, #storage{
+        name = Name,
+        helpers = [
+            #helper{
+                name = helper:translate_name(HelperName),
+                args = maps:fold(fun(K, V, Args) ->
+                    maps:put(helper:translate_arg_name(K), V, Args)
+                end, #{}, HelperArgs)
+            } || {_, HelperName, HelperArgs} <- Helpers
+        ]
+    }};
+upgrade_record(2, {?MODULE, Name, Helpers, Readonly}) ->
+    {3, #storage{
+        name = Name,
+        helpers = Helpers,
+        readonly = Readonly,
+        luma_config = undefined
+    }}.

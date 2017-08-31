@@ -12,7 +12,7 @@
 -module(lfm_shares).
 
 -include("proto/oneprovider/provider_messages.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/oz/oz_shares.hrl").
 
 %% API

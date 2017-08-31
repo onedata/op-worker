@@ -13,7 +13,6 @@
 -author("Krzysztof Trzepla").
 
 -include("modules/events/definitions.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 
 %% API
 -export([add_subscriber/2, get_subscribers/1, remove_subscriber/2]).
@@ -39,7 +38,7 @@ add_subscriber(<<_/binary>> = Key, SessId) ->
     end,
     case file_subscription:update(Key, Diff) of
         {ok, Key} -> {ok, Key};
-        {error, {not_found, _}} ->
+        {error, not_found} ->
             Doc = #document{key = Key, value = #file_subscription{
                 sessions = gb_sets:from_list([SessId])
             }},
@@ -68,7 +67,7 @@ get_subscribers(<<_/binary>> = Key) ->
     case file_subscription:get(Key) of
         {ok, #document{value = #file_subscription{sessions = SessIds}}} ->
             {ok, gb_sets:to_list(SessIds)};
-        {error, {not_found, _}} ->
+        {error, not_found} ->
             {ok, []};
         {error, Reason} ->
             {error, Reason}
@@ -93,6 +92,6 @@ remove_subscriber(Key, SessId) ->
     end,
     case file_subscription:update(Key, Diff) of
         {ok, _} -> ok;
-        {error, {not_found, _}} -> ok;
+        {error, not_found} -> ok;
         {error, Reason} -> {error, Reason}
     end.

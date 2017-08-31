@@ -231,7 +231,7 @@ parse_space_id(Req, State = #{auth := Auth}) ->
     case od_space:get(Id, UserId) of
         {ok, _} ->
             {State#{space_id => Id}, NewReq};
-        {error, {not_found, od_space}} ->
+        {error, not_found} ->
             throw(?ERROR_SPACE_NOT_FOUND)
     end.
 
@@ -268,7 +268,7 @@ parse_last_seq(Req, #{space_id := SpaceId} = State) ->
     {RawLastSeq, NewReq} = cowboy_req:qs_val(<<"last_seq">>, Req, ?DEFAULT_LAST_SEQ),
     case RawLastSeq of
         <<"now">> ->
-            LastSeq = dbsync_state2:get_seq(SpaceId, oneprovider:get_provider_id()),
+            LastSeq = dbsync_state:get_seq(SpaceId, oneprovider:get_provider_id()),
             {State#{last_seq => LastSeq}, NewReq};
         Number ->
             try binary_to_integer(Number) of

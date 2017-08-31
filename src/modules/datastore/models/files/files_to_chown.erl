@@ -11,51 +11,27 @@
 %%%-------------------------------------------------------------------
 -module(files_to_chown).
 -author("Tomasz Lichon").
--behaviour(model_behaviour).
 
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore_runner.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include_lib("ctool/include/oz/oz_users.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([chown_or_schedule_chowning/1, chown_file/1]).
+-export([save/1, get/1, exists/1, delete/1, update/2, create/1, create_or_update/2]).
 
-%% model_behaviour callbacks
--export([save/1, get/1, exists/1, delete/1, update/2, create/1, create_or_update/2,
-    model_init/0, 'after'/5, before/4]).
--export([record_struct/1, record_upgrade/2]).
-
--export_type([id/0]).
+%% datastore_model callbacks
+-export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
 
 -type id() :: od_user:id().
+-type record() :: #files_to_chown{}.
+-type doc() :: datastore_doc:doc(record()).
+-type diff() :: datastore_doc:diff(record()).
+-export_type([id/0]).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns structure of the record in specified version.
-%% @end
-%%--------------------------------------------------------------------
--spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
-record_struct(1) ->
-    {record, [
-        {file_uuids, [string]}
-    ]};
-record_struct(2) ->
-    {record, [
-        {file_guids, [string]}
-    ]}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Upgrades record from specified version.
-%% @end
-%%--------------------------------------------------------------------
--spec record_upgrade(datastore_json:record_version(), tuple()) ->
-    {datastore_json:record_version(), tuple()}.
-record_upgrade(1, {?MODEL_NAME, Uuids}) ->
-    Guids = lists:map(fun fslogic_uuid:uuid_to_guid/1, Uuids),
-    {2, #files_to_chown{file_guids = Guids}}.
+-define(CTX, #{model => ?MODULE}).
 
 %%%===================================================================
 %%% API
@@ -93,64 +69,32 @@ chown_file(FileCtx) ->
     (catch storage_file_manager:chown(SFMHandle, OwnerUserId, SpaceId)), %todo implement chown in s3/ceph and remove this catch
     FileCtx3.
 
-%%%===================================================================
-%%% model_behaviour callbacks
-%%%===================================================================
+%%--------------------------------------------------------------------
+%% @doc
+%% Saves permission cache.
+%% @end
+%%--------------------------------------------------------------------
+-spec save(doc()) -> {ok, id()} | {error, term()}.
+save(Doc) ->
+    ?extract_key(datastore_model:save(?CTX, Doc)).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback save/1.
+%% Updates permission cache.
 %% @end
 %%--------------------------------------------------------------------
--spec save(datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
-save(Document) ->
-    model:execute_with_default_context(?MODULE, save, [Document]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback update/2.
-%% @end
-%%--------------------------------------------------------------------
--spec update(datastore:key(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:key()} | datastore:update_error().
+-spec update(id(), diff()) -> {ok, id()} | {error, term()}.
 update(Key, Diff) ->
-    model:execute_with_default_context(?MODULE, update, [Key, Diff]).
+    ?extract_key(datastore_model:update(?CTX, Key, Diff)).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback create/1.
+%% Creates permission cache.
 %% @end
 %%--------------------------------------------------------------------
--spec create(datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
-create(Document) ->
-    model:execute_with_default_context(?MODULE, create, [Document]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback get/1.
-%% @end
-%%--------------------------------------------------------------------
--spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
-get(Key) ->
-    model:execute_with_default_context(?MODULE, get, [Key]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback delete/1.
-%% @end
-%%--------------------------------------------------------------------
--spec delete(datastore:key()) -> ok | datastore:generic_error().
-delete(Key) ->
-    model:execute_with_default_context(?MODULE, delete, [Key]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback exists/1.
-%% @end
-%%--------------------------------------------------------------------
--spec exists(datastore:key()) -> datastore:exists_return().
-exists(Key) ->
-    ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [Key])).
+-spec create(doc()) -> {ok, id()} | {error, term()}.
+create(Doc) ->
+    ?extract_key(datastore_model:create(?CTX, Doc)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -158,48 +102,38 @@ exists(Key) ->
 %% it initialises the object with the document.
 %% @end
 %%--------------------------------------------------------------------
--spec create_or_update(datastore:document(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:key()} | datastore:generic_error().
-create_or_update(Doc, Diff) ->
-    model:execute_with_default_context(?MODULE, create_or_update, [Doc, Diff]).
+-spec create_or_update(doc(), diff()) ->
+    {ok, id()} | {error, term()}.
+create_or_update(#document{key = Key, value = Default}, Diff) ->
+    ?extract_key(datastore_model:update(?CTX, Key, Diff, Default)).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback model_init/0.
+%% Returns permission cache.
 %% @end
 %%--------------------------------------------------------------------
--spec model_init() -> model_behaviour:model_config().
-model_init() ->
-    Config = ?MODEL_CONFIG(files_to_chown_bucket, [{od_user, create},
-        {od_user, save}, {od_user, create_or_update}], ?GLOBALLY_CACHED_LEVEL),
-    Config#model_config{version = 2}.
+-spec get(id()) -> {ok, doc()} | {error, term()}.
+get(Key) ->
+    datastore_model:get(?CTX, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback 'after'/5.
+%% Deletes permission cache.
 %% @end
 %%--------------------------------------------------------------------
--spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term(),
-    ReturnValue :: term()) -> ok.
-'after'(od_user, create, _, _, {ok, Uuid}) ->
-    chown_pending_files(Uuid);
-'after'(od_user, save, _, _, {ok, Uuid}) ->
-    chown_pending_files(Uuid);
-'after'(od_user, create_or_update, _, _, {ok, Uuid}) ->
-    chown_pending_files(Uuid);
-'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
-    ok.
+-spec delete(id()) -> ok | {error, term()}.
+delete(Key) ->
+    datastore_model:delete(?CTX, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback before/4.
+%% Checks whether permission cache exists.
 %% @end
 %%--------------------------------------------------------------------
--spec before(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
-before(_ModelName, _Method, _Level, _Context) ->
-    ok.
+-spec exists(id()) -> boolean().
+exists(Key) ->
+    {ok, Exists} = datastore_model:exists(?CTX, Key),
+    Exists.
 
 %%%===================================================================
 %%% Internal functions
@@ -211,7 +145,7 @@ before(_ModelName, _Method, _Level, _Context) ->
 %% Add file that need to be chowned in future.
 %% @end
 %%--------------------------------------------------------------------
--spec add(file_ctx:ctx(), od_user:id()) -> {ok, datastore:key()} | datastore:generic_error().
+-spec add(file_ctx:ctx(), od_user:id()) -> {ok, datastore:id()} | {error, term()}.
 add(FileCtx, UserId) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
     UpdateFun = fun(Val = #files_to_chown{file_guids = Guids}) ->
@@ -227,34 +161,42 @@ add(FileCtx, UserId) ->
     }},
     create_or_update(DocToCreate, UpdateFun).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Chown all pending files of given user
-%% @end
-%%--------------------------------------------------------------------
--spec chown_pending_files(od_user:id()) -> ok.
-chown_pending_files(UserId) ->
-    case files_to_chown:get(UserId) of
-        {ok, #document{value = #files_to_chown{file_guids = FileGuids}}} ->
-            lists:foreach(fun chown_pending_file/1, FileGuids),
-            delete(UserId);
-        {error,{not_found,files_to_chown}} ->
-            ok
-    end.
+%%%===================================================================
+%%% datastore_model callbacks
+%%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
-%% Chown given file to its owner
+%% Returns model's record version.
 %% @end
 %%--------------------------------------------------------------------
--spec chown_pending_file(fslogic_worker:file_guid()) -> file_ctx:ctx().
-chown_pending_file(FileGuid) ->
-    try
-        FileCtx = file_ctx:new_by_guid(FileGuid),
-        chown_file(FileCtx)
-    catch
-        _:Error ->
-            ?error_stacktrace("Cannot chown pending file ~p due to error ~p", [FileGuid, Error])
-    end.
+-spec get_record_version() -> datastore_model:record_version().
+get_record_version() ->
+    2.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's record structure in provided version.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_record_struct(datastore_model:record_version()) ->
+    datastore_model:record_struct().
+get_record_struct(1) ->
+    {record, [
+        {file_uuids, [string]}
+    ]};
+get_record_struct(2) ->
+    {record, [
+        {file_guids, [string]}
+    ]}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Upgrades model's record from provided version to the next one.
+%% @end
+%%--------------------------------------------------------------------
+-spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
+    {datastore_model:record_version(), datastore_model:record()}.
+upgrade_record(1, {?MODULE, Uuids}) ->
+    Guids = lists:map(fun fslogic_uuid:uuid_to_guid/1, Uuids),
+    {2, #files_to_chown{file_guids = Guids}}.

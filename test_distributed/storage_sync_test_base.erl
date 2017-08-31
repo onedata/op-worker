@@ -183,7 +183,8 @@ create_file_import_test(Config, MountSpaceInRoot) ->
     {ok, Handle1} = ?assertMatch({ok, _},
         lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
     ?assertMatch({ok, ?TEST_DATA},
-        lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))).
+        lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
+    lfm_proxy:close(W1, Handle1).
 
 %%todo uncomment after resolving VFS-3410
 %%     Check if file was imported on W2
@@ -213,7 +214,8 @@ create_file_import_check_user_id_test(Config, MountSpaceInRoot) ->
     {ok, Handle1} = ?assertMatch({ok, _},
         lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
     ?assertMatch({ok, ?TEST_DATA},
-        lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))).
+        lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
+    lfm_proxy:close(W1, Handle1).
 
 create_file_import_check_user_id_error_test(Config, MountSpaceInRoot) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -315,6 +317,7 @@ create_file_export_test(Config, MountInRoot) ->
         ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {guid, FileGuid}, write)),
     ?assertEqual({ok, byte_size(?TEST_DATA)}, lfm_proxy:write(W1, FileHandle, 0, ?TEST_DATA)),
     ?assertEqual(ok, lfm_proxy:fsync(W1, FileHandle)),
+    lfm_proxy:close(W1, FileHandle),
     % Check if file was exported
     ?assert(filelib:is_regular(StorageTestFilePath)),
     ?assertEqual({ok, ?TEST_DATA}, file:read_file(StorageTestFilePath)).
@@ -341,7 +344,8 @@ create_file_in_dir_import_test(Config, MountSpaceInRoot) ->
     {ok, Handle1} = ?assertMatch({ok, _},
         lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH2}, read)),
     ?assertMatch({ok, ?TEST_DATA},
-        lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))).
+        lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
+    lfm_proxy:close(W1, Handle1).
 
 %%todo uncomment after resolving VFS-3410
 %%    %% Check if file was imported on W2
@@ -392,6 +396,7 @@ create_file_in_dir_update_test(Config, MountSpaceInRoot) ->
         lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle5, 0, byte_size(?TEST_DATA))),
+    lfm_proxy:close(W1, Handle5),
 
     test_utils:mock_unload(W1, storage_sync_changes),
     assert_num_results(History, ?assertHashChangedFun(?SPACE_ID, true), 0),
@@ -468,6 +473,7 @@ create_file_in_dir_exceed_batch_update_test(Config, MountSpaceInRoot) ->
         lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle5, 0, byte_size(?TEST_DATA))),
+    lfm_proxy:close(W1, Handle5),
 
     assert_num_results(History, ?assertHashChangedFun(?TEST_DIR2, true), 0),
     assert_num_results(History, ?assertMtimeChangedFun(?TEST_DIR2, true), 0),
@@ -525,6 +531,7 @@ delete_non_empty_directory_update_test(Config, MountSpaceInRoot) ->
         lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle5, 0, byte_size(?TEST_DATA))),
+    lfm_proxy:close(W1, Handle5),
     %% Delete dir on storage
     recursive_rm(StorageTestDirPath),
     %% Check if dir was deleted in space
@@ -571,6 +578,7 @@ delete_file_update_test(Config, MountSpaceInRoot) ->
         ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
+    lfm_proxy:close(W1, Handle1),
     %% Delete file on storage
     ok = file:delete(StorageTestFilePath),
     %% Check if file was deleted in space
@@ -590,11 +598,11 @@ delete_file_export_test(Config, MountSpaceInRoot) ->
         lfm_proxy:open(W1, SessId, {guid, FileGuid}, write)),
     ?assertEqual({ok, byte_size(?TEST_DATA)}, lfm_proxy:write(W1, FileHandle, 0, ?TEST_DATA)),
     ?assertEqual(ok, lfm_proxy:fsync(W1, FileHandle)),
+    lfm_proxy:close(W1, FileHandle),
     % Check if file was exported
     ?assert(filelib:is_regular(StorageTestFilePath)),
     ?assertEqual({ok, ?TEST_DATA}, file:read_file(StorageTestFilePath)),
     % Delete file in space
-    lfm_proxy:close(W1, FileHandle),
     ok = lfm_proxy:unlink(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}),
     %% Check if file was deleted on storage
     ?assertMatch({error, ?ENOENT}, file:read_file(StorageTestFilePath), ?ATTEMPTS).
@@ -616,6 +624,7 @@ append_file_update_test(Config, MountSpaceInRoot) ->
         lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
+    lfm_proxy:close(W1, Handle1),
     %% Append to file
     append(StorageTestFilePath, ?TEST_DATA2),
 
@@ -624,7 +633,8 @@ append_file_update_test(Config, MountSpaceInRoot) ->
         lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
     AppendedData = <<(?TEST_DATA)/binary, (?TEST_DATA2)/binary>>,
     ?assertMatch({ok, AppendedData},
-        lfm_proxy:read(W1, Handle2, 0, byte_size(AppendedData))).
+        lfm_proxy:read(W1, Handle2, 0, byte_size(AppendedData))),
+    lfm_proxy:close(W1, Handle2).
 
 append_file_export_test(Config, MountSpaceInRoot) ->
     [W1, _] = ?config(op_worker_nodes, Config),
@@ -647,6 +657,7 @@ append_file_export_test(Config, MountSpaceInRoot) ->
     ?assertEqual({ok, byte_size(?TEST_DATA2)},
         lfm_proxy:write(W1, FileHandle, byte_size(?TEST_DATA), ?TEST_DATA2)),
     ?assertEqual(ok, lfm_proxy:fsync(W1, FileHandle)),
+    lfm_proxy:close(W1, FileHandle),
     ?assertEqual({ok, AppendedData}, file:read_file(StorageTestFilePath)).
 
 copy_file_update_test(Config, MountSpaceInRoot) ->
@@ -668,6 +679,7 @@ copy_file_update_test(Config, MountSpaceInRoot) ->
         lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
+    lfm_proxy:close(W1, Handle1),
     %% Copy file
     file:copy(StorageTestFilePath, StorageTestFilePath2),
 
@@ -676,10 +688,12 @@ copy_file_update_test(Config, MountSpaceInRoot) ->
         lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH2}, read), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle2, 0, byte_size(?TEST_DATA))),
+    lfm_proxy:close(W1, Handle2),
     {ok, Handle3} = ?assertMatch({ok, _},
         lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
     ?assertMatch({ok, ?TEST_DATA},
-        lfm_proxy:read(W1, Handle3, 0, byte_size(?TEST_DATA))).
+        lfm_proxy:read(W1, Handle3, 0, byte_size(?TEST_DATA))),
+    lfm_proxy:close(W1, Handle3).
 
 move_file_update_test(Config, MountSpaceInRoot) ->
     [W1, _] = ?config(op_worker_nodes, Config),
@@ -700,6 +714,7 @@ move_file_update_test(Config, MountSpaceInRoot) ->
         lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
+    lfm_proxy:close(W1, Handle1),
     %% Move file
     ok = file:rename(StorageTestFilePath, StorageTestFilePath2),
     %% Check if file was moved
@@ -708,7 +723,8 @@ move_file_update_test(Config, MountSpaceInRoot) ->
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle2, 0, byte_size(?TEST_DATA))),
     ?assertMatch({error, ?ENOENT},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH})).
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH})),
+    lfm_proxy:close(W1, Handle2).
 
 truncate_file_update_test(Config, MountSpaceInRoot) ->
     [W1, _] = ?config(op_worker_nodes, Config),
@@ -727,6 +743,7 @@ truncate_file_update_test(Config, MountSpaceInRoot) ->
         lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
+    lfm_proxy:close(W1, Handle1),
     %% Truncate file
     truncate(StorageTestFilePath, 1),
     %% Check if file was truncated
@@ -758,6 +775,7 @@ chmod_file_update_test(Config, MountSpaceInRoot) ->
         lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
+    lfm_proxy:close(W1, Handle1),
 
     test_utils:mock_new(W1, storage_sync_changes, [passthrough]),
 
@@ -805,7 +823,8 @@ chmod_file_update2_test(Config, MountSpaceInRoot) ->
         {ok, Handle1} = ?assertMatch({ok, _},
             lfm_proxy:open(W1, SessId, {path, SpaceFile}, read)),
         ?assertMatch({ok, ?TEST_DATA},
-            lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA)))
+            lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
+        lfm_proxy:close(W1, Handle1)
     end, [?SPACE_TEST_FILE_IN_DIR_PATH, ?SPACE_TEST_FILE_IN_DIR_PATH2, ?SPACE_TEST_FILE_IN_DIR_PATH3]),
 
     test_utils:mock_new(W1, storage_sync_changes, [passthrough]),
@@ -838,6 +857,7 @@ update_timestamps_file_import_test(Config, MountSpaceInRoot) ->
         lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
+    lfm_proxy:close(W1, Handle1),
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
     %% Change file permissions
@@ -886,7 +906,8 @@ import_file_by_path_test(Config, MountSpaceInRoot) ->
     {ok, Handle1} = ?assertMatch({ok, _},
         lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
     ?assertMatch({ok, ?TEST_DATA},
-        lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))).
+        lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
+    lfm_proxy:close(W1, Handle1).
 
 get_child_attr_by_path_test(Config, MountSpaceInRoot) ->
     [W1, _] = ?config(op_worker_nodes, Config),
@@ -925,7 +946,8 @@ import_remote_file_by_path_test(Config, MountSpaceInRoot) ->
     {ok, Handle} = ?assertMatch({ok, _},
         lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}, read)),
     ?assertMatch({ok, ?TEST_DATA},
-        lfm_proxy:read(W2, Handle, 0, byte_size(?TEST_DATA))).
+        lfm_proxy:read(W2, Handle, 0, byte_size(?TEST_DATA))),
+    lfm_proxy:close(W2, Handle).
 
 %%%===================================================================
 %%% Util functions
@@ -963,8 +985,8 @@ clean_dir(Name) ->
 enable_storage_import(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     {ok, [#document{key = StorageId} | _]} = rpc:call(W1, storage, list, []),
-    {ok, _} = rpc:call(W1, storage_sync, start_simple_scan_import,
-        [?SPACE_ID, StorageId, ?MAX_DEPTH]).
+    ?assertMatch({ok, _}, rpc:call(W1, storage_sync, start_simple_scan_import,
+        [?SPACE_ID, StorageId, ?MAX_DEPTH])).
 
 enable_storage_update(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -1072,7 +1094,8 @@ storage_test_file_path(MountPath, SpaceId, FileName, false) ->
 
 append(FilePath, Bytes) ->
     {ok, IoDevice} = file:open(FilePath, [append]),
-    ok = file:write(IoDevice, Bytes).
+    ok = file:write(IoDevice, Bytes),
+    file:close(IoDevice).
 
 recursive_rm(DirPath) ->
     [] = os:cmd("rm -rf " ++ str_utils:to_list(DirPath)).
@@ -1080,7 +1103,8 @@ recursive_rm(DirPath) ->
 truncate(FilePath, NewSize) ->
     {ok, IoDevice} = file:open(FilePath, [read, write]),
     {ok, NewSize} = file:position(IoDevice, NewSize),
-    ok = file:truncate(IoDevice).
+    ok = file:truncate(IoDevice),
+    file:close(IoDevice).
 
 change_time(FilePath, Atime, Mtime) ->
     file:write_file_info(FilePath,
@@ -1137,6 +1161,7 @@ verify_file(FilePath, Pid, W1, SessId, Attempts) ->
         lfm_proxy:open(W1, SessId, {path, FilePath}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
+    lfm_proxy:close(W1, Handle1),
     Pid ! {finished, FilePath}.
 
 verify_file_in_dir(N, Pid, W1, SessId, Attempts) ->
@@ -1148,6 +1173,7 @@ verify_file_in_dir(N, Pid, W1, SessId, Attempts) ->
         lfm_proxy:open(W1, SessId, {path, FileInDirPath}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
+    lfm_proxy:close(W1, Handle1),
     Pid ! {finished, NBin}.
 
 

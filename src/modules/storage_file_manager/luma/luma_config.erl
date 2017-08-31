@@ -11,6 +11,7 @@
 -module(luma_config).
 -author("Jakub Kudzia").
 
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 
 -type config() :: #luma_config{}.

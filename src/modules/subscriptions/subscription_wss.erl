@@ -16,7 +16,7 @@
 -behaviour(websocket_client_handler_behaviour).
 
 -include("global_definitions.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -export([init/2, websocket_handle/3, websocket_info/3, websocket_terminate/3]).

@@ -21,7 +21,7 @@
     try
         F()
     catch
-        _:{badmatch, {error, {not_found, file_meta}}} ->
+        _:{badmatch, {error, not_found}} ->
             {error, ?ENOENT};
         _:{badmatch, Error} ->
             Error;

@@ -236,13 +236,13 @@ pid_to_id(Pid) ->
 %% Converts transfer id to pid of transfer handler
 %% @end
 %%--------------------------------------------------------------------
--spec id_to_pid(TransferId :: id()) -> {ok, pid()} | {error, {not_found, transfer}}.
+-spec id_to_pid(TransferId :: id()) -> {ok, pid()} | {error, not_found}.
 id_to_pid(TransferId) ->
     try
         {ok, binary_to_term(base64url:decode(TransferId))}
     catch
         _:_ ->
-            {error, {not_found, transfer}}
+            {error, not_found}
     end.
 
 %%--------------------------------------------------------------------
@@ -250,11 +250,11 @@ id_to_pid(TransferId) ->
 %% Check if transfer server pid exists.
 %% @end
 %%--------------------------------------------------------------------
--spec check_transfer_existence(pid()) -> ok | {error, {not_found, transfer}}.
+-spec check_transfer_existence(pid()) -> ok | {error, not_found}.
 check_transfer_existence(Pid) ->
     case utils:process_info(Pid) of
         undefined ->
-            {error, {not_found, transfer}};
+            {error, not_found};
         _ ->
             ok
     end.

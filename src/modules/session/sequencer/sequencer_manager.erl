@@ -18,8 +18,7 @@
 
 -behaviour(gen_server).
 
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
-
+-include("modules/datastore/datastore_models.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/stream_messages.hrl").
@@ -87,7 +86,10 @@ start_link(SeqManSup, SessId) ->
 init([SeqManSup, SessId]) ->
     ?debug("Initializing sequencer manager for session ~p", [SessId]),
     process_flag(trap_exit, true),
-    {ok, SessId} = session:update(SessId, #{sequencer_manager => self()}),
+    Self = self(),
+    {ok, SessId} = session:update(SessId, fun(Session = #session{}) ->
+        {ok, Session#session{sequencer_manager = Self}}
+    end),
     {ok, #state{sequencer_manager_sup = SeqManSup, session_id = SessId}, 0}.
 
 %%--------------------------------------------------------------------
@@ -240,7 +242,9 @@ handle_info(Info, State) ->
     State :: #state{}) -> term().
 terminate(Reason, #state{session_id = SessId} = State) ->
     ?log_terminate(Reason, State),
-    session:update(SessId, #{sequencer_manager => undefined}).
+    session:update(SessId, fun(Session = #session{}) ->
+        {ok, Session#session{sequencer_manager = undefined}}
+    end).
 
 %%--------------------------------------------------------------------
 %% @private

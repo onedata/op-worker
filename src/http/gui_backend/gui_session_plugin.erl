@@ -69,10 +69,8 @@ cleanup() ->
 create_session(_UserId, [#user_identity{} = Identity, #macaroon_auth{} = Auth]) ->
     %% UserId no needed here to crete session as it is indicated by Auth.
     case session_manager:create_gui_session(Identity, Auth) of
-        {ok, SessionId} ->
-            {ok, SessionId};
-        {error, Error} ->
-            {error, Error}
+        {ok, SessionId} -> {ok, SessionId};
+        {error, Reason} -> {error, Reason}
     end.
 
 
@@ -89,10 +87,8 @@ update_session(SessionId, MemoryUpdateFun) ->
         {ok, Session#session{memory = MemoryUpdateFun(OldMemory)}}
     end,
     case session:update(SessionId, SessionUpdateFun) of
-        {ok, _} ->
-            ok;
-        {error, Error} ->
-            {error, Error}
+        {ok, _} -> ok;
+        {error, Error} -> {error, Error}
     end.
 
 
@@ -105,10 +101,8 @@ update_session(SessionId, MemoryUpdateFun) ->
     {ok, Memory :: maps:map()} | undefined.
 lookup_session(SessionId) ->
     case session:get(SessionId) of
-        {ok, #document{value = #session{memory = Memory}}} ->
-            {ok, Memory};
-        _ ->
-            undefined
+        {ok, #document{value = #session{memory = Memory}}} -> {ok, Memory};
+        _ -> undefined
     end.
 
 
@@ -133,8 +127,6 @@ delete_session(SessionId) ->
 -spec get_cookie_ttl() -> integer() | {error, term()}.
 get_cookie_ttl() ->
     case application:get_env(?APP_NAME, gui_session_ttl_seconds) of
-        {ok, Val} when is_integer(Val) ->
-            Val;
-        _ ->
-            {error, missing_env}
+        {ok, Val} when is_integer(Val) -> Val;
+        _ -> {error, missing_env}
     end.

@@ -14,9 +14,8 @@
 -author("Lukasz Opiola").
 
 -include("proto/common/credentials.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/oz/oz_spaces.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
 
 -export([get/2]).
 
@@ -31,6 +30,6 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get(oz_endpoint:auth(), HandleServiceId :: od_handle_service:id()) ->
-    {ok, datastore:document()} | datastore:get_error().
+    {ok, datastore:doc()} | {error, term()}.
 get(Auth, HandleServiceId) ->
     od_handle_service:get_or_fetch(Auth, HandleServiceId).

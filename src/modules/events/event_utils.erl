@@ -13,7 +13,6 @@
 -author("Krzysztof Trzepla").
 
 -include("modules/events/definitions.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 
 %% API
 -export([aggregate_file_read_events/2, aggregate_file_written_events/2]).
