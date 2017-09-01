@@ -40,6 +40,11 @@
     size :: file_meta:size()
 }).
 
+-record(get_file_children_attrs, {
+    offset :: file_meta:offset(),
+    size :: file_meta:size()
+}).
+
 -record(create_dir, {
     name :: file_meta:name(),
     mode :: file_meta:mode()
@@ -130,7 +135,7 @@
     #open_file{} | #get_file_location{} | #release{} | #truncate{} |
     #synchronize_block{} | #synchronize_block_and_compute_checksum{} |
     #get_child_attr{} | #get_xattr{} | #set_xattr{} | #remove_xattr{} |
-    #list_xattr{} | #fsync{}.
+    #list_xattr{} | #fsync{} | #get_file_children_attrs{}.
 
 -record(file_request, {
     context_guid :: fslogic_worker:file_guid(),
@@ -168,6 +173,10 @@
 
 -record(file_children, {
     child_links :: [#child_link{}]
+}).
+
+-record(file_children_attrs, {
+    child_attrs :: [#file_attr{}]
 }).
 
 -record(helper_arg, {
@@ -219,7 +228,7 @@
     #file_attr{} | #file_children{} | #file_location{} | #helper_params{} |
     #storage_test_file{} | #dir{} | #sync_response{} | #file_created{} |
     #file_opened{} | #file_renamed{} | #guid{} | #xattr_list{} | #xattr{} |
-    undefined.
+    #file_children_attrs{} | undefined.
 
 -record(fuse_response, {
     status :: undefined | #status{},

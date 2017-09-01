@@ -238,6 +238,8 @@ translate_from_protobuf(#'GetChildAttr'{name = Name}) ->
     #get_child_attr{name = Name};
 translate_from_protobuf(#'GetFileChildren'{offset = Offset, size = Size}) ->
     #get_file_children{offset = Offset, size = Size};
+translate_from_protobuf(#'GetFileChildrenAttrs'{offset = Offset, size = Size}) ->
+    #get_file_children_attrs{offset = Offset, size = Size};
 translate_from_protobuf(#'CreateDir'{name = Name, mode = Mode}) ->
     #create_dir{name = Name, mode = Mode};
 translate_from_protobuf(#'DeleteFile'{silent = Silent}) ->
@@ -301,6 +303,11 @@ translate_from_protobuf(#'FileChildren'{child_links = FileEntries}) ->
         fun(ChildLink) ->
             translate_from_protobuf(ChildLink)
         end, FileEntries)};
+translate_from_protobuf(#'FileChildrenAttrs'{child_attrs = Children}) ->
+    #file_children_attrs{child_attrs = lists:map(
+        fun(Child) ->
+            translate_from_protobuf(Child)
+        end, Children)};
 translate_from_protobuf(#'FileLocation'{} = Record) ->
     #file_location{
         uuid = fslogic_uuid:guid_to_uuid(Record#'FileLocation'.uuid),
@@ -690,6 +697,8 @@ translate_to_protobuf(#get_child_attr{name = Name}) ->
     {get_child_attr, #'GetChildAttr'{name = Name}};
 translate_to_protobuf(#get_file_children{offset = Offset, size = Size}) ->
     {get_file_children, #'GetFileChildren'{offset = Offset, size = Size}};
+translate_to_protobuf(#get_file_children_attrs{offset = Offset, size = Size}) ->
+    {get_file_children_attrs, #'GetFileChildrenAttrs'{offset = Offset, size = Size}};
 translate_to_protobuf(#create_dir{name = Name, mode = Mode}) ->
     {create_dir, #'CreateDir'{name = Name, mode = Mode}};
 translate_to_protobuf(#delete_file{silent = Silent}) ->
@@ -749,6 +758,11 @@ translate_to_protobuf(#file_children{child_links = FileEntries}) ->
     {file_children, #'FileChildren'{child_links = lists:map(fun(ChildLink) ->
         translate_to_protobuf(ChildLink)
     end, FileEntries)}};
+translate_to_protobuf(#file_children_attrs{child_attrs = Children}) ->
+    {file_children_attrs, #'FileChildrenAttrs'{child_attrs = lists:map(fun(Child) ->
+        {file_attr, Translated} = translate_to_protobuf(Child),
+        Translated
+    end, Children)}};
 translate_to_protobuf(#file_location{} = Record) ->
     {file_location, #'FileLocation'{
         uuid = fslogic_uuid:uuid_to_guid(Record#file_location.uuid, Record#file_location.space_id),
