@@ -79,6 +79,17 @@ create(Document) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Updates given document by replacing given fields with new values or
+%% creates new one if not exists.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_or_update(Document :: datastore:document(), Diff :: datastore:document_diff()) ->
+    {ok, datastore:ext_key()} | datastore:generic_error().
+create_or_update(Doc, Diff) ->
+    model:execute_with_default_context(?MODULE, create_or_update, [Doc, Diff]).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% {@link model_behaviour} callback get/1.
 %% @end
 %%--------------------------------------------------------------------
@@ -159,12 +170,13 @@ before(_ModelName, _Method, _Level, _Context) ->
 -spec apply_size_change(SpaceId :: od_space:id(), SizeDiff :: integer()) ->
     {ok, datastore:key()} | datastore:update_error().
 apply_size_change(SpaceId, SizeDiff) ->
-    % TODO - use create_or_update
-    critical_section:run([?MODEL_NAME, term_to_binary({quota, SpaceId})],
-        fun() ->
-            {ok, #document{value = Quot = #space_quota{current_size = OldSize}} = Doc} = get(SpaceId),
-            save(Doc#document{value = Quot#space_quota{current_size = OldSize + SizeDiff}})
-        end).
+    UpdateFun1 = fun(#space_quota{current_size = OldSize} = Record) ->
+        {ok, Record#space_quota{current_size = OldSize + SizeDiff}}
+    end,
+    create_or_update(
+        #document{key = SpaceId, value = #space_quota{current_size = SizeDiff}},
+        UpdateFun1
+    ).
 
 
 %%--------------------------------------------------------------------
@@ -175,6 +187,8 @@ apply_size_change(SpaceId, SizeDiff) ->
 %%--------------------------------------------------------------------
 -spec apply_size_change_and_maybe_emit(SpaceId :: od_space:id(), SizeDiff :: integer()) ->
     ok | {error, Reason :: any()}.
+apply_size_change_and_maybe_emit(_SpaceId, 0) ->
+    ok;
 apply_size_change_and_maybe_emit(SpaceId, SizeDiff) ->
     Before = space_quota:available_size(SpaceId),
     {ok, _} = space_quota:apply_size_change(SpaceId, SizeDiff),

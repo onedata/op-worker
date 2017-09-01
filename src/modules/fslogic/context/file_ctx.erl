@@ -687,7 +687,39 @@ get_file_size(FileCtx) ->
         {#document{value = #file_location{size = Size}}, FileCtx2} ->
             {Size, FileCtx2};
         {undefined, FileCtx2} ->
-            {0 ,FileCtx2}
+            {LocationDocs, FileCtx3} = get_file_location_docs(FileCtx2),
+            case LocationDocs of
+                [] ->
+                    {0 ,FileCtx3};
+                [First | DocsTail] ->
+                    ChocenDoc = lists:foldl(fun(
+                        New = #document{value = #file_location{
+                            version_vector = NewVV
+                        }},
+                        Current = #document{value = #file_location{
+                            version_vector = CurrentVV
+                        }}
+                    ) ->
+                        case version_vector:compare(CurrentVV, NewVV) of
+                            identical -> Current;
+                            greater -> Current;
+                            lesser -> New;
+                            concurrent -> New
+                        end
+                    end, First, DocsTail),
+
+                    case ChocenDoc of
+                        #document{
+                            value = #file_location{
+                                size = undefined,
+                                blocks = Blocks
+                            }
+                        } ->
+                            {fslogic_blocks:upper(Blocks), FileCtx3};
+                        #document{value = #file_location{size = Size}} ->
+                            {Size, FileCtx3}
+                    end
+            end
     end.
 
 %%--------------------------------------------------------------------

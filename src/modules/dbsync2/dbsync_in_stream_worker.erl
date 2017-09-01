@@ -215,7 +215,7 @@ code_change(_OldVsn, State, _Extra) ->
 handle_changes_batch(Since, Until, Docs,
     State = #state{seq = Seq, apply_batch = Apply}) ->
     case {Since, Apply} of
-        {Seq, _} ->
+        {Seq, undefined} ->
             apply_changes_batch(Since, Until, Docs, State);
         {Higher, undefined} when Higher > Seq ->
             State2 = stash_changes_batch(Since, Until, Docs, State),
@@ -284,12 +284,12 @@ change_applied(_Since, Until, Ans, State) ->
     case Ans of
         ok ->
             gen_server2:cast(self(), check_batch_stash),
-            update_seq(Until, State);
+            update_seq(Until, State2);
         {error, Seq, _} ->
             State2 = update_seq(Seq - 1, State),
             schedule_changes_request(State2);
         timeout ->
-            schedule_changes_request(State)
+            schedule_changes_request(State2)
     end.
 
 %%--------------------------------------------------------------------

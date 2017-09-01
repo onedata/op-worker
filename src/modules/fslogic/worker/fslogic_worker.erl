@@ -168,15 +168,16 @@ cleanup() ->
 %%--------------------------------------------------------------------
 -spec handle_request_and_process_response(session:id(), request()) -> response().
 handle_request_and_process_response(SessId, Request) ->
-    Response = try
-        handle_request(SessId, Request)
-    catch
-        Type:Error ->
-            fslogic_errors:handle_error(Request, Type, Error)
-    end,
-
-    try %todo TL move this storage_sync logic out of here
+    try
         UserCtx = user_ctx:new(SessId),
+        Response = try
+            handle_request(UserCtx, Request)
+        catch
+            Type:Error ->
+                fslogic_errors:handle_error(Request, Type, Error)
+        end,
+
+        %todo TL move this storage_sync logic out of here
         process_response(UserCtx, Request, Response)
     catch
         Type2:Error2 ->
@@ -189,9 +190,8 @@ handle_request_and_process_response(SessId, Request) ->
 %% Analyze request data and handle it locally or remotely.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_request(session:id(), request()) -> response().
-handle_request(SessId, Request) ->
-    UserCtx = user_ctx:new(SessId),
+-spec handle_request(user_ctx:ctx(), request()) -> response().
+handle_request(UserCtx, Request) ->
     FilePartialCtx = fslogic_request:get_file_partial_ctx(UserCtx, Request),
     Providers = fslogic_request:get_target_providers(UserCtx, FilePartialCtx, Request),
 
