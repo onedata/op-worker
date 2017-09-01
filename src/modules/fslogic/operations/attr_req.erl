@@ -45,10 +45,7 @@ get_file_attr(UserCtx, FileCtx) ->
 -spec get_file_attr_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:fuse_response().
 get_file_attr_insecure(UserCtx, FileCtx) ->
-    % trigger location create
-    {_LocalLocation, FileCtx2} =
-        file_ctx:get_or_create_local_file_location_doc(FileCtx),
-    get_file_attr_insecure(UserCtx, FileCtx2, false).
+    get_file_attr_insecure(UserCtx, FileCtx, false).
 
 %%--------------------------------------------------------------------
 %% @doc

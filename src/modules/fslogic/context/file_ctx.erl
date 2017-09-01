@@ -687,7 +687,7 @@ get_file_size(FileCtx) ->
         {#document{value = #file_location{size = Size}}, FileCtx2} ->
             {Size, FileCtx2};
         {undefined, FileCtx2} ->
-            {0 ,FileCtx2}
+            get_file_size_from_remote_locations(FileCtx)
     end.
 
 %%--------------------------------------------------------------------
@@ -900,4 +900,47 @@ get_or_create_local_regular_file_location_doc(FileCtx) ->
             };
         {Location, FileCtx2} ->
             {Location, FileCtx2}
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns size of file. File size is calculated from remote locations.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_size_from_remote_locations(file_ctx:ctx() | file_meta:uuid()) ->
+    {Size :: non_neg_integer(), file_ctx:ctx()}.
+get_file_size_from_remote_locations(FileCtx) ->
+    {LocationDocs, FileCtx2} = get_file_location_docs(FileCtx),
+    case LocationDocs of
+        [] ->
+            {0 ,FileCtx2};
+        [First | DocsTail] ->
+            ChocenDoc = lists:foldl(fun(
+                New = #document{value = #file_location{
+                    version_vector = NewVV
+                }},
+                Current = #document{value = #file_location{
+                    version_vector = CurrentVV
+                }}
+            ) ->
+                case version_vector:compare(CurrentVV, NewVV) of
+                    identical -> Current;
+                    greater -> Current;
+                    lesser -> New;
+                    concurrent -> New
+                end
+            end, First, DocsTail),
+
+            case ChocenDoc of
+                #document{
+                    value = #file_location{
+                        size = undefined,
+                        blocks = Blocks
+                    }
+                } ->
+                    {fslogic_blocks:upper(Blocks), FileCtx2};
+                #document{value = #file_location{size = Size}} ->
+                    {Size, FileCtx2}
+            end
     end.
