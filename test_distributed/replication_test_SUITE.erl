@@ -536,7 +536,6 @@ read_should_synchronize_file(Config) ->
 
     % then
     ?assertEqual({ok, <<>>}, Ans),
-    ct:print("~p", [rpc:call(W1, meck, history, [rtransfer])]),
     ?assertEqual(1, rpc:call(W1, meck, num_calls, [rtransfer, prepare_request, '_'])),
     ?assert(rpc:call(W1, meck, called,
         [rtransfer, prepare_request, [ExternalProviderId, FileGuid, 1, '_']])),

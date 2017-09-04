@@ -19,10 +19,13 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start/6, stop/1, get_status/1, get_info/1]).
--export([mark_active/1, mark_completed/1, mark_file_transfer_scheduled/2,
-    mark_file_transfer_finished/2, mark_data_transfer_scheduled/2,
-    mark_data_transfer_finished/2]).
+-export([init_lists/0, start/6, stop/1, get_status/1, get_info/1]).
+-export([mark_active/1, mark_completed/1, mark_failed/1,
+    mark_active_invalidation/1, mark_completed_invalidation/1, mark_failed_invalidation/1,
+    mark_file_transfer_scheduled/2, mark_file_transfer_finished/2,
+    mark_data_transfer_scheduled/2, mark_data_transfer_finished/2,
+    for_each_successfull_transfer/2, for_each_failed_transfer/2,
+    for_each_unfinished_transfer/2]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, create_or_update/2,
@@ -34,8 +37,17 @@
 -type callback() :: undefined | binary().
 -type transfer() :: #transfer{}.
 -type doc() :: #document{value :: transfer()}.
+-type virtual_list_id() :: binary(). % ?(SUCCESSFUL|FAILED|UNFINISHED)_TRANSFERS_KEY
 
 -export_type([id/0, status/0, callback/0, doc/0]).
+
+-define(SUCCESSFUL_TRANSFERS_KEY, <<"SUCCESSFUL_TRANSFERS_KEY">>).
+-define(FAILED_TRANSFERS_KEY, <<"FAILED_TRANSFERS_KEY">>).
+-define(UNFINISHED_TRANSFERS_KEY, <<"UNFINISHED_TRANSFERS_KEY">>).
+
+-define(MIN_TIME_WINDOW, 60).
+-define(HR_TIME_WINDOW, 3600).
+-define(DY_TIME_WINDOW, 86400).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -58,12 +70,29 @@ record_struct(1) ->
         {files_to_transfer, integer},
         {files_transferred, integer},
         {bytes_to_transfer, integer},
-        {bytes_transferred, integer}
+        {bytes_transferred, integer},
+        {start_time, integer},
+        {last_update, integer},
+        {min_hist, [integer]},
+        {hr_hist, [integer]},
+        {dy_hist, [integer]}
     ]}.
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Initializes documents used for listing
+%% @end
+%%--------------------------------------------------------------------
+-spec init_lists() -> ok.
+init_lists() ->
+    transfer:create(#document{key = ?SUCCESSFUL_TRANSFERS_KEY, value = #transfer{}}),
+    transfer:create(#document{key = ?FAILED_TRANSFERS_KEY, value = #transfer{}}),
+    transfer:create(#document{key = ?UNFINISHED_TRANSFERS_KEY, value = #transfer{}}),
+    ok.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -85,6 +114,10 @@ start(SessionId, FileGuid, FilePath, ProviderId, Callback, InvalidateSourceRepli
         false ->
             skipped
     end,
+    TimeSeconds = utils:system_time_seconds(),
+    MinHist = time_slot_histogram:new(?MIN_TIME_WINDOW, 60),
+    HrHist = time_slot_histogram:new(?HR_TIME_WINDOW, 24),
+    DyHist = time_slot_histogram:new(?DY_TIME_WINDOW, 30),
     ToCreate = #document{
         scope = fslogic_uuid:guid_to_space_id(FileGuid),
         value = #transfer{
@@ -97,10 +130,17 @@ start(SessionId, FileGuid, FilePath, ProviderId, Callback, InvalidateSourceRepli
             target_provider_id = ProviderId,
             transfer_status = TransferStatus,
             invalidation_status = InvalidationStatus,
-            invalidate_source_replica = InvalidateSourceReplica
+            invalidate_source_replica = InvalidateSourceReplica,
+            start_time = TimeSeconds,
+            last_update = 0,
+            min_hist = time_slot_histogram:get_histogram_values(MinHist),
+            hr_hist = time_slot_histogram:get_histogram_values(HrHist),
+            dy_hist = time_slot_histogram:get_histogram_values(DyHist)
+
         }},
     {ok, TransferId} = create(ToCreate),
     session:add_transfer(SessionId, TransferId),
+    add_link(?UNFINISHED_TRANSFERS_KEY, TransferId),
     transfer_controller:on_new_transfer_doc(ToCreate#document{key = TransferId}),
     invalidation_controller:on_new_transfer_doc(ToCreate#document{key = TransferId}),
     {ok, TransferId}.
@@ -133,7 +173,12 @@ get_info(TransferId) ->
         files_to_transfer = FilesToTransfer,
         files_transferred = FilesTransferred,
         bytes_to_transfer = BytesToTransfer,
-        bytes_transferred = BytesTransferred
+        bytes_transferred = BytesTransferred,
+        start_time = StartTime,
+        last_update = LastUpdate,
+        min_hist = MinHist,
+        hr_hist = HrHist,
+        dy_hist = DyHist
     }}} = get(TransferId),
     FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
     NullableCallback = utils:ensure_defined(Callback, undefined, null),
@@ -148,7 +193,12 @@ get_info(TransferId) ->
         <<"filesToTransfer">> => FilesToTransfer,
         <<"filesTransferred">> => FilesTransferred,
         <<"bytesToTransfer">> => BytesToTransfer,
-        <<"bytesTransferred">> => BytesTransferred
+        <<"bytesTransferred">> => BytesTransferred,
+        <<"startTime">> => StartTime,
+        <<"lastUpdate">> => LastUpdate,
+        <<"minHist">> => MinHist,
+        <<"hrHist">> => HrHist,
+        <<"dyHist">> => DyHist
     }.
 
 %%--------------------------------------------------------------------
@@ -156,8 +206,11 @@ get_info(TransferId) ->
 %% Stop transfer
 %% @end
 %%--------------------------------------------------------------------
--spec stop(id()) -> ok.
+-spec stop(id()) -> ok | {error, term()}.
 stop(TransferId) ->
+    remove_link(?UNFINISHED_TRANSFERS_KEY, TransferId),
+    remove_link(?FAILED_TRANSFERS_KEY, TransferId),
+    remove_link(?SUCCESSFUL_TRANSFERS_KEY, TransferId),
     delete(TransferId).
 
 %%--------------------------------------------------------------------
@@ -165,7 +218,7 @@ stop(TransferId) ->
 %% Marks transfer as active and sets number of files to transfer to 1.
 %% @end
 %%--------------------------------------------------------------------
--spec mark_active(id()) -> ok.
+-spec mark_active(id()) -> {ok, id()} | {error, term()}.
 mark_active(TransferId) ->
     transfer:update(TransferId, #{transfer_status => active, files_to_transfer => 1}).
 
@@ -174,16 +227,76 @@ mark_active(TransferId) ->
 %% Marks transfer as completed
 %% @end
 %%--------------------------------------------------------------------
--spec mark_completed(id()) -> ok.
+-spec mark_completed(id()) -> {ok, id()} | {error, term()}.
 mark_completed(TransferId) ->
-    transfer:update(TransferId, #{transfer_status => completed}).
+    transfer:update(TransferId, fun(Transfer) ->
+        case Transfer#transfer.invalidation_status of
+            skipped ->
+                add_link(?SUCCESSFUL_TRANSFERS_KEY, TransferId),
+                remove_link(?UNFINISHED_TRANSFERS_KEY, TransferId),
+                {ok, Transfer#transfer{transfer_status = completed}};
+            _ ->
+                {ok, Transfer#transfer{transfer_status = completed}}
+        end
+    end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Marks transfer as failed
+%% @end
+%%--------------------------------------------------------------------
+-spec mark_failed(id()) -> {ok, id()} | {error, term()}.
+mark_failed(TransferId) ->
+    add_link(?FAILED_TRANSFERS_KEY, TransferId),
+    remove_link(?UNFINISHED_TRANSFERS_KEY, TransferId),
+    transfer:update(TransferId, #{transfer_status => failed}).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Marks replica invalidation as active.
+%% @end
+%%--------------------------------------------------------------------
+-spec mark_active_invalidation(id()) -> {ok, id()} | {error, term()}.
+mark_active_invalidation(TransferId) ->
+    transfer:update(TransferId, #{invalidation_status => active}).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Marks replica invalidation as completed
+%% @end
+%%--------------------------------------------------------------------
+-spec mark_completed_invalidation(id()) -> {ok, id()} | {error, term()}.
+mark_completed_invalidation(TransferId) ->
+    transfer:update(TransferId, fun(Transfer) ->
+        add_link(?SUCCESSFUL_TRANSFERS_KEY, TransferId),
+        remove_link(?UNFINISHED_TRANSFERS_KEY, TransferId),
+
+        Transfer#transfer{invalidation_status = completed}
+    end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Marks replica invalidation as failed
+%% @end
+%%--------------------------------------------------------------------
+-spec mark_failed_invalidation(id()) -> {ok, id()} | {error, term()}.
+mark_failed_invalidation(TransferId) ->
+    transfer:update(TransferId, fun(Transfer) ->
+        add_link(?FAILED_TRANSFERS_KEY, TransferId),
+        remove_link(?UNFINISHED_TRANSFERS_KEY, TransferId),
+
+        Transfer#transfer{invalidation_status = failed}
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Marks in transfer doc that 'FilesNum' files are scheduled to be transferred.
 %% @end
 %%--------------------------------------------------------------------
--spec mark_file_transfer_scheduled(id(), non_neg_integer()) -> ok.
+-spec mark_file_transfer_scheduled(undefined | id(), non_neg_integer()) ->
+    {ok, id()} | {error, term()}.
+mark_file_transfer_scheduled(undefined, _FilesNum) ->
+    {ok, undefined};
 mark_file_transfer_scheduled(TransferId, FilesNum) ->
     transfer:update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{
@@ -196,7 +309,10 @@ mark_file_transfer_scheduled(TransferId, FilesNum) ->
 %% Marks in transfer doc successful transfer of 'FilesNum' files.
 %% @end
 %%--------------------------------------------------------------------
--spec mark_file_transfer_finished(id(), non_neg_integer()) -> ok.
+-spec mark_file_transfer_finished(undefined | id(), non_neg_integer()) ->
+    {ok, id()} | {error, term()}.
+mark_file_transfer_finished(undefined, _FilesNum) ->
+    {ok, undefined};
 mark_file_transfer_finished(TransferId, FilesNum) ->
     transfer:update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{
@@ -209,7 +325,10 @@ mark_file_transfer_finished(TransferId, FilesNum) ->
 %% Marks in transfer doc that 'Bytes' bytes are scheduled to be transferred.
 %% @end
 %%--------------------------------------------------------------------
--spec mark_data_transfer_scheduled(id(), non_neg_integer()) -> ok.
+-spec mark_data_transfer_scheduled(undefined | id(), non_neg_integer()) ->
+    {ok, id()} | {error, term()}.
+mark_data_transfer_scheduled(undefined, _Bytes) ->
+    {ok, undefined};
 mark_data_transfer_scheduled(TransferId, Bytes) ->
     transfer:update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{
@@ -222,13 +341,69 @@ mark_data_transfer_scheduled(TransferId, Bytes) ->
 %% Marks in transfer doc successful transfer of 'Bytes' bytes.
 %% @end
 %%--------------------------------------------------------------------
--spec mark_data_transfer_finished(id(), non_neg_integer()) -> ok.
+-spec mark_data_transfer_finished(undefined | id(), non_neg_integer()) ->
+    {ok, id()} | {error, term()}.
+mark_data_transfer_finished(undefined, _Bytes) ->
+    {ok, undefined};
 mark_data_transfer_finished(TransferId, Bytes) ->
-    transfer:update(TransferId, fun(Transfer) ->
+    transfer:update(TransferId, fun(Transfer = #transfer{
+        bytes_transferred = OldBytes,
+        last_update = LastUpdate,
+        min_hist = MinHistValues,
+        hr_hist = HrHistValues,
+        dy_hist = DyHistValues
+    }) ->
+        MinHist = time_slot_histogram:new(LastUpdate, ?MIN_TIME_WINDOW, MinHistValues),
+        HrHist = time_slot_histogram:new(LastUpdate, ?HR_TIME_WINDOW, HrHistValues),
+        DyHist = time_slot_histogram:new(LastUpdate, ?DY_TIME_WINDOW, DyHistValues),
+        ActualTimestamp = utils:system_time_seconds(),
         {ok, Transfer#transfer{
-            bytes_transferred = Transfer#transfer.bytes_transferred + Bytes
+            bytes_transferred = OldBytes + Bytes,
+            last_update = ActualTimestamp,
+            min_hist = time_slot_histogram:get_histogram_values(
+                time_slot_histogram:increment(MinHist, ActualTimestamp, Bytes)
+            ),
+            hr_hist = time_slot_histogram:get_histogram_values(
+                time_slot_histogram:increment(HrHist, ActualTimestamp, Bytes)
+            ),
+            dy_hist = time_slot_histogram:get_histogram_values(
+                time_slot_histogram:increment(DyHist, ActualTimestamp, Bytes)
+            )
         }}
     end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Executes callback for each successfully completed transfer
+%% @end
+%%--------------------------------------------------------------------
+-spec for_each_successfull_transfer(
+    Callback :: fun((id(), Acc0 :: term()) -> Acc :: term()),
+    Acc0 :: term()) -> {ok, Acc :: term()} | {error, term()}.
+for_each_successfull_transfer(Callback, Acc0) ->
+    for_each_transfer(?SUCCESSFUL_TRANSFERS_KEY, Callback, Acc0).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Executes callback for each failed transfer
+%% @end
+%%--------------------------------------------------------------------
+-spec for_each_failed_transfer(
+    Callback :: fun((id(), Acc0 :: term()) -> Acc :: term()),
+    Acc0 :: term()) -> {ok, Acc :: term()} | {error, term()}.
+for_each_failed_transfer(Callback, Acc0) ->
+    for_each_transfer(?FAILED_TRANSFERS_KEY, Callback, Acc0).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Executes callback for each unfinished transfer
+%% @end
+%%--------------------------------------------------------------------
+-spec for_each_unfinished_transfer(
+    Callback :: fun((id(), Acc0 :: term()) -> Acc :: term()),
+    Acc0 :: term()) -> {ok, Acc :: term()} | {error, term()}.
+for_each_unfinished_transfer(Callback, Acc0) ->
+    for_each_transfer(?UNFINISHED_TRANSFERS_KEY, Callback, Acc0).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -307,7 +482,7 @@ create_or_update(Doc, Diff) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    Config = ?MODEL_CONFIG(transfer_bucket, [], ?GLOBALLY_CACHED_LEVEL),
+    Config = ?MODEL_CONFIG(transfer_bucket, [], ?GLOBALLY_CACHED_LEVEL, ?GLOBALLY_CACHED_LEVEL),
     Config#model_config{version = 1, sync_enabled = true}.
 
 %%--------------------------------------------------------------------
@@ -334,3 +509,35 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Adds link to transfer
+%% @end
+%%--------------------------------------------------------------------
+-spec add_link(SourceId :: virtual_list_id(), TransferId :: id()) -> ok.
+add_link(SourceId, TransferId) ->
+    model:execute_with_default_context(?MODULE, add_links, [SourceId, {TransferId, {TransferId, ?MODEL_NAME}}]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes link to transfer
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_link(SourceId :: virtual_list_id(), TransferId :: id()) -> ok.
+remove_link(SourceId, TransferId) ->
+    model:execute_with_default_context(?MODULE, delete_links, [SourceId, TransferId]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Executes callback for each successfully completed transfer
+%% @end
+%%--------------------------------------------------------------------
+-spec for_each_transfer(
+    virtual_list_id(), Callback :: fun((id(), Acc0 :: term()) -> Acc :: term()),
+    Acc0 :: term()) -> {ok, Acc :: term()} | {error, term()}.
+for_each_transfer(ListDocId, Callback, Acc0) ->
+    model:execute_with_default_context(?MODULE, foreach_link, [ListDocId,
+        fun(LinkName, _LinkTarget, Acc) ->
+            Callback(LinkName, Acc)
+        end, Acc0]).

@@ -160,6 +160,7 @@ replicate_file(Config) ->
 
     % when
     timer:sleep(timer:seconds(20)), % for hooks todo VFS-3462
+    ?assertEqual({ok, []}, rpc:call(WorkerP1, transfer, for_each_successfull_transfer, [fun(Id, Acc) -> [Id | Acc] end, []])),
     {ok, 200, _, Body0} = do_request(WorkerP1, <<"replicas", File/binary, "?provider_id=",
         (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
     DecodedBody0 = json_utils:decode_map(Body0),
@@ -178,13 +179,18 @@ replicate_file(Config) ->
         <<"filesToTransfer">> := 1,
         <<"filesTransferred">> := 1,
         <<"bytesToTransfer">> := 4,
-        <<"bytesTransferred">> := 4
+        <<"bytesTransferred">> := 4,
+        <<"minHist">> := [4 | _],
+        <<"hrHist">> := [4 | _],
+        <<"dyHist">> := [4 | _]
     },
         case do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []) of
             {ok, 200, _, TransferStatus} ->
                 json_utils:decode_map(TransferStatus);
             Error -> Error
         end, 30),
+
+    ?assertEqual({ok, [Tid]}, rpc:call(WorkerP2, transfer, for_each_successfull_transfer, [fun(Id, Acc) -> [Id | Acc] end, []])),
     timer:sleep(timer:seconds(20)), % todo VFS-3462 - reorganize tests to remove sleeps
     {ok, 200, _, Body} = do_request(WorkerP2, <<"replicas", File/binary>>, get, [user_1_token_header(Config)], []),
     {ok, 200, _, Body2} = do_request(WorkerP1, <<"replicas", File/binary>>, get, [user_1_token_header(Config)], []),

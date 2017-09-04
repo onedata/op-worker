@@ -137,16 +137,16 @@ handle_cast(start_transfer, State = #state{
     callback = Callback
 }) ->
     try
-        transfer:update(TransferId, #{invalidation_status => active}),
+        transfer:mark_active_invalidation(TransferId),
         #provider_response{status = #status{code = ?OK}} =
             sync_req:invalidate_file_replica(user_ctx:new(SessionId), file_ctx:new_by_guid(FileGuid), undefined, TransferId),
-        transfer:update(TransferId, #{invalidation_status => completed}),
+        transfer:mark_completed_invalidation(TransferId),
         notify_callback(Callback),
         {stop, normal, State}
     catch
         _:E ->
             ?error_stacktrace("Could not replicate file ~p due to ~p", [FileGuid, E]),
-            transfer:update(TransferId, #{invalidation_status => failed}),
+            transfer:mark_failed_invalidation(TransferId),
             {stop, E, State}
     end;
 handle_cast(_Request, State) ->

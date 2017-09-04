@@ -134,7 +134,7 @@ handle_cast(start_transfer, State = #state{
     catch
         _:E ->
             ?error_stacktrace("Could not replicate file ~p due to ~p", [FileGuid, E]),
-            transfer:update(TransferId, #{transfer_status => failed}),
+            transfer:mark_failed(TransferId),
             {stop, E, State}
     end;
 handle_cast(_Request, State) ->
