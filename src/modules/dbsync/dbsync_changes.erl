@@ -18,10 +18,6 @@
 %% API
 -export([apply_batch/2, apply/1]).
 
--record(links, {
-    origin, doc_key, model, link_map, children
-}).
-
 -type ctx() :: datastore_cache:ctx().
 -type key() :: datastore:key().
 -type doc() :: datastore:doc().

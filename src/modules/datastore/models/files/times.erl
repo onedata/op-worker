@@ -74,7 +74,7 @@ get_or_default(FileUuid) ->
 %%--------------------------------------------------------------------
 -spec save(doc()) -> {ok, key()} | {error, term()}.
 save(Doc) ->
-    ?extract_key(datastore_model:save(?CTX, Doc)).
+    ?extract_key(datastore_model:save(?CTX#{generated_key => true}, Doc)).
 
 %%--------------------------------------------------------------------
 %% @doc

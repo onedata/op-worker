@@ -46,7 +46,7 @@ refresh_subscription() ->
     {Missing, ResumeAt} = subscriptions:get_missing(),
     Users = subscriptions:get_users(),
     ?info("Subscription progress - last_seq: ~p, missing: ~p, users: ~p ",
-        [ResumeAt, Missing, Users]),
+        [ResumeAt, Missing, erlang:length(Users)]),
 
     Message = json_utils:encode([
         {users, Users},

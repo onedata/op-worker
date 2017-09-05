@@ -324,10 +324,10 @@ get_child(ParentUuid, Name) ->
 %% Returns parent child by name within given links tree set.
 %% @end
 %%--------------------------------------------------------------------
--spec get_child(uuid(), datastore_links:tree_id(), name()) ->
+-spec get_child(uuid(), datastore_links:tree_ids(), name()) ->
     {ok, doc()} | {error, term()}.
-get_child(ParentUuid, TreeId, Name) ->
-    case datastore_model:get_links(?CTX, ParentUuid, TreeId, Name) of
+get_child(ParentUuid, TreeIds, Name) ->
+    case datastore_model:get_links(?CTX, ParentUuid, TreeIds, Name) of
         {ok, [#link{target = FileUuid}]} ->
             file_meta:get({uuid, FileUuid});
         {ok, [#link{} | _]} ->

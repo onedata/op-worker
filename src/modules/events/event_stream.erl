@@ -63,7 +63,7 @@
     events = #{} :: events(),
     subscriptions = #{} :: subscriptions(),
     emission_ref :: undefined | pending | reference(),
-    handler_ref :: undefined | pid()
+    handler_ref :: undefined | {pid(), reference()}
 }).
 
 %%%===================================================================
@@ -107,7 +107,7 @@ execute_event_handler(Force, #state{events = Evts, handler_ref = undefined,
                 [?MODULE, State, Error, Reason])
     end;
 
-execute_event_handler(Force, #state{handler_ref = Pid} = State) ->
+execute_event_handler(Force, #state{handler_ref = {Pid, _}} = State) ->
     MonitorRef = monitor(process, Pid),
     receive
         {'DOWN', MonitorRef, _, _, _} -> ok
@@ -202,7 +202,7 @@ handle_cast(_Request, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_info({'EXIT', Pid, _}, #state{handler_ref = Pid,
+handle_info({'DOWN', MonitorRef, _, _, _}, #state{handler_ref = {_, MonitorRef},
     emission_ref = EmissionRef} = State) ->
     NewState = State#state{handler_ref = undefined},
     case EmissionRef of
@@ -210,11 +210,11 @@ handle_info({'EXIT', Pid, _}, #state{handler_ref = Pid,
         _ -> {noreply, NewState}
     end;
 
+handle_info({'DOWN', _, _, _, _}, State) ->
+    {noreply, State};
+
 handle_info({'EXIT', _, shutdown}, State) ->
     {stop, normal, State};
-
-handle_info({'EXIT', _, normal}, State) ->
-    {noreply, State};
 
 handle_info({periodic_emission, Ref}, #state{emission_ref = Ref} = State) ->
     {noreply, maybe_spawn_event_handler(false, State)};
@@ -329,7 +329,7 @@ maybe_spawn_event_handler(_Force, #state{} = State) ->
 %%--------------------------------------------------------------------
 -spec spawn_event_handler(Force :: boolean(), State :: #state{}) -> NewState :: #state{}.
 spawn_event_handler(Force, #state{stream = Stm} = State) ->
-    HandlerRef = spawn_link(?MODULE, execute_event_handler, [Force, State]),
+    HandlerRef = spawn_monitor(?MODULE, execute_event_handler, [Force, State]),
     State#state{
         events = #{},
         metadata = Stm#event_stream.metadata,

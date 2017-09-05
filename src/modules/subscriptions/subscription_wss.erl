@@ -43,7 +43,7 @@ healthcheck() ->
 push(Message) ->
     case whereis(subscription_wss) of
         undefined ->
-            ?warning("No connection - dropping ~p", [Message]);
+            ?warning("Subscription WSS connection not found");
         WSS ->
             WSS ! {push, Message},
             ok
