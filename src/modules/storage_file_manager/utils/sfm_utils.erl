@@ -171,15 +171,21 @@ create_storage_file_location(FileCtx, StorageFileCreated) ->
 %%--------------------------------------------------------------------
 -spec create_storage_file(user_ctx:ctx(), file_ctx:ctx()) ->
     file_ctx:ctx().
+% TODO naniesc poprawki z VFS-3314
 create_storage_file(UserCtx, FileCtx) ->
-    FileCtx2 = create_parent_dirs(FileCtx),
     SessId = user_ctx:get_session_id(UserCtx),
-    {#document{value = #file_meta{mode = Mode}}, FileCtx3} =
-        file_ctx:get_file_doc(FileCtx2),
-    {SFMHandle, FileCtx4} = storage_file_manager:new_handle(SessId, FileCtx3),
-    storage_file_manager:unlink(SFMHandle),
-    ok = storage_file_manager:create(SFMHandle, Mode),
-    FileCtx4.
+    {#document{value = #file_meta{mode = Mode}}, FileCtx2} =
+        file_ctx:get_file_doc(FileCtx),
+    {SFMHandle, FileCtx3} = storage_file_manager:new_handle(SessId, FileCtx2),
+%%    storage_file_manager:unlink(SFMHandle),
+    {ok, FinalCtx} = case storage_file_manager:create(SFMHandle, Mode) of
+        {error, enoent} ->
+            FileCtx4 = create_parent_dirs(FileCtx3),
+            {storage_file_manager:create(SFMHandle, Mode), FileCtx4};
+        Other ->
+            {Other, FileCtx3}
+    end,
+    FinalCtx.
 
 %%--------------------------------------------------------------------
 %% @doc
