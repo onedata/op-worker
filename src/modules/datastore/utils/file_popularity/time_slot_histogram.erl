@@ -19,8 +19,8 @@
 -type histogram() :: {LastUpdateTime :: timestamp(), TimeWindow :: time(), histogram:histogram()}.
 
 %% API
--export([new/2, new/3, increment/2, get_histogram_values/1, get_last_update/1,
-    get_sum/1, get_average/1]).
+-export([new/2, new/3, increment/2, increment/3, get_histogram_values/1,
+    get_last_update/1, get_sum/1, get_average/1]).
 
 %%%===================================================================
 %%% API
@@ -46,17 +46,26 @@ new(LastUpdate, TimeWindow, HistogramValues) ->
     {LastUpdate, TimeWindow, HistogramValues}.
 
 %%--------------------------------------------------------------------
+%% @equiv increment(Histogram, CurrentTimestamp, 1).
+%% @end
+%%--------------------------------------------------------------------
+-spec increment(histogram(), CurrentTimestamp :: timestamp()) -> histogram().
+increment(Histogram, CurrentTimestamp) ->
+    increment(Histogram, CurrentTimestamp, 1).
+
+%%--------------------------------------------------------------------
 %% @doc
-%% Increments newest time window. The function shifts time slots if
+%% Increments newest time window by N. The function shifts time slots if
 %% the difference between provided CurrentTime and LastUpdate is greater than
 %% TimeWindow.
 %% @end
 %%--------------------------------------------------------------------
--spec increment(histogram(), CurrentTimestamp :: timestamp()) -> histogram().
-increment({LastUpdate, TimeWindow, Histogram}, CurrentTimestamp) ->
+-spec increment(histogram(), CurrentTimestamp :: timestamp(), N :: non_neg_integer()) ->
+    histogram().
+increment({LastUpdate, TimeWindow, Histogram}, CurrentTimestamp, N) ->
     ShiftSize = CurrentTimestamp div TimeWindow - LastUpdate div TimeWindow,
     ShiftedHistogram = histogram:shift(Histogram, ShiftSize),
-    {CurrentTimestamp, TimeWindow, histogram:increment(ShiftedHistogram)}.
+    {CurrentTimestamp, TimeWindow, histogram:increment(ShiftedHistogram, N)}.
 
 %%--------------------------------------------------------------------
 %% @doc

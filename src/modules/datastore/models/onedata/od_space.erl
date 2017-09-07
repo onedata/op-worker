@@ -142,17 +142,14 @@ model_init() ->
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
 'after'(?MODULE, create, _, _, {ok, SpaceId}) ->
-    space_cleanup:initialize(SpaceId),
     space_strategies:create(space_strategies:new(SpaceId)),
     ok = permissions_cache:invalidate(),
     emit_monitoring_event(SpaceId);
 'after'(?MODULE, create_or_update, _, _, {ok, SpaceId}) ->
-    space_cleanup:initialize(SpaceId),
     space_strategies:create(space_strategies:new(SpaceId)),
     ok = permissions_cache:invalidate(),
     emit_monitoring_event(SpaceId);
 'after'(?MODULE, save, _, _, {ok, SpaceId}) ->
-    space_cleanup:initialize(SpaceId),
     space_strategies:create(space_strategies:new(SpaceId)),
     ok = permissions_cache:invalidate(),
     emit_monitoring_event(SpaceId);

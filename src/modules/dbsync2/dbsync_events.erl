@@ -110,6 +110,12 @@ change_replicated_internal(_SpaceId, #document{
         value = #custom_metadata{}
     }) ->
     ?debug("change_replicated_internal: changed custom_metadata ~p", [FileUuid]);
+change_replicated_internal(_SpaceId, Transfer = #document{value = #transfer{
+    file_uuid = FileUuid
+}}) ->
+    ?debug("change_replicated_internal: changed transfer ~p", [FileUuid]),
+    transfer_controller:on_transfer_doc_change(Transfer),
+    invalidation_controller:on_transfer_doc_change(Transfer);
 change_replicated_internal(_SpaceId, _Change) ->
     ok.
 

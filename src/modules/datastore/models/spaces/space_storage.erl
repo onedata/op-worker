@@ -137,7 +137,8 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    Config = ?MODEL_CONFIG(space_storage_bucket, [], ?GLOBALLY_CACHED_LEVEL),
+    Config = ?MODEL_CONFIG(space_storage_bucket, [{?MODULE, create}, {?MODULE, save},
+        {?MODULE, create_or_update}, {?MODULE, update}], ?GLOBALLY_CACHED_LEVEL),
     Config#model_config{version = 3}.
 
 %%--------------------------------------------------------------------
@@ -147,6 +148,14 @@ model_init() ->
 %%--------------------------------------------------------------------
 -spec 'after'(model_behaviour:model_type(), model_behaviour:model_action(),
     datastore:store_level(), Context :: term(), ReturnValue :: term()) -> ok.
+'after'(?MODULE, create, _, _, {ok, SpaceId}) ->
+    space_cleanup_api:initialize(SpaceId);
+'after'(?MODULE, create_or_update, _, _, {ok, SpaceId}) ->
+    space_cleanup_api:initialize(SpaceId);
+'after'(?MODULE, save, _, _, {ok, SpaceId}) ->
+    space_cleanup_api:initialize(SpaceId);
+'after'(?MODULE, update, _, _, {ok, SpaceId}) ->
+    space_cleanup_api:initialize(SpaceId);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 
@@ -244,8 +253,12 @@ get_mounted_in_root(#document{value = #space_storage{} = Value}) ->
 %%--------------------------------------------------------------------
 -spec is_cleanup_enabled(od_space:id()) -> boolean().
 is_cleanup_enabled(SpaceId) ->
-    {ok, Doc} = space_storage:get(SpaceId),
-    Doc#document.value#space_storage.cleanup_enabled.
+    case space_storage:get(SpaceId) of
+        {ok, Doc} ->
+            Doc#document.value#space_storage.cleanup_enabled;
+        _Error ->
+            false
+    end.
 
 %%%===================================================================
 %%% Internal functions
