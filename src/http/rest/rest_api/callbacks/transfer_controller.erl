@@ -49,7 +49,7 @@ on_new_transfer_doc(Transfer) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Callback called when new transfer is synced from some other provider.
+%% Callback called when transfer doc is synced from some other provider.
 %% @end
 %%--------------------------------------------------------------------
 -spec on_transfer_doc_change(transfer:doc()) -> ok.

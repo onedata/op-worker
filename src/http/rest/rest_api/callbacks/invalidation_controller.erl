@@ -40,7 +40,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Callback called when new transfer is synced from some other provider.
+%% Callback called when new transfer doc is created locally.
 %% @end
 %%--------------------------------------------------------------------
 -spec on_new_transfer_doc(transfer:doc()) -> ok.
@@ -62,7 +62,7 @@ on_new_transfer_doc(_ExistingTransfer) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Callback called when new transfer is synced from some other provider.
+%% Callback called when transfer doc is synced from some other provider.
 %% @end
 %%--------------------------------------------------------------------
 -spec on_transfer_doc_change(transfer:doc()) -> ok.

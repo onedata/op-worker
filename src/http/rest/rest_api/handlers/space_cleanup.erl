@@ -69,7 +69,7 @@ is_authorized(Req, State) ->
 %% @equiv pre_handler:content_types_accepted/2
 %% @end
 %%--------------------------------------------------------------------
--spec content_types_accepted(req(), maps:map()) -> {[{binary(), atom()}], req(), maps:map()}.
+-spec content_types_accepted(req(), maps:map()) -> {[{atom(), atom()}], req(), maps:map()}.
 content_types_accepted(Req, State) ->
     {[
         {'*', enable_cleanup}
