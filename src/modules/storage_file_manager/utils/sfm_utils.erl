@@ -121,9 +121,16 @@ create_delayed_storage_file(FileCtx) ->
                 (#file_location{storage_file_created = true}) ->
                     {error, already_created};
                 (FileLocation = #file_location{storage_file_created = false}) ->
-                    FileCtx3 = create_storage_file(user_ctx:new(?ROOT_SESS_ID), FileCtx2),
-                    files_to_chown:chown_or_schedule_chowning(FileCtx3),
-                    {ok, FileLocation#file_location{storage_file_created = true}}
+                    try
+                        FileCtx3 = create_storage_file(user_ctx:new(?ROOT_SESS_ID), FileCtx2),
+                        files_to_chown:chown_or_schedule_chowning(FileCtx3),
+                        {ok, FileLocation#file_location{storage_file_created = true}}
+                    catch
+                        E1:E2 ->
+                            ?error_stacktrace("Error during storage file creation: ~p:~p",
+                                [E1, E2]),
+                            {error, {E1, E2}}
+                    end
             end),
             FileCtx2;
         true ->
@@ -182,6 +189,11 @@ create_storage_file(UserCtx, FileCtx) ->
         {error, enoent} ->
             FileCtx4 = create_parent_dirs(FileCtx3),
             {storage_file_manager:create(SFMHandle, Mode), FileCtx4};
+        {error,eexist} ->
+            % TODO - co jesli space jest importowany i ten plik istnieje, ale nie
+            % zdarzyl sie zaktualizowac?
+            storage_file_manager:unlink(SFMHandle),
+            {storage_file_manager:create(SFMHandle, Mode), FileCtx3};
         Other ->
             {Other, FileCtx3}
     end,
