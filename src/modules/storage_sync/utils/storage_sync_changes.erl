@@ -107,10 +107,13 @@ count_file_attrs_hash(StorageFileCtx) ->
         st_ctime = STCtime
     }= StatBuf,
 
-    {Xattr, StorageFileCtx3} = case storage_file_ctx:get_nfs4_acl(StorageFileCtx2) of
-        {error, ?ENOTSUP} ->
+    {Xattr, StorageFileCtx3} = try
+        storage_file_ctx:get_nfs4_acl(StorageFileCtx2)
+    catch
+        throw:?ENOTSUP ->
             {<<"">>, StorageFileCtx2};
-        Other -> Other
+        throw:?ENOENT ->
+            {<<"">>, StorageFileCtx2}
     end,
 
     case file_meta:type(StMode) of

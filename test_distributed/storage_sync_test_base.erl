@@ -957,7 +957,6 @@ import_nfs_acl_with_disabled_luma_should_fail_test(Config, MountSpaceInRoot) ->
     [W1, _] = ?config(op_worker_nodes, Config),
     W1MountPoint = get_host_mount_point(W1, Config),
     SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
-    SessId2 = ?config({session_id, {?USER2, ?GET_DOMAIN(W1)}}, Config),
     StorageTestFilePath =
         storage_test_file_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
 
@@ -965,6 +964,7 @@ import_nfs_acl_with_disabled_luma_should_fail_test(Config, MountSpaceInRoot) ->
     ok = file:write_file(StorageTestFilePath, ?TEST_DATA),
     storage_sync_test_base:enable_storage_import(Config),
     %% File shouldn't have been imported
+    timer:sleep(timer:seconds(?ATTEMPTS)),
     ?assertMatch({error, ?ENOENT},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS).
 
@@ -1065,7 +1065,7 @@ enable_storage_import(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     {ok, [#document{key = StorageId} | _]} = rpc:call(W1, storage, list, []),
     {ok, _} = rpc:call(W1, storage_sync, start_simple_scan_import,
-        [?SPACE_ID, StorageId, ?MAX_DEPTH]).
+        [?SPACE_ID, StorageId, ?MAX_DEPTH, ?SYNC_ACL]).
 
 enable_storage_update(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -1074,10 +1074,11 @@ enable_storage_update(Config) ->
     ScanInterval = maps:get(scan_interval, UpdateConfig, ?SCAN_INTERVAL),
     WriteOnce = maps:get(write_once, UpdateConfig, ?WRITE_ONCE),
     DeleteEnable = maps:get(delete_enable, UpdateConfig, ?DELETE_ENABLE),
+    SyncAcl = maps:get(delete_enable, UpdateConfig, ?SYNC_ACL),
 
     {ok, [#document{key = StorageId} | _]} = rpc:call(W1, storage, list, []),
     {ok, _} = rpc:call(W1, storage_sync, start_simple_scan_update,
-        [?SPACE_ID, StorageId, ?MAX_DEPTH, ScanInterval, WriteOnce, DeleteEnable]).
+        [?SPACE_ID, StorageId, ?MAX_DEPTH, ScanInterval, WriteOnce, DeleteEnable, SyncAcl]).
 
 
 disable_storage_import(Config) ->

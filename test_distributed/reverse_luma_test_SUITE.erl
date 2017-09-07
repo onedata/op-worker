@@ -24,7 +24,7 @@
     get_user_id_on_posix_storage/1,
     get_user_id_on_posix_storage_by_acl_username/1,
     get_user_id_on_posix_storage_should_return_root_user_id_when_reverse_luma_is_disabled/1,
-    get_user_id_on_posix_storage_by_acl_username_should_return_root_user_id_when_reverse_luma_is_disabled/1,
+    get_user_id_on_posix_storage_by_acl_username_should_return_error_when_reverse_luma_is_disabled/1,
     get_user_id_on_posix_storage_should_fail_with_404_error/1,
     get_user_id_on_posix_storage_by_acl_username_should_fail_with_404_error/1,
     get_user_id_should_fail_with_not_supported_storage_error/1,
@@ -36,7 +36,7 @@
     get_group_id_on_posix_storage/1,
     get_group_id_on_posix_storage_by_acl_groupname/1,
     get_group_id_on_posix_storage_should_return_undefined_when_reverse_luma_is_disabled/1,
-    get_group_id_on_posix_storage_by_acl_groupname_should_return_undefined_when_reverse_luma_is_disabled/1,
+    get_group_id_on_posix_storage_by_acl_groupname_should_return_error_when_reverse_luma_is_disabled/1,
     get_group_id_on_posix_storage_should_fail_with_404_error/1,
     get_group_id_on_posix_storage_by_acl_groupname_should_fail_with_404_error/1,
     get_group_id_should_fail_with_not_supported_storage_error/1,
@@ -52,7 +52,7 @@ all() ->
         get_user_id_on_posix_storage,
         get_user_id_on_posix_storage_by_acl_username,
         get_user_id_on_posix_storage_should_return_root_user_id_when_reverse_luma_is_disabled,
-        get_user_id_on_posix_storage_by_acl_username_should_return_root_user_id_when_reverse_luma_is_disabled,
+        get_user_id_on_posix_storage_by_acl_username_should_return_error_when_reverse_luma_is_disabled,
         get_user_id_on_posix_storage_should_fail_with_404_error,
         get_user_id_on_posix_storage_by_acl_username_should_fail_with_404_error,
         get_user_id_should_fail_with_not_supported_storage_error,
@@ -64,7 +64,7 @@ all() ->
         get_group_id_on_posix_storage,
         get_group_id_on_posix_storage_by_acl_groupname,
         get_group_id_on_posix_storage_should_return_undefined_when_reverse_luma_is_disabled,
-        get_group_id_on_posix_storage_by_acl_groupname_should_return_undefined_when_reverse_luma_is_disabled,
+        get_group_id_on_posix_storage_by_acl_groupname_should_return_error_when_reverse_luma_is_disabled,
         get_group_id_on_posix_storage_should_fail_with_404_error,
         get_group_id_on_posix_storage_by_acl_groupname_should_fail_with_404_error,
         get_group_id_should_fail_with_not_supported_storage_error,
@@ -127,11 +127,11 @@ get_user_id_on_posix_storage_should_return_root_user_id_when_reverse_luma_is_dis
         [<<"0">>, <<"0">>, ?STORAGE_ID, ?STORAGE_DISABLED_LUMA]),
     ?assertEqual({ok, ?ROOT_USER_ID}, Result).
 
-get_user_id_on_posix_storage_by_acl_username_should_return_root_user_id_when_reverse_luma_is_disabled(Config) ->
+get_user_id_on_posix_storage_by_acl_username_should_return_error_when_reverse_luma_is_disabled(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Result = rpc:call(Worker, reverse_luma, get_user_id_by_name,
         [<<"user@nfsdomain.org">>, ?STORAGE_ID, ?STORAGE_DISABLED_LUMA]),
-    ?assertEqual({ok, ?ROOT_USER_ID}, Result).
+    ?assertEqual({error, luma_disabled}, Result).
 
 get_user_id_on_posix_storage_should_fail_with_404_error(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -255,11 +255,11 @@ get_group_id_on_posix_storage_should_return_undefined_when_reverse_luma_is_disab
         [<<"0">>, ?STORAGE_ID, ?STORAGE_DISABLED_LUMA]),
     ?assertEqual({ok, undefined}, Result).
 
-get_group_id_on_posix_storage_by_acl_groupname_should_return_undefined_when_reverse_luma_is_disabled(Config) ->
+get_group_id_on_posix_storage_by_acl_groupname_should_return_error_when_reverse_luma_is_disabled(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Result = rpc:call(Worker, reverse_luma, get_group_id_by_name,
         [<<"group@nfsdomain.org">>, ?STORAGE_ID, ?STORAGE_DISABLED_LUMA]),
-    ?assertEqual({ok, undefined}, Result).
+    ?assertEqual({error, luma_disabled}, Result).
 
 get_group_id_on_posix_storage_should_fail_with_404_error(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),

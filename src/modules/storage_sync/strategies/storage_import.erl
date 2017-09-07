@@ -60,6 +60,11 @@ available_strategies() ->
                     name = max_depth,
                     type = integer,
                     description = <<"Max depth of file tree that will be scanned">>
+                },
+                #space_strategy_argument{
+                    name = sync_acl,
+                    type = boolean,
+                    description = <<"Enables synchronization of NFSv4 ACLs">>
                 }
             ],
             description = <<"Simple full filesystem scan">>
@@ -82,7 +87,9 @@ strategy_init_jobs(no_import, _, _) ->
     [];
 strategy_init_jobs(_, _, #{import_start_time := ImportStartTime})
     when is_integer(ImportStartTime) -> [];
-strategy_init_jobs(simple_scan, Args = #{max_depth := MaxDepth},
+strategy_init_jobs(simple_scan, Args = #{
+    max_depth := MaxDepth
+},
     Data = #{
         import_start_time := undefined,
         space_id := SpaceId,

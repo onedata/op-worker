@@ -101,7 +101,7 @@ get_user_id_by_name(Name, StorageId) ->
 %% Returns od_group:id() for storage group associated with given Gid.
 %% which is appropriate for the local server operations.
 %% Ids are cached for timeout defined in #luma_config{} record.
-%% If reverse LUMA is disabled, function returns ?ROOT USER_ID.
+%% If reverse LUMA is disabled, function returns error.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_group_id(binary(), storage:id(), storage:model()) ->

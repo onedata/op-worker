@@ -123,15 +123,15 @@ get_child_ctx(ParentCtx = #storage_file_ctx{
 %% Returns #statbuf of file associated with StorageFileCtx.
 %% @end
 %%-------------------------------------------------------------------
--spec get_stat_buf(ctx()) -> {#statbuf{}, ctx()} | {error, term()}.
+-spec get_stat_buf(ctx()) -> {#statbuf{}, ctx()}.
 get_stat_buf(StorageFileCtx = #storage_file_ctx{stat = undefined, handle = undefined}) ->
     get_stat_buf(set_sfm_handle(StorageFileCtx));
 get_stat_buf(StorageFileCtx = #storage_file_ctx{stat = undefined, handle = SFMHandle}) ->
     case storage_file_manager:stat(SFMHandle) of
         {ok, StatBuf} ->
             {StatBuf, StorageFileCtx#storage_file_ctx{stat = StatBuf}};
-        Error ->
-            Error
+        {error, ?ENOENT} ->
+            throw(?ENOENT)
     end;
 get_stat_buf(StorageFileCtx = #storage_file_ctx{stat = StatBuf}) ->
     {StatBuf, StorageFileCtx}.
@@ -168,7 +168,7 @@ get_storage_doc(StorageFileCtx = #storage_file_ctx{
 %% Returns binary representation of nfs4 acl.
 %% @end
 %%-------------------------------------------------------------------
--spec get_nfs4_acl(ctx()) -> {binary(), ctx()} | {error, Reason :: term()}.
+-spec get_nfs4_acl(ctx()) -> {binary(), ctx()}.
 get_nfs4_acl(StorageFileCtx) ->
     get_xattr(StorageFileCtx, <<"system.nfs4_acl">>).
 
@@ -177,7 +177,7 @@ get_nfs4_acl(StorageFileCtx) ->
 %% Returns binary representation of given xattr.
 %% @end
 %%-------------------------------------------------------------------
--spec get_xattr(ctx(), binary()) -> {binary(), ctx()} | {error, Reason :: term()}.
+-spec get_xattr(ctx(), binary()) -> {binary(), ctx()}.
 get_xattr(StorageFileCtx = #storage_file_ctx{
     xattr = undefined,
     handle = undefined
@@ -192,8 +192,10 @@ get_xattr(StorageFileCtx = #storage_file_ctx{handle = SFMHandle}, XattrName) ->
     case storage_file_manager:getxattr(SFMHandle, XattrName) of
         {ok, Xattr} ->
             {Xattr, StorageFileCtx#storage_file_ctx{xattr = Xattr}};
-        Error ->
-            Error
+        {error, ?ENOTSUP} ->
+            throw(?ENOTSUP);
+        {error, ?ENOENT} ->
+            throw(?ENOENT)
     end.
 
 %%%===================================================================

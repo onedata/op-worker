@@ -59,6 +59,12 @@ get_oz_rest_api_prefix() ->
     {ok, Prefix} = application:get_env(?APP_NAME, oz_rest_api_prefix),
     Prefix.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% @doc Should return OZ REST endpoint, ended with given Path.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_oz_rest_endpoint(string() | binary()) -> string().
 get_oz_rest_endpoint(Path) ->
     str_utils:format("~s:~B~s~s", [
         get_oz_url(),

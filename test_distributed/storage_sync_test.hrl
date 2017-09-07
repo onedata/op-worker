@@ -23,6 +23,7 @@
 -define(SCAN_INTERVAL, 10).
 -define(WRITE_ONCE, false).
 -define(DELETE_ENABLE, false).
+-define(SYNC_ACL, true).
 -define(MAX_DEPTH, 9999999999999999999999).
 
 %% test data

@@ -46,17 +46,11 @@ check_permission([], _User, _OperationMask, _FileCtx) -> throw(?EACCES);
 check_permission([ACE = #access_control_entity{
     identifier = ?owner
 } | Rest],
-    User = #document{key = UserId}, Operation, FileCtx
+    User, Operation, FileCtx
 ) ->
-
     {OwnerId, FileCtx2} = file_ctx:get_owner(FileCtx),
-    case UserId of
-        OwnerId ->
-            check_permission([ACE#access_control_entity{identifier = OwnerId} | Rest],
-                User, Operation, FileCtx2);
-        _ ->
-            check_permission(Rest, User, Operation, FileCtx2)
-    end;
+    check_permission([ACE#access_control_entity{identifier = OwnerId} | Rest],
+        User, Operation, FileCtx2);
 check_permission([ACE = #access_control_entity{
     identifier = ?group,
     aceflags = Flags
@@ -108,14 +102,22 @@ check_permission([#access_control_entity{
     acemask = AceMask
 } | Rest],
     User = #document{key = SameUserId},
-    Operation, FileCtx) ->
+    Operation, FileCtx
+) ->
 
     case (Operation band AceMask) of
         Operation -> ok;
         OtherAllowedBits ->
             check_permission(Rest, User, Operation bxor OtherAllowedBits, FileCtx)
     end;
-check_permission([#access_control_entity{acetype = ?deny_mask, identifier = SameUserId, acemask = AceMask} | Rest], #document{key = SameUserId} = User, Operation, FileCtx) ->
+check_permission([#access_control_entity{
+    acetype = ?deny_mask,
+    identifier = SameUserId,
+    acemask = AceMask
+} | Rest],
+    User = #document{key = SameUserId},
+    Operation, FileCtx
+) ->
     case (Operation band AceMask) of
         ?no_flags_mask -> check_permission(Rest, User, Operation, FileCtx);
         _ -> throw(?EACCES)

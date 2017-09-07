@@ -18,13 +18,41 @@
 
 
 %% API
--export([decode/1, encode/1, normalize/2]).
+-export([decode_and_normalize/2, encode/1]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 %%-------------------------------------------------------------------
+%% @doc
+%% Converts ACL from binary form to list of #access_control_entity
+%% records and resolves 'who' fields in all ACEs in given ACL
+%% form user@nfsdomain.org or group@nfsdomain.org to onedata user/group id.
+%% Whether given identifier is associated with user or group is
+%% determined by identifier_group_mask in acemask field.
+%% @end
+%%-------------------------------------------------------------------
+-spec decode_and_normalize(binary(), storage_file_ctx:ctx()) -> {ok, acl_logic:acl()}.
+decode_and_normalize(ACLBin, StorageFileCtx) ->
+    {ok,  ACL} = decode(ACLBin),
+    normalize(ACL, StorageFileCtx).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Converts list of #access_control_entity records to binary form. 
+%% @end
+%%-------------------------------------------------------------------
+-spec encode(acl_logic:acl()) -> binary().
+encode(#acl{value = ACEs}) ->
+    encode(ACEs, []).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%-------------------------------------------------------------------
+%% @private
 %% @doc
 %% Converts ACL from binary form to list of #access_control_entity
 %% records.
@@ -41,6 +69,7 @@ decode(ACLBin) ->
     {ok, #acl{value = ACEs}}.
 
 %%-------------------------------------------------------------------
+%% @private
 %% @doc
 %% Resolves 'who' fields in all ACEs in given ACL
 %% form user@nfsdomain.org or group@nfsdomain.org to onedata user/group id.
@@ -49,27 +78,9 @@ decode(ACLBin) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec normalize(acl_logic:acl(), storage_file_ctx:ctx()) ->
-    {ok, acl_logic:acl()} | {error, Reason :: term()}.
+    {ok, acl_logic:acl()}.
 normalize(Acl = #acl{value = ACEs}, StorageFileCtx) ->
-    try
-        {ok, Acl#acl{value = normalize(ACEs, [], StorageFileCtx)}}
-    catch
-        _Error:Reason ->
-            {error, Reason}
-    end.
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Converts list of #access_control_entity records to binary form. 
-%% @end
-%%-------------------------------------------------------------------
--spec encode(acl_logic:acl()) -> binary().
-encode(#acl{value = ACEs}) ->
-    encode(ACEs, []).
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
+    {ok, Acl#acl{value = normalize(ACEs, [], StorageFileCtx)}}.
 
 %%-------------------------------------------------------------------
 %% @private
@@ -182,7 +193,7 @@ normalize_ace(ACE = #access_control_entity{
 %% @end
 %%-------------------------------------------------------------------
 -spec normalize_who(non_neg_integer(), binary(), storage_file_ctx:ctx()) ->
-    {ok, od_user:id() | od_group:id(), storage_file_ctx:ctx()} | no_return().
+    {od_user:id() | od_group:id(), storage_file_ctx:ctx()}.
 normalize_who(Flags, Who, StorageFileCtx) when ?has_flag(Flags, ?identifier_group_mask) ->
     {StorageDoc, StorageFileCtx2} = storage_file_ctx:get_storage_doc(StorageFileCtx),
     {ok, GroupId} = reverse_luma:get_group_id_by_name(Who, StorageDoc),
