@@ -34,6 +34,8 @@
 %%--------------------------------------------------------------------
 -spec check_normal_or_default_def(check_permissions:access_definition(), user_ctx:ctx(),
     file_ctx:ctx()) -> {ok, file_ctx:ctx()}.
+check_normal_or_default_def({Type, FileCtx}, UserCtx, FileCtx) ->
+    {ok, _FileCtx2} = check_normal_def({Type, FileCtx}, UserCtx, FileCtx);
 check_normal_or_default_def({Type, SubjectCtx}, UserCtx, FileCtx) ->
     {ok, _} = check_normal_def({Type, SubjectCtx}, UserCtx, FileCtx),
     {ok, FileCtx};
@@ -64,7 +66,7 @@ check_normal_def({share, SubjectCtx}, UserCtx, DefaultFileCtx) ->
                     {ok, SubjectCtx2};
                 false ->
                     {ParentCtx, SubjectCtx3} = file_ctx:get_parent(SubjectCtx2, UserCtx),
-                    check_normal_def({share, ParentCtx}, UserCtx, DefaultFileCtx),
+                    rules_cache:check_and_cache_results([{share, ParentCtx}], UserCtx, DefaultFileCtx),
                     {ok, SubjectCtx3}
             end
     end;
@@ -81,8 +83,8 @@ check_normal_def({traverse_ancestors, SubjectCtx}, UserCtx, _DefaultFileCtx) ->
                     SubjectCtx
             end,
             {ParentCtx, SubjectCtx3} = file_ctx:get_parent(SubjectCtx2, UserCtx),
-            check_normal_def({?traverse_container, ParentCtx}, UserCtx, _DefaultFileCtx),
-            check_normal_def({traverse_ancestors, ParentCtx}, UserCtx, _DefaultFileCtx),
+            rules_cache:check_and_cache_results([{?traverse_container, ParentCtx}], UserCtx, _DefaultFileCtx),
+            rules_cache:check_and_cache_results([{traverse_ancestors, ParentCtx}], UserCtx, _DefaultFileCtx),
             {ok, SubjectCtx3}
     end;
 check_normal_def({Type, SubjectCtx}, UserCtx, _FileCtx) ->

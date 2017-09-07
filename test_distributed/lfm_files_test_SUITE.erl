@@ -62,7 +62,14 @@
     new_file_should_not_have_popularity_doc/1,
     new_file_should_have_zero_popularity/1,
     opening_file_should_increase_file_popularity/1,
-    file_popularity_view_should_return_unpopular_files/1
+    file_popularity_view_should_return_unpopular_files/1,
+    file_popularity_should_have_correct_file_size/1,
+    delayed_creation_should_not_prevent_truncate/1,
+    readdir_plus_should_return_empty_result_for_empty_dir/1,
+    readdir_plus_should_return_empty_result_zero_size/1,
+    readdir_plus_should_work_with_zero_offset/1,
+    readdir_plus_should_work_with_non_zero_offset/1,
+    readdir_plus_should_work_with_size_greater_than_dir_size/1
 ]).
 
 -define(TEST_CASES, [
@@ -98,7 +105,14 @@
     new_file_should_not_have_popularity_doc,
     new_file_should_have_zero_popularity,
     opening_file_should_increase_file_popularity,
-    file_popularity_view_should_return_unpopular_files
+    file_popularity_view_should_return_unpopular_files,
+    file_popularity_should_have_correct_file_size,
+    delayed_creation_should_not_prevent_truncate,
+    readdir_plus_should_return_empty_result_for_empty_dir,
+    readdir_plus_should_return_empty_result_zero_size,
+    readdir_plus_should_work_with_zero_offset,
+    readdir_plus_should_work_with_non_zero_offset,
+    readdir_plus_should_work_with_size_greater_than_dir_size
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -123,6 +137,26 @@ all() ->
 %%%====================================================================
 %%% Test function
 %%%====================================================================
+
+readdir_plus_should_return_empty_result_for_empty_dir(Config) ->
+    MainDirPath = generate_dir(Config, 0),
+    verify_attrs(Config, MainDirPath, 10, 0).
+
+readdir_plus_should_return_empty_result_zero_size(Config) ->
+    MainDirPath = generate_dir(Config, 10),
+    verify_attrs(Config, MainDirPath, 0, 0).
+
+readdir_plus_should_work_with_zero_offset(Config) ->
+    MainDirPath = generate_dir(Config, 5),
+    verify_attrs(Config, MainDirPath, 5, 5).
+
+readdir_plus_should_work_with_non_zero_offset(Config) ->
+    MainDirPath = generate_dir(Config, 5),
+    verify_attrs(Config, MainDirPath, 3, 3, 2).
+
+readdir_plus_should_work_with_size_greater_than_dir_size(Config) ->
+    MainDirPath = generate_dir(Config, 5),
+    verify_attrs(Config, MainDirPath, 10, 5).
 
 echo_loop_test(Config) ->
     ?PERFORMANCE(Config, [
@@ -154,9 +188,8 @@ echo_loop_test_base(Config) ->
 
     {WriteTime, _} = measure_execution_time(fun() ->
         lists:foldl(fun(N, Offset) ->
-            OpenAns = lfm_proxy:open(Worker, SessId1, {path, FilePath}, write),
-            ?assertMatch({ok, _}, OpenAns),
-            {ok, Handle} = OpenAns,
+            {ok, Handle} = ?assertMatch({ok, _},
+                lfm_proxy:open(Worker, SessId1, {path, FilePath}, write)),
             Bytes = integer_to_binary(N),
             BufSize = size(Bytes),
             ?assertMatch({ok, BufSize}, lfm_proxy:write(Worker, Handle, Offset, Bytes)),
@@ -292,9 +325,8 @@ ls_with_stats_test_base(Config) ->
 
     % List directory
     {LsTime, LSDirs} = measure_execution_time(fun() ->
-        LSAns = lfm_proxy:ls(Worker, SessId1, {path, LastTreeDir}, 0, DirsNumPerProc*ProcNum),
-        ?assertMatch({ok, _}, LSAns),
-        {ok, ListedDirs} = LSAns,
+        {ok, ListedDirs} = ?assertMatch({ok, _},
+            lfm_proxy:ls(Worker, SessId1, {path, LastTreeDir}, 0, DirsNumPerProc*ProcNum)),
         ?assertEqual(DirsNumPerProc*ProcNum, length(ListedDirs)),
         ListedDirs
     end),
@@ -303,8 +335,7 @@ ls_with_stats_test_base(Config) ->
     {StatTime, _} = measure_execution_time(fun() ->
         Fun = fun(Dirs) ->
             lists:foreach(fun({D, _}) ->
-                StatAns = lfm_proxy:stat(Worker, SessId1,  {guid, D}),
-                ?assertMatch({ok, #file_attr{}}, StatAns)
+                ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Worker, SessId1,  {guid, D}))
             end, Dirs)
         end,
         case ProcNum of
@@ -382,15 +413,12 @@ ls_test_base(Config) ->
     VerifyLS = fun(Offset0, Limit0, ElementsList) ->
         Offset = Offset0 * DSM,
         Limit = Limit0 * DSM,
-        LSAns = lfm_proxy:ls(Worker, SessId1, {path, MainDirPath}, Offset, Limit),
-        LSAns2 = lfm_proxy:ls(Worker, SessId1, {path, MainDirPath}, 0, Offset),
-        LSAns3 = lfm_proxy:ls(Worker, SessId1, {path, MainDirPath}, Offset + Limit, length(ElementsList)),
-        ?assertMatch({ok, _}, LSAns),
-        ?assertMatch({ok, _}, LSAns2),
-        ?assertMatch({ok, _}, LSAns3),
-        {_, ListedElements} = LSAns,
-        {_, ListedElements2} = LSAns2,
-        {_, ListedElements3} = LSAns3,
+        {ok, ListedElements} = ?assertMatch({ok, _},
+            lfm_proxy:ls(Worker, SessId1, {path, MainDirPath}, Offset, Limit)),
+        {ok, ListedElements2} = ?assertMatch({ok, _},
+            lfm_proxy:ls(Worker, SessId1, {path, MainDirPath}, 0, Offset)),
+        {ok, ListedElements3} = ?assertMatch({ok, _},
+            lfm_proxy:ls(Worker, SessId1, {path, MainDirPath}, Offset + Limit, length(ElementsList))),
 
         ?assertEqual({min(Limit, max(length(ElementsList) - Offset, 0)), min(Offset, length(ElementsList)),
             max(length(ElementsList) - Offset - Limit, 0)},
@@ -778,10 +806,8 @@ lfm_acl_test(Config) ->
         #access_control_entity{acetype = ?allow_mask, identifier = UserId1, aceflags = ?no_flags_mask, acemask = ?read_mask bor ?write_mask},
         #access_control_entity{acetype = ?deny_mask, identifier = GroupId1, aceflags = ?identifier_group_mask, acemask = ?write_mask}
     ],
-    Ans1 = lfm_proxy:set_acl(W, SessId1, {guid, FileGUID}, Acl),
-    ?assertEqual(ok, Ans1),
-    Ans2 = lfm_proxy:get_acl(W, SessId1, {guid, FileGUID}),
-    ?assertEqual({ok, Acl}, Ans2).
+    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId1, {guid, FileGUID}, Acl)),
+    ?assertEqual({ok, Acl}, lfm_proxy:get_acl(W, SessId1, {guid, FileGUID})).
 
 rm_recursive_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -1036,13 +1062,13 @@ new_file_should_have_zero_popularity(Config) ->
                 file_uuid = FileUuid,
                 space_id = SpaceId,
                 last_open = 0,
-                total_open_count = 0,
-                hourly_moving_average = 0,
-                daily_moving_average = 0,
-                monthly_moving_average = 0
+                open_count = 0,
+                hr_mov_avg = 0,
+                dy_mov_avg = 0,
+                mth_mov_avg = 0
             }
         }},
-        rpc:call(W, file_popularity, get_or_default, [FileUuid, SpaceId])
+        rpc:call(W, file_popularity, get_or_default, [file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId))])
     ).
 
 opening_file_should_increase_file_popularity(Config) ->
@@ -1064,13 +1090,13 @@ opening_file_should_increase_file_popularity(Config) ->
             value = #file_popularity{
                 file_uuid = FileUuid,
                 space_id = SpaceId,
-                total_open_count = 1,
-                hourly_histogram = [1 | _],
-                daily_histogram = [1 | _],
-                monthly_histogram = [1 | _]
+                open_count = 1,
+                hr_hist = [1 | _],
+                dy_hist = [1 | _],
+                mth_hist = [1 | _]
             }
         }},
-        rpc:call(W, file_popularity, get_or_default, [FileUuid, SpaceId])
+        rpc:call(W, file_popularity, get_or_default, [file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId))])
     ),
     ?assert(TimeBeforeFirstOpen =< Doc#document.value#file_popularity.last_open),
 
@@ -1085,18 +1111,18 @@ opening_file_should_increase_file_popularity(Config) ->
     {ok, Doc2} = ?assertMatch(
         {ok, #document{
             value = #file_popularity{
-                total_open_count = 24,
-                hourly_moving_average = 1,
-                daily_moving_average = 1,
-                monthly_moving_average = 2
+                open_count = 24,
+                hr_mov_avg = 1,
+                dy_mov_avg = 1,
+                mth_mov_avg = 2
             }
         }},
-        rpc:call(W, file_popularity, get_or_default, [FileUuid, SpaceId])
+        rpc:call(W, file_popularity, get_or_default, [file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId))])
     ),
     ?assert(TimeBeforeSecondOpen =< Doc2#document.value#file_popularity.last_open),
-    [FirstHour, SecondHour | _] = Doc2#document.value#file_popularity.hourly_histogram,
-    [FirstDay, SecondDay | _] = Doc2#document.value#file_popularity.hourly_histogram,
-    [FirstMonth, SecondMonth | _] = Doc2#document.value#file_popularity.hourly_histogram,
+    [FirstHour, SecondHour | _] = Doc2#document.value#file_popularity.hr_hist,
+    [FirstDay, SecondDay | _] = Doc2#document.value#file_popularity.hr_hist,
+    [FirstMonth, SecondMonth | _] = Doc2#document.value#file_popularity.hr_hist,
     ?assertEqual(24, FirstHour + SecondHour),
     ?assertEqual(24, FirstDay + SecondDay),
     ?assertEqual(24, FirstMonth + SecondMonth).
@@ -1107,24 +1133,66 @@ file_popularity_view_should_return_unpopular_files(Config) ->
     {ok, PopularFileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/popular_file">>, 8#755),
     {ok, UnpopularFileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/unpopular_file">>, 8#755),
     SpaceId = fslogic_uuid:guid_to_space_id(PopularFileGuid),
-    PopularHandle = lfm_proxy:open(W, SessId1, {guid, PopularFileGuid}, read),
-    lfm_proxy:close(W, PopularHandle),
-    UnpopularHandle = lfm_proxy:open(W, SessId1, {guid, UnpopularFileGuid}, read),
-    lfm_proxy:close(W, UnpopularHandle),
+
+    {ok, PopularHandle} = lfm_proxy:open(W, SessId1, {guid, PopularFileGuid}, read),
+    ok = lfm_proxy:close(W, PopularHandle),
+    {ok, UnpopularHandle} = lfm_proxy:open(W, SessId1, {guid, UnpopularFileGuid}, read),
+    ok = lfm_proxy:close(W, UnpopularHandle),
 
     timer:sleep(timer:seconds(10)),
 
-    UnpopularFiles1 = rpc:call(W, file_popularity_view, get_unpopular_files, [SpaceId, null, 10, null, null, null]),
+    UnpopularFiles1 = ?assertMatch([_ | _],
+        rpc:call(W, file_popularity_view, get_unpopular_files,
+            [SpaceId, null, null, 10, null, null, null]
+        )
+    ),
     ?assert(lists:member(file_ctx:new_by_guid(PopularFileGuid), UnpopularFiles1)),
     ?assert(lists:member(file_ctx:new_by_guid(UnpopularFileGuid), UnpopularFiles1)),
 
     Handles = [lfm_proxy:open(W, SessId1, {guid, PopularFileGuid}, read) || _ <- lists:seq(0,10)],
-    [lfm_proxy:close(W, Handle) || Handle <- Handles],
+    [lfm_proxy:close(W, Handle) || {ok, Handle} <- Handles],
 
     timer:sleep(timer:seconds(10)),
-    UnpopularFiles2 = rpc:call(W, file_popularity_view, get_unpopular_files, [SpaceId, null, 10, null, null, null]),
+    UnpopularFiles2 = ?assertMatch([_ | _],
+        rpc:call(W, file_popularity_view, get_unpopular_files,
+            [SpaceId, null, null, 10, null, null, null]
+        )
+    ),
     ?assertNot(lists:member(file_ctx:new_by_guid(PopularFileGuid), UnpopularFiles2)),
     ?assert(lists:member(file_ctx:new_by_guid(UnpopularFileGuid), UnpopularFiles2)).
+
+file_popularity_should_have_correct_file_size(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/file_to_check_size">>, 8#755),
+
+    {ok, Handle} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, write),
+    {ok, 5} = lfm_proxy:write(W, Handle, 0, <<"01234">>),
+    ok = lfm_proxy:close(W, Handle),
+
+    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+    ?assertMatch(
+        {ok, #document{value = #file_popularity{size = 5}}},
+        rpc:call(W, file_popularity, get, [FileUuid])
+    ),
+
+    {ok, Handle2} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, write),
+    {ok, 5} = lfm_proxy:write(W, Handle2, 5, <<"01234">>),
+    ok = lfm_proxy:close(W, Handle2),
+
+    ?assertMatch(
+        {ok, #document{value = #file_popularity{size = 10}}},
+        rpc:call(W, file_popularity, get, [FileUuid])
+    ),
+
+    ok = lfm_proxy:truncate(W, SessId1, {guid, FileGuid}, 1),
+    {ok, Handle3} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, write),
+    ok = lfm_proxy:close(W, Handle3),
+
+    ?assertMatch(
+        {ok, #document{value = #file_popularity{size = 1}}},
+        rpc:call(W, file_popularity, get, [FileUuid])
+    ).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -1224,3 +1292,40 @@ wait_for_cache_dump(Workers) ->
     lists:foreach(fun(W) ->
         rpc:call(W, caches_controller, wait_for_cache_dump, [])
     end, Workers).
+
+generate_dir(Config, Size) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+
+    MainDir = generator:gen_name(),
+    MainDirPath = <<"/space_name1/", MainDir/binary, "/">>,
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, MainDirPath, 8#755)),
+
+    case Size of
+        0 ->
+            MainDirPath;
+        _ ->
+            Files = lists:sort(lists:map(fun(_) ->
+                generator:gen_name() end, lists:seq(1, Size))),
+            lists:foreach(fun(F) ->
+                ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId1, <<MainDirPath/binary, F/binary>>, 8#755))
+            end, Files),
+
+            MainDirPath
+    end.
+
+verify_attrs(Config, MainDirPath, Limit, ExpectedSize) ->
+    verify_attrs(Config, MainDirPath, Limit, ExpectedSize, 0).
+
+verify_attrs(Config, MainDirPath, Limit, ExpectedSize, Offset) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+
+    Ans = lfm_proxy:read_dir_plus(Worker, SessId1, {path, MainDirPath}, Offset, Limit),
+    ?assertMatch({ok, _}, Ans),
+    {ok, List} = Ans,
+    ?assertEqual(ExpectedSize, length(List)).

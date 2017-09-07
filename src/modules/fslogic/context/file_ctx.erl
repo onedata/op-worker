@@ -71,7 +71,7 @@
     get_or_create_local_file_location_doc/1, get_local_file_location_doc/1,
     get_file_location_ids/1, get_file_location_docs/1, get_acl/1,
     get_raw_storage_path/1, get_child_canonical_path/2, get_file_size/1,
-    get_owner/1, get_group_owner/1]).
+    get_owner/1, get_group_owner/1, get_local_storage_file_size/1]).
 -export([is_dir/1]).
 
 %%%===================================================================
@@ -670,7 +670,7 @@ get_acl(FileCtx = #file_ctx{acl = Acl}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% For given file / location or multiple locations, reads file size assigned to those locations.
+%% Returns size of file
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_size(file_ctx:ctx() | file_meta:uuid()) ->
@@ -686,6 +686,25 @@ get_file_size(FileCtx) ->
             {fslogic_blocks:upper(Blocks), FileCtx2};
         {#document{value = #file_location{size = Size}}, FileCtx2} ->
             {Size, FileCtx2};
+        {undefined, FileCtx2} ->
+            get_file_size_from_remote_locations(FileCtx)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns size of file on local storage
+%% @end
+%%--------------------------------------------------------------------
+-spec get_local_storage_file_size(file_ctx:ctx() | file_meta:uuid()) ->
+    {Size :: non_neg_integer(), file_ctx:ctx()}.
+get_local_storage_file_size(FileCtx) ->
+    case file_ctx:get_local_file_location_doc(FileCtx) of
+        {#document{
+            value = #file_location{
+                blocks = Blocks
+            }
+        }, FileCtx2} ->
+            {fslogic_blocks:upper(Blocks), FileCtx2};
         {undefined, FileCtx2} ->
             {0 ,FileCtx2}
     end.
@@ -912,4 +931,47 @@ get_or_create_local_regular_file_location_doc(FileCtx) ->
             };
         {Location, FileCtx2} ->
             {Location, FileCtx2}
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns size of file. File size is calculated from remote locations.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_size_from_remote_locations(file_ctx:ctx() | file_meta:uuid()) ->
+    {Size :: non_neg_integer(), file_ctx:ctx()}.
+get_file_size_from_remote_locations(FileCtx) ->
+    {LocationDocs, FileCtx2} = get_file_location_docs(FileCtx),
+    case LocationDocs of
+        [] ->
+            {0 ,FileCtx2};
+        [First | DocsTail] ->
+            ChocenDoc = lists:foldl(fun(
+                New = #document{value = #file_location{
+                    version_vector = NewVV
+                }},
+                Current = #document{value = #file_location{
+                    version_vector = CurrentVV
+                }}
+            ) ->
+                case version_vector:compare(CurrentVV, NewVV) of
+                    identical -> Current;
+                    greater -> Current;
+                    lesser -> New;
+                    concurrent -> New
+                end
+            end, First, DocsTail),
+
+            case ChocenDoc of
+                #document{
+                    value = #file_location{
+                        size = undefined,
+                        blocks = Blocks
+                    }
+                } ->
+                    {fslogic_blocks:upper(Blocks), FileCtx2};
+                #document{value = #file_location{size = Size}} ->
+                    {Size, FileCtx2}
+            end
     end.

@@ -16,7 +16,7 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([mkdir/4, read_dir/4]).
+-export([mkdir/4, read_dir/4, read_dir_plus/4]).
 
 %%%===================================================================
 %%% API
@@ -48,11 +48,25 @@ read_dir(UserCtx, FileCtx, Offset, Limit) ->
         [UserCtx, FileCtx, Offset, Limit],
         fun read_dir_insecure/4).
 
+%%--------------------------------------------------------------------
+%% @equiv read_dir_plus_insecure/4 with permission checks
+%% @end
+%%--------------------------------------------------------------------
+-spec read_dir_plus(user_ctx:ctx(), file_ctx:ctx(),
+    Offset :: non_neg_integer(), Limit :: non_neg_integer()) ->
+    fslogic_worker:fuse_response().
+read_dir_plus(UserCtx, FileCtx, Offset, Limit) ->
+    check_permissions:execute(
+        [traverse_ancestors, ?traverse_container, ?list_container],
+        [UserCtx, FileCtx, Offset, Limit],
+        fun read_dir_plus_insecure/4).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Creates new directory.
 %% @end
@@ -82,8 +96,9 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     }.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Lists directory. Starts with ROffset entity and limits returned list to RCount size.
+%% Lists directory. Starts with Offset entity and limits returned list to Limit size.
 %% @end
 %%--------------------------------------------------------------------
 -spec read_dir_insecure(user_ctx:ctx(), file_ctx:ctx(),
@@ -103,3 +118,68 @@ read_dir_insecure(UserCtx, FileCtx, Offset, Limit) ->
             child_links = ChildrenLinks
         }
     }.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Lists directory with stats of each file.
+%% Starts with Offset entity and limits returned list to Limit size.
+%% @end
+%%--------------------------------------------------------------------
+-spec read_dir_plus_insecure(user_ctx:ctx(), file_ctx:ctx(),
+    Offset :: non_neg_integer(), Limit :: non_neg_integer()) ->
+    fslogic_worker:fuse_response().
+read_dir_plus_insecure(UserCtx, FileCtx, Offset, Limit) ->
+    {Children, FileCtx2} = file_ctx:get_file_children(FileCtx, UserCtx, Offset, Limit),
+
+    MapFun = fun(ChildCtx) ->
+        try
+            #fuse_response{
+                status = #status{code = ?OK},
+                fuse_response = Attrs
+            } = attr_req:get_file_attr_insecure(UserCtx, ChildCtx),
+            Attrs
+        catch
+            _:_ ->
+                % File can be not synchronized with other provider
+                error
+        end
+    end,
+    FilterFun = fun
+        (error) -> false;
+        (_Attrs) -> true
+    end,
+    ChildrenAttrs = filtermap(MapFun, FilterFun, Children),
+
+    fslogic_times:update_atime(FileCtx2),
+    #fuse_response{status = #status{code = ?OK},
+        fuse_response = #file_children_attrs{
+            child_attrs = ChildrenAttrs
+        }
+    }.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% A parallel function similar to lists:filtermap/2. See {@link lists:filtermap/2}.
+%% However, Filter and Map functions are separeted.
+%% @end
+%%--------------------------------------------------------------------
+-spec filtermap(Map :: fun((X :: A) -> B), Filter :: fun((X :: A) -> boolean()),
+    L :: [A]) -> [B].
+filtermap(Map, Filter, L) ->
+    LWithNum = lists:zip(lists:seq(1, length(L)), L),
+    Mapped = utils:pmap(fun({Num, Element}) ->
+        {Num, Map(Element)}
+    end, LWithNum),
+
+    lists:filtermap(fun
+        ({_, error}) -> false;
+        ({_, Ans}) ->
+            case Filter(Ans) of
+                true ->
+                    {true, Ans};
+                _ ->
+                    false
+            end
+    end, lists:sort(Mapped)).

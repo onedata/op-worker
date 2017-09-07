@@ -434,14 +434,15 @@
 -record(file_popularity, {
     file_uuid :: undefined | file_meta:uuid(),
     space_id :: undefined  | od_space:id(),
-    total_open_count = 0 :: non_neg_integer(),
+    size = 0 :: non_neg_integer(),
+    open_count = 0 :: non_neg_integer(),
     last_open = 0 :: non_neg_integer(),
-    hourly_histogram = [] :: list(),
-    daily_histogram = [] :: list(),
-    monthly_histogram = [] :: list(),
-    hourly_moving_average = 0 :: non_neg_integer(),
-    daily_moving_average = 0 :: non_neg_integer(),
-    monthly_moving_average = 0 :: non_neg_integer()
+    hr_hist = [] :: list(),
+    dy_hist = [] :: list(),
+    mth_hist = [] :: list(),
+    hr_mov_avg = 0 :: non_neg_integer(),
+    dy_mov_avg = 0 :: non_neg_integer(),
+    mth_mov_avg = 0 :: non_neg_integer()
 }).
 
 -endif.

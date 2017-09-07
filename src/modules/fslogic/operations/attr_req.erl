@@ -18,8 +18,9 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([get_file_attr/2, get_file_attr_insecure/2, get_file_attr_insecure/3,
-    get_child_attr/3, chmod/3, update_times/5, chmod_attrs_only_insecure/2]).
+-export([get_file_attr/2, get_file_attr_insecure/2, get_file_attr_insecure/2,
+    get_file_attr_insecure/3, get_file_attr_insecure/4, get_child_attr/3,
+    chmod/3, update_times/5, chmod_attrs_only_insecure/2]).
 
 %%%===================================================================
 %%% API
@@ -44,10 +45,7 @@ get_file_attr(UserCtx, FileCtx) ->
 -spec get_file_attr_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:fuse_response().
 get_file_attr_insecure(UserCtx, FileCtx) ->
-    % trigger location create
-    {_LocalLocation, FileCtx2} =
-        file_ctx:get_or_create_local_file_location_doc(FileCtx),
-    get_file_attr_insecure(UserCtx, FileCtx2, false).
+    get_file_attr_insecure(UserCtx, FileCtx, false).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -59,6 +57,18 @@ get_file_attr_insecure(UserCtx, FileCtx) ->
     AllowDeletedFiles :: boolean()) ->
 fslogic_worker:fuse_response().
 get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles) ->
+    get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles, true).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file attributes. When the AllowDeletedFiles flag is set to true,
+%% function will return attributes even for files that are marked as deleted.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_attr_insecure(user_ctx:ctx(), file_ctx:ctx(),
+    AllowDeletedFiles :: boolean(), IncludeSize :: boolean()) ->
+    fslogic_worker:fuse_response().
+get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize) ->
     {#document{
         key = Uuid,
         value = #file_meta{
@@ -78,7 +88,12 @@ get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles) ->
     {FileName, FileCtx3} = file_ctx:get_aliased_name(FileCtx2, UserCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx3),
     {{Uid, Gid}, FileCtx4} = file_ctx:get_posix_storage_user_context(FileCtx3),
-    {Size, FileCtx5} = file_ctx:get_file_size(FileCtx4),
+
+    {Size, FileCtx5} = case IncludeSize of
+        true -> file_ctx:get_file_size(FileCtx4);
+        _ -> {undefined, FileCtx4}
+    end,
+
     {{ATime, CTime, MTime}, FileCtx6} = file_ctx:get_times(FileCtx5),
     {ParentGuid, _FileCtx7} = file_ctx:get_parent_guid(FileCtx6, UserCtx),
 
