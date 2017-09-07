@@ -149,13 +149,13 @@ model_init() ->
 -spec 'after'(model_behaviour:model_type(), model_behaviour:model_action(),
     datastore:store_level(), Context :: term(), ReturnValue :: term()) -> ok.
 'after'(?MODULE, create, _, _, {ok, SpaceId}) ->
-    space_cleanup:initialize(SpaceId);
+    space_cleanup_api:initialize(SpaceId);
 'after'(?MODULE, create_or_update, _, _, {ok, SpaceId}) ->
-    space_cleanup:initialize(SpaceId);
+    space_cleanup_api:initialize(SpaceId);
 'after'(?MODULE, save, _, _, {ok, SpaceId}) ->
-    space_cleanup:initialize(SpaceId);
+    space_cleanup_api:initialize(SpaceId);
 'after'(?MODULE, update, _, _, {ok, SpaceId}) ->
-    space_cleanup:initialize(SpaceId);
+    space_cleanup_api:initialize(SpaceId);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 

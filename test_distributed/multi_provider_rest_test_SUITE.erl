@@ -74,7 +74,8 @@
     set_get_json_metadata_using_filter/1,
     primitive_json_metadata_test/1,
     empty_metadata_invalid_json_test/1,
-    spatial_flag_test/1
+    spatial_flag_test/1,
+    space_cleanup_enable_and_disable/1
 ]).
 
 all() ->
@@ -120,7 +121,8 @@ all() ->
         set_get_json_metadata_using_filter,
         primitive_json_metadata_test,
         empty_metadata_invalid_json_test,
-        spatial_flag_test
+        spatial_flag_test,
+        space_cleanup_enable_and_disable
     ]).
 
 %%%===================================================================
@@ -560,7 +562,7 @@ periodic_cleanup_should_invalidate_unpopular_files(Config) ->
     test_utils:mock_expect(WorkerP2, utils, system_time_seconds, fun() ->
         meck:passthrough([]) + 25 * 3600
     end),
-    rpc:call(WorkerP2, space_cleanup, periodic_cleanup, []),
+    rpc:call(WorkerP2, space_cleanup_api, periodic_cleanup, []),
     test_utils:mock_validate_and_unload(WorkerP2, utils),
 
     % then
@@ -1406,6 +1408,17 @@ spatial_flag_test(Config) ->
     ?assertMatch({ok, 404, _, _}, do_request(WorkerP1, <<"query-index/file-popularity-", SpaceId/binary>>, get, [user_1_token_header(Config)], [])),
     ?assertMatch({ok, 400, _, _}, do_request(WorkerP1, <<"query-index/file-popularity-", SpaceId/binary, "?spatial">>, get, [user_1_token_header(Config)], [])),
     ?assertMatch({ok, 200, _, _}, do_request(WorkerP1, <<"query-index/file-popularity-", SpaceId/binary, "?spatial=true">>, get, [user_1_token_header(Config)], [])).
+
+space_cleanup_enable_and_disable(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+
+    test_utils:mock_new(WorkerP1, space_cleanup_api, [passthrough]),
+    ?assertMatch({ok, 204, _, _}, do_request(WorkerP1, <<"space-cleanup/", SpaceId/binary>>, post, [user_1_token_header(Config)], [])),
+    test_utils:mock_assert_num_calls(WorkerP1, space_cleanup_api, enable_cleanup, [SpaceId], 1),
+    ?assertMatch({ok, 204, _, _}, do_request(WorkerP1, <<"space-cleanup/", SpaceId/binary>>, delete, [user_1_token_header(Config)], [])),
+    test_utils:mock_assert_num_calls(WorkerP1, space_cleanup_api, disable_cleanup, [SpaceId], 1),
+    test_utils:mock_validate_and_unload(WorkerP1, space_cleanup_api).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

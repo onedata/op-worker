@@ -123,7 +123,7 @@ handle(invalidate_permissions_cache) ->
     ),
     ok;
 handle(spaces_cleanup) ->
-    space_cleanup:periodic_cleanup(),
+    space_cleanup_api:periodic_cleanup(),
     erlang:send_after(?INVALIDATE_PERMISSIONS_CACHE_INTERVAL, self(),
         {sync_timer, invalidate_permissions_cache}
     ),

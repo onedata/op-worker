@@ -9,7 +9,7 @@
 %%% Cleanup of unpopular files.
 %%% @end
 %%%--------------------------------------------------------------------
--module(space_cleanup).
+-module(space_cleanup_api).
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
@@ -43,7 +43,7 @@
     application:get_env(?APP_NAME, month_average_limit, null)).
 
 %% API
--export([initialize/1, periodic_cleanup/0]).
+-export([initialize/1, periodic_cleanup/0, enable_cleanup/1, disable_cleanup/1]).
 
 %%%===================================================================
 %%% API
@@ -77,6 +77,24 @@ periodic_cleanup() ->
         space_storage:is_cleanup_enabled(SpaceId)
     end, Spaces),
     lists:foreach(fun cleanup_space/1, SpacesToCleanup).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Enable file popularity and space cleanup
+%% @end
+%%--------------------------------------------------------------------
+-spec enable_cleanup(od_space:id()) -> {ok, od_space:id()} | {error, term()}.
+enable_cleanup(SpaceId) ->
+    space_storage:update(SpaceId, #{cleanup_enabled => true}).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Disable file popularity and space cleanup
+%% @end
+%%--------------------------------------------------------------------
+-spec disable_cleanup(od_space:id()) -> {ok, od_space:id()} | {error, term()}.
+disable_cleanup(SpaceId) ->
+    space_storage:update(SpaceId, #{cleanup_enabled => false}).
 
 %%%===================================================================
 %%% Internal functions
