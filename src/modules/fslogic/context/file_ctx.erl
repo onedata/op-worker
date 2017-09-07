@@ -95,7 +95,9 @@ new_root_ctx() ->
 %%--------------------------------------------------------------------
 -spec new_by_canonical_path(user_ctx:ctx(), file_meta:path()) -> ctx().
 new_by_canonical_path(UserCtx, Path) ->
-    new_by_partial_context(file_partial_ctx:new_by_canonical_path(UserCtx, Path)).
+    {FileCtx, _} = new_by_partial_context(
+        file_partial_ctx:new_by_canonical_path(UserCtx, Path)),
+    FileCtx.
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -19,7 +19,7 @@
 
 %% API
 -export([create_file/5, make_file/4, get_file_location/2, open_file/3,
-    open_file_insecure/3, fsync/4, release/3]).
+    open_file_insecure/3, open_file_insecure/4, fsync/4, release/3]).
 
 %%%===================================================================
 %%% API
