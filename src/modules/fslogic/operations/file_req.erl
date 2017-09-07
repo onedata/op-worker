@@ -177,13 +177,19 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
             HId
     end,
 
-    #fuse_response{fuse_response = #file_attr{} = FileAttr} =
+    #fuse_response{fuse_response = #file_attr{size = Size} = FileAttr} =
         attr_req:get_file_attr_insecure(UserCtx, FileCtx3, false, false),
+    FileAttr2 = case Size of
+        undefined ->
+            FileAttr#file_attr{size = 0};
+        _ ->
+            FileAttr
+    end,
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_created{
             handle_id = HandleId,
-            file_attr = FileAttr,
+            file_attr = FileAttr2,
             file_location = FileLocation
         }
     }.
