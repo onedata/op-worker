@@ -465,13 +465,15 @@ get_storage_strategy_config(#space_strategies{
     storage_strategies = Strategies
 }, storage_import, StorageId
 ) ->
-    #storage_strategies{storage_import = Import} = maps:get(StorageId, Strategies),
+    #storage_strategies{storage_import = Import} =
+        maps:get(StorageId, Strategies, #storage_strategies{}),
     Import;
 get_storage_strategy_config(#space_strategies{
     storage_strategies = Strategies
 }, storage_update, StorageId
 ) ->
-    #storage_strategies{storage_update = Update} = maps:get(StorageId, Strategies),
+    #storage_strategies{storage_update = Update} =
+        maps:get(StorageId, Strategies, #storage_strategies{}),
     Update;
 get_storage_strategy_config(#document{value=Value}, StrategyType, StorageId) ->
     get_storage_strategy_config(Value, StrategyType, StorageId).
