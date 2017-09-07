@@ -422,8 +422,10 @@ handle_proxyio_request(UserCtx, #remote_read{offset = Offset, size = Size}, File
 %% Do posthook for request response
 %% @end
 %%--------------------------------------------------------------------
--spec process_response(user_ctx:ctx(), request(), response(), od_space:id()) ->
-    response().
+-spec process_response(user_ctx:ctx(), request(), response(),
+    od_space:id() | undefined) -> response().
+process_response(_, _, Response, undefined) ->
+    Response;
 process_response(UserCtx, #fuse_request{fuse_request = #file_request{
     file_request = #get_child_attr{name = FileName},
     context_guid = ParentGuid
