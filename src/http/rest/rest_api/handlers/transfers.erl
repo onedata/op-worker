@@ -140,6 +140,6 @@ list_transfers(Req, State) ->
 
     #{id := Id} = State2,
 
-    Transfer = transfer:get(Id),
+    Transfer = transfer:get_info(Id),
     Response = json_utils:encode_map(Transfer),
     {Response, Req2, State2}.

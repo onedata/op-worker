@@ -37,8 +37,9 @@
     replicate_dir/1,
     replicate_file_by_id/1,
     replicate_to_missing_provider/1,
-    replicate_to_nunsupporting_provider/1,
+    replicate_to_nonsupporting_provider/1,
     invalidate_file_replica/1,
+    invalidate_file_replica_with_migration/1,
     invalidate_dir_replica/1,
     periodic_cleanup_should_invalidate_unpopular_files/1,
     posix_mode_get/1,
@@ -73,7 +74,8 @@
     set_get_json_metadata_using_filter/1,
     primitive_json_metadata_test/1,
     empty_metadata_invalid_json_test/1,
-    spatial_flag_test/1
+    spatial_flag_test/1,
+    space_cleanup_enable_and_disable/1
 ]).
 
 all() ->
@@ -83,7 +85,7 @@ all() ->
         replicate_dir,
         replicate_file_by_id,
         replicate_to_missing_provider,
-        replicate_to_nunsupporting_provider,
+        replicate_to_nonsupporting_provider,
         invalidate_file_replica,
         invalidate_dir_replica,
         periodic_cleanup_should_invalidate_unpopular_files,
@@ -119,7 +121,8 @@ all() ->
         set_get_json_metadata_using_filter,
         primitive_json_metadata_test,
         empty_metadata_invalid_json_test,
-        spatial_flag_test
+        spatial_flag_test,
+        space_cleanup_enable_and_disable
     ]).
 
 %%%===================================================================
@@ -159,20 +162,40 @@ replicate_file(Config) ->
 
     % when
     timer:sleep(timer:seconds(20)), % for hooks todo VFS-3462
-    {ok, 200, _, Body0} = do_request(WorkerP1, <<"replicas/space3/file?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
+    ?assertEqual({ok, []}, rpc:call(WorkerP1, transfer, for_each_successfull_transfer, [fun(Id, Acc) -> [Id | Acc] end, []])),
+    {ok, 200, _, Body0} = do_request(WorkerP1, <<"replicas", File/binary, "?provider_id=",
+        (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
     DecodedBody0 = json_utils:decode_map(Body0),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody0),
 
     % then
-    ExpectedTransferStatus = erlang:iolist_to_binary([
-        <<"{\"targetProviderId\":\"">>, domain(WorkerP2),
-        <<"\",\"status\":\"completed\",\"path\":\"/space3/file\"}">>
-    ]),
-    ?assertMatch({ok, 200, _, ExpectedTransferStatus},
-        do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []), 5),
+    {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
+    DomainP2 = domain(WorkerP2),
+    ?assertMatch(#{
+        <<"transferStatus">> := <<"completed">>,
+        <<"targetProviderId">> := DomainP2,
+        <<"path">> := File,
+        <<"invalidationStatus">> := <<"skipped">>,
+        <<"fileId">> := FileObjectId,
+        <<"callback">> := null,
+        <<"filesToTransfer">> := 1,
+        <<"filesTransferred">> := 1,
+        <<"bytesToTransfer">> := 4,
+        <<"bytesTransferred">> := 4,
+        <<"minHist">> := [4 | _],
+        <<"hrHist">> := [4 | _],
+        <<"dyHist">> := [4 | _]
+    },
+        case do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []) of
+            {ok, 200, _, TransferStatus} ->
+                json_utils:decode_map(TransferStatus);
+            Error -> Error
+        end, 30),
+
+    ?assertEqual({ok, [Tid]}, rpc:call(WorkerP2, transfer, for_each_successfull_transfer, [fun(Id, Acc) -> [Id | Acc] end, []])),
     timer:sleep(timer:seconds(20)), % todo VFS-3462 - reorganize tests to remove sleeps
-    {ok, 200, _, Body} = do_request(WorkerP2, <<"replicas/space3/file">>, get, [user_1_token_header(Config)], []),
-    {ok, 200, _, Body2} = do_request(WorkerP1, <<"replicas/space3/file">>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body} = do_request(WorkerP2, <<"replicas", File/binary>>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body2} = do_request(WorkerP1, <<"replicas", File/binary>>, get, [user_1_token_header(Config)], []),
     DecodedBody = json_utils:decode_map(Body),
     DecodedBody2 = json_utils:decode_map(Body2),
     ?assertEqual(
@@ -194,7 +217,7 @@ replicate_dir(Config) ->
     File1 = <<"/space3/dir1_rd/file1">>,
     File2 = <<"/space3/dir1_rd/file2">>,
     File3 = <<"/space3/dir1_rd/dir2/file3">>,
-    {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, Dir1),
+    {ok, Dir1Guid} = lfm_proxy:mkdir(WorkerP1, SessionId, Dir1),
     {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, Dir2),
     {ok, File1Guid} = lfm_proxy:create(WorkerP1, SessionId, File1, 8#700),
     {ok, Handle1} = lfm_proxy:open(WorkerP1, SessionId, {guid, File1Guid}, write),
@@ -211,22 +234,36 @@ replicate_dir(Config) ->
 
     % when
     timer:sleep(timer:seconds(20)), % for hooks todo  VFS-3462
-    {ok, 200, _, Body} = do_request(WorkerP1, <<"replicas/space3/dir1_rd?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"replicas", Dir1/binary,
+        "?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
     DecodedBody = json_utils:decode_map(Body),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
 
     % then
-    ExpectedTransferStatus = erlang:iolist_to_binary([
-        <<"{\"targetProviderId\":\"">>, domain(WorkerP2),
-        <<"\",\"status\":\"completed\",\"path\":\"/space3/dir1_rd\"}">>
-    ]),
-    ?assertMatch({ok, 200, _, ExpectedTransferStatus},
-        do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []), 5),
+    {ok, FileObjectId} = cdmi_id:guid_to_objectid(Dir1Guid),
+    DomainP2 = domain(WorkerP2),
+    ?assertMatch(#{
+        <<"transferStatus">> := <<"completed">>,
+        <<"targetProviderId">> := DomainP2,
+        <<"path">> := Dir1,
+        <<"invalidationStatus">> := <<"skipped">>,
+        <<"fileId">> := FileObjectId,
+        <<"callback">> := null,
+        <<"filesToTransfer">> := 5,
+        <<"filesTransferred">> := 5,
+        <<"bytesToTransfer">> := 12,
+        <<"bytesTransferred">> := 12
+    },
+        case do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []) of
+            {ok, 200, _, TransferStatus} ->
+                json_utils:decode_map(TransferStatus);
+            Error -> Error
+        end, 30),
 
     timer:sleep(timer:seconds(20)), % for hooks todo  VFS-3462
-    {ok, 200, _, Body1} = do_request(WorkerP2, <<"replicas/space3/dir1_rd/file1">>, get, [user_1_token_header(Config)], []),
-    {ok, 200, _, Body2} = do_request(WorkerP2, <<"replicas/space3/dir1_rd/file2">>, get, [user_1_token_header(Config)], []),
-    {ok, 200, _, Body3} = do_request(WorkerP2, <<"replicas/space3/dir1_rd/dir2/file3">>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body1} = do_request(WorkerP2, <<"replicas", File1/binary>>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body2} = do_request(WorkerP2, <<"replicas", File2/binary>>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body3} = do_request(WorkerP2, <<"replicas", File3/binary>>, get, [user_1_token_header(Config)], []),
     DecodedBody1 = json_utils:decode_map(Body1),
     DecodedBody2 = json_utils:decode_map(Body2),
     DecodedBody3 = json_utils:decode_map(Body3),
@@ -255,13 +292,25 @@ replicate_file_by_id(Config) ->
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody0),
 
     % then
-    ExpectedTransferStatus = erlang:iolist_to_binary([
-        <<"{\"targetProviderId\":\"">>, domain(WorkerP2),
-        <<"\",\"status\":\"completed\",\"path\":\"/space3/replicate_file_by_id\"}">>
-    ]),
     timer:sleep(timer:seconds(20)), % for hooks todo  VFS-3462
-    ?assertMatch({ok, 200, _, ExpectedTransferStatus},
-        do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []), 5),
+    DomainP2 = domain(WorkerP2),
+    ?assertMatch(#{
+        <<"transferStatus">> := <<"completed">>,
+        <<"targetProviderId">> := DomainP2,
+        <<"path">> := File,
+        <<"invalidationStatus">> := <<"skipped">>,
+        <<"fileId">> := FileObjectId,
+        <<"callback">> := null,
+        <<"filesToTransfer">> := 1,
+        <<"filesTransferred">> := 1,
+        <<"bytesToTransfer">> := 4,
+        <<"bytesTransferred">> := 4
+    },
+        case do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []) of
+            {ok, 200, _, TransferStatus} ->
+                json_utils:decode_map(TransferStatus);
+            Error -> Error
+        end, 30),
     {ok, 200, _, Body} = do_request(WorkerP2, <<"replicas-id/", FileObjectId/binary>>, get, [user_1_token_header(Config)], []),
     DecodedBody = json_utils:decode_map(Body),
     ?assertEqual(
@@ -281,19 +330,12 @@ replicate_to_missing_provider(Config) ->
 
     % when
     timer:sleep(timer:seconds(30)), % for hooks todo VFS-3462
-    {ok, 200, _, Body0} = do_request(WorkerP1, <<"replicas/space3/replicate_to_missing_provider?provider_id=missing_id">>, post, [user_1_token_header(Config)], []),
-    DecodedBody0 = json_utils:decode_map(Body0),
-    #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody0),
+    ?assertMatch(
+        {ok, 400, _, _},
+        do_request(WorkerP1, <<"replicas", File/binary, "?provider_id=missing_id">>, post, [user_1_token_header(Config)], [])
+    ).
 
-    % then
-    ExpectedTransferStatus = erlang:iolist_to_binary([
-        <<"{\"targetProviderId\":\"">>, <<"missing_id">>,
-        <<"\",\"status\":\"failed\",\"path\":\"/space3/replicate_to_missing_provider\"}">>
-    ]),
-    ?assertMatch({ok, 200, _, ExpectedTransferStatus},
-        do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []), 5).
-
-replicate_to_nunsupporting_provider(Config) ->
+replicate_to_nonsupporting_provider(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     File = <<"/space1/file">>,
@@ -303,18 +345,8 @@ replicate_to_nunsupporting_provider(Config) ->
     lfm_proxy:fsync(WorkerP1, Handle),
 
     % when
-    {ok, 200, _, Body0} = do_request(WorkerP1, <<"replicas/space1/file?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
-    DecodedBody0 = json_utils:decode_map(Body0),
-    #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody0),
-
-    % then
-    ExpectedTransferStatus = erlang:iolist_to_binary([
-        <<"{\"targetProviderId\":\"">>, domain(WorkerP2),
-        <<"\",\"status\":\"failed\",\"path\":\"/space1/file\"}">>
-    ]),
-    ?assertMatch({ok, 200, _, ExpectedTransferStatus},
-        do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []), 5),
-    {ok, 200, _, Body2} = do_request(WorkerP1, <<"replicas/space1/file">>, get, [user_1_token_header(Config)], []),
+    {ok, 400, _, _} = do_request(WorkerP1, <<"replicas", File/binary, "?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body2} = do_request(WorkerP1, <<"replicas", File/binary>>, get, [user_1_token_header(Config)], []),
     DecodedBody2 = json_utils:decode_map(Body2),
     ?assertEqual(
         [
@@ -332,16 +364,31 @@ invalidate_file_replica(Config) ->
 
     % when
     timer:sleep(timer:seconds(20)), % for hooks todo VFS-3462
-    {ok, 200, _, Body0} = do_request(WorkerP1, <<"replicas/space3/file?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body0} = do_request(WorkerP1, <<"replicas", File/binary, "?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
     DecodedBody0 = json_utils:decode_map(Body0),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody0),
-    ExpectedTransferStatus = erlang:iolist_to_binary([
-        <<"{\"targetProviderId\":\"">>, domain(WorkerP2),
-        <<"\",\"status\":\"completed\",\"path\":\"/space3/file\"}">>
-    ]),
-    ?assertMatch({ok, 200, _, ExpectedTransferStatus},
-        do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []), 5),
-    {ok, 200, _, Body} = do_request(WorkerP2, <<"replicas/space3/file">>, get, [user_1_token_header(Config)], []),
+    {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
+    DomainP2 = domain(WorkerP2),
+    ?assertMatch(#{
+        <<"transferStatus">> := <<"completed">>,
+        <<"targetProviderId">> := DomainP2,
+        <<"path">> := File,
+        <<"invalidationStatus">> := <<"skipped">>,
+        <<"fileId">> := FileObjectId,
+        <<"callback">> := null,
+        <<"filesToTransfer">> := 1,
+        <<"filesTransferred">> := 1,
+        <<"bytesToTransfer">> := 4,
+        <<"bytesTransferred">> := 4
+
+    },
+        case do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []) of
+            {ok, 200, _, TransferStatus} ->
+                json_utils:decode_map(TransferStatus);
+            Error -> Error
+        end, 30),
+
+    {ok, 200, _, Body} = do_request(WorkerP2, <<"replicas", File/binary>>, get, [user_1_token_header(Config)], []),
     DecodedBody = json_utils:decode_map(Body),
     ?assertEqual(
         lists:sort([
@@ -350,14 +397,51 @@ invalidate_file_replica(Config) ->
         ]), lists:sort(DecodedBody)),
 
     % then
-    {ok, 204, _, _} = do_request(WorkerP1, <<"replicas/space3/file?provider_id=", (domain(WorkerP2))/binary>>, delete, [user_1_token_header(Config)], []),
-    {ok, 200, _, Body3} = do_request(WorkerP2, <<"replicas/space3/file">>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, _} = do_request(WorkerP2, <<"replicas", File/binary, "?provider_id=", (domain(WorkerP2))/binary>>, delete, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body3} = do_request(WorkerP2, <<"replicas", File/binary>>, get, [user_1_token_header(Config)], []),
     DecodedBody3 = json_utils:decode_map(Body3),
     ?assertEqual(
         lists:sort([
             #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
             #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => []}
         ]), lists:sort(DecodedBody3)).
+
+invalidate_file_replica_with_migration(Config) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    File = <<"/space3/file_invalidate_migration">>,
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
+    {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
+    lfm_proxy:write(WorkerP1, Handle, 0, <<"test">>),
+    lfm_proxy:fsync(WorkerP1, Handle),
+
+    % when
+    timer:sleep(timer:seconds(20)), % for hooks todo VFS-3462
+    {ok, 200, _, Body} = do_request(WorkerP2, <<"replicas", File/binary>>, get, [user_1_token_header(Config)], []),
+    DecodedBody = json_utils:decode_map(Body),
+    ?assertEqual(
+        lists:sort([
+            #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]}
+        ]), lists:sort(DecodedBody)),
+
+    % then
+    {ok, 200, _, _} = do_request(WorkerP1, <<"replicas", File/binary, "?provider_id=",
+        (domain(WorkerP1))/binary, "&migration_provider_id=", (domain(WorkerP2))/binary>>, delete, [user_1_token_header(Config)], []),
+    timer:sleep(timer:seconds(20)), % for hooks todo VFS-3462
+    {ok, 200, _, Body3} = do_request(WorkerP2, <<"replicas", File/binary>>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body4} = do_request(WorkerP1, <<"replicas", File/binary>>, get, [user_1_token_header(Config)], []),
+    DecodedBody3 = json_utils:decode_map(Body3),
+    DecodedBody4 = json_utils:decode_map(Body4),
+    ?assertEqual(
+        lists:sort([
+            #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => []},
+            #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
+        ]), lists:sort(DecodedBody3)),
+    ?assertEqual(
+        lists:sort([
+            #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => []},
+            #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
+        ]), lists:sort(DecodedBody4)).
 
 invalidate_dir_replica(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -367,7 +451,7 @@ invalidate_dir_replica(Config) ->
     File1 = <<"/space3/dir1_invalidate/file1">>,
     File2 = <<"/space3/dir1_invalidate/file2">>,
     File3 = <<"/space3/dir1_invalidate/dir2/file3">>,
-    {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, Dir1),
+    {ok, Dir1Guid} = lfm_proxy:mkdir(WorkerP1, SessionId, Dir1),
     {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, Dir2),
     {ok, File1Guid} = lfm_proxy:create(WorkerP1, SessionId, File1, 8#700),
     {ok, Handle1} = lfm_proxy:open(WorkerP1, SessionId, {guid, File1Guid}, write),
@@ -384,19 +468,33 @@ invalidate_dir_replica(Config) ->
 
     % when
     timer:sleep(timer:seconds(20)), % for hooks todo  VFS-3462
-    {ok, 200, _, Body} = do_request(WorkerP1, <<"replicas/space3/dir1_rd?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"replicas", Dir1/binary, "?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
     DecodedBody = json_utils:decode_map(Body),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
-    ExpectedTransferStatus = erlang:iolist_to_binary([
-        <<"{\"targetProviderId\":\"">>, domain(WorkerP2),
-        <<"\",\"status\":\"completed\",\"path\":\"/space3/dir1_rd\"}">>
-    ]),
-    ?assertMatch({ok, 200, _, ExpectedTransferStatus},
-        do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []), 5),
+    {ok, FileObjectId} = cdmi_id:guid_to_objectid(Dir1Guid),
+    DomainP2 = domain(WorkerP2),
+    ?assertMatch(#{
+        <<"transferStatus">> := <<"completed">>,
+        <<"targetProviderId">> := DomainP2,
+        <<"path">> := Dir1,
+        <<"invalidationStatus">> := <<"skipped">>,
+        <<"fileId">> := FileObjectId,
+        <<"callback">> := null,
+        <<"filesToTransfer">> := 5,
+        <<"filesTransferred">> := 5,
+        <<"bytesToTransfer">> := 12,
+        <<"bytesTransferred">> := 12
+    },
+        case do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []) of
+            {ok, 200, _, TransferStatus} ->
+                json_utils:decode_map(TransferStatus);
+            Error -> Error
+        end, 30),
+
     timer:sleep(timer:seconds(20)), % for hooks todo  VFS-3462
-    {ok, 200, _, Body1} = do_request(WorkerP2, <<"replicas/space3/dir1_rd/file1">>, get, [user_1_token_header(Config)], []),
-    {ok, 200, _, Body2} = do_request(WorkerP2, <<"replicas/space3/dir1_rd/file2">>, get, [user_1_token_header(Config)], []),
-    {ok, 200, _, Body3} = do_request(WorkerP2, <<"replicas/space3/dir1_rd/dir2/file3">>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body1} = do_request(WorkerP2, <<"replicas", File1/binary, "">>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body2} = do_request(WorkerP2, <<"replicas", File2/binary>>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body3} = do_request(WorkerP2, <<"replicas", File3/binary>>, get, [user_1_token_header(Config)], []),
     DecodedBody1 = json_utils:decode_map(Body1),
     DecodedBody2 = json_utils:decode_map(Body2),
     DecodedBody3 = json_utils:decode_map(Body3),
@@ -407,12 +505,12 @@ invalidate_dir_replica(Config) ->
     ?assertEqual(Distribution, lists:sort(DecodedBody1)),
     ?assertEqual(Distribution, lists:sort(DecodedBody2)),
     ?assertEqual(Distribution, lists:sort(DecodedBody3)),
-    {ok, 204, _, _} = do_request(WorkerP1, <<"replicas/space3/dir1_rd?provider_id=", (domain(WorkerP2))/binary>>, delete, [user_1_token_header(Config)], []),
+    {ok, 200, _, _} = do_request(WorkerP2, <<"replicas", Dir1/binary, "?provider_id=", (domain(WorkerP2))/binary>>, delete, [user_1_token_header(Config)], []),
 
     %then
-    {ok, 200, _, NewBody1} = do_request(WorkerP2, <<"replicas/space3/dir1_rd/file1">>, get, [user_1_token_header(Config)], []),
-    {ok, 200, _, NewBody2} = do_request(WorkerP2, <<"replicas/space3/dir1_rd/file2">>, get, [user_1_token_header(Config)], []),
-    {ok, 200, _, NewBody3} = do_request(WorkerP2, <<"replicas/space3/dir1_rd/dir2/file3">>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, NewBody1} = do_request(WorkerP2, <<"replicas", File1/binary>>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, NewBody2} = do_request(WorkerP2, <<"replicas", File2/binary>>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, NewBody3} = do_request(WorkerP2, <<"replicas", File3/binary>>, get, [user_1_token_header(Config)], []),
     DecodedNewBody1 = json_utils:decode_map(NewBody1),
     DecodedNewBody2 = json_utils:decode_map(NewBody2),
     DecodedNewBody3 = json_utils:decode_map(NewBody3),
@@ -465,7 +563,7 @@ periodic_cleanup_should_invalidate_unpopular_files(Config) ->
     test_utils:mock_expect(WorkerP2, utils, system_time_seconds, fun() ->
         meck:passthrough([]) + 25 * 3600
     end),
-    rpc:call(WorkerP2, space_cleanup, periodic_cleanup, []),
+    rpc:call(WorkerP2, space_cleanup_api, periodic_cleanup, []),
     test_utils:mock_validate_and_unload(WorkerP2, utils),
 
     % then
@@ -1319,6 +1417,17 @@ spatial_flag_test(Config) ->
     ?assertMatch({ok, 404, _, _}, do_request(WorkerP1, <<"query-index/file-popularity-", SpaceId/binary>>, get, [user_1_token_header(Config)], [])),
     ?assertMatch({ok, 400, _, _}, do_request(WorkerP1, <<"query-index/file-popularity-", SpaceId/binary, "?spatial">>, get, [user_1_token_header(Config)], [])),
     ?assertMatch({ok, 200, _, _}, do_request(WorkerP1, <<"query-index/file-popularity-", SpaceId/binary, "?spatial=true">>, get, [user_1_token_header(Config)], [])).
+
+space_cleanup_enable_and_disable(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+
+    test_utils:mock_new(WorkerP1, space_cleanup_api, [passthrough]),
+    ?assertMatch({ok, 204, _, _}, do_request(WorkerP1, <<"space-cleanup/", SpaceId/binary>>, post, [user_1_token_header(Config)], [])),
+    test_utils:mock_assert_num_calls(WorkerP1, space_cleanup_api, enable_cleanup, [SpaceId], 1),
+    ?assertMatch({ok, 204, _, _}, do_request(WorkerP1, <<"space-cleanup/", SpaceId/binary>>, delete, [user_1_token_header(Config)], [])),
+    test_utils:mock_assert_num_calls(WorkerP1, space_cleanup_api, disable_cleanup, [SpaceId], 1),
+    test_utils:mock_validate_and_unload(WorkerP1, space_cleanup_api).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

@@ -574,7 +574,7 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
 
     test_utils:mock_expect(AllWorkers, oz_providers, get_spaces,
         fun(_) ->
-            PID = oneprovider:get_provider_id(),
+            ProviderId = oneprovider:get_provider_id(),
             ProvMap = lists:foldl(fun({SpaceId, SpaceConfig}, AccIn) ->
                 Providers0 = proplists:get_value(<<"providers">>, SpaceConfig),
                 lists:foldl(fun({CPid, _}, CAcc) ->
@@ -583,7 +583,7 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
                 end, AccIn, Providers0)
             end, #{}, SpacesSetup),
 
-            {ok, maps:get(PID, ProvMap)}
+            {ok, maps:get(ProviderId, ProvMap)}
         end),
 
     test_utils:mock_expect(AllWorkers, oz_providers, get_details,

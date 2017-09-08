@@ -451,4 +451,32 @@
     mth_mov_avg = 0 :: non_neg_integer()
 }).
 
+%% Model holds information about ongoing transfer
+-record(transfer, {
+    file_uuid :: undefined | file_meta:uuid(),
+    space_id :: undefined | od_space:id(),
+    path :: undefined | file_meta:path(),
+    callback :: undefined | transfer:callback(),
+    transfer_status :: undefined | transfer:status(),
+    invalidation_status :: undefined | transfer:status(),
+    source_provider_id :: undefined | oneprovider:id(),
+    target_provider_id :: undefined | oneprovider:id(),
+    invalidate_source_replica :: undefined | boolean(),
+
+    files_to_transfer = 0 :: non_neg_integer(),
+    files_transferred = 0 :: non_neg_integer(),
+    bytes_to_transfer = 0 :: non_neg_integer(),
+    bytes_transferred = 0 :: non_neg_integer(),
+    start_time = 0 :: non_neg_integer(),
+    last_update = 0 :: non_neg_integer(),
+
+    % Histograms of transferred bytes, head of list is most recent:
+    % list of 60 integers counting bytes transferred during each minute of last hour,
+    min_hist :: undefined | [non_neg_integer()],
+    % list of 24 integers counting bytes transferred during each hour of last day,
+    hr_hist :: undefined | [non_neg_integer()],
+    % list of 30 integers counting bytes transferred during each day of last month,
+    dy_hist :: undefined | [non_neg_integer()]
+}).
+
 -endif.

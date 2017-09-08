@@ -190,13 +190,16 @@ is_cleanup_enabled(SpaceId) ->
 %%--------------------------------------------------------------------
 -spec run_after(atom(), list(), term()) -> term().
 run_after(create, _, {ok, #document{key = SpaceId}}) ->
-    space_cleanup:initialize(SpaceId),
+    space_cleanup_api:initialize(SpaceId),
+    {ok, SpaceId};
+run_after(update, [_, _, _], {ok, #document{key = SpaceId}}) ->
+    space_cleanup_api:initialize(SpaceId),
     {ok, SpaceId};
 run_after(update, [_, _, _, _], {ok, #document{key = SpaceId}}) ->
-    space_cleanup:initialize(SpaceId),
+    space_cleanup_api:initialize(SpaceId),
     {ok, SpaceId};
 run_after(save, _, {ok, #document{key = SpaceId}}) ->
-    space_cleanup:initialize(SpaceId),
+    space_cleanup_api:initialize(SpaceId),
     {ok, SpaceId};
 run_after(_Function, _Args, Result) ->
     Result.

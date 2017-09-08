@@ -8,33 +8,30 @@
 %%% @doc
 %%% Manages data transfers, which include starting the transfer and tracking transfer's status.
 %%% Such gen_server is created for each data transfer, process.
-%%% Server's pid is encoded in form of transfer id and stored in user's session memory.
-%%% The transfer server is deleted on user's request.
 %%% @end
 %%%--------------------------------------------------------------------
--module(transfer).
+-module(transfer_controller).
 -author("Tomasz Lichon").
 
 -behaviour(gen_server).
 
+-include("proto/oneprovider/provider_messages.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start/4, get_status/1, get/1, stop/1]).
+-export([on_new_transfer_doc/1, on_transfer_doc_change/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
 
--type id() :: binary().
--type status() :: scheduled | active | completed | cancelled | failed.
-
 -record(state, {
+    transfer_id :: transfer:id(),
     session_id :: session:id(),
-    status :: status(),
-    callback :: binary(),
-    path :: file_meta:path(),
-    target_provider_id :: oneprovider:id()
+    callback :: transfer:callback(),
+    file_guid :: fslogic_worker:file_guid(),
+    invalidate_source_replica :: boolean()
 }).
 
 %%%===================================================================
@@ -43,50 +40,31 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Starts the server.
+%% Callback called when new transfer doc is created locally.
 %% @end
 %%--------------------------------------------------------------------
--spec start(session:id(), file_meta:entry(), oneprovider:id(), binary()) ->
-    {ok, id()} | ignore | {error, Reason :: term()}.
-start(SessionId, FileEntry, ProviderId, Callback) ->
-    {ok, Pid} = gen_server2:start(?MODULE,
-        [SessionId, FileEntry, ProviderId, Callback], []),
-    TransferId = pid_to_id(Pid),
-    session:add_transfer(SessionId, TransferId),
-    {ok, TransferId}.
+-spec on_new_transfer_doc(transfer:doc()) -> ok.
+on_new_transfer_doc(Transfer) ->
+    on_transfer_doc_change(Transfer).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets status of the transfer
+%% Callback called when transfer doc is synced from some other provider.
 %% @end
 %%--------------------------------------------------------------------
--spec get_status(TransferId :: id()) -> status().
-get_status(TransferId)  ->
-    {ok, Pid} = id_to_pid(TransferId),
-    ok = check_transfer_existence(Pid),
-    gen_server2:call(Pid, get_status).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets transfer info
-%% @end
-%%--------------------------------------------------------------------
--spec get(TransferId :: id()) -> maps:map().
-get(TransferId)  ->
-    {ok, Pid} = id_to_pid(TransferId),
-    ok = check_transfer_existence(Pid),
-    gen_server2:call(Pid, get_info).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Stop transfer
-%% @end
-%%--------------------------------------------------------------------
--spec stop(id()) -> ok.
-stop(TransferId) ->
-    {ok, Pid} = id_to_pid(TransferId),
-    ok = check_transfer_existence(Pid),
-    gen_server2:stop(Pid).
+-spec on_transfer_doc_change(transfer:doc()) -> ok.
+on_transfer_doc_change(Transfer = #document{value = #transfer{
+    transfer_status = scheduled,
+    target_provider_id = TargetProviderId
+}}) ->
+    case TargetProviderId =:= oneprovider:get_provider_id() of
+        true ->
+            new_transfer(Transfer);
+        false ->
+            ok
+    end;
+on_transfer_doc_change(_ExistingTransfer) ->
+    ok.
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -101,29 +79,15 @@ stop(TransferId) ->
 -spec init(Args :: term()) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
-init([SessionId, FileEntry, ProviderId, Callback]) ->
-    Server = self(),
-    spawn(fun() ->
-        try
-            ok = gen_server2:call(Server, transfer_active),
-            ok = logical_file_manager:replicate_file(SessionId, FileEntry, ProviderId),
-            gen_server2:cast(Server, transfer_completed)
-        catch
-            _:E ->
-                ?error_stacktrace("Could not replicate file ~p due to ~p", [FileEntry, E]),
-                gen_server2:cast(Server, transfer_failed)
-        end
-    end),
-    FilePath =
-        case FileEntry of
-            {path, Path} ->
-                Path;
-            {guid, Guid} ->
-                {ok, Path} = logical_file_manager:get_file_path(SessionId, Guid),
-                Path
-        end,
-    {ok, #state{session_id = SessionId, status = scheduled, callback = Callback,
-        path = FilePath, target_provider_id = ProviderId}}.
+init([SessionId, TransferId, FileGuid, Callback, InvalidationSourceReplica]) ->
+    ok = gen_server2:cast(self(), start_transfer),
+    {ok, #state{
+        transfer_id = TransferId,
+        session_id = SessionId,
+        file_guid = FileGuid,
+        callback = Callback,
+        invalidate_source_replica = InvalidationSourceReplica
+    }}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -139,17 +103,6 @@ init([SessionId, FileEntry, ProviderId, Callback]) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_call(get_info, _From, State = #state{status = Status, path = Path, target_provider_id = TargetProviderId}) ->
-    Response = #{
-        <<"path">> => Path,
-        <<"status">> => atom_to_binary(Status, utf8),
-        <<"targetProviderId">> => TargetProviderId
-    },
-    {reply, Response, State};
-handle_call(get_status, _From, State) ->
-    {reply, State#state.status, State};
-handle_call(transfer_active, _From, State) ->
-    {reply, ok, State#state{status = active}};
 handle_call(_Request, _From, State) ->
     ?log_bad_request(_Request),
     {reply, wrong_request, State}.
@@ -164,17 +117,26 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_cast(transfer_completed, State = #state{callback = None}) when None =:= undefined; None =:= <<"">> ->
-    {noreply, State#state{status = completed}};
-handle_cast(transfer_completed, State = #state{callback = Callback}) ->
-    case http_client:get(Callback) of
-        {ok, _, _, _} ->
-            {noreply, State#state{status = completed}};
-        _ ->
-            {noreply, State#state{status = failed}}
+handle_cast(start_transfer, State = #state{
+    transfer_id = TransferId,
+    session_id = SessionId,
+    file_guid = FileGuid,
+    callback = Callback,
+    invalidate_source_replica = InvalidationSourceReplica
+}) ->
+    try
+        transfer:mark_active(TransferId),
+        #provider_response{status = #status{code = ?OK}} =
+            sync_req:replicate_file(user_ctx:new(SessionId), file_ctx:new_by_guid(FileGuid), undefined, TransferId),
+        transfer:mark_completed(TransferId),
+        notify_callback(Callback, InvalidationSourceReplica),
+        {stop, normal, State}
+    catch
+        _:E ->
+            ?error_stacktrace("Could not replicate file ~p due to ~p", [FileGuid, E]),
+            transfer:mark_failed(TransferId),
+            {stop, E, State}
     end;
-handle_cast(transfer_failed, State) ->
-    {noreply, State#state{status = failed}};
 handle_cast(_Request, State) ->
     ?log_bad_request(_Request),
     {noreply, State}.
@@ -204,8 +166,11 @@ handle_info(_Info, State) ->
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term().
-terminate(_Reason, #state{session_id = SessionId}) ->
-    session:remove_transfer(SessionId, pid_to_id(self())).
+terminate(_Reason, #state{
+    session_id = SessionId,
+    transfer_id = TransferId
+}) ->
+    session:remove_transfer(SessionId, TransferId).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -220,41 +185,38 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%%===================================================================
 %%% Internal functions
-%%%===================================================================
+%%%===================================================================\
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Converts pid of transfer handler to transfer id
+%% Starts new transfer based on existing doc synchronized from other provider
 %% @end
 %%--------------------------------------------------------------------
--spec pid_to_id(Pid :: pid()) -> id().
-pid_to_id(Pid) ->
-    base64url:encode(term_to_binary(Pid)).
+-spec new_transfer(transfer:doc()) -> ok.
+new_transfer(#document{
+    key = TransferId,
+    value = #transfer{
+        file_uuid = FileUuid,
+        space_id = SpaceId,
+        callback = Callback,
+        invalidate_source_replica = InvalidateSourceReplica
+    }
+}) ->
+    FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
+    {ok, _Pid} = gen_server2:start(transfer_controller,
+        [session:root_session_id(), TransferId, FileGuid, Callback, InvalidateSourceReplica], []),
+    ok.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Converts transfer id to pid of transfer handler
+%% Notifies callback about successfull transfer
 %% @end
 %%--------------------------------------------------------------------
--spec id_to_pid(TransferId :: id()) -> {ok, pid()} | {error, not_found}.
-id_to_pid(TransferId) ->
-    try
-        {ok, binary_to_term(base64url:decode(TransferId))}
-    catch
-        _:_ ->
-            {error, not_found}
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Check if transfer server pid exists.
-%% @end
-%%--------------------------------------------------------------------
--spec check_transfer_existence(pid()) -> ok | {error, not_found}.
-check_transfer_existence(Pid) ->
-    case utils:process_info(Pid) of
-        undefined ->
-            {error, not_found};
-        _ ->
-            ok
-    end.
+-spec notify_callback(transfer:callback(), InvalidationSourceReplica :: boolean()) -> ok.
+notify_callback(_Callback, true) -> ok;
+notify_callback(undefined, false) -> ok;
+notify_callback(<<>>, false) -> ok;
+notify_callback(Callback, false) ->
+    {ok, _, _, _} = http_client:get(Callback).

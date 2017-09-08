@@ -98,5 +98,16 @@ change_replicated_internal(SpaceId, #document{
     ?debug("change_replicated_internal: changed times ~p", [FileUuid]),
     FileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId)),
     (catch fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx));
+change_replicated_internal(_SpaceId, #document{
+    key = FileUuid,
+    value = #custom_metadata{}
+}) ->
+    ?debug("change_replicated_internal: changed custom_metadata ~p", [FileUuid]);
+change_replicated_internal(_SpaceId, Transfer = #document{value = #transfer{
+    file_uuid = FileUuid
+}}) ->
+    ?debug("change_replicated_internal: changed transfer ~p", [FileUuid]),
+    transfer_controller:on_transfer_doc_change(Transfer),
+    invalidation_controller:on_transfer_doc_change(Transfer);
 change_replicated_internal(_SpaceId, _Change) ->
     ok.

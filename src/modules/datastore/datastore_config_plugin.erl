@@ -54,7 +54,8 @@ get_models() -> [
     file_force_proxy,
     reverse_luma,
     luma,
-    file_popularity
+    file_popularity,
+    transfer
 ].
 
 %%--------------------------------------------------------------------

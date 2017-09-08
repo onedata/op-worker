@@ -16,6 +16,7 @@
 -include("http/http_common.hrl").
 -include("http/rest/http_status.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include("http/rest/rest_api/rest_errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -171,9 +172,19 @@ invalidate_file_replica_internal(Req, State = #{
     provider_id := ProviderId,
     migration_provider_id := MigrationProviderId
 }) ->
-    File = get_file(State),
-    ok = onedata_file_api:invalidate_file_replica(Auth, File, ProviderId, MigrationProviderId),
-    {true, Req, State}.
+    FileGuid = get_file_guid(State),
+    FilePath = get_file_path(State),
+    SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
+
+    throw_if_non_local_space(SpaceId),
+    throw_if_non_local_provider(ProviderId),
+    throw_if_nonexistent_provider(SpaceId, MigrationProviderId),
+    {ok, _} = onedata_file_api:stat(Auth, {guid, FileGuid}),
+    {ok, TransferId} = transfer:start(Auth, FileGuid, FilePath, MigrationProviderId, undefined, true),
+
+    Response = json_utils:encode_map(#{<<"transferId">> => TransferId}),
+    {ok, Req2} = cowboy_req:reply(?HTTP_OK, [], Response, Req),
+    {halt, Req2, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -182,10 +193,14 @@ invalidate_file_replica_internal(Req, State = #{
 %%--------------------------------------------------------------------
 -spec replicate_file_internal(req(), maps:map()) -> {term(), req(), maps:map()}.
 replicate_file_internal(Req, #{auth := Auth, provider_id := ProviderId, callback := Callback} = State) ->
-    File = get_file(State),
+    FileGuid = get_file_guid(State),
+    FilePath = get_file_path(State),
+    SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
 
-    {ok, _} = onedata_file_api:stat(Auth, File),
-    {ok, TransferId} = transfer:start(Auth, File, ProviderId, Callback),
+    throw_if_non_local_space(SpaceId),
+    throw_if_nonexistent_provider(SpaceId, ProviderId),
+    {ok, _} = onedata_file_api:stat(Auth, {guid, FileGuid}),
+    {ok, TransferId} = transfer:start(Auth, FileGuid, FilePath, ProviderId, Callback, false),
 
     Response = json_utils:encode_map(#{<<"transferId">> => TransferId}),
     {ok, Req2} = cowboy_req:reply(?HTTP_OK, [], Response, Req),
@@ -198,19 +213,85 @@ replicate_file_internal(Req, #{auth := Auth, provider_id := ProviderId, callback
 %%--------------------------------------------------------------------
 -spec get_file_replicas_internal(req(), maps:map()) -> {term(), req(), maps:map()}.
 get_file_replicas_internal(Req, #{auth := Auth} = State) ->
-    File = get_file(State),
-    {ok, Distribution} = onedata_file_api:get_file_distribution(Auth, File),
+    FileGuid = get_file_guid(State),
+
+    {ok, Distribution} = onedata_file_api:get_file_distribution(Auth, {guid, FileGuid}),
     Response = json_utils:encode_map(Distribution),
     {Response, Req, State}.
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Get file entry from state
+%% Get file path from state
 %% @end
 %%--------------------------------------------------------------------
--spec get_file(maps:map()) -> {guid, binary()} | {path, binary()}.
-get_file(#{id := Id}) ->
-    {guid, Id};
-get_file(#{path := Path}) ->
-    {path, Path}.
+-spec get_file_path(maps:map()) -> file_meta:path().
+get_file_path(#{path := Path}) ->
+    Path;
+get_file_path(#{auth := Auth, id := Id}) ->
+    {ok, Path} = logical_file_manager:get_file_path(Auth, Id),
+    Path.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Get file guid from state
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_guid(maps:map()) -> fslogic_worker:file_guid().
+get_file_guid(#{id := Guid}) ->
+    Guid;
+get_file_guid(#{auth := Auth, path := Path}) ->
+    {ok, Guid} = logical_file_manager:get_file_guid(Auth, Path),
+    Guid.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Throws error if given space is not locally supported
+%% @end
+%%--------------------------------------------------------------------
+-spec throw_if_non_local_space(od_space:id()) -> ok.
+throw_if_non_local_space(SpaceId) ->
+    {ok, Provider} = od_provider:get(oneprovider:get_provider_id()),
+    case lists:member(SpaceId, Provider#document.value#od_provider.spaces) of
+        true ->
+            ok;
+        false ->
+            throw(?ERROR_SPACE_NOT_SUPPORTED)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Throws error if given provide_id is not local
+%% @end
+%%--------------------------------------------------------------------
+-spec throw_if_non_local_provider(od_provider:id()) -> ok.
+throw_if_non_local_provider(ProviderId) ->
+    case ProviderId =:= oneprovider:get_provider_id() of
+        true ->
+            ok;
+        false ->
+            throw(?ERROR_NON_LOCAL_PROVIDER)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Throws error if given provider does not support given space
+%% @end
+%%--------------------------------------------------------------------
+-spec throw_if_nonexistent_provider(od_space:id(), od_provider:id()) -> ok.
+throw_if_nonexistent_provider(_SpaceId, undefined) ->
+    ok;
+throw_if_nonexistent_provider(SpaceId, ProviderId) ->
+    case od_provider:get(ProviderId) of
+        {ok, _} ->
+            {ok, #document{value = #od_space{providers = Providers}}} = od_space:get(SpaceId),
+            case lists:member(ProviderId, Providers) of
+                true ->
+                    ok;
+                false ->
+                    throw(?ERROR_PROVIDER_NOT_FOUND)
+            end;
+        _Error ->
+            throw(?ERROR_PROVIDER_NOT_SUPPORTING_SPACE)
+    end.

@@ -19,7 +19,7 @@
 -include("timeouts.hrl").
 
 %% API
--export([synchronize/4]).
+-export([synchronize/5]).
 
 -define(MINIMAL_SYNC_REQUEST, application:get_env(?APP_NAME, minimal_sync_request, 4194304)).
 -define(TRIGGER_BYTE, application:get_env(?APP_NAME, trigger_byte, 52428800)).
@@ -35,8 +35,8 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec synchronize(user_ctx:ctx(), file_ctx:ctx(), fslogic_blocks:block(),
-    boolean()) -> ok.
-synchronize(UserCtx, FileCtx, Block = #file_block{size = RequestedSize}, Prefetch) ->
+    boolean(), undefined | transfer:id()) -> ok.
+synchronize(UserCtx, FileCtx, Block = #file_block{size = RequestedSize}, Prefetch, TransferId) ->
     EnlargedBlock =
         case Prefetch of
             true ->
@@ -52,16 +52,26 @@ synchronize(UserCtx, FileCtx, Block = #file_block{size = RequestedSize}, Prefetc
     FileGuid = file_ctx:get_guid_const(FileCtx3),
     SpaceId = file_ctx:get_space_id_const(FileCtx3),
     UserId = user_ctx:get_user_id(UserCtx),
+    BlockSizes = [BlockSize ||{_, Blocks} <- ProvidersAndBlocks,  #file_block{size = BlockSize} <- Blocks],
+    transfer:mark_data_transfer_scheduled(TransferId, lists:sum(BlockSizes)),
     lists:foreach(
         fun({ProviderId, Blocks}) ->
             lists:foreach(
-                fun(BlockToSync = #file_block{offset = O, size = S}) ->
+                fun(#file_block{offset = O, size = S}) ->
                     Ref = rtransfer:prepare_request(ProviderId, FileGuid, O, S),
-                    NewRef = rtransfer:fetch(Ref, fun notify_fun/3, on_complete_fun()),
-                    {ok, Size} = receive_rtransfer_notification(NewRef, ?SYNC_TIMEOUT),
-                    monitoring_event:emit_rtransfer_statistics(SpaceId, UserId, Size),
-                    replica_updater:update(FileCtx3,
-                        [BlockToSync#file_block{size = Size}], undefined, false)
+                    Self = self(),
+                    NotifyFun = fun(Ref, Offset, Size) ->
+                        monitoring_event:emit_rtransfer_statistics(SpaceId, UserId, Size),
+                        replica_updater:update(FileCtx3,
+                            [#file_block{offset = Offset, size = Size}], undefined, false),
+                        transfer:mark_data_transfer_finished(TransferId, Size),
+                        Self ! {Ref, active, #file_block{offset = Offset, size = Size}}
+                    end,
+                    CompleteFun = fun(Ref, Status) ->
+                        Self ! {Ref, complete, Status}
+                    end,
+                    NewRef = rtransfer:fetch(Ref, NotifyFun, CompleteFun),
+                    {ok, _} = receive_rtransfer_notification(NewRef, ?SYNC_TIMEOUT)
                 end, Blocks)
         end, ProvidersAndBlocks),
     SessId = user_ctx:get_session_id(UserCtx),
@@ -98,7 +108,7 @@ trigger_prefetching(_, _, _, _) ->
 prefetch_data_fun(UserCtx, FileCtx, #file_block{offset = O, size = _S}) ->
     fun() ->
         try
-            replica_synchronizer:synchronize(UserCtx, FileCtx, #file_block{offset = O, size = ?PREFETCH_SIZE}, false)
+            replica_synchronizer:synchronize(UserCtx, FileCtx, #file_block{offset = O, size = ?PREFETCH_SIZE}, false, undefined)
         catch
             _:Error ->
                 ?error_stacktrace("Prefetching of ~p at offset ~p with size ~p failed due to: ~p",
@@ -116,28 +126,6 @@ contains_trigger_byte(#file_block{offset = O, size = S}) ->
     ((O rem ?TRIGGER_BYTE) == 0) orelse
         ((O rem ?TRIGGER_BYTE) + S >= ?TRIGGER_BYTE).
 
-
-%%--------------------------------------------------------------------
-%% @doc
-%% RTransfer notify fun
-%% @end
-%%--------------------------------------------------------------------
--spec notify_fun(any(), any(), any()) -> ok.
-notify_fun(_Ref, _Offset, _Size) ->
-    ok.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Rtransfer on complete fun
-%% @end
-%%--------------------------------------------------------------------
--spec on_complete_fun() -> function().
-on_complete_fun() ->
-    Self = self(),
-    fun(Ref, Status) ->
-        Self ! {Ref, Status}
-    end.
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Wait for Rtransfer notification.
@@ -146,7 +134,9 @@ on_complete_fun() ->
 -spec receive_rtransfer_notification(rtransfer:ref(), non_neg_integer()) -> term().
 receive_rtransfer_notification(Ref, Timeout) ->
     receive
-        {Ref, Status} ->
+        {Ref, active, _Block} ->
+            receive_rtransfer_notification(Ref, Timeout);
+        {Ref, complete, Status} ->
             Status
     after
         Timeout -> {error, timeout}
