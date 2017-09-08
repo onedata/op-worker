@@ -1,15 +1,15 @@
 %%%--------------------------------------------------------------------
 %%% @author Tomasz Lichon
-%%% @copyright (C) 2016 ACK CYFRONET AGH
+%%% @copyright (C) 2017 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Handler for listing files.
+%%% Handler for enabling space cleanup.
 %%% @end
 %%%--------------------------------------------------------------------
--module(files).
+-module(space_cleanup).
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
@@ -24,10 +24,10 @@
 
 %% API
 -export([rest_init/2, terminate/3, allowed_methods/2, is_authorized/2,
-    content_types_provided/2]).
+    content_types_accepted/2, delete_resource/2]).
 
 %% resource functions
--export([list_files/2]).
+-export([enable_cleanup/2, disable_cleanup/2]).
 
 %%%===================================================================
 %%% API
@@ -55,7 +55,7 @@ terminate(_, _, _) ->
 %%--------------------------------------------------------------------
 -spec allowed_methods(req(), maps:map() | {error, term()}) -> {[binary()], req(), maps:map()}.
 allowed_methods(Req, State) ->
-    {[<<"GET">>], Req, State}.
+    {[<<"POST">>, <<"DELETE">>], Req, State}.
 
 %%--------------------------------------------------------------------
 %% @equiv pre_handler:is_authorized/2
@@ -66,55 +66,53 @@ is_authorized(Req, State) ->
     onedata_auth_api:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
-%% @equiv pre_handler:content_types_provided/2
+%% @equiv pre_handler:content_types_accepted/2
 %% @end
 %%--------------------------------------------------------------------
--spec content_types_provided(req(), maps:map()) -> {[{binary(), atom()}], req(), maps:map()}.
-content_types_provided(Req, State) ->
+-spec content_types_accepted(req(), maps:map()) -> {[{atom(), atom()}], req(), maps:map()}.
+content_types_accepted(Req, State) ->
     {[
-        {<<"application/json">>, list_files}
+        {'*', enable_cleanup}
     ], Req, State}.
+
+%%--------------------------------------------------------------------
+%% @equiv pre_handler:delete_resource/2
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_resource(req(), maps:map()) -> {term(), req(), maps:map()}.
+delete_resource(Req, State) ->
+    disable_cleanup(Req, State).
 
 %%%===================================================================
 %%% Content type handler functions
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% '/api/v3/oneprovider/files/{path}'
-%% @doc Returns the list of folders and files directly under specified path.
-%% If the path points to a file, the result array will consist only of the
-%% single item with the path to the file requested, confirming it exists.\n
-%%
-%% HTTP method: GET
-%%
-%% @param path Directory path (e.g. &#39;/My Private Space/testfiles&#39;)
+%% '/api/v3/oneprovider/space-cleanup/{sid}'
+%% @doc
+%% Enable file popularity and space cleanup
 %% @end
 %%--------------------------------------------------------------------
--spec list_files(req(), maps:map()) -> {term(), req(), maps:map()}.
-list_files(Req, State) ->
-    {State2, Req2} = validator:parse_path(Req, State),
-    {State3, Req3} = validator:parse_offset(Req2, State2),
-    {State4, Req4} = validator:parse_dir_limit(Req3, State3),
+-spec enable_cleanup(req(), maps:map()) -> {term(), req(), maps:map()}.
+enable_cleanup(Req, State) ->
+    {State2, Req2} = validator:parse_space_id(Req, State),
 
-    #{auth := Auth, path := Path, offset := Offset, limit := Limit} = State4,
+    #{space_id := SpaceId} = State2,
 
-    Response =
-        case onedata_file_api:stat(Auth, {path, Path}) of
-            {ok, #file_attr{type = ?DIRECTORY_TYPE, guid = Guid}} ->
-                case onedata_file_api:get_children_count(Auth, {guid, Guid}) of
-                    {ok, ChildNum} when Limit =:= undefined andalso ChildNum > ?MAX_ENTRIES ->
-                        throw(?ERROR_TOO_MANY_ENTRIES);
-                    {ok, _ChildNum} ->
-                        DefinedLimit = utils:ensure_defined(Limit, undefined, ?MAX_ENTRIES),
-                        {ok, Children} = onedata_file_api:ls(Auth, {path, Path}, Offset, DefinedLimit),
-                        json_utils:encode_map(
-                            lists:map(fun({ChildGuid, ChildPath}) ->
-                                {ok, ObjectId} = cdmi_id:guid_to_objectid(ChildGuid),
-                                #{<<"id">> => ObjectId, <<"path">> => filename:join(Path, ChildPath)}
-                            end, Children))
-                end;
-            {ok, #file_attr{guid = Guid}} ->
-                {ok, ObjectId} = cdmi_id:guid_to_objectid(Guid),
-                json_utils:encode_map([#{<<"id">> => ObjectId, <<"path">> => Path}])
-        end,
-    {Response, Req4, State4}.
+    {ok, _} = space_cleanup_api:enable_cleanup(SpaceId),
+    {true, Req2, State2}.
+
+%%--------------------------------------------------------------------
+%% '/api/v3/oneprovider/space-cleanup/{sid}'
+%% @doc
+%% Disable file popularity and space cleanup
+%% @end
+%%--------------------------------------------------------------------
+-spec disable_cleanup(req(), maps:map()) -> {term(), req(), maps:map()}.
+disable_cleanup(Req, State) ->
+    {State2, Req2} = validator:parse_space_id(Req, State),
+
+    #{space_id := SpaceId} = State2,
+
+    {ok, _} = space_cleanup_api:disable_cleanup(SpaceId),
+    {true, Req2, State2}.

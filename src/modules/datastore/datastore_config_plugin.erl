@@ -58,7 +58,8 @@ models() -> [
     space_strategies,
     file_force_proxy,
     luma_cache,
-    file_popularity
+    file_popularity,
+    transfer
 ].
 
 %%--------------------------------------------------------------------

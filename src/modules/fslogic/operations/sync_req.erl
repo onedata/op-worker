@@ -19,8 +19,8 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([synchronize_block/4, synchronize_block_and_compute_checksum/3,
-    get_file_distribution/2, replicate_file/3, invalidate_file_replica/3]).
+-export([synchronize_block/5, synchronize_block_and_compute_checksum/3,
+    get_file_distribution/2, replicate_file/4, invalidate_file_replica/4]).
 
 %%%===================================================================
 %%% API
@@ -31,14 +31,15 @@
 %% Synchronizes given block with remote replicas.
 %% @end
 %%--------------------------------------------------------------------
--spec synchronize_block(user_ctx:ctx(), file_ctx:ctx(), fslogic_blocks:block(), Prefetch :: boolean()) ->
+-spec synchronize_block(user_ctx:ctx(), file_ctx:ctx(), fslogic_blocks:block(),
+    Prefetch :: boolean(), undefined | transfer:id()) ->
     fslogic_worker:fuse_response().
-synchronize_block(UserCtx, FileCtx, undefined, Prefetch) ->
+synchronize_block(UserCtx, FileCtx, undefined, Prefetch, TransferId) ->
     {_, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx), % trigger file_location creation
     {Size, FileCtx3} = file_ctx:get_file_size(FileCtx2),
-    synchronize_block(UserCtx, FileCtx3, #file_block{offset = 0, size = Size}, Prefetch);
-synchronize_block(UserCtx, FileCtx, Block, Prefetch) ->
-    ok = replica_synchronizer:synchronize(UserCtx, FileCtx, Block, Prefetch),
+    synchronize_block(UserCtx, FileCtx3, #file_block{offset = 0, size = Size}, Prefetch, TransferId);
+synchronize_block(UserCtx, FileCtx, Block, Prefetch, TransferId) ->
+    ok = replica_synchronizer:synchronize(UserCtx, FileCtx, Block, Prefetch, TransferId),
     #fuse_response{status = #status{code = ?OK}}.
 
 %%--------------------------------------------------------------------
@@ -97,25 +98,27 @@ get_file_distribution(_UserCtx, FileCtx) ->
 %% @equiv replicate_file_insecure/3 with permission check
 %% @end
 %%--------------------------------------------------------------------
--spec replicate_file(user_ctx:ctx(), file_ctx:ctx(), fslogic_blocks:block()) ->
+-spec replicate_file(user_ctx:ctx(), file_ctx:ctx(),
+    undefined | fslogic_blocks:block(), undefined | transfer:id()) ->
     fslogic_worker:provider_response().
-replicate_file(UserCtx, FileCtx, Block) ->
+replicate_file(UserCtx, FileCtx, Block, TransferId) ->
     check_permissions:execute(
         [traverse_ancestors, ?write_object],
-        [UserCtx, FileCtx, Block, 0],
-        fun replicate_file_insecure/4).
+        [UserCtx, FileCtx, Block, 0, TransferId],
+        fun replicate_file_insecure/5).
 
 %%--------------------------------------------------------------------
 %% @equiv invalidate_file_replica_insecure/3 with permission check
 %% @end
 %%--------------------------------------------------------------------
--spec invalidate_file_replica(user_ctx:ctx(), file_ctx:ctx(), undefined | oneprovider:id()) ->
+-spec invalidate_file_replica(user_ctx:ctx(), file_ctx:ctx(),
+    undefined | oneprovider:id(), undefined | transfer:id()) ->
     fslogic_worker:provider_response().
-invalidate_file_replica(UserCtx, FileCtx, MigrationProviderId) ->
+invalidate_file_replica(UserCtx, FileCtx, MigrationProviderId, TransferId) ->
     check_permissions:execute(
         [traverse_ancestors, ?write_object],
-        [UserCtx, FileCtx, MigrationProviderId, 0],
-        fun invalidate_file_replica_insecure/4).
+        [UserCtx, FileCtx, MigrationProviderId, 0, TransferId],
+        fun invalidate_file_replica_insecure/5).
 
 %%%===================================================================
 %%% Internal functions
@@ -129,23 +132,27 @@ invalidate_file_replica(UserCtx, FileCtx, MigrationProviderId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec replicate_file_insecure(user_ctx:ctx(), file_ctx:ctx(),
-    fslogic_blocks:block(), non_neg_integer()) ->
+    fslogic_blocks:block(), non_neg_integer(), undefined | transfer:id()) ->
     fslogic_worker:provider_response().
-replicate_file_insecure(UserCtx, FileCtx, Block, Offset) ->
+replicate_file_insecure(UserCtx, FileCtx, Block, Offset, TransferId) ->
     {ok, Chunk} = application:get_env(?APP_NAME, ls_chunk_size),
     case file_ctx:is_dir(FileCtx) of
         {true, FileCtx2} ->
             case file_ctx:get_file_children(FileCtx2, UserCtx, Offset, Chunk) of
                 {Children, _FileCtx3} when length(Children) < Chunk ->
-                    replicate_children(UserCtx, Children, Block),
+                    transfer:mark_file_transfer_scheduled(TransferId, length(Children)),
+                    replicate_children(UserCtx, Children, Block, TransferId),
+                    transfer:mark_file_transfer_finished(TransferId, 1),
                     #provider_response{status = #status{code = ?OK}};
                 {Children, FileCtx3} ->
-                    replicate_children(UserCtx, Children, Block),
-                    replicate_file_insecure(UserCtx, FileCtx3, Block, Offset + Chunk)
+                    transfer:mark_file_transfer_scheduled(TransferId, Chunk),
+                    replicate_children(UserCtx, Children, Block, TransferId),
+                    replicate_file_insecure(UserCtx, FileCtx3, Block, Offset + Chunk, TransferId)
             end;
         {false, FileCtx2} ->
             #fuse_response{status = Status} =
-                synchronize_block(UserCtx, FileCtx2, Block, false),
+                synchronize_block(UserCtx, FileCtx2, Block, false, TransferId),
+            transfer:mark_file_transfer_finished(TransferId, 1),
             #provider_response{status = Status}
     end.
 
@@ -156,10 +163,10 @@ replicate_file_insecure(UserCtx, FileCtx, Block, Offset) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec replicate_children(user_ctx:ctx(), [file_ctx:ctx()],
-    fslogic_blocks:block()) -> ok.
-replicate_children(UserCtx, Children, Block) ->
-    utils:pforeach(fun(ChildCtx) ->
-        replicate_file(UserCtx, ChildCtx, Block)
+    fslogic_blocks:block(), undefined | transfer:id()) -> ok.
+replicate_children(UserCtx, Children, Block, TransferId) ->
+    lists:foreach(fun(ChildCtx) -> %todo possible parallelization on a process pool
+        replicate_file(UserCtx, ChildCtx, Block, TransferId)
     end, Children).
 
 %%--------------------------------------------------------------------
@@ -170,19 +177,19 @@ replicate_children(UserCtx, Children, Block) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec invalidate_file_replica_insecure(user_ctx:ctx(), file_ctx:ctx(),
-    oneprovider:id() | undefined, non_neg_integer()) ->
+    oneprovider:id() | undefined, non_neg_integer(), undefined | transfer:id()) ->
     fslogic_worker:provider_response().
-invalidate_file_replica_insecure(UserCtx, FileCtx, MigrationProviderId, Offset) ->
+invalidate_file_replica_insecure(UserCtx, FileCtx, MigrationProviderId, Offset, TransferId) ->
     {ok, Chunk} = application:get_env(?APP_NAME, ls_chunk_size),
     case file_ctx:is_dir(FileCtx) of
         {true, FileCtx2} ->
             case file_ctx:get_file_children(FileCtx2, UserCtx, Offset, Chunk) of
                 {Children, _FileCtx3} when length(Children) < Chunk ->
-                    invalidate_children_replicas(UserCtx, Children, MigrationProviderId),
+                    invalidate_children_replicas(UserCtx, Children, MigrationProviderId, TransferId),
                     #provider_response{status = #status{code = ?OK}};
                 {Children, FileCtx3} ->
-                    invalidate_children_replicas(UserCtx, Children, MigrationProviderId),
-                    invalidate_file_replica_insecure(UserCtx, FileCtx3, MigrationProviderId, Offset + Chunk)
+                    invalidate_children_replicas(UserCtx, Children, MigrationProviderId, TransferId),
+                    invalidate_file_replica_insecure(UserCtx, FileCtx3, MigrationProviderId, Offset + Chunk, TransferId)
             end;
         {false, FileCtx2} ->
             case replica_finder:get_unique_blocks(FileCtx2) of
@@ -237,9 +244,9 @@ invalidate_fully_redundant_file_replica(UserCtx, FileCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec invalidate_children_replicas(user_ctx:ctx(), [file_ctx:ctx()],
-    oneprovider:id()) -> ok.
-invalidate_children_replicas(UserCtx, Children, MigrationProviderId) ->
-    utils:pforeach(fun(ChildCtx) ->
-        invalidate_file_replica(UserCtx, ChildCtx, MigrationProviderId)
+    oneprovider:id(), undefined | transfer:id()) -> ok.
+invalidate_children_replicas(UserCtx, Children, MigrationProviderId, TransferId) ->
+    lists:foreach(fun(ChildCtx) ->  %todo possible parallelization on a process pool
+        invalidate_file_replica(UserCtx, ChildCtx, MigrationProviderId, TransferId)
     end, Children).
 

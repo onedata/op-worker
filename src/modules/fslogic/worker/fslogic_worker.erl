@@ -69,6 +69,8 @@ init(_Args) ->
         _ -> ok
     end,
 
+    transfer:init_lists(),
+
     erlang:send_after(?INVALIDATE_PERMISSIONS_CACHE_INTERVAL, self(),
         {sync_timer, invalidate_permissions_cache}
     ),
@@ -121,7 +123,7 @@ handle(invalidate_permissions_cache) ->
     ),
     ok;
 handle(spaces_cleanup) ->
-    space_cleanup:periodic_cleanup(),
+    space_cleanup_api:periodic_cleanup(),
     erlang:send_after(?INVALIDATE_PERMISSIONS_CACHE_INTERVAL, self(),
         {sync_timer, invalidate_permissions_cache}
     ),
@@ -312,7 +314,7 @@ handle_file_request(UserCtx, #get_file_location{}, FileCtx) ->
 handle_file_request(UserCtx, #truncate{size = Size}, FileCtx) ->
     truncate_req:truncate(UserCtx, FileCtx, Size);
 handle_file_request(UserCtx, #synchronize_block{block = Block, prefetch = Prefetch}, FileCtx) ->
-    sync_req:synchronize_block(UserCtx, FileCtx, Block, Prefetch);
+    sync_req:synchronize_block(UserCtx, FileCtx, Block, Prefetch, undefined);
 handle_file_request(UserCtx, #synchronize_block_and_compute_checksum{block = Block}, FileCtx) ->
     sync_req:synchronize_block_and_compute_checksum(UserCtx, FileCtx, Block);
 handle_file_request(UserCtx, #get_xattr{
@@ -350,11 +352,11 @@ handle_file_request(UserCtx, #fsync{
 handle_provider_request(UserCtx, #get_file_distribution{}, FileCtx) ->
     sync_req:get_file_distribution(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #replicate_file{block = Block}, FileCtx) ->
-    sync_req:replicate_file(UserCtx, FileCtx, Block);
+    sync_req:replicate_file(UserCtx, FileCtx, Block, undefined);
 handle_provider_request(UserCtx, #invalidate_file_replica{
     migration_provider_id = MigrationProviderId
 }, FileCtx) ->
-    sync_req:invalidate_file_replica(UserCtx, FileCtx, MigrationProviderId);
+    sync_req:invalidate_file_replica(UserCtx, FileCtx, MigrationProviderId, undefined);
 handle_provider_request(UserCtx, #get_parent{}, FileCtx) ->
     guid_req:get_parent(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #get_file_path{}, FileCtx) ->

@@ -19,7 +19,7 @@
 %% API
 %% Functions operating on directories or files
 -export([unlink/3, rm/2, mv/3, cp/3, get_parent/2, get_file_path/2,
-    replicate_file/3, invalidate_file_replica/4]).
+    get_file_guid/2, replicate_file/3, invalidate_file_replica/4]).
 %% Functions operating on files
 -export([create/2, create/3, create/4, open/3, fsync/1, fsync/3, write/3,
     write_without_events/3, read/3, read_without_events/3, silent_read/3,
@@ -121,6 +121,17 @@ get_file_path(SessId, FileGuid) ->
         fun(#file_path{value = Path}) ->
             {ok, Path}
         end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns guid of file
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_guid(session:id(), FileKey :: file_meta:path()) ->
+    {ok, fslogic_worker:file_guid()}.
+get_file_guid(SessId, FilePath) ->
+    {guid, FileGuid} = guid_utils:ensure_guid(SessId, {path, FilePath}),
+    {ok, FileGuid}.
 
 %%--------------------------------------------------------------------
 %% @doc
