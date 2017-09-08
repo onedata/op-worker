@@ -278,7 +278,7 @@ import_file_safe(Job = #space_strategy_job{
 -spec import_file(space_strategy:job()) -> {ok, file_ctx:ctx()}| no_return().
 import_file(#space_strategy_job{
     strategy_type = StrategyType,
-    strategy_args = #{sync_acl := SyncAcl},
+    strategy_args = Args,
     data = #{
         file_name := FileName,
         space_id := SpaceId,
@@ -311,6 +311,7 @@ import_file(#space_strategy_job{
             ok
     end,
     FileCtx = file_ctx:new_by_doc(FileMetaDoc#document{key = FileUuid}, SpaceId, undefined),
+    SyncAcl = maps:get(sync_acl, Args, false),
     case SyncAcl of
         true ->
             ok = import_nfs4_acl(FileCtx, StorageFileCtx3);
@@ -489,12 +490,13 @@ new_job(Job, Data, StorageFileCtx) ->
     file_ctx:ctx()) -> {ok, space_strategy:job()}.
 handle_already_imported_file(Job = #space_strategy_job{
     strategy_type = StrategyType,
-    strategy_args = #{sync_acl := SyncAcl},
+    strategy_args = Args,
     data = Data = #{
         space_id := SpaceId,
         storage_file_ctx := StorageFileCtx
 }}, FileAttr, FileCtx) ->
 
+    SyncAcl = maps:get(sync_acl, Args, false),
     try
         {#statbuf{st_mode = Mode}, StorageFileCtx2} = storage_file_ctx:get_stat_buf(StorageFileCtx),
         maybe_update_attrs(FileAttr, FileCtx, StorageFileCtx2, Mode, SpaceId, SyncAcl)
