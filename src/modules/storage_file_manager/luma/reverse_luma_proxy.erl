@@ -15,10 +15,11 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 
 %% API
--export([get_user_id/5]).
+-export([get_user_id/4, get_group_id/4]).
 
 %%%===================================================================
 %%% API functions
@@ -26,22 +27,42 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Queries third party LUMA service for the storage user context.
+%% Queries third party reverse LUMA service for id of user associated
+%% with given Uid and Gid on storage named StorageId.
 %% @end
 %%--------------------------------------------------------------------
--spec get_user_id(binary(), binary(), storage:name(), helper:name(),
+-spec get_user_id(map(), storage:id(), helper:name(),
     luma_config:config()) -> {ok, od_user:id()}.
-get_user_id(Uid, Gid, StorageName, HelperName, LumaConfig = #luma_config{url = LumaUrl}) ->
-    Url = lists:flatten(io_lib:format("~s/resolve_user_identity", [LumaUrl])),
+get_user_id(Args, StorageId, HelperName, LumaConfig = #luma_config{url = LumaUrl}) ->
+    Url = lists:flatten(io_lib:format("~s/resolve_user", [LumaUrl])),
     ReqHeaders = luma_proxy:get_request_headers(LumaConfig),
-    ReqBody = get_request_body(Uid, Gid, StorageName, HelperName),
+    ReqBody = get_user_request_body(Args, StorageId, HelperName),
     {ok, 200, _RespHeaders, RespBody} = http_client:post(Url, ReqHeaders, ReqBody),
     Response = json_utils:decode_map(RespBody),
-    ProviderId = maps:get(<<"providerId">>, Response),
+    ProviderId = maps:get(<<"idp">>, Response),
     ProviderUserId = maps:get(<<"userId">>, Response),
     UserId = datastore_utils2:gen_key(<<"">>, str_utils:format_bin("~p:~s",
         [ProviderId, ProviderUserId])),
     {ok, UserId}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Queries third party reverse LUMA service for id of group associated
+%% with given Gid on storage named StorageId
+%% @end
+%%--------------------------------------------------------------------
+-spec get_group_id(map(), storage:id(), helper:name(),
+    luma_config:config()) -> {ok, od_user:id()}.
+get_group_id(Args, StorageId, HelperName, LumaConfig = #luma_config{url = LumaUrl}) ->
+    Url = lists:flatten(io_lib:format("~s/resolve_group", [LumaUrl])),
+    ReqHeaders = luma_proxy:get_request_headers(LumaConfig),
+    ReqBody = get_group_request_body(Args, StorageId, HelperName),
+    {ok, 200, _RespHeaders, RespBody} = http_client:post(Url, ReqHeaders, ReqBody),
+    Response = json_utils:decode_map(RespBody),
+    Idp = maps:get(<<"idp">>, Response),
+    IdpGroupId = maps:get(<<"groupId">>, Response),
+    GroupId = idp_to_onedata_group_id(Idp, IdpGroupId),
+    {ok, GroupId}.
 
 %%%===================================================================
 %%% Internal functions
@@ -50,37 +71,100 @@ get_user_id(Uid, Gid, StorageName, HelperName, LumaConfig = #luma_config{url = L
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Maps Uid and Gid from #statbuf to map of credentials understandable
+%% Sends request to onezone to map given Idp and IdpGroupId to onedata
+%% group id.
+%% @end
+%%-------------------------------------------------------------------
+-spec idp_to_onedata_group_id(binary(), binary()) -> od_group:id().
+idp_to_onedata_group_id(Idp, IdpGroupId) ->
+    Url = oz_plugin:get_oz_rest_endpoint("/provider/test/map_group"),
+    Headers = #{<<"Content-Type">> => <<"application/json">>},
+    Body = json_utils:encode_map(#{
+        <<"idp">> => Idp,
+        <<"groupId">> => IdpGroupId
+    }),
+    {ok, 200, _RespHeaders, RespBody} = http_client:post(Url, Headers, Body),
+    Response = json_utils:decode_map(RespBody),
+    maps:get(<<"groupId">>, Response).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Maps Gid from #statbuf to map of credentials understandable
 %% by given storage.
 %% @end
 %%-------------------------------------------------------------------
--spec get_request_body(binary(), binary(), storage:name(), helper:name()) -> binary().
-get_request_body(Uid, Gid, StorageName, ?POSIX_HELPER_NAME) ->
-    json_utils:encode_map(get_posix_request_body(Uid, Gid, StorageName));
-get_request_body(Uid, Gid, StorageName, ?CEPH_HELPER_NAME) ->
-    json_utils:encode_map(get_ceph_request_body_(Uid, Gid, StorageName));
-get_request_body(Uid, Gid, StorageName, ?S3_HELPER_NAME) ->
-    json_utils:encode_map(get_s3_request_body(Uid, Gid, StorageName));
-get_request_body(Uid, Gid, StorageName, ?SWIFT_HELPER_NAME) ->
-    json_utils:encode_map(get_swift_request_body(Uid, Gid, StorageName));
-get_request_body(Uid, Gid, StorageName, ?GLUSTERFS_HELPER_NAME) ->
-    json_utils:encode_map(get_glusterfs_request_body(Uid, Gid, StorageName)).
+-spec get_group_request_body(map(), storage:name(), helper:name()) -> binary().
+get_group_request_body(Args, StorageId, ?POSIX_HELPER_NAME) ->
+    json_utils:encode_map(get_posix_request_body(Args, StorageId));
+get_group_request_body(Args, StorageId, ?CEPH_HELPER_NAME) ->
+    json_utils:encode_map(get_ceph_group_request_body(Args, StorageId));
+get_group_request_body(Args, StorageId, ?S3_HELPER_NAME) ->
+    json_utils:encode_map(get_s3_group_request_body(Args, StorageId));
+get_group_request_body(Args, StorageId, ?SWIFT_HELPER_NAME) ->
+    json_utils:encode_map(get_swift_group_request_body(Args, StorageId));
+get_group_request_body(Args, StorageId, ?GLUSTERFS_HELPER_NAME) ->
+    json_utils:encode_map(get_glusterfs_group_request_body(Args, StorageId)).
 
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
 %% Maps Uid and Gid from #statbuf to map of credentials understandable
-%% by POSIX storage.
+%% by given storage.
 %% @end
 %%-------------------------------------------------------------------
--spec get_posix_request_body(binary(), binary(), storage:name()) -> map().
-get_posix_request_body(Uid, Gid, StorageName) ->
+-spec get_user_request_body(map(), storage:name(), helper:name()) -> binary().
+get_user_request_body(Args, StorageId, ?POSIX_HELPER_NAME) ->
+    json_utils:encode_map(get_posix_request_body(Args, StorageId));
+get_user_request_body(Args, StorageId, ?CEPH_HELPER_NAME) ->
+    json_utils:encode_map(get_ceph_user_request_body(Args, StorageId));
+get_user_request_body(Args, StorageId, ?S3_HELPER_NAME) ->
+    json_utils:encode_map(get_s3_user_request_body(Args, StorageId));
+get_user_request_body(Args, StorageId, ?SWIFT_HELPER_NAME) ->
+    json_utils:encode_map(get_swift_user_request_body(Args, StorageId));
+get_user_request_body(Args, StorageId, ?GLUSTERFS_HELPER_NAME) ->
+    json_utils:encode_map(get_glusterfs_user_request_body(Args, StorageId)).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Maps Gid from #statbuf to map of credentials understandable by
+%% POSIX storage.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_posix_request_body(map(), storage:name()) -> map().
+get_posix_request_body(Args, StorageId) ->
+    maps:merge(Args, get_posix_generic_request_body_part(StorageId)).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns generic arguments for given POSIX storage in request body.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_posix_generic_request_body_part(storage:name()) -> map().
+get_posix_generic_request_body_part(StorageId) ->
     #{
-        <<"name">> => StorageName,
-        <<"uid">> => Uid,
-        <<"gid">> => Gid,
+        <<"id">> => StorageId,
         <<"type">> => <<"posix">>
     }.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Maps Gid from #statbuf to map of credentials understandable
+%% by CEPH storage.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_ceph_group_request_body(map(), storage:name()) -> map().
+get_ceph_group_request_body(#{
+    <<"gid">> := Gid
+}, StorageId) ->
+    {GroupName, Key} = get_ceph_group_credentials(Gid),
+    maps:merge(#{
+        <<"groupname">> => GroupName,   %todo jk check key name
+        <<"key">> => Key
+    }, get_ceph_generic_request_body_part(StorageId)).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -89,15 +173,45 @@ get_posix_request_body(Uid, Gid, StorageName) ->
 %% by CEPH storage.
 %% @end
 %%-------------------------------------------------------------------
--spec get_ceph_request_body_(binary(), binary(), storage:name()) -> map().
-get_ceph_request_body_(Uid, Gid, StorageName) ->
-    {UserName, Key} = get_ceph_credentials(Uid, Gid),
-    #{
-        <<"name">> => StorageName,
+-spec get_ceph_user_request_body(map(), storage:name()) -> map().
+get_ceph_user_request_body(#{
+    <<"uid">> := Uid,
+    <<"gid">> := Gid
+}, StorageId) ->
+    {UserName, Key} = get_ceph_user_credentials(Uid, Gid),
+    maps:merge(#{
         <<"username">> => UserName,
-        <<"key">> => Key,
+        <<"key">> => Key
+    }, get_ceph_generic_request_body_part(StorageId)).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns generic arguments for given CEPH storage in request body.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_ceph_generic_request_body_part(storage:name()) -> map().
+get_ceph_generic_request_body_part(StorageId) ->
+    #{
+        <<"id">> => StorageId,
         <<"type">> => <<"ceph">>
     }.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Maps Gid from #statbuf to map of credentials understandable
+%% by S3 storage.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_s3_group_request_body(map(), storage:name()) -> map().
+get_s3_group_request_body(#{
+    <<"gid">> := Gid
+}, StorageId) ->
+    {_Key1, _Key2} = get_s3_group_credentials(Gid),
+    maps:merge(#{
+        %todo jk use abovee credentials
+    }, get_s3_generic_request_body_part(StorageId)).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -106,13 +220,27 @@ get_ceph_request_body_(Uid, Gid, StorageName) ->
 %% by S3 storage.
 %% @end
 %%-------------------------------------------------------------------
--spec get_s3_request_body(binary(), binary(), storage:name()) -> map().
-get_s3_request_body(Uid, Gid, StorageName) ->
-    {AccessKey, SecretKey} = get_s3_credentials(Uid, Gid),
-    #{
-        <<"name">> => StorageName,
+-spec get_s3_user_request_body(map(), storage:name()) -> map().
+get_s3_user_request_body(#{
+    <<"uid">> := Uid,
+    <<"gid">> := Gid
+}, StorageId) ->
+    {AccessKey, SecretKey} = get_s3_user_credentials(Uid, Gid),
+    maps:merge(#{
         <<"accessKey">> => AccessKey,
-        <<"secretKey">> => SecretKey,
+        <<"secretKey">> => SecretKey
+    }, get_s3_generic_request_body_part(StorageId)).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns generic arguments for given S3 storage in request body.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_s3_generic_request_body_part(storage:name()) -> map().
+get_s3_generic_request_body_part(StorageId) ->
+    #{
+        <<"id">> => StorageId,
         <<"type">> => <<"s3">>
     }.
 
@@ -123,15 +251,61 @@ get_s3_request_body(Uid, Gid, StorageName) ->
 %% by SWIFT storage.
 %% @end
 %%-------------------------------------------------------------------
--spec get_swift_request_body(binary(), binary(), storage:name()) -> map().
-get_swift_request_body(Uid, Gid, StorageName) ->
-    {Username, Password} = get_swift_credentials(Uid, Gid),
-    #{
-        <<"name">> => StorageName,
+-spec get_swift_group_request_body(map(), storage:name()) -> map().
+get_swift_group_request_body(#{
+    <<"gid">> := Gid
+}, StorageId) ->
+    {_Key1, _Key2} = get_swift_group_credentials(Gid),
+    maps:merge(#{
+        %todo jk use abovee credentials
+    }, get_swift_generic_request_body_part(StorageId)).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Maps Uid and Gid from #statbuf to map of credentials understandable
+%% by SWIFT storage.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_swift_user_request_body(map(), storage:name()) -> map().
+get_swift_user_request_body(#{
+    <<"uid">> := Uid,
+    <<"gid">> := Gid
+}, StorageId) ->
+    {Username, Password} = get_swift_user_credentials(Uid, Gid),
+    maps:merge(#{
         <<"username">> => Username,
-        <<"password">> => Password,
+        <<"password">> => Password
+    }, get_swift_generic_request_body_part(StorageId)).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns generic arguments for given SWIFT storage in request body.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_swift_generic_request_body_part(storage:name()) -> map().
+get_swift_generic_request_body_part(StorageId) ->
+    #{
+        <<"id">> => StorageId,
         <<"type">> => <<"swift">>
     }.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Maps Gid from #statbuf to map of credentials understandable
+%% by GLUSTERFS storage.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_glusterfs_group_request_body(map(), storage:name()) -> map().
+get_glusterfs_group_request_body(#{
+    <<"gid">> := Gid
+}, StorageId) ->
+    {_Key1, _Key2} = get_glusterfs_group_credentials(Gid),
+    maps:merge(#{
+        %todo jk use abovee credentials
+    }, get_glusterfs_generic_request_body_part(StorageId)).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -140,12 +314,39 @@ get_swift_request_body(Uid, Gid, StorageName) ->
 %% by GLUSTERFS storage.
 %% @end
 %%-------------------------------------------------------------------
--spec get_glusterfs_request_body(binary(), binary(), storage:name()) -> map().
-get_glusterfs_request_body(_Uid, _Gid, StorageName) ->
+-spec get_glusterfs_user_request_body(map(), storage:name()) -> map().
+get_glusterfs_user_request_body(#{
+    <<"uid">> := Uid,
+    <<"gid">> := Gid
+}, StorageId) ->
+    {_Key1, _Key2} = get_glusterfs_user_credentials(Uid, Gid),
+    maps:merge(#{
+        %todo jk use above credentials
+    }, get_glusterfs_generic_request_body_part(StorageId)).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns generic arguments for given GLUSTERFS storage in request body.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_glusterfs_generic_request_body_part(storage:name()) -> map().
+get_glusterfs_generic_request_body_part(StorageId) ->
     #{
-        <<"name">> => StorageName,
+        <<"id">> => StorageId,
         <<"type">> => <<"glusterfs">>
     }.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Maps Gid from #statbuf to map of credentials understandable
+%% by CEPH storage.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_ceph_group_credentials(binary()) -> {binary(), binary()}.
+get_ceph_group_credentials(_Gid) ->
+    {<<"">>, <<"">>}.
 
 %%-------------------------------------------------------------------
 %% @private
@@ -154,8 +355,19 @@ get_glusterfs_request_body(_Uid, _Gid, StorageName) ->
 %% by CEPH storage.
 %% @end
 %%-------------------------------------------------------------------
--spec get_ceph_credentials(binary(), binary()) -> {binary(), binary()}.
-get_ceph_credentials(_Uid, _Gid) ->
+-spec get_ceph_user_credentials(binary(), binary()) -> {binary(), binary()}.
+get_ceph_user_credentials(_Uid, _Gid) ->
+    {<<"">>, <<"">>}.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Maps Gid from #statbuf to map of credentials understandable
+%% by SWIFT storage.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_swift_group_credentials(binary()) -> {binary(), binary()}.
+get_swift_group_credentials(_Gid) ->
     {<<"">>, <<"">>}.
 
 %%-------------------------------------------------------------------
@@ -165,8 +377,19 @@ get_ceph_credentials(_Uid, _Gid) ->
 %% by SWIFT storage.
 %% @end
 %%-------------------------------------------------------------------
--spec get_swift_credentials(binary(), binary()) -> {binary(), binary()}.
-get_swift_credentials(_Uid, _Gid) ->
+-spec get_swift_user_credentials(binary(), binary()) -> {binary(), binary()}.
+get_swift_user_credentials(_Uid, _Gid) ->
+    {<<"">>, <<"">>}.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Maps Gid from #statbuf to map of credentials understandable
+%% by S3 storage.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_s3_group_credentials(binary()) -> {binary(), binary()}.
+get_s3_group_credentials(_Gid) ->
     {<<"">>, <<"">>}.
 
 %%-------------------------------------------------------------------
@@ -176,6 +399,28 @@ get_swift_credentials(_Uid, _Gid) ->
 %% by S3 storage.
 %% @end
 %%-------------------------------------------------------------------
--spec get_s3_credentials(binary(), binary()) -> {binary(), binary()}.
-get_s3_credentials(_Uid, _Gid) ->
+-spec get_s3_user_credentials(binary(), binary()) -> {binary(), binary()}.
+get_s3_user_credentials(_Uid, _Gid) ->
+    {<<"">>, <<"">>}.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Maps Gid from #statbuf to map of credentials understandable
+%% by GLUSTERFS storage.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_glusterfs_group_credentials(binary()) -> {binary(), binary()}.
+get_glusterfs_group_credentials(_Gid) ->
+    {<<"">>, <<"">>}.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Maps Uid and Gid from #statbuf to map of credentials understandable
+%% by GLUSTERFS storage.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_glusterfs_user_credentials(binary(), binary()) -> {binary(), binary()}.
+get_glusterfs_user_credentials(_Uid, _Gid) ->
     {<<"">>, <<"">>}.

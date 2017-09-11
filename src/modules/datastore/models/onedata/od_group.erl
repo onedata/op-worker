@@ -20,7 +20,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% model_behaviour callbacks
--export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
+-export([save/1, get/1, exists/1, delete/1, update/2, create/1,
     model_init/0, 'after'/5, before/4]).
 -export([record_struct/1]).
 
@@ -99,15 +99,6 @@ create(Document) ->
 -spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
     model:execute_with_default_context(?MODULE, get, [Key]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of all records.
-%% @end
-%%--------------------------------------------------------------------
--spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
-list() ->
-    model:execute_with_default_context(?MODULE, list, [?GET_ALL, []]).
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -17,14 +17,14 @@
 -include_lib("kernel/include/file.hrl").
 -include("storage_sync_test.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% util functions
 -export([disable_storage_sync/1, set_check_locally_enoent_strategy/2,
     set_check_globally_enoent_strategy/2, reset_enoent_strategies/2,
     add_workers_storage_mount_points/1, get_mount_point/2, clean_storage/2,
     get_host_mount_point/2, storage_test_file_path/4, create_init_file/1,
-    enable_storage_import/1, enable_storage_update/1,
-    delete_non_empty_directory_update_test/2
+    enable_storage_import/1, enable_storage_update/1, clean_reverse_luma_cache/1
 ]).
 
 %% tests
@@ -49,7 +49,9 @@
     create_directory_import_check_user_id_error_test/2,
     create_file_import_check_user_id_test/2,
     create_file_import_check_user_id_error_test/2,
-    clean_reverse_luma_cache/1]).
+    delete_non_empty_directory_update_test/2,
+    import_nfs_acl_test/2, update_nfs_acl_test/2,
+    import_nfs_acl_with_disabled_luma_should_fail_test/2]).
 
 
 -define(assertHashChangedFun(File, ExpectedResult0),
@@ -113,7 +115,7 @@ create_directory_import_check_user_id_test(Config, MountSpaceInRoot) ->
     ok = file:change_owner(StorageTestDirPath, ?TEST_UID, ?TEST_GID),
     storage_sync_test_base:enable_storage_import(Config),
     %% Check if dir was imported
-    ?assertMatch({ok, #file_attr{owner_id = ?TEST_OD_USER_ID}},
+    ?assertMatch({ok, #file_attr{owner_id = ?USER}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS).
 
 create_directory_import_check_user_id_error_test(Config, MountSpaceInRoot) ->
@@ -208,7 +210,7 @@ create_file_import_check_user_id_test(Config, MountSpaceInRoot) ->
     storage_sync_test_base:enable_storage_import(Config),
 
     %% Check if file was imported on W1
-    ?assertMatch({ok, #file_attr{owner_id = ?TEST_OD_USER_ID}},
+    ?assertMatch({ok, #file_attr{owner_id = ?USER}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
     {ok, Handle1} = ?assertMatch({ok, _},
         lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
@@ -254,12 +256,12 @@ create_subfiles_import_many2_test(Config, MountSpaceInRoot) ->
     %% Create dirs and files on storage
     RootPath = storage_test_dir_path(W1MountPoint, ?SPACE_ID, <<"">>, MountSpaceInRoot),
     DirStructure = [10, 10, 10],
-
     create_nested_directory_tree(DirStructure, RootPath),
     storage_sync_test_base:enable_storage_import(Config),
     Files = generate_nested_directory_tree_file_paths(DirStructure, ?SPACE_PATH),
 
-    parallel_assert(?MODULE, verify_file, [W1, SessId, 60], Files, 60).
+    Timeout = 120,
+    parallel_assert(?MODULE, verify_file, [W1, SessId, Timeout], Files, Timeout).
 
 
 create_subfiles_and_delete_before_import_is_finished_test(Config, MountSpaceInRoot) ->
@@ -284,7 +286,7 @@ create_subfiles_and_delete_before_import_is_finished_test(Config, MountSpaceInRo
     ?assertMatch({error, ?ENOENT},
         file:list_dir(StorageTestDirPath)),
     ?assertMatch({ok, []},
-            lfm_proxy:ls(W1, SessId, {path, ?SPACE_PATH}, 0, 100), 2 * ?ATTEMPTS).
+        lfm_proxy:ls(W1, SessId, {path, ?SPACE_PATH}, 0, 100), 2 * ?ATTEMPTS).
 
 create_directory_export_test(Config, MountSpaceInRoot) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -866,6 +868,105 @@ should_not_detect_timestamp_update_test(Config, MountSpaceInRoot) ->
     ?assertNotMatch({ok, #file_attr{atime = 1, mtime = 1}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH})).
 
+import_nfs_acl_test(Config, MountSpaceInRoot) ->
+    [W1, _] = ?config(op_worker_nodes, Config),
+    W1MountPoint = get_host_mount_point(W1, Config),
+    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
+    SessId2 = ?config({session_id, {?USER2, ?GET_DOMAIN(W1)}}, Config),
+    StorageTestFilePath =
+        storage_test_file_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+
+    %% Create file on storage
+    ok = file:write_file(StorageTestFilePath, ?TEST_DATA),
+    storage_sync_test_base:enable_storage_import(Config),
+    %% Check if file was imported
+    ?assertMatch({ok, #file_attr{}},
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+
+    %% User1 should be allowed to read acl
+    {ok, #xattr{value = Value}} = ?assertMatch({ok, #xattr{}},
+        lfm_proxy:get_xattr(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, <<"cdmi_acl">>)),
+    ?assertMatch(Value, ?ACL_JSON),
+
+    %% User1 should not be allowed to set acl
+    ?assertMatch({error, ?EACCES},
+        lfm_proxy:set_xattr(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, #xattr{})),
+
+    %% User1 should not be allowed to modify file attrs
+    ?assertMatch({error, ?EACCES},
+        lfm_proxy:truncate(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, 100)),
+
+    %% User2 should be allowed to read acl
+    {ok, #xattr{value = Value}} = ?assertMatch({ok, #xattr{}},
+        lfm_proxy:get_xattr(W1, SessId2, {path, ?SPACE_TEST_FILE_PATH}, <<"cdmi_acl">>)).
+
+update_nfs_acl_test(Config, MountSpaceInRoot) ->
+    Workers = [W1, _] = ?config(op_worker_nodes, Config),
+    W1MountPoint = get_host_mount_point(W1, Config),
+    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
+    SessId2 = ?config({session_id, {?USER2, ?GET_DOMAIN(W1)}}, Config),
+    StorageTestFilePath =
+        storage_test_file_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+
+    %% Create file on storage
+    ok = file:write_file(StorageTestFilePath, ?TEST_DATA),
+    storage_sync_test_base:enable_storage_import(Config),
+
+    %% Check if file was imported
+    ?assertMatch({ok, #file_attr{}},
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+
+    %% User1 should be allowed to read acl
+    {ok, #xattr{value = Value}} = ?assertMatch({ok, #xattr{}},
+        lfm_proxy:get_xattr(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, <<"cdmi_acl">>)),
+    ?assertMatch(Value, ?ACL_JSON),
+
+    %% User1 should not be allowed to set acl
+    ?assertMatch({error, ?EACCES},
+        lfm_proxy:set_xattr(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, #xattr{})),
+
+    %% User2 should be allowed to read acl
+    {ok, #xattr{value = Value}} = ?assertMatch({ok, #xattr{}},
+        lfm_proxy:get_xattr(W1, SessId2, {path, ?SPACE_TEST_FILE_PATH}, <<"cdmi_acl">>)),
+
+    %% User2 should not be allowed to set acl
+    ?assertMatch({error, ?EACCES},
+        lfm_proxy:set_xattr(W1, SessId2, {path, ?SPACE_TEST_FILE_PATH}, #xattr{})),
+
+    EncACL = nfs4_acl:encode(?ACL2),
+    ok = test_utils:mock_expect(Workers, storage_file_manager, getxattr, fun
+        (Handle = #sfm_handle{file = <<"/">>}, Name) ->
+            meck:passthrough([Handle, Name]);
+        (Handle = #sfm_handle{file = <<"/space1">>}, Name) ->
+            meck:passthrough([Handle, Name]);
+        (#sfm_handle{}, _) ->
+            {ok, EncACL}
+    end),
+    storage_sync_test_base:enable_storage_update(Config),
+
+    %% User1 should not be allowed to read acl
+    ?assertMatch({error, ?EACCES},
+        lfm_proxy:get_xattr(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, <<"cdmi_acl">>), ?ATTEMPTS),
+
+    %% User2 should be allowed to read acl
+    {ok, #xattr{value = Value2}} = ?assertMatch({ok, #xattr{}},
+        lfm_proxy:get_xattr(W1, SessId2, {path, ?SPACE_TEST_FILE_PATH}, <<"cdmi_acl">>)),
+    ?assertMatch(Value2, ?ACL2_JSON).
+
+import_nfs_acl_with_disabled_luma_should_fail_test(Config, MountSpaceInRoot) ->
+    [W1, _] = ?config(op_worker_nodes, Config),
+    W1MountPoint = get_host_mount_point(W1, Config),
+    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
+    StorageTestFilePath =
+        storage_test_file_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+
+    %% Create file on storage
+    ok = file:write_file(StorageTestFilePath, ?TEST_DATA),
+    storage_sync_test_base:enable_storage_import(Config),
+    %% File shouldn't have been imported
+    timer:sleep(timer:seconds(?ATTEMPTS)),
+    ?assertMatch({error, ?ENOENT},
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS).
 
 import_file_by_path_test(Config, MountSpaceInRoot) ->
     [W1, _] = ?config(op_worker_nodes, Config),
@@ -938,7 +1039,7 @@ create_init_file(Config) ->
     case file:make_dir(Name) of
         ok ->
             file:change_mode(Name, 8#777);
-        {error,eexist} ->
+        {error, eexist} ->
             clean_dir(Name)
     end.
 
@@ -964,7 +1065,7 @@ enable_storage_import(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     {ok, [#document{key = StorageId} | _]} = rpc:call(W1, storage, list, []),
     {ok, _} = rpc:call(W1, storage_sync, start_simple_scan_import,
-        [?SPACE_ID, StorageId, ?MAX_DEPTH]).
+        [?SPACE_ID, StorageId, ?MAX_DEPTH, ?SYNC_ACL]).
 
 enable_storage_update(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -973,10 +1074,11 @@ enable_storage_update(Config) ->
     ScanInterval = maps:get(scan_interval, UpdateConfig, ?SCAN_INTERVAL),
     WriteOnce = maps:get(write_once, UpdateConfig, ?WRITE_ONCE),
     DeleteEnable = maps:get(delete_enable, UpdateConfig, ?DELETE_ENABLE),
+    SyncAcl = maps:get(delete_enable, UpdateConfig, ?SYNC_ACL),
 
     {ok, [#document{key = StorageId} | _]} = rpc:call(W1, storage, list, []),
     {ok, _} = rpc:call(W1, storage_sync, start_simple_scan_update,
-        [?SPACE_ID, StorageId, ?MAX_DEPTH, ScanInterval, WriteOnce, DeleteEnable]).
+        [?SPACE_ID, StorageId, ?MAX_DEPTH, ScanInterval, WriteOnce, DeleteEnable, SyncAcl]).
 
 
 disable_storage_import(Config) ->
@@ -1010,7 +1112,7 @@ clean_storage(Config, Readonly) ->
     timer:sleep(timer:seconds(3)).
 
 clean_reverse_luma_cache(Worker) ->
-    ok = rpc:call(Worker, reverse_luma, invalidate_cache, []).
+    ok = rpc:call(Worker, luma_cache, invalidate, []).
 
 set_check_locally_enoent_strategy(Worker, SpaceId) ->
     {ok, _} = rpc:call(Worker, storage_sync, set_check_locally_enoent_strategy, [SpaceId]).
@@ -1108,7 +1210,7 @@ parallel_assert(M, F, A, List, Attempts) ->
 
     lists:foldl(fun(_, AccIn) ->
         case sets:size(AccIn) of
-            0  -> ok;
+            0 -> ok;
             _ ->
                 receive
                     {finished, Ans} ->
@@ -1126,7 +1228,7 @@ parallel_assert(M, F, A, List, Attempts) ->
 verify_dir(N, Pid, W1, SessId, Attempts) ->
     NBin = integer_to_binary(N),
     DirPath = ?SPACE_TEST_DIR_PATH(NBin),
-    ?assertMatch({ok, #file_attr{}}, 
+    ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, DirPath}), Attempts),
     Pid ! {finished, DirPath}.
 
@@ -1169,7 +1271,7 @@ create_nested_directory_tree([SubFilesNum], Root) ->
         ok = file:write_file(FilePath, ?TEST_DATA)
     end, lists:seq(1, SubFilesNum));
 create_nested_directory_tree([SubDirsNum | Rest], Root) ->
-%%    ok = utils:pforeach(fun(N) ->
+    %%    ok = utils:pforeach(fun(N) ->
     ok = lists:foreach(fun(N) ->
         NBin = integer_to_binary(N),
         DirPath = filename:join([Root, NBin]),

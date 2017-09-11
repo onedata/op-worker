@@ -75,10 +75,10 @@ exists_by_name(FileCtx, XattrName) ->
 %%--------------------------------------------------------------------
 -spec set(file_ctx:ctx(), name(), value(), Create :: boolean(), Replace :: boolean()) ->
     {ok, datastore:key()} | datastore:generic_error().
-set(FileCtx, XattrName, XattreValue, Create, Replace) ->
+set(FileCtx, XattrName, XattrValue, Create, Replace) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    custom_metadata:set_xattr_metadata(FileUuid, SpaceId, XattrName, XattreValue, Create, Replace).
+    custom_metadata:set_xattr_metadata(FileUuid, SpaceId, XattrName, XattrValue, Create, Replace).
 
 %%--------------------------------------------------------------------
 %% @doc

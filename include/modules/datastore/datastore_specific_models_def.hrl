@@ -266,6 +266,7 @@
     type :: undefined | file_meta:type(),
     mode = 0 :: file_meta:posix_permissions(),
     owner :: undefined | od_user:id(),
+    group_owner :: undefined | od_group:id(),
     size = 0 :: undefined | file_meta:size(),
     version = 0, %% Snapshot version
     is_scope = false :: boolean(),
@@ -424,16 +425,9 @@
     mtime = 0 :: times:time()
 }).
 
-%% Model that caches mapping from storage user credentials to od_user:id()
--record(reverse_luma, {
-    user_id = <<"">> :: od_user:id(),
-    timestamp = 0 :: luma_cache:timestamp() % time of last update, in milliseconds since epoch
-}).
-
-%% Model that caches mapping from od_user:id() to storage user credentials
--record(luma, {
-    user_ctx = #{} :: luma:user_ctx(),
-    timestamp = 0 :: luma_cache:timestamp()% time of last update, in milliseconds since epoch
+-record(luma_cache, {
+    timestamp = 0 :: luma_cache:timestamp(),
+    value :: undefined | luma_cache:value()
 }).
 
 %% Model that tracks popularity of file

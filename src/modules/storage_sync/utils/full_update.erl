@@ -25,7 +25,7 @@
 -type key() :: file_meta:name() | atom().
 
 %% API
--export([run/2, delete_imported_file/3]).
+-export([run/2, delete_imported_file_and_update_counters/3, delete_imported_file/2]).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -58,22 +58,32 @@ run(Job = #space_strategy_job{
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Remove files that had been earlier imported.
+%% Remove files that had been earlier imported and updates suitable counters.
 %% @end
 %%-------------------------------------------------------------------
--spec delete_imported_file(file_meta:name(), file_ctx:ctx(), od_space:id()) -> ok.
-delete_imported_file(ChildName, FileCtx, SpaceId) ->
+-spec delete_imported_file_and_update_counters(file_meta:name(),
+    file_ctx:ctx(), od_space:id()) -> ok.
+delete_imported_file_and_update_counters(ChildName, FileCtx, SpaceId) ->
     storage_sync_monitoring:update_queue_length_spirals(SpaceId, -1),
-    RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
     try
-        {ChildCtx, _} = file_ctx:get_child(FileCtx, ChildName, RootUserCtx),
-        ok = fslogic_delete:remove_file_and_file_meta(ChildCtx, RootUserCtx, true, false),
-        ok = fslogic_delete:remove_file_handles(ChildCtx),
+        delete_imported_file(ChildName, FileCtx),
         storage_sync_monitoring:increase_deleted_files_spirals(SpaceId)
     catch
         _:_ ->
             ok
     end.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Remove files that had been earlier imported.
+%% @end
+%%-------------------------------------------------------------------
+-spec delete_imported_file(file_meta:name(), file_ctx:ctx()) -> ok.
+delete_imported_file(ChildName, FileCtx) ->
+    RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
+    {ChildCtx, _} = file_ctx:get_child(FileCtx, ChildName, RootUserCtx),
+    ok = fslogic_delete:remove_file_and_file_meta(ChildCtx, RootUserCtx, true, false),
+    ok = fslogic_delete:remove_file_handles(ChildCtx).
 
 %%===================================================================
 %% Internal functions
@@ -88,7 +98,6 @@ delete_imported_file(ChildName, FileCtx, SpaceId) ->
 storage_table_name(FileUuid) ->
     ets_name(?STORAGE_TABLE_PREFIX, FileUuid).
 
-
 %%-------------------------------------------------------------------
 %% @private
 %% @doc @equiv  ets_name(?DB_TABLE_PREFIX, FileUuid).
@@ -97,7 +106,6 @@ storage_table_name(FileUuid) ->
 -spec db_storage_name(file_meta:uuid()) -> atom().
 db_storage_name(FileUuid) ->
     ets_name(?DB_TABLE_PREFIX, FileUuid).
-
 
 %%-------------------------------------------------------------------
 %% @private
@@ -117,7 +125,6 @@ ets_name(Prefix, FileUuid) ->
 -spec create_ets(atom()) -> atom().
 create_ets(Name) ->
     Name = ets:new(Name, [named_table, ordered_set, public]).
-
 
 %%-------------------------------------------------------------------
 %% @private
@@ -259,5 +266,5 @@ save_storage_children_names(TableName, StorageFileCtx, Offset, BatchSize) ->
 cast_deletion_of_imported_file(ChildName, FileCtx, SpaceId) ->
     storage_sync_monitoring:update_queue_length_spirals(SpaceId, 1),
     worker_pool:cast(?STORAGE_SYNC_FILE_POOL_NAME, {?MODULE,
-        delete_imported_file, [ChildName, FileCtx, SpaceId]},
+        delete_imported_file_and_update_counters, [ChildName, FileCtx, SpaceId]},
         worker_pool:default_strategy()).
