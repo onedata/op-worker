@@ -52,8 +52,7 @@ get_models() -> [
     helper_handle,
     space_strategies,
     file_force_proxy,
-    reverse_luma,
-    luma,
+    luma_cache,
     file_popularity,
     transfer
 ].

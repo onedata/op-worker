@@ -14,33 +14,14 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/datastore/datastore_models.hrl").
--include("modules/datastore/datastore_runner.hrl").
--include("modules/storage_file_manager/helpers/helpers.hrl").
 
 %% API
--export([get_server_user_ctx/4, get_client_user_ctx/4, get_posix_user_ctx/2,
-    invalidate_cache/0]).
--export([save/1, get/1, exists/1, delete/1, update/2, create/1, list/0]).
+-export([get_server_user_ctx/4, get_client_user_ctx/4, get_posix_user_ctx/2]).
 
-%% luma_cache callbacks
--export([last_timestamp/1, get_value/1, new/2]).
-
--type key() :: datastore:key().
--type record() :: #luma{}.
--type doc() :: datastore_doc:doc(record()).
--type diff() :: datastore_doc:diff(record()).
 -type user_ctx() :: helper:user_ctx().
 -type posix_user_ctx() :: {Uid :: non_neg_integer(), Gid :: non_neg_integer()}.
 
--export_type([record/0, user_ctx/0, posix_user_ctx/0]).
-
--define(CTX, #{
-    model => ?MODULE,
-    routing => local,
-    disc_driver => undefined,
-    fold_enabled => true
-}).
+-export_type([user_ctx/0, posix_user_ctx/0]).
 
 %%%===================================================================
 %%% API functions
@@ -110,112 +91,6 @@ get_posix_user_ctx(UserId, SpaceId) ->
     #{<<"uid">> := Uid, <<"gid">> := Gid} = UserCtx,
     {binary_to_integer(Uid), binary_to_integer(Gid)}.
 
-%%-------------------------------------------------------------------
-%% @doc
-%% Invalidates cached entries
-%% @end
-%%-------------------------------------------------------------------
--spec invalidate_cache() -> ok.
-invalidate_cache() ->
-    luma_cache:invalidate(?MODULE).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Saves permission cache.
-%% @end
-%%--------------------------------------------------------------------
--spec save(doc()) -> {ok, key()} | {error, term()}.
-save(Doc) ->
-    ?extract_key(datastore_model:save(?CTX, Doc)).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates permission cache.
-%% @end
-%%--------------------------------------------------------------------
--spec update(key(), diff()) -> {ok, key()} | {error, term()}.
-update(Key, Diff) ->
-    ?extract_key(datastore_model:update(?CTX, Key, Diff)).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates permission cache.
-%% @end
-%%--------------------------------------------------------------------
--spec create(doc()) -> {ok, key()} | {error, term()}.
-create(Doc) ->
-    ?extract_key(datastore_model:create(?CTX, Doc)).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns permission cache.
-%% @end
-%%--------------------------------------------------------------------
--spec get(key()) -> {ok, doc()} | {error, term()}.
-get(Key) ->
-    datastore_model:get(?CTX, Key).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Deletes permission cache.
-%% @end
-%%--------------------------------------------------------------------
--spec delete(key()) -> ok | {error, term()}.
-delete(Key) ->
-    datastore_model:delete(?CTX, Key).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks whether permission cache exists.
-%% @end
-%%--------------------------------------------------------------------
--spec exists(key()) -> boolean().
-exists(Key) ->
-    {ok, Exists} = datastore_model:exists(?CTX, Key),
-    Exists.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of all records.
-%% @end
-%%--------------------------------------------------------------------
--spec list() -> {ok, [key()]} | {error, term()}.
-list() ->
-    datastore_model:fold(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
-
-%%%===================================================================
-%%% luma_cache callbacks
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link luma_cache_behaviour} callback last_timestamp/1.
-%% @end
-%%--------------------------------------------------------------------
--spec last_timestamp(luma_cache:model()) -> luma_cache:timestamp().
-last_timestamp(#luma{timestamp = Timestamp}) ->
-    Timestamp.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link luma_cache_behaviour} callback get_value/1.
-%% @end
-%%--------------------------------------------------------------------
--spec get_value(luma_cache:model()) -> luma_cache:value().
-get_value(#luma{user_ctx = UserCtx}) ->
-    UserCtx.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link luma_cache_behaviour} callback new/2.
-%% @end
-%%--------------------------------------------------------------------
--spec new(luma_cache:value(), luma_cache:timestamp()) -> luma_cache:model().
-new(UserCtx, Timestamp) ->
-    #luma{
-        user_ctx = UserCtx,
-        timestamp = Timestamp
-    }.
 
 %%%===================================================================
 %%% Internal functions
@@ -299,7 +174,7 @@ fetch_user_ctx(UserId, SpaceId, StorageDoc, Helper) ->
         true ->
             LumaConfig = storage:get_luma_config(StorageDoc),
             LumaCacheTimeout = luma_config:get_timeout(LumaConfig),
-            Result = luma_cache:get(?MODULE, UserId,
+            Result = luma_cache:get(UserId,
                 fun luma_proxy:get_user_ctx/4,
                 [UserId, SpaceId, StorageDoc, Helper],
                 LumaCacheTimeout

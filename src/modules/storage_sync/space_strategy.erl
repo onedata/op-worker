@@ -33,7 +33,7 @@
 
 -type job()             :: #space_strategy_job{}.
 -type job_result()      :: term().
--type job_data()        :: term().
+-type job_data()        :: maps:map().
 
 -type config()          :: {name(), arguments()}.
 
@@ -51,7 +51,8 @@
 -export_type([job_merge_type/0, runnable/0]).
 
 %% API
--export([types/0, default_worker_pool_config/0, default_main_worker_pool/0]).
+-export([types/0, default_worker_pool_config/0, default_main_worker_pool/0,
+    update_job_data/3, take_from_job_data/3]).
 
 %%%===================================================================
 %%% API functions
@@ -86,6 +87,29 @@ default_worker_pool_config() ->
 -spec default_main_worker_pool() -> worker_pool:name().
 default_main_worker_pool() ->
     ?GENERIC_STRATEGY_POOL_NAME.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Updates space_strategy_job data map with new Key, Value pair.
+%% @end
+%%-------------------------------------------------------------------
+-spec update_job_data(atom(), term(), job()) -> job().
+update_job_data(Key, Value, Job = #space_strategy_job{data = Data}) ->
+    Job#space_strategy_job{data = Data#{Key => Value}}.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Takes (gets and removes) value from space_strategy_job data map.
+%% @end
+%%-------------------------------------------------------------------
+-spec take_from_job_data(atom(), job(), term()) -> {term(), job()}.
+take_from_job_data(Key, Job = #space_strategy_job{data = Data}, Default) ->
+    case maps:take(Key, Data) of
+        {Value, Data2} ->
+            {Value, Job#space_strategy_job{data = Data2}};
+        error ->
+            {Default, Job}
+    end.
 
 %%%===================================================================
 %%% Internal functions

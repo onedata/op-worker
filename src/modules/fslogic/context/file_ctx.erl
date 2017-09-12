@@ -71,7 +71,7 @@
     get_or_create_local_file_location_doc/1, get_local_file_location_doc/1,
     get_file_location_ids/1, get_file_location_docs/1, get_acl/1,
     get_raw_storage_path/1, get_child_canonical_path/2, get_file_size/1,
-    get_local_storage_file_size/1]).
+    get_owner/1, get_group_owner/1, get_local_storage_file_size/1]).
 -export([is_dir/1]).
 
 %%%===================================================================
@@ -708,6 +708,37 @@ get_local_storage_file_size(FileCtx) ->
         {undefined, FileCtx2} ->
             {0 ,FileCtx2}
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns id of file's owner.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_owner(ctx()) -> {od_user:id() | undefined, ctx()}.
+get_owner(FileCtx = #file_ctx{
+    file_doc = #document{
+        value = #file_meta{owner = OwnerId}
+}}) ->
+    {OwnerId, FileCtx};
+get_owner(FileCtx) ->
+    {_, FileCtx2} = get_file_doc(FileCtx),
+    get_owner(FileCtx2).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns id of file's group_owner.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_group_owner(ctx()) -> {od_group:id() | undefined, ctx()}.
+get_group_owner(FileCtx = #file_ctx{
+    file_doc = #document{
+        value = #file_meta{group_owner = GroupOwnerId}
+    }}) ->
+    {GroupOwnerId, FileCtx};
+get_group_owner(FileCtx) ->
+    {_, FileCtx2} = get_file_doc(FileCtx),
+    get_group_owner(FileCtx2).
+
 
 %%--------------------------------------------------------------------
 %% @doc

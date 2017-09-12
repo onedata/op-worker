@@ -35,7 +35,7 @@ get_user_ctx(UserId, SpaceId, StorageDoc = #document{
 }}, Helper) ->
     Url = str_utils:format_bin("~s/map_user_credentials", [LumaUrl]),
     ReqHeaders = get_request_headers(LumaConfig),
-    ReqBody = get_request_body(UserId, SpaceId, StorageDoc, Helper),
+    ReqBody = get_request_body(UserId, SpaceId, StorageDoc),
     case http_client:post(Url, ReqHeaders, ReqBody) of
         {ok, 200, _RespHeaders, RespBody} ->
             UserCtx = json_utils:decode_map(RespBody),
@@ -73,15 +73,14 @@ get_request_headers(#luma_config{api_key = APIKey}) ->
 %% Constructs user context request that will be sent to the external LUMA service.
 %% @end
 %%--------------------------------------------------------------------
--spec get_request_body(od_user:id(), od_space:id(), storage:doc(), storage:helper()) ->
+-spec get_request_body(od_user:id(), od_space:id(), storage:doc()) ->
     Body :: binary().
-get_request_body(UserId, SpaceId, StorageDoc, Helper) ->
+get_request_body(UserId, SpaceId, StorageDoc) ->
     Body = [
         {<<"storageId">>, storage:get_id(StorageDoc)},
         {<<"storageName">>, storage:get_name(StorageDoc)},
-        {<<"storageType">>, helper:get_name(Helper)},
-        {<<"userDetails">>, get_user_details(UserId)},
-        {<<"spaceId">>, SpaceId}
+        {<<"spaceId">>, SpaceId},
+        {<<"userDetails">>, get_user_details(UserId)}
     ],
     json_utils:encode(Body).
 
@@ -98,17 +97,17 @@ get_user_details(UserId) ->
             [
                 {<<"id">>, UserId},
                 {<<"name">>, User#od_user.name},
-                {<<"alias">>, User#od_user.alias},
-                {<<"emailList">>, User#od_user.email_list},
-                {<<"connectedAccounts">>, format_user_accounts(Accounts)}
+                {<<"connectedAccounts">>, format_user_accounts(Accounts)},
+                {<<"login">>, User#od_user.alias},
+                {<<"emailList">>, User#od_user.email_list}
             ];
         {error, _} ->
             [
                 {<<"id">>, UserId},
                 {<<"name">>, <<>>},
-                {<<"alias">>, <<>>},
-                {<<"emailList">>, []},
-                {<<"connectedAccounts">>, []}
+                {<<"connectedAccounts">>, []},
+                {<<"login">>, <<>>},
+                {<<"emailList">>, []}
             ]
     end.
 
@@ -122,7 +121,7 @@ get_user_details(UserId) ->
     FormattedAccounts :: [proplists:proplist()].
 format_user_accounts(Accounts) ->
     Keys = [
-        <<"providerId">>, <<"userId">>, <<"login">>, <<"name">>,
+        <<"idp">>, <<"userId">>, <<"login">>, <<"name">>,
         <<"emailList">>, <<"groups">>
     ],
     lists:map(fun(Account) ->

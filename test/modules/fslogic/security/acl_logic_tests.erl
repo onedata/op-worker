@@ -127,29 +127,33 @@ binary_acl_conversion_test() ->
 
 check_permission_test() ->
     Id1 = <<"id1">>,
+    FileGuid = <<"file_guid">>,
+    FileCtx = file_ctx:new_by_guid(FileGuid),
     User1 = #document{key = Id1, value = #od_user{}},
     Ace1 = #access_control_entity{acetype = ?allow_mask, aceflags = ?no_flags_mask, identifier = Id1, acemask = ?read_mask},
     Ace2 = #access_control_entity{acetype = ?allow_mask, aceflags = ?no_flags_mask, identifier = Id1, acemask = ?write_mask},
     % read permission
-    ?assertEqual(ok, acl_logic:check_permission([Ace1, Ace2], User1, ?read_mask)),
+    ?assertEqual(ok, acl_logic:check_permission([Ace1, Ace2], User1, ?read_mask, FileCtx)),
     % rdwr permission on different ACEs
-    ?assertEqual(ok, acl_logic:check_permission([Ace1, Ace2], User1, ?read_mask bor ?write_mask)),
+    ?assertEqual(ok, acl_logic:check_permission([Ace1, Ace2], User1, ?read_mask bor ?write_mask, FileCtx)),
     % rwx permission, not allowed
-    ?assertEqual(?EACCES, catch acl_logic:check_permission([Ace1, Ace2], User1, ?read_mask bor ?write_mask bor ?execute_mask)),
+    ?assertEqual(?EACCES, catch acl_logic:check_permission([Ace1, Ace2], User1, ?read_mask bor ?write_mask bor ?execute_mask, FileCtx)),
     % x permission, not allowed
-    ?assertEqual(?EACCES, catch acl_logic:check_permission([Ace1, Ace2], User1, ?execute_mask)),
+    ?assertEqual(?EACCES, catch acl_logic:check_permission([Ace1, Ace2], User1, ?execute_mask, FileCtx)),
 
     Id2 = <<"id2">>,
     User2 = #document{key = Id2, value = #od_user{}},
     Ace3 = #access_control_entity{acetype = ?deny_mask, aceflags = ?no_flags_mask, identifier = Id2, acemask = ?read_mask},
     Ace4 = #access_control_entity{acetype = ?deny_mask, aceflags = ?no_flags_mask, identifier = Id1, acemask = ?read_mask},
     % read permission, with denying someone's else read
-    ?assertEqual(ok, acl_logic:check_permission([Ace3, Ace1, Ace2], User1, ?read_mask)),
+    ?assertEqual(ok, acl_logic:check_permission([Ace3, Ace1, Ace2], User1, ?read_mask, FileCtx)),
     % read permission, with denying read
-    ?assertEqual(?EACCES, catch acl_logic:check_permission([Ace2, Ace4, Ace1], User2, ?read_mask bor ?write_mask)).
+    ?assertEqual(?EACCES, catch acl_logic:check_permission([Ace2, Ace4, Ace1], User2, ?read_mask bor ?write_mask, FileCtx)).
 
 check_group_permission_test() ->
     Id1 = <<"id1">>,
+    FileGuid = <<"file_guid">>,
+    FileCtx = file_ctx:new_by_guid(FileGuid),
     GId1 = <<"gid1">>,
     GId2 = <<"gid2">>,
     GId3 = <<"gid3">>,
@@ -161,25 +165,96 @@ check_group_permission_test() ->
     Ace3 = #access_control_entity{acetype = ?allow_mask, aceflags = ?identifier_group_mask, identifier = GId3, acemask = ?execute_mask},
 
     % read permission
-    ?assertEqual(ok, acl_logic:check_permission([Ace1, Ace2, Ace3], User1, ?read_mask)),
+    ?assertEqual(ok, acl_logic:check_permission([Ace1, Ace2, Ace3], User1, ?read_mask, FileCtx)),
     % rdwr permission on different ACEs
-    ?assertEqual(ok, acl_logic:check_permission([Ace1, Ace2, Ace3], User1, ?read_mask bor ?write_mask)),
+    ?assertEqual(ok, acl_logic:check_permission([Ace1, Ace2, Ace3], User1, ?read_mask bor ?write_mask, FileCtx)),
     % rwx permission, not allowed
-    ?assertEqual(?EACCES, catch acl_logic:check_permission([Ace1, Ace2, Ace3], User1, ?read_mask bor ?write_mask bor ?execute_mask)),
+    ?assertEqual(?EACCES, catch acl_logic:check_permission([Ace1, Ace2, Ace3], User1, ?read_mask bor ?write_mask bor ?execute_mask, FileCtx)),
     % x permission, not allowed
-    ?assertEqual(?EACCES, catch acl_logic:check_permission([Ace1, Ace2, Ace3], User1, ?execute_mask)),
+    ?assertEqual(?EACCES, catch acl_logic:check_permission([Ace1, Ace2, Ace3], User1, ?execute_mask, FileCtx)),
     % write, not allowed
-    ?assertEqual(?EACCES, catch acl_logic:check_permission([Ace1], User1, ?write_mask)),
+    ?assertEqual(?EACCES, catch acl_logic:check_permission([Ace1], User1, ?write_mask, FileCtx)),
 
     Id2 = <<"id2">>,
     User2 = #document{key = Id2, value = #od_user{}},
     Ace4 = #access_control_entity{acetype = ?deny_mask, aceflags = ?no_flags_mask, identifier = GId1, acemask = ?read_mask},
 
     % user allow, group deny
-    ?assertEqual(?EACCES, catch acl_logic:check_permission([Ace2, Ace4], User1, ?read_mask bor ?write_mask)),
+    ?assertEqual(?EACCES, catch acl_logic:check_permission([Ace2, Ace4], User1, ?read_mask bor ?write_mask, FileCtx)),
     % read & write allow from od_user and group ace
-    ?assertEqual(ok, acl_logic:check_permission([Ace1, Ace4], User1, ?read_mask bor ?read_mask)),
+    ?assertEqual(ok, acl_logic:check_permission([Ace1, Ace4], User1, ?read_mask bor ?read_mask, FileCtx)),
 
-    ?assertEqual(?EACCES, catch acl_logic:check_permission([Ace1, Ace2], User2, ?read_mask bor ?write_mask)).
+    ?assertEqual(?EACCES, catch acl_logic:check_permission([Ace1, Ace2], User2, ?read_mask bor ?write_mask, FileCtx)).
+
+check_owner_principal_permission_test() ->
+    Id1 = <<"id1">>,
+    Principal = <<"OWNER@">>,
+    FileGuid = <<"file_guid">>,
+    FileMeta = #file_meta{owner = Id1},
+    FileDoc = #document{key = FileGuid, value = FileMeta},
+    FileCtx = file_ctx:new_by_doc(FileDoc, <<"space">>, undefined),
+    meck:new(file_ctx, [passthrough]),
+    meck:expect(file_ctx, get_file_doc, fun(Ctx) -> {FileDoc, Ctx} end),
+    User1 = #document{key = Id1, value = #od_user{}},
+    Ace5 = #access_control_entity{acetype = ?allow_mask, aceflags = ?no_flags_mask, identifier = Principal, acemask = ?read_mask},
+    Ace6 = #access_control_entity{acetype = ?allow_mask, aceflags = ?no_flags_mask, identifier = Principal, acemask = ?write_mask},
+    % read permission
+    ?assertEqual(ok, acl_logic:check_permission([Ace5, Ace6], User1, ?read_mask, FileCtx)),
+    % rdwr permission on different ACEs
+    ?assertEqual(ok, acl_logic:check_permission([Ace5, Ace6], User1, ?read_mask bor ?write_mask, FileCtx)),
+    % rwx permission, not allowed
+    ?assertEqual(?EACCES, catch acl_logic:check_permission([Ace5, Ace6], User1, ?read_mask bor ?write_mask bor ?execute_mask, FileCtx)),
+    % x permission, not allowed
+    ?assertEqual(?EACCES, catch acl_logic:check_permission([Ace5, Ace6], User1, ?execute_mask, FileCtx)),
+    meck:validate(file_ctx),
+    meck:unload().
+
+check_group_principal_permission_test() ->
+    Id1 = <<"id1">>,
+    Gid1 = <<"gid1">>,
+    Principal = <<"GROUP@">>,
+    FileGuid = <<"file_guid">>,
+    FileMeta = #file_meta{group_owner = Gid1},
+    FileDoc = #document{key = FileGuid, value = FileMeta},
+    FileCtx = file_ctx:new_by_doc(FileDoc, <<"space">>, undefined),
+    meck:new(file_ctx, [passthrough]),
+    meck:expect(file_ctx, get_file_doc, fun(Ctx) -> {FileDoc, Ctx} end),
+    User1 = #document{key = Id1, value = #od_user{eff_groups = [Gid1]}},
+    Ace5 = #access_control_entity{acetype = ?allow_mask, aceflags = ?no_flags_mask, identifier = Principal, acemask = ?read_mask},
+    Ace6 = #access_control_entity{acetype = ?deny_mask, aceflags = ?no_flags_mask, identifier = Principal, acemask = ?write_mask},
+    % read permission
+    ?assertEqual(ok, acl_logic:check_permission([Ace5, Ace6], User1, ?read_mask, FileCtx)),
+    % rdwr permission on different ACEs, not allowed
+    ?assertEqual(?EACCES, catch acl_logic:check_permission([Ace5, Ace6], User1, ?read_mask bor ?write_mask, FileCtx)),
+    % rwx permission, not allowed
+    ?assertEqual(?EACCES, catch acl_logic:check_permission([Ace5, Ace6], User1, ?read_mask bor ?write_mask bor ?execute_mask, FileCtx)),
+    % x permission, not allowed
+    ?assertEqual(?EACCES, catch acl_logic:check_permission([Ace5, Ace6], User1, ?execute_mask, FileCtx)),
+    meck:validate(file_ctx),
+    meck:unload().
+
+check_everyone_principal_permission_test() ->
+    Id1 = <<"id1">>,
+    Id2 = <<"id2">>,
+    Principal = <<"EVERYONE@">>,
+    FileGuid = <<"file_guid">>,
+    FileMeta = #file_meta{owner = Id1},
+    FileDoc = #document{key = FileGuid, value = FileMeta},
+    FileCtx = file_ctx:new_by_doc(FileDoc, <<"space">>, undefined),
+    meck:new(file_ctx, [passthrough]),
+    meck:expect(file_ctx, get_file_doc, fun(Ctx) -> {FileDoc, Ctx} end),
+    User2 = #document{key = Id2, value = #od_user{}},
+    Ace5 = #access_control_entity{acetype = ?allow_mask, aceflags = ?no_flags_mask, identifier = Principal, acemask = ?read_mask},
+    Ace6 = #access_control_entity{acetype = ?deny_mask, aceflags = ?no_flags_mask, identifier = Principal, acemask = ?write_mask},
+    % read permission
+    ?assertEqual(ok, acl_logic:check_permission([Ace5, Ace6], User2, ?read_mask, FileCtx)),
+    % rdwr permission on different ACEs, not allowed
+    ?assertEqual(?EACCES, catch acl_logic:check_permission([Ace5, Ace6], User2, ?read_mask bor ?write_mask, FileCtx)),
+    % rwx permission, not allowed
+    ?assertEqual(?EACCES, catch acl_logic:check_permission([Ace5, Ace6], User2, ?read_mask bor ?write_mask bor ?execute_mask, FileCtx)),
+    % x permission, not allowed
+    ?assertEqual(?EACCES, catch acl_logic:check_permission([Ace5, Ace6], User2, ?execute_mask, FileCtx)),
+    meck:validate(file_ctx),
+    meck:unload().
 
 -endif.

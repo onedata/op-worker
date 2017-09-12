@@ -33,7 +33,7 @@
 -export([get_parent/1, get_parent_uuid/1]).
 -export([get_child/2, list_children/3]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
-    make_space_exist/1, new_doc/6, type/1, get_ancestors/1,
+    make_space_exist/1, new_doc/7, type/1, get_ancestors/1,
     get_locations_by_uuid/1, rename/4]).
 
 
@@ -635,14 +635,15 @@ make_space_exist(SpaceId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec new_doc(undefined | file_meta:name(), undefined | file_meta:type(),
-    file_meta:posix_permissions(), undefined | od_user:id(),
+    file_meta:posix_permissions(), undefined | od_user:id(), undefined | od_group:id(),
     undefined | file_meta:size(), uuid()) -> doc().
-new_doc(FileName, FileType, Mode, Owner, Size, ParentUuid) ->
+new_doc(FileName, FileType, Mode, Owner, GroupOwner, Size, ParentUuid) ->
     #document{value = #file_meta{
         name = FileName,
         type = FileType,
         mode = Mode,
         owner = Owner,
+        group_owner = GroupOwner,
         size = Size,
         parent_uuid = ParentUuid
     }}.
@@ -763,7 +764,7 @@ get_posthooks() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    4.
+    5.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -838,6 +839,27 @@ get_record_struct(4) ->
             {last_synchronized_mtime, integer}
         ]}},
         {parent_uuid, string}
+    ]};
+get_record_struct(5) ->
+    {record, [
+        {name, string},
+        {type, atom},
+        {mode, integer},
+        {owner, string},
+        {group_owner, string},
+        {size, integer},
+        {version, integer},
+        {is_scope, boolean},
+        {scope, string},
+        {provider_id, string},
+        {link_value, string},
+        {shares, [string]},
+        {deleted, boolean},
+        {storage_sync_info, {record, [
+            {children_attrs_hash, #{integer => binary}},
+            {last_synchronized_mtime, integer}
+        ]}},
+        {parent_uuid, string}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -869,4 +891,13 @@ upgrade_record(3, {?MODULE, Name, Type, Mode, Owner, Size, Version, IsScope,
         provider_id = ProviderId, link_value = LinkValue, shares = Shares,
         deleted = false, storage_sync_info = StorageSyncInfo,
         parent_uuid = undefined
+    }};
+upgrade_record(4, {?MODULE, Name, Type, Mode, Owner, Size, Version, IsScope,
+    Scope, ProviderId, LinkValue, Shares, StorageSyncInfo, ParentUuid}
+) ->
+    {5, #file_meta{name = Name, type = Type, mode = Mode, owner = Owner, size = Size,
+        version = Version, is_scope = IsScope, scope = Scope,
+        provider_id = ProviderId, link_value = LinkValue, shares = Shares,
+        deleted = false, storage_sync_info = StorageSyncInfo,
+        parent_uuid = ParentUuid, group_owner = undefined
     }}.

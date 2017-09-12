@@ -16,10 +16,10 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_simple_scan_import/3, modify_storage_import/3,
+-export([start_simple_scan_import/4, modify_storage_import/3,
     modify_storage_import/4, stop_storage_import/1, stop_storage_update/1,
     modify_storage_update/4, modify_storage_update/3,
-    start_simple_scan_update/6
+    start_simple_scan_update/7
 ]).
 
 
@@ -54,10 +54,13 @@ modify_storage_import(SpaceId, StrategyName, StorageId, Args) ->
 %% @equiv modify_storage_import(SpaceId, simple_scan, StorageId, #{max_depth =>MaxDepth}).
 %% @end
 %%--------------------------------------------------------------------
--spec start_simple_scan_import(od_space:id(), storage:id(), non_neg_integer()) ->
+-spec start_simple_scan_import(od_space:id(), storage:id(), non_neg_integer(), boolean()) ->
     {ok, datastore:key()} | {error, term()}.
-start_simple_scan_import(SpaceId, StorageId, MaxDepth) ->
-    modify_storage_import(SpaceId, simple_scan, StorageId, #{max_depth =>MaxDepth}).
+start_simple_scan_import(SpaceId, StorageId, MaxDepth, SyncAcl) ->
+    modify_storage_import(SpaceId, simple_scan, StorageId, #{
+        max_depth => MaxDepth,
+        sync_acl => SyncAcl
+    }).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -102,16 +105,17 @@ modify_storage_update(SpaceId, StrategyName, StorageId, Args) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec start_simple_scan_update(od_space:id(), storage:id(),
-    non_neg_integer(), non_neg_integer(), boolean(), boolean()) ->
+    non_neg_integer(), non_neg_integer(), boolean(), boolean(), boolean()) ->
     {ok, datastore:key()} | {error, term()}.
 start_simple_scan_update(SpaceId, StorageId, MaxDepth, ScanInterval, WriteOnce,
-    DeleteEnable
+    DeleteEnable, SyncAcl
 ) ->
     modify_storage_update(SpaceId, simple_scan, StorageId, #{
         max_depth => MaxDepth,
         scan_interval => ScanInterval,
         write_once => WriteOnce,
-        delete_enable => DeleteEnable
+        delete_enable => DeleteEnable,
+        sync_acl => SyncAcl
     }).
 
 %%--------------------------------------------------------------------
