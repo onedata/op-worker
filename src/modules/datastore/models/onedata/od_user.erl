@@ -145,8 +145,10 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(onedata_user_bucket, [{?MODEL_NAME, create}, {?MODEL_NAME, save},
-        {?MODEL_NAME, create_or_update}, {?MODEL_NAME, update}], ?GLOBALLY_CACHED_LEVEL).
+    ?MODEL_CONFIG(onedata_user_bucket, [
+        {?MODEL_NAME, create}, {?MODEL_NAME, save},
+        {?MODEL_NAME, create_or_update}, {?MODEL_NAME, update}
+    ], ?GLOBALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc

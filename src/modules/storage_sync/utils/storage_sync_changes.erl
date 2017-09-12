@@ -17,6 +17,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 
 -type hash() :: binary() | undefined.
 
@@ -106,12 +107,21 @@ count_file_attrs_hash(StorageFileCtx) ->
         st_ctime = STCtime
     }= StatBuf,
 
+    {Xattr, StorageFileCtx3} = try
+        storage_file_ctx:get_nfs4_acl(StorageFileCtx2)
+    catch
+        throw:?ENOTSUP ->
+            {<<"">>, StorageFileCtx2};
+        throw:?ENOENT ->
+            {<<"">>, StorageFileCtx2}
+    end,
+
     case file_meta:type(StMode) of
         ?DIRECTORY_TYPE ->
             %% don't count hash for directory as it will be scanned anyway
-            {<<"">>, StorageFileCtx2};
+            {<<"">>, StorageFileCtx3};
         ?REGULAR_FILE_TYPE ->
-            {hash([StMode, StSize, StAtime, STMtime, STCtime]), StorageFileCtx2}
+            {hash([StMode, StSize, StAtime, STMtime, STCtime, Xattr]), StorageFileCtx3}
     end.
 
 

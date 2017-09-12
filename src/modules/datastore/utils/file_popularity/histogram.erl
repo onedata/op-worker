@@ -17,7 +17,7 @@
 -type histogram() :: [non_neg_integer()].
 
 %% API
--export([new/1, shift/2, increment/1]).
+-export([new/1, shift/2, increment/2]).
 
 %%%===================================================================
 %%% API
@@ -38,7 +38,7 @@ new(Size) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec shift(histogram(), ShiftSize :: non_neg_integer()) -> histogram().
-shift(Histogram, ShiftSize) when ShiftSize >= Histogram ->
+shift(Histogram, ShiftSize) when ShiftSize >= length(Histogram) ->
     new(length(Histogram));
 shift(Histogram, ShiftSize) ->
     NewSlots = new(ShiftSize),
@@ -46,9 +46,9 @@ shift(Histogram, ShiftSize) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Increments first value in given histogram
+%% Increments first value in given histogram by N
 %% @end
 %%--------------------------------------------------------------------
--spec increment(histogram()) -> histogram().
-increment([Head | Rest]) ->
-    [Head + 1 | Rest].
+-spec increment(histogram(), non_neg_integer()) -> histogram().
+increment([Head | Rest], N) ->
+    [Head + N | Rest].

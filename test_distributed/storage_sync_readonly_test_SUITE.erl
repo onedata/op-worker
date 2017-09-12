@@ -19,6 +19,9 @@
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("kernel/include/file.hrl").
 -include("storage_sync_test.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
+-include_lib("ctool/include/logging.hrl").
+
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1,
@@ -50,7 +53,10 @@
     create_directory_import_check_user_id_test/1,
     create_directory_import_check_user_id_error_test/1,
     create_file_import_check_user_id_test/1,
-    create_file_import_check_user_id_error_test/1]).
+    create_file_import_check_user_id_error_test/1,
+    import_nfs_acl_test/1,
+    update_nfs_acl_test/1,
+    import_nfs_acl_with_disabled_luma_should_fail_test/1]).
 
 -define(TEST_CASES, [
     create_directory_import_test,
@@ -77,7 +83,10 @@
     chmod_file_update_test,
     chmod_file_update2_test,
     update_timestamps_file_import_test,
-    should_not_detect_timestamp_update_test
+    should_not_detect_timestamp_update_test,
+    import_nfs_acl_test,
+    update_nfs_acl_test,
+    import_nfs_acl_with_disabled_luma_should_fail_test
 %%    import_file_by_path_test, %todo uncomment after resolving and merging with VFS-3052
 %%    get_child_attr_by_path_test,
 %%    import_remote_file_by_path_test
@@ -164,6 +173,12 @@ update_timestamps_file_import_test(Config) ->
 should_not_detect_timestamp_update_test(Config) ->
     storage_sync_test_base:should_not_detect_timestamp_update_test(Config, true).
 
+import_nfs_acl_test(Config) ->
+    storage_sync_test_base:import_nfs_acl_test(Config, true).
+
+update_nfs_acl_test(Config) ->
+    storage_sync_test_base:update_nfs_acl_test(Config, true).
+
 import_file_by_path_test(Config) ->
     storage_sync_test_base:import_file_by_path_test(Config, true).
 
@@ -172,6 +187,9 @@ get_child_attr_by_path_test(Config) ->
 
 import_remote_file_by_path_test(Config) ->
     storage_sync_test_base:import_remote_file_by_path_test(Config, true).
+
+import_nfs_acl_with_disabled_luma_should_fail_test(Config) ->
+    storage_sync_test_base:import_nfs_acl_with_disabled_luma_should_fail_test(Config, true).
 
 %===================================================================
 % SetUp and TearDown functions
@@ -185,7 +203,7 @@ init_per_suite(Config) ->
         initializer:enable_grpca_based_communication(NewConfig),
         NewConfig
     end,
-    [{?LOAD_MODULES, [initializer]}, {?ENV_UP_POSTHOOK, Posthook} | Config].
+    [{?LOAD_MODULES, [initializer, storage_sync_test_base]}, {?ENV_UP_POSTHOOK, Posthook} | Config].
 
 end_per_suite(Config) ->
     initializer:unload_quota_mocks(Config),
@@ -202,8 +220,11 @@ init_per_testcase(Case, Config) when
         {StorageDoc = #document{value = Storage = #storage{}}, Ctx} = meck:passthrough([Ctx]),
         {StorageDoc#document{value = Storage#storage{luma_config = ?LUMA_CONFIG}}, Ctx}
     end),
-    test_utils:mock_expect(Workers, reverse_luma_proxy, get_user_id, fun(_, _, _, _, _) ->
-        {ok, ?TEST_OD_USER_ID}
+    test_utils:mock_expect(Workers, reverse_luma_proxy, get_group_id, fun(_, _, _, _) ->
+        {ok, ?GROUP}
+    end),
+    test_utils:mock_expect(Workers, reverse_luma_proxy, get_user_id, fun(_, _, _, _) ->
+        {ok, ?USER}
     end),
     init_per_testcase(default, Config);
 
@@ -217,7 +238,10 @@ init_per_testcase(Case, Config) when
         {StorageDoc = #document{value = Storage = #storage{}}, Ctx} = meck:passthrough([Ctx]),
         {StorageDoc#document{value = Storage#storage{luma_config = ?LUMA_CONFIG}}, Ctx}
     end),
-    test_utils:mock_expect(Workers, reverse_luma_proxy, get_user_id, fun(_, _, _, _, _) ->
+    test_utils:mock_expect(Workers, reverse_luma_proxy, get_group_id, fun(_, _, _, _) ->
+        {ok, ?GROUP}
+    end),
+    test_utils:mock_expect(Workers, reverse_luma_proxy, get_user_id, fun(_, _, _, _) ->
         error(test_reason)
     end),
     init_per_testcase(default, Config);
@@ -271,6 +295,56 @@ init_per_testcase(Case, Config) when
     Config2 = [{old_dir_batch_size, OldDirBatchSize} | Config],
     init_per_testcase(default, Config2);
 
+init_per_testcase(Case, Config) when
+    Case =:= import_nfs_acl_test;
+    Case =:= update_nfs_acl_test
+->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, [storage_file_manager, reverse_luma_proxy, storage_file_ctx]),
+
+    test_utils:mock_expect(Workers, storage_file_ctx, get_storage_doc, fun(Ctx) ->
+        {StorageDoc = #document{value = Storage = #storage{}}, Ctx2} = meck:passthrough([Ctx]),
+        {StorageDoc#document{value = Storage#storage{luma_config = ?LUMA_CONFIG}}, Ctx2}
+    end),
+
+    test_utils:mock_expect(Workers, reverse_luma_proxy, get_user_id, fun(_, _, _, _) ->
+        {ok, ?USER}
+    end),
+
+    test_utils:mock_expect(Workers, reverse_luma_proxy, get_group_id, fun(Args, _, _, _) ->
+        case maps:keys(Args) of
+            [<<"gid">>] ->
+                {ok, ?GROUP};
+            [<<"name">>] ->
+                {ok, ?GROUP2}
+        end
+    end),
+
+    EncACL = nfs4_acl:encode(?ACL),
+    test_utils:mock_expect(Workers, storage_file_manager, getxattr, fun
+        (Handle = #sfm_handle{file = <<"/">>}, Ctx) ->
+            meck:passthrough([Handle, Ctx]);
+        (#sfm_handle{}, _) ->
+            {ok, EncACL}
+    end),
+    init_per_testcase(default, Config);
+
+init_per_testcase(Case, Config) when
+    Case =:= import_nfs_acl_with_disabled_luma_should_fail_test ->
+
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, [storage_file_manager]),
+
+    EncACL = nfs4_acl:encode(?ACL),
+    test_utils:mock_expect(Workers, storage_file_manager, getxattr, fun
+        (Handle = #sfm_handle{file = <<"/space1">>}, Ctx) ->
+            meck:passthrough([Handle, Ctx]);
+        (#sfm_handle{}, _) ->
+            {ok, EncACL}
+    end),
+    init_per_testcase(default, Config);
+
+
 init_per_testcase(_Case, Config) ->
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(
         ?TEST_FILE(Config, "env_desc.json"), Config),
@@ -305,13 +379,21 @@ end_per_testcase(Case, Config) when
     ok = test_utils:mock_unload(Workers, [reverse_luma_proxy, storage_file_ctx]),
     end_per_testcase(default, Config);
 
+end_per_testcase(Case, Config) when
+    Case =:= import_nfs_acl_test;
+    Case =:= update_nfs_acl_test
+->
+    Workers = [W1 | _] = ?config(op_worker_nodes, Config),
+    ok = storage_sync_test_base:clean_reverse_luma_cache(W1),
+    ok = test_utils:mock_unload(Workers, [reverse_luma_proxy, storage_file_ctx, storage_file_manager]),
+    end_per_testcase(default, Config);
+
 end_per_testcase(_Case, Config) ->
     storage_sync_test_base:disable_storage_sync(Config),
     storage_sync_test_base:clean_storage(Config, true),
     lfm_proxy:teardown(Config),
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config).
-
 
 %%%===================================================================
 %%% Internal functions

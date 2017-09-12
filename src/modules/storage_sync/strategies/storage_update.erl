@@ -78,6 +78,11 @@ available_strategies() ->
                     name = write_once,
                     type = boolean,
                     description = <<"Allows modifying already imported files">>
+                },
+                #space_strategy_argument{
+                    name = sync_acl,
+                    type = boolean,
+                    description = <<"Enables synchronization of NFSv4 ACLs">>
                 }
             ],
             description = <<"Simple full filesystem scan">>
@@ -238,22 +243,20 @@ start(SpaceId, StorageId, ImportFinishTime, LastUpdateStartTime, LastUpdateFinis
 -spec maybe_import_storage_file_and_children(space_strategy:job()) ->
     {space_strategy:job_result(), [space_strategy:job()]}.
 maybe_import_storage_file_and_children(Job0 = #space_strategy_job{
-    data = Data0 = #{
-        storage_file_ctx := StorageFileCtx0
-}}) ->
+    data = #{storage_file_ctx := StorageFileCtx0}
+}) ->
     {#statbuf{
         st_mtime = StorageMtime,
         st_mode = Mode
     }, StorageFileCtx1} = storage_file_ctx:get_stat_buf(StorageFileCtx0),
-
-    Job1 = Job0#space_strategy_job{data = Data0#{storage_file_ctx => StorageFileCtx1}},
+    Job1 = space_strategy:update_job_data(storage_file_ctx, StorageFileCtx1, Job0),
     {LocalResult, FileCtx, Job2} = simple_scan:maybe_import_storage_file(Job1),
     Data2 = Job2#space_strategy_job.data,
     Offset = maps:get(dir_offset, Data2, 0),
     Job3 = case Offset of
         0 ->
-            Data3 = Data2#{mtime => StorageMtime},  %remember mtime to save after importing all subfiles
-            Job2#space_strategy_job{data=Data3};
+            %remember mtime to save after importing all subfiles
+            space_strategy:update_job_data(mtime, StorageMtime, Job2);
         _ -> Job2
     end,
     SubJobs = import_children(Job3, file_meta:type(Mode), Offset, FileCtx, ?DIR_BATCH),
@@ -289,8 +292,7 @@ handle_already_imported_file(Job = #space_strategy_job{
     Offset :: non_neg_integer(), file_ctx:ctx(), non_neg_integer()) ->
     [space_strategy:job()].
 import_children(Job = #space_strategy_job{
-    strategy_args = #{
-        write_once := true}
+    strategy_args = #{write_once := true}
 }, Type = ?DIRECTORY_TYPE, Offset, FileCtx, BatchSize
 ) ->
     simple_scan:import_children(Job, Type, Offset, FileCtx, BatchSize);
@@ -452,13 +454,11 @@ handle_already_imported_directory_unchanged_mtime(Job = #space_strategy_job{
     #file_attr{}, file_ctx:ctx(), storage_sync_changes:hash()) ->
     {ok, space_strategy:job()}.
 handle_already_imported_directory_changed_hash(Job = #space_strategy_job{
-    data = Data0 = #{dir_offset := Offset}
+    data = #{dir_offset := Offset}
 }, FileAttr, FileCtx, CurrentHash
 ) ->
-    Job2 = Job#space_strategy_job{
-        data = Data0#{
-            hashes_map => #{Offset div ?DIR_BATCH => CurrentHash}
-        }},
+    HashesMap = #{Offset div ?DIR_BATCH => CurrentHash},
+    Job2 = space_strategy:update_job_data(hashes_map, HashesMap, Job),
     simple_scan:handle_already_imported_file(Job2, FileAttr, FileCtx).
 
 %%-------------------------------------------------------------------
@@ -468,10 +468,8 @@ handle_already_imported_directory_changed_hash(Job = #space_strategy_job{
 %% only its subdirectories will be imported.
 %% @end
 %%-------------------------------------------------------------------
-import_dirs_only(Job = #space_strategy_job{data = Data0},
-    FileAttr, FileCtx
-) ->
-    Job2 = Job#space_strategy_job{data = Data0#{import_dirs_only => true}},
+import_dirs_only(Job = #space_strategy_job{}, FileAttr, FileCtx) ->
+    Job2 = space_strategy:update_job_data(import_dirs_only, true, Job),
     simple_scan:handle_already_imported_file(Job2, FileAttr, FileCtx).
 
 %%-------------------------------------------------------------------

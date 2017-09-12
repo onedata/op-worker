@@ -47,6 +47,7 @@ routes() ->
             handler_initial_opts => #{resource_type => id}}},
         {"/api/v3/oneprovider/spaces", #{handler => spaces}},
         {"/api/v3/oneprovider/spaces/:sid", #{handler => spaces_by_id}},
+        {"/api/v3/oneprovider/space-cleanup/:sid", #{handler => space_cleanup}},
         {"/api/v3/oneprovider/transfers", #{handler => transfers,
             handler_initial_opts => #{list_all => true}}},
         {"/api/v3/oneprovider/transfers/:id", #{handler => transfers}}

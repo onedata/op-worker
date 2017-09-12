@@ -34,35 +34,40 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:rest_init/2
+%% @equiv pre_handler:rest_init/2
+%% @end
 %%--------------------------------------------------------------------
 -spec rest_init(req(), term()) -> {ok, req(), term()} | {shutdown, req()}.
 rest_init(Req, State) ->
     {ok, Req, State}.
 
 %%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:terminate/3
+%% @equiv pre_handler:terminate/3
+%% @end
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: term(), req(), maps:map()) -> ok.
 terminate(_, _, _) ->
     ok.
 
 %%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:allowed_methods/2
+%% @equiv pre_handler:allowed_methods/2
+%% @end
 %%--------------------------------------------------------------------
 -spec allowed_methods(req(), maps:map() | {error, term()}) -> {[binary()], req(), maps:map()}.
 allowed_methods(Req, State) ->
     {[<<"GET">>], Req, State}.
 
 %%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:is_authorized/2
+%% @equiv pre_handler:is_authorized/2
+%% @end
 %%--------------------------------------------------------------------
 -spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | halt, req(), maps:map()}.
 is_authorized(Req, State) ->
     onedata_auth_api:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:content_types_provided/2
+%% @equiv pre_handler:content_types_provided/2
+%% @end
 %%--------------------------------------------------------------------
 -spec content_types_provided(req(), maps:map()) -> {[{binary(), atom()}], req(), maps:map()}.
 content_types_provided(Req, State) ->
@@ -83,6 +88,7 @@ content_types_provided(Req, State) ->
 %% HTTP method: GET
 %%
 %% @param path Directory path (e.g. &#39;/My Private Space/testfiles&#39;)
+%% @end
 %%--------------------------------------------------------------------
 -spec list_files(req(), maps:map()) -> {term(), req(), maps:map()}.
 list_files(Req, State) ->

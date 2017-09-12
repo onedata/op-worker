@@ -39,7 +39,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec chmod_storage_file(user_ctx:ctx(), file_ctx:ctx(),
-    file_meta:posix_permissions()) -> ok | no_return().
+    file_meta:posix_permissions()) -> ok | {error, Reason :: term()} | no_return().
 chmod_storage_file(UserCtx, FileCtx, Mode) ->
     SessId = user_ctx:get_session_id(UserCtx),
     case file_ctx:is_dir(FileCtx) of
@@ -49,7 +49,8 @@ chmod_storage_file(UserCtx, FileCtx, Mode) ->
             {SFMHandle, _} = storage_file_manager:new_handle(SessId, FileCtx2),
             case storage_file_manager:chmod(SFMHandle, Mode) of
                 ok -> ok;
-                {error, ?ENOENT} -> ok
+                {error, ?ENOENT} -> ok;
+                {error, ?EROFS} -> {error, ?EROFS}
             end
     end.
 

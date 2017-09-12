@@ -20,7 +20,7 @@
 -include("proto/oneclient/handshake_messages.hrl").
 
 %% oz_plugin_behaviour API
--export([get_oz_url/0, get_oz_rest_port/0, get_oz_rest_api_prefix/0]).
+-export([get_oz_url/0, get_oz_rest_port/0, get_oz_rest_api_prefix/0, get_oz_rest_endpoint/1]).
 -export([get_key_file/0, get_csr_file/0, get_cert_file/0, get_cacerts_dir/0]).
 -export([auth_to_rest_client/1]).
 
@@ -58,6 +58,20 @@ get_oz_rest_port() ->
 get_oz_rest_api_prefix() ->
     {ok, Prefix} = application:get_env(?APP_NAME, oz_rest_api_prefix),
     Prefix.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @doc Should return OZ REST endpoint, ended with given Path.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_oz_rest_endpoint(string() | binary()) -> string().
+get_oz_rest_endpoint(Path) ->
+    str_utils:format("~s:~B~s~s", [
+        get_oz_url(),
+        get_oz_rest_port(),
+        get_oz_rest_api_prefix(),
+        Path
+    ]).
 
 %%--------------------------------------------------------------------
 %% @doc

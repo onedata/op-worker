@@ -206,65 +206,87 @@ check(?read_acl, Doc, UserCtx, ShareId, _, FileCtx) when is_binary(ShareId) ->
 
 % acl is specified, check access masks
 check(?read_object, _, UserCtx, _, Acl, FileCtx) ->
-    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx), ?read_object_mask),
+    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx),
+        ?read_object_mask, FileCtx),
     {ok, FileCtx};
 check(?list_container, _, UserCtx, _, Acl, FileCtx) ->
-    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx), ?list_container_mask),
+    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx),
+        ?list_container_mask, FileCtx),
     {ok, FileCtx};
 check(?write_object, _Doc, UserCtx, ShareId, Acl, FileCtx) ->
-    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx), ?write_object_mask),
+    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx),
+        ?write_object_mask, FileCtx),
     validate_scope_privs(write, FileCtx, UserCtx, ShareId);
 check(?add_object, _Doc, UserCtx, ShareId, Acl, FileCtx) ->
-    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx), ?add_object_mask),
+    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx),
+        ?add_object_mask, FileCtx),
     validate_scope_privs(write, FileCtx, UserCtx, ShareId);
 check(?append_data, _, UserCtx, _, Acl, FileCtx) ->
-    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx), ?append_data_mask),
+    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx),
+        ?append_data_mask, FileCtx),
     {ok, FileCtx};
 check(?add_subcontainer, _, UserCtx, _, Acl, FileCtx) ->
-    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx), ?add_subcontainer_mask),
+    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx),
+        ?add_subcontainer_mask, FileCtx),
     {ok, FileCtx};
 check(?read_metadata, _, UserCtx, _, Acl, FileCtx) ->
-    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx), ?read_metadata_mask),
+    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx),
+        ?read_metadata_mask, FileCtx),
     {ok, FileCtx};
 check(?write_metadata, _Doc, UserCtx, ShareId, Acl, FileCtx) ->
-    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx), ?write_metadata_mask),
+    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx),
+        ?write_metadata_mask, FileCtx),
     validate_scope_privs(write, FileCtx, UserCtx, ShareId);
 check(?execute, _, UserCtx, _, Acl, FileCtx) ->
-    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx), ?execute_mask),
+    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx),
+        ?execute_mask, FileCtx),
     {ok, FileCtx};
-check(?traverse_container, #document{value = #file_meta{is_scope = true}}, UserCtx, ShareId, Acl, FileCtx) ->
+check(?traverse_container, #document{value = #file_meta{is_scope = true}},
+    UserCtx, ShareId, Acl, FileCtx
+) ->
     validate_scope_access(FileCtx, UserCtx, ShareId),
-    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx), ?traverse_container_mask),
+    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx),
+        ?traverse_container_mask, FileCtx),
     {ok, FileCtx};
 check(?traverse_container, _, UserCtx, _, Acl, FileCtx) ->
-    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx), ?traverse_container_mask),
+    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx),
+        ?traverse_container_mask, FileCtx),
     {ok, FileCtx};
 check(?delete_object, _Doc, UserCtx, ShareId, Acl, FileCtx) ->
-    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx), ?delete_object_mask),
+    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx),
+        ?delete_object_mask, FileCtx),
     validate_scope_privs(write, FileCtx, UserCtx, ShareId);
 check(?delete_subcontainer, _Doc, UserCtx, ShareId, Acl, FileCtx) ->
-    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx), ?delete_subcontainer_mask),
+    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx),
+        ?delete_subcontainer_mask, FileCtx),
     validate_scope_privs(write, FileCtx, UserCtx, ShareId);
 check(?read_attributes, _, UserCtx, _, Acl, FileCtx) ->
-    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx), ?read_attributes_mask),
+    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx),
+        ?read_attributes_mask, FileCtx),
     {ok, FileCtx};
 check(?write_attributes, _, UserCtx, _, Acl, FileCtx) ->
-    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx), ?write_attributes_mask),
+    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx),
+        ?write_attributes_mask, FileCtx),
     {ok, FileCtx};
 check(?delete, _Doc, UserCtx, ShareId, Acl, FileCtx) ->
-    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx), ?delete_mask),
+    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx),
+        ?delete_mask, FileCtx),
     validate_scope_privs(write, FileCtx, UserCtx, ShareId);
 check(?read_acl, _, UserCtx, _, Acl, FileCtx) ->
-    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx), ?read_acl_mask),
+    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx),
+        ?read_acl_mask, FileCtx),
     {ok, FileCtx};
 check(?write_acl, _Doc, UserCtx, ShareId, Acl, FileCtx) ->
-    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx), ?write_acl_mask),
+    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx),
+        ?write_acl_mask, FileCtx),
     validate_scope_privs(write, FileCtx, UserCtx, ShareId);
 check(?write_owner, _Doc, UserCtx, ShareId, Acl, FileCtx) ->
-    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx), ?write_owner_mask),
+    acl_logic:check_permission(Acl, user_ctx:get_user(UserCtx),
+        ?write_owner_mask, FileCtx),
     validate_scope_privs(write, FileCtx, UserCtx, ShareId);
 check(Perm, File, User, ShareId, Acl, _FileCtx) ->
-    ?error("Unknown permission check rule: (~p, ~p, ~p, ~p, ~p)", [Perm, File, User, ShareId, Acl]),
+    ?error("Unknown permission check rule: (~p, ~p, ~p, ~p, ~p)",
+        [Perm, File, User, ShareId, Acl]),
     throw(?EACCES).
 
 %%%===================================================================

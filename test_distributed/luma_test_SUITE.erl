@@ -316,8 +316,5 @@ end_per_testcase(Case, Config) when
 
 end_per_testcase(_Case, Config) ->
     Workers = [Worker | _] = ?config(op_worker_nodes, Config),
-    {ok, Docs} = rpc:call(Worker, luma, list, []),
-    lists:foreach(fun(#document{key = Key}) ->
-        rpc:call(Worker, luma, delete, [Key])
-    end, Docs),
+    rpc:call(Worker, luma_cache, invalidate, []),
     test_utils:mock_unload(Workers, [http_client, luma]).
