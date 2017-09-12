@@ -20,12 +20,12 @@
 
 %% API
 -export([init_lists/0, start/6, stop/1, get_status/1, get_info/1]).
--export([mark_active/1, mark_completed/1, mark_failed/1,
-    mark_active_invalidation/1, mark_completed_invalidation/1, mark_failed_invalidation/1,
+-export([mark_active/1, mark_completed/1, mark_failed/2,
+    mark_active_invalidation/1, mark_completed_invalidation/2, mark_failed_invalidation/2,
     mark_file_transfer_scheduled/2, mark_file_transfer_finished/2,
     mark_data_transfer_scheduled/2, mark_data_transfer_finished/2,
-    for_each_successfull_transfer/2, for_each_failed_transfer/2,
-    for_each_unfinished_transfer/2]).
+    for_each_successful_transfer/2, for_each_failed_transfer/2,
+    for_each_unfinished_transfer/2, restart_unfinished_and_failed_transfers/0]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, create_or_update/2,
@@ -117,17 +117,18 @@ start(SessionId, FileGuid, FilePath, ProviderId, Callback, InvalidateSourceRepli
     MinHist = time_slot_histogram:new(?MIN_TIME_WINDOW, 60),
     HrHist = time_slot_histogram:new(?HR_TIME_WINDOW, 24),
     DyHist = time_slot_histogram:new(?DY_TIME_WINDOW, 30),
+    SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
     ToCreate = #document{
         scope = fslogic_uuid:guid_to_space_id(FileGuid),
         value = #transfer{
             file_uuid = fslogic_uuid:guid_to_uuid(FileGuid),
-            space_id = fslogic_uuid:guid_to_space_id(FileGuid),
+            space_id = SpaceId,
             path = FilePath,
             callback = Callback,
-            source_provider_id = oneprovider:get_provider_id(),
-            target_provider_id = ProviderId,
             transfer_status = TransferStatus,
             invalidation_status = InvalidationStatus,
+            source_provider_id = oneprovider:get_provider_id(),
+            target_provider_id = ProviderId,
             invalidate_source_replica = InvalidateSourceReplica,
             start_time = TimeSeconds,
             last_update = 0,
@@ -138,10 +139,21 @@ start(SessionId, FileGuid, FilePath, ProviderId, Callback, InvalidateSourceRepli
         }},
     {ok, TransferId} = create(ToCreate),
     session:add_transfer(SessionId, TransferId),
-    add_link(?UNFINISHED_TRANSFERS_KEY, TransferId),
+    add_link(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
     transfer_controller:on_new_transfer_doc(ToCreate#document{key = TransferId}),
     invalidation_controller:on_new_transfer_doc(ToCreate#document{key = TransferId}),
     {ok, TransferId}.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Restarts all unfinished and failed transfers.
+%% @end
+%%-------------------------------------------------------------------
+-spec restart_unfinished_and_failed_transfers() -> ok.
+restart_unfinished_and_failed_transfers() ->
+    restart_unfinished_transfers(),
+    restart_failed_transfers(),
+    ok.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -206,9 +218,10 @@ get_info(TransferId) ->
 %%--------------------------------------------------------------------
 -spec stop(id()) -> ok | {error, term()}.
 stop(TransferId) ->
-    remove_link(?UNFINISHED_TRANSFERS_KEY, TransferId),
-    remove_link(?FAILED_TRANSFERS_KEY, TransferId),
-    remove_link(?SUCCESSFUL_TRANSFERS_KEY, TransferId),
+    {ok, #document{value = #transfer{space_id = SpaceId}}} = get(TransferId),
+    remove_link(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
+    remove_link(?FAILED_TRANSFERS_KEY, TransferId, SpaceId),
+    remove_link(?SUCCESSFUL_TRANSFERS_KEY, TransferId, SpaceId),
     delete(TransferId).
 
 %%--------------------------------------------------------------------
@@ -230,8 +243,9 @@ mark_completed(TransferId) ->
     transfer:update(TransferId, fun(Transfer) ->
         case Transfer#transfer.invalidation_status of
             skipped ->
-                add_link(?SUCCESSFUL_TRANSFERS_KEY, TransferId),
-                remove_link(?UNFINISHED_TRANSFERS_KEY, TransferId),
+                SpaceId = Transfer#transfer.space_id,
+                add_link(?SUCCESSFUL_TRANSFERS_KEY, TransferId, SpaceId),
+                remove_link(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
                 {ok, Transfer#transfer{transfer_status = completed}};
             _ ->
                 {ok, Transfer#transfer{transfer_status = completed}}
@@ -243,10 +257,10 @@ mark_completed(TransferId) ->
 %% Marks transfer as failed
 %% @end
 %%--------------------------------------------------------------------
--spec mark_failed(id()) -> {ok, id()} | {error, term()}.
-mark_failed(TransferId) ->
-    add_link(?FAILED_TRANSFERS_KEY, TransferId),
-    remove_link(?UNFINISHED_TRANSFERS_KEY, TransferId),
+-spec mark_failed(id(), od_space:id()) -> {ok, id()} | {error, term()}.
+mark_failed(TransferId, SpaceId) ->
+    add_link(?FAILED_TRANSFERS_KEY, TransferId, SpaceId),
+    remove_link(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
     transfer:update(TransferId, #{transfer_status => failed}).
 
 %%--------------------------------------------------------------------
@@ -263,11 +277,11 @@ mark_active_invalidation(TransferId) ->
 %% Marks replica invalidation as completed
 %% @end
 %%--------------------------------------------------------------------
--spec mark_completed_invalidation(id()) -> {ok, id()} | {error, term()}.
-mark_completed_invalidation(TransferId) ->
+-spec mark_completed_invalidation(id(), od_space:id()) -> {ok, id()} | {error, term()}.
+mark_completed_invalidation(TransferId, SpaceId) ->
     transfer:update(TransferId, fun(Transfer) ->
-        add_link(?SUCCESSFUL_TRANSFERS_KEY, TransferId),
-        remove_link(?UNFINISHED_TRANSFERS_KEY, TransferId),
+        add_link(?SUCCESSFUL_TRANSFERS_KEY, TransferId, SpaceId),
+        remove_link(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
 
         Transfer#transfer{invalidation_status = completed}
     end).
@@ -277,12 +291,11 @@ mark_completed_invalidation(TransferId) ->
 %% Marks replica invalidation as failed
 %% @end
 %%--------------------------------------------------------------------
--spec mark_failed_invalidation(id()) -> {ok, id()} | {error, term()}.
-mark_failed_invalidation(TransferId) ->
+-spec mark_failed_invalidation(id(), od_space:id()) -> {ok, id()} | {error, term()}.
+mark_failed_invalidation(TransferId, SpaceId) ->
     transfer:update(TransferId, fun(Transfer) ->
-        add_link(?FAILED_TRANSFERS_KEY, TransferId),
-        remove_link(?UNFINISHED_TRANSFERS_KEY, TransferId),
-
+        add_link(?FAILED_TRANSFERS_KEY, TransferId, SpaceId),
+        remove_link(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
         Transfer#transfer{invalidation_status = failed}
     end).
 
@@ -375,10 +388,10 @@ mark_data_transfer_finished(TransferId, Bytes) ->
 %% Executes callback for each successfully completed transfer
 %% @end
 %%--------------------------------------------------------------------
--spec for_each_successfull_transfer(
+-spec for_each_successful_transfer(
     Callback :: fun((id(), Acc0 :: term()) -> Acc :: term()),
     Acc0 :: term()) -> {ok, Acc :: term()} | {error, term()}.
-for_each_successfull_transfer(Callback, Acc0) ->
+for_each_successful_transfer(Callback, Acc0) ->
     for_each_transfer(?SUCCESSFUL_TRANSFERS_KEY, Callback, Acc0).
 
 %%--------------------------------------------------------------------
@@ -480,7 +493,8 @@ create_or_update(Doc, Diff) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    Config = ?MODEL_CONFIG(transfer_bucket, [], ?GLOBALLY_CACHED_LEVEL, ?GLOBALLY_CACHED_LEVEL),
+    Config = ?MODEL_CONFIG(transfer_bucket, [], ?GLOBALLY_CACHED_LEVEL,
+        ?GLOBALLY_CACHED_LEVEL, true, false, oneprovider:get_provider_id()),
     Config#model_config{version = 1, sync_enabled = true}.
 
 %%--------------------------------------------------------------------
@@ -509,24 +523,33 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Adds link to transfer
 %% @end
 %%--------------------------------------------------------------------
--spec add_link(SourceId :: virtual_list_id(), TransferId :: id()) -> ok.
-add_link(SourceId, TransferId) ->
-    model:execute_with_default_context(?MODULE, add_links, [SourceId, {TransferId, {TransferId, ?MODEL_NAME}}]).
+-spec add_link(SourceId :: virtual_list_id(), TransferId :: id(),
+    SpaceId :: od_space:id()) -> ok.
+add_link(SourceId, TransferId, SpaceId) ->
+    model:execute_with_default_context(?MODULE, add_links, [
+        SourceId, {TransferId, {TransferId, ?MODEL_NAME}}
+    ], [{scope, SpaceId}]).
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Removes link to transfer
 %% @end
 %%--------------------------------------------------------------------
--spec remove_link(SourceId :: virtual_list_id(), TransferId :: id()) -> ok.
-remove_link(SourceId, TransferId) ->
-    model:execute_with_default_context(?MODULE, delete_links, [SourceId, TransferId]).
+-spec remove_link(SourceId :: virtual_list_id(), TransferId :: id(),
+    SpaceId :: od_space:id()) -> ok.
+remove_link(SourceId, TransferId, SpaceId) ->
+    model:execute_with_default_context(?MODULE, delete_links, [SourceId, TransferId],
+        [{scope, SpaceId}]
+    ).
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Executes callback for each successfully completed transfer
 %% @end
@@ -539,3 +562,55 @@ for_each_transfer(ListDocId, Callback, Acc0) ->
         fun(LinkName, _LinkTarget, Acc) ->
             Callback(LinkName, Acc)
         end, Acc0]).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Restarts transfer referenced by given TransferId.
+%% @end
+%%-------------------------------------------------------------------
+-spec restart(id()) -> {ok, id()}.
+restart(TransferId) ->
+    TimeSeconds = utils:system_time_seconds(),
+    MinHist = time_slot_histogram:new(?MIN_TIME_WINDOW, 60),
+    HrHist = time_slot_histogram:new(?HR_TIME_WINDOW, 24),
+    DyHist = time_slot_histogram:new(?DY_TIME_WINDOW, 30),
+    {ok, TransferId} = update(TransferId, #{
+        files_to_transfer => 0,
+        files_transferred => 0,
+        bytes_to_transfer => 0,
+        bytes_transferred => 0,
+        start_time => TimeSeconds,
+        last_update => 0,
+        min_hist => time_slot_histogram:get_histogram_values(MinHist),
+        hr_hist => time_slot_histogram:get_histogram_values(HrHist),
+        dy_hist => time_slot_histogram:get_histogram_values(DyHist)
+    }),
+    {ok, TransferDoc} = get(TransferId),
+    transfer_controller:on_new_transfer_doc(TransferDoc),
+    invalidation_controller:on_new_transfer_doc(TransferDoc),
+    {ok, TransferId}.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Restarts all unfinished transfers.
+%% @end
+%%-------------------------------------------------------------------
+-spec restart_unfinished_transfers() -> term().
+restart_unfinished_transfers() ->
+    for_each_unfinished_transfer(fun(TransferId, _AccIn) ->
+        restart(TransferId)
+    end, []).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Restarts all failed transfers.
+%% @end
+%%-------------------------------------------------------------------
+-spec restart_failed_transfers() -> term().
+restart_failed_transfers() ->
+    for_each_failed_transfer(fun(TransferId, _AccIn) ->
+        restart(TransferId)
+    end, []).
