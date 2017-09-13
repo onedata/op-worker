@@ -173,36 +173,44 @@ handle_request_and_process_response(SessId, Request) ->
     try
         UserCtx = user_ctx:new(SessId),
         FilePartialCtx = fslogic_request:get_file_partial_ctx(UserCtx, Request),
-        Providers = fslogic_request:get_target_providers(UserCtx, FilePartialCtx, Request),
+        Providers = fslogic_request:get_target_providers(UserCtx,
+            FilePartialCtx, Request),
         case lists:member(oneprovider:get_provider_id(), Providers) of
             true ->
-                {FileCtx, SpaceID} = case FilePartialCtx of
-                    undefined ->
-                        {undefined, undefined};
-                    _ ->
-                        file_ctx:new_by_partial_context(FilePartialCtx)
-                end,
-                Response = try
-                    handle_request_locally(UserCtx, Request, FileCtx)
-                catch
-                    Type:Error ->
-                        fslogic_errors:handle_error(Request, Type, Error)
-                end,
-
-                %todo TL move this storage_sync logic out of here
-                process_response(UserCtx, Request, Response, SpaceID);
+                handle_request_and_process_response_locally(UserCtx, Request,
+                    FilePartialCtx);
             false ->
-                try
-                    handle_request_remotely(UserCtx, Request, Providers)
-                catch
-                    Type:Error ->
-                        fslogic_errors:handle_error(Request, Type, Error)
-                end
+                handle_request_remotely(UserCtx, Request, Providers)
         end
     catch
         Type2:Error2 ->
             fslogic_errors:handle_error(Request, Type2, Error2)
     end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handle request locally and do postprocessing of the response
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_request_and_process_response_locally(user_ctx:ctx(), request(),
+    file_partial_ctx:ctx() | undefined) -> response().
+handle_request_and_process_response_locally(UserCtx, Request, FilePartialCtx) ->
+    {FileCtx, SpaceID} = case FilePartialCtx of
+        undefined ->
+            {undefined, undefined};
+        _ ->
+            file_ctx:new_by_partial_context(FilePartialCtx)
+    end,
+    Response = try
+        handle_request_locally(UserCtx, Request, FileCtx)
+    catch
+        Type:Error ->
+            fslogic_errors:handle_error(Request, Type, Error)
+    end,
+
+    %todo TL move this storage_sync logic out of here
+    process_response(UserCtx, Request, Response, SpaceID).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -218,13 +226,11 @@ handle_request_locally(UserCtx, #fuse_request{fuse_request = Req}, FileCtx)  ->
 handle_request_locally(UserCtx, #provider_request{provider_request = Req}, FileCtx)  ->
     handle_provider_request(UserCtx, Req, FileCtx);
 handle_request_locally(UserCtx, #proxyio_request{
-    storage_id = StorageId,
-    file_id = FileId,
     parameters = Parameters,
     proxyio_request = Req
 }, FileCtx)  ->
     HandleId = maps:get(?PROXYIO_PARAMETER_HANDLE_ID, Parameters, undefined),
-    handle_proxyio_request(UserCtx, Req, FileCtx, HandleId, StorageId, FileId).
+    handle_proxyio_request(UserCtx, Req, FileCtx, HandleId).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -408,14 +414,13 @@ handle_provider_request(UserCtx, #remove_share{}, FileCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_proxyio_request(user_ctx:ctx(), proxyio_request_type(), file_ctx:ctx(),
-    HandleId :: storage_file_manager:handle_id(), StorageId :: storage:id(),
-    FileId :: helpers:file_id()) -> proxyio_response().
+    HandleId :: storage_file_manager:handle_id()) -> proxyio_response().
 handle_proxyio_request(UserCtx, #remote_write{byte_sequence = ByteSequences}, FileCtx,
-    HandleId, StorageId, FileId) ->
-    read_write_req:write(UserCtx, FileCtx, HandleId, StorageId, FileId, ByteSequences);
+    HandleId) ->
+    read_write_req:write(UserCtx, FileCtx, HandleId, ByteSequences);
 handle_proxyio_request(UserCtx, #remote_read{offset = Offset, size = Size}, FileCtx,
-    HandleId, StorageId, FileId) ->
-    read_write_req:read(UserCtx, FileCtx, HandleId, StorageId, FileId, Offset, Size).
+    HandleId) ->
+    read_write_req:read(UserCtx, FileCtx, HandleId, Offset, Size).
 
 %%--------------------------------------------------------------------
 %% @todo refactor
@@ -428,10 +433,11 @@ handle_proxyio_request(UserCtx, #remote_read{offset = Offset, size = Size}, File
     od_space:id() | undefined) -> response().
 process_response(_, _, Response, undefined) ->
     Response;
-process_response(UserCtx, #fuse_request{fuse_request = #file_request{
+process_response(UserCtx, Request = #fuse_request{fuse_request = #file_request{
     file_request = #get_child_attr{name = FileName},
     context_guid = ParentGuid
-}} = Request, #fuse_response{status = #status{code = ?ENOENT}} = Response, SpaceId) ->
+}}, Response = #fuse_response{status = #status{code = ?ENOENT}},
+    SpaceId) ->
     case space_strategies:is_import_on(SpaceId) of
         true ->
             SessId = user_ctx:get_session_id(UserCtx),
@@ -455,24 +461,26 @@ process_response(UserCtx, #fuse_request{fuse_request = #file_request{
         _ ->
             Response
     end;
-process_response(UserCtx, #fuse_request{fuse_request = #resolve_guid{path = Path}} = Request,
-    #fuse_response{status = #status{code = ?ENOENT}} = Response, SpaceId) ->
+process_response(UserCtx,
+    Request = #fuse_request{fuse_request = #resolve_guid{path = Path}},
+    Response = #fuse_response{status = #status{code = ?ENOENT}}, SpaceId) ->
     case space_strategies:is_import_on(SpaceId) of
         true ->
-            ok;
-        _ ->
-            Response
-    end,
-    {ok, Tokens} = fslogic_path:split_skipping_dots(Path),
-    case enoent_handling:get_canonical_file_entry(UserCtx, Tokens) of
-        {path, P} ->
-            {ok, Tokens1} = fslogic_path:split_skipping_dots(P),
-            case Tokens1 of
-                [<<?DIRECTORY_SEPARATOR>>, SpaceId | _] ->
-                    Data = #{response => Response, path => Path, ctx => UserCtx, space_id => SpaceId, request => Request},
-                    Init = space_sync_worker:init(enoent_handling, SpaceId, undefined, Data),
-                    space_sync_worker:run(Init);
-                _ -> Response
+            {ok, Tokens} = fslogic_path:split_skipping_dots(Path),
+            case enoent_handling:get_canonical_file_entry(UserCtx, Tokens) of
+                {path, P} ->
+                    {ok, Tokens1} = fslogic_path:split_skipping_dots(P),
+                    case Tokens1 of
+                        [<<?DIRECTORY_SEPARATOR>>, SpaceId | _] ->
+                            Data = #{response => Response, path => Path, ctx => UserCtx,
+                                space_id => SpaceId, request => Request},
+                            Init = space_sync_worker:init(enoent_handling,
+                                SpaceId, undefined, Data),
+                            space_sync_worker:run(Init);
+                        _ -> Response
+                    end;
+                _ ->
+                    Response
             end;
         _ ->
             Response

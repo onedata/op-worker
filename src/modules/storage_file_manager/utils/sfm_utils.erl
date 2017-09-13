@@ -127,10 +127,10 @@ create_delayed_storage_file(FileCtx) ->
                         files_to_chown:chown_or_schedule_chowning(FileCtx3),
                         {ok, FileLocation#file_location{storage_file_created = true}}
                     catch
-                        E1:E2 ->
+                        Error:Reason ->
                             ?error_stacktrace("Error during storage file creation: ~p:~p",
-                                [E1, E2]),
-                            {error, {E1, E2}}
+                                [Error, Reason]),
+                            {error, {Error, Reason}}
                     end
             end),
             FileCtx2;
@@ -179,20 +179,16 @@ create_storage_file_location(FileCtx, StorageFileCreated) ->
 %%--------------------------------------------------------------------
 -spec create_storage_file(user_ctx:ctx(), file_ctx:ctx()) ->
     file_ctx:ctx().
-% TODO naniesc poprawki z VFS-3314
 create_storage_file(UserCtx, FileCtx) ->
     SessId = user_ctx:get_session_id(UserCtx),
     {#document{value = #file_meta{mode = Mode}}, FileCtx2} =
         file_ctx:get_file_doc(FileCtx),
     {SFMHandle, FileCtx3} = storage_file_manager:new_handle(SessId, FileCtx2),
-%%    storage_file_manager:unlink(SFMHandle),
     {ok, FinalCtx} = case storage_file_manager:create(SFMHandle, Mode) of
-        {error, enoent} ->
+        {error, ?ENOENT} ->
             FileCtx4 = create_parent_dirs(FileCtx3),
             {storage_file_manager:create(SFMHandle, Mode), FileCtx4};
-        {error,eexist} ->
-            % TODO - co jesli space jest importowany i ten plik istnieje, ale nie
-            % zdarzyl sie zaktualizowac?
+        {error, ?EEXIST} ->
             storage_file_manager:unlink(SFMHandle),
             {storage_file_manager:create(SFMHandle, Mode), FileCtx3};
         Other ->

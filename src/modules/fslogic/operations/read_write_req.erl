@@ -21,7 +21,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([read/7, write/6]).
+-export([read/5, write/4]).
 
 %%%===================================================================
 %%% API functions
@@ -33,14 +33,13 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec read(user_ctx:ctx(), file_ctx:ctx(), HandleId :: storage_file_manager:handle_id(),
-    StorageId :: storage:id(), FileId :: helpers:file(),
     Offset :: non_neg_integer(), Size :: pos_integer()) ->
     fslogic_worker:proxyio_response().
-read(UserCtx, FileCtx, HandleId, StorageId, FileId, Offset, Size) ->
+read(UserCtx, FileCtx, HandleId, Offset, Size) ->
     #fuse_response{status = #status{code = ?OK}} =
         sync_req:synchronize_block(UserCtx, FileCtx,
             #file_block{offset = Offset, size = Size}, false, undefined),
-    {ok, Handle} =  get_handle(UserCtx, FileCtx, HandleId, StorageId, FileId, read),
+    {ok, Handle} =  get_handle(UserCtx, FileCtx, HandleId),
     {ok, Data} = storage_file_manager:read(Handle, Offset, Size),
     #proxyio_response{
         status = #status{code = ?OK},
@@ -53,11 +52,10 @@ read(UserCtx, FileCtx, HandleId, StorageId, FileId, Offset, Size) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec write(user_ctx:ctx(), file_ctx:ctx(),
-    HandleId :: storage_file_manager:handle_id(), StorageId :: storage:id(),
-    FileId :: helpers:file(), ByteSequences :: [#byte_sequence{}]) ->
-    fslogic_worker:proxyio_response().
-write(UserCtx, FileCtx, HandleId, StorageId, FileId, ByteSequences) ->
-    {ok, Handle} = get_handle(UserCtx, FileCtx, HandleId, StorageId, FileId, write),
+    HandleId :: storage_file_manager:handle_id(),
+    ByteSequences :: [#byte_sequence{}]) -> fslogic_worker:proxyio_response().
+write(UserCtx, FileCtx, HandleId, ByteSequences) ->
+    {ok, Handle} = get_handle(UserCtx, FileCtx, HandleId),
     Wrote =
         lists:foldl(fun(#byte_sequence{offset = Offset, data = Data}, Acc) ->
             Acc + write_all(Handle, Offset, Data, 0)
@@ -78,10 +76,10 @@ write(UserCtx, FileCtx, HandleId, StorageId, FileId, ByteSequences) ->
 %% Returns handle by either retrieving it from session or opening file.
 %% @end
 %%--------------------------------------------------------------------
--spec get_handle(user_ctx:ctx(), file_ctx:ctx(), HandleId :: storage_file_manager:handle_id(),
-    StorageId :: storage:id(), FileId :: helpers:file(), OpenFlag :: helpers:open_flag()) ->
+-spec get_handle(user_ctx:ctx(), file_ctx:ctx(),
+    HandleId :: storage_file_manager:handle_id()) ->
     {ok, storage_file_manager:handle()} | logical_file_manager:error_reply().
-get_handle(UserCtx, FileCtx, HandleId, _StorageId, _FileId, _OpenFlag) ->
+get_handle(UserCtx, FileCtx, HandleId) ->
     SessId = user_ctx:get_session_id(UserCtx),
     case session:get_handle(SessId, HandleId) of
         {error, link_not_found} ->

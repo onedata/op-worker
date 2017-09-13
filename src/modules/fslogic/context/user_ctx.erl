@@ -122,6 +122,7 @@ is_normal_user(#user_ctx{session = #document{key = SessId}}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec is_direct_io(ctx()) -> boolean().
-is_direct_io(#user_ctx{session = #document{value =
-    #session{direct_io = DirectIO}}}) ->
+is_direct_io(#user_ctx{session = #document{
+    value = #session{direct_io = DirectIO}
+}}) ->
     DirectIO.

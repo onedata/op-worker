@@ -21,6 +21,8 @@
 -export([create_file/5, make_file/4, get_file_location/2, open_file/3,
     open_file_insecure/3, open_file_insecure/4, fsync/4, release/3]).
 
+-define(NEW_HANDLE_ID, base64:encode(crypto:strong_rand_bytes(20))).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -97,7 +99,7 @@ open_file_insecure(UserCtx, FileCtx, Flag, HandleId0) ->
     SessId = user_ctx:get_session_id(UserCtx),
     FileCtx2 = sfm_utils:create_delayed_storage_file(FileCtx),
     {SFMHandle, FileCtx3} = storage_file_manager:new_handle(SessId, FileCtx2),
-    SFMHandle2 = storage_file_manager:add_size(SFMHandle),
+    SFMHandle2 = storage_file_manager:set_size(SFMHandle),
     {ok, Handle} = storage_file_manager:open(SFMHandle2, Flag),
     {ok, HandleId} = save_handle(SessId, Handle, HandleId0),
     ok = file_handles:register_open(FileCtx3, SessId, 1),
@@ -164,7 +166,7 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
 
     HandleId = case user_ctx:is_direct_io(UserCtx) of
         true ->
-            base64:encode(crypto:strong_rand_bytes(20));
+            ?NEW_HANDLE_ID;
         _ ->
             % open file on adequate node
             FileGuid = file_ctx:get_guid_const(FileCtx3),
@@ -276,7 +278,7 @@ create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
 save_handle(SessId, Handle, HandleId0) ->
     HandleId = case HandleId0 of
         undefined ->
-            base64:encode(crypto:strong_rand_bytes(20));
+            ?NEW_HANDLE_ID;
         _ ->
             HandleId0
     end,
