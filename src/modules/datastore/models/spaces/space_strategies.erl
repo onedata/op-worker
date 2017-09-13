@@ -24,7 +24,7 @@
     get_storage_import_details/2, get_storage_update_details/2,
     update_import_start_time/3, get_import_finish_time/2,
     get_import_start_time/2, update_last_update_start_time/3, update_last_update_finish_time/3,
-    get_last_update_finish_time/2, get_last_update_start_time/2]).
+    get_last_update_finish_time/2, get_last_update_start_time/2, is_import_on/1]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
@@ -216,7 +216,25 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @private
+%% @doc
+%% Checks if any storage is imported for a space.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_import_on(od_space:id()) -> boolean().
+is_import_on(SpaceId) ->
+    {ok, Doc} = space_storage:get(SpaceId),
+    StorageIds = space_storage:get_storage_ids(Doc),
+    lists:foldl(fun
+        (_StorageId, true) ->
+            true;
+        (StorageId, _) ->
+            case get_storage_import_details(SpaceId, StorageId) of
+                {no_import, _} -> false;
+                _ -> true
+            end
+    end, false, StorageIds).
+
+%%--------------------------------------------------------------------
 %% @doc
 %% Returns datastore document for space-strategies mapping.
 %% @end
@@ -447,13 +465,15 @@ get_storage_strategy_config(#space_strategies{
     storage_strategies = Strategies
 }, storage_import, StorageId
 ) ->
-    #storage_strategies{storage_import = Import} = maps:get(StorageId, Strategies),
+    #storage_strategies{storage_import = Import} =
+        maps:get(StorageId, Strategies, #storage_strategies{}),
     Import;
 get_storage_strategy_config(#space_strategies{
     storage_strategies = Strategies
 }, storage_update, StorageId
 ) ->
-    #storage_strategies{storage_update = Update} = maps:get(StorageId, Strategies),
+    #storage_strategies{storage_update = Update} =
+        maps:get(StorageId, Strategies, #storage_strategies{}),
     Update;
 get_storage_strategy_config(#document{value=Value}, StrategyType, StorageId) ->
     get_storage_strategy_config(Value, StrategyType, StorageId).

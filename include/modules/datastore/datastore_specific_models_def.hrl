@@ -238,7 +238,8 @@
     % Key-value in-session memory
     memory = #{} :: maps:map(),
     open_files = sets:new() :: sets:set(fslogic_worker:file_guid()),
-    transfers = [] :: [transfer:id()]
+    transfers = [] :: [transfer:id()],
+    direct_io = false :: boolean()
 }).
 
 %% File handle used by the module

@@ -200,7 +200,7 @@ init_should_clear_open_files_test_base(Config, DelayedFileCreation) ->
     test_utils:mock_assert_num_calls(Worker, file_meta, delete, 1, 1),
     case DelayedFileCreation of
         true -> ok;
-        false -> test_utils:mock_assert_num_calls(Worker, storage_file_manager, unlink, 1, 2)
+        false -> test_utils:mock_assert_num_calls(Worker, storage_file_manager, unlink, 1, 1)
     end.
 
 open_file_deletion_request(Config) ->
@@ -220,7 +220,7 @@ open_file_deletion_request_test_base(Config, DelayedFileCreation) ->
     test_utils:mock_assert_num_calls(Worker, file_meta, delete, 1, 1),
     case DelayedFileCreation of
         true -> ok;
-        false -> test_utils:mock_assert_num_calls(Worker, storage_file_manager, unlink, 1, 2)
+        false -> test_utils:mock_assert_num_calls(Worker, storage_file_manager, unlink, 1, 1)
     end.
 
 deletion_of_not_open_file(Config) ->
@@ -243,7 +243,7 @@ deletion_of_not_open_file_test_base(Config, DelayedFileCreation) ->
     test_utils:mock_assert_num_calls(Worker, file_meta, delete, 1, 1),
     case DelayedFileCreation of
         true -> ok;
-        false -> test_utils:mock_assert_num_calls(Worker, storage_file_manager, unlink, 1, 2)
+        false -> test_utils:mock_assert_num_calls(Worker, storage_file_manager, unlink, 1, 1)
     end.
 
 file_shouldnt_be_listed_after_deletion(Config) ->

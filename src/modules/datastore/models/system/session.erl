@@ -33,7 +33,7 @@
     get_connections/1, get_connections/2, get_auth/1, remove_connection/2, get_rest_session_id/1,
     all_with_user/0, get_user_id/1, add_open_file/2, remove_open_file/2,
     get_transfers/1, remove_transfer/2, add_transfer/2, add_handle/3, remove_handle/2, get_handle/2,
-    is_special/1, is_root/1, is_guest/1, root_session_id/0]).
+    is_special/1, is_root/1, is_guest/1, root_session_id/0, set_direct_io/2]).
 
 -type id() :: binary().
 -type model() :: #session{}.
@@ -179,6 +179,23 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets direct_io property of session.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_direct_io(id(), boolean()) ->
+    ok | datastore:update_error().
+set_direct_io(SessId, DirectIO) ->
+    Diff = fun(Sess) ->
+        {ok, Sess#session{direct_io = DirectIO}}
+    end,
+    case session:update(SessId, Diff) of
+        {ok, SessId} -> ok;
+        Other -> Other
+    end.
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns session supervisor and node on which supervisor is running.
