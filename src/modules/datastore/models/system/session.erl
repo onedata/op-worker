@@ -33,6 +33,7 @@
 -export([add_transfer/2, get_transfers/1, remove_transfer/2]).
 -export([add_handle/3, remove_handle/2, get_handle/2]).
 -export([is_special/1, is_root/1, is_guest/1, root_session_id/0]).
+-export([set_direct_io/2]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -152,10 +153,11 @@ list() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns list of sessions with defined user Id.
+%% Returns session supervisor and node on which supervisor is running.
 %% @end
 %%--------------------------------------------------------------------
--spec all_with_user() -> {ok, [doc()]} | {error, term()}.
+-spec all_with_user() ->
+    {ok, [datastore:document()]} | {error, Reason :: term()}.
 all_with_user() ->
     Fun = fun
         (Doc = #document{value = #session{
@@ -544,6 +546,22 @@ is_guest(_) ->
 -spec root_session_id() -> id().
 root_session_id() ->
     ?ROOT_SESS_ID.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets direct_io property of session.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_direct_io(id(), boolean()) ->
+    ok | datastore:update_error().
+set_direct_io(SessId, DirectIO) ->
+    Diff = fun(Sess) ->
+        {ok, Sess#session{direct_io = DirectIO}}
+    end,
+    case session:update(SessId, Diff) of
+        {ok, SessId} -> ok;
+        Other -> Other
+    end.
 
 %%%===================================================================
 %%% Internal functions

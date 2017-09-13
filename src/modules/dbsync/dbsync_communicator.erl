@@ -74,7 +74,11 @@ forward(#tree_broadcast2{
                 {low_provider_id, LowProviderId},
                 {high_provider_id, HighProviderId},
                 {high_open, true}
-            ])
+            ]);
+        Other ->
+            ?error("Wrong provider ids in tree broadcast:"
+                "receiver: ~p, sender: ~p, low_provider: ~p, high_provider: ~p",
+                [Other, SrcProviderId, LowProviderId, HighProviderId])
     end.
 
 %%--------------------------------------------------------------------

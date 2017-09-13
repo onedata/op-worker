@@ -19,7 +19,9 @@
 
 %% API
 -export([create_file/5, make_file/4, get_file_location/2, open_file/3,
-    open_file_insecure/3, fsync/4, release/3]).
+    open_file_insecure/3, open_file_insecure/4, fsync/4, release/3]).
+
+-define(NEW_HANDLE_ID, base64:encode(crypto:strong_rand_bytes(20))).
 
 %%%===================================================================
 %%% API
@@ -77,18 +79,29 @@ open_file(UserCtx, FileCtx, rdwr) ->
     open_file_for_rdwr(UserCtx, FileCtx).
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Opens a file and returns a handle to it.
+%% @equiv open_file_insecure(UserCtx, FileCtx, Flag, undefined).
 %% @end
 %%--------------------------------------------------------------------
 -spec open_file_insecure(user_ctx:ctx(), FileCtx :: file_ctx:ctx(),
     fslogic_worker:open_flag()) -> no_return() | #fuse_response{}.
 open_file_insecure(UserCtx, FileCtx, Flag) ->
+    open_file_insecure(UserCtx, FileCtx, Flag, undefined).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Opens a file and returns a handle to it.
+%% @end
+%%--------------------------------------------------------------------
+-spec open_file_insecure(user_ctx:ctx(), FileCtx :: file_ctx:ctx(),
+    fslogic_worker:open_flag(), storage_file_manager:handle_id() | undefined) ->
+    no_return() | #fuse_response{}.
+open_file_insecure(UserCtx, FileCtx, Flag, HandleId0) ->
     SessId = user_ctx:get_session_id(UserCtx),
     FileCtx2 = sfm_utils:create_delayed_storage_file(FileCtx),
     {SFMHandle, FileCtx3} = storage_file_manager:new_handle(SessId, FileCtx2),
-    {ok, Handle} = storage_file_manager:open(SFMHandle, Flag),
-    {ok, HandleId} = save_handle(SessId, Handle),
+    SFMHandle2 = storage_file_manager:set_size(SFMHandle),
+    {ok, Handle} = storage_file_manager:open(SFMHandle2, Flag),
+    {ok, HandleId} = save_handle(SessId, Handle, HandleId0),
     ok = file_handles:register_open(FileCtx3, SessId, 1),
     #fuse_response{
         status = #status{code = ?OK},
@@ -116,10 +129,18 @@ fsync(UserCtx, FileCtx, DataOnly, HandleId) ->
     fslogic_worker:fuse_response().
 release(UserCtx, FileCtx, HandleId) ->
     SessId = user_ctx:get_session_id(UserCtx),
-    {ok, SfmHandle} = session:get_handle(SessId, HandleId),
-    ok = session:remove_handle(SessId, HandleId),
-    ok = file_handles:register_release(FileCtx, SessId, 1),
-    ok = storage_file_manager:release(SfmHandle),
+    ok = case session:get_handle(SessId, HandleId) of
+        {ok, SfmHandle} ->
+            ok = session:remove_handle(SessId, HandleId),
+            ok = file_handles:register_release(FileCtx, SessId, 1),
+            ok = storage_file_manager:release(SfmHandle);
+        {error, link_not_found} ->
+            ok;
+        {error, {not_found, _}} ->
+            ok;
+        Other ->
+            Other
+    end,
     ok = file_popularity:increment_open(FileCtx),
     #fuse_response{status = #status{code = ?OK}}.
 
@@ -143,22 +164,34 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
     {FileLocation, FileCtx3} = sfm_utils:create_storage_file_location(FileCtx2, true),
     fslogic_times:update_mtime_ctime(ParentFileCtx),
 
-    % open file on adequate node
-    FileGuid = file_ctx:get_guid_const(FileCtx3),
-    Node = consistent_hasing:get_node(FileGuid),
-    #fuse_response{
-        status = #status{code = ?OK},
-        fuse_response = #file_opened{handle_id = HandleId}
-    } = rpc:call(Node, file_req, open_file_insecure,
-        [UserCtx, FileCtx3, rdwr]),
+    HandleId = case user_ctx:is_direct_io(UserCtx) of
+        true ->
+            ?NEW_HANDLE_ID;
+        _ ->
+            % open file on adequate node
+            FileGuid = file_ctx:get_guid_const(FileCtx3),
+            Node = consistent_hasing:get_node(FileGuid),
+            #fuse_response{
+                status = #status{code = ?OK},
+                fuse_response = #file_opened{handle_id = HId}
+            } = rpc:call(Node, file_req, open_file_insecure,
+                [UserCtx, FileCtx3, rdwr]),
+            HId
+    end,
 
-    #fuse_response{fuse_response = #file_attr{} = FileAttr} =
-        attr_req:get_file_attr_insecure(UserCtx, FileCtx3),
+    #fuse_response{fuse_response = #file_attr{size = Size} = FileAttr} =
+        attr_req:get_file_attr_insecure(UserCtx, FileCtx3, false, false),
+    FileAttr2 = case Size of
+        undefined ->
+            FileAttr#file_attr{size = 0};
+        _ ->
+            FileAttr
+    end,
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_created{
             handle_id = HandleId,
-            file_attr = FileAttr,
+            file_attr = FileAttr2,
             file_location = FileLocation
         }
     }.
@@ -240,10 +273,15 @@ create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
 %% Saves file handle in user's session, returns id of saved handle.
 %% @end
 %%--------------------------------------------------------------------
--spec save_handle(session:id(), storage_file_manager:handle()) ->
-    {ok, binary()}.
-save_handle(SessId, Handle) ->
-    HandleId = base64:encode(crypto:strong_rand_bytes(20)),
+-spec save_handle(session:id(), storage_file_manager:handle(),
+    storage_file_manager:handle_id() | undefined) -> {ok, binary()}.
+save_handle(SessId, Handle, HandleId0) ->
+    HandleId = case HandleId0 of
+        undefined ->
+            ?NEW_HANDLE_ID;
+        _ ->
+            HandleId0
+    end,
     session:add_handle(SessId, HandleId, Handle),
     {ok, HandleId}.
 
@@ -298,8 +336,17 @@ fsync_insecure(UserCtx, FileCtx, _DataOnly, undefined) ->
     flush_event_queue(UserCtx, FileCtx);
 fsync_insecure(UserCtx, FileCtx, DataOnly, HandleId) ->
     SessId = user_ctx:get_session_id(UserCtx),
-    {ok, Handle} = session:get_handle(SessId, HandleId),
-    storage_file_manager:fsync(Handle, DataOnly),
+    ok = case session:get_handle(SessId, HandleId) of
+        {ok, Handle} ->
+            storage_file_manager:fsync(Handle, DataOnly);
+        {error, link_not_found} ->
+            ok;
+        {error, {not_found, _}} ->
+            ok;
+        Other ->
+            Other
+    end,
+
     flush_event_queue(UserCtx, FileCtx).
 
 %%--------------------------------------------------------------------

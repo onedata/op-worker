@@ -45,7 +45,8 @@
     file_location_docs :: undefined | [file_location:doc()],
     file_location_ids :: undefined | [file_location:id()],
     acl :: undefined | acl:acl(),
-    is_dir :: undefined | boolean()
+    is_dir :: undefined | boolean(),
+    is_import_on :: undefined | boolean()
 }).
 
 -type ctx() :: #file_ctx{}.
@@ -71,7 +72,8 @@
     get_or_create_local_file_location_doc/1, get_local_file_location_doc/1,
     get_file_location_ids/1, get_file_location_docs/1, get_acl/1,
     get_raw_storage_path/1, get_child_canonical_path/2, get_file_size/1,
-    get_owner/1, get_group_owner/1, get_local_storage_file_size/1]).
+    get_owner/1, get_group_owner/1, get_local_storage_file_size/1,
+    is_import_on/1]).
 -export([is_dir/1]).
 
 %%%===================================================================
@@ -94,7 +96,9 @@ new_root_ctx() ->
 %%--------------------------------------------------------------------
 -spec new_by_canonical_path(user_ctx:ctx(), file_meta:path()) -> ctx().
 new_by_canonical_path(UserCtx, Path) ->
-    new_by_partial_context(file_partial_ctx:new_by_canonical_path(UserCtx, Path)).
+    {FileCtx, _} = new_by_partial_context(
+        file_partial_ctx:new_by_canonical_path(UserCtx, Path)),
+    FileCtx.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -122,14 +126,15 @@ new_by_doc(Doc = #document{key = Uuid, value = #file_meta{}}, SpaceId, ShareId) 
 %% that the file is locally supported.
 %% @end
 %%--------------------------------------------------------------------
--spec new_by_partial_context(file_partial_ctx:ctx()) -> file_partial_ctx:ctx().
+-spec new_by_partial_context(file_partial_ctx:ctx()) ->
+    {file_partial_ctx:ctx(), od_space:id() | undefined}.
 new_by_partial_context(FileCtx = #file_ctx{}) ->
-    FileCtx;
+    {FileCtx, get_space_id_const(FileCtx)};
 new_by_partial_context(FilePartialCtx) ->
     {CanonicalPath, FilePartialCtx2} = file_partial_ctx:get_canonical_path(FilePartialCtx),
     {ok, FileDoc} = fslogic_path:resolve(CanonicalPath),
     SpaceId = file_partial_ctx:get_space_id_const(FilePartialCtx2),
-    new_by_doc(FileDoc, SpaceId, undefined).
+    {new_by_doc(FileDoc, SpaceId, undefined), SpaceId}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -336,9 +341,9 @@ get_parent_guid(FileCtx, UserCtx) ->
         true ->
             {undefined, FileCtx};
         false ->
-            {ParentFile, NewFile} = get_parent(FileCtx, UserCtx),
+            {ParentFile, FileCtx2} = get_parent(FileCtx, UserCtx),
             ParentGuid = get_guid_const(ParentFile),
-            {ParentGuid, NewFile}
+            {ParentGuid, FileCtx2}
     end.
 
 %%--------------------------------------------------------------------
@@ -360,11 +365,30 @@ get_storage_file_id(FileCtx = #file_ctx{storage_file_id = StorageFileId}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_raw_storage_path(ctx()) -> {StorageFileId :: helpers:file_id(), ctx()}.
-get_raw_storage_path(FileCtx) ->
+get_raw_storage_path(FileCtx = #file_ctx{is_import_on = true}) ->
     {FileId, FileCtx2} = get_storage_file_id(FileCtx),
     SpaceId = get_space_id_const(FileCtx2),
     {StorageId, FileCtx3} = get_storage_id(FileCtx2),
-    {filename_mapping:to_storage_path(SpaceId, StorageId, FileId), FileCtx3}.
+    {filename_mapping:to_storage_path(SpaceId, StorageId, FileId), FileCtx3};
+get_raw_storage_path(FileCtx = #file_ctx{is_import_on = false}) ->
+    {FileId, FileCtx2} = get_storage_file_id(FileCtx),
+    {FileId, FileCtx2};
+get_raw_storage_path(FileCtx) ->
+    {_, FileCtx2} = is_import_on(FileCtx),
+    get_raw_storage_path(FileCtx2).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns information about import settings in space when file is stored.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_import_on(ctx()) -> {boolean(), ctx()}.
+is_import_on(FileCtx = #file_ctx{is_import_on = undefined}) ->
+    SpaceId = get_space_id_const(FileCtx),
+    IsOn = space_strategies:is_import_on(SpaceId),
+    {IsOn, FileCtx#file_ctx{is_import_on = IsOn}};
+is_import_on(FileCtx = #file_ctx{is_import_on = IsOn}) ->
+    {IsOn, FileCtx}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -413,7 +437,8 @@ get_aliased_name(FileCtx = #file_ctx{file_name = FileName}, _UserCtx) ->
 %%--------------------------------------------------------------------
 -spec get_posix_storage_user_context(ctx()) ->
     {luma:posix_user_ctx(), ctx()}.
-get_posix_storage_user_context(FileCtx) ->
+get_posix_storage_user_context(
+    FileCtx = #file_ctx{storage_posix_user_context = undefined}) ->
     IsSpaceDir = is_space_dir_const(FileCtx),
     IsUserRootDir = is_root_dir_const(FileCtx),
     SpaceId = get_space_id_const(FileCtx),
@@ -426,7 +451,10 @@ get_posix_storage_user_context(FileCtx) ->
                 file_ctx:get_file_doc_including_deleted(FileCtx),
             luma:get_posix_user_ctx(OwnerId, SpaceId)
     end,
-    {UserCtx, FileCtx2#file_ctx{storage_posix_user_context = UserCtx}}.
+    {UserCtx, FileCtx2#file_ctx{storage_posix_user_context = UserCtx}};
+get_posix_storage_user_context(
+    FileCtx = #file_ctx{storage_posix_user_context = UserCtx}) ->
+    {UserCtx, FileCtx}.
 
 %%--------------------------------------------------------------------
 %% @doc
