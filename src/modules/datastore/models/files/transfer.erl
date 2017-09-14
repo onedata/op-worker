@@ -31,6 +31,7 @@
 -export([get_ctx/0, get_record_struct/1]).
 
 -type id() :: binary().
+-type diff() :: datastore:diff(transfer()).
 -type status() :: scheduled | skipped | active | completed | cancelled | failed.
 -type callback() :: undefined | binary().
 -type transfer() :: #transfer{}.
@@ -65,15 +66,9 @@
 %%--------------------------------------------------------------------
 -spec init_lists() -> ok.
 init_lists() ->
-    datastore_model:create(?CTX, #document{
-        key = ?SUCCESSFUL_TRANSFERS_KEY, value = #transfer{}
-    }),
-    datastore_model:create(?CTX, #document{
-        key = ?FAILED_TRANSFERS_KEY, value = #transfer{}
-    }),
-    datastore_model:create(?CTX, #document{
-        key = ?UNFINISHED_TRANSFERS_KEY, value = #transfer{}
-    }),
+    create(#document{key = ?SUCCESSFUL_TRANSFERS_KEY, value = #transfer{}}),
+    create(#document{key = ?FAILED_TRANSFERS_KEY, value = #transfer{}}),
+    create(#document{key = ?UNFINISHED_TRANSFERS_KEY, value = #transfer{}}),
     ok.
 
 %%--------------------------------------------------------------------
@@ -202,12 +197,12 @@ stop(TransferId) ->
 %%--------------------------------------------------------------------
 -spec mark_active(id()) -> {ok, id()} | {error, term()}.
 mark_active(TransferId) ->
-    ?extract_key(datastore_model:update(?CTX, TransferId, fun(Transfer) ->
+    update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{
             transfer_status = active,
             files_to_transfer = 1
         }}
-    end)).
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -218,14 +213,14 @@ mark_active(TransferId) ->
 mark_completed(TransferId) ->
     add_link(?SUCCESSFUL_TRANSFERS_KEY, TransferId),
     remove_link(?UNFINISHED_TRANSFERS_KEY, TransferId),
-    ?extract_key(datastore_model:update(?CTX, TransferId, fun(Transfer) ->
+    update(TransferId, fun(Transfer) ->
         case Transfer#transfer.invalidation_status of
             skipped ->
                 {ok, Transfer#transfer{transfer_status = completed}};
             _ ->
                 {ok, Transfer#transfer{transfer_status = completed}}
         end
-    end)).
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -236,9 +231,9 @@ mark_completed(TransferId) ->
 mark_failed(TransferId) ->
     add_link(?FAILED_TRANSFERS_KEY, TransferId),
     remove_link(?UNFINISHED_TRANSFERS_KEY, TransferId),
-    ?extract_key(datastore_model:update(?CTX, TransferId, fun(Transfer) ->
+    update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{transfer_status = failed}}
-    end)).
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -247,9 +242,9 @@ mark_failed(TransferId) ->
 %%--------------------------------------------------------------------
 -spec mark_active_invalidation(id()) -> {ok, id()} | {error, term()}.
 mark_active_invalidation(TransferId) ->
-    ?extract_key(datastore_model:update(?CTX, TransferId, fun(Transfer) ->
+    update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{invalidation_status = active}}
-    end)).
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -260,9 +255,9 @@ mark_active_invalidation(TransferId) ->
 mark_completed_invalidation(TransferId) ->
     add_link(?SUCCESSFUL_TRANSFERS_KEY, TransferId),
     remove_link(?UNFINISHED_TRANSFERS_KEY, TransferId),
-    ?extract_key(datastore_model:update(?CTX, TransferId, fun(Transfer) ->
+    update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{invalidation_status = completed}}
-    end)).
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -273,9 +268,9 @@ mark_completed_invalidation(TransferId) ->
 mark_failed_invalidation(TransferId) ->
     add_link(?FAILED_TRANSFERS_KEY, TransferId),
     remove_link(?UNFINISHED_TRANSFERS_KEY, TransferId),
-    ?extract_key(datastore_model:update(?CTX, TransferId, fun(Transfer) ->
+    update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{invalidation_status = failed}}
-    end)).
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -287,11 +282,11 @@ mark_failed_invalidation(TransferId) ->
 mark_file_transfer_scheduled(undefined, _FilesNum) ->
     {ok, undefined};
 mark_file_transfer_scheduled(TransferId, FilesNum) ->
-    ?extract_key(datastore_model:update(?CTX, TransferId, fun(Transfer) ->
+    update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{
             files_to_transfer = Transfer#transfer.files_to_transfer + FilesNum
         }}
-    end)).
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -303,11 +298,11 @@ mark_file_transfer_scheduled(TransferId, FilesNum) ->
 mark_file_transfer_finished(undefined, _FilesNum) ->
     {ok, undefined};
 mark_file_transfer_finished(TransferId, FilesNum) ->
-    ?extract_key(datastore_model:update(?CTX, TransferId, fun(Transfer) ->
+    update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{
             files_transferred = Transfer#transfer.files_transferred + FilesNum
         }}
-    end)).
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -319,11 +314,11 @@ mark_file_transfer_finished(TransferId, FilesNum) ->
 mark_data_transfer_scheduled(undefined, _Bytes) ->
     {ok, undefined};
 mark_data_transfer_scheduled(TransferId, Bytes) ->
-    ?extract_key(datastore_model:update(?CTX, TransferId, fun(Transfer) ->
+    update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{
             bytes_to_transfer = Transfer#transfer.bytes_to_transfer + Bytes
         }}
-    end)).
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -335,7 +330,7 @@ mark_data_transfer_scheduled(TransferId, Bytes) ->
 mark_data_transfer_finished(undefined, _Bytes) ->
     {ok, undefined};
 mark_data_transfer_finished(TransferId, Bytes) ->
-    ?extract_key(datastore_model:update(?CTX, TransferId, fun(Transfer = #transfer{
+    update(TransferId, fun(Transfer = #transfer{
         bytes_transferred = OldBytes,
         last_update = LastUpdate,
         min_hist = MinHistValues,
@@ -359,7 +354,7 @@ mark_data_transfer_finished(TransferId, Bytes) ->
                 time_slot_histogram:increment(DyHist, ActualTimestamp, Bytes)
             )
         }}
-    end)).
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -399,8 +394,29 @@ for_each_unfinished_transfer(Callback, Acc0) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Adds link to transfer
+%% Creates transfer.
+%% @end
+%%--------------------------------------------------------------------
+-spec create(doc()) -> {ok, doc()} | {error, term()}.
+create(Doc) ->
+    datastore_model:create(?CTX, Doc).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Updates transfer.
+%% @end
+%%--------------------------------------------------------------------
+-spec update(id(), diff()) -> {ok, id()} | {error, term()}.
+update(TransferId, Diff) ->
+    ?extract_key(datastore_model:update(?CTX, TransferId, Diff)).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Adds link to transfer.
 %% @end
 %%--------------------------------------------------------------------
 -spec add_link(SourceId :: virtual_list_id(), TransferId :: id()) -> ok.
@@ -410,8 +426,9 @@ add_link(SourceId, TransferId) ->
     ok.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Removes link to transfer
+%% Removes link to transfer.
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_link(SourceId :: virtual_list_id(), TransferId :: id()) -> ok.
@@ -420,8 +437,9 @@ remove_link(SourceId, TransferId) ->
     datastore_model:delete_links(?CTX, SourceId, TreeId, TransferId).
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Executes callback for each successfully completed transfer
+%% Executes callback for each successfully completed transfer.
 %% @end
 %%--------------------------------------------------------------------
 -spec for_each_transfer(
