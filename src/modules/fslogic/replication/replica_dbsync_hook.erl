@@ -48,8 +48,8 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
                     FileCtx2 = file_ctx:set_file_id(file_ctx:reset(FileCtx), FileId),
                     FileCtx3 = file_ctx:set_is_dir(FileCtx2, false),
                     case file_ctx:get_local_file_location_doc(FileCtx3) of
-                        {undefined, _FileCtx4} ->
-                            ok;
+                        {undefined, FileCtx4} ->
+                            fslogic_event_emitter:emit_file_attr_changed(FileCtx4, []);
                         {LocalLocation, FileCtx4} ->
                             update_local_location_replica(FileCtx4, LocalLocation, ChangedLocationDoc)
                     end;
