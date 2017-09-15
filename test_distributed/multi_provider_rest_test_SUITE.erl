@@ -18,6 +18,7 @@
 -include("http/rest/http_status.hrl").
 -include("proto/common/credentials.hrl").
 -include("proto/oneclient/common_messages.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -35,11 +36,14 @@
     get_simple_file_distribution/1,
     replicate_file/1,
     replicate_dir/1,
+    restart_file_replication/1,
+    restart_dir_replication/1,
     replicate_file_by_id/1,
     replicate_to_missing_provider/1,
     replicate_to_nonsupporting_provider/1,
     invalidate_file_replica/1,
     invalidate_file_replica_with_migration/1,
+    restart_invalidation_of_file_replica_with_migration/1,
     invalidate_dir_replica/1,
     periodic_cleanup_should_invalidate_unpopular_files/1,
     posix_mode_get/1,
@@ -75,18 +79,23 @@
     primitive_json_metadata_test/1,
     empty_metadata_invalid_json_test/1,
     spatial_flag_test/1,
-    space_cleanup_enable_and_disable/1
-]).
+    space_cleanup_enable_and_disable/1]).
+
+%utils
+-export([kill/1]).
 
 all() ->
     ?ALL([
         get_simple_file_distribution,
         replicate_file,
+        restart_file_replication,
         replicate_dir,
+        restart_dir_replication,
         replicate_file_by_id,
         replicate_to_missing_provider,
         replicate_to_nonsupporting_provider,
         invalidate_file_replica,
+        restart_invalidation_of_file_replica_with_migration,
         invalidate_dir_replica,
         periodic_cleanup_should_invalidate_unpopular_files,
         posix_mode_get,
@@ -125,6 +134,9 @@ all() ->
         space_cleanup_enable_and_disable
     ]).
 
+-define(LIST_TRANSFER, fun(Id, Acc) -> [Id | Acc] end).
+-define(ATTEMPTS, 20).
+
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
@@ -140,7 +152,9 @@ get_simple_file_distribution(Config) ->
     lfm_proxy:fsync(WorkerP1, Handle),
 
     % when
-    {ok, 200, _, Body} = do_request(WorkerP1, <<"replicas", File/binary>>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"replicas", File/binary>>, get,
+        [user_1_token_header(Config)], []
+    ),
 
     % then
     DecodedBody = json_utils:decode_map(Body),
@@ -154,31 +168,26 @@ get_simple_file_distribution(Config) ->
 replicate_file(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
     File = <<"/space3/file">>,
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
     {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
     lfm_proxy:write(WorkerP1, Handle, 0, <<"test">>),
     lfm_proxy:fsync(WorkerP1, Handle),
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
 
     % when
-    timer:sleep(timer:seconds(20)), % for hooks todo VFS-3462
-    ?assertEqual({ok, []}, rpc:call(WorkerP1, transfer, for_each_successful_transfer, [fun(Id, Acc) -> [Id | Acc] end, []])),
-    ?assertEqual({ok, []}, rpc:call(WorkerP2, transfer, for_each_successful_transfer, [fun(Id, Acc) -> [Id | Acc] end, []])),
-
-    ?assertEqual({ok, []}, rpc:call(WorkerP2, transfer, for_each_unfinished_transfer, [fun(Id, Acc) -> [Id | Acc] end, []])),
-    ?assertEqual({ok, []}, rpc:call(WorkerP1, transfer, for_each_unfinished_transfer, [fun(Id, Acc) -> [Id | Acc] end, []])),
-
-    ?assertEqual({ok, []}, rpc:call(WorkerP2, transfer, for_each_failed_transfer, [fun(Id, Acc) -> [Id | Acc] end, []])),
-    ?assertEqual({ok, []}, rpc:call(WorkerP1, transfer, for_each_failed_transfer, [fun(Id, Acc) -> [Id | Acc] end, []])),
-
-    {ok, 200, _, Body0} = do_request(WorkerP1, <<"replicas", File/binary, "?provider_id=",
-        (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body0} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1,
+        <<"replicas", File/binary, "?provider_id=", (domain(WorkerP2))/binary>>,
+        post, [user_1_token_header(Config)], []
+    ), ?ATTEMPTS),
     DecodedBody0 = json_utils:decode_map(Body0),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody0),
 
     % then
     {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
     DomainP2 = domain(WorkerP2),
+
     ?assertMatch(#{
         <<"transferStatus">> := <<"completed">>,
         <<"targetProviderId">> := DomainP2,
@@ -198,20 +207,99 @@ replicate_file(Config) ->
             {ok, 200, _, TransferStatus} ->
                 json_utils:decode_map(TransferStatus);
             Error -> Error
-        end, 30),
+        end, ?ATTEMPTS),
 
-    ?assertEqual({ok, [Tid]}, rpc:call(WorkerP2, transfer, for_each_successful_transfer, [fun(Id, Acc) -> [Id | Acc] end, []])),
-    ?assertEqual({ok, [Tid]}, rpc:call(WorkerP1, transfer, for_each_successful_transfer, [fun(Id, Acc) -> [Id | Acc] end, []])),
+    {ok, 200, _, Body} = do_request(WorkerP2, <<"replicas", File/binary>>, get,
+            [user_1_token_header(Config)], []
+    ),
+    {ok, 200, _, Body2} = do_request(WorkerP1, <<"replicas", File/binary>>, get,
+        [user_1_token_header(Config)], []
+    ),
+    DecodedBody = json_utils:decode_map(Body),
+    DecodedBody2 = json_utils:decode_map(Body2),
+    ?assertEqual(
+        lists:sort([
+            #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
+            #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
+        ]), lists:sort(DecodedBody)),
+    ?assertEqual(
+        lists:sort([
+            #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
+            #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
+        ]), lists:sort(DecodedBody2)).
 
-    ?assertEqual({ok, []}, rpc:call(WorkerP2, transfer, for_each_unfinished_transfer, [fun(Id, Acc) -> [Id | Acc] end, []])),
-    ?assertEqual({ok, []}, rpc:call(WorkerP1, transfer, for_each_unfinished_transfer, [fun(Id, Acc) -> [Id | Acc] end, []])),
+restart_file_replication(Config) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
+    File = <<"/space3/file_restart_replication">>,
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
+    {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
+    lfm_proxy:write(WorkerP1, Handle, 0, <<"test">>),
+    lfm_proxy:fsync(WorkerP1, Handle),
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
 
-    ?assertEqual({ok, []}, rpc:call(WorkerP2, transfer, for_each_failed_transfer, [fun(Id, Acc) -> [Id | Acc] end, []])),
-    ?assertEqual({ok, []}, rpc:call(WorkerP1, transfer, for_each_failed_transfer, [fun(Id, Acc) -> [Id | Acc] end, []])),
-    
-    timer:sleep(timer:seconds(20)), % todo VFS-3462 - reorganize tests to remove sleeps
-    {ok, 200, _, Body} = do_request(WorkerP2, <<"replicas", File/binary>>, get, [user_1_token_header(Config)], []),
-    {ok, 200, _, Body2} = do_request(WorkerP1, <<"replicas", File/binary>>, get, [user_1_token_header(Config)], []),
+    % when
+    lengthen_file_replication_time(WorkerP2, 60),
+    {ok, 200, _, Body0} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1,
+        <<"replicas", File/binary, "?provider_id=", (domain(WorkerP2))/binary>>,
+        post, [user_1_token_header(Config)], []),
+    ?ATTEMPTS),
+
+    DecodedBody0 = json_utils:decode_map(Body0),
+    #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody0),
+
+    Pid = check_pid(WorkerP2, ?ATTEMPTS, Tid),
+    %% stop transfer
+    true = rpc:call(WorkerP2, multi_provider_rest_test_SUITE, kill, [Pid]),
+
+    % then
+    {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
+    DomainP2 = domain(WorkerP2),
+
+    ?assertMatch(#{
+        <<"transferStatus">> := <<"active">>,
+        <<"targetProviderId">> := DomainP2,
+        <<"path">> := File,
+        <<"invalidationStatus">> := <<"skipped">>,
+        <<"fileId">> := FileObjectId
+    },
+        case do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []) of
+            {ok, 200, _, TransferStatus} ->
+                json_utils:decode_map(TransferStatus);
+            Error -> Error
+        end, ?ATTEMPTS),
+
+    resume_file_replication_time(WorkerP2),
+    rpc:call(WorkerP1, transfer, restart_unfinished_and_failed_transfers, []),
+
+    ?assertMatch(#{
+        <<"transferStatus">> := <<"completed">>,
+        <<"targetProviderId">> := DomainP2,
+        <<"path">> := File,
+        <<"invalidationStatus">> := <<"skipped">>,
+        <<"fileId">> := FileObjectId,
+        <<"callback">> := null,
+        <<"filesToTransfer">> := 1,
+        <<"filesTransferred">> := 1,
+        <<"bytesToTransfer">> := 4,
+        <<"bytesTransferred">> := 4,
+        <<"minHist">> := [4 | _],
+        <<"hrHist">> := [4 | _],
+        <<"dyHist">> := [4 | _]
+    },
+        case do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []) of
+            {ok, 200, _, TransferStatus} ->
+                json_utils:decode_map(TransferStatus);
+            Error -> Error
+        end, ?ATTEMPTS),
+
+    {ok, 200, _, Body} = do_request(WorkerP2,
+        <<"replicas", File/binary>>, get, [user_1_token_header(Config)], []
+    ),
+    {ok, 200, _, Body2} = do_request(WorkerP1,
+        <<"replicas", File/binary>>, get, [user_1_token_header(Config)], []
+    ),
     DecodedBody = json_utils:decode_map(Body),
     DecodedBody2 = json_utils:decode_map(Body2),
     ?assertEqual(
@@ -228,6 +316,7 @@ replicate_file(Config) ->
 replicate_dir(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
     Dir1 = <<"/space3/dir1_rd">>,
     Dir2 = <<"/space3/dir1_rd/dir2">>,
     File1 = <<"/space3/dir1_rd/file1">>,
@@ -248,10 +337,15 @@ replicate_dir(Config) ->
     lfm_proxy:write(WorkerP1, Handle3, 0, <<"test">>),
     lfm_proxy:fsync(WorkerP1, Handle3),
 
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File1}), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File2}), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File3}), ?ATTEMPTS),
+
     % when
-    timer:sleep(timer:seconds(20)), % for hooks todo  VFS-3462
-    {ok, 200, _, Body} = do_request(WorkerP1, <<"replicas", Dir1/binary,
-        "?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1, 
+        <<"replicas", Dir1/binary, "?provider_id=", (domain(WorkerP2))/binary>>, 
+        post, [user_1_token_header(Config)], []), 
+    ?ATTEMPTS),
     DecodedBody = json_utils:decode_map(Body),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
 
@@ -274,12 +368,123 @@ replicate_dir(Config) ->
             {ok, 200, _, TransferStatus} ->
                 json_utils:decode_map(TransferStatus);
             Error -> Error
-        end, 30),
+        end, ?ATTEMPTS),
 
-    timer:sleep(timer:seconds(20)), % for hooks todo  VFS-3462
-    {ok, 200, _, Body1} = do_request(WorkerP2, <<"replicas", File1/binary>>, get, [user_1_token_header(Config)], []),
-    {ok, 200, _, Body2} = do_request(WorkerP2, <<"replicas", File2/binary>>, get, [user_1_token_header(Config)], []),
-    {ok, 200, _, Body3} = do_request(WorkerP2, <<"replicas", File3/binary>>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body1} = do_request(WorkerP2,
+        <<"replicas", File1/binary>>, get, [user_1_token_header(Config)], []
+    ),
+
+    {ok, 200, _, Body2} = do_request(WorkerP2,
+        <<"replicas", File2/binary>>, get, [user_1_token_header(Config)], []
+    ),
+
+    {ok, 200, _, Body3} = do_request(WorkerP2,
+        <<"replicas", File3/binary>>, get, [user_1_token_header(Config)], []
+    ),
+    DecodedBody1 = json_utils:decode_map(Body1),
+    DecodedBody2 = json_utils:decode_map(Body2),
+    DecodedBody3 = json_utils:decode_map(Body3),
+    Distribution = lists:sort([
+        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
+        #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
+    ]),
+    ?assertEqual(Distribution, lists:sort(DecodedBody1)),
+    ?assertEqual(Distribution, lists:sort(DecodedBody2)),
+    ?assertEqual(Distribution, lists:sort(DecodedBody3)).
+
+restart_dir_replication(Config) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
+
+    Dir1 = <<"/space3/dir1_rd_restart">>,
+    Dir2 = <<"/space3/dir1_rd_restart/dir2">>,
+    File1 = <<"/space3/dir1_rd_restart/file1">>,
+    File2 = <<"/space3/dir1_rd_restart/file2">>,
+    File3 = <<"/space3/dir1_rd_restart/dir2/file3">>,
+    {ok, Dir1Guid} = lfm_proxy:mkdir(WorkerP1, SessionId, Dir1),
+    {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, Dir2),
+    {ok, File1Guid} = lfm_proxy:create(WorkerP1, SessionId, File1, 8#700),
+    {ok, Handle1} = lfm_proxy:open(WorkerP1, SessionId, {guid, File1Guid}, write),
+    lfm_proxy:write(WorkerP1, Handle1, 0, <<"test">>),
+    lfm_proxy:fsync(WorkerP1, Handle1),
+    {ok, File2Guid} = lfm_proxy:create(WorkerP1, SessionId, File2, 8#700),
+    {ok, Handle2} = lfm_proxy:open(WorkerP1, SessionId, {guid, File2Guid}, write),
+    lfm_proxy:write(WorkerP1, Handle2, 0, <<"test">>),
+    lfm_proxy:fsync(WorkerP1, Handle2),
+    {ok, File3Guid} = lfm_proxy:create(WorkerP1, SessionId, File3, 8#700),
+    {ok, Handle3} = lfm_proxy:open(WorkerP1, SessionId, {guid, File3Guid}, write),
+    lfm_proxy:write(WorkerP1, Handle3, 0, <<"test">>),
+    lfm_proxy:fsync(WorkerP1, Handle3),
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File1}), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File2}), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File3}), ?ATTEMPTS),
+
+    lengthen_file_replication_time(WorkerP2, 60),
+
+    % when
+    {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1, <<"replicas", Dir1/binary,
+        "?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
+    ?ATTEMPTS),
+    DecodedBody = json_utils:decode_map(Body),
+    #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
+
+    Pid = check_pid(WorkerP2, ?ATTEMPTS, Tid),
+
+    %% stop transfer
+    true = rpc:call(WorkerP2, multi_provider_rest_test_SUITE, kill, [Pid]),
+
+    % then
+    {ok, FileObjectId} = cdmi_id:guid_to_objectid(Dir1Guid),
+    DomainP2 = domain(WorkerP2),
+
+    ?assertMatch(#{
+        <<"transferStatus">> := <<"active">>,
+        <<"targetProviderId">> := DomainP2,
+        <<"path">> := Dir1,
+        <<"invalidationStatus">> := <<"skipped">>,
+        <<"fileId">> := FileObjectId
+    },
+        case do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []) of
+            {ok, 200, _, TransferStatus} ->
+                json_utils:decode_map(TransferStatus);
+            Error -> Error
+        end, ?ATTEMPTS),
+
+    resume_file_replication_time(WorkerP2),
+    %% restart transfer
+    rpc:call(WorkerP1, transfer, restart_unfinished_and_failed_transfers, []),
+
+    ?assertMatch(#{
+        <<"transferStatus">> := <<"completed">>,
+        <<"targetProviderId">> := DomainP2,
+        <<"path">> := Dir1,
+        <<"invalidationStatus">> := <<"skipped">>,
+        <<"fileId">> := FileObjectId,
+        <<"callback">> := null,
+        <<"filesToTransfer">> := 5,
+        <<"filesTransferred">> := 5,
+        <<"bytesToTransfer">> := 12,
+        <<"bytesTransferred">> := 12
+    },
+        case do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []) of
+            {ok, 200, _, TransferStatus} ->
+                json_utils:decode_map(TransferStatus);
+            Error -> Error
+        end, ?ATTEMPTS),
+
+    {ok, 200, _, Body1} = do_request(WorkerP2,
+        <<"replicas", File1/binary>>, get, [user_1_token_header(Config)], []
+    ),
+
+    {ok, 200, _, Body2} = do_request(WorkerP2,
+        <<"replicas", File2/binary>>, get, [user_1_token_header(Config)], []
+    ),
+
+    {ok, 200, _, Body3} = do_request(WorkerP2,
+        <<"replicas", File3/binary>>, get, [user_1_token_header(Config)], []
+    ),
+
     DecodedBody1 = json_utils:decode_map(Body1),
     DecodedBody2 = json_utils:decode_map(Body2),
     DecodedBody3 = json_utils:decode_map(Body3),
@@ -294,21 +499,24 @@ replicate_dir(Config) ->
 replicate_file_by_id(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
     File = <<"/space3/replicate_file_by_id">>,
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
     {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
     lfm_proxy:write(WorkerP1, Handle, 0, <<"test">>),
     lfm_proxy:fsync(WorkerP1, Handle),
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
 
     % when
-    timer:sleep(timer:seconds(20)), % for hooks todo  VFS-3462
     {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
-    {ok, 200, _, Body0} = do_request(WorkerP1, <<"replicas-id/", FileObjectId/binary, "?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body0} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1,
+        <<"replicas-id/", FileObjectId/binary, "?provider_id=", (domain(WorkerP2))/binary>>,
+        post, [user_1_token_header(Config)], []),
+    ?ATTEMPTS),
     DecodedBody0 = json_utils:decode_map(Body0),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody0),
 
     % then
-    timer:sleep(timer:seconds(20)), % for hooks todo  VFS-3462
     DomainP2 = domain(WorkerP2),
     ?assertMatch(#{
         <<"transferStatus">> := <<"completed">>,
@@ -326,8 +534,11 @@ replicate_file_by_id(Config) ->
             {ok, 200, _, TransferStatus} ->
                 json_utils:decode_map(TransferStatus);
             Error -> Error
-        end, 30),
-    {ok, 200, _, Body} = do_request(WorkerP2, <<"replicas-id/", FileObjectId/binary>>, get, [user_1_token_header(Config)], []),
+        end, ?ATTEMPTS),
+
+    {ok, 200, _, Body} = do_request(WorkerP2,
+        <<"replicas-id/", FileObjectId/binary>>, get, [user_1_token_header(Config)], []
+    ),
     DecodedBody = json_utils:decode_map(Body),
     ?assertEqual(
         lists:sort([
@@ -346,9 +557,9 @@ replicate_to_missing_provider(Config) ->
 
     % when
     timer:sleep(timer:seconds(30)), % for hooks todo VFS-3462
-    ?assertMatch(
-        {ok, 400, _, _},
-        do_request(WorkerP1, <<"replicas", File/binary, "?provider_id=missing_id">>, post, [user_1_token_header(Config)], [])
+    ?assertMatch({ok, 400, _, _},
+        do_request(WorkerP1, <<"replicas", File/binary, "?provider_id=missing_id">>,
+            post, [user_1_token_header(Config)], [])
     ).
 
 replicate_to_nonsupporting_provider(Config) ->
@@ -372,15 +583,19 @@ replicate_to_nonsupporting_provider(Config) ->
 invalidate_file_replica(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
     File = <<"/space3/file_invalidate">>,
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
     {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
     lfm_proxy:write(WorkerP1, Handle, 0, <<"test">>),
     lfm_proxy:fsync(WorkerP1, Handle),
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
 
     % when
-    timer:sleep(timer:seconds(20)), % for hooks todo VFS-3462
-    {ok, 200, _, Body0} = do_request(WorkerP1, <<"replicas", File/binary, "?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body0} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1,
+        <<"replicas", File/binary, "?provider_id=", (domain(WorkerP2))/binary>>,
+        post, [user_1_token_header(Config)], []),
+    ?ATTEMPTS),
     DecodedBody0 = json_utils:decode_map(Body0),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody0),
     {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
@@ -396,13 +611,12 @@ invalidate_file_replica(Config) ->
         <<"filesTransferred">> := 1,
         <<"bytesToTransfer">> := 4,
         <<"bytesTransferred">> := 4
-
     },
         case do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []) of
             {ok, 200, _, TransferStatus} ->
                 json_utils:decode_map(TransferStatus);
             Error -> Error
-        end, 30),
+        end, ?ATTEMPTS),
 
     {ok, 200, _, Body} = do_request(WorkerP2, <<"replicas", File/binary>>, get, [user_1_token_header(Config)], []),
     DecodedBody = json_utils:decode_map(Body),
@@ -425,15 +639,18 @@ invalidate_file_replica(Config) ->
 invalidate_file_replica_with_migration(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
     File = <<"/space3/file_invalidate_migration">>,
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
     {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
     lfm_proxy:write(WorkerP1, Handle, 0, <<"test">>),
     lfm_proxy:fsync(WorkerP1, Handle),
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
 
     % when
-    timer:sleep(timer:seconds(20)), % for hooks todo VFS-3462
-    {ok, 200, _, Body} = do_request(WorkerP2, <<"replicas", File/binary>>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP2,
+        <<"replicas", File/binary>>, get, [user_1_token_header(Config)], []),
+    ?ATTEMPTS),
     DecodedBody = json_utils:decode_map(Body),
     ?assertEqual(
         lists:sort([
@@ -443,6 +660,7 @@ invalidate_file_replica_with_migration(Config) ->
     % then
     {ok, 200, _, _} = do_request(WorkerP1, <<"replicas", File/binary, "?provider_id=",
         (domain(WorkerP1))/binary, "&migration_provider_id=", (domain(WorkerP2))/binary>>, delete, [user_1_token_header(Config)], []),
+
     timer:sleep(timer:seconds(20)), % for hooks todo VFS-3462
     {ok, 200, _, Body3} = do_request(WorkerP2, <<"replicas", File/binary>>, get, [user_1_token_header(Config)], []),
     {ok, 200, _, Body4} = do_request(WorkerP1, <<"replicas", File/binary>>, get, [user_1_token_header(Config)], []),
@@ -459,9 +677,77 @@ invalidate_file_replica_with_migration(Config) ->
             #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
         ]), lists:sort(DecodedBody4)).
 
+restart_invalidation_of_file_replica_with_migration(Config) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
+    File = <<"/space3/file_invalidate_migration_restart">>,
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
+    {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
+    lfm_proxy:write(WorkerP1, Handle, 0, <<"test">>),
+    lfm_proxy:fsync(WorkerP1, Handle),
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
+
+    % when
+    {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP2,
+        <<"replicas", File/binary>>, get, [user_1_token_header(Config)], []),
+    ?ATTEMPTS),
+
+    DecodedBody = json_utils:decode_map(Body),
+    ?assertEqual(
+        lists:sort([
+            #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]}
+        ]), lists:sort(DecodedBody)),
+
+    lengthen_file_replication_time(WorkerP2, 60),
+    % then
+    {ok, 200, _, Body1} = do_request(WorkerP1, <<"replicas", File/binary, "?provider_id=",
+        (domain(WorkerP1))/binary, "&migration_provider_id=", (domain(WorkerP2))/binary>>,
+        delete, [user_1_token_header(Config)], []
+    ),
+    DecodedBody1 = json_utils:decode_map(Body1),
+    #{<<"transferId">> := Tid1} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody1),
+
+    Pid = check_pid(WorkerP2, ?ATTEMPTS, Tid1),
+    true = rpc:call(WorkerP2, multi_provider_rest_test_SUITE, kill, [Pid]),
+
+    ?assertMatch(#{
+        <<"transferStatus">> := <<"active">>
+    },
+        case do_request(WorkerP1, <<"transfers/", Tid1/binary>>, get, [user_1_token_header(Config)], []) of
+            {ok, 200, _, TransferStatus} ->
+                json_utils:decode_map(TransferStatus);
+            Error -> Error
+        end, ?ATTEMPTS),
+
+    resume_file_replication_time(WorkerP2),
+    rpc:call(WorkerP2, transfer, restart_unfinished_and_failed_transfers, []),
+
+    ?assertEqual({ok, []}, rpc:call(WorkerP2, transfer, for_each_unfinished_transfer, [?LIST_TRANSFER, []]), ?ATTEMPTS),
+    ?assertEqual({ok, []}, rpc:call(WorkerP1, transfer, for_each_unfinished_transfer, [?LIST_TRANSFER, []]), ?ATTEMPTS),
+
+    {ok, 200, _, Body3} = do_request(WorkerP2, <<"replicas", File/binary>>,
+        get, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body4} = do_request(WorkerP1, <<"replicas", File/binary>>,
+        get, [user_1_token_header(Config)], []),
+
+    DecodedBody3 = json_utils:decode_map(Body3),
+    DecodedBody4 = json_utils:decode_map(Body4),
+    ?assertEqual(
+        lists:sort([
+            #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => []},
+            #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
+        ]), lists:sort(DecodedBody3)),
+    ?assertEqual(
+        lists:sort([
+            #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => []},
+            #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
+        ]), lists:sort(DecodedBody4)).
+
 invalidate_dir_replica(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
     Dir1 = <<"/space3/dir1_invalidate">>,
     Dir2 = <<"/space3/dir1_invalidate/dir2">>,
     File1 = <<"/space3/dir1_invalidate/file1">>,
@@ -482,9 +768,16 @@ invalidate_dir_replica(Config) ->
     lfm_proxy:write(WorkerP1, Handle3, 0, <<"test">>),
     lfm_proxy:fsync(WorkerP1, Handle3),
 
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File1}), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File2}), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File3}), ?ATTEMPTS),
+
     % when
-    timer:sleep(timer:seconds(20)), % for hooks todo  VFS-3462
-    {ok, 200, _, Body} = do_request(WorkerP1, <<"replicas", Dir1/binary, "?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1,
+        <<"replicas", Dir1/binary, "?provider_id=", (domain(WorkerP2))/binary>>,
+        post, [user_1_token_header(Config)], []),
+    ?ATTEMPTS),
+
     DecodedBody = json_utils:decode_map(Body),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
     {ok, FileObjectId} = cdmi_id:guid_to_objectid(Dir1Guid),
@@ -505,7 +798,7 @@ invalidate_dir_replica(Config) ->
             {ok, 200, _, TransferStatus} ->
                 json_utils:decode_map(TransferStatus);
             Error -> Error
-        end, 30),
+        end, ?ATTEMPTS),
 
     timer:sleep(timer:seconds(20)), % for hooks todo  VFS-3462
     {ok, 200, _, Body1} = do_request(WorkerP2, <<"replicas", File1/binary, "">>, get, [user_1_token_header(Config)], []),
@@ -559,7 +852,7 @@ periodic_cleanup_should_invalidate_unpopular_files(Config) ->
     lfm_proxy:close(WorkerP1, Handle3),
 
     % synchronize files
-    timer:sleep(timer:seconds(10)), % for hooks todo  VFS-3462
+    timer:sleep(timer:seconds(?ATTEMPTS)), % for hooks todo  VFS-3462
     {ok, ReadHandle1} = lfm_proxy:open(WorkerP2, SessionIdP2, {guid, File1Guid}, read),
     {ok, <<"test">>} = lfm_proxy:read(WorkerP2, ReadHandle1, 0, 4),
     lfm_proxy:close(WorkerP2, ReadHandle1),
@@ -1456,7 +1749,11 @@ init_per_suite(Config) ->
         initializer:enable_grpca_based_communication(NewConfig2),
         initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2)
     end,
-    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
+    [
+        {?ENV_UP_POSTHOOK, Posthook},
+        {?LOAD_MODULES, [initializer, multi_provider_rest_test_SUITE]}
+        | Config
+    ].
 
 
 end_per_suite(Config) ->
@@ -1477,6 +1774,7 @@ init_per_testcase(metric_get, Config) ->
     init_per_testcase(all, Config);
 
 init_per_testcase(_Case, Config) ->
+    ct:timetrap({minutes, 5}),
     lfm_proxy:init(Config).
 
 end_per_testcase(metric_get = Case, Config) ->
@@ -1524,3 +1822,32 @@ user_1_token_header(Config) ->
 
 domain(Node) ->
     atom_to_binary(?GET_DOMAIN(Node), utf8).
+
+lengthen_file_replication_time(Node, SleepTimeInSeconds) ->
+    test_utils:mock_new(Node, sync_req),
+    test_utils:mock_expect(Node, sync_req, replicate_file,
+        fun(UserCtx, FileCtx, Block, TransferId) ->
+            timer:sleep(timer:seconds(SleepTimeInSeconds)),    %lengthen replication time
+            meck:passthrough([UserCtx, FileCtx, Block, TransferId])
+        end
+    ).
+
+resume_file_replication_time(Node) ->
+    ok = test_utils:mock_validate_and_unload(Node, sync_req).
+
+kill(Pid) ->
+    true = exit(list_to_pid(binary_to_list(Pid)), kill).
+
+check_pid(_Node, 0, _Tid) ->
+    undefined;
+check_pid(Node, Attempts, Tid) ->
+    case rpc:call(Node, transfer, get, [Tid]) of
+        {ok, #document{value = #transfer{pid = undefined}}} ->
+            timer:sleep(timer:seconds(1)),
+            check_pid(Node, Attempts - 1, Tid);
+        {ok, #document{value = #transfer{pid = Pid}}} ->
+            Pid;
+        _Other ->
+            timer:sleep(timer:seconds(1)),
+            check_pid(Node, Attempts - 1, Tid)
+    end.

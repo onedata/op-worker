@@ -457,6 +457,9 @@
     source_provider_id :: undefined | oneprovider:id(),
     target_provider_id :: undefined | oneprovider:id(),
     invalidate_source_replica :: undefined | boolean(),
+    % pid of transfer or invalidation controller, as both cannot execute
+    % simultaneously for given TransferId
+    pid :: undefined | binary(), %todo VFS-3657
 
     files_to_transfer = 0 :: non_neg_integer(),
     files_transferred = 0 :: non_neg_integer(),
