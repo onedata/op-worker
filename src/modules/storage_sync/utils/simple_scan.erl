@@ -264,7 +264,6 @@ import_file_safe(Job = #space_strategy_job{
         import_file(Job)
     catch
         Error:Reason ->
-            ?critical_stacktrace("DUPA"),
             full_update:delete_imported_file(FileName, ParentCtx),
             erlang:Error(Reason)
     end.

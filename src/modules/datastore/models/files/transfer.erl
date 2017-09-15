@@ -66,6 +66,7 @@ record_struct(1) ->
         {source_provider_id, string},
         {target_provider_id, string},
         {invalidate_source_replica, boolean},
+        {pid, string}, %todo VFS-3657
         {files_to_transfer, integer},
         {files_transferred, integer},
         {bytes_to_transfer, integer},
@@ -231,7 +232,11 @@ stop(TransferId) ->
 %%--------------------------------------------------------------------
 -spec mark_active(id()) -> {ok, id()} | {error, term()}.
 mark_active(TransferId) ->
-    transfer:update(TransferId, #{transfer_status => active, files_to_transfer => 1}).
+    transfer:update(TransferId, #{
+        transfer_status => active,
+        files_to_transfer => 1,
+        pid => list_to_binary(pid_to_list(self()))
+    }).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -270,7 +275,10 @@ mark_failed(TransferId, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec mark_active_invalidation(id()) -> {ok, id()} | {error, term()}.
 mark_active_invalidation(TransferId) ->
-    transfer:update(TransferId, #{invalidation_status => active}).
+    transfer:update(TransferId, #{
+        invalidation_status => active,
+        pid => list_to_binary(pid_to_list(self()))
+    }).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -575,17 +583,20 @@ restart(TransferId) ->
     MinHist = time_slot_histogram:new(?MIN_TIME_WINDOW, 60),
     HrHist = time_slot_histogram:new(?HR_TIME_WINDOW, 24),
     DyHist = time_slot_histogram:new(?DY_TIME_WINDOW, 30),
-    {ok, TransferId} = update(TransferId, #{
-        files_to_transfer => 0,
-        files_transferred => 0,
-        bytes_to_transfer => 0,
-        bytes_transferred => 0,
-        start_time => TimeSeconds,
-        last_update => 0,
-        min_hist => time_slot_histogram:get_histogram_values(MinHist),
-        hr_hist => time_slot_histogram:get_histogram_values(HrHist),
-        dy_hist => time_slot_histogram:get_histogram_values(DyHist)
-    }),
+    {ok, TransferId} = update(TransferId, fun(Transfer=#transfer{}) ->
+        {ok, Transfer#transfer{
+            transfer_status = scheduled,
+            files_to_transfer = 0,
+            files_transferred = 0,
+            bytes_to_transfer = 0,
+            bytes_transferred = 0,
+            start_time = TimeSeconds,
+            last_update = 0,
+            min_hist = time_slot_histogram:get_histogram_values(MinHist),
+            hr_hist = time_slot_histogram:get_histogram_values(HrHist),
+            dy_hist = time_slot_histogram:get_histogram_values(DyHist)
+        }}
+    end),
     {ok, TransferDoc} = get(TransferId),
     transfer_controller:on_new_transfer_doc(TransferDoc),
     invalidation_controller:on_new_transfer_doc(TransferDoc),
@@ -600,7 +611,7 @@ restart(TransferId) ->
 -spec restart_unfinished_transfers() -> term().
 restart_unfinished_transfers() ->
     for_each_unfinished_transfer(fun(TransferId, _AccIn) ->
-        restart(TransferId)
+        {ok, TransferId} = restart(TransferId)
     end, []).
 
 %%-------------------------------------------------------------------
@@ -612,5 +623,5 @@ restart_unfinished_transfers() ->
 -spec restart_failed_transfers() -> term().
 restart_failed_transfers() ->
     for_each_failed_transfer(fun(TransferId, _AccIn) ->
-        restart(TransferId)
+        {ok, TransferId} = restart(TransferId)
     end, []).

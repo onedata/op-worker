@@ -216,7 +216,7 @@ new_transfer(#document{
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Notifies callback about successfull transfer
+%% Notifies callback about successful transfer
 %% @end
 %%--------------------------------------------------------------------
 -spec notify_callback(transfer:callback(), InvalidationSourceReplica :: boolean()) -> ok.

@@ -52,7 +52,7 @@
 -define(SPACES_CLEANUP_INTERVAL, application:get_env(?APP_NAME,
     spaces_cleanup_interval, timer:hours(1))).
 
--define(TRANSFERS_RESTART_DELAY, timer:seconds(30)).
+-define(TRANSFERS_RESTART_DELAY, timer:seconds(1)).
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
