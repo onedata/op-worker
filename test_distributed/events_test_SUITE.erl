@@ -185,7 +185,8 @@ init_per_testcase(_Case, Config) ->
         {ok, #document{value = #od_space{providers = [oneprovider:get_provider_id()]}}}
     end),
     initializer:mock_test_file_context(Config, ?FILE_UUID),
-    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), [{session_id, SessId} | Config]).
+    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"),
+        [{session_id, SessId} | Config]).
 
 end_per_testcase(Case, Config) when
     Case =:= emit_file_read_event_should_execute_handler;

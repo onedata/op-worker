@@ -12,6 +12,11 @@
 -define(DATASTORE_RUNNER_HRL, 1).
 
 %% Runs given codeblock and converts any badmatch/case_clause to {error, Reason :: term()}
--define(run(B), datastore_runner:run_and_normalize_error(fun() -> B end, ?MODULE)).
+-define(run(Fun), datastore_runner:run_and_normalize_error(
+    fun() -> Fun end, ?MODULE
+)).
+
+-define(extract_ok(Result), datastore_runner:extract_ok(Result)).
+-define(extract_key(Result), datastore_runner:extract_key(Result)).
 
 -endif.

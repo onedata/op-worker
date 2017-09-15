@@ -13,10 +13,8 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
--include("modules/dbsync/common.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("proto/oneclient/common_messages.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include("timeouts.hrl").
 

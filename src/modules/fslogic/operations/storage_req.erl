@@ -67,7 +67,7 @@ get_helper_params(_UserCtx, StorageId, true = _ForceProxy) ->
     {ok, Helper} = case storage:get(StorageId) of
         {ok, StorageDoc} ->
             fslogic_storage:select_helper(StorageDoc);
-        {error,{not_found,storage}} ->
+        {error, not_found} ->
             {ok, undefined}
     end,
     HelperParams = helper:get_proxy_params(Helper, StorageId),

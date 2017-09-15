@@ -15,9 +15,8 @@
 -author("Michal Zmuda").
 
 -include("proto/common/credentials.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/oz/oz_spaces.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
 
 -export([get/2]).
 -export([get_spaces/2, get_spaces/1, get_default_space/2, set_default_space/2]).
@@ -35,7 +34,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get(oz_endpoint:auth(), UserId :: binary()) ->
-    {ok, datastore:document()} | datastore:get_error().
+    {ok, datastore:doc()} | {error, term()}.
 get(Auth, UserId) ->
     od_user:get_or_fetch(Auth, UserId).
 
@@ -81,7 +80,7 @@ get_spaces(UserId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_default_space(oz_endpoint:auth(), UserId :: binary()) ->
-    {ok, SpaceId :: od_space:id()} | datastore:get_error().
+    {ok, SpaceId :: od_space:id()} | {error, term()}.
 get_default_space(Auth, UserId) ->
     case get(Auth, UserId) of
         {ok, Doc} ->
@@ -115,7 +114,7 @@ set_default_space(Auth, SpaceId) ->
 -spec has_efective_group(UserId :: od_user:id(), GroupId :: od_group:id()) -> boolean().
 has_efective_group(UserId, GroupId) ->
     case od_user:get(UserId) of
-        {error, {not_found, _}} ->
+        {error, not_found} ->
             false;
         {ok, #document{value = #od_user{eff_groups = Groups}}} ->
             lists:member(GroupId, Groups)

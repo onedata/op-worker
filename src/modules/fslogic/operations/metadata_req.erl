@@ -79,7 +79,7 @@ get_metadata_insecure(_UserCtx, FileCtx, json, Names, Inherited) ->
                 status = #status{code = ?OK},
                 provider_response = #metadata{type = json, value = Meta}
             };
-        {error, {not_found, custom_metadata}} ->
+        {error, not_found} ->
             #provider_response{status = #status{code = ?ENOATTR}}
     end;
 get_metadata_insecure(_UserCtx, FileCtx, rdf, _, Inherited) ->
@@ -89,7 +89,7 @@ get_metadata_insecure(_UserCtx, FileCtx, rdf, _, Inherited) ->
                 status = #status{code = ?OK},
                 provider_response = #metadata{type = rdf, value = Meta}
             };
-        {error, {not_found, custom_metadata}} ->
+        {error, not_found} ->
             #provider_response{status = #status{code = ?ENOATTR}}
     end.
 

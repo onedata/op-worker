@@ -20,8 +20,6 @@
 
 
 -include("global_definitions.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("gui/include/gui.hrl").
 
 -export([route/1, data_backend/2, private_rpc_backend/0, public_rpc_backend/0]).

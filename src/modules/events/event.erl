@@ -160,7 +160,7 @@ get_event_manager(MgrRef) ->
     case session:get_event_manager(MgrRef) of
         {ok, Mgr} ->
             {ok, Mgr};
-        {error, {not_found, _} = Reason} ->
+        {error, not_found = Reason} ->
             {error, Reason};
         {error, Reason} ->
             ?warning("Cannot get event manager for session ~p due to: ~p",

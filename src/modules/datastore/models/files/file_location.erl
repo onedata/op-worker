@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Rafal Slota
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2017 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -10,77 +10,32 @@
 %%%-------------------------------------------------------------------
 -module(file_location).
 -author("Rafal Slota").
--behaviour(model_behaviour).
 
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore_runner.hrl").
 -include("proto/oneclient/common_messages.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
--include_lib("ctool/include/logging.hrl").
 
 % API
 -export([local_id/1, id/2, critical_section/2, save_and_bump_version/1]).
+-export([create/1, save/1, get/1, update/2, delete/1, delete/2]).
 
-%% model_behaviour callbacks
--export([save/1, get/1, exists/1, delete/1, delete/2, update/2, create/1, model_init/0,
-    'after'/5, before/4]).
--export([record_struct/1, record_upgrade/2]).
+%% datastore_model callbacks
+-export([get_ctx/0]).
+-export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
 
--type id() :: binary().
--type doc() :: datastore:document().
+-type id() :: datastore:id().
+-type record() :: #file_location{}.
+-type doc() :: datastore_doc:doc(record()).
+-type diff() :: datastore_doc:diff(record()).
 
 -export_type([id/0, doc/0]).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns structure of the record in specified version.
-%% @end
-%%--------------------------------------------------------------------
--spec record_struct(datastore_json:record_version()) ->
-    datastore_json:record_struct().
-record_struct(1) ->
-    {record, [
-        {uuid, string},
-        {provider_id, string},
-        {storage_id, string},
-        {file_id, string},
-        {blocks, [term]},
-        {version_vector, #{term => integer}},
-        {size, integer},
-        {handle_id, string},
-        {space_id, string},
-        {recent_changes, {[term], [term]}},
-        {last_rename, {{string, string}, integer}}
-    ]};
-record_struct(2) ->
-    {record, Struct} = record_struct(1),
-    {record, proplists:delete(handle_id, Struct)};
-record_struct(3) ->
-    {record, Struct} = record_struct(2),
-    {record, Struct ++ [{storage_file_created, boolean}]}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Upgrades record from specified version.
-%% @end
-%%--------------------------------------------------------------------
--spec record_upgrade(datastore_json:record_version(), tuple()) ->
-    {datastore_json:record_version(), tuple()}.
-record_upgrade(1, {?MODEL_NAME, Uuid, ProviderId, StorageId, FileId, Blocks,
-    VersionVector, Size, _HandleId, SpaceId, RecentChanges, LastRename}) ->
-    {2, #file_location{
-        uuid = Uuid, provider_id = ProviderId, storage_id = StorageId,
-        file_id = FileId, blocks = Blocks, version_vector = VersionVector,
-        size = Size, space_id = SpaceId, recent_changes = RecentChanges,
-        last_rename = LastRename
-    }};
-record_upgrade(2, {?MODEL_NAME, Uuid, ProviderId, StorageId, FileId, Blocks,
-    VersionVector, Size, SpaceId, RecentChanges, LastRename}) ->
-    {3, #file_location{
-        uuid = Uuid, provider_id = ProviderId, storage_id = StorageId,
-        file_id = FileId, blocks = Blocks, version_vector = VersionVector,
-        size = Size, space_id = SpaceId, recent_changes = RecentChanges,
-        last_rename = LastRename, storage_file_created = true
-    }}.
+-define(CTX, #{
+    model => ?MODULE,
+    sync_enabled => true,
+    mutator => oneprovider:get_provider_id(),
+    local_links_tree_id => oneprovider:get_provider_id()
+}).
 
 %%%===================================================================
 %%% API
@@ -88,7 +43,7 @@ record_upgrade(2, {?MODEL_NAME, Uuid, ProviderId, StorageId, FileId, Blocks,
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Return id of local file location
+%% Returns id of local file location
 %% @end
 %%--------------------------------------------------------------------
 -spec local_id(file_meta:uuid()) -> file_location:id().
@@ -97,12 +52,12 @@ local_id(FileUuid) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Return id of local file location
+%% Returns id of local file location
 %% @end
 %%--------------------------------------------------------------------
 -spec id(file_meta:uuid(), od_provider:id()) -> file_location:id().
 id(FileUuid, ProviderId) ->
-    datastore_utils2:gen_key(ProviderId, FileUuid).
+    datastore_utils:gen_key(ProviderId, FileUuid).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -110,37 +65,53 @@ id(FileUuid, ProviderId) ->
 %% 2 funs with same ResourceId won't run at the same time.
 %% @end
 %%--------------------------------------------------------------------
--spec critical_section(ResourceId :: binary(), Fun :: fun(() -> Result :: term())) -> Result :: term().
+-spec critical_section(ResourceId :: binary(), Fun :: fun(() -> term())) ->
+    term().
 critical_section(ResourceId, Fun) ->
-    critical_section:run([?MODEL_NAME, ResourceId], Fun).
+    critical_section:run([?MODULE, ResourceId], Fun).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Increase version in version_vector and save document.
+%% Increases version in version_vector and save document.
 %% @end
 %%--------------------------------------------------------------------
--spec save_and_bump_version(doc()) -> {ok, datastore:key()} | datastore:generic_error().
+-spec save_and_bump_version(doc()) -> {ok, doc()} | {error, term()}.
 save_and_bump_version(FileLocationDoc) ->
     file_location:save(version_vector:bump_version(FileLocationDoc)).
 
-%%%===================================================================
-%%% model_behaviour callbacks
-%%%===================================================================
-
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback save/1.
+%% Creates file location.
 %% @end
 %%--------------------------------------------------------------------
--spec save(datastore:document()) ->
-    {ok, datastore:key()} | datastore:generic_error().
-save(Document = #document{key = Key, value = #file_location{
+-spec create(doc()) -> {ok, doc()} | {error, term()}.
+create(Doc = #document{value = #file_location{
     uuid = FileUuid,
     space_id = SpaceId
 }}) ->
-    NewSize = count_bytes(Document),
+    NewSize = count_bytes(Doc),
+    space_quota:apply_size_change_and_maybe_emit(SpaceId, NewSize),
+    case get_owner_id(FileUuid) of
+        {ok, UserId} ->
+            monitoring_event:emit_storage_used_updated(SpaceId, UserId, NewSize);
+        {error, not_found} ->
+            ok
+    end,
+    ?extract_key(datastore_model:create(?CTX, Doc#document{scope = SpaceId})).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Saves file location.
+%% @end
+%%--------------------------------------------------------------------
+-spec save(doc()) -> {ok, id()} | {error, term()}.
+save(Doc = #document{key = Key, value = #file_location{
+    uuid = FileUuid,
+    space_id = SpaceId
+}}) ->
+    NewSize = count_bytes(Doc),
     {ok, UserId} = get_owner_id(FileUuid),
-    case get(Key) of
+    case datastore_model:get(?CTX, Key) of
         {ok, #document{value = #file_location{space_id = SpaceId}} = OldDoc} ->
             OldSize = count_bytes(OldDoc),
             space_quota:apply_size_change_and_maybe_emit(SpaceId, NewSize - OldSize),
@@ -158,57 +129,34 @@ save(Document = #document{key = Key, value = #file_location{
             space_quota:apply_size_change_and_maybe_emit(SpaceId, NewSize),
             monitoring_event:emit_storage_used_updated(SpaceId, UserId, NewSize)
     end,
-    model:execute_with_default_context(?MODULE, save, [Document#document{scope = SpaceId}]).
+    ?extract_key(datastore_model:save(?CTX, Doc#document{scope = SpaceId})).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback update/2.
+%% Returns file location.
 %% @end
 %%--------------------------------------------------------------------
--spec update(datastore:key(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:key()} | datastore:update_error().
-update(Key, Diff) ->
-    model:execute_with_default_context(?MODULE, update, [Key, Diff]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback create/1.
-%% @end
-%%--------------------------------------------------------------------
--spec create(datastore:document()) ->
-    {ok, datastore:key()} | datastore:create_error().
-create(Document = #document{value = #file_location{
-    uuid = FileUuid,
-    space_id = SpaceId
-}}) ->
-    NewSize = count_bytes(Document),
-    space_quota:apply_size_change_and_maybe_emit(SpaceId, NewSize),
-    case get_owner_id(FileUuid) of
-        {ok, UserId} ->
-            monitoring_event:emit_storage_used_updated(SpaceId, UserId, NewSize);
-        {error, {not_found, _}} ->
-            ok
-    end,
-
-    model:execute_with_default_context(?MODULE, create, [Document#document{scope = SpaceId}]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback get/1.
-%% @end
-%%--------------------------------------------------------------------
--spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
+-spec get(id()) -> {ok, doc()} | {error, term()}.
 get(Key) ->
-    model:execute_with_default_context(?MODULE, get, [Key]).
+    datastore_model:get(?CTX, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback delete/1.
+%% Updates file location.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(datastore:key()) -> ok | datastore:generic_error().
+-spec update(id(), diff()) -> {ok, id()} | {error, term()}.
+update(Key, Diff) ->
+    ?extract_key(datastore_model:update(?CTX, Key, Diff)).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes file location.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete(id()) -> ok | {error, term()}.
 delete(Key) ->
-    case get(Key) of
+    case datastore_model:get(?CTX, Key) of
         {ok, Doc = #document{value = #file_location{
             uuid = FileUuid,
             space_id = SpaceId
@@ -220,98 +168,137 @@ delete(Key) ->
         _ ->
             ok
     end,
-    model:execute_with_default_context(?MODULE, delete, [Key]).
+   datastore_model:delete(?CTX, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Deletes doc and emits event for owner.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(datastore:key(), datastore:id()) -> ok | datastore:generic_error().
+-spec delete(id(), od_user:id()) -> ok | {error, term()}.
 delete(Key, UserId) ->
-    case get(Key) of
-        {ok, Doc = #document{value = #file_location{
-            space_id = SpaceId
-        }}} ->
+    case datastore_model:get(?CTX, Key) of
+        {ok, Doc = #document{value = #file_location{space_id = SpaceId}}} ->
             Size = count_bytes(Doc),
             space_quota:apply_size_change_and_maybe_emit(SpaceId, -1 * Size),
             monitoring_event:emit_storage_used_updated(SpaceId, UserId, -1 * Size);
         _ ->
             ok
     end,
-    model:execute_with_default_context(?MODULE, delete, [Key]).
+    datastore_model:delete(?CTX, Key).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback exists/1.
-%% @end
-%%--------------------------------------------------------------------
--spec exists(datastore:key()) -> datastore:exists_return().
-exists(Key) ->
-    ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [Key])).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback model_init/0.
-%% @end
-%%--------------------------------------------------------------------
--spec model_init() -> model_behaviour:model_config().
-model_init() ->
-    Config = ?MODEL_CONFIG(file_locations_bucket, [], ?GLOBALLY_CACHED_LEVEL),
-    Config#model_config{
-        version = 3,
-        sync_enabled = true
-    }.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback 'after'/5.
-%% @end
-%%--------------------------------------------------------------------
--spec 'after'(ModelName :: model_behaviour:model_type(),
-    Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term(),
-    ReturnValue :: term()) -> ok.
-'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
-    ok.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback before/4.
-%% @end
-%%--------------------------------------------------------------------
--spec before(ModelName :: model_behaviour:model_type(),
-    Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term()) ->
-    ok | datastore:generic_error().
-before(_ModelName, _Method, _Level, _Context) ->
-    ok.
-
-%%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Returns total size used by given file_location.
 %% @end
 %%--------------------------------------------------------------------
--spec count_bytes(datastore:document()) -> Size :: non_neg_integer().
+-spec count_bytes(doc()) -> non_neg_integer().
 count_bytes(#document{value = #file_location{blocks = Blocks}}) ->
     count_bytes(Blocks, 0).
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns total size used by given file_location.
+%% @end
+%%--------------------------------------------------------------------
+-spec count_bytes([fslogic_blocks:block()], non_neg_integer()) -> 
+    non_neg_integer().
 count_bytes([], Size) ->
     Size;
 count_bytes([#file_block{size = Size} | T], TotalSize) ->
     count_bytes(T, TotalSize + Size).
 
 %%--------------------------------------------------------------------
-%% @doc
 %% @private
+%% @doc
 %% Return user id for given file uuid.
 %% @end
 %%--------------------------------------------------------------------
--spec get_owner_id(file_meta:uuid()) -> {ok, datastore:id()} | {error, term()}.
+-spec get_owner_id(file_meta:uuid()) -> {ok, od_user:id()} | {error, term()}.
 get_owner_id(FileUuid) ->
     case file_meta:get_including_deleted(FileUuid) of
         {ok, #document{value = #file_meta{owner = UserId}}} ->
             {ok, UserId};
-        Error ->
-            Error
+        {error, Reason} ->
+            {error, Reason}
     end.
+
+%%%===================================================================
+%%% datastore_model callbacks
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_ctx() -> datastore:ctx().
+get_ctx() ->
+    ?CTX.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's record version.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_record_version() -> datastore_model:record_version().
+get_record_version() ->
+    3.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's record structure in provided version.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_record_struct(datastore_model:record_version()) ->
+    datastore_model:record_struct().
+get_record_struct(1) ->
+    {record, [
+        {uuid, string},
+        {provider_id, string},
+        {storage_id, string},
+        {file_id, string},
+        {blocks, [term]},
+        {version_vector, #{term => integer}},
+        {size, integer},
+        {handle_id, string},
+        {space_id, string},
+        {recent_changes, {[term], [term]}},
+        {last_rename, {{string, string}, integer}}
+    ]};
+get_record_struct(2) ->
+    {record, Struct} = get_record_struct(1),
+    {record, proplists:delete(handle_id, Struct)};
+get_record_struct(3) ->
+    {record, Struct} = get_record_struct(2),
+    {record, Struct ++ [{storage_file_created, boolean}]}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Upgrades model's record from provided version to the next one.
+%% @end
+%%--------------------------------------------------------------------
+-spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
+    {datastore_model:record_version(), datastore_model:record()}.
+upgrade_record(1, {?MODULE, Uuid, ProviderId, StorageId, FileId, Blocks,
+    VersionVector, Size, _HandleId, SpaceId, RecentChanges, LastRename}) ->
+    {2, #file_location{
+        uuid = Uuid, provider_id = ProviderId, storage_id = StorageId,
+        file_id = FileId, blocks = Blocks, version_vector = VersionVector,
+        size = Size, space_id = SpaceId, recent_changes = RecentChanges,
+        last_rename = LastRename
+    }};
+upgrade_record(2, {?MODULE, Uuid, ProviderId, StorageId, FileId, Blocks,
+    VersionVector, Size, SpaceId, RecentChanges, LastRename}) ->
+    {3, #file_location{
+        uuid = Uuid, provider_id = ProviderId, storage_id = StorageId,
+        file_id = FileId, blocks = Blocks, version_vector = VersionVector,
+        size = Size, space_id = SpaceId, recent_changes = RecentChanges,
+        last_rename = LastRename, storage_file_created = true
+    }}.

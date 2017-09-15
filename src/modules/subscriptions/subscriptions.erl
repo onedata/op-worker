@@ -15,7 +15,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/subscriptions/subscriptions.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -25,9 +25,10 @@
 -type seq() :: non_neg_integer().
 -type rev() :: term().
 -type model() :: od_group | od_user | od_space | od_share |
-od_provider | od_handle_service | od_handle.
+                 od_provider | od_handle_service | od_handle.
 -type record() :: #od_space{} | #od_user{} | #od_group{} |
-#od_share{} | #od_provider{} | #od_handle_service{} | #od_handle{}.
+                  #od_share{} | #od_provider{} | #od_handle_service{} |
+                  #od_handle{}.
 -export_type([seq/0, rev/0, model/0, record/0]).
 
 %%--------------------------------------------------------------------

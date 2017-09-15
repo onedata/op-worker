@@ -12,6 +12,7 @@
 -author("Jakub Kudzia").
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -28,7 +29,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec modify_storage_import(od_space:id(), space_strategy:name(),
-    space_strategy:arguments()) -> {ok, datastore:ext_key()} | datastore:update_error().
+    space_strategy:arguments()) -> {ok, datastore:key()} | {error, term()}.
 modify_storage_import(SpaceId, StrategyName, Args) ->
     StorageId = get_supporting_storage(SpaceId),
     modify_storage_import(SpaceId, StrategyName, StorageId, Args).
@@ -40,7 +41,7 @@ modify_storage_import(SpaceId, StrategyName, Args) ->
 %%--------------------------------------------------------------------
 -spec modify_storage_import(od_space:id(), space_strategy:name(),
     storage:id(), space_strategy:arguments()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
+    {ok, datastore:key()} | {error, term()}.
 modify_storage_import(SpaceId, StrategyName, StorageId, Args) ->
     file_meta:make_space_exist(SpaceId),
     {CurrentStrategyName, _} = space_strategies:get_storage_import_details(SpaceId, StorageId),
@@ -54,7 +55,7 @@ modify_storage_import(SpaceId, StrategyName, StorageId, Args) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec start_simple_scan_import(od_space:id(), storage:id(), non_neg_integer(), boolean()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
+    {ok, datastore:key()} | {error, term()}.
 start_simple_scan_import(SpaceId, StorageId, MaxDepth, SyncAcl) ->
     modify_storage_import(SpaceId, simple_scan, StorageId, #{
         max_depth => MaxDepth,
@@ -67,7 +68,7 @@ start_simple_scan_import(SpaceId, StorageId, MaxDepth, SyncAcl) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec stop_storage_import(od_space:id()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
+    {ok, datastore:key()} | {error, term()}.
 stop_storage_import(SpaceId) ->
     StorageId = get_supporting_storage(SpaceId),
     modify_storage_import(SpaceId, no_import, StorageId, #{}).
@@ -78,7 +79,7 @@ stop_storage_import(SpaceId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec modify_storage_update(od_space:id(), space_strategy:name(),
-    space_strategy:arguments()) -> {ok, datastore:ext_key()} | datastore:update_error().
+    space_strategy:arguments()) -> {ok, datastore:key()} | {error, term()}.
 modify_storage_update(SpaceId, StrategyName, Args) ->
     StorageId = get_supporting_storage(SpaceId),
     modify_storage_update(SpaceId, StrategyName, StorageId, Args).
@@ -89,7 +90,7 @@ modify_storage_update(SpaceId, StrategyName, Args) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec modify_storage_update(od_space:id(),space_strategy:name(), storage:id(),
-    space_strategy:arguments()) -> {ok, datastore:ext_key()} | datastore:update_error().
+    space_strategy:arguments()) -> {ok, datastore:key()} | {error, term()}.
 modify_storage_update(SpaceId, StrategyName, StorageId, Args) ->
     file_meta:make_space_exist(SpaceId),
     {CurrentStrategyName, _} = space_strategies:get_storage_update_details(SpaceId, StorageId),
@@ -105,7 +106,7 @@ modify_storage_update(SpaceId, StrategyName, StorageId, Args) ->
 %%--------------------------------------------------------------------
 -spec start_simple_scan_update(od_space:id(), storage:id(),
     non_neg_integer(), non_neg_integer(), boolean(), boolean(), boolean()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
+    {ok, datastore:key()} | {error, term()}.
 start_simple_scan_update(SpaceId, StorageId, MaxDepth, ScanInterval, WriteOnce,
     DeleteEnable, SyncAcl
 ) ->
@@ -123,7 +124,7 @@ start_simple_scan_update(SpaceId, StorageId, MaxDepth, ScanInterval, WriteOnce,
 %% @end
 %%--------------------------------------------------------------------
 -spec stop_storage_update(od_space:id()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
+    {ok, datastore:key()} | {error, term()}.
 stop_storage_update(SpaceId) ->
     modify_storage_update(SpaceId, no_update, #{}).
 

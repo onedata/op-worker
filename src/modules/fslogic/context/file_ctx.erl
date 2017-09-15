@@ -24,7 +24,7 @@
 -module(file_ctx).
 -author("Tomasz Lichon").
 
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
@@ -132,7 +132,7 @@ new_by_partial_context(FileCtx = #file_ctx{}) ->
     {FileCtx, get_space_id_const(FileCtx)};
 new_by_partial_context(FilePartialCtx) ->
     {CanonicalPath, FilePartialCtx2} = file_partial_ctx:get_canonical_path(FilePartialCtx),
-    {ok, {FileDoc, _}} = file_meta:resolve_path(CanonicalPath),
+    {ok, FileDoc} = fslogic_path:resolve(CanonicalPath),
     SpaceId = file_partial_ctx:get_space_id_const(FilePartialCtx2),
     {new_by_doc(FileDoc, SpaceId, undefined), SpaceId}.
 
@@ -498,12 +498,12 @@ get_child(FileCtx, Name, UserCtx) ->
         _ ->
             SpaceId = get_space_id_const(FileCtx),
             {FileDoc, FileCtx2} = get_file_doc(FileCtx),
-            case file_meta:resolve_path(FileDoc, <<"/", Name/binary>>) of
-                {ok, {ChildDoc, _}} ->
+            case fslogic_path:resolve(FileDoc, <<"/", Name/binary>>) of
+                {ok, ChildDoc} ->
                     ShareId = get_share_id_const(FileCtx2),
                     Child = new_by_doc(ChildDoc, SpaceId, ShareId),
                     {Child, FileCtx2};
-                {error, {not_found, _}} ->
+                {error, not_found} ->
                     throw(?ENOENT)
             end
     end.
@@ -645,7 +645,7 @@ get_local_file_location_doc(FileCtx) ->
     case file_location:get(LocalLocationId) of
         {ok, Location} ->
             {Location, FileCtx};
-        {error, {not_found, _}} ->
+        {error, not_found} ->
             {undefined, FileCtx}
     end.
 
@@ -715,7 +715,7 @@ get_file_size(FileCtx) ->
         {#document{value = #file_location{size = Size}}, FileCtx2} ->
             {Size, FileCtx2};
         {undefined, FileCtx2} ->
-            get_file_size_from_remote_locations(FileCtx)
+            get_file_size_from_remote_locations(FileCtx2)
     end.
 
 %%--------------------------------------------------------------------

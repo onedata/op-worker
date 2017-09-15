@@ -9,7 +9,7 @@
 %%% and routing messages to them.
 %%% @end
 %%%-------------------------------------------------------------------
--module(dbsync_worker2).
+-module(dbsync_worker).
 -author("Krzysztof Trzepla").
 
 -behaviour(worker_plugin_behaviour).
@@ -24,7 +24,7 @@
 %% API
 -export([supervisor_flags/0]).
 
--define(DBSYNC_WORKER_SUP, dbsync_worker2_sup).
+-define(DBSYNC_WORKER_SUP, dbsync_worker_sup).
 -define(STREAMS_HEALTHCHECK_INTERVAL, application:get_env(?APP_NAME,
     dbsync_streams_healthcheck_interval, timer:seconds(5))).
 
@@ -40,7 +40,7 @@
 -spec init(Args :: term()) ->
     {ok, worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    couchbase_changes:enable([dbsync_utils2:get_bucket()]),
+    couchbase_changes:enable([dbsync_utils:get_bucket()]),
     start_streams(),
     erlang:send_after(?STREAMS_HEALTHCHECK_INTERVAL, self(),
         {sync_timer, streams_healthcheck}
@@ -71,9 +71,9 @@ handle(streams_healthcheck) ->
 handle({dbsync_message, _SessId, Msg = #tree_broadcast2{}}) ->
     handle_tree_broadcast(Msg);
 handle({dbsync_message, SessId, Msg = #changes_request2{}}) ->
-    handle_changes_request(dbsync_utils2:get_provider(SessId), Msg);
+    handle_changes_request(dbsync_utils:get_provider(SessId), Msg);
 handle({dbsync_message, SessId, Msg = #changes_batch{}}) ->
-    handle_changes_batch(dbsync_utils2:get_provider(SessId), undefined, Msg);
+    handle_changes_batch(dbsync_utils:get_provider(SessId), undefined, Msg);
 handle(Request) ->
     ?log_bad_request(Request).
 
@@ -158,7 +158,7 @@ start_streams() ->
                 _ ->
                     ok
             end
-        end, dbsync_utils2:get_spaces())
+        end, dbsync_utils:get_spaces())
     end, [dbsync_in_stream, dbsync_out_stream]).
 
 %%--------------------------------------------------------------------
@@ -181,7 +181,7 @@ start_in_stream(SpaceId) ->
 -spec start_out_stream(od_space:id()) -> supervisor:startchild_ret().
 start_out_stream(SpaceId) ->
     Filter = fun
-        (#document{mutator = [Mutator | _]}) ->
+        (#document{mutators = [Mutator | _]}) ->
             Mutator =:= oneprovider:get_provider_id();
         (#document{}) ->
             false
@@ -192,7 +192,7 @@ start_out_stream(SpaceId) ->
         (Since, Until, Docs) ->
             ProviderId = oneprovider:get_provider_id(),
             dbsync_communicator:broadcast_changes(SpaceId, Since, Until, Docs),
-            dbsync_state2:set_seq(SpaceId, ProviderId, Until)
+            dbsync_state:set_seq(SpaceId, ProviderId, Until)
     end,
     Spec = dbsync_out_stream_spec(SpaceId, SpaceId, [
         {register, true},
@@ -219,7 +219,7 @@ handle_changes_batch(ProviderId, MsgId, #changes_batch{
     compressed_docs = CompressedDocs
 }) ->
     Name = {dbsync_in_stream, SpaceId},
-    Docs = dbsync_utils2:uncompress(CompressedDocs),
+    Docs = dbsync_utils:uncompress(CompressedDocs),
     gen_server:cast(
         {global, Name}, {changes_batch, MsgId, ProviderId, Since, Until, Docs}
     ).
@@ -247,7 +247,7 @@ handle_changes_request(ProviderId, #changes_request2{
                 ProviderId, SpaceId, BatchSince, BatchUntil, Docs
             )
     end,
-    ReqId = dbsync_utils2:gen_request_id(),
+    ReqId = dbsync_utils:gen_request_id(),
     Spec = dbsync_out_stream_spec(ReqId, SpaceId, [
         {since, Since},
         {until, Until},

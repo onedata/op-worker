@@ -13,11 +13,11 @@
 -author("Michal Wrzeszcz").
 
 -include("global_definitions.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_common_internal.hrl").
 -include_lib("cluster_worker/include/global_definitions.hrl").
 
 %% API

@@ -14,12 +14,11 @@
 -author("Rafal Slota").
 -behavior(worker_plugin_behaviour).
 
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/storage_sync/strategy_config.hrl").
 -include("global_definitions.hrl").
 -include_lib("cluster_worker/include/elements/worker_host/worker_protocol.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 
 -define(SYNC_JOB_TIMEOUT,  timer:hours(24)).

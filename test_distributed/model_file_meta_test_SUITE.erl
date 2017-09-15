@@ -109,7 +109,7 @@ rename_test(Config) ->
     % rename tree root again
     ?assertMatch(ok, rpc:call(Worker2, file_meta, rename, [D2Doc, Space1DirDoc, Space1DirDoc, <<"d3">>])),
     ?assertMatch({error, _}, rpc:call(Worker2, file_meta, get, [{path, <<"/Space 1/d2">>}])),
-    {ok, D3Doc} = ?assertMatch({ok, #document{value = #file_meta{name = <<"d3">>}}}, rpc:call(Worker2, file_meta, get, [{path, <<"/Space 1/d3">>}])),
+    {ok, _D3Doc} = ?assertMatch({ok, #document{value = #file_meta{name = <<"d3">>}}}, rpc:call(Worker2, file_meta, get, [{path, <<"/Space 1/d3">>}])),
     ?assertMatch({ok, _}, rpc:call(Worker2, file_meta, get, [{path, <<"/Space 1/d3/f1">>}])).
 
 %%%===================================================================

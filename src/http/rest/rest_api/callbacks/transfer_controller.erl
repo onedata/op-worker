@@ -16,7 +16,7 @@
 -behaviour(gen_server).
 
 -include("proto/oneprovider/provider_messages.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API

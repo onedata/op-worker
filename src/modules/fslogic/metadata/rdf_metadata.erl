@@ -11,7 +11,7 @@
 -module(rdf_metadata).
 -author("Tomasz Lichon").
 
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/metadata.hrl").
 
 %% API

@@ -15,7 +15,7 @@
 -author("Michal Zmuda").
 
 -include("proto/common/credentials.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/oz/oz_spaces.hrl").
 
 % Todo move create join leave to user logic
@@ -40,7 +40,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get(oz_endpoint:auth(), SpaceId :: binary(), UserId :: binary()) ->
-    {ok, datastore:document()} | datastore:get_error().
+    {ok, datastore:doc()} | {error, term()}.
 get(Auth, SpaceId, UserId) ->
     od_space:get_or_fetch(Auth, SpaceId, UserId).
 
@@ -183,7 +183,7 @@ get_invite_provider_token(Auth, SpaceId) ->
     UserId :: od_user:id()) -> boolean().
 has_effective_user(SpaceId, UserId) ->
     case od_user:get(UserId) of
-        {error, {not_found, _}} ->
+        {error, not_found} ->
             false;
         {ok, #document{value = UserInfo}} ->
             #od_user{space_aliases = SpaceNames} = UserInfo,

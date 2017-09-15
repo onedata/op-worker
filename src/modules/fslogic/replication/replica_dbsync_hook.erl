@@ -13,9 +13,7 @@
 -author("Tomasz Lichon").
 
 -include("proto/oneclient/common_messages.hrl").
--include("modules/dbsync/common.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -39,24 +37,23 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
         file_id = FileId
     }}
 ) ->
-    file_location:critical_section(Uuid,
-        fun() ->
-            case oneprovider:get_provider_id() =/= ProviderId of
-                true ->
-                    % set file_id as the same as for remote file, because
-                    % computing it requires parent links which may be not here yet.
-                    FileCtx2 = file_ctx:set_file_id(file_ctx:reset(FileCtx), FileId),
-                    FileCtx3 = file_ctx:set_is_dir(FileCtx2, false),
-                    case file_ctx:get_local_file_location_doc(FileCtx3) of
-                        {undefined, FileCtx4} ->
-                            fslogic_event_emitter:emit_file_attr_changed(FileCtx4, []);
-                        {LocalLocation, FileCtx4} ->
-                            update_local_location_replica(FileCtx4, LocalLocation, ChangedLocationDoc)
-                    end;
-                false ->
-                    ok
-            end
-        end).
+    file_location:critical_section(Uuid, fun() ->
+        case oneprovider:get_provider_id() =/= ProviderId of
+            true ->
+                % set file_id as the same as for remote file, because
+                % computing it requires parent links which may be not here yet.
+                FileCtx2 = file_ctx:set_file_id(file_ctx:reset(FileCtx), FileId),
+                FileCtx3 = file_ctx:set_is_dir(FileCtx2, false),
+                case file_ctx:get_local_file_location_doc(FileCtx3) of
+                    {undefined, FileCtx4} ->
+                        fslogic_event_emitter:emit_file_attr_changed(FileCtx4, []);
+                    {LocalLocation, FileCtx4} ->
+                        update_local_location_replica(FileCtx4, LocalLocation, ChangedLocationDoc)
+                end;
+            false ->
+                ok
+        end
+    end).
 
 %%%===================================================================
 %%% Internal functions

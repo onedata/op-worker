@@ -81,6 +81,7 @@ single_dir_creation_test_base(Config, Clear) ->
                                 ok ->
                                     {OkNum+1, OkTime+T, ErrorNum, ErrorTime};
                                 _ ->
+                                    ct:print("Unlink error: ~p", [A]),
                                     {OkNum, OkTime, ErrorNum+1, ErrorTime+T}
                             end
                         end, {0,0,0,0}, lists:seq(1,FilesNum));
@@ -439,6 +440,7 @@ create_single_call(SessId, Dir, FilesNum, NameExtBin) ->
             {ok, _} ->
                 {OkNum+1, OkTime+T, ErrorNum, ErrorTime};
             _ ->
+                ct:print("Create error: ~p", [A]),
                 {OkNum, OkTime, ErrorNum+1, ErrorTime+T}
         end
     end, {0,0,0,0}, lists:seq(1,FilesNum)).

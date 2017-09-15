@@ -20,7 +20,6 @@
 
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 
 %% API
 -export([start_link/2]).
@@ -89,8 +88,8 @@ start_link(SpaceId, Opts) ->
     {stop, Reason :: term()} | ignore.
 init([SpaceId, Opts]) ->
     Stream = self(),
-    Bucket = dbsync_utils2:get_bucket(),
-    Since = dbsync_state2:get_seq(SpaceId, oneprovider:get_provider_id()),
+    Bucket = dbsync_utils:get_bucket(),
+    Since = dbsync_state:get_seq(SpaceId, oneprovider:get_provider_id()),
     Callback = fun(Change) -> gen_server:cast(Stream, {change, Change}) end,
     case proplists:get_value(register, Opts, false) of
         true -> {ok, _} = couchbase_changes_worker:start_link(Bucket, SpaceId);
@@ -219,7 +218,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% Aggregates change. Handles aggregated changes if batch size is reached.
 %% @end
 %%--------------------------------------------------------------------
--spec aggregate_change(datastore:document(), state()) -> state().
+-spec aggregate_change(datastore:doc(), state()) -> state().
 aggregate_change(Doc = #document{seq = Seq}, State = #state{changes = Docs}) ->
     State2 = State#state{
         until = Seq + 1,
@@ -273,15 +272,15 @@ schedule_docs_handling(State = #state{handling_ref = Ref}) ->
 %% Handles change that include document.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_doc_change(datastore:document(), filter(), state()) -> state().
+-spec handle_doc_change(datastore:doc(), filter(), state()) -> state().
 handle_doc_change(#document{seq = Seq} = Doc, Filter,
     State = #state{until = Until}) when Seq >= Until ->
     case Filter(Doc) of
         true -> aggregate_change(Doc, State);
         false -> State#state{until = Seq + 1}
     end;
-handle_doc_change(#document{seq = Seq} = _Doc, _Filter,
+handle_doc_change(#document{seq = Seq} = Doc, _Filter,
     State = #state{until = Until}) ->
     ?error("Received change with old sequence ~p. Expected sequences"
-    " greater than or equal to ~p", [Seq, Until]),
+    " greater than or equal to ~p~n~p", [Seq, Until, Doc]),
     State.

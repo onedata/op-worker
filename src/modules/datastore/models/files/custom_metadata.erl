@@ -5,274 +5,83 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Model for holding files' custom metadata.
+%%% @doc
+%%% Model for holding files' custom metadata.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(custom_metadata).
 -author("Tomasz Lichon").
--behaviour(model_behaviour).
 
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore_runner.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/metadata.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 
 %% API
+-export([get/1, update/2, delete/1, create_or_update/2]).
 -export([get_xattr_metadata/3, list_xattr_metadata/2, exists_xattr_metadata/2,
     remove_xattr_metadata/2, set_xattr_metadata/6]).
 
-%% model_behaviour callbacks
--export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
-    create_or_update/2, 'after'/5, before/4]).
--export([record_struct/1, record_upgrade/2]).
+%% datastore_model callbacks
+-export([get_ctx/0]).
+-export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
 
 % Metadata types
 -type type() :: json | rdf.
 -type name() :: binary().
--type value() :: rdf() | json().
+-type value() :: rdf() | jiffy:json_value().
 -type names() :: [name()].
+-type doc() :: datastore_doc:doc(metadata()).
+-type diff() :: datastore_doc:diff(metadata()).
 -type metadata() :: #metadata{}.
 -type rdf() :: binary().
 -type view_id() :: binary().
 -type filter() :: [binary()].
 
-% JSON type
--type json() :: json_object() | json_array().
--type json_array() :: [json_term()].
--type json_object() :: #{json_key() => json_term()}.
--type json_key() :: binary() | atom().
--type json_term() :: json_array()
-| json_object()
-| json_string()
-| json_number()
-| true | false | null.
--type json_string() :: binary().
--type json_number() :: float() | integer().
+-export_type([type/0, name/0, value/0, names/0, metadata/0, rdf/0, view_id/0,
+    filter/0]).
 
--export_type([type/0, name/0, value/0, names/0, metadata/0, rdf/0, view_id/0, filter/0]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns structure of the record in specified version.
-%% @end
-%%--------------------------------------------------------------------
--spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
-record_struct(1) ->
-    {record, [
-        {space_id, string},
-        {value, {custom, {json_utils, encode_map, decode_map}}}
-    ]};
-record_struct(2) ->
-    {record, [
-        {space_id, string},
-        {file_objectid, string},
-        {value, {custom, {json_utils, encode_map, decode_map}}}
-    ]}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Upgrades record from specified version.
-%% @end
-%%--------------------------------------------------------------------
--spec record_upgrade(datastore_json:record_version(), tuple()) ->
-    {datastore_json:record_version(), tuple()}.
-record_upgrade(1, {?MODEL_NAME, SpaceId, Value}) ->
-    {2, #custom_metadata{space_id = SpaceId, file_objectid = undefined, value = Value}}.
-
+-define(CTX, #{
+    model => ?MODULE,
+    sync_enabled => true,
+    mutator => oneprovider:get_provider_id(),
+    local_links_tree_id => oneprovider:get_provider_id()
+}).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Get extended attribute metadata
+%% @doc
+%% Returns custom metadata.
+%% @end
 %%--------------------------------------------------------------------
--spec get_xattr_metadata(file_meta:uuid(), xattr:name(), Inherited :: boolean()) ->
-    {ok, xattr:value()} | datastore:get_error().
-get_xattr_metadata(?ROOT_DIR_UUID, Name, true) ->
-    get_xattr_metadata(?ROOT_DIR_UUID, Name, false);
-get_xattr_metadata(FileUuid, Name, true) ->
-    case get_xattr_metadata(FileUuid, Name, false) of
-        {ok, Value} ->
-            {ok, Value};
-        {error, {not_found, custom_metadata}} ->
-            case file_meta:get_parent_uuid({uuid, FileUuid}) of
-                {ok, ParentUuid} ->
-                    get_xattr_metadata(ParentUuid, Name, true);
-                Error ->
-                    Error
-            end;
-        Error ->
-            Error
-    end;
-get_xattr_metadata(FileUuid, Name, false) ->
-    case get(FileUuid) of
-        {ok, #document{value = #custom_metadata{value = Meta}}} ->
-            case maps:get(Name, Meta, undefined) of
-                undefined ->
-                    {error, {not_found, custom_metadata}};
-                Value ->
-                    {ok, Value}
-            end;
-        Error ->
-            Error
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc List extended attribute metadata names
-%%--------------------------------------------------------------------
--spec list_xattr_metadata(file_meta:uuid(), Inherited :: boolean()) ->
-    {ok, [xattr:name()]} | datastore:generic_error().
-list_xattr_metadata(FileUuid, true) ->
-    case file_meta:get_ancestors(FileUuid) of
-        {ok, Uuids} ->
-            Xattrs = lists:foldl(fun(Uuid, Acc) ->
-                case list_xattr_metadata(Uuid, false) of
-                    {ok, Json} ->
-                        Acc ++ Json;
-                    {error, {not_found,custom_metadata}} ->
-                        Acc
-                end
-            end, [], [FileUuid | Uuids]),
-            UniqueAttrs = lists:usort(Xattrs),
-            {ok, UniqueAttrs};
-        Error ->
-            Error
-    end;
-list_xattr_metadata(FileUuid, false) ->
-    case get(FileUuid) of
-        {ok, #document{value = #custom_metadata{value = Meta}}} ->
-            Keys = maps:keys(Meta),
-            {ok, Keys};
-        {error, {not_found, custom_metadata}} ->
-            {ok, []};
-        Error ->
-            Error
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc Remove extended attribute metadata
-%%--------------------------------------------------------------------
--spec remove_xattr_metadata(file_meta:uuid(), xattr:name()) ->
-    ok | datastore:generic_error().
-remove_xattr_metadata(FileUuid, Name) ->
-    case update(FileUuid, fun(Meta = #custom_metadata{value = MetaValue}) ->
-        NewMetaValue = maps:remove(Name, MetaValue),
-        {ok, Meta#custom_metadata{value = NewMetaValue}}
-    end) of
-        {ok, _} ->
-            ok;
-        {error, {not_found, custom_metadata}} ->
-            ok;
-        Error ->
-            Error
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc Checks if extended attribute metadata exists
-%%--------------------------------------------------------------------
--spec exists_xattr_metadata(file_meta:uuid(), xattr:name()) ->
-    datastore:exists_return().
-exists_xattr_metadata(FileUuid, Name) ->
-    case get(FileUuid) of
-        {ok, #document{value = #custom_metadata{value = MetaValue}}} ->
-            maps:is_key(Name, MetaValue);
-        {error, {not_found, custom_metadata}} ->
-            false
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc Set extended attribute metadata
-%%--------------------------------------------------------------------
--spec set_xattr_metadata(file_meta:uuid(), od_space:id(), xattr:name(),
-    xattr:value(), Create :: boolean(), Replace :: boolean()) ->
-    {ok, file_meta:uuid()} | datastore:generic_error().
-set_xattr_metadata(FileUuid, SpaceId, Name, Value, Create, Replace) ->
-    Map = maps:put(Name,Value, #{}),
-    FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
-    {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
-
-    UpdatingFunction = update_custom_meta_fun(Name, Value, Create, Replace),
-    case Replace of
-        true ->
-            case update(FileUuid, UpdatingFunction) of
-                {error, {not_found, _}} ->
-                    {error, ?ENODATA};
-                OtherAns ->
-                    OtherAns
-            end;
-        false ->
-            NewDoc = #document{key = FileUuid, value = #custom_metadata{
-                space_id = SpaceId,
-                file_objectid = FileObjectId,
-                value = Map
-            }, scope = SpaceId},
-            create_or_update(NewDoc, UpdatingFunction)
-    end.
-
-%%%===================================================================
-%%% model_behaviour callbacks
-%%%===================================================================
+-spec get(file_meta:uuid()) -> {ok, doc()} | {error, term()}.
+get(FileUuid) ->
+    datastore_model:get(?CTX, FileUuid).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback save/1.
+%% Updates custom metadata.
 %% @end
 %%--------------------------------------------------------------------
--spec save(datastore:document()) ->
-    {ok, datastore:key()} | datastore:generic_error().
-save(Document) ->
-    model:execute_with_default_context(?MODULE, save, [Document]).
+-spec update(file_meta:uuid(), diff()) ->
+    {ok, file_meta:uuid()} | {error, term()}.
+update(FileUuid, Diff) ->
+    ?extract_key(datastore_model:update(?CTX, FileUuid, Diff)).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback update/2.
+%% Deletes custom metadata.
 %% @end
 %%--------------------------------------------------------------------
--spec update(datastore:key(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:key()} | datastore:update_error().
-update(Key, Diff) ->
-    model:execute_with_default_context(?MODULE, update, [Key, Diff]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback create/1.
-%% @end
-%%--------------------------------------------------------------------
--spec create(datastore:document()) ->
-    {ok, datastore:key()} | datastore:create_error().
-create(Document) ->
-    model:execute_with_default_context(?MODULE, create, [Document]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback get/1.
-%% @end
-%%--------------------------------------------------------------------
--spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
-get(Key) ->
-    model:execute_with_default_context(?MODULE, get, [Key]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback delete/1.
-%% @end
-%%--------------------------------------------------------------------
--spec delete(datastore:key()) -> ok | datastore:generic_error().
-delete(Key) ->
-    model:execute_with_default_context(?MODULE, delete, [Key]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback exists/1.
-%% @end
-%%--------------------------------------------------------------------
--spec exists(datastore:key()) -> datastore:exists_return().
-exists(Key) ->
-    ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [Key])).
+-spec delete(file_meta:uuid()) -> ok | {error, term()}.
+delete(FileUuid) ->
+    datastore_model:delete(?CTX, FileUuid).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -280,60 +89,122 @@ exists(Key) ->
 %% it initialises the object with the document.
 %% @end
 %%--------------------------------------------------------------------
--spec create_or_update(datastore:document(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:key()} | datastore:generic_error().
-create_or_update(Doc, Diff) ->
-    model:execute_with_default_context(?MODULE, create_or_update, [Doc, Diff]).
+-spec create_or_update(doc(), diff()) ->
+    {ok, file_meta:uuid()} | {error, term()}.
+create_or_update(#document{key = Key, value = Default, scope = Scope}, Diff) ->
+    ?extract_key(datastore_model:update(
+        ?CTX#{scope => Scope}, Key, Diff, Default)
+    ).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback model_init/0.
+%% Get extended attribute metadata.
 %% @end
 %%--------------------------------------------------------------------
--spec model_init() -> model_behaviour:model_config().
-model_init() ->
-    ModelConfig = ?MODEL_CONFIG(custom_metadata_bucket, [{file_meta, delete}], ?GLOBALLY_CACHED_LEVEL),
-    ModelConfig#model_config{sync_enabled = true, version = 2}.
+-spec get_xattr_metadata(file_meta:uuid(), xattr:name(), Inherited :: boolean()) ->
+    {ok, xattr:value()} | {error, term()}.
+get_xattr_metadata(?ROOT_DIR_UUID, Name, true) ->
+    get_xattr_metadata(?ROOT_DIR_UUID, Name, false);
+get_xattr_metadata(FileUuid, Name, true) ->
+    case get_xattr_metadata(FileUuid, Name, false) of
+        {ok, Value} ->
+            {ok, Value};
+        {error, not_found} ->
+            case file_meta:get_parent_uuid({uuid, FileUuid}) of
+                {ok, ParentUuid} ->
+                    get_xattr_metadata(ParentUuid, Name, true);
+                {error, Reason} ->
+                    {error, Reason}
+            end;
+        {error, Reason} ->
+            {error, Reason}
+    end;
+get_xattr_metadata(FileUuid, Name, false) ->
+    case datastore_model:get(?CTX, FileUuid) of
+        {ok, #document{value = #custom_metadata{value = Meta}}} ->
+            case maps:find(Name, Meta) of
+                {ok, Value} -> {ok, Value};
+                error -> {error, not_found}
+            end;
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback 'after'/5.
+%% List extended attribute metadata names.
 %% @end
 %%--------------------------------------------------------------------
--spec 'after'(ModelName :: model_behaviour:model_type(),
-    Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term(),
-    ReturnValue :: term()) -> ok.
-'after'(file_meta, delete, _, [Key, _], ok) ->
-    delete(Key);
-'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
-    ok.
+-spec list_xattr_metadata(file_meta:uuid(), Inherited :: boolean()) ->
+    {ok, [xattr:name()]} | {error, term()}.
+list_xattr_metadata(FileUuid, true) ->
+    case file_meta:get_ancestors(FileUuid) of
+        {ok, Uuids} ->
+            Xattrs = lists:foldl(fun(Uuid, Acc) ->
+                case list_xattr_metadata(Uuid, false) of
+                    {ok, Json} ->
+                        Acc ++ Json;
+                    {error, not_found} ->
+                        Acc
+                end
+            end, [], [FileUuid | Uuids]),
+            UniqueAttrs = lists:usort(Xattrs),
+            {ok, UniqueAttrs};
+        {error, Reason} ->
+            {error, Reason}
+    end;
+list_xattr_metadata(FileUuid, false) ->
+    case datastore_model:get(?CTX, FileUuid) of
+        {ok, #document{value = #custom_metadata{value = Meta}}} ->
+            Keys = maps:keys(Meta),
+            {ok, Keys};
+        {error, not_found} ->
+            {ok, []};
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback before/4.
+%% Removes extended attribute metadata.
 %% @end
 %%--------------------------------------------------------------------
--spec before(ModelName :: model_behaviour:model_type(),
-    Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term()) ->
-    ok | datastore:generic_error().
-before(_ModelName, _Method, _Level, _Context) ->
-    ok.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
+-spec remove_xattr_metadata(file_meta:uuid(), xattr:name()) ->
+    ok | {error, term()}.
+remove_xattr_metadata(FileUuid, Name) ->
+    Diff = fun(Meta = #custom_metadata{value = MetaValue}) ->
+        {ok, Meta#custom_metadata{value = maps:remove(Name, MetaValue)}}
+    end,
+    case datastore_model:update(?CTX, FileUuid, Diff) of
+        {ok, _} -> ok;
+        {error, not_found} -> ok;
+        {error, Reason} -> {error, Reason}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns function used for updating custom_metadata doc.
+%% Checks if extended attribute metadata exists.
 %% @end
 %%--------------------------------------------------------------------
--spec update_custom_meta_fun(name(), value(), Create :: boolean(), Replace :: boolean()) ->
-    function().
-update_custom_meta_fun(Name, Value, Create, Replace) ->
-    fun(Meta = #custom_metadata{value = MetaValue}) ->
+-spec exists_xattr_metadata(file_meta:uuid(), xattr:name()) -> boolean().
+exists_xattr_metadata(FileUuid, Name) ->
+    case datastore_model:get(?CTX, FileUuid) of
+        {ok, #document{value = #custom_metadata{value = MetaValue}}} ->
+            maps:is_key(Name, MetaValue);
+        {error, not_found} ->
+            false
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets extended attribute metadata.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_xattr_metadata(file_meta:uuid(), od_space:id(), xattr:name(),
+    xattr:value(), Create :: boolean(), Replace :: boolean()) ->
+    {ok, file_meta:uuid()} | {error, term()}.
+set_xattr_metadata(FileUuid, SpaceId, Name, Value, Create, Replace) ->
+    Diff = fun(Meta = #custom_metadata{value = MetaValue}) ->
         case {maps:is_key(Name, MetaValue), Create, Replace} of
             {true, true, _} ->
                 {error, ?EEXIST};
@@ -343,4 +214,77 @@ update_custom_meta_fun(Name, Value, Create, Replace) ->
                 NewMetaValue = maps:put(Name, Value, MetaValue),
                 {ok, Meta#custom_metadata{value = NewMetaValue}}
         end
+    end,
+    case Replace of
+        true ->
+            case datastore_model:update(?CTX, FileUuid, Diff) of
+                {error, not_found} -> {error, ?ENODATA};
+                Other -> Other
+            end;
+        false ->
+            FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
+            {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
+            Default = #custom_metadata{
+                space_id = SpaceId,
+                file_objectid = FileObjectId,
+                value = maps:put(Name, Value, #{})
+            },
+            datastore_model:update(
+                ?CTX#{scope => SpaceId}, FileUuid, Diff, Default
+            )
     end.
+
+%%%===================================================================
+%%% datastore_model callbacks
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_ctx() -> datastore:ctx().
+get_ctx() ->
+    ?CTX.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's record version.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_record_version() -> datastore_model:record_version().
+get_record_version() ->
+    2.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's record structure in provided version.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_record_struct(datastore_model:record_version()) ->
+    datastore_model:record_struct().
+get_record_struct(1) ->
+    {record, [
+        {space_id, string},
+        {value, {custom, {json_utils, encode_map, decode_map}}}
+    ]};
+get_record_struct(2) ->
+    {record, [
+        {space_id, string},
+        {file_objectid, string},
+        {value, {custom, {json_utils, encode_map, decode_map}}}
+    ]}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Upgrades model's record from provided version to the next one.
+%% @end
+%%--------------------------------------------------------------------
+-spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
+    {datastore_model:record_version(), datastore_model:record()}.
+upgrade_record(1, {?MODULE, SpaceId, Value}) ->
+    {2, #custom_metadata{
+        space_id = SpaceId,
+        file_objectid = undefined,
+        value = Value
+    }}.

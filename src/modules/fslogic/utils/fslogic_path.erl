@@ -21,6 +21,7 @@
 %% API
 -export([split_skipping_dots/1]).
 -export([split/1, join/1, basename_and_parent/1, logical_to_canonical_path/2]).
+-export([resolve/1, resolve/2]).
 
 %%%===================================================================
 %%% API functions
@@ -93,7 +94,8 @@ basename_and_parent(Path) ->
     case lists:reverse(split(Path)) of
         [Leaf | Tokens] ->
             {Leaf, join([<<?DIRECTORY_SEPARATOR>> | lists:reverse(Tokens)])};
-        _ -> {<<"">>, <<?DIRECTORY_SEPARATOR>>}
+        _ ->
+            {<<"">>, <<?DIRECTORY_SEPARATOR>>}
     end.
 
 %%--------------------------------------------------------------------
@@ -105,6 +107,41 @@ basename_and_parent(Path) ->
 logical_to_canonical_path(LogicalPath, SpaceId) ->
     [<<"/">>, _SpaceName | Rest] = split(LogicalPath),
     join([<<"/">>, SpaceId | Rest]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Resolves given file_meta:path() and returns file_meta:entry() along with list of
+%% all ancestors' UUIDs.
+%% @end
+%%--------------------------------------------------------------------
+-spec resolve(file_meta:path()) ->
+    {ok, file_meta:doc()} | {error, term()}.
+resolve(Path) ->
+    resolve({uuid, ?ROOT_DIR_UUID}, Path).
+
+-spec resolve(file_meta:entry(), file_meta:path()) ->
+    {ok, file_meta:doc()} | {error, term()}.
+resolve(Parent, <<?DIRECTORY_SEPARATOR, Path/binary>>) ->
+    ?run(begin
+        {ok, Root} = file_meta:get(Parent),
+        Tokens = fslogic_path:split(Path),
+        get_leaf(Root, Tokens)
+    end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file meta document associated with path leaf.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_leaf(file_meta:doc(), [file_meta:name()]) ->
+    {ok, file_meta:doc()} | {error, term()}.
+get_leaf(Doc, []) ->
+    {ok, Doc};
+get_leaf(#document{key = ParentUuid}, [Name | Names]) ->
+    case file_meta:get_child(ParentUuid, Name) of
+        {ok, Doc} -> get_leaf(Doc, Names);
+        {error, Reason} -> {error, Reason}
+    end.
 
 %%%===================================================================
 %%% Internal functions

@@ -14,10 +14,9 @@
 
 -include("global_definitions.hrl").
 -include("http/http_common.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("http/rest/http_status.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API

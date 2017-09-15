@@ -13,28 +13,38 @@
 -module(luma_cache).
 -author("Jakub Kudzia").
 
--behaviour(model_behaviour).
-
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
+-include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore_runner.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+%% API
+-export([get/4, invalidate/0]).
+-export([save/1, update/2, create/1, get/1, delete/1, exists/1, list/0]).
 
--type key() :: binary().
+%% datastore_model callbacks
+-export([get_ctx/0]).
+
+-type key() :: datastore:key().
+-type record() :: #luma_cache{}.
+-type doc() :: datastore_doc:doc(record()).
+-type diff() :: datastore_doc:diff(record()).
 -type value() :: od_user:id() | od_group:id()| luma:user_ctx().
 -type timestamp() :: non_neg_integer().
 
 -export_type([value/0, timestamp/0]).
 
-%% API
--export([get/4, invalidate/0]).
+-define(CTX, #{
+    model => ?MODULE,
+    routing => local,
+    disc_driver => undefined,
+    fold_enabled => true
+}).
 
-%% model_behaviour callbacks
--export([save/1, get/1, exists/1, delete/1, update/2, create/1,
-    model_init/0, 'after'/5, before/4, list/0]).
-
+%%%===================================================================
+%%% API functions
+%%%===================================================================
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -47,8 +57,8 @@
     {ok, Value :: value()} | {error, Reason :: term()}.
 get(Key, QueryFun, QueryArgs, LumaCacheTimeout) ->
     CurrentTimestamp = utils:system_time_milli_seconds(),
-    case get(Key) of
-        {error, {not_found, _}} ->
+    case datastore_model:get(?CTX, Key) of
+        {error, not_found} ->
             query_and_cache_value(Key, QueryFun, QueryArgs,
                 CurrentTimestamp);
         {ok, #document{
@@ -79,106 +89,69 @@ invalidate() ->
         delete(Key)
     end, Docs).
 
-%%%===================================================================
-%%% model_behaviour callbacks
-%%%===================================================================
+%%--------------------------------------------------------------------
+%% @doc
+%% Saves luma cache.
+%% @end
+%%--------------------------------------------------------------------
+-spec save(doc()) -> {ok, key()} | {error, term()}.
+save(Doc) ->
+    ?extract_key(datastore_model:save(?CTX, Doc)).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback save/1.
+%% Updates luma cache.
 %% @end
 %%--------------------------------------------------------------------
--spec save(datastore:document()) ->
-    {ok, datastore:ext_key()} | datastore:generic_error().
-save(Document) ->
-    model:execute_with_default_context(?MODULE, save, [Document]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback update/2.
-%% @end
-%%--------------------------------------------------------------------
--spec update(datastore:ext_key(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
+-spec update(key(), diff()) -> {ok, key()} | {error, term()}.
 update(Key, Diff) ->
-    model:execute_with_default_context(?MODULE, update, [Key, Diff]).
+    ?extract_key(datastore_model:update(?CTX, Key, Diff)).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback create/1.
+%% Creates luma cache.
 %% @end
 %%--------------------------------------------------------------------
--spec create(datastore:document()) ->
-    {ok, datastore:ext_key()} | datastore:create_error().
-create(Document) ->
-    model:execute_with_default_context(?MODULE, create, [Document]).
+-spec create(doc()) -> {ok, key()} | {error, term()}.
+create(Doc) ->
+    ?extract_key(datastore_model:create(?CTX, Doc)).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback get/1.
+%% Returns luma cache.
 %% @end
 %%--------------------------------------------------------------------
--spec get(datastore:ext_key()) -> {ok, datastore:document()} | datastore:get_error().
+-spec get(key()) -> {ok, doc()} | {error, term()}.
 get(Key) ->
-    model:execute_with_default_context(?MODULE, get, [Key]).
+    datastore_model:get(?CTX, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback delete/1.
+%% Deletes luma cache.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(datastore:ext_key()) -> ok | datastore:generic_error().
+-spec delete(key()) -> ok | {error, term()}.
 delete(Key) ->
-    model:execute_with_default_context(?MODULE, delete, [Key]).
+    datastore_model:delete(?CTX, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback exists/1.
+%% Checks whether luma cache exists.
 %% @end
 %%--------------------------------------------------------------------
--spec exists(datastore:ext_key()) -> datastore:exists_return().
+-spec exists(key()) -> boolean().
 exists(Key) ->
-    ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [Key])).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback model_init/0.
-%% @end
-%%--------------------------------------------------------------------
--spec model_init() -> model_behaviour:model_config().
-model_init() ->
-    ?MODEL_CONFIG(luma_cache_bucket, [], ?LOCAL_ONLY_LEVEL)#model_config{
-        list_enabled = {true, return_errors}}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback 'after'/5.
-%% @end
-%%--------------------------------------------------------------------
--spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term(),
-    ReturnValue :: term()) -> ok.
-'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
-    ok.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback before/4.
-%% @end
-%%--------------------------------------------------------------------
--spec before(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
-before(_ModelName, _Method, _Level, _Context) ->
-    ok.
+    {ok, Exists} = datastore_model:exists(?CTX, Key),
+    Exists.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns list of all records.
 %% @end
 %%--------------------------------------------------------------------
--spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
+-spec list() -> {ok, [key()]} | {error, term()}.
 list() ->
-    model:execute_with_default_context(?MODULE, list, [?GET_ALL, []]).
+    datastore_model:fold(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
 
 %%%===================================================================
 %%% Internal functions
@@ -220,3 +193,16 @@ query_and_cache_value(Key, QueryFun, QueryArgs, CurrentTimestamp) ->
 -spec cache_should_be_renewed(timestamp(), timestamp(), luma_config:cache_timeout()) -> boolean().
 cache_should_be_renewed(CurrentTimestamp, LastTimestamp, CacheTimeout) ->
     (CurrentTimestamp - LastTimestamp) > CacheTimeout.
+
+%%%===================================================================
+%%% datastore_model callbacks
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_ctx() -> datastore:ctx().
+get_ctx() ->
+    ?CTX.

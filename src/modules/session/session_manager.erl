@@ -12,8 +12,7 @@
 -module(session_manager).
 -author("Krzysztof Trzepla").
 
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -114,7 +113,7 @@ reuse_or_create_proxy_session(SessId, ProxyVia, Auth, SessionType) ->
 -spec create_gui_session(Iden :: session:identity(), Auth :: session:auth()) ->
     {ok, SessId :: session:id()} | {error, Reason :: term()}.
 create_gui_session(Iden, Auth) ->
-    SessId = datastore_utils:gen_uuid(),
+    SessId = datastore_utils:gen_key(),
     Sess = #session{status = active, identity = Iden, auth = Auth, type = gui,
         accessed = utils:system_time_seconds(), connections = []},
     case session:create(#document{key = SessId, value = Sess}) of
@@ -237,7 +236,7 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, NewCons, ProxyVia) ->
         type = SessType, proxy_via = ProxyVia},
     Diff = fun
         (#session{status = inactive}) ->
-            {error, {not_found, session}};
+            {error, not_found};
         (#session{identity = ValidIden, connections = Cons} = ExistingSess) ->
             case Iden of
                 ValidIden ->
@@ -253,7 +252,7 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, NewCons, ProxyVia) ->
         {ok, SessId} ->
             subscribe_user(Iden),
             {ok, SessId};
-        {error, {not_found, _}} ->
+        {error, not_found} ->
             case session:create(#document{key = SessId, value = Sess}) of
                 {ok, SessId} ->
                     supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, SessType]),

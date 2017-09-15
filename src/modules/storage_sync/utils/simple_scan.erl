@@ -40,7 +40,7 @@ run(Job = #space_strategy_job{
     data = #{
         space_id := SpaceId,
         storage_file_ctx := StorageFileCtx
-}}) when StorageFileCtx =/= undefined ->
+    }}) when StorageFileCtx =/= undefined ->
 
     Module = storage_sync_utils:module(Job),
     storage_sync_monitoring:update_queue_length_spirals(SpaceId, -1),
@@ -51,7 +51,7 @@ run(Job = #space_strategy_job{
         file_name := FileName,
         space_id := SpaceId,
         storage_id := StorageId
-}}) ->
+    }}) ->
 
     {CanonicalPath, ParentCtx2} = file_ctx:get_child_canonical_path(ParentCtx, FileName),
     StorageFileCtx = storage_file_ctx:new(CanonicalPath, SpaceId, StorageId),
@@ -493,7 +493,7 @@ handle_already_imported_file(Job = #space_strategy_job{
     data = Data = #{
         space_id := SpaceId,
         storage_file_ctx := StorageFileCtx
-}}, FileAttr, FileCtx) ->
+    }}, FileAttr, FileCtx) ->
 
     SyncAcl = maps:get(sync_acl, Args, false),
     try
@@ -629,11 +629,13 @@ maybe_update_times(#file_attr{atime = _ATime, mtime = _MTime, ctime = _CTime},
     #statbuf{st_atime = StorageATime, st_mtime = StorageMTime, st_ctime = StorageCTime},
     FileCtx
 ) ->
-    ok = fslogic_times:update_times_and_emit(FileCtx, #{
-        atime => StorageATime,
-        mtime => StorageMTime,
-        ctime => StorageCTime
-    }),
+    ok = fslogic_times:update_times_and_emit(FileCtx, fun(Times = #times{}) ->
+        {ok, Times#times{
+            atime = StorageATime,
+            mtime = StorageMTime,
+            ctime = StorageCTime
+        }}
+    end),
     updated.
 
 %%--------------------------------------------------------------------
@@ -650,7 +652,9 @@ maybe_update_owner(#file_attr{owner_id = OldOwnerId}, StorageFileCtx, FileCtx) -
             not_updated;
         NewOwnerId ->
             FileUuid = file_ctx:get_uuid_const(FileCtx),
-            {ok, FileUuid} = file_meta:update(FileUuid, #{owner => NewOwnerId}),
+            {ok, _} = file_meta:update(FileUuid, fun(FileMeta = #file_meta{}) ->
+                {ok, FileMeta#file_meta{owner = NewOwnerId}}
+            end),
             updated
     end.
 
@@ -660,9 +664,9 @@ maybe_update_owner(#file_attr{owner_id = OldOwnerId}, StorageFileCtx, FileCtx) -
 %% Creates file meta
 %% @end
 %%--------------------------------------------------------------------
--spec create_file_meta(datastore:document(), file_meta:uuid()) -> {ok, file_meta:uuid()}.
+-spec create_file_meta(datastore:doc(), file_meta:uuid()) -> {ok, file_meta:uuid()}.
 create_file_meta(FileMetaDoc, ParentUuid) ->
-    file_meta:create({uuid, ParentUuid}, FileMetaDoc, true).
+    file_meta:create({uuid, ParentUuid}, FileMetaDoc).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -674,14 +678,15 @@ create_file_meta(FileMetaDoc, ParentUuid) ->
     od_space:id()) ->
     {ok, datastore:key()}.
 create_times(FileUuid, MTime, ATime, CTime, SpaceId) ->
-    times:save_new(#document{
+    times:save(#document{
         key = FileUuid,
         value = #times{
             mtime = MTime,
             atime = ATime,
             ctime = CTime
         },
-        scope = SpaceId}).
+        scope = SpaceId}
+    ).
 
 %%--------------------------------------------------------------------
 %% @private

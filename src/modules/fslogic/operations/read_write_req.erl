@@ -16,8 +16,7 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -82,12 +81,7 @@ write(UserCtx, FileCtx, HandleId, ByteSequences) ->
 get_handle(UserCtx, FileCtx, HandleId) ->
     SessId = user_ctx:get_session_id(UserCtx),
     case session:get_handle(SessId, HandleId) of
-        {error, link_not_found} ->
-            ?warning("Hanlde link not found, session id: ~p, handle id: ~p",
-                [SessId, HandleId]),
-            create_handle(UserCtx, FileCtx, HandleId),
-            session:get_handle(SessId, HandleId);
-        {error, {not_found, _}} ->
+        {error, not_found} ->
             ?warning("Hanlde not found, session id: ~p, handle id: ~p",
                 [SessId, HandleId]),
             create_handle(UserCtx, FileCtx, HandleId),

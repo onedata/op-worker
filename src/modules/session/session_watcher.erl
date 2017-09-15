@@ -66,7 +66,10 @@ start_link(SessId, SessType) ->
     {stop, Reason :: term()} | ignore.
 init([SessId, SessType]) ->
     process_flag(trap_exit, true),
-    {ok, _} = session:update(SessId, #{watcher => self()}),
+    Self = self(),
+    {ok, _} = session:update(SessId, fun(Session = #session{}) ->
+        {ok, Session#session{watcher = Self}}
+    end),
     TTL = get_session_ttl(SessType),
     schedule_session_status_checkup(TTL),
     schedule_connections_status_checkup(?CONNECTION_CHECK_INTERVAL),
@@ -176,6 +179,8 @@ handle_info({overloaded_connection, Pid}, State = #state{overloaded_connections 
             {noreply, State#state{overloaded_connections = maps:put(Pid, QueueLen, Connections)}, hibernate}
     end;
 
+handle_info({'EXIT', _, shutdown}, State) ->
+    {stop, shutdown, State};
 
 handle_info(Info, State) ->
     ?log_bad_request(Info),

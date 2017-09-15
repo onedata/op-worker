@@ -17,10 +17,10 @@
 -include_lib("ctool/include/oz/oz_groups.hrl").
 -include_lib("ctool/include/oz/oz_users.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
 -include_lib("ctool/include/oz/oz_providers.hrl").
 -include_lib("public_key/include/public_key.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("proto/common/credentials.hrl").
 -include("proto/oneclient/message_id.hrl").
 -include("proto/oneclient/client_messages.hrl").
@@ -168,8 +168,7 @@ clean_test_users_and_spaces(Config) ->
     DomainWorkers = get_different_domain_workers(Config),
 
     lists:foreach(fun(W) ->
-        initializer:teardown_sesion(W, Config),
-        clear_cache(W)
+        initializer:teardown_sesion(W, Config)
     end, DomainWorkers),
     test_utils:mock_validate_and_unload(Workers, [oz_spaces, oz_users,
         oz_groups, space_storage, oneprovider, oz_providers]).
@@ -186,18 +185,10 @@ clean_test_users_and_spaces_no_validate(Config) ->
     Workers = ?config(op_worker_nodes, Config),
 
     lists:foreach(fun(W) ->
-        initializer:teardown_sesion(W, Config),
-        clear_cache(W)
+        initializer:teardown_sesion(W, Config)
     end, Workers),
-    test_utils:mock_unload(Workers, [od_user, oz_spaces, oz_groups, space_storage, oneprovider, oz_providers]).
-
-
-clear_cache(W) ->
-    _A1 = rpc:call(W, caches_controller, wait_for_cache_dump, []),
-%%     A2 = gen_server2:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000),
-%%     A3 = gen_server2:call({?NODE_MANAGER_NAME, W}, force_clear_node, 60000),
-%%     ?assertMatch({ok, ok, {ok, ok}}, {A1, A2, A3}).
-    ok.
+    test_utils:mock_unload(Workers, [oz_spaces, oz_users,
+        oz_groups, space_storage, oneprovider, oz_providers]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -680,7 +671,7 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
         test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_update_interval, timer:seconds(1)),
         test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_stream_update_interval, timer:seconds(1))
     end, AllWorkers),
-    rpc:multicall(AllWorkers, worker_proxy, call, [dbsync_worker2, streams_healthcheck]),
+    rpc:multicall(AllWorkers, worker_proxy, call, [dbsync_worker, streams_healthcheck]),
 
     proplists:compact(
         lists:flatten([{spaces, Spaces}] ++ [initializer:setup_session(W, Users, Config) || W <- MasterWorkers])
@@ -863,10 +854,11 @@ oz_groups_mock_setup(Workers, Groups, Users) ->
 od_user_mock_setup(Workers) ->
     Self = self(),
     test_utils:mock_new(Workers, od_user),
-    test_utils:mock_expect(Workers, od_user, 'after', fun
-        (ModelName, Method, Level, Context, ReturnValue) ->
-            meck:passthrough([ModelName, Method, Level, Context, ReturnValue]),
-            Self ! onedata_user_after
+    test_utils:mock_expect(Workers, od_user, run_after, fun
+        (Function, Args, Result) ->
+            Result2 = meck:passthrough([Function, Args, Result]),
+            Self ! onedata_user_after,
+            Result2
     end).
 
 %%--------------------------------------------------------------------

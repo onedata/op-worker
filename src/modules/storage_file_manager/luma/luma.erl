@@ -15,14 +15,13 @@
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 
+%% API
+-export([get_server_user_ctx/4, get_client_user_ctx/4, get_posix_user_ctx/2]).
+
 -type user_ctx() :: helper:user_ctx().
 -type posix_user_ctx() :: {Uid :: non_neg_integer(), Gid :: non_neg_integer()}.
 
 -export_type([user_ctx/0, posix_user_ctx/0]).
-
-%% API
--export([get_server_user_ctx/4, get_client_user_ctx/4, get_posix_user_ctx/2]).
-
 
 %%%===================================================================
 %%% API functions
@@ -86,7 +85,7 @@ get_posix_user_ctx(UserId, SpaceId) ->
     {ok, UserCtx} = case select_posix_storage(SpaceId) of
         {ok, StorageDoc} ->
             luma:get_server_user_ctx(UserId, SpaceId, StorageDoc, ?POSIX_HELPER_NAME);
-        {error, {not_found, _}} ->
+        {error, not_found} ->
             generate_user_ctx(UserId, SpaceId, ?POSIX_HELPER_NAME)
     end,
     #{<<"uid">> := Uid, <<"gid">> := Gid} = UserCtx,
@@ -237,19 +236,19 @@ generate_posix_identifier(Id, {Low, High}) ->
 select_posix_storage(SpaceId) ->
     StorageIds = case space_storage:get(SpaceId) of
         {ok, Doc} -> space_storage:get_storage_ids(Doc);
-        {error, {not_found, _}} -> []
+        {error, not_found} -> []
     end,
     StorageDocs = lists:filtermap(fun(StorageId) ->
         case storage:get(StorageId) of
             {ok, StorageDoc} ->
                 case storage:select_helper(StorageDoc, ?POSIX_HELPER_NAME) of
                     {ok, _} -> {true, StorageDoc};
-                    {error, {not_found, _}} -> false
+                    {error, not_found} -> false
                 end;
-            {error, {not_found, _}} -> false
+            {error, not_found} -> false
         end
     end, StorageIds),
     case StorageDocs of
-        [] -> {error, {not_found, storage}};
+        [] -> {error, not_found};
         [StorageDoc | _] -> {ok, StorageDoc}
     end.

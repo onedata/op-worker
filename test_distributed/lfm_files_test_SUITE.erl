@@ -13,7 +13,7 @@
 -author("Rafal Slota").
 
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
@@ -64,7 +64,6 @@
     opening_file_should_increase_file_popularity/1,
     file_popularity_view_should_return_unpopular_files/1,
     file_popularity_should_have_correct_file_size/1,
-    delayed_creation_should_not_prevent_truncate/1,
     readdir_plus_should_return_empty_result_for_empty_dir/1,
     readdir_plus_should_return_empty_result_zero_size/1,
     readdir_plus_should_work_with_zero_offset/1,
@@ -1041,7 +1040,7 @@ new_file_should_not_have_popularity_doc(Config) ->
 
     % then
     ?assertEqual(
-        {error, {not_found, file_popularity}},
+        {error, not_found},
         rpc:call(W, file_popularity, get, [FileUuid])
     ).
 

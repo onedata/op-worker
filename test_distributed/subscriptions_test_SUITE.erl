@@ -48,7 +48,7 @@
 ]).
 
 -define(SUBSCRIPTIONS_STATE_KEY, <<"current_state">>).
--define(MESSAGES_WAIT_TIMEOUT, timer:seconds(3)).
+-define(MESSAGES_WAIT_TIMEOUT, timer:seconds(1)).
 -define(MESSAGES_RECEIVE_ATTEMPTS, 30).
 
 %% appends function name to id (atom) and yields binary accepted by the db
@@ -681,19 +681,19 @@ applies_deletion(Config) ->
     expect_message([], 14, []),
 
     %% then
-    ?assertMatch({error, {not_found, od_space}},
+    ?assertMatch({error, not_found},
         fetch(Node, od_space, Sp1)),
-    ?assertMatch({error, {not_found, od_share}},
+    ?assertMatch({error, not_found},
         fetch(Node, od_share, Sh1)),
-    ?assertMatch({error, {not_found, od_group}},
+    ?assertMatch({error, not_found},
         fetch(Node, od_group, G1)),
-    ?assertMatch({error, {not_found, od_user}},
+    ?assertMatch({error, not_found},
         fetch(Node, od_user, U1)),
-    ?assertMatch({error, {not_found, od_provider}},
+    ?assertMatch({error, not_found},
         fetch(Node, od_provider, P1)),
-    ?assertMatch({error, {not_found, od_handle_service}},
+    ?assertMatch({error, not_found},
         fetch(Node, od_handle_service, HS1)),
-    ?assertMatch({error, {not_found, od_handle}},
+    ?assertMatch({error, not_found},
         fetch(Node, od_handle, H1)),
     ok.
 
@@ -1152,11 +1152,9 @@ expect_message(Match, 1) ->
 
 expect_message(Match, Retries) ->
     receive
-        Match -> ok;
-        _Any ->
-            expect_message(Match, Retries - 1)
+        Match -> ok
     after
-        ?MESSAGES_WAIT_TIMEOUT -> ?assertMatch(Match, <<"timeout">>)
+        ?MESSAGES_WAIT_TIMEOUT -> expect_message(Match, Retries - 1)
     end.
 
 

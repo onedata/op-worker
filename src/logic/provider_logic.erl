@@ -13,7 +13,7 @@
 -module(provider_logic).
 -author("Michal Zmuda").
 
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -export([get/1, get_providers_with_common_support/0]).
@@ -28,7 +28,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get(ProviderID :: binary()) ->
-    {ok, datastore:document()} | {error, Reason :: term()}.
+    {ok, datastore:doc()} | {error, Reason :: term()}.
 get(ProviderID) ->
     od_provider:get(ProviderID).
 
@@ -40,7 +40,7 @@ get(ProviderID) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_providers_with_common_support() ->
-    {ok, [datastore:document()]} | {error, Reason :: term()}.
+    {ok, [datastore:doc()]} | {error, Reason :: term()}.
 get_providers_with_common_support() ->
     GetIdsOfProvidersWithCommonSupport = get_ids_of_providers_with_common_support(),
     case GetIdsOfProvidersWithCommonSupport of
@@ -53,7 +53,7 @@ get_providers_with_common_support() ->
 %%%===================================================================
 
 -spec get_providers(ProviderIDs :: [binary()]) ->
-    {ok, [datastore:document()]} | {error, Reason :: term()}.
+    {ok, [datastore:doc()]} | {error, Reason :: term()}.
 get_providers(ProviderIDs) ->
     Results = utils:pmap(fun od_provider:get/1, ProviderIDs),
     case lists:any(fun

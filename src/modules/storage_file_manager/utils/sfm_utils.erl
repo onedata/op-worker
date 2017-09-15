@@ -14,7 +14,7 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/common_messages.hrl").
 
@@ -226,7 +226,7 @@ delete_storage_file_without_location(FileCtx, UserCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_storage_dir(file_ctx:ctx(), user_ctx:ctx()) ->
-    datastore:ext_key().
+    ok | {error, term()}.
 delete_storage_dir(FileCtx, UserCtx) ->
     SessId = user_ctx:get_session_id(UserCtx),
     {SFMHandle, _} = storage_file_manager:new_handle(SessId, FileCtx),

@@ -166,7 +166,7 @@ init_per_testcase(_Case, Config) ->
     lists:foreach(fun(W) ->
         {ok, Docs} = rpc:call(W, cached_identity, list, []),
         lists:foreach(fun(#document{key = ID}) ->
-            rpc:call(W, cached_identity, delete, [ID])
+            ?assertEqual(ok, rpc:call(W, cached_identity, delete, [ID]))
         end, Docs)
     end, Workers),
 

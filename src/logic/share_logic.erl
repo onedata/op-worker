@@ -14,7 +14,7 @@
 -author("Lukasz Opiola").
 
 -include("proto/common/credentials.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/oz/oz_spaces.hrl").
 
 -export([get/2, create/5, set_name/3, delete/2]).
@@ -32,7 +32,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get(oz_endpoint:auth(), ShareId :: binary()) ->
-    {ok, datastore:document()} | datastore:get_error().
+    {ok, datastore:doc()} | {error, term()}.
 get(Auth, ShareId) ->
     od_share:get_or_fetch(Auth, ShareId).
 

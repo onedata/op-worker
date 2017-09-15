@@ -42,8 +42,10 @@ basic_operations_test_core(Config, LastLevel) ->
     BigDirDel(0),
 
     delete_deep_tree(Worker2, LastLevel),
-    [rpc:call(Worker1, file_meta, delete, [{path, D}]) || D <- ["/Space 1", "/Space 1/dir1", "/Space 1/dir1/file1",
-        "/Space 1/dir2", "/Space 1/dir2/file1", "/Space 1/dir2/file2", "/Space 1/dir2/file3"]],
+    [rpc:call(Worker1, file_meta, delete, [{path, list_to_binary(D)}]) || D <- [
+        "/Space 1", "/Space 1/dir1", "/Space 1/dir1/file1", "/Space 1/dir2",
+        "/Space 1/dir2/file1", "/Space 1/dir2/file2", "/Space 1/dir2/file3"
+    ]],
 
     % Test
     RootUuid = <<>>,
@@ -109,12 +111,12 @@ basic_operations_test_core(Config, LastLevel) ->
     ?assertMatch(<<"/Space 1/dir2/file2">>, U31),
     ?assertMatch(<<"/Space 1/dir2/file3">>, U32),
 
-    {{A41, U41}, ResolveLevel2} = ?call_with_time(Worker1, resolve_path, [<<"/Space 1/">>]),
-    {{A42, U42}, ResolveLevel3} = ?call_with_time(Worker1, resolve_path, [<<"/Space 1/dir2">>]),
-    {{A43, U43}, ResolveLevel20} = ?call_with_time(Worker1, resolve_path, [Level20Path]),
-    ?assertMatch({ok, {#document{key = Space1Uuid}, _}}, {A41, U41}),
-    ?assertMatch({ok, {#document{key = Dir2Uuid}, _}}, {A42, U42}),
-    ?assertMatch({ok, {#document{key = Level20Key}, _}}, {A43, U43}),
+    {A41, ResolveLevel2} = ?call_with_time(Worker1, fslogic_path, resolve, [<<"/Space 1/">>]),
+    {A42, ResolveLevel3} = ?call_with_time(Worker1, fslogic_path, resolve, [<<"/Space 1/dir2">>]),
+    {A43, ResolveLevel20} = ?call_with_time(Worker1, fslogic_path, resolve, [Level20Path]),
+    ?assertMatch({ok, #document{key = Space1Uuid}}, A41),
+    ?assertMatch({ok, #document{key = Dir2Uuid}}, A42),
+    ?assertMatch({ok, #document{key = Level20Key}}, A43),
 
 
     {UL20_2, GenPathLevel20} = ?call_with_time(Worker2, fslogic_uuid, uuid_to_path, [?ROOT_SESS_ID, Level20Key]),

@@ -14,10 +14,6 @@
 -author("Tomasz Lichon").
 
 -include("proto/oneclient/message_id.hrl").
--include("modules/fslogic/fslogic_common.hrl").
--include("proto/common/credentials.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
--include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([generate/1, generate/2, encode/1, decode/1]).
@@ -28,6 +24,10 @@
 -export_type([id/0]).
 
 -define(INT64, 16#FFFFFFFFFFFFFFF).
+
+%%%===================================================================
+%%% API
+%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -86,7 +86,3 @@ decode(Id) ->
         _:_ ->
             {ok, #message_id{issuer = client, id = Id}}
     end.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================

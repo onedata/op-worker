@@ -33,8 +33,7 @@ get_user_ctx(UserId, SpaceId, StorageDoc = #document{
     value = #storage{
         luma_config = LumaConfig = #luma_config{url = LumaUrl}
 }}, Helper) ->
-
-    Url = lists:flatten(io_lib:format("~s/map_user_credentials", [LumaUrl])),
+    Url = str_utils:format_bin("~s/map_user_credentials", [LumaUrl]),
     ReqHeaders = get_request_headers(LumaConfig),
     ReqBody = get_request_body(UserId, SpaceId, StorageDoc),
     case http_client:post(Url, ReqHeaders, ReqBody) of

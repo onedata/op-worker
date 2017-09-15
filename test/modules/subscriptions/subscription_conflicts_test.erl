@@ -15,7 +15,7 @@
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -include("global_definitions.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 
 -define(MOCKED_MODELS, [od_space, od_group, od_user]).
 
@@ -42,7 +42,7 @@ creates_docs_with_proper_value_test_() ->
             },
             UpdateDoc = #document{
                 key = <<"some key">>,
-                rev = ?REV4,
+                revs = ?REV4,
                 value = Space
             },
 
@@ -67,7 +67,7 @@ accepts_unseen_revs_test_() ->
         [fun() ->
             % given
             UpdateDoc = #document{
-                rev = <<"rev_not_connected_with_update">>,
+                revs = <<"rev_not_connected_with_update">>,
                 value = #od_space{name = <<"space1-up">>}
             },
             subscription_conflicts:update_model(od_space, UpdateDoc,
@@ -95,7 +95,7 @@ includes_all_unseen_revs_on_accept_test_() ->
         [fun() ->
             % given
             UpdateDoc = #document{
-                rev = <<"rev_not_connected_with_update">>,
+                revs = <<"rev_not_connected_with_update">>,
                 value = #od_space{name = <<"space1-up">>}
             },
             subscription_conflicts:update_model(od_space, UpdateDoc,
@@ -123,7 +123,7 @@ ignores_seen_revs_test_() ->
         [fun() ->
             % given
             UpdateDoc = #document{
-                rev = <<"rev_not_connected_with_update">>,
+                revs = <<"rev_not_connected_with_update">>,
                 value = #od_space{name = <<"space1-up">>}
             },
             subscription_conflicts:update_model(od_space, UpdateDoc,
@@ -151,7 +151,7 @@ includes_all_unseen_revs_on_ignore_test_() ->
         [fun() ->
             % given
             UpdateDoc = #document{
-                rev = <<"rev_not_connected_with_update">>,
+                revs = <<"rev_not_connected_with_update">>,
                 value = #od_space{name = <<"space1-up">>}
             },
             subscription_conflicts:update_model(od_space, UpdateDoc,

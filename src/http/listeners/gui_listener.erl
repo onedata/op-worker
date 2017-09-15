@@ -145,7 +145,7 @@ stop() ->
 %%--------------------------------------------------------------------
 -spec healthcheck() -> ok | {error, server_not_responding}.
 healthcheck() ->
-    Endpoint = "https://127.0.0.1:" ++ integer_to_list(port()),
+    Endpoint = <<"https://127.0.0.1:", (integer_to_binary(port()))/binary>>,
     case http_client:get(Endpoint, #{}, <<>>, [insecure]) of
         {ok, _, _, _} -> ok;
         _ -> {error, server_not_responding}

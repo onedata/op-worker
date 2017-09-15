@@ -30,8 +30,8 @@
 -spec handle_file_written_events(Evts :: [event:event()], UserCtxMap :: maps:map()) ->
     [ok | {error, Reason :: term()}].
 handle_file_written_events(Evts, #{session_id := SessId} = UserCtxMap) ->
-    Results = lists:map(fun(Ev) ->
-        handle_file_written_event(Ev, SessId)
+    Results = lists:map(fun(Evt) ->
+        handle_file_written_event(Evt, SessId)
     end, Evts),
 
     case UserCtxMap of
