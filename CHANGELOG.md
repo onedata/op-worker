@@ -4,6 +4,43 @@
 CHANGELOG
 ---------
 
+### 17.06.1
+
+* VFS-3649 Emit attrs remote attrs change even if location does not exist
+* VFS-3500 Extend logging for wrong provider ids in tree_broadcast messages
+* VFS-3449 set sync_acl flag default to false
+* VFS-3549 Add endpoint for enabling space cleanup.
+* VFS-3500 Limit calls to storage when new file is created. Limit calls to storage_strategies.
+* VFS-3549 Add list operation and histograms to transfers.
+* VFS-3549 Add transfer model.
+* VFS-3500 Do not create locations during get_attrs
+* VFS-3567 Store missing documents in datastore cache
+* VFS-3449 adapting luma to new protocol, refactor of luma_cache module, added tests of reverse_luma and importing acls associated with groups, WIP
+* VFS-3449 adapting reverse luma for querying by acl username, groups handling, WIP
+* VFS-3541 Move file_popularity increment from open to release.
+* VFS-3541 Do not migrate data during replica invalidation when migration_provider_id is set to undefined.
+* VFS-3449 storage_sync supports NFS4 ACL, preparation of luma modules to support requests considering groups mapping, extended handling of acl principals in acl_logic
+* VFS-3560 Updating GUI ref
+* VFS-3495 Improve rest error handling.
+* VFS-3444 Adjuster default helper buffer values in app.conf
+* VFS-3495 Update ctool and use its new util function for getting system time. Introduce hard open time limit to space cleanup.
+* VFS-3500 Configure throttling
+* VFS-3500 Use cache of parent during permissions checking
+* VFS-3495 Add parameters to file_popularity_view.
+* VFS-3495 Add histograms to file_popularity model.
+* VFS-3498 Read_dir+
+* VFS-3500 Reconfigure throttling
+* VFS-3495 Do not ivalidate partially unique file as root (we cannot guarantee its synchronization), add space cleanup test.
+* VFS-3500 Update couchbase pool size control
+* VFS-3500 Reconfigure cluster for better performance
+* VFS-3494 Add popularity views and use them in space_cleanup.
+* VFS-3494 Move cleanup_enabled flag to space_storage doc.
+* VFS-3494 Add cleanup_enabled flag to storage doc
+* VFS-3494 Add file_popularity model tracking file open.
+* VFS-3494 Add invalidate_file_replica function to logical_file_manager and rest api.
+* VFS-3464 Added extended attributes support to storage helpers
+
+
 ### 17.06.0-rc2
 
 * fix overlapping imports
