@@ -4,7 +4,7 @@
 CHANGELOG
 ---------
 
-### 17.06.1
+### 17.06.0-rc3
 
 * VFS-3649 Emit attrs remote attrs change even if location does not exist
 * VFS-3500 Extend logging for wrong provider ids in tree_broadcast messages
