@@ -889,8 +889,16 @@ changes_stream_xattr_test(Config) ->
     ?assertNotEqual(<<>>, Body),
     Changes = binary:split(Body, <<"\r\n">>, [global]),
     ?assert(length(Changes) >= 1),
-    [_, LastChangeJson | _] = lists:reverse(Changes),
-    LastChange = json_utils:decode_map(LastChangeJson),
+
+    [_ | Changes2] = lists:reverse(Changes),
+    [LastChange | _] = lists:filtermap(fun(Change) ->
+        DecodedChange = json_utils:decode_map(Change),
+        case maps:get(<<"name">>, DecodedChange) of
+            <<"file4_csxt">> -> {true, DecodedChange};
+            _ -> false
+        end
+    end, Changes2),
+
     Metadata = maps:get(<<"changes">>, LastChange),
     ?assertEqual(#{<<"name">> => <<"value">>}, maps:get(<<"xattrs">>, Metadata)).
 
