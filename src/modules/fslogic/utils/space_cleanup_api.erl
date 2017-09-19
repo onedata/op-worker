@@ -13,7 +13,7 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 
 % file which was not opened for this period of hours is invalidated,
 % regardless of other factors
@@ -85,7 +85,9 @@ periodic_cleanup() ->
 %%--------------------------------------------------------------------
 -spec enable_cleanup(od_space:id()) -> {ok, od_space:id()} | {error, term()}.
 enable_cleanup(SpaceId) ->
-    space_storage:update(SpaceId, #{cleanup_enabled => true}).
+    space_storage:update(SpaceId, fun(SpaceStorage = #space_storage{}) ->
+        {ok, SpaceStorage#space_storage{cleanup_enabled = true}}
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -94,7 +96,9 @@ enable_cleanup(SpaceId) ->
 %%--------------------------------------------------------------------
 -spec disable_cleanup(od_space:id()) -> {ok, od_space:id()} | {error, term()}.
 disable_cleanup(SpaceId) ->
-    space_storage:update(SpaceId, #{cleanup_enabled => false}).
+    space_storage:update(SpaceId, fun(SpaceStorage = #space_storage{}) ->
+        {ok, SpaceStorage#space_storage{cleanup_enabled = false}}
+    end).
 
 %%%===================================================================
 %%% Internal functions

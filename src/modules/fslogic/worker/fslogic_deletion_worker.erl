@@ -109,7 +109,7 @@ handle({fslogic_deletion_request, UserCtx, FileCtx, Silent}) ->
                 fslogic_delete:remove_file_and_file_meta(FileCtx, UserCtx, Silent)
         end
     catch
-        _:{badmatch, {error, {not_found, file_meta}}} ->
+        _:{badmatch, {error, not_found}} ->
             ok
     end,
     ok;
@@ -118,7 +118,7 @@ handle({open_file_deletion_request, FileCtx}) ->
         UserCtx = user_ctx:new(?ROOT_SESS_ID),
         fslogic_delete:remove_file_and_file_meta(FileCtx, UserCtx, false)
     catch
-        _:{badmatch, {error, {not_found, file_meta}}} ->
+        _:{badmatch, {error, not_found}} ->
             ok
     end;
 handle(_Request) ->

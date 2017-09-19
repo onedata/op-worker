@@ -12,17 +12,16 @@
 %%%-------------------------------------------------------------------
 -module(storage_file_manager).
 
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
 -include("modules/storage_file_manager/helpers/helpers.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("storage_file_manager_errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--export([new_handle/2, new_handle/6]).
+-export([new_handle/2, new_handle/6, set_size/1]).
 -export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/3, link/2, readdir/3,
     get_child_handle/2]).
 -export([stat/1, read/3, write/3, create/2, create/3, open/2, release/1,
@@ -62,21 +61,40 @@ new_handle(SessionId, FileCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec new_handle(session:id(), od_space:id(), file_meta:uuid(),
-    Storage :: datastore:document(), FileId :: helpers:file_id(),
+    Storage :: datastore:doc(), FileId :: helpers:file_id(),
     ShareId :: od_share:id() | undefined) -> handle().
 new_handle(SessionId, SpaceId, FileUuid, #document{key = StorageId} = Storage,
     FileId, ShareId) ->
-    FSize = get_size(FileUuid, SpaceId),
-    StorageFileId = filename_mapping:to_storage_path(SpaceId, StorageId, FileId),
+    StorageFileId = case space_strategies:is_import_on(SpaceId) of
+        true ->
+            filename_mapping:to_storage_path(SpaceId, StorageId, FileId);
+        _ ->
+            FileId
+    end,
     #sfm_handle{
         session_id = SessionId,
         space_id = SpaceId,
         file_uuid = FileUuid,
         file = StorageFileId,
         storage = Storage,
-        file_size = FSize,
         share_id = ShareId
     }.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets size in handle.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_size(handle()) -> handle().
+set_size(#sfm_handle{
+    space_id = SpaceId,
+    file_uuid = FileUuid
+} = Handle) ->
+    FSize = get_size(FileUuid, SpaceId),
+    Handle#sfm_handle{
+        file_size = FSize
+    }.
+
 
 %%--------------------------------------------------------------------
 %% @doc

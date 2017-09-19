@@ -22,10 +22,12 @@
 
 -type rrd_file() :: binary().
 %% Params: [Heartbeat, MinValue, MaxValue]
--type datastore() :: {DSName :: string(), StoreType :: atom(), Params :: []}.
+-type datastore() :: {DSName :: string(), StoreType :: atom(), Params :: list()}.
 -type rra() :: {ConsolidationFunction :: atom(), XffFactor :: float(),
     PDPsPerCDP :: non_neg_integer(), CDPsPerRRA :: non_neg_integer()}.
 -type options() :: proplists:proplists().
+
+-export_type([datastore/0, options/0]).
 
 %%%===================================================================
 %%% API functions
@@ -36,7 +38,7 @@
 %% Creates rrd with given parameters if database entry for it is empty.
 %% @end
 %%--------------------------------------------------------------------
--spec create_rrd(datastore:id(), #monitoring_id{}, maps:map(), non_neg_integer()) -> ok.
+-spec create_rrd(datastore:key(), #monitoring_id{}, maps:map(), non_neg_integer()) -> ok.
 create_rrd(SpaceId, MonitoringId, StateBuffer, CreationTime) ->
     case monitoring_state:exists(MonitoringId) of
         false ->
@@ -69,7 +71,8 @@ create_rrd(SpaceId, MonitoringId, StateBuffer, CreationTime) ->
             ok = logical_file_manager:fsync(Handle2),
             ok = logical_file_manager:release(Handle2),
 
-            {ok, _} = monitoring_state:save(#document{key = MonitoringId,
+            {ok, _} = monitoring_state:save(#document{
+                key = RRDFileName,
                 value = #monitoring_state{
                     monitoring_id = MonitoringId,
                     rrd_guid = Guid,
@@ -110,7 +113,9 @@ update_rrd(MonitoringId, MonitoringState, UpdateTime, UpdateValues) ->
     ok = logical_file_manager:fsync(Handle3),
     ok = logical_file_manager:release(Handle3),
 
-    {ok, _} = monitoring_state:update(MonitoringId, #{last_update_time => UpdateTime}),
+    {ok, _} = monitoring_state:update(MonitoringId, fun(State = #monitoring_state{}) ->
+        {ok, State#monitoring_state{last_update_time = UpdateTime}}
+    end),
     ok.
 
 %%--------------------------------------------------------------------

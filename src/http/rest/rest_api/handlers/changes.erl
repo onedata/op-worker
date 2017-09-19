@@ -14,8 +14,7 @@
 
 -include("global_definitions.hrl").
 -include("http/http_common.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include("http/rest/http_status.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
@@ -30,8 +29,8 @@
 
 -record(change, {
     seq :: non_neg_integer(),
-    doc :: datastore:document(),
-    model :: model_behaviour:model_type()
+    doc :: datastore:doc(),
+    model :: datastore_model:model()
 }).
 
 %%%===================================================================
@@ -239,7 +238,7 @@ prepare_response(#change{seq = Seq, doc = FileDoc = #document{
             case custom_metadata:get(Uuid) of
                 {ok, #document{value = #custom_metadata{value = Metadata}}} ->
                     Metadata;
-                {error, {not_found, custom_metadata}} ->
+                {error, not_found} ->
                     #{}
             end
         catch
@@ -300,7 +299,7 @@ same(X) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec notify(pid(), reference(),
-    {ok, [datastore:document()] | datastore:document() | end_of_stream} |
+    {ok, [datastore:doc()] | datastore:doc() | end_of_stream} |
     {error, couchbase_changes:since(), term()}) -> ok.
 notify(Pid, Ref, {ok, end_of_stream}) ->
     Pid ! {Ref, stream_ended},

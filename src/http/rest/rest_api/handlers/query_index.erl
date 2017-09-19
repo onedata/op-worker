@@ -129,7 +129,7 @@ prepare_options([{endkey, undefined} | Rest]) ->
     prepare_options(Rest);
 prepare_options([{endkey, Endkey} | Rest]) ->
     try
-        [{endkey, couchbeam_ejson:decode(Endkey)} | prepare_options(Rest)]
+        [{endkey, jiffy:decode(Endkey)} | prepare_options(Rest)]
     catch
         _:_ ->
             throw(?ERROR_INVALID_ENDKEY)
@@ -139,7 +139,7 @@ prepare_options([{startkey, undefined} | Rest]) ->
     prepare_options(Rest);
 prepare_options([{startkey, StartKey} | Rest]) ->
     try
-        [{startkey, couchbeam_ejson:decode(StartKey)} | prepare_options(Rest)]
+        [{startkey, jiffy:decode(StartKey)} | prepare_options(Rest)]
     catch
         _:_ ->
             throw(?ERROR_INVALID_STARTKEY)
@@ -156,7 +156,7 @@ prepare_options([{key, undefined} | Rest]) ->
     prepare_options(Rest);
 prepare_options([{key, Key} | Rest]) ->
     try
-        [{key, couchbeam_ejson:decode(Key)} | prepare_options(Rest)]
+        [{key, jiffy:decode(Key)} | prepare_options(Rest)]
     catch
         _:_ ->
             throw(?ERROR_INVALID_KEY)
@@ -166,7 +166,7 @@ prepare_options([{keys, undefined} | Rest]) ->
     prepare_options(Rest);
 prepare_options([{keys, Keys} | Rest]) ->
     try
-        DecodedKeys = couchbeam_ejson:decode(Keys),
+        DecodedKeys = jiffy:decode(Keys),
         true = is_list(DecodedKeys),
         [{keys, DecodedKeys} | prepare_options(Rest)]
     catch
@@ -212,23 +212,21 @@ prepare_options([{spatial, false} | Rest]) ->
 prepare_options([{start_range, undefined} | Rest]) ->
     prepare_options(Rest);
 prepare_options([{start_range, Endkey} | Rest]) ->
-    StartRange =
-        try
-            {start_range, couchbeam_ejson:decode(Endkey)}
-        catch
-            _:_ ->
-                throw(?ERROR_INVALID_START_RANGE)
-        end,
+    StartRange = try
+        {start_range, jiffy:decode(Endkey)}
+    catch
+        _:_ ->
+            throw(?ERROR_INVALID_START_RANGE)
+    end,
     [StartRange | prepare_options(Rest)];
 
 prepare_options([{end_range, undefined} | Rest]) ->
     prepare_options(Rest);
 prepare_options([{end_range, Endkey} | Rest]) ->
-    EndRange =
-        try
-            {end_range, couchbeam_ejson:decode(Endkey)}
-        catch
-            _:_ ->
-                throw(?ERROR_INVALID_END_RANGE)
-        end,
+    EndRange = try
+        {end_range, jiffy:decode(Endkey)}
+    catch
+        _:_ ->
+            throw(?ERROR_INVALID_END_RANGE)
+    end,
     [EndRange | prepare_options(Rest)].

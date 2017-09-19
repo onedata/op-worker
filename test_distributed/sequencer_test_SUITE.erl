@@ -13,8 +13,7 @@
 -author("Krzysztof Trzepla").
 
 
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").

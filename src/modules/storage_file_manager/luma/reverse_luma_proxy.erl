@@ -17,7 +17,6 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-
 %% API
 -export([get_user_id/4, get_group_id/4]).
 
@@ -34,14 +33,14 @@
 -spec get_user_id(map(), storage:id(), helper:name(),
     luma_config:config()) -> {ok, od_user:id()}.
 get_user_id(Args, StorageId, HelperName, LumaConfig = #luma_config{url = LumaUrl}) ->
-    Url = lists:flatten(io_lib:format("~s/resolve_user", [LumaUrl])),
+    Url = str_utils:format_bin("~s/resolve_user", [LumaUrl]),
     ReqHeaders = luma_proxy:get_request_headers(LumaConfig),
     ReqBody = get_user_request_body(Args, StorageId, HelperName),
     {ok, 200, _RespHeaders, RespBody} = http_client:post(Url, ReqHeaders, ReqBody),
     Response = json_utils:decode_map(RespBody),
     ProviderId = maps:get(<<"idp">>, Response),
     ProviderUserId = maps:get(<<"userId">>, Response),
-    UserId = datastore_utils2:gen_key(<<"">>, str_utils:format_bin("~p:~s",
+    UserId = datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
         [ProviderId, ProviderUserId])),
     {ok, UserId}.
 
@@ -54,7 +53,7 @@ get_user_id(Args, StorageId, HelperName, LumaConfig = #luma_config{url = LumaUrl
 -spec get_group_id(map(), storage:id(), helper:name(),
     luma_config:config()) -> {ok, od_user:id()}.
 get_group_id(Args, StorageId, HelperName, LumaConfig = #luma_config{url = LumaUrl}) ->
-    Url = lists:flatten(io_lib:format("~s/resolve_group", [LumaUrl])),
+    Url = str_utils:format_bin("~s/resolve_group", [LumaUrl]),
     ReqHeaders = luma_proxy:get_request_headers(LumaConfig),
     ReqBody = get_group_request_body(Args, StorageId, HelperName),
     {ok, 200, _RespHeaders, RespBody} = http_client:post(Url, ReqHeaders, ReqBody),

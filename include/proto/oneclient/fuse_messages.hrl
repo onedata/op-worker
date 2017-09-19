@@ -14,8 +14,7 @@
 -define(FUSE_MESSAGES_HRL, 1).
 
 -include("common_messages.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
 -record(child_link_uuid, {

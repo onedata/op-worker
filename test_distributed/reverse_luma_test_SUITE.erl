@@ -109,7 +109,7 @@ get_user_id_on_posix_storage(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Result = rpc:call(Worker, reverse_luma, get_user_id,
         [<<"0">>, <<"0">>, ?STORAGE_ID, ?STORAGE]),
-    ExpectedUserId = datastore_utils2:gen_key(<<"">>, str_utils:format_bin("~p:~s",
+    ExpectedUserId = datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
         [?TEST_PROVIDER_ID, ?TEST_USER_ID])),
     ?assertEqual({ok, ExpectedUserId}, Result).
 
@@ -117,7 +117,7 @@ get_user_id_on_posix_storage_by_acl_username(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Result = rpc:call(Worker, reverse_luma, get_user_id_by_name,
         [<<"user@nfsdomain.org">>, ?STORAGE_ID, ?STORAGE]),
-    ExpectedUserId = datastore_utils2:gen_key(<<"">>, str_utils:format_bin("~p:~s",
+    ExpectedUserId = datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
         [?TEST_PROVIDER_ID, ?TEST_USER_ID])),
     ?assertEqual({ok, ExpectedUserId}, Result).
 
@@ -162,7 +162,7 @@ get_user_id_by_acl_username_should_fail_with_not_supported_storage_error(Config)
 get_user_id_on_posix_storage_should_query_reverse_luma_once(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, reverse_luma_proxy, [passthrough]),
-    ExpectedUserId = datastore_utils2:gen_key(<<"">>, str_utils:format_bin("~p:~s",
+    ExpectedUserId = datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
         [?TEST_PROVIDER_ID, ?TEST_USER_ID])),
 
     Result = rpc:call(Worker, reverse_luma, get_user_id,
@@ -179,7 +179,7 @@ get_user_id_on_posix_storage_should_query_reverse_luma_once(Config) ->
 get_user_id_on_posix_storage_by_acl_username_should_query_reverse_luma_once(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, reverse_luma_proxy, [passthrough]),
-    ExpectedUserId = datastore_utils2:gen_key(<<"">>, str_utils:format_bin("~p:~s",
+    ExpectedUserId = datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
         [?TEST_PROVIDER_ID, ?TEST_USER_ID])),
 
     Result = rpc:call(Worker, reverse_luma, get_user_id_by_name,
@@ -198,7 +198,7 @@ get_user_id_on_posix_storage_should_query_reverse_luma_twice(Config) ->
     CacheTimeout = 5,
     LumaConfig = ?LUMA_CONFIG(CacheTimeout),
     test_utils:mock_new(Worker, reverse_luma_proxy, [passthrough]),
-    ExpectedUserId = datastore_utils2:gen_key(<<"">>, str_utils:format_bin("~p:~s",
+    ExpectedUserId = datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
         [?TEST_PROVIDER_ID, ?TEST_USER_ID])),
 
     Result = rpc:call(Worker, reverse_luma, get_user_id,
@@ -220,7 +220,7 @@ get_user_id_on_posix_storage_by_acl_username_should_query_reverse_luma_twice(Con
     CacheTimeout = 5,
     LumaConfig = ?LUMA_CONFIG(CacheTimeout),
     test_utils:mock_new(Worker, reverse_luma_proxy, [passthrough]),
-    ExpectedUserId = datastore_utils2:gen_key(<<"">>, str_utils:format_bin("~p:~s",
+    ExpectedUserId = datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
         [?TEST_PROVIDER_ID, ?TEST_USER_ID])),
 
     Result = rpc:call(Worker, reverse_luma, get_user_id_by_name,
@@ -457,7 +457,7 @@ end_per_testcase(_Case, Config) ->
 mock_resolve_user_post(Worker, Expected) ->
     test_utils:mock_expect(Worker, http_client, post, fun
         (Url, Headers, Body) when is_binary(Url) ->
-            case binary:split(Url, <<"/">>, [global]) of
+            case lists:last(binary:split(Url, <<"/">>, [global])) of
                 <<"resolve_user">> ->
                     Expected;
                 _ ->
@@ -477,7 +477,7 @@ mock_resolve_user_post(Worker, Expected) ->
 mock_resolve_group_post(Worker, ExpectedLuma, ExpectedOz) ->
     test_utils:mock_expect(Worker, http_client, post, fun
         (Url, Headers, Body) when is_binary(Url) ->
-            case binary:split(Url, <<"/">>, [global]) of
+            case lists:last(binary:split(Url, <<"/">>, [global])) of
                 <<"resolve_group">> ->
                     ExpectedLuma;
                 <<"map_group">> ->

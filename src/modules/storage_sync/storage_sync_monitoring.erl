@@ -12,7 +12,7 @@
 -author("Jakub Kudzia").
 
 -include_lib("ctool/include/logging.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 
 
 %% reporters API

@@ -15,7 +15,7 @@
 -author("Michal Zmuda").
 
 -include("global_definitions.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -28,7 +28,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec update_model(Model :: subscriptions:model(),
-    Update :: datastore:document(),
+    Update :: datastore:doc(),
     UpdateRevs :: [subscriptions:rev()]) -> ok.
 update_model(Model, UpdateDoc, UpdateRevs) ->
     try
@@ -61,7 +61,7 @@ update_model(Model, UpdateDoc, UpdateRevs) ->
 %% the model is deleted without revision checks.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_model(Model :: subscriptions:model(), ID :: datastore:ext_key()) ->
+-spec delete_model(Model :: subscriptions:model(), ID :: datastore:key()) ->
     ok.
 delete_model(Model, ID) ->
     Model:delete(ID),

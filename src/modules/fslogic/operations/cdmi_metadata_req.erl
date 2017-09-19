@@ -116,7 +116,7 @@ get_transfer_encoding_insecure(_UserCtx, FileCtx) ->
     case xattr:get_by_name(FileCtx, ?TRANSFER_ENCODING_KEY) of
         {ok, Val} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #transfer_encoding{value = Val}};
-        {error, {not_found, custom_metadata}} ->
+        {error, not_found} ->
             #provider_response{status = #status{code = ?ENOATTR}}
     end.
 
@@ -133,7 +133,7 @@ set_transfer_encoding_insecure(_UserCtx, FileCtx, Encoding, Create, Replace) ->
         {ok, _} ->
             fslogic_times:update_ctime(FileCtx),
             #provider_response{status = #status{code = ?OK}};
-        {error, {not_found, custom_metadata}} ->
+        {error, not_found} ->
             #provider_response{status = #status{code = ?ENOATTR}}
     end.
 
@@ -152,7 +152,7 @@ get_cdmi_completion_status_insecure(_UserCtx, FileCtx) ->
                 status = #status{code = ?OK},
                 provider_response = #cdmi_completion_status{value = Val}
             };
-        {error, {not_found, custom_metadata}} ->
+        {error, not_found} ->
             #provider_response{status = #status{code = ?ENOATTR}}
     end.
 
@@ -169,7 +169,7 @@ set_cdmi_completion_status_insecure(_UserCtx, FileCtx, CompletionStatus, Create,
     case xattr:set(FileCtx, ?CDMI_COMPLETION_STATUS_KEY, CompletionStatus, Create, Replace) of
         {ok, _} ->
             #provider_response{status = #status{code = ?OK}};
-        {error, {not_found, custom_metadata}} ->
+        {error, not_found} ->
             #provider_response{status = #status{code = ?ENOENT}}
     end.
 
@@ -184,7 +184,7 @@ get_mimetype_insecure(_UserCtx, FileCtx) ->
     case xattr:get_by_name(FileCtx, ?MIMETYPE_KEY) of
         {ok, Val} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #mimetype{value = Val}};
-        {error, {not_found, custom_metadata}} ->
+        {error, not_found} ->
             #provider_response{status = #status{code = ?ENOATTR}}
     end.
 
@@ -201,6 +201,6 @@ set_mimetype_insecure(_UserCtx, FileCtx, Mimetype, Create, Replace) ->
         {ok, _} ->
             fslogic_times:update_ctime(FileCtx),
             #provider_response{status = #status{code = ?OK}};
-        {error, {not_found, custom_metadata}} ->
+        {error, not_found} ->
             #provider_response{status = #status{code = ?ENOATTR}}
     end.

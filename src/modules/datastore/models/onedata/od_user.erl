@@ -11,28 +11,25 @@
 %%%-------------------------------------------------------------------
 -module(od_user).
 -author("Tomasz Lichon").
--behaviour(model_behaviour).
 
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("proto/common/credentials.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/oz/oz_users.hrl").
 -include_lib("ctool/include/oz/oz_spaces.hrl").
 
-%% model_behaviour callbacks
--export([save/1, get/1, exists/1, delete/1, update/2, create/1,
-    model_init/0, 'after'/5, before/4]).
-
 %% API
--export([fetch/1, get_or_fetch/2, create_or_update/2]).
--export([record_struct/1]).
+-export([save/1, get/1, exists/1, delete/1, update/2, create/1]).
+-export([fetch/1, get_or_fetch/2, create_or_update/2, run_after/3]).
 
--export_type([doc/0, id/0, connected_account/0]).
+%% datastore_model callbacks
+-export([get_ctx/0, get_posthooks/0, get_record_struct/1]).
 
--type doc() :: datastore:document().
 -type id() :: binary().
+-type info() :: #od_user{}.
+-type doc() :: datastore_doc:doc(info()).
+-type diff() :: datastore_doc:diff(info()).
 
 %% Oauth connected accounts in form of proplist:
 %%[
@@ -44,140 +41,9 @@
 %%]
 -type connected_account() :: proplists:proplist().
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns structure of the record in specified version.
-%% @end
-%%--------------------------------------------------------------------
--spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
-record_struct(1) ->
-    {record, [
-        {name, string},
-        {alias, string},
-        {email_list, [string]},
-        {connected_accounts, [[{string, term}]]},
-        {default_space, string},
-        {space_aliases, [{string, string}]},
-        {groups, [string]},
-        {spaces, [string]},
-        {handle_services, [string]},
-        {handles, [string]},
-        {eff_groups, [string]},
-        {eff_spaces, [string]},
-        {eff_shares, [string]},
-        {eff_providers, [string]},
-        {eff_handle_services, [string]},
-        {eff_handles, [string]},
-        {public_only, boolean},
-        {revision_history, [term]}
-    ]}.
+-export_type([doc/0, id/0, connected_account/0]).
 
-%%%===================================================================
-%%% model_behaviour callbacks
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback save/1.
-%% @end
-%%--------------------------------------------------------------------
--spec save(datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
-save(Document) ->
-    run_and_update_user(fun model:execute_with_default_context/3,
-        [?MODULE, save, [Document]]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback update/2.
-%% @end
-%%--------------------------------------------------------------------
--spec update(datastore:key(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:key()} | datastore:update_error().
-update(Key, Diff) ->
-    run_and_update_user(fun model:execute_with_default_context/3,
-        [?MODULE, update, [Key, Diff]]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback create/1.
-%% @end
-%%--------------------------------------------------------------------
--spec create(datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
-create(Document) ->
-    run_and_update_user(fun model:execute_with_default_context/3,
-        [?MODULE, create, [Document]]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback get/1.
-%% @end
-%%--------------------------------------------------------------------
--spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
-get(?ROOT_USER_ID) ->
-    {ok, #document{key = ?ROOT_USER_ID, value = #od_user{name = <<"root">>}}};
-get(?GUEST_USER_ID) ->
-    {ok, #document{key = ?GUEST_USER_ID, value = #od_user{name = <<"nobody">>, space_aliases = []}}};
-get(Key) ->
-    model:execute_with_default_context(?MODULE, get, [Key]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback delete/1.
-%% @end
-%%--------------------------------------------------------------------
--spec delete(datastore:key()) -> ok | datastore:generic_error().
-delete(Key) ->
-    model:execute_with_default_context(?MODULE, delete, [Key]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback exists/1.
-%% @end
-%%--------------------------------------------------------------------
--spec exists(datastore:key()) -> datastore:exists_return().
-exists(Key) ->
-    ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [Key])).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback model_init/0.
-%% @end
-%%--------------------------------------------------------------------
--spec model_init() -> model_behaviour:model_config().
-model_init() ->
-    ?MODEL_CONFIG(onedata_user_bucket, [
-        {?MODEL_NAME, create}, {?MODEL_NAME, save},
-        {?MODEL_NAME, create_or_update}, {?MODEL_NAME, update}
-    ], ?GLOBALLY_CACHED_LEVEL).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback 'after'/5.
-%% @end
-%%--------------------------------------------------------------------
--spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term(),
-    ReturnValue :: term()) -> ok.
-'after'(?MODEL_NAME, create, _, _, {ok, _}) ->
-    ok = permissions_cache:invalidate();
-'after'(?MODEL_NAME, create_or_update, _, _, {ok, _}) ->
-    ok = permissions_cache:invalidate();
-'after'(?MODEL_NAME, save, _, _, {ok, _}) ->
-    ok = permissions_cache:invalidate();
-'after'(?MODEL_NAME, update, _, _, {ok, _}) ->
-    ok = permissions_cache:invalidate();
-'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
-    ok.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback before/4.
-%% @end
-%%--------------------------------------------------------------------
--spec before(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
-before(_ModelName, _Method, _Level, _Context) ->
-    ok.
+-define(CTX, #{model => ?MODULE}).
 
 %%%===================================================================
 %%% API
@@ -185,15 +51,76 @@ before(_ModelName, _Method, _Level, _Context) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Saves space.
+%% @end
+%%--------------------------------------------------------------------
+-spec save(doc()) -> {ok, id()} | {error, term()}.
+save(Doc) ->
+    run_and_update_user(fun datastore_model:save/2, [?CTX, Doc]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates space.
+%% @end
+%%--------------------------------------------------------------------
+-spec update(id(), diff()) -> {ok, id()} | {error, term()}.
+update(UserId, Diff) ->
+    run_and_update_user(fun datastore_model:update/3, [?CTX, UserId, Diff]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates space.
+%% @end
+%%--------------------------------------------------------------------
+-spec create(doc()) -> {ok, id()} | {error, term()}.
+create(Doc) ->
+    run_and_update_user(fun datastore_model:create/2, [?CTX, Doc]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes space.
+%% @end
+%%--------------------------------------------------------------------
+-spec get(id()) -> ok | {error, term()}.
+get(?ROOT_USER_ID) ->
+    {ok, #document{key = ?ROOT_USER_ID, value = #od_user{name = <<"root">>}}};
+get(?GUEST_USER_ID) ->
+    {ok, #document{key = ?GUEST_USER_ID, value = #od_user{
+        name = <<"nobody">>, space_aliases = []
+    }}};
+get(UserId) ->
+    datastore_model:get(?CTX, UserId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes user.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete(id()) -> ok | {error, term()}.
+delete(UserId) ->
+    datastore_model:delete(?CTX, UserId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks whether user exists.
+%% @end
+%%--------------------------------------------------------------------
+-spec exists(id()) -> boolean().
+exists(UserId) ->
+    {ok, Exists} = datastore_model:exists(?CTX, UserId),
+    Exists.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Updates document with using ID from document. If such object does not exist,
 %% it initialises the object with the document.
 %% @end
 %%--------------------------------------------------------------------
--spec create_or_update(datastore:document(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:key()} | datastore:generic_error().
-create_or_update(Doc, Diff) ->
-    run_and_update_user(fun model:execute_with_default_context/3,
-        [?MODULE, create_or_update, [Doc, Diff]]).
+-spec create_or_update(doc(), diff()) -> {ok, id()} | {error, term()}.
+create_or_update(#document{key = UserId, value = Default}, Diff) ->
+    run_and_update_user(fun datastore_model:update/4, [
+        ?CTX, UserId, Diff, Default
+    ]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -201,7 +128,7 @@ create_or_update(Doc, Diff) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch(Auth :: oz_endpoint:auth()) ->
-    {ok, datastore:document()} | {error, Reason :: term()}.
+    {ok, datastore:doc()} | {error, Reason :: term()}.
 fetch(Auth) ->
     {ok, #user_details{
         id = UserId, name = Name, connected_accounts = ConnectedAccounts,
@@ -249,12 +176,12 @@ fetch(Auth) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_or_fetch(Auth :: oz_endpoint:auth(), UserId :: id()) ->
-    {ok, datastore:document()} | datastore:get_error().
+    {ok, datastore:doc()} | {error, term()}.
 get_or_fetch(Auth, UserId) ->
     try
         case od_user:get(UserId) of
             {ok, Doc} -> {ok, Doc};
-            {error, {not_found, _}} -> fetch(Auth);
+            {error, not_found} -> fetch(Auth);
             Error -> Error
         end
     catch
@@ -273,12 +200,87 @@ get_or_fetch(Auth, UserId) ->
 %% Run function and in case of success, update user's file_meta space structures.
 %% @end
 %%--------------------------------------------------------------------
--spec run_and_update_user(function(), list()) -> {ok, datastore:ext_key()} | datastore:update_error().
+-spec run_and_update_user(function(), list()) -> {ok, datastore:key()} | {error, term()}.
 run_and_update_user(Function, Args) ->
     case apply(Function, Args) of
-        {ok, Uuid} ->
+        {ok, #document{key = Uuid}} ->
             file_meta:setup_onedata_user(provider, Uuid),
             {ok, Uuid};
         Error ->
             Error
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% User create/update posthook.
+%% @end
+%%--------------------------------------------------------------------
+-spec run_after(atom(), list(), term()) -> term().
+run_after(create, _, {ok, Doc}) ->
+    ok = permissions_cache:invalidate(),
+    {ok, Doc};
+run_after(update, [_, _, _, _], {ok, Doc}) ->
+    ok = permissions_cache:invalidate(),
+    {ok, Doc};
+run_after(save, _, {ok, Doc}) ->
+    ok = permissions_cache:invalidate(),
+    {ok, Doc};
+run_after(update, _, {ok, Doc}) ->
+    ok = permissions_cache:invalidate(),
+    {ok, Doc};
+run_after(_Function, _Args, Result) ->
+    Result.
+
+%%%===================================================================
+%%% datastore_model callbacks
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_ctx() -> datastore:ctx().
+get_ctx() ->
+    ?CTX.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of callbacks which will be called after each operation
+%% on datastore model.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_posthooks() -> [datastore_hooks:posthook()].
+get_posthooks() ->
+    [fun(Function, Args, Result) ->
+        od_user:run_after(Function, Args, Result)
+    end].
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's record structure in provided version.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_record_struct(datastore_model:record_version()) ->
+    datastore_model:record_struct().
+get_record_struct(1) ->
+    {record, [
+        {name, string},
+        {alias, string},
+        {email_list, [string]},
+        {connected_accounts, [[{string, term}]]},
+        {default_space, string},
+        {space_aliases, [{string, string}]},
+        {groups, [string]},
+        {spaces, [string]},
+        {handle_services, [string]},
+        {handles, [string]},
+        {eff_groups, [string]},
+        {eff_spaces, [string]},
+        {eff_shares, [string]},
+        {eff_providers, [string]},
+        {eff_handle_services, [string]},
+        {eff_handles, [string]},
+        {public_only, boolean},
+        {revision_history, [term]}
+    ]}.

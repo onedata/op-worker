@@ -74,7 +74,11 @@ forward(#tree_broadcast2{
                 {low_provider_id, LowProviderId},
                 {high_provider_id, HighProviderId},
                 {high_open, true}
-            ])
+            ]);
+        Other ->
+            ?error("Wrong provider ids in tree broadcast:"
+                "receiver: ~p, sender: ~p, low_provider: ~p, high_provider: ~p",
+                [Other, SrcProviderId, LowProviderId, HighProviderId])
     end.
 
 %%--------------------------------------------------------------------
@@ -142,7 +146,7 @@ send_changes(ProviderId, SpaceId, Since, Until, Docs) ->
         space_id = SpaceId,
         since = Since,
         until = Until,
-        compressed_docs = dbsync_utils2:compress(Docs)
+        compressed_docs = dbsync_utils:compress(Docs)
     }).
 
 %%--------------------------------------------------------------------
@@ -154,12 +158,12 @@ send_changes(ProviderId, SpaceId, Since, Until, Docs) ->
 -spec broadcast_changes(od_space:id(), couchbase_changes:since(),
     couchbase_changes:until(), [datastore:doc()]) -> ok.
 broadcast_changes(SpaceId, Since, Until, Docs) ->
-    MsgId = dbsync_utils2:gen_request_id(),
+    MsgId = dbsync_utils:gen_request_id(),
     Msg = #changes_batch{
         space_id = SpaceId,
         since = Since,
         until = Until,
-        compressed_docs = dbsync_utils2:compress(Docs)
+        compressed_docs = dbsync_utils:compress(Docs)
     },
     broadcast(SpaceId, MsgId, Msg, []),
     broadcast(SpaceId, MsgId, Msg, []).
@@ -184,7 +188,7 @@ broadcast_changes(SpaceId, Since, Until, Docs) ->
     LowProviderId :: od_provider:id(),
     HighProviderId :: od_provider:id().
 get_next_broadcast_hops(SpaceId, Opts) ->
-    ProviderIds = dbsync_utils2:get_providers(SpaceId),
+    ProviderIds = dbsync_utils:get_providers(SpaceId),
     ProviderIds2 = select_receiving_providers(ProviderIds, Opts),
     Pivot = rand:uniform(length(ProviderIds2) + 1) - 1,
     {LowProviderIds, HighProviderIds} = lists:split(Pivot, ProviderIds2),

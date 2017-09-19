@@ -11,48 +11,59 @@
 %%%-------------------------------------------------------------------
 -module(permissions_cache_helper).
 -author("Michal Wrzeszcz").
--behaviour(model_behaviour).
 
--include("modules/datastore/datastore_specific_models_def.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
+-include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore_runner.hrl").
 
-%% model_behaviour callbacks
+%% API
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, create_or_update/2,
-    list/0, count/0, model_init/0, 'after'/5, before/4]).
+    list/0, count/0]).
+
+%% datastore_model callbacks
+-export([get_ctx/0]).
+
+-type key() :: datastore:key().
+-type record() :: #permissions_cache_helper{}.
+-type doc() :: datastore_doc:doc(record()).
+-type diff() :: datastore_doc:diff(record()).
+
+-define(CTX, #{
+    model => ?MODULE,
+    disc_driver => undefined,
+    volatile => true,
+    fold_enabled => true
+}).
 
 %%%===================================================================
-%%% model_behaviour callbacks
+%%% API
 %%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback save/1.
+%% Saves permission cache.
 %% @end
 %%--------------------------------------------------------------------
--spec save(datastore:document()) ->
-    {ok, datastore:ext_key()} | datastore:generic_error().
-save(Document) ->
-    model:execute_with_default_context(?MODULE, save, [Document]).
+-spec save(doc()) -> {ok, key()} | {error, term()}.
+save(Doc) ->
+    ?extract_key(datastore_model:save(?CTX, Doc)).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback update/2.
+%% Updates permission cache.
 %% @end
 %%--------------------------------------------------------------------
--spec update(datastore:ext_key(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
+-spec update(key(), diff()) -> {ok, key()} | {error, term()}.
 update(Key, Diff) ->
-    model:execute_with_default_context(?MODULE, update, [Key, Diff]).
+    ?extract_key(datastore_model:update(?CTX, Key, Diff)).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback create/1.
+%% Creates permission cache.
 %% @end
 %%--------------------------------------------------------------------
--spec create(datastore:document()) ->
-    {ok, datastore:ext_key()} | datastore:create_error().
-create(Document) ->
-    model:execute_with_default_context(?MODULE, create, [Document]).
+-spec create(doc()) -> {ok, key()} | {error, term()}.
+create(Doc) ->
+    ?extract_key(datastore_model:create(?CTX, Doc)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -60,95 +71,69 @@ create(Document) ->
 %% it initialises the object with the document.
 %% @end
 %%--------------------------------------------------------------------
--spec create_or_update(datastore:document(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:ext_key()} | datastore:generic_error().
-create_or_update(Doc, Diff) ->
-    model:execute_with_default_context(?MODULE, create_or_update, [Doc, Diff]).
+-spec create_or_update(doc(), diff()) ->
+    {ok, key()} | {error, term()}.
+create_or_update(#document{key = Key, value = Default}, Diff) ->
+    ?extract_key(datastore_model:update(?CTX, Key, Diff, Default)).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback get/1.
+%% Returns permission cache.
 %% @end
 %%--------------------------------------------------------------------
--spec get(datastore:ext_key()) -> {ok, datastore:document()} | datastore:get_error().
+-spec get(key()) -> {ok, doc()} | {error, term()}.
 get(Key) ->
-    model:execute_with_default_context(?MODULE, get, [Key]).
+    datastore_model:get(?CTX, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback delete/1.
+%% Deletes permission cache.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(datastore:ext_key()) -> ok | datastore:generic_error().
+-spec delete(key()) -> ok | {error, term()}.
 delete(Key) ->
-    model:execute_with_default_context(?MODULE, delete, [Key]).
+    datastore_model:delete(?CTX, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback exists/1.
+%% Checks whether permission cache exists.
 %% @end
 %%--------------------------------------------------------------------
--spec exists(datastore:ext_key()) -> datastore:exists_return().
+-spec exists(key()) -> boolean().
 exists(Key) ->
-    ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [Key])).
+    {ok, Exists} = datastore_model:exists(?CTX, Key),
+    Exists.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns list of all records.
 %% @end
 %%--------------------------------------------------------------------
--spec list() -> {ok, [datastore:ext_key()]} | datastore:generic_error() | no_return().
+-spec list() -> {ok, [key()]} | {error, term()}.
 list() ->
-    Filter = fun
-                 ('$end_of_table', Acc) ->
-                     {abort, Acc};
-                 (Uuid, Acc) ->
-                     {next, [Uuid | Acc]}
-             end,
-    model:execute_with_default_context(?MODULE, list_keys, [Filter, []]).
+    Fun = fun(Uuid, Acc) -> {ok, [Uuid | Acc]} end,
+    datastore_model:fold_keys(?CTX, Fun, []).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns count of all records.
 %% @end
 %%--------------------------------------------------------------------
--spec count() -> {ok, non_neg_integer()} | datastore:generic_error() | no_return().
+-spec count() -> {ok, non_neg_integer()} | {error, term()} | no_return().
 count() ->
-    Filter = fun
-        ('$end_of_table', Acc) ->
-            {abort, Acc};
-        (_Uuid, Acc) ->
-            {next, Acc + 1}
-    end,
-    model:execute_with_default_context(?MODULE, list_keys, [Filter, 0]).
+    Fun = fun(_Uuid, Acc) -> {ok, Acc + 1} end,
+    datastore_model:fold_keys(?CTX, Fun, 0).
+
+
+%%%===================================================================
+%%% datastore_model callbacks
+%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback model_init/0.
+%% Returns model's context.
 %% @end
 %%--------------------------------------------------------------------
--spec model_init() -> model_behaviour:model_config().
-model_init() ->
-    ?MODEL_CONFIG(permissions_cache_helper_bucket, [], ?GLOBAL_ONLY_LEVEL)#model_config{
-        list_enabled = {true, return_errors}, volatile = true}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback 'after'/5.
-%% @end
-%%--------------------------------------------------------------------
--spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term(),
-    ReturnValue :: term()) -> ok.
-'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
-    ok.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback before/4.
-%% @end
-%%--------------------------------------------------------------------
--spec before(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
-before(_ModelName, _Method, _Level, _Context) ->
-    ok.
+-spec get_ctx() -> datastore:ctx().
+get_ctx() ->
+    ?CTX.

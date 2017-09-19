@@ -14,7 +14,7 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/common_messages.hrl").
 
@@ -122,9 +122,16 @@ create_delayed_storage_file(FileCtx) ->
                 (#file_location{storage_file_created = true}) ->
                     {error, already_created};
                 (FileLocation = #file_location{storage_file_created = false}) ->
-                    FileCtx3 = create_storage_file(user_ctx:new(?ROOT_SESS_ID), FileCtx2),
-                    files_to_chown:chown_or_schedule_chowning(FileCtx3),
-                    {ok, FileLocation#file_location{storage_file_created = true}}
+                    try
+                        FileCtx3 = create_storage_file(user_ctx:new(?ROOT_SESS_ID), FileCtx2),
+                        files_to_chown:chown_or_schedule_chowning(FileCtx3),
+                        {ok, FileLocation#file_location{storage_file_created = true}}
+                    catch
+                        Error:Reason ->
+                            ?error_stacktrace("Error during storage file creation: ~p:~p",
+                                [Error, Reason]),
+                            {error, {Error, Reason}}
+                    end
             end),
             FileCtx2;
         true ->
@@ -173,14 +180,21 @@ create_storage_file_location(FileCtx, StorageFileCreated) ->
 -spec create_storage_file(user_ctx:ctx(), file_ctx:ctx()) ->
     file_ctx:ctx().
 create_storage_file(UserCtx, FileCtx) ->
-    FileCtx2 = create_parent_dirs(FileCtx),
     SessId = user_ctx:get_session_id(UserCtx),
-    {#document{value = #file_meta{mode = Mode}}, FileCtx3} =
-        file_ctx:get_file_doc(FileCtx2),
-    {SFMHandle, FileCtx4} = storage_file_manager:new_handle(SessId, FileCtx3),
-    storage_file_manager:unlink(SFMHandle),
-    ok = storage_file_manager:create(SFMHandle, Mode),
-    FileCtx4.
+    {#document{value = #file_meta{mode = Mode}}, FileCtx2} =
+        file_ctx:get_file_doc(FileCtx),
+    {SFMHandle, FileCtx3} = storage_file_manager:new_handle(SessId, FileCtx2),
+    {ok, FinalCtx} = case storage_file_manager:create(SFMHandle, Mode) of
+        {error, ?ENOENT} ->
+            FileCtx4 = create_parent_dirs(FileCtx3),
+            {storage_file_manager:create(SFMHandle, Mode), FileCtx4};
+        {error, ?EEXIST} ->
+            storage_file_manager:unlink(SFMHandle),
+            {storage_file_manager:create(SFMHandle, Mode), FileCtx3};
+        Other ->
+            {Other, FileCtx3}
+    end,
+    FinalCtx.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -212,7 +226,7 @@ delete_storage_file_without_location(FileCtx, UserCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_storage_dir(file_ctx:ctx(), user_ctx:ctx()) ->
-    datastore:ext_key().
+    ok | {error, term()}.
 delete_storage_dir(FileCtx, UserCtx) ->
     SessId = user_ctx:get_session_id(UserCtx),
     {SFMHandle, _} = storage_file_manager:new_handle(SessId, FileCtx),

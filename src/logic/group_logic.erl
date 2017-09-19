@@ -15,7 +15,7 @@
 -author("Michal Zmuda").
 
 -include("proto/common/credentials.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -export([get/1, get/2, create/2, set_name/3, delete/2]).
@@ -36,7 +36,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get(GroupId :: binary()) ->
-    {ok, datastore:document()} | {error, Reason :: term()}.
+    {ok, datastore:doc()} | {error, Reason :: term()}.
 get(GroupId) ->
     od_group:get(GroupId).
 
@@ -48,7 +48,7 @@ get(GroupId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(oz_endpoint:auth(), GroupId :: binary()) ->
-    {ok, datastore:document()} | {error, Reason :: term()}.
+    {ok, datastore:doc()} | {error, Reason :: term()}.
 get(Auth, GroupId) ->
     od_group:get_or_fetch(Auth, GroupId).
 
@@ -226,7 +226,7 @@ get_create_space_token(Auth, GroupId) ->
     UserId :: od_user:id()) -> boolean().
 has_effective_user(GroupId, UserId) ->
     case od_user:get(UserId) of
-        {error, {not_found, _}} ->
+        {error, not_found} ->
             false;
         {ok, #document{value = UserInfo}} ->
             #od_user{eff_groups = Groups} = UserInfo,

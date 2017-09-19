@@ -11,13 +11,17 @@
 -module(dbsync_changes).
 -author("Krzysztof Trzepla").
 
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_common_internal.hrl").
 
 %% API
 -export([apply_batch/2, apply/1]).
+
+-type ctx() :: datastore_cache:ctx().
+-type key() :: datastore:key().
+-type doc() :: datastore:doc().
+-type model() :: datastore_model:model().
 
 %% Time to wait for worker process
 -define(WORKER_TIMEOUT, 90000).
@@ -51,30 +55,20 @@ apply_batch(Docs, BatchRange) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec apply(datastore:doc()) -> ok | {error, datastore:seq(), term()}.
-% TODO - do we sync any listed models?
-apply(Doc = #document{key = Key, value = Value, scope = SpaceId, seq = Seq}) ->
+apply(Doc = #document{value = Value, scope = SpaceId, seq = Seq}) ->
     try
         case Value of
-            #links{origin = Origin, doc_key = MainDocKey, model = ModelName} ->
-                ModelConfig = ModelName:model_init(),
-
-                OldLinks = case foreign_links_get(ModelConfig, Key, MainDocKey) of
-                    {ok, #document{value = OldLinks1}} ->
-                        OldLinks1;
-                    {error, _Reason0} ->
-                        #links{link_map = #{}, model = ModelName}
-                end,
-
-                CurrentLinks = #links{} = foreign_links_save(ModelConfig, Doc),
-                {AddedMap, DeletedMap} = links_utils:diff(OldLinks, CurrentLinks),
-                ok = dbsync_events:links_changed(
-                    Origin, ModelName, MainDocKey, AddedMap, DeletedMap
-                );
+            #links_forest{model = Model, key = Key} ->
+                links_save(Model, Key, Doc);
+            #links_node{model = Model, key = Key} ->
+                links_save(Model, Key, Doc);
+            #links_mask{} ->
+                links_delete(Doc);
             _ ->
-                ModelName = element(1, Value),
-                ModelConfig = ModelName:model_init(),
-                ok = model:execute_with_default_context(ModelConfig, save,
-                    [Doc], [{hooks_config, no_hooks}, {resolve_conflicts, true}])
+                Model = element(1, Value),
+                Ctx = datastore_model_default:get_ctx(Model),
+                Ctx2 = Ctx#{sync_change => true, hooks_disabled => true},
+                {ok, _} = datastore_model:save(Ctx2, Doc)
         end,
 
         try
@@ -99,47 +93,110 @@ apply(Doc = #document{key = Key, value = Value, scope = SpaceId, seq = Seq}) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Gets current version of links' document.
+%% Saves datastore links document.
 %% @end
 %%--------------------------------------------------------------------
--spec foreign_links_get(model_behaviour:model_config(),
-    datastore:ext_key(), datastore:ext_key()) ->
-    {ok, datastore:document()} | {error, Reason :: any()}.
-foreign_links_get(ModelConfig, Key, MainDocKey) ->
-    model:execute_with_default_context(ModelConfig, get,
-        [Key], [{hooks_config, no_hooks}, {links_tree, {true, MainDocKey}}]).
-
+-spec links_save(model(), key(), doc()) -> ok.
+links_save(Model, RoutingKey, Doc = #document{key = Key}) ->
+    Ctx = datastore_model_default:get_ctx(Model),
+    Ctx2 = Ctx#{
+        sync_change => true,
+        local_links_tree_id => oneprovider:get_provider_id()
+    },
+    {ok, _} = datastore_router:route(Ctx2, RoutingKey, save, [
+        Ctx2, Key, Doc
+    ]),
+    ok.
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Saves links document received from other provider and returns current version
-%% of given document.
+%% Removes datastore links based on links mask.
 %% @end
 %%--------------------------------------------------------------------
--spec foreign_links_save(model_behaviour:model_config(), datastore:document()) ->
-    #links{} | {error, Reason :: any()}.
-foreign_links_save(ModelConfig, Doc = #document{key = Key, value = #links{
-    doc_key = MainDocKey
-} = Links}) ->
-    Result = model:execute_with_default_context(ModelConfig, save,
-        [Doc#document{seq = null}], [{hooks_config, no_hooks},
-            {resolve_conflicts, true}, {links_tree, {true, MainDocKey}},
-            {disc_driver_ctx, no_seq, true}
-        ]),
-    case Result of
-        ok ->
-            case foreign_links_get(ModelConfig, Key, MainDocKey) of
-                {error, {not_found, _}} ->
-                    Links#links{link_map = #{}, children = #{}};
-                {ok, #document{value = CurrentLinks}} ->
-                    CurrentLinks
-            end;
-        Error ->
-            ?error("Unable to save forign links document ~p due to ~p",
-                [Doc, Error]),
-            Error
+-spec links_delete(doc()) -> ok.
+links_delete(Doc = #document{key = Key, value = LinksMask = #links_mask{
+    model = Model, tree_id = TreeId
+}, deleted = false}) ->
+    LocalTreeId = oneprovider:get_provider_id(),
+    case TreeId of
+        LocalTreeId ->
+            Ctx = datastore_model_default:get_ctx(Model),
+            Ctx2 = Ctx#{
+                sync_change => true,
+                local_links_tree_id => LocalTreeId
+            },
+            DeletedLinks = get_links_mask(Ctx2, Key),
+            Deleted = apply_links_mask(Ctx2, LinksMask, DeletedLinks),
+            save_links_mask(Ctx, Doc#document{deleted = Deleted});
+        _ ->
+            ok
+    end;
+links_delete(Doc = #document{
+    mutators = [TreeId, RemoteTreeId],
+    value = #links_mask{model = Model, tree_id = RemoteTreeId},
+    deleted = true
+}) ->
+    LocalTreeId = oneprovider:get_provider_id(),
+    case TreeId of
+        LocalTreeId ->
+            Ctx = datastore_model_default:get_ctx(Model),
+            Ctx2 = Ctx#{
+                sync_change => true,
+                local_links_tree_id => LocalTreeId
+            },
+            save_links_mask(Ctx2, Doc);
+        _ ->
+            ok
+    end;
+links_delete(#document{}) ->
+    ok.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns list of masked links that have been already deleted.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_links_mask(ctx(), key()) -> [links_mask:link()].
+get_links_mask(Ctx, Key) ->
+    case datastore_router:route(Ctx, Key, get, [Ctx, Key]) of
+        {ok, #document{value = #links_mask{links = Links}}} -> Links;
+        {error, not_found} -> []
     end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Applies links mask by deleting masked links.
+%% @end
+%%--------------------------------------------------------------------
+-spec apply_links_mask(ctx(), links_mask:mask(), [links_mask:link()]) ->
+    boolean().
+apply_links_mask(Ctx, #links_mask{key = Key, tree_id = TreeId, links = Links},
+    DeletedLinks) ->
+    LinksSet = gb_sets:from_list(Links),
+    DeletedLinksSet = gb_sets:from_list(DeletedLinks),
+    Links2 = gb_sets:to_list(gb_sets:subtract(LinksSet, DeletedLinksSet)),
+    Results = datastore_router:route(Ctx, Key, delete_links, [
+        Ctx, Key, TreeId, Links2
+    ]),
+    true = lists:all(fun(Result) -> Result == ok end, Results),
+    Size = application:get_env(cluster_worker, datastore_links_mask_size, 1000),
+    erlang:length(Links) == Size.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Saves datastore links mask.
+%% @end
+%%--------------------------------------------------------------------
+-spec save_links_mask(ctx(), doc()) -> ok.
+save_links_mask(Ctx, Doc = #document{key = Key}) ->
+    {ok, _} = datastore_router:route(Ctx, Key, save, [
+        Ctx, Key, Doc
+    ]),
+    ok.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -147,11 +204,9 @@ foreign_links_save(ModelConfig, Doc = #document{key = Key, value = #links{
 %% Returns key connected with particular change.
 %% @end
 %%--------------------------------------------------------------------
--spec get_change_key(datastore:doc()) -> datastore:ext_key().
+-spec get_change_key(datastore:doc()) -> datastore:key().
 get_change_key(#document{value = #file_location{uuid = FileUuid}}) ->
     FileUuid;
-get_change_key(#document{value = #links{doc_key = DocUuid}}) ->
-    DocUuid;
 get_change_key(#document{key = Uuid}) ->
     Uuid.
 
@@ -175,7 +230,7 @@ group_changes(Docs) ->
 %% Starts one worker for each documents' group.
 %% @end
 %%--------------------------------------------------------------------
--spec parallel_apply([{datastore:ext_key(),
+-spec parallel_apply([{datastore:key(),
     [datastore:doc()]}], reference()) -> ok.
 parallel_apply(DocsList, Ref) ->
     Master = self(),

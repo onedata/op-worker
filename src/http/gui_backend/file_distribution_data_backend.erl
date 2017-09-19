@@ -14,9 +14,6 @@
 -behavior(data_backend_behaviour).
 -author("Lukasz Opiola").
 
--include("modules/fslogic/fslogic_common.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/posix/errors.hrl").

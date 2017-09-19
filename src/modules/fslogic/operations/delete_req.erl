@@ -81,7 +81,7 @@ delete_file(UserCtx, FileCtx, Silent) ->
 %%--------------------------------------------------------------------
 -spec check_if_empty_and_delete(user_ctx:ctx(), file_ctx:ctx(),
     Silent :: boolean()) -> fslogic_worker:fuse_response().
-check_if_empty_and_delete(UserCtx, FileCtx, Silent)  ->
+check_if_empty_and_delete(UserCtx, FileCtx, Silent) ->
     case file_ctx:get_file_children(FileCtx, UserCtx, 0, 1) of
         {[], FileCtx2} ->
             delete_insecure(UserCtx, FileCtx2, Silent);
@@ -100,12 +100,15 @@ check_if_empty_and_delete(UserCtx, FileCtx, Silent)  ->
     fslogic_worker:fuse_response().
 delete_insecure(UserCtx, FileCtx, Silent) ->
     {ParentFileCtx, FileCtx2} = file_ctx:get_parent(FileCtx, UserCtx),
-    {ParentDoc, _ParentFileCtx2} = file_ctx:get_file_doc(ParentFileCtx),
-    {#document{value = #file_meta{name = FileName}}, FileCtx3} =
-        file_ctx:get_file_doc(FileCtx2),
+    {#document{key = ParentUuid}, _ParentFileCtx2} = file_ctx:get_file_doc(ParentFileCtx),
+    {#document{key = FileUuid, scope = Scope, value = #file_meta{
+        name = FileName
+    }}, FileCtx3} = file_ctx:get_file_doc(FileCtx2),
     FileUuid = file_ctx:get_uuid_const(FileCtx3),
-    {ok, _} = file_meta:update(FileUuid, #{deleted => true}),
-    ok = file_meta:delete_child_link(ParentDoc, FileName),
+    {ok, _} = file_meta:update(FileUuid, fun(FileMeta = #file_meta{}) ->
+        {ok, FileMeta#file_meta{deleted = true}}
+    end),
+    ok = file_meta:delete_child_link(ParentUuid, Scope, FileUuid, FileName),
 
     fslogic_deletion_worker:request_deletion(UserCtx, FileCtx3, Silent),
     #fuse_response{status = #status{code = ?OK}}.

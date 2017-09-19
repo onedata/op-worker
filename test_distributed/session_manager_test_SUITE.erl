@@ -12,8 +12,7 @@
 -module(session_manager_test_SUITE).
 -author("Krzysztof Trzepla").
 
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -185,7 +184,7 @@ session_manager_session_removal_test(Config) ->
             remove_session, [SessId])),
 
         % Check whether session has been removed from cache.
-        ?assertMatch({error, {not_found, _}}, rpc:call(Worker,
+        ?assertMatch({error, not_found}, rpc:call(Worker,
             session, get, [SessId])),
 
         % Check session infrastructure has been stopped.
@@ -244,7 +243,7 @@ session_supervisor_child_crash_test(Config) ->
 
         apply(Fun, [Child | Args]),
 
-        ?assertMatch({error, {not_found, _}}, rpc:call(Worker, session, get, [SessId]), 10),
+        ?assertMatch({error, not_found}, rpc:call(Worker, session, get, [SessId]), 10),
         ?assertEqual([], supervisor:which_children({session_manager_worker_sup, Node}))
     end, [
         {event_manager_sup, fun erlang:exit/2, [kill]},

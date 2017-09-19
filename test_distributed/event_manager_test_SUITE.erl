@@ -13,7 +13,7 @@
 -author("Krzysztof Trzepla").
 
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/events/definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -61,7 +61,7 @@ event_manager_should_update_session_on_init(Config) ->
 event_manager_should_update_session_on_terminate(Config) ->
     stop_event_manager(?config(event_manager, Config)),
     [Worker | _] = ?config(op_worker_nodes, Config),
-    ?assertEqual({error, {not_found, missing}}, rpc:call(
+    ?assertEqual({error, not_found}, rpc:call(
         Worker, session, get_event_manager, [?config(session_id, Config)]
     ), 10).
 

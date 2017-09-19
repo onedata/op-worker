@@ -12,9 +12,7 @@
 -module(version_vector).
 -author("Tomasz Lichon").
 
--include("modules/dbsync/common.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API

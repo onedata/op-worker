@@ -12,14 +12,14 @@
 %%%-------------------------------------------------------------------
 -module(transfer).
 -author("Tomasz Lichon").
--behaviour(model_behaviour).
 
--include("modules/datastore/datastore_specific_models_def.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
+-include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore_runner.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([init_lists/0, start/6, stop/1, get_status/1, get_info/1]).
+-export([init_lists/0, start/6, stop/1, get_status/1, get_info/1, get/1]).
 -export([mark_active/1, mark_completed/1, mark_failed/2,
     mark_active_invalidation/1, mark_completed_invalidation/2, mark_failed_invalidation/2,
     mark_file_transfer_scheduled/2, mark_file_transfer_finished/2,
@@ -27,19 +27,25 @@
     for_each_successful_transfer/2, for_each_failed_transfer/2,
     for_each_unfinished_transfer/2, restart_unfinished_and_failed_transfers/0]).
 
-%% model_behaviour callbacks
--export([save/1, get/1, exists/1, delete/1, update/2, create/1, create_or_update/2,
-    model_init/0, 'after'/5, before/4]).
--export([record_struct/1]).
+%% datastore_model callbacks
+-export([get_ctx/0, get_record_struct/1]).
 
 -type id() :: binary().
+-type diff() :: datastore:diff(transfer()).
 -type status() :: scheduled | skipped | active | completed | cancelled | failed.
 -type callback() :: undefined | binary().
 -type transfer() :: #transfer{}.
--type doc() :: #document{value :: transfer()}.
+-type doc() :: datastore_doc:doc(transfer()).
 -type virtual_list_id() :: binary(). % ?(SUCCESSFUL|FAILED|UNFINISHED)_TRANSFERS_KEY
 
 -export_type([id/0, status/0, callback/0, doc/0]).
+
+-define(CTX, #{
+    model => ?MODULE,
+    sync_enabled => true,
+    mutator => oneprovider:get_provider_id(),
+    local_links_tree_id => oneprovider:get_provider_id()
+}).
 
 -define(SUCCESSFUL_TRANSFERS_KEY, <<"SUCCESSFUL_TRANSFERS_KEY">>).
 -define(FAILED_TRANSFERS_KEY, <<"FAILED_TRANSFERS_KEY">>).
@@ -48,35 +54,6 @@
 -define(MIN_TIME_WINDOW, 60).
 -define(HR_TIME_WINDOW, 3600).
 -define(DY_TIME_WINDOW, 86400).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns structure of the record in specified version.
-%% @end
-%%--------------------------------------------------------------------
--spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
-record_struct(1) ->
-    {record, [
-        {file_uuid, string},
-        {space_id, string},
-        {path, string},
-        {callback, string},
-        {transfer_status, atom},
-        {invalidation_status, atom},
-        {source_provider_id, string},
-        {target_provider_id, string},
-        {invalidate_source_replica, boolean},
-        {pid, string}, %todo VFS-3657
-        {files_to_transfer, integer},
-        {files_transferred, integer},
-        {bytes_to_transfer, integer},
-        {bytes_transferred, integer},
-        {start_time, integer},
-        {last_update, integer},
-        {min_hist, [integer]},
-        {hr_hist, [integer]},
-        {dy_hist, [integer]}
-    ]}.
 
 %%%===================================================================
 %%% API
@@ -89,9 +66,9 @@ record_struct(1) ->
 %%--------------------------------------------------------------------
 -spec init_lists() -> ok.
 init_lists() ->
-    transfer:create(#document{key = ?SUCCESSFUL_TRANSFERS_KEY, value = #transfer{}}),
-    transfer:create(#document{key = ?FAILED_TRANSFERS_KEY, value = #transfer{}}),
-    transfer:create(#document{key = ?UNFINISHED_TRANSFERS_KEY, value = #transfer{}}),
+    create(#document{key = ?SUCCESSFUL_TRANSFERS_KEY, value = #transfer{}}),
+    create(#document{key = ?FAILED_TRANSFERS_KEY, value = #transfer{}}),
+    create(#document{key = ?UNFINISHED_TRANSFERS_KEY, value = #transfer{}}),
     ok.
 
 %%--------------------------------------------------------------------
@@ -138,7 +115,7 @@ start(SessionId, FileGuid, FilePath, ProviderId, Callback, InvalidateSourceRepli
             dy_hist = time_slot_histogram:get_histogram_values(DyHist)
 
         }},
-    {ok, TransferId} = create(ToCreate),
+    {ok, #document{key = TransferId}} = datastore_model:create(?CTX, ToCreate),
     session:add_transfer(SessionId, TransferId),
     add_link(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
     transfer_controller:on_new_transfer_doc(ToCreate#document{key = TransferId}),
@@ -163,7 +140,8 @@ restart_unfinished_and_failed_transfers() ->
 %%--------------------------------------------------------------------
 -spec get_status(TransferId :: id()) -> status().
 get_status(TransferId) ->
-    {ok, #document{value = #transfer{transfer_status = Status}}} = get(TransferId),
+    {ok, #document{value = #transfer{transfer_status = Status}}} =
+        datastore_model:get(?CTX, TransferId),
     Status.
 
 %%--------------------------------------------------------------------
@@ -190,7 +168,7 @@ get_info(TransferId) ->
         min_hist = MinHist,
         hr_hist = HrHist,
         dy_hist = DyHist
-    }}} = get(TransferId),
+    }}} = datastore_model:get(?CTX, TransferId),
     FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
     NullableCallback = utils:ensure_defined(Callback, undefined, null),
     {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
@@ -212,6 +190,15 @@ get_info(TransferId) ->
         <<"dyHist">> => DyHist
     }.
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns transfer document.
+%% @end
+%%-------------------------------------------------------------------
+-spec get(id()) -> {ok, doc()}.
+get(TransferId) ->
+    datastore_model:get(?CTX, TransferId).
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Stop transfer
@@ -219,11 +206,11 @@ get_info(TransferId) ->
 %%--------------------------------------------------------------------
 -spec stop(id()) -> ok | {error, term()}.
 stop(TransferId) ->
-    {ok, #document{value = #transfer{space_id = SpaceId}}} = get(TransferId),
+    {ok, #document{value = #transfer{space_id = SpaceId}}} = datastore_model:get(?CTX, TransferId),
     remove_link(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
     remove_link(?FAILED_TRANSFERS_KEY, TransferId, SpaceId),
     remove_link(?SUCCESSFUL_TRANSFERS_KEY, TransferId, SpaceId),
-    delete(TransferId).
+    datastore_model:delete(?CTX, TransferId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -232,11 +219,14 @@ stop(TransferId) ->
 %%--------------------------------------------------------------------
 -spec mark_active(id()) -> {ok, id()} | {error, term()}.
 mark_active(TransferId) ->
-    transfer:update(TransferId, #{
-        transfer_status => active,
-        files_to_transfer => 1,
-        pid => list_to_binary(pid_to_list(self()))
-    }).
+    Pid = list_to_binary(pid_to_list(self())),
+    update(TransferId, fun(Transfer) ->
+        {ok, Transfer#transfer{
+            transfer_status = active,
+            files_to_transfer = 1,
+            pid = Pid
+        }}
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -245,7 +235,7 @@ mark_active(TransferId) ->
 %%--------------------------------------------------------------------
 -spec mark_completed(id()) -> {ok, id()} | {error, term()}.
 mark_completed(TransferId) ->
-    transfer:update(TransferId, fun(Transfer) ->
+    update(TransferId, fun(Transfer) ->
         case Transfer#transfer.invalidation_status of
             skipped ->
                 SpaceId = Transfer#transfer.space_id,
@@ -266,7 +256,9 @@ mark_completed(TransferId) ->
 mark_failed(TransferId, SpaceId) ->
     add_link(?FAILED_TRANSFERS_KEY, TransferId, SpaceId),
     remove_link(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
-    transfer:update(TransferId, #{transfer_status => failed}).
+    update(TransferId, fun(Transfer) ->
+        {ok, Transfer#transfer{transfer_status = failed}}
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -275,10 +267,13 @@ mark_failed(TransferId, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec mark_active_invalidation(id()) -> {ok, id()} | {error, term()}.
 mark_active_invalidation(TransferId) ->
-    transfer:update(TransferId, #{
-        invalidation_status => active,
-        pid => list_to_binary(pid_to_list(self()))
-    }).
+    Pid = list_to_binary(pid_to_list(self())),
+    update(TransferId, fun(Transfer) ->
+        {ok, Transfer#transfer{
+            invalidation_status = active,
+            pid = Pid
+        }}
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -287,11 +282,10 @@ mark_active_invalidation(TransferId) ->
 %%--------------------------------------------------------------------
 -spec mark_completed_invalidation(id(), od_space:id()) -> {ok, id()} | {error, term()}.
 mark_completed_invalidation(TransferId, SpaceId) ->
+    add_link(?SUCCESSFUL_TRANSFERS_KEY, TransferId, SpaceId),
+    remove_link(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
     transfer:update(TransferId, fun(Transfer) ->
-        add_link(?SUCCESSFUL_TRANSFERS_KEY, TransferId, SpaceId),
-        remove_link(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
-
-        Transfer#transfer{invalidation_status = completed}
+        {ok, Transfer#transfer{invalidation_status = completed}}
     end).
 
 %%--------------------------------------------------------------------
@@ -301,10 +295,10 @@ mark_completed_invalidation(TransferId, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec mark_failed_invalidation(id(), od_space:id()) -> {ok, id()} | {error, term()}.
 mark_failed_invalidation(TransferId, SpaceId) ->
-    transfer:update(TransferId, fun(Transfer) ->
-        add_link(?FAILED_TRANSFERS_KEY, TransferId, SpaceId),
-        remove_link(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
-        Transfer#transfer{invalidation_status = failed}
+    add_link(?FAILED_TRANSFERS_KEY, TransferId, SpaceId),
+    remove_link(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
+    update(TransferId, fun(Transfer) ->
+        {ok, Transfer#transfer{invalidation_status = failed}}
     end).
 
 %%--------------------------------------------------------------------
@@ -313,11 +307,11 @@ mark_failed_invalidation(TransferId, SpaceId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec mark_file_transfer_scheduled(undefined | id(), non_neg_integer()) ->
-    {ok, id()} | {error, term()}.
+    {ok, undefined | id()} | {error, term()}.
 mark_file_transfer_scheduled(undefined, _FilesNum) ->
     {ok, undefined};
 mark_file_transfer_scheduled(TransferId, FilesNum) ->
-    transfer:update(TransferId, fun(Transfer) ->
+    update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{
             files_to_transfer = Transfer#transfer.files_to_transfer + FilesNum
         }}
@@ -329,11 +323,11 @@ mark_file_transfer_scheduled(TransferId, FilesNum) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec mark_file_transfer_finished(undefined | id(), non_neg_integer()) ->
-    {ok, id()} | {error, term()}.
+    {ok, undefined | id()} | {error, term()}.
 mark_file_transfer_finished(undefined, _FilesNum) ->
     {ok, undefined};
 mark_file_transfer_finished(TransferId, FilesNum) ->
-    transfer:update(TransferId, fun(Transfer) ->
+    update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{
             files_transferred = Transfer#transfer.files_transferred + FilesNum
         }}
@@ -345,11 +339,11 @@ mark_file_transfer_finished(TransferId, FilesNum) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec mark_data_transfer_scheduled(undefined | id(), non_neg_integer()) ->
-    {ok, id()} | {error, term()}.
+    {ok, undefined | id()} | {error, term()}.
 mark_data_transfer_scheduled(undefined, _Bytes) ->
     {ok, undefined};
 mark_data_transfer_scheduled(TransferId, Bytes) ->
-    transfer:update(TransferId, fun(Transfer) ->
+    update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{
             bytes_to_transfer = Transfer#transfer.bytes_to_transfer + Bytes
         }}
@@ -361,11 +355,11 @@ mark_data_transfer_scheduled(TransferId, Bytes) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec mark_data_transfer_finished(undefined | id(), non_neg_integer()) ->
-    {ok, id()} | {error, term()}.
+    {ok, undefined | id()} | {error, term()}.
 mark_data_transfer_finished(undefined, _Bytes) ->
     {ok, undefined};
 mark_data_transfer_finished(TransferId, Bytes) ->
-    transfer:update(TransferId, fun(Transfer = #transfer{
+    update(TransferId, fun(Transfer = #transfer{
         bytes_transferred = OldBytes,
         last_update = LastUpdate,
         min_hist = MinHistValues,
@@ -425,151 +419,69 @@ for_each_unfinished_transfer(Callback, Acc0) ->
     for_each_transfer(?UNFINISHED_TRANSFERS_KEY, Callback, Acc0).
 
 %%%===================================================================
-%%% model_behaviour callbacks
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback save/1.
-%% @end
-%%--------------------------------------------------------------------
--spec save(datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
-save(Document) ->
-    model:execute_with_default_context(?MODULE, save, [Document]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback update/2.
-%% @end
-%%--------------------------------------------------------------------
--spec update(datastore:key(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:key()} | datastore:update_error().
-update(Key, Diff) ->
-    model:execute_with_default_context(?MODULE, update, [Key, Diff]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback create/1.
-%% @end
-%%--------------------------------------------------------------------
--spec create(datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
-create(Document) ->
-    model:execute_with_default_context(?MODULE, create, [Document]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback get/1.
-%% @end
-%%--------------------------------------------------------------------
--spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
-get(Key) ->
-    model:execute_with_default_context(?MODULE, get, [Key]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback delete/1.
-%% @end
-%%--------------------------------------------------------------------
--spec delete(datastore:key()) -> ok | datastore:generic_error().
-delete(Key) ->
-    model:execute_with_default_context(?MODULE, delete, [Key]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback exists/1.
-%% @end
-%%--------------------------------------------------------------------
--spec exists(datastore:key()) -> datastore:exists_return().
-exists(Key) ->
-    ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [Key])).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates document with using ID from document. If such object does not exist,
-%% it initialises the object with the document.
-%% @end
-%%--------------------------------------------------------------------
--spec create_or_update(datastore:document(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:key()} | datastore:generic_error().
-create_or_update(Doc, Diff) ->
-    model:execute_with_default_context(?MODULE, create_or_update, [Doc, Diff]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback model_init/0.
-%% @end
-%%--------------------------------------------------------------------
--spec model_init() -> model_behaviour:model_config().
-model_init() ->
-    Config = ?MODEL_CONFIG(transfer_bucket, [], ?GLOBALLY_CACHED_LEVEL,
-        ?GLOBALLY_CACHED_LEVEL, true, false, oneprovider:get_provider_id()),
-    Config#model_config{version = 1, sync_enabled = true}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback 'after'/5.
-%% @end
-%%--------------------------------------------------------------------
--spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term(),
-    ReturnValue :: term()) -> ok.
-'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
-    ok.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback before/4.
-%% @end
-%%--------------------------------------------------------------------
--spec before(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
-before(_ModelName, _Method, _Level, _Context) ->
-    ok.
-
-%%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Adds link to transfer
+%% Creates transfer.
+%% @end
+%%--------------------------------------------------------------------
+-spec create(doc()) -> {ok, doc()} | {error, term()}.
+create(Doc) ->
+    datastore_model:create(?CTX, Doc).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Updates transfer.
+%% @end
+%%--------------------------------------------------------------------
+-spec update(id(), diff()) -> {ok, id()} | {error, term()}.
+update(TransferId, Diff) ->
+    ?extract_key(datastore_model:update(?CTX, TransferId, Diff)).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Adds link to transfer.
 %% @end
 %%--------------------------------------------------------------------
 -spec add_link(SourceId :: virtual_list_id(), TransferId :: id(),
-    SpaceId :: od_space:id()) -> ok.
+    od_space:id()) -> ok.
 add_link(SourceId, TransferId, SpaceId) ->
-    model:execute_with_default_context(?MODULE, add_links, [
-        SourceId, {TransferId, {TransferId, ?MODEL_NAME}}
-    ], [{scope, SpaceId}]).
+    TreeId = oneprovider:get_provider_id(),
+    Ctx = ?CTX#{scope => SpaceId},
+    {ok, _} = datastore_model:add_links(Ctx, SourceId, TreeId, {TransferId, <<>>}),
+    ok.
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Removes link to transfer
+%% Removes link to transfer.
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_link(SourceId :: virtual_list_id(), TransferId :: id(),
-    SpaceId :: od_space:id()) -> ok.
+    od_space:id()) -> ok.
 remove_link(SourceId, TransferId, SpaceId) ->
-    model:execute_with_default_context(?MODULE, delete_links, [SourceId, TransferId],
-        [{scope, SpaceId}]
-    ).
+    TreeId = oneprovider:get_provider_id(),
+    Ctx = ?CTX#{scope => SpaceId},
+    datastore_model:delete_links(Ctx, SourceId, TreeId, TransferId).
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Executes callback for each successfully completed transfer
+%% Executes callback for each successfully completed transfer.
 %% @end
 %%--------------------------------------------------------------------
 -spec for_each_transfer(
     virtual_list_id(), Callback :: fun((id(), Acc0 :: term()) -> Acc :: term()),
     Acc0 :: term()) -> {ok, Acc :: term()} | {error, term()}.
 for_each_transfer(ListDocId, Callback, Acc0) ->
-    model:execute_with_default_context(?MODULE, foreach_link, [ListDocId,
-        fun(LinkName, _LinkTarget, Acc) ->
-            Callback(LinkName, Acc)
-        end, Acc0]).
+    datastore_model:fold_links(?CTX, ListDocId, all, fun
+        (#link{name = Name}, Acc) -> {ok, Callback(Name, Acc)}
+    end, Acc0, #{}).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -583,7 +495,7 @@ restart(TransferId) ->
     MinHist = time_slot_histogram:new(?MIN_TIME_WINDOW, 60),
     HrHist = time_slot_histogram:new(?HR_TIME_WINDOW, 24),
     DyHist = time_slot_histogram:new(?DY_TIME_WINDOW, 30),
-    {ok, TransferId} = update(TransferId, fun(Transfer=#transfer{}) ->
+    {ok, TransferId} = update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{
             transfer_status = scheduled,
             files_to_transfer = 0,
@@ -597,7 +509,7 @@ restart(TransferId) ->
             dy_hist = time_slot_histogram:get_histogram_values(DyHist)
         }}
     end),
-    {ok, TransferDoc} = get(TransferId),
+    {ok, TransferDoc} = datastore_model:get(?CTX, TransferId),
     transfer_controller:on_new_transfer_doc(TransferDoc),
     invalidation_controller:on_new_transfer_doc(TransferDoc),
     {ok, TransferId}.
@@ -625,3 +537,46 @@ restart_failed_transfers() ->
     for_each_failed_transfer(fun(TransferId, _AccIn) ->
         {ok, TransferId} = restart(TransferId)
     end, []).
+
+%%%===================================================================
+%%% datastore_model callbacks
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_ctx() -> datastore:ctx().
+get_ctx() ->
+    ?CTX.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's record structure in provided version.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_record_struct(datastore_model:record_version()) ->
+    datastore_model:record_struct().
+get_record_struct(1) ->
+    {record, [
+        {file_uuid, string},
+        {space_id, string},
+        {path, string},
+        {callback, string},
+        {transfer_status, atom},
+        {invalidation_status, atom},
+        {source_provider_id, string},
+        {target_provider_id, string},
+        {invalidate_source_replica, boolean},
+        {pid, string}, %todo VFS-3657
+        {files_to_transfer, integer},
+        {files_transferred, integer},
+        {bytes_to_transfer, integer},
+        {bytes_transferred, integer},
+        {start_time, integer},
+        {last_update, integer},
+        {min_hist, [integer]},
+        {hr_hist, [integer]},
+        {dy_hist, [integer]}
+    ]}.

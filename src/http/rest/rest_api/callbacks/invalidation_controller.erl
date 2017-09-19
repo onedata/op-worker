@@ -17,7 +17,7 @@
 -behaviour(gen_server).
 
 -include("proto/oneprovider/provider_messages.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -95,7 +95,6 @@ on_transfer_doc_change(_ExistingTransfer) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
 init([SessionId, TransferId, FileGuid, Callback]) ->
-    {ok, TransferId} = transfer:update(TransferId, #{pid => list_to_binary(pid_to_list(self()))}),
     ok = gen_server2:cast(self(), start_transfer),
     {ok, #state{
         transfer_id = TransferId,

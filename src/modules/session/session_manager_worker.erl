@@ -15,8 +15,7 @@
 
 -behaviour(worker_plugin_behaviour).
 
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -126,10 +125,15 @@ remove_session(SessId) ->
             session:delete(SessId),
             close_connections(Cons);
         {ok, #document{value = #session{supervisor = Sup, node = Node, connections = Cons}}} ->
-            supervisor:terminate_child({?SESSION_MANAGER_WORKER_SUP, Node}, Sup),
+            try
+                supervisor:terminate_child({?SESSION_MANAGER_WORKER_SUP, Node}, Sup)
+            catch
+                exit:{noproc, _} -> ok;
+                exit:{shutdown, _} -> ok
+            end,
             session:delete(SessId),
             close_connections(Cons);
-        {error, {not_found, _}} ->
+        {error, not_found} ->
             ok;
         {error, Reason} ->
             {error, Reason}

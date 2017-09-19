@@ -13,7 +13,7 @@
 -author("Michal Zmuda").
 
 -include("global_definitions.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -74,6 +74,7 @@ providers_with_common_support_retrieval_test(Config) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
 set_own_provider_id(Worker, ID) ->
     rpc:call(Worker, application, set_env, [?APP_NAME, provider_id, ID]).
 

@@ -723,8 +723,19 @@ restart_invalidation_of_file_replica_with_migration(Config) ->
     resume_file_replication_time(WorkerP2),
     rpc:call(WorkerP2, transfer, restart_unfinished_and_failed_transfers, []),
 
-    ?assertEqual({ok, []}, rpc:call(WorkerP2, transfer, for_each_unfinished_transfer, [?LIST_TRANSFER, []]), ?ATTEMPTS),
-    ?assertEqual({ok, []}, rpc:call(WorkerP1, transfer, for_each_unfinished_transfer, [?LIST_TRANSFER, []]), ?ATTEMPTS),
+    ?assertEqual(false,
+        begin
+            {ok, Unfinished} = rpc:call(WorkerP2, transfer, for_each_unfinished_transfer, [?LIST_TRANSFER, []]),
+            lists:member(Tid1, Unfinished)
+        end,
+    ?ATTEMPTS),
+
+    ?assertEqual(false,
+        begin
+            {ok, Unfinished} = rpc:call(WorkerP1, transfer, for_each_unfinished_transfer, [?LIST_TRANSFER, []]),
+            lists:member(Tid1, Unfinished)
+        end,
+    ?ATTEMPTS),
 
     {ok, 200, _, Body3} = do_request(WorkerP2, <<"replicas", File/binary>>,
         get, [user_1_token_header(Config)], []),
@@ -867,6 +878,7 @@ periodic_cleanup_should_invalidate_unpopular_files(Config) ->
     [lfm_proxy:close(WorkerP2, Handle) || {ok, Handle} <- Handles],
 
     % trigger cleanup advancing 24 hours into future
+    timer:sleep(timer:seconds(10)),
     test_utils:mock_new(WorkerP2, utils),
     test_utils:mock_expect(WorkerP2, utils, system_time_seconds, fun() ->
         meck:passthrough([]) + 25 * 3600
@@ -1079,8 +1091,14 @@ metric_get(Config) ->
 
     ?assertMatch(ok, rpc:call(WorkerP1, monitoring_utils, create, [<<"space3">>, MonitoringId, utils:system_time_seconds()])),
     {ok, #document{value = State}} = rpc:call(WorkerP1, monitoring_state, get, [MonitoringId]),
-    ?assertMatch({ok, _}, rpc:call(WorkerP1, monitoring_state, save,
-        [#document{key = MonitoringId#monitoring_id{provider_id = Prov2ID}, value = State}])),
+    ?assertMatch({ok, _}, rpc:call(WorkerP1, monitoring_state, save, [
+        #document{
+            key = monitoring_state:encode_id(MonitoringId#monitoring_id{
+                provider_id = Prov2ID
+            }),
+            value =  State
+        }
+    ])),
 
     % when
     {ok, 200, _, Body} = do_request(WorkerP1, <<"metrics/space/space3?metric=storage_quota">>, get, [user_1_token_header(Config)], []),
@@ -1191,8 +1209,16 @@ changes_stream_xattr_test(Config) ->
     ?assertNotEqual(<<>>, Body),
     Changes = binary:split(Body, <<"\r\n">>, [global]),
     ?assert(length(Changes) >= 1),
-    [_, LastChangeJson | _] = lists:reverse(Changes),
-    LastChange = json_utils:decode_map(LastChangeJson),
+
+    [_ | Changes2] = lists:reverse(Changes),
+    [LastChange | _] = lists:filtermap(fun(Change) ->
+        DecodedChange = json_utils:decode_map(Change),
+        case maps:get(<<"name">>, DecodedChange) of
+            <<"file4_csxt">> -> {true, DecodedChange};
+            _ -> false
+        end
+    end, Changes2),
+
     Metadata = maps:get(<<"changes">>, LastChange),
     ?assertEqual(#{<<"name">> => <<"value">>}, maps:get(<<"xattrs">>, Metadata)).
 
@@ -1555,8 +1581,10 @@ query_geospatial_index(Config) ->
     {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1, <<"query-index/", Id/binary, "?spatial=true&stale=false">>, get, [user_1_token_header(Config)], [])),
 
     % then
-    Guids = lists:map(fun(X) -> {ok, ObjId} = cdmi_id:objectid_to_guid(X),
-        ObjId end, json_utils:decode_map(Body)),
+    Guids = lists:map(fun(X) ->
+        {ok, ObjId} = cdmi_id:objectid_to_guid(X),
+        ObjId
+    end, json_utils:decode_map(Body)),
     ?assertEqual(lists:sort([Guid1, Guid2, Guid3]), lists:sort(Guids)),
 
     % when

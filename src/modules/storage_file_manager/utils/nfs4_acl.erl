@@ -11,7 +11,6 @@
 -module(nfs4_acl).
 -author("Jakub Kudzia").
 
--include("modules/datastore/datastore_specific_models_def.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/logging.hrl").

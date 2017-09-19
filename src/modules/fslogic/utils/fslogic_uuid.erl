@@ -274,7 +274,7 @@ unpack_guid(FileGuid) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec gen_path(file_meta:entry(), od_user:id(), [file_meta:name()]) ->
-    {ok, file_meta:path()} | datastore:generic_error() | no_return().
+    {ok, file_meta:path()} | {error, term()} | no_return().
 gen_path(Entry, UserId, Tokens) ->
     {ok, #document{key = Uuid, value = #file_meta{name = Name}} = Doc} = file_meta:get(Entry),
     case file_meta:get_parent(Doc) of

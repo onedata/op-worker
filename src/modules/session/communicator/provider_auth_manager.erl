@@ -11,7 +11,7 @@
 -module(provider_auth_manager).
 -author("Rafal Slota").
 
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("ctool/include/logging.hrl").
 

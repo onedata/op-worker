@@ -195,7 +195,9 @@ chmod_insecure(UserCtx, FileCtx, Mode) ->
     fslogic_worker:posix_permissions()) -> ok | {error, term()}.
 chmod_attrs_only_insecure(FileCtx, Mode) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    {ok, _} = file_meta:update({uuid, FileUuid}, #{mode => Mode}),
+    {ok, _} = file_meta:update({uuid, FileUuid}, fun(FileMeta = #file_meta{}) ->
+        {ok, FileMeta#file_meta{mode = Mode}}
+    end),
     ok = permissions_cache:invalidate(),
     fslogic_event_emitter:emit_file_perm_changed(FileCtx).
 
@@ -209,8 +211,20 @@ chmod_attrs_only_insecure(FileCtx, Mode) ->
     MTime :: file_meta:time() | undefined,
     CTime :: file_meta:time() | undefined) -> fslogic_worker:fuse_response().
 update_times_insecure(_UserCtx, FileCtx, ATime, MTime, CTime) ->
-    UpdateMap = #{atime => ATime, mtime => MTime, ctime => CTime},
-    UpdateMap1 = maps:filter(fun(_Key, Value) ->
-        is_integer(Value) end, UpdateMap),
-    fslogic_times:update_times_and_emit(FileCtx, UpdateMap1),
+    TimesDiff1 = fun
+        (Times = #times{}) when ATime == undefined -> Times;
+        (Times = #times{}) -> Times#times{atime = ATime}
+    end,
+    TimesDiff2 = fun
+        (Times = #times{}) when MTime == undefined -> Times;
+        (Times = #times{}) -> Times#times{mtime = MTime}
+    end,
+    TimesDiff3 = fun
+        (Times = #times{}) when CTime == undefined -> Times;
+        (Times = #times{}) -> Times#times{ctime = CTime}
+    end,
+    TimesDiff = fun(Times = #times{}) ->
+        {ok, TimesDiff1(TimesDiff2(TimesDiff3(Times)))}
+    end,
+    fslogic_times:update_times_and_emit(FileCtx, TimesDiff),
     #fuse_response{status = #status{code = ?OK}}.

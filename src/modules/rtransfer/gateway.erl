@@ -130,12 +130,12 @@ notify(What, Details, #gw_fetch{notify = Notify} = Action) when is_atom(What) ->
     SubRef :: reference()) -> no_return().
 queue_loop(Max, Running, SubRef) when Running =:= Max ->
     RunningDelta = wait_for_messages(SubRef),
-    ?MODULE:queue_loop(Max, Running + RunningDelta, SubRef);
+    gateway:queue_loop(Max, Running + RunningDelta, SubRef);
 
 queue_loop(Max, Running, SubRef) ->
     FetchResult = rt_utils:pop(?GATEWAY_INCOMING_QUEUE),
     RunningDelta = act_on_fetch_result(FetchResult, SubRef),
-    ?MODULE:queue_loop(Max, Running + RunningDelta, SubRef).
+    gateway:queue_loop(Max, Running + RunningDelta, SubRef).
 
 
 %%%===================================================================

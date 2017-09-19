@@ -13,10 +13,9 @@
 -author("Rafal Slota").
 -behavior(space_strategy_behaviour).
 
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/storage_sync/strategy_config.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 
 %%%===================================================================
 %%% Types

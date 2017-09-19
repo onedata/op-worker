@@ -20,7 +20,7 @@
 -include("global_definitions.hrl").
 -include("proto/common/credentials.hrl").
 -include("modules/subscriptions/subscriptions.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/oz/oz_runner.hrl").
 
@@ -46,7 +46,7 @@ refresh_subscription() ->
     {Missing, ResumeAt} = subscriptions:get_missing(),
     Users = subscriptions:get_users(),
     ?info("Subscription progress - last_seq: ~p, missing: ~p, users: ~p ",
-        [ResumeAt, Missing, Users]),
+        [ResumeAt, Missing, erlang:length(Users)]),
 
     Message = json_utils:encode([
         {users, Users},
@@ -161,8 +161,6 @@ handle_update(#sub_update{model = Model, doc = Doc, revs = Revs}) ->
 %%--------------------------------------------------------------------
 -spec schedule_subscription_renew() -> ok.
 schedule_subscription_renew() ->
-    whereis(?MODULE) ! {timer, refresh_subscription},
-
     {ok, Seconds} = application:get_env(?APP_NAME,
         subscription_renew_seconds),
 

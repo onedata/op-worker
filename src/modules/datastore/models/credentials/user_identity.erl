@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Tomasz Lichon
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2017 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -11,122 +11,29 @@
 %%%-------------------------------------------------------------------
 -module(user_identity).
 -author("Tomasz Lichon").
--behaviour(model_behaviour).
 
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
+-include("proto/oneclient/handshake_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/oz/oz_users.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
-
--include("proto/oneclient/handshake_messages.hrl").
-
-%% model_behaviour callbacks
--export([save/1, get/1, exists/1, delete/1, update/2, create/1,
-    model_init/0, 'after'/5, before/4]).
 
 %% API
--export([fetch/1, get_or_fetch/1]).
+-export([get/1, fetch/1, get_or_fetch/1, delete/1]).
 
+%% datastore_model callbacks
+-export([get_ctx/0]).
+
+-type record() :: #user_identity{}.
+-type doc() :: datastore_doc:doc(record()).
+-type credentials() :: #macaroon_auth{} | #token_auth{} | #basic_auth{} |
+                       #certificate_auth{}.
 -export_type([credentials/0]).
 
-%% todo split this model to:
-%% todo globally cached - #certificate{} -> #user_identity{},
-%% todo and locally cached - #token{} | #certificate_info{} -> #user_identity{}
--type credentials() :: #macaroon_auth{} | #token_auth{} | #basic_auth{} |
-#certificate_auth{}.
-
-%%%===================================================================
-%%% model_behaviour callbacks
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback save/1.
-%% @end
-%%--------------------------------------------------------------------
--spec save(datastore:document()) ->
-    {ok, datastore:ext_key()} | datastore:generic_error().
-save(#document{key = Key} = Document) ->
-    model:execute_with_default_context(?MODULE, save, [
-        Document#document{key = encode_key(Key)}]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback update/2.
-%% @end
-%%--------------------------------------------------------------------
--spec update(datastore:ext_key(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
-update(Key, Diff) ->
-    model:execute_with_default_context(?MODULE, update, [encode_key(Key), Diff]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback create/1.
-%% @end
-%%--------------------------------------------------------------------
--spec create(datastore:document()) ->
-    {ok, datastore:ext_key()} | datastore:create_error().
-create(#document{key = Key} = Document) ->
-    model:execute_with_default_context(?MODULE, create, [
-        Document#document{key = encode_key(Key)}]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback get/1.
-%% @end
-%%--------------------------------------------------------------------
--spec get(datastore:ext_key()) -> {ok, datastore:document()} | datastore:get_error().
-get(Key) ->
-    model:execute_with_default_context(?MODULE, get, [encode_key(Key)]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback delete/1.
-%% @end
-%%--------------------------------------------------------------------
--spec delete(datastore:ext_key()) -> ok | datastore:generic_error().
-delete(Key) ->
-    model:execute_with_default_context(?MODULE, delete, [encode_key(Key)]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback exists/1.
-%% @end
-%%--------------------------------------------------------------------
--spec exists(datastore:ext_key()) -> datastore:exists_return().
-exists(Key) ->
-    ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [encode_key(Key)])).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback model_init/0.
-%% @end
-%%--------------------------------------------------------------------
--spec model_init() -> model_behaviour:model_config().
-model_init() ->
-    ?MODEL_CONFIG(identity_bucket, [], ?LOCAL_ONLY_LEVEL).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback 'after'/5.
-%% @end
-%%--------------------------------------------------------------------
--spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term(),
-    ReturnValue :: term()) -> ok.
-'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
-    ok.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback before/4.
-%% @end
-%%--------------------------------------------------------------------
--spec before(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
-before(_ModelName, _Method, _Level, _Context) ->
-    ok.
+-define(CTX, #{
+    model => ?MODULE,
+    routing => local,
+    disc_driver => undefined
+}).
 
 %%%===================================================================
 %%% API
@@ -134,26 +41,37 @@ before(_ModelName, _Method, _Level, _Context) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Fetch user from OZ and save it in cache.
+%% Returns user's identity.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch(user_identity:credentials()) ->
-    {ok, datastore:document()} | datastore:get_error().
+-spec get(credentials()) -> {ok, doc()} | {error, term()}.
+get(Auth) ->
+    datastore_model:get(?CTX, term_to_binary(Auth)).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Fetches user's identity from onezone and stores it in cache.
+%% @end
+%%--------------------------------------------------------------------
+-spec fetch(credentials()) -> {ok, doc()} | {error, term()}.
 fetch(#certificate_auth{}) ->
-    {error, cannot_fetch};
+    {error, not_supported};
 fetch(Auth) ->
     try
-         case oz_users:get_details(Auth) of
+        case oz_users:get_details(Auth) of
             {ok, #user_details{id = UserId}} ->
                 {ok, #document{key = Id}} = od_user:get_or_fetch(Auth, UserId),
-                NewDoc = #document{key = Auth, value = #user_identity{user_id = Id}},
-                case user_identity:create(NewDoc) of
+                NewDoc = #document{
+                    key = term_to_binary(Auth),
+                    value = #user_identity{user_id = Id}
+                },
+                case datastore_model:create(?CTX, NewDoc) of
                     {ok, _} -> ok;
                     {error, already_exists} -> ok
                 end,
                 {ok, NewDoc};
-             {error, {_Code, _Reason, _}} = Error ->
-                 Error
+            {error, {_Code, _Reason, _}} = Error ->
+                Error
         end
     catch
         _:Reason ->
@@ -163,18 +81,36 @@ fetch(Auth) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get user's identity from cache, or fetch user from OZ
-%% and store its identity
+%% Gets user's identity from cache, or fetches it from onezone
+%% and stores in cache.
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_fetch(user_identity:credentials()) ->
-    {ok, datastore:document()} | datastore:get_error().
-get_or_fetch(Cred) ->
-    case user_identity:get(Cred) of
+-spec get_or_fetch(credentials()) -> {ok, doc()} | {error, term()}.
+get_or_fetch(Auth) ->
+    case datastore_model:get(?CTX, term_to_binary(Auth)) of
         {ok, Doc} -> {ok, Doc};
-        {error, {not_found, _}} -> fetch(Cred);
-        Error -> Error
+        {error, not_found} -> fetch(Auth);
+        {error, Reason} -> {error, Reason}
     end.
 
-encode_key(Key) ->
-    term_to_binary(Key).
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes user's identity from cache.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete(credentials()) -> ok | {error, term()}.
+delete(Auth) ->
+    datastore_model:delete(?CTX, term_to_binary(Auth)).
+
+%%%===================================================================
+%%% datastore_model callbacks
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_ctx() -> datastore:ctx().
+get_ctx() ->
+    ?CTX.

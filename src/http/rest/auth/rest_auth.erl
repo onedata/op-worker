@@ -13,8 +13,7 @@
 -author("Tomasz Lichon").
 
 -include("http/http_common.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("proto/oneclient/handshake_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -36,7 +35,7 @@ is_authorized(Req, State) ->
     case authenticate(Req) of
         {ok, Auth} ->
             {true, Req, State#{auth => Auth}};
-        {error, {not_found, _}} ->
+        {error, not_found} ->
             GrUrl = oz_plugin:get_oz_url(),
             ProviderId = oneprovider:get_provider_id(),
             {_, NewReq2} = cowboy_req:host(Req),

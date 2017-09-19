@@ -8,11 +8,11 @@
 %%% This module contains DBSync utility functions.
 %%% @end
 %%%-------------------------------------------------------------------
--module(dbsync_utils2).
+-module(dbsync_utils).
 -author("Krzysztof Trzepla").
 
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 
 %% API
 -export([get_bucket/0]).
@@ -87,7 +87,7 @@ get_providers(SpaceId) ->
 %%--------------------------------------------------------------------
 -spec is_supported(od_space:id(), [od_provider:id()]) -> boolean().
 is_supported(SpaceId, ProviderIds) ->
-    ValidProviderIds = gb_sets:from_list(dbsync_utils2:get_providers(SpaceId)),
+    ValidProviderIds = gb_sets:from_list(dbsync_utils:get_providers(SpaceId)),
     lists:all(fun(ProviderId) ->
         gb_sets:is_element(ProviderId, ValidProviderIds)
     end, ProviderIds).
@@ -108,7 +108,7 @@ gen_request_id() ->
 %%--------------------------------------------------------------------
 -spec compress([datastore:doc()]) -> binary().
 compress(Docs) ->
-    Docs2 = [datastore_json2:encode(Doc) || Doc <- Docs],
+    Docs2 = [datastore_json:encode(Doc) || Doc <- Docs],
     zlib:compress(jiffy:encode(Docs2)).
 
 %%--------------------------------------------------------------------
@@ -119,4 +119,4 @@ compress(Docs) ->
 -spec uncompress(binary()) -> [datastore:doc()].
 uncompress(CompressedDocs) ->
     Docs = jiffy:decode(zlib:uncompress(CompressedDocs)),
-    [datastore_json2:decode(Doc) || Doc <- Docs].
+    [datastore_json:decode(Doc) || Doc <- Docs].

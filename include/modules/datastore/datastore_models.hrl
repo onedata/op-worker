@@ -14,7 +14,7 @@
 
 -include("modules/events/subscriptions.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_models.hrl").
 
 -type file_descriptors() :: #{session:id() => non_neg_integer()}.
 -type indexes_value() :: #{indexes:index_id() => indexes:index()}.
@@ -238,7 +238,8 @@
     % Key-value in-session memory
     memory = #{} :: maps:map(),
     open_files = sets:new() :: sets:set(fslogic_worker:file_guid()),
-    transfers = [] :: [transfer:id()]
+    transfers = [] :: [transfer:id()],
+    direct_io = false :: boolean()
 }).
 
 %% File handle used by the module
@@ -351,7 +352,7 @@
 }).
 
 %% Model that holds synchronization state for a space
--record(dbsync_state2, {
+-record(dbsync_state, {
     seq = #{} :: maps:map([{od_provider:id(), couchbase_changes:seq()}])
 }).
 

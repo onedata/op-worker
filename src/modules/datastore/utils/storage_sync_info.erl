@@ -12,7 +12,7 @@
 -module(storage_sync_info).
 -author("Jakub Kudzia").
 
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 
 %% API
 -export([update/4]).
@@ -24,7 +24,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec update(file_meta:uuid(), undefined | non_neg_integer(), undefined | non_neg_integer(),
-    binary()) -> {ok, file_meta:uuid()} | datastore:update_error().
+    binary()) -> {ok, file_meta:uuid()} | {error, term()}.
 update(Uuid, NewMTime, NewHashKey, NewHashValue) ->
     file_meta:update({uuid, Uuid},
         fun
