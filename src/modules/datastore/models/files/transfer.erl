@@ -467,7 +467,7 @@ add_link(SourceId, TransferId, SpaceId) ->
 remove_link(SourceId, TransferId, SpaceId) ->
     TreeId = oneprovider:get_provider_id(),
     Ctx = ?CTX#{scope => SpaceId},
-    datastore_model:delete_links(Ctx, SourceId, TreeId, TransferId).
+    ok = datastore_model:delete_links(Ctx, SourceId, TreeId, TransferId).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -496,8 +496,16 @@ restart(TransferId) ->
     HrHist = time_slot_histogram:new(?HR_TIME_WINDOW, 24),
     DyHist = time_slot_histogram:new(?DY_TIME_WINDOW, 30),
     {ok, TransferId} = update(TransferId, fun(Transfer) ->
+
+        TransferStatus = case Transfer#transfer.transfer_status of
+            completed -> completed;
+            skipped -> skipped;
+            cancelled -> cancelled;
+            _ -> scheduled
+        end,
+
         {ok, Transfer#transfer{
-            transfer_status = scheduled,
+            transfer_status = TransferStatus,
             files_to_transfer = 0,
             files_transferred = 0,
             bytes_to_transfer = 0,
