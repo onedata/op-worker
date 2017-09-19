@@ -137,6 +137,22 @@ all() ->
 -define(LIST_TRANSFER, fun(Id, Acc) -> [Id | Acc] end).
 -define(ATTEMPTS, 20).
 
+-define(assertDistribution(Worker, ExpectedDistribution, Config, File),
+    ?assertEqual(lists:sort(ExpectedDistribution), begin
+        {ok, 200, _, __Body} = do_request(Worker, <<"replicas", File/binary>>, get,
+            [user_1_token_header(Config)], []
+        ),
+        lists:sort(json_utils:decode_map(__Body))
+    end, ?ATTEMPTS)).
+
+-define(assertDistributionById(Worker, ExpectedDistribution, Config, FileId),
+    ?assertEqual(lists:sort(ExpectedDistribution), begin
+        {ok, 200, _, __Body} = do_request(Worker, <<"replicas-id/", FileId/binary>>, get,
+            [user_1_token_header(Config)], []
+        ),
+        lists:sort(json_utils:decode_map(__Body))
+    end, ?ATTEMPTS)).
+
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
@@ -152,18 +168,13 @@ get_simple_file_distribution(Config) ->
     lfm_proxy:fsync(WorkerP1, Handle),
 
     % when
-    {ok, 200, _, Body} = do_request(WorkerP1, <<"replicas", File/binary>>, get,
-        [user_1_token_header(Config)], []
-    ),
-
-    % then
-    DecodedBody = json_utils:decode_map(Body),
-    ?assertEqual([
-        #{
+    ExpectedDistribution = [#{
             <<"providerId">> => domain(WorkerP1),
             <<"blocks">> => [[0, 4]]
-        }
-    ], DecodedBody).
+    }],
+
+    % then
+    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File).
 
 replicate_file(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -209,24 +220,13 @@ replicate_file(Config) ->
             Error -> Error
         end, ?ATTEMPTS),
 
-    {ok, 200, _, Body} = do_request(WorkerP2, <<"replicas", File/binary>>, get,
-            [user_1_token_header(Config)], []
-    ),
-    {ok, 200, _, Body2} = do_request(WorkerP1, <<"replicas", File/binary>>, get,
-        [user_1_token_header(Config)], []
-    ),
-    DecodedBody = json_utils:decode_map(Body),
-    DecodedBody2 = json_utils:decode_map(Body2),
-    ?assertEqual(
-        lists:sort([
-            #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
-            #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
-        ]), lists:sort(DecodedBody)),
-    ?assertEqual(
-        lists:sort([
-            #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
-            #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
-        ]), lists:sort(DecodedBody2)).
+    ExpectedDistribution = [
+        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
+        #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
+    ],
+
+    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File),
+    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File).
 
 restart_file_replication(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -294,24 +294,12 @@ restart_file_replication(Config) ->
             Error -> Error
         end, ?ATTEMPTS),
 
-    {ok, 200, _, Body} = do_request(WorkerP2,
-        <<"replicas", File/binary>>, get, [user_1_token_header(Config)], []
-    ),
-    {ok, 200, _, Body2} = do_request(WorkerP1,
-        <<"replicas", File/binary>>, get, [user_1_token_header(Config)], []
-    ),
-    DecodedBody = json_utils:decode_map(Body),
-    DecodedBody2 = json_utils:decode_map(Body2),
-    ?assertEqual(
-        lists:sort([
-            #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
-            #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
-        ]), lists:sort(DecodedBody)),
-    ?assertEqual(
-        lists:sort([
-            #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
-            #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
-        ]), lists:sort(DecodedBody2)).
+    ExpectedDistribution = [
+        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
+        #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
+    ],
+    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File),
+    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File).
 
 replicate_dir(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -370,27 +358,16 @@ replicate_dir(Config) ->
             Error -> Error
         end, ?ATTEMPTS),
 
-    {ok, 200, _, Body1} = do_request(WorkerP2,
-        <<"replicas", File1/binary>>, get, [user_1_token_header(Config)], []
-    ),
-
-    {ok, 200, _, Body2} = do_request(WorkerP2,
-        <<"replicas", File2/binary>>, get, [user_1_token_header(Config)], []
-    ),
-
-    {ok, 200, _, Body3} = do_request(WorkerP2,
-        <<"replicas", File3/binary>>, get, [user_1_token_header(Config)], []
-    ),
-    DecodedBody1 = json_utils:decode_map(Body1),
-    DecodedBody2 = json_utils:decode_map(Body2),
-    DecodedBody3 = json_utils:decode_map(Body3),
-    Distribution = lists:sort([
+    ExpectedDistribution = [
         #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
         #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
-    ]),
-    ?assertEqual(Distribution, lists:sort(DecodedBody1)),
-    ?assertEqual(Distribution, lists:sort(DecodedBody2)),
-    ?assertEqual(Distribution, lists:sort(DecodedBody3)).
+    ],
+    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File1),
+    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File2),
+    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File3),
+    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File1),
+    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File2),
+    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File3).
 
 restart_dir_replication(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -473,28 +450,16 @@ restart_dir_replication(Config) ->
             Error -> Error
         end, ?ATTEMPTS),
 
-    {ok, 200, _, Body1} = do_request(WorkerP2,
-        <<"replicas", File1/binary>>, get, [user_1_token_header(Config)], []
-    ),
-
-    {ok, 200, _, Body2} = do_request(WorkerP2,
-        <<"replicas", File2/binary>>, get, [user_1_token_header(Config)], []
-    ),
-
-    {ok, 200, _, Body3} = do_request(WorkerP2,
-        <<"replicas", File3/binary>>, get, [user_1_token_header(Config)], []
-    ),
-
-    DecodedBody1 = json_utils:decode_map(Body1),
-    DecodedBody2 = json_utils:decode_map(Body2),
-    DecodedBody3 = json_utils:decode_map(Body3),
-    Distribution = lists:sort([
+    ExpectedDistribution = [
         #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
         #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
-    ]),
-    ?assertEqual(Distribution, lists:sort(DecodedBody1)),
-    ?assertEqual(Distribution, lists:sort(DecodedBody2)),
-    ?assertEqual(Distribution, lists:sort(DecodedBody3)).
+    ],
+    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File1),
+    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File2),
+    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File3),
+    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File1),
+    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File2),
+    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File3).
 
 replicate_file_by_id(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -536,15 +501,12 @@ replicate_file_by_id(Config) ->
             Error -> Error
         end, ?ATTEMPTS),
 
-    {ok, 200, _, Body} = do_request(WorkerP2,
-        <<"replicas-id/", FileObjectId/binary>>, get, [user_1_token_header(Config)], []
-    ),
-    DecodedBody = json_utils:decode_map(Body),
-    ?assertEqual(
-        lists:sort([
-            #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
-            #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
-        ]), lists:sort(DecodedBody)).
+    ExpectedDistribution = [
+        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
+        #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
+    ],
+    ?assertDistributionById(WorkerP1, ExpectedDistribution, Config, FileObjectId),
+    ?assertDistributionById(WorkerP2, ExpectedDistribution, Config, FileObjectId).
 
 replicate_to_missing_provider(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -572,13 +534,14 @@ replicate_to_nonsupporting_provider(Config) ->
     lfm_proxy:fsync(WorkerP1, Handle),
 
     % when
-    {ok, 400, _, _} = do_request(WorkerP1, <<"replicas", File/binary, "?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
-    {ok, 200, _, Body2} = do_request(WorkerP1, <<"replicas", File/binary>>, get, [user_1_token_header(Config)], []),
-    DecodedBody2 = json_utils:decode_map(Body2),
-    ?assertEqual(
-        [
-            #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]}
-        ], DecodedBody2).
+    {ok, 400, _, _} = do_request(WorkerP1,
+        <<"replicas", File/binary, "?provider_id=", (domain(WorkerP2))/binary>>,
+        post, [user_1_token_header(Config)], []
+    ),
+    ExpectedDistribution = [
+        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]}
+    ],
+    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File).
 
 invalidate_file_replica(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -618,23 +581,24 @@ invalidate_file_replica(Config) ->
             Error -> Error
         end, ?ATTEMPTS),
 
-    {ok, 200, _, Body} = do_request(WorkerP2, <<"replicas", File/binary>>, get, [user_1_token_header(Config)], []),
-    DecodedBody = json_utils:decode_map(Body),
-    ?assertEqual(
-        lists:sort([
-            #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
-            #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
-        ]), lists:sort(DecodedBody)),
+    ExpectedDistribution = [
+        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
+        #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
+    ],
+    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File),
+    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
 
     % then
-    {ok, 200, _, _} = do_request(WorkerP2, <<"replicas", File/binary, "?provider_id=", (domain(WorkerP2))/binary>>, delete, [user_1_token_header(Config)], []),
-    {ok, 200, _, Body3} = do_request(WorkerP2, <<"replicas", File/binary>>, get, [user_1_token_header(Config)], []),
-    DecodedBody3 = json_utils:decode_map(Body3),
-    ?assertEqual(
-        lists:sort([
-            #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
-            #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => []}
-        ]), lists:sort(DecodedBody3)).
+    {ok, 200, _, _} = do_request(WorkerP2,
+        <<"replicas", File/binary, "?provider_id=", (domain(WorkerP2))/binary>>,
+        delete, [user_1_token_header(Config)], []
+    ),
+    ExpectedDistribution2 = [
+        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
+        #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => []}
+    ],
+    ?assertDistribution(WorkerP1, ExpectedDistribution2, Config, File),
+    ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, File).
 
 invalidate_file_replica_with_migration(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -648,34 +612,24 @@ invalidate_file_replica_with_migration(Config) ->
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
 
     % when
-    {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP2,
-        <<"replicas", File/binary>>, get, [user_1_token_header(Config)], []),
-    ?ATTEMPTS),
-    DecodedBody = json_utils:decode_map(Body),
-    ?assertEqual(
-        lists:sort([
-            #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]}
-        ]), lists:sort(DecodedBody)),
+    ExpectedDistribution = [
+        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]}
+    ],
+    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File),
+    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
 
     % then
     {ok, 200, _, _} = do_request(WorkerP1, <<"replicas", File/binary, "?provider_id=",
-        (domain(WorkerP1))/binary, "&migration_provider_id=", (domain(WorkerP2))/binary>>, delete, [user_1_token_header(Config)], []),
+        (domain(WorkerP1))/binary, "&migration_provider_id=", (domain(WorkerP2))/binary>>,
+        delete, [user_1_token_header(Config)], []
+    ),
 
-    timer:sleep(timer:seconds(20)), % for hooks todo VFS-3462
-    {ok, 200, _, Body3} = do_request(WorkerP2, <<"replicas", File/binary>>, get, [user_1_token_header(Config)], []),
-    {ok, 200, _, Body4} = do_request(WorkerP1, <<"replicas", File/binary>>, get, [user_1_token_header(Config)], []),
-    DecodedBody3 = json_utils:decode_map(Body3),
-    DecodedBody4 = json_utils:decode_map(Body4),
-    ?assertEqual(
-        lists:sort([
-            #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => []},
-            #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
-        ]), lists:sort(DecodedBody3)),
-    ?assertEqual(
-        lists:sort([
-            #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => []},
-            #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
-        ]), lists:sort(DecodedBody4)).
+    ExpectedDistribution2 = [
+        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => []},
+        #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
+    ],
+    ?assertDistribution(WorkerP1, ExpectedDistribution2, Config, File),
+    ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, File).
 
 restart_invalidation_of_file_replica_with_migration(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -689,15 +643,11 @@ restart_invalidation_of_file_replica_with_migration(Config) ->
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
 
     % when
-    {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP2,
-        <<"replicas", File/binary>>, get, [user_1_token_header(Config)], []),
-    ?ATTEMPTS),
-
-    DecodedBody = json_utils:decode_map(Body),
-    ?assertEqual(
-        lists:sort([
-            #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]}
-        ]), lists:sort(DecodedBody)),
+    ExpectedDistribution = [
+        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]}
+    ],
+    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File),
+    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
 
     lengthen_file_replication_time(WorkerP2, 60),
     % then
@@ -737,23 +687,12 @@ restart_invalidation_of_file_replica_with_migration(Config) ->
         end,
     ?ATTEMPTS),
 
-    {ok, 200, _, Body3} = do_request(WorkerP2, <<"replicas", File/binary>>,
-        get, [user_1_token_header(Config)], []),
-    {ok, 200, _, Body4} = do_request(WorkerP1, <<"replicas", File/binary>>,
-        get, [user_1_token_header(Config)], []),
-
-    DecodedBody3 = json_utils:decode_map(Body3),
-    DecodedBody4 = json_utils:decode_map(Body4),
-    ?assertEqual(
-        lists:sort([
-            #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => []},
-            #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
-        ]), lists:sort(DecodedBody3)),
-    ?assertEqual(
-        lists:sort([
-            #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => []},
-            #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
-        ]), lists:sort(DecodedBody4)).
+    ExpectedDistribution2 = [
+        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => []},
+        #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
+    ],
+    ?assertDistribution(WorkerP1, ExpectedDistribution2, Config, File),
+    ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, File).
 
 invalidate_dir_replica(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -811,36 +750,33 @@ invalidate_dir_replica(Config) ->
             Error -> Error
         end, ?ATTEMPTS),
 
-    timer:sleep(timer:seconds(20)), % for hooks todo  VFS-3462
-    {ok, 200, _, Body1} = do_request(WorkerP2, <<"replicas", File1/binary, "">>, get, [user_1_token_header(Config)], []),
-    {ok, 200, _, Body2} = do_request(WorkerP2, <<"replicas", File2/binary>>, get, [user_1_token_header(Config)], []),
-    {ok, 200, _, Body3} = do_request(WorkerP2, <<"replicas", File3/binary>>, get, [user_1_token_header(Config)], []),
-    DecodedBody1 = json_utils:decode_map(Body1),
-    DecodedBody2 = json_utils:decode_map(Body2),
-    DecodedBody3 = json_utils:decode_map(Body3),
-    Distribution = lists:sort([
+    ExpectedDistribution = [
         #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
         #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
-    ]),
-    ?assertEqual(Distribution, lists:sort(DecodedBody1)),
-    ?assertEqual(Distribution, lists:sort(DecodedBody2)),
-    ?assertEqual(Distribution, lists:sort(DecodedBody3)),
-    {ok, 200, _, _} = do_request(WorkerP2, <<"replicas", Dir1/binary, "?provider_id=", (domain(WorkerP2))/binary>>, delete, [user_1_token_header(Config)], []),
+    ],
+    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File1),
+    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File2),
+    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File3),
+    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File1),
+    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File2),
+    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File3),
+
+    {ok, 200, _, _} = do_request(WorkerP2,
+        <<"replicas", Dir1/binary, "?provider_id=", (domain(WorkerP2))/binary>>,
+        delete, [user_1_token_header(Config)], []
+    ),
 
     %then
-    {ok, 200, _, NewBody1} = do_request(WorkerP2, <<"replicas", File1/binary>>, get, [user_1_token_header(Config)], []),
-    {ok, 200, _, NewBody2} = do_request(WorkerP2, <<"replicas", File2/binary>>, get, [user_1_token_header(Config)], []),
-    {ok, 200, _, NewBody3} = do_request(WorkerP2, <<"replicas", File3/binary>>, get, [user_1_token_header(Config)], []),
-    DecodedNewBody1 = json_utils:decode_map(NewBody1),
-    DecodedNewBody2 = json_utils:decode_map(NewBody2),
-    DecodedNewBody3 = json_utils:decode_map(NewBody3),
-    Distribution2 = lists:sort([
+    ExpectedDistribution2 = [
         #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
         #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => []}
-    ]),
-    ?assertEqual(Distribution2, lists:sort(DecodedNewBody1)),
-    ?assertEqual(Distribution2, lists:sort(DecodedNewBody2)),
-    ?assertEqual(Distribution2, lists:sort(DecodedNewBody3)).
+    ],
+    ?assertDistribution(WorkerP1, ExpectedDistribution2, Config, File1),
+    ?assertDistribution(WorkerP1, ExpectedDistribution2, Config, File2),
+    ?assertDistribution(WorkerP1, ExpectedDistribution2, Config, File3),
+    ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, File1),
+    ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, File2),
+    ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, File3).
 
 periodic_cleanup_should_invalidate_unpopular_files(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),

@@ -284,7 +284,7 @@ mark_active_invalidation(TransferId) ->
 mark_completed_invalidation(TransferId, SpaceId) ->
     add_link(?SUCCESSFUL_TRANSFERS_KEY, TransferId, SpaceId),
     remove_link(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
-    transfer:update(TransferId, fun(Transfer) ->
+    update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{invalidation_status = completed}}
     end).
 
