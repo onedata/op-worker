@@ -73,7 +73,7 @@
     get_file_location_ids/1, get_file_location_docs/1, get_acl/1,
     get_raw_storage_path/1, get_child_canonical_path/2, get_file_size/1,
     get_owner/1, get_group_owner/1, get_local_storage_file_size/1,
-    is_import_on/1]).
+    is_import_on/1, get_and_cache_file_doc_including_deleted/1]).
 -export([is_dir/1]).
 
 %%%===================================================================
@@ -290,6 +290,25 @@ get_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = undefined}) ->
             {Doc, FileCtx#file_ctx{file_doc = Doc}}
     end;
 get_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = FileDoc}) ->
+    {FileDoc, FileCtx}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file's file_meta document even if its marked as deleted. If
+%% document does not exists returns error
+%% @end
+%%--------------------------------------------------------------------
+-spec get_and_cache_file_doc_including_deleted(ctx()) ->
+    {file_meta:doc(), ctx()} | datastore:get_error().
+get_and_cache_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = undefined}) ->
+    FileUuid = get_uuid_const(FileCtx),
+    case file_meta:get_including_deleted(FileUuid) of
+        {ok, Doc} ->
+            {Doc, FileCtx#file_ctx{file_doc = Doc}};
+        Error ->
+            Error
+    end;
+get_and_cache_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = FileDoc}) ->
     {FileDoc, FileCtx}.
 
 %%--------------------------------------------------------------------

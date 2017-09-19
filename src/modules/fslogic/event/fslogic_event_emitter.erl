@@ -36,10 +36,17 @@
 -spec emit_file_attr_changed(file_ctx:ctx(), [session:id()]) ->
     ok | {error, Reason :: term()}.
 emit_file_attr_changed(FileCtx, ExcludedSessions) ->
-    #fuse_response{fuse_response = #file_attr{} = FileAttr} =
-        attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_SESS_ID), FileCtx, true),
-    event:emit(#file_attr_changed_event{file_attr = FileAttr},
-        {exclude, ExcludedSessions}).
+    case file_ctx:get_and_cache_file_doc_including_deleted(FileCtx) of
+        {error, not_found} ->
+            ok;
+        {#document{}, FileCtx2} ->
+            #fuse_response{fuse_response = #file_attr{} = FileAttr} =
+                attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_SESS_ID), FileCtx2, true),
+            event:emit(#file_attr_changed_event{file_attr = FileAttr},
+                {exclude, ExcludedSessions});
+        Other ->
+            Other
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -49,12 +56,19 @@ emit_file_attr_changed(FileCtx, ExcludedSessions) ->
 -spec emit_sizeless_file_attrs_changed(file_ctx:ctx()) ->
     ok | {error, Reason :: term()}.
 emit_sizeless_file_attrs_changed(FileCtx) ->
-    #fuse_response{fuse_response = #file_attr{} = FileAttr} =
-        attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_SESS_ID),
-            FileCtx, true, false),
-    event:emit(#file_attr_changed_event{
-        file_attr = FileAttr
-    }).
+    case file_ctx:get_and_cache_file_doc_including_deleted(FileCtx) of
+        {error, not_found} ->
+            ok;
+        {#document{}, FileCtx2} ->
+            #fuse_response{fuse_response = #file_attr{} = FileAttr} =
+                attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_SESS_ID),
+                    FileCtx2, true, false),
+            event:emit(#file_attr_changed_event{
+                file_attr = FileAttr
+            });
+        Other ->
+            Other
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
