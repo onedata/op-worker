@@ -135,7 +135,7 @@ all() ->
     ]).
 
 -define(LIST_TRANSFER, fun(Id, Acc) -> [Id | Acc] end).
--define(ATTEMPTS, 20).
+-define(ATTEMPTS, 30).
 
 -define(assertDistribution(Worker, ExpectedDistribution, Config, File),
     ?assertEqual(lists:sort(ExpectedDistribution), begin
@@ -169,8 +169,8 @@ get_simple_file_distribution(Config) ->
 
     % when
     ExpectedDistribution = [#{
-            <<"providerId">> => domain(WorkerP1),
-            <<"blocks">> => [[0, 4]]
+        <<"providerId">> => domain(WorkerP1),
+        <<"blocks">> => [[0, 4]]
     }],
 
     % then
@@ -662,7 +662,8 @@ restart_invalidation_of_file_replica_with_migration(Config) ->
     true = rpc:call(WorkerP2, multi_provider_rest_test_SUITE, kill, [Pid]),
 
     ?assertMatch(#{
-        <<"transferStatus">> := <<"active">>
+        <<"transferStatus">> := <<"active">>,
+        <<"invalidationStatus">> := <<"scheduled">>
     },
         case do_request(WorkerP1, <<"transfers/", Tid1/binary>>, get, [user_1_token_header(Config)], []) of
             {ok, 200, _, TransferStatus} ->
