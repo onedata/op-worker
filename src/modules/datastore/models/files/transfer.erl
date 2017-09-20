@@ -19,7 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([init_lists/0, start/6, stop/1, get_status/1, get_info/1]).
+-export([start/6, stop/1, get_status/1, get_info/1, get/1]).
 -export([mark_active/1, mark_completed/1, mark_failed/2,
     mark_active_invalidation/1, mark_completed_invalidation/2, mark_failed_invalidation/2,
     mark_file_transfer_scheduled/2, mark_file_transfer_finished/2,
@@ -81,18 +81,6 @@ record_struct(1) ->
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Initializes documents used for listing
-%% @end
-%%--------------------------------------------------------------------
--spec init_lists() -> ok.
-init_lists() ->
-    transfer:create(#document{key = ?SUCCESSFUL_TRANSFERS_KEY, value = #transfer{}}),
-    transfer:create(#document{key = ?FAILED_TRANSFERS_KEY, value = #transfer{}}),
-    transfer:create(#document{key = ?UNFINISHED_TRANSFERS_KEY, value = #transfer{}}),
-    ok.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -232,11 +220,14 @@ stop(TransferId) ->
 %%--------------------------------------------------------------------
 -spec mark_active(id()) -> {ok, id()} | {error, term()}.
 mark_active(TransferId) ->
-    transfer:update(TransferId, #{
-        transfer_status => active,
-        files_to_transfer => 1,
-        pid => list_to_binary(pid_to_list(self()))
-    }).
+    Pid = encode_pid(self()),
+    update(TransferId, fun(Transfer) ->
+        {ok, Transfer#transfer{
+            transfer_status = active,
+            files_to_transfer = 1,
+            pid = Pid
+        }}
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -275,10 +266,13 @@ mark_failed(TransferId, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec mark_active_invalidation(id()) -> {ok, id()} | {error, term()}.
 mark_active_invalidation(TransferId) ->
-    transfer:update(TransferId, #{
-        invalidation_status => active,
-        pid => list_to_binary(pid_to_list(self()))
-    }).
+    Pid = encode_pid(self()),
+    update(TransferId, fun(Transfer) ->
+        {ok, Transfer#transfer{
+            invalidation_status = active,
+            pid = Pid
+        }}
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -631,3 +625,14 @@ restart_failed_transfers() ->
     for_each_failed_transfer(fun(TransferId, _AccIn) ->
         {ok, TransferId} = restart(TransferId)
     end, []).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Encodes Pid to binary.
+%% @end
+%%-------------------------------------------------------------------
+-spec encode_pid(pid()) -> binary().
+encode_pid(Pid)  ->
+    % todo remove after VFS-3657
+    list_to_binary(pid_to_list(Pid)).
