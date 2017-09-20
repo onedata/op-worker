@@ -19,7 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([init_lists/0, start/6, stop/1, get_status/1, get_info/1, get/1]).
+-export([start/6, stop/1, get_status/1, get_info/1, get/1]).
 -export([mark_active/1, mark_completed/1, mark_failed/2,
     mark_active_invalidation/1, mark_completed_invalidation/2, mark_failed_invalidation/2,
     mark_file_transfer_scheduled/2, mark_file_transfer_finished/2,
@@ -58,18 +58,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Initializes documents used for listing
-%% @end
-%%--------------------------------------------------------------------
--spec init_lists() -> ok.
-init_lists() ->
-    create(#document{key = ?SUCCESSFUL_TRANSFERS_KEY, value = #transfer{}}),
-    create(#document{key = ?FAILED_TRANSFERS_KEY, value = #transfer{}}),
-    create(#document{key = ?UNFINISHED_TRANSFERS_KEY, value = #transfer{}}),
-    ok.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -115,7 +103,7 @@ start(SessionId, FileGuid, FilePath, ProviderId, Callback, InvalidateSourceRepli
             dy_hist = time_slot_histogram:get_histogram_values(DyHist)
 
         }},
-    {ok, #document{key = TransferId}} = datastore_model:create(?CTX, ToCreate),
+    {ok, #document{key = TransferId}} = create(ToCreate),
     session:add_transfer(SessionId, TransferId),
     add_link(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
     transfer_controller:on_new_transfer_doc(ToCreate#document{key = TransferId}),
@@ -219,7 +207,7 @@ stop(TransferId) ->
 %%--------------------------------------------------------------------
 -spec mark_active(id()) -> {ok, id()} | {error, term()}.
 mark_active(TransferId) ->
-    Pid = list_to_binary(pid_to_list(self())),
+    Pid = encode_pid(self()),
     update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{
             transfer_status = active,
@@ -267,7 +255,7 @@ mark_failed(TransferId, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec mark_active_invalidation(id()) -> {ok, id()} | {error, term()}.
 mark_active_invalidation(TransferId) ->
-    Pid = list_to_binary(pid_to_list(self())),
+    Pid = encode_pid(self()),
     update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{
             invalidation_status = active,
@@ -545,6 +533,17 @@ restart_failed_transfers() ->
     for_each_failed_transfer(fun(TransferId, _AccIn) ->
         {ok, TransferId} = restart(TransferId)
     end, []).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Encodes Pid to binary.
+%% @end
+%%-------------------------------------------------------------------
+-spec encode_pid(pid()) -> binary().
+encode_pid(Pid)  ->
+    % todo remove after VFS-3657
+    list_to_binary(pid_to_list(Pid)).
 
 %%%===================================================================
 %%% datastore_model callbacks

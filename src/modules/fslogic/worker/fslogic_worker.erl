@@ -72,8 +72,6 @@ init(_Args) ->
         _ -> ok
     end,
 
-    transfer:init_lists(),
-
     erlang:send_after(?INVALIDATE_PERMISSIONS_CACHE_INTERVAL, self(),
         {sync_timer, invalidate_permissions_cache}
     ),
