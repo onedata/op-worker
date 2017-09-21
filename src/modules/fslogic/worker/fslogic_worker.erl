@@ -72,6 +72,8 @@ init(_Args) ->
         _ -> ok
     end,
 
+    transfer:init(),
+
     erlang:send_after(?INVALIDATE_PERMISSIONS_CACHE_INTERVAL, self(),
         {sync_timer, invalidate_permissions_cache}
     ),
@@ -164,6 +166,7 @@ handle(_Request) ->
     Result :: ok | {error, Error},
     Error :: timeout | term().
 cleanup() ->
+    transfer:cleanup(),
     ok.
 
 %%%===================================================================

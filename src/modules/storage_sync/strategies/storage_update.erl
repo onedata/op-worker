@@ -182,13 +182,10 @@ strategy_merge_result(_Job, {error, Reason1}, {error, Reason2}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec worker_pools_config() -> [{worker_pool:name(), non_neg_integer()}].
-worker_pools_config() ->
-    {ok, FileWorkersNum} = application:get_env(?APP_NAME, ?STORAGE_SYNC_FILE_WORKERS_NUM_KEY),
-    {ok, DirWorkersNum} = application:get_env(?APP_NAME, ?STORAGE_SYNC_DIR_WORKERS_NUM_KEY),
-    [
-        {?STORAGE_SYNC_DIR_POOL_NAME, DirWorkersNum},
-        {?STORAGE_SYNC_FILE_POOL_NAME, FileWorkersNum}
-    ].
+worker_pools_config() -> [
+    {?STORAGE_SYNC_DIR_POOL_NAME, ?STORAGE_SYNC_DIR_WORKERS_NUM},
+    {?STORAGE_SYNC_FILE_POOL_NAME, ?STORAGE_SYNC_FILE_WORKERS_NUM}
+].
 
 %%--------------------------------------------------------------------
 %% @doc
