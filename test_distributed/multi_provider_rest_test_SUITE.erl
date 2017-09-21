@@ -79,10 +79,12 @@
     primitive_json_metadata_test/1,
     empty_metadata_invalid_json_test/1,
     spatial_flag_test/1,
-    space_cleanup_enable_and_disable/1]).
+    space_cleanup_enable_and_disable/1,
+    replicate_big_dir/1]).
 
 %utils
--export([kill/1]).
+-export([kill/1, verify_file/3, create_file/3, create_dir/3,
+    create_nested_directory_tree/4, sync_file_counter/3, create_file_counter/4]).
 
 all() ->
     ?ALL([
@@ -131,8 +133,9 @@ all() ->
         primitive_json_metadata_test,
         empty_metadata_invalid_json_test,
         spatial_flag_test,
-        space_cleanup_enable_and_disable
-    ]).
+        space_cleanup_enable_and_disable,
+        replicate_big_dir
+        ]).
 
 -define(LIST_TRANSFER, fun(Id, Acc) -> [Id | Acc] end).
 -define(ATTEMPTS, 30).
@@ -153,6 +156,12 @@ all() ->
         lists:sort(json_utils:decode_map(__Body))
     end, ?ATTEMPTS)).
 
+-define(TEST_DATA, <<"test">>).
+
+-define(CREATE_FILE_COUNTER, create_file_counter).
+-define(SYNC_FILE_COUNTER, sync_file_counter).
+-define(VERIFY_POOL, verify_pool).
+
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
@@ -164,7 +173,7 @@ get_simple_file_distribution(Config) ->
     File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file0_gsfd"])),
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
     {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
-    lfm_proxy:write(WorkerP1, Handle, 0, <<"test">>),
+    lfm_proxy:write(WorkerP1, Handle, 0, ?TEST_DATA),
     lfm_proxy:fsync(WorkerP1, Handle),
 
     % when
@@ -183,7 +192,7 @@ replicate_file(Config) ->
     File = <<"/space3/file">>,
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
     {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
-    lfm_proxy:write(WorkerP1, Handle, 0, <<"test">>),
+    lfm_proxy:write(WorkerP1, Handle, 0, ?TEST_DATA),
     lfm_proxy:fsync(WorkerP1, Handle),
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
 
@@ -235,7 +244,7 @@ restart_file_replication(Config) ->
     File = <<"/space3/file_restart_replication">>,
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
     {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
-    lfm_proxy:write(WorkerP1, Handle, 0, <<"test">>),
+    lfm_proxy:write(WorkerP1, Handle, 0, ?TEST_DATA),
     lfm_proxy:fsync(WorkerP1, Handle),
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
 
@@ -314,15 +323,15 @@ replicate_dir(Config) ->
     {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, Dir2),
     {ok, File1Guid} = lfm_proxy:create(WorkerP1, SessionId, File1, 8#700),
     {ok, Handle1} = lfm_proxy:open(WorkerP1, SessionId, {guid, File1Guid}, write),
-    lfm_proxy:write(WorkerP1, Handle1, 0, <<"test">>),
+    lfm_proxy:write(WorkerP1, Handle1, 0, ?TEST_DATA),
     lfm_proxy:fsync(WorkerP1, Handle1),
     {ok, File2Guid} = lfm_proxy:create(WorkerP1, SessionId, File2, 8#700),
     {ok, Handle2} = lfm_proxy:open(WorkerP1, SessionId, {guid, File2Guid}, write),
-    lfm_proxy:write(WorkerP1, Handle2, 0, <<"test">>),
+    lfm_proxy:write(WorkerP1, Handle2, 0, ?TEST_DATA),
     lfm_proxy:fsync(WorkerP1, Handle2),
     {ok, File3Guid} = lfm_proxy:create(WorkerP1, SessionId, File3, 8#700),
     {ok, Handle3} = lfm_proxy:open(WorkerP1, SessionId, {guid, File3Guid}, write),
-    lfm_proxy:write(WorkerP1, Handle3, 0, <<"test">>),
+    lfm_proxy:write(WorkerP1, Handle3, 0, ?TEST_DATA),
     lfm_proxy:fsync(WorkerP1, Handle3),
 
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File1}), ?ATTEMPTS),
@@ -330,10 +339,10 @@ replicate_dir(Config) ->
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File3}), ?ATTEMPTS),
 
     % when
-    {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1, 
-        <<"replicas", Dir1/binary, "?provider_id=", (domain(WorkerP2))/binary>>, 
-        post, [user_1_token_header(Config)], []), 
-    ?ATTEMPTS),
+    {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1,
+        <<"replicas", Dir1/binary, "?provider_id=", (domain(WorkerP2))/binary>>,
+        post, [user_1_token_header(Config)], []),
+        ?ATTEMPTS),
     DecodedBody = json_utils:decode_map(Body),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
 
@@ -383,15 +392,15 @@ restart_dir_replication(Config) ->
     {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, Dir2),
     {ok, File1Guid} = lfm_proxy:create(WorkerP1, SessionId, File1, 8#700),
     {ok, Handle1} = lfm_proxy:open(WorkerP1, SessionId, {guid, File1Guid}, write),
-    lfm_proxy:write(WorkerP1, Handle1, 0, <<"test">>),
+    lfm_proxy:write(WorkerP1, Handle1, 0, ?TEST_DATA),
     lfm_proxy:fsync(WorkerP1, Handle1),
     {ok, File2Guid} = lfm_proxy:create(WorkerP1, SessionId, File2, 8#700),
     {ok, Handle2} = lfm_proxy:open(WorkerP1, SessionId, {guid, File2Guid}, write),
-    lfm_proxy:write(WorkerP1, Handle2, 0, <<"test">>),
+    lfm_proxy:write(WorkerP1, Handle2, 0, ?TEST_DATA),
     lfm_proxy:fsync(WorkerP1, Handle2),
     {ok, File3Guid} = lfm_proxy:create(WorkerP1, SessionId, File3, 8#700),
     {ok, Handle3} = lfm_proxy:open(WorkerP1, SessionId, {guid, File3Guid}, write),
-    lfm_proxy:write(WorkerP1, Handle3, 0, <<"test">>),
+    lfm_proxy:write(WorkerP1, Handle3, 0, ?TEST_DATA),
     lfm_proxy:fsync(WorkerP1, Handle3),
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File1}), ?ATTEMPTS),
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File2}), ?ATTEMPTS),
@@ -468,7 +477,7 @@ replicate_file_by_id(Config) ->
     File = <<"/space3/replicate_file_by_id">>,
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
     {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
-    lfm_proxy:write(WorkerP1, Handle, 0, <<"test">>),
+    lfm_proxy:write(WorkerP1, Handle, 0, ?TEST_DATA),
     lfm_proxy:fsync(WorkerP1, Handle),
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
 
@@ -514,7 +523,7 @@ replicate_to_missing_provider(Config) ->
     File = <<"/space3/replicate_to_missing_provider">>,
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
     {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
-    lfm_proxy:write(WorkerP1, Handle, 0, <<"test">>),
+    lfm_proxy:write(WorkerP1, Handle, 0, ?TEST_DATA),
     lfm_proxy:fsync(WorkerP1, Handle),
 
     % when
@@ -530,7 +539,7 @@ replicate_to_nonsupporting_provider(Config) ->
     File = <<"/space1/file">>,
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
     {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
-    lfm_proxy:write(WorkerP1, Handle, 0, <<"test">>),
+    lfm_proxy:write(WorkerP1, Handle, 0, ?TEST_DATA),
     lfm_proxy:fsync(WorkerP1, Handle),
 
     % when
@@ -550,7 +559,7 @@ invalidate_file_replica(Config) ->
     File = <<"/space3/file_invalidate">>,
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
     {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
-    lfm_proxy:write(WorkerP1, Handle, 0, <<"test">>),
+    lfm_proxy:write(WorkerP1, Handle, 0, ?TEST_DATA),
     lfm_proxy:fsync(WorkerP1, Handle),
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
 
@@ -607,7 +616,7 @@ invalidate_file_replica_with_migration(Config) ->
     File = <<"/space3/file_invalidate_migration">>,
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
     {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
-    lfm_proxy:write(WorkerP1, Handle, 0, <<"test">>),
+    lfm_proxy:write(WorkerP1, Handle, 0, ?TEST_DATA),
     lfm_proxy:fsync(WorkerP1, Handle),
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
 
@@ -638,7 +647,7 @@ restart_invalidation_of_file_replica_with_migration(Config) ->
     File = <<"/space3/file_invalidate_migration_restart">>,
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
     {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
-    lfm_proxy:write(WorkerP1, Handle, 0, <<"test">>),
+    lfm_proxy:write(WorkerP1, Handle, 0, ?TEST_DATA),
     lfm_proxy:fsync(WorkerP1, Handle),
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
 
@@ -708,15 +717,15 @@ invalidate_dir_replica(Config) ->
     {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, Dir2),
     {ok, File1Guid} = lfm_proxy:create(WorkerP1, SessionId, File1, 8#700),
     {ok, Handle1} = lfm_proxy:open(WorkerP1, SessionId, {guid, File1Guid}, write),
-    lfm_proxy:write(WorkerP1, Handle1, 0, <<"test">>),
+    lfm_proxy:write(WorkerP1, Handle1, 0, ?TEST_DATA),
     lfm_proxy:fsync(WorkerP1, Handle1),
     {ok, File2Guid} = lfm_proxy:create(WorkerP1, SessionId, File2, 8#700),
     {ok, Handle2} = lfm_proxy:open(WorkerP1, SessionId, {guid, File2Guid}, write),
-    lfm_proxy:write(WorkerP1, Handle2, 0, <<"test">>),
+    lfm_proxy:write(WorkerP1, Handle2, 0, ?TEST_DATA),
     lfm_proxy:fsync(WorkerP1, Handle2),
     {ok, File3Guid} = lfm_proxy:create(WorkerP1, SessionId, File3, 8#700),
     {ok, Handle3} = lfm_proxy:open(WorkerP1, SessionId, {guid, File3Guid}, write),
-    lfm_proxy:write(WorkerP1, Handle3, 0, <<"test">>),
+    lfm_proxy:write(WorkerP1, Handle3, 0, ?TEST_DATA),
     lfm_proxy:fsync(WorkerP1, Handle3),
 
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File1}), ?ATTEMPTS),
@@ -788,27 +797,27 @@ periodic_cleanup_should_invalidate_unpopular_files(Config) ->
     File3 = <<"/space3/file3_unpopular">>,
     {ok, File1Guid} = lfm_proxy:create(WorkerP1, SessionIdP1, File1, 8#777),
     {ok, Handle1} = lfm_proxy:open(WorkerP1, SessionIdP1, {guid, File1Guid}, write),
-    lfm_proxy:write(WorkerP1, Handle1, 0, <<"test">>),
+    lfm_proxy:write(WorkerP1, Handle1, 0, ?TEST_DATA),
     lfm_proxy:close(WorkerP1, Handle1),
     {ok, File2Guid} = lfm_proxy:create(WorkerP1, SessionIdP1, File2, 8#777),
     {ok, Handle2} = lfm_proxy:open(WorkerP1, SessionIdP1, {guid, File2Guid}, write),
-    lfm_proxy:write(WorkerP1, Handle2, 0, <<"test">>),
+    lfm_proxy:write(WorkerP1, Handle2, 0, ?TEST_DATA),
     lfm_proxy:close(WorkerP1, Handle2),
     {ok, File3Guid} = lfm_proxy:create(WorkerP1, SessionIdP1, File3, 8#777),
     {ok, Handle3} = lfm_proxy:open(WorkerP1, SessionIdP1, {guid, File3Guid}, write),
-    lfm_proxy:write(WorkerP1, Handle3, 0, <<"test">>),
+    lfm_proxy:write(WorkerP1, Handle3, 0, ?TEST_DATA),
     lfm_proxy:close(WorkerP1, Handle3),
 
     % synchronize files
     timer:sleep(timer:seconds(?ATTEMPTS)), % for hooks todo  VFS-3462
     {ok, ReadHandle1} = lfm_proxy:open(WorkerP2, SessionIdP2, {guid, File1Guid}, read),
-    {ok, <<"test">>} = lfm_proxy:read(WorkerP2, ReadHandle1, 0, 4),
+    {ok, ?TEST_DATA} = lfm_proxy:read(WorkerP2, ReadHandle1, 0, 4),
     lfm_proxy:close(WorkerP2, ReadHandle1),
     {ok, ReadHandle2} = lfm_proxy:open(WorkerP2, SessionIdP2, {guid, File2Guid}, read),
-    {ok, <<"test">>} = lfm_proxy:read(WorkerP2, ReadHandle2, 0, 4),
+    {ok, ?TEST_DATA} = lfm_proxy:read(WorkerP2, ReadHandle2, 0, 4),
     lfm_proxy:close(WorkerP2, ReadHandle2),
     {ok, ReadHandle3} = lfm_proxy:open(WorkerP2, SessionIdP2, {guid, File3Guid}, read),
-    {ok, <<"test">>} = lfm_proxy:read(WorkerP2, ReadHandle3, 0, 4),
+    {ok, ?TEST_DATA} = lfm_proxy:read(WorkerP2, ReadHandle3, 0, 4),
     lfm_proxy:close(WorkerP2, ReadHandle3),
     % open popular file
     Handles = [lfm_proxy:open(WorkerP2, SessionIdP2, {guid, File1Guid}, read) || _ <- lists:seq(0, 100)],
@@ -1694,6 +1703,58 @@ space_cleanup_enable_and_disable(Config) ->
     test_utils:mock_assert_num_calls(WorkerP1, space_cleanup_api, disable_cleanup, [SpaceId], 1),
     test_utils:mock_validate_and_unload(WorkerP1, space_cleanup_api).
 
+replicate_big_dir(Config) ->
+    ct:timetrap({hours, 1}),
+    {ok, _} = application:ensure_all_started(worker_pool),
+    {ok, _} = worker_pool:start_sup_pool(?VERIFY_POOL, [{workers, 8}]),
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
+    Space = <<"/space3">>,
+    RootDir = filename:join(Space, <<"big_dir_replication">>),
+    Structure = [10, 10, 10],   % last level are files
+    FilesToCreate = lists:foldl(fun(N, AccIn) -> 1 + AccIn * N end, 1, Structure),
+    BytesSum = byte_size(?TEST_DATA) * lists:foldl(fun(N, AccIn) -> AccIn * N  end, 1, Structure),
+
+    true = register(?CREATE_FILE_COUNTER, spawn_link(?MODULE, create_file_counter, [0, FilesToCreate, self(), []])),
+    true = register(?SYNC_FILE_COUNTER, spawn_link(?MODULE, sync_file_counter, [0, FilesToCreate, self()])),
+
+    create_nested_directory_tree(WorkerP1, SessionId, Structure, RootDir),
+
+    FileGuids = receive {create, FileGuids0} -> FileGuids0 end,
+
+    lists:foreach(fun(FileGuid) ->
+        worker_pool:cast(?VERIFY_POOL, {?MODULE, verify_file, [WorkerP2, SessionId2, FileGuid]})
+    end, FileGuids),
+
+    receive files_synchronized -> ok end,
+    DomainP2 = domain(WorkerP2),
+
+    {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1,
+        <<"replicas", RootDir/binary, "?provider_id=", (domain(WorkerP2))/binary>>,
+        post, [user_1_token_header(Config)], []),
+        ?ATTEMPTS),
+    DecodedBody = json_utils:decode_map(Body),
+    #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
+
+    % then
+    ?assertMatch(#{
+        <<"transferStatus">> := <<"completed">>,
+        <<"targetProviderId">> := DomainP2,
+        <<"path">> := RootDir,
+        <<"invalidationStatus">> := <<"skipped">>,
+        <<"callback">> := null,
+        <<"filesToTransfer">> := FilesToCreate,
+        <<"filesTransferred">> := FilesToCreate,
+        <<"bytesToTransfer">> := BytesSum,
+        <<"bytesTransferred">> := BytesSum
+    },
+        case do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []) of
+            {ok, 200, _, TransferStatus} ->
+                json_utils:decode_map(TransferStatus);
+            Error -> Error
+        end, 3600).
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -1816,3 +1877,50 @@ check_pid(Node, Attempts, Tid) ->
             timer:sleep(timer:seconds(1)),
             check_pid(Node, Attempts - 1, Tid)
     end.
+
+create_nested_directory_tree(Node, SessionId, [SubFilesNum], Root) ->
+    create_dir(Node, SessionId, Root),
+    lists:foreach(fun(N) ->
+        FilePath = filename:join([Root, integer_to_binary(N)]),
+        worker_pool:cast(?VERIFY_POOL, {?MODULE, create_file, [Node, SessionId, FilePath]})
+    end, lists:seq(1, SubFilesNum));
+create_nested_directory_tree(Node, SessionId, [SubDirsNum | Rest], Root) ->
+    create_dir(Node, SessionId, Root),
+    lists:foreach(fun(N) ->
+        NBin = integer_to_binary(N),
+        DirPath = filename:join([Root, NBin]),
+        worker_pool:cast(?VERIFY_POOL,
+            {?MODULE, create_nested_directory_tree, [Node, SessionId, Rest, DirPath]}
+        )
+    end, lists:seq(1, SubDirsNum)).
+
+create_file(Node, SessionId, FilePath) ->
+    DataSize = byte_size(?TEST_DATA),
+    {ok, FileGuid} = lfm_proxy:create(Node, SessionId, FilePath, 8#700),
+    {ok, Handle} = lfm_proxy:open(Node, SessionId, {guid, FileGuid}, write),
+    ?CREATE_FILE_COUNTER ! {created, FileGuid},
+    ?assertEqual({ok, DataSize}, lfm_proxy:write(Node, Handle, 0, ?TEST_DATA)).
+
+create_dir(Node, SessionId, DirPath) ->
+    {ok, DirGuid} = lfm_proxy:mkdir(Node, SessionId, DirPath),
+    ?CREATE_FILE_COUNTER ! {created, DirGuid}.
+
+sync_file_counter(FilesToVerify, FilesToVerify, ParentPid) ->
+    ParentPid ! files_synchronized;
+sync_file_counter(N, FilesToVerify, ParentPid) ->
+    receive
+        verified ->
+            sync_file_counter(N + 1, FilesToVerify, ParentPid)
+    end.
+
+create_file_counter(FilesToCreate, FilesToCreate, ParentPid, Files) ->
+    ParentPid ! {create, Files};
+create_file_counter(N, FilesToCreate, ParentPid, Files) ->
+    receive
+        {created, FileGuid} ->
+            create_file_counter(N + 1, FilesToCreate, ParentPid, [FileGuid | Files])
+    end.
+
+verify_file(Worker, SessionId, FileGuid) ->
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Worker, SessionId, {guid, FileGuid}), 3600),
+    ?SYNC_FILE_COUNTER ! verified.
