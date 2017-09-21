@@ -41,6 +41,7 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Callback called when new transfer doc is created locally.
+%% (Because dbsync doesn't detect local changes).
 %% @end
 %%--------------------------------------------------------------------
 -spec on_new_transfer_doc(transfer:doc()) -> ok.
@@ -126,15 +127,19 @@ handle_cast(start_transfer, State = #state{
 }) ->
     try
         transfer:mark_active(TransferId),
-        #provider_response{status = #status{code = ?OK}} =
-            sync_req:replicate_file(user_ctx:new(SessionId), file_ctx:new_by_guid(FileGuid), undefined, TransferId),
+        #provider_response{
+            status = #status{code = ?OK}
+        } = sync_req:replicate_file(user_ctx:new(SessionId),
+            file_ctx:new_by_guid(FileGuid), undefined, TransferId
+        ),
         transfer:mark_completed(TransferId),
         notify_callback(Callback, InvalidationSourceReplica),
         {stop, normal, State}
     catch
         _:E ->
             ?error_stacktrace("Could not replicate file ~p due to ~p", [FileGuid, E]),
-            transfer:mark_failed(TransferId),
+            SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
+            transfer:mark_failed(TransferId, SpaceId),
             {stop, E, State}
     end;
 handle_cast(_Request, State) ->
@@ -211,7 +216,7 @@ new_transfer(#document{
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Notifies callback about successfull transfer
+%% Notifies callback about successful transfer
 %% @end
 %%--------------------------------------------------------------------
 -spec notify_callback(transfer:callback(), InvalidationSourceReplica :: boolean()) -> ok.
