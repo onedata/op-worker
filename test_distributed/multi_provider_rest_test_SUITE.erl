@@ -1684,7 +1684,7 @@ replicate_big_dir(Config) ->
     SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
     Space = <<"/space3">>,
     RootDir = filename:join(Space, <<"big_dir_replication">>),
-    Structure = [10, 10, 10],   % last level are files
+    Structure = [10, 10],   % last level are files
     FilesToCreate = lists:foldl(fun(N, AccIn) -> 1 + AccIn * N end, 1, Structure),
     BytesSum = byte_size(?TEST_DATA) * lists:foldl(fun(N, AccIn) -> AccIn * N  end, 1, Structure),
 
