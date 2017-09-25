@@ -98,12 +98,23 @@ stop() ->
 %%--------------------------------------------------------------------
 -spec healthcheck() -> ok | {error, server_not_responding}.
 healthcheck() ->
-    {ok, Timeout} = application:get_env(?CLUSTER_WORKER_APP_NAME,
-        nagios_healthcheck_timeout),
-    case gen_tcp:connect("127.0.0.1", port(), [{packet, 4}, {active, false}], Timeout) of
-        {ok, Sock} ->
-            gen_tcp:close(Sock),
-            ok;
-        {error, Reason} ->
-            {error, Reason}
-    end.
+%%    {ok, Timeout} = application:get_env(?CLUSTER_WORKER_APP_NAME,
+%%        nagios_healthcheck_timeout),
+%%    KeyFile = oz_plugin:get_key_file(),
+%%
+%%    case file:read_file(KeyFile) of
+%%        {ok, _} ->
+%%            case ssl:connect("127.0.0.1", port(), [{certfile, oz_plugin:get_cert_file()},
+%%                {keyfile, KeyFile}], Timeout) of
+%%                {ok, Sock} ->
+%%                    ssl:close(Sock),
+%%                    ok;
+%%                {error, Reason} ->
+%%                    {error, Reason}
+%%            end;
+%%        {error, enoent} ->
+%%            ok; % single provider environment
+%%        Error ->
+%%            Error
+%%    end.
+ok.
