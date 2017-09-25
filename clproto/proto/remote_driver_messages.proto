@@ -1,0 +1,36 @@
+/**
+ * Communication protocol used by remote datastore driver.
+ * @author Krzysztof Trzepla
+ * @copyright (C) 2017 ACK CYFRONET AGH
+ * @copyright This software is released under the MIT license cited in
+ * 'LICENSE.txt'
+ */
+
+syntax = "proto2";
+package one.clproto;
+
+import "common_messages.proto";
+
+message RemoteDriverRequest {
+    oneof request {
+        GetRemoteDocument get_remote_document = 1;
+    }
+}
+
+message GetRemoteDocument {
+    required bytes model = 1;
+    required bytes key = 2;
+    optional bytes routing_key = 3;
+}
+
+message RemoteDriverResponse {
+    required Status status = 1;
+
+    oneof response {
+        RemoteDocument remote_document = 2;
+    }
+}
+
+message RemoteDocument {
+    required bytes compressed_data = 1;
+}
