@@ -24,6 +24,7 @@
 -include("proto/oneprovider/dbsync_messages.hrl").
 -include("proto/oneprovider/dbsync_messages2.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
+-include("proto/oneprovider/remote_driver_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("clproto/include/messages.hrl").
 
@@ -528,6 +529,30 @@ translate_from_protobuf(#'ChangesRequest2'{} = CR) ->
         until = CR#'ChangesRequest2'.until
     };
 
+%% REMOTE DRIVER
+translate_from_protobuf(#'RemoteDriverRequest'{request = {_, Record}}) ->
+    #remote_driver_request{request = translate_from_protobuf(Record)};
+translate_from_protobuf(#'RemoteDriverResponse'{
+    status = Status,
+    response = {_, Record}
+}) ->
+    #remote_driver_response{
+        status = translate_from_protobuf(Status),
+        response = translate_from_protobuf(Record)
+    };
+translate_from_protobuf(#'GetRemoteDocument'{
+    model = Model, key = Key, routing_key = RoutingKey
+}) ->
+    #get_remote_document{
+        model = binary_to_atom(Model, utf8),
+        key = Key,
+        routing_key = RoutingKey
+    };
+translate_from_protobuf(#'RemoteDocument'{
+    compressed_data = Data
+}) ->
+    #remote_document{compressed_data = Data};
+
 translate_from_protobuf(undefined) ->
     undefined.
 
@@ -991,6 +1016,26 @@ translate_to_protobuf(#changes_request2{} = CR) ->
         since = CR#'changes_request2'.since,
         until = CR#'changes_request2'.until
     }};
+
+%% PROVIDER
+translate_to_protobuf(#remote_driver_request{request = Record}) ->
+    {remote_driver_request, #'RemoteDriverRequest'{
+        request = translate_to_protobuf(Record)
+    }};
+translate_to_protobuf(#remote_driver_response{status = Status, response = Record}) ->
+    {status, StatusProto} = translate_to_protobuf(Status),
+    {remote_driver_response, #'RemoteDriverResponse'{
+        status = StatusProto,
+        response = translate_to_protobuf(Record)
+    }};
+translate_to_protobuf(#get_remote_document{
+    model = Model, key = Key, routing_key = RoutingKey
+}) ->
+    {get_remote_document, #'GetRemoteDocument'{
+        model = atom_to_binary(Model, utf8), key = Key, routing_key = RoutingKey
+    }};
+translate_to_protobuf(#remote_document{compressed_data = Data}) ->
+    {remote_document, #'RemoteDocument'{compressed_data = Data}};
 
 translate_to_protobuf(undefined) ->
     undefined.
