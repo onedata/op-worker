@@ -393,7 +393,7 @@ call_onezone(ConnRef, Client, Request) ->
 
 -spec maybe_serve_from_cache(connection_ref(), client(), gs_protocol:graph_req()) ->
     {true, doc()} | false | gs_protocol:error().
-maybe_serve_from_cache(ConnRef, Client, #gs_req_graph{gri = GRI, auth_hint = AuthHint}) ->
+maybe_serve_from_cache(ConnRef, Client, #gs_req_graph{gri = #gri{aspect = instance} = GRI, auth_hint = AuthHint}) ->
     case get_from_cache(GRI) of
         false ->
             false;
@@ -421,7 +421,9 @@ maybe_serve_from_cache(ConnRef, Client, #gs_req_graph{gri = GRI, auth_hint = Aut
                             {true, Result}
                     end
             end
-    end.
+    end;
+maybe_serve_from_cache(_, _, _) ->
+    false.
 
 
 -spec cache_record(connection_ref(), gs_protocol:gri(), doc()) ->
