@@ -42,26 +42,23 @@
 %% Handles remote driver requests.
 %% @end
 %%--------------------------------------------------------------------
--spec handle(#remote_driver_request{}) -> #remote_driver_response{}.
-handle(#remote_driver_request{request = #get_remote_document{
+-spec handle(#get_remote_document{}) -> #remote_document{}.
+handle(#get_remote_document{
     model = Model, key = Key, routing_key = RoutingKey
-} = R}) ->
-    ?alert("RECEIVED REQUEST: ~p", [R]),
+}) ->
     Ctx = datastore_model_default:get_ctx(Model),
     case datastore_router:route(Ctx, RoutingKey, get, [Ctx, Key]) of
         {ok, Doc} ->
-            #remote_driver_response{
+            #remote_document{
                 status = #status{code = ?OK},
-                response = #remote_document{
-                    compressed_data = zlib:compress(datastore_json:encode(Doc))
-                }
+                compressed_data = zlib:compress(datastore_json:encode(Doc))
             };
         {error, not_found} ->
-            #remote_driver_response{
+            #remote_document{
                 status = #status{code = ?ENOENT}
             };
         {error, Reason} ->
-            #remote_driver_response{
+            #remote_document{
                 status = #status{
                     code = ?EAGAIN,
                     description = erlang:term_to_binary(Reason)
@@ -82,26 +79,23 @@ handle(#remote_driver_request{request = #get_remote_document{
 get_async(#{
     model := Model,
     routing_key := RoutingKey,
-    provider_id := ProviderId
-} = A, Key) ->
+    source_ids := [ProviderId | _]
+}, Key) ->
     try
         case oneprovider:get_provider_id() of
             ProviderId ->
                 {error, not_found};
             _ ->
-                ?info("SENDING REQUEST: ~p, ~p", [A, Key]),
                 SessId = session_manager:get_provider_session_id(outgoing, ProviderId),
-                provider_communicator:communicate_async(#remote_driver_request{
-                    request = #get_remote_document{
-                        model = Model,
-                        key = Key,
-                        routing_key = RoutingKey
-                    }
+                provider_communicator:communicate_async(#get_remote_document{
+                    model = Model,
+                    key = Key,
+                    routing_key = RoutingKey
                 }, SessId)
         end
     catch
         _:Reason ->
-            ?info_stacktrace("SENDING REQUEST ERROR: ~p", [Reason]),
+            ?error_stacktrace("Datastore remote get failed due to: ~p", [Reason]),
             {error, not_found}
     end.
 
@@ -114,23 +108,23 @@ get_async(#{
 wait({ok, MsgId}) ->
     Timeout = application:get_env(op_worker, datastore_remote_driver_timeout,
         timer:minutes(1)),
-    R = receive
+    receive
         #server_message{
             message_id = MsgId,
-            message_body = #remote_driver_response{
+            message_body = #remote_document{
                 status = #status{code = ?OK},
-                response = #remote_document{compressed_data = Data}
+                compressed_data = Data
             }
         } -> {ok, datastore_json:decode(zlib:uncompress(Data))};
         #server_message{
             message_id = MsgId,
-            message_body = #remote_driver_response{
+            message_body = #remote_document{
                 status = #status{code = ?ENOENT}
             }
         } -> {error, not_found};
         #server_message{
             message_id = MsgId,
-            message_body = #remote_driver_response{
+            message_body = #remote_document{
                 status = #status{
                     code = ?EAGAIN,
                     description = Description
@@ -139,8 +133,6 @@ wait({ok, MsgId}) ->
         } -> {error, binary_to_term(Description)}
     after
         Timeout -> {error, timeout}
-    end,
-    ?info("RECEIVED RESPONSE: ~p", [R]),
-    R;
+    end;
 wait({error, Reason}) ->
     {error, Reason}.

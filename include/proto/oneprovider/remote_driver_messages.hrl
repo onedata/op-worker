@@ -17,20 +17,12 @@
 -record(get_remote_document, {
     model :: datastore_model:model(),
     key :: datastore:key(),
-    routing_key :: datastore:key() | undefined
-}).
-
--record(remote_driver_request, {
-    request :: #get_remote_document{}
+    routing_key :: undefined | datastore:key()
 }).
 
 -record(remote_document, {
-    compressed_data :: binary()
-}).
-
--record(remote_driver_response, {
     status :: #status{},
-    response :: undefined | #remote_document{}
+    compressed_data :: undefined | binary()
 }).
 
 -endif.

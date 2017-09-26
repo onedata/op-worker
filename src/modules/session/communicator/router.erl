@@ -248,9 +248,9 @@ route_and_send_answer(Msg = #client_message{
     {ok, #server_message{message_id = Id, message_body = ProviderResponse}};
 route_and_send_answer(#client_message{
     message_id = Id,
-    message_body = Request = #remote_driver_request{}
+    message_body = Request = #get_remote_document{}
 }) ->
-    {ok, Response} = datastore_remote_driver:handle(Request),
+    Response = datastore_remote_driver:handle(Request),
     {ok, #server_message{message_id = Id, message_body = Response}};
 route_and_send_answer(Msg = #client_message{
     message_id = Id,
