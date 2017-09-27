@@ -250,6 +250,7 @@ create_subfiles_import_many_test(Config, MountSpaceInRoot) ->
     parallel_assert(?MODULE, verify_file_in_dir, [W1, SessId, 60], lists:seq(1, DirsNumber), 60).
 
 create_subfiles_import_many2_test(Config, MountSpaceInRoot) ->
+%%    ct:timetrap({hours, 1}),
     [W1 | _] = ?config(op_worker_nodes, Config),
     W1MountPoint = get_host_mount_point(W1, Config),
     SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
@@ -258,6 +259,8 @@ create_subfiles_import_many2_test(Config, MountSpaceInRoot) ->
     DirStructure = [10, 10, 10],
     create_nested_directory_tree(DirStructure, RootPath),
     storage_sync_test_base:enable_storage_import(Config),
+%%    ct:pal("Sleep"),
+%%    ct:sleep({hours, 1}),
     Files = generate_nested_directory_tree_file_paths(DirStructure, ?SPACE_PATH),
 
     Timeout = 120,
