@@ -475,10 +475,8 @@
 }).
 
 -record(storage_sync_histogram, {
-    metric :: storage_sync_histogram:key(),
     values = [] :: storage_sync_histogram:values(),
-    timestamp :: storage_sync_histogram:timestamp(),
-    max_length :: storage_sync_histogram:length()
+    timestamp :: undefined | storage_sync_histogram:timestamp()
 }).
 
 -endif.
