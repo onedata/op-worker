@@ -47,7 +47,7 @@
 -type spiral_type() :: imported_files | updated_files | deleted_files | queue_length.
 -type error() :: {error, term()}.
 
--define(STORAGE_SYNC_METRIC_PREFIX, storaage_sync).
+-define(STORAGE_SYNC_METRIC_PREFIX, storage_sync).
 
 -define(COUNTER_NAME(SpaceId, Type), [
     ?STORAGE_SYNC_METRIC_PREFIX, counter, SpaceId, Type

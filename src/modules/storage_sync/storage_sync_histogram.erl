@@ -85,7 +85,7 @@ get_histogram(Metric) ->
         }}}  ->
             {Values, Timestamp};
         _ ->
-            udefined
+            undefined
     end.
 
 %%-------------------------------------------------------------------
