@@ -43,7 +43,7 @@ healthcheck() ->
 push(Message) ->
     case whereis(subscription_wss) of
         undefined ->
-            ?warning("No connection - dropping ~p", [Message]);
+            ?debug("No connection - dropping ~p", [Message]);
         WSS ->
             WSS ! {push, Message},
             ok
@@ -126,7 +126,7 @@ websocket_info(register, _ConnState, _State) ->
         {ok, _State}
     catch
         E:R ->
-            ?error_stacktrace("Unable to register ~p:~p", [E, R]),
+            ?debug_stacktrace("Unable to register ~p:~p", [E, R]),
             {close, <<"closed">>, _State}
     end;
 websocket_info({push, Binary}, _ConnState, _State) ->

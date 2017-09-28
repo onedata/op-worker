@@ -113,7 +113,7 @@ healthcheck() ->
                     {error, Reason}
             end;
         {error, enoent} ->
-            ok; % single provider environment
+            ok; % single provider test environment
         Error ->
             Error
     end.

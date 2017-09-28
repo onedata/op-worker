@@ -90,6 +90,11 @@ def run(image, docker_host=None, detach=False, dns_list=[], add_host={},
     if cpuset_cpus:
         cmd.extend(['--cpuset-cpus', cpuset_cpus])
 
+    # cmd.append('--cpus=2.0')
+    cmd.append('--cpu-period=100000')
+    cmd.append('--cpu-quota=25000')
+    cmd.append('--memory=256m')
+
     cmd.extend(run_params)
     cmd.append(image)
 
