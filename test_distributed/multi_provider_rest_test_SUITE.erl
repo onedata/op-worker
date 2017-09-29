@@ -1701,18 +1701,20 @@ space_cleanup_enable_and_disable(Config) ->
 quota_exceeded_during_file_replication(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
     rpc:call(WorkerP2, application, set_env, [op_worker, soft_quota_limit_size, 0]),
     File = <<"/space4/file">>,
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
     {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
     {ok, 10} = lfm_proxy:write(WorkerP1, Handle, 0, <<"0123456789">>),
     lfm_proxy:fsync(WorkerP1, Handle),
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
 
     % when
-    timer:sleep(timer:seconds(20)), % for hooks todo VFS-3462
-
-    {ok, 200, _, Body0} = do_request(WorkerP1, <<"replicas", File/binary, "?provider_id=",
-        (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body0} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1,
+        <<"replicas", File/binary, "?provider_id=", (domain(WorkerP2))/binary>>,
+        post, [user_1_token_header(Config)], []),
+    ?ATTEMPTS),
     DecodedBody0 = json_utils:decode_map(Body0),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody0),
 
@@ -1738,22 +1740,13 @@ quota_exceeded_during_file_replication(Config) ->
 
     ?assertEqual({ok, [Tid]}, rpc:call(WorkerP2, transfer, for_each_failed_transfer, [fun(Id, Acc) ->
         [Id | Acc] end, []])),
-    timer:sleep(timer:seconds(30)), % todo VFS-3462 - reorganize tests to remove sleeps
-    {ok, 200, _, Body} = do_request(WorkerP2, <<"replicas", File/binary>>, get, [user_1_token_header(Config)], []),
-    {ok, 200, _, Body2} = do_request(WorkerP1, <<"replicas", File/binary>>, get, [user_1_token_header(Config)], []),
-    DecodedBody = json_utils:decode_map(Body),
-    DecodedBody2 = json_utils:decode_map(Body2),
-    ?assertEqual(
-        lists:sort([
-            #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 10]]},
-            #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => []}
-        ]), lists:sort(DecodedBody)),
-    ?assertEqual(
-        lists:sort([
-            #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 10]]},
-            #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => []}
-        ]), lists:sort(DecodedBody2)).
 
+    ExpectedDistribution = [
+        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 10]]},
+        #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => []}
+    ],
+    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File),
+    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
