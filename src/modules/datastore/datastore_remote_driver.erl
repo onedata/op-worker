@@ -27,7 +27,7 @@
 
 -type ctx() :: #{model := datastore_model:model(),
                  routing_key := key(),
-                 provider_id := oneprovider:id()}.
+                 source_ids := [oneprovider:id()]}.
 -type key() :: datastore:key().
 -type doc() :: datastore:doc().
 -type future() :: {ok, message_id:id()} | {error, term()}.
@@ -49,9 +49,10 @@ handle(#get_remote_document{
     Ctx = datastore_model_default:get_ctx(Model),
     case datastore_router:route(Ctx, RoutingKey, get, [Ctx, Key]) of
         {ok, Doc} ->
+            Data = zlib:compress(jiffy:encode(datastore_json:encode(Doc))),
             #remote_document{
                 status = #status{code = ?OK},
-                compressed_data = zlib:compress(datastore_json:encode(Doc))
+                compressed_data = Data
             };
         {error, not_found} ->
             #remote_document{
@@ -115,7 +116,7 @@ wait({ok, MsgId}) ->
                 status = #status{code = ?OK},
                 compressed_data = Data
             }
-        } -> {ok, datastore_json:decode(zlib:uncompress(Data))};
+        } -> {ok, datastore_json:decode(jiffy:decode(zlib:uncompress(Data)))};
         #server_message{
             message_id = MsgId,
             message_body = #remote_document{
