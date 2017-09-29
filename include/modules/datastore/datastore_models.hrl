@@ -477,4 +477,9 @@
     dy_hist :: undefined | [non_neg_integer()]
 }).
 
+-record(storage_sync_histogram, {
+    values = [] :: storage_sync_histogram:values(),
+    timestamp :: undefined | storage_sync_histogram:timestamp()
+}).
+
 -endif.

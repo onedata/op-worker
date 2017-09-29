@@ -11,13 +11,14 @@
 -module(storage_sync_monitoring).
 -author("Jakub Kudzia").
 
+-include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include("modules/datastore/datastore_models.hrl").
 
 
 %% reporters API
 -export([start_lager_reporter/0, delete_lager_reporter/0, start_ets_reporter/0,
-    start_ets_reporter/1, delete_ets_reporter/0]).
+    delete_ets_reporter/0, ensure_reporters_started/1]).
 
 %% counters API
 -export([start_imported_files_counter/1, increase_imported_files_counter/1,
@@ -46,16 +47,19 @@
 -type spiral_type() :: imported_files | updated_files | deleted_files | queue_length.
 -type error() :: {error, term()}.
 
+-define(STORAGE_SYNC_METRIC_PREFIX, storage_sync).
+
 -define(COUNTER_NAME(SpaceId, Type), [
-    storage_sync, counter, SpaceId, Type
+    ?STORAGE_SYNC_METRIC_PREFIX, counter, SpaceId, Type
 ]).
 
 -define(SPIRAL_NAME(SpaceId, Type, Window), [
-    storage_sync, spiral, SpaceId, Type, Window
+    ?STORAGE_SYNC_METRIC_PREFIX, spiral, SpaceId, Type, Window
 ]).
 
 -define(COUNTER_LOGGING_INTERVAL, timer:seconds(30)).
--define(SPIRAL_DEFAULT_RESOLUTION, 12).
+-define(SPIRAL_RESOLUTION, application:get_env(?APP_NAME, storage_sync_histogram_length, 12)).
+
 
 -define(LAGER_REPORTER_NAME, exometer_report_lager).
 -define(ETS_REPORTER_NAME, exometer_report_rrd_ets).
@@ -68,6 +72,14 @@
 -define(FILES_TO_IMPORT, files_to_import).
 -define(FILES_TO_UPDATE, files_to_update).
 -define(QUEUE_LENGTH, queue_length).
+
+-define(COUNTER_TYPES, [
+    ?IMPORTED_FILES, ?FILES_TO_IMPORT, ?FILES_TO_UPDATE
+]).
+
+-define(SPIRAL_TYPES, [
+    ?IMPORTED_FILES, ?DELETED_FILES, ?UPDATED_FILES, ?QUEUE_LENGTH
+]).
 
 
 -define(WINDOWS, [
@@ -90,23 +102,12 @@ start_lager_reporter() ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% @equiv start_ets_reporter(?SPIRAL_DEFAULT_RESOLUTION).
+%% Starts space_sync_monitoring ets reporter.
 %% @end
 %%-------------------------------------------------------------------
 -spec start_ets_reporter() -> ok | error().
 start_ets_reporter() ->
-    ok = start_ets_reporter(?SPIRAL_DEFAULT_RESOLUTION).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Starts space_sync_monitoring ets reporter.
-%% @end
-%%-------------------------------------------------------------------
--spec start_ets_reporter(non_neg_integer()) -> ok | error().
-start_ets_reporter(Resolution) ->
-    ok = exometer_report:add_reporter(?ETS_REPORTER_NAME, [
-        {values_num, Resolution}
-    ]).
+    ok = exometer_report:add_reporter(?ETS_REPORTER_NAME, []).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -160,7 +161,7 @@ start_files_to_update_counter(SpaceId) ->
 -spec start_queue_length_spirals(od_space:id()) -> ok.
 start_queue_length_spirals(SpaceId) ->
     lists:foreach(fun(Window) ->
-        start_queue_length_spiral(SpaceId, Window, ?SPIRAL_DEFAULT_RESOLUTION)
+        start_queue_length_spiral(SpaceId, Window, ?SPIRAL_RESOLUTION)
     end, ?WINDOWS).
 
 %%-------------------------------------------------------------------
@@ -171,7 +172,7 @@ start_queue_length_spirals(SpaceId) ->
 -spec start_imported_files_spirals(od_space:id()) -> ok.
 start_imported_files_spirals(SpaceId) ->
     lists:foreach(fun(Window) ->
-        start_imported_files_spiral(SpaceId, Window, ?SPIRAL_DEFAULT_RESOLUTION)
+        start_imported_files_spiral(SpaceId, Window, ?SPIRAL_RESOLUTION)
     end, ?WINDOWS).
 
 %%-------------------------------------------------------------------
@@ -182,7 +183,7 @@ start_imported_files_spirals(SpaceId) ->
 -spec start_deleted_files_spirals(od_space:id()) -> ok.
 start_deleted_files_spirals(SpaceId) ->
     lists:foreach(fun(Window) ->
-        start_deleted_files_spiral(SpaceId, Window, ?SPIRAL_DEFAULT_RESOLUTION)
+        start_deleted_files_spiral(SpaceId, Window, ?SPIRAL_RESOLUTION)
     end, ?WINDOWS).
 
 %%-------------------------------------------------------------------
@@ -193,7 +194,7 @@ start_deleted_files_spirals(SpaceId) ->
 -spec start_updated_files_spirals(od_space:id()) -> ok.
 start_updated_files_spirals(SpaceId) ->
     lists:foreach(fun(Window) ->
-        start_updated_files_spiral(SpaceId, Window, ?SPIRAL_DEFAULT_RESOLUTION)
+        start_updated_files_spiral(SpaceId, Window, ?SPIRAL_RESOLUTION)
     end, ?WINDOWS).
 
 %%-------------------------------------------------------------------
@@ -427,7 +428,7 @@ update_in_progress(SpaceId) ->
 -spec get_metric(od_space:id(), spiral_type(), window()) -> proplists:proplist() | undefined.
 get_metric(SpaceId, Type, Window) ->
     SpiralName = ?SPIRAL_NAME(SpaceId, Type, Window),
-    case exometer_report_rrd_ets:get(SpiralName) of
+    case storage_sync_histogram:get_histogram(SpiralName) of
         undefined ->
             undefined;
         {Values, Timestamp} ->
@@ -452,9 +453,71 @@ ensure_all_metrics_stopped(SpaceId) ->
     storage_sync_monitoring:stop_imported_files_spirals(SpaceId),
     storage_sync_monitoring:stop_queue_length_spirals(SpaceId).
 
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function restarts reporters which are supposed to be running.
+%% TODO improve handling failures of exometer VFS-3173
+%% @end
+%%-------------------------------------------------------------------
+-spec ensure_reporters_started(od_space:id()) -> ok.
+ensure_reporters_started(SpaceId) ->
+    ExpectedReporters = [?LAGER_REPORTER_NAME, ?ETS_REPORTER_NAME],
+    AliveReporters = lists:filtermap(fun({Reporter, Pid}) ->
+        case {lists:member(Reporter, ExpectedReporters), erlang:is_process_alive(Pid)} of
+            {true, true} -> {true, Reporter};
+            _ -> false
+        end
+    end, exometer_report:list_reporters()),
+    case AliveReporters -- ExpectedReporters of
+        [] ->
+            ok;
+        DeadReporters ->
+            lists:foreach(fun(Reporter) ->
+                start_reporter(Reporter)
+            end, DeadReporters),
+            resubscribe(DeadReporters, SpaceId)
+    end.
+
 %%===================================================================
 %% Internal functions
 %%===================================================================
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function restarts reporters which are supposed to be running.
+%% TODO improve handling failures of exometer VFS-3173
+%% @end
+%%-------------------------------------------------------------------
+-spec start_reporter(atom()) -> ok.
+start_reporter(?LAGER_REPORTER_NAME) ->
+    start_lager_reporter();
+start_reporter(?ETS_REPORTER_NAME) ->
+    start_ets_reporter().
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Resubscribes suitable metrics to given reporter.
+%% TODO improve handling failures of exometer VFS-3173
+%% @end
+%%-------------------------------------------------------------------
+-spec resubscribe([atom()], od_space:id()) -> ok.
+resubscribe([], _SpaceId) ->
+    ok;
+resubscribe(?LAGER_REPORTER_NAME, SpaceId) ->
+    start_imported_files_counter(SpaceId),
+    start_files_to_import_counter(SpaceId),
+    start_files_to_update_counter(SpaceId);
+resubscribe(?ETS_REPORTER_NAME, SpaceId) ->
+    start_imported_files_spirals(SpaceId),
+    start_deleted_files_spirals(SpaceId),
+    start_updated_files_spirals(SpaceId),
+    start_queue_length_spirals(SpaceId);
+resubscribe(DeadReporters = [H | T], SpaceId) when is_list(DeadReporters) ->
+    resubscribe(H, SpaceId),
+    resubscribe(T, SpaceId).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -595,7 +658,7 @@ update_queue_length_spiral(SpaceId, Window, Value) ->
     ok | error().
 start_and_subscribe_storage_sync_counter(SpaceId, CounterType) ->
     CounterName = ?COUNTER_NAME(SpaceId, CounterType),
-    ok = exometer:new(CounterName, counter),
+    exometer:new(CounterName, counter),
     ok = exometer_report:subscribe(?LAGER_REPORTER_NAME, CounterName, [value],
         ?COUNTER_LOGGING_INTERVAL).
 
@@ -621,7 +684,7 @@ start_and_subscribe_storage_sync_spiral(SpaceId, Type, Window, Resolution) ->
 start_and_subscribe_storage_sync_spiral(SpaceId, Type, Window, Resolution, Metric) ->
     SpiralName = ?SPIRAL_NAME(SpaceId, Type, Window),
     TimeSpan = resolution_to_time_span(Window, Resolution),
-    ok = exometer:new(SpiralName, spiral, [{time_span, TimeSpan}]),
+    exometer:new(SpiralName, spiral, [{time_span, TimeSpan}]),
     ok = exometer_report:subscribe(?ETS_REPORTER_NAME, SpiralName, [Metric], TimeSpan).
 
 %%-------------------------------------------------------------------
