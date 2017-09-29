@@ -70,7 +70,7 @@ message ClientMessage {
         ProviderRequest          provider_request          = 21;
 
         // remote_driver_messages.proto
-        RemoteDriverRequest      remote_driver_request     = 22;
+        GetRemoteDocument        get_remote_document       = 22;
     }
     
     optional bytes proxy_session_id = 23;
@@ -117,7 +117,7 @@ message ServerMessage {
         ProviderResponse         provider_response         = 17;
 
         // remote_driver_messages.proto
-        RemoteDriverResponse     remote_driver_response    = 18;
+        RemoteDocument           remote_document           = 18;
     }
 
     optional bytes proxy_session_id = 19;
