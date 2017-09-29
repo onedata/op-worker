@@ -17,6 +17,8 @@
 
 
 -type key() :: exometer_report:metric().
+-type histogram() :: #storage_sync_histogram{}.
+-type doc() :: datastore_doc:doc(histogram()).
 -type value() :: integer().
 -type values() :: [value()].
 -type timestamp() :: calendar:datetime().
@@ -52,14 +54,14 @@ new(Metric) ->
             timestamp = calendar:local_time()
         }
     },
-    {ok, Key} = datastore_model:save(?CTX, NewDoc).
+    {ok, _} = datastore_model:save(?CTX, NewDoc).
 
 %%-------------------------------------------------------------------
 %% @doc
 %% Adds value to histogram associated with given metric.
 %% @end
 %%-------------------------------------------------------------------
--spec add(key(), value()) -> {ok ,key()}.
+-spec add(key(), value()) -> {ok , doc()}.
 add(Metric, NewValue) ->
     {ok, _} = datastore_model:update(?CTX, term_to_binary(Metric), fun(Old = #storage_sync_histogram{
         values = OldValues
