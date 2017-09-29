@@ -16,6 +16,7 @@
 -include("modules/rtransfer/gateway.hrl").
 -include("modules/rtransfer/rtransfer.hrl").
 -include("modules/rtransfer/rt_container.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 -define(RTRANSFER_RUNNING_JOBS, rtransfer_running_jobs).
 -define(aggregators_map, aggregators_map).
@@ -182,7 +183,7 @@ retry(_Why, #gw_fetch{file_id = FileId, offset = Offset, size = Size, retry = Re
 -spec pick_gw() -> pid().
 pick_gw() ->
     Nodes = pg2:get_members(gateway),
-    NodeNo = random:uniform(length(Nodes)),
+    NodeNo = rand:uniform(length(Nodes)),
     lists:nth(NodeNo, Nodes).
 
 
@@ -197,7 +198,7 @@ pick_gw() ->
 provider_id_to_remote(ProviderId, State) ->
     GetNodes = proplists:get_value(get_nodes_fun, State),
     Nodes = GetNodes(ProviderId),
-    NodeNo = random:uniform(length(Nodes)),
+    NodeNo = rand:uniform(length(Nodes)),
     lists:nth(NodeNo, Nodes).
 
 

@@ -112,5 +112,5 @@ remove_test_file(Helper, UserCtx, FileId) ->
 random_ascii_lowercase_sequence(Length) ->
     random:seed(erlang:phash2([node()]), erlang:monotonic_time(), erlang:unique_integer()),
     lists:foldl(fun(_, Acc) ->
-        <<Acc/binary, (random:uniform(26) + 96)>>
+        <<Acc/binary, (rand:uniform(26) + 96)>>
     end, <<>>, lists:seq(1, Length)).

@@ -114,7 +114,7 @@ compute_request_hash(RequestBytes) ->
 %% Notifies a process about something related to the action it required.
 %% @end
 %%--------------------------------------------------------------------
--spec notify(What :: atom(), Reason :: term(), Action :: #gw_fetch{}) -> ok.
+-spec notify(What :: atom(), Details :: term(), Action :: #gw_fetch{}) -> ok.
 notify(What, Details, #gw_fetch{notify = Notify} = Action) when is_atom(What) ->
     lists:foreach(fun(Pid) -> Pid ! {What, Details, Action} end, Notify),
     ok.

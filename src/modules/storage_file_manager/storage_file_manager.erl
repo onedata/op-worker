@@ -577,7 +577,7 @@ open_insecure(#sfm_handle{
 %%--------------------------------------------------------------------
 -spec get_size(file_meta:uuid(), od_space:id()) -> non_neg_integer().
 get_size(FileUuid, SpaceId) ->
-    try file_ctx:get_file_size(
+    try file_ctx:get_local_storage_file_size(
         file_ctx:new_by_guid(
             fslogic_uuid:uuid_to_guid(FileUuid, SpaceId))
     ) of
