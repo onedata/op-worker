@@ -542,7 +542,10 @@ translate_from_protobuf(#'RemoteDocument'{
     status = Status,
     compressed_data = Data
 }) ->
-    #remote_document{status = Status, compressed_data = Data};
+    #remote_document{
+        status = translate_from_protobuf(Status),
+        compressed_data = Data
+    };
 
 translate_from_protobuf(undefined) ->
     undefined.

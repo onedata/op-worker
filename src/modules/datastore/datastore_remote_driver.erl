@@ -92,7 +92,7 @@ get_async(#{
                     model = Model,
                     key = Key,
                     routing_key = RoutingKey
-                }, SessId)
+                }, SessId, self())
         end
     catch
         _:Reason ->
