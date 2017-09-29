@@ -56,10 +56,11 @@ read(UserCtx, FileCtx, HandleId, Offset, Size) ->
     ByteSequences :: [#byte_sequence{}]) -> fslogic_worker:proxyio_response().
 write(UserCtx, FileCtx, HandleId, ByteSequences) ->
     {ok, Handle} = get_handle(UserCtx, FileCtx, HandleId),
-    Wrote =
-        lists:foldl(fun(#byte_sequence{offset = Offset, data = Data}, Acc) ->
-            Acc + write_all(Handle, Offset, Data, 0)
-        end, 0, ByteSequences),
+    {Wrote, _} =
+        lists:foldl(fun(#byte_sequence{offset = Offset, data = Data}, {Acc, Handle0}) ->
+            {WroteNow, Handle1} = write_all(Handle0, Offset, Data, 0),
+            {Acc + WroteNow, Handle1}
+        end, {0, Handle}, ByteSequences),
 
     #proxyio_response{
         status = #status{code = ?OK},
@@ -121,10 +122,11 @@ create_handle(UserCtx, FileCtx, HandleId) ->
 %%--------------------------------------------------------------------
 -spec write_all(Handle :: storage_file_manager:handle(),
     Offset :: non_neg_integer(), Data :: binary(),
-    Wrote :: non_neg_integer()) -> non_neg_integer().
-write_all(_Handle, _Offset, <<>>, Wrote) -> Wrote;
+    Wrote :: non_neg_integer()) -> {non_neg_integer(), storage_file_manager:handle()}.
+write_all(Handle, _Offset, <<>>, Wrote) -> {Wrote, Handle};
 write_all(Handle, Offset, Data, Wrote) ->
     {ok, WroteNow} = storage_file_manager:write(Handle, Offset, Data),
-    write_all(Handle, Offset + WroteNow,
+    Handle2 = storage_file_manager:increase_size(Handle, WroteNow),
+    write_all(Handle2, Offset + WroteNow,
               binary_part(Data, {byte_size(Data), WroteNow - byte_size(Data)}),
               Wrote + WroteNow).
