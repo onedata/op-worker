@@ -65,6 +65,7 @@
 -define(CTX, #{
     model => ?MODULE,
     sync_enabled => true,
+    remote_driver => datastore_remote_driver,
     mutator => oneprovider:get_provider_id(),
     local_links_tree_id => oneprovider:get_provider_id()
 }).

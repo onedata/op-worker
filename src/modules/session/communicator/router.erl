@@ -23,6 +23,7 @@
 -include("proto/oneprovider/dbsync_messages.hrl").
 -include("proto/oneprovider/dbsync_messages2.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
+-include("proto/oneprovider/remote_driver_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -245,6 +246,12 @@ route_and_send_answer(Msg = #client_message{
     {ok, ProviderResponse} = worker_proxy:call(fslogic_worker,
         {provider_request, effective_session_id(Msg), ProviderRequest}),
     {ok, #server_message{message_id = Id, message_body = ProviderResponse}};
+route_and_send_answer(#client_message{
+    message_id = Id,
+    message_body = Request = #get_remote_document{}
+}) ->
+    Response = datastore_remote_driver:handle(Request),
+    {ok, #server_message{message_id = Id, message_body = Response}};
 route_and_send_answer(Msg = #client_message{
     message_id = Id,
     message_body = ProxyIORequest = #proxyio_request{
