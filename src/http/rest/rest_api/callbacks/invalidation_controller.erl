@@ -185,7 +185,7 @@ handle_cast(finish_transfer, State = #state{
 handle_cast({failed_transfer, Error}, State = #state{
     file_guid = FileGuid,
     transfer_id = TransferId,
-    space_id = space_id = SpaceId
+    space_id = SpaceId
 }) ->
     ?error_stacktrace("Could not invalidate file ~p due to ~p", [FileGuid, Error]),
     transfer:mark_failed_invalidation(TransferId, SpaceId),
