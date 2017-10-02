@@ -59,7 +59,7 @@ remove_file_and_file_meta(FileCtx, UserCtx, Silent, RemoveStorageFile) ->
         _ -> ok
     end,
 
-    ok = file_meta:delete(FileDoc),
+    ok = file_meta:delete_without_link(FileDoc),
     maybe_emit_event(FileCtx3, UserCtx, Silent).
 
 %%--------------------------------------------------------------------

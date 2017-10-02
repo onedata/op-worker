@@ -31,8 +31,8 @@
 -define(SET_LINK_SCOPE(ScopeId), [{scope, ScopeId}]).
 
 %% model_behaviour callbacks
--export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
-    'after'/5, before/4]).
+-export([save/1, get/1, exists/1, delete/1, delete_without_link/1, update/2,
+    create/1, model_init/0, 'after'/5, before/4]).
 
 -export([resolve_path/1, resolve_path/2, create/2, create/3,
     get_scope_id/1, list_children/3, get_parent/1, get_parent_uuid/1,
@@ -368,15 +368,46 @@ get_including_deleted(FileUuid) ->
 delete({uuid, Key}) ->
     delete(Key);
 delete(#document{
-    key = FileUuid
+    key = FileUuid,
+    value = #file_meta{
+        name = FileName,
+        parent_uuid = ParentUuid
+    }
 }) ->
-    delete(FileUuid);
+    ?run(begin
+        ok = delete_child_link_in_parent(ParentUuid, FileName, FileUuid),
+        LocalLocaitonId = file_location:local_id(FileUuid),
+        file_location:delete(LocalLocaitonId),
+        model:execute_with_default_context(?MODULE, delete, [FileUuid])
+    end);
 delete({path, Path}) ->
     ?run(begin
-        {ok, {#document{key = FileUuid}, _}} = resolve_path(Path),
-        delete(FileUuid)
+        {ok, {#document{} = Document, _}} = resolve_path(Path),
+        delete(Document)
     end);
 delete(FileUuid) ->
+    ?run(begin
+        case get(FileUuid) of
+            {ok, #document{} = Document} ->
+                delete(Document);
+            {error, {not_found, _}} ->
+                ok
+        end
+    end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Similar to delete/1 but does not delete link in parent.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_without_link(uuid() | datastore:document()) -> ok | datastore:generic_error().
+delete_without_link({uuid, Key}) ->
+    delete_without_link(Key);
+delete_without_link(#document{
+    key = FileUuid
+}) ->
+    delete_without_link(FileUuid);
+delete_without_link(FileUuid) ->
     ?run(begin
         LocalLocaitonId = file_location:local_id(FileUuid),
         file_location:delete(LocalLocaitonId),
