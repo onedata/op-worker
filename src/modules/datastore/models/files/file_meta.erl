@@ -31,8 +31,8 @@
 -define(SET_LINK_SCOPE(ScopeId), [{scope, ScopeId}]).
 
 %% model_behaviour callbacks
--export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
-    'after'/5, before/4]).
+-export([save/1, get/1, exists/1, delete/1, delete_without_link/1, update/2,
+    create/1, model_init/0, 'after'/5, before/4]).
 
 -export([resolve_path/1, resolve_path/2, create/2, create/3,
     get_scope_id/1, list_children/3, get_parent/1, get_parent_uuid/1,
@@ -393,6 +393,23 @@ delete(FileUuid) ->
             {error, {not_found, _}} ->
                 ok
         end
+    end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Similar to delete/1 but does not delete link in parent.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_without_link(uuid() | datastore:document()) -> ok | datastore:generic_error().
+delete_without_link(#document{
+    key = FileUuid
+}) ->
+    delete_without_link(FileUuid);
+delete_without_link(FileUuid) ->
+    ?run(begin
+        LocalLocaitonId = file_location:local_id(FileUuid),
+        file_location:delete(LocalLocaitonId),
+        model:execute_with_default_context(?MODULE, delete, [FileUuid])
     end).
 
 %%--------------------------------------------------------------------

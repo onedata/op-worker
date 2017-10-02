@@ -80,11 +80,14 @@
     empty_metadata_invalid_json_test/1,
     spatial_flag_test/1,
     space_cleanup_enable_and_disable/1,
-    replicate_big_dir/1]).
+    quota_exceeded_during_file_replication/1,
+    replicate_big_dir/1
+]).
 
 %utils
 -export([kill/1, verify_file/3, create_file/3, create_dir/3,
     create_nested_directory_tree/4, sync_file_counter/3, create_file_counter/4]).
+
 
 all() ->
     ?ALL([
@@ -134,8 +137,9 @@ all() ->
         empty_metadata_invalid_json_test,
         spatial_flag_test,
         space_cleanup_enable_and_disable,
+        quota_exceeded_during_file_replication,
         replicate_big_dir
-        ]).
+    ]).
 
 -define(LIST_TRANSFER, fun(Id, Acc) -> [Id | Acc] end).
 -define(ATTEMPTS, 30).
@@ -1072,7 +1076,8 @@ list_dir(Config) ->
         [
             #{<<"id">> := _, <<"path">> := <<"/space1">>},
             #{<<"id">> := _, <<"path">> := <<"/space2">>},
-            #{<<"id">> := _, <<"path">> := <<"/space3">>}
+            #{<<"id">> := _, <<"path">> := <<"/space3">>},
+            #{<<"id">> := _, <<"path">> := <<"/space4">>}
         ],
         DecodedBody
     ).
@@ -1232,7 +1237,7 @@ changes_stream_on_multi_provider_test(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     SessionIdP2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
-    [_, _, {_SpaceId, SpaceName}] = ?config({spaces, <<"user1">>}, Config),
+    [_, _, {_SpaceId, SpaceName}, _] = ?config({spaces, <<"user1">>}, Config),
     File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file4_csompt"])),
     Mode = 8#700,
     % when
@@ -1276,7 +1281,8 @@ list_spaces(Config) ->
         [
             #{<<"name">> := <<"space1">>, <<"spaceId">> := <<"space1">>},
             #{<<"name">> := <<"space2">>, <<"spaceId">> := <<"space2">>},
-            #{<<"name">> := <<"space3">>, <<"spaceId">> := <<"space3">>}
+            #{<<"name">> := <<"space3">>, <<"spaceId">> := <<"space3">>},
+            #{<<"name">> := <<"space4">>, <<"spaceId">> := <<"space4">>}
         ],
         DecodedBody
     ).
@@ -1675,6 +1681,62 @@ space_cleanup_enable_and_disable(Config) ->
     test_utils:mock_assert_num_calls(WorkerP1, space_cleanup_api, disable_cleanup, [SpaceId], 1),
     test_utils:mock_validate_and_unload(WorkerP1, space_cleanup_api).
 
+quota_exceeded_during_file_replication(Config) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    rpc:call(WorkerP2, application, set_env, [op_worker, soft_quota_limit_size, 0]),
+    File = <<"/space4/file">>,
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
+    {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
+    {ok, 10} = lfm_proxy:write(WorkerP1, Handle, 0, <<"0123456789">>),
+    lfm_proxy:fsync(WorkerP1, Handle),
+
+    % when
+    timer:sleep(timer:seconds(20)), % for hooks todo VFS-3462
+
+    {ok, 200, _, Body0} = do_request(WorkerP1, <<"replicas", File/binary, "?provider_id=",
+        (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
+    DecodedBody0 = json_utils:decode_map(Body0),
+    #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody0),
+
+    % then
+    {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
+    DomainP2 = domain(WorkerP2),
+    ?assertMatch(#{
+        <<"transferStatus">> := <<"failed">>,
+        <<"targetProviderId">> := DomainP2,
+        <<"path">> := File,
+        <<"invalidationStatus">> := <<"skipped">>,
+        <<"fileId">> := FileObjectId,
+        <<"callback">> := null,
+        <<"filesToTransfer">> := 1,
+        <<"filesTransferred">> := 0,
+        <<"bytesToTransfer">> := 10
+    },
+        case do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []) of
+            {ok, 200, _, TransferStatus} ->
+                json_utils:decode_map(TransferStatus);
+            Error -> Error
+        end, 30),
+
+    ?assertEqual({ok, [Tid]}, rpc:call(WorkerP2, transfer, for_each_failed_transfer, [fun(Id, Acc) ->
+        [Id | Acc] end, []])),
+    timer:sleep(timer:seconds(30)), % todo VFS-3462 - reorganize tests to remove sleeps
+    {ok, 200, _, Body} = do_request(WorkerP2, <<"replicas", File/binary>>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body2} = do_request(WorkerP1, <<"replicas", File/binary>>, get, [user_1_token_header(Config)], []),
+    DecodedBody = json_utils:decode_map(Body),
+    DecodedBody2 = json_utils:decode_map(Body2),
+    ?assertEqual(
+        lists:sort([
+            #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 10]]},
+            #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => []}
+        ]), lists:sort(DecodedBody)),
+    ?assertEqual(
+        lists:sort([
+            #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 10]]},
+            #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => []}
+        ]), lists:sort(DecodedBody2)).
+
 replicate_big_dir(Config) ->
     ct:timetrap({hours, 1}),
     {ok, _} = application:ensure_all_started(worker_pool),
@@ -1726,6 +1788,7 @@ replicate_big_dir(Config) ->
                 json_utils:decode_map(TransferStatus);
             Error -> Error
         end, 3600).
+
 
 %%%===================================================================
 %%% SetUp and TearDown functions
