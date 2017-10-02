@@ -503,7 +503,7 @@ start_reporter(?ETS_REPORTER_NAME) ->
 %% TODO improve handling failures of exometer VFS-3173
 %% @end
 %%-------------------------------------------------------------------
--spec resubscribe([atom()], od_space:id()) -> ok.
+-spec resubscribe(atom() | [atom()], od_space:id()) -> ok.
 resubscribe([], _SpaceId) ->
     ok;
 resubscribe(?LAGER_REPORTER_NAME, SpaceId) ->
