@@ -801,13 +801,7 @@ stop_pools() ->
 %% Posthook responsible for stopping transfer or invalidation controller.
 %% @end
 %%-------------------------------------------------------------------
--spec maybe_mark_completed(atom(), list(), term()) -> term().
-maybe_mark_completed(update, [_, _, _], Result = {ok, #document{value = Transfer}}) ->
-    handle_updated(Transfer),
-    Result;
-maybe_mark_completed(_, _, Result) ->
-    Result.
-
+-spec handle_updated(transfer()) -> ok.
 handle_updated(#transfer{
     transfer_status = active,
     files_to_transfer = FilesToTransfer,
