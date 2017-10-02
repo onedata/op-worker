@@ -101,18 +101,8 @@ open_file_insecure(UserCtx, FileCtx, Flag, HandleId0) ->
     {SFMHandle, FileCtx3} = storage_file_manager:new_handle(SessId, FileCtx2),
     SFMHandle2 = storage_file_manager:set_size(SFMHandle),
     {ok, Handle} = storage_file_manager:open(SFMHandle2, Flag),
-
-    HandleId = case HandleId0 of
-        undefined ->
-            GeneratedHandleId = ?NEW_HANDLE_ID,
-            session:add_handle(SessId, GeneratedHandleId, Handle),
-            ok = file_handles:register_open(FileCtx3, SessId, 1),
-            GeneratedHandleId;
-        _ ->
-            session:add_handle(SessId, HandleId0, Handle),
-            HandleId0
-    end,
-
+    {ok, HandleId} = save_handle(SessId, Handle, HandleId0),
+    ok = file_handles:register_open(FileCtx3, SessId, 1),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_opened{handle_id = HandleId}
@@ -144,8 +134,10 @@ release(UserCtx, FileCtx, HandleId) ->
             ok = session:remove_handle(SessId, HandleId),
             ok = file_handles:register_release(FileCtx, SessId, 1),
             ok = storage_file_manager:release(SfmHandle);
-        {error, not_found} ->
-            ok = file_handles:register_release(FileCtx, SessId, 1);
+        {error, link_not_found} ->
+            ok;
+        {error, {not_found, _}} ->
+            ok;
         Other ->
             Other
     end,
@@ -174,8 +166,6 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
 
     HandleId = case user_ctx:is_direct_io(UserCtx) of
         true ->
-            SessId = user_ctx:get_session_id(UserCtx),
-            ok = file_handles:register_open(FileCtx3, SessId, 1),
             ?NEW_HANDLE_ID;
         _ ->
             % open file on adequate node
@@ -276,6 +266,24 @@ create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
     }, scope = SpaceId}),
 
     file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId)).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Saves file handle in user's session, returns id of saved handle.
+%% @end
+%%--------------------------------------------------------------------
+-spec save_handle(session:id(), storage_file_manager:handle(),
+    storage_file_manager:handle_id() | undefined) -> {ok, binary()}.
+save_handle(SessId, Handle, HandleId0) ->
+    HandleId = case HandleId0 of
+        undefined ->
+            ?NEW_HANDLE_ID;
+        _ ->
+            HandleId0
+    end,
+    session:add_handle(SessId, HandleId, Handle),
+    {ok, HandleId}.
 
 %%--------------------------------------------------------------------
 %% @private
