@@ -26,7 +26,8 @@
 %% How many entries shall be processed in one batch for set_scope operation.
 -define(SET_SCOPE_BATCH_SIZE, 100).
 
--export([create/1, create/2, save/1, get/1, exists/1, update/2, delete/1]).
+-export([create/1, create/2, save/1, get/1, exists/1, update/2, delete/1,
+    delete_without_link/1]).
 -export([delete_child_link/4, foreach_child/3]).
 -export([hidden_file_name/1, is_hidden/1]).
 -export([add_share/2, remove_share/2]).
@@ -208,15 +209,43 @@ update(Key, Diff) ->
 delete({uuid, FileUuid}) ->
     delete(FileUuid);
 delete(#document{
-    key = FileUuid
+    key = FileUuid,
+    scope = Scope,
+    value = #file_meta{
+        name = FileName,
+        parent_uuid = ParentUuid
+    }
 }) ->
-    delete(FileUuid);
+    ?run(begin
+        ok = delete_child_link(ParentUuid, Scope, FileUuid, FileName),
+        LocalLocationId = file_location:local_id(FileUuid),
+        file_location:delete(LocalLocationId),
+        datastore_model:delete(?CTX, FileUuid)
+    end);
 delete({path, Path}) ->
     ?run(begin
-        {ok, #document{key = FileUuid}} = fslogic_path:resolve(Path),
-        delete(FileUuid)
+        {ok, #document{} = Doc} = fslogic_path:resolve(Path),
+        delete(Doc)
     end);
 delete(FileUuid) ->
+    ?run(begin
+        case file_meta:get(FileUuid) of
+            {ok, #document{} = Doc} -> delete(Doc);
+            {error, not_found} -> ok
+        end
+    end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Similar to delete/1 but does not delete link in parent.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_without_link(uuid() | doc()) -> ok | {error, term()}.
+delete_without_link(#document{
+    key = FileUuid
+}) ->
+    delete_without_link(FileUuid);
+delete_without_link(FileUuid) ->
     ?run(begin
         LocalLocationId = file_location:local_id(FileUuid),
         file_location:delete(LocalLocationId),
