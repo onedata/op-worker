@@ -36,13 +36,15 @@
     model_init/0, 'after'/5, before/4]).
 
 -define(RESOLUTION, application:get_env(?APP_NAME, storage_sync_histogram_length, 12)).
+-define(KEY_SEPARATOR, <<"#">>).
+-define(KEY_PREFIX, <<"sshist">>).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
 new(Metric) ->
-    Key = term_to_binary(Metric),
+    Key = to_key(Metric),
     NewDoc = #document{
         key = Key,
         value = #storage_sync_histogram{
@@ -59,7 +61,7 @@ new(Metric) ->
 %%-------------------------------------------------------------------
 -spec add(key(), value()) -> {ok ,key()}.
 add(Metric, NewValue) ->
-    {ok, _} = update(term_to_binary(Metric), fun(Old = #storage_sync_histogram{
+    {ok, _} = update(to_key(Metric), fun(Old = #storage_sync_histogram{
         values = OldValues
     }) ->
         NewLength = length(OldValues) + 1,
@@ -78,7 +80,7 @@ add(Metric, NewValue) ->
 %%-------------------------------------------------------------------
 -spec get_histogram(key()) -> {values(), timestamp()} | undefined.
 get_histogram(Metric) ->
-    case  get(term_to_binary(Metric)) of
+    case  get(to_key(Metric)) of
         {ok, #document{value = #storage_sync_histogram{
             values = Values,
             timestamp = Timestamp
@@ -96,7 +98,7 @@ get_histogram(Metric) ->
 %%-------------------------------------------------------------------
 -spec remove(key()) -> ok.
 remove(Metric) ->
-    ok = delete(term_to_binary(Metric)).
+    ok = delete(to_key(Metric)).
 
 
 %%%===================================================================
@@ -189,3 +191,12 @@ model_init() ->
     Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+-spec to_key(exometer_report:metric()) -> binary().
+to_key(Metric) ->
+    MetricBinary = [str_utils:to_binary(E) || E <- Metric],
+    str_utils:join_binary([?KEY_PREFIX | MetricBinary], ?KEY_SEPARATOR).

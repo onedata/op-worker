@@ -469,7 +469,7 @@ ensure_reporters_started(SpaceId) ->
             _ -> false
         end
     end, exometer_report:list_reporters()),
-    case AliveReporters -- ExpectedReporters of
+    case ExpectedReporters -- AliveReporters of
         [] ->
             ok;
         DeadReporters ->

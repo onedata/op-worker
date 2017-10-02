@@ -474,6 +474,7 @@
     dy_hist :: undefined | [non_neg_integer()]
 }).
 
+%% Model for storing storage_sync monitoring data.
 -record(storage_sync_histogram, {
     values = [] :: storage_sync_histogram:values(),
     timestamp :: undefined | storage_sync_histogram:timestamp()
