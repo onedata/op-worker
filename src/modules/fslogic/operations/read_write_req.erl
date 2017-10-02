@@ -54,12 +54,12 @@ read(UserCtx, FileCtx, HandleId, Offset, Size) ->
     HandleId :: storage_file_manager:handle_id(),
     ByteSequences :: [#byte_sequence{}]) -> fslogic_worker:proxyio_response().
 write(UserCtx, FileCtx, HandleId, ByteSequences) ->
-    {ok, Handle} = get_handle(UserCtx, FileCtx, HandleId),
+    {ok, Handle0} = get_handle(UserCtx, FileCtx, HandleId),
     {Wrote, _} =
-        lists:foldl(fun(#byte_sequence{offset = Offset, data = Data}, {Acc, Handle0}) ->
-            {WroteNow, Handle1} = write_all(Handle0, Offset, Data, 0),
-            {Acc + WroteNow, Handle1}
-        end, {0, Handle}, ByteSequences),
+        lists:foldl(fun(#byte_sequence{offset = Offset, data = Data}, {Acc, Handle}) ->
+            {WroteNow, NewHandle} = write_all(Handle, Offset, Data, 0),
+            {Acc + WroteNow, NewHandle}
+        end, {0, Handle0}, ByteSequences),
 
     #proxyio_response{
         status = #status{code = ?OK},

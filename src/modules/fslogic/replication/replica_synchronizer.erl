@@ -58,19 +58,19 @@ synchronize(UserCtx, FileCtx, Block = #file_block{size = RequestedSize}, Prefetc
         fun({ProviderId, Blocks}) ->
             lists:foreach(
                 fun(#file_block{offset = O, size = S}) ->
-                    Ref = rtransfer:prepare_request(ProviderId, FileGuid, O, S),
+                    Ref0 = rtransfer:prepare_request(ProviderId, FileGuid, O, S),
                     Self = self(),
-                    NotifyFun = fun(Ref0, Offset, Size) ->
+                    NotifyFun = fun(Ref, Offset, Size) ->
                         monitoring_event:emit_rtransfer_statistics(SpaceId, UserId, Size),
                         replica_updater:update(FileCtx3,
                             [#file_block{offset = Offset, size = Size}], undefined, false),
                         transfer:mark_data_transfer_finished(TransferId, Size),
-                        Self ! {Ref0, active, #file_block{offset = Offset, size = Size}}
+                        Self ! {Ref, active, #file_block{offset = Offset, size = Size}}
                     end,
-                    CompleteFun = fun(Ref0, Status) ->
-                        Self ! {Ref0, complete, Status}
+                    CompleteFun = fun(Ref, Status) ->
+                        Self ! {Ref, complete, Status}
                     end,
-                    NewRef = rtransfer:fetch(Ref, NotifyFun, CompleteFun),
+                    NewRef = rtransfer:fetch(Ref0, NotifyFun, CompleteFun),
                     {ok, _} = receive_rtransfer_notification(NewRef, ?SYNC_TIMEOUT)
                 end, Blocks)
         end, ProvidersAndBlocks),

@@ -18,8 +18,8 @@
 
 -include("modules/rtransfer/gateway.hrl").
 -include("modules/rtransfer/registered_names.hrl").
--include_lib("ctool/include/logging.hrl").
 -include("timeouts.hrl").
+-include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 
 -record(gwcstate, {
