@@ -140,20 +140,24 @@ ensure_initialised() ->
 %% selection is persisted.
 %% @end
 %%--------------------------------------------------------------------
--spec get_refreshing_node() -> {ok, node()}.
+-spec get_refreshing_node() -> {ok, node()} | {error, dispatcher_out_of_sync}.
 get_refreshing_node() ->
     ensure_initialised(),
     {ok, #document{value = #subscriptions_state{refreshing_node = Node}}} =
         subscriptions_state:get(?SUBSCRIPTIONS_STATE_KEY),
-    {ok, Nodes} = request_dispatcher:get_worker_nodes(?MODULE),
-    case lists:member(Node, Nodes) of
-        true -> {ok, Node};
-        false ->
-            [NewNode | _] = lists:append(Nodes, [node()]),
-            subscriptions_state:update(?SUBSCRIPTIONS_STATE_KEY, fun(State) ->
-                State#subscriptions_state{refreshing_node = NewNode}
-            end),
-            {ok, NewNode}
+    case request_dispatcher:get_worker_nodes(?MODULE) of
+        {ok, Nodes} ->
+            case lists:member(Node, Nodes) of
+                true -> {ok, Node};
+                false ->
+                    [NewNode | _] = lists:append(Nodes, [node()]),
+                    subscriptions_state:update(?SUBSCRIPTIONS_STATE_KEY, fun(State) ->
+                        State#subscriptions_state{refreshing_node = NewNode}
+                    end),
+                    {ok, NewNode}
+            end;
+        Error ->
+            Error
     end.
 
 
