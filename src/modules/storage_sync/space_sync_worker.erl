@@ -21,8 +21,8 @@
 -include_lib("ctool/include/logging.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 
--define(SYNC_JOB_TIMEOUT,  timer:hours(24)).
--define(ASYNC_JOB_TIMEOUT,  timer:seconds(10)).
+-define(SYNC_JOB_TIMEOUT, timer:hours(24)).
+-define(ASYNC_JOB_TIMEOUT, timer:seconds(10)).
 
 %% Interval between successive check strategies.
 -define(SPACE_STRATEGIES_CHECK_INTERVAL, check_strategies_interval).
@@ -158,10 +158,18 @@ run({return_none, Jobs}) ->
 %%--------------------------------------------------------------------
 -spec check_strategies() -> ok.
 check_strategies() ->
-    try od_provider:get_or_fetch(oneprovider:get_provider_id()) of
-        {ok, #document{value = #od_provider{spaces = SpaceIds}}} ->
-            check_strategies(SpaceIds);
-        {error, _} -> ok
+    try
+        case oneprovider:get_provider_id() of
+            ?UNREGISTERED_PROVIDER_ID ->
+                ok;
+            ProviderId ->
+                case provider_logic:get_spaces(ProviderId) of
+                    {ok, Spaces} ->
+                        check_strategies(Spaces);
+                    {error, _} ->
+                        ok
+                end
+        end
     catch
         _:TReason ->
             ?error_stacktrace("Unable to check space strategies due to: ~p", [TReason])
@@ -348,7 +356,7 @@ run_and_merge_all([]) -> ok;
 run_and_merge_all(Jobs = [
     #space_strategy_job{
         strategy_type = StrategyType}
-| _]) ->
+    | _]) ->
     PoolName = StrategyType:main_worker_pool(),
     Responses = utils:pmap(fun(Job) ->
         case (StrategyType =:= storage_import) or (StrategyType =:= storage_update) of

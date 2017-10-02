@@ -375,9 +375,9 @@ init_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
         (#subscription_cancellation{} = Msg, _) -> Self ! Msg, ok;
         (_, _) -> ok
     end),
-    test_utils:mock_new(Workers, od_space),
-    test_utils:mock_expect(Workers, od_space, get_or_fetch, fun(_, _, _) ->
-        {ok, #document{value = #od_space{providers = [oneprovider:get_provider_id()]}}}
+    test_utils:mock_new(Workers, space_logic),
+    test_utils:mock_expect(Workers, space_logic, get_provider_ids, fun(_, _) ->
+        {ok, [oneprovider:get_provider_id()]}
     end),
     initializer:mock_test_file_context(Config, <<"file_id">>),
     initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config);
@@ -392,9 +392,9 @@ init_per_testcase(_Case, Config) ->
     test_utils:mock_expect(Worker, communicator, send, fun
         (_, _) -> ok
     end),
-    test_utils:mock_new(Workers, od_space),
-    test_utils:mock_expect(Workers, od_space, get_or_fetch, fun(_, _, _) ->
-        {ok, #document{value = #od_space{providers = [oneprovider:get_provider_id()]}}}
+    test_utils:mock_new(Workers, space_logic),
+    test_utils:mock_expect(Workers, space_logic, get_provider_ids, fun(_, _) ->
+        {ok, [oneprovider:get_provider_id()]}
     end),
     session_setup(Worker, SessId, Iden, Self),
     initializer:mock_test_file_context(Config, <<"file_id">>),
@@ -405,7 +405,7 @@ end_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:unmock_test_file_context(Config),
-    test_utils:mock_unload(Workers, od_space),
+    test_utils:mock_unload(Workers, space_logic),
     test_utils:mock_validate_and_unload(Workers, [communicator]);
 
 end_per_testcase(_Case, Config) ->
@@ -414,7 +414,7 @@ end_per_testcase(_Case, Config) ->
     session_teardown(Worker, SessId),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:unmock_test_file_context(Config),
-    test_utils:mock_unload(Workers, od_space),
+    test_utils:mock_unload(Workers, space_logic),
     test_utils:mock_validate_and_unload(Worker, [communicator]).
 
 %%%===================================================================

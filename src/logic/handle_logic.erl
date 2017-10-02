@@ -1,24 +1,30 @@
 %%%-------------------------------------------------------------------
 %%% @author Lukasz Opiola
-%%% @copyright (C) 2016 ACK CYFRONET AGH
+%%% @copyright (C) 2017 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Interface to provider's handle cache.
-%%% Operations may involve interactions with OZ api
-%%% or cached records from the datastore.
+%%% @doc
+%%% Interface for reading and manipulating od_handle records synchronized
+%%% via Graph Sync. Requests are delegated to gs_client_worker, which decides
+%%% if they should be served from cache or handled by OneZone.
+%%% NOTE: This is the only valid way to interact with od_handle records, to
+%%% ensure consistency, no direct requests to datastore or OZ REST should
+%%% be performed.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(handle_logic).
 -author("Lukasz Opiola").
 
+-include("graph_sync/provider_graph_sync.hrl").
 -include("proto/common/credentials.hrl").
 -include("modules/datastore/datastore_models.hrl").
--include_lib("ctool/include/oz/oz_spaces.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--export([get/2, create/5]).
+-export([get/2, get_public_data/2]).
+-export([has_eff_user/2, has_eff_user/3]).
+-export([create/5]).
 
 %%%===================================================================
 %%% API
@@ -26,30 +32,68 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Retrieves handle_info document.
-%% Provided client should be authorised to access handle_info details.
+%% Retrieves handle doc by given SpaceId.
 %% @end
 %%--------------------------------------------------------------------
--spec get(oz_endpoint:auth(), HandleId :: od_handle:id()) ->
-    {ok, datastore:doc()} | {error, term()}.
-get(Auth, HandleId) ->
-  od_handle:get_or_fetch(Auth, HandleId).
+-spec get(gs_client_worker:client(), od_handle:id()) ->
+    {ok, od_handle:doc()} | gs_protocol:error().
+get(SessionId, HandleId) ->
+    gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = get,
+        gri = #gri{type = od_handle, id = HandleId, aspect = instance, scope = private},
+        subscribe = true
+    }).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates a new handle for given user.
+%% Retrieves handle doc restricted to public data by given SpaceId.
 %% @end
 %%--------------------------------------------------------------------
--spec create(oz_endpoint:auth(), HandleServiceId :: od_handle_service:id(),
-    ResourceType :: od_handle:resource_type(),
-    ResourceId :: od_handle:resource_id(),
-    Metadata :: od_handle:metadata()) ->
-    {ok, od_share:id()} | {error, Reason :: term()}.
-create(Auth, HandleServiceId, ResourceType, ResourceId, Metadata) ->
-    oz_handles:create(Auth, [
-        {<<"handleServiceId">>, HandleServiceId},
-        {<<"resourceType">>, ResourceType},
-        {<<"resourceId">>, ResourceId},
-        {<<"metadata">>, Metadata}
-    ]).
+-spec get_public_data(gs_client_worker:client(), od_handle:id()) ->
+    {ok, od_handle:doc()} | gs_protocol:error().
+get_public_data(SessionId, HandleId) ->
+    gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = get,
+        gri = #gri{type = od_handle, id = HandleId, aspect = instance, scope = public},
+        subscribe = true
+    }).
+
+
+-spec has_eff_user(od_handle:doc(), od_user:id()) -> boolean().
+has_eff_user(#document{value = #od_handle{eff_users = EffUsers}}, UserId) ->
+    maps:is_key(UserId, EffUsers).
+
+
+-spec has_eff_user(gs_client_worker:client(), od_handle:id(), od_user:id()) ->
+    boolean().
+has_eff_user(SessionId, HandleId, UserId) ->
+    case get(SessionId, HandleId) of
+        {ok, HandleDoc = #document{}} ->
+            has_eff_user(HandleDoc, UserId);
+        _ ->
+            false
+    end.
+
+
+-spec create(gs_client_worker:client(), od_handle_service:id(),
+    od_handle:resource_type(), od_handle:resource_id(), od_handle:metadata()) ->
+    {ok, od_handle:id()} | gs_protocol:error().
+create(SessionId, HandleServiceId, ResourceType, ResourceId, Metadata) ->
+    {ok, UserId} = session:get_user_id(SessionId),
+    Res = ?CREATE_RETURN_ID(gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = create,
+        gri = #gri{type = od_handle, id = undefined, aspect = instance},
+        auth_hint = ?AS_USER(UserId),
+        data = #{
+            <<"handleServiceId">> => HandleServiceId,
+            <<"resourceType">> => ResourceType,
+            <<"resourceId">> => ResourceId,
+            <<"metadata">> => Metadata
+        },
+        subscribe = true
+    })),
+    ?ON_SUCCESS(Res, fun(_) ->
+        {ok, UserId} = session:get_user_id(SessionId),
+        gs_client_worker:invalidate_cache(od_user, UserId)
+    end).

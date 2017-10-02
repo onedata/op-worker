@@ -15,7 +15,6 @@
 -include("global_definitions.hrl").
 -include("modules/events/definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include_lib("ctool/include/oz/oz_users.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
@@ -430,6 +429,7 @@ attributes_retaining_test(Config) ->
     SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W2)}}, Config),
     UserId = ?config({user_id, <<"user1">>}, Config),
+    UserName = ?config({user_name, <<"user1">>}, Config),
 
     ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId1, filename(1, TestDir, ""))),
     ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId1, filename(2, TestDir, ""))),
@@ -447,6 +447,7 @@ attributes_retaining_test(Config) ->
         acetype = ?allow_mask,
         aceflags = ?no_flags_mask,
         identifier = UserId,
+        name = UserName,
         acemask = (?read_mask bor ?write_mask bor ?execute_mask)
     },
     Mimetype = <<"text/html">>,

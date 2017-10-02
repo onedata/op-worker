@@ -147,10 +147,7 @@ public_rpc_backend() -> public_rpc_backend.
     {ok, proplists:proplist()} | gui_error:error_result().
 session_details() ->
     ProviderId = oneprovider:get_provider_id(),
-    {ok, #document{
-        value = #od_provider{
-            client_name = ProviderName
-        }}} = od_provider:get_or_fetch(ProviderId),
+    {ok, ProviderName} = provider_logic:get_name(ProviderId),
     {_AppId, _AppName, AppVersion} = lists:keyfind(
         ?APP_NAME, 1, application:loaded_applications()
     ),

@@ -75,10 +75,13 @@ remove_acl(_UserCtx, FileCtx) ->
 get_acl_insecure(_UserCtx, FileCtx) ->
     case xattr:get_by_name(FileCtx, ?ACL_KEY) of
         {ok, Val} ->
+            % ACLs are kept in database without names, as they might change.
+            % Resolve the names here.
+            Acl = acl_names:add(acl_logic:from_json_format_to_acl(Val)),
             #provider_response{
                 status = #status{code = ?OK},
                 provider_response = #acl{
-                    value = acl_logic:from_json_format_to_acl(Val)
+                    value = Acl
                 }
             };
         {error, not_found} ->
@@ -94,7 +97,10 @@ get_acl_insecure(_UserCtx, FileCtx) ->
     Create :: boolean(), Replace :: boolean()) ->
     fslogic_worker:provider_response().
 set_acl_insecure(_UserCtx, FileCtx, #acl{value = Val}, Create, Replace) ->
-    case xattr:set(FileCtx, ?ACL_KEY, acl_logic:from_acl_to_json_format(Val), Create, Replace) of
+    % ACLs are kept in database without names, as they might change.
+    % Strip the names here.
+    AclJson = acl_logic:from_acl_to_json_format(acl_names:strip(Val)),
+    case xattr:set(FileCtx, ?ACL_KEY, AclJson, Create, Replace) of
         {ok, _} ->
             ok = permissions_cache:invalidate(),
             maybe_chmod_storage_file(FileCtx, 8#000),

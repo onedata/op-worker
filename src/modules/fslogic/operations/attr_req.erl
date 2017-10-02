@@ -87,7 +87,7 @@ get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize) ->
     ShareId = file_ctx:get_share_id_const(FileCtx),
     {FileName, FileCtx3} = file_ctx:get_aliased_name(FileCtx2, UserCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx3),
-    {{Uid, Gid}, FileCtx4} = file_ctx:get_posix_storage_user_context(FileCtx3),
+    {{Uid, Gid}, FileCtx4} = file_ctx:get_posix_storage_user_context(FileCtx3, UserCtx),
 
     {Size, FileCtx5} = case IncludeSize of
         true -> file_ctx:get_file_size(FileCtx4);

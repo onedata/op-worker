@@ -61,9 +61,9 @@ create_share_insecure(UserCtx, FileCtx, Name) ->
     Guid = file_ctx:get_guid_const(FileCtx),
     ShareId = datastore_utils:gen_key(),
     ShareGuid = fslogic_uuid:guid_to_share_guid(Guid, ShareId),
-    Auth = user_ctx:get_auth(UserCtx),
+    SessionId = user_ctx:get_session_id(UserCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    {ok, _} = share_logic:create(Auth, ShareId, Name, SpaceId, ShareGuid),
+    {ok, _} = share_logic:create(SessionId, ShareId, Name, SpaceId, ShareGuid),
     {ok, _} = file_meta:add_share(FileCtx, ShareId),
     #provider_response{
         status = #status{code = ?OK},
@@ -82,8 +82,8 @@ create_share_insecure(UserCtx, FileCtx, Name) ->
     fslogic_worker:provider_response().
 remove_share_insecure(UserCtx, FileCtx) ->
     ShareId = file_ctx:get_share_id_const(FileCtx),
-    Auth = user_ctx:get_auth(UserCtx),
-    ok = share_logic:delete(Auth, ShareId),
+    SessionId = user_ctx:get_session_id(UserCtx),
+    ok = share_logic:delete(SessionId, ShareId),
     {ok, _} = file_meta:remove_share(FileCtx, ShareId),
     ok = permissions_cache:invalidate(),
     #provider_response{status = #status{code = ?OK}}.

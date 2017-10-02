@@ -119,7 +119,7 @@ update_record(<<"file-permission">>, FileId, Data) ->
         case Type of
             <<"acl">> ->
                 AclJson = proplists:get_value(<<"aclValue">>, Data, <<"[]">>),
-                Acl = acl_utils:json_to_acl(AclJson),
+                Acl = gui_acl_parser:json_to_acl(AclJson),
                 case logical_file_manager:set_acl(SessId, {guid, FileId}, Acl) of
                     ok ->
                         ok;
@@ -210,7 +210,7 @@ file_permissions_record(SessId, FileId) ->
                 {error, ?EACCES} ->
                     {<<"eaccess">>, null};
                 {ok, AclEntries} ->
-                    {<<"acl">>, acl_utils:acl_to_json(AclEntries)}
+                    {<<"acl">>, gui_acl_parser:acl_to_json(AclEntries)}
             end,
             {ok, [
                 {<<"id">>, FileId},

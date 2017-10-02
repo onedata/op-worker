@@ -251,12 +251,11 @@ file_record(ModelName, SessionId, FileId) ->
     ResourceId :: binary(), ChildrenFromCache :: boolean(),
     ChildrenOffset :: non_neg_integer()) -> {ok, proplists:proplist()}.
 file_record(<<"file-shared">>, _, <<"containerDir.", ShareId/binary>>, _, _) ->
-    UserAuth = op_gui_utils:get_user_auth(),
     {ok, #document{
         value = #od_share{
             name = Name,
             root_file = RootFileId
-        }}} = share_logic:get(UserAuth, ShareId),
+        }}} = share_logic:get(gui_session:get_session_id(), ShareId),
     FileId = fslogic_uuid:share_guid_to_guid(RootFileId),
     Res = [
         {<<"id">>, <<"containerDir.", ShareId/binary>>},
@@ -280,7 +279,7 @@ file_record(<<"file-public">>, _, <<"containerDir.", ShareId/binary>>, _, _) ->
         value = #od_share{
             name = Name,
             root_file = RootFile
-        }}} = share_logic:get(?GUEST_SESS_ID, ShareId),
+        }}} = share_logic:get_public_data(?GUEST_SESS_ID, ShareId),
     Res = [
         {<<"id">>, <<"containerDir.", ShareId/binary>>},
         {<<"name">>, Name},

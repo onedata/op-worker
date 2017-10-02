@@ -127,11 +127,9 @@ apply_size_change_and_maybe_emit(SpaceId, SizeDiff) ->
     AvailableSize :: integer().
 available_size(SpaceId) ->
     try
-        {ok, #document{value = #space_quota{current_size = CSize}}} =
-            space_quota:get(SpaceId),
-        {ok, #document{value = #od_space{providers_supports = ProvSupport}}} =
-            od_space:get_or_fetch(provider, SpaceId, ?ROOT_USER_ID),
-        SupSize = proplists:get_value(oneprovider:get_provider_id(), ProvSupport, 0),
+        {ok, #document{value = #space_quota{current_size = CSize}}} = ?MODULE:get(SpaceId),
+        {ok, Supports} = space_logic:get_providers_supports(?ROOT_SESS_ID, SpaceId),
+        SupSize = maps:get(oneprovider:get_provider_id(), Supports, 0),
         SupSize - CSize
     catch
         _:Reason ->
@@ -193,8 +191,7 @@ soft_assert_write(SpaceId, WriteSize) ->
 %%--------------------------------------------------------------------
 -spec get_disabled_spaces() -> [od_space:id()].
 get_disabled_spaces() ->
-    %% @todo: use locally cached data after resolving VFS-2087
-    {ok, SpaceIds} = oz_providers:get_spaces(provider),
+    {ok, SpaceIds} = provider_logic:get_spaces(),
     SpacesWithASize = lists:map(fun(SpaceId) ->
         {SpaceId, catch space_quota:available_size(SpaceId)}
     end, SpaceIds),

@@ -115,8 +115,8 @@ remove_file_on_storage(FileCtx, UserCtx, ?DIRECTORY_TYPE) ->
 delete_shares(_UserCtx, []) ->
     ok;
 delete_shares(UserCtx, Shares) ->
-    Auth = user_ctx:get_auth(UserCtx),
-    [ok = share_logic:delete(Auth, ShareId) || ShareId <- Shares],
+    SessionId = user_ctx:get_session_id(UserCtx),
+    [ok = share_logic:delete(SessionId, ShareId) || ShareId <- Shares],
     ok.
 
 %%--------------------------------------------------------------------

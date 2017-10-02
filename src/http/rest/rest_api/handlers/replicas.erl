@@ -17,6 +17,7 @@
 -include("http/rest/http_status.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -252,8 +253,10 @@ get_file_guid(#{auth := Auth, path := Path}) ->
 %%--------------------------------------------------------------------
 -spec throw_if_non_local_space(od_space:id()) -> ok.
 throw_if_non_local_space(SpaceId) ->
-    {ok, Provider} = od_provider:get(oneprovider:get_provider_id()),
-    case lists:member(SpaceId, Provider#document.value#od_provider.spaces) of
+    SupportsSpace = provider_logic:supports_space(
+        ?ROOT_SESS_ID, oneprovider:get_provider_id(), SpaceId
+    ),
+    case SupportsSpace of
         true ->
             ok;
         false ->
@@ -283,15 +286,9 @@ throw_if_non_local_provider(ProviderId) ->
 throw_if_nonexistent_provider(_SpaceId, undefined) ->
     ok;
 throw_if_nonexistent_provider(SpaceId, ProviderId) ->
-    case od_provider:get(ProviderId) of
-        {ok, _} ->
-            {ok, #document{value = #od_space{providers = Providers}}} = od_space:get(SpaceId),
-            case lists:member(ProviderId, Providers) of
-                true ->
-                    ok;
-                false ->
-                    throw(?ERROR_PROVIDER_NOT_FOUND)
-            end;
-        _Error ->
+    case space_logic:is_supported(?ROOT_SESS_ID, SpaceId, ProviderId) of
+        true ->
+            ok;
+        false ->
             throw(?ERROR_PROVIDER_NOT_SUPPORTING_SPACE)
     end.

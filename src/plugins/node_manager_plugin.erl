@@ -77,7 +77,6 @@ modules_with_args() -> [
         {supervisor_flags, session_manager_worker:supervisor_flags()},
         {supervisor_children_spec, session_manager_worker:supervisor_children_spec()}
     ]},
-    {subscriptions_worker, []},
     {fslogic_worker, []},
     {dbsync_worker, [
         {supervisor_flags, dbsync_worker:supervisor_flags()}
@@ -85,6 +84,9 @@ modules_with_args() -> [
     {monitoring_worker, [
         {supervisor_flags, monitoring_worker:supervisor_flags()},
         {supervisor_children_spec, monitoring_worker:supervisor_children_spec()}
+    ]},
+    {gs_worker, [
+        {supervisor_flags, gs_worker:supervisor_flags()}
     ]},
     {fslogic_deletion_worker, []},
     {space_sync_worker, []}
@@ -128,7 +130,6 @@ before_init([]) ->
 -spec check_node_ip_address() -> IPV4Addr :: {A :: byte(), B :: byte(), C :: byte(), D :: byte()}.
 check_node_ip_address() ->
     try
-        application:set_env(ctool, verify_oz_cert, false), % @todo VFS-1572
         {ok, IPBin} = oz_providers:check_ip_address(provider),
         {ok, IP} = inet_parse:ipv4_address(binary_to_list(IPBin)),
         IP
