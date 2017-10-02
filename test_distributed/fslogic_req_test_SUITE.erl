@@ -20,7 +20,6 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("ctool/include/oz/oz_spaces.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 
@@ -553,14 +552,6 @@ simple_rename_test(Config) ->
     {SessId2, _UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user2">>}, Config)},
     {_SessId3, _UserId3} = {?config({session_id, {<<"user3">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user3">>}, Config)},
     {_SessId4, _UserId4} = {?config({session_id, {<<"user4">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user4">>}, Config)},
-
-    test_utils:mock_expect(Worker, oz_spaces, get_providers,
-        fun
-            (provider, _SpaceId) ->
-                {ok, [oneprovider:get_provider_id()]};
-            (_Client, _SpaceId) ->
-                meck:passthrough([_Client, _SpaceId])
-        end),
 
     #fuse_response{fuse_response = #guid{guid = RootGuid1}} =
         ?assertMatch(

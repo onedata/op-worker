@@ -17,7 +17,6 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("clproto/include/messages.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/oz/oz_spaces.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -40,17 +39,12 @@ all() -> ?ALL([token_authentication]).
 token_authentication(Config) ->
     % given
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
-    mock_oz_certificates(Config),
     SessionId = <<"SessionId">>,
 
     % when
     {ok, Sock} = connect_via_token(Worker1, ?MACAROON, SessionId),
 
     % then
-    ?assertMatch(
-        {ok, #document{value = #od_user{name = ?USER_NAME}}},
-        rpc:call(Worker1, od_user, get, [?USER_ID])
-    ),
     ?assertMatch(
         {ok, #document{value = #session{identity = #user_identity{user_id = ?USER_ID}}}},
         rpc:call(Worker1, session, get, [SessionId])
@@ -59,7 +53,6 @@ token_authentication(Config) ->
         {ok, #document{value = #user_identity{user_id = ?USER_ID}}},
         rpc:call(Worker1, user_identity, get, [#token_auth{token = ?MACAROON}])
     ),
-    test_utils:mock_validate_and_unload(Workers, oz_endpoint),
     ok = ssl:close(Sock).
 
 %%%===================================================================
@@ -68,11 +61,13 @@ token_authentication(Config) ->
 
 init_per_testcase(_Case, Config) ->
     ssl:start(),
-    mock_oz_spaces(Config),
+    mock_space_logic(Config),
+    mock_user_logic(Config),
     Config.
 
 end_per_testcase(_Case, Config) ->
-    unmock_oz_spaces(Config),
+    unmock_space_logic(Config),
+    unmock_user_logic(Config),
     ssl:stop().
 
 %%%===================================================================
@@ -123,63 +118,26 @@ receive_server_message(IgnoredMsgList) ->
         {error, timeout}
     end.
 
-mock_oz_spaces(Config) ->
+mock_space_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_expect(Workers, oz_spaces, get_details,
-        fun(_, _) -> {ok, #space_details{}} end),
-    test_utils:mock_expect(Workers, oz_spaces, get_users,
-        fun(_, _) -> {ok, []} end),
-    test_utils:mock_expect(Workers, oz_spaces, get_groups,
-        fun(_, _) -> {ok, []} end).
+    test_utils:mock_new(Workers, space_logic, []),
+    test_utils:mock_expect(Workers, space_logic, get,
+        fun(_, _) ->
+            {ok, #document{value = #od_space{}}}
+        end).
 
-unmock_oz_spaces(Config) ->
+unmock_space_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, oz_spaces).
+    test_utils:mock_validate_and_unload(Workers, space_logic).
 
-mock_oz_certificates(Config) ->
-    [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
-    OZUrl = rpc:call(Worker1, oz_plugin, get_oz_url, []),
-    OZRestPort = rpc:call(Worker1, oz_plugin, get_oz_rest_port, []),
-    OZRestApiPrefix = rpc:call(Worker1, oz_plugin, get_oz_rest_api_prefix, []),
-    OzRestApiUrl = str_utils:format("~s:~B~s", [
-        OZUrl,
-        OZRestPort,
-        OZRestApiPrefix
-    ]),
+mock_user_logic(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, user_logic, []),
+    test_utils:mock_expect(Workers, user_logic, get_by_auth,
+        fun(#token_auth{token = ?MACAROON}) ->
+            {ok, #document{key = ?USER_ID, value = #od_user{name = ?USER_NAME}}}
+        end).
 
-    % save key and cert files on the workers
-    % read the files
-    {ok, KeyBin} = file:read_file(?TEST_FILE(Config, "grpkey.pem")),
-    {ok, CertBin} = file:read_file(?TEST_FILE(Config, "grpcert.pem")),
-    % choose paths for the files
-    KeyPath = "/tmp/user_auth_test_key.pem",
-    CertPath = "/tmp/user_auth_test_cert.pem",
-    % and save them on workers
-    lists:foreach(
-        fun(Node) ->
-            ok = rpc:call(Node, file, write_file, [KeyPath, KeyBin]),
-            ok = rpc:call(Node, file, write_file, [CertPath, CertBin])
-        end, Workers),
-    % Use the cert paths on workers to mock oz_endpoint
-    SSLOpts = {ssl_options, [{keyfile, KeyPath}, {certfile, CertPath}]},
-
-    test_utils:mock_new(Workers, oz_endpoint),
-    test_utils:mock_expect(Workers, oz_endpoint, provider_request,
-        fun
-        % @todo for now, in rest we only use the root macaroon
-            (#macaroon_auth{macaroon = Macaroon}, URN, Method, Headers, Body, Options) ->
-                http_client:request(Method, OzRestApiUrl ++ URN, Headers#{
-                    <<"content-type">> => <<"application/json">>,
-                    <<"macaroon">> => Macaroon
-                }, Body, [SSLOpts, insecure | Options]);
-            (#token_auth{token = Token}, URN, Method, Headers, Body, Options) ->
-                http_client:request(Method, OzRestApiUrl ++ URN, Headers#{
-                    <<"content-type">> => <<"application/json">>,
-                    <<"x-auth-token">> => Token
-                }, Body, [SSLOpts, insecure | Options]);
-            (_, URN, Method, Headers, Body, Options) ->
-                http_client:request(Method, OzRestApiUrl ++ URN,
-                    Headers#{<<"content-type">> => <<"application/json">>},
-                    Body, [SSLOpts, insecure | Options])
-        end
-    ).
+unmock_user_logic(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_validate_and_unload(Workers, user_logic).

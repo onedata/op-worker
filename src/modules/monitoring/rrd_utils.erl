@@ -1,6 +1,6 @@
 %% ===================================================================
 %% @author Michal Wrona
-%% @copyright (C): 2016 ACK CYFRONET AGH
+%% @copyright (C) 2016 ACK CYFRONET AGH
 %% This software is released under the MIT license
 %% cited in 'LICENSE.txt'.
 %% @end

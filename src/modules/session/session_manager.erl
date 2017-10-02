@@ -85,7 +85,7 @@ reuse_or_create_rest_session(Iden) ->
     {ok, SessId :: session:id()} | {error, Reason :: term()}.
 reuse_or_create_rest_session(Iden = #user_identity{user_id = UserId}, Auth) ->
     SessId = session:get_rest_session_id(Iden),
-    case od_user:exists(UserId) of
+    case user_logic:exists(?ROOT_SESS_ID, UserId) of
         true ->
             reuse_or_create_session(SessId, rest, Iden, Auth, []);
         false ->
@@ -119,7 +119,6 @@ create_gui_session(Iden, Auth) ->
     case session:create(#document{key = SessId, value = Sess}) of
         {ok, SessId} ->
             supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, gui]),
-            subscribe_user(Iden),
             {ok, SessId};
         {error, Reason} ->
             {error, Reason}
@@ -131,11 +130,13 @@ create_gui_session(Iden, Auth) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_root_session() -> {ok, SessId :: session:id()} |
-    {error, Reason :: term()}.
+{error, Reason :: term()}.
 create_root_session() ->
     Sess = #session{status = active, type = root, connections = [],
         accessed = utils:system_time_seconds(),
-        identity = #user_identity{user_id = ?ROOT_USER_ID}},
+        identity = #user_identity{user_id = ?ROOT_USER_ID},
+        auth = ?ROOT_AUTH
+    },
     case session:create(#document{key = ?ROOT_SESS_ID, value = Sess}) of
         {ok, ?ROOT_SESS_ID} ->
             supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [?ROOT_SESS_ID, root]),
@@ -153,7 +154,7 @@ create_root_session() ->
     {error, Reason :: term()}.
 create_guest_session() ->
     Sess = #session{status = active, type = guest, connections = [],
-        identity = #user_identity{user_id = ?GUEST_USER_ID}},
+        identity = #user_identity{user_id = ?GUEST_USER_ID}, auth = ?GUEST_AUTH},
     case session:create(#document{key = ?GUEST_SESS_ID, value = Sess}) of
         {ok, ?GUEST_SESS_ID} ->
             supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [?GUEST_SESS_ID, guest]),
@@ -248,15 +249,14 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, NewCons, ProxyVia) ->
                     {error, {invalid_identity, Iden}}
             end
     end,
+
     case session:update(SessId, Diff) of
         {ok, SessId} ->
-            subscribe_user(Iden),
             {ok, SessId};
         {error, not_found} ->
             case session:create(#document{key = SessId, value = Sess}) of
                 {ok, SessId} ->
                     supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, SessType]),
-                    subscribe_user(Iden),
                     {ok, SessId};
                 {error, already_exists} ->
                     reuse_or_create_session(SessId, SessType, Iden, Auth, NewCons, ProxyVia);
@@ -265,19 +265,4 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, NewCons, ProxyVia) ->
             end;
         {error, Reason} ->
             {error, Reason}
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc @private
-%% Includes user in subscription (if identity belongs to an user).
-%% @end
-%%--------------------------------------------------------------------
--spec subscribe_user(Iden :: session:identity()) -> ok.
-subscribe_user(Iden) ->
-    UID = Iden#user_identity.user_id,
-    case UID of
-        undefined -> ok;
-        _ ->
-            subscriptions:put_user(UID),
-            subscriptions_worker:refresh_subscription()
     end.

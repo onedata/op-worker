@@ -23,7 +23,7 @@
 -export([init/0, terminate/0]).
 -export([find_record/2, find_all/1, query/2, query_record/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
--export([user_record/2, push_modified_user/5]).
+-export([user_record/2]).
 
 %%%===================================================================
 %%% data_backend_behaviour callbacks
@@ -57,10 +57,10 @@ terminate() ->
 -spec find_record(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find_record(<<"user">>, UserId) ->
-    UserAuth = op_gui_utils:get_user_auth(),
+    SessionId = gui_session:get_session_id(),
     case gui_session:get_user_id() of
         UserId ->
-            {ok, user_record(UserAuth, UserId)};
+            {ok, user_record(SessionId, UserId)};
         _ ->
             gui_error:unauthorized()
     end.
@@ -121,8 +121,8 @@ create_record(<<"user">>, _Data) ->
 update_record(<<"user">>, UserId, [{<<"defaultSpaceId">>, DefaultSpace}]) ->
     case gui_session:get_user_id() of
         UserId ->
-            UserAuth = op_gui_utils:get_user_auth(),
-            case user_logic:set_default_space(UserAuth, DefaultSpace) of
+            SessionId = gui_session:get_session_id(),
+            case user_logic:set_default_space(SessionId, UserId, DefaultSpace) of
                 ok ->
                     ok;
                 {error, _} ->
@@ -156,76 +156,40 @@ delete_record(<<"user">>, _Id) ->
 %% Returns a client-compliant user record based on space id.
 %% @end
 %%--------------------------------------------------------------------
--spec user_record(Auth :: #macaroon_auth{}, UserId :: od_user:id()) ->
+-spec user_record(SessionId :: session:id(), UserId :: od_user:id()) ->
     proplists:proplist().
-user_record(Auth, UserId) ->
+user_record(SessionId, UserId) ->
     {ok, #document{value = #od_user{
         name = Name,
-        default_space = DefaultSpaceValue
-    }}} = od_user:get(UserId),
+        default_space = DefaultSpaceValue,
+        eff_spaces = EffSpaces,
+        eff_groups = EffGroups,
+        eff_handle_services = EffHServices
+    }}} = user_logic:get(SessionId, UserId),
     DefaultSpace = case DefaultSpaceValue of
         undefined -> null;
         _ -> DefaultSpaceValue
     end,
-    Groups = op_gui_utils:find_all_groups(Auth, UserId),
-    Spaces = op_gui_utils:find_all_spaces(Auth, UserId),
     Shares = lists:foldl(
         fun(SpaceId, Acc) ->
             % Make sure that user is allowed to view shares in this space
-            Authorized = space_logic:has_effective_privilege(
-                SpaceId, UserId, ?SPACE_VIEW
+            Authorized = space_logic:has_eff_privilege(
+                SessionId, SpaceId, UserId, ?SPACE_VIEW
             ),
             case Authorized of
                 true ->
-                    {ok, #document{value = #od_space{
-                        shares = ShareIds
-                    }}} = od_space:get(SpaceId),
+                    {ok, ShareIds} = space_logic:get_shares(SessionId, SpaceId),
                     ShareIds ++ Acc;
                 false ->
                     Acc
             end
-        end, [], Spaces),
-    {ok, HandleServices} = user_logic:get_effective_handle_services(
-        Auth, UserId
-    ),
+        end, [], EffSpaces),
     [
         {<<"id">>, UserId},
         {<<"name">>, Name},
-        {<<"defaultSpaceId">>, DefaultSpace},
-        {<<"groups">>, Groups},
-        {<<"spaces">>, Spaces},
+        {<<"defaultSpaceId">>, gs_protocol:undefined_to_null(DefaultSpace)},
+        {<<"groups">>, EffGroups},
+        {<<"spaces">>, EffSpaces},
         {<<"shares">>, Shares},
-        {<<"handleServices">>, HandleServices}
+        {<<"handleServices">>, EffHServices}
     ].
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Modifies user record by changing one of its relations (adds or removes
-%% relations of given type).
-%% RelationType can be:
-%%      <<"groups">>
-%%      <<"spaces">>
-%%      <<"shares">>
-%%      <<"handleServices">>
-%% @end
-%%--------------------------------------------------------------------
--spec push_modified_user(Auth :: #macaroon_auth{}, UserId :: od_user:id(),
-    RelationType :: binary(), AddOrRemove :: add | remove,
-    Ids :: binary() | [binary()]) -> ok.
-push_modified_user(UserAuth, UserId, RelationType, AddOrRemove, Id) when is_binary(Id) ->
-    push_modified_user(UserAuth, UserId, RelationType, AddOrRemove, [Id]);
-push_modified_user(UserAuth, UserId, RelationType, AddOrRemove, Ids) ->
-    UserRecord = user_record(UserAuth, UserId),
-    Relations = proplists:get_value(RelationType, UserRecord),
-    NewRelations = case AddOrRemove of
-        add ->
-            % Make sure that the Ids are not duplicated.
-            Ids ++ (Relations -- Ids);
-        remove ->
-            Relations -- Ids
-    end,
-    UserRecordWithNewRelations = lists:keystore(
-        RelationType, 1, UserRecord, {RelationType, NewRelations}
-    ),
-    gui_async:push_updated(<<"user">>, UserRecordWithNewRelations).

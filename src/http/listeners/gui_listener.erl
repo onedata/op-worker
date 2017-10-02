@@ -85,6 +85,7 @@ start() ->
         % Proper requests are routed to handler modules
         {'_', lists:flatten([
             {?provider_id_path, get_provider_id_handler, []},
+            {"/nagios/oz_connectivity", oz_connectivity_handler, []},
             {"/nagios/[...]", nagios_handler, []},
             {"/upload", upload_handler, []},
             {"/download/:id", download_handler, []},

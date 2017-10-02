@@ -32,8 +32,10 @@
 -define(ROOT_DIR_NAME, <<"">>).
 -define(ROOT_USER_ID, <<"0">>).
 -define(ROOT_SESS_ID, <<"0">>).
+-define(ROOT_AUTH, root_auth).
 -define(GUEST_USER_ID, <<"nobody">>).
 -define(GUEST_SESS_ID, <<"nobody">>).
+-define(GUEST_AUTH, guest_auth).
 
 %% Mode for automatically created parent directory while creating file/directory.
 -define(AUTO_CREATED_PARENT_DIR_MODE, 8#333).

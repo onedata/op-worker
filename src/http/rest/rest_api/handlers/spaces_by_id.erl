@@ -84,19 +84,18 @@ content_types_provided(Req, State) ->
 get_space(Req, State) ->
     {State2, Req2} = validator:parse_space_id(Req, State),
 
-    #{auth := Auth, space_id := SpaceId} = State2,
+    #{auth := SessionId, space_id := SpaceId} = State2,
 
-    space_membership:check_with_auth(Auth, SpaceId),
+    space_membership:check_with_auth(SessionId, SpaceId),
     {ok, #document{value = #od_space{name = Name, providers = Providers}}} =
-        od_space:get_or_fetch(Auth, SpaceId),
+        space_logic:get(SessionId, SpaceId),
     ProvidersRawResponse = lists:map(fun(ProviderId) ->
-        {ok, #document{value = #od_provider{client_name = ProviderName}}} =
-            od_provider:get_or_fetch(ProviderId),
+        {ok, ProviderName} = provider_logic:get_name(ProviderId),
         #{
             <<"providerId">> => ProviderId,
             <<"providerName">> => ProviderName
         }
-    end, Providers),
+    end, maps:keys(Providers)),
     RawResponse = #{
         <<"name">> => Name,
         <<"providers">> => ProvidersRawResponse,

@@ -170,17 +170,17 @@ is_user_root_dir_const(FileCtx, UserCtx) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets space alias and space id, in user context according to given space name.
+%% Gets space id, in user context according to given space name.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_space_id_from_user_spaces(od_space:name(), user_ctx:ctx()) ->
-    od_space:alias().
+    od_space:name().
 get_space_id_from_user_spaces(SpaceName, UserCtx) ->
-    #document{value = #od_user{space_aliases = Spaces}} =
-        user_ctx:get_user(UserCtx),
-    case lists:keyfind(SpaceName, 2, Spaces) of
+    UserId = user_ctx:get_user_id(UserCtx),
+    SessionId = user_ctx:get_session_id(UserCtx),
+    case user_logic:get_space_by_name(SessionId, UserId, SpaceName) of
         false ->
             throw(?ENOENT);
-        {SpaceId, SpaceName} ->
+        {true, SpaceId} ->
             SpaceId
     end.
