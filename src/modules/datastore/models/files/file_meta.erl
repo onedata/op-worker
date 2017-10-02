@@ -368,31 +368,19 @@ get_including_deleted(FileUuid) ->
 delete({uuid, Key}) ->
     delete(Key);
 delete(#document{
-    key = FileUuid,
-    value = #file_meta{
-        name = FileName,
-        parent_uuid = ParentUuid
-    }
+    key = FileUuid
 }) ->
-    ?run(begin
-        ok = delete_child_link_in_parent(ParentUuid, FileName, FileUuid),
-        LocalLocaitonId = file_location:local_id(FileUuid),
-        file_location:delete(LocalLocaitonId),
-        model:execute_with_default_context(?MODULE, delete, [FileUuid])
-    end);
+    delete(FileUuid);
 delete({path, Path}) ->
     ?run(begin
-        {ok, {#document{} = Document, _}} = resolve_path(Path),
-        delete(Document)
+        {ok, {#document{key = FileUuid}, _}} = resolve_path(Path),
+        delete(FileUuid)
     end);
 delete(FileUuid) ->
     ?run(begin
-        case get(FileUuid) of
-            {ok, #document{} = Document} ->
-                delete(Document);
-            {error, {not_found, _}} ->
-                ok
-        end
+        LocalLocaitonId = file_location:local_id(FileUuid),
+        file_location:delete(LocalLocaitonId),
+        model:execute_with_default_context(?MODULE, delete, [FileUuid])
     end).
 
 %%--------------------------------------------------------------------

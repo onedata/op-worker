@@ -57,6 +57,7 @@ change_replicated_internal(SpaceId, #document{
         {ok, false} ->
             try
                 FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
+                fslogic_event_emitter:emit_file_removed(FileCtx, []),
                 % TODO - if links delete comes before, it fails!
                 sfm_utils:delete_storage_file_without_location(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
                 file_location:delete(file_location:local_id(FileUuid), UserId)
@@ -68,6 +69,22 @@ change_replicated_internal(SpaceId, #document{
         _ ->
             ok
     end;
+change_replicated_internal(SpaceId, #document{
+    key = FileUuid,
+    value = #file_meta{},
+    deleted = true
+} = FileDoc) ->
+    ?debug("change_replicated_internal: deleted file_meta (directory) ~p", [FileUuid]),
+    FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
+    fslogic_event_emitter:emit_file_removed(FileCtx, []);
+change_replicated_internal(SpaceId, #document{
+    key = FileUuid,
+    value = #file_meta{deleted = true}
+} = FileDoc) ->
+    ?debug("change_replicated_internal: deleted file_meta (internal delete field is true) ~p",
+        [FileUuid]),
+    FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
+    fslogic_event_emitter:emit_file_removed(FileCtx, []);
 change_replicated_internal(SpaceId, #document{
         key = FileUuid,
         value = #file_meta{type = ?REGULAR_FILE_TYPE}
