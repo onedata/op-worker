@@ -21,7 +21,7 @@
 -include_lib("storage_file_manager_errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--export([new_handle/2, new_handle/6, set_size/1, increase_size/2, get_size/1]).
+-export([new_handle/2, new_handle/6, set_size/1, increase_size/2]).
 -export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/3, link/2, readdir/3,
     get_child_handle/2]).
 -export([stat/1, read/3, write/3, create/2, create/3, open/2, release/1,
@@ -105,15 +105,6 @@ increase_size(SFMHandle = #sfm_handle{file_size = CurrentSize}, Increase) ->
     SFMHandle#sfm_handle{
         file_size = CurrentSize + Increase
     }.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns file size
-%% @end
-%%--------------------------------------------------------------------
--spec get_size(handle()) -> non_neg_integer().
-get_size(#sfm_handle{file_size = Size}) ->
-    Size.
 
 %%--------------------------------------------------------------------
 %% @doc
