@@ -401,8 +401,6 @@ delete(FileUuid) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_without_link(uuid() | datastore:document()) -> ok | datastore:generic_error().
-delete_without_link({uuid, Key}) ->
-    delete_without_link(Key);
 delete_without_link(#document{
     key = FileUuid
 }) ->
