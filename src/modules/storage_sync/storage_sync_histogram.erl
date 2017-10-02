@@ -40,13 +40,15 @@
 }).
 
 -define(RESOLUTION, application:get_env(?APP_NAME, storage_sync_histogram_length, 12)).
+-define(KEY_SEPARATOR, <<"#">>).
+-define(KEY_PREFIX, <<"sshist">>).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
 new(Metric) ->
-    Key = term_to_binary(Metric),
+    Key = to_key(Metric),
     NewDoc = #document{
         key = Key,
         value = #storage_sync_histogram{
@@ -63,7 +65,7 @@ new(Metric) ->
 %%-------------------------------------------------------------------
 -spec add(key(), value()) -> {ok , doc()}.
 add(Metric, NewValue) ->
-    {ok, _} = datastore_model:update(?CTX, term_to_binary(Metric), fun(Old = #storage_sync_histogram{
+    {ok, _} = datastore_model:update(?CTX, to_key(Metric), fun(Old = #storage_sync_histogram{
         values = OldValues
     }) ->
         NewLength = length(OldValues) + 1,
@@ -82,7 +84,7 @@ add(Metric, NewValue) ->
 %%-------------------------------------------------------------------
 -spec get_histogram(key()) -> {values(), timestamp()} | undefined.
 get_histogram(Metric) ->
-    case  get(term_to_binary(Metric)) of
+    case  get(to_key(Metric)) of
         {ok, #document{value = #storage_sync_histogram{
             values = Values,
             timestamp = Timestamp
@@ -100,7 +102,7 @@ get_histogram(Metric) ->
 %%-------------------------------------------------------------------
 -spec remove(key()) -> ok.
 remove(Metric) ->
-    ok = datastore_model:delete(?CTX, term_to_binary(Metric)).
+    ok = datastore_model:delete(?CTX, to_key(Metric)).
 
 
 %%%===================================================================
@@ -115,3 +117,12 @@ remove(Metric) ->
 -spec get_ctx() -> datastore:ctx().
 get_ctx() ->
     ?CTX.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+-spec to_key(exometer_report:metric()) -> binary().
+to_key(Metric) ->
+    MetricBinary = [str_utils:to_binary(E) || E <- Metric],
+    str_utils:join_binary([?KEY_PREFIX | MetricBinary], ?KEY_SEPARATOR).
