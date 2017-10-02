@@ -208,30 +208,21 @@ update(Key, Diff) ->
 delete({uuid, FileUuid}) ->
     delete(FileUuid);
 delete(#document{
-    key = FileUuid,
-    scope = Scope,
-    value = #file_meta{
-        name = FileName,
-        parent_uuid = ParentUuid
-    }
+    key = FileUuid
 }) ->
     ?run(begin
-        ok = delete_child_link(ParentUuid, Scope, FileUuid, FileName),
-        LocalLocationId = file_location:local_id(FileUuid),
-        file_location:delete(LocalLocationId),
-        datastore_model:delete(?CTX, FileUuid)
+        delete(FileUuid)
     end);
 delete({path, Path}) ->
     ?run(begin
-        {ok, #document{} = Doc} = fslogic_path:resolve(Path),
-        delete(Doc)
+        {ok, #document{key = FileUuid}} = fslogic_path:resolve(Path),
+        delete(FileUuid)
     end);
 delete(FileUuid) ->
     ?run(begin
-        case file_meta:get(FileUuid) of
-            {ok, #document{} = Doc} -> delete(Doc);
-            {error, not_found} -> ok
-        end
+        LocalLocationId = file_location:local_id(FileUuid),
+        file_location:delete(LocalLocationId),
+        datastore_model:delete(?CTX, FileUuid)
     end).
 
 %%--------------------------------------------------------------------
