@@ -210,9 +210,7 @@ delete({uuid, FileUuid}) ->
 delete(#document{
     key = FileUuid
 }) ->
-    ?run(begin
-        delete(FileUuid)
-    end);
+    delete(FileUuid);
 delete({path, Path}) ->
     ?run(begin
         {ok, #document{key = FileUuid}} = fslogic_path:resolve(Path),
