@@ -19,7 +19,7 @@
 
 
 %% API
--export([remove_file_and_file_meta/3, remove_file_and_file_meta/4,
+-export([remove_file_and_file_meta/3, remove_file_and_file_meta/5,
     remove_file_handles/1]).
 
 %%--------------------------------------------------------------------
@@ -29,7 +29,7 @@
 %%--------------------------------------------------------------------
 -spec remove_file_and_file_meta(file_ctx:ctx(), user_ctx:ctx(), boolean()) -> ok.
 remove_file_and_file_meta(FileCtx, UserCtx, Silent) ->
-    remove_file_and_file_meta(FileCtx, UserCtx, Silent, true).
+    remove_file_and_file_meta(FileCtx, UserCtx, Silent, true, false).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -37,11 +37,13 @@ remove_file_and_file_meta(FileCtx, UserCtx, Silent) ->
 %% If parameter Silent is true, file_removed_event will not be emitted.
 %% If parameter RemoveStorageFile is false, file will not be deleted
 %% on storage.
+%% If parameter DeleteParentLink is true, link in parent is deleted.
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_file_and_file_meta(file_ctx:ctx(), user_ctx:ctx(), boolean(),
-    boolean()) -> ok.
-remove_file_and_file_meta(FileCtx, UserCtx, Silent, RemoveStorageFile) ->
+    boolean(), boolean()) -> ok.
+remove_file_and_file_meta(FileCtx, UserCtx, Silent, RemoveStorageFile,
+    DeleteParentLink) ->
     {FileDoc = #document{
         value = #file_meta{
             type = Type,
@@ -59,7 +61,12 @@ remove_file_and_file_meta(FileCtx, UserCtx, Silent, RemoveStorageFile) ->
         _ -> ok
     end,
 
-    ok = file_meta:delete_without_link(FileDoc),
+    ok = case DeleteParentLink of
+        true ->
+            file_meta:delete(FileDoc);
+        _ ->
+            file_meta:delete_without_link(FileDoc)
+    end,
     maybe_emit_event(FileCtx3, UserCtx, Silent).
 
 %%--------------------------------------------------------------------

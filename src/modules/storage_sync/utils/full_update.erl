@@ -82,7 +82,8 @@ delete_imported_file_and_update_counters(ChildName, FileCtx, SpaceId) ->
 delete_imported_file(ChildName, FileCtx) ->
     RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
     {ChildCtx, _} = file_ctx:get_child(FileCtx, ChildName, RootUserCtx),
-    ok = fslogic_delete:remove_file_and_file_meta(ChildCtx, RootUserCtx, true, false),
+    ok = fslogic_delete:remove_file_and_file_meta(ChildCtx, RootUserCtx,
+        true, false, true),
     ok = fslogic_delete:remove_file_handles(ChildCtx).
 
 %%===================================================================
