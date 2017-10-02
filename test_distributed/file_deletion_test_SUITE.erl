@@ -197,7 +197,7 @@ init_should_clear_open_files_test_base(Config, DelayedFileCreation) ->
     {ok, ClearedOpenFiles} = rpc:call(Worker, file_handles, list, []),
     ?assertEqual(0, length(ClearedOpenFiles)),
 
-    test_utils:mock_assert_num_calls(Worker, file_meta, delete, 1, 1),
+    test_utils:mock_assert_num_calls(Worker, file_meta, delete_without_link, 1, 1),
     case DelayedFileCreation of
         true -> ok;
         false -> test_utils:mock_assert_num_calls(Worker, storage_file_manager, unlink, 1, 1)
@@ -217,7 +217,7 @@ open_file_deletion_request_test_base(Config, DelayedFileCreation) ->
     ?assertEqual(ok, ?req(Worker, {open_file_deletion_request, file_ctx:new_by_guid(FileGuid)})),
 
     test_utils:mock_assert_num_calls(Worker, rename_req, rename, 4, 0),
-    test_utils:mock_assert_num_calls(Worker, file_meta, delete, 1, 1),
+    test_utils:mock_assert_num_calls(Worker, file_meta, delete_without_link, 1, 1),
     case DelayedFileCreation of
         true -> ok;
         false -> test_utils:mock_assert_num_calls(Worker, storage_file_manager, unlink, 1, 1)
@@ -240,7 +240,7 @@ deletion_of_not_open_file_test_base(Config, DelayedFileCreation) ->
     ?assertEqual(ok, ?req(Worker, {fslogic_deletion_request, UserCtx, file_ctx:new_by_guid(FileGuid), false})),
 
     test_utils:mock_assert_num_calls(Worker, rename_req, rename, 4, 0),
-    test_utils:mock_assert_num_calls(Worker, file_meta, delete, 1, 1),
+    test_utils:mock_assert_num_calls(Worker, file_meta, delete_without_link, 1, 1),
     case DelayedFileCreation of
         true -> ok;
         false -> test_utils:mock_assert_num_calls(Worker, storage_file_manager, unlink, 1, 1)
