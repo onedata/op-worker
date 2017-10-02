@@ -45,7 +45,7 @@
 refresh_subscription() ->
     {Missing, ResumeAt} = subscriptions:get_missing(),
     Users = subscriptions:get_users(),
-    ?info("Subscription progress - last_seq: ~p, missing: ~p, users: ~p ",
+    ?debug("Subscription progress - last_seq: ~p, missing: ~p, users: ~p ",
         [ResumeAt, Missing, Users]),
 
     Message = json_utils:encode([
@@ -89,7 +89,7 @@ handle(healthcheck) ->
     case subscription_wss:healthcheck() of
         ok -> ok;
         %% Active connection to the OZ isn't required to assume worker is ok
-        {error, Reason} -> ?warning("Connection error:~p", [Reason])
+        {error, Reason} -> ?debug("Connection error:~p", [Reason])
     end;
 
 handle(ensure_connection_running) ->
@@ -104,7 +104,11 @@ handle(refresh_subscription) ->
         {ok, Self} -> refresh_subscription();
         {ok, Node} ->
             ?debug("Pid ~p does not match dedicated ~p", [Self, Node]),
-            ensure_connection_running()
+            ensure_connection_running();
+        {error, dispatcher_out_of_sync} ->
+            % Possible error during node init - log only debug
+            ?debug("Cannot refresh subscriptions: dispatcher_out_of_sync"),
+            ok
     end,
     ok;
 
@@ -213,7 +217,7 @@ start_provider_connection() ->
                         reset_reconnect_interval();
                     {Type, Reason} ->
                         Interval = postpone_next_reconnect(),
-                        ?error("Subscriptions connection failed to start - ~p:~p. "
+                        ?debug("Subscriptions connection failed to start - ~p:~p. "
                         "Next retry not sooner than ~p seconds.", [
                             Type, Reason, Interval
                         ])
