@@ -51,7 +51,7 @@ get_user_id(Args, StorageId, HelperName, LumaConfig = #luma_config{url = LumaUrl
 %% @end
 %%--------------------------------------------------------------------
 -spec get_group_id(map(), storage:id(), helper:name(),
-    luma_config:config()) -> {ok, od_user:id()}.
+    luma_config:config()) -> {ok, od_group:id()}.
 get_group_id(Args, StorageId, HelperName, LumaConfig = #luma_config{url = LumaUrl}) ->
     Url = str_utils:format_bin("~s/resolve_group", [LumaUrl]),
     ReqHeaders = luma_proxy:get_request_headers(LumaConfig),
@@ -60,31 +60,11 @@ get_group_id(Args, StorageId, HelperName, LumaConfig = #luma_config{url = LumaUr
     Response = json_utils:decode_map(RespBody),
     Idp = maps:get(<<"idp">>, Response),
     IdpGroupId = maps:get(<<"groupId">>, Response),
-    GroupId = idp_to_onedata_group_id(Idp, IdpGroupId),
-    {ok, GroupId}.
+    provider_logic:map_idp_group_to_onedata(Idp, IdpGroupId).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Sends request to onezone to map given Idp and IdpGroupId to onedata
-%% group id.
-%% @end
-%%-------------------------------------------------------------------
--spec idp_to_onedata_group_id(binary(), binary()) -> od_group:id().
-idp_to_onedata_group_id(Idp, IdpGroupId) ->
-    Url = oz_plugin:get_oz_rest_endpoint("/provider/test/map_group"),
-    Headers = #{<<"Content-Type">> => <<"application/json">>},
-    Body = json_utils:encode_map(#{
-        <<"idp">> => Idp,
-        <<"groupId">> => IdpGroupId
-    }),
-    {ok, 200, _RespHeaders, RespBody} = http_client:post(Url, Headers, Body),
-    Response = json_utils:decode_map(RespBody),
-    maps:get(<<"groupId">>, Response).
 
 %%-------------------------------------------------------------------
 %% @private

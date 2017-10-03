@@ -28,6 +28,7 @@
 -export([get_urls/0, get_urls/1, get_urls/2]).
 -export([has_eff_user/2, has_eff_user/3]).
 -export([supports_space/2, supports_space/3]).
+-export([map_idp_group_to_onedata/2]).
 
 %%%===================================================================
 %%% API
@@ -221,3 +222,21 @@ supports_space(SessionId, ProviderId, SpaceId) ->
         _ ->
             false
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Calls OZ to learn what's the onedata id of given group from certain IdP.
+%% @end
+%%--------------------------------------------------------------------
+-spec map_idp_group_to_onedata(Idp :: binary(), IdpGroupId :: binary()) ->
+    {ok, od_group:id()} | gs_protocol:error().
+map_idp_group_to_onedata(Idp, IdpGroupId) ->
+    ?CREATE_RETURN_DATA(gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = create,
+        gri = #gri{type = od_provider, id = undefined, aspect = map_idp_group},
+        data = #{
+            <<"idp">> => Idp,
+            <<"groupId">> => IdpGroupId
+        }
+    })).

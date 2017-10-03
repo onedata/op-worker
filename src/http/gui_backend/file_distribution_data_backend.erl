@@ -82,26 +82,47 @@ query(<<"file-distribution">>, [{<<"fileId">>, FileId}]) ->
     {ok, Distributions} = logical_file_manager:get_file_distribution(
         SessionId, {guid, FileId}
     ),
-    Res = lists:map(
+    SpaceId = fslogic_uuid:guid_to_space_id(FileId),
+    % Distributions contain only the providers which has synchronized file
+    % blocks, we need to mark other providers with "neverSynchronized" flag
+    % to present that in GUI.
+    {ok, Providers} = space_logic:get_provider_ids(SessionId, SpaceId),
+    SynchronizedProviders = lists:map(
+        fun(#{<<"providerId">> := ProviderId}) ->
+            ProviderId
+        end, Distributions),
+    NeverSynchronizedProviders = Providers -- SynchronizedProviders,
+
+    BlocksOfSyncedProviders = lists:map(
         fun(#{<<"providerId">> := ProviderId, <<"blocks">> := Blocks}) ->
-            BlocksList =
-                case Blocks of
-                    [] ->
-                        [0, 0];
-                    _ ->
-                        lists:foldl(
-                            fun([Offset, Size], Acc) ->
-                                Acc ++ [Offset, Offset + Size]
-                            end, [], Blocks)
-                end,
+            BlocksList = case Blocks of
+                [] ->
+                    [0, 0];
+                _ ->
+                    lists:foldl(
+                        fun([Offset, Size], Acc) ->
+                            Acc ++ [Offset, Offset + Size]
+                        end, [], Blocks)
+            end,
             [
                 {<<"id">>, op_gui_utils:ids_to_association(FileId, ProviderId)},
                 {<<"fileId">>, FileId},
                 {<<"provider">>, ProviderId},
-                {<<"blocks">>, BlocksList}
+                {<<"blocks">>, BlocksList},
+                {<<"neverSynchronized">>, false}
             ]
         end, Distributions),
-    {ok, Res}.
+
+    BlocksOfNeverSyncedProviders = lists:map(
+        fun(ProviderId) ->
+            [
+                {<<"id">>, op_gui_utils:ids_to_association(FileId, ProviderId)},
+                {<<"provider">>, ProviderId},
+                {<<"neverSynchronized">>, true}
+            ]
+        end, NeverSynchronizedProviders),
+
+    {ok, BlocksOfSyncedProviders ++ BlocksOfNeverSyncedProviders}.
 
 
 %%--------------------------------------------------------------------
