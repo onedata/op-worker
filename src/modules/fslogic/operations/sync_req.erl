@@ -16,6 +16,7 @@
 -include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
+-include("modules/datastore/transfer.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
@@ -95,13 +96,59 @@ get_file_distribution(_UserCtx, FileCtx) ->
     }.
 
 %%--------------------------------------------------------------------
-%% @equiv replicate_file_insecure/3 with permission check
+%% @equiv replicate_file/4 but catches exception and notifies
+%% transfer_controller
 %% @end
 %%--------------------------------------------------------------------
 -spec replicate_file(user_ctx:ctx(), file_ctx:ctx(),
     undefined | fslogic_blocks:block(), undefined | transfer:id()) ->
     fslogic_worker:provider_response().
+replicate_file(UserCtx, FileCtx, Block, undefined) ->
+    replicate_file_internal(UserCtx, FileCtx, Block, undefined);
 replicate_file(UserCtx, FileCtx, Block, TransferId) ->
+    try
+        replicate_file_internal(UserCtx, FileCtx, Block, TransferId)
+    catch
+        _:Error ->
+            {ok, #document{
+                value = #transfer{pid = Pid}
+            }} = transfer:get(TransferId),
+            transfer_controller:failed_transfer(transfer:decode_pid(Pid), Error)
+    end.
+
+%%--------------------------------------------------------------------
+%% @equiv invalidate_file_replica_internal/4 but catches exception and
+%% notifies invalidation_controller
+%% @end
+%%--------------------------------------------------------------------
+-spec invalidate_file_replica(user_ctx:ctx(), file_ctx:ctx(),
+    undefined | fslogic_blocks:block(), undefined | transfer:id()) ->
+    fslogic_worker:provider_response().
+invalidate_file_replica(UserCtx, FileCtx, MigrationProviderId, undefined) ->
+    invalidate_file_replica_internal(UserCtx, FileCtx, MigrationProviderId, undefined);
+invalidate_file_replica(UserCtx, FileCtx, MigrationProviderId, TransferId) ->
+    try
+        invalidate_file_replica_internal(UserCtx, FileCtx, MigrationProviderId, TransferId)
+    catch
+        _:Error ->
+            {ok, #document{value = #transfer{pid = Pid}}} = transfer:get(TransferId),
+            invalidation_controller:failed_transfer(transfer:decode_pid(Pid), Error)
+    end.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @equiv replicate_file_insecure/3 with permission check
+%% @end
+%%--------------------------------------------------------------------
+-spec replicate_file_internal(user_ctx:ctx(), file_ctx:ctx(),
+    undefined | fslogic_blocks:block(), undefined | transfer:id()) ->
+    fslogic_worker:provider_response().
+replicate_file_internal(UserCtx, FileCtx, Block, TransferId) ->
     check_permissions:execute(
         [traverse_ancestors, ?write_object],
         [UserCtx, FileCtx, Block, 0, TransferId],
@@ -111,18 +158,14 @@ replicate_file(UserCtx, FileCtx, Block, TransferId) ->
 %% @equiv invalidate_file_replica_insecure/3 with permission check
 %% @end
 %%--------------------------------------------------------------------
--spec invalidate_file_replica(user_ctx:ctx(), file_ctx:ctx(),
+-spec invalidate_file_replica_internal(user_ctx:ctx(), file_ctx:ctx(),
     undefined | oneprovider:id(), undefined | transfer:id()) ->
     fslogic_worker:provider_response().
-invalidate_file_replica(UserCtx, FileCtx, MigrationProviderId, TransferId) ->
+invalidate_file_replica_internal(UserCtx, FileCtx, MigrationProviderId, TransferId) ->
     check_permissions:execute(
         [traverse_ancestors, ?write_object],
         [UserCtx, FileCtx, MigrationProviderId, 0, TransferId],
         fun invalidate_file_replica_insecure/5).
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @private
@@ -165,8 +208,10 @@ replicate_file_insecure(UserCtx, FileCtx, Block, Offset, TransferId) ->
 -spec replicate_children(user_ctx:ctx(), [file_ctx:ctx()],
     fslogic_blocks:block(), undefined | transfer:id()) -> ok.
 replicate_children(UserCtx, Children, Block, TransferId) ->
-    lists:foreach(fun(ChildCtx) -> %todo possible parallelization on a process pool
-        replicate_file(UserCtx, ChildCtx, Block, TransferId)
+    lists:foreach(fun(ChildCtx) ->
+        worker_pool:cast(?REPLICATION_POOL,
+            {?MODULE, replicate_file, [UserCtx, ChildCtx, Block, TransferId]}
+        )
     end, Children).
 
 %%--------------------------------------------------------------------
@@ -185,18 +230,27 @@ invalidate_file_replica_insecure(UserCtx, FileCtx, MigrationProviderId, Offset, 
         {true, FileCtx2} ->
             case file_ctx:get_file_children(FileCtx2, UserCtx, Offset, Chunk) of
                 {Children, _FileCtx3} when length(Children) < Chunk ->
+                    transfer:mark_file_invalidation_scheduled(TransferId, length(Children)),
                     invalidate_children_replicas(UserCtx, Children, MigrationProviderId, TransferId),
+                    transfer:mark_file_invalidation_finished(TransferId, 1),
                     #provider_response{status = #status{code = ?OK}};
                 {Children, FileCtx3} ->
+                    transfer:mark_file_invalidation_scheduled(TransferId, Chunk),
                     invalidate_children_replicas(UserCtx, Children, MigrationProviderId, TransferId),
                     invalidate_file_replica_insecure(UserCtx, FileCtx3, MigrationProviderId, Offset + Chunk, TransferId)
             end;
         {false, FileCtx2} ->
             case replica_finder:get_unique_blocks(FileCtx2) of
                 {[], FileCtx3} ->
-                    invalidate_fully_redundant_file_replica(UserCtx, FileCtx3);
+                    Response = invalidate_fully_redundant_file_replica(UserCtx, FileCtx3),
+                    transfer:mark_file_invalidation_finished(TransferId, 1),
+                    Response;
                 {_Other, FileCtx3} ->
-                    invalidate_partially_unique_file_replica(UserCtx, FileCtx3, MigrationProviderId)
+                    Response = invalidate_partially_unique_file_replica(UserCtx,
+                        FileCtx3, MigrationProviderId
+                    ),
+                    transfer:mark_file_invalidation_finished(TransferId, 1),
+                    Response
             end
     end.
 
@@ -246,7 +300,9 @@ invalidate_fully_redundant_file_replica(UserCtx, FileCtx) ->
 -spec invalidate_children_replicas(user_ctx:ctx(), [file_ctx:ctx()],
     oneprovider:id(), undefined | transfer:id()) -> ok.
 invalidate_children_replicas(UserCtx, Children, MigrationProviderId, TransferId) ->
-    lists:foreach(fun(ChildCtx) ->  %todo possible parallelization on a process pool
+    lists:foreach(fun(ChildCtx) ->
+        %todo possible parallelization on a process pool, cannot parallelize as
+        % in replication because you must be sure that all children are invalidated before parent
         invalidate_file_replica(UserCtx, ChildCtx, MigrationProviderId, TransferId)
     end, Children).
 

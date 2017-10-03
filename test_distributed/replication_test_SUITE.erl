@@ -1385,8 +1385,8 @@ dir_replica_invalidate_should_invalidate_all_children(Config) ->
     ok = lfm_proxy:invalidate_file_replica(W1, SessionId, {guid, DirGuid}, LocalProviderId, ExternalProviderId),
 
     % then
-    ?assertMatch({ok, #statbuf{st_size = 0}}, rpc:call(W1, storage_file_manager, stat, [SfmHandle1])),
-    ?assertMatch({ok, #statbuf{st_size = 0}}, rpc:call(W1, storage_file_manager, stat, [SfmHandle2])),
+    ?assertMatch({ok, #statbuf{st_size = 0}}, rpc:call(W1, storage_file_manager, stat, [SfmHandle1]), 30),
+    ?assertMatch({ok, #statbuf{st_size = 0}}, rpc:call(W1, storage_file_manager, stat, [SfmHandle2]), 30),
     test_utils:mock_validate_and_unload(W1, [od_space, logical_file_manager]).
 
 %%%===================================================================

@@ -54,7 +54,7 @@ synchronize(UserCtx, FileCtx, Block = #file_block{size = RequestedSize}, Prefetc
     FileGuid = file_ctx:get_guid_const(FileCtx3),
     SpaceId = file_ctx:get_space_id_const(FileCtx3),
     UserId = user_ctx:get_user_id(UserCtx),
-    BlockSizes = [BlockSize ||{_, Blocks} <- ProvidersAndBlocks,  #file_block{size = BlockSize} <- Blocks],
+    BlockSizes = [BlockSize || {_, Blocks} <- ProvidersAndBlocks,  #file_block{size = BlockSize} <- Blocks],
     transfer:mark_data_transfer_scheduled(TransferId, lists:sum(BlockSizes)),
     lists:foreach(
         fun({ProviderId, Blocks}) ->

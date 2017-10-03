@@ -52,6 +52,9 @@
 -define(SPACES_CLEANUP_INTERVAL, application:get_env(?APP_NAME,
     spaces_cleanup_interval, timer:hours(1))).
 
+-define(TRANSFERS_RESTART_DELAY, application:get_env(?APP_NAME,
+    transfers_restart_delay, timer:seconds(10))).
+
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
 %%%===================================================================
@@ -69,7 +72,7 @@ init(_Args) ->
         _ -> ok
     end,
 
-    transfer:init_lists(),
+    transfer:init(),
 
     erlang:send_after(?INVALIDATE_PERMISSIONS_CACHE_INTERVAL, self(),
         {sync_timer, invalidate_permissions_cache}
@@ -77,6 +80,10 @@ init(_Args) ->
 
     erlang:send_after(?SPACES_CLEANUP_INTERVAL, self(),
         {sync_timer, spaces_cleanup}
+    ),
+
+    erlang:send_after(?TRANSFERS_RESTART_DELAY, self(),
+        {sync_timer, restart_transfers}
     ),
 
     lists:foreach(fun({Fun, Args}) ->
@@ -128,6 +135,9 @@ handle(spaces_cleanup) ->
         {sync_timer, invalidate_permissions_cache}
     ),
     ok;
+handle(restart_transfers) ->
+    ?debug("Restarting failed and unfinished transfers"),
+    transfer:restart_unfinished_and_failed_transfers();
 handle({fuse_request, SessId, FuseRequest}) ->
     ?debug("fuse_request(~p): ~p", [SessId, FuseRequest]),
     Response = handle_request_and_process_response(SessId, FuseRequest),
@@ -156,6 +166,7 @@ handle(_Request) ->
     Result :: ok | {error, Error},
     Error :: timeout | term().
 cleanup() ->
+    transfer:cleanup(),
     ok.
 
 %%%===================================================================

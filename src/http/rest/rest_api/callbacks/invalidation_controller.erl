@@ -21,7 +21,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([on_new_transfer_doc/1, on_transfer_doc_change/1]).
+-export([on_new_transfer_doc/1, on_transfer_doc_change/1, finish_transfer/1, failed_transfer/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -31,7 +31,8 @@
     transfer_id :: transfer:id(),
     session_id :: session:id(),
     file_guid :: fslogic_worker:file_guid(),
-    callback :: transfer:callback()
+    callback :: transfer:callback(),
+    space_id :: od_space:id()
 }).
 
 %%%===================================================================
@@ -41,6 +42,7 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Callback called when new transfer doc is created locally.
+%% (Because dbsync doesn't detect local changes).
 %% @end
 %%--------------------------------------------------------------------
 -spec on_new_transfer_doc(transfer:doc()) -> ok.
@@ -80,6 +82,26 @@ on_transfer_doc_change(Transfer = #document{value = #transfer{
 on_transfer_doc_change(_ExistingTransfer) ->
     ok.
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Stops invalidation_controller process and marks invalidation as completed.
+%% @end
+%%-------------------------------------------------------------------
+-spec finish_transfer(pid()) -> ok.
+finish_transfer(Pid) ->
+    gen_server2:cast(Pid, finish_transfer),
+    ok.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Stops transfer_controller process and marks transfer as failed.
+%% @end
+%%-------------------------------------------------------------------
+-spec failed_transfer(pid(), term()) -> ok.
+failed_transfer(Pid, Error) ->
+    gen_server2:cast(Pid, {failed_transfer, Error}).
+
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -94,12 +116,14 @@ on_transfer_doc_change(_ExistingTransfer) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
 init([SessionId, TransferId, FileGuid, Callback]) ->
+    {ok, TransferId} = transfer:update(TransferId, #{pid => list_to_binary(pid_to_list(self()))}),
     ok = gen_server2:cast(self(), start_transfer),
     {ok, #state{
         transfer_id = TransferId,
         session_id = SessionId,
         file_guid = FileGuid,
-        callback = Callback
+        callback = Callback,
+        space_id = fslogic_uuid:guid_to_space_id(FileGuid)
     }}.
 
 %%--------------------------------------------------------------------
@@ -133,22 +157,39 @@ handle_call(_Request, _From, State) ->
 handle_cast(start_transfer, State = #state{
     transfer_id = TransferId,
     session_id = SessionId,
-    file_guid = FileGuid,
-    callback = Callback
+    file_guid = FileGuid
 }) ->
+    SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
     try
         transfer:mark_active_invalidation(TransferId),
-        #provider_response{status = #status{code = ?OK}} =
-            sync_req:invalidate_file_replica(user_ctx:new(SessionId), file_ctx:new_by_guid(FileGuid), undefined, TransferId),
-        transfer:mark_completed_invalidation(TransferId),
-        notify_callback(Callback),
-        {stop, normal, State}
+        #provider_response{
+            status = #status{code = ?OK}
+        } = sync_req:invalidate_file_replica(user_ctx:new(SessionId),
+            file_ctx:new_by_guid(FileGuid), undefined, TransferId
+        ),
+        {noreply, State}
     catch
         _:E ->
-            ?error_stacktrace("Could not replicate file ~p due to ~p", [FileGuid, E]),
-            transfer:mark_failed_invalidation(TransferId),
+            ?error_stacktrace("Could not invalidate file ~p due to ~p", [FileGuid, E]),
+            transfer:mark_failed_invalidation(TransferId, SpaceId),
             {stop, E, State}
     end;
+handle_cast(finish_transfer, State = #state{
+    transfer_id = TransferId,
+    callback = Callback,
+    space_id = SpaceId
+}) ->
+    transfer:mark_completed_invalidation(TransferId, SpaceId),
+    notify_callback(Callback),
+    {stop, normal, State};
+handle_cast({failed_transfer, Error}, State = #state{
+    file_guid = FileGuid,
+    transfer_id = TransferId,
+    space_id = SpaceId
+}) ->
+    ?error_stacktrace("Could not invalidate file ~p due to ~p", [FileGuid, Error]),
+    transfer:mark_failed_invalidation(TransferId, SpaceId),
+    {stop, Error, State};
 handle_cast(_Request, State) ->
     ?log_bad_request(_Request),
     {noreply, State}.
