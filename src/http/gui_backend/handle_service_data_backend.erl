@@ -55,12 +55,12 @@ terminate() ->
 -spec find_record(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find_record(<<"handle-service">>, HandleServiceId) ->
+    SessionId = gui_session:get_session_id(),
     UserId = gui_session:get_user_id(),
-    Auth = op_gui_utils:get_user_auth(),
     {ok, #document{
         value = #od_handle_service{
             name = Name
-        }}} = handle_service_logic:get(Auth, HandleServiceId),
+        }}} = handle_service_logic:get(SessionId, HandleServiceId),
     {ok, [
         {<<"id">>, HandleServiceId},
         {<<"name">>, Name},

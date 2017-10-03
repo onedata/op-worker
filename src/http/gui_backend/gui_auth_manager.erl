@@ -36,7 +36,7 @@ authenticate(MacaroonBin) ->
         Caveats = macaroon:third_party_caveats(Macaroon),
         DischMacaroonsBin = lists:map(
             fun({_, CaveatId}) ->
-                {ok, DischMacaroonBin} = oz_users:authorize(CaveatId),
+                {ok, DischMacaroonBin} = user_logic:authorize(CaveatId),
                 DischMacaroonBin
             end, Caveats),
         {ok, #macaroon_auth{

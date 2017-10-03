@@ -16,7 +16,7 @@
 -include("http/rest/rest_api/rest_errors.hrl").
 
 %% API
--export([check_with_auth/2, check_with_user/2]).
+-export([check_with_auth/2, check_with_user/3]).
 
 %%%===================================================================
 %%% API
@@ -28,19 +28,19 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec check_with_auth(onedata_auth_api:auth(), od_space:id()) -> ok | no_return().
-check_with_auth(Auth, SpaceId) ->
-    {ok, UserId} = session:get_user_id(Auth),
-    check_with_user(UserId, SpaceId).
+check_with_auth(SessionId, SpaceId) ->
+    {ok, UserId} = session:get_user_id(SessionId),
+    check_with_user(SessionId, UserId, SpaceId).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Check if user is in space.
 %% @end
 %%--------------------------------------------------------------------
--spec check_with_user(od_user:id(), od_space:id()) -> ok | no_return().
-check_with_user(UserId, SpaceId) ->
-    {ok, #document{value = #od_user{space_aliases = Spaces}}} = od_user:get(UserId),
-    case lists:any(fun({Id, _}) -> SpaceId =:= Id end, Spaces) of
+-spec check_with_user(SessionId :: session:id(), od_user:id(), od_space:id()) ->
+    ok | no_return().
+check_with_user(SessionId, UserId, SpaceId) ->
+    case user_logic:has_eff_space(SessionId, UserId, SpaceId) of
         true ->
             ok;
         false ->

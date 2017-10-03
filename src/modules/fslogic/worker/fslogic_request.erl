@@ -111,15 +111,12 @@ get_target_providers_for_file(UserCtx, FilePartialCtx) ->
             [oneprovider:get_provider_id()];
         false ->
             SpaceId = file_partial_ctx:get_space_id_const(FilePartialCtx),
-            Auth = user_ctx:get_auth(UserCtx),
-            UserId = user_ctx:get_user_id(UserCtx),
-            {ok, #document{value = #od_space{providers = ProviderIds}}} =
-                od_space:get_or_fetch(Auth, SpaceId, UserId), %todo consider caching it in file_ctx
-
-            case lists:member(oneprovider:get_provider_id(), ProviderIds) of
+            SessionId = user_ctx:get_session_id(UserCtx),
+            {ok, Providers} = space_logic:get_provider_ids(SessionId, SpaceId),
+            case lists:member(oneprovider:get_provider_id(), Providers) of
                 true ->
                     [oneprovider:get_provider_id()];
                 false ->
-                    ProviderIds
+                    Providers
             end
     end.

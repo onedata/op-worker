@@ -26,7 +26,8 @@
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
--include_lib("ctool/include/oz/oz_providers.hrl").
+-include_lib("cluster_worker/include/api_errors.hrl").
+-include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 
 %% API
 -export([init/0, terminate/0]).
@@ -104,34 +105,31 @@ query(_ResourceType, _Data) ->
 -spec query_record(ResourceType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 query_record(<<"system-provider">>, Data) ->
+    SessionId = gui_session:get_session_id(),
     ProviderId = proplists:get_value(<<"id">>, Data),
-    % Do not check context, provider name can always be fetched
-    _Context = proplists:get_value(<<"context">>, Data),
-    {ok, #provider_details{
-        name = Name
-    }} = oz_providers:get_details(provider, ProviderId),
-    {ok, [
-        {<<"id">>, ProviderId},
-        {<<"name">>, Name}
-    ]};
+    case provider_logic:get_name(SessionId, ProviderId) of
+        ?ERROR_FORBIDDEN ->
+            gui_error:unauthorized();
+        {ok, ProviderName} ->
+            {ok, [
+                {<<"id">>, ProviderId},
+                {<<"name">>, ProviderName}
+            ]}
+    end;
 
 query_record(<<"system-user">>, Data) ->
-    CurrentUserId = gui_session:get_user_id(),
+    SessionId = gui_session:get_session_id(),
     UserId = proplists:get_value(<<"id">>, Data),
-    Context = proplists:get_value(<<"context">>, Data),
-    [{EntityType, EntityId}] = Context,
-    Authorized = op_gui_utils:can_view_public_data(
-        CurrentUserId,
-        od_user, UserId,
-        binary_to_existing_atom(EntityType, utf8), EntityId
-    ),
-    case Authorized of
-        false ->
+    [{EntityType, EntityId}] = proplists:get_value(<<"context">>, Data),
+    AuthHint = case EntityType of
+        <<"od_group">> -> ?THROUGH_GROUP(EntityId);
+        <<"od_space">> -> ?THROUGH_SPACE(EntityId)
+    end,
+
+    case user_logic:get_name(SessionId, UserId, AuthHint) of
+        ?ERROR_FORBIDDEN ->
             gui_error:unauthorized();
-        true ->
-            CurrentUserAuth = op_gui_utils:get_user_auth(),
-            {ok, #document{value = #od_user{name = UserName}}} =
-                user_logic:get(CurrentUserAuth, UserId),
+        {ok, UserName} ->
             {ok, [
                 {<<"id">>, UserId},
                 {<<"name">>, UserName}
@@ -139,22 +137,19 @@ query_record(<<"system-user">>, Data) ->
     end;
 
 query_record(<<"system-group">>, Data) ->
-    CurrentUserId = gui_session:get_user_id(),
+    SessionId = gui_session:get_session_id(),
     GroupId = proplists:get_value(<<"id">>, Data),
     Context = proplists:get_value(<<"context">>, Data),
     [{EntityType, EntityId}] = Context,
-    Authorized = op_gui_utils:can_view_public_data(
-        CurrentUserId,
-        od_group, GroupId,
-        binary_to_existing_atom(EntityType, utf8), EntityId
-    ),
-    case Authorized of
-        false ->
+    AuthHint = case EntityType of
+        <<"od_group">> -> ?THROUGH_GROUP(EntityId);
+        <<"od_space">> -> ?THROUGH_SPACE(EntityId)
+    end,
+
+    case group_logic:get_name(SessionId, GroupId, AuthHint) of
+        ?ERROR_FORBIDDEN ->
             gui_error:unauthorized();
-        true ->
-            CurrentUserAuth = op_gui_utils:get_user_auth(),
-            {ok, #document{value = #od_group{name = GroupName}}} =
-                group_logic:get(CurrentUserAuth, GroupId),
+        {ok, GroupName} ->
             {ok, [
                 {<<"id">>, GroupId},
                 {<<"name">>, GroupName}

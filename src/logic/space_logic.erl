@@ -1,30 +1,42 @@
 %%%-------------------------------------------------------------------
-%%% @clientor Michal Zmuda
 %%% @author Lukasz Opiola
-%%% @copyright (C) 2016 ACK CYFRONET AGH
+%%% @copyright (C) 2017 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Interface to provider's space cache.
-%%% Operations may involve interactions with OZ api
-%%% or cached records from the datastore.
+%%% @doc
+%%% Interface for reading and manipulating od_space records synchronized
+%%% via Graph Sync. Requests are delegated to gs_client_worker, which decides
+%%% if they should be served from cache or handled by OneZone.
+%%% NOTE: This is the only valid way to interact with od_space records, to
+%%% ensure consistency, no direct requests to datastore or OZ REST should
+%%% be performed.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(space_logic).
--author("Michal Zmuda").
+-author("Lukasz Opiola").
 
+-include("graph_sync/provider_graph_sync.hrl").
 -include("proto/common/credentials.hrl").
 -include("modules/datastore/datastore_models.hrl").
--include_lib("ctool/include/oz/oz_spaces.hrl").
+-include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/privileges.hrl").
 
-% Todo move create join leave to user logic
--export([get/3, create_user_space/2, delete/2]).
--export([join_space/2, leave_space/2]).
--export([set_name/3, set_user_privileges/4, set_group_privileges/4]).
--export([get_invite_user_token/2, get_invite_group_token/2,
-    get_invite_provider_token/2]).
--export([has_effective_user/2, has_effective_privilege/3]).
+-export([get/2, get_protected_data/2]).
+-export([get_name/2]).
+-export([get_eff_users/2, get_shares/2]).
+-export([get_provider_ids/2, get_providers_supports/2]).
+-export([has_eff_user/2, has_eff_user/3]).
+-export([has_eff_group/2, has_eff_group/3]).
+-export([is_supported/2, is_supported/3]).
+-export([has_eff_privilege/3, has_eff_privilege/4]).
+-export([can_view_user_through_space/3, can_view_user_through_space/4]).
+-export([can_view_group_through_space/3, can_view_group_through_space/4]).
+-export([create/2, create/3, update_name/3, delete/2]).
+-export([update_user_privileges/4, update_group_privileges/4]).
+-export([create_user_invite_token/2, create_group_invite_token/2]).
+-export([create_provider_invite_token/2]).
 
 
 %%%===================================================================
@@ -33,219 +45,288 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Retrieves space document.
-%% Returned document contains parameters tied to given user
-%% (as space name may differ from user to user).
-%% Provided client should be authorised to access user details.
+%% Retrieves space doc by given SpaceId.
 %% @end
 %%--------------------------------------------------------------------
--spec get(oz_endpoint:auth(), SpaceId :: binary(), UserId :: binary()) ->
-    {ok, datastore:doc()} | {error, term()}.
-get(Auth, SpaceId, UserId) ->
-    od_space:get_or_fetch(Auth, SpaceId, UserId).
+-spec get(gs_client_worker:client(), od_space:id()) ->
+    {ok, od_space:doc()} | gs_protocol:error().
+get(SessionId, SpaceId) ->
+    gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = get,
+        gri = #gri{type = od_space, id = SpaceId, aspect = instance, scope = private},
+        subscribe = true
+    }).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates space in context of an user.
-%% User identity is determined using provided auth.
+%% Retrieves space doc restricted to protected data by given SpaceId.
 %% @end
 %%--------------------------------------------------------------------
--spec create_user_space(oz_endpoint:auth(), #od_space{}) ->
-    {ok, SpaceId :: binary()} | {error, Reason :: term()}.
-create_user_space(Auth, Record) ->
-    Name = Record#od_space.name,
-    oz_users:create_space(Auth, [{<<"name">>, Name}]).
+-spec get_protected_data(gs_client_worker:client(), od_space:id()) ->
+    {ok, od_space:doc()} | gs_protocol:error().
+get_protected_data(SessionId, SpaceId) ->
+    gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = get,
+        gri = #gri{type = od_space, id = SpaceId, aspect = instance, scope = protected},
+        subscribe = true
+    }).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Deletes space from the system.
-%% @end
-%%--------------------------------------------------------------------
--spec delete(oz_endpoint:auth(), SpaceId :: binary()) ->
-    ok | {error, Reason :: term()}.
-delete(Auth, SpaceId) ->
-    oz_spaces:remove(Auth, SpaceId).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes a user (owner of auth) from space users list.
-%% @end
-%%--------------------------------------------------------------------
--spec leave_space(oz_endpoint:auth(), SpaceId :: binary()) ->
-    ok | {error, Reason :: term()}.
-leave_space(Auth, SpaceId) ->
-    oz_users:leave_space(Auth, SpaceId).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Joins a user to a space based on token.
-%% @end
-%%--------------------------------------------------------------------
--spec join_space(oz_endpoint:auth(), Token :: binary()) ->
-    ok | {error, Reason :: term()}.
-join_space(Auth, Token) ->
-    case oz_users:join_space(Auth, [{<<"token">>, Token}]) of
-        {ok, SpaceId} ->
-            {ok, SpaceId};
-        {error, {400, <<"Bad value:", _/binary>>, _}} ->
-            {error, invalid_token_value}
+-spec get_name(gs_client_worker:client(), od_space:id()) ->
+    {ok, od_space:name()} | gs_protocol:error().
+get_name(SessionId, SpaceId) ->
+    case get_protected_data(SessionId, SpaceId) of
+        {ok, #document{value = #od_space{name = Name}}} ->
+            {ok, Name};
+        {error, _} = Error ->
+            Error
     end.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets name for an user.
-%% User identity is determined using provided auth.
-%% @end
-%%--------------------------------------------------------------------
--spec set_name(oz_endpoint:auth(), SpaceId :: binary(), Name :: binary()) ->
-    ok | {error, Reason :: term()}.
-set_name(Auth, SpaceId, Name) ->
-    oz_spaces:modify_details(Auth, SpaceId, [{<<"name">>, Name}]).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets space privileges for an user.
-%% User identity is determined using provided auth.
-%% @end
-%%--------------------------------------------------------------------
--spec set_user_privileges(oz_endpoint:auth(), SpaceId :: binary(),
-    UserId :: binary(), Privileges :: [atom()]) ->
-    ok | {error, Reason :: term()}.
-set_user_privileges(Auth, SpaceId, UserId, PrivilegesAtoms) ->
-    Privileges = [atom_to_binary(P, utf8) || P <- PrivilegesAtoms],
-    oz_spaces:set_user_privileges(Auth, SpaceId, UserId, [
-        {<<"privileges">>, Privileges}
-    ]).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets space privileges for an user.
-%% User identity is determined using provided auth.
-%% @end
-%%--------------------------------------------------------------------
--spec set_group_privileges(oz_endpoint:auth(), SpaceId :: binary(),
-    GroupId :: binary(), Privileges :: [atom()]) ->
-    ok | {error, Reason :: term()}.
-set_group_privileges(Auth, SpaceId, GroupId, PrivilegesAtoms) ->
-    Privileges = [atom_to_binary(P, utf8) || P <- PrivilegesAtoms],
-    oz_spaces:set_group_privileges(Auth, SpaceId, GroupId, [
-        {<<"privileges">>, Privileges}
-    ]).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns a user invitation token for given space.
-%% @end
-%%--------------------------------------------------------------------
--spec get_invite_user_token(oz_endpoint:auth(), SpaceId :: binary()) ->
-    {ok, binary()} | {error, Reason :: term()}.
-get_invite_user_token(Auth, SpaceId) ->
-    oz_spaces:get_invite_user_token(Auth, SpaceId).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns a group invitation token for given space.
-%% @end
-%%--------------------------------------------------------------------
--spec get_invite_group_token(oz_endpoint:auth(), SpaceId :: binary()) ->
-    {ok, binary()} | {error, Reason :: term()}.
-get_invite_group_token(Auth, SpaceId) ->
-    oz_spaces:get_invite_group_token(Auth, SpaceId).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns a provider invitation token (to get support) for given space.
-%% @end
-%%--------------------------------------------------------------------
--spec get_invite_provider_token(oz_endpoint:auth(), SpaceId :: binary()) ->
-    {ok, binary()} | {error, Reason :: term()}.
-get_invite_provider_token(Auth, SpaceId) ->
-    oz_spaces:get_invite_provider_token(Auth, SpaceId).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Predicate telling if given user belongs to given space directly
-%% or via his groups.
-%% @end
-%%--------------------------------------------------------------------
--spec has_effective_user(SpaceId :: od_space:id(),
-    UserId :: od_user:id()) -> boolean().
-has_effective_user(SpaceId, UserId) ->
-    case od_user:get(UserId) of
-        {error, not_found} ->
-            false;
-        {ok, #document{value = UserInfo}} ->
-            #od_user{space_aliases = SpaceNames} = UserInfo,
-            proplists:is_defined(SpaceId, SpaceNames)
+-spec get_eff_users(gs_client_worker:client(), od_space:id()) ->
+    {ok, [od_user:id()]} | gs_protocol:error().
+get_eff_users(SessionId, SpaceId) ->
+    case get(SessionId, SpaceId) of
+        {ok, #document{value = #od_space{eff_users = EffUsers}}} ->
+            {ok, EffUsers};
+        {error, _} = Error ->
+            Error
     end.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Predicate telling if given user has a privilege in given space, directly
-%% or via his groups.
-%% @end
-%%--------------------------------------------------------------------
--spec has_effective_privilege(SpaceId :: od_space:id(),
-    UserId :: od_user:id(), Privilege :: privileges:space_privilege()) ->
+-spec get_shares(gs_client_worker:client(), od_space:id()) ->
+    {ok, [od_share:id()]} | gs_protocol:error().
+get_shares(SessionId, SpaceId) ->
+    case get(SessionId, SpaceId) of
+        {ok, #document{value = #od_space{shares = Shares}}} ->
+            {ok, Shares};
+        {error, _} = Error ->
+            Error
+    end.
+
+
+-spec get_provider_ids(gs_client_worker:client(), od_space:id()) ->
+    {ok, [od_provider:id()]} | gs_protocol:error().
+get_provider_ids(SessionId, SpaceId) ->
+    case get(SessionId, SpaceId) of
+        {ok, #document{value = #od_space{providers = Providers}}} ->
+            {ok, maps:keys(Providers)};
+        {error, _} = Error ->
+            Error
+    end.
+
+
+-spec get_providers_supports(gs_client_worker:client(), od_space:id()) ->
+    {ok, maps:map(od_provider:id(), Size :: integer())} | gs_protocol:error().
+get_providers_supports(SessionId, SpaceId) ->
+    case get(SessionId, SpaceId) of
+        {ok, #document{value = #od_space{providers = Providers}}} ->
+            {ok, Providers};
+        {error, _} = Error ->
+            Error
+    end.
+
+
+-spec has_eff_user(od_space:doc(), od_user:id()) -> boolean().
+has_eff_user(#document{value = #od_space{eff_users = EffUsers}}, UserId) ->
+    maps:is_key(UserId, EffUsers).
+
+
+-spec has_eff_user(gs_client_worker:client(), od_space:id(), od_user:id()) ->
     boolean().
-has_effective_privilege(SpaceId, UserId, Privilege) ->
-    case has_effective_user(SpaceId, UserId) of
-        false ->
-            false;
-        true ->
-            {ok, UserPrivileges} = get_effective_privileges(SpaceId, UserId),
-            ordsets:is_element(Privilege, UserPrivileges)
+has_eff_user(SessionId, SpaceId, UserId) ->
+    case get(SessionId, SpaceId) of
+        {ok, SpaceDoc = #document{}} ->
+            has_eff_user(SpaceDoc, UserId);
+        _ ->
+            false
     end.
 
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Retrieves effective user privileges taking into account any groups
-%% he is a member of that also are members of the Space.
-%% Throws exception when call to the datastore fails,
-%% or space/user doesn't exist.
-%% @end
-%%--------------------------------------------------------------------
--spec get_effective_privileges(SpaceId :: od_space:id(),
-    UserId :: od_user:id()) ->
-    {ok, ordsets:ordset(privileges:space_privilege())}.
-get_effective_privileges(SpaceId, UserId) ->
-    {ok, #document{
-        value = #od_user{
-            eff_groups = UGroups
-        }}} = od_user:get(UserId),
-    {ok, #document{
-        value = #od_space{
-            users = UserTuples,
-            groups = SGroupTuples
-        }}} = od_space:get(SpaceId),
+-spec has_eff_group(od_space:doc(), od_group:id()) -> boolean().
+has_eff_group(#document{value = #od_space{eff_groups = EffGroups}}, GroupId) ->
+    maps:is_key(GroupId, EffGroups).
 
-    UserGroups = sets:from_list(UGroups),
 
-    PrivilegesSets = lists:filtermap(fun({GroupId, Privileges}) ->
-        case sets:is_element(GroupId, UserGroups) of
-            true -> {true, ordsets:from_list(Privileges)};
-            false -> false
-        end
-    end, SGroupTuples),
+-spec has_eff_group(gs_client_worker:client(), od_space:id(), od_group:id()) ->
+    boolean().
+has_eff_group(SessionId, SpaceId, GroupId) ->
+    case get(SessionId, SpaceId) of
+        {ok, SpaceDoc = #document{}} ->
+            has_eff_group(SpaceDoc, GroupId);
+        _ ->
+            false
+    end.
 
-    UserPrivileges =
-        case lists:keyfind(UserId, 1, UserTuples) of
-            {UserId, Privileges} -> ordsets:from_list(Privileges);
-            false -> ordsets:new()
-        end,
 
-    {ok, ordsets:union([UserPrivileges | PrivilegesSets])}.
+-spec is_supported(od_space:doc(), od_provider:id()) -> boolean().
+is_supported(#document{value = #od_space{providers = Providers}}, ProviderId) ->
+    maps:is_key(ProviderId, Providers).
+
+
+-spec is_supported(gs_client_worker:client(), od_space:id(), od_provider:id()) ->
+    boolean().
+is_supported(SessionId, SpaceId, ProviderId) ->
+    case get(SessionId, SpaceId) of
+        {ok, SpaceDoc = #document{}} ->
+            is_supported(SpaceDoc, ProviderId);
+        _ ->
+            false
+    end.
+
+
+-spec has_eff_privilege(od_space:doc(), od_user:id(), privileges:space_privilege()) ->
+    boolean().
+has_eff_privilege(#document{value = #od_space{eff_users = EffUsers}}, UserId, Privilege) ->
+    lists:member(Privilege, maps:get(UserId, EffUsers, [])).
+
+
+-spec has_eff_privilege(gs_client_worker:client(), od_space:id(), od_user:id(),
+    privileges:space_privilege()) -> boolean().
+has_eff_privilege(SessionId, SpaceId, UserId, Privilege) ->
+    case get(SessionId, SpaceId) of
+        {ok, SpaceDoc = #document{}} ->
+            has_eff_privilege(SpaceDoc, UserId, Privilege);
+        _ ->
+            false
+    end.
+
+
+-spec can_view_user_through_space(gs_client_worker:client(), od_space:id(),
+    ClientUserId :: od_user:id(), TargetUserId :: od_user:id()) -> boolean().
+can_view_user_through_space(SessionId, SpaceId, ClientUserId, TargetUserId) ->
+    case get(SessionId, SpaceId) of
+        {ok, SpaceDoc = #document{}} ->
+            can_view_user_through_space(SpaceDoc, ClientUserId, TargetUserId);
+        _ ->
+            false
+    end.
+
+
+-spec can_view_user_through_space(od_space:doc(), ClientUserId :: od_user:id(),
+    TargetUserId :: od_user:id()) -> boolean().
+can_view_user_through_space(SpaceDoc, ClientUserId, TargetUserId) ->
+    has_eff_privilege(SpaceDoc, ClientUserId, ?SPACE_VIEW) andalso
+        has_eff_user(SpaceDoc, TargetUserId).
+
+
+-spec can_view_group_through_space(gs_client_worker:client(), od_space:id(),
+    ClientUserId :: od_user:id(), od_group:id()) -> boolean().
+can_view_group_through_space(SessionId, SpaceId, ClientUserId, GroupId) ->
+    case get(SessionId, SpaceId) of
+        {ok, SpaceDoc = #document{}} ->
+            can_view_group_through_space(SpaceDoc, ClientUserId, GroupId);
+        _ ->
+            false
+    end.
+
+
+-spec can_view_group_through_space(od_space:doc(), ClientUserId :: od_user:id(),
+    od_group:id()) -> boolean().
+can_view_group_through_space(SpaceDoc, ClientUserId, GroupId) ->
+    has_eff_privilege(SpaceDoc, ClientUserId, ?SPACE_VIEW) andalso
+        has_eff_group(SpaceDoc, GroupId).
+
+
+-spec create(gs_client_worker:client(), od_space:name()) ->
+    {ok, od_space:id()} | gs_protocol:error().
+create(SessionId, Name) ->
+    {ok, UserId} = session:get_user_id(SessionId),
+    create(SessionId, UserId, Name).
+
+
+-spec create(gs_client_worker:client(), od_user:id(),
+    od_space:name()) -> {ok, od_space:id()} | gs_protocol:error().
+create(SessionId, UserId, Name) ->
+    Res = ?CREATE_RETURN_ID(gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = create,
+        gri = #gri{type = od_space, id = undefined, aspect = instance},
+        auth_hint = ?AS_USER(UserId),
+        data = #{<<"name">> => Name},
+        subscribe = true
+    })),
+    ?ON_SUCCESS(Res, fun(_) ->
+        {ok, UserId} = session:get_user_id(SessionId),
+        gs_client_worker:invalidate_cache(od_user, UserId)
+    end).
+
+
+-spec update_name(gs_client_worker:client(), od_space:id(), od_space:name()) ->
+    ok | gs_protocol:error().
+update_name(SessionId, SpaceId, Name) ->
+    Res = gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = update,
+        gri = #gri{type = od_space, id = SpaceId, aspect = instance},
+        data = #{<<"name">> => Name}
+    }),
+    ?ON_SUCCESS(Res, fun(_) ->
+        gs_client_worker:invalidate_cache(od_space, SpaceId)
+    end).
+
+
+-spec delete(gs_client_worker:client(), od_space:id()) -> ok | gs_protocol:error().
+delete(SessionId, SpaceId) ->
+    Res = gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = delete,
+        gri = #gri{type = od_space, id = SpaceId, aspect = instance}
+    }),
+    ?ON_SUCCESS(Res, fun(_) ->
+        gs_client_worker:invalidate_cache(od_space, SpaceId)
+    end).
+
+
+-spec update_user_privileges(gs_client_worker:client(), od_space:id(),
+    od_user:id(), [privileges:space_privilege()]) -> ok | gs_protocol:error().
+update_user_privileges(SessionId, SpaceId, UserId, Privileges) ->
+    Res = gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = update,
+        gri = #gri{type = od_space, id = SpaceId, aspect = {user_privileges, UserId}},
+        data = #{<<"privileges">> => Privileges}
+    }),
+    ?ON_SUCCESS(Res, fun(_) ->
+        gs_client_worker:invalidate_cache(od_space, SpaceId)
+    end).
+
+
+-spec update_group_privileges(gs_client_worker:client(), od_space:id(),
+    od_group:id(), [privileges:space_privilege()]) -> ok | gs_protocol:error().
+update_group_privileges(SessionId, SpaceId, GroupId, Privileges) ->
+    Res = gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = update,
+        gri = #gri{type = od_space, id = SpaceId, aspect = {group_privileges, GroupId}},
+        data = #{<<"privileges">> => Privileges}
+    }),
+    ?ON_SUCCESS(Res, fun(_) ->
+        gs_client_worker:invalidate_cache(od_space, SpaceId)
+    end).
+
+
+-spec create_user_invite_token(gs_client_worker:client(), od_space:id()) ->
+    {ok, Token :: binary()} | gs_protocol:error().
+create_user_invite_token(SessionId, SpaceId) ->
+    ?CREATE_RETURN_DATA(gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = create,
+        gri = #gri{type = od_space, id = SpaceId, aspect = invite_user_token},
+        data = #{}
+    })).
+
+
+-spec create_group_invite_token(gs_client_worker:client(), od_space:id()) ->
+    {ok, Token :: binary()} | gs_protocol:error().
+create_group_invite_token(SessionId, SpaceId) ->
+    ?CREATE_RETURN_DATA(gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = create,
+        gri = #gri{type = od_space, id = SpaceId, aspect = invite_group_token},
+        data = #{}
+    })).
+
+
+-spec create_provider_invite_token(gs_client_worker:client(), od_space:id()) ->
+    {ok, Token :: binary()} | gs_protocol:error().
+create_provider_invite_token(SessionId, SpaceId) ->
+    ?CREATE_RETURN_DATA(gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = create,
+        gri = #gri{type = od_space, id = SpaceId, aspect = invite_provider_token},
+        data = #{}
+    })).

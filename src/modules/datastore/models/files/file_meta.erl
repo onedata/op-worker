@@ -65,6 +65,7 @@
 -define(CTX, #{
     model => ?MODULE,
     sync_enabled => true,
+    remote_driver => datastore_remote_driver,
     mutator => oneprovider:get_provider_id(),
     local_links_tree_id => oneprovider:get_provider_id()
 }).
@@ -438,8 +439,7 @@ get_locations_by_uuid(FileUuid) ->
             {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}}} ->
                 {ok, []};
             {ok, #document{scope = SpaceId}} ->
-                {ok, #document{value = #od_space{providers = Providers}}} =
-                    od_space:get(SpaceId),
+                {ok, Providers} = space_logic:get_provider_ids(?ROOT_SESS_ID, SpaceId),
                 Locations = lists:map(fun(ProviderId) ->
                     file_location:id(FileUuid, ProviderId)
                 end, Providers),
@@ -537,19 +537,15 @@ get_scope_id(Entry) ->
 %% this function is called asynchronously automatically after user's document is updated.
 %% @end
 %%--------------------------------------------------------------------
--spec setup_onedata_user(oz_endpoint:auth(), UserId :: od_user:id()) -> ok.
-setup_onedata_user(_Client, UserId) ->
-    ?info("setup_onedata_user ~p as ~p", [_Client, UserId]),
+-spec setup_onedata_user(UserId :: od_user:id(), EffSpaces :: [od_space:id()]) -> ok.
+setup_onedata_user(UserId, EffSpaces) ->
+    ?info("Setting up user: ~p", [UserId]),
     critical_section:run([od_user, UserId], fun() ->
-        {ok, #document{value = #od_user{
-            space_aliases = Spaces
-        }}} = od_user:get(UserId),
+        CTime = erlang:system_time(seconds),
 
-        CTime = utils:system_time_seconds(),
-
-        lists:foreach(fun({SpaceId, _}) ->
+        lists:foreach(fun(SpaceId) ->
             make_space_exist(SpaceId)
-        end, Spaces),
+        end, EffSpaces),
 
         FileUuid = fslogic_uuid:user_root_dir_uuid(UserId),
         ScopeId = <<>>, % TODO - do we need scope for user dir

@@ -54,17 +54,5 @@
                 }
             }
         }
-    },
-    "appmock_domains": {
-        "oz": {
-            "appmock": {
-                "node1": {
-                    "mocked_app": "oz_worker",
-                    "sys.config": {
-                        "app_description_file": "./oz_mock_description.erl.cfg"
-                    }
-                }
-            }
-        }
     }
 }

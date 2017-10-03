@@ -1,22 +1,33 @@
 %%%-------------------------------------------------------------------
-%%% @author Michal Zmuda
-%%% @copyright (C) 2016 ACK CYFRONET AGH
+%%% @author Lukasz Opiola
+%%% @copyright (C) 2017 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Interface to provider's cache containing od_provider.
-%%% Operations may involve interactions with OZ api
-%%% or cached records from the datastore.
+%%% @doc
+%%% Interface for reading and manipulating od_provider records synchronized
+%%% via Graph Sync. Requests are delegated to gs_client_worker, which decides
+%%% if they should be served from cache or handled by OneZone.
+%%% NOTE: This is the only valid way to interact with od_provider records, to
+%%% ensure consistency, no direct requests to datastore or OZ REST should
+%%% be performed.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(provider_logic).
--author("Michal Zmuda").
+-author("Lukasz Opiola").
 
+-include("modules/fslogic/fslogic_common.hrl").
+-include("graph_sync/provider_graph_sync.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--export([get/1, get_providers_with_common_support/0]).
+-export([get/0, get/1, get/2, get_protected_data/2]).
+-export([get_name/0, get_name/1, get_name/2]).
+-export([get_spaces/0, get_spaces/1, get_spaces/2]).
+-export([get_urls/0, get_urls/1, get_urls/2]).
+-export([has_eff_user/2, has_eff_user/3]).
+-export([supports_space/2, supports_space/3]).
 
 %%%===================================================================
 %%% API
@@ -24,79 +35,189 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Retrieves group document as provider.
+%% Retrieves provider doc of this provider.
 %% @end
 %%--------------------------------------------------------------------
--spec get(ProviderID :: binary()) ->
-    {ok, datastore:doc()} | {error, Reason :: term()}.
-get(ProviderID) ->
-    od_provider:get(ProviderID).
+-spec get() ->
+    {ok, od_provider:doc()} | gs_protocol:error().
+get() ->
+    get(?ROOT_SESS_ID, oneprovider:get_provider_id()).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Retrieves provider info docs for providers that support at least
-%% one space supported also by this provider. Returns error if any piece
-%% of information needed is unavailable.
+%% Retrieves provider doc by given ProviderId using current provider's auth.
 %% @end
 %%--------------------------------------------------------------------
--spec get_providers_with_common_support() ->
-    {ok, [datastore:doc()]} | {error, Reason :: term()}.
-get_providers_with_common_support() ->
-    GetIdsOfProvidersWithCommonSupport = get_ids_of_providers_with_common_support(),
-    case GetIdsOfProvidersWithCommonSupport of
-        {ok, ProviderIDs} -> get_providers(ProviderIDs);
-        Error -> Error
+-spec get(od_provider:id()) ->
+    {ok, od_provider:doc()} | gs_protocol:error().
+get(ProviderId) ->
+    get(?ROOT_SESS_ID, ProviderId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves provider doc by given ProviderId.
+%% @end
+%%--------------------------------------------------------------------
+-spec get(gs_client_worker:client(), od_provider:id()) ->
+    {ok, od_provider:doc()} | gs_protocol:error().
+get(SessionId, ProviderId) ->
+    gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = get,
+        gri = #gri{type = od_provider, id = ProviderId, aspect = instance},
+        subscribe = true
+    }).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves provider doc restricted to protected data by given ProviderId.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_protected_data(gs_client_worker:client(), od_provider:id()) ->
+    {ok, od_provider:doc()} | gs_protocol:error().
+get_protected_data(SessionId, ProviderId) ->
+    gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = get,
+        gri = #gri{type = od_provider, id = ProviderId, aspect = instance, scope = protected},
+        subscribe = true
+    }).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves provider name of this provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_name() -> {ok, od_provider:name()} | gs_protocol:error().
+get_name() ->
+    get_name(?ROOT_SESS_ID, oneprovider:get_provider_id()).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves provider name by given ProviderId using current provider's auth.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_name(od_provider:id()) -> {ok, od_provider:name()} | gs_protocol:error().
+get_name(ProviderId) ->
+    get_name(?ROOT_SESS_ID, ProviderId).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves provider name by given ProviderId.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_name(gs_client_worker:client(), od_provider:id()) ->
+    {ok, od_provider:name()} | gs_protocol:error().
+get_name(SessionId, ProviderId) ->
+    case get_protected_data(SessionId, ProviderId) of
+        {ok, #document{value = #od_provider{name = Name}}} ->
+            {ok, Name};
+        {error, _} = Error ->
+            Error
     end.
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
 
--spec get_providers(ProviderIDs :: [binary()]) ->
-    {ok, [datastore:doc()]} | {error, Reason :: term()}.
-get_providers(ProviderIDs) ->
-    Results = utils:pmap(fun od_provider:get/1, ProviderIDs),
-    case lists:any(fun
-        ({error, Reason}) ->
-            ?warning("Unable to read provider info due to ~p", [Reason]),
-            true;
-        (_) -> false
-    end, Results) of
-        true -> {error, no_public_provider_info};
-        false -> {ok, lists:map(fun({ok, Doc}) -> Doc end, Results)}
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves spaces of this provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_spaces() -> {ok, [od_space:id()]} | gs_protocol:error().
+get_spaces() ->
+    get_spaces(?ROOT_SESS_ID, oneprovider:get_provider_id()).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves spaces of provider by given ProviderId using current provider's auth.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_spaces(od_provider:id()) -> {ok, [od_space:id()]} | gs_protocol:error().
+get_spaces(ProviderId) ->
+    get_spaces(?ROOT_SESS_ID, ProviderId).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves spaces of provider by given ProviderId.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_spaces(gs_client_worker:client(), od_provider:id()) ->
+    {ok, [od_space:id()]} | gs_protocol:error().
+get_spaces(SessionId, ProviderId) ->
+    case get(SessionId, ProviderId) of
+        {ok, #document{value = #od_provider{spaces = Spaces}}} ->
+            {ok, maps:keys(Spaces)};
+        {error, _} = Error ->
+            Error
     end.
 
--spec get_ids_of_providers_with_common_support() ->
-    {ok, [ProviderID :: binary()]} | {error, Reason :: term()}.
-get_ids_of_providers_with_common_support() ->
-    ProviderID = oneprovider:get_provider_id(),
-    case provider_logic:get(ProviderID) of
-        {ok, #document{value = Provider}} ->
-            case Provider of
-                #od_provider{public_only = true} ->
-                    ?error("Own provider info contains public only data"),
-                    {error, no_private_info};
-                #od_provider{spaces = SIDs} ->
-                    ger_supporting_providers(SIDs)
-            end;
-        {error, Reason} ->
-            ?error("Could not read own provider info due to ~p", [Reason]),
-            {error, no_info}
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves urls of this provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_urls() -> {ok, od_provider:urls()} | gs_protocol:error().
+get_urls() ->
+    get_urls(?ROOT_SESS_ID, oneprovider:get_provider_id()).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves urls of provider by given ProviderId using current provider's auth.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_urls(od_provider:id()) -> {ok, od_provider:urls()} | gs_protocol:error().
+get_urls(ProviderId) ->
+    get_urls(?ROOT_SESS_ID, ProviderId).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves urls of provider by given ProviderId.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_urls(gs_client_worker:client(), od_provider:id()) ->
+    {ok, od_provider:urls()} | gs_protocol:error().
+get_urls(SessionId, ProviderId) ->
+    case get_protected_data(SessionId, ProviderId) of
+        {ok, #document{value = #od_provider{urls = URLs}}} ->
+            {ok, URLs};
+        {error, _} = Error ->
+            Error
     end.
 
--spec ger_supporting_providers(SpaceIDs :: [binary()]) ->
-    {ok, [ProviderID :: binary()]} | {error, Reason :: term()}.
-ger_supporting_providers(SpaceIDs) ->
-    ProviderIDs = lists:flatten(utils:pmap(fun(SpaceID) ->
-        {ok, #document{value = #od_space{providers_supports = Supports}}}
-            = od_space:get(SpaceID),
-        {SupportingProviderIDs, _} = lists:unzip(Supports),
-        SupportingProviderIDs
-    end, SpaceIDs)),
 
-    case lists:all(fun erlang:is_binary/1, ProviderIDs) of
-        false ->
-            ?error("Unable to read space info"),
-            {error, no_od_space};
-        true -> {ok, ProviderIDs}
+-spec has_eff_user(od_provider:doc(), od_user:id()) -> boolean().
+has_eff_user(#document{value = #od_provider{eff_users = EffUsers}}, UserId) ->
+    lists:member(UserId, EffUsers).
+
+
+-spec has_eff_user(gs_client_worker:client(), od_provider:id(), od_user:id()) ->
+    boolean().
+has_eff_user(SessionId, ProviderId, UserId) ->
+    case get(SessionId, ProviderId) of
+        {ok, ProviderDoc = #document{}} ->
+            has_eff_user(ProviderDoc, UserId);
+        _ ->
+            false
+    end.
+
+
+-spec supports_space(od_provider:doc(), od_space:id()) -> boolean().
+supports_space(#document{value = #od_provider{spaces = Spaces}}, SpaceId) ->
+    maps:is_key(SpaceId, Spaces).
+
+
+-spec supports_space(gs_client_worker:client(), od_provider:id(), od_space:id()) ->
+    boolean().
+supports_space(SessionId, ProviderId, SpaceId) ->
+    case get(SessionId, ProviderId) of
+        {ok, ProviderDoc = #document{}} ->
+            supports_space(ProviderDoc, SpaceId);
+        _ ->
+            false
     end.

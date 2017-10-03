@@ -19,6 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
+-include_lib("ctool/include/privileges.hrl").
 
 
 %% API
@@ -60,9 +61,10 @@ terminate() ->
 -spec find_record(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find_record(<<"group">>, GroupId) ->
+    SessionId = gui_session:get_session_id(),
     UserId = gui_session:get_user_id(),
     % Check if the user belongs to this group
-    case group_logic:has_effective_user(GroupId, UserId) of
+    case group_logic:has_eff_user(SessionId, GroupId, UserId) of
         false ->
             gui_error:unauthorized();
         true ->
@@ -72,11 +74,12 @@ find_record(<<"group">>, GroupId) ->
 % PermissionsRecord matches <<"group-(user|group)-(list|permission)">>
 find_record(PermissionsRecord, RecordId) ->
     GroupId = permission_record_to_group_id(PermissionsRecord, RecordId),
+    SessionId = gui_session:get_session_id(),
     UserId = gui_session:get_user_id(),
     % Make sure that user is allowed to view requested privileges - he must have
     % view privileges in this group.
-    Authorized = group_logic:has_effective_privilege(
-        GroupId, UserId, ?GROUP_VIEW
+    Authorized = group_logic:has_eff_privilege(
+        SessionId, GroupId, UserId, ?GROUP_VIEW
     ),
     case Authorized of
         false ->
@@ -135,7 +138,7 @@ query_record(<<"group">>, _Data) ->
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 create_record(<<"group">>, Data) ->
-    UserAuth = op_gui_utils:get_user_auth(),
+    SessionId = gui_session:get_session_id(),
     UserId = gui_session:get_user_id(),
     Name = proplists:get_value(<<"name">>, Data),
     case Name of
@@ -143,10 +146,11 @@ create_record(<<"group">>, Data) ->
             gui_error:report_warning(
                 <<"Cannot create group with empty name.">>);
         _ ->
-            case group_logic:create(UserAuth, #od_group{name = Name}) of
+            case user_logic:create_group(SessionId, UserId, Name) of
                 {ok, GroupId} ->
-                    user_data_backend:push_modified_user(
-                        UserAuth, UserId, <<"groups">>, add, GroupId
+                    gui_async:push_updated(
+                        <<"user">>,
+                        user_data_backend:user_record(SessionId, UserId)
                     ),
                     % This group was created by this user -> he has view privs.
                     GroupRecord = group_record(GroupId, true),
@@ -167,7 +171,7 @@ create_record(<<"group">>, Data) ->
     Data :: proplists:proplist()) ->
     ok | gui_error:error_result().
 update_record(<<"group">>, GroupId, [{<<"name">>, Name}]) ->
-    UserAuth = op_gui_utils:get_user_auth(),
+    SessionId = gui_session:get_session_id(),
     case Name of
         undefined ->
             ok;
@@ -175,7 +179,7 @@ update_record(<<"group">>, GroupId, [{<<"name">>, Name}]) ->
             gui_error:report_warning(
                 <<"Cannot set group name to empty string.">>);
         NewName ->
-            case group_logic:set_name(UserAuth, GroupId, NewName) of
+            case group_logic:update_name(SessionId, GroupId, NewName) of
                 ok ->
                     ok;
                 {error, {403, <<>>, <<>>}} ->
@@ -188,13 +192,13 @@ update_record(<<"group">>, GroupId, [{<<"name">>, Name}]) ->
     end;
 
 update_record(<<"group-user-permission">>, AssocId, Data) ->
-    UserAuth = op_gui_utils:get_user_auth(),
+    SessionId = gui_session:get_session_id(),
     {UserId, GroupId} = op_gui_utils:association_to_ids(AssocId),
     {ok, #document{
         value = #od_group{
-            users = UsersAndPerms
-        }}} = group_logic:get(UserAuth, GroupId),
-    UserPerms = proplists:get_value(UserId, UsersAndPerms),
+            direct_users = UsersAndPerms
+        }}} = group_logic:get(SessionId, GroupId),
+    UserPerms = maps:get(UserId, UsersAndPerms),
     NewUserPerms = lists:foldl(
         fun({PermGui, Flag}, PermsAcc) ->
             Perm = perm_gui_to_db(PermGui),
@@ -206,8 +210,8 @@ update_record(<<"group-user-permission">>, AssocId, Data) ->
             end
         end, UserPerms, Data),
 
-    Result = group_logic:set_user_privileges(
-        UserAuth, GroupId, UserId, lists:usort(NewUserPerms)),
+    Result = group_logic:update_user_privileges(
+        SessionId, GroupId, UserId, lists:usort(NewUserPerms)),
     case Result of
         ok ->
             ok;
@@ -220,13 +224,13 @@ update_record(<<"group-user-permission">>, AssocId, Data) ->
     end;
 
 update_record(<<"group-group-permission">>, AssocId, Data) ->
-    UserAuth = op_gui_utils:get_user_auth(),
+    SessionId = gui_session:get_session_id(),
     {ChildGroupId, ParentGroupId} = op_gui_utils:association_to_ids(AssocId),
     {ok, #document{
         value = #od_group{
-            children = GroupsAndPerms
-        }}} = group_logic:get(UserAuth, ParentGroupId),
-    GroupPerms = proplists:get_value(ChildGroupId, GroupsAndPerms),
+            direct_children = GroupsAndPerms
+        }}} = group_logic:get(SessionId, ParentGroupId),
+    GroupPerms = maps:get(ChildGroupId, GroupsAndPerms),
     NewGroupPerms = lists:foldl(
         fun({PermGui, Flag}, PermsAcc) ->
             Perm = perm_gui_to_db(PermGui),
@@ -238,8 +242,8 @@ update_record(<<"group-group-permission">>, AssocId, Data) ->
             end
         end, GroupPerms, Data),
 
-    Result = group_logic:set_group_privileges(
-        UserAuth, ParentGroupId, ChildGroupId, lists:usort(NewGroupPerms)),
+    Result = group_logic:update_child_privileges(
+        SessionId, ParentGroupId, ChildGroupId, lists:usort(NewGroupPerms)),
     case Result of
         ok ->
             ok;
@@ -263,12 +267,13 @@ update_record(_ResourceType, _Id, _Data) ->
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
     ok | gui_error:error_result().
 delete_record(<<"group">>, GroupId) ->
-    UserAuth = op_gui_utils:get_user_auth(),
+    SessionId = gui_session:get_session_id(),
     UserId = gui_session:get_user_id(),
-    case group_logic:delete(UserAuth, GroupId) of
+    case group_logic:delete(SessionId, GroupId) of
         ok ->
-            user_data_backend:push_modified_user(
-                UserAuth, UserId, <<"groups">>, remove, GroupId
+            gui_async:push_updated(
+                <<"user">>,
+                user_data_backend:user_record(SessionId, UserId)
             ),
             ok;
         {error, {403, <<>>, <<>>}} ->
@@ -292,9 +297,10 @@ delete_record(<<"group">>, GroupId) ->
 %%--------------------------------------------------------------------
 -spec group_record(GroupId :: binary()) -> proplists:proplist().
 group_record(GroupId) ->
+    SessionId = gui_session:get_session_id(),
     % Check if that user has view privileges in that group
-    HasViewPrivileges = group_logic:has_effective_privilege(
-        GroupId, gui_session:get_user_id(), ?GROUP_VIEW
+    HasViewPrivileges = group_logic:has_eff_privilege(
+        SessionId, GroupId, gui_session:get_user_id(), ?GROUP_VIEW
     ),
     group_record(GroupId, HasViewPrivileges).
 
@@ -308,15 +314,15 @@ group_record(GroupId) ->
 -spec group_record(GroupId :: binary(), HasViewPrivileges :: boolean()) ->
     proplists:proplist().
 group_record(GroupId, HasViewPrivs) ->
-    UserAuth = op_gui_utils:get_user_auth(),
+    SessionId = gui_session:get_session_id(),
     UserId = gui_session:get_user_id(),
     {ok, #document{
         value = #od_group{
             name = Name,
-            children = ChildrenWithPerms,
-            parents = ParentGroups
-        }}} = group_logic:get(UserAuth, GroupId),
-    {ChildGroups, _} = lists:unzip(ChildrenWithPerms),
+            direct_children = ChildrenWithPerms,
+            direct_parents = ParentGroups
+        }}} = group_logic:get(SessionId, GroupId),
+    ChildGroups = maps:keys(ChildrenWithPerms),
 
     % Depending on view privileges, show or hide info about members and privs
     {GroupUserListId, GroupGroupListId, Parents, Children} = case HasViewPrivs of
@@ -344,14 +350,14 @@ group_record(GroupId, HasViewPrivs) ->
 %%--------------------------------------------------------------------
 -spec group_user_list_record(SpaceId :: binary()) -> proplists:proplist().
 group_user_list_record(GroupId) ->
-    UserAuth = op_gui_utils:get_user_auth(),
+    SessionId = gui_session:get_session_id(),
     {ok, #document{value = #od_group{
-        users = UsersWithPerms
-    }}} = group_logic:get(UserAuth, GroupId),
+        direct_users = UsersWithPerms
+    }}} = group_logic:get(SessionId, GroupId),
     UserPermissions = lists:map(
-        fun({UsId, _UsPerms}) ->
+        fun(UsId) ->
             op_gui_utils:ids_to_association(UsId, GroupId)
-        end, UsersWithPerms),
+        end, maps:keys(UsersWithPerms)),
     [
         {<<"id">>, GroupId},
         {<<"group">>, GroupId},
@@ -366,14 +372,14 @@ group_user_list_record(GroupId) ->
 %%--------------------------------------------------------------------
 -spec group_group_list_record(SpaceId :: binary()) -> proplists:proplist().
 group_group_list_record(GroupId) ->
-    UserAuth = op_gui_utils:get_user_auth(),
+    SessionId = gui_session:get_session_id(),
     {ok, #document{value = #od_group{
-        children = GroupsWithPerms
-    }}} = group_logic:get(UserAuth, GroupId),
+        direct_children = GroupsWithPerms
+    }}} = group_logic:get(SessionId, GroupId),
     GroupPermissions = lists:map(
-        fun({GrId, _GrPerms}) ->
+        fun(GrId) ->
             op_gui_utils:ids_to_association(GrId, GroupId)
-        end, GroupsWithPerms),
+        end, maps:keys(GroupsWithPerms)),
     [
         {<<"id">>, GroupId},
         {<<"group">>, GroupId},
@@ -389,13 +395,13 @@ group_group_list_record(GroupId) ->
 %%--------------------------------------------------------------------
 -spec group_user_permission_record(AssocId :: binary()) -> proplists:proplist().
 group_user_permission_record(AssocId) ->
-    UserAuth = op_gui_utils:get_user_auth(),
+    SessionId = gui_session:get_session_id(),
     {UserId, GroupId} = op_gui_utils:association_to_ids(AssocId),
     {ok, #document{
         value = #od_group{
-            users = UsersAndPerms
-        }}} = group_logic:get(UserAuth, GroupId),
-    UserPerms = proplists:get_value(UserId, UsersAndPerms),
+            direct_users = UsersAndPerms
+        }}} = group_logic:get(SessionId, GroupId),
+    UserPerms = maps:get(UserId, UsersAndPerms),
     PermsMapped = perms_db_to_gui(UserPerms),
     PermsMapped ++ [
         {<<"id">>, AssocId},
@@ -413,13 +419,13 @@ group_user_permission_record(AssocId) ->
 -spec group_group_permission_record(AssocId :: binary()) ->
     proplists:proplist().
 group_group_permission_record(AssocId) ->
-    UserAuth = op_gui_utils:get_user_auth(),
+    SessionId = gui_session:get_session_id(),
     {ChildGroupId, ParentGroupId} = op_gui_utils:association_to_ids(AssocId),
     {ok, #document{
         value = #od_group{
-            children = GroupsAndPerms
-        }}} = group_logic:get(UserAuth, ParentGroupId),
-    GroupPerms = proplists:get_value(ChildGroupId, GroupsAndPerms),
+            direct_children = GroupsAndPerms
+        }}} = group_logic:get(SessionId, ParentGroupId),
+    GroupPerms = maps:get(ChildGroupId, GroupsAndPerms),
     PermsMapped = perms_db_to_gui(GroupPerms),
     PermsMapped ++ [
         {<<"id">>, AssocId},

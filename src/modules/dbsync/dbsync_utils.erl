@@ -11,8 +11,10 @@
 -module(dbsync_utils).
 -author("Krzysztof Trzepla").
 
+-include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([get_bucket/0]).
@@ -41,13 +43,17 @@ get_bucket() ->
 -spec get_spaces() -> [od_space:id()].
 get_spaces() ->
     case oneprovider:get_provider_id() of
-        <<"non_global_provider">> ->
+        ?UNREGISTERED_PROVIDER_ID ->
             [];
         ProviderId ->
-            case od_provider:get_or_fetch(ProviderId) of
-                {ok, #document{value = #od_provider{spaces = SpaceIds}}} ->
-                    SpaceIds;
-                {error, _Reason} ->
+            try provider_logic:get_spaces(ProviderId) of
+                {ok, Spaces} -> Spaces;
+                {error, _Reason} -> []
+            catch
+                _:Reason ->
+                    ?error_stacktrace(
+                        "Cannot resolve spaces of provider due to ~p", [Reason]
+                    ),
                     []
             end
     end.
@@ -72,12 +78,15 @@ get_provider(SessId) ->
 -spec get_providers(od_space:id()) -> [od_provider:id()].
 get_providers(SpaceId) ->
     case oneprovider:get_provider_id() of
-        <<"non_global_provider">> ->
+        ?UNREGISTERED_PROVIDER_ID ->
             [];
         _ ->
-            {ok, #document{value = #od_space{providers = ProviderIds}}} =
-                od_space:get_or_fetch(?ROOT_SESS_ID, SpaceId),
-            ProviderIds
+            case space_logic:get_provider_ids(?ROOT_SESS_ID, SpaceId) of
+                {ok, ProvIds} ->
+                    ProvIds;
+                _ ->
+                    []
+            end
     end.
 
 %%--------------------------------------------------------------------

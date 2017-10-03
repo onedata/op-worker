@@ -43,7 +43,7 @@
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
 -type ttl() :: non_neg_integer().
--type auth() :: #macaroon_auth{} | #token_auth{} | #basic_auth{}.
+-type auth() :: #macaroon_auth{} | #token_auth{} | #basic_auth{} | ?ROOT_AUTH | ?GUEST_AUTH.
 -type type() :: fuse | rest | gui | provider_outgoing | provider_incoming | root | guest.
 -type status() :: active | inactive.
 -type identity() :: #user_identity{}.
@@ -632,7 +632,7 @@ add_missing_helper(SessId, SpaceId, StorageDoc) ->
     {ok, UserId} = get_user_id(SessId),
 
     {ok, #document{key = HandleId, value = HelperHandle}} =
-        helper_handle:create(UserId, SpaceId, StorageDoc),
+        helper_handle:create(SessId, UserId, SpaceId, StorageDoc),
 
     case datastore_model:add_links(
         Ctx, SessId, ?HELPER_HANDLES_TREE_ID,

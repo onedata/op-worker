@@ -15,6 +15,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/storage_file_manager/helpers/helpers.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -180,7 +181,7 @@ local_file_location_should_have_correct_uid_for_local_user(Config) ->
     lfm_proxy:close(W1, Handle2),
 
     %then
-    {Uid, _Gid} = rpc:call(W1, luma, get_posix_user_ctx, [UserId, SpaceId]),
+    {Uid, _Gid} = rpc:call(W1, luma, get_posix_user_ctx, [?ROOT_SESS_ID, UserId, SpaceId]),
     {ok, CorrectFileInfo} =
         rpc:call(W1, file, read_file_info, [filename:join([StorageDir, FileToCompareFID])]),
     {ok, FileInfo} =
@@ -257,23 +258,20 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
         [SpaceId, #document{key = FileUuid, value = FileMeta}]),
     rpc:call(W1, dbsync_events, change_replicated,
         [SpaceId, #document{key = FileUuid2, value = FileMeta2}]),
-    rpc:call(W1, od_user, create, [#document{
-        key = ExternalUser,
-        value = #od_user{
-            name = <<"User">>,
-            space_aliases = [{SpaceId, SpaceName}]
-        }
-    }]),
-    timer:sleep(timer:seconds(1)), % need to wait for asynchronous trigger
+
     FileGuid1 = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId), % create delayed storage files
     {ok, Handle1} = lfm_proxy:open(W1, SessionId, {guid, FileGuid1}, read),
     lfm_proxy:close(W1, Handle1),
+
     FileGuid2 = fslogic_uuid:uuid_to_guid(FileUuid2, SpaceId),
     {ok, Handle2} = lfm_proxy:open(W1, SessionId, {guid, FileGuid2}, read),
     lfm_proxy:close(W1, Handle2),
 
+    % Simulate new user appearing
+    rpc:call(W1, od_user, run_after, [save, [], {ok, #document{key = ExternalUser, value = #od_user{}}}]),
+
     %then
-    {Uid, _Gid} = rpc:call(W1, luma, get_posix_user_ctx, [ExternalUser, SpaceId]),
+    {Uid, _Gid} = rpc:call(W1, luma, get_posix_user_ctx, [?ROOT_SESS_ID, ExternalUser, SpaceId]),
     {ok, CorrectFileInfo} =
         rpc:call(W1, file, read_file_info, [filename:join([StorageDir, FileToCompareFID])]),
     {ok, FileInfo1} =
@@ -506,27 +504,8 @@ read_should_synchronize_file(Config) ->
             ref
         end
     ),
-    test_utils:mock_new(Workers, od_space, [passthrough]),
-    test_utils:mock_expect(Workers, od_space, get,
-        fun(Id) when Id =:= SpaceId ->
-            case meck:passthrough([Id]) of
-                {ok, Doc = #document{value = Space}} ->
-                    {ok, Doc#document{
-                        value = Space#od_space{
-                            providers = [LocalProviderId, ExternalProviderId],
-                            providers_supports = [
-                                {LocalProviderId, 999999999},
-                                {ExternalProviderId, 999999999}
-                            ]
-                        }
-                    }};
-                Error ->
-                    Error
-            end;
-        (OtherId) ->
-            meck:passthrough([OtherId])
-        end
-    ),
+
+    override_space_providers_mock(Workers, SpaceId, [LocalProviderId, ExternalProviderId]),
 
     % when
     {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
@@ -539,7 +518,7 @@ read_should_synchronize_file(Config) ->
         [rtransfer, prepare_request, [ExternalProviderId, FileGuid, 1, '_']])),
     ?assertEqual(1, rpc:call(W1, meck, num_calls, [rtransfer, fetch, '_'])),
     ?assert(rpc:call(W1, meck, called, [rtransfer, fetch, [ref, '_', '_']])),
-    test_utils:mock_validate_and_unload(Workers, [rtransfer, od_space]),
+    test_utils:mock_validate_and_unload(Workers, [rtransfer]),
     ?assertMatch({
         #document{
             value = #file_location{
@@ -550,6 +529,7 @@ read_should_synchronize_file(Config) ->
     },
         rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileUuid)])
     ).
+
 
 external_change_should_invalidate_blocks(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -609,7 +589,7 @@ external_change_should_invalidate_blocks(Config) ->
             ]
         }
     }, _},
-    rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileUuid)])).
+        rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileUuid)])).
 
 update_should_save_recent_changes(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -1162,28 +1142,8 @@ replica_invalidate_should_migrate_unique_data(Config) ->
         rpc:call(W1, file_location, create, [RemoteLocation])
     ),
 
-    % mock spaces
-    test_utils:mock_new(Workers, od_space, [passthrough]),
-    test_utils:mock_expect(Workers, od_space, get,
-        fun(Id) when Id =:= SpaceId ->
-            case meck:passthrough([Id]) of
-                {ok, Doc = #document{value = Space}} ->
-                    {ok, Doc#document{
-                        value = Space#od_space{
-                            providers = [LocalProviderId, ExternalProviderId],
-                            providers_supports = [
-                                {LocalProviderId, 999999999},
-                                {ExternalProviderId, 999999999}
-                            ]
-                        }
-                    }};
-                Error ->
-                    Error
-            end;
-            (OtherId) ->
-                meck:passthrough([OtherId])
-        end
-    ),
+    override_space_providers_mock(Workers, SpaceId, [LocalProviderId, ExternalProviderId]),
+
     test_utils:mock_new(Workers, logical_file_manager, [passthrough]),
     test_utils:mock_expect(Workers, logical_file_manager, replicate_file,
         fun(_SessId, _FileKey, _ProviderId) -> ok end),
@@ -1202,7 +1162,7 @@ replica_invalidate_should_migrate_unique_data(Config) ->
 
     % then
     test_utils:mock_assert_num_calls(W1, logical_file_manager, replicate_file, [SessionId, {guid, FileGuid}, ExternalProviderId], 1),
-    test_utils:mock_validate_and_unload(Workers, [od_space, logical_file_manager]).
+    test_utils:mock_validate_and_unload(Workers, [logical_file_manager]).
 
 replica_invalidate_should_truncate_storage_file_to_zero_size(Config) ->
     [W1 | _] = Workers = ?config(op_worker_nodes, Config),
@@ -1243,28 +1203,8 @@ replica_invalidate_should_truncate_storage_file_to_zero_size(Config) ->
         rpc:call(W1, file_location, create, [RemoteLocation])
     ),
 
-    % mock spaces
-    test_utils:mock_new(Workers, od_space, [passthrough]),
-    test_utils:mock_expect(Workers, od_space, get,
-        fun(Id) when Id =:= SpaceId ->
-            case meck:passthrough([Id]) of
-                {ok, Doc = #document{value = Space}} ->
-                    {ok, Doc#document{
-                        value = Space#od_space{
-                            providers = [LocalProviderId, ExternalProviderId],
-                            providers_supports = [
-                                {LocalProviderId, 999999999},
-                                {ExternalProviderId, 999999999}
-                            ]
-                        }
-                    }};
-                Error ->
-                    Error
-            end;
-            (OtherId) ->
-                meck:passthrough([OtherId])
-        end
-    ),
+    override_space_providers_mock(Workers, SpaceId, [LocalProviderId, ExternalProviderId]),
+
     test_utils:mock_new(Workers, logical_file_manager, [passthrough]),
     test_utils:mock_expect(Workers, logical_file_manager, replicate_file,
         fun(_SessId, _FileKey, _ProviderId) -> ok end),
@@ -1282,7 +1222,7 @@ replica_invalidate_should_truncate_storage_file_to_zero_size(Config) ->
         rpc:call(W1, file_ctx, get_local_file_location_doc, [FileCtx])
     ),
     ?assertMatch({ok, #statbuf{st_size = 0}}, rpc:call(W1, storage_file_manager, stat, [SfmHandle])),
-    test_utils:mock_validate_and_unload(W1, [od_space, logical_file_manager]).
+    test_utils:mock_validate_and_unload(W1, [logical_file_manager]).
 
 dir_replica_invalidate_should_invalidate_all_children(Config) ->
     [W1 | _] = Workers = ?config(op_worker_nodes, Config),
@@ -1351,28 +1291,8 @@ dir_replica_invalidate_should_invalidate_all_children(Config) ->
         rpc:call(W1, file_location, create, [RemoteLocation2])
     ),
 
-    % mock spaces
-    test_utils:mock_new(Workers, od_space, [passthrough]),
-    test_utils:mock_expect(Workers, od_space, get,
-        fun(Id) when Id =:= SpaceId ->
-            case meck:passthrough([Id]) of
-                {ok, Doc = #document{value = Space}} ->
-                    {ok, Doc#document{
-                        value = Space#od_space{
-                            providers = [LocalProviderId, ExternalProviderId],
-                            providers_supports = [
-                                {LocalProviderId, 999999999},
-                                {ExternalProviderId, 999999999}
-                            ]
-                        }
-                    }};
-                Error ->
-                    Error
-            end;
-            (OtherId) ->
-                meck:passthrough([OtherId])
-        end
-    ),
+    override_space_providers_mock(Workers, SpaceId, [LocalProviderId, ExternalProviderId]),
+
     test_utils:mock_new(Workers, logical_file_manager, [passthrough]),
     test_utils:mock_expect(Workers, logical_file_manager, replicate_file,
         fun(_SessId, _FileKey, _ProviderId) -> ok end),
@@ -1385,7 +1305,7 @@ dir_replica_invalidate_should_invalidate_all_children(Config) ->
     % then
     ?assertMatch({ok, #statbuf{st_size = 0}}, rpc:call(W1, storage_file_manager, stat, [SfmHandle1])),
     ?assertMatch({ok, #statbuf{st_size = 0}}, rpc:call(W1, storage_file_manager, stat, [SfmHandle2])),
-    test_utils:mock_validate_and_unload(W1, [od_space, logical_file_manager]).
+    test_utils:mock_validate_and_unload(W1, [logical_file_manager]).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -1426,3 +1346,27 @@ get_storage_file_id_by_uuid(Worker, FileUuid) ->
     FileCtx = rpc:call(Worker, file_ctx, new_by_guid, [FileGuid]),
     {StorageFileId, _} = rpc:call(Worker, file_ctx, get_storage_file_id, [FileCtx]),
     StorageFileId.
+
+% space_logic is mocked in initializer to return data from default test
+% setup, modify this mock so that user's space has more providers.
+% Given that this just overrides the mock from initializer, no need to unmock
+% (this will be done in test cleanup).
+override_space_providers_mock(Workers, SpaceId, Providers) ->
+    test_utils:mock_unload(Workers, [space_logic]),
+    test_utils:mock_new(Workers, space_logic, []),
+    test_utils:mock_expect(Workers, space_logic, has_eff_user,
+        fun(_Client, SpId, UsId) ->
+            SpId =:= SpaceId andalso UsId =:= <<"user1">>
+        end),
+    test_utils:mock_expect(Workers, space_logic, has_eff_privilege,
+        fun(_Client, SpId, UsId, Privilege) ->
+            SpId =:= SpaceId andalso UsId =:= <<"user1">> andalso lists:member(Privilege, privileges:space_privileges())
+        end),
+    test_utils:mock_expect(Workers, space_logic, get_provider_ids,
+        fun(_Client, SpId) when SpId =:= SpaceId ->
+            {ok, Providers}
+        end),
+    test_utils:mock_expect(Workers, space_logic, is_supported,
+        fun(_Client, SpId, ProvId) when SpId =:= SpaceId ->
+            lists:member(ProvId, Providers)
+        end).
