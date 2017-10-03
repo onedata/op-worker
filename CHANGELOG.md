@@ -4,6 +4,20 @@
 CHANGELOG
 ---------
 
+### 17.06.0-rc4
+
+* VFS-3682 Upgraded GlusterFS libraries
+* VFS-3663 Fix delete events and improve changes broadcasting
+* VFS-3616 parallelize replication of file
+* VFS-3705 recount current file size on storage when saving sequence of blocks
+* VFS-3615 resuming transfer after restart, fix of synchronization of links in transfer model
+* VFS-3705 fix quota leak
+* VFS-3701 Update logging and cluster start procedure
+* VFS-3709 add mechanism to ensure that exometer_reporter is alive
+* VFS-3701 Better provider listener healthcheck
+* VFS-3666 Event emiter does not crush when file_meta is not synchronized
+
+
 ### 17.06.0-rc3
 
 * VFS-3649 Emit attrs remote attrs change even if location does not exist
