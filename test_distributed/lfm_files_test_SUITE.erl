@@ -793,7 +793,8 @@ lfm_acl_test(Config) ->
 
     SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
     UserId1 = ?config({user_id, <<"user1">>}, Config),
-    [{GroupId1, _GroupName1} | _] = ?config({groups, <<"user1">>}, Config),
+    UserName1 = ?config({user_name, <<"user1">>}, Config),
+    [{GroupId1, GroupName1} | _] = ?config({groups, <<"user1">>}, Config),
     FileName = <<"/space_name2/test_file_acl">>,
     DirName = <<"/space_name2/test_dir_acl">>,
 
@@ -802,8 +803,8 @@ lfm_acl_test(Config) ->
 
     % test setting and getting acl
     Acl = [
-        #access_control_entity{acetype = ?allow_mask, identifier = UserId1, aceflags = ?no_flags_mask, acemask = ?read_mask bor ?write_mask},
-        #access_control_entity{acetype = ?deny_mask, identifier = GroupId1, aceflags = ?identifier_group_mask, acemask = ?write_mask}
+        #access_control_entity{acetype = ?allow_mask, identifier = UserId1, name = UserName1, aceflags = ?no_flags_mask, acemask = ?read_mask bor ?write_mask},
+        #access_control_entity{acetype = ?deny_mask, identifier = GroupId1, name = GroupName1, aceflags = ?identifier_group_mask, acemask = ?write_mask}
     ],
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId1, {guid, FileGUID}, Acl)),
     ?assertEqual({ok, Acl}, lfm_proxy:get_acl(W, SessId1, {guid, FileGUID})).
@@ -1215,8 +1216,8 @@ init_per_testcase(ShareTest, Config) when
     ShareTest =:= share_child_read_test orelse
     ShareTest =:= share_permission_denied_test ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, oz_shares),
-    test_utils:mock_expect(Workers, oz_shares, create, fun(_Auth, ShareId, _SpaceId, _Parameters) -> {ok, ShareId} end),
+    test_utils:mock_new(Workers, share_logic),
+    test_utils:mock_expect(Workers, share_logic, create, fun(_Auth, ShareId, _Name, _SpaceId, _ShareFileGuid) -> {ok, ShareId} end),
     init_per_testcase(default, Config);
 init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -1235,7 +1236,7 @@ end_per_testcase(ShareTest, Config) when
         ShareTest =:= share_child_read_test orelse
         ShareTest =:= share_permission_denied_test ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, oz_shares),
+    test_utils:mock_validate_and_unload(Workers, share_logic),
     end_per_testcase(?DEFAULT_CASE(ShareTest), Config);
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),

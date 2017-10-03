@@ -19,9 +19,10 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([ace_to_map/1, map_to_ace/1, from_acl_to_json_format/1,
-    from_json_format_to_acl/1, check_permission/4]).
--export([ace_name_to_uid/1, uid_to_ace_name/1, gid_to_ace_name/1, ace_name_to_gid/1]).
+-export([check_permission/4]).
+-export([from_acl_to_json_format/1, from_json_format_to_acl/1]).
+-export([ace_to_map/1, map_to_ace/1]).
+-export([identifier_acl_to_json/2, identifier_json_to_acl/1]).
 -export([bitmask_to_binary/1, binary_to_bitmask/1]).
 
 -type ace() :: #access_control_entity{}.
@@ -143,18 +144,16 @@ from_acl_to_json_format(Acl) ->
 from_json_format_to_acl(JsonAcl) ->
     [map_to_ace(AceProplist) || AceProplist <- JsonAcl].
 
+
 %%--------------------------------------------------------------------
 %% @doc Parses access control entity to format suitable for jiffy:encode
 %%--------------------------------------------------------------------
 -spec ace_to_map(ace()) -> custom_metadata:json_object().
-ace_to_map(#access_control_entity{acetype = Type, aceflags = Flags, identifier = Who, acemask = AccessMask}) ->
+ace_to_map(#access_control_entity{acetype = Type, aceflags = Flags,
+    identifier = Identifier, name = Name, acemask = AccessMask}) ->
     #{
         <<"acetype">> => bitmask_to_binary(Type),
-        <<"identifier">> =>
-        case ?has_flag(Flags, ?identifier_group_mask) of
-            true -> gid_to_ace_name(Who);
-            false -> uid_to_ace_name(Who)
-        end,
+        <<"identifier">> => identifier_acl_to_json(Identifier, Name),
         <<"aceflags">> => bitmask_to_binary(Flags),
         <<"acemask">> => bitmask_to_binary(AccessMask)
     }.
@@ -169,76 +168,34 @@ map_to_ace(Map) ->
     Type = maps:get(<<"acetype">>, Map, undefined),
     Flags = maps:get(<<"aceflags">>, Map, undefined),
     Mask = maps:get(<<"acemask">>, Map, undefined),
-    Name = maps:get(<<"identifier">>, Map, undefined),
+    JsonId = maps:get(<<"identifier">>, Map, undefined),
+
+    {Identifier, Name} = identifier_json_to_acl(JsonId),
 
     Acetype = type_to_bitmask(Type),
     Aceflags = flags_to_bitmask(Flags),
     Acemask = mask_to_bitmask(Mask),
-    Identifier = case ?has_flag(Aceflags, ?identifier_group_mask) of
-        true -> ace_name_to_gid(Name);
-        false -> ace_name_to_uid(Name)
-    end,
+    #access_control_entity{acetype = Acetype, aceflags = Aceflags,
+        identifier = Identifier, name = Name, acemask = Acemask
+    }.
 
-    #access_control_entity{acetype = Acetype, aceflags = Aceflags, acemask = Acemask, identifier = Identifier}.
 
-%%--------------------------------------------------------------------
-%% @doc Transforms global id to acl name representation (name and hash suffix)
-%% i. e. "fif3nhh238hdfg33f3" -> "John Dow#fif3n"
-%% @end
-%%--------------------------------------------------------------------
--spec uid_to_ace_name(Uid :: binary()) -> binary().
-uid_to_ace_name(?owner) ->
-    ?owner;
-uid_to_ace_name(?everyone) ->
-    ?everyone;
-uid_to_ace_name(?group) ->
-    ?group;
-uid_to_ace_name(Uid) ->
-    {ok, #document{value = #od_user{name = Name}}} = od_user:get(Uid),
-    <<Name/binary, "#", Uid/binary>>.
+-spec identifier_acl_to_json(Id :: binary(), Name :: undefined | binary()) ->
+    JsonId :: binary().
+identifier_acl_to_json(Id, undefined) ->
+    Id;
+identifier_acl_to_json(Id, Name) ->
+    <<Name/binary, "#", Id/binary>>.
 
-%%--------------------------------------------------------------------
-%% @doc Transforms acl name representation (name and hash suffix) to global id
-%% i. e. "John Dow#fif3n" -> "fif3n"
-%% @end
-%%--------------------------------------------------------------------
--spec ace_name_to_uid(Name :: binary()) -> binary().
-ace_name_to_uid(?owner) ->
-    ?owner;
-ace_name_to_uid(?everyone) ->
-    ?everyone;
-ace_name_to_uid(?group) ->
-    ?group;
-ace_name_to_uid(AceName) ->
-    case binary:split(AceName, <<"#">>, [global]) of
-        [_UserName, Uid] ->
-            Uid;
-        [Uid] ->
-            Uid
-    end.
 
-%%--------------------------------------------------------------------
-%% @doc Transforms global group id to acl group name representation (name and hash suffix)
-%% i. e. "fif3nhh238hdfg33f3" -> "group1#fif3n"
-%% @end
-%%--------------------------------------------------------------------
--spec gid_to_ace_name(GRGroupId :: binary()) -> binary().
-gid_to_ace_name(GroupId) ->
-    {ok, #document{value = #od_group{name = Name}}} = od_group:get(GroupId),
-    <<Name/binary, "#", GroupId/binary>>.
-
-%%--------------------------------------------------------------------
-%% @doc Transforms acl group name representation (name and hash suffix) to global id
-%% i. e. "group1#fif3n" -> "fif3n"
-%% @end
-%%--------------------------------------------------------------------
--spec ace_name_to_gid(Name :: binary()) -> binary().
-ace_name_to_gid(AceName) ->
-    case binary:split(AceName, <<"#">>, [global]) of
-        [_GroupName, GroupId] ->
-            GroupId;
-        [GroupId] ->
-            GroupId
+-spec identifier_json_to_acl(JsonId :: binary()) ->
+    {Id :: binary(), Name :: undefined | binary()}.
+identifier_json_to_acl(JsonId) ->
+    case binary:split(JsonId, <<"#">>, [global]) of
+        [Name, Id] ->
+            {Id, Name};
+        [Id] ->
+            {Id, undefined}
     end.
 
 %%--------------------------------------------------------------------

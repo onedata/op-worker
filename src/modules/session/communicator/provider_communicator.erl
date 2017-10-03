@@ -197,7 +197,7 @@ ensure_connected(SessId) ->
                 _ ->
                     session_manager:session_id_to_provider_id(SessId)
             end,
-            {ok, #document{value = #od_provider{urls = URLs}}} = od_provider:get_or_fetch(ProviderId),
+            {ok, URLs} = provider_logic:get_urls(ProviderId),
             lists:foreach(
                 fun(URL) ->
                     {ok, Port} = application:get_env(?APP_NAME, provider_protocol_handler_port),

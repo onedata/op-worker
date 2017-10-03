@@ -80,12 +80,13 @@ content_types_provided(Req, State) ->
 %%
 %%--------------------------------------------------------------------
 -spec list_spaces(req(), maps:map()) -> {term(), req(), maps:map()}.
-list_spaces(Req, State = #{auth := Auth}) ->
-    {ok, UserId} = session:get_user_id(Auth),
-    {ok, #document{value = #od_user{space_aliases = Spaces}}} = od_user:get_or_fetch(Auth, UserId),
+list_spaces(Req, State = #{auth := SessionId}) ->
+    {ok, UserId} = session:get_user_id(SessionId),
+    {ok, EffSpaces} = user_logic:get_eff_spaces(SessionId, UserId),
     RawResponse =
-        lists:map(fun({SpaceId, SpaceName}) ->
-            #{<<"name">> => SpaceName, <<"spaceId">> => SpaceId}
-        end, Spaces),
+        lists:map(fun(SpaceId) ->
+            {ok, SpaceName} = space_logic:get_name(SessionId, SpaceId),
+            #{<<"spaceId">> => SpaceId, <<"name">> => SpaceName}
+        end, EffSpaces),
     Response = json_utils:encode_map(RawResponse),
     {Response, Req, State}.

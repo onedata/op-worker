@@ -93,19 +93,19 @@ get_metric(Req, State) ->
     {Step, Req5} = cowboy_req:qs_val(<<"step">>, Req4),
 
     #{
-        auth := Auth,
+        auth := SessionId,
         subject_type := SubjectType,
         secondary_subject_type := SecondarySubjectType,
         space_id := SpaceId,
         user_id := UId
     } = State3,
 
-    space_membership:check_with_auth(Auth, SpaceId),
-    case od_space:get_or_fetch(Auth, SpaceId) of
-        {ok, #document{value = #od_space{providers = Providers}}} ->
+    space_membership:check_with_auth(SessionId, SpaceId),
+    case space_logic:get_provider_ids(SessionId, SpaceId) of
+        {ok, Providers} ->
             Json =
                 lists:map(fun(ProviderId) ->
-                    case onedata_metrics_api:get_metric(Auth, SubjectType, SpaceId, SecondarySubjectType, UId,
+                    case onedata_metrics_api:get_metric(SessionId, SubjectType, SpaceId, SecondarySubjectType, UId,
                         transform_metric(Metric, SubjectType, SecondarySubjectType), transform_step(Step), ProviderId, json)
                     of
                         {ok, Data} ->

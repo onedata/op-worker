@@ -42,10 +42,9 @@
 -spec new(session:id()) -> ctx() | no_return().
 new(SessId) ->
     {ok, Session = #document{value = #session{
-        auth = Auth,
         identity = #user_identity{user_id = UserId}
     }}} = session:get(SessId),
-    {ok, User} = od_user:get_or_fetch(Auth, UserId),
+    {ok, User} = user_logic:get(SessId, UserId),
     #user_ctx{
         session = Session,
         user_doc = User

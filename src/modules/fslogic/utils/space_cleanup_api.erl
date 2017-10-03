@@ -71,8 +71,7 @@ initialize(SpaceId) ->
 %%--------------------------------------------------------------------
 -spec periodic_cleanup() -> ok.
 periodic_cleanup() ->
-    {ok, #document{value = #od_provider{spaces = Spaces}}} =
-        od_provider:get_or_fetch(oneprovider:get_provider_id()),
+    {ok, Spaces} = provider_logic:get_spaces(),
     SpacesToCleanup = lists:filter(fun(SpaceId) ->
         space_storage:is_cleanup_enabled(SpaceId)
     end, Spaces),

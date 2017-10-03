@@ -16,7 +16,7 @@
 -include("global_definitions.hrl").
 
 %% API
--export([get_user_ctx/4, get_request_headers/1]).
+-export([get_user_ctx/5, get_request_headers/1]).
 
 %%%===================================================================
 %%% API functions
@@ -27,15 +27,15 @@
 %% Queries third party LUMA service for the storage user context.
 %% @end
 %%--------------------------------------------------------------------
--spec get_user_ctx(od_user:id(), od_space:id(), storage:doc(), storage:helper()) ->
+-spec get_user_ctx(session:id(), od_user:id(), od_space:id(), storage:doc(), storage:helper()) ->
     {ok, luma:user_ctx()} | {error, Reason :: term()}.
-get_user_ctx(UserId, SpaceId, StorageDoc = #document{
+get_user_ctx(SessionId, UserId, SpaceId, StorageDoc = #document{
     value = #storage{
         luma_config = LumaConfig = #luma_config{url = LumaUrl}
 }}, Helper) ->
     Url = str_utils:format_bin("~s/map_user_credentials", [LumaUrl]),
     ReqHeaders = get_request_headers(LumaConfig),
-    ReqBody = get_request_body(UserId, SpaceId, StorageDoc),
+    ReqBody = get_request_body(SessionId, UserId, SpaceId, StorageDoc),
     case http_client:post(Url, ReqHeaders, ReqBody) of
         {ok, 200, _RespHeaders, RespBody} ->
             UserCtx = json_utils:decode_map(RespBody),
@@ -73,16 +73,16 @@ get_request_headers(#luma_config{api_key = APIKey}) ->
 %% Constructs user context request that will be sent to the external LUMA service.
 %% @end
 %%--------------------------------------------------------------------
--spec get_request_body(od_user:id(), od_space:id(), storage:doc()) ->
+-spec get_request_body(session:id(), od_user:id(), od_space:id(), storage:doc()) ->
     Body :: binary().
-get_request_body(UserId, SpaceId, StorageDoc) ->
-    Body = [
-        {<<"storageId">>, storage:get_id(StorageDoc)},
-        {<<"storageName">>, storage:get_name(StorageDoc)},
-        {<<"spaceId">>, SpaceId},
-        {<<"userDetails">>, get_user_details(UserId)}
-    ],
-    json_utils:encode(Body).
+get_request_body(SessionId, UserId, SpaceId, StorageDoc) ->
+    Body = #{
+        <<"storageId">> => storage:get_id(StorageDoc),
+        <<"storageName">> => storage:get_name(StorageDoc),
+        <<"spaceId">> => SpaceId,
+        <<"userDetails">> => get_user_details(SessionId, UserId)
+    },
+    json_utils:encode_map(Body).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -90,42 +90,23 @@ get_request_body(UserId, SpaceId, StorageDoc) ->
 %% Constructs user details list.
 %% @end
 %%--------------------------------------------------------------------
--spec get_user_details(od_user:id()) -> UserDetails :: proplists:proplist().
-get_user_details(UserId) ->
-    case od_user:get(UserId) of
-        {ok, #document{value = #od_user{connected_accounts = Accounts} = User}} ->
-            [
-                {<<"id">>, UserId},
-                {<<"name">>, User#od_user.name},
-                {<<"connectedAccounts">>, format_user_accounts(Accounts)},
-                {<<"login">>, User#od_user.alias},
-                {<<"emailList">>, User#od_user.email_list}
-            ];
+-spec get_user_details(session:id(), od_user:id()) -> UserDetails :: maps:map().
+get_user_details(SessionId, UserId) ->
+    case user_logic:get_protected_data(SessionId, UserId) of
+        {ok, #document{value = User}} ->
+            #{
+                <<"id">> => UserId,
+                <<"name">> => User#od_user.name,
+                <<"login">> => User#od_user.login,
+                <<"connectedAccounts">> => User#od_user.linked_accounts,
+                <<"emailList">> => User#od_user.email_list
+            };
         {error, _} ->
-            [
-                {<<"id">>, UserId},
-                {<<"name">>, <<>>},
-                {<<"connectedAccounts">>, []},
-                {<<"login">>, <<>>},
-                {<<"emailList">>, []}
-            ]
+            #{
+                <<"id">> => UserId,
+                <<"name">> => <<>>,
+                <<"login">> => <<>>,
+                <<"connectedAccounts">> => [],
+                <<"emailList">> => []
+            }
     end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Formats user OpenId accounts list.
-%% @end
-%%--------------------------------------------------------------------
--spec format_user_accounts(Accounts :: [proplists:proplist()]) ->
-    FormattedAccounts :: [proplists:proplist()].
-format_user_accounts(Accounts) ->
-    Keys = [
-        <<"idp">>, <<"userId">>, <<"login">>, <<"name">>,
-        <<"emailList">>, <<"groups">>
-    ],
-    lists:map(fun(Account) ->
-        Values = utils:get_values([<<"provider_id">>, <<"user_id">>, <<"login">>,
-            <<"name">>, <<"email_list">>, <<"groups">>], Account),
-        lists:zip(Keys, Values)
-    end, Accounts).
