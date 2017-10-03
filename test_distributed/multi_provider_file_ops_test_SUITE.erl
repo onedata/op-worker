@@ -47,8 +47,8 @@
     create_and_delete_file_loop_test_base/1,
     echo_and_delete_file_loop_test/1,
     echo_and_delete_file_loop_test_base/1,
-    distributed_delete_test/1
-
+    distributed_delete_test/1,
+    remote_driver_test/1
 ]).
 
 -define(TEST_CASES, [
@@ -67,7 +67,8 @@
     mkdir_and_rmdir_loop_test,
     create_and_delete_file_loop_test,
     echo_and_delete_file_loop_test,
-    distributed_delete_test
+    distributed_delete_test,
+    remote_driver_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -385,9 +386,27 @@ echo_and_delete_file_loop_test_base(Config) ->
     IterationsNum = ?config(iterations, Config),
     multi_provider_file_ops_test_base:echo_and_delete_file_loop_test_base(Config, IterationsNum, <<"user1">>).
 
-
-
-
+remote_driver_test(Config) ->
+    Config2 = multi_provider_file_ops_test_base:extend_config(Config, <<"user1">>, {0, 0, 0, 0}, 0),
+    Workers = ?config(op_worker_nodes, Config),
+    [Worker1 | _] = ?config(workers1, Config2),
+    [Worker2 | _] = ?config(workers_not1, Config2),
+    Key = <<"someKey">>,
+    LinkName = <<"someName">>,
+    LinkTarget = <<"someTarget">>,
+    Link = {LinkName, LinkTarget},
+    TreeId1 = rpc:call(Worker1, oneprovider, get_provider_id, []),
+    Ctx1 = rpc:call(Worker1, datastore_model_default, get_ctx, [file_meta]),
+    Ctx2 = rpc:call(Worker2, datastore_model_default, get_ctx, [file_meta]),
+    ?assertMatch({ok, #link{}}, rpc:call(Worker1, datastore_model, add_links, [
+        Ctx1, Key, TreeId1, Link
+    ])),
+    ?assertMatch({ok, [#link{
+        name = LinkName,
+        target = LinkTarget
+    }]}, rpc:call(Worker2, datastore_model, get_links, [
+        Ctx2, Key, TreeId1, LinkName
+    ])).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

@@ -16,11 +16,14 @@
 -author("Jakub Liput").
 
 -include("proto/common/credentials.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
+-include_lib("cluster_worker/include/api_errors.hrl").
 
 
 %% API
@@ -60,28 +63,12 @@ terminate() ->
 -spec find_record(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find_record(ModelType, ShareId) ->
-    % Make sure that user is allowed to view requested share - he must have
-    % view privileges in this space, or view the share in public view.
-    {Authorized, ShareRecord} = case ModelType of
+    case ModelType of
         <<"share">> ->
-            UserAuth = op_gui_utils:get_user_auth(),
-            {ok, #document{
-                value = #od_share{space = SpaceId} = ShRecord
-            }} = share_logic:get(UserAuth, ShareId),
-            UserId = gui_session:get_user_id(),
-            HasPriv = space_logic:has_effective_privilege(
-                SpaceId, UserId, ?SPACE_VIEW
-            ),
-            {HasPriv, ShRecord};
+            SessionId = gui_session:get_session_id(),
+            share_record(SessionId, ShareId);
         <<"share-public">> ->
-            {ok, #document{value = ShRecord}} = share_logic:get(provider, ShareId),
-            {true, ShRecord}
-    end,
-    case Authorized of
-        false ->
-            gui_error:unauthorized();
-        true ->
-            share_record(ModelType, ShareId, ShareRecord)
+            public_share_record(ShareId)
     end.
 
 
@@ -142,7 +129,7 @@ create_record(_, _Data) ->
 update_record(<<"share-public">>, _ShareId, _Data) ->
     gui_error:report_error(<<"Not implemented">>);
 update_record(<<"share">>, ShareId, [{<<"name">>, Name}]) ->
-    UserAuth = op_gui_utils:get_user_auth(),
+    SessionId = gui_session:get_session_id(),
     case Name of
         undefined ->
             ok;
@@ -150,7 +137,7 @@ update_record(<<"share">>, ShareId, [{<<"name">>, Name}]) ->
             gui_error:report_warning(
                 <<"Cannot set share name to empty string.">>);
         NewName ->
-            case share_logic:set_name(UserAuth, ShareId, NewName) of
+            case share_logic:update_name(SessionId, ShareId, NewName) of
                 ok ->
                     % Push container dir as its name has also changed.
                     {ok, FileData} = file_data_backend:find_record(
@@ -193,44 +180,62 @@ delete_record(<<"share">>, ShareId) ->
                 <<"Cannot remove share due to unknown error.">>)
     end.
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Constructs a share record for given ShareId.
 %% @end
 %%--------------------------------------------------------------------
--spec share_record(ModelType :: binary(), ShareId :: od_share:id(),
-    ShareRecord :: od_share:info()) -> {ok, proplists:proplist()}.
-share_record(ModelType, ShareId, ShareRecord) ->
-    #od_share{
-        name = Name,
-        root_file = RootFileId,
-        space = SpaceId,
-        public_url = PublicURL,
-        handle = Handle
-    } = ShareRecord,
-    HandleVal = case Handle of
-        undefined -> null;
-        <<"undefined">> -> null;
-        _ -> Handle
-    end,
-    FileId = case ModelType of
-        <<"share">> ->
-            fslogic_uuid:share_guid_to_guid(RootFileId);
-        <<"share-public">> ->
-            RootFileId
-    end,
-    UserEntry = case ModelType of
-        <<"share">> ->
-            [{<<"user">>, gui_session:get_user_id()}];
-        <<"share-public">> ->
-            []
-    end,
-    {ok, [
-        {<<"id">>, ShareId},
-        {<<"name">>, Name},
-        {<<"file">>, FileId},
-        {<<"containerDir">>, <<"containerDir.", ShareId/binary>>},
-        {<<"dataSpace">>, SpaceId},
-        {<<"publicUrl">>, PublicURL},
-        {<<"handle">>, HandleVal}
-    ] ++ UserEntry}.
+-spec share_record(SessionId :: session:id(), ShareId :: od_share:id()) ->
+    {ok, proplists:proplist()}.
+share_record(SessionId, ShareId) ->
+    case share_logic:get(SessionId, ShareId) of
+        {error, _} ->
+            gui_error:unauthorized();
+        {ok, #document{value = ShareRecord}} ->
+            #od_share{
+                name = Name,
+                root_file = RootFileId,
+                space = SpaceId,
+                public_url = PublicURL,
+                handle = HandleId
+            } = ShareRecord,
+            {ok, [
+                {<<"id">>, ShareId},
+                {<<"name">>, Name},
+                {<<"file">>, fslogic_uuid:share_guid_to_guid(RootFileId)},
+                {<<"containerDir">>, <<"containerDir.", ShareId/binary>>},
+                {<<"dataSpace">>, SpaceId},
+                {<<"publicUrl">>, PublicURL},
+                {<<"handle">>, gs_protocol:undefined_to_null(HandleId)},
+                {<<"user">>, gui_session:get_user_id()}
+            ]}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Constructs a public share record for given ShareId.
+%% @end
+%%--------------------------------------------------------------------
+-spec public_share_record(ShareId :: od_share:id()) -> {ok, proplists:proplist()}.
+public_share_record(ShareId) ->
+    case share_logic:get_public_data(?GUEST_SESS_ID, ShareId) of
+        {error, _} ->
+            gui_error:unauthorized();
+        {ok, #document{value = ShareRecord}} ->
+            #od_share{
+                name = Name,
+                root_file = RootFileId,
+                public_url = PublicURL,
+                handle = HandleId
+            } = ShareRecord,
+            {ok, [
+                {<<"id">>, ShareId},
+                {<<"name">>, Name},
+                {<<"file">>, RootFileId},
+                {<<"containerDir">>, <<"containerDir.", ShareId/binary>>},
+                {<<"publicUrl">>, PublicURL},
+                {<<"handle">>, gs_protocol:undefined_to_null(HandleId)}
+            ]}
+    end.

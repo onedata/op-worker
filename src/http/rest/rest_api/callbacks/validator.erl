@@ -225,13 +225,13 @@ parse_callback(Req, State) ->
 %%--------------------------------------------------------------------
 -spec parse_space_id(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
-parse_space_id(Req, State = #{auth := Auth}) ->
+parse_space_id(Req, State = #{auth := SessionId}) ->
     {Id, NewReq} = cowboy_req:binding(sid, Req),
-    {ok, UserId} = session:get_user_id(Auth),
-    case od_space:get(Id, UserId) of
-        {ok, _} ->
+    {ok, UserId} = session:get_user_id(SessionId),
+    case user_logic:has_eff_space(SessionId, UserId, Id) of
+        true ->
             {State#{space_id => Id}, NewReq};
-        {error, not_found} ->
+        false ->
             throw(?ERROR_SPACE_NOT_FOUND)
     end.
 

@@ -20,6 +20,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
+-include_lib("ctool/include/privileges.hrl").
 
 
 %% API
@@ -61,9 +62,10 @@ terminate() ->
 -spec find_record(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find_record(<<"space">>, SpaceId) ->
+    SessionId = gui_session:get_session_id(),
     UserId = gui_session:get_user_id(),
     % Check if the user belongs to this space
-    case space_logic:has_effective_user(SpaceId, UserId) of
+    case space_logic:has_eff_user(SessionId, SpaceId, UserId) of
         false ->
             gui_error:unauthorized();
         true ->
@@ -72,6 +74,7 @@ find_record(<<"space">>, SpaceId) ->
 
 % PermissionsRecord matches <<"space-(user|group)-(list|permission)">>
 find_record(PermissionsRecord, RecordId) ->
+    SessionId = gui_session:get_session_id(),
     SpaceId = case PermissionsRecord of
         <<"space-user-list">> ->
             RecordId;
@@ -84,8 +87,8 @@ find_record(PermissionsRecord, RecordId) ->
     UserId = gui_session:get_user_id(),
     % Make sure that user is allowed to view requested privileges - he must have
     % view privileges in this space.
-    Authorized = space_logic:has_effective_privilege(
-        SpaceId, UserId, ?SPACE_VIEW
+    Authorized = space_logic:has_eff_privilege(
+        SessionId, SpaceId, UserId, ?SPACE_VIEW
     ),
     case Authorized of
         false ->
@@ -145,7 +148,7 @@ query_record(<<"space">>, _Data) ->
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 create_record(<<"space">>, Data) ->
-    UserAuth = op_gui_utils:get_user_auth(),
+    SessionId = gui_session:get_session_id(),
     UserId = gui_session:get_user_id(),
     Name = proplists:get_value(<<"name">>, Data),
     case Name of
@@ -153,10 +156,11 @@ create_record(<<"space">>, Data) ->
             gui_error:report_warning(
                 <<"Cannot create space with empty name.">>);
         _ ->
-            case space_logic:create_user_space(UserAuth, #od_space{name = Name}) of
+            case user_logic:create_space(SessionId, UserId, Name) of
                 {ok, SpaceId} ->
-                    user_data_backend:push_modified_user(
-                        UserAuth, UserId, <<"spaces">>, add, SpaceId
+                    gui_async:push_updated(
+                        <<"user">>,
+                        user_data_backend:user_record(SessionId, UserId)
                     ),
                     SpaceRecord = space_record(SpaceId, true),
                     {ok, SpaceRecord};
@@ -176,7 +180,7 @@ create_record(<<"space">>, Data) ->
     Data :: proplists:proplist()) ->
     ok | gui_error:error_result().
 update_record(<<"space">>, SpaceId, [{<<"name">>, Name}]) ->
-    UserAuth = op_gui_utils:get_user_auth(),
+    SessionId = gui_session:get_session_id(),
     case Name of
         undefined ->
             ok;
@@ -184,7 +188,7 @@ update_record(<<"space">>, SpaceId, [{<<"name">>, Name}]) ->
             gui_error:report_warning(
                 <<"Cannot set space name to empty string.">>);
         NewName ->
-            case space_logic:set_name(UserAuth, SpaceId, NewName) of
+            case space_logic:update_name(SessionId, SpaceId, NewName) of
                 ok ->
                     ok;
                 {error, {403, <<>>, <<>>}} ->
@@ -197,14 +201,13 @@ update_record(<<"space">>, SpaceId, [{<<"name">>, Name}]) ->
     end;
 
 update_record(<<"space-user-permission">>, AssocId, Data) ->
-    UserAuth = op_gui_utils:get_user_auth(),
-    CurrentUser = gui_session:get_user_id(),
+    SessionId = gui_session:get_session_id(),
     {UserId, SpaceId} = op_gui_utils:association_to_ids(AssocId),
     {ok, #document{
         value = #od_space{
-            users = UsersAndPerms
-        }}} = space_logic:get(UserAuth, SpaceId, CurrentUser),
-    UserPerms = proplists:get_value(UserId, UsersAndPerms),
+            direct_users = UsersAndPerms
+        }}} = space_logic:get(SessionId, SpaceId),
+    UserPerms = maps:get(UserId, UsersAndPerms),
     NewUserPerms = lists:foldl(
         fun({PermGui, Flag}, PermsAcc) ->
             Perm = perm_gui_to_db(PermGui),
@@ -216,8 +219,8 @@ update_record(<<"space-user-permission">>, AssocId, Data) ->
             end
         end, UserPerms, Data),
 
-    Result = space_logic:set_user_privileges(
-        UserAuth, SpaceId, UserId, lists:usort(NewUserPerms)),
+    Result = space_logic:update_user_privileges(
+        SessionId, SpaceId, UserId, lists:usort(NewUserPerms)),
     case Result of
         ok ->
             ok;
@@ -230,14 +233,13 @@ update_record(<<"space-user-permission">>, AssocId, Data) ->
     end;
 
 update_record(<<"space-group-permission">>, AssocId, Data) ->
-    UserAuth = op_gui_utils:get_user_auth(),
-    CurrentUser = gui_session:get_user_id(),
+    SessionId = gui_session:get_session_id(),
     {GroupId, SpaceId} = op_gui_utils:association_to_ids(AssocId),
     {ok, #document{
         value = #od_space{
-            groups = GroupsAndPerms
-        }}} = space_logic:get(UserAuth, SpaceId, CurrentUser),
-    GroupPerms = proplists:get_value(GroupId, GroupsAndPerms),
+            direct_groups = GroupsAndPerms
+        }}} = space_logic:get(SessionId, SpaceId),
+    GroupPerms = maps:get(GroupId, GroupsAndPerms),
     NewGroupPerms = lists:foldl(
         fun({PermGui, Flag}, PermsAcc) ->
             Perm = perm_gui_to_db(PermGui),
@@ -249,8 +251,8 @@ update_record(<<"space-group-permission">>, AssocId, Data) ->
             end
         end, GroupPerms, Data),
 
-    Result = space_logic:set_group_privileges(
-        UserAuth, SpaceId, GroupId, lists:usort(NewGroupPerms)),
+    Result = space_logic:update_group_privileges(
+        SessionId, SpaceId, GroupId, lists:usort(NewGroupPerms)),
     case Result of
         ok ->
             ok;
@@ -274,12 +276,13 @@ update_record(_ResourceType, _Id, _Data) ->
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
     ok | gui_error:error_result().
 delete_record(<<"space">>, SpaceId) ->
-    UserAuth = op_gui_utils:get_user_auth(),
+    SessionId = gui_session:get_session_id(),
     UserId = gui_session:get_user_id(),
-    case space_logic:delete(UserAuth, SpaceId) of
+    case space_logic:delete(SessionId, SpaceId) of
         ok ->
-            user_data_backend:push_modified_user(
-                UserAuth, UserId, <<"spaces">>, remove, SpaceId
+            gui_async:push_updated(
+                <<"user">>,
+                user_data_backend:user_record(SessionId, UserId)
             ),
             ok;
         {error, {403, <<>>, <<>>}} ->
@@ -303,9 +306,10 @@ delete_record(<<"space">>, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec space_record(SpaceId :: binary()) -> proplists:proplist().
 space_record(SpaceId) ->
+    SessionId = gui_session:get_session_id(),
     % Check if that user has view privileges in that space
-    HasViewPrivileges = space_logic:has_effective_privilege(
-        SpaceId, gui_session:get_user_id(), ?SPACE_VIEW
+    HasViewPrivileges = space_logic:has_eff_privilege(
+        SessionId, SpaceId, gui_session:get_user_id(), ?SPACE_VIEW
     ),
     space_record(SpaceId, HasViewPrivileges).
 
@@ -319,14 +323,14 @@ space_record(SpaceId) ->
 -spec space_record(SpaceId :: binary(), HasViewPrivileges :: boolean()) ->
     proplists:proplist().
 space_record(SpaceId, HasViewPrivileges) ->
+    SessionId = gui_session:get_session_id(),
     UserId = gui_session:get_user_id(),
-    UserAuth = op_gui_utils:get_user_auth(),
     {ok, #document{value = #od_space{
         name = Name,
-        providers_supports = Providers
-    }}} = space_logic:get(UserAuth, SpaceId, UserId),
+        providers = Providers
+    }}} = space_logic:get(SessionId, SpaceId),
     RootDir = case Providers of
-        [] ->
+        EmptyMap when map_size(EmptyMap) =:= 0 ->
             null;
         _ ->
             fslogic_uuid:uuid_to_guid(
@@ -359,15 +363,14 @@ space_record(SpaceId, HasViewPrivileges) ->
 %%--------------------------------------------------------------------
 -spec space_user_list_record(SpaceId :: binary()) -> proplists:proplist().
 space_user_list_record(SpaceId) ->
-    UserId = gui_session:get_user_id(),
-    UserAuth = op_gui_utils:get_user_auth(),
+    SessionId = gui_session:get_session_id(),
     {ok, #document{value = #od_space{
-        users = UsersWithPerms
-    }}} = space_logic:get(UserAuth, SpaceId, UserId),
+        direct_users = UsersWithPerms
+    }}} = space_logic:get(SessionId, SpaceId),
     UserPermissions = lists:map(
-        fun({UsId, _UsPerms}) ->
+        fun(UsId) ->
             op_gui_utils:ids_to_association(UsId, SpaceId)
-        end, UsersWithPerms),
+        end, maps:keys(UsersWithPerms)),
     [
         {<<"id">>, SpaceId},
         {<<"space">>, SpaceId},
@@ -382,15 +385,14 @@ space_user_list_record(SpaceId) ->
 %%--------------------------------------------------------------------
 -spec space_group_list_record(SpaceId :: binary()) -> proplists:proplist().
 space_group_list_record(SpaceId) ->
-    UserId = gui_session:get_user_id(),
-    UserAuth = op_gui_utils:get_user_auth(),
+    SessionId = gui_session:get_session_id(),
     {ok, #document{value = #od_space{
-        groups = GroupsWithPerms
-    }}} = space_logic:get(UserAuth, SpaceId, UserId),
+        direct_groups = GroupsWithPerms
+    }}} = space_logic:get(SessionId, SpaceId),
     GroupPermissions = lists:map(
-        fun({GrId, _GrPerms}) ->
+        fun(GrId) ->
             op_gui_utils:ids_to_association(GrId, SpaceId)
-        end, GroupsWithPerms),
+        end, maps:keys(GroupsWithPerms)),
     [
         {<<"id">>, SpaceId},
         {<<"space">>, SpaceId},
@@ -406,14 +408,13 @@ space_group_list_record(SpaceId) ->
 %%--------------------------------------------------------------------
 -spec space_user_permission_record(AssocId :: binary()) -> proplists:proplist().
 space_user_permission_record(AssocId) ->
-    UserAuth = op_gui_utils:get_user_auth(),
-    CurrentUser = gui_session:get_user_id(),
+    SessionId = gui_session:get_session_id(),
     {UserId, SpaceId} = op_gui_utils:association_to_ids(AssocId),
     {ok, #document{
         value = #od_space{
-            users = UsersAndPerms
-        }}} = space_logic:get(UserAuth, SpaceId, CurrentUser),
-    UserPerms = proplists:get_value(UserId, UsersAndPerms),
+            direct_users = UsersAndPerms
+        }}} = space_logic:get(SessionId, SpaceId),
+    UserPerms = maps:get(UserId, UsersAndPerms),
     PermsMapped = perms_db_to_gui(UserPerms),
     PermsMapped ++ [
         {<<"id">>, AssocId},
@@ -431,14 +432,13 @@ space_user_permission_record(AssocId) ->
 -spec space_group_permission_record(AssocId :: binary()) ->
     proplists:proplist().
 space_group_permission_record(AssocId) ->
-    UserAuth = op_gui_utils:get_user_auth(),
-    CurrentUser = gui_session:get_user_id(),
+    SessionId = gui_session:get_session_id(),
     {GroupId, SpaceId} = op_gui_utils:association_to_ids(AssocId),
     {ok, #document{
         value = #od_space{
-            groups = GroupsAndPerms
-        }}} = space_logic:get(UserAuth, SpaceId, CurrentUser),
-    GroupPerms = proplists:get_value(GroupId, GroupsAndPerms),
+            direct_groups = GroupsAndPerms
+        }}} = space_logic:get(SessionId, SpaceId),
+    GroupPerms = maps:get(GroupId, GroupsAndPerms),
     PermsMapped = perms_db_to_gui(GroupPerms),
     PermsMapped ++ [
         {<<"id">>, AssocId},

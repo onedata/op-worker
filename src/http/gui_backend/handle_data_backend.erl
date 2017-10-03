@@ -19,7 +19,6 @@
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
--include_lib("ctool/include/oz/oz_handles.hrl").
 
 -export([init/0, terminate/0]).
 -export([find_record/2, find_all/1, query/2, query_record/2]).
@@ -57,13 +56,13 @@ terminate() ->
 -spec find_record(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find_record(ModelType, HandleId) ->
-    Auth = case ModelType of
+    case ModelType of
         <<"handle">> ->
-            op_gui_utils:get_user_auth();
+            SessionId = gui_session:get_session_id(),
+            handle_record(SessionId, HandleId);
         <<"handle-public">> ->
-            ?GUEST_SESS_ID
-    end,
-    handle_record(ModelType, Auth, HandleId).
+            public_handle_record(HandleId)
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -109,21 +108,21 @@ query_record(_, _Data) ->
 create_record(<<"handle-public">>, _Data) ->
     gui_error:report_error(<<"Not implemented">>);
 create_record(<<"handle">>, Data) ->
-    Auth = op_gui_utils:get_user_auth(),
+    SessionId = gui_session:get_session_id(),
     HandleServiceId = proplists:get_value(<<"handleService">>, Data, <<"">>),
     Metadata = proplists:get_value(<<"metadataString">>, Data, <<"">>),
     ShareId = proplists:get_value(<<"share">>, Data, <<"">>),
     {ok, HandleId} = handle_logic:create(
-        Auth, HandleServiceId, <<"Share">>, ShareId, Metadata
+        SessionId, HandleServiceId, <<"Share">>, ShareId, Metadata
     ),
     {ok, ShareData} = share_data_backend:find_record(<<"share">>, ShareId),
     NewShareData = lists:keyreplace(
         <<"handle">>, 1, ShareData, {<<"handle">>, HandleId}
     ),
     gui_async:push_updated(<<"share">>, NewShareData),
-    {ok, #handle_details{
+    {ok, #document{value = #od_handle{
         public_handle = PublicHandle
-    }} = oz_handles:get_details(Auth, HandleId),
+    }}} = handle_logic:get(SessionId, HandleId),
     {ok, [
         {<<"id">>, HandleId},
         {<<"handleService">>, HandleServiceId},
@@ -159,31 +158,51 @@ delete_record(_, _Id) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Constructs a handle record for given HandleId, depending on given Auth.
+%% Constructs a handle record for given HandleId, depending on given SessionId.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_record(ModelType :: binary(), Auth :: term(),
+-spec handle_record(SessionId :: session:id(),
     HandleId :: binary()) -> {ok, proplists:proplist()}.
-handle_record(ModelType, Auth, HandleId) ->
-    UserId = gui_session:get_user_id(),
-    {ok, #document{value = #od_handle{
-        handle_service = HandleServiceId,
-        public_handle = PublicHandle,
-        resource_id = ShareId,
-        metadata = Metadata
-    }}} = handle_logic:get(Auth, HandleId),
-    % Hide some information in public view
-    {HandleService, Share} = case ModelType of
-        <<"handle">> ->
-            {HandleServiceId, ShareId};
-        <<"handle-public">> ->
-            {null, null}
-    end,
-    {ok, [
-        {<<"id">>, HandleId},
-        {<<"handleService">>, HandleService},
-        {<<"share">>, Share},
-        {<<"metadataString">>, Metadata},
-        {<<"publicHandle">>, PublicHandle},
-        {<<"user">>, UserId}
-    ]}.
+handle_record(SessionId, HandleId) ->
+    case handle_logic:get(SessionId, HandleId) of
+        {error, _} ->
+            gui_error:unauthorized();
+        {ok, #document{value = HandleRecord}} ->
+            #od_handle{
+                handle_service = HandleServiceId,
+                public_handle = PublicHandle,
+                resource_id = ShareId,
+                metadata = Metadata
+            } = HandleRecord,
+            {ok, [
+                {<<"id">>, HandleId},
+                {<<"handleService">>, HandleServiceId},
+                {<<"share">>, ShareId},
+                {<<"metadataString">>, Metadata},
+                {<<"publicHandle">>, PublicHandle}
+            ]}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Constructs a public handle record for given HandleId.
+%% @end
+%%--------------------------------------------------------------------
+-spec public_handle_record(HandleId :: binary()) -> {ok, proplists:proplist()}.
+public_handle_record(HandleId) ->
+    case handle_logic:get_public_data(?GUEST_SESS_ID, HandleId) of
+        {error, _} ->
+            gui_error:unauthorized();
+        {ok, #document{value = HandleRecord}} ->
+            #od_handle{
+                public_handle = PublicHandle,
+                metadata = Metadata
+            } = HandleRecord,
+            {ok, [
+                {<<"id">>, HandleId},
+                {<<"metadataString">>, Metadata},
+                {<<"publicHandle">>, PublicHandle}
+            ]}
+    end.

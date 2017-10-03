@@ -13,6 +13,7 @@
 -author("Michal Wrona").
 
 -include("global_definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("modules/monitoring/rrd_definitions.hrl").
 
@@ -117,9 +118,8 @@ update(#monitoring_id{main_subject_type = space, main_subject_id = SpaceId,
 update(#monitoring_id{main_subject_type = space, main_subject_id = SpaceId,
     metric_type = storage_quota} = MonitoringId, MonitoringState, UpdateTime, _UpdateValue) ->
 
-    {ok, #document{value = #od_space{providers_supports = ProvSupport}}} =
-        od_space:get(SpaceId),
-    SupSize = proplists:get_value(oneprovider:get_provider_id(), ProvSupport, 0),
+    {ok, ProvidersSupports} = space_logic:get_providers_supports(?ROOT_SESS_ID, SpaceId),
+    SupSize = maps:get(oneprovider:get_provider_id(), ProvidersSupports, 0),
 
     maybe_update(MonitoringId, MonitoringState, UpdateTime, SupSize);
 
@@ -127,8 +127,8 @@ update(#monitoring_id{main_subject_type = space, main_subject_id = SpaceId,
 update(#monitoring_id{main_subject_type = space, main_subject_id = SpaceId,
     metric_type = connected_users} = MonitoringId, MonitoringState, UpdateTime, _UpdateValue) ->
 
-    {ok, #document{value = #od_space{users = Users}}} = od_space:get(SpaceId),
-    ConnectedUsers = length(Users),
+    {ok, EffUsers} = space_logic:get_eff_users(?ROOT_SESS_ID, SpaceId),
+    ConnectedUsers = maps:size(EffUsers),
 
     maybe_update(MonitoringId, MonitoringState, UpdateTime, ConnectedUsers);
 

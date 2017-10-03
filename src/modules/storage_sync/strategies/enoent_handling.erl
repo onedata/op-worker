@@ -87,7 +87,8 @@ strategy_handle_job(#space_strategy_job{strategy_name = check_globally, data = D
         ctx := CTX,
         request := Request
     } = Data,
-    {ok, #document{value = #od_space{providers = ProviderIds0}}} = od_space:get(SpaceId),
+    SessionId = user_ctx:get_session_id(CTX),
+    {ok, ProviderIds0} = space_logic:get_provider_ids(SessionId, SpaceId),
     case oneprovider:get_provider_id() == ProviderId of
         true ->
             {MergeType, Jobs} = space_sync_worker:init(?MODULE, SpaceId, undefined, Data),
@@ -238,11 +239,12 @@ get_canonical_file_entry_for_user(UserCtx, [<<?DIRECTORY_SEPARATOR>>]) ->
     UserId = user_ctx:get_user_id(UserCtx),
     {uuid, fslogic_uuid:user_root_dir_uuid(UserId)};
 get_canonical_file_entry_for_user(UserCtx, [<<?DIRECTORY_SEPARATOR>>, SpaceName | Tokens]) ->
-    #document{value = #od_user{space_aliases = Spaces}} = user_ctx:get_user(UserCtx),
-    case lists:keyfind(SpaceName, 2, Spaces) of
+    UserId = user_ctx:get_user_id(UserCtx),
+    SessionId = user_ctx:get_session_id(UserCtx),
+    case user_logic:get_space_by_name(SessionId, UserId, SpaceName) of
         false ->
             throw(?ENOENT);
-        {SpaceId, _} ->
+        {true, SpaceId} ->
             {path, fslogic_path:join(
                 [<<?DIRECTORY_SEPARATOR>>, SpaceId | Tokens])}
     end;

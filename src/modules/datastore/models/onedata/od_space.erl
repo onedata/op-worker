@@ -1,39 +1,47 @@
 %%%-------------------------------------------------------------------
-%%% @author Krzysztof Trzepla
-%%% @copyright (C) 2016 ACK CYFRONET AGH
+%%% @author Lukasz Opiola
+%%% @copyright (C) 2017 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Cache for space details fetched from onezone.
+%%% @doc
+%%% This model server as cache for od_space records
+%%% synchronized via Graph Sync.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(od_space).
--author("Krzysztof Trzepla").
+-author("Lukasz Opiola").
 
 -include("proto/common/credentials.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/oz/oz_spaces.hrl").
 
 -type id() :: binary().
--type info() :: #od_space{}.
--type doc() :: datastore_doc:doc(info()).
--type diff() :: datastore_doc:diff(info()).
--type alias() :: binary().
+-type record() :: #od_space{}.
+-type doc() :: datastore_doc:doc(record()).
+-type diff() :: datastore_doc:diff(record()).
+
+-type login() :: binary().
 -type name() :: binary().
--export_type([doc/0, info/0, id/0, alias/0, name/0]).
+
+-export_type([doc/0, record/0, id/0]).
+-export_type([login/0, name/0]).
+
+-define(CTX, #{
+    model => ?MODULE,
+    fold_enabled => true
+}).
 
 %% API
--export([create_or_update/2, get/2, get_or_fetch/3, get_or_fetch/2]).
--export([save/1, get/1, exists/1, delete/1, update/2, create/1]).
+-export([save/1, get/1, delete/1, list/0, run_after/3]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_posthooks/0, get_record_struct/1]).
-
--define(CTX, #{model => ?MODULE}).
+-export([get_ctx/0, get_record_version/0]).
+-export([get_posthooks/0]).
+-export([get_record_struct/1, upgrade_record/2]).
 
 %%%===================================================================
 %%% API
@@ -41,7 +49,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Saves space.
+%% Saves handle.
 %% @end
 %%--------------------------------------------------------------------
 -spec save(doc()) -> {ok, id()} | {error, term()}.
@@ -50,42 +58,16 @@ save(Doc) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Updates space.
+%% Returns handle.
 %% @end
 %%--------------------------------------------------------------------
--spec update(id(), diff()) -> {ok, id()} | {error, term()}.
-update(Key, Diff) ->
-    ?extract_key(datastore_model:update(?CTX, Key, Diff)).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates space.
-%% @end
-%%--------------------------------------------------------------------
--spec create(doc()) -> {ok, id()} | {error, term()}.
-create(Doc) ->
-    ?extract_key(datastore_model:create(?CTX, Doc)).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns space.
-%% @end
-%%--------------------------------------------------------------------
--spec get(datastore:key()) -> {ok, datastore:doc()} | {error, term()}.
+-spec get(id()) -> {ok, doc()} | {error, term()}.
 get(Key) ->
-    case datastore_model:get(?CTX, Key) of
-        {error, Reason} ->
-            {error, Reason};
-        {ok, D = #document{value = S = #od_space{providers_supports = Supports}}} when is_list(Supports) ->
-            {ProviderIds, _} = lists:unzip(Supports),
-            {ok, D#document{value = S#od_space{providers = ProviderIds}}};
-        {ok, Doc} ->
-            {ok, Doc}
-    end.
+    datastore_model:get(?CTX, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Deletes space.
+%% Deletes handle.
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(id()) -> ok | {error, term()}.
@@ -94,166 +76,12 @@ delete(Key) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Checks whether group exists.
+%% Returns list of all records.
 %% @end
 %%--------------------------------------------------------------------
--spec exists(id()) -> boolean().
-exists(Key) ->
-    {ok, Exists} = datastore_model:exists(?CTX, Key),
-    Exists.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates document with using ID from document. If such object does not exist,
-%% it initialises the object with the document.
-%% @end
-%%--------------------------------------------------------------------
--spec create_or_update(doc(), diff()) -> {ok, id()} | {error, term()}.
-create_or_update(#document{key = Key, value = Default}, Diff) ->
-    ?extract_key(datastore_model:update(?CTX, Key, Diff, Default)).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets space info from the database in user context.
-%% @end
-%%--------------------------------------------------------------------
--spec get(SpaceId :: binary(), UserId :: od_user:id()) ->
-    {ok, datastore:doc()} | {error, term()}.
-get(SpaceId, SpecialUser) when SpecialUser =:= ?ROOT_USER_ID orelse SpecialUser =:= ?GUEST_USER_ID ->
-    case od_space:get(SpaceId) of
-        {ok, Doc} -> {ok, Doc};
-        {error, Reason} -> {error, Reason}
-    end;
-get(SpaceId, UserId) ->
-    case get(SpaceId, ?ROOT_USER_ID) of
-        {ok, #document{value = SpaceInfo} = Doc} ->
-            case od_user:get(UserId) of
-                {ok, #document{value = #od_user{space_aliases = Spaces}}} ->
-                    {_, SpaceName} = lists:keyfind(SpaceId, 1, Spaces),
-                    {ok, Doc#document{value = SpaceInfo#od_space{name = SpaceName}}};
-                {error, Reason} ->
-                    {error, Reason}
-            end;
-        {error, Reason} ->
-            {error, Reason}
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets space info from the database in user context. If space info is not found
-%% fetches it from onezone and stores it in the database.
-%% @end
-%%--------------------------------------------------------------------
--spec get_or_fetch(session:id(), SpaceId :: binary()) ->
-    {ok, datastore:doc()} | {error, term()}.
-get_or_fetch(SessionId, SpaceId) ->
-    {ok, UserId} = session:get_user_id(SessionId),
-    get_or_fetch(SessionId, SpaceId, UserId).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets space info from the database in user context. If space info is not found
-%% fetches it from onezone and stores it in the database.
-%% @end
-%%--------------------------------------------------------------------
--spec get_or_fetch(Auth :: oz_endpoint:auth(), SpaceId :: binary(),
-    UserId :: od_user:id()) -> {ok, datastore:doc()} | {error, term()}.
-get_or_fetch(Auth, SpaceId, SpecialUser) when SpecialUser =:= ?ROOT_USER_ID orelse SpecialUser =:= ?GUEST_USER_ID ->
-    case get(SpaceId, SpecialUser) of
-        {ok, Doc} -> {ok, Doc};
-        {error, not_found} -> fetch(Auth, SpaceId);
-        {error, Reason} -> {error, Reason}
-    end;
-get_or_fetch(Auth, SpaceId, UserId) ->
-    case get_or_fetch(Auth, SpaceId, ?ROOT_USER_ID) of
-        {ok, #document{value = SpaceInfo} = Doc} ->
-            case od_user:get_or_fetch(Auth, UserId) of
-                {ok, #document{value = #od_user{space_aliases = Spaces}}} ->
-                    case lists:keyfind(SpaceId, 1, Spaces) of
-                        false ->
-                            {ok, Doc};
-                        {_, SpaceName} ->
-                            {ok, Doc#document{value = SpaceInfo#od_space{name = SpaceName}}}
-                    end;
-                {error, Reason} ->
-                    {error, Reason}
-            end;
-        {error, Reason} ->
-            {error, Reason}
-    end.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Fetches space info from onezone and stores it in the database.
-%% @end
-%%--------------------------------------------------------------------
--spec fetch(Auth :: oz_endpoint:auth(), SpaceId :: binary()) ->
-    {ok, datastore:doc()} | {error, term()}.
-fetch(Auth, SpaceId) ->
-    {ok, #space_details{
-        name = Name,
-        providers_supports = Supports,
-        shares = Shares
-    }} = oz_spaces:get_details(Auth, SpaceId),
-
-    {ok, GroupIds} = oz_spaces:get_groups(Auth, SpaceId),
-    {ok, UserIds} = oz_spaces:get_users(Auth, SpaceId),
-
-    {ok, ProviderIds} = oz_spaces:get_providers(Auth, SpaceId),
-
-    GroupPrivileges = utils:pmap(fun(GroupId) ->
-        oz_spaces:get_group_privileges(Auth, SpaceId, GroupId)
-    end, GroupIds),
-    GroupsWithPrivileges = lists:zipwith(fun(GroupId, {ok, Privileges}) ->
-        {GroupId, Privileges}
-    end, GroupIds, GroupPrivileges),
-
-    UserPrivileges = utils:pmap(fun(UserId) ->
-        oz_spaces:get_user_privileges(Auth, SpaceId, UserId)
-    end, UserIds),
-    UsersWithPrivileges = lists:zipwith(fun(UserId, {ok, Privileges}) ->
-        {UserId, Privileges}
-    end, UserIds, UserPrivileges),
-
-    Doc = #document{key = SpaceId, value = #od_space{
-        name = Name,
-        users = UsersWithPrivileges,
-        groups = GroupsWithPrivileges,
-        providers_supports = Supports,
-        providers = ProviderIds,
-        shares = Shares
-    }},
-
-    case create(Doc) of
-        {ok, _} -> ok;
-        {error, already_exists} -> ok
-    end,
-
-    {ok, Doc}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Sends event informing about od_space update if provider supports space.
-%% @end
-%%--------------------------------------------------------------------
--spec emit_monitoring_event(datastore:key()) -> no_return().
-emit_monitoring_event(SpaceId) ->
-    case od_space:get(SpaceId) of
-        {ok, #document{value = #od_space{providers = Providers}}} ->
-            case lists:member(oneprovider:get_provider_id(), Providers) of
-                true -> monitoring_event:emit_od_space_updated(SpaceId);
-                _ -> ok
-            end;
-        _ -> ok
-    end,
-    {ok, SpaceId}.
+-spec list() -> {ok, [id()]} | {error, term()}.
+list() ->
+    datastore_model:fold_keys(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -294,6 +122,15 @@ get_ctx() ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns model's record version.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_record_version() -> datastore_model:record_version().
+get_record_version() ->
+    2.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Returns list of callbacks which will be called after each operation
 %% on datastore model.
 %% @end
@@ -312,12 +149,89 @@ get_posthooks() ->
 get_record_struct(1) ->
     {record, [
         {name, string},
+
         {providers_supports, [{string, integer}]},
         {providers, [string]},
         {users, [{string, [atom]}]},
         {groups, [{string, [atom]}]},
         {shares, [string]},
+
         {eff_users, [{string, [atom]}]},
         {eff_groups, [{string, [atom]}]},
         {revision_history, [term]}
+    ]};
+get_record_struct(2) ->
+    {record, [
+        {name, string},
+
+        {direct_users, #{string => [atom]}},
+        {eff_users, #{string => [atom]}},
+
+        {direct_groups, #{string => [atom]}},
+        {eff_groups, #{string => [atom]}},
+
+        {providers, #{string => integer}},
+        {shares, [string]},
+
+        {cache_state, #{atom => term}}
     ]}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Upgrades model's record from provided version to the next one.
+%% @end
+%%--------------------------------------------------------------------
+-spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
+    {datastore_model:record_version(), datastore_model:record()}.
+upgrade_record(1, Space) ->
+    {
+        od_space,
+        Name,
+
+        _ProviderSupports,
+        _Providers,
+        _Users,
+        _Groups,
+        _Shares,
+
+        _EffUsers,
+        _EffGroups,
+
+        _RevisionHistory
+    } = Space,
+    {2, #od_space{
+        name = Name,
+
+        direct_users = #{},
+        eff_users = #{},
+
+        direct_groups = #{},
+        eff_groups = #{},
+
+        providers = #{},
+        shares = [],
+
+        cache_state = #{}
+    }}.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Sends event informing about od_space update if provider supports space.
+%% @end
+%%--------------------------------------------------------------------
+-spec emit_monitoring_event(datastore:key()) -> no_return().
+emit_monitoring_event(SpaceId) ->
+    case od_space:get(SpaceId) of
+        {ok, #document{value = #od_space{providers = Providers}}} ->
+            case maps:is_key(oneprovider:get_provider_id(), Providers) of
+                true -> monitoring_event:emit_od_space_updated(SpaceId);
+                _ -> ok
+            end;
+        _ -> ok
+    end,
+    {ok, SpaceId}.

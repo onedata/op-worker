@@ -156,9 +156,7 @@ rename_or_delete(FileCtx,
         }},
     {{RemoteTargetFileId, TargetSpaceId}, _} = LastRename
 ) ->
-    {ok, #document{
-        value = #od_space{providers = Providers}
-    }} = od_space:get_or_fetch(?ROOT_SESS_ID, TargetSpaceId),
+    {ok, Providers} = space_logic:get_provider_ids(?ROOT_SESS_ID, TargetSpaceId),
     case lists:member(oneprovider:get_provider_id(), Providers) of
         true ->
             {ok, Storage} = fslogic_storage:select_storage(TargetSpaceId),

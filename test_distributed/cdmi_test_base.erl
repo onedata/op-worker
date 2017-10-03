@@ -1309,11 +1309,13 @@ copy(Config) ->
     % create file to copy
     FileName2 = filename:join([binary_to_list(SpaceName), "copy_test_file.txt"]),
     UserId1 = ?config({user_id, <<"user1">>}, Config),
+    UserName1 = ?config({user_name, <<"user1">>}, Config),
     create_file(Config, FileName2),
     FileData2 = <<"data">>,
     Acl = [#access_control_entity{
         acetype = ?allow_mask,
         identifier = UserId1,
+        name = UserName1,
         aceflags = ?no_flags_mask,
         acemask = ?all_perms_mask}],
     JsonMetadata = #{<<"a">> => <<"b">>, <<"c">> => 2, <<"d">> => []},

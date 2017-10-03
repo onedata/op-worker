@@ -34,8 +34,8 @@ authorize_test() ->
     M4 = macaroon:add_third_party_caveat(M3, "Location4", "Key4", "TPCaveat4"),
     {ok, M4Bin} = token_utils:serialize62(M4),
 
-    meck:new(oz_users),
-    meck:expect(oz_users, authorize, fun(CaveatID) ->
+    meck:new(user_logic),
+    meck:expect(user_logic, authorize, fun(CaveatID) ->
         Macaroon = get_disch_macaroon(M4, CaveatID),
         {ok, Token} = token_utils:serialize62(Macaroon),
         {ok, Token}
@@ -52,5 +52,5 @@ authorize_test() ->
     V = macaroon_verifier:create(),
     ?assertEqual(ok, macaroon_verifier:verify(V, M4, "Key", DischMacaroons)),
 
-    ?assert(meck:validate(oz_users)),
-    ok = meck:unload(oz_users).
+    ?assert(meck:validate(user_logic)),
+    ok = meck:unload(user_logic).

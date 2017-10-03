@@ -265,9 +265,7 @@ get_provider_for_file(FileCtx, #state{session_id = SessId}) ->
             ProviderId;
         false ->
             SpaceId = file_ctx:get_space_id_const(FileCtx),
-            {ok, UserId} = session:get_user_id(SessId),
-            {ok, #document{value = #od_space{providers = ProviderIds}}} =
-                od_space:get_or_fetch(SessId, SpaceId, UserId),
+            {ok, ProviderIds} = space_logic:get_provider_ids(SessId, SpaceId),
             case {ProviderIds, lists:member(ProviderId, ProviderIds)} of
                 {_, true} -> ProviderId;
                 {[RemoteProviderId | _], _} -> RemoteProviderId;

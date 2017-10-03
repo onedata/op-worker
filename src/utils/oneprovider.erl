@@ -18,9 +18,6 @@
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-%% ID of provider that is not currently registered in Global Registry
--define(NON_GLOBAL_PROVIDER_ID, <<"non_global_provider">>).
-
 %% ID of this provider (assigned by global registry)
 -type id() :: binary().
 
@@ -269,11 +266,11 @@ get_provider_id() ->
                     catch application:set_env(?APP_NAME, provider_id, ProviderId),
                     ProviderId;
                 {error, _} ->
-                    ?NON_GLOBAL_PROVIDER_ID
+                    ?UNREGISTERED_PROVIDER_ID
             catch
                 _:Reason ->
                     ?error_stacktrace("Unable to read certificate file due to ~p", [Reason]),
-                    ?NON_GLOBAL_PROVIDER_ID
+                    ?UNREGISTERED_PROVIDER_ID
             end
     end.
 
