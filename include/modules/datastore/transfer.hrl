@@ -19,9 +19,5 @@
 -define(HR_TIME_WINDOW, 3600).
 -define(DY_TIME_WINDOW, 86400).
 
--define(REPLICATION_POOL, begin
-    {ok, __FileWorkerPool} = application:get_env(?APP_NAME, replication_pool),
-    __FileWorkerPool
-end).
-
+-define(REPLICATION_POOL, replication_pool).
 -define(REPLICATION_POOL_SIZE, application:get_env(?APP_NAME, replication_pool_size, 10)).
