@@ -18,8 +18,9 @@
 
 -include("modules/rtransfer/gateway.hrl").
 -include("modules/rtransfer/registered_names.hrl").
--include_lib("ctool/include/logging.hrl").
 -include("timeouts.hrl").
+-include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 
 -record(gwcstate, {
     remote :: {inet:ip_address(), inet:port_number()},
@@ -290,21 +291,44 @@ complete_request(#'FetchReply'{content = Content, request_hash = RequestHash}, S
                             %% TODO: {error, {storage
                             NewHandle = case WriteFun(Handle, Offset, Data) of
                                 {ok, NH, Wrote} ->
-                                    gateway:notify(fetch_complete, Wrote, Action),
+                                    notify_complete(Wrote, Action),
                                     NH;
 
-                                {error, NH, Reason} ->
-                                    gateway:notify(error, Reason, Action),
-                                    NH
+                                {error, Reason} ->
+                                    notify_error(Reason, Action),
+                                    Handle
                             end,
 
                             CloseFun(NewHandle);
 
                         {error, Reason} ->
-                            gateway:notify(error, Reason, Action)
+                            notify_error(Reason, Action)
                     end
             end,
 
             ets:delete(TID, RequestHash)
     end,
     ok.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Wrapper for gateway:notify function
+%% @end
+%%-------------------------------------------------------------------
+-spec notify_complete(Wrote :: integer(),  Action :: #gw_fetch{}) -> ok.
+notify_complete(Wrote, Action) ->
+    gateway:notify(fetch_complete, Wrote, Action).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Wrapper for gateway:notify function.
+%% Allows to handle specially specific errors.
+%% @end
+%%-------------------------------------------------------------------
+-spec notify_error(Reason :: term(),  Action :: #gw_fetch{}) -> ok.
+notify_error(?ENOSPC, Action) ->
+    gateway:notify(fetch_error, ?ENOSPC, Action#gw_fetch{retry=0});
+notify_error(Reason, Action) ->
+    gateway:notify(fetch_error, Reason, Action).

@@ -54,15 +54,16 @@ read(UserCtx, FileCtx, HandleId, Offset, Size) ->
     HandleId :: storage_file_manager:handle_id(),
     ByteSequences :: [#byte_sequence{}]) -> fslogic_worker:proxyio_response().
 write(UserCtx, FileCtx, HandleId, ByteSequences) ->
-    {ok, Handle} = get_handle(UserCtx, FileCtx, HandleId),
-    Wrote =
-        lists:foldl(fun(#byte_sequence{offset = Offset, data = Data}, Acc) ->
-            Acc + write_all(Handle, Offset, Data, 0)
-        end, 0, ByteSequences),
+    {ok, Handle0} = get_handle(UserCtx, FileCtx, HandleId),
+    {Written, _} =
+        lists:foldl(fun(#byte_sequence{offset = Offset, data = Data}, {Acc, Handle}) ->
+            {WrittenNow, NewHandle} = write_all(Handle, Offset, Data, 0),
+            {Acc + WrittenNow, NewHandle}
+        end, {0, Handle0}, ByteSequences),
 
     #proxyio_response{
         status = #status{code = ?OK},
-        proxyio_response = #remote_write_result{wrote = Wrote}
+        proxyio_response = #remote_write_result{wrote = Written}
     }.
 
 %%%===================================================================
@@ -115,10 +116,11 @@ create_handle(UserCtx, FileCtx, HandleId) ->
 %%--------------------------------------------------------------------
 -spec write_all(Handle :: storage_file_manager:handle(),
     Offset :: non_neg_integer(), Data :: binary(),
-    Wrote :: non_neg_integer()) -> non_neg_integer().
-write_all(_Handle, _Offset, <<>>, Wrote) -> Wrote;
-write_all(Handle, Offset, Data, Wrote) ->
-    {ok, WroteNow} = storage_file_manager:write(Handle, Offset, Data),
-    write_all(Handle, Offset + WroteNow,
-              binary_part(Data, {byte_size(Data), WroteNow - byte_size(Data)}),
-              Wrote + WroteNow).
+    Wrote :: non_neg_integer()) -> {non_neg_integer(), storage_file_manager:handle()}.
+write_all(Handle, _Offset, <<>>, Written) -> {Written, Handle};
+write_all(Handle, Offset, Data, Written) ->
+    {ok, WrittenNow} = storage_file_manager:write(Handle, Offset, Data),
+    Handle2 = storage_file_manager:increase_size(Handle, WrittenNow),
+    write_all(Handle2, Offset + WrittenNow,
+              binary_part(Data, {byte_size(Data), WrittenNow - byte_size(Data)}),
+              Written + WrittenNow).

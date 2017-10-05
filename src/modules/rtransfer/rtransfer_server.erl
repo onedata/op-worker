@@ -16,6 +16,7 @@
 -include("modules/rtransfer/gateway.hrl").
 -include("modules/rtransfer/rtransfer.hrl").
 -include("modules/rtransfer/rt_container.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 -define(RTRANSFER_RUNNING_JOBS, rtransfer_running_jobs).
 -define(aggregators_map, aggregators_map).
