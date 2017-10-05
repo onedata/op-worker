@@ -79,7 +79,7 @@ count_files_attrs_hash([]) ->
 count_files_attrs_hash(StorageFileCtxs) ->
     try
         lists:foldr(fun(StorageFileCtx, {Hash0, StorageFileCtxs0}) ->
-            {FileHash, StorageFileCtx2} = count_file_attrs_hash(StorageFileCtx),
+            {FileHash, StorageFileCtx2} = count_file_attrs_hash_safe(StorageFileCtx),
             {hash([Hash0, FileHash]), [StorageFileCtx2 | StorageFileCtxs0]}
         end, {<<"">>, []}, StorageFileCtxs)
     catch
@@ -90,6 +90,22 @@ count_files_attrs_hash(StorageFileCtxs) ->
 %%===================================================================
 %% Internal functions
 %%===================================================================
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Counts hash of attributes of file associated with passed context.
+%% If file has been remove, it will return empty hash.
+%% @end
+%%-------------------------------------------------------------------
+-spec count_file_attrs_hash_safe(storage_file_ctx:ctx()) -> {hash(), storage_file_ctx:ctx()}.
+count_file_attrs_hash_safe(StorageFileCtx) ->
+    try
+       count_file_attrs_hash(StorageFileCtx)
+    catch
+        throw:?ENOENT ->
+            {<<"">>, StorageFileCtx}
+    end.
 
 %%-------------------------------------------------------------------
 %% @private
