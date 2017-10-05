@@ -53,7 +53,8 @@ get_models() -> [
     file_force_proxy,
     luma_cache,
     file_popularity,
-    transfer
+    transfer,
+    storage_sync_histogram
 ].
 
 %%--------------------------------------------------------------------
