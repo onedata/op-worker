@@ -36,21 +36,8 @@ is_authorized(Req, State) ->
         {ok, Auth} ->
             {true, Req, State#{auth => Auth}};
         {error, not_found} ->
-            GrUrl = oz_plugin:get_oz_url(),
-            ProviderId = oneprovider:get_provider_id(),
-            {_, NewReq2} = cowboy_req:host(Req),
-            {<<"http://", Url/binary>>, NewReq3} = cowboy_req:url(NewReq2),
-
-            {ok, NewReq4} = cowboy_req:reply(
-                307,
-                [
-                    {<<"location">>, <<(list_to_binary(GrUrl))/binary,
-                        "/user/providers/", ProviderId/binary, "/auth_proxy?ref=https://", Url/binary>>}
-                ],
-                <<"">>,
-                NewReq3
-            ),
-            {halt, NewReq4, State};
+            {ok, Req2} = cowboy_req:reply(401, [], <<"">>, Req),
+            {halt, Req2, State};
         {error, Error} ->
             ?debug("Authentication error ~p", [Error]),
             {{false, <<"authentication_error">>}, Req, State}
@@ -133,8 +120,10 @@ resolve_auth(basic, Req) ->
     case cowboy_req:header(<<"authorization">>, Req) of
         {undefined, _} ->
             resolve_auth(certificate, Req);
-        {BasicAuthHeader, _} ->
-            #basic_auth{credentials = BasicAuthHeader}
+        {<<"Basic ", UserPasswdB64/binary>>, _} ->
+            #basic_auth{credentials = UserPasswdB64};
+        {_, _} ->
+            resolve_auth(certificate, Req)
     end;
 resolve_auth(certificate, Req) ->
     Socket = cowboy_req:get(socket, Req),

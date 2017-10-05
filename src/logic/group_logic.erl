@@ -1,30 +1,42 @@
 %%%-------------------------------------------------------------------
-%%% @author Michal Zmuda
 %%% @author Lukasz Opiola
-%%% @copyright (C) 2016 ACK CYFRONET AGH
+%%% @copyright (C) 2017 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Interface to provider's group cache.
-%%% Operations may involve interactions with OZ api
-%%% or cached records from the datastore.
+%%% @doc
+%%% Interface for reading and manipulating od_group records synchronized
+%%% via Graph Sync. Requests are delegated to gs_client_worker, which decides
+%%% if they should be served from cache or handled by OneZone.
+%%% NOTE: This is the only valid way to interact with od_group records, to
+%%% ensure consistency, no direct requests to datastore or OZ REST should
+%%% be performed.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(group_logic).
--author("Michal Zmuda").
+-author("Lukasz Opiola").
 
+-include("graph_sync/provider_graph_sync.hrl").
 -include("proto/common/credentials.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/privileges.hrl").
 
--export([get/1, get/2, create/2, set_name/3, delete/2]).
+-export([get/2, get_protected_data/2, get_shared_data/3]).
+-export([get_name/2, get_name/3]).
+-export([get_eff_children/2, get_eff_spaces/2]).
+-export([has_eff_user/2, has_eff_user/3]).
+-export([has_eff_child/2, has_eff_child/3]).
+-export([has_eff_space/2, has_eff_space/3]).
+-export([has_eff_privilege/3, has_eff_privilege/4]).
+-export([can_view_user_through_group/3, can_view_user_through_group/4]).
+-export([can_view_child_through_group/3, can_view_child_through_group/4]).
+-export([create/2, create/3, update_name/3, delete/2]).
+-export([update_user_privileges/4, update_child_privileges/4]).
+-export([create_user_invite_token/2, create_group_invite_token/2]).
 -export([leave_space/3, join_space/3]).
 -export([join_group/3, leave_group/3]).
--export([set_user_privileges/4, set_group_privileges/4]).
--export([get_invite_user_token/2, get_invite_group_token/2,
-    get_create_space_token/2]).
--export([has_effective_user/2, has_effective_privilege/3]).
 
 %%%===================================================================
 %%% API
@@ -32,225 +44,334 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Retrieves group document as provider.
+%% Retrieves group doc by given GroupId.
 %% @end
 %%--------------------------------------------------------------------
--spec get(GroupId :: binary()) ->
-    {ok, datastore:doc()} | {error, Reason :: term()}.
-get(GroupId) ->
-    od_group:get(GroupId).
+-spec get(gs_client_worker:client(), od_group:id()) ->
+    {ok, od_group:doc()} | gs_protocol:error().
+get(SessionId, GroupId) ->
+    gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = get,
+        gri = #gri{type = od_group, id = GroupId, aspect = instance, scope = private},
+        subscribe = true
+    }).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Retrieves group document as a user.
-%% Provided client should be authorised to access group details.
+%% Retrieves group doc restricted to protected data by given GroupId.
 %% @end
 %%--------------------------------------------------------------------
--spec get(oz_endpoint:auth(), GroupId :: binary()) ->
-    {ok, datastore:doc()} | {error, Reason :: term()}.
-get(Auth, GroupId) ->
-    od_group:get_or_fetch(Auth, GroupId).
+-spec get_protected_data(gs_client_worker:client(), od_group:id()) ->
+    {ok, od_group:doc()} | gs_protocol:error().
+get_protected_data(SessionId, GroupId) ->
+    gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = get,
+        gri = #gri{type = od_group, id = GroupId, aspect = instance, scope = protected},
+        subscribe = true
+    }).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates group in context of an user.
-%% User identity is determined using provided auth.
+%% Retrieves group doc restricted to shared data by given GroupId and AuthHint.
 %% @end
 %%--------------------------------------------------------------------
--spec create(oz_endpoint:auth(), #od_group{}) ->
-    {ok, GroupId :: binary()} | {error, Reason :: term()}.
-create(Auth, Record) ->
-    Name = Record#od_group.name,
-    oz_users:create_group(Auth, [
-        {<<"name">>, Name},
-        % Use default group type
-        {<<"type">>, <<"role">>}
-    ]).
+-spec get_shared_data(gs_client_worker:client(), od_group:id(), gs_protocol:auth_hint()) ->
+    {ok, od_group:doc()} | gs_protocol:error().
+get_shared_data(SessionId, GroupId, AuthHint) ->
+    gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = get,
+        gri = #gri{type = od_group, id = GroupId, aspect = instance, scope = shared},
+        auth_hint = AuthHint,
+        subscribe = true
+    }).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Deletes group from the system.
-%% @end
-%%--------------------------------------------------------------------
--spec delete(oz_endpoint:auth(), GroupId :: binary()) ->
-    ok | {error, Reason :: term()}.
-delete(Auth, GroupId) ->
-    oz_groups:remove(Auth, GroupId).
+-spec get_name(gs_client_worker:client(), od_group:id()) ->
+    {ok, od_group:name()} | gs_protocol:error().
+get_name(SessionId, GroupId) ->
+    get_name(SessionId, GroupId, undefined).
 
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Joins a group to a space based on invite token.
-%% @end
-%%--------------------------------------------------------------------
--spec join_space(oz_endpoint:auth(), GroupId :: binary(),
-    Token :: binary()) -> ok | {error, Reason :: term()}.
-join_space(Auth, GroupId, Token) ->
-    case oz_groups:join_space(Auth, GroupId, [{<<"token">>, Token}]) of
-        {ok, SpaceId} ->
-            {ok, SpaceId};
-        {error, {400, <<"Bad value:", _/binary>>, _}} ->
-            {error, invalid_token_value}
+get_name(SessionId, GroupId, AuthHint) ->
+    case get_shared_data(SessionId, GroupId, AuthHint) of
+        {ok, #document{value = #od_group{name = Name}}} ->
+            {ok, Name};
+        {error, _} = Error ->
+            Error
     end.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes a group from space.
-%% @end
-%%--------------------------------------------------------------------
--spec leave_space(oz_endpoint:auth(), GroupId :: binary(),
-    SpaceId :: binary()) -> ok | {error, Reason :: term()}.
-leave_space(Auth, GroupId, SpaceId) ->
-    oz_groups:leave_space(Auth, GroupId, SpaceId).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Joins a group to a space based on invite token.
-%% @end
-%%--------------------------------------------------------------------
--spec join_group(oz_endpoint:auth(), GroupId :: binary(),
-    Token :: binary()) -> ok | {error, Reason :: term()}.
-join_group(Auth, ChildGroupId, Token) ->
-    case oz_groups:join_group(Auth, ChildGroupId, [{<<"token">>, Token}]) of
-        {ok, ParentGroupId} ->
-            {ok, ParentGroupId};
-        {error, {400, <<"Bad value:", _/binary>>, _}} ->
-            {error, invalid_token_value}
+-spec get_eff_children(gs_client_worker:client(), od_group:id()) ->
+    {ok, [od_group:id()]} | gs_protocol:error().
+get_eff_children(SessionId, GroupId) ->
+    case get(SessionId, GroupId) of
+        {ok, #document{value = #od_group{eff_children = EffChildren}}} ->
+            {ok, EffChildren};
+        {error, _} = Error ->
+            Error
     end.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes a subgroup from a group.
-%% @end
-%%--------------------------------------------------------------------
--spec leave_group(oz_endpoint:auth(), ParentGroupId :: binary(),
-    ChildGroupId :: binary()) -> ok | {error, Reason :: term()}.
-leave_group(Auth, ParentGroupId, ChildGroupId) ->
-    oz_groups:leave_group(Auth, ParentGroupId, ChildGroupId).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets name for a group.
-%% User identity is determined using provided auth.
-%% @end
-%%--------------------------------------------------------------------
--spec set_name(oz_endpoint:auth(), GroupId :: binary(), Name :: binary()) ->
-    ok | {error, Reason :: term()}.
-set_name(Auth, GroupId, Name) ->
-    oz_groups:modify_details(Auth, GroupId, [
-        {<<"name">>, Name},
-        % Use default group type
-        {<<"type">>, <<"role">>}
-    ]).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets group privileges for an user.
-%% User identity is determined using provided auth.
-%% @end
-%%--------------------------------------------------------------------
--spec set_user_privileges(oz_endpoint:auth(), SpaceId :: binary(),
-    UserId :: binary(), Privileges :: [atom()]) ->
-    ok | {error, Reason :: term()}.
-set_user_privileges(Auth, GroupId, UserId, PrivilegesAtoms) ->
-    Privileges = [atom_to_binary(P, utf8) || P <- PrivilegesAtoms],
-    oz_groups:set_user_privileges(Auth, GroupId, UserId, [
-        {<<"privileges">>, Privileges}
-    ]).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets group privileges for a group.
-%% User identity is determined using provided auth.
-%% @end
-%%--------------------------------------------------------------------
--spec set_group_privileges(oz_endpoint:auth(), ParentGroupId :: binary(),
-    ChildGroupId :: binary(), Privileges :: [atom()]) ->
-    ok | {error, Reason :: term()}.
-set_group_privileges(Auth, ParentGroupId, ChildGroupId, PrivilegesAtoms) ->
-    Privileges = [atom_to_binary(P, utf8) || P <- PrivilegesAtoms],
-    oz_groups:set_nested_privileges(Auth, ParentGroupId, ChildGroupId, [
-        {<<"privileges">>, Privileges}
-    ]).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns a user invitation token to group.
-%% @end
-%%--------------------------------------------------------------------
--spec get_invite_user_token(oz_endpoint:auth(), GroupId :: binary()) ->
-    {ok, binary()} | {error, Reason :: term()}.
-get_invite_user_token(Auth, GroupId) ->
-    oz_groups:get_invite_user_token(Auth, GroupId).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns a group invitation token to group.
-%% @end
-%%--------------------------------------------------------------------
--spec get_invite_group_token(oz_endpoint:auth(), GroupId :: binary()) ->
-    {ok, binary()} | {error, Reason :: term()}.
-get_invite_group_token(Auth, GroupId) ->
-    oz_groups:get_invite_group_token(Auth, GroupId).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns a create space token (for provider to create a space for group).
-%% @end
-%%--------------------------------------------------------------------
--spec get_create_space_token(oz_endpoint:auth(), GroupId :: binary()) ->
-    {ok, binary()} | {error, Reason :: term()}.
-get_create_space_token(Auth, GroupId) ->
-    oz_groups:get_create_space_token(Auth, GroupId).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Predicate telling if given user belongs to given group directly
-%% or via nested groups.
-%% @end
-%%--------------------------------------------------------------------
--spec has_effective_user(GroupId :: od_group:id(),
-    UserId :: od_user:id()) -> boolean().
-has_effective_user(GroupId, UserId) ->
-    case od_user:get(UserId) of
-        {error, not_found} ->
-            false;
-        {ok, #document{value = UserInfo}} ->
-            #od_user{eff_groups = Groups} = UserInfo,
-            lists:member(GroupId, Groups)
+-spec get_eff_spaces(gs_client_worker:client(), od_group:id()) ->
+    {ok, [od_space:id()]} | gs_protocol:error().
+get_eff_spaces(SessionId, GroupId) ->
+    case get(SessionId, GroupId) of
+        {ok, #document{value = #od_group{eff_spaces = EffSpaces}}} ->
+            {ok, EffSpaces};
+        {error, _} = Error ->
+            Error
     end.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Predicate telling if given user has a privilege in given group.
-%% @end
-%%--------------------------------------------------------------------
--spec has_effective_privilege(GroupId :: od_group:id(),
-    UserId :: od_user:id(), Privilege :: privileges:group_privilege()) ->
+-spec has_eff_user(od_group:doc(), od_user:id()) -> boolean().
+has_eff_user(#document{value = #od_group{eff_users = EffUsers}}, UserId) ->
+    maps:is_key(UserId, EffUsers).
+
+
+-spec has_eff_user(gs_client_worker:client(), od_group:id(), od_user:id()) ->
     boolean().
-has_effective_privilege(GroupId, UserId, Privilege) ->
-    case has_effective_user(GroupId, UserId) of
-        false ->
-            false;
-        true ->
-            {ok, #document{
-                value = #od_group{
-                    users = UserTuples
-                }}} = od_group:get(GroupId),
-            UserPrivileges = proplists:get_value(UserId, UserTuples, []),
-            lists:member(Privilege, UserPrivileges)
+has_eff_user(SessionId, GroupId, UserId) ->
+    case get(SessionId, GroupId) of
+        {ok, GroupDoc = #document{}} ->
+            has_eff_user(GroupDoc, UserId);
+        _ ->
+            false
     end.
+
+
+-spec has_eff_child(od_group:doc(), od_group:id()) -> boolean().
+has_eff_child(#document{value = #od_group{eff_children = EffChildren}}, ChildId) ->
+    maps:is_key(ChildId, EffChildren).
+
+
+-spec has_eff_child(gs_client_worker:client(), od_group:id(),
+    ChildId :: od_group:id()) -> boolean().
+has_eff_child(SessionId, GroupId, ChildId) ->
+    case get(SessionId, GroupId) of
+        {ok, GroupDoc = #document{}} ->
+            has_eff_child(GroupDoc, ChildId);
+        _ ->
+            false
+    end.
+
+
+-spec has_eff_space(od_group:doc(), od_space:id()) -> boolean().
+has_eff_space(#document{value = #od_group{eff_spaces = EffSpaces}}, SpaceId) ->
+    lists:member(SpaceId, EffSpaces).
+
+
+-spec has_eff_space(gs_client_worker:client(), od_group:id(), od_space:id()) ->
+    boolean().
+has_eff_space(SessionId, GroupId, SpaceId) ->
+    case get(SessionId, GroupId) of
+        {ok, GroupDoc = #document{}} ->
+            has_eff_space(GroupDoc, SpaceId);
+        _ ->
+            false
+    end.
+
+
+-spec has_eff_privilege(od_group:doc(), od_user:id(), privileges:group_privilege()) ->
+    boolean().
+has_eff_privilege(#document{value = #od_group{eff_users = EffUsers}}, UserId, Privilege) ->
+    lists:member(Privilege, maps:get(UserId, EffUsers, [])).
+
+
+-spec has_eff_privilege(gs_client_worker:client(), od_group:id(), od_user:id(),
+    privileges:group_privilege()) -> boolean().
+has_eff_privilege(SessionId, GroupId, UserId, Privilege) ->
+    case get(SessionId, GroupId) of
+        {ok, GroupDoc = #document{}} ->
+            has_eff_privilege(GroupDoc, UserId, Privilege);
+        _ ->
+            false
+    end.
+
+
+-spec can_view_user_through_group(gs_client_worker:client(), od_group:id(),
+    ClientUserId :: od_user:id(), TargetUserId :: od_user:id()) -> boolean().
+can_view_user_through_group(SessionId, GroupId, ClientUserId, TargetUserId) ->
+    case get(SessionId, GroupId) of
+        {ok, GroupDoc = #document{}} ->
+            can_view_user_through_group(GroupDoc, ClientUserId, TargetUserId);
+        _ ->
+            false
+    end.
+
+
+-spec can_view_user_through_group(od_group:doc(), ClientUserId :: od_user:id(),
+    TargetUserId :: od_user:id()) -> boolean().
+can_view_user_through_group(GroupDoc, ClientUserId, TargetUserId) ->
+    has_eff_privilege(GroupDoc, ClientUserId, ?GROUP_VIEW) andalso
+        has_eff_user(GroupDoc, TargetUserId).
+
+
+-spec can_view_child_through_group(gs_client_worker:client(), od_group:id(),
+    ClientUserId :: od_user:id(), ChildId :: od_group:id()) -> boolean().
+can_view_child_through_group(SessionId, GroupId, ClientUserId, ChildId) ->
+    case get(SessionId, GroupId) of
+        {ok, GroupDoc = #document{}} ->
+            can_view_child_through_group(GroupDoc, ClientUserId, ChildId);
+        _ ->
+            false
+    end.
+
+
+-spec can_view_child_through_group(od_group:doc(), ClientUserId :: od_user:id(),
+    ChildId :: od_group:id()) -> boolean().
+can_view_child_through_group(GroupDoc, ClientUserId, ChildId) ->
+    has_eff_privilege(GroupDoc, ClientUserId, ?GROUP_VIEW) andalso
+        has_eff_child(GroupDoc, ChildId).
+
+
+-spec create(gs_client_worker:client(), od_group:name() | maps:map()) ->
+    {ok, od_group:id()} | gs_protocol:error().
+create(SessionId, NameOrData) ->
+    {ok, UserId} = session:get_user_id(SessionId),
+    create(SessionId, UserId, NameOrData).
+
+
+-spec create(gs_client_worker:client(), od_user:id(),
+    od_group:name() | maps:map()) -> {ok, od_group:id()} | gs_protocol:error().
+create(SessionId, UserId, Name) when is_binary(Name) ->
+    create(SessionId, UserId, #{<<"name">> => Name});
+create(SessionId, UserId, Data) ->
+    Res = ?CREATE_RETURN_ID(gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = create,
+        gri = #gri{type = od_group, id = undefined, aspect = instance},
+        auth_hint = ?AS_USER(UserId),
+        data = Data,
+        subscribe = true
+    })),
+    ?ON_SUCCESS(Res, fun(_) ->
+        {ok, UserId} = session:get_user_id(SessionId),
+        gs_client_worker:invalidate_cache(od_user, UserId)
+    end).
+
+
+-spec update_name(gs_client_worker:client(), od_group:id(), od_group:name()) ->
+    ok | gs_protocol:error().
+update_name(SessionId, GroupId, Name) ->
+    Res = gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = update,
+        gri = #gri{type = od_group, id = GroupId, aspect = instance},
+        data = #{<<"name">> => Name}
+    }),
+    ?ON_SUCCESS(Res, fun(_) ->
+        gs_client_worker:invalidate_cache(od_group, GroupId)
+    end).
+
+
+-spec delete(gs_client_worker:client(), od_group:id()) -> ok | gs_protocol:error().
+delete(SessionId, GroupId) ->
+    Res = gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = delete,
+        gri = #gri{type = od_group, id = GroupId, aspect = instance}
+    }),
+    ?ON_SUCCESS(Res, fun(_) ->
+        gs_client_worker:invalidate_cache(od_group, GroupId)
+    end).
+
+
+-spec update_user_privileges(gs_client_worker:client(), od_group:id(),
+    od_user:id(), [privileges:group_privilege()]) -> ok | gs_protocol:error().
+update_user_privileges(SessionId, GroupId, UserId, Privileges) ->
+    Res = gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = update,
+        gri = #gri{type = od_group, id = GroupId, aspect = {user_privileges, UserId}},
+        data = #{<<"privileges">> => Privileges}
+    }),
+    ?ON_SUCCESS(Res, fun(_) ->
+        gs_client_worker:invalidate_cache(od_group, GroupId)
+    end).
+
+
+-spec update_child_privileges(gs_client_worker:client(), od_group:id(),
+    ChildGroupId :: od_group:id(), [privileges:group_privilege()]) ->
+    ok | gs_protocol:error().
+update_child_privileges(SessionId, GroupId, ChildGroupId, Privileges) ->
+    Res = gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = update,
+        gri = #gri{type = od_group, id = GroupId, aspect = {child_privileges, ChildGroupId}},
+        data = #{<<"privileges">> => Privileges}
+    }),
+    ?ON_SUCCESS(Res, fun(_) ->
+        gs_client_worker:invalidate_cache(od_group, GroupId)
+    end).
+
+
+-spec create_user_invite_token(gs_client_worker:client(), od_group:id()) ->
+    {ok, Token :: binary()} | gs_protocol:error().
+create_user_invite_token(SessionId, GroupId) ->
+    ?CREATE_RETURN_DATA(gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = create,
+        gri = #gri{type = od_group, id = GroupId, aspect = invite_user_token},
+        data = #{}
+    })).
+
+
+-spec create_group_invite_token(gs_client_worker:client(), od_group:id()) ->
+    {ok, Token :: binary()} | gs_protocol:error().
+create_group_invite_token(SessionId, GroupId) ->
+    ?CREATE_RETURN_DATA(gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = create,
+        gri = #gri{type = od_group, id = GroupId, aspect = invite_group_token},
+        data = #{}
+    })).
+
+
+-spec join_group(gs_client_worker:client(), od_group:id(), Token :: binary()) ->
+    {ok, od_group:id()} | gs_protocol:error().
+join_group(SessionId, GroupId, Token) ->
+    Res = ?CREATE_RETURN_ID(gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = create,
+        gri = #gri{type = od_group, id = undefined, aspect = join},
+        auth_hint = ?AS_GROUP(GroupId),
+        data = #{<<"token">> => Token}
+    })),
+    ?ON_SUCCESS(Res, fun({ok, JoinedGroupId}) ->
+        gs_client_worker:invalidate_cache(od_group, JoinedGroupId),
+        gs_client_worker:invalidate_cache(od_group, GroupId)
+    end).
+
+
+-spec leave_group(gs_client_worker:client(), od_group:id(),
+    ParentGroupId :: od_group:id()) -> ok | gs_protocol:error().
+leave_group(SessionId, GroupId, ParentGroupId) ->
+    Res = gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = delete,
+        gri = #gri{type = od_group, id = GroupId, aspect = {parent, ParentGroupId}}
+    }),
+    ?ON_SUCCESS(Res, fun(_) ->
+        gs_client_worker:invalidate_cache(od_group, GroupId),
+        gs_client_worker:invalidate_cache(od_group, ParentGroupId)
+    end).
+
+
+-spec join_space(gs_client_worker:client(), od_group:id(), Token :: binary()) ->
+    {ok, od_space:id()} | gs_protocol:error().
+join_space(SessionId, GroupId, Token) ->
+    Res = ?CREATE_RETURN_ID(gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = create,
+        gri = #gri{type = od_space, id = undefined, aspect = join},
+        auth_hint = ?AS_GROUP(GroupId),
+        data = #{<<"token">> => Token}
+    })),
+    ?ON_SUCCESS(Res, fun({ok, JoinedSpaceId}) ->
+        gs_client_worker:invalidate_cache(od_space, JoinedSpaceId),
+        gs_client_worker:invalidate_cache(od_group, GroupId)
+    end).
+
+
+-spec leave_space(gs_client_worker:client(), od_group:id(), od_space:id()) ->
+    ok | gs_protocol:error().
+leave_space(SessionId, GroupId, SpaceId) ->
+    Res = gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = delete,
+        gri = #gri{type = od_group, id = GroupId, aspect = {space, SpaceId}}
+    }),
+    ?ON_SUCCESS(Res, fun(_) ->
+        gs_client_worker:invalidate_cache(od_space, SpaceId),
+        gs_client_worker:invalidate_cache(od_group, GroupId)
+    end).

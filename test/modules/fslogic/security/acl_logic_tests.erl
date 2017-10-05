@@ -24,22 +24,10 @@ bitmask_acl_conversion_test() ->
     UserName = <<"UserName">>,
     GroupId = <<"GroupId">>,
     GroupName = <<"GroupName">>,
-    meck:new(od_user),
-    meck:expect(od_user, get,
-        fun(Id) when Id =:= UserId ->
-            {ok, #document{value = #od_user{name = UserName}}}
-        end
-    ),
-    meck:new(od_group),
-    meck:expect(od_group, get,
-        fun(Id) when Id =:= GroupId ->
-            {ok, #document{value = #od_group{name = GroupName}}}
-        end
-    ),
 
     % when
-    AceName1 = acl_logic:uid_to_ace_name(UserId),
-    AceName2 = acl_logic:gid_to_ace_name(GroupId),
+    AceName1 = acl_logic:identifier_acl_to_json(UserId, UserName),
+    AceName2 = acl_logic:identifier_acl_to_json(GroupId, GroupName),
 
     % then
     ?assert(is_binary(AceName1)),
@@ -65,34 +53,19 @@ bitmask_acl_conversion_test() ->
 
     % then
     ?assertEqual(Acl, [
-        #access_control_entity{acetype = ?allow_mask, identifier = UserId, aceflags = ?no_flags_mask, acemask = ?read_mask bor ?write_mask},
-        #access_control_entity{acetype = ?deny_mask, identifier = GroupId, aceflags = ?identifier_group_mask, acemask = ?write_mask}
-    ]),
-    meck:validate(od_user),
-    meck:validate(od_group),
-    meck:unload().
+        #access_control_entity{acetype = ?allow_mask, identifier = UserId, name = UserName, aceflags = ?no_flags_mask, acemask = ?read_mask bor ?write_mask},
+        #access_control_entity{acetype = ?deny_mask, identifier = GroupId, name = GroupName, aceflags = ?identifier_group_mask, acemask = ?write_mask}
+    ]).
 
 binary_acl_conversion_test() ->
     UserId = <<"UserId">>,
     UserName = <<"UserName">>,
     GroupId = <<"GroupId">>,
     GroupName = <<"GroupName">>,
-    meck:new(od_user),
-    meck:expect(od_user, get,
-        fun(Id) when Id =:= UserId ->
-            {ok, #document{value = #od_user{name = UserName}}}
-        end
-    ),
-    meck:new(od_group),
-    meck:expect(od_group, get,
-        fun(Id) when Id =:= GroupId ->
-            {ok, #document{value = #od_group{name = GroupName}}}
-        end
-    ),
 
     % when
-    AceName1 = acl_logic:uid_to_ace_name(UserId),
-    AceName2 = acl_logic:gid_to_ace_name(GroupId),
+    AceName1 = acl_logic:identifier_acl_to_json(UserId, UserName),
+    AceName2 = acl_logic:identifier_acl_to_json(GroupId, GroupName),
 
     % then
     ?assert(is_binary(AceName1)),
@@ -118,12 +91,9 @@ binary_acl_conversion_test() ->
 
     % then
     ?assertEqual(Acl, [
-        #access_control_entity{acetype = ?allow_mask, identifier = UserId, aceflags = ?no_flags_mask, acemask = ?read_mask bor ?write_mask},
-        #access_control_entity{acetype = ?deny_mask, identifier = GroupId, aceflags = ?identifier_group_mask, acemask = ?write_mask}
-    ]),
-    meck:validate(od_user),
-    meck:validate(od_group),
-    meck:unload().
+        #access_control_entity{acetype = ?allow_mask, identifier = UserId, name = UserName, aceflags = ?no_flags_mask, acemask = ?read_mask bor ?write_mask},
+        #access_control_entity{acetype = ?deny_mask, identifier = GroupId, name = GroupName, aceflags = ?identifier_group_mask, acemask = ?write_mask}
+    ]).
 
 check_permission_test() ->
     Id1 = <<"id1">>,

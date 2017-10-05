@@ -29,7 +29,6 @@ get_models() -> [
     od_provider,
     od_handle_service,
     od_handle,
-    subscriptions_state,
     subscription,
     file_subscription,
     session,
@@ -54,7 +53,8 @@ get_models() -> [
     file_force_proxy,
     luma_cache,
     file_popularity,
-    transfer
+    transfer,
+    storage_sync_histogram
 ].
 
 %%--------------------------------------------------------------------

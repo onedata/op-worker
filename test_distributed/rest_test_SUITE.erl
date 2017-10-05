@@ -14,8 +14,8 @@
 
 -include("global_definitions.hrl").
 -include("proto/oneclient/handshake_messages.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/oz/oz_spaces.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -43,7 +43,14 @@ all() -> ?ALL([
 ]).
 
 -define(MACAROON, <<"DUMMY-MACAROON">>).
--define(BASIC_AUTH_HEADER, <<"Basic ", (base64:encode(<<"user:password">>))/binary>>).
+-define(BASIC_AUTH_CREDENTIALS, <<"dXNlcjpwYXNzd29yZAo=">>).
+-define(BASIC_AUTH_HEADER, <<"Basic ", (?BASIC_AUTH_CREDENTIALS)/binary>>).
+
+-define(USER_ID, <<"test_id">>).
+-define(USER_NAME, <<"test_name">>).
+
+-define(SPACE_ID, <<"space0">>).
+-define(SPACE_NAME, <<"Space 0">>).
 
 %%%===================================================================
 %%% Test functions
@@ -161,8 +168,8 @@ init_per_testcase(Case, Config) when
 init_per_testcase(_Case, Config) ->
     ssl:start(),
     hackney:start(),
-    mock_oz_spaces(Config),
-    mock_oz_certificates(Config),
+    mock_space_logic(Config),
+    mock_user_logic(Config),
     Config.
 
 end_per_testcase(Case, Config) when
@@ -174,8 +181,8 @@ end_per_testcase(Case, Config) when
     hackney:stop(),
     ssl:stop();
 end_per_testcase(_Case, Config) ->
-    unmock_oz_spaces(Config),
-    unmock_oz_certificates(Config),
+    unmock_space_logic(Config),
+    unmock_user_logic(Config),
     hackney:stop(),
     ssl:stop().
 
@@ -206,79 +213,74 @@ rest_endpoint(Node) ->
         end,
     string:join(["https://", utils:get_host(Node), ":", Port, "/api/v3/oneprovider/"], "").
 
-mock_oz_spaces(Config) ->
+mock_space_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_expect(Workers, oz_spaces, get_details,
-        fun(_, _) -> {ok, #space_details{}} end),
-    test_utils:mock_expect(Workers, oz_spaces, get_users,
-        fun(_, _) -> {ok, []} end),
-    test_utils:mock_expect(Workers, oz_spaces, get_groups,
-        fun(_, _) -> {ok, []} end).
+    test_utils:mock_new(Workers, space_logic, []),
+    test_utils:mock_expect(Workers, space_logic, get,
+        fun(_, ?SPACE_ID) ->
+            {ok, #document{value = #od_space{
+                name = ?SPACE_NAME,
+                eff_users = #{?USER_ID => []}
+            }}}
+        end),
+    test_utils:mock_expect(Workers, space_logic, get_name,
+        fun(_, ?SPACE_ID) ->
+            {ok, ?SPACE_NAME}
+        end).
 
-unmock_oz_spaces(Config) ->
+unmock_space_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, oz_spaces).
+    test_utils:mock_validate_and_unload(Workers, space_logic).
 
-mock_oz_certificates(Config) ->
-    [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
-    OZUrl = rpc:call(Worker1, oz_plugin, get_oz_url, []),
-    OZRestPort = rpc:call(Worker1, oz_plugin, get_oz_rest_port, []),
-    OZRestApiPrefix = rpc:call(Worker1, oz_plugin, get_oz_rest_api_prefix, []),
-    OzRestApiUrl = str_utils:format("~s:~B~s", [
-        OZUrl,
-        OZRestPort,
-        OZRestApiPrefix
-    ]),
+mock_user_logic(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, user_logic, []),
 
-    % save key and cert files on the workers
-    % read the files
-    {ok, KeyBin} = file:read_file(?TEST_FILE(Config, "grpkey.pem")),
-    {ok, CertBin} = file:read_file(?TEST_FILE(Config, "grpcert.pem")),
-    % choose paths for the files
-    KeyPath = "/tmp/user_auth_test_key.pem",
-    CertPath = "/tmp/user_auth_test_cert.pem",
-    % and save them on workers
-    lists:foreach(
-        fun(Node) ->
-            ok = rpc:call(Node, file, write_file, [KeyPath, KeyBin]),
-            ok = rpc:call(Node, file, write_file, [CertPath, CertBin])
-        end, Workers),
-    % Use the cert paths on workers to mock oz_endpoint
-    SSLOpts = {ssl_options, [{keyfile, KeyPath}, {certfile, CertPath}]},
+    UserDoc = {ok, #document{key = ?USER_ID, value = #od_user{
+        name = ?USER_NAME,
+        eff_spaces = [?SPACE_ID]
+    }}},
 
-    test_utils:mock_new(Workers, [oneprovider, oz_endpoint]),
+    GetUserFun = fun
+        (#macaroon_auth{macaroon = ?MACAROON}, ?USER_ID) ->
+            UserDoc;
+        (#token_auth{token = ?MACAROON}, ?USER_ID) ->
+            UserDoc;
+        (#basic_auth{credentials = ?BASIC_AUTH_CREDENTIALS}, ?USER_ID) ->
+            UserDoc;
+        (?ROOT_SESS_ID, ?USER_ID) ->
+            UserDoc;
+        (UserSessId, ?USER_ID) ->
+            try session:get_user_id(UserSessId) of
+                {ok, ?USER_ID} -> UserDoc;
+                _ -> {error, forbidden}
+            catch
+                _:_ -> {error, forbidden}
+            end;
+        (_, _) ->
+            {error, not_found}
+    end,
 
-    test_utils:mock_expect(Workers, oneprovider, get_provider_id,
-        fun() -> <<"050fec8f157d6e4b31fd6d2924923c7a">> end),
-
-    test_utils:mock_expect(Workers, oz_endpoint, provider_request,
-        fun
-        % @todo for now, in rest we only use the root macaroon
-            (#macaroon_auth{macaroon = Macaroon}, URN, Method, Headers, Body, Options) ->
-                do_request(Method, OzRestApiUrl ++ URN, Headers#{
-                    <<"macaroon">> => Macaroon,
-                    <<"content-type">> => <<"application/json">>
-                }, Body, [SSLOpts | Options]);
-            (#token_auth{token = Token}, URN, Method, Headers, Body, Options) ->
-                do_request(Method, OzRestApiUrl ++ URN, Headers#{
-                    <<"x-auth-token">> => Token,
-                    <<"content-type">> => <<"application/json">>
-                }, Body, [SSLOpts | Options]);
-            (#basic_auth{credentials = Credentials}, URN, Method, Headers, Body, Options) ->
-                do_request(Method, OzRestApiUrl ++ URN, Headers#{
-                    <<"Authorization">> => Credentials,
-                    <<"content-type">> => <<"application/json">>
-                }, Body, [SSLOpts | Options]);
-            (_, URN, Method, Headers, Body, Options) ->
-                do_request(Method, OzRestApiUrl ++ URN, Headers#{
-                    <<"content-type">> => <<"application/json">>
-                }, Body, [SSLOpts | Options])
+    test_utils:mock_expect(Workers, user_logic, get, GetUserFun),
+    test_utils:mock_expect(Workers, user_logic, get_by_auth, fun(Auth) ->
+        GetUserFun(Auth, ?USER_ID)
+    end),
+    test_utils:mock_expect(Workers, user_logic, exists,
+        fun(Auth, UserId) ->
+            case GetUserFun(Auth, UserId) of
+                {ok, _} ->
+                    true;
+                _ ->
+                    false
+            end
         end
-    ).
+    ),
+    [rpc:call(W, file_meta, setup_onedata_user, [?USER_ID, []]) || W <- Workers].
 
-unmock_oz_certificates(Config) ->
+unmock_user_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, [oz_endpoint, oneprovider]).
+    test_utils:mock_validate_and_unload(Workers, user_logic).
+
 
 -spec test_crash(term(), term()) -> no_return().
 test_crash(_, _) ->

@@ -15,7 +15,6 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/oneclient/handshake_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/oz/oz_users.hrl").
 
 %% API
 -export([get/1, fetch/1, get_or_fetch/1, delete/1]).
@@ -58,20 +57,19 @@ fetch(#certificate_auth{}) ->
     {error, not_supported};
 fetch(Auth) ->
     try
-        case oz_users:get_details(Auth) of
-            {ok, #user_details{id = UserId}} ->
-                {ok, #document{key = Id}} = od_user:get_or_fetch(Auth, UserId),
+        case user_logic:get_by_auth(Auth) of
+            {ok, #document{key = UserId}} ->
                 NewDoc = #document{
                     key = term_to_binary(Auth),
-                    value = #user_identity{user_id = Id}
+                    value = #user_identity{user_id = UserId}
                 },
                 case datastore_model:create(?CTX, NewDoc) of
                     {ok, _} -> ok;
                     {error, already_exists} -> ok
                 end,
                 {ok, NewDoc};
-            {error, {_Code, _Reason, _}} = Error ->
-                Error
+             {error, _} = Error ->
+                 Error
         end
     catch
         _:Reason ->

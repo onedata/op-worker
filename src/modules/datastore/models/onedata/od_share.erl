@@ -1,11 +1,13 @@
 %%%-------------------------------------------------------------------
 %%% @author Lukasz Opiola
-%%% @copyright (C) 2016 ACK CYFRONET AGH
+%%% @copyright (C) 2017 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Cache for share details fetched from OZ.
+%%% @doc
+%%% This model server as cache for od_share records
+%%% synchronized via Graph Sync.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(od_share).
@@ -16,31 +18,32 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/oz/oz_shares.hrl").
-
-%% API
--export([create_or_update/2, get_or_fetch/2]).
--export([save/1, get/1, exists/1, delete/1, update/2, create/1]).
-
-%% datastore_model callbacks
--export([get_ctx/0, get_record_struct/1]).
 
 -type id() :: binary().
--type info() :: #od_share{}.
--type doc() :: datastore_doc:doc(info()).
--type diff() :: datastore_doc:diff(info()).
+-type record() :: #od_share{}.
+-type doc() :: datastore_doc:doc(record()).
+-type diff() :: datastore_doc:diff(record()).
+
+-type name() :: binary().
 % guid of special 'share' type, which when used as guest user, allows for read
 % only access to file (when used as normal user it behaves like normal guid).
 % Apart from FileUuid and SpaceId, it contains also ShareId.
 -type share_guid() :: fslogic_worker:file_guid().
 
--export_type([doc/0, info/0, id/0]).
--export_type([share_guid/0]).
+-export_type([doc/0, record/0, id/0]).
+-export_type([name/0, share_guid/0]).
 
 -define(CTX, #{
     model => ?MODULE,
     fold_enabled => true
 }).
+
+%% API
+-export([save/1, get/1, delete/1, list/0]).
+
+%% datastore_model callbacks
+-export([get_ctx/0, get_record_version/0]).
+-export([get_record_struct/1, upgrade_record/2]).
 
 %%%===================================================================
 %%% API
@@ -48,7 +51,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Saves share.
+%% Saves handle.
 %% @end
 %%--------------------------------------------------------------------
 -spec save(doc()) -> {ok, id()} | {error, term()}.
@@ -57,36 +60,7 @@ save(Doc) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Updates share.
-%% @end
-%%--------------------------------------------------------------------
--spec update(id(), diff()) -> {ok, id()} | {error, term()}.
-update(Key, Diff) ->
-    ?extract_key(datastore_model:update(?CTX, Key, Diff)).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates share.
-%% @end
-%%--------------------------------------------------------------------
--spec create(doc()) -> {ok, id()} | {error, term()}.
-create(Doc) ->
-    ?extract_key(datastore_model:create(?CTX, Doc)).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates document with using ID from document. If such object does not exist,
-%% it initialises the object with the document.
-%% @end
-%%--------------------------------------------------------------------
--spec create_or_update(doc(), diff()) ->
-    {ok, id()} | {error, term()}.
-create_or_update(#document{key = Key, value = Default}, Diff) ->
-    ?extract_key(datastore_model:update(?CTX, Key, Diff, Default)).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns share.
+%% Returns handle.
 %% @end
 %%--------------------------------------------------------------------
 -spec get(id()) -> {ok, doc()} | {error, term()}.
@@ -95,7 +69,7 @@ get(Key) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Deletes share.
+%% Deletes handle.
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(id()) -> ok | {error, term()}.
@@ -104,62 +78,12 @@ delete(Key) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Checks whether group exists.
+%% Returns list of all records.
 %% @end
 %%--------------------------------------------------------------------
--spec exists(id()) -> boolean().
-exists(Key) ->
-    {ok, Exists} = datastore_model:exists(?CTX, Key),
-    Exists.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets space info from the database in user context. If space info is not found
-%% fetches it from onezone and stores it in the database.
-%% @end
-%%--------------------------------------------------------------------
--spec get_or_fetch(Auth :: oz_endpoint:auth(), UserId :: od_user:id()) ->
-    {ok, datastore:doc()} | {error, term()}.
-get_or_fetch(Auth, ShareId) ->
-    case od_share:get(ShareId) of
-        {ok, Doc} -> {ok, Doc};
-        {error, not_found} -> fetch(Auth, ShareId);
-        {error, Reason} -> {error, Reason}
-    end.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Fetches space info from onezone and stores it in the database.
-%% @end
-%%--------------------------------------------------------------------
--spec fetch(Auth :: oz_endpoint:auth(), ShareId :: binary()) ->
-    {ok, datastore:doc()} | {error, term()}.
-fetch(Auth, ShareId) ->
-    {ok, #share_details{
-        name = Name,
-        public_url = PublicURL,
-        root_file = RootFileId,
-        space = Space
-    }} = oz_shares:get_details(Auth, ShareId),
-
-    Doc = #document{key = ShareId, value = #od_share{
-        name = Name,
-        public_url = PublicURL,
-        root_file = RootFileId,
-        space = Space
-    }},
-
-    case create(Doc) of
-        {ok, _} -> ok;
-        {error, already_exists} -> ok
-    end,
-
-    {ok, Doc}.
+-spec list() -> {ok, [id()]} | {error, term()}.
+list() ->
+    datastore_model:fold_keys(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
 
 %%%===================================================================
 %%% datastore_model callbacks
@@ -176,6 +100,15 @@ get_ctx() ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns model's record version.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_record_version() -> datastore_model:record_version().
+get_record_version() ->
+    2.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Returns model's record structure in provided version.
 %% @end
 %%--------------------------------------------------------------------
@@ -185,10 +118,56 @@ get_record_struct(1) ->
     {record, [
         {name, string},
         {public_url, string},
+
         {space, string},
         {handle, string},
         {root_file, string},
+
         {eff_users, [string]},
         {eff_groups, [string]},
+
         {revision_history, [term]}
+    ]};
+get_record_struct(2) ->
+    {record, [
+        {name, string},
+        {public_url, string},
+
+        {space, string},
+        {handle, string},
+        {root_file, string},
+
+        {cache_state, #{atom => term}}
     ]}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Upgrades model's record from provided version to the next one.
+%% @end
+%%--------------------------------------------------------------------
+-spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
+    {datastore_model:record_version(), datastore_model:record()}.
+upgrade_record(1, Share) ->
+    {
+        od_share,
+        Name,
+        PublicUrl,
+        SpaceId,
+        HandleId,
+        RootFileId,
+
+        _EffUsers,
+        _EffGroups,
+
+        _RevisionHistory
+    } = Share,
+    {2, #od_share{
+        name = Name,
+        public_url = PublicUrl,
+
+        space = SpaceId,
+        handle = HandleId,
+        root_file = RootFileId,
+
+        cache_state = #{}
+    }}.

@@ -17,6 +17,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
+-include_lib("cluster_worker/include/api_errors.hrl").
 
 %% API
 -export([handle/2]).
@@ -114,8 +115,8 @@ handle(<<"fetchMoreDirChildren">>, Props) ->
 %% Space related procedures
 %%--------------------------------------------------------------------
 handle(<<"getTokenUserJoinSpace">>, [{<<"spaceId">>, SpaceId}]) ->
-    UserAuth = op_gui_utils:get_user_auth(),
-    case space_logic:get_invite_user_token(UserAuth, SpaceId) of
+    SessionId = gui_session:get_session_id(),
+    case space_logic:create_user_invite_token(SessionId, SpaceId) of
         {ok, Token} ->
             {ok, [{<<"token">>, Token}]};
         {error, _} ->
@@ -124,39 +125,39 @@ handle(<<"getTokenUserJoinSpace">>, [{<<"spaceId">>, SpaceId}]) ->
     end;
 
 handle(<<"userJoinSpace">>, [{<<"token">>, Token}]) ->
-    UserAuth = op_gui_utils:get_user_auth(),
+    SessionId = gui_session:get_session_id(),
     UserId = gui_session:get_user_id(),
-    case space_logic:join_space(UserAuth, Token) of
+    case user_logic:join_space(SessionId, UserId, Token) of
         {ok, SpaceId} ->
-            user_data_backend:push_modified_user(
-                UserAuth, UserId, <<"spaces">>, add, SpaceId
+            gui_async:push_updated(
+                <<"user">>,
+                user_data_backend:user_record(SessionId, UserId)
             ),
             SpaceRecord = space_data_backend:space_record(SpaceId),
             SpaceName = proplists:get_value(<<"name">>, SpaceRecord),
             {ok, [{<<"spaceName">>, SpaceName}]};
-        {error, invalid_token_value} ->
+        ?ERROR_BAD_VALUE_TOKEN(<<"token">>) ->
             gui_error:report_warning(<<"Invalid token value.">>)
     end;
 
 handle(<<"userLeaveSpace">>, [{<<"spaceId">>, SpaceId}]) ->
-    UserAuth = op_gui_utils:get_user_auth(),
+    SessionId = gui_session:get_session_id(),
     UserId = gui_session:get_user_id(),
-    case space_logic:leave_space(UserAuth, SpaceId) of
+    case user_logic:leave_space(SessionId, UserId, SpaceId) of
         ok ->
-            AllGroups = op_gui_utils:find_all_groups(UserAuth, UserId),
+            {ok, AllGroups} = user_logic:get_eff_groups(SessionId, UserId),
             StillHasAccess = lists:any(
                 fun(GroupId) ->
-                    {ok, #document{
-                        value = #od_group{spaces = Spaces}}
-                    } = od_group:get(GroupId),
-                    lists:member(SpaceId, Spaces)
+                    {ok, EffSpaces} = group_logic:get_eff_spaces(SessionId, GroupId),
+                    lists:member(SpaceId, EffSpaces)
                 end, AllGroups),
             case StillHasAccess of
                 true ->
                     ok;
                 false ->
-                    user_data_backend:push_modified_user(
-                        UserAuth, UserId, <<"spaces">>, remove, SpaceId
+                    gui_async:push_updated(
+                        <<"user">>,
+                        user_data_backend:user_record(SessionId, UserId)
                     )
             end,
             ok;
@@ -166,8 +167,8 @@ handle(<<"userLeaveSpace">>, [{<<"spaceId">>, SpaceId}]) ->
     end;
 
 handle(<<"getTokenGroupJoinSpace">>, [{<<"spaceId">>, SpaceId}]) ->
-    UserAuth = op_gui_utils:get_user_auth(),
-    case space_logic:get_invite_group_token(UserAuth, SpaceId) of
+    SessionId = gui_session:get_session_id(),
+    case space_logic:create_group_invite_token(SessionId, SpaceId) of
         {ok, Token} ->
             {ok, [{<<"token">>, Token}]};
         {error, _} ->
@@ -178,41 +179,41 @@ handle(<<"getTokenGroupJoinSpace">>, [{<<"spaceId">>, SpaceId}]) ->
 handle(<<"groupJoinSpace">>, Props) ->
     GroupId = proplists:get_value(<<"groupId">>, Props),
     Token = proplists:get_value(<<"token">>, Props),
-    UserAuth = op_gui_utils:get_user_auth(),
+    SessionId = gui_session:get_session_id(),
     UserId = gui_session:get_user_id(),
-    case group_logic:join_space(UserAuth, GroupId, Token) of
+    case group_logic:join_space(SessionId, GroupId, Token) of
         {ok, SpaceId} ->
-            user_data_backend:push_modified_user(
-                UserAuth, UserId, <<"spaces">>, add, SpaceId
+            gui_async:push_updated(
+                <<"user">>,
+                user_data_backend:user_record(SessionId, UserId)
             ),
             SpaceRecord = space_data_backend:space_record(SpaceId),
             SpaceName = proplists:get_value(<<"name">>, SpaceRecord),
             {ok, [{<<"spaceName">>, SpaceName}]};
-        {error, invalid_token_value} ->
+        ?ERROR_BAD_VALUE_TOKEN(<<"token">>) ->
             gui_error:report_warning(<<"Invalid token value.">>)
     end;
 
 handle(<<"groupLeaveSpace">>, Props) ->
     GroupId = proplists:get_value(<<"groupId">>, Props),
     SpaceId = proplists:get_value(<<"spaceId">>, Props),
-    UserAuth = op_gui_utils:get_user_auth(),
+    SessionId = gui_session:get_session_id(),
     UserId = gui_session:get_user_id(),
-    case group_logic:leave_space(UserAuth, GroupId, SpaceId) of
+    case group_logic:leave_space(SessionId, GroupId, SpaceId) of
         ok ->
-            AllGroups = op_gui_utils:find_all_groups(UserAuth, UserId),
+            {ok, AllGroups} = user_logic:get_eff_groups(SessionId, UserId),
             StillHasAccess = lists:any(
                 fun(GrId) ->
-                    {ok, #document{
-                        value = #od_group{spaces = Spaces}}
-                    } = od_group:get(GrId),
-                    lists:member(SpaceId, Spaces)
+                    {ok, EffSpaces} = group_logic:get_eff_spaces(SessionId, GrId),
+                    lists:member(SpaceId, EffSpaces)
                 end, AllGroups -- [GroupId]),
             case StillHasAccess of
                 true ->
                     ok;
                 false ->
-                    user_data_backend:push_modified_user(
-                        UserAuth, UserId, <<"spaces">>, remove, SpaceId
+                    gui_async:push_updated(
+                        <<"user">>,
+                        user_data_backend:user_record(SessionId, UserId)
                     )
             end,
             ok;
@@ -222,8 +223,8 @@ handle(<<"groupLeaveSpace">>, Props) ->
     end;
 
 handle(<<"getTokenProviderSupportSpace">>, [{<<"spaceId">>, SpaceId}]) ->
-    UserAuth = op_gui_utils:get_user_auth(),
-    case space_logic:get_invite_provider_token(UserAuth, SpaceId) of
+    SessionId = gui_session:get_session_id(),
+    case space_logic:create_provider_invite_token(SessionId, SpaceId) of
         {ok, Token} ->
             {ok, [{<<"token">>, Token}]};
         {error, _} ->
@@ -232,15 +233,15 @@ handle(<<"getTokenProviderSupportSpace">>, [{<<"spaceId">>, SpaceId}]) ->
     end;
 
 handle(<<"createFileShare">>, Props) ->
-    UserAuth = op_gui_utils:get_user_auth(),
-    UserId = gui_session:get_user_id(),
     SessionId = gui_session:get_session_id(),
+    UserId = gui_session:get_user_id(),
     FileId = proplists:get_value(<<"fileId">>, Props),
     Name = proplists:get_value(<<"shareName">>, Props),
     case logical_file_manager:create_share(SessionId, {guid, FileId}, Name) of
         {ok, {ShareId, _}} ->
-            user_data_backend:push_modified_user(
-                UserAuth, UserId, <<"shares">>, add, ShareId
+            gui_async:push_updated(
+                <<"user">>,
+                user_data_backend:user_record(SessionId, UserId)
             ),
             % Push file data so GUI knows that is is shared
             {ok, FileData} = file_data_backend:file_record(SessionId, FileId),
@@ -259,8 +260,8 @@ handle(<<"createFileShare">>, Props) ->
 %% Group related procedures
 %%--------------------------------------------------------------------
 handle(<<"getTokenUserJoinGroup">>, [{<<"groupId">>, GroupId}]) ->
-    UserAuth = op_gui_utils:get_user_auth(),
-    case group_logic:get_invite_user_token(UserAuth, GroupId) of
+    SessionId = gui_session:get_session_id(),
+    case group_logic:create_user_invite_token(SessionId, GroupId) of
         {ok, Token} ->
             {ok, [{<<"token">>, Token}]};
         {error, _} ->
@@ -269,12 +270,13 @@ handle(<<"getTokenUserJoinGroup">>, [{<<"groupId">>, GroupId}]) ->
     end;
 
 handle(<<"userJoinGroup">>, [{<<"token">>, Token}]) ->
-    UserAuth = op_gui_utils:get_user_auth(),
+    SessionId = gui_session:get_session_id(),
     UserId = gui_session:get_user_id(),
-    case user_logic:join_group(UserAuth, Token) of
+    case user_logic:join_group(SessionId, UserId, Token) of
         {ok, GroupId} ->
-            user_data_backend:push_modified_user(
-                UserAuth, UserId, <<"groups">>, add, GroupId
+            gui_async:push_updated(
+                <<"user">>,
+                user_data_backend:user_record(SessionId, UserId)
             ),
             GroupRecord = group_data_backend:group_record(GroupId),
             GroupName = proplists:get_value(<<"name">>, GroupRecord),
@@ -285,24 +287,23 @@ handle(<<"userJoinGroup">>, [{<<"token">>, Token}]) ->
     end;
 
 handle(<<"userLeaveGroup">>, [{<<"groupId">>, GroupId}]) ->
-    UserAuth = op_gui_utils:get_user_auth(),
+    SessionId = gui_session:get_session_id(),
     UserId = gui_session:get_user_id(),
-    case user_logic:leave_group(UserAuth, GroupId) of
+    case user_logic:leave_group(SessionId, UserId, GroupId) of
         ok ->
-            AllGroups = op_gui_utils:find_all_groups(UserAuth, UserId),
+            {ok, AllGroups} = user_logic:get_eff_groups(SessionId, UserId),
             StillHasAccess = lists:any(
                 fun(GrId) ->
-                    {ok, #document{
-                        value = #od_group{children = Children}}
-                    } = od_group:get(GrId),
-                    proplists:is_defined(GroupId, Children)
+                    {ok, EffChildren} = group_logic:get_eff_children(SessionId, GrId),
+                    maps:is_key(GroupId, EffChildren)
                 end, AllGroups -- [GroupId]),
             case StillHasAccess of
                 true ->
                     ok;
                 false ->
-                    user_data_backend:push_modified_user(
-                        UserAuth, UserId, <<"groups">>, remove, GroupId
+                    gui_async:push_updated(
+                        <<"user">>,
+                        user_data_backend:user_record(SessionId, UserId)
                     )
             end,
             ok;
@@ -312,8 +313,8 @@ handle(<<"userLeaveGroup">>, [{<<"groupId">>, GroupId}]) ->
     end;
 
 handle(<<"getTokenGroupJoinGroup">>, [{<<"groupId">>, GroupId}]) ->
-    UserAuth = op_gui_utils:get_user_auth(),
-    case group_logic:get_invite_group_token(UserAuth, GroupId) of
+    SessionId = gui_session:get_session_id(),
+    case group_logic:create_group_invite_token(SessionId, GroupId) of
         {ok, Token} ->
             {ok, [{<<"token">>, Token}]};
         {error, _} ->
@@ -324,16 +325,18 @@ handle(<<"getTokenGroupJoinGroup">>, [{<<"groupId">>, GroupId}]) ->
 handle(<<"groupJoinGroup">>, Props) ->
     ChildGroupId = proplists:get_value(<<"groupId">>, Props),
     Token = proplists:get_value(<<"token">>, Props),
-    UserAuth = op_gui_utils:get_user_auth(),
+    SessionId = gui_session:get_session_id(),
     UserId = gui_session:get_user_id(),
-    case group_logic:join_group(UserAuth, ChildGroupId, Token) of
+    case group_logic:join_group(SessionId, ChildGroupId, Token) of
         {ok, ParentGroupId} ->
-            user_data_backend:push_modified_user(
-                UserAuth, UserId, <<"groups">>, add, ParentGroupId
+            gui_async:push_updated(
+                <<"user">>,
+                user_data_backend:user_record(SessionId, UserId)
             ),
             ChildGroupRecord = group_data_backend:group_record(ChildGroupId),
             gui_async:push_updated(<<"group">>, ChildGroupRecord),
             ParentGroupRecord = group_data_backend:group_record(ParentGroupId),
+            gui_async:push_updated(<<"group">>, ParentGroupRecord),
             PrntGroupName = proplists:get_value(<<"name">>, ParentGroupRecord),
             {ok, [{<<"groupName">>, PrntGroupName}]};
         {error, _} ->
@@ -344,8 +347,8 @@ handle(<<"groupJoinGroup">>, Props) ->
 handle(<<"groupLeaveGroup">>, Props) ->
     ParentGroupId = proplists:get_value(<<"parentGroupId">>, Props),
     ChildGroupId = proplists:get_value(<<"childGroupId">>, Props),
-    UserAuth = op_gui_utils:get_user_auth(),
-    case group_logic:leave_group(UserAuth, ParentGroupId, ChildGroupId) of
+    SessionId = gui_session:get_session_id(),
+    case group_logic:leave_group(SessionId, ChildGroupId, ParentGroupId) of
         ok ->
             ok;
         {error, _} ->
@@ -353,15 +356,9 @@ handle(<<"groupLeaveGroup">>, Props) ->
                 <<"Cannot leave group due to unknown error.">>)
     end;
 
-handle(<<"getTokenRequestSpaceCreation">>, [{<<"groupId">>, GroupId}]) ->
-    UserAuth = op_gui_utils:get_user_auth(),
-    case group_logic:get_create_space_token(UserAuth, GroupId) of
-        {ok, Token} ->
-            {ok, [{<<"token">>, Token}]};
-        {error, _} ->
-            gui_error:report_error(
-                <<"Cannot get invite provider token due to unknown error.">>)
-    end;
+handle(<<"getTokenRequestSpaceCreation">>, [{<<"groupId">>, _GroupId}]) ->
+    gui_error:report_error(
+        <<"This feature is no longer supported.">>);
 
 handle(_, _) ->
     gui_error:report_error(<<"Not implemented">>).

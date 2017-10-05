@@ -113,7 +113,11 @@ strategy_init_jobs(StrategyName, StrategyArgs, InitData) ->
 %%--------------------------------------------------------------------
 -spec strategy_handle_job(space_strategy:job()) ->
     {space_strategy:job_result(), [space_strategy:job()]}.
-strategy_handle_job(Job = #space_strategy_job{strategy_name = simple_scan}) ->
+strategy_handle_job(Job = #space_strategy_job{
+    strategy_name = simple_scan,
+    data = #{space_id := SpaceId}
+}) ->
+    storage_sync_monitoring:ensure_reporters_started(SpaceId),
     simple_scan:run(Job);
 strategy_handle_job(#space_strategy_job{strategy_name = no_import}) ->
     {ok, []}.
@@ -164,13 +168,10 @@ strategy_merge_result(_Job, {error, Reason1}, {error, Reason2}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec worker_pools_config() -> [{worker_pool:name(), non_neg_integer()}].
-worker_pools_config() -> 
-    {ok, FileWorkersNum} = application:get_env(?APP_NAME, ?STORAGE_SYNC_FILE_WORKERS_NUM_KEY),
-    {ok, DirWorkersNum} = application:get_env(?APP_NAME, ?STORAGE_SYNC_DIR_WORKERS_NUM_KEY),
-    [
-        {?STORAGE_SYNC_DIR_POOL_NAME, DirWorkersNum},
-        {?STORAGE_SYNC_FILE_POOL_NAME, FileWorkersNum}
-    ].
+worker_pools_config() -> [
+    {?STORAGE_SYNC_DIR_POOL_NAME, ?STORAGE_SYNC_DIR_WORKERS_NUM},
+    {?STORAGE_SYNC_FILE_POOL_NAME, ?STORAGE_SYNC_FILE_WORKERS_NUM}
+].
 
 %%--------------------------------------------------------------------
 %% @doc

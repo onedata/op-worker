@@ -35,8 +35,8 @@ user_acl_conversion_test() ->
     Mask = 17,
     Acl = [?ACE(?allow_mask, Mask, ?no_flags_mask, UserId)],
 
-    Json = acl_utils:acl_to_json(Acl),
-    DecodedAcl = acl_utils:json_to_acl(Json),
+    Json = gui_acl_parser:acl_to_json(Acl),
+    DecodedAcl = gui_acl_parser:json_to_acl(Json),
 
     ?assertEqual([?JSON_ACE(<<"allow">>, Mask, <<"user">>, UserId, null)],
         Json),
@@ -47,8 +47,8 @@ group_acl_conversion_test() ->
     Mask = 17,
     Acl = [?ACE(?allow_mask, Mask, ?identifier_group_mask, GroupId)],
 
-    Json = acl_utils:acl_to_json(Acl),
-    DecodedAcl = acl_utils:json_to_acl(Json),
+    Json = gui_acl_parser:acl_to_json(Acl),
+    DecodedAcl = gui_acl_parser:json_to_acl(Json),
 
     ?assertEqual([?JSON_ACE(<<"allow">>, Mask, <<"group">>, null, GroupId)],
         Json),
@@ -58,8 +58,8 @@ everyone_acl_conversion_test() ->
     Mask = 17,
     Acl = [?ACE(?allow_mask, Mask, ?no_flags_mask, ?everyone)],
 
-    Json = acl_utils:acl_to_json(Acl),
-    DecodedAcl = acl_utils:json_to_acl(Json),
+    Json = gui_acl_parser:acl_to_json(Acl),
+    DecodedAcl = gui_acl_parser:json_to_acl(Json),
 
     ?assertEqual([?JSON_ACE(<<"allow">>, Mask, <<"everyone">>, null, null)],
         Json),
@@ -69,8 +69,8 @@ owner_acl_conversion_test() ->
     Mask = 17,
     Acl = [?ACE(?allow_mask, Mask, ?no_flags_mask, ?owner)],
 
-    Json = acl_utils:acl_to_json(Acl),
-    DecodedAcl = acl_utils:json_to_acl(Json),
+    Json = gui_acl_parser:acl_to_json(Acl),
+    DecodedAcl = gui_acl_parser:json_to_acl(Json),
 
     ?assertEqual([?JSON_ACE(<<"allow">>, Mask, <<"owner">>, null, null)],
         Json),
@@ -86,8 +86,8 @@ multiple_acl_conversion_test() ->
         ?ACE(?deny_mask, Mask, ?identifier_group_mask, GroupId)
     ],
 
-    Json = acl_utils:acl_to_json(Acl),
-    DecodedAcl = acl_utils:json_to_acl(Json),
+    Json = gui_acl_parser:acl_to_json(Acl),
+    DecodedAcl = gui_acl_parser:json_to_acl(Json),
 
     ?assertEqual([
         ?JSON_ACE(<<"allow">>, Mask, <<"user">>, UserId, null),

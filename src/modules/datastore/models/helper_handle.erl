@@ -15,7 +15,7 @@
 -include("modules/datastore/datastore_models.hrl").
 
 %% API
--export([create/3, get/1, delete/1]).
+-export([create/4, get/1, delete/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -40,11 +40,14 @@
 %% Creates and caches helper handle.
 %% @end
 %%--------------------------------------------------------------------
--spec create(od_user:id(), od_space:id(), storage:doc()) -> {ok, doc()}.
-create(UserId, SpaceId, StorageDoc) ->
+-spec create(session:id(), od_user:id(), od_space:id(), storage:doc()) ->
+    {ok, doc()}.
+create(SessionId, UserId, SpaceId, StorageDoc) ->
     {ok, Helper} = fslogic_storage:select_helper(StorageDoc),
     HelperName = helper:get_name(Helper),
-    {ok, UserCtx} = luma:get_server_user_ctx(UserId, SpaceId, StorageDoc, HelperName),
+    {ok, UserCtx} = luma:get_server_user_ctx(
+        SessionId, UserId, SpaceId, StorageDoc, HelperName
+    ),
     HelperHandle = helpers:get_helper_handle(Helper, UserCtx),
     HelperDoc = #document{value = HelperHandle},
     datastore_model:create(?CTX, HelperDoc).

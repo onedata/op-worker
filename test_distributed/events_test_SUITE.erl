@@ -180,9 +180,9 @@ init_per_testcase(_Case, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Worker),
     {ok, SessId} = session_setup(Worker),
-    test_utils:mock_new(Workers, od_space),
-    test_utils:mock_expect(Workers, od_space, get_or_fetch, fun(_, _, _) ->
-        {ok, #document{value = #od_space{providers = [oneprovider:get_provider_id()]}}}
+    test_utils:mock_new(Workers, space_logic),
+    test_utils:mock_expect(Workers, space_logic, get_provider_ids, fun(_, _) ->
+        {ok, [oneprovider:get_provider_id()]}
     end),
     initializer:mock_test_file_context(Config, ?FILE_UUID),
     initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"),
@@ -219,7 +219,7 @@ end_per_testcase(_Case, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     session_teardown(Worker, ?config(session_id, Config)),
     initializer:clean_test_users_and_spaces_no_validate(Config),
-    test_utils:mock_unload(Workers, od_space),
+    test_utils:mock_unload(Workers, space_logic),
     initializer:unmock_test_file_context(Config),
     test_utils:mock_validate_and_unload(Worker, [communicator]).
 

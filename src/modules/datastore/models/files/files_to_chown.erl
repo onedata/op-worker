@@ -15,11 +15,10 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include_lib("ctool/include/oz/oz_users.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([chown_or_schedule_chowning/1, chown_file/1]).
+-export([chown_or_schedule_chowning/1, chown_file/1, chown_pending_files/1]).
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, create_or_update/2]).
 
 %% datastore_model callbacks
@@ -47,7 +46,7 @@
 chown_or_schedule_chowning(FileCtx) ->
     {#document{value = #file_meta{owner = OwnerUserId}}, FileCtx2} =
         file_ctx:get_file_doc(FileCtx),
-    case od_user:exists(OwnerUserId) of
+    case user_logic:exists(?ROOT_SESS_ID, OwnerUserId) of
         true ->
             chown_file(FileCtx2);
         false ->
@@ -68,6 +67,42 @@ chown_file(FileCtx) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx3),
     (catch storage_file_manager:chown(SFMHandle, OwnerUserId, SpaceId)), %todo implement chown in s3/ceph and remove this catch
     FileCtx3.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Chown all pending files of given user
+%% @end
+%%--------------------------------------------------------------------
+-spec chown_pending_files(od_user:id()) -> ok.
+chown_pending_files(UserId) ->
+    case files_to_chown:get(UserId) of
+        {ok, #document{value = #files_to_chown{file_guids = FileGuids}}} ->
+            lists:foreach(fun chown_pending_file/1, FileGuids),
+            delete(UserId);
+        {error, not_found} ->
+            ok
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Chown given file to its owner
+%% @end
+%%--------------------------------------------------------------------
+-spec chown_pending_file(fslogic_worker:file_guid()) -> file_ctx:ctx().
+chown_pending_file(FileGuid) ->
+    try
+        FileCtx = file_ctx:new_by_guid(FileGuid),
+        chown_file(FileCtx)
+    catch
+        _:Error ->
+            ?error_stacktrace("Cannot chown pending file ~p due to error ~p", [FileGuid, Error])
+    end.
+
+%%%===================================================================
+%%% datastore_model callbacks
+%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc

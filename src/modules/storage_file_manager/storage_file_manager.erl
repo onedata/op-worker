@@ -21,7 +21,7 @@
 -include_lib("storage_file_manager_errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--export([new_handle/2, new_handle/6, set_size/1]).
+-export([new_handle/2, new_handle/6, set_size/1, increase_size/2]).
 -export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/3, link/2, readdir/3,
     get_child_handle/2]).
 -export([stat/1, read/3, write/3, create/2, create/3, open/2, release/1,
@@ -95,6 +95,16 @@ set_size(#sfm_handle{
         file_size = FSize
     }.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets size in handle.
+%% @end
+%%--------------------------------------------------------------------
+-spec increase_size(handle(), non_neg_integer()) -> handle().
+increase_size(SFMHandle = #sfm_handle{file_size = CurrentSize}, Increase) ->
+    SFMHandle#sfm_handle{
+        file_size = CurrentSize + Increase
+    }.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -239,7 +249,7 @@ chown(#sfm_handle{
     space_id = SpaceId
 }, UserId, SpaceId) ->
     {ok, HelperHandle} = session:get_helper(?ROOT_SESS_ID, SpaceId, Storage),
-    {Uid, Gid} = luma:get_posix_user_ctx(UserId, SpaceId),
+    {Uid, Gid} = luma:get_posix_user_ctx(?ROOT_SESS_ID, UserId, SpaceId),
     helpers:chown(HelperHandle, FileId, Uid, Gid);
 chown(_, _, _) ->
     throw(?EPERM).
@@ -576,7 +586,7 @@ open_insecure(#sfm_handle{
 %%--------------------------------------------------------------------
 -spec get_size(file_meta:uuid(), od_space:id()) -> non_neg_integer().
 get_size(FileUuid, SpaceId) ->
-    try file_ctx:get_file_size(
+    try file_ctx:get_local_storage_file_size(
         file_ctx:new_by_guid(
             fslogic_uuid:uuid_to_guid(FileUuid, SpaceId))
     ) of

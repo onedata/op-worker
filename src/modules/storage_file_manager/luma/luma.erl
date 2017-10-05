@@ -16,7 +16,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 
 %% API
--export([get_server_user_ctx/4, get_client_user_ctx/4, get_posix_user_ctx/2]).
+-export([get_server_user_ctx/5, get_client_user_ctx/5, get_posix_user_ctx/3]).
 
 -type user_ctx() :: helper:user_ctx().
 -type posix_user_ctx() :: {Uid :: non_neg_integer(), Gid :: non_neg_integer()}.
@@ -37,14 +37,14 @@
 %% storages storage admin context is returned.
 %% @end
 %%--------------------------------------------------------------------
--spec get_server_user_ctx(od_user:id(), od_space:id(), storage:doc(), helper:name()) ->
-    {ok, user_ctx()} | {error, Reason :: term()}.
-get_server_user_ctx(UserId, SpaceId, StorageDoc, HelperName) ->
+-spec get_server_user_ctx(session:id(), od_user:id(), od_space:id(),
+    storage:doc(), helpers:name()) -> {ok, user_ctx()} | {error, Reason :: term()}.
+get_server_user_ctx(SessionId, UserId, SpaceId, StorageDoc, HelperName) ->
     case storage:select_helper(StorageDoc, HelperName) of
         {ok, Helper} ->
             get_user_ctx([
                 {fun get_admin_ctx/2, [UserId, Helper]},
-                {fun fetch_user_ctx/4, [UserId, SpaceId, StorageDoc, Helper]},
+                {fun fetch_user_ctx/5, [SessionId, UserId, SpaceId, StorageDoc, Helper]},
                 {fun generate_user_ctx/3, [UserId, SpaceId, HelperName]},
                 {fun get_admin_ctx/2, [?ROOT_USER_ID, Helper]}
             ]);
@@ -60,13 +60,13 @@ get_server_user_ctx(UserId, SpaceId, StorageDoc, HelperName) ->
 %% storage helper is defined as insecure, storage admin context is returned.
 %% @end
 %%--------------------------------------------------------------------
--spec get_client_user_ctx(od_user:id(), od_space:id(), storage:doc(), helper:name()) ->
-    {ok, user_ctx()} | {error, Reason :: term()}.
-get_client_user_ctx(UserId, SpaceId, StorageDoc, HelperName) ->
+-spec get_client_user_ctx(session:id(), od_user:id(), od_space:id(),
+    storage:doc(), helpers:name()) -> {ok, user_ctx()} | {error, Reason :: term()}.
+get_client_user_ctx(SessionId, UserId, SpaceId, StorageDoc, HelperName) ->
     case storage:select_helper(StorageDoc, HelperName) of
         {ok, Helper} ->
             get_user_ctx([
-                {fun fetch_user_ctx/4, [UserId, SpaceId, StorageDoc, Helper]},
+                {fun fetch_user_ctx/5, [SessionId, UserId, SpaceId, StorageDoc, Helper]},
                 {fun get_insecure_user_ctx/1, [Helper]},
                 {fun get_nobody_ctx/1, [Helper]}
             ]);
@@ -80,11 +80,11 @@ get_client_user_ctx(UserId, SpaceId, StorageDoc, HelperName) ->
 %% (UID and GID), otherwise generates it.
 %% @end
 %%--------------------------------------------------------------------
--spec get_posix_user_ctx(od_user:id(), od_space:id()) -> posix_user_ctx().
-get_posix_user_ctx(UserId, SpaceId) ->
+-spec get_posix_user_ctx(session:id(), od_user:id(), od_space:id()) -> posix_user_ctx().
+get_posix_user_ctx(SessionId, UserId, SpaceId) ->
     {ok, UserCtx} = case select_posix_storage(SpaceId) of
         {ok, StorageDoc} ->
-            luma:get_server_user_ctx(UserId, SpaceId, StorageDoc, ?POSIX_HELPER_NAME);
+            luma:get_server_user_ctx(SessionId, UserId, SpaceId, StorageDoc, ?POSIX_HELPER_NAME);
         {error, not_found} ->
             generate_user_ctx(UserId, SpaceId, ?POSIX_HELPER_NAME)
     end,
@@ -165,9 +165,9 @@ get_nobody_ctx(_Helper) ->
 %% Fails with an error if the response is erroneous.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch_user_ctx(od_user:id(), od_space:id(), storage:doc(), storage:helper()) ->
+-spec fetch_user_ctx(session:id(), od_user:id(), od_space:id(), storage:doc(), storage:helper()) ->
     {ok, user_ctx()} | {error, Reason :: term()} | undefined.
-fetch_user_ctx(UserId, SpaceId, StorageDoc, Helper) ->
+fetch_user_ctx(SessionId, UserId, SpaceId, StorageDoc, Helper) ->
     case storage:is_luma_enabled(StorageDoc) of
         false ->
             undefined;
@@ -175,8 +175,8 @@ fetch_user_ctx(UserId, SpaceId, StorageDoc, Helper) ->
             LumaConfig = storage:get_luma_config(StorageDoc),
             LumaCacheTimeout = luma_config:get_timeout(LumaConfig),
             Result = luma_cache:get(UserId,
-                fun luma_proxy:get_user_ctx/4,
-                [UserId, SpaceId, StorageDoc, Helper],
+                fun luma_proxy:get_user_ctx/5,
+                [SessionId, UserId, SpaceId, StorageDoc, Helper],
                 LumaCacheTimeout
             ),
 

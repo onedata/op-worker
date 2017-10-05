@@ -1,39 +1,44 @@
 %%%-------------------------------------------------------------------
-%%% @author Michal Zmuda
-%%% @copyright (C) 2016 ACK CYFRONET AGH
+%%% @author Lukasz Opiola
+%%% @copyright (C) 2017 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Cache for space details fetched from onezone.
+%%% @doc
+%%% This model server as cache for od_provider records
+%%% synchronized via Graph Sync.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(od_provider).
--author("Michal Zmuda").
+-author("Lukasz Opiola").
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
--include_lib("ctool/include/oz/oz_providers.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-%% API
--export([create_or_update/2, get_or_fetch/1, fetch/1]).
--export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1]).
-
-%% datastore_model callbacks
--export([get_ctx/0, get_record_struct/1]).
-
 -type id() :: binary().
--type info() :: #od_provider{}.
--type doc() :: datastore_doc:doc(info()).
--type diff() :: datastore_doc:diff(info()).
+-type record() :: #od_provider{}.
+-type doc() :: datastore_doc:doc(record()).
+-type diff() :: datastore_doc:diff(record()).
 
--export_type([id/0]).
+-type name() :: binary().
+-type urls() :: [binary()].
+
+-export_type([doc/0, id/0]).
+-export_type([name/0, urls/0]).
 
 -define(CTX, #{
     model => ?MODULE,
     fold_enabled => true
 }).
+
+%% API
+-export([save/1, get/1, delete/1, list/0]).
+
+%% datastore_model callbacks
+-export([get_ctx/0, get_record_version/0]).
+-export([get_record_struct/1, upgrade_record/2]).
 
 %%%===================================================================
 %%% API
@@ -41,7 +46,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Saves provider.
+%% Saves handle.
 %% @end
 %%--------------------------------------------------------------------
 -spec save(doc()) -> {ok, id()} | {error, term()}.
@@ -50,36 +55,7 @@ save(Doc) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Updates provider.
-%% @end
-%%--------------------------------------------------------------------
--spec update(id(), diff()) -> {ok, id()} | {error, term()}.
-update(Key, Diff) ->
-    ?extract_key(datastore_model:update(?CTX, Key, Diff)).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates provider.
-%% @end
-%%--------------------------------------------------------------------
--spec create(doc()) -> {ok, id()} | {error, term()}.
-create(Doc) ->
-    ?extract_key(datastore_model:create(?CTX, Doc)).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates document with using ID from document. If such object does not exist,
-%% it initialises the object with the document.
-%% @end
-%%--------------------------------------------------------------------
--spec create_or_update(doc(), diff()) ->
-    {ok, id()} | {error, term()}.
-create_or_update(#document{key = Key, value = Default}, Diff) ->
-    ?extract_key(datastore_model:update(?CTX, Key, Diff, Default)).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns provider.
+%% Returns handle.
 %% @end
 %%--------------------------------------------------------------------
 -spec get(id()) -> {ok, doc()} | {error, term()}.
@@ -88,22 +64,12 @@ get(Key) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Deletes provider.
+%% Deletes handle.
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(id()) -> ok | {error, term()}.
 delete(Key) ->
     datastore_model:delete(?CTX, Key).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks whether group exists.
-%% @end
-%%--------------------------------------------------------------------
--spec exists(id()) -> boolean().
-exists(Key) ->
-    {ok, Exists} = datastore_model:exists(?CTX, Key),
-    Exists.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -113,56 +79,6 @@ exists(Key) ->
 -spec list() -> {ok, [id()]} | {error, term()}.
 list() ->
     datastore_model:fold_keys(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Get provider from cache or fetch from OZ and save in cache.
-%% @end
-%%--------------------------------------------------------------------
--spec get_or_fetch(ProviderId :: id()) ->
-    {ok, datastore:doc()} | {error, term()}.
-get_or_fetch(ProviderId) ->
-    case od_provider:get(ProviderId) of
-        {ok, Doc} -> {ok, Doc};
-        {error, not_found} -> fetch(ProviderId);
-        Error -> Error
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Fetch provider from OZ and save it in cache.
-%% @end
-%%--------------------------------------------------------------------
--spec fetch(ProviderId :: id()) ->
-    {ok, datastore:doc()} | {error, Reason :: term()}.
-fetch(ProviderId) ->
-    try
-        {ok, #provider_details{name = Name, urls = URLs}} =
-            oz_providers:get_details(provider, ProviderId),
-        {PublicOnly, SpaceIDs} = case oz_providers:get_spaces(provider) of
-            {ok, SIDs} -> {false, SIDs};
-            {error, Res} ->
-                ?warning("Unable to fetch public info for provider ~p due to ~p", [
-                    ProviderId, Res]),
-                {true, []}
-        end,
-
-        Doc = #document{key = ProviderId, value = #od_provider{
-            client_name = Name,
-            urls = URLs,
-            spaces = SpaceIDs,
-            public_only = PublicOnly
-        }},
-
-        case od_provider:create(Doc) of
-            {ok, _} -> ok;
-            {error, already_exists} -> ok
-        end,
-        {ok, Doc}
-    catch
-        _:Reason ->
-            {error, Reason}
-    end.
 
 %%%===================================================================
 %%% datastore_model callbacks
@@ -179,6 +95,15 @@ get_ctx() ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns model's record version.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_record_version() -> datastore_model:record_version().
+get_record_version() ->
+    2.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Returns model's record structure in provided version.
 %% @end
 %%--------------------------------------------------------------------
@@ -188,7 +113,50 @@ get_record_struct(1) ->
     {record, [
         {client_name, string},
         {urls, [string]},
+
         {spaces, [string]},
+
         {public_only, boolean},
         {revision_history, [term]}
+    ]};
+get_record_struct(2) ->
+    {record, [
+        {name, string},
+        {urls, [string]},
+
+        {spaces, #{string => integer}},
+
+        {eff_users, [string]},
+        {eff_groups, [string]},
+
+        {cache_state, #{atom => term}}
     ]}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Upgrades model's record from provided version to the next one.
+%% @end
+%%--------------------------------------------------------------------
+-spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
+    {datastore_model:record_version(), datastore_model:record()}.
+upgrade_record(1, Provider) ->
+    {
+        od_provider,
+        Name,
+        Urls,
+        _Spaces,
+
+        _PublicOnly,
+        _RevisionHistory
+    } = Provider,
+    {2, #od_provider{
+        name = Name,
+        urls = Urls,
+
+        spaces = #{},
+
+        eff_users = [],
+        eff_groups = [],
+
+        cache_state = #{}
+    }}.

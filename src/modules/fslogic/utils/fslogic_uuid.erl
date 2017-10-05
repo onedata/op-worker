@@ -79,8 +79,7 @@ uuid_to_path(SessionId, FileUuid) ->
     case FileUuid of
         UserRoot -> <<"/">>;
         _ ->
-            {ok, UserId} = session:get_user_id(SessionId),
-            {ok, Path} = gen_path({uuid, FileUuid}, UserId, []),
+            {ok, Path} = gen_path({uuid, FileUuid}, SessionId, []),
             Path
     end.
 
@@ -273,18 +272,17 @@ unpack_guid(FileGuid) ->
 %% and concatenates them into path().
 %% @end
 %%--------------------------------------------------------------------
--spec gen_path(file_meta:entry(), od_user:id(), [file_meta:name()]) ->
+-spec gen_path(file_meta:entry(), session:id(), [file_meta:name()]) ->
     {ok, file_meta:path()} | {error, term()} | no_return().
-gen_path(Entry, UserId, Tokens) ->
+gen_path(Entry, SessionId, Tokens) ->
     {ok, #document{key = Uuid, value = #file_meta{name = Name}} = Doc} = file_meta:get(Entry),
     case file_meta:get_parent(Doc) of
         {ok, #document{key = ?ROOT_DIR_UUID}} ->
             SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(Uuid),
-            {ok, #document{value = #od_space{name = SpaceName}}} =
-                od_space:get(SpaceId, UserId),
+            {ok, SpaceName} = space_logic:get_name(SessionId, SpaceId),
             {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, SpaceName | Tokens])};
         {ok, #document{key = ParentUuid}} ->
-            gen_path({uuid, ParentUuid}, UserId, [Name | Tokens])
+            gen_path({uuid, ParentUuid}, SessionId, [Name | Tokens])
     end.
 
 %%--------------------------------------------------------------------

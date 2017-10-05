@@ -16,6 +16,7 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("cluster_worker/include/api_errors.hrl").
 
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
@@ -143,7 +144,7 @@ get_user_id_on_posix_storage_by_acl_username_should_fail_with_404_error(Config) 
     [Worker | _] = ?config(op_worker_nodes, Config),
     Result = rpc:call(Worker, reverse_luma, get_user_id_by_name,
         [<<"user@nfsdomain.org">>, ?STORAGE_ID, ?STORAGE]),
-    ?assertMatch({error,{ok, 404, _, _}}, Result).
+    ?assertMatch({error, {ok, 404, _, _}}, Result).
 
 get_user_id_should_fail_with_not_supported_storage_error(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -405,17 +406,17 @@ init_per_testcase(Case, Config) when
     Case =:= get_group_id_on_posix_storage_should_query_reverse_luma_once ->
 
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, [http_client, storage]),
+    test_utils:mock_new(Worker, [http_client, storage, provider_logic]),
     mock_resolve_group_post(Worker,
         {
             ok, 200, [], str_utils:format_bin("{
                 \"idp\": \"~s\",
                 \"groupId\": \"~s\"\}", [?TEST_PROVIDER_ID, ?TEST_GROUP_ID])
-        },
-        {
-            ok, 200, [], str_utils:format_bin("{
-                \"groupId\": \"~s\"\}", [?TEST_MAPPED_GROUP_ID])
         }
+    ),
+    mock_idp_group_mapping(Worker,
+        ?TEST_PROVIDER_ID, ?TEST_GROUP_ID,
+        ?TEST_MAPPED_GROUP_ID
     ),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
@@ -424,17 +425,17 @@ init_per_testcase(Case, Config) when
     Case =:= get_group_id_on_posix_storage_should_query_reverse_luma_twice ->
 
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, [http_client, reverse_luma_proxy]),
+    test_utils:mock_new(Worker, [http_client, reverse_luma_proxy, provider_logic]),
     mock_resolve_group_post(Worker,
         {
             ok, 200, [], str_utils:format_bin("{
             \"idp\": \"~s\",
             \"groupId\": \"~s\"\}", [?TEST_PROVIDER_ID, ?TEST_GROUP_ID])
-        },
-        {
-            ok, 200, [], str_utils:format_bin("{
-            \"groupId\": \"~s\"\}", [?TEST_MAPPED_GROUP_ID])
         }
+    ),
+    mock_idp_group_mapping(Worker,
+        ?TEST_PROVIDER_ID, ?TEST_GROUP_ID,
+        ?TEST_MAPPED_GROUP_ID
     ),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
@@ -443,7 +444,7 @@ init_per_testcase(Case, Config) when
     Case =:= get_group_id_on_posix_storage_should_fail_with_404_error ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, [http_client]),
-    mock_resolve_group_post(Worker, {ok, 404, [], <<"{\"error\": \"reason\"\}">>}, undefined),
+    mock_resolve_group_post(Worker, {ok, 404, [], <<"{\"error\": \"reason\"\}">>}),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(_Case, Config) ->
@@ -452,7 +453,7 @@ init_per_testcase(_Case, Config) ->
 end_per_testcase(_Case, Config) ->
     Workers = [Worker | _] = ?config(op_worker_nodes, Config),
     ok = rpc:call(Worker, luma_cache, invalidate, []),
-    test_utils:mock_unload(Workers, [http_client, reverse_luma_proxy]).
+    test_utils:mock_unload(Workers, [http_client, reverse_luma_proxy, provider_logic]).
 
 mock_resolve_user_post(Worker, Expected) ->
     test_utils:mock_expect(Worker, http_client, post, fun
@@ -474,14 +475,12 @@ mock_resolve_user_post(Worker, Expected) ->
             meck:passthrough([Url, Headers, Body])
     end).
 
-mock_resolve_group_post(Worker, ExpectedLuma, ExpectedOz) ->
+mock_resolve_group_post(Worker, ExpectedLuma) ->
     test_utils:mock_expect(Worker, http_client, post, fun
         (Url, Headers, Body) when is_binary(Url) ->
             case lists:last(binary:split(Url, <<"/">>, [global])) of
                 <<"resolve_group">> ->
                     ExpectedLuma;
-                <<"map_group">> ->
-                    ExpectedOz;
                 _ ->
                     meck:passthrough([Url, Headers, Body])
             end;
@@ -489,11 +488,20 @@ mock_resolve_group_post(Worker, ExpectedLuma, ExpectedOz) ->
             case lists:last(string:tokens(Url, "/")) of
                 "resolve_group" ->
                     ExpectedLuma;
-                "map_group" ->
-                    ExpectedOz;
                 _ ->
                     meck:passthrough([Url, Headers, Body])
             end;
         (Url, Headers, Body) ->
             meck:passthrough([Url, Headers, Body])
     end).
+
+mock_idp_group_mapping(Worker, IdP, IdpGroupId, GroupId) ->
+    test_utils:mock_expect(Worker, provider_logic, map_idp_group_to_onedata,
+        fun(IdPArg, IdpGroupIdArg) ->
+            case {IdPArg, IdpGroupIdArg} of
+                {IdP, IdpGroupId} ->
+                    {ok, GroupId};
+                _ ->
+                    ?ERROR_BAD_VALUE_ID_NOT_FOUND(IdP)
+            end
+        end).

@@ -17,6 +17,7 @@
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/privileges.hrl").
 
 %% API
 -export([check_normal_or_default_def/3]).
@@ -375,33 +376,17 @@ validate_scope_access(FileCtx, _UserCtx, _ShareId) ->
     user_ctx:ctx(), od_share:id() | undefined) ->
     {ok, file_ctx:ctx()} | no_return().
 validate_scope_privs(write, FileCtx, UserCtx, _ShareId) ->
-    #document{key = UserId, value = #od_user{eff_groups = UserGroups}} =
-        user_ctx:get_user(UserCtx),
+    SessionId = user_ctx:get_session_id(UserCtx),
+    UserId = user_ctx:get_user_id(UserCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    {ok, #document{value = #od_space{users = Users, groups = Groups}}} =
-        od_space:get(SpaceId, UserId),
-
-    UserPrivs = proplists:get_value(UserId, Users, []),
-    case lists:member(?SPACE_WRITE_DATA, UserPrivs) of
-        true -> {ok, FileCtx};
+    HasPrivilege = space_logic:has_eff_privilege(
+        SessionId, SpaceId, UserId, ?SPACE_WRITE_DATA
+    ),
+    case HasPrivilege of
+        true ->
+            {ok, FileCtx};
         false ->
-            SpaceGroupsSet = sets:from_list(proplists:get_keys(Groups)),
-            UserGroupsSet = sets:from_list(UserGroups),
-            CommonGroups = sets:to_list(sets:intersection(UserGroupsSet, SpaceGroupsSet)),
-
-            ValidGroups = lists:foldl(fun(GroupId, AccIn) ->
-                GroupPrivs = proplists:get_value(GroupId, Groups, []),
-                case lists:member(?SPACE_WRITE_DATA, GroupPrivs) of
-                    true ->
-                        [GroupId | AccIn];
-                    false ->
-                        AccIn
-                end
-            end, [], CommonGroups),
-            case ValidGroups of
-                [] -> throw(?EACCES);
-                _ -> {ok, FileCtx}
-            end
+            throw(?EACCES)
     end;
 validate_scope_privs(_, FileCtx, _, _) ->
     {ok, FileCtx}.

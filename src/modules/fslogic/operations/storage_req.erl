@@ -86,6 +86,7 @@ get_helper_params(_UserCtx, _StorageId, false = _ForceProxy) ->
 create_storage_test_file(UserCtx, Guid, StorageId) ->
     FileCtx = file_ctx:new_by_guid(Guid),
     UserId = user_ctx:get_user_id(UserCtx),
+    SessionId = user_ctx:get_session_id(UserCtx),
     SpaceId = case file_ctx:get_space_id_const(FileCtx) of
         undefined -> throw(?ENOENT);
         <<_/binary>> = Id -> Id
@@ -95,9 +96,9 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
     {ok, Helper} = fslogic_storage:select_helper(StorageDoc),
     HelperName = helper:get_name(Helper),
 
-    case luma:get_client_user_ctx(UserId, SpaceId, StorageDoc, HelperName) of
+    case luma:get_client_user_ctx(SessionId, UserId, SpaceId, StorageDoc, HelperName) of
         {ok, ClientStorageUserUserCtx} ->
-            {ok, ServerStorageUserUserCtx} = luma:get_server_user_ctx(UserId, SpaceId,
+            {ok, ServerStorageUserUserCtx} = luma:get_server_user_ctx(SessionId, UserId, SpaceId,
                 StorageDoc, HelperName),
             HelperParams = helper:get_params(Helper, ClientStorageUserUserCtx),
 
@@ -132,10 +133,11 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
     storage:id(), helpers:file_id(), FileContent :: binary()) -> #fuse_response{}.
 verify_storage_test_file(UserCtx, SpaceId, StorageId, FileId, FileContent) ->
     UserId = user_ctx:get_user_id(UserCtx),
+    SessionId = user_ctx:get_session_id(UserCtx),
     {ok, StorageDoc} = storage:get(StorageId),
     {ok, Helper} = fslogic_storage:select_helper(StorageDoc),
     HelperName = helper:get_name(Helper),
-    {ok, StorageUserCtx} = luma:get_server_user_ctx(UserId, SpaceId, StorageDoc, HelperName),
+    {ok, StorageUserCtx} = luma:get_server_user_ctx(SessionId, UserId, SpaceId, StorageDoc, HelperName),
     verify_storage_test_file_loop(Helper, StorageUserCtx, FileId, FileContent, ?ENOENT,
         ?VERIFY_STORAGE_TEST_FILE_ATTEMPTS).
 
