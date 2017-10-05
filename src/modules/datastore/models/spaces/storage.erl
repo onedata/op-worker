@@ -18,7 +18,8 @@
 
 %% API
 -export([new/2, new/4]).
--export([get_id/1, get_name/1, is_readonly/1, get_helpers/1, is_luma_enabled/1, get_luma_config/1]).
+-export([get_id/1, get_name/1, is_readonly/1, get_helpers/1, is_luma_enabled/1,
+    get_luma_config/1, get_luma_config_map/1]).
 -export([select_helper/2, update_helper/3, select/1]).
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, list/0]).
 
@@ -179,6 +180,27 @@ get_helpers(#storage{helpers = Helpers}) ->
     Helpers;
 get_helpers(#document{value = #storage{} = Value}) ->
     get_helpers(Value).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns map describing luma configuration
+%% @end
+%%-------------------------------------------------------------------
+-spec get_luma_config_map(record() | doc()) -> maps:map().
+get_luma_config_map(#storage{luma_config = undefined}) ->
+    #{enabled => false};
+get_luma_config_map(#storage{
+    luma_config = #luma_config{
+        url = URL,
+        cache_timeout = CacheTimeout
+}}) ->
+    #{
+        enabled => true,
+        url => URL,
+        cache_timeout => CacheTimeout div 60000
+    };
+get_luma_config_map(#document{value = Storage}) ->
+    get_luma_config_map(Storage).
 
 %%--------------------------------------------------------------------
 %% @doc
