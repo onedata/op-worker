@@ -504,7 +504,7 @@ start_pools() ->
 %%--------------------------------------------------------------------
 -spec start_pool(atom(), non_neg_integer()) -> {ok, pid()}.
 start_pool(PoolName, WorkersNum) ->
-    {ok, _ } = wpool:start_sup_pool(PoolName, [{workers, WorkersNum}, {queue_type, lifo}]).
+    {ok, _ } = worker_pool:start_sup_pool(PoolName, [{workers, WorkersNum}, {queue_type, lifo}]).
 
 %%--------------------------------------------------------------------
 %% @private

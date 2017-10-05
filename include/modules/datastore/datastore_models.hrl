@@ -429,6 +429,8 @@
     files_transferred = 0 :: non_neg_integer(),
     bytes_to_transfer = 0 :: non_neg_integer(),
     bytes_transferred = 0 :: non_neg_integer(),
+    files_to_invalidate = 0 :: non_neg_integer(),
+    files_invalidated = 0 :: non_neg_integer(),
     start_time = 0 :: non_neg_integer(),
     last_update = 0 :: non_neg_integer(),
 

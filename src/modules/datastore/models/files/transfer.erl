@@ -15,20 +15,23 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
+-include("modules/datastore/transfer.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start/6, stop/1, get_status/1, get_info/1, get/1]).
+-export([start/6, stop/1, get_status/1, get_info/1, get/1, init/0, cleanup/0, decode_pid/1, encode_pid/1]).
 -export([mark_active/1, mark_completed/1, mark_failed/2,
     mark_active_invalidation/1, mark_completed_invalidation/2, mark_failed_invalidation/2,
     mark_file_transfer_scheduled/2, mark_file_transfer_finished/2,
     mark_data_transfer_scheduled/2, mark_data_transfer_finished/2,
     for_each_successful_transfer/2, for_each_failed_transfer/2,
-    for_each_unfinished_transfer/2, restart_unfinished_and_failed_transfers/0]).
+    for_each_unfinished_transfer/2, restart_unfinished_and_failed_transfers/0,
+    mark_file_invalidation_finished/2, mark_file_invalidation_scheduled/2]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_struct/1]).
+-export([get_ctx/0, get_record_struct/1, get_posthooks/0, get_record_version/0,
+    upgrade_record/2]).
 
 -type id() :: binary().
 -type diff() :: datastore:diff(transfer()).
@@ -48,17 +51,27 @@
     local_links_tree_id => oneprovider:get_provider_id()
 }).
 
--define(SUCCESSFUL_TRANSFERS_KEY, <<"SUCCESSFUL_TRANSFERS_KEY">>).
--define(FAILED_TRANSFERS_KEY, <<"FAILED_TRANSFERS_KEY">>).
--define(UNFINISHED_TRANSFERS_KEY, <<"UNFINISHED_TRANSFERS_KEY">>).
-
--define(MIN_TIME_WINDOW, 60).
--define(HR_TIME_WINDOW, 3600).
--define(DY_TIME_WINDOW, 86400).
-
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Initialize resources required by transfers.
+%% @end
+%%--------------------------------------------------------------------
+-spec init() -> ok.
+init() ->
+    start_pools().
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Cleanup resources required by transfers.
+%% @end
+%%-------------------------------------------------------------------
+-spec cleanup() -> ok.
+cleanup() ->
+    stop_pools().
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -324,6 +337,41 @@ mark_file_transfer_finished(TransferId, FilesNum) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Marks in transfer doc that 'FilesNum' files are scheduled to be invalidated.
+%% @end
+%%--------------------------------------------------------------------
+-spec mark_file_invalidation_scheduled(undefined | id(), non_neg_integer()) ->
+    {ok, undefined | id()} | {error, term()}.
+mark_file_invalidation_scheduled(undefined, _) ->
+    {ok, undefined};
+mark_file_invalidation_scheduled(TransferId, FilesNum) ->
+    update(TransferId, fun(Transfer) ->
+        {ok, Transfer#transfer{
+            files_to_invalidate = Transfer#transfer.files_to_invalidate + FilesNum
+        }}
+    end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Marks in transfer doc successful invalidation of 'FilesNum' files.
+%% If files_to_invalidate counter equals files_invalidated, invalidation
+%% transfer is marked as finished.
+%% @end
+%%--------------------------------------------------------------------
+-spec mark_file_invalidation_finished(undefined | id(), non_neg_integer()) ->
+    {ok, undefined | id()} | {error, term()}.
+mark_file_invalidation_finished(undefined, _FilesNum) ->
+    {ok, undefined};
+mark_file_invalidation_finished(TransferId, FilesNum) ->
+    update(TransferId, fun(Transfer) ->
+        {ok, Transfer#transfer{
+            files_invalidated = Transfer#transfer.files_invalidated + FilesNum
+        }}
+    end).
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Marks in transfer doc that 'Bytes' bytes are scheduled to be transferred.
 %% @end
 %%--------------------------------------------------------------------
@@ -406,6 +454,27 @@ for_each_failed_transfer(Callback, Acc0) ->
     Acc0 :: term()) -> {ok, Acc :: term()} | {error, term()}.
 for_each_unfinished_transfer(Callback, Acc0) ->
     for_each_transfer(?UNFINISHED_TRANSFERS_KEY, Callback, Acc0).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Encodes Pid to binary.
+%% @end
+%%-------------------------------------------------------------------
+-spec encode_pid(pid()) -> binary().
+encode_pid(Pid) ->
+    % todo remove after VFS-3657
+    list_to_binary(pid_to_list(Pid)).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Decodes Pid from binary.
+%% @end
+%%-------------------------------------------------------------------
+-spec decode_pid(binary()) -> pid().
+decode_pid(Pid) ->
+    % todo remove after VFS-3657
+    list_to_pid(binary_to_list(Pid)).
+
 
 %%%===================================================================
 %%% Internal functions
@@ -493,12 +562,22 @@ restart(TransferId) ->
             _ -> scheduled
         end,
 
+        InvalidationStatus = case Transfer#transfer.invalidation_status of
+            completed -> completed;
+            skipped -> skipped;
+            cancelled -> cancelled;
+            _ -> scheduled
+        end,
+
         {ok, Transfer#transfer{
             transfer_status = TransferStatus,
+            invalidation_status = InvalidationStatus,
             files_to_transfer = 0,
             files_transferred = 0,
             bytes_to_transfer = 0,
             bytes_transferred = 0,
+            files_invalidated = 0,
+            files_to_invalidate = 0,
             start_time = TimeSeconds,
             last_update = 0,
             min_hist = time_slot_histogram:get_histogram_values(MinHist),
@@ -538,19 +617,66 @@ restart_failed_transfers() ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Encodes Pid to binary.
+%% Starts worker pools responsible for replicating files and directories.
 %% @end
 %%-------------------------------------------------------------------
--spec encode_pid(pid()) -> binary().
-encode_pid(Pid)  ->
-    % todo remove after VFS-3657
-    list_to_binary(pid_to_list(Pid)).
+-spec start_pools() -> ok.
+start_pools() ->
+    {ok, _} = worker_pool:start_sup_pool(?REPLICATION_POOL, [
+        {workers, ?REPLICATION_POOL_SIZE}, {queue_type, lifo}
+    ]),
+    ok.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Stops worker pools responsible for replicating files and directories.
+%% @end
+%%-------------------------------------------------------------------
+-spec stop_pools() -> ok.
+stop_pools() ->
+    true = worker_pool:stop_pool(?REPLICATION_POOL),
+    ok.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Posthook responsible for stopping transfer or invalidation controller.
+%% @end
+%%-------------------------------------------------------------------
+-spec maybe_mark_completed(atom(), list(), term()) -> term().
+maybe_mark_completed(update, [_, _, _], Result = {ok, #document{value = Transfer}}) ->
+    handle_updated(Transfer),
+    Result;
+maybe_mark_completed(_, _, Result) ->
+    Result.
+
+handle_updated(#transfer{
+    transfer_status = active,
+    files_to_transfer = FilesToTransfer,
+    files_transferred = FilesToTransfer,
+    bytes_to_transfer = BytesToTransfer,
+    bytes_transferred = BytesToTransfer,
+    pid = Pid
+}) ->
+    transfer_controller:finish_transfer(decode_pid(Pid));
+handle_updated(#transfer{
+    transfer_status = TransferStatus,
+    files_to_invalidate = FilesToInvalidate,
+    files_invalidated = FilesToInvalidate,
+    invalidation_status = active,
+    pid = Pid
+}) when TransferStatus =:= completed orelse TransferStatus =:= skipped ->
+    invalidation_controller:finish_transfer(decode_pid(Pid));
+handle_updated(_) ->
+    ok.
 
 %%%===================================================================
 %%% datastore_model callbacks
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Returns model's context.
 %% @end
@@ -558,6 +684,15 @@ encode_pid(Pid)  ->
 -spec get_ctx() -> datastore:ctx().
 get_ctx() ->
     ?CTX.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's record version.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_record_version() -> datastore_model:record_version().
+get_record_version() ->
+    2.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -587,4 +722,75 @@ get_record_struct(1) ->
         {min_hist, [integer]},
         {hr_hist, [integer]},
         {dy_hist, [integer]}
+    ]};
+get_record_struct(2) ->
+    {record, [
+        {file_uuid, string},
+        {space_id, string},
+        {path, string},
+        {callback, string},
+        {transfer_status, atom},
+        {invalidation_status, atom},
+        {source_provider_id, string},
+        {target_provider_id, string},
+        {invalidate_source_replica, boolean},
+        {pid, string}, %todo VFS-3657
+        {files_to_transfer, integer},
+        {files_transferred, integer},
+        {files_to_invalidate, integer},
+        {files_invalidated, integer},
+        {bytes_to_transfer, integer},
+        {bytes_transferred, integer},
+        {start_time, integer},
+        {last_update, integer},
+        {min_hist, [integer]},
+        {hr_hist, [integer]},
+        {dy_hist, [integer]}
     ]}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Upgrades model's record from provided version to the next one.
+%% @end
+%%--------------------------------------------------------------------
+-spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
+    {datastore_model:record_version(), datastore_model:record()}.
+upgrade_record(1, {?MODULE, FileUuid, SpaceId, Path, CallBack, TransferStatus,
+    InvalidationStatus, SourceProviderId, TargetProviderId,
+    InvalidateSourceReplica, Pid, FilesToTransfer, FilesTransferred,
+    BytesToTransfer, BytesTransferred, StartTime, LastUpdate, MinHist, HrHist,
+    DyHist}
+) ->
+    {2, #transfer{
+        file_uuid = FileUuid,
+        space_id = SpaceId,
+        path = Path,
+        callback = CallBack,
+        transfer_status = TransferStatus,
+        invalidation_status = InvalidationStatus,
+        source_provider_id = SourceProviderId,
+        target_provider_id = TargetProviderId,
+        invalidate_source_replica = InvalidateSourceReplica,
+        pid = Pid,
+        files_to_transfer = FilesToTransfer,
+        files_transferred = FilesTransferred,
+        bytes_to_transfer = BytesToTransfer,
+        bytes_transferred = BytesTransferred,
+        files_to_invalidate = 0,
+        files_invalidated = 0,
+        start_time = StartTime,
+        last_update = LastUpdate,
+        min_hist = MinHist,
+        hr_hist = HrHist,
+        dy_hist = DyHist
+    }}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of callbacks which will be called after each operation
+%% on datastore model.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_posthooks() -> [datastore_hooks:posthook()].
+get_posthooks() ->
+    [fun maybe_mark_completed/3].
