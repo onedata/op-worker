@@ -4,6 +4,12 @@
 CHANGELOG
 ---------
 
+### 17.06.0-rc5
+
+* fix error that occurs when we try to count attrs hash of deleted file
+* fix fetching luma_config
+
+
 ### 17.06.0-rc4
 
 * VFS-3682 Upgraded GlusterFS libraries
