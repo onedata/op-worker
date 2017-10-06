@@ -12,6 +12,7 @@
 -module(dbsync_communicator).
 -author("Krzysztof Trzepla").
 
+-include("global_definitions.hrl").
 -include("proto/oneprovider/dbsync_messages2.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -96,9 +97,9 @@ forward(#tree_broadcast2{
 %% @end
 %%--------------------------------------------------------------------
 -spec broadcast(od_space:id(), msg_id(), changes_batch(), [broadcast_opt()]) ->
-    ok.
+    MultipathBroadcast :: boolean().
 broadcast(SpaceId, MsgId, Msg, Opts) ->
-    Hops = get_next_broadcast_hops(SpaceId, Opts),
+    {Multipath, Hops} = get_next_broadcast_hops(SpaceId, Opts),
     lists:foreach(fun({ProviderId, {LowProviderId, HighProviderId}}) ->
         Result = dbsync_communicator:send(ProviderId, #tree_broadcast2{
             src_provider_id = proplists:get_value(src_provider_id,
@@ -114,7 +115,8 @@ broadcast(SpaceId, MsgId, Msg, Opts) ->
                 ?warning("Cannot broadcast changes batch to provider ~p "
                 "due to: ~p", [ProviderId, Reason])
         end
-    end, Hops).
+    end, Hops),
+    Multipath.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -165,8 +167,12 @@ broadcast_changes(SpaceId, Since, Until, Docs) ->
         until = Until,
         compressed_docs = dbsync_utils:compress(Docs)
     },
-    broadcast(SpaceId, MsgId, Msg, []),
-    broadcast(SpaceId, MsgId, Msg, []).
+    case broadcast(SpaceId, MsgId, Msg, []) of
+        true ->
+            broadcast(SpaceId, MsgId, Msg, []);
+        _ ->
+            ok
+    end.
 
 %%%===================================================================
 %%% Internal functions
@@ -183,14 +189,24 @@ broadcast_changes(SpaceId, Since, Until, Docs) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_next_broadcast_hops(od_space:id(), [broadcast_opt()]) ->
-    [{DestProviderId, {LowProviderId, HighProviderId}}] when
+    {MultipathBroadcast :: boolean(),
+        [{DestProviderId, {LowProviderId, HighProviderId}}]} when
     DestProviderId :: od_provider:id(),
     LowProviderId :: od_provider:id(),
     HighProviderId :: od_provider:id().
 get_next_broadcast_hops(SpaceId, Opts) ->
     ProviderIds = dbsync_utils:get_providers(SpaceId),
     ProviderIds2 = select_receiving_providers(ProviderIds, Opts),
-    Pivot = rand:uniform(length(ProviderIds2) + 1) - 1,
+
+    MinSupport = application:get_env(?APP_NAME, multipath_broadcast_min_support, 8),
+    Multipath = length(ProviderIds2) >= MinSupport,
+
+    Pivot = case Multipath of
+        true ->
+            rand:uniform(length(ProviderIds2) + 1) - 1;
+        _ ->
+            length(ProviderIds2) div 2
+    end,
     {LowProviderIds, HighProviderIds} = lists:split(Pivot, ProviderIds2),
     Hops = case LowProviderIds of
         [] -> [];
@@ -198,12 +214,13 @@ get_next_broadcast_hops(SpaceId, Opts) ->
             HighProviderId = lists:last(LowProviderIds),
             [{HighProviderId, {LowProviderId, HighProviderId}}]
     end,
-    case HighProviderIds of
+    Paths = case HighProviderIds of
         [] -> Hops;
         [LowProviderId2 | _] ->
             HighProviderId2 = lists:last(HighProviderIds),
             [{LowProviderId2, {LowProviderId2, HighProviderId2}} | Hops]
-    end.
+    end,
+    {Multipath, Paths}.
 
 %%--------------------------------------------------------------------
 %% @private
