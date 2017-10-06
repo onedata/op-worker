@@ -13,6 +13,7 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/oneprovider/dbsync_messages2.hrl").
+-include("global_definitions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -381,7 +382,11 @@ changes_request_should_be_handled(Config) ->
 %%%===================================================================
 
 init_per_testcase(_Case, Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
+    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
+    lists:foreach(fun(W) ->
+        test_utils:set_env(W, ?APP_NAME,
+            multipath_broadcast_min_support, 1)
+    end, Workers),
     Self = self(),
 
     test_utils:mock_new(Worker, [
