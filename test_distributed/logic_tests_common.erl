@@ -46,7 +46,11 @@ mock_provider_id(Config, ProviderId) ->
     Nodes = ?config(op_worker_nodes, Config),
     ok = test_utils:mock_new(Nodes, oneprovider, [passthrough]),
     ok = test_utils:mock_expect(Nodes, oneprovider, get_provider_id, fun() ->
-        ProviderId end),
+        ProviderId
+    end),
+    ok = test_utils:mock_expect(Nodes, oneprovider, is_registered, fun() ->
+        false
+    end),
     ok.
 
 

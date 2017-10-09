@@ -32,7 +32,7 @@
 %% (cert/token)
 %% @end
 %%--------------------------------------------------------------------
--spec handle_handshake(#client_message{}, #'OTPCertificate'{}) ->
+-spec handle_handshake(#client_message{}, DerCert :: binary()) ->
     {ok, SessId :: session:id()} | no_return().
 handle_handshake(#client_message{message_body = #handshake_request{
     session_id = SessId, auth = Auth}}, _)
@@ -42,8 +42,8 @@ handle_handshake(#client_message{message_body = #handshake_request{
     {ok, SessId};
 
 handle_handshake(#client_message{message_body = #handshake_request{
-    session_id = SessId}}, OtpCert) when is_binary(SessId) ->
-    {ok, Iden} = authenticate_using_certificate(OtpCert),
+    session_id = SessId}}, DerCert) when is_binary(SessId) ->
+    {ok, Iden} = authenticate_using_certificate(DerCert),
     {ok, _} = session_manager:reuse_or_create_fuse_session(SessId, Iden, self()),
     {ok, SessId}.
 
@@ -68,7 +68,7 @@ authenticate_using_token(Auth) ->
 %% Authenticate client using given certificate. Returns client identity.
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate_using_certificate(#'OTPCertificate'{}) -> {ok, #user_identity{}}.
-authenticate_using_certificate(_OtpCert) ->
+-spec authenticate_using_certificate(DerCert :: binary()) -> {ok, #user_identity{}}.
+authenticate_using_certificate(_DerCert) ->
     %identity:get_or_fetch(_CertInfo). todo integrate with identity model
     {ok, #user_identity{}}.

@@ -109,8 +109,8 @@ init_per_testcase(stress_test, Config) ->
     ssl:start(),
     hackney:start(),
     initializer:disable_quota_limit(Config),
-    initializer:enable_grpca_based_communication(Config),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
+    initializer:enable_grpca_based_communication(ConfigWithSessionInfo),
     lfm_proxy:init(ConfigWithSessionInfo);
 
 init_per_testcase(_Case, Config) ->
@@ -119,8 +119,8 @@ init_per_testcase(_Case, Config) ->
 end_per_testcase(stress_test, Config) ->
     lfm_proxy:teardown(Config),
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
-    initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:disable_grpca_based_communication(Config),
+    initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:unload_quota_mocks(Config),
     hackney:stop(),
     ssl:stop();

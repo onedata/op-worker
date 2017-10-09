@@ -36,7 +36,7 @@
 -export_type([ref/0]).
 
 -record(state, {
-    certificate :: #'OTPCertificate'{},
+    certificate :: DerCert :: binary() | undefined,
     % handler responses
     ok :: atom(),
     closed :: atom(),
@@ -82,12 +82,12 @@ init(Ref, Socket, Transport, _Opts) ->
     ok = ranch:accept_ack(Ref),
     ok = Transport:setopts(Socket, [binary, {active, once}, {packet, ?PACKET_VALUE}]),
     {Ok, Closed, Error} = Transport:messages(),
-    Certificate = get_cert(Socket),
+    DerCert = get_cert(Socket),
 
-    PeerType = case provider_auth_manager:is_provider(Certificate) of
+    PeerType = case provider_auth_manager:is_provider(DerCert) of
         true ->
             MyProviderId = oneprovider:get_provider_id(),
-            case provider_auth_manager:get_provider_id(Certificate) of
+            case provider_auth_manager:get_provider_id(DerCert) of
                 MyProviderId ->
                     ?warning("Connection loop detected. Shutting down the connection."),
                     erlang:error(connection_loop_detected);
@@ -103,7 +103,7 @@ init(Ref, Socket, Transport, _Opts) ->
         ok = Ok,
         closed = Closed,
         error = Error,
-        certificate = Certificate,
+        certificate = DerCert,
         connection_type = incoming,
         peer_type = PeerType
     }, ?TIMEOUT).
@@ -117,20 +117,18 @@ init(Ref, Socket, Transport, _Opts) ->
 -spec init(session:id(), Hostname :: binary(), Port :: non_neg_integer(), Transport :: atom(), Timeout :: non_neg_integer()) ->
     no_return().
 init(SessionId, Hostname, Port, Transport, Timeout) ->
-    {ok, CaCertsDir} = application:get_env(?APP_NAME, cacerts_dir),
-    {ok, CaCertPems} = file_utils:read_files({dir, CaCertsDir}),
-    CaCerts = lists:map(fun cert_decoder:pem_to_der/1, CaCertPems),
+    {ok, OzCaCertPem} = file:read_file(oz_plugin:get_oz_cacert_path()),
     TLSSettings = [
         {certfile, oz_plugin:get_cert_file()},
         {keyfile, oz_plugin:get_key_file()},
-        {cacerts, CaCerts}
+        {cacerts, [cert_decoder:pem_to_der(OzCaCertPem)]}
     ],
     ?info("Connecting to ~p ~p", [Hostname, Port]),
     {ok, Socket} = Transport:connect(binary_to_list(Hostname), Port, TLSSettings, Timeout),
     ok = Transport:setopts(Socket, [binary, {active, once}, {packet, ?PACKET_VALUE}]),
 
     {Ok, Closed, Error} = Transport:messages(),
-    Certificate = get_cert(Socket),
+    DerCert = get_cert(Socket),
 
     session_manager:reuse_or_create_provider_session(SessionId, provider_outgoing, #user_identity{
         provider_id = session_manager:session_id_to_provider_id(SessionId)}, self()),
@@ -142,7 +140,7 @@ init(SessionId, Hostname, Port, Transport, Timeout) ->
         ok = Ok,
         closed = Closed,
         error = Error,
-        certificate = Certificate,
+        certificate = DerCert,
         connection_type = outgoing,
         peer_type = provider_incoming
     }, ?TIMEOUT).
@@ -338,11 +336,11 @@ code_change(_OldVsn, State, _Extra) ->
 -spec handle_client_message(#state{}, binary()) ->
     {noreply, NewState :: #state{}, timeout()} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_client_message(State = #state{session_id = SessId, certificate = Cert}, Data) ->
-    IsProvider = provider_auth_manager:is_provider(Cert),
+handle_client_message(State = #state{session_id = SessId, certificate = DerCert}, Data) ->
+    IsProvider = provider_auth_manager:is_provider(DerCert),
     try serializator:deserialize_client_message(Data, SessId) of
         {ok, Msg} when SessId == undefined, IsProvider ->
-            NewSessId = provider_auth_manager:handshake(Cert, self()),
+            NewSessId = provider_auth_manager:handshake(DerCert, self()),
             handle_normal_message(State#state{session_id = NewSessId}, Msg#client_message{session_id = NewSessId});
         {ok, Msg} when SessId == undefined ->
             handle_handshake(State, Msg);
@@ -365,7 +363,7 @@ handle_client_message(State = #state{session_id = SessId, certificate = Cert}, D
 -spec handle_server_message(#state{}, binary()) ->
     {noreply, NewState :: #state{}, timeout()} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_server_message(State = #state{session_id = SessId, certificate = _Cert}, Data) ->
+handle_server_message(State = #state{session_id = SessId}, Data) ->
     try serializator:deserialize_server_message(Data, SessId) of
         {ok, Msg} ->
             handle_normal_message(State, Msg)
@@ -521,15 +519,15 @@ send_client_message(Socket, Transport, #client_message{} = ClientMsg) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns OTP certificate for given socket or 'undefined' if there isn't one.
+%% Returns OTP certificate in DER format for given socket or 'undefined' if
+%% there isn't one.
 %% @end
 %%--------------------------------------------------------------------
--spec get_cert(Socket :: ssl:socket()) ->
-    undefined | #'OTPCertificate'{}.
+-spec get_cert(ssl:socket()) -> DerCert :: binary() | undefined.
 get_cert(Socket) ->
     case ssl:peercert(Socket) of
         {error, _} -> undefined;
-        {ok, Der} -> public_key:pkix_decode_cert(Der, otp)
+        {ok, Der} -> Der
     end.
 
 %%--------------------------------------------------------------------

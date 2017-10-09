@@ -835,15 +835,16 @@ init_env(Config) ->
 
     ssl:start(),
     hackney:start(),
-    initializer:enable_grpca_based_communication(Config),
     initializer:disable_quota_limit(Config),
-    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config).
+    NewConfig = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
+    initializer:enable_grpca_based_communication(NewConfig),
+    NewConfig.
 
 teardown_env(Config) ->
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
+    initializer:disable_grpca_based_communication(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:unload_quota_mocks(Config),
-    initializer:disable_grpca_based_communication(Config),
     hackney:stop(),
     ssl:stop().
 

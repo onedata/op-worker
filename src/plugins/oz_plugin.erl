@@ -21,7 +21,8 @@
 
 %% oz_plugin_behaviour API
 -export([get_oz_url/0, get_oz_rest_port/0, get_oz_rest_api_prefix/0, get_oz_rest_endpoint/1]).
--export([get_key_file/0, get_csr_file/0, get_cert_file/0, get_cacerts_dir/0]).
+-export([get_key_file/0, get_csr_file/0, get_cert_file/0]).
+-export([get_cacerts_dir/0, get_oz_cacert_path/0]).
 -export([auth_to_rest_client/1]).
 
 %%%===================================================================
@@ -30,7 +31,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Should return a Global Registry URL.
+%% Should return a OneZone URL.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_oz_url() -> string().
@@ -96,7 +97,7 @@ get_csr_file() ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Should return a path to file containing provider's
-%% public certificate signed by Global Registry.
+%% public certificate signed by OneZone.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_cert_file() -> file:name_all().
@@ -106,14 +107,23 @@ get_cert_file() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Should return a path to file containing Global Registry
-%% CA certificate.
+%% Should return the path to CA certs directory.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_cacerts_dir() -> file:name_all().
 get_cacerts_dir() ->
     {ok, CACertsDir} = application:get_env(?APP_NAME, cacerts_dir),
     CACertsDir.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Should return the path to file containing OneZone CA certificate.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_oz_cacert_path() -> file:name_all().
+get_oz_cacert_path() ->
+    {ok, CaFile} = application:get_env(?APP_NAME, oz_ca_file),
+    filename:join(get_cacerts_dir(), CaFile).
 
 %%--------------------------------------------------------------------
 %% @doc

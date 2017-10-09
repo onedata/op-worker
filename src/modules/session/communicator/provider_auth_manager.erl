@@ -23,15 +23,17 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Checks whether given certificate belongs to provider or not.
+%% @doc
+%% Checks whether given certificate belongs to provider or not.
 %% @end
-%% @todo: improve the implementation by adding internal CA validation
 %%--------------------------------------------------------------------
--spec is_provider(Cert :: #'OTPCertificate'{}) -> boolean().
-is_provider(#'OTPCertificate'{} = Cert) ->
+-spec is_provider(DerCert :: binary()) -> boolean().
+is_provider(DerCert) ->
     try
-        #'OTPCertificate'{tbsCertificate =
-        #'OTPTBSCertificate'{subject = {rdnSequence, Attrs}}} = Cert,
+        OTPCert = public_key:pkix_decode_cert(DerCert, otp),
+        #'OTPCertificate'{tbsCertificate = #'OTPTBSCertificate'{
+            subject = {rdnSequence, Attrs}
+        }} = OTPCert,
 
         OU = lists:filtermap(
             fun([Attribute]) ->
@@ -42,12 +44,10 @@ is_provider(#'OTPCertificate'{} = Cert) ->
                     _ -> false
                 end
             end, Attrs),
-        [<<"Providers">>] =:= OU
+        [<<"Providers">>] =:= OU andalso verify_provider_cert(DerCert)
     catch
         _:_ -> false
-    end;
-is_provider(_) ->
-    false.
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -55,10 +55,10 @@ is_provider(_) ->
 %% Initializes provider's session based on its certificate.
 %% @end
 %%--------------------------------------------------------------------
--spec handshake(Cert :: #'OTPCertificate'{}, Conn :: pid()) ->
+-spec handshake(DerCert :: binary(), Conn :: pid()) ->
     session:id() | no_return().
-handshake(Cert, Conn) ->
-    ProviderId = provider_auth_manager:get_provider_id(Cert),
+handshake(DerCert, Conn) ->
+    ProviderId = provider_auth_manager:get_provider_id(DerCert),
     Identity = #user_identity{provider_id = ProviderId},
     SessionId = session_manager:get_provider_session_id(incoming, ProviderId),
     {ok, _} = session_manager:reuse_or_create_provider_session(SessionId, provider_incoming, Identity, Conn),
@@ -69,10 +69,12 @@ handshake(Cert, Conn) ->
 %% @doc Returns ProviderId based on provider's certificate (issued by OZ).
 %% @end
 %%--------------------------------------------------------------------
--spec get_provider_id(Cert :: #'OTPCertificate'{}) -> ProviderId :: oneprovider:id() | no_return().
-get_provider_id(#'OTPCertificate'{} = Cert) ->
-    #'OTPCertificate'{tbsCertificate =
-    #'OTPTBSCertificate'{subject = {rdnSequence, Attrs}}} = Cert,
+-spec get_provider_id(DerCert :: binary()) -> oneprovider:id() | no_return().
+get_provider_id(DerCert) ->
+    OTPCert = public_key:pkix_decode_cert(DerCert, otp),
+    #'OTPCertificate'{tbsCertificate = #'OTPTBSCertificate'{
+        subject = {rdnSequence, Attrs}
+    }} = OTPCert,
 
     [ProviderId] = lists:filtermap(
         fun([Attribute]) ->
@@ -89,3 +91,19 @@ get_provider_id(#'OTPCertificate'{} = Cert) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if given provider cert was issued by OZ CA.
+%% @end
+%%--------------------------------------------------------------------
+-spec verify_provider_cert(DerCert :: binary()) -> boolean().
+verify_provider_cert(DerCert) ->
+    CaCertFile = oz_plugin:get_oz_cacert_path(),
+    {ok, CaCertPem} = file:read_file(CaCertFile),
+    [{'Certificate', CaCertDer, not_encrypted}] = public_key:pem_decode(CaCertPem),
+    #'OTPCertificate'{} = CaCert = public_key:pkix_decode_cert(CaCertDer, otp),
+    case public_key:pkix_path_validation(CaCert, [DerCert], [{max_path_length, 0}]) of
+        {ok, _} -> true;
+        _ -> false
+    end.

@@ -19,9 +19,9 @@
 -include_lib("ctool/include/logging.hrl").
 
 -type id() :: binary().
--type info() :: #od_user{}.
--type doc() :: datastore_doc:doc(info()).
--type diff() :: datastore_doc:diff(info()).
+-type record() :: #od_user{}.
+-type doc() :: datastore_doc:doc(record()).
+-type diff() :: datastore_doc:diff(record()).
 
 -type name() :: binary().
 %% Oauth linked accounts in form of map:
@@ -35,7 +35,7 @@
 %% }
 -type linked_account() :: maps:map().
 
--export_type([doc/0, id/0]).
+-export_type([id/0, record/0, doc/0, diff/0]).
 -export_type([name/0, linked_account/0]).
 
 -define(CTX, #{
