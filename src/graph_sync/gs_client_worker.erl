@@ -147,6 +147,7 @@ init([]) ->
             {stop, normal};
         {ok, ClientRef, #gs_resp_handshake{identity = {provider, _}}} ->
             ?info("Started connection to OneZone: ~p", [ClientRef]),
+            oneprovider:on_connection_to_oz(),
             {ok, #state{client_ref = ClientRef}};
         {error, {options, {keyfile, _, {error, enoent}}}} ->
             ?warning("Cannot start connection to OneZone - provider certificate not found"),
@@ -274,6 +275,10 @@ start_gs_connection() ->
         {ok, true} -> [{verify, verify_peer} | Opts];
         _ -> [{verify, verify_none} | Opts]
     end,
+
+    % If provider's certs have changed since last connection, ssl pem cache
+    % should be cleared to make sure new certs are used to connect.
+    ssl_manager:clear_pem_cache(),
 
     try
         gs_client:start_link(

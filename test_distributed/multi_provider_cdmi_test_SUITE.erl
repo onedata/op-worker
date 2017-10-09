@@ -83,7 +83,7 @@ all() ->
         move_copy_conflict_test,
         move_test,
         copy_test
-]).
+    ]).
 
 -define(TIMEOUT, timer:seconds(5)).
 
@@ -186,18 +186,18 @@ init_per_suite(Config) ->
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(1)) % TODO - change to 2 seconds
         end, ?config(op_worker_nodes, NewConfig2)),
-
         ssl:start(),
         hackney:start(),
-        initializer:enable_grpca_based_communication(NewConfig2),
-        initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2)
+        NewConfig3 = initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2),
+        initializer:enable_grpca_based_communication(NewConfig3),
+        NewConfig3
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
 end_per_suite(Config) ->
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
-    initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:disable_grpca_based_communication(Config),
+    initializer:clean_test_users_and_spaces_no_validate(Config),
     hackney:stop(),
     ssl:stop(),
     initializer:teardown_storage(Config).

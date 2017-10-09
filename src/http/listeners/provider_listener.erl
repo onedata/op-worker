@@ -22,6 +22,7 @@
 
 %% listener_behaviour callbacks
 -export([port/0, start/0, stop/0, healthcheck/0]).
+-export([ensure_started/0]).
 
 %%%===================================================================
 %%% listener_behaviour callbacks
@@ -45,32 +46,35 @@ port() ->
 %%--------------------------------------------------------------------
 -spec start() -> ok | {error, Reason :: term()}.
 start() ->
-    {ok, Port} = application:get_env(?APP_NAME, provider_protocol_handler_port),
-    {ok, DispatcherPoolSize} =
-        application:get_env(?APP_NAME, protocol_handler_pool_size),
-    {ok, KeyFile} =
-        application:get_env(?APP_NAME, protocol_handler_ssl_key_file),
-    {ok, CertFile} =
-        application:get_env(?APP_NAME, protocol_handler_ssl_cert_file),
-    {ok, CaCertsDir} = application:get_env(?APP_NAME, cacerts_dir),
-    {ok, CaCertPems} = file_utils:read_files({dir, CaCertsDir}),
-    CaCerts = lists:map(fun cert_decoder:pem_to_der/1, CaCertPems),
+    case oneprovider:is_registered() of
+        false ->
+            % Do not start the listener if the provider is not registered.
+            ok;
+        true ->
+            {ok, Port} = application:get_env(?APP_NAME, provider_protocol_handler_port),
+            {ok, DispatcherPoolSize} =
+                application:get_env(?APP_NAME, protocol_handler_pool_size),
 
-    Result = ranch:start_listener(?TCP_PROTO_LISTENER, DispatcherPoolSize,
-        ranch_ssl, [
-            {port, Port},
-            {keyfile, KeyFile},
-            {certfile, CertFile},
-            {cacerts, CaCerts},
-            {verify, verify_peer},
-            {fail_if_no_peer_cert, true},
-            {ciphers, ssl:cipher_suites() -- ssl_utils:weak_ciphers()}
-        ],
-        connection, []
-    ),
-    case Result of
-        {ok, _} -> ok;
-        _ -> Result
+            KeyFile = oz_plugin:get_key_file(),
+            CertFile = oz_plugin:get_cert_file(),
+            {ok, OzCaCertPem} = file:read_file(oz_plugin:get_oz_cacert_path()),
+
+            Result = ranch:start_listener(?TCP_PROTO_LISTENER, DispatcherPoolSize,
+                ranch_ssl, [
+                    {port, Port},
+                    {keyfile, KeyFile},
+                    {certfile, CertFile},
+                    {cacerts, [cert_decoder:pem_to_der(OzCaCertPem)]},
+                    {verify, verify_peer},
+                    {fail_if_no_peer_cert, true},
+                    {ciphers, ssl:cipher_suites() -- ssl_utils:weak_ciphers()}
+                ],
+                connection, []
+            ),
+            case Result of
+                {ok, _} -> ok;
+                _ -> Result
+            end
     end.
 
 
@@ -98,22 +102,35 @@ stop() ->
 %%--------------------------------------------------------------------
 -spec healthcheck() -> ok | {error, server_not_responding}.
 healthcheck() ->
-    {ok, Timeout} = application:get_env(?CLUSTER_WORKER_APP_NAME,
-        nagios_healthcheck_timeout),
-    KeyFile = oz_plugin:get_key_file(),
-
-    case file:read_file(KeyFile) of
-        {ok, _} ->
-            case ssl:connect("127.0.0.1", port(), [{certfile, oz_plugin:get_cert_file()},
-                {keyfile, KeyFile}], Timeout) of
+    case oneprovider:is_registered() of
+        false ->
+            % The listener is not started if the provider is not registered.
+            ok;
+        true ->
+            {ok, Timeout} = application:get_env(?CLUSTER_WORKER_APP_NAME,
+                nagios_healthcheck_timeout),
+            Opts = [
+                {certfile, oz_plugin:get_cert_file()},
+                {keyfile, oz_plugin:get_key_file()}
+            ],
+            case ssl:connect("127.0.0.1", port(), Opts, Timeout) of
                 {ok, Sock} ->
                     ssl:close(Sock),
                     ok;
                 {error, Reason} ->
                     {error, Reason}
-            end;
-        {error, enoent} ->
-            ok; % single provider test environment
-        Error ->
-            Error
+            end
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if this listener is running and starts it if not.
+%% @end
+%%--------------------------------------------------------------------
+-spec ensure_started() -> ok | {error, Reason :: term()}.
+ensure_started() ->
+    case healthcheck() of
+        ok -> ok;
+        _ -> start()
     end.

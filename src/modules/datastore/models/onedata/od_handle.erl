@@ -29,7 +29,7 @@
 -type metadata() :: binary().
 -type timestamp() :: calendar:datetime().
 
--export_type([doc/0, record/0, id/0]).
+-export_type([id/0, record/0, doc/0, diff/0]).
 -export_type([resource_type/0, resource_id/0, public_handle/0, metadata/0,
     timestamp/0]).
 

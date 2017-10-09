@@ -29,6 +29,7 @@
     communicator_mock/1, clean_test_users_and_spaces_no_validate/1,
     domain_to_provider_id/1, mock_test_file_context/2, unmock_test_file_context/1]).
 -export([enable_grpca_based_communication/1, disable_grpca_based_communication/1]).
+-export([mock_provider_ids/1, unmock_provider_ids/1]).
 -export([unload_quota_mocks/1, disable_quota_limit/1]).
 
 -define(DUMMY_MACAROON(__UserId), <<"DUMMY-MACAROON-", __UserId/binary>>).
@@ -168,7 +169,8 @@ clean_test_users_and_spaces(Config) ->
     end, DomainWorkers),
 
     test_utils:mock_validate_and_unload(Workers, [user_logic, group_logic,
-        space_logic, provider_logic, space_storage, oneprovider]).
+        space_logic, provider_logic, space_storage]),
+    unmock_provider_ids(Config).
 
 %%TODO this function can be deleted after resolving VFS-1811 and replacing call
 %%to this function in cdmi_test_SUITE with call to clean_test_users_and_spaces.
@@ -187,7 +189,7 @@ clean_test_users_and_spaces_no_validate(Config) ->
     end, DomainWorkers),
 
     test_utils:mock_unload(Workers, [user_logic, group_logic, space_logic,
-        provider_logic, space_storage, oneprovider]).
+        provider_logic, space_storage]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -401,6 +403,13 @@ communicator_mock(Workers) ->
     test_utils:mock_expect(Workers, communicator, send, fun(_, _) -> ok end),
     test_utils:mock_expect(Workers, communicator, send, fun(_, _, _) -> ok end).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Can only be used after create_test_users_and_spaces is run, which mocks
+%% modules required by provider listener to run.
+%% @end
+%%--------------------------------------------------------------------
 -spec enable_grpca_based_communication(Config :: list()) -> ok.
 enable_grpca_based_communication(Config) ->
     AllWorkers = ?config(op_worker_nodes, Config),
@@ -421,10 +430,8 @@ enable_grpca_based_communication(Config) ->
             fun() -> KeyPath end),
 
         {ok, PEMBin} = file:read_file(CertPath0),
-        [{_, DER, _}] = public_key:pem_decode(PEMBin),
-        Cert = #'OTPCertificate'{} = public_key:pkix_decode_cert(DER, otp),
-
-        {Cert, Domain}
+        [{_, CertDer, _}] = public_key:pem_decode(PEMBin),
+        {CertDer, Domain}
     end, DomainMappings),
 
     test_utils:mock_expect(AllWorkers, provider_auth_manager, is_provider,
@@ -438,7 +445,17 @@ enable_grpca_based_communication(Config) ->
     test_utils:mock_expect(AllWorkers, provider_auth_manager, get_provider_id,
         fun(CertToCheck) ->
             domain_to_provider_id(proplists:get_value(CertToCheck, CertMappings))
-        end).
+        end),
+
+    % Save OZ CA cert (that signed provider certs) under expected location
+    % on all nodes and run the listeners.
+    OzCaPath = rpc:call(hd(AllWorkers), oz_plugin, get_oz_cacert_path, []),
+    {ok, OzCaPem} = file:read_file(?TEST_FILE(Config, "ozp_cacert.pem")),
+    lists:foreach(
+        fun(Worker) ->
+            rpc:call(Worker, utils, save_file, [OzCaPath, OzCaPem]),
+            rpc:call(Worker, provider_listener, ensure_started, [])
+        end, AllWorkers).
 
 -spec disable_grpca_based_communication(Config :: list()) -> ok.
 disable_grpca_based_communication(Config) ->
@@ -513,6 +530,38 @@ unmock_test_file_context(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Workers, file_ctx).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Mocks oneprovider module which makes the providers think they have been given
+%% certain ID by onezone.
+%% @end
+%%--------------------------------------------------------------------
+-spec mock_provider_ids(proplists:proplist()) -> ok.
+mock_provider_ids(Config) ->
+    AllWorkers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(AllWorkers, oneprovider),
+    Domains = lists:usort([?GET_DOMAIN(W) || W <- AllWorkers]),
+    lists:foreach(fun(Domain) ->
+        CWorkers = get_same_domain_workers(Config, Domain),
+        ProviderId = domain_to_provider_id(Domain),
+        test_utils:mock_expect(CWorkers, oneprovider, get_provider_id, fun() ->
+            ProviderId
+        end),
+        ok = test_utils:mock_expect(CWorkers, oneprovider, is_registered, fun() ->
+            true
+        end)
+    end, Domains).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Cleans up after mocking provider ids.
+%% @end
+%%--------------------------------------------------------------------
+-spec unmock_provider_ids(proplists:proplist()) -> ok.
+unmock_provider_ids(Config) ->
+    AllWorkers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(AllWorkers, [oneprovider]).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -547,22 +596,15 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     UsersSetup = proplists:get_value(<<"users">>, GlobalSetup),
     Domains = lists:usort([?GET_DOMAIN(W) || W <- AllWorkers]),
 
-    test_utils:mock_new(AllWorkers, oneprovider),
+    mock_provider_ids(Config),
     MasterWorkers = lists:map(fun(Domain) ->
         [MWorker | _] = CWorkers = get_same_domain_workers(Config, Domain),
-        ProviderId = domain_to_provider_id(Domain),
-        test_utils:mock_expect(CWorkers, oneprovider, get_provider_id,
-            fun() ->
-                ProviderId
-            end),
-
         case ?config({storage_id, Domain}, Config) of
             undefined -> ok;
             StorageId ->
                 %% If storage mock was configured, mock space_storage model
                 initializer:space_storage_mock(CWorkers, StorageId)
         end,
-
         MWorker
     end, Domains),
 

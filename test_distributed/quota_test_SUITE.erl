@@ -454,7 +454,7 @@ end_per_suite(Config) ->
 
 init_per_testcase(_Case, Config) ->
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
-    initializer:enable_grpca_based_communication(Config),
+    initializer:enable_grpca_based_communication(ConfigWithSessionInfo),
 
     Workers = ?config(op_worker_nodes, ConfigWithSessionInfo),
     rpc:multicall(Workers, application, set_env, [?APP_NAME, soft_quota_limit_size, 0]),
@@ -470,9 +470,9 @@ end_per_testcase(_Case, Config) ->
         end, ?config(spaces, Config)),
 
     lfm_proxy:teardown(Config),
+    initializer:disable_grpca_based_communication(Config),
      %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
-    initializer:clean_test_users_and_spaces_no_validate(Config),
-    initializer:disable_grpca_based_communication(Config).
+    initializer:clean_test_users_and_spaces_no_validate(Config).
 
 %%%===================================================================
 %%% Internal functions

@@ -26,7 +26,7 @@
 -type name() :: binary().
 -type type() :: 'organization' | 'unit' | 'team' | 'role'.
 
--export_type([doc/0, id/0]).
+-export_type([id/0, record/0, doc/0, diff/0]).
 -export_type([name/0, type/0]).
 
 -define(CTX, #{

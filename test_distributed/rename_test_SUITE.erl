@@ -698,7 +698,7 @@ init_per_testcase(Case = redirecting_event_to_renamed_file_test, Config) ->
 
 init_per_testcase(CaseName, Config) ->
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
-    initializer:enable_grpca_based_communication(Config),
+    initializer:enable_grpca_based_communication(ConfigWithSessionInfo),
     NewConfig = lfm_proxy:init(ConfigWithSessionInfo),
     initializer:disable_quota_limit(NewConfig),
 
@@ -708,8 +708,8 @@ init_per_testcase(CaseName, Config) ->
 end_per_testcase(_CaseName, Config) ->
     initializer:unload_quota_mocks(Config),
     lfm_proxy:teardown(Config),
-    initializer:clean_test_users_and_spaces_no_validate(Config),
-    initializer:disable_grpca_based_communication(Config).
+    initializer:disable_grpca_based_communication(Config),
+    initializer:clean_test_users_and_spaces_no_validate(Config).
 
 %%%===================================================================
 %%% Internal functions
