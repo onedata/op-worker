@@ -95,10 +95,11 @@
 %%-------------------------------------------------------------------
 -spec start_lager_reporter() -> ok | error().
 start_lager_reporter() ->
-    ok = exometer_report:add_reporter(?LAGER_REPORTER_NAME, [
-        {type_map,[{'_',integer}]},
-        {level, ?LOG_LEVEL}
-    ]).
+%%    ok = exometer_report:add_reporter(?LAGER_REPORTER_NAME, [
+%%        {type_map,[{'_',integer}]},
+%%        {level, ?LOG_LEVEL}
+%%    ]).
+    ok.
 
 %%-------------------------------------------------------------------
 %% @doc

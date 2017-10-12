@@ -141,6 +141,7 @@ strategy_handle_job(Job = #space_strategy_job{
     data = #{space_id := SpaceId}
 }) ->
 storage_sync_monitoring:ensure_reporters_started(SpaceId),
+    ok = caches_controller:throttle(import),
     simple_scan:run(Job);
 strategy_handle_job(#space_strategy_job{strategy_name = no_update}) ->
     {ok, []}.
