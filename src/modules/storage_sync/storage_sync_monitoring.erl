@@ -469,9 +469,7 @@ init_report([SpaceId | Rest]) ->
 %% TODO improve handling failures of exometer VFS-3173
 %% @end
 %%-------------------------------------------------------------------
--spec resubscribe(atom() | [atom()], od_space:id()) -> ok.
-resubscribe([], _SpaceId) ->
-    ok;
+-spec resubscribe(atom(), od_space:id()) -> ok.
 resubscribe(?LAGER_REPORTER_NAME, SpaceId) ->
     start_imported_files_counter(SpaceId),
     start_files_to_import_counter(SpaceId),
@@ -480,10 +478,7 @@ resubscribe(?ETS_REPORTER_NAME, SpaceId) ->
     start_imported_files_spirals(SpaceId),
     start_deleted_files_spirals(SpaceId),
     start_updated_files_spirals(SpaceId),
-    start_queue_length_spirals(SpaceId);
-resubscribe(DeadReporters = [H | T], SpaceId) when is_list(DeadReporters) ->
-    resubscribe(H, SpaceId),
-    resubscribe(T, SpaceId).
+    start_queue_length_spirals(SpaceId).
 
 %%-------------------------------------------------------------------
 %% @private
