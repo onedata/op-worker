@@ -420,7 +420,14 @@ ensure_all_metrics_stopped(SpaceId) ->
 %%--------------------------------------------------------------------
 -spec init_report() -> ok.
 init_report() ->
-    ok.
+    try od_provider:get_or_fetch(oneprovider:get_provider_id()) of
+        {ok, #document{value = #od_provider{spaces = SpaceIds}}} ->
+            init_report(SpaceIds);
+        {error, _} -> ok
+    catch
+        _:TReason ->
+            ?error_stacktrace("Unable to restart reporters due to: ~p", [TReason])
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -434,6 +441,49 @@ init_reporter() ->
 %%===================================================================
 %% Internal functions
 %%===================================================================
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function is responsible for resubscribing lager and ets reporter
+%% for all Spaces for which storage_import is turned on.
+%% @end
+%%-------------------------------------------------------------------
+-spec init_report([od_space:id()]) -> ok.
+init_report([]) ->
+    ok;
+init_report([SpaceId | Rest]) ->
+    case space_strategies:is_import_on(SpaceId) of
+        false ->
+            ok;
+        true ->
+            resubscribe(?LAGER_REPORTER_NAME, SpaceId),
+            resubscribe(?ETS_REPORTER_NAME, SpaceId)
+    end,
+    init_report(Rest).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Resubscribes suitable metrics to given reporter.
+%% TODO improve handling failures of exometer VFS-3173
+%% @end
+%%-------------------------------------------------------------------
+-spec resubscribe(atom() | [atom()], od_space:id()) -> ok.
+resubscribe([], _SpaceId) ->
+    ok;
+resubscribe(?LAGER_REPORTER_NAME, SpaceId) ->
+    start_imported_files_counter(SpaceId),
+    start_files_to_import_counter(SpaceId),
+    start_files_to_update_counter(SpaceId);
+resubscribe(?ETS_REPORTER_NAME, SpaceId) ->
+    start_imported_files_spirals(SpaceId),
+    start_deleted_files_spirals(SpaceId),
+    start_updated_files_spirals(SpaceId),
+    start_queue_length_spirals(SpaceId);
+resubscribe(DeadReporters = [H | T], SpaceId) when is_list(DeadReporters) ->
+    resubscribe(H, SpaceId),
+    resubscribe(T, SpaceId).
 
 %%-------------------------------------------------------------------
 %% @private
