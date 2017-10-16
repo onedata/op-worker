@@ -16,10 +16,6 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 
 
-%% reporters API
--export([start_lager_reporter/0, delete_lager_reporter/0, start_ets_reporter/0,
-    delete_ets_reporter/0, ensure_reporters_started/1]).
-
 %% counters API
 -export([start_imported_files_counter/1, increase_imported_files_counter/1,
     get_imported_files_value/1, stop_imported_files_counter/1,
@@ -41,6 +37,8 @@
     update_queue_length_spirals/2, stop_queue_length_spirals/1
 ]).
 
+-export([init_report/0, init_reporter/0]).
+
 
 -type window() :: day | hours | minute.
 -type counter_type() :: imported_files | files_to_import | files_to_update.
@@ -60,9 +58,6 @@
 -define(COUNTER_LOGGING_INTERVAL, timer:seconds(30)).
 -define(SPIRAL_RESOLUTION, application:get_env(?APP_NAME, storage_sync_histogram_length, 12)).
 
-
--define(LAGER_REPORTER_NAME, exometer_report_lager).
--define(ETS_REPORTER_NAME, exometer_report_rrd_ets).
 
 %%metric types
 -define(IMPORTED_FILES, imported_files).
@@ -87,45 +82,6 @@
 ]).
 
 -define(LOG_LEVEL, critical).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Starts space_sync_monitoring lager reporter
-%% @end
-%%-------------------------------------------------------------------
--spec start_lager_reporter() -> ok | error().
-start_lager_reporter() ->
-%%    ok = exometer_report:add_reporter(?LAGER_REPORTER_NAME, [
-%%        {type_map,[{'_',integer}]},
-%%        {level, ?LOG_LEVEL}
-%%    ]).
-    ok.
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Starts space_sync_monitoring ets reporter.
-%% @end
-%%-------------------------------------------------------------------
--spec start_ets_reporter() -> ok | error().
-start_ets_reporter() ->
-    ok = exometer_report:add_reporter(?ETS_REPORTER_NAME, []).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Deletes space_sync_monitoring_reporter
-%% @end
-%%-------------------------------------------------------------------
--spec delete_lager_reporter() -> ok | error().
-delete_lager_reporter() ->
-    exometer_report:remove_reporter(?LAGER_REPORTER_NAME).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Deletes space_sync_monitoring_reporter
-%% @end
-%%-------------------------------------------------------------------
-delete_ets_reporter() ->
-    exometer_report:remove_reporter(?ETS_REPORTER_NAME).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -454,71 +410,27 @@ ensure_all_metrics_stopped(SpaceId) ->
     storage_sync_monitoring:stop_imported_files_spirals(SpaceId),
     storage_sync_monitoring:stop_queue_length_spirals(SpaceId).
 
-%%-------------------------------------------------------------------
-%% @private
+%%--------------------------------------------------------------------
 %% @doc
-%% This function restarts reporters which are supposed to be running.
-%% TODO improve handling failures of exometer VFS-3173
+%% Subscribe for reports for all spaces.
 %% @end
-%%-------------------------------------------------------------------
--spec ensure_reporters_started(od_space:id()) -> ok.
-ensure_reporters_started(SpaceId) ->
-    ExpectedReporters = [?LAGER_REPORTER_NAME, ?ETS_REPORTER_NAME],
-    AliveReporters = lists:filtermap(fun({Reporter, Pid}) ->
-        case {lists:member(Reporter, ExpectedReporters), erlang:is_process_alive(Pid)} of
-            {true, true} -> {true, Reporter};
-            _ -> false
-        end
-    end, exometer_report:list_reporters()),
-    case ExpectedReporters -- AliveReporters of
-        [] ->
-            ok;
-        DeadReporters ->
-            lists:foreach(fun(Reporter) ->
-                start_reporter(Reporter)
-            end, DeadReporters),
-            resubscribe(DeadReporters, SpaceId)
-    end.
+%%--------------------------------------------------------------------
+-spec init_report() -> ok.
+init_report() ->
+    ok.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Initialize exometer reporter used by storage_sync.
+%% @end
+%%--------------------------------------------------------------------
+-spec init_reporter() -> ok.
+init_reporter() ->
+    exometer_report:add_reporter(exometer_report_rrd_ets, []).
 
 %%===================================================================
 %% Internal functions
 %%===================================================================
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function restarts reporters which are supposed to be running.
-%% TODO improve handling failures of exometer VFS-3173
-%% @end
-%%-------------------------------------------------------------------
--spec start_reporter(atom()) -> ok.
-start_reporter(?LAGER_REPORTER_NAME) ->
-    start_lager_reporter();
-start_reporter(?ETS_REPORTER_NAME) ->
-    start_ets_reporter().
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Resubscribes suitable metrics to given reporter.
-%% TODO improve handling failures of exometer VFS-3173
-%% @end
-%%-------------------------------------------------------------------
--spec resubscribe(atom() | [atom()], od_space:id()) -> ok.
-resubscribe([], _SpaceId) ->
-    ok;
-resubscribe(?LAGER_REPORTER_NAME, SpaceId) ->
-    start_imported_files_counter(SpaceId),
-    start_files_to_import_counter(SpaceId),
-    start_files_to_update_counter(SpaceId);
-resubscribe(?ETS_REPORTER_NAME, SpaceId) ->
-    start_imported_files_spirals(SpaceId),
-    start_deleted_files_spirals(SpaceId),
-    start_updated_files_spirals(SpaceId),
-    start_queue_length_spirals(SpaceId);
-resubscribe(DeadReporters = [H | T], SpaceId) when is_list(DeadReporters) ->
-    resubscribe(H, SpaceId),
-    resubscribe(T, SpaceId).
 
 %%-------------------------------------------------------------------
 %% @private

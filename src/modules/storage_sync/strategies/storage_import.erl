@@ -114,11 +114,9 @@ strategy_init_jobs(StrategyName, StrategyArgs, InitData) ->
 -spec strategy_handle_job(space_strategy:job()) ->
     {space_strategy:job_result(), [space_strategy:job()]}.
 strategy_handle_job(Job = #space_strategy_job{
-    strategy_name = simple_scan,
-    data = #{space_id := SpaceId}
+    strategy_name = simple_scan
 }) ->
     ok = caches_controller:throttle(import),
-    storage_sync_monitoring:ensure_reporters_started(SpaceId),
     simple_scan:run(Job);
 strategy_handle_job(#space_strategy_job{strategy_name = no_import}) ->
     {ok, []}.
