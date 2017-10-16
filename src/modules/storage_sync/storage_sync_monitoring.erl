@@ -59,6 +59,9 @@
 -define(SPIRAL_RESOLUTION, application:get_env(?APP_NAME, storage_sync_histogram_length, 12)).
 
 
+-define(LAGER_REPORTER_NAME, exometer_report_lager).
+-define(ETS_REPORTER_NAME, exometer_report_rrd_ets).
+
 %%metric types
 -define(IMPORTED_FILES, imported_files).
 -define(DELETED_FILES, deleted_files).
