@@ -596,7 +596,7 @@ extern "C" {
 
 static int load(ErlNifEnv *env, void **priv_data, ERL_NIF_TERM load_info)
 {
-    helpers::init();
+    one::helpers::init();
 
     auto args =
         nifpp::get<std::unordered_map<folly::fbstring, folly::fbstring>>(
