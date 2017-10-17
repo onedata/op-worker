@@ -4,6 +4,12 @@
 CHANGELOG
 ---------
 
+### 17.06.0-rc6
+
+* VFS-3693 Update exometer reporters management
+* VFS-3693 Reconfigure throttling
+
+
 ### 17.06.0-rc5
 
 * fix error that occurs when we try to count attrs hash of deleted file
