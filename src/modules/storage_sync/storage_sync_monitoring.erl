@@ -84,8 +84,6 @@
    minute, hour, day
 ]).
 
--define(LOG_LEVEL, critical).
-
 %%-------------------------------------------------------------------
 %% @doc
 %% Starts counter of imported files.
