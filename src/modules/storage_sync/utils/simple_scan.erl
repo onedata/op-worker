@@ -645,13 +645,17 @@ maybe_update_times(#file_attr{atime = _ATime, mtime = _MTime, ctime = _CTime},
 -spec maybe_update_owner(#file_attr{}, storage_file_ctx:ctx(),
     file_ctx:ctx()) -> updated | not_updated.
 maybe_update_owner(#file_attr{owner_id = OldOwnerId}, StorageFileCtx, FileCtx) ->
-    case get_owner_id(StorageFileCtx) of
-        OldOwnerId ->
-            not_updated;
-        NewOwnerId ->
-            FileUuid = file_ctx:get_uuid_const(FileCtx),
-            {ok, FileUuid} = file_meta:update(FileUuid, #{owner => NewOwnerId}),
-            updated
+    case file_ctx:is_space_dir_const(FileCtx) of
+        true -> not_updated;
+        _ ->
+            case get_owner_id(StorageFileCtx) of
+                OldOwnerId ->
+                    not_updated;
+                NewOwnerId ->
+                    FileUuid = file_ctx:get_uuid_const(FileCtx),
+                    {ok, FileUuid} = file_meta:update(FileUuid, #{owner => NewOwnerId}),
+                    updated
+            end
     end.
 
 %%--------------------------------------------------------------------
@@ -755,8 +759,14 @@ get_group_owner_id(StorageFileCtx) ->
     {StatBuf, _} = storage_file_ctx:get_stat_buf(StorageFileCtx),
     #statbuf{st_gid = Gid} = StatBuf,
     {StorageDoc, _} = storage_file_ctx:get_storage_doc(StorageFileCtx),
-    {ok, GroupId} = reverse_luma:get_group_id(Gid, StorageDoc),
-    GroupId.
+    try
+        {ok, GroupId} = reverse_luma:get_group_id(Gid, StorageDoc),
+        GroupId
+    catch
+        _:Reason ->
+            ?error_stacktrace("Resolving group with Gid ~p failed due to ~p", [Gid, Reason]),
+            undefined
+    end.
 
 %%-------------------------------------------------------------------
 %% @private

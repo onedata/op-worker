@@ -47,8 +47,8 @@ get_user_id(Uid, Gid, StorageId, Storage = #storage{}) ->
             {ok, ?ROOT_USER_ID};
         true ->
             get_user_id_internal(#{
-                <<"uid">> => Uid,
-                <<"gid">> => Gid
+                <<"uid">> => str_utils:to_binary(Uid),
+                <<"gid">> => str_utils:to_binary(Gid)
             }, StorageId, Storage)
     end.
 
@@ -111,7 +111,7 @@ get_group_id(Gid, StorageId, Storage = #storage{}) ->
         false ->
             {ok, undefined};
         true ->
-            get_group_id_internal(#{<<"gid">> => Gid}, StorageId, Storage)
+            get_group_id_internal(#{<<"gid">> => str_utils:to_binary(Gid)}, StorageId, Storage)
     end.
 
 %%--------------------------------------------------------------------
