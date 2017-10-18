@@ -1,4 +1,5 @@
 #include "../nifpp.h"
+#include "helpers/init.h"
 #include "helpers/storageHelperCreator.h"
 
 #include <asio.hpp>
@@ -595,6 +596,8 @@ extern "C" {
 
 static int load(ErlNifEnv *env, void **priv_data, ERL_NIF_TERM load_info)
 {
+    one::helpers::init();
+
     auto args =
         nifpp::get<std::unordered_map<folly::fbstring, folly::fbstring>>(
             env, load_info);
