@@ -266,15 +266,8 @@ start_gs_connection() ->
 
     KeyFile = oz_plugin:get_key_file(),
     CertFile = oz_plugin:get_cert_file(),
-    CaCertsDir = oz_plugin:get_cacerts_dir(),
-    {ok, CaCertsPems} = file_utils:read_files({dir, CaCertsDir}),
-    CaCerts = lists:map(fun cert_decoder:pem_to_der/1, CaCertsPems),
-
+    CaCerts = cert_utils:load_ders_in_dir(oz_plugin:get_cacerts_dir()),
     Opts = [{keyfile, KeyFile}, {certfile, CertFile}, {cacerts, CaCerts}],
-    Opts2 = case application:get_env(?APP_NAME, verify_oz_cert) of
-        {ok, true} -> [{verify, verify_peer} | Opts];
-        _ -> [{verify, verify_none} | Opts]
-    end,
 
     % If provider's certs have changed since last connection, ssl pem cache
     % should be cleared to make sure new certs are used to connect.
@@ -283,7 +276,7 @@ start_gs_connection() ->
     try
         gs_client:start_link(
             Address, undefined, [?GS_PROTOCOL_VERSION],
-            fun process_push_message/1, Opts2
+            fun process_push_message/1, Opts
         )
     catch
         Type:Reason ->

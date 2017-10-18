@@ -50,12 +50,10 @@ start() ->
     {ok, DispatcherPoolSize} =
         application:get_env(?APP_NAME, protocol_handler_pool_size),
     {ok, KeyFile} =
-        application:get_env(?APP_NAME, protocol_handler_ssl_key_file),
+        application:get_env(?APP_NAME, protocol_handler_key_file),
     {ok, CertFile} =
-        application:get_env(?APP_NAME, protocol_handler_ssl_cert_file),
-    {ok, CaCertsDir} = application:get_env(?APP_NAME, cacerts_dir),
-    {ok, CaCertPems} = file_utils:read_files({dir, CaCertsDir}),
-    CaCerts = lists:map(fun cert_decoder:pem_to_der/1, CaCertPems),
+        application:get_env(?APP_NAME, protocol_handler_cert_file),
+    CaCerts = cert_utils:load_ders_in_dir(oz_plugin:get_cacerts_dir()),
 
     Result = ranch:start_listener(?TCP_PROTO_LISTENER, DispatcherPoolSize,
         ranch_ssl, [

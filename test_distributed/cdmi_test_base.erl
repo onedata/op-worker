@@ -1866,12 +1866,18 @@ remove_times_metadata(ResponseJSON) ->
 
 % Performs a single request using http_client
 do_request_impl(Node, RestSubpath, Method, Headers, Body) ->
+    CaCertsDir = rpc:call(Node, oz_plugin, get_cacerts_dir, []),
+    CaCerts = rpc:call(Node, cert_utils, load_ders_in_dir, [CaCertsDir]),
     Result = http_client:request(
         Method,
         cdmi_endpoint(Node) ++ RestSubpath,
         maps:from_list(Headers),
         Body,
-        [insecure, {connect_timeout, timer:minutes(1)}, {recv_timeout, timer:minutes(1)}]
+        [
+            {ssl_options, [{cacerts, CaCerts}]},
+            {connect_timeout, timer:minutes(1)},
+            {recv_timeout, timer:minutes(1)}
+        ]
     ),
     case Result of
         {ok, RespCode, RespHeaders, RespBody} ->
@@ -1890,7 +1896,8 @@ cdmi_endpoint(Node) ->
                 PStr;
             P -> P
         end,
-    string:join(["https://", utils:get_host(Node), ":", Port, "/cdmi/"], "").
+    {ok, Domain} = test_utils:get_env(Node, ?APP_NAME, provider_domain),
+    string:join(["https://", str_utils:to_list(Domain), ":", Port, "/cdmi/"], "").
 
 create_test_dir_and_file(Config) ->
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),

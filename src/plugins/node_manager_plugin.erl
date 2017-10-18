@@ -14,10 +14,13 @@
 
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/global_definitions.hrl").
 
 %% node_manager_plugin_behaviour callbacks
--export([before_init/1, modules_with_args/0, listeners/0, cm_nodes/0,
-    db_nodes/0, check_node_ip_address/0, app_name/0, renamed_models/0]).
+-export([app_name/0, cm_nodes/0, db_nodes/0]).
+-export([listeners/0, modules_with_args/0]).
+-export([before_init/1, on_cluster_initialized/0]).
+-export([check_node_ip_address/0, renamed_models/0]).
 
 -type model() :: datastore_model:model().
 -type record_version() :: datastore_model:record_version().
@@ -109,9 +112,6 @@ renamed_models() ->
 -spec before_init(Args :: term()) -> Result :: ok | {error, Reason :: term()}.
 before_init([]) ->
     try
-        application:set_env(ctool, verify_oz_cert,
-            application:get_env(?APP_NAME, verify_oz_cert, true)
-        ),
         op_worker_sup:start_link(),
         ensure_correct_hostname(),
         ok = helpers_nif:init()
@@ -121,6 +121,16 @@ before_init([]) ->
                 [Error]),
             {error, cannot_start_node_manager_plugin}
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% This callback is executed when the cluster has been initialized, i.e. all
+%% nodes have connected to cluster manager.
+%% @end
+%%--------------------------------------------------------------------
+-spec on_cluster_initialized() -> Result :: ok | {error, Reason :: term()}.
+on_cluster_initialized() ->
+    maybe_generate_web_cert().
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -160,4 +170,59 @@ ensure_correct_hostname() ->
             "Current configuration:~nHostname: ~p~nDomain: ~p",
                 [Hostname, Domain]),
             throw(wrong_hostname)
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Generates a new test web server cert if none is found under expected path,
+%% given that this option is enabled in env config. The new cert is then
+%% distributed among cluster nodes. The procedure is run within critical section
+%% to avoid race conditions across multiple nodes.
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_generate_web_cert() -> ok.
+maybe_generate_web_cert() ->
+    critical_section:run(oz_web_cert, fun maybe_generate_web_cert_unsafe/0).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Generates a new test web server cert if none is found under expected path,
+%% given that this option is enabled in env config. The new cert is then
+%% distributed among cluster nodes.
+%% Should not be called in parallel to prevent race conditions.
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_generate_web_cert_unsafe() -> ok.
+maybe_generate_web_cert_unsafe() ->
+    GenerateIfAbsent = application:get_env(
+        ?APP_NAME, generate_web_cert_if_absent, false
+    ),
+    {ok, WebKeyPath} = application:get_env(?APP_NAME, web_key_file),
+    {ok, WebCertPath} = application:get_env(?APP_NAME, web_cert_file),
+    CertExists = filelib:is_regular(WebKeyPath) andalso
+        filelib:is_regular(WebCertPath),
+    case GenerateIfAbsent andalso not CertExists of
+        false ->
+            ok;
+        true ->
+            % Both key and cert are expected in the same file
+            {ok, CAPath} = application:get_env(?APP_NAME, test_web_cert_ca_path),
+            {ok, Hostname} = application:get_env(?APP_NAME, provider_domain),
+            cert_utils:create_signed_webcert(
+                WebKeyPath, WebCertPath, Hostname, CAPath, CAPath
+            ),
+            ?warning(
+                "Web server cert not found (~s). Generated a new cert for "
+                "hostname '~s'. Use only for test purposes.",
+                [WebCertPath, Hostname]
+            ),
+            NodeList = gen_server2:call({global, ?CLUSTER_MANAGER}, get_nodes),
+            OtherWorkers = NodeList -- [node()],
+            {ok, Key} = file:read_file(WebKeyPath),
+            {ok, Cert} = file:read_file(WebCertPath),
+            ok = utils:save_file_on_hosts(OtherWorkers, WebKeyPath, Key),
+            ok = utils:save_file_on_hosts(OtherWorkers, WebCertPath, Cert),
+            ?info("Synchronized the new web server cert across all nodes")
     end.

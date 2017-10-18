@@ -148,7 +148,9 @@ init_per_suite(RunConfig) ->
             {ok, Key} = rpc:call(Worker, application, get_env, [?APP_NAME, oz_provider_key_file]),
             {ok, Cert} = rpc:call(Worker, application, get_env, [?APP_NAME, oz_provider_cert_file]),
             Domain = rpc:call(Worker, oneprovider, get_provider_domain, []),
-            ok = rpc:call(Worker, identity_utils, ensure_synced_cert_present, [Key, Cert, Domain])
+            ok = rpc:call(Worker, identity_utils, ensure_synced_cert_present, [Key, Cert, Domain]),
+            % Appmock does not have a valid certificate, turn on insecure mode
+            rpc:call(Worker, application, set_env, [web_client, force_insecure_connections, true])
         end, Workers),
         NewConfig
     end,
