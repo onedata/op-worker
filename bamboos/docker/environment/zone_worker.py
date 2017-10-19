@@ -110,3 +110,6 @@ sed -i.bak s/onedata.org/{domain}/g /root/bin/node/data/dns.config
 
     def nodes_list_attribute(self):
         return "oz_worker_nodes"
+
+    def has_dns_server(self):
+        return True
