@@ -255,7 +255,7 @@ restart_file_replication(Config) ->
     {ok, 200, _, Body0} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1,
         <<"replicas", File/binary, "?provider_id=", (domain(WorkerP2))/binary>>,
         post, [user_1_token_header(Config)], []),
-    ?ATTEMPTS),
+        ?ATTEMPTS),
 
     DecodedBody0 = json_utils:decode_map(Body0),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody0),
@@ -344,7 +344,7 @@ replicate_dir(Config) ->
     {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1,
         <<"replicas", Dir1/binary, "?provider_id=", (domain(WorkerP2))/binary>>,
         post, [user_1_token_header(Config)], []),
-    ?ATTEMPTS),
+        ?ATTEMPTS),
     DecodedBody = json_utils:decode_map(Body),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
 
@@ -413,7 +413,7 @@ restart_dir_replication(Config) ->
     % when
     {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1, <<"replicas", Dir1/binary,
         "?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
-    ?ATTEMPTS),
+        ?ATTEMPTS),
     DecodedBody = json_utils:decode_map(Body),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
 
@@ -488,7 +488,7 @@ replicate_file_by_id(Config) ->
     {ok, 200, _, Body0} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1,
         <<"replicas-id/", FileObjectId/binary, "?provider_id=", (domain(WorkerP2))/binary>>,
         post, [user_1_token_header(Config)], []),
-    ?ATTEMPTS),
+        ?ATTEMPTS),
     DecodedBody0 = json_utils:decode_map(Body0),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody0),
 
@@ -569,7 +569,7 @@ invalidate_file_replica(Config) ->
     {ok, 200, _, Body0} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1,
         <<"replicas", File/binary, "?provider_id=", (domain(WorkerP2))/binary>>,
         post, [user_1_token_header(Config)], []),
-    ?ATTEMPTS),
+        ?ATTEMPTS),
     DecodedBody0 = json_utils:decode_map(Body0),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody0),
     {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
@@ -690,14 +690,14 @@ restart_invalidation_of_file_replica_with_migration(Config) ->
             {ok, Unfinished} = rpc:call(WorkerP2, transfer, for_each_unfinished_transfer, [?LIST_TRANSFER, []]),
             lists:member(Tid1, Unfinished)
         end,
-    ?ATTEMPTS),
+        ?ATTEMPTS),
 
     ?assertEqual(false,
         begin
             {ok, Unfinished} = rpc:call(WorkerP1, transfer, for_each_unfinished_transfer, [?LIST_TRANSFER, []]),
             lists:member(Tid1, Unfinished)
         end,
-    ?ATTEMPTS),
+        ?ATTEMPTS),
 
     ExpectedDistribution2 = [
         #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => []},
@@ -738,7 +738,7 @@ invalidate_dir_replica(Config) ->
     {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1,
         <<"replicas", Dir1/binary, "?provider_id=", (domain(WorkerP2))/binary>>,
         post, [user_1_token_header(Config)], []),
-    ?ATTEMPTS),
+        ?ATTEMPTS),
 
     DecodedBody = json_utils:decode_map(Body),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
@@ -1044,7 +1044,7 @@ metric_get(Config) ->
             key = monitoring_state:encode_id(MonitoringId#monitoring_id{
                 provider_id = Prov2ID
             }),
-            value =  State
+            value = State
         }
     ])),
 
@@ -1134,7 +1134,7 @@ changes_stream_file_meta_test(Config) ->
         lfm_proxy:create(WorkerP1, SessionId, File2, Mode)
     end),
     {ok, 200, _, Body} = do_request(WorkerP1, <<"changes/metadata/space1?timeout=10000">>,
-        get, [user_1_token_header(Config)], [], [insecure, {recv_timeout, 40000}]),
+        get, [user_1_token_header(Config)], [], [{recv_timeout, 40000}]),
 
     ?assertNotEqual(<<>>, Body),
     ?assert(length(binary:split(Body, <<"\r\n">>, [global])) >= 2).
@@ -1153,7 +1153,7 @@ changes_stream_xattr_test(Config) ->
         lfm_proxy:set_xattr(WorkerP1, SessionId, {guid, FileGuid}, #xattr{name = <<"name">>, value = <<"value">>})
     end),
     {ok, 200, _, Body} = do_request(WorkerP1, <<"changes/metadata/space1?timeout=10000">>,
-        get, [user_1_token_header(Config)], [], [insecure, {recv_timeout, 40000}]),
+        get, [user_1_token_header(Config)], [], [{recv_timeout, 40000}]),
 
     ?assertNotEqual(<<>>, Body),
     Changes = binary:split(Body, <<"\r\n">>, [global]),
@@ -1185,7 +1185,7 @@ changes_stream_json_metadata_test(Config) ->
         lfm_proxy:set_metadata(WorkerP1, SessionId, {guid, FileGuid}, json, Json, [])
     end),
     {ok, 200, _, Body} = do_request(WorkerP1, <<"changes/metadata/space1?timeout=10000">>,
-        get, [user_1_token_header(Config)], [], [insecure, {recv_timeout, 40000}]),
+        get, [user_1_token_header(Config)], [], [{recv_timeout, 40000}]),
 
     ?assertNotEqual(<<>>, Body),
     Changes = binary:split(Body, <<"\r\n">>, [global]),
@@ -1213,7 +1213,7 @@ changes_stream_times_test(Config) ->
         lfm_proxy:update_times(WorkerP1, SessionId, {guid, FileGuid}, 1000, 1000, 1000)
     end),
     {ok, 200, _, Body} = do_request(WorkerP1, <<"changes/metadata/space1?timeout=10000">>,
-        get, [user_1_token_header(Config)], [], [insecure, {recv_timeout, 40000}]),
+        get, [user_1_token_header(Config)], [], [{recv_timeout, 40000}]),
 
     ?assertNotEqual(<<>>, Body),
     Changes = binary:split(Body, <<"\r\n">>, [global]),
@@ -1243,7 +1243,7 @@ changes_stream_file_location_test(Config) ->
         {ok, 5} = lfm_proxy:write(WorkerP1, Handle, 0, <<"01234">>)
     end),
     {ok, 200, _, Body} = do_request(WorkerP1, <<"changes/metadata/space1?timeout=10000">>,
-        get, [user_1_token_header(Config)], [], [insecure, {recv_timeout, 40000}]),
+        get, [user_1_token_header(Config)], [], [{recv_timeout, 40000}]),
 
     ?assertNotEqual(<<>>, Body),
     Changes = binary:split(Body, <<"\r\n">>, [global]),
@@ -1273,7 +1273,7 @@ changes_stream_on_multi_provider_test(Config) ->
     end),
     ?assertMatch({ok, _}, lfm_proxy:open(WorkerP2, SessionIdP2, {guid, FileGuid}, write), 20),
     {ok, 200, _, Body} = do_request(WorkerP2, <<"changes/metadata/space3?timeout=20000">>,
-        get, [user_1_token_header(Config)], [], [insecure, {recv_timeout, 60000}]),
+        get, [user_1_token_header(Config)], [], [{recv_timeout, 60000}]),
 
     ?assertNotEqual(<<>>, Body),
     Changes = binary:split(Body, <<"\r\n">>, [global]),
@@ -1723,7 +1723,7 @@ quota_exceeded_during_file_replication(Config) ->
     {ok, 200, _, Body0} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1,
         <<"replicas", File/binary, "?provider_id=", (domain(WorkerP2))/binary>>,
         post, [user_1_token_header(Config)], []),
-    ?ATTEMPTS),
+        ?ATTEMPTS),
     DecodedBody0 = json_utils:decode_map(Body0),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody0),
 
@@ -1767,8 +1767,10 @@ replicate_big_dir(Config) ->
     Space = <<"/space3">>,
     RootDir = filename:join(Space, <<"big_dir_replication">>),
     Structure = [10, 10],   % last level are files
-    FilesToCreate = lists:foldl(fun(N, AccIn) -> 1 + AccIn * N end, 1, Structure),
-    BytesSum = byte_size(?TEST_DATA) * lists:foldl(fun(N, AccIn) -> AccIn * N  end, 1, Structure),
+    FilesToCreate = lists:foldl(fun(N, AccIn) ->
+        1 + AccIn * N end, 1, Structure),
+    BytesSum = byte_size(?TEST_DATA) * lists:foldl(fun(N, AccIn) ->
+        AccIn * N end, 1, Structure),
 
     true = register(?CREATE_FILE_COUNTER, spawn_link(?MODULE, create_file_counter, [0, FilesToCreate, self(), []])),
     true = register(?SYNC_FILE_COUNTER, spawn_link(?MODULE, sync_file_counter, [0, FilesToCreate, self()])),
@@ -1871,12 +1873,14 @@ end_per_testcase(_Case, Config) ->
 %%%===================================================================
 
 do_request(Node, URL, Method, Headers, Body) ->
-    do_request(Node, URL, Method, Headers, Body, [insecure, {recv_timeout, 15000}]).
-
+    do_request(Node, URL, Method, Headers, Body, [{recv_timeout, 15000}]).
 do_request(Node, URL, Method, Headers, Body, Opts) ->
+    CaCertsDir = rpc:call(Node, oz_plugin, get_cacerts_dir, []),
+    CaCerts = rpc:call(Node, cert_utils, load_ders_in_dir, [CaCertsDir]),
+    Opts2 = [{ssl_options, [{cacerts, CaCerts}]} | Opts],
     Result = http_client:request(
         Method, <<(rest_endpoint(Node))/binary, URL/binary>>,
-        maps:from_list(Headers), Body, Opts
+        maps:from_list(Headers), Body, Opts2
     ),
     case Result of
         {ok, RespCode, RespHeaders, RespBody} ->
@@ -1894,7 +1898,8 @@ rest_endpoint(Node) ->
                 PStr;
             P -> P
         end,
-    <<"https://", (list_to_binary(utils:get_host(Node)))/binary, ":", Port/binary, "/api/v3/oneprovider/">>.
+    {ok, Domain} = test_utils:get_env(Node, ?APP_NAME, provider_domain),
+    <<"https://", (str_utils:to_binary(Domain))/binary, ":", Port/binary, "/api/v3/oneprovider/">>.
 
 
 user_1_token_header(Config) ->

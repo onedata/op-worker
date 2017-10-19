@@ -62,9 +62,9 @@ token_auth(Config) ->
     Endpoint = rest_endpoint(Worker),
 
     % when
-    AuthFail = do_request(get, Endpoint ++ "files", #{<<"X-Auth-Token">> => <<"invalid">>}),
-    AuthSuccess1 = do_request(get, Endpoint ++ "files", #{<<"X-Auth-Token">> => ?MACAROON}),
-    AuthSuccess2 = do_request(get, Endpoint ++ "files", #{<<"Macaroon">> => ?MACAROON}),
+    AuthFail = do_request(Config, get, Endpoint ++ "files", #{<<"X-Auth-Token">> => <<"invalid">>}),
+    AuthSuccess1 = do_request(Config, get, Endpoint ++ "files", #{<<"X-Auth-Token">> => ?MACAROON}),
+    AuthSuccess2 = do_request(Config, get, Endpoint ++ "files", #{<<"Macaroon">> => ?MACAROON}),
 
     % then
     ?assertMatch({ok, 401, _, _}, AuthFail),
@@ -81,16 +81,16 @@ cert_auth(Config) ->
     KnownCertOpt = {ssl_options, [{certfile, CertKnown}, {reuse_sessions, false}]},
 
     % then - unauthorized access
-    {ok, 307, Headers, _} = do_request(get, Endpoint ++ "files", #{}, <<>>, [UnknownCertOpt]),
+    {ok, 307, Headers, _} = do_request(Config, get, Endpoint ++ "files", #{}, <<>>, [UnknownCertOpt]),
     Loc = maps:get(<<"location">>, Headers),
-    ?assertMatch({ok, 401, _, _}, do_request(get, Loc, #{}, <<>>, [UnknownCertOpt])),
+    ?assertMatch({ok, 401, _, _}, do_request(Config, get, Loc, #{}, <<>>, [UnknownCertOpt])),
 
     % then - authorized access
-    {ok, 307, Headers2, _} = do_request(get, Endpoint ++ "files", #{}, <<>>, [KnownCertOpt]),
+    {ok, 307, Headers2, _} = do_request(Config, get, Endpoint ++ "files", #{}, <<>>, [KnownCertOpt]),
     Loc2 = maps:get(<<"location">>, Headers2),
-    {ok, 307, Headers3, _} = do_request(get, Loc2, #{}, <<>>, [KnownCertOpt]),
+    {ok, 307, Headers3, _} = do_request(Config, get, Loc2, #{}, <<>>, [KnownCertOpt]),
     Loc3 = maps:get(<<"location">>, Headers3),
-    ?assertMatch({ok, 404, _, _}, do_request(get, Loc3, #{}, <<>>, [KnownCertOpt])).
+    ?assertMatch({ok, 404, _, _}, do_request(Config, get, Loc3, #{}, <<>>, [KnownCertOpt])).
 
 basic_auth(Config) ->
     % given
@@ -98,8 +98,8 @@ basic_auth(Config) ->
     Endpoint = rest_endpoint(Worker),
 
     % when
-    AuthFail = do_request(get, Endpoint ++ "files", #{<<"Authorization">> => <<"invalid">>}),
-    AuthSuccess = do_request(get, Endpoint ++ "files", #{<<"Authorization">> => ?BASIC_AUTH_HEADER}),
+    AuthFail = do_request(Config, get, Endpoint ++ "files", #{<<"Authorization">> => <<"invalid">>}),
+    AuthSuccess = do_request(Config, get, Endpoint ++ "files", #{<<"Authorization">> => ?BASIC_AUTH_HEADER}),
 
     % then
     ?assertMatch({ok, 401, _, _}, AuthFail),
@@ -112,7 +112,7 @@ internal_error_when_handler_crashes(Config) ->
     test_utils:mock_expect(Workers, files, is_authorized, fun test_crash/2),
 
     % when
-    {ok, Status, _, _} = do_request(get, Endpoint ++ "files"),
+    {ok, Status, _, _} = do_request(Config, get, Endpoint ++ "files"),
 
     % then
     ?assertEqual(500, Status).
@@ -124,7 +124,7 @@ custom_code_when_handler_throws_code(Config) ->
     test_utils:mock_expect(Workers, files, is_authorized, fun test_throw_400/2),
 
     % when
-    {ok, Status, _, _} = do_request(get, Endpoint ++ "files"),
+    {ok, Status, _, _} = do_request(Config, get, Endpoint ++ "files"),
 
     % then
     ?assertEqual(400, Status).
@@ -136,7 +136,7 @@ custom_error_when_handler_throws_error(Config) ->
     test_utils:mock_expect(Workers, files, is_authorized, fun test_throw_400_with_description/2),
 
     % when
-    {ok, Status, _, Body} = do_request(get, Endpoint ++ "files"),
+    {ok, Status, _, Body} = do_request(Config, get, Endpoint ++ "files"),
 
     % then
     ?assertEqual(400, Status),
@@ -191,14 +191,18 @@ end_per_testcase(_Case, Config) ->
 %%%===================================================================
 
 % Performs a single request using http_client
-do_request(Method, URL) ->
-    do_request(Method, URL, #{}).
-do_request(Method, URL, Headers) ->
-    do_request(Method, URL, Headers, <<>>).
-do_request(Method, URL, Headers, Body) ->
-    do_request(Method, URL, Headers, Body, []).
-do_request(Method, URL, Headers, Body, Opts) ->
-    http_client:request(Method, URL, Headers, Body, [insecure | Opts]).
+do_request(Config, Method, URL) ->
+    do_request(Config, Method, URL, #{}).
+do_request(Config, Method, URL, Headers) ->
+    do_request(Config, Method, URL, Headers, <<>>).
+do_request(Config, Method, URL, Headers, Body) ->
+    do_request(Config, Method, URL, Headers, Body, []).
+do_request(Config, Method, URL, Headers, Body, Opts) ->
+    [Node | _] = ?config(op_worker_nodes, Config),
+    CaCertsDir = rpc:call(Node, oz_plugin, get_cacerts_dir, []),
+    CaCerts = rpc:call(Node, cert_utils, load_ders_in_dir, [CaCertsDir]),
+    Opts2 = [{ssl_options, [{cacerts, CaCerts}]} | Opts],
+    http_client:request(Method, URL, Headers, Body, Opts2).
 
 
 rest_endpoint(Node) ->
@@ -211,7 +215,8 @@ rest_endpoint(Node) ->
                 PStr;
             P -> P
         end,
-    string:join(["https://", utils:get_host(Node), ":", Port, "/api/v3/oneprovider/"], "").
+    {ok, Domain} = test_utils:get_env(Node, ?APP_NAME, provider_domain),
+    string:join(["https://", str_utils:to_list(Domain), ":", Port, "/api/v3/oneprovider/"], "").
 
 mock_space_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),

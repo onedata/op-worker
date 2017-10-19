@@ -54,11 +54,9 @@ start() ->
         application:get_env(?APP_NAME, gui_max_keepalive),
     {ok, Timeout} =
         application:get_env(?APP_NAME, gui_socket_timeout_seconds),
-    {ok, KeyFile} = application:get_env(?APP_NAME, web_ssl_key_file),
-    {ok, CertFile} = application:get_env(?APP_NAME, web_ssl_cert_file),
-    {ok, CaCertsDir} = application:get_env(?APP_NAME, cacerts_dir),
-    {ok, CaCertPems} = file_utils:read_files({dir, CaCertsDir}),
-    CaCerts = lists:map(fun cert_decoder:pem_to_der/1, CaCertPems),
+    {ok, KeyFile} = application:get_env(?APP_NAME, web_key_file),
+    {ok, CertFile} = application:get_env(?APP_NAME, web_cert_file),
+    CaCerts = cert_utils:load_ders_in_dir(oz_plugin:get_cacerts_dir()),
 
     % Resolve static files root. First, check if there is a non-empty dir
     % located in gui_custom_static_root. If not, use default.
@@ -146,8 +144,10 @@ stop() ->
 %%--------------------------------------------------------------------
 -spec healthcheck() -> ok | {error, server_not_responding}.
 healthcheck() ->
-    Endpoint = <<"https://127.0.0.1:", (integer_to_binary(port()))/binary>>,
-    case http_client:get(Endpoint, #{}, <<>>, [insecure]) of
+    Endpoint = str_utils:format_bin("https://127.0.0.1:~B", [port()]),
+    CaCerts = cert_utils:load_ders_in_dir(oz_plugin:get_cacerts_dir()),
+    Opts = [{ssl_options, [{secure, only_verify_peercert}, {cacerts, CaCerts}]}],
+    case http_client:get(Endpoint, #{}, <<>>, Opts) of
         {ok, _, _, _} -> ok;
         _ -> {error, server_not_responding}
     end.

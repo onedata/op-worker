@@ -168,7 +168,7 @@ register_in_oz_dev(NodeList, KeyFilePassword, ProviderName) ->
             {<<"urls">>, IPAddresses},
             {<<"csr">>, CSR},
             {<<"redirectionPoint">>, RedirectionPoint},
-            {<<"clientName">>, ProviderName},
+            {<<"name">>, ProviderName},
             {<<"uuid">>, ProviderName}
         ],
         {ok, ProviderId, Cert} = oz_providers:register_with_uuid(provider, Parameters),

@@ -85,7 +85,6 @@ The JSON looks like follows:
                             "db_nodes":[
                                 "dbnode1"
                             ],
-                            "verify_oz_cert":false,
                             "oz_domain":"oz"
                         }
                     }

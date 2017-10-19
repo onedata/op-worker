@@ -261,7 +261,7 @@ new_invalidation(#document{
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Notifies callback about successfull transfer
+%% Notifies callback about successful transfer
 %% @end
 %%--------------------------------------------------------------------
 -spec notify_callback(transfer:callback()) -> ok.

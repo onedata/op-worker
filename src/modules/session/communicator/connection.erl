@@ -36,7 +36,7 @@
 -export_type([ref/0]).
 
 -record(state, {
-    certificate :: DerCert :: binary() | undefined,
+    certificate :: public_key:der_encoded() | undefined,
     % handler responses
     ok :: atom(),
     closed :: atom(),
@@ -117,11 +117,10 @@ init(Ref, Socket, Transport, _Opts) ->
 -spec init(session:id(), Hostname :: binary(), Port :: non_neg_integer(), Transport :: atom(), Timeout :: non_neg_integer()) ->
     no_return().
 init(SessionId, Hostname, Port, Transport, Timeout) ->
-    {ok, OzCaCertPem} = file:read_file(oz_plugin:get_oz_cacert_path()),
     TLSSettings = [
         {certfile, oz_plugin:get_cert_file()},
         {keyfile, oz_plugin:get_key_file()},
-        {cacerts, [cert_decoder:pem_to_der(OzCaCertPem)]}
+        {cacerts, [cert_utils:load_der(oz_plugin:get_oz_cacert_path())]}
     ],
     ?info("Connecting to ~p ~p", [Hostname, Port]),
     {ok, Socket} = Transport:connect(binary_to_list(Hostname), Port, TLSSettings, Timeout),
@@ -523,7 +522,7 @@ send_client_message(Socket, Transport, #client_message{} = ClientMsg) ->
 %% there isn't one.
 %% @end
 %%--------------------------------------------------------------------
--spec get_cert(ssl:socket()) -> DerCert :: binary() | undefined.
+-spec get_cert(ssl:socket()) -> public_key:der_encoded() | undefined.
 get_cert(Socket) ->
     case ssl:peercert(Socket) of
         {error, _} -> undefined;
