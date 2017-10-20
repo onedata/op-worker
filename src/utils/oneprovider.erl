@@ -16,6 +16,7 @@
 
 -include("global_definitions.hrl").
 -include_lib("public_key/include/public_key.hrl").
+-include_lib("ctool/include/global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% ID of this provider (assigned by global registry)
@@ -133,6 +134,13 @@ get_oz_providers_page() ->
 
 -spec on_connection_to_oz() -> ok.
 on_connection_to_oz() ->
+    % when connection is established onezone should be notified about
+    % current provider ips.
+    % cast is used as this function is called
+    % in gs_client init and a call would cause a deadlock - updating
+    % ips uses the graph sync connection.
+    gen_server2:cast(?NODE_MANAGER_NAME, update_subdomain_delegation_ips),
+
     % Make sure provider proto listener is started
     % (it won't start until provider is registered)
     ok = provider_listener:ensure_started().

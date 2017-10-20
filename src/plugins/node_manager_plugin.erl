@@ -13,6 +13,8 @@
 -author("Michal Zmuda").
 
 -include("global_definitions.hrl").
+-include("graph_sync/provider_graph_sync.hrl").
+-include_lib("cluster_worker/include/elements/node_manager/node_manager.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
 
@@ -20,10 +22,13 @@
 -export([app_name/0, cm_nodes/0, db_nodes/0]).
 -export([listeners/0, modules_with_args/0]).
 -export([before_init/1, on_cluster_initialized/0]).
+-export([handle_cast/2]).
 -export([check_node_ip_address/0, renamed_models/0]).
 
 -type model() :: datastore_model:model().
 -type record_version() :: datastore_model:record_version().
+
+-type state() :: #state{}.
 
 %%%===================================================================
 %%% node_manager_plugin_behaviour callbacks
@@ -130,6 +135,33 @@ before_init([]) ->
 -spec on_cluster_initialized() -> Result :: ok | {error, Reason :: term()}.
 on_cluster_initialized() ->
     maybe_generate_web_cert().
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Overrides {@link node_manager_plugin_default:handle_cast/2}.
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_cast(Request :: term(), State :: state()) ->
+    {noreply, NewState :: state()} |
+    {noreply, NewState :: state(), timeout() | hibernate} |
+    {stop, Reason :: term(), NewState :: state()}.
+handle_cast(update_subdomain_delegation_ips, State) ->
+    % This cast will be usually used only after aquiring connection
+    % to onezone in order to send current cluster IPs
+    case provider_logic:update_subdomain_delegation_ips() of
+        ok ->
+            ok;
+        error ->
+            % Kill the connection to OneZone in case provider IPs cannot be
+            % updated, which will cause a reconnection and update retry.
+            gen_server2:call({global, ?GS_CLIENT_WORKER_GLOBAL_NAME},
+                {terminate, normal})
+    end,
+    {noreply, State};
+handle_cast(Request, State) ->
+    ?log_bad_request(Request),
+    {noreply, State}.
 
 %%--------------------------------------------------------------------
 %% @doc
