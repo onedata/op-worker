@@ -21,7 +21,7 @@
 %% node_manager_plugin_behaviour callbacks
 -export([app_name/0, cm_nodes/0, db_nodes/0]).
 -export([listeners/0, modules_with_args/0]).
--export([before_init/1, on_cluster_initialized/0]).
+-export([before_init/1, on_cluster_initialized/1]).
 -export([handle_cast/2]).
 -export([check_node_ip_address/0, renamed_models/0]).
 
@@ -132,9 +132,9 @@ before_init([]) ->
 %% nodes have connected to cluster manager.
 %% @end
 %%--------------------------------------------------------------------
--spec on_cluster_initialized() -> Result :: ok | {error, Reason :: term()}.
-on_cluster_initialized() ->
-    maybe_generate_web_cert().
+-spec on_cluster_initialized(Nodes :: [node()]) -> Result :: ok | {error, Reason :: term()}.
+on_cluster_initialized(Nodes) ->
+    maybe_generate_web_cert(Nodes).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -192,9 +192,9 @@ check_node_ip_address() ->
 %% to avoid race conditions across multiple nodes.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_generate_web_cert() -> ok.
-maybe_generate_web_cert() ->
-    critical_section:run(oz_web_cert, fun maybe_generate_web_cert_unsafe/0).
+-spec maybe_generate_web_cert(Nodes :: [node()]) -> ok.
+maybe_generate_web_cert(Nodes) ->
+    critical_section:run(oz_web_cert, fun () -> maybe_generate_web_cert_unsafe(Nodes) end).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -205,8 +205,8 @@ maybe_generate_web_cert() ->
 %% Should not be called in parallel to prevent race conditions.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_generate_web_cert_unsafe() -> ok.
-maybe_generate_web_cert_unsafe() ->
+-spec maybe_generate_web_cert_unsafe(ClusterNodes :: [node()]) -> ok.
+maybe_generate_web_cert_unsafe(ClusterNodes) ->
     GenerateIfAbsent = application:get_env(
         ?APP_NAME, generate_web_cert_if_absent, false
     ),
@@ -229,8 +229,7 @@ maybe_generate_web_cert_unsafe() ->
                 "hostname '~s'. Use only for test purposes.",
                 [WebCertPath, Hostname]
             ),
-            NodeList = gen_server2:call({global, ?CLUSTER_MANAGER}, get_nodes),
-            OtherWorkers = NodeList -- [node()],
+            OtherWorkers = ClusterNodes -- [node()],
             {ok, Key} = file:read_file(WebKeyPath),
             {ok, Cert} = file:read_file(WebCertPath),
             ok = utils:save_file_on_hosts(OtherWorkers, WebKeyPath, Key),
