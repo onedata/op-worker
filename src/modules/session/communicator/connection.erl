@@ -120,7 +120,7 @@ init(SessionId, Hostname, Port, Transport, Timeout) ->
     TLSSettings = [
         {certfile, oz_plugin:get_cert_file()},
         {keyfile, oz_plugin:get_key_file()},
-        {cacerts, [cert_utils:load_der(oz_plugin:get_oz_cacert_path())]}
+        {cacerts, cert_utils:load_ders(oz_plugin:get_oz_cacert_path())}
     ],
     ?info("Connecting to ~p ~p", [Hostname, Port]),
     {ok, Socket} = Transport:connect(binary_to_list(Hostname), Port, TLSSettings, Timeout),

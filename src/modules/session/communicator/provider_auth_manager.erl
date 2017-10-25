@@ -99,7 +99,8 @@ get_provider_id(DerCert) ->
 %%--------------------------------------------------------------------
 -spec verify_provider_cert(public_key:der_encoded()) -> boolean().
 verify_provider_cert(DerCert) ->
-    OzCaCertDer = cert_utils:load_der(oz_plugin:get_oz_cacert_path()),
+    % Zone CA is always a single cert so below match is safe
+    [OzCaCertDer] = cert_utils:load_ders(oz_plugin:get_oz_cacert_path()),
     OzCaCert = #'OTPCertificate'{} = public_key:pkix_decode_cert(OzCaCertDer, otp),
     case public_key:pkix_path_validation(OzCaCert, [DerCert], [{max_path_length, 0}]) of
         {ok, _} -> true;
