@@ -57,14 +57,14 @@ start() ->
 
             KeyFile = oz_plugin:get_key_file(),
             CertFile = oz_plugin:get_cert_file(),
-            OzCaCertDer = cert_utils:load_der(oz_plugin:get_oz_cacert_path()),
+            OzCaCerts = cert_utils:load_ders(oz_plugin:get_oz_cacert_path()),
 
             Result = ranch:start_listener(?TCP_PROTO_LISTENER, DispatcherPoolSize,
                 ranch_ssl, [
                     {port, Port},
                     {keyfile, KeyFile},
                     {certfile, CertFile},
-                    {cacerts, [OzCaCertDer]},
+                    {cacerts, OzCaCerts},
                     {verify, verify_peer},
                     {fail_if_no_peer_cert, true},
                     {ciphers, ssl:cipher_suites() -- ssl_utils:weak_ciphers()}
