@@ -12,7 +12,6 @@
 -module(space_storage).
 -author("Krzysztof Trzepla").
 
-<<<<<<< HEAD
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("global_definitions.hrl").
@@ -197,7 +196,7 @@ disable_file_popularity(SpaceId) ->
 %% given space.
 %% @end
 %%--------------------------------------------------------------------
--spec is_cleanup_enabled(od_space:id() | model() | doc()) -> boolean().
+-spec is_cleanup_enabled(od_space:id() | record() | doc()) -> boolean().
 is_cleanup_enabled(#document{value = SS = #space_storage{}}) ->
     is_cleanup_enabled(SS);
 is_cleanup_enabled(SpaceStorage = #space_storage{}) ->
@@ -212,10 +211,10 @@ is_cleanup_enabled(SpaceId) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Disables autocleaning
+%% Disables autocleaning.
 %% @end
 %%-------------------------------------------------------------------
--spec disable_autocleaning(od_space:id()) -> {ok, od_space:id()}.
+-spec disable_autocleaning(od_space:id()) -> {ok, id()}.
 disable_autocleaning(SpaceId) ->
     update_autocleaning(SpaceId, #{enabled => false}).
 
@@ -233,13 +232,18 @@ update_autocleaning(SpaceId, Settings) ->
     autocleaning:maybe_start(SpaceId),
     UpdateResult.
 
-
+%%-------------------------------------------------------------------
+%% @doc
+%% getter for cleanup_in_progress field
+%% @end
+%%-------------------------------------------------------------------
+-spec get_cleanup_in_progress(record() | doc() | od_space:id()) -> autocleaning:id() | undefined.
 get_cleanup_in_progress(#space_storage{cleanup_in_progress = CleanupInProgress}) ->
     CleanupInProgress;
 get_cleanup_in_progress(#document{value = SS}) ->
     get_cleanup_in_progress(SS);
 get_cleanup_in_progress(SpaceId) ->
-    {ok, SpaceStorageDoc} = get(SpaceId),
+    {ok, SpaceStorageDoc} = ?MODULE:get(SpaceId),
     get_cleanup_in_progress(SpaceStorageDoc).
 
 
@@ -248,13 +252,13 @@ get_cleanup_in_progress(SpaceId) ->
 %% Returns autocleaning_config of storage supporting given space.
 %% @end
 %%-------------------------------------------------------------------
--spec get_autocleaning_config(model() | doc()) -> undefined | autocleaning_config:config().
+-spec get_autocleaning_config(record() | doc() | od_space:id()) -> undefined | autocleaning_config:config().
 get_autocleaning_config(#document{value = SS = #space_storage{}}) ->
     get_autocleaning_config(SS);
 get_autocleaning_config(SpaceStorage = #space_storage{}) ->
     SpaceStorage#space_storage.autocleaning_config;
 get_autocleaning_config(SpaceId) ->
-    {ok, Doc} = get(SpaceId),
+    {ok, Doc} = ?MODULE:get(SpaceId),
     get_autocleaning_config(Doc#document.value).
 
 
@@ -337,8 +341,8 @@ get_autocleaning_settings(SpaceId) ->
 %% Updates autocleaning_config.
 %% @end
 %%-------------------------------------------------------------------
--spec update_autocleaning(model(), boolean(), maps:map()) ->
-    {ok, model()} | {error, term()}.
+-spec update_autocleaning(record(), boolean(), maps:map()) ->
+    {ok, record()} | {error, term()}.
 update_autocleaning(#space_storage{cleanup_enabled = false}, undefined, _) ->
     {error, autocleaning_disabled};
 update_autocleaning(SS = #space_storage{cleanup_enabled = _Enabled}, false, _) ->
@@ -427,7 +431,7 @@ get_posthooks() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    3.
+    4.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -458,10 +462,10 @@ get_record_struct(4) ->
         {file_popularity_enabled, boolean},
         {cleanup_enabled, boolean},
         {cleanup_in_progress, string},
-        {autocleaning, {record, [
-            {file_size_gt, integer},
-            {file_size_lt, integer},
-            {max_inactive, integer},
+        {autocleaning_config, {record, [
+            {lower_file_size_limit, integer},
+            {upper_file_size_limit, integer},
+            {max_file_not_opened_hours, integer},
             {target, integer},
             {threshold, integer}
         ]}}

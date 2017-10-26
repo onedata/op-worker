@@ -10,10 +10,9 @@
 %%%-------------------------------------------------------------------
 -module(autocleaning).
 -author("Jakub Kudzia").
--behaviour(model_behaviour).
 
--include("modules/datastore/datastore_specific_models_def.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
+-include("modules/datastore/datastore_runner.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -type id() :: binary().
@@ -29,13 +28,16 @@
     mark_completed/1, mark_released_file/2, get_config/1, status/1,
     mark_active/1, mark_failed/1]).
 
-%% model_behaviour callbacks
--export([get/1, save/1, exists/1, delete/1, update/2, create/1, create_or_update/2,
-    model_init/0, 'after'/5, before/4, list/0]).
--export([record_struct/1]).
+%% datastore_model callbacks
+-export([get_ctx/0, get_record_struct/1, get_record_version/0]).
 
 -define(LINK, <<"AUTOCLEANING_LINK">>).
 
+-define(CTX, #{
+    model => ?MODULE,
+    mutator => oneprovider:get_provider_id(),
+    local_links_tree_id => oneprovider:get_provider_id()
+}).
 
 %%%===================================================================
 %%% API
@@ -76,7 +78,7 @@ maybe_start(SpaceId) ->
 -spec list_reports_since(od_space:id(), non_neg_integer()) -> [maps:map()].
 list_reports_since(SpaceId, Since) ->
     {ok, Reports} = for_each_autocleaning(SpaceId, fun(AutoCleaningId, AccIn) ->
-        {ok, #document{value = Autocleaning}} = get(AutoCleaningId),
+        {ok, #document{value = Autocleaning}} = datastore_model:get(?CTX, AutoCleaningId),
         case {started_later_than(Autocleaning, Since),
               active_completed_or_failed(Autocleaning)} of
             {true, true} ->
@@ -95,7 +97,7 @@ list_reports_since(SpaceId, Since) ->
 -spec remove_skipped(id(), od_space:id()) -> ok.
 remove_skipped(AutocleaningId, SpaceId) ->
     remove_link(AutocleaningId, SpaceId),
-    ok = delete(AutocleaningId).
+    ok = datastore_model:delete(?CTX, AutocleaningId).
 
 
 %%-------------------------------------------------------------------
@@ -107,7 +109,7 @@ remove_skipped(AutocleaningId, SpaceId) ->
 mark_released_file(undefined, _Size) ->
     {ok, undefined};
 mark_released_file(AutocleaningId, Size) ->
-    update(AutocleaningId, fun(AC = #autocleaning{
+    datastore_model:update(?CTX, AutocleaningId, fun(AC = #autocleaning{
         released_bytes = ReleasedBytes,
         released_files = ReleasedFiles
     }) ->
@@ -126,10 +128,8 @@ mark_released_file(AutocleaningId, Size) ->
 mark_active(undefined) ->
     {ok, undefined};
 mark_active(AutocleaningId) ->
-    update(AutocleaningId, fun(AC) ->
-        {ok, AC#autocleaning{
-            status = active
-        }}
+    datastore_model:update(?CTX, AutocleaningId, fun(AC) ->
+        {ok, AC#autocleaning{status = active}}
     end).
 
 %%-------------------------------------------------------------------
@@ -141,7 +141,7 @@ mark_active(AutocleaningId) ->
 mark_failed(undefined) ->
     {ok, undefined};
 mark_failed(AutocleaningId) ->
-    update(AutocleaningId, fun(AC = #autocleaning{space_id = SpaceId}) ->
+    datastore_model:update(?CTX, AutocleaningId, fun(AC = #autocleaning{space_id = SpaceId}) ->
         {ok, _} = space_storage:mark_cleanup_finished(SpaceId),
         {ok, AC#autocleaning{
             stopped_at = utils:system_time_seconds(),
@@ -158,7 +158,7 @@ mark_failed(AutocleaningId) ->
 mark_completed(undefined) ->
     {ok, undefined};
 mark_completed(AutocleaningId) ->
-    update(AutocleaningId, fun(AC = #autocleaning{space_id = SpaceId}) ->
+    datastore_model:update(?CTX, AutocleaningId, fun(AC = #autocleaning{space_id = SpaceId}) ->
         {ok, _} = space_storage:mark_cleanup_finished(SpaceId),
         {ok, AC#autocleaning{
             stopped_at = utils:system_time_seconds(),
@@ -178,7 +178,7 @@ get_config(#autocleaning{config = Config}) ->
 get_config(#document{value = Autocleaning}) ->
     get_config(Autocleaning);
 get_config(AutocleaningId) ->
-    {ok, Doc} = get(AutocleaningId),
+    {ok, Doc} = datastore_model:get(?CTX, AutocleaningId),
     get_config(Doc).
 
 %%-------------------------------------------------------------------
@@ -201,140 +201,6 @@ status(SpaceId) ->
         {spaceOccupancy, CurrentSize}
     ].
 
-%%%===================================================================
-%%% model_behaviour callbacks
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns structure of the record in specified version.
-%% @end
-%%--------------------------------------------------------------------
--spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
-record_struct(1) ->
-    {record, [
-        {space_id, string},
-        {started_at, integer},
-        {stopped_at, integer},
-        {released_bytes, integer},
-        {bytes_to_release, integer},
-        {released_files, integer},
-        {status, atom},
-        {autocleaning_config, {record, [
-            {file_size_gt, integer},
-            {file_size_lt, integer},
-            {max_inactive, integer},
-            {target, integer},
-            {threshold, integer}
-        ]}}
-    ]}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback save/1.
-%% @end
-%%--------------------------------------------------------------------
--spec save(datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
-save(Document) ->
-    model:execute_with_default_context(?MODULE, save, [Document]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback update/2.
-%% @end
-%%--------------------------------------------------------------------
--spec update(datastore:key(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:key()} | datastore:update_error().
-update(Key, Diff) ->
-    model:execute_with_default_context(?MODULE, update, [Key, Diff]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback create/1.
-%% @end
-%%--------------------------------------------------------------------
--spec create(datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
-create(Document) ->
-    model:execute_with_default_context(?MODULE, create, [Document]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback get/1.
-%% @end
-%%--------------------------------------------------------------------
--spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
-get(Key) ->
-    model:execute_with_default_context(?MODULE, get, [Key]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback delete/1.
-%% @end
-%%--------------------------------------------------------------------
--spec delete(datastore:key()) -> ok | datastore:generic_error().
-delete(Key) ->
-    model:execute_with_default_context(?MODULE, delete, [Key]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback exists/1.
-%% @end
-%%--------------------------------------------------------------------
--spec exists(datastore:key()) -> datastore:exists_return().
-exists(Key) ->
-    ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [Key])).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates document with using ID from document. If such object does not exist,
-%% it initialises the object with the document.
-%% @end
-%%--------------------------------------------------------------------
--spec create_or_update(datastore:document(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:key()} | datastore:generic_error().
-create_or_update(Doc, Diff) ->
-    model:execute_with_default_context(?MODULE, create_or_update, [Doc, Diff]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback model_init/0.
-%% @end
-%%--------------------------------------------------------------------
--spec model_init() -> model_behaviour:model_config().
-model_init() ->
-    ?MODEL_CONFIG(autocleaning_bucket, [{autocleaning, update}], ?LOCALLY_CACHED_LEVEL,
-        ?LOCALLY_CACHED_LEVEL, true, false, oneprovider:get_provider_id())#model_config{
-        list_enabled = {true, return_errors}}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback 'after'/5.
-%% @end
-%%--------------------------------------------------------------------
--spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term(),
-    ReturnValue :: term()) -> ok.
-'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
-    ok.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback before/4.
-%% @end
-%%--------------------------------------------------------------------
--spec before(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
-before(_ModelName, _Method, _Level, _Context) ->
-    ok.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of all records.
-%% @end
-%%--------------------------------------------------------------------
--spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
-list() ->
-    model:execute_with_default_context(?MODULE, list, [?GET_ALL, []]).
 
 %%%===================================================================
 %%% Internal functions
@@ -362,7 +228,7 @@ start(SpaceId, CleanupConfig, CurrentSize) ->
                     config = CleanupConfig
                 }
             },
-            {ok, AutocleaningId} = create(NewDoc),
+            {ok, AutocleaningId} = ?extract_key(datastore_model:create(?CTX, NewDoc)),
             {ok, _} = space_storage:maybe_mark_cleanup_in_progress(SpaceId, AutocleaningId),
             add_link(AutocleaningId, SpaceId),
             autocleaning_controller:maybe_start(AutocleaningId, Autocleaning),
@@ -379,9 +245,10 @@ start(SpaceId, CleanupConfig, CurrentSize) ->
 %%--------------------------------------------------------------------
 -spec add_link(AutocleaningId :: id(), SpaceId :: od_space:id()) -> ok.
 add_link(AutocleaningId, SpaceId) ->
-    model:execute_with_default_context(?MODULE, add_links, [
-        ?LINK, {AutocleaningId, {AutocleaningId, ?MODEL_NAME}}
-    ], [{scope, SpaceId}]).
+    Ctx = ?CTX#{scope => SpaceId},
+    TreeId = oneprovider:get_provider_id(),
+    {ok, _} = datastore_model:add_links(Ctx, ?LINK, TreeId, {AutocleaningId, <<>>}),
+    ok.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -391,10 +258,9 @@ add_link(AutocleaningId, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec remove_link(AutocleaningId :: id(), SpaceId :: od_space:id()) -> ok.
 remove_link(AutocleaningId, SpaceId) ->
-    model:execute_with_default_context(?MODULE, delete_links, [?LINK, AutocleaningId],
-        [{scope, SpaceId}]
-    ).
-
+    Ctx = ?CTX#{scope => SpaceId},
+    TreeId = oneprovider:get_provider_id(),
+    ok = datastore_model:delete_links(Ctx, ?LINK, TreeId, AutocleaningId).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -428,10 +294,10 @@ active_completed_or_failed(#autocleaning{}) -> false.
     Callback :: fun((id(), Acc0 :: term()) -> Acc :: term()),
     AccIn :: term()) -> {ok, Acc :: term()} | {error, term()}.
 for_each_autocleaning(SpaceId, Callback, AccIn) ->
-    model:execute_with_default_context(?MODULE, foreach_link, [?LINK,
-        fun(LinkName, _LinkTarget, Acc) ->
-            Callback(LinkName, Acc)
-        end, AccIn], [{scope, SpaceId}]).
+    Ctx = ?CTX#{scope => SpaceId},
+    datastore_model:fold_links(Ctx, ?LINK, all, fun(#link{name = Name}, Acc) ->
+        {ok, Callback(Name, Acc)}
+    end, AccIn, #{}).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -458,3 +324,51 @@ get_info(#autocleaning{
         {bytesToRelease, BytesToRelease},
         {filesNumber, ReleasedFiles}
     ].
+
+%%%===================================================================
+%%% datastore_model callbacks
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns model's context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_ctx() -> datastore:ctx().
+get_ctx() ->
+    ?CTX.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's record version.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_record_version() -> datastore_model:record_version().
+get_record_version() ->
+    1.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's record structure in provided version.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_record_struct(datastore_model:record_version()) ->
+    datastore_model:record_struct().
+get_record_struct(1) ->
+    {record, [
+        {space_id, string},
+        {started_at, integer},
+        {stopped_at, integer},
+        {released_bytes, integer},
+        {bytes_to_release, integer},
+        {released_files, integer},
+        {status, atom},
+        {config, {record, [
+            {lower_file_size_limit, integer},
+            {upper_file_size_limit, integer},
+            {max_file_not_opened_hours, integer},
+            {target, integer},
+            {threshold, integer}
+        ]}}
+    ]}.

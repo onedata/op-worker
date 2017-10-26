@@ -1311,8 +1311,6 @@ changes_stream_on_multi_provider_test(Config) ->
     SessionIdP2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
     [_, _, {_SpaceId, SpaceName}, _, _, _] = ?config({spaces, <<"user1">>}, Config),
     File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file4_csompt"])),
-    ct:pal("SpaceId: ~p", [_SpaceId]),
-    ct:pal("SpaceName: ~p", [SpaceName]),
     Mode = 8#700,
     % when
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
@@ -1824,10 +1822,6 @@ quota_decreased_after_invalidation(Config) ->
         #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 10]]}
     ],
     ?assertDistributionProxyByGuid(WorkerP2, SessionId2, ExpectedDistribution0, FileGuid),
-%%
-%%    tracer:start(WorkerP2),
-%%    tracer:trace_calls(storage_file_manager, write),
-%%    tracer:trace_calls(space_quota, soft_assert_write),
 
     % when
     {ok, 200, _, Body0} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1,
@@ -2077,7 +2071,6 @@ init_per_testcase(Case, Config) when
     Case =:= quota_decreased_after_invalidation
     ->
     [WorkerP2, _WorkerP1] = ?config(op_worker_nodes, Config),
-    ct:pal("Cleaned: ~p", [clean_monitoring_dir(WorkerP2, <<"space6">>)]),
     OldSoftQuota = rpc:call(WorkerP2, application, get_env, [op_worker, soft_quota_limit_size]),
     ok = rpc:call(WorkerP2, application, set_env, [op_worker, soft_quota_limit_size, 15]),
     Config2 = [{old_soft_quota, OldSoftQuota} | Config],
@@ -2093,9 +2086,6 @@ init_per_testcase(automatic_cleanup_should_invalidate_unpopular_files, Config) -
 
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 5}),
-    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    ct:pal("QuotaP1: ~p", [rpc:call(WorkerP1, space_quota, current_size, [<<"space6">>])]),
-    ct:pal("QuotaP2: ~p", [rpc:call(WorkerP2, space_quota, current_size, [<<"space6">>])]),
     lfm_proxy:init(Config).
 
 end_per_testcase(metric_get = Case, Config) ->
@@ -2130,9 +2120,6 @@ end_per_testcase(Case, Config) when
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(_Case, Config) ->
-    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    ct:pal("QuotaP1 after: ~p", [rpc:call(WorkerP1, space_quota, current_size, [<<"space6">>])]),
-    ct:pal("QuotaP2 after: ~p", [rpc:call(WorkerP2, space_quota, current_size, [<<"space6">>])]),
     lfm_proxy:teardown(Config).
 
 %%%===================================================================
@@ -2256,7 +2243,10 @@ clean_monitoring_dir(Worker, SpaceId) ->
     RootSessionId = <<"0">>,
     SpaceGuid = rpc:call(Worker, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
     RRDDir = rpc:call(Worker, file_meta, hidden_file_name, [<<"rrd">>]),
-    {ok, #file_attr{
-        guid = RRDGuid}
-    } = rpc:call(Worker, logical_file_manager, get_child_attr, [RootSessionId, SpaceGuid, RRDDir]),
-    lfm_proxy:rm_recursive(Worker, RootSessionId, {guid, RRDGuid}).
+    case rpc:call(Worker, logical_file_manager, get_child_attr, [RootSessionId, SpaceGuid, RRDDir]) of
+        {ok, #file_attr{
+            guid = RRDGuid}
+        } ->
+            lfm_proxy:rm_recursive(Worker, RootSessionId, {guid, RRDGuid});
+        _ -> ok
+    end.

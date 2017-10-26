@@ -17,7 +17,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([increment_open/1, get_or_default/1, initialize/1, update_size/2, delete/1]).
+-export([increment_open/1, get_or_default/1, initialize/1, update_size/2, delete/1, update/2]).
 
 %% datastore_model callbacks
 -export([get_record_struct/1, get_ctx/0, get_record_version/0]).
@@ -129,6 +129,15 @@ get(FileUuid) ->
 -spec delete(file_meta:uuid()) -> ok | {error, term()}.
 delete(FileUuid) ->
     datastore_model:delete(?CTX, FileUuid).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file_popularity doc.
+%% @end
+%%--------------------------------------------------------------------
+-spec update(file_meta:uuid(), datastore_model:diff()) -> {ok, file_popularity()} | {error, term()}.
+update(FileUuid, Diff) ->
+    datastore_model:update(?CTX, FileUuid, Diff).
 
 %%--------------------------------------------------------------------
 %% @doc

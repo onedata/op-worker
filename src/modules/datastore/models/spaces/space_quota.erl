@@ -122,7 +122,7 @@ apply_size_change_and_maybe_emit(SpaceId, SizeDiff) ->
 %%-------------------------------------------------------------------
 -spec current_size(od_space:id()) -> non_neg_integer().
 current_size(SpaceId) ->
-    {ok, #document{value = #space_quota{current_size = CSize}}} = get(SpaceId),
+    {ok, #document{value = #space_quota{current_size = CSize}}} = ?MODULE:get(SpaceId),
     CSize.
 
 %%--------------------------------------------------------------------
@@ -214,10 +214,12 @@ get_disabled_spaces() ->
 %% @end
 %%-------------------------------------------------------------------
 -spec run_after(atom(), term(), term()) -> term().
-run_after(create, _, {ok, #document{key = SpaceId}}) ->
-    autocleaning:maybe_start(SpaceId);
-run_after(create_or_update, _, {ok, #document{key = SpaceId}}) ->
-    autocleaning:maybe_start(SpaceId);
+run_after(create, _, Result = {ok, #document{key = SpaceId}}) ->
+    autocleaning:maybe_start(SpaceId),
+    Result;
+run_after(update, _, Result = {ok, #document{key = SpaceId}}) ->
+    autocleaning:maybe_start(SpaceId),
+    Result;
 run_after(_, _, Result) ->
     Result.
 

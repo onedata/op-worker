@@ -10,7 +10,7 @@
 -module(autocleaning_config).
 -author("Jakub Kudzia").
 
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 
 -type config() :: #autocleaning_config{}.
 

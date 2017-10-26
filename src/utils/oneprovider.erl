@@ -25,7 +25,7 @@
 
 %% API
 -export([get_node_hostname/0, get_node_ip/0]).
--export([get_provider_id/0, get_provider_domain, is_registered/0, get_rest_endpoint/1]).
+-export([get_provider_id/0, get_provider_domain/0, is_registered/0, get_rest_endpoint/1]).
 -export([get_oz_domain/0, get_oz_url/0]).
 -export([get_oz_login_page/0, get_oz_logout_page/0, get_oz_providers_page/0]).
 -export([on_connection_to_oz/0]).
