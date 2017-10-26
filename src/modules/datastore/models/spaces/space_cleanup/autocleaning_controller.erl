@@ -95,7 +95,7 @@ stop() ->
     {stop, Reason :: term()} | ignore).
 init([AutocleaningId, SpaceId, FileSizeGt, FileSizeLt, MaxInactive, Target, Threshold]) ->
     ok = gen_server2:cast(self(), ?START_CLEAN),
-    ?info("Autocleaning: ~p started in space", [AutocleaningId, SpaceId]),
+    ?info("Autocleaning: ~p started in space ~p", [AutocleaningId, SpaceId]),
     {ok, _} = autocleaning:mark_active(AutocleaningId),
     {ok, #state{
         autocleaning_id = AutocleaningId,

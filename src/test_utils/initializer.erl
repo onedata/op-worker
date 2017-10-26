@@ -171,7 +171,6 @@ clean_test_users_and_spaces(Config) ->
         initializer:teardown_sesion(W, Config),
         clear_cache(W)
     end, DomainWorkers),
-    ct:pal("Will invalidate on workers: ~p", [Workers]),
     test_utils:mock_validate_and_unload(Workers, [oz_spaces, oz_users,
         oz_groups, space_storage, oneprovider, oz_providers]).
 

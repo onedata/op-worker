@@ -340,6 +340,12 @@ is_cleanup_enabled(SpaceId) ->
             false
     end.
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Disables autocleaning.
+%% @end
+%%-------------------------------------------------------------------
+-spec disable_autocleaning(od_space:id()) -> {ok, id()}.
 disable_autocleaning(SpaceId) ->
     update_autocleaning(SpaceId, #{enabled => false}).
 
@@ -357,6 +363,12 @@ update_autocleaning(SpaceId, Settings) ->
     autocleaning:maybe_start(SpaceId),
     UpdateResult.
 
+%%-------------------------------------------------------------------
+%% @doc
+%% getter for cleanup_in_progress field
+%% @end
+%%-------------------------------------------------------------------
+-spec get_cleanup_in_progress(model() | doc() | od_space:id()) -> autocleaning:id() | undefined.
 get_cleanup_in_progress(#space_storage{cleanup_in_progress = CleanupInProgress}) ->
     CleanupInProgress;
 get_cleanup_in_progress(#document{value = SS}) ->
@@ -371,7 +383,7 @@ get_cleanup_in_progress(SpaceId) ->
 %% Returns autocleaning_config of storage supporting given space.
 %% @end
 %%-------------------------------------------------------------------
--spec get_autocleaning_config(model() | doc()) -> undefined | autocleaning_config:config().
+-spec get_autocleaning_config(model() | doc() | od_space:id()) -> undefined | autocleaning_config:config().
 get_autocleaning_config(#document{value = SS = #space_storage{}}) ->
     get_autocleaning_config(SS);
 get_autocleaning_config(SpaceStorage = #space_storage{}) ->

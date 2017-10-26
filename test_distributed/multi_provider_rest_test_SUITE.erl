@@ -1288,8 +1288,6 @@ changes_stream_on_multi_provider_test(Config) ->
     SessionIdP2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
     [_, _, {_SpaceId, SpaceName}, _, _, _] = ?config({spaces, <<"user1">>}, Config),
     File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file4_csompt"])),
-    ct:pal("SpaceId: ~p", [_SpaceId]),
-    ct:pal("SpaceName: ~p", [SpaceName]),
     Mode = 8#700,
     % when
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
@@ -2065,9 +2063,6 @@ init_per_testcase(automatic_cleanup_should_invalidate_unpopular_files, Config) -
 
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 5}),
-    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    ct:pal("QuotaP1: ~p", [rpc:call(WorkerP1, space_quota, current_size, [<<"space6">>])]),
-    ct:pal("QuotaP2: ~p", [rpc:call(WorkerP2, space_quota, current_size, [<<"space6">>])]),
     lfm_proxy:init(Config).
 
 end_per_testcase(metric_get = Case, Config) ->
@@ -2102,9 +2097,6 @@ end_per_testcase(Case, Config) when
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(_Case, Config) ->
-    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    ct:pal("QuotaP1 after: ~p", [rpc:call(WorkerP1, space_quota, current_size, [<<"space6">>])]),
-    ct:pal("QuotaP2 after: ~p", [rpc:call(WorkerP2, space_quota, current_size, [<<"space6">>])]),
     lfm_proxy:teardown(Config).
 
 %%%===================================================================
