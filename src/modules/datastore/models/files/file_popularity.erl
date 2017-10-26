@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([increment_open/1, get_or_default/1]).
+-export([increment_open/1, get_or_default/1, initialize/1, update_size/2]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, create_or_update/2,
@@ -31,7 +31,7 @@
 
 -define(HOUR_HISTOGRAM_SIZE, 24).
 -define(DAY_HISTOGRAM_SIZE, 30).
--define(MONTH_HISTOGRAM_SIZE, 12). % 30*24
+-define(MONTH_HISTOGRAM_SIZE, 12).
 
 -type id() :: file_meta:uuid().
 -type file_popularity() :: #file_popularity{}.
@@ -64,6 +64,49 @@ record_struct(1) ->
 %%% API
 %%%===================================================================
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Creates file popularity view if it is enabled.
+%% @end
+%%-------------------------------------------------------------------
+-spec initialize(od_space:id()) -> ok | {error, term()}.
+initialize(SpaceId) ->
+    case space_storage:is_file_popularity_enabled(SpaceId) of
+        true ->
+            file_popularity_view:create(SpaceId);
+        false ->
+            ok
+    end.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Updated file's size
+%% @end
+%%-------------------------------------------------------------------
+update_size(FileCtx, NewSize) ->
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    case space_storage:is_file_popularity_enabled(SpaceId) of
+        true ->
+            FileUuid = file_ctx:get_uuid_const(FileCtx),
+            DefaultFilePopularity = empty_file_popularity(FileCtx),
+            ToCreate = #document{
+                key = FileUuid,
+                value = DefaultFilePopularity#file_popularity{size=NewSize}
+            },
+            case
+                create_or_update(ToCreate, fun(FilePopularity) ->
+                    {ok, FilePopularity#file_popularity{size=NewSize}}
+                end)
+            of
+                {ok, _} ->
+                    ok;
+                Error -> Error
+            end;
+        false ->
+            ok
+    end.
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Updates file's popularity with information about open.
@@ -72,9 +115,8 @@ record_struct(1) ->
 -spec increment_open(FileCtx :: file_ctx:ctx()) -> ok | datastore:generic_error().
 increment_open(FileCtx) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    case space_storage:is_cleanup_enabled(SpaceId) of
+    case space_storage:is_file_popularity_enabled(SpaceId) of
         true ->
-            SpaceId = file_ctx:get_space_id_const(FileCtx),
             FileUuid = file_ctx:get_uuid_const(FileCtx),
             DefaultFilePopularity = empty_file_popularity(FileCtx),
             ToCreate = #document{
@@ -192,7 +234,7 @@ create_or_update(Doc, Diff) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    Config = ?MODEL_CONFIG(file_popularity_bucket, [], ?GLOBALLY_CACHED_LEVEL),
+    Config = ?MODEL_CONFIG(file_popularity_bucket, [], ?LOCALLY_CACHED_LEVEL),
     Config#model_config{version = 1}.
 
 %%--------------------------------------------------------------------

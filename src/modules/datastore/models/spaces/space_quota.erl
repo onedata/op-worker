@@ -22,8 +22,8 @@
 %% API
 -export([
     apply_size_change/2, available_size/1, assert_write/1, assert_write/2,
-    get_disabled_spaces/0, apply_size_change_and_maybe_emit/2, soft_assert_write/2
-]).
+    get_disabled_spaces/0, apply_size_change_and_maybe_emit/2,
+    soft_assert_write/2, current_size/1]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
@@ -135,7 +135,8 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(space_quota_bucket, [], ?GLOBALLY_CACHED_LEVEL).
+    Hooks = [{?MODULE, create}, {?MODULE, create_or_update}],
+    ?MODEL_CONFIG(space_quota_bucket, Hooks, ?GLOBALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -145,7 +146,11 @@ model_init() ->
 -spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
-'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
+'after'(?MODULE, create, _Level, _Context, {ok, SpaceId}) ->
+     autocleaning:maybe_start(SpaceId);
+'after'(?MODULE, create_or_update, _Level, _Context, {ok, SpaceId}) ->
+    autocleaning:maybe_start(SpaceId);
+'after'(?MODULE, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 
 %%--------------------------------------------------------------------
@@ -182,7 +187,7 @@ apply_size_change(SpaceId, SizeDiff) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Records total space size change. If space becomes accessible or
-%% is getting disabled because of this change, QuotaExeeded event is sent.
+%% is getting disabled because of this change, QuotaExceeded event is sent.
 %% @end
 %%--------------------------------------------------------------------
 -spec apply_size_change_and_maybe_emit(SpaceId :: od_space:id(), SizeDiff :: integer()) ->
@@ -198,6 +203,15 @@ apply_size_change_and_maybe_emit(SpaceId, SizeDiff) ->
         false -> ok
     end.
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns current storage occupancy.
+%% @end
+%%-------------------------------------------------------------------
+-spec current_size(od_space:id()) -> non_neg_integer().
+current_size(SpaceId) ->
+    {ok, #document{value = #space_quota{current_size = CSize}}} = get(SpaceId),
+    CSize.
 
 %%--------------------------------------------------------------------
 %% @doc

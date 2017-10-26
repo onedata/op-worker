@@ -298,7 +298,29 @@
 -record(space_storage, {
     storage_ids = [] :: [storage:id()],
     mounted_in_root = [] :: [storage:id()],
-    cleanup_enabled = false :: boolean()
+    file_popularity_enabled = false :: boolean(),
+    cleanup_enabled = false :: boolean(),
+    cleanup_in_progress :: undefined | autocleaning:id(),
+    autocleaning_config :: undefined | autocleaning_config:config()
+}).
+
+-record(autocleaning_config, {
+    lower_file_size_limit :: undefined | non_neg_integer(),
+    upper_file_size_limit :: undefined |  non_neg_integer(),
+    max_file_not_opened_hours :: undefined |  non_neg_integer(),
+    target :: non_neg_integer(),
+    threshold :: non_neg_integer()
+}).
+
+-record(autocleaning, {
+    space_id :: undefined | od_space:id(),
+    started_at = 0 :: non_neg_integer(),
+    stopped_at :: undefined | non_neg_integer(),
+    released_bytes = 0 :: non_neg_integer(),
+    bytes_to_release = 0 :: non_neg_integer(),
+    released_files = 0 :: non_neg_integer(),
+    status :: undefined | autocleaning:status(),
+    config :: undefined | autocleaning_config:config()
 }).
 
 -record(helper_handle, {

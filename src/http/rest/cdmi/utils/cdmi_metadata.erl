@@ -281,15 +281,15 @@ prepare_cdmi_metadata([Name | Rest], FileKey, Auth, Attrs, Prefix) ->
                     };
                 <<"cdmi_ctime">> ->
                     (prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix))#{
-                        <<"cdmi_ctime">> => epoch_to_iso8601(Attrs#file_attr.ctime)
+                        <<"cdmi_ctime">> => timestamp_utils:epoch_to_iso8601(Attrs#file_attr.ctime)
                     };
                 <<"cdmi_atime">> ->
                     (prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix))#{
-                        <<"cdmi_atime">> => epoch_to_iso8601(Attrs#file_attr.atime)
+                        <<"cdmi_atime">> => timestamp_utils:epoch_to_iso8601(Attrs#file_attr.atime)
                     };
                 <<"cdmi_mtime">> ->
                     (prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix))#{
-                        <<"cdmi_mtime">> => epoch_to_iso8601(Attrs#file_attr.mtime)
+                        <<"cdmi_mtime">> => timestamp_utils:epoch_to_iso8601(Attrs#file_attr.mtime)
                     };
                 <<"cdmi_owner">> ->
                     (prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix))#{
@@ -307,12 +307,3 @@ prepare_cdmi_metadata([Name | Rest], FileKey, Auth, Attrs, Prefix) ->
             end;
         false -> prepare_cdmi_metadata(Rest, Auth, FileKey, Attrs, Prefix)
     end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Convert unix epoch to iso8601 format.
-%% @end
-%%--------------------------------------------------------------------
--spec epoch_to_iso8601(Epoch :: non_neg_integer()) -> binary().
-epoch_to_iso8601(Epoch) ->
-    iso8601:format({Epoch div 1000000, Epoch rem 1000000, 0}).

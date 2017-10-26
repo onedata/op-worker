@@ -171,6 +171,7 @@ clean_test_users_and_spaces(Config) ->
         initializer:teardown_sesion(W, Config),
         clear_cache(W)
     end, DomainWorkers),
+    ct:pal("Will invalidate on workers: ~p", [Workers]),
     test_utils:mock_validate_and_unload(Workers, [oz_spaces, oz_users,
         oz_groups, space_storage, oneprovider, oz_providers]).
 
@@ -385,8 +386,7 @@ space_storage_mock(Workers, StorageId) ->
     test_utils:mock_new(Workers, space_strategies),
     test_utils:mock_expect(Workers, space_storage, get, fun(_) ->
         {ok, #document{value = #space_storage{
-            storage_ids = [StorageId],
-            cleanup_enabled = true
+            storage_ids = [StorageId]
         }}}
     end),
     test_utils:mock_expect(Workers, space_storage, get_storage_ids,
@@ -394,8 +394,7 @@ space_storage_mock(Workers, StorageId) ->
     test_utils:mock_expect(Workers, space_strategies, get, fun(_) ->
         {ok, #document{
             value = #space_strategies{
-                storage_strategies =
-                maps:put(StorageId, #storage_strategies{}, #{})
+                storage_strategies = maps:put(StorageId, #storage_strategies{}, #{})
             }
         }}
     end).
@@ -556,8 +555,12 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
         case ?config({storage_id, Domain}, Config) of
             undefined -> ok;
             StorageId ->
-                %% If storage mock was configured, mock space_storage model
-                initializer:space_storage_mock(CWorkers, StorageId)
+                case ?config(space_storage_mock, Config, false) of
+                    true ->
+%%                        % If storage mock was configured, mock space_storage model
+                        initializer:space_storage_mock(CWorkers, StorageId);
+                    _ -> ok
+                end
         end,
 
         MWorker

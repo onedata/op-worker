@@ -105,7 +105,7 @@ open(Worker, SessId, FileKey, OpenFlag) ->
     ?EXEC(Worker,
         case logical_file_manager:open(SessId, uuid_to_guid(Worker, FileKey), OpenFlag) of
             {ok, Handle} ->
-                TestHandle = crypto:rand_bytes(10),
+                TestHandle = crypto:strong_rand_bytes(10),
                 ets:insert(lfm_handles, {TestHandle, Handle}),
                 {ok, TestHandle};
             Other -> Other

@@ -39,7 +39,7 @@
     setup_onedata_user/2, get_including_deleted/1, make_space_exist/1,
     new_doc/7, type/1, get_ancestors/1, get_locations_by_uuid/1, rename/4]).
 -export([delete_child_link/2, foreach_child/3]).
--export([hidden_file_name/1, is_hidden/1]).
+-export([hidden_file_name/1, is_hidden/1, is_child_of_hidden_dir/1]).
 -export([add_share/2, remove_share/2]).
 -export([record_struct/1, record_upgrade/2]).
 
@@ -861,6 +861,17 @@ is_hidden(FileName) ->
         <<?HIDDEN_FILE_PREFIX, _/binary>> -> true;
         _ -> false
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if given filename is child of hidden directory.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_child_of_hidden_dir(FileName :: name()) -> boolean().
+is_child_of_hidden_dir(Path) ->
+    {_, ParentPath} = fslogic_path:basename_and_parent(Path),
+    {Parent, _} = fslogic_path:basename_and_parent(ParentPath),
+    is_hidden(Parent).
 
 %%%===================================================================
 %%% Internal functions

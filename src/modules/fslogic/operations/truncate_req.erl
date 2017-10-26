@@ -51,7 +51,8 @@ truncate_insecure(UserCtx, FileCtx, Size, UpdateTimes) ->
     case storage_file_manager:open(SFMHandle, write) of
         {ok, Handle} ->
             ok = storage_file_manager:truncate(Handle, Size),
-            ok = storage_file_manager:release(Handle);
+            ok = storage_file_manager:release(Handle),
+            ok = file_popularity:update_size(FileCtx3, Size);
         {error, ?ENOENT} ->
             ok
     end,
@@ -76,6 +77,6 @@ truncate_insecure(UserCtx, FileCtx, Size, UpdateTimes) ->
 -spec update_quota(file_ctx:ctx(), file_meta:size()) -> NewFileCtx :: file_ctx:ctx().
 update_quota(FileCtx, Size) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    {OldSize, FileCtx2} = file_ctx:get_file_size(FileCtx),
+    {OldSize, FileCtx2} = file_ctx:get_local_storage_file_size(FileCtx),
     ok = space_quota:assert_write(SpaceId, Size - OldSize),
     FileCtx2.

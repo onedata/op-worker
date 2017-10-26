@@ -60,7 +60,8 @@ models() -> [
     luma_cache,
     file_popularity,
     transfer,
-    storage_sync_histogram
+    storage_sync_histogram,
+    autocleaning
 ].
 
 %%--------------------------------------------------------------------
