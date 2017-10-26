@@ -755,7 +755,7 @@ get_local_storage_file_size(FileCtx) ->
                 blocks = Blocks
             }
         }, FileCtx2} ->
-            {fslogic_blocks:upper(Blocks), FileCtx2};
+            {fslogic_blocks:size(Blocks), FileCtx2};
         {undefined, FileCtx2} ->
             {0, FileCtx2}
     end.

@@ -109,6 +109,6 @@ delete_insecure(UserCtx, FileCtx, Silent) ->
         {ok, FileMeta#file_meta{deleted = true}}
     end),
     ok = file_meta:delete_child_link(ParentUuid, Scope, FileUuid, FileName),
-
     fslogic_deletion_worker:request_deletion(UserCtx, FileCtx3, Silent),
+    file_popularity:delete(FileUuid),
     #fuse_response{status = #status{code = ?OK}}.

@@ -21,7 +21,7 @@
 -export_type([block/0, blocks/0]).
 
 %% API
--export([merge/2, aggregate/2, consolidate/1, invalidate/2, upper/1, lower/1]).
+-export([merge/2, aggregate/2, consolidate/1, invalidate/2, upper/1, lower/1, size/1]).
 
 %%%===================================================================
 %%% API
@@ -53,6 +53,15 @@ aggregate(Blocks, []) ->
     Blocks;
 aggregate(Blocks1, Blocks2) ->
     aggregate_blocks(Blocks1, Blocks2, []).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns aggregated size of give list of blocks.
+%% @end
+%%-------------------------------------------------------------------
+-spec size(blocks()) -> non_neg_integer().
+size(Blocks) ->
+    size(Blocks, 0).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -171,3 +180,13 @@ aggregate_block(#file_block{offset = Offset1, size = Size1} = Block1,
     } | Blocks];
 aggregate_block(Block, Blocks) ->
     [Block | Blocks].
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Tail recursive helper function for size/1 function.
+%% @end
+%%-------------------------------------------------------------------
+-spec size([blocks()], non_neg_integer()) -> non_neg_integer().
+size([], AggregatedSize) -> AggregatedSize;
+size([#file_block{size = Size} | RestBlocks], AggregatedSize) ->
+    size(RestBlocks, Size + AggregatedSize).

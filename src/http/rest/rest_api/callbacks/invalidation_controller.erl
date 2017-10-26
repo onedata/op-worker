@@ -164,7 +164,7 @@ handle_cast(start_transfer, State = #state{
         #provider_response{
             status = #status{code = ?OK}
         } = sync_req:invalidate_file_replica(user_ctx:new(SessionId),
-            file_ctx:new_by_guid(FileGuid), undefined, TransferId
+            file_ctx:new_by_guid(FileGuid), undefined, TransferId, undefined
         ),
         {noreply, State}
     catch
