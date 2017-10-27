@@ -137,6 +137,8 @@ get_record_struct(3) ->
         {subdomain_delegation, boolean},
         {domain, string},
         {subdomain, string},
+        {latitude, float},
+        {longitude, float},
 
         {spaces, #{string => integer}},
 

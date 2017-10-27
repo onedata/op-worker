@@ -24,6 +24,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 -export([get/0, get/1, get/2, get_protected_data/2]).
+-export([get_as_map/0]).
 -export([get_name/0, get_name/1, get_name/2]).
 -export([get_spaces/0, get_spaces/1, get_spaces/2]).
 -export([has_eff_user/2, has_eff_user/3]).
@@ -87,6 +88,32 @@ get_protected_data(SessionId, ProviderId) ->
         gri = #gri{type = od_provider, id = ProviderId, aspect = instance, scope = protected},
         subscribe = true
     }).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns current provider's data in a map.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_as_map() -> map().
+get_as_map() ->
+    {ok, #document{value = ProviderRecord}} = ?MODULE:get(),
+    #od_provider{
+        name = Name,
+        subdomain_delegation = SubdomainDelegation,
+        domain = Domain,
+        subdomain = Subdomain,
+        longitude = Longitude,
+        latitude = Latitude
+    } = ProviderRecord,
+    #{
+        name => Name,
+        subdomain_delegation => SubdomainDelegation,
+        domain => Domain,
+        subdomain => Subdomain,
+        longitude => Longitude,
+        latitude => Latitude
+    }.
 
 
 %%--------------------------------------------------------------------

@@ -157,6 +157,8 @@ translate(#gri{type = od_provider, id = Id, aspect = instance, scope = private},
             subdomain_delegation = maps:get(<<"subdomainDelegation">>, Result),
             domain = maps:get(<<"domain">>, Result),
             subdomain = maps:get(<<"subdomain">>, Result),
+            longitude = maps:get(<<"longitude">>, Result),
+            latitude = maps:get(<<"latitude">>, Result),
             spaces = maps:get(<<"spaces">>, Result),
             eff_users = maps:get(<<"effectiveUsers">>, Result),
             eff_groups = maps:get(<<"effectiveGroups">>, Result)
