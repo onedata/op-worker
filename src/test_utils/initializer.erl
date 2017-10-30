@@ -1012,7 +1012,9 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
                     name = PID,
                     subdomain_delegation = false,
                     domain = PID,
-                    spaces = maps:from_list([{S, 1000000000} || S <- Spaces])
+                    spaces = maps:from_list([{S, 1000000000} || S <- Spaces]),
+                    longitude = 0.0,
+                    latitude = 0.0
                 }}}
         end
     end,
