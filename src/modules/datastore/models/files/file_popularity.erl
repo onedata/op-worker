@@ -17,7 +17,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([increment_open/1, get_or_default/1, initialize/1, update_size/2, delete/1, update/2]).
+-export([increment_open/1, get_or_default/1, initialize/1, update_size/2, delete/1, update/2, get/1]).
 
 %% datastore_model callbacks
 -export([get_record_struct/1, get_ctx/0, get_record_version/0]).

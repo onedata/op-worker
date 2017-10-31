@@ -31,10 +31,10 @@
 %%--------------------------------------------------------------------
 -spec cleanup_space(od_space:id(), autocleaning:id(), non_neg_integer(),
     non_neg_integer(), non_neg_integer(), non_neg_integer()) -> ok.
-cleanup_space(SpaceId, AutocleaningId, SizeLowerLimit, SizeUpperLimit, MaxInactive, Target) ->
+cleanup_space(SpaceId, AutocleaningId, SizeLowerLimit, SizeUpperLimit, MaxNotOpenedHours, Target) ->
 
     FilesToClean = file_popularity_view:get_unpopular_files(
-        SpaceId, SizeLowerLimit, SizeUpperLimit,  MaxInactive, null,
+        SpaceId, SizeLowerLimit, SizeUpperLimit, MaxNotOpenedHours, null,
         null, null, null
     ),
     ConditionFun = fun() ->

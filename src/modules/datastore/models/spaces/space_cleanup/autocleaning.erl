@@ -105,7 +105,7 @@ remove_skipped(AutocleaningId, SpaceId) ->
 %% Mark released file and it's size.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_released_file(undefined | id(), non_neg_integer()) -> {ok, id()}.
+-spec mark_released_file(undefined | id(), non_neg_integer()) -> {ok, id() | undefined}.
 mark_released_file(undefined, _Size) ->
     {ok, undefined};
 mark_released_file(AutocleaningId, Size) ->
@@ -124,7 +124,7 @@ mark_released_file(AutocleaningId, Size) ->
 %% Mark given autocleaning as active.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_active(undefined | id()) -> {ok, id()}.
+-spec mark_active(undefined | id()) -> {ok, id() | undefined}.
 mark_active(undefined) ->
     {ok, undefined};
 mark_active(AutocleaningId) ->
@@ -137,7 +137,7 @@ mark_active(AutocleaningId) ->
 %% Mark given autocleaning as failed.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_failed(undefined | id()) -> {ok, id()}.
+-spec mark_failed(undefined | id()) -> {ok, id() | undefined}.
 mark_failed(undefined) ->
     {ok, undefined};
 mark_failed(AutocleaningId) ->
@@ -154,7 +154,7 @@ mark_failed(AutocleaningId) ->
 %% Mark given autocleaning as completed.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_completed(undefined | id()) -> {ok, id()}.
+-spec mark_completed(undefined | id()) -> {ok, id() | undefined}.
 mark_completed(undefined) ->
     {ok, undefined};
 mark_completed(AutocleaningId) ->
