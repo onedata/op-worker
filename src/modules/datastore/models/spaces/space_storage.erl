@@ -67,10 +67,10 @@ record_struct(4) ->
         {file_popularity_enabled, boolean},
         {cleanup_enabled, boolean},
         {cleanup_in_progress, string},
-        {autocleaning, {record, [
-            {file_size_gt, integer},
-            {file_size_lt, integer},
-            {max_inactive, integer},
+        {autocleaning_config, {record, [
+            {lower_file_size_limit, integer},
+            {upper_file_size_limit, integer},
+            {max_file_not_opened_hours, integer},
             {target, integer},
             {threshold, integer}
         ]}}

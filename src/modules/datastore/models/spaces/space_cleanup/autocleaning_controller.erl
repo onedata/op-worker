@@ -32,11 +32,10 @@
 -record(state, {
     autocleaning_id :: autocleaning:id(),
     space_id :: od_space:id(),
-    file_size_gt :: undefined | non_neg_integer(),
-    file_size_lt :: undefined | non_neg_integer(),
-    max_inactive :: undefined | non_neg_integer(),
-    target :: non_neg_integer(),
-    threshold :: non_neg_integer()  % todo redundant???
+    lower_file_size_limit :: undefined | non_neg_integer(),
+    upper_file_size_limit :: undefined | non_neg_integer(),
+    max_file_not_opened_hours :: undefined | non_neg_integer(),
+    target :: non_neg_integer()
 }).
 
 -define(START_CLEAN, start_autocleaning).
@@ -93,18 +92,17 @@ stop() ->
 -spec(init(Args :: term()) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore).
-init([AutocleaningId, SpaceId, FileSizeGt, FileSizeLt, MaxInactive, Target, Threshold]) ->
+init([AutocleaningId, SpaceId, LowerFileLimit, UpperFileLimit, MaxNotOpenedHours, Target]) ->
     ok = gen_server2:cast(self(), ?START_CLEAN),
     ?info("Autocleaning: ~p started in space ~p", [AutocleaningId, SpaceId]),
     {ok, _} = autocleaning:mark_active(AutocleaningId),
     {ok, #state{
         autocleaning_id = AutocleaningId,
         space_id = SpaceId,
-        file_size_gt = FileSizeGt,
-        file_size_lt = FileSizeLt,
-        max_inactive = MaxInactive,
-        target = Target,
-        threshold = Threshold
+        lower_file_size_limit = LowerFileLimit,
+        upper_file_size_limit = UpperFileLimit,
+        max_file_not_opened_hours = MaxNotOpenedHours,
+        target = Target
     }}.
 
 %%--------------------------------------------------------------------
@@ -138,13 +136,14 @@ handle_call(_Request, _From, State) ->
 handle_cast(?START_CLEAN, State = #state{
     autocleaning_id = AutocleaningId,
     space_id = SpaceId,
-    file_size_lt = FileSizeLt,
-    file_size_gt = FileSizeGt,
-    max_inactive = MaxInactive,
+    lower_file_size_limit = LowerFileLimit,
+    upper_file_size_limit = UpperFileLimit,
+    max_file_not_opened_hours = MaxNotOpenedHours,
     target = Target
 }) ->
     try
-        space_cleanup_api:cleanup_space(SpaceId, AutocleaningId, FileSizeGt, FileSizeLt, MaxInactive, Target),
+        space_cleanup_api:cleanup_space(SpaceId, AutocleaningId, LowerFileLimit,
+            UpperFileLimit, MaxNotOpenedHours, Target),
         {noreply, State}
     catch
         _:Reason ->
@@ -216,13 +215,11 @@ code_change(_OldVsn, State, _Extra) ->
 -spec start(autocleaning:id(), autocleaning:autocleaning()) -> ok.
 start(AutocleaningId, AC = #autocleaning{space_id = SpaceId}) ->
     #autocleaning_config{
-        lower_file_size_limit = FileSizeGt,
-        upper_file_size_limit = FileSizeLt,
-        max_file_not_opened_hours = MaxInactive,
-        target = Target,
-        threshold = Threshold
+        lower_file_size_limit = LowerFileLimit,
+        upper_file_size_limit = UpperFileLimit,
+        max_file_not_opened_hours = MaxNotOpenedHours,
+        target = Target
     } = autocleaning:get_config(AC),
     {ok, _Pid} = gen_server2:start(autocleaning_controller, [AutocleaningId,
-        SpaceId, FileSizeGt, FileSizeLt, MaxInactive, Target, Threshold
-    ], []),
+        SpaceId, LowerFileLimit, UpperFileLimit, MaxNotOpenedHours, Target], []),
     ok.

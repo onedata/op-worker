@@ -221,9 +221,9 @@ record_struct(1) ->
         {released_files, integer},
         {status, atom},
         {autocleaning_config, {record, [
-            {file_size_gt, integer},
-            {file_size_lt, integer},
-            {max_inactive, integer},
+            {lower_file_size_limit, integer},
+            {upper_file_size_limit, integer},
+            {max_file_not_opened_hours, integer},
             {target, integer},
             {threshold, integer}
         ]}}
