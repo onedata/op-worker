@@ -59,13 +59,17 @@ cleanup_space(SpaceId, AutocleaningId, SizeLowerLimit, SizeUpperLimit, MaxNotOpe
 -spec foreach_until(fun((FileCtx :: file_ctx:ctx()) -> ok),
     fun(() -> boolean()), [file_ctx:ctx()]) -> ok.
 foreach_until(Fun, Condition, List) ->
-    lists:foldl(fun
-        (_Arg, true) ->
-            true;
-        (Arg, false) ->
-            Fun(Arg),
-            Condition()
-    end, false, List),
+    case Condition() of
+        true -> ok;
+        false ->
+            lists:foldl(fun
+                (_Arg, true) ->
+                    true;
+                (Arg, false) ->
+                    Fun(Arg),
+                    Condition()
+            end, false, List)
+    end,
     ok.
 
 %%--------------------------------------------------------------------

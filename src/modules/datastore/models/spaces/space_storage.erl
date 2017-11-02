@@ -225,12 +225,10 @@ disable_autocleaning(SpaceId) ->
 %%-------------------------------------------------------------------
 -spec update_autocleaning(od_space:id(), maps:map()) -> {ok, od_space:id()}.
 update_autocleaning(SpaceId, Settings) ->
-    UpdateResult = update(SpaceId, fun(SpaceStorage) ->
+    update(SpaceId, fun(SpaceStorage) ->
         Enabled = maps:get(enabled, Settings, undefined),
         update_autocleaning(SpaceStorage, Enabled, Settings)
-    end),
-    autocleaning:maybe_start(SpaceId),
-    UpdateResult.
+    end).
 
 %%-------------------------------------------------------------------
 %% @doc
