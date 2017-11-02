@@ -304,6 +304,7 @@
     autocleaning_config :: undefined | autocleaning_config:config()
 }).
 
+%% Record containing autocleaning configuration
 -record(autocleaning_config, {
     lower_file_size_limit :: undefined | non_neg_integer(),
     upper_file_size_limit :: undefined |  non_neg_integer(),
@@ -312,6 +313,7 @@
     threshold :: non_neg_integer()
 }).
 
+%% Model for holding information about autocleaning procedures
 -record(autocleaning, {
     space_id :: undefined | od_space:id(),
     started_at = 0 :: non_neg_integer(),
