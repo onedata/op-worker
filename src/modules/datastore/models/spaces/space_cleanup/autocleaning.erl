@@ -27,7 +27,7 @@
 %% API
 -export([maybe_start/1, list_reports_since/2, remove_skipped/2,
     mark_completed/1, mark_released_file/2, get_config/1, status/1,
-    mark_active/1, mark_failed/1]).
+    mark_active/1, mark_failed/1, start/1]).
 
 %% model_behaviour callbacks
 -export([get/1, save/1, exists/1, delete/1, update/2, create/1, create_or_update/2,
@@ -43,27 +43,49 @@
 
 %%-------------------------------------------------------------------
 %% @doc
-%% This function is responsible for scheduling autocleaning operations.
-%% It schedules autocleaning if cleanup is enabled and current storage
-%% occupation has reached threshold defined in cleanup configuration in
-%% space_storage record.
-%% @end
+%% @equiv maybe_start(SpaceId, false).
 %%-------------------------------------------------------------------
 -spec maybe_start(od_space:id()) -> ok.
 maybe_start(SpaceId) ->
-    case space_storage:get(SpaceId) of
-        {ok, SpaceStorageDoc} ->
-            case space_storage:is_cleanup_enabled(SpaceStorageDoc) of
-                true ->
-                    CleanupConfig = space_storage:get_autocleaning_config(SpaceStorageDoc),
-                    CurrentSize = space_quota:current_size(SpaceId),
-                    case autocleaning_config:should_start_autoclean(CurrentSize, CleanupConfig) of
-                        true -> start(SpaceId, CleanupConfig, CurrentSize);
-                        _ -> ok
-                    end;
-                _ -> ok
-            end;
-        {error, _} ->
+    maybe_start(SpaceId, false).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% @equiv maybe_start(SpaceId, true).
+%% @end
+%%-------------------------------------------------------------------
+-spec start(od_space:id()) -> ok.
+start(SpaceId) ->
+    maybe_start(SpaceId, true).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% This function is responsible for starting autocleaning_controller.
+%% If autocleaning_operation is currently in progress
+%% @end
+%%-------------------------------------------------------------------
+-spec start(od_space:id(), autocleaning_config:config(), non_neg_integer()) -> ok.
+start(SpaceId, CleanupConfig, CurrentSize) ->
+    Target = autocleaning_config:get_target(CleanupConfig),
+    BytesToRelease = CurrentSize - Target,
+    case BytesToRelease > 0 of
+        true ->
+            NewDoc = #document{
+                scope = SpaceId,
+                value = Autocleaning = #autocleaning{
+                    space_id = SpaceId,
+                    started_at = utils:system_time_seconds(),
+                    bytes_to_release = CurrentSize - Target,
+                    status = scheduled,
+                    config = CleanupConfig
+                }
+            },
+            {ok, AutocleaningId} = create(NewDoc),
+            {ok, _} = space_storage:maybe_mark_cleanup_in_progress(SpaceId, AutocleaningId),
+            add_link(AutocleaningId, SpaceId),
+            autocleaning_controller:maybe_start(AutocleaningId, Autocleaning),
+            ok;
+        _ ->
             ok
     end.
 
@@ -341,33 +363,30 @@ list() ->
 %%%===================================================================
 
 %%-------------------------------------------------------------------
+%% @private
 %% @doc
-%% This function is responsible for starting autocleaning_controller.
-%% If autocleaning_operation is currently in progress
+%% This function is responsible for scheduling autocleaning operations.
+%% It schedules autocleaning if cleanup is enabled and current storage
+%% occupation has reached threshold defined in cleanup configuration in
+%% space_storage record or if flag Force is set to true.
 %% @end
 %%-------------------------------------------------------------------
--spec start(od_space:id(), autocleaning_config:config(), non_neg_integer()) -> ok.
-start(SpaceId, CleanupConfig, CurrentSize) ->
-    Target = autocleaning_config:get_target(CleanupConfig),
-    BytesToRelease = CurrentSize - Target,
-    case BytesToRelease > 0 of
-        true ->
-            NewDoc = #document{
-                scope = SpaceId,
-                value = Autocleaning = #autocleaning{
-                    space_id = SpaceId,
-                    started_at = utils:system_time_seconds(),
-                    bytes_to_release = CurrentSize - Target,
-                    status = scheduled,
-                    config = CleanupConfig
-                }
-            },
-            {ok, AutocleaningId} = create(NewDoc),
-            {ok, _} = space_storage:maybe_mark_cleanup_in_progress(SpaceId, AutocleaningId),
-            add_link(AutocleaningId, SpaceId),
-            autocleaning_controller:maybe_start(AutocleaningId, Autocleaning),
-            ok;
-        _ ->
+-spec maybe_start(od_space:id(), boolean()) -> ok.
+maybe_start(SpaceId, Force) ->
+    case space_storage:get(SpaceId) of
+        {ok, SpaceStorageDoc} ->
+            case space_storage:is_cleanup_enabled(SpaceStorageDoc) of
+                true ->
+                    CleanupConfig = space_storage:get_autocleaning_config(SpaceStorageDoc),
+                    CurrentSize = space_quota:current_size(SpaceId),
+                    case {autocleaning_config:should_start_autoclean(CurrentSize, CleanupConfig), Force} of
+                        {true, _}-> start(SpaceId, CleanupConfig, CurrentSize);
+                        {_, true} -> start(SpaceId, CleanupConfig, CurrentSize);
+                        _ -> ok
+                    end;
+                _ -> ok
+            end;
+        {error, _} ->
             ok
     end.
 
