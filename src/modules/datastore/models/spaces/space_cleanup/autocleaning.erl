@@ -82,7 +82,7 @@ start(SpaceId, CleanupConfig, CurrentSize) ->
                     config = CleanupConfig
                 }
             },
-            {ok, AutocleaningId} = create(NewDoc),
+            {ok, AutocleaningId} = ?extract_key(datastore_model:create(?CTX, NewDoc)),
             {ok, _} = space_storage:maybe_mark_cleanup_in_progress(SpaceId, AutocleaningId),
             add_link(AutocleaningId, SpaceId),
             autocleaning_controller:maybe_start(AutocleaningId, Autocleaning),
