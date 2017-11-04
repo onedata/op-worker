@@ -234,7 +234,7 @@ create_or_update(Doc, Diff) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    Config = ?MODEL_CONFIG(file_popularity_bucket, [], ?LOCALLY_CACHED_LEVEL),
+    Config = ?MODEL_CONFIG(file_popularity_bucket, [], ?GLOBALLY_CACHED_LEVEL),
     Config#model_config{version = 1}.
 
 %%--------------------------------------------------------------------

@@ -78,8 +78,7 @@
     set_get_json_metadata_using_filter/1,
     primitive_json_metadata_test/1,
     empty_metadata_invalid_json_test/1,
-    spatial_flag_test/1
-    ,
+    spatial_flag_test/1,
     quota_exceeded_during_file_replication/1,
     replicate_big_dir/1,
     quota_decreased_after_invalidation/1]).
@@ -2047,7 +2046,6 @@ init_per_testcase(Case, Config) when
     Case =:= quota_decreased_after_invalidation
     ->
     [WorkerP2, _WorkerP1] = ?config(op_worker_nodes, Config),
-    ct:pal("Cleaned: ~p", [clean_monitoring_dir(WorkerP2, <<"space6">>)]),
     OldSoftQuota = rpc:call(WorkerP2, application, get_env, [op_worker, soft_quota_limit_size]),
     ok = rpc:call(WorkerP2, application, set_env, [op_worker, soft_quota_limit_size, 15]),
     Config2 = [{old_soft_quota, OldSoftQuota} | Config],
@@ -2055,10 +2053,10 @@ init_per_testcase(Case, Config) when
 
 init_per_testcase(automatic_cleanup_should_invalidate_unpopular_files, Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    rpc:call(WorkerP1, space_storage, enable_file_popularity, [<<"space5">>]),
-    rpc:call(WorkerP2, space_storage, enable_file_popularity, [<<"space5">>]),
-    rpc:call(WorkerP1, space_storage, update_autocleaning, [<<"space5">>, ?AUTOCLEANING_SETTINGS]),
-    rpc:call(WorkerP2, space_storage, update_autocleaning, [<<"space5">>, ?AUTOCLEANING_SETTINGS]),
+    {ok, _} = rpc:call(WorkerP1, space_storage, enable_file_popularity, [<<"space5">>]),
+    {ok, _} = rpc:call(WorkerP2, space_storage, enable_file_popularity, [<<"space5">>]),
+    {ok, _} = rpc:call(WorkerP1, space_cleanup_api, configure_autocleaning, [<<"space5">>, ?AUTOCLEANING_SETTINGS]),
+    {ok, _} = rpc:call(WorkerP2, space_cleanup_api, configure_autocleaning, [<<"space5">>, ?AUTOCLEANING_SETTINGS]),
     init_per_testcase(all, Config);
 
 init_per_testcase(_Case, Config) ->
@@ -2074,8 +2072,8 @@ end_per_testcase(Case = automatic_cleanup_should_invalidate_unpopular_files, Con
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     rpc:call(WorkerP1, space_storage, disable_file_popularity, [<<"space5">>]),
     rpc:call(WorkerP2, space_storage, disable_file_popularity, [<<"space5">>]),
-    rpc:call(WorkerP2, space_storage, disable_autocleaning, [<<"space5">>]),
-    rpc:call(WorkerP2, space_storage, disable_autocleaning, [<<"space5">>]),
+    rpc:call(WorkerP2, space_cleanup_api, disable_autocleaning, [<<"space5">>]),
+    rpc:call(WorkerP2, space_cleanup_api, disable_autocleaning, [<<"space5">>]),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(Case, Config) when

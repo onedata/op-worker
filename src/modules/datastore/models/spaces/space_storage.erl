@@ -21,11 +21,11 @@
 %% API
 -export([add/2, add/3]).
 -export([get_storage_ids/1, get_mounted_in_root/1,
-    is_file_popularity_enabled/1, is_cleanup_enabled/1, enable_file_popularity/1,
-    disable_file_popularity/1, update_autocleaning/2, get_autocleaning_config/1,
+    is_file_popularity_enabled/1, enable_file_popularity/1,
+    disable_file_popularity/1, get_autocleaning_config/1,
     get_cleanup_in_progress/1, mark_cleanup_finished/1,
-    maybe_mark_cleanup_in_progress/2, disable_autocleaning/1,
-    get_file_popularity_details/1, get_autocleaning_details/1, get_soft_quota/0]).
+    maybe_mark_cleanup_in_progress/2,
+    get_file_popularity_details/1, get_soft_quota/0]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
@@ -319,47 +319,7 @@ enable_file_popularity(SpaceId) ->
 -spec disable_file_popularity(od_space:id()) -> {ok, od_space:id()}.
 disable_file_popularity(SpaceId) ->
     update_file_popularity(SpaceId, false),
-    disable_autocleaning(SpaceId).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks whether automatic cleanup is enabled for storage supporting
-%% given space.
-%% @end
-%%--------------------------------------------------------------------
--spec is_cleanup_enabled(od_space:id() | model() | doc()) -> boolean().
-is_cleanup_enabled(#document{value = SS = #space_storage{}}) ->
-    is_cleanup_enabled(SS);
-is_cleanup_enabled(SpaceStorage = #space_storage{}) ->
-    SpaceStorage#space_storage.cleanup_enabled;
-is_cleanup_enabled(SpaceId) ->
-    case space_storage:get(SpaceId) of
-        {ok, Doc} ->
-            is_cleanup_enabled(Doc#document.value);
-        _Error ->
-            false
-    end.
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Disables autocleaning.
-%% @end
-%%-------------------------------------------------------------------
--spec disable_autocleaning(od_space:id()) -> {ok, id()}.
-disable_autocleaning(SpaceId) ->
-    update_autocleaning(SpaceId, #{enabled => false}).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Helper function for changing auto_cleaning settings.
-%% @end
-%%-------------------------------------------------------------------
--spec update_autocleaning(od_space:id(), maps:map()) -> {ok, od_space:id()}.
-update_autocleaning(SpaceId, Settings) ->
-    update(SpaceId, fun(SpaceStorage) ->
-        Enabled = maps:get(enabled, Settings, undefined),
-        update_autocleaning(SpaceStorage, Enabled, Settings)
-    end).
+    space_cleanup_api:disable_autocleaning(SpaceId).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -421,17 +381,6 @@ mark_cleanup_finished(SpaceId) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Returns autocleaning details.
-%% @end
-%%-------------------------------------------------------------------
--spec get_autocleaning_details(od_space:id()) -> proplists:proplist().
-get_autocleaning_details(SpaceId) -> [
-    {enabled, is_cleanup_enabled(SpaceId)},
-    {settings, get_autocleaning_settings(SpaceId)}
-].
-
-%%-------------------------------------------------------------------
-%% @doc
 %% Returns soft_quota limit currently set in app.config
 %% @end
 %%-------------------------------------------------------------------
@@ -442,55 +391,6 @@ get_soft_quota() ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns current autocleaning_settings.
-%% @end
-%%-------------------------------------------------------------------
--spec get_autocleaning_settings(od_space:id()) -> proplists:proplist() | undefined.
-get_autocleaning_settings(SpaceId) ->
-    case get_autocleaning_config(SpaceId) of
-        undefined ->
-            undefined;
-        Config ->
-        [
-            {lowerFileSizeLimit, autocleaning_config:get_lower_size_limit(Config)},
-            {upperFileSizeLimit, autocleaning_config:get_upper_size_limit(Config)},
-            {maxFileNotOpenedHours, autocleaning_config:get_max_inactive_limit(Config)},
-            {threshold, autocleaning_config:get_threshold(Config)},
-            {target, autocleaning_config:get_target(Config)}
-        ]
-    end.
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Updates autocleaning_config.
-%% @end
-%%-------------------------------------------------------------------
--spec update_autocleaning(model(), boolean(), maps:map()) ->
-    {ok, model()} | {error, term()}.
-update_autocleaning(#space_storage{cleanup_enabled = false}, undefined, _) ->
-    {error, autocleaning_disabled};
-update_autocleaning(SS = #space_storage{cleanup_enabled = _Enabled}, false, _) ->
-    {ok, SS#space_storage{cleanup_enabled = false}};
-update_autocleaning(SS = #space_storage{autocleaning_config = OldConfig}, _, Settings) ->
-    case SS#space_storage.file_popularity_enabled of
-        true ->
-            case autocleaning_config:create_or_update(OldConfig, Settings) of
-                {error, Reason} ->
-                    {error, Reason};
-                NewConfig ->
-                    {ok, SS#space_storage{
-                        cleanup_enabled = true,
-                        autocleaning_config = NewConfig
-                    }}
-            end;
-        _ ->
-            {error, file_popularity_disabled}
-    end.
 
 %%--------------------------------------------------------------------
 %% @private

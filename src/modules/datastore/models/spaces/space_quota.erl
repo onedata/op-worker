@@ -147,9 +147,9 @@ model_init() ->
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
 'after'(?MODULE, create, _Level, _Context, {ok, SpaceId}) ->
-     autocleaning:maybe_start(SpaceId);
+    space_cleanup_api:maybe_start(SpaceId);
 'after'(?MODULE, create_or_update, _Level, _Context, {ok, SpaceId}) ->
-    autocleaning:maybe_start(SpaceId);
+    space_cleanup_api:maybe_start(SpaceId);
 'after'(?MODULE, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 
