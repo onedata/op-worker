@@ -24,9 +24,8 @@
 -export_type([id/0, status/0]).
 
 %% API
--export([maybe_start/1, list_reports_since/2, remove_skipped/2,
-    mark_completed/1, mark_released_file/2, get_config/1, status/1,
-    mark_active/1, mark_failed/1, start/1]).
+-export([list_reports_since/2, remove_skipped/2,
+    mark_completed/1, mark_released_file/2, get_config/1, mark_active/1, mark_failed/1, start/3]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
@@ -45,25 +44,9 @@
 
 %%-------------------------------------------------------------------
 %% @doc
-%% @equiv maybe_start(SpaceId, false).
-%%-------------------------------------------------------------------
--spec maybe_start(od_space:id()) -> ok.
-maybe_start(SpaceId) ->
-    maybe_start(SpaceId, false).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% @equiv maybe_start(SpaceId, true).
-%% @end
-%%-------------------------------------------------------------------
--spec start(od_space:id()) -> ok.
-start(SpaceId) ->
-    maybe_start(SpaceId, true).
-
-%%-------------------------------------------------------------------
-%% @doc
 %% This function is responsible for starting autocleaning_controller.
-%% If autocleaning_operation is currently in progress
+%% If autocleaning operation is currently in progress, new operation
+%% will be skipped ba autocleaning_controller.
 %% @end
 %%-------------------------------------------------------------------
 -spec start(od_space:id(), autocleaning_config:config(), non_neg_integer()) -> ok.
@@ -84,9 +67,8 @@ start(SpaceId, CleanupConfig, CurrentSize) ->
             },
             {ok, AutocleaningId} = ?extract_key(datastore_model:create(?CTX, NewDoc)),
             {ok, _} = space_storage:maybe_mark_cleanup_in_progress(SpaceId, AutocleaningId),
-            add_link(AutocleaningId, SpaceId),
-            autocleaning_controller:maybe_start(AutocleaningId, Autocleaning),
-            ok;
+            ok = add_link(AutocleaningId, SpaceId),
+            ok = autocleaning_controller:maybe_start(AutocleaningId, Autocleaning);
         _ ->
             ok
     end.
@@ -120,7 +102,6 @@ list_reports_since(SpaceId, Since) ->
 remove_skipped(AutocleaningId, SpaceId) ->
     remove_link(AutocleaningId, SpaceId),
     ok = datastore_model:delete(?CTX, AutocleaningId).
-
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -203,58 +184,11 @@ get_config(AutocleaningId) ->
     {ok, Doc} = datastore_model:get(?CTX, AutocleaningId),
     get_config(Doc).
 
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns proplist describing status of autocleaning in given space.
-%% @end
-%%-------------------------------------------------------------------
--spec status(od_space:id()) -> proplists:proplist().
-status(SpaceId) ->
-    CurrentSize = space_quota:current_size(SpaceId),
-    InProgress = case space_storage:get_cleanup_in_progress(SpaceId) of
-        undefined ->
-            false;
-        _ ->
-            true
-    end,
-    [
-        {inProgress, InProgress},
-        {spaceOccupancy, CurrentSize}
-    ].
 
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function is responsible for scheduling autocleaning operations.
-%% It schedules autocleaning if cleanup is enabled and current storage
-%% occupation has reached threshold defined in cleanup configuration in
-%% space_storage record or if flag Force is set to true.
-%% @end
-%%-------------------------------------------------------------------
--spec maybe_start(od_space:id(), boolean()) -> ok.
-maybe_start(SpaceId, Force) ->
-    case space_storage:get(SpaceId) of
-        {ok, SpaceStorageDoc} ->
-            case space_storage:is_cleanup_enabled(SpaceStorageDoc) of
-                true ->
-                    CleanupConfig = space_storage:get_autocleaning_config(SpaceStorageDoc),
-                    CurrentSize = space_quota:current_size(SpaceId),
-                    case {autocleaning_config:should_start_autoclean(CurrentSize, CleanupConfig), Force} of
-                        {true, _}-> start(SpaceId, CleanupConfig, CurrentSize);
-                        {_, true} -> start(SpaceId, CleanupConfig, CurrentSize);
-                        _ -> ok
-                    end;
-                _ -> ok
-            end;
-        {error, _} ->
-            ok
-    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -319,6 +253,7 @@ for_each_autocleaning(SpaceId, Callback, AccIn) ->
     end, AccIn, #{}).
 
 %%-------------------------------------------------------------------
+%% @private
 %% @doc
 %% Returns info about given autocleaning.
 %% @end

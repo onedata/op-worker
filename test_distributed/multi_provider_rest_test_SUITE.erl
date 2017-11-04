@@ -2078,10 +2078,10 @@ init_per_testcase(Case, Config) when
 
 init_per_testcase(automatic_cleanup_should_invalidate_unpopular_files, Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    rpc:call(WorkerP1, space_storage, enable_file_popularity, [<<"space5">>]),
-    rpc:call(WorkerP2, space_storage, enable_file_popularity, [<<"space5">>]),
-    rpc:call(WorkerP1, space_storage, update_autocleaning, [<<"space5">>, ?AUTOCLEANING_SETTINGS]),
-    rpc:call(WorkerP2, space_storage, update_autocleaning, [<<"space5">>, ?AUTOCLEANING_SETTINGS]),
+    {ok, _} = rpc:call(WorkerP1, space_storage, enable_file_popularity, [<<"space5">>]),
+    {ok, _} = rpc:call(WorkerP2, space_storage, enable_file_popularity, [<<"space5">>]),
+    {ok, _} = rpc:call(WorkerP1, space_cleanup_api, configure_autocleaning, [<<"space5">>, ?AUTOCLEANING_SETTINGS]),
+    {ok, _} = rpc:call(WorkerP2, space_cleanup_api, configure_autocleaning, [<<"space5">>, ?AUTOCLEANING_SETTINGS]),
     init_per_testcase(all, Config);
 
 init_per_testcase(_Case, Config) ->
@@ -2097,8 +2097,8 @@ end_per_testcase(Case = automatic_cleanup_should_invalidate_unpopular_files, Con
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     rpc:call(WorkerP1, space_storage, disable_file_popularity, [<<"space5">>]),
     rpc:call(WorkerP2, space_storage, disable_file_popularity, [<<"space5">>]),
-    rpc:call(WorkerP2, space_storage, disable_autocleaning, [<<"space5">>]),
-    rpc:call(WorkerP2, space_storage, disable_autocleaning, [<<"space5">>]),
+    rpc:call(WorkerP2, space_cleanup_api, disable_autocleaning, [<<"space5">>]),
+    rpc:call(WorkerP2, space_cleanup_api, disable_autocleaning, [<<"space5">>]),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(Case, Config) when

@@ -270,10 +270,15 @@
 
 %% Record containing autocleaning configuration
 -record(autocleaning_config, {
+    % lowest size of file that can be invalidated during autocleaning
     lower_file_size_limit :: undefined | non_neg_integer(),
+    % highest size of file that can be invalidated during autocleaning
     upper_file_size_limit :: undefined |  non_neg_integer(),
+    % if file hasn't been opened for this number of hours or longer it will be deleted
     max_file_not_opened_hours :: undefined |  non_neg_integer(),
+    % storage occupancy at which autocleaning will stop
     target :: non_neg_integer(),
+    % autocleaning will start after exceeding threshold level of occupancy
     threshold :: non_neg_integer()
 }).
 

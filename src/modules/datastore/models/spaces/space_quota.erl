@@ -215,10 +215,10 @@ get_disabled_spaces() ->
 %%-------------------------------------------------------------------
 -spec run_after(atom(), term(), term()) -> term().
 run_after(create, _, Result = {ok, #document{key = SpaceId}}) ->
-    autocleaning:maybe_start(SpaceId),
+    space_cleanup_api:maybe_start(SpaceId),
     Result;
 run_after(update, _, Result = {ok, #document{key = SpaceId}}) ->
-    autocleaning:maybe_start(SpaceId),
+    space_cleanup_api:maybe_start(SpaceId),
     Result;
 run_after(_, _, Result) ->
     Result.
