@@ -4,6 +4,22 @@
 CHANGELOG
 ---------
 
+### 17.06.0-rc7
+
+* Fix failures connected with exometer timeouts
+* VFS-3815 Added erlang-observer as RPM build dependency
+* VFS-3686 allow to start space cleaning manually
+* VFS-3781 Added radosstriper library
+* VFS-3686 autocleaning API and model
+* Updating GUI, including: VFS-3710 - VFS-3710 Using binary prefixes for size units (IEC format: MiB, GiB, TiB, etc.)
+* Updating GUI, including: VFS-3668 - VFS-3668 Show file conflict names in files tree and change conflict name format to same as in Oneclient
+* VFS-3756 Repair session (prevent hang up)
+* VFS-3756 Update cluster_worker to prevent provider from crush when database is down
+* VFS-3763 Fixed helpers namespace in NIF
+* VFS-3763 Updated to folly 2017.10.02
+* VFS-3753 - fix storage sync failing when luma is enabled
+
+
 ### 17.06.0-rc6
 
 * VFS-3693 Update exometer reporters management
