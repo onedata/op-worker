@@ -2046,6 +2046,7 @@ init_per_testcase(Case, Config) when
     Case =:= quota_decreased_after_invalidation
     ->
     [WorkerP2, _WorkerP1] = ?config(op_worker_nodes, Config),
+    clean_monitoring_dir(WorkerP2, <<"space6">>),
     OldSoftQuota = rpc:call(WorkerP2, application, get_env, [op_worker, soft_quota_limit_size]),
     ok = rpc:call(WorkerP2, application, set_env, [op_worker, soft_quota_limit_size, 15]),
     Config2 = [{old_soft_quota, OldSoftQuota} | Config],
