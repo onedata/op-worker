@@ -709,7 +709,10 @@ get_value(SpaceId, CounterType) ->
         {ok, [{value, Value}]} ->
             Value;
         {error, not_found} ->
-            0
+            0;
+        Error ->
+            ?error("Cannot get exometer counter ~p for space ~p, error: ~p:p",
+                [CounterType, SpaceId, Error])
     end.
 
 %%-------------------------------------------------------------------
