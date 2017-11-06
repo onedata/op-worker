@@ -37,7 +37,7 @@ gen_storage_dir() ->
 %%--------------------------------------------------------------------
 -spec gen_name() -> binary().
 gen_name() ->
-    binary:replace(base64:encode(crypto:rand_bytes(12)), <<"/">>, <<"">>, [global]).
+    binary:replace(base64:encode(crypto:strong_rand_bytes(12)), <<"/">>, <<"">>, [global]).
 
 %%%===================================================================
 %%% Internal functions

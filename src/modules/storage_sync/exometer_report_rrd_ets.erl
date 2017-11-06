@@ -15,7 +15,7 @@
 
 -include_lib("ctool/include/logging.hrl").
 
--behaviour(exometer_report).
+%%-behaviour(exometer_report).  %todo VFS-3788
 
 -export([
     exometer_init/1,

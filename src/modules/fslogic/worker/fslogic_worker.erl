@@ -78,10 +78,6 @@ init(_Args) ->
         {sync_timer, invalidate_permissions_cache}
     ),
 
-    erlang:send_after(?SPACES_CLEANUP_INTERVAL, self(),
-        {sync_timer, spaces_cleanup}
-    ),
-
     erlang:send_after(?TRANSFERS_RESTART_DELAY, self(),
         {sync_timer, restart_transfers}
     ),
@@ -125,12 +121,6 @@ handle(invalidate_permissions_cache) ->
         _:Reason ->
             ?error_stacktrace("Failed to invalidate permissions cache due to: ~p", [Reason])
     end,
-    erlang:send_after(?INVALIDATE_PERMISSIONS_CACHE_INTERVAL, self(),
-        {sync_timer, invalidate_permissions_cache}
-    ),
-    ok;
-handle(spaces_cleanup) ->
-    space_cleanup_api:periodic_cleanup(),
     erlang:send_after(?INVALIDATE_PERMISSIONS_CACHE_INTERVAL, self(),
         {sync_timer, invalidate_permissions_cache}
     ),
@@ -375,7 +365,7 @@ handle_provider_request(UserCtx, #replicate_file{block = Block}, FileCtx) ->
 handle_provider_request(UserCtx, #invalidate_file_replica{
     migration_provider_id = MigrationProviderId
 }, FileCtx) ->
-    sync_req:invalidate_file_replica(UserCtx, FileCtx, MigrationProviderId, undefined);
+    sync_req:invalidate_file_replica(UserCtx, FileCtx, MigrationProviderId, undefined, undefined);
 handle_provider_request(UserCtx, #get_parent{}, FileCtx) ->
     guid_req:get_parent(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #get_file_path{}, FileCtx) ->

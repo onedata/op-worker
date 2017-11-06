@@ -18,7 +18,7 @@
 -define(VIEW_NAME(SpaceId), <<"file-popularity-", SpaceId/binary>>).
 
 %% API
--export([create/1, get_unpopular_files/7]).
+-export([create/1, get_unpopular_files/8, rest_url/1]).
 
 -define(INFINITY, 100000000000000000). % 100PB
 
@@ -58,10 +58,11 @@ create(SpaceId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_unpopular_files(od_space:id(), SizeLowerLimit :: null | non_neg_integer(),
+    SizeUpperLimit :: null | non_neg_integer(),
     HoursSinceLastOpen :: null | non_neg_integer(), TotalOpenLimit :: null | non_neg_integer(),
     HourAverageLimit :: null | non_neg_integer(), DayAverageLimit :: null | non_neg_integer(),
     MonthAverageLimit :: null | non_neg_integer()) -> [file_ctx:ctx()].
-get_unpopular_files(SpaceId, SizeLowerLimit, HoursSinceLastOpenLimit,
+get_unpopular_files(SpaceId, SizeLowerLimit, SizeUpperLimit, HoursSinceLastOpenLimit,
     TotalOpenLimit, HourAverageLimit, DayAverageLimit, MonthAverageLimit
 ) ->
     Ctx = model:make_disk_ctx(file_popularity:model_init()),
@@ -77,7 +78,7 @@ get_unpopular_files(SpaceId, SizeLowerLimit, HoursSinceLastOpenLimit,
         {stale, false},
         {start_range, [SizeLowerLimit, 0, 0, 0, 0, 0]},
         {end_range, [
-            ?INFINITY,
+            SizeUpperLimit,
             HoursTimestampLimit,
             TotalOpenLimit,
             HourAverageLimit,
@@ -91,6 +92,17 @@ get_unpopular_files(SpaceId, SizeLowerLimit, HoursSinceLastOpenLimit,
             lists:keyfind(<<"id">>, 1, Row),
         file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId))
     end, Rows).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns rest url endpoint for querying file popularity in given space.
+%% @end
+%%-------------------------------------------------------------------
+-spec rest_url(od_space:id()) -> binary().
+rest_url(SpaceId) ->
+    Endpoint = oneprovider:get_rest_endpoint(str_utils:format("query-index/file-popularity-~s", [SpaceId])),
+    list_to_binary(Endpoint).
+
 
 %%%===================================================================
 %%% Internal functions

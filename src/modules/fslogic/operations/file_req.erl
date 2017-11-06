@@ -141,7 +141,13 @@ release(UserCtx, FileCtx, HandleId) ->
         Other ->
             Other
     end,
-    ok = file_popularity:increment_open(FileCtx),
+    {CanonicalPath, _} = file_ctx:get_canonical_path(FileCtx),
+    case file_meta:is_child_of_hidden_dir(CanonicalPath) of
+        true ->
+            ok;
+        false ->
+            ok = file_popularity:increment_open(FileCtx)
+    end,
     #fuse_response{status = #status{code = ?OK}}.
 
 %%%===================================================================
