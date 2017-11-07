@@ -30,7 +30,7 @@
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
 
--define(LINK, <<"AUTOCLEANING_LINK">>).
+-define(LINK_PREFIX, <<"autocleaning_">>).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -200,7 +200,7 @@ get_config(AutocleaningId) ->
 add_link(AutocleaningId, SpaceId) ->
     Ctx = ?CTX#{scope => SpaceId},
     TreeId = oneprovider:get_provider_id(),
-    {ok, _} = datastore_model:add_links(Ctx, ?LINK, TreeId, {AutocleaningId, <<>>}),
+    {ok, _} = datastore_model:add_links(Ctx, space_link_root(SpaceId), TreeId, {AutocleaningId, <<>>}),
     ok.
 
 %%--------------------------------------------------------------------
@@ -213,7 +213,7 @@ add_link(AutocleaningId, SpaceId) ->
 remove_link(AutocleaningId, SpaceId) ->
     Ctx = ?CTX#{scope => SpaceId},
     TreeId = oneprovider:get_provider_id(),
-    ok = datastore_model:delete_links(Ctx, ?LINK, TreeId, AutocleaningId).
+    ok = datastore_model:delete_links(Ctx, space_link_root(SpaceId), TreeId, AutocleaningId).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -248,7 +248,7 @@ active_completed_or_failed(#autocleaning{}) -> false.
     AccIn :: term()) -> {ok, Acc :: term()} | {error, term()}.
 for_each_autocleaning(SpaceId, Callback, AccIn) ->
     Ctx = ?CTX#{scope => SpaceId},
-    datastore_model:fold_links(Ctx, ?LINK, all, fun(#link{name = Name}, Acc) ->
+    datastore_model:fold_links(Ctx, space_link_root(SpaceId), all, fun(#link{name = Name}, Acc) ->
         {ok, Callback(Name, Acc)}
     end, AccIn, #{}).
 
@@ -326,3 +326,12 @@ get_record_struct(1) ->
             {threshold, integer}
         ]}}
     ]}.
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns links tree root for given space.
+%% @end
+%%-------------------------------------------------------------------
+-spec space_link_root(od_space:id()) -> binary().
+space_link_root(SpaceId) ->
+    <<?LINK_PREFIX/binary, SpaceId/binary>>.
