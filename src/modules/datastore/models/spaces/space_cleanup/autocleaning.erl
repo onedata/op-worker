@@ -33,7 +33,7 @@
     model_init/0, 'after'/5, before/4, list/0]).
 -export([record_struct/1]).
 
--define(LINK, <<"AUTOCLEANING_LINK">>).
+-define(LINK_PREFIX, <<"autocleaning_">>).
 
 
 %%%===================================================================
@@ -333,7 +333,7 @@ list() ->
 -spec add_link(AutocleaningId :: id(), SpaceId :: od_space:id()) -> ok.
 add_link(AutocleaningId, SpaceId) ->
     model:execute_with_default_context(?MODULE, add_links, [
-        ?LINK, {AutocleaningId, {AutocleaningId, ?MODEL_NAME}}
+        space_link_root(SpaceId), {AutocleaningId, {AutocleaningId, ?MODEL_NAME}}
     ], [{scope, SpaceId}]).
 
 %%--------------------------------------------------------------------
@@ -344,8 +344,8 @@ add_link(AutocleaningId, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec remove_link(AutocleaningId :: id(), SpaceId :: od_space:id()) -> ok.
 remove_link(AutocleaningId, SpaceId) ->
-    model:execute_with_default_context(?MODULE, delete_links, [?LINK, AutocleaningId],
-        [{scope, SpaceId}]
+    model:execute_with_default_context(?MODULE, delete_links,
+        [space_link_root(SpaceId), AutocleaningId], [{scope, SpaceId}]
     ).
 
 
@@ -381,7 +381,7 @@ active_completed_or_failed(#autocleaning{}) -> false.
     Callback :: fun((id(), Acc0 :: term()) -> Acc :: term()),
     AccIn :: term()) -> {ok, Acc :: term()} | {error, term()}.
 for_each_autocleaning(SpaceId, Callback, AccIn) ->
-    model:execute_with_default_context(?MODULE, foreach_link, [?LINK,
+    model:execute_with_default_context(?MODULE, foreach_link, [space_link_root(SpaceId),
         fun(LinkName, _LinkTarget, Acc) ->
             Callback(LinkName, Acc)
         end, AccIn], [{scope, SpaceId}]).
@@ -412,3 +412,13 @@ get_info(#autocleaning{
         {bytesToRelease, BytesToRelease},
         {filesNumber, ReleasedFiles}
     ].
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns links tree root for given space.
+%% @end
+%%-------------------------------------------------------------------
+-spec space_link_root(od_space:id()) -> binary().
+space_link_root(SpaceId) ->
+    <<?LINK_PREFIX/binary, SpaceId/binary>>.
