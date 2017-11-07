@@ -205,6 +205,7 @@ get_group_id_internal(Args, StorageId, Storage = #storage{}) ->
     storage:model()) -> {ok, od_user:id()}.
 get_user_id_from_supported_storage_credentials(Args, StorageId,
     #storage{
+        name = StorageName,
         helpers = [#helper{name = HelperName} | _],
         luma_config = LumaConfig = #luma_config{
             cache_timeout = CacheTimeout
@@ -212,8 +213,8 @@ get_user_id_from_supported_storage_credentials(Args, StorageId,
 
     Key = to_user_key(StorageId, Args),
     luma_cache:get(Key,
-        fun reverse_luma_proxy:get_user_id/4,
-        [Args, StorageId, HelperName, LumaConfig],
+        fun reverse_luma_proxy:get_user_id/5,
+        [Args, StorageId, StorageName, HelperName, LumaConfig],
         CacheTimeout
     ).
 
@@ -227,6 +228,7 @@ get_user_id_from_supported_storage_credentials(Args, StorageId,
     storage:id(), storage:model()) -> {ok, od_group:id()}.
 get_group_id_from_supported_storage_credentials(Args, StorageId,
     #storage{
+        name = StorageName,
         helpers = [#helper{name = HelperName} | _],
         luma_config = LumaConfig = #luma_config{
             cache_timeout = CacheTimeout
@@ -234,8 +236,8 @@ get_group_id_from_supported_storage_credentials(Args, StorageId,
 
     Key = to_group_key(StorageId, Args),
     luma_cache:get(Key,
-        fun reverse_luma_proxy:get_group_id/4,
-        [Args, StorageId, HelperName, LumaConfig],
+        fun reverse_luma_proxy:get_group_id/5,
+        [Args, StorageId, StorageName, HelperName, LumaConfig],
         CacheTimeout
     ).
 
