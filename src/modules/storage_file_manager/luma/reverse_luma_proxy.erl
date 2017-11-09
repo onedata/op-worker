@@ -41,9 +41,15 @@ get_user_id(Args, StorageId, StorageName, HelperName, LumaConfig = #luma_config{
     Response = json_utils:decode_map(RespBody),
     ProviderId = maps:get(<<"idp">>, Response),
     ProviderUserId = maps:get(<<"userId">>, Response),
-    UserId = datastore_utils2:gen_key(<<"">>, str_utils:format_bin("~p:~s",
-        [ProviderId, ProviderUserId])),
-    {ok, UserId}.
+    case ProviderId of
+        <<"onedata">> ->
+            {ok, ProviderUserId};
+        _ ->
+            UserId = datastore_utils2:gen_key(<<"">>, str_utils:format_bin("~p:~s",
+                [ProviderId, ProviderUserId])
+            ),
+            {ok, UserId}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
