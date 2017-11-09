@@ -29,7 +29,7 @@
 
 %% API
 -export([get_node_hostname/0, get_node_ip/0]).
--export([get_provider_id/0, get_provider_domain/0]).
+-export([get_provider_id/0, get_provider_domain/0, get_rest_endpoint/1]).
 -export([get_oz_domain/0, get_oz_url/0]).
 -export([get_oz_login_page/0, get_oz_logout_page/0, get_oz_providers_page/0]).
 -export([register_in_oz/3, save_file/2]).
@@ -56,6 +56,16 @@
 get_node_hostname() ->
     utils:get_host(node()).
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns full provider rest endpoint URL.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_rest_endpoint(string()) -> string().
+get_rest_endpoint(Path) ->
+    {ok, Port} = application:get_env(?APP_NAME, rest_port),
+    Host = oneprovider:get_node_hostname(),
+    str_utils:format("https://~s:~B/api/v3/oneprovider/~s", [Host, Port, Path]).
 
 %%--------------------------------------------------------------------
 %% @doc

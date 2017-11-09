@@ -174,7 +174,7 @@ get_user_id_on_posix_storage_should_query_reverse_luma_once(Config) ->
     ?assertEqual({ok, ExpectedUserId}, Result2),
 
     test_utils:mock_assert_num_calls(Worker, reverse_luma_proxy, get_user_id,
-        ['_', '_', '_', '_'], 1).
+        ['_', '_', '_', '_', '_'], 1).
 
 get_user_id_on_posix_storage_by_acl_username_should_query_reverse_luma_once(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -191,7 +191,7 @@ get_user_id_on_posix_storage_by_acl_username_should_query_reverse_luma_once(Conf
     ?assertEqual({ok, ExpectedUserId}, Result2),
 
     test_utils:mock_assert_num_calls(Worker, reverse_luma_proxy, get_user_id,
-        ['_', '_', '_', '_'], 1).
+        ['_', '_', '_', '_', '_'], 1).
 
 get_user_id_on_posix_storage_should_query_reverse_luma_twice(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -213,7 +213,7 @@ get_user_id_on_posix_storage_should_query_reverse_luma_twice(Config) ->
     ?assertEqual({ok, ExpectedUserId}, Result2),
 
     test_utils:mock_assert_num_calls(Worker, reverse_luma_proxy, get_user_id,
-        ['_', '_', '_', '_'], 2).
+        ['_', '_', '_', '_', '_'], 2).
 
 get_user_id_on_posix_storage_by_acl_username_should_query_reverse_luma_twice(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -235,7 +235,7 @@ get_user_id_on_posix_storage_by_acl_username_should_query_reverse_luma_twice(Con
     ?assertEqual({ok, ExpectedUserId}, Result2),
 
     test_utils:mock_assert_num_calls(Worker, reverse_luma_proxy, get_user_id,
-        ['_', '_', '_', '_'], 2).
+        ['_', '_', '_', '_', '_'], 2).
 
 get_group_id_on_posix_storage(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -300,7 +300,7 @@ get_group_id_on_posix_storage_should_query_reverse_luma_once(Config) ->
     ?assertEqual({ok, ?TEST_MAPPED_GROUP_ID}, Result2),
 
     test_utils:mock_assert_num_calls(Worker, reverse_luma_proxy, get_group_id,
-        ['_', '_', '_', '_'], 1).
+        ['_', '_', '_', '_', '_'], 1).
 
 get_group_id_on_posix_storage_by_acl_groupname_should_query_reverse_luma_once(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -315,7 +315,7 @@ get_group_id_on_posix_storage_by_acl_groupname_should_query_reverse_luma_once(Co
     ?assertEqual({ok, ?TEST_MAPPED_GROUP_ID}, Result2),
 
     test_utils:mock_assert_num_calls(Worker, reverse_luma_proxy, get_group_id,
-        ['_', '_', '_', '_'], 1).
+        ['_', '_', '_', '_', '_'], 1).
 
 get_group_id_on_posix_storage_should_query_reverse_luma_twice(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -335,7 +335,7 @@ get_group_id_on_posix_storage_should_query_reverse_luma_twice(Config) ->
     ?assertEqual({ok, ?TEST_MAPPED_GROUP_ID}, Result2),
 
     test_utils:mock_assert_num_calls(Worker, reverse_luma_proxy, get_group_id,
-        ['_', '_', '_', '_'], 2).
+        ['_', '_', '_', '_', '_'], 2).
 
 get_group_id_on_posix_storage_by_acl_groupname_should_query_reverse_luma_twice(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -355,7 +355,7 @@ get_group_id_on_posix_storage_by_acl_groupname_should_query_reverse_luma_twice(C
     ?assertEqual({ok, ?TEST_MAPPED_GROUP_ID}, Result2),
 
     test_utils:mock_assert_num_calls(Worker, reverse_luma_proxy, get_group_id,
-        ['_', '_', '_', '_'], 2).
+        ['_', '_', '_', '_', '_'], 2).
 
 
 %%%===================================================================

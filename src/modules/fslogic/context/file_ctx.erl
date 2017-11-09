@@ -734,7 +734,7 @@ get_file_size(FileCtx) ->
         {#document{value = #file_location{size = Size}}, FileCtx2} ->
             {Size, FileCtx2};
         {undefined, FileCtx2} ->
-            get_file_size_from_remote_locations(FileCtx)
+            get_file_size_from_remote_locations(FileCtx2)
     end.
 
 %%--------------------------------------------------------------------
@@ -751,7 +751,7 @@ get_local_storage_file_size(FileCtx) ->
                 blocks = Blocks
             }
         }, FileCtx2} ->
-            {fslogic_blocks:upper(Blocks), FileCtx2};
+            {fslogic_blocks:size(Blocks), FileCtx2};
         {undefined, FileCtx2} ->
             {0 ,FileCtx2}
     end.
