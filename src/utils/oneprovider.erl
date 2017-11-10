@@ -34,11 +34,6 @@
 % Developer function
 -export([register_in_oz_dev/3]).
 
-%% Function for future use
-%% todo: in order to use identity verification based on public keys
-%% todo: use this function instead of register_in_oz_dev function
--export([register_provider_in_oz/1]).
-
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -196,36 +191,6 @@ register_in_oz_dev(NodeList, KeyFilePassword, ProviderName) ->
             {error, M}
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Registers in OZ using config from app.src (cert locations).
-%% @end
-%%--------------------------------------------------------------------
--spec register_provider_in_oz(NodeList :: [node()]) ->
-    {ok, ProviderID :: binary()} | {error, term()}.
-register_provider_in_oz(NodeList) ->
-    try
-        {ok, KeyFile} = application:get_env(?APP_NAME, identity_key_file),
-        {ok, CertFile} = application:get_env(?APP_NAME, identity_cert_file),
-        %Domain = oneprovider:get_provider_domain(),
-        {ok, Domain} = provider_logic:get_domain(),
-        identity_utils:ensure_synced_cert_present(KeyFile, CertFile, binary_to_list(Domain)),
-        Cert = identity_utils:read_cert(CertFile),
-        PublicKey = identity_utils:get_public_key(Cert),
-        ID = identity_utils:get_id(Cert),
-
-        Parameters = [
-            {<<"id">>, ID},
-            {<<"publicKey">>, identity_utils:encode(PublicKey)},
-            {<<"domain">>, Domain}
-        ],
-        ok = oz_identities:register_provider(provider, Parameters),
-        {ok, ID}
-    catch
-        T:M ->
-            ?error_stacktrace("Cannot register in OZ - ~p:~p", [T, M]),
-            {error, M}
-    end.
 
 %%--------------------------------------------------------------------
 %% @doc
