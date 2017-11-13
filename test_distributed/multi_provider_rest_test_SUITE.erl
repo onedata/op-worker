@@ -2153,7 +2153,7 @@ rest_endpoint(Node) ->
                 PStr;
             P -> P
         end,
-    {ok, Domain} = test_utils:get_env(Node, ?APP_NAME, provider_domain),
+    {ok, Domain} = test_utils:get_env(Node, ?APP_NAME, test_web_cert_domain),
     <<"https://", (str_utils:to_binary(Domain))/binary, ":", Port/binary, "/api/v3/oneprovider/">>.
 
 

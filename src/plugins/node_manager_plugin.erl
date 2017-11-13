@@ -220,7 +220,7 @@ maybe_generate_web_cert_unsafe(ClusterNodes) ->
         true ->
             % Both key and cert are expected in the same file
             {ok, CAPath} = application:get_env(?APP_NAME, test_web_cert_ca_path),
-            {ok, Hostname} = application:get_env(?APP_NAME, provider_domain),
+            {ok, Hostname} = application:get_env(?APP_NAME, test_web_cert_domain),
             cert_utils:create_signed_webcert(
                 WebKeyPath, WebCertPath, Hostname, CAPath, CAPath
             ),
