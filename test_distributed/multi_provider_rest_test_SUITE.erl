@@ -1795,10 +1795,6 @@ quota_decreased_after_invalidation(Config) ->
         #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 10]]}
     ],
     ?assertDistributionProxyByGuid(WorkerP2, SessionId2, ExpectedDistribution0, FileGuid),
-%%
-%%    tracer:start(WorkerP2),
-%%    tracer:trace_calls(storage_file_manager, write),
-%%    tracer:trace_calls(space_quota, soft_assert_write),
 
     % when
     {ok, 200, _, Body0} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1,

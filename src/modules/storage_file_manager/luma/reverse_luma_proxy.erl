@@ -94,7 +94,7 @@ get_group_id(Gid, SpaceId, StorageId, StorageName, LumaConfig = #luma_config{url
 get_group_id_by_name(Name, SpaceId, StorageId, StorageName,
     LumaConfig = #luma_config{url = LumaUrl}
 ) ->
-    Url = lists:flatten(io_lib:format("~s/resolve_aclgroup", [LumaUrl])),
+    Url = lists:flatten(io_lib:format("~s/resolve_acl_group", [LumaUrl])),
     ReqHeaders = luma_proxy:get_request_headers(LumaConfig),
     ReqBody = get_group_request_body_by_name(Name, SpaceId, StorageId, StorageName),
     {ok, 200, _RespHeaders, RespBody} = http_client:post(Url, ReqHeaders, ReqBody),
