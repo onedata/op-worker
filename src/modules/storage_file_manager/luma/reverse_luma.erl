@@ -24,7 +24,6 @@
 ]).
 
 -define(KEY_SEPARATOR, <<"::">>).
--define(DEFAULT_CACHE_TIMEOUT, timer:minutes(5)).
 
 
 %%%===================================================================
@@ -309,15 +308,7 @@ to_user_key(StorageId, UidOrName) ->
 %% Concatenates helper name and guid to create unique key for given group
 %% @end
 %%-------------------------------------------------------------------
--spec to_group_key(storage:id(), map()) -> binary().
-to_group_key(StorageId, #{
-    <<"gid">> := Gid
-}) ->
-    to_group_key(StorageId, Gid);
-to_group_key(StorageId, #{
-    <<"name">> := Name
-}) ->
-    to_group_key(StorageId, Name);
+-spec to_group_key(storage:id(), integer() | binary()) -> binary().
 to_group_key(StorageId, GidOrName) ->
     Args = [<<"group">>, StorageId, GidOrName],
     Binaries = [str_utils:to_binary(E) || E <- Args],

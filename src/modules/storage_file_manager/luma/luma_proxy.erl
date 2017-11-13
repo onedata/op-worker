@@ -16,7 +16,7 @@
 -include("global_definitions.hrl").
 
 %% API
--export([get_user_ctx/5, get_request_headers/1]).
+-export([get_user_ctx/5, get_request_headers/1, get_gid/3]).
 
 %%%===================================================================
 %%% API functions
@@ -48,6 +48,31 @@ get_user_ctx(SessionId, UserId, SpaceId, StorageDoc = #document{
         {error, Reason} ->
             {error, Reason}
     end.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Queries third party LUMA service for the storage GID for given GroupId.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_gid(od_group:id() | undefined, od_space:id(), storage:doc()) ->
+    {ok, luma:gid()} | {error, term()}.
+get_gid(GroupId, SpaceId, #document{
+    value = #storage{
+        luma_config = LumaConfig = #luma_config{url = LumaUrl}
+}}) ->
+    Url = lists:flatten(io_lib:format("~s/map_group", [LumaUrl])),
+    ReqHeaders = get_request_headers(LumaConfig),
+    ReqBody = get_group_request_body(GroupId, SpaceId),
+    case http_client:post(Url, ReqHeaders, ReqBody) of
+        {ok, 200, _RespHeaders, RespBody} ->
+            Gid = maps:get(<<"gid">>, json_utils:decode_map(RespBody)),
+            {ok, Gid};
+        {ok, Code, _RespHeaders, RespBody} ->
+            {error, {Code, json_utils:decode(RespBody)}};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -83,6 +108,23 @@ get_request_body(SessionId, UserId, SpaceId, StorageDoc) ->
         <<"userDetails">> => get_user_details(SessionId, UserId)
     },
     json_utils:encode_map(Body).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Constructs user context request that will be sent to the external LUMA service.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_group_request_body(od_group:id() | undefined | null, od_space:id()) ->
+    Body :: binary().
+get_group_request_body(undefined, SpaceId) ->
+    get_group_request_body(null, SpaceId);
+get_group_request_body(GroupId, SpaceId) ->
+    Body = [
+        {<<"groupId">>, GroupId},
+        {<<"spaceId">>, SpaceId}
+    ],
+    json_utils:encode(Body).
 
 %%--------------------------------------------------------------------
 %% @private
