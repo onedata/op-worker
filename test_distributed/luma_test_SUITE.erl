@@ -163,9 +163,9 @@ all() ->
 
 -define(SPACE_STORAGE_DOC(StorageIds), #space_storage{storage_ids = [StorageIds]}).
 
--define(UID1, <<"1">>).
--define(GID1, <<"1">>).
--define(GID2, <<"2">>).
+-define(UID1, 1).
+-define(GID1, 1).
+-define(GID2, 2).
 -define(GID_NULL, <<"null">>).
 
 -define(SPACE_ID, <<"spaceId">>).
@@ -238,9 +238,9 @@ get_server_user_ctx_should_fail_with_invalid_fetch_user_ctx(Config) ->
         ]),
         ?assertEqual({error, {luma_server, Reason}}, Result)
     end, [
-        {<<"{\"gid\": \"2\"}">>, {missing_field, <<"uid">>}},
-        {<<"{\"uid\": 1,\"gid\": \"2\"}">>, {invalid_field_value, <<"uid">>}},
-        {<<"{\"uid\": \"1\",\"gid\": \"2\",\"other\": \"value\"}">>,
+        {<<"{\"gid\": 2}">>, {missing_field, <<"uid">>}},
+        {<<"{\"uid\": \[1,2,3\],\"gid\": 2}">>, {invalid_field_value, <<"uid">>}},
+        {<<"{\"uid\": 1,\"gid\": 2,\"other\": \"value\"}">>,
             {invalid_additional_fields, #{<<"other">> => <<"value">>}}}
     ]).
 
@@ -354,11 +354,11 @@ get_posix_user_ctx_should_fetch_user_ctx(Config) ->
         <<"userId">>,
         <<"spaceId">>
     ]),
-    test_utils:mock_assert_num_calls(Worker, luma_proxy, get_user_ctx,
-        ['_', '_', '_', '_'], 1),
     {Uid, Gid} = ?assertMatch({_, _}, Result),
     ?assert(is_integer(Uid)),
-    ?assert(is_integer(Gid)).
+    ?assert(is_integer(Gid)),
+    test_utils:mock_assert_num_calls(Worker, luma_proxy, get_user_ctx,
+        ['_', '_', '_', '_'], 1).
 
 get_posix_user_ctx_should_fetch_user_ctx_twice(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -383,8 +383,8 @@ get_posix_user_ctx_should_fetch_user_ctx_twice(Config) ->
         ['_', '_', '_', '_'], 2),
 
     {Uid, Gid} = ?assertMatch({_, _}, Result),
-    ?assertEqual(?UID1, integer_to_binary(Uid)),
-    ?assertEqual(?GID1, integer_to_binary(Gid)).
+    ?assertEqual(?UID1, Uid),
+    ?assertEqual(?GID1, Gid).
 
 get_posix_user_ctx_should_fetch_user_ctx_by_group_id(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -400,8 +400,8 @@ get_posix_user_ctx_should_fetch_user_ctx_by_group_id(Config) ->
     test_utils:mock_assert_num_calls(Worker, luma_proxy, get_user_ctx,
         ['_', '_', '_', '_'], 1),
     {Uid, Gid} = ?assertMatch({_, _}, Result),
-    ?assertEqual(?UID1, integer_to_binary(Uid)),
-    ?assertEqual(?GID2, integer_to_binary(Gid)).
+    ?assertEqual(?UID1, Uid),
+    ?assertEqual(?GID2, Gid).
 
 
 get_posix_user_ctx_by_group_id_should_generate_gid_by_group_id_when_luma_returns_null(Config) ->
@@ -418,8 +418,7 @@ get_posix_user_ctx_by_group_id_should_generate_gid_by_group_id_when_luma_returns
     test_utils:mock_assert_num_calls(Worker, luma_proxy, get_user_ctx,
         ['_', '_', '_', '_'], 1),
     {Uid, Gid} = ?assertMatch({_, _}, Result),
-    ct:pal("Result: ~p", [Result]),
-    ?assertEqual(?UID1, integer_to_binary(Uid)),
+    ?assertEqual(?UID1, Uid),
     ?assertEqual(generate_posix_identifier(?GROUP_ID, ?GID_RANGE), Gid).
 
 get_posix_user_ctx_by_group_id_should_generate_gid_by_space_id_when_luma_returns_null_and_group_is_undefined(Config) ->
@@ -436,8 +435,7 @@ get_posix_user_ctx_by_group_id_should_generate_gid_by_space_id_when_luma_returns
     test_utils:mock_assert_num_calls(Worker, luma_proxy, get_user_ctx,
         ['_', '_', '_', '_'], 1),
     {Uid, Gid} = ?assertMatch({_, _}, Result),
-    ct:pal("Result: ~p", [Result]),
-    ?assertEqual(?UID1, integer_to_binary(Uid)),
+    ?assertEqual(?UID1, Uid),
     ?assertEqual(generate_posix_identifier(?SPACE_ID, ?GID_RANGE), Gid).
 
 %%%===================================================================

@@ -370,6 +370,8 @@ check_user_ctx_fields([Field | Fields], UserCtx) ->
     case maps:find(Field, UserCtx) of
         {ok, <<_/binary>>} ->
             check_user_ctx_fields(Fields, maps:remove(Field, UserCtx));
+        {ok, Value} when is_integer(Value) ->
+            check_user_ctx_fields(Fields, maps:remove(Field, UserCtx));
         {ok, _} ->
             {error, {invalid_field_value, Field}};
         error ->
