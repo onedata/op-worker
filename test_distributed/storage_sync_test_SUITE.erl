@@ -244,7 +244,7 @@ init_per_testcase(Case, Config) when
     test_utils:mock_expect(Workers, reverse_luma_proxy, get_group_id, fun(_, _, _, _, _) ->
         {ok, ?GROUP}
     end),
-    test_utils:mock_expect(Workers, reverse_luma_proxy, get_user_id, fun(_, _, _, _, _) ->
+    test_utils:mock_expect(Workers, reverse_luma_proxy, get_user_id, fun(_, _, _, _) ->
         {ok, ?USER}
     end),
     init_per_testcase(default, Config);
@@ -262,7 +262,7 @@ init_per_testcase(Case, Config) when
     test_utils:mock_expect(Workers, reverse_luma_proxy, get_group_id, fun(_, _, _, _, _) ->
         {ok, ?GROUP}
     end),
-    test_utils:mock_expect(Workers, reverse_luma_proxy, get_user_id, fun(_, _, _, _, _) ->
+    test_utils:mock_expect(Workers, reverse_luma_proxy, get_user_id, fun(_, _, _, _) ->
         error(test_reason)
     end),
     init_per_testcase(default, Config);
@@ -328,11 +328,15 @@ init_per_testcase(Case, Config) when
         {StorageDoc#document{value = Storage#storage{luma_config = ?LUMA_CONFIG}}, Ctx2}
     end),
 
-    test_utils:mock_expect(Workers, reverse_luma_proxy, get_user_id, fun(_, _, _, _, _) ->
+    test_utils:mock_expect(Workers, reverse_luma_proxy, get_user_id, fun(_, _, _, _) ->
         {ok, ?USER}
     end),
 
-    test_utils:mock_expect(Workers, reverse_luma_proxy, get_group_id, fun(Args, _, _, _, _) ->
+    test_utils:mock_expect(Workers, reverse_luma_proxy, get_user_id_by_name, fun(_, _, _, _) ->
+        {ok, ?USER}
+    end),
+
+    test_utils:mock_expect(Workers, reverse_luma_proxy, get_group_id_by_name, fun(Args, _, _, _, _) ->
         case maps:keys(Args) of
             [<<"gid">>] ->
                 {ok, ?GROUP};

@@ -17,8 +17,7 @@
 
 %% API
 -export([get_server_user_ctx/5, get_server_user_ctx/6,get_client_user_ctx/5,
-    , get_posix_user_ctx/3, get_posix_user_ctx/4]).
--export([get_server_user_ctx/4, get_client_user_ctx/4, get_posix_user_ctx/2,
+    get_posix_user_ctx/3, get_posix_user_ctx/4]).
 
 -type user_ctx() :: helper:user_ctx().
 -type gid() :: non_neg_integer().
@@ -102,8 +101,8 @@ get_posix_user_ctx(SessionId, UserId, SpaceId) ->
 %% (UID and GID), otherwise generates it.
 %% @end
 %%--------------------------------------------------------------------
--spec get_posix_user_ctx(od_user:id(), undefined | od_group:id(), od_space:id()) ->
-    posix_user_ctx().
+-spec get_posix_user_ctx(session:id(), od_user:id(), undefined | od_group:id(),
+    od_space:id()) -> posix_user_ctx().
 get_posix_user_ctx(SessionId, UserId, GroupId, SpaceId) ->
     {ok, UserCtx} = case select_posix_storage(SpaceId) of
         {ok, StorageDoc} ->
@@ -128,7 +127,7 @@ get_posix_user_ctx(SessionId, UserId, GroupId, SpaceId) ->
 %% storages storage admin context is returned.
 %% @end
 %%--------------------------------------------------------------------
--spec get_server_user_ctx(od_user:id(), od_group:id(), od_space:id(),
+-spec get_server_user_ctx(session:id(), od_user:id(), od_group:id(), od_space:id(),
     storage:doc(), helper:name()) -> {ok, user_ctx()} | {error, Reason :: term()}.
 get_server_user_ctx(SessionId, UserId, GroupId, SpaceId, StorageDoc, HelperName) ->
     case storage:select_helper(StorageDoc, HelperName) of
