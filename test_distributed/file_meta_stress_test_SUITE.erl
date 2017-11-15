@@ -215,9 +215,13 @@ init_per_suite(Config) ->
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [model_file_meta_test_base]} | Config].
 
 init_per_testcase(stress_test, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers,
+        [provider_id_helper]),
     lists:foreach(fun(Worker) ->
-        test_utils:set_env(Worker, ?APP_NAME, provider_id, <<"non_global_provider">>)
-    end, ?config(op_worker_nodes, Config)),
+        ProviderID = rpc:call(Worker, oneprovider, get_provider_id, []),
+        test_utils:set_env(Worker, ?APP_NAME, provider_id, ProviderID)
+    end, Workers),
 
     Config;
 

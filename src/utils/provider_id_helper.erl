@@ -8,7 +8,9 @@
 %%% @doc
 %%% Helper module for provision of provider ID. This module duplicates
 %%% some functionality of oneprovider.erl because to many calls to single
-%%% function in one module resulted in performance problems.
+%%% function in one module resulted in performance problems during stress tests.
+%%% It is possible that it is connected with environment mocking
+%%% (check mock of oneprovider module in initializer).
 %%% TODO: VFS-3806
 %%% @end
 %%%-------------------------------------------------------------------
