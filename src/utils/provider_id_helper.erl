@@ -1,21 +1,21 @@
 %%%-------------------------------------------------------------------
-%%% @author Rafal Slota
-%%% @author Lukasz Opiola
+%%% @author Michał Wrzeszcz
 %%% @copyright (C) 2014 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Library module for oneprovider-wide operations.
+%%% Helper module for provision of provider ID. This module duplicates
+%%% some functionality of oneprovider.erl because to many calls to single
+%%% function in one module resulted in performance problems.
+%%% TODO: VFS-3806
 %%% @end
 %%%-------------------------------------------------------------------
--module(oneprovider2).
--author("Rafal Slota").
--author("Lukasz Opiola").
+-module(provider_id_helper).
+-author("Michał Wrzeszcz").
 
 -include("global_definitions.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -31,8 +31,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns Provider ID for current oneprovider instance.
-%% Fails with undefined exception if the oneprovider is not registered as a provider.
+%% @equiv oneprovider:get_provider_id/0
 %% @end
 %%--------------------------------------------------------------------
 -spec get_provider_id() -> ProviderId :: binary() | no_return().
@@ -48,9 +47,10 @@ get_provider_id() ->
                     ProviderId = get_provider_id(PeerCert),
                     catch application:set_env(?APP_NAME, provider_id, ProviderId),
                     ProviderId;
-                {error,enoent} ->
-                    application:set_env(?APP_NAME, provider_id, ?NON_GLOBAL_PROVIDER_ID),
-                    ?NON_GLOBAL_PROVIDER_ID;
+                % TODO - better caching when cert is not found
+%%                {error,enoent} ->
+%%                    application:set_env(?APP_NAME, provider_id, ?NON_GLOBAL_PROVIDER_ID),
+%%                    ?NON_GLOBAL_PROVIDER_ID;
                 {error, _} ->
                     ?NON_GLOBAL_PROVIDER_ID
             catch
@@ -66,7 +66,7 @@ get_provider_id() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns ProviderId based on provider's certificate (issued by OZ).
+%% @equiv oneprovider:get_provider_id/1
 %% @end
 %%--------------------------------------------------------------------
 -spec get_provider_id(Cert :: #'OTPCertificate'{}) -> ProviderId :: binary() | no_return().

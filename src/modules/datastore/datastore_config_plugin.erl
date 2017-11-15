@@ -79,4 +79,4 @@ throttled_models() -> [file_meta].
 %%--------------------------------------------------------------------
 -spec get_mutator() -> datastore:mutator() | undefined.
 get_mutator() ->
-    oneprovider2:get_provider_id().
+    provider_id_helper:get_provider_id().

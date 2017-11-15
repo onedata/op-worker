@@ -21,7 +21,7 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, end_per_suite/1]).
+-export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2]).
 -export([stress_test/1, file_meta_basic_operations_test/1, file_meta_basic_operations_test_base/1, stress_test_base/1,
     many_files_creation_test/1, many_files_creation_test_base/1]).
 
@@ -214,6 +214,15 @@ init_per_suite(Config) ->
     ct:print("2"),
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [model_file_meta_test_base]} | Config].
 
+init_per_testcase(stress_test, Config) ->
+    lists:foreach(fun(Worker) ->
+        test_utils:set_env(Worker, ?APP_NAME, provider_id, <<"non_global_provider">>)
+    end, ?config(op_worker_nodes, Config)),
+
+    Config;
+
+init_per_testcase(_Case, Config) ->
+    Config.
 
 end_per_suite(Config) ->
     ct:print("3"),
