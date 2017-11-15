@@ -37,8 +37,9 @@
     get_posix_user_ctx_should_fetch_user_ctx/1,
     get_posix_user_ctx_should_fetch_user_ctx_twice/1,
     get_posix_user_ctx_should_fetch_user_ctx_by_group_id/1,
-    get_posix_user_ctx_by_group_id_should_generate_gid_by_group_id_when_luma_returns_null/1,
-    get_posix_user_ctx_by_group_id_should_generate_gid_by_space_id_when_luma_returns_null_and_group_is_undefined/1]).
+    get_posix_user_ctx_by_group_id_should_generate_gid_by_group_id_when_mapping_is_not_found/1,
+    get_posix_user_ctx_by_group_id_should_generate_gid_by_space_id_when_luma_returns_null_and_group_is_undefined/1,
+    get_posix_user_ctx_by_group_id_should_return_0_for_root/1]).
 
 all() ->
     ?ALL([
@@ -58,7 +59,7 @@ all() ->
         get_posix_user_ctx_should_fetch_user_ctx,
         get_posix_user_ctx_should_fetch_user_ctx_twice,
         get_posix_user_ctx_should_fetch_user_ctx_by_group_id,
-        get_posix_user_ctx_by_group_id_should_generate_gid_by_group_id_when_luma_returns_null,
+        get_posix_user_ctx_by_group_id_should_generate_gid_by_group_id_when_mapping_is_not_found,
         get_posix_user_ctx_by_group_id_should_generate_gid_by_space_id_when_luma_returns_null_and_group_is_undefined
     ]).
 
@@ -248,9 +249,11 @@ get_server_user_ctx_should_fail_with_invalid_fetch_user_ctx(Config) ->
         ]),
         ?assertEqual({error, {luma_server, Reason}}, Result)
     end, [
-        {<<"{\"gid\": \"2\"}">>, {missing_field, <<"uid">>}},
-        {<<"{\"uid\": 1,\"gid\": \"2\"}">>, {invalid_field_value, <<"uid">>}},
-        {<<"{\"uid\": \"1\",\"gid\": \"2\",\"other\": \"value\"}">>,
+        {<<"{\"gid\": 2}">>, {missing_field, <<"uid">>}},
+        {<<"{\"uid\": \[1,2,3\],\"gid\": 2}">>, {invalid_field_value, <<"uid">>, [1,2,3]}},
+        {<<"{\"uid\": \"null\",\"gid\": 2}">>, {invalid_field_value, <<"uid">>, <<"null">>}},
+        {<<"{\"uid\": null,\"gid\": 2}">>, {invalid_field_value, <<"uid">>, null}},
+        {<<"{\"uid\": 1,\"gid\": 2,\"other\": \"value\"}">>,
             {invalid_additional_fields, #{<<"other">> => <<"value">>}}}
     ]).
 
@@ -422,7 +425,7 @@ get_posix_user_ctx_should_fetch_user_ctx_by_group_id(Config) ->
     ?assertEqual(?GID2, integer_to_binary(Gid)).
 
 
-get_posix_user_ctx_by_group_id_should_generate_gid_by_group_id_when_luma_returns_null(Config) ->
+get_posix_user_ctx_by_group_id_should_generate_gid_by_group_id_when_mapping_is_not_found(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, luma_proxy, [passthrough]),
     test_utils:mock_expect(Worker, storage, get, fun(_) ->
@@ -457,6 +460,21 @@ get_posix_user_ctx_by_group_id_should_generate_gid_by_space_id_when_luma_returns
     ct:pal("Result: ~p", [Result]),
     ?assertEqual(?UID1, integer_to_binary(Uid)),
     ?assertEqual(generate_posix_identifier(?SPACE_ID, ?GID_RANGE), Gid).
+
+get_posix_user_ctx_by_group_id_should_return_0_for_root(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Worker, luma_proxy, [passthrough]),
+    test_utils:mock_expect(Worker, storage, get, fun(_) ->
+        {ok, ?POSIX_STORAGE_DOC}
+    end),
+    Result = rpc:call(Worker, luma, get_posix_user_ctx, [
+        <<"0">>,
+        undefined,
+        ?SPACE_ID
+    ]),
+    {Uid, Gid} = ?assertMatch({_, _}, Result),
+    ?assertEqual(0, Uid),
+    ?assertEqual(0, Gid).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -529,9 +547,10 @@ init_per_testcase(Case, Config) when
     end),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
+
 init_per_testcase(Case, Config) when
-    Case =:= get_posix_user_ctx_by_group_id_should_generate_gid_by_group_id;
-    Case =:= get_posix_user_ctx_by_group_id_should_generate_gid_by_space_id_when_luma_returns_null_and_group_is_undefined ->
+    Case =:= get_posix_user_ctx_by_group_id_should_generate_gid_by_space_id_when_luma_returns_null_and_group_is_undefined;
+    Case =:= get_posix_user_ctx_by_group_id_should_generate_gid_by_group_id_when_mapping_is_not_found->
 
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, [space_storage, storage, http_client]),
@@ -539,39 +558,14 @@ init_per_testcase(Case, Config) when
         {ok, ?SPACE_STORAGE_DOC([<<"storage_id">>])}
     end),
     Expected = json_utils:encode_map(#{<<"uid">> => ?UID1, <<"gid">> => ?GID1}),
-    Expected2 = json_utils:encode_map(#{<<"gid">> => ?GID_NULL}),
+    Expected2 = json_utils:encode_map(#{<<"error">> => <<"mapping not found">>}),
     test_utils:mock_expect(Worker, http_client, post, fun
         (Url, Headers, Body) when is_list(Url) ->
             case lists:last(string:tokens(Url, "/")) of
                 "map_user_credentials" ->
                     {ok, 200, [], Expected};
                 "map_group" ->
-                    {ok, 200, [], Expected2};
-                _ ->
-                    meck:passthrough([Url, Headers, Body])
-            end;
-        (Url, Headers, Body) ->
-            meck:passthrough([Url, Headers, Body])
-    end),
-    init_per_testcase(?DEFAULT_CASE(Case), Config);
-
-init_per_testcase(Case, Config) when
-    Case =:= get_posix_user_ctx_by_group_id_should_generate_gid_by_group_id_when_luma_returns_null->
-
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, [space_storage, storage, http_client]),
-    test_utils:mock_expect(Worker, space_storage, get, fun(_) ->
-        {ok, ?SPACE_STORAGE_DOC([<<"storage_id">>])}
-    end),
-    Expected = json_utils:encode_map(#{<<"uid">> => ?UID1, <<"gid">> => ?GID1}),
-    Expected2 = json_utils:encode_map(#{<<"gid">> => ?GID_NULL}),
-    test_utils:mock_expect(Worker, http_client, post, fun
-        (Url, Headers, Body) when is_list(Url) ->
-            case lists:last(string:tokens(Url, "/")) of
-                "map_user_credentials" ->
-                    {ok, 200, [], Expected};
-                "map_group" ->
-                    {ok, 200, [], Expected2};
+                    {ok, 404, [], Expected2};
                 _ ->
                     meck:passthrough([Url, Headers, Body])
             end;
