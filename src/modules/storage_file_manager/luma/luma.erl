@@ -16,10 +16,11 @@
 -include("modules/fslogic/fslogic_common.hrl").
 
 -type user_ctx() :: helper:user_ctx().
+-type group_ctx() :: helper:group_ctx().
 -type gid() :: non_neg_integer().
 -type posix_user_ctx() :: {Uid :: non_neg_integer(), Gid :: non_neg_integer()}.
 
--export_type([user_ctx/0, posix_user_ctx/0, gid/0]).
+-export_type([user_ctx/0, posix_user_ctx/0, gid/0, group_ctx/0]).
 
 %% API
 -export([get_server_user_ctx/4, get_client_user_ctx/4, get_posix_user_ctx/2,
@@ -108,7 +109,7 @@ get_posix_user_ctx(UserId, GroupId, SpaceId) ->
         {ok, StorageDoc} ->
             get_server_user_ctx(UserId, GroupId, SpaceId, StorageDoc, ?POSIX_HELPER_NAME);
         {error, {not_found, _}} ->
-            generate_user_ctx(UserId, SpaceId, ?POSIX_HELPER_NAME)
+            generate_user_ctx(UserId, GroupId, SpaceId, ?POSIX_HELPER_NAME)
     end,
     #{<<"uid">> := Uid, <<"gid">> := Gid} = UserCtx,
     {ensure_integer(Uid), ensure_integer(Gid)}.
@@ -135,8 +136,7 @@ get_server_user_ctx(UserId, GroupId, SpaceId, StorageDoc, HelperName) ->
             get_user_ctx([
                 {fun get_admin_ctx/2, [UserId, Helper]},
                 {fun fetch_user_ctx/5, [UserId, GroupId, SpaceId, StorageDoc, Helper]},
-                {fun generate_user_ctx/4, [UserId, GroupId, SpaceId, HelperName]},
-                {fun get_admin_ctx/2, [?ROOT_USER_ID, Helper]}
+                {fun generate_user_ctx/4, [UserId, GroupId, SpaceId, HelperName]}
             ]);
         {error, Reason} ->
             {error, Reason}
@@ -247,32 +247,24 @@ fetch_user_ctx(UserId, GroupId, SpaceId, StorageDoc, Helper) ->
     case fetch_user_ctx(UserId, SpaceId, StorageDoc, Helper) of
         undefined ->
             undefined;
-        {error, Reason} -> {error, Reason};
         {ok, UserCtx} ->
             LumaConfig = storage:get_luma_config(StorageDoc),
             LumaCacheTimeout = luma_config:get_timeout(LumaConfig),
             StorageId = storage:get_id(StorageDoc),
             Result = luma_cache:get(luma_cache_group_key(GroupId, SpaceId, StorageId),
-                fun luma_proxy:get_gid/3,
-                [GroupId, SpaceId, StorageDoc],
+                fun luma_proxy:get_group_ctx/4,
+                [GroupId, SpaceId, StorageDoc, Helper],
                 LumaCacheTimeout
             ),
-
             case Result of
-                {error, Reason} ->
-                    {error, {luma_server, Reason}};
-                {ok, <<"null">>} ->
-                    {ok, GidRange} = application:get_env(?APP_NAME, luma_posix_gid_range),
-                    Gid = case GroupId of
-                        undefined ->
-                            integer_to_binary(generate_posix_identifier(SpaceId, GidRange));
-                        _ ->
-                            integer_to_binary(generate_posix_identifier(GroupId, GidRange))
-                    end,
-                    {ok, UserCtx#{<<"gid">> => Gid}};
-                {ok, Gid} ->
-                    {ok, UserCtx#{<<"gid">> => Gid}}
-            end
+                {error, _} ->
+                    {ok, GroupCtx} = generate_group_ctx(UserId, GroupId, SpaceId, Helper#helper.name),
+                    {ok, maps:merge(UserCtx, GroupCtx)};
+                {ok, GroupCtx} ->
+                    {ok, maps:merge(UserCtx, GroupCtx)}
+            end;
+        Error ->
+            Error
     end.
 
 %%--------------------------------------------------------------------
@@ -315,6 +307,32 @@ generate_user_ctx(UserId, GroupId, _SpaceId, ?POSIX_HELPER_NAME) ->
     generate_user_ctx(UserId, GroupId, ?POSIX_HELPER_NAME);
 generate_user_ctx(_UserId, _GroupId, _SpaceId, _HelperName) ->
     undefined.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% For the POSIX storage generates group context (GID) as a hash of
+%% group ID or space ID (if group ID is undefined).
+%% For the other storage returns 'undefined'.
+%% @end
+%%--------------------------------------------------------------------
+-spec generate_group_ctx(od_user:id(), od_group:id() | undefined, od_space:id(),
+    helper:name()) -> {ok, group_ctx()} | undefined.
+generate_group_ctx(?ROOT_USER_ID, _GroupId, _SpaceId, ?POSIX_HELPER_NAME) ->
+    {ok, #{<<"gid">> => <<"0">>}};
+generate_group_ctx(_UserId, undefined, SpaceId, ?POSIX_HELPER_NAME) ->
+    generate_group_ctx(SpaceId, ?POSIX_HELPER_NAME);
+generate_group_ctx(_UserId, GroupId, _SpaceId, ?POSIX_HELPER_NAME) ->
+    generate_group_ctx(GroupId, ?POSIX_HELPER_NAME);
+generate_group_ctx(_UserId, _GroupId, _SpaceId, _HelperName) ->
+    undefined.
+
+generate_group_ctx(Id, ?POSIX_HELPER_NAME) ->
+    {ok, GidRange} = application:get_env(?APP_NAME, luma_posix_gid_range),
+    Gid = generate_posix_identifier(Id, GidRange),
+    {ok, #{
+        <<"gid">> => integer_to_binary(Gid)
+    }}.
 
 %%--------------------------------------------------------------------
 %% @private
