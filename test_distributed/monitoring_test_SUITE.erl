@@ -262,7 +262,7 @@ end_per_testcase(rrdtool_pool_test = Case, Config) ->
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(_Case, Config) ->
-    initializer:clean_test_users_and_spaces(Config).
+    initializer:clean_test_users_and_spaces_no_validate(Config).
 
 clear_state(Worker) ->
     {ok, Docs} = rpc:call(Worker, monitoring_state, list, []),

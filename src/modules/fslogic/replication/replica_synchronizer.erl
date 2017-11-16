@@ -53,7 +53,7 @@ synchronize(UserCtx, FileCtx, Block = #file_block{size = RequestedSize}, Prefetc
     SpaceId = file_ctx:get_space_id_const(FileCtx3),
     UserId = user_ctx:get_user_id(UserCtx),
     BlockSizes = [BlockSize || {_, Blocks} <- ProvidersAndBlocks,  #file_block{size = BlockSize} <- Blocks],
-    transfer:mark_data_transfer_scheduled(TransferId, lists:sum(BlockSizes)),
+    {ok, _} = transfer:mark_data_transfer_scheduled(TransferId, lists:sum(BlockSizes)),
     lists:foreach(
         fun({ProviderId, Blocks}) ->
             lists:foreach(
@@ -64,7 +64,7 @@ synchronize(UserCtx, FileCtx, Block = #file_block{size = RequestedSize}, Prefetc
                         monitoring_event:emit_rtransfer_statistics(SpaceId, UserId, Size),
                         replica_updater:update(FileCtx3,
                             [#file_block{offset = Offset, size = Size}], undefined, false),
-                        transfer:mark_data_transfer_finished(TransferId, Size),
+                        {ok, _} = transfer:mark_data_transfer_finished(TransferId, Size),
                         Self ! {Ref, active, #file_block{offset = Offset, size = Size}}
                     end,
                     CompleteFun = fun(Ref, Status) ->

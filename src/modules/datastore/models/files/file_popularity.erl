@@ -13,13 +13,14 @@
 -author("Tomasz Lichon").
 
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore_runner.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([increment_open/1, get/1, get_or_default/1]).
+-export([increment_open/1, get_or_default/1, initialize/1, update_size/2, delete/1, update/2, get/1]).
 
 %% datastore_model callbacks
--export([get_record_struct/1]).
+-export([get_record_struct/1, get_ctx/0, get_record_version/0]).
 
 -type id() :: file_meta:uuid().
 -type file_popularity() :: #file_popularity{}.
@@ -34,11 +35,55 @@
 
 -define(HOUR_HISTOGRAM_SIZE, 24).
 -define(DAY_HISTOGRAM_SIZE, 30).
--define(MONTH_HISTOGRAM_SIZE, 12). % 30*24
+-define(MONTH_HISTOGRAM_SIZE, 12).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Creates file popularity view if it is enabled.
+%% @end
+%%-------------------------------------------------------------------
+-spec initialize(od_space:id()) -> ok | {error, term()}.
+initialize(SpaceId) ->
+    case space_storage:is_file_popularity_enabled(SpaceId) of
+        true ->
+            file_popularity_view:create(SpaceId);
+        false ->
+            ok
+    end.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Updated file's size
+%% @end
+%%-------------------------------------------------------------------
+-spec update_size(file_ctx:ctx(), non_neg_integer()) -> ok | {error, term()}.
+update_size(FileCtx, NewSize) ->
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    case space_storage:is_file_popularity_enabled(SpaceId) of
+        true ->
+            FileUuid = file_ctx:get_uuid_const(FileCtx),
+            DefaultFilePopularity = empty_file_popularity(FileCtx),
+            DefaultToCreate = #document{
+                key = FileUuid,
+                value = DefaultFilePopularity#file_popularity{size=NewSize}
+            },
+            case
+                datastore_model:update(?CTX, FileUuid, fun(FilePopularity) ->
+                    {ok, FilePopularity#file_popularity{size=NewSize}}
+                end, DefaultToCreate)
+            of
+                {ok, _} ->
+                    ok;
+                Error -> Error
+            end;
+        false ->
+            ok
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -48,9 +93,8 @@
 -spec increment_open(FileCtx :: file_ctx:ctx()) -> ok | {error, term()}.
 increment_open(FileCtx) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    case space_storage:is_cleanup_enabled(SpaceId) of
+    case space_storage:is_file_popularity_enabled(SpaceId) of
         true ->
-            SpaceId = file_ctx:get_space_id_const(FileCtx),
             FileUuid = file_ctx:get_uuid_const(FileCtx),
             Diff = fun(FilePopularity) ->
                 {ok, increase_popularity(FileCtx, FilePopularity)}
@@ -76,6 +120,24 @@ increment_open(FileCtx) ->
 -spec get(file_meta:uuid()) -> {ok, doc()} | {error, term()}.
 get(FileUuid) ->
     datastore_model:get(?CTX, FileUuid).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file_popularity doc.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete(file_meta:uuid()) -> ok | {error, term()}.
+delete(FileUuid) ->
+    datastore_model:delete(?CTX, FileUuid).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file_popularity doc.
+%% @end
+%%--------------------------------------------------------------------
+-spec update(file_meta:uuid(), datastore_model:diff()) -> {ok, file_popularity()} | {error, term()}.
+update(FileUuid, Diff) ->
+    datastore_model:update(?CTX, FileUuid, Diff).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -205,3 +267,22 @@ get_record_struct(1) ->
         {dy_mov_avg, integer},
         {mth_mov_avg, integer}
     ]}.
+
+%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns model's context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_ctx() -> datastore:ctx().
+get_ctx() ->
+    ?CTX.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's record version.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_record_version() -> datastore_model:record_version().
+get_record_version() ->
+    1.

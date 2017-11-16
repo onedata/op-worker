@@ -1143,7 +1143,7 @@ file_popularity_view_should_return_unpopular_files(Config) ->
 
     UnpopularFiles1 = ?assertMatch([_ | _],
         rpc:call(W, file_popularity_view, get_unpopular_files,
-            [SpaceId, null, null, 10, null, null, null]
+            [SpaceId, null, null, null, 10, null, null, null]
         )
     ),
     ?assert(lists:member(file_ctx:new_by_guid(PopularFileGuid), UnpopularFiles1)),
@@ -1155,7 +1155,7 @@ file_popularity_view_should_return_unpopular_files(Config) ->
     timer:sleep(timer:seconds(10)),
     UnpopularFiles2 = ?assertMatch([_ | _],
         rpc:call(W, file_popularity_view, get_unpopular_files,
-            [SpaceId, null, null, 10, null, null, null]
+            [SpaceId, null, null, null, 10, null, null, null]
         )
     ),
     ?assertNot(lists:member(file_ctx:new_by_guid(PopularFileGuid), UnpopularFiles2)),
@@ -1219,6 +1219,16 @@ init_per_testcase(ShareTest, Config) when
     test_utils:mock_new(Workers, share_logic),
     test_utils:mock_expect(Workers, share_logic, create, fun(_Auth, ShareId, _Name, _SpaceId, _ShareFileGuid) -> {ok, ShareId} end),
     init_per_testcase(default, Config);
+
+init_per_testcase(Case, Config) when
+    Case =:= opening_file_should_increase_file_popularity;
+    Case =:= file_popularity_view_should_return_unpopular_files;
+    Case =:= file_popularity_should_have_correct_file_size
+    ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    ok = test_utils:mock_expect(W, space_storage, is_file_popularity_enabled, fun(_) -> true end),
+    init_per_testcase(default, Config);
+
 init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Workers),
@@ -1327,5 +1337,4 @@ verify_attrs(Config, MainDirPath, Limit, ExpectedSize, Offset) ->
 
     Ans = lfm_proxy:read_dir_plus(Worker, SessId1, {path, MainDirPath}, Offset, Limit),
     ?assertMatch({ok, _}, Ans),
-    {ok, List} = Ans,
-    ?assertEqual(ExpectedSize, length(List)).
+    {ok, List} = Ans, ?assertEqual(ExpectedSize, length(List)).

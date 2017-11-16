@@ -20,13 +20,12 @@
 
 %% API
 -export([create/1, get/1, delete/1]).
--export([
-    apply_size_change/2, available_size/1, assert_write/1, assert_write/2,
-    get_disabled_spaces/0, apply_size_change_and_maybe_emit/2, soft_assert_write/2
-]).
+-export([apply_size_change/2, available_size/1, assert_write/1, assert_write/2,
+    get_disabled_spaces/0, apply_size_change_and_maybe_emit/2,
+    soft_assert_write/2, current_size/1]).
 
 %% datastore_model callbacks
--export([get_record_struct/1]).
+-export([get_record_struct/1, get_posthooks/0]).
 
 -type id() :: binary().
 -type doc() :: datastore:doc().
@@ -100,7 +99,7 @@ apply_size_change(SpaceId, SizeDiff) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Records total space size change. If space becomes accessible or
-%% is getting disabled because of this change, QuotaExeeded event is sent.
+%% is getting disabled because of this change, QuotaExceeded event is sent.
 %% @end
 %%--------------------------------------------------------------------
 -spec apply_size_change_and_maybe_emit(SpaceId :: od_space:id(), SizeDiff :: integer()) ->
@@ -116,6 +115,15 @@ apply_size_change_and_maybe_emit(SpaceId, SizeDiff) ->
         false -> ok
     end.
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns current storage occupancy.
+%% @end
+%%-------------------------------------------------------------------
+-spec current_size(od_space:id()) -> non_neg_integer().
+current_size(SpaceId) ->
+    {ok, #document{value = #space_quota{current_size = CSize}}} = ?MODULE:get(SpaceId),
+    CSize.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -199,6 +207,22 @@ get_disabled_spaces() ->
     [SpaceId || {SpaceId, AvailableSize} <- SpacesWithASize,
         AvailableSize =< 0 orelse not is_integer(AvailableSize)].
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Posthook responsible for starting autocleaning if it has been
+%% turned on.
+%% @end
+%%-------------------------------------------------------------------
+-spec run_after(atom(), term(), term()) -> term().
+run_after(create, _, Result = {ok, #document{key = SpaceId}}) ->
+    space_cleanup_api:maybe_start(SpaceId),
+    Result;
+run_after(update, _, Result = {ok, #document{key = SpaceId}}) ->
+    space_cleanup_api:maybe_start(SpaceId),
+    Result;
+run_after(_, _, Result) ->
+    Result.
+
 %%%===================================================================
 %%% datastore_model callbacks
 %%%===================================================================
@@ -214,3 +238,13 @@ get_record_struct(1) ->
     {record, [
         {current_size, integer}
     ]}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of callbacks which will be called after each operation
+%% on datastore model.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_posthooks() -> [datastore_hooks:posthook()].
+get_posthooks() ->
+    [fun run_after/3].

@@ -1214,13 +1214,7 @@ replica_invalidate_should_truncate_storage_file_to_zero_size(Config) ->
     ok = lfm_proxy:invalidate_file_replica(W1, SessionId, {guid, FileGuid}, LocalProviderId, ExternalProviderId),
 
     % then
-    ?assertMatch(
-        {#document{value = #file_location{
-            size = 10,
-            blocks = []
-        }}, _},
-        rpc:call(W1, file_ctx, get_local_file_location_doc, [FileCtx])
-    ),
+    ?assertMatch({undefined, _}, rpc:call(W1, file_ctx, get_local_file_location_doc, [FileCtx])),
     ?assertMatch({ok, #statbuf{st_size = 0}}, rpc:call(W1, storage_file_manager, stat, [SfmHandle])),
     test_utils:mock_validate_and_unload(W1, [logical_file_manager]).
 

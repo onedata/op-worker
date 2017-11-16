@@ -262,7 +262,36 @@
 -record(space_storage, {
     storage_ids = [] :: [storage:id()],
     mounted_in_root = [] :: [storage:id()],
-    cleanup_enabled = false :: boolean()
+    file_popularity_enabled = false :: boolean(),
+    cleanup_enabled = false :: boolean(),
+    cleanup_in_progress :: undefined | autocleaning:id(),
+    autocleaning_config :: undefined | autocleaning_config:config()
+}).
+
+%% Record containing autocleaning configuration
+-record(autocleaning_config, {
+    % lowest size of file that can be invalidated during autocleaning
+    lower_file_size_limit :: undefined | non_neg_integer(),
+    % highest size of file that can be invalidated during autocleaning
+    upper_file_size_limit :: undefined |  non_neg_integer(),
+    % if file hasn't been opened for this number of hours or longer it will be deleted
+    max_file_not_opened_hours :: undefined |  non_neg_integer(),
+    % storage occupancy at which autocleaning will stop
+    target :: non_neg_integer(),
+    % autocleaning will start after exceeding threshold level of occupancy
+    threshold :: non_neg_integer()
+}).
+
+%% Model for holding information about autocleaning procedures
+-record(autocleaning, {
+    space_id :: undefined | od_space:id(),
+    started_at = 0 :: non_neg_integer(),
+    stopped_at :: undefined | non_neg_integer(),
+    released_bytes = 0 :: non_neg_integer(),
+    bytes_to_release = 0 :: non_neg_integer(),
+    released_files = 0 :: non_neg_integer(),
+    status :: undefined | autocleaning:status(),
+    config :: undefined | autocleaning_config:config()
 }).
 
 -record(helper_handle, {
