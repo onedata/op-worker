@@ -297,6 +297,15 @@ init_per_testcase(stress_test, Config) ->
     hackney:start(),
     initializer:disable_quota_limit(Config),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
+
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers,
+        [provider_id_helper]),
+    lists:foreach(fun(Worker) ->
+        ProviderID = rpc:call(Worker, oneprovider, get_provider_id, []),
+        test_utils:set_env(Worker, ?APP_NAME, provider_id, ProviderID)
+    end, Workers),
+
     lfm_proxy:init(ConfigWithSessionInfo);
 
 init_per_testcase(_Case, Config) ->

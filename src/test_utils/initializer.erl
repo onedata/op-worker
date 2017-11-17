@@ -171,8 +171,8 @@ clean_test_users_and_spaces(Config) ->
         initializer:teardown_sesion(W, Config),
         clear_cache(W)
     end, DomainWorkers),
-    test_utils:mock_validate_and_unload(Workers, [oz_spaces, oz_users,
-        oz_groups, space_storage, oneprovider, oz_providers]).
+    test_utils:mock_validate_and_unload(Workers, [oz_spaces, oz_users, oz_groups,
+        space_storage, oneprovider, provider_id_helper, oz_providers]).
 
 %%TODO this function can be deleted after resolving VFS-1811 and replacing call
 %%to this function in cdmi_test_SUITE with call to clean_test_users_and_spaces.
@@ -189,7 +189,8 @@ clean_test_users_and_spaces_no_validate(Config) ->
         initializer:teardown_sesion(W, Config),
         clear_cache(W)
     end, Workers),
-    test_utils:mock_unload(Workers, [od_user, oz_spaces, oz_groups, space_storage, oneprovider, oz_providers]).
+    test_utils:mock_unload(Workers, [od_user, oz_spaces, oz_groups,
+        space_storage, oneprovider, provider_id_helper, oz_providers]).
 
 
 clear_cache(W) ->
@@ -542,11 +543,16 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
     UsersSetup = proplists:get_value(<<"users">>, GlobalSetup),
     Domains = lists:usort([?GET_DOMAIN(W) || W <- AllWorkers]),
 
-        catch test_utils:mock_new(AllWorkers, oneprovider),
+    catch test_utils:mock_new(AllWorkers, oneprovider),
+    catch test_utils:mock_new(AllWorkers, provider_id_helper),
     MasterWorkers = lists:map(fun(Domain) ->
         [MWorker | _] = CWorkers = get_same_domain_workers(Config, Domain),
         ProviderId = domain_to_provider_id(Domain),
         test_utils:mock_expect(CWorkers, oneprovider, get_provider_id,
+            fun() ->
+                ProviderId
+            end),
+        test_utils:mock_expect(CWorkers, provider_id_helper, get_provider_id,
             fun() ->
                 ProviderId
             end),
