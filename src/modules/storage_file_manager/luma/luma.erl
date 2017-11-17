@@ -14,6 +14,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 -type user_ctx() :: helper:user_ctx().
 -type group_ctx() :: helper:group_ctx().
@@ -257,10 +258,11 @@ fetch_user_ctx(UserId, GroupId, SpaceId, StorageDoc, Helper) ->
                 LumaCacheTimeout
             ),
             case Result of
-                {error, _} ->
-                    {ok, GroupCtx} = generate_group_ctx(UserId, GroupId, SpaceId, Helper#helper.name),
-                    {ok, maps:merge(UserCtx, GroupCtx)};
                 {ok, GroupCtx} ->
+                    {ok, maps:merge(UserCtx, GroupCtx)};
+                Error ->
+                    ?warning_stacktrace("Fetching user_ctx from LUMA failed with ~p", [Error]),
+                    {ok, GroupCtx} = generate_group_ctx(UserId, GroupId, SpaceId, Helper#helper.name),
                     {ok, maps:merge(UserCtx, GroupCtx)}
             end;
         Error ->
