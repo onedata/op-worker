@@ -73,7 +73,7 @@ synchronize(UserCtx, FileCtx, Block = #file_block{size = RequestedSize}, Prefetc
                         Self ! {Ref, complete, Status}
                     end,
                     NewRef = rtransfer:fetch(Ref0, NotifyFun, CompleteFun),
-                    {ok, _} = receive_rtransfer_notification(NewRef, ?SYNC_TIMEOUT)
+                    {ok, _} = receive_rtransfer_notification(NewRef)
                 end, Blocks)
         end, ProvidersAndBlocks),
     SessId = user_ctx:get_session_id(UserCtx),
@@ -133,13 +133,11 @@ contains_trigger_byte(#file_block{offset = O, size = S}) ->
 %% Wait for Rtransfer notification.
 %% @end
 %%--------------------------------------------------------------------
--spec receive_rtransfer_notification(rtransfer:ref(), non_neg_integer()) -> term().
-receive_rtransfer_notification(Ref, Timeout) ->
+-spec receive_rtransfer_notification(rtransfer:ref()) -> term().
+receive_rtransfer_notification(Ref) ->
     receive
         {Ref, active, _Block} ->
-            receive_rtransfer_notification(Ref, Timeout);
+            receive_rtransfer_notification(Ref);
         {Ref, complete, Status} ->
             Status
-    after
-        Timeout -> {error, timeout}
     end.
