@@ -12,6 +12,7 @@
 -module(rtransfer_config).
 -author("Tomasz Lichon").
 
+-include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/oz/oz_providers.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -24,6 +25,8 @@
 
 %% Test API
 -export([rtransfer_opts/0]).
+
+-define(STREAMS_NUM, application:get_env(?APP_NAME, streams_number, 10)).
 
 %%%===================================================================
 %%% API
@@ -46,6 +49,7 @@ start_rtransfer() ->
 -spec rtransfer_opts() -> list().
 rtransfer_opts() ->
     [
+        {bind, lists:duplicate(?STREAMS_NUM, {0, 0, 0, 0})},
         {get_nodes_fun,
             fun(ProviderId) ->
                 {ok, #provider_details{urls = URLs}} = oz_providers:get_details(provider, ProviderId),
