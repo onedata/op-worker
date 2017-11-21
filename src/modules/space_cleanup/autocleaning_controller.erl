@@ -73,7 +73,7 @@ start_link() ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Stops transfer_controller process and marks transfer as completed.
+%% Stops autocleaning_controller process and marks transfer as completed.
 %% @end
 %%-------------------------------------------------------------------
 -spec stop() -> ok.

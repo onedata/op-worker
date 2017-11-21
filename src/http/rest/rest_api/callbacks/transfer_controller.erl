@@ -147,10 +147,8 @@ handle_cast(start_transfer, State = #state{
 }) ->
     try
         transfer:mark_active(TransferId),
-        #provider_response{
-            status = #status{code = ?OK}
-        } = sync_req:cast_file_replication(user_ctx:new(SessionId),
-                file_ctx:new_by_guid(FileGuid), undefined, TransferId),
+        ok = sync_req:cast_file_replication(user_ctx:new(SessionId),
+            file_ctx:new_by_guid(FileGuid), undefined, TransferId),
         {noreply, State}
     catch
         _:E ->
