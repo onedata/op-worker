@@ -21,7 +21,8 @@
 
 %% API
 -export([synchronize_block/5, synchronize_block_and_compute_checksum/3,
-    get_file_distribution/2, replicate_file/4, invalidate_file_replica/5]).
+    get_file_distribution/2, replicate_file/4, invalidate_file_replica/5,
+    cast_file_replication/4]).
 
 %%%===================================================================
 %%% API
@@ -136,6 +137,16 @@ invalidate_file_replica(UserCtx, FileCtx, MigrationProviderId, TransferId, AutoC
             invalidation_controller:failed_transfer(transfer:decode_pid(Pid), Error)
     end.
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Casts task of file replication to worker from ?REPLICATION_POOL.
+%% @end
+%%-------------------------------------------------------------------
+-spec cast_file_replication(user_ctx:ctx(), file_ctx:ctx(),
+    undefined | fslogic_blocks:block(), transfer:id() | undefined) -> ok.
+cast_file_replication(UserCtx, FileCtx, Block, TransferId) ->
+    worker_pool:cast(?REPLICATION_POOL,
+        {?MODULE, replicate_file, [UserCtx, FileCtx, Block, TransferId]}).
 
 %%%===================================================================
 %%% Internal functions
@@ -210,9 +221,7 @@ replicate_file_insecure(UserCtx, FileCtx, Block, Offset, TransferId) ->
     fslogic_blocks:block(), undefined | transfer:id()) -> ok.
 replicate_children(UserCtx, Children, Block, TransferId) ->
     lists:foreach(fun(ChildCtx) ->
-        worker_pool:cast(?REPLICATION_POOL,
-            {?MODULE, replicate_file, [UserCtx, ChildCtx, Block, TransferId]}
-        )
+        cast_file_replication(UserCtx, ChildCtx, Block, TransferId)
     end, Children).
 
 %%--------------------------------------------------------------------
