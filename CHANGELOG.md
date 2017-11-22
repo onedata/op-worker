@@ -4,6 +4,17 @@
 CHANGELOG
 ---------
 
+### 17.06.0-rc8
+
+* do not restart failed transfers
+* VFS-3851 - fix rtransfer not binding to many interfaces
+* VFS-3851 fix not casting replication of first file in the tree (replication was handled by transfer_controller itself)
+* VFS-3851 remove timeout from function awaiting rtransfer completion
+* VFS-3813 Improve files creation performance
+* fix reverse luma not resolving onedata groups, add storage name to reverse luma request parameters
+* VFS-3686 create autocleaning links tree for each space
+
+
 ### 17.06.0-rc7
 
 * Fix failures connected with exometer timeouts
