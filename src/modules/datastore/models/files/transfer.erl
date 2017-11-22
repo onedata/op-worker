@@ -132,7 +132,6 @@ start(SessionId, FileGuid, FilePath, ProviderId, Callback, InvalidateSourceRepli
 -spec restart_unfinished_and_failed_transfers() -> ok.
 restart_unfinished_and_failed_transfers() ->
     restart_unfinished_transfers(),
-    restart_failed_transfers(),
     ok.
 
 %%--------------------------------------------------------------------
@@ -599,18 +598,6 @@ restart(TransferId) ->
 -spec restart_unfinished_transfers() -> term().
 restart_unfinished_transfers() ->
     for_each_unfinished_transfer(fun(TransferId, _AccIn) ->
-        {ok, TransferId} = restart(TransferId)
-    end, []).
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Restarts all failed transfers.
-%% @end
-%%-------------------------------------------------------------------
--spec restart_failed_transfers() -> term().
-restart_failed_transfers() ->
-    for_each_failed_transfer(fun(TransferId, _AccIn) ->
         {ok, TransferId} = restart(TransferId)
     end, []).
 
