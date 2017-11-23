@@ -40,8 +40,9 @@ def _tweak_config(config, name, instance, uid, configurator):
         cluster_manager.cm_erl_node_name(n, instance, uid) for n in
         sys_config[app_name]['cm_nodes']]
     # Set the cluster domain (needed for nodes to start)
-    sys_config[app_name][configurator.domain_env_name()] = cluster_domain(
-        instance, uid)
+    sys_config[app_name][configurator.domain_env_name()] = {
+        'string': cluster_domain(instance, uid)
+    }
 
     if 'cluster_worker' not in sys_config:
         sys_config['cluster_worker'] = dict()
