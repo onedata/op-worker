@@ -123,9 +123,6 @@ The JSON looks like follows:
                             "db_nodes":[
                                 "127.0.0.1:49161"
                             ],
-                            "http_domain":{
-                                "string":"127.0.0.1"
-                            },
                             "dev_mode":true
                         }
                     }
