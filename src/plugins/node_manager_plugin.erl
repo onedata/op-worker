@@ -13,17 +13,22 @@
 -author("Michal Zmuda").
 
 -include("global_definitions.hrl").
+-include("graph_sync/provider_graph_sync.hrl").
+-include_lib("cluster_worker/include/elements/node_manager/node_manager.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
 
 %% node_manager_plugin_behaviour callbacks
 -export([app_name/0, cm_nodes/0, db_nodes/0]).
 -export([listeners/0, modules_with_args/0]).
--export([before_init/1, on_cluster_initialized/0]).
+-export([before_init/1, on_cluster_initialized/1]).
+-export([handle_cast/2]).
 -export([check_node_ip_address/0, renamed_models/0]).
 
 -type model() :: datastore_model:model().
 -type record_version() :: datastore_model:record_version().
+
+-type state() :: #state{}.
 
 %%%===================================================================
 %%% node_manager_plugin_behaviour callbacks
@@ -113,7 +118,6 @@ renamed_models() ->
 before_init([]) ->
     try
         op_worker_sup:start_link(),
-        ensure_correct_hostname(),
         ok = helpers_nif:init()
     catch
         _:Error ->
@@ -128,16 +132,43 @@ before_init([]) ->
 %% nodes have connected to cluster manager.
 %% @end
 %%--------------------------------------------------------------------
--spec on_cluster_initialized() -> Result :: ok | {error, Reason :: term()}.
-on_cluster_initialized() ->
-    maybe_generate_web_cert().
+-spec on_cluster_initialized(Nodes :: [node()]) -> Result :: ok | {error, Reason :: term()}.
+on_cluster_initialized(Nodes) ->
+    maybe_generate_web_cert(Nodes).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Overrides {@link node_manager_plugin_default:handle_cast/2}.
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_cast(Request :: term(), State :: state()) ->
+    {noreply, NewState :: state()} |
+    {noreply, NewState :: state(), timeout() | hibernate} |
+    {stop, Reason :: term(), NewState :: state()}.
+handle_cast(update_subdomain_delegation_ips, State) ->
+    % This cast will be usually used only after aquiring connection
+    % to onezone in order to send current cluster IPs
+    case provider_logic:update_subdomain_delegation_ips() of
+        ok ->
+            ok;
+        error ->
+            % Kill the connection to OneZone in case provider IPs cannot be
+            % updated, which will cause a reconnection and update retry.
+            gen_server2:call({global, ?GS_CLIENT_WORKER_GLOBAL_NAME},
+                {terminate, normal})
+    end,
+    {noreply, State};
+handle_cast(Request, State) ->
+    ?log_bad_request(Request),
+    {noreply, State}.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Overrides {@link node_manager_plugin_default:check_node_ip_address/0}.
 %% @end
 %%--------------------------------------------------------------------
--spec check_node_ip_address() -> IPV4Addr :: {A :: byte(), B :: byte(), C :: byte(), D :: byte()}.
+-spec check_node_ip_address() -> inet:ip4_address().
 check_node_ip_address() ->
     try
         {ok, IPBin} = oz_providers:check_ip_address(provider),
@@ -155,35 +186,15 @@ check_node_ip_address() ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Makes sure node hostname belongs to provider domain.
-%% @end
-%%--------------------------------------------------------------------
--spec ensure_correct_hostname() -> ok | no_return().
-ensure_correct_hostname() ->
-    Hostname = oneprovider:get_node_hostname(),
-    Domain = oneprovider:get_provider_domain(),
-    case string:join(tl(string:tokens(Hostname, ".")), ".") of
-        Domain ->
-            ok;
-        _ ->
-            ?error("Node hostname must be in provider domain. Check env conf. "
-            "Current configuration:~nHostname: ~p~nDomain: ~p",
-                [Hostname, Domain]),
-            throw(wrong_hostname)
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
 %% Generates a new test web server cert if none is found under expected path,
 %% given that this option is enabled in env config. The new cert is then
 %% distributed among cluster nodes. The procedure is run within critical section
 %% to avoid race conditions across multiple nodes.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_generate_web_cert() -> ok.
-maybe_generate_web_cert() ->
-    critical_section:run(oz_web_cert, fun maybe_generate_web_cert_unsafe/0).
+-spec maybe_generate_web_cert(Nodes :: [node()]) -> ok.
+maybe_generate_web_cert(Nodes) ->
+    critical_section:run(oz_web_cert, fun () -> maybe_generate_web_cert_unsafe(Nodes) end).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -194,8 +205,8 @@ maybe_generate_web_cert() ->
 %% Should not be called in parallel to prevent race conditions.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_generate_web_cert_unsafe() -> ok.
-maybe_generate_web_cert_unsafe() ->
+-spec maybe_generate_web_cert_unsafe(ClusterNodes :: [node()]) -> ok.
+maybe_generate_web_cert_unsafe(ClusterNodes) ->
     GenerateIfAbsent = application:get_env(
         ?APP_NAME, generate_web_cert_if_absent, false
     ),
@@ -209,7 +220,7 @@ maybe_generate_web_cert_unsafe() ->
         true ->
             % Both key and cert are expected in the same file
             {ok, CAPath} = application:get_env(?APP_NAME, test_web_cert_ca_path),
-            {ok, Hostname} = application:get_env(?APP_NAME, provider_domain),
+            {ok, Hostname} = application:get_env(?APP_NAME, test_web_cert_domain),
             cert_utils:create_signed_webcert(
                 WebKeyPath, WebCertPath, Hostname, CAPath, CAPath
             ),
@@ -218,8 +229,7 @@ maybe_generate_web_cert_unsafe() ->
                 "hostname '~s'. Use only for test purposes.",
                 [WebCertPath, Hostname]
             ),
-            NodeList = gen_server2:call({global, ?CLUSTER_MANAGER}, get_nodes),
-            OtherWorkers = NodeList -- [node()],
+            OtherWorkers = ClusterNodes -- [node()],
             {ok, Key} = file:read_file(WebKeyPath),
             {ok, Cert} = file:read_file(WebCertPath),
             ok = utils:save_file_on_hosts(OtherWorkers, WebKeyPath, Key),

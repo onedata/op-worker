@@ -20,15 +20,21 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("graph_sync/provider_graph_sync.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("cluster_worker/include/api_errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -export([get/0, get/1, get/2, get_protected_data/2]).
+-export([get_as_map/0]).
 -export([get_name/0, get_name/1, get_name/2]).
 -export([get_spaces/0, get_spaces/1, get_spaces/2]).
--export([get_urls/0, get_urls/1, get_urls/2]).
 -export([has_eff_user/2, has_eff_user/3]).
 -export([supports_space/2, supports_space/3]).
 -export([map_idp_group_to_onedata/2]).
+-export([get_domain/0, get_domain/1, get_domain/2]).
+-export([set_domain/1, set_delegated_subdomain/1]).
+-export([is_subdomain_delegated/0, get_subdomain_delegation_ips/0]).
+-export([update_subdomain_delegation_ips/0]).
+-export([resolve_ips/1, resolve_ips/2]).
 
 %%%===================================================================
 %%% API
@@ -82,6 +88,32 @@ get_protected_data(SessionId, ProviderId) ->
         gri = #gri{type = od_provider, id = ProviderId, aspect = instance, scope = protected},
         subscribe = true
     }).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns current provider's data in a map.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_as_map() -> map().
+get_as_map() ->
+    {ok, #document{value = ProviderRecord}} = ?MODULE:get(),
+    #od_provider{
+        name = Name,
+        subdomain_delegation = SubdomainDelegation,
+        domain = Domain,
+        subdomain = Subdomain,
+        longitude = Longitude,
+        latitude = Latitude
+    } = ProviderRecord,
+    #{
+        name => Name,
+        subdomain_delegation => SubdomainDelegation,
+        domain => Domain,
+        subdomain => Subdomain,
+        longitude => Longitude,
+        latitude => Latitude
+    }.
 
 
 %%--------------------------------------------------------------------
@@ -156,42 +188,6 @@ get_spaces(SessionId, ProviderId) ->
     end.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Retrieves urls of this provider.
-%% @end
-%%--------------------------------------------------------------------
--spec get_urls() -> {ok, od_provider:urls()} | gs_protocol:error().
-get_urls() ->
-    get_urls(?ROOT_SESS_ID, oneprovider:get_provider_id()).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Retrieves urls of provider by given ProviderId using current provider's auth.
-%% @end
-%%--------------------------------------------------------------------
--spec get_urls(od_provider:id()) -> {ok, od_provider:urls()} | gs_protocol:error().
-get_urls(ProviderId) ->
-    get_urls(?ROOT_SESS_ID, ProviderId).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Retrieves urls of provider by given ProviderId.
-%% @end
-%%--------------------------------------------------------------------
--spec get_urls(gs_client_worker:client(), od_provider:id()) ->
-    {ok, od_provider:urls()} | gs_protocol:error().
-get_urls(SessionId, ProviderId) ->
-    case get_protected_data(SessionId, ProviderId) of
-        {ok, #document{value = #od_provider{urls = URLs}}} ->
-            {ok, URLs};
-        {error, _} = Error ->
-            Error
-    end.
-
-
 -spec has_eff_user(od_provider:doc(), od_user:id()) -> boolean().
 has_eff_user(#document{value = #od_provider{eff_users = EffUsers}}, UserId) ->
     lists:member(UserId, EffUsers).
@@ -222,6 +218,210 @@ supports_space(SessionId, ProviderId, SpaceId) ->
         _ ->
             false
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves domain of this provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_domain() ->
+    {ok, od_provider:doc()} | gs_protocol:error().
+get_domain() ->
+    get_domain(?ROOT_SESS_ID, oneprovider:get_provider_id()).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves provider domain by given ProviderId using current provider's auth.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_domain(od_provider:id()) ->
+    {ok, od_provider:doc()} | gs_protocol:error().
+get_domain(ProviderId) ->
+    get_domain(?ROOT_SESS_ID, ProviderId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves provider domain by given ProviderId.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_domain(gs_client_worker:client(), od_provider:id()) ->
+    {ok, od_provider:domain()} | gs_protocol:error().
+get_domain(SessionId, ProviderId) ->
+    case get_protected_data(SessionId, ProviderId) of
+        {ok, #document{value = #od_provider{domain = Domain}}} ->
+            {ok, Domain};
+        {error, _} = Error ->
+            Error
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Resolves IPs of given provider via DNS using current provider's auth.
+%% @end
+%%--------------------------------------------------------------------
+-spec resolve_ips(od_provider:id()) -> {ok, inet:ip4_address()} | {error, term()}.
+resolve_ips(ProviderId) ->
+    resolve_ips(?ROOT_SESS_ID, ProviderId).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Resolves IPs of given provider via DNS.
+%% @end
+%%--------------------------------------------------------------------
+-spec resolve_ips(gs_client_worker:client(), od_provider:id()) ->
+    {ok, inet:ip4_address()} | {error, term()}.
+resolve_ips(SessionId, ProviderId) ->
+    case get_domain(SessionId, ProviderId) of
+        {ok, Domain} ->
+            inet:getaddrs(binary_to_list(Domain), inet);
+        {error, _} = Error ->
+            Error
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if this provider uses subdomain delegation.
+%% If yes, returns the subdomain.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_subdomain_delegated() ->
+    {true, binary()} | false | gs_protocol:error().
+is_subdomain_delegated() ->
+    case ?MODULE:get() of
+        {ok, #document{value = #od_provider{
+            subdomain_delegation = Delegation,
+            subdomain = Subdomain}}} ->
+            case Delegation of
+                true ->
+                    {true, Subdomain};
+                false ->
+                    false
+            end;
+        Error ->
+            Error
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets onezone subdomain pointing to this provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_delegated_subdomain(binary()) ->
+    ok | {error, subdomain_exists} | {error, term()}.
+set_delegated_subdomain(Subdomain) ->
+    {ok, NodesIPs} = node_manager:get_cluster_nodes_ips(),
+    {_, IPTuples} = lists:unzip(NodesIPs),
+    case set_subdomain_delegation(Subdomain, IPTuples) of
+        ok ->
+            gs_client_worker:invalidate_cache(od_provider, oneprovider:get_provider_id()),
+            ok;
+        ?ERROR_BAD_VALUE_IDENTIFIER_OCCUPIED(<<"subdomain">>) ->
+            {error, subdomain_exists};
+        Error ->
+            Error
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% If subdomain delegation is on, updates ips of this provider in dns state.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_subdomain_delegation_ips() -> ok | error.
+update_subdomain_delegation_ips() ->
+    try
+        {ok, NodesIPs} = node_manager:get_cluster_nodes_ips(),
+        {_, IPTuples} = lists:unzip(NodesIPs),
+        case is_subdomain_delegated() of
+            {true, Subdomain} ->
+                ok = set_subdomain_delegation(Subdomain, IPTuples);
+            false ->
+                ok
+        end
+    catch Type:Message ->
+         ?error("Error updating provider IPs: ~p:~p", [Type, Message]),
+         error
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves IPs of this provider as known to OneZone DNS.
+%% Returns the atom 'false' if subdomain delegation is not enabled for this
+%% provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_subdomain_delegation_ips() ->
+    {true, [inet:ip4_address()]} | false | {error, term()}.
+get_subdomain_delegation_ips() ->
+    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = get,
+        gri = #gri{type = od_provider, id = oneprovider:get_provider_id(),
+                   aspect = domain_config}
+    }),
+    case Result of
+        {ok, #{<<"subdomainDelegation">> := SubdomainDelegation} = Data} ->
+            case SubdomainDelegation of
+                true ->
+                    #{<<"ipList">> := IPs} = Data,
+                    {true, IPs};
+                false ->
+                    false
+            end;
+        {error, _} = Error ->
+            Error
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets provider domain that is NOT a subdomain of onezone domain.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_domain(binary()) -> ok | {error, term()}.
+set_domain(Domain) ->
+    Data = #{
+        <<"subdomainDelegation">> => false,
+        <<"domain">> => Domain},
+    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = update, data = Data,
+        gri = #gri{type = od_provider, id = oneprovider:get_provider_id(),
+                   aspect = domain_config}
+    }),
+    ?ON_SUCCESS(Result, fun(_) ->
+        gs_client_worker:invalidate_cache(od_provider, oneprovider:get_provider_id())
+    end).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Turns on subdomain delegation for this provider
+%% and sets its subdomain and ips.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_subdomain_delegation(binary(), [inet:ip4_address()]) ->
+    ok | {error, term()}.
+set_subdomain_delegation(Subdomain, IPs) ->
+    IPBinaries = [list_to_binary(inet:ntoa(IPTuple)) || IPTuple <- IPs],
+    ProviderId = oneprovider:get_provider_id(),
+    Data = #{
+      <<"subdomainDelegation">> => true,
+      <<"subdomain">> => Subdomain,
+      <<"ipList">> => IPBinaries},
+    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = update, data = Data,
+        gri = #gri{type = od_provider, id = ProviderId,
+                   aspect = domain_config}
+    }),
+    ?ON_SUCCESS(Result, fun(_) ->
+        gs_client_worker:invalidate_cache(od_provider, ProviderId)
+    end).
 
 
 %%--------------------------------------------------------------------

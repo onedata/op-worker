@@ -126,11 +126,15 @@
 
 % Mocked provider data
 -define(PROVIDER_NAME(__Provider), __Provider).
--define(PROVIDER_URLS(__Provider), [__Provider, __Provider]).
+-define(PROVIDER_DOMAIN(__Provider), __Provider).
+-define(PROVIDER_SUBDOMAIN_DELEGATION(__Provider), false).
+-define(PROVIDER_SUBDOMAIN(__Provider), undefined).
 -define(PROVIDER_SPACES_VALUE(__Provider), #{?SPACE_1 => 1000000000, ?SPACE_2 => 1000000000}).
 -define(PROVIDER_SPACES_MATCHER(__Provider), #{?SPACE_1 := 1000000000, ?SPACE_2 := 1000000000}).
 -define(PROVIDER_EFF_USERS(__Provider), [?USER_1, ?USER_2]).
 -define(PROVIDER_EFF_GROUPS(__Provider), [?GROUP_1, ?GROUP_2]).
+-define(PROVIDER_LATITUDE(__Provider), 0.0).
+-define(PROVIDER_LONGITUDE(__Provider), 0.0).
 
 % Mocked handle service data
 -define(HANDLE_SERVICE_NAME(__HService), __HService).
@@ -265,14 +269,15 @@
 
 -define(PROVIDER_PRIVATE_DATA_MATCHER(__Provider), #document{key = __Provider, value = #od_provider{
     name = ?PROVIDER_NAME(__Provider),
-    urls = ?PROVIDER_URLS(__Provider),
+    subdomain_delegation = ?PROVIDER_SUBDOMAIN_DELEGATION(__Provider),
+    domain = ?PROVIDER_DOMAIN(__Provider),
     spaces = ?PROVIDER_SPACES_MATCHER(__Provider),
     eff_users = ?PROVIDER_EFF_USERS(__Provider),
     eff_groups = ?PROVIDER_EFF_GROUPS(__Provider)
 }}).
 -define(PROVIDER_PROTECTED_DATA_MATCHER(__Provider), #document{key = __Provider, value = #od_provider{
     name = ?PROVIDER_NAME(__Provider),
-    urls = ?PROVIDER_URLS(__Provider),
+    domain = ?PROVIDER_DOMAIN(__Provider),
     spaces = #{},
     eff_users = [],
     eff_groups = []
@@ -403,11 +408,15 @@ end).
 -define(PROVIDER_PROTECTED_DATA_VALUE(__ProviderId), #{
     <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_provider, id = __ProviderId, aspect = instance, scope = protected}),
     <<"name">> => ?PROVIDER_NAME(__ProviderId),
-    <<"urls">> => ?PROVIDER_URLS(__ProviderId)
+    <<"domain">> => ?PROVIDER_DOMAIN(__ProviderId),
+    <<"latitude">> => ?PROVIDER_LATITUDE(__ProviderId),
+    <<"longitude">> => ?PROVIDER_LONGITUDE(__ProviderId)
 }).
 -define(PROVIDER_PRIVATE_DATA_VALUE(__ProviderId), begin
     __ProtectedData = ?PROVIDER_PROTECTED_DATA_VALUE(__ProviderId),
     __ProtectedData#{
+        <<"subdomainDelegation">> => ?PROVIDER_SUBDOMAIN_DELEGATION(__ProviderId),
+        <<"subdomain">> => ?PROVIDER_SUBDOMAIN(__ProviderId),
         <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_provider, id = __ProviderId, aspect = instance, scope = private}),
         <<"spaces">> => ?PROVIDER_SPACES_VALUE(__ProviderId),
         <<"effectiveUsers">> => ?PROVIDER_EFF_USERS(__ProviderId),

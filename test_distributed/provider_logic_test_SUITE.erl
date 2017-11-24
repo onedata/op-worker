@@ -288,8 +288,8 @@ convenience_functions_test(Config) ->
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
     ?assertMatch(
-        {ok, ?PROVIDER_URLS(?PROVIDER_1)},
-        rpc:call(Node, provider_logic, get_urls, [?ROOT_SESS_ID, ?PROVIDER_1])
+        {ok, ?PROVIDER_DOMAIN(?PROVIDER_1)},
+        rpc:call(Node, provider_logic, get_domain, [?ROOT_SESS_ID, ?PROVIDER_1])
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 

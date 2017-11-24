@@ -148,6 +148,7 @@ init([]) ->
         {ok, ClientRef, #gs_resp_handshake{identity = {provider, _}}} ->
             ?info("Started connection to OneZone: ~p", [ClientRef]),
             oneprovider:on_connection_to_oz(),
+
             {ok, #state{client_ref = ClientRef}};
         {error, {options, {keyfile, _, {error, enoent}}}} ->
             ?warning("Cannot start connection to OneZone - provider certificate not found"),
@@ -176,6 +177,9 @@ handle_call(#gs_req{}, _From, #state{client_ref = undefined} = State) ->
 handle_call(#gs_req{} = GsReq, _From, #state{client_ref = ClientRef} = State) ->
     Result = gs_client:sync_request(ClientRef, GsReq),
     {reply, Result, State};
+
+handle_call({terminate, Reason}, _From, State) ->
+    {stop, Reason, ok, State};
 
 handle_call(Request, _From, #state{} = State) ->
     ?log_bad_request(Request),
@@ -371,7 +375,7 @@ call_onezone(ConnRef, Client, Request) ->
 
 -spec maybe_serve_from_cache(connection_ref(), client(), gs_protocol:graph_req()) ->
     {true, doc()} | false | gs_protocol:error().
-maybe_serve_from_cache(ConnRef, Client, #gs_req_graph{gri = GRI, auth_hint = AuthHint}) ->
+maybe_serve_from_cache(ConnRef, Client, #gs_req_graph{gri = #gri{aspect = instance} = GRI, auth_hint = AuthHint}) ->
     case get_from_cache(GRI) of
         false ->
             false;
@@ -399,7 +403,9 @@ maybe_serve_from_cache(ConnRef, Client, #gs_req_graph{gri = GRI, auth_hint = Aut
                             {true, Result}
                     end
             end
-    end.
+    end;
+maybe_serve_from_cache(_, _, _) ->
+    false.
 
 
 -spec cache_record(connection_ref(), gs_protocol:gri(), doc()) ->

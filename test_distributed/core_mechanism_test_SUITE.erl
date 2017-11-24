@@ -65,12 +65,12 @@ nagios_test(Config) ->
         end, WorkerNodes),
 
     % Check if all workers are in the report.
-    Nodes = rpc:call(Worker1, gen_server, call, [{global, ?CLUSTER_MANAGER}, get_nodes, 1000]),
+    {ok, Nodes} = rpc:call(Worker1, gen_server, call, [{global, ?CLUSTER_MANAGER}, get_nodes, 1000]),
     lists:foreach(
         fun({WNode, WName}) ->
             WorkersOnNode = proplists:get_value(atom_to_list(WNode), WorkersByNodeXML),
             ?assertEqual(true, lists:member(WName, WorkersOnNode))
-        end, [{Node, Worker} || Node <- Nodes, Worker <- rpc:call(Worker1, node_manager, modules, [])]),
+        end, [{Node, Worker} || {Node, _IP} <- Nodes, Worker <- rpc:call(Worker1, node_manager, modules, [])]),
 
     % Check if every node's status contains dispatcher and node manager status
     lists:foreach(

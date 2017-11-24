@@ -129,7 +129,11 @@
 %% Model for caching provider details fetched from OZ
 -record(od_provider, {
     name :: undefined | binary(),
-    urls = [] :: [binary()],
+    subdomain_delegation = false :: boolean(),
+    domain :: binary(),
+    subdomain = undefined :: undefined |  binary(),
+    latitude = 0.0 :: float(),
+    longitude = 0.0 :: float(),
 
     % Direct relations to other entities
     spaces = #{} :: maps:map(od_space:id(), Size :: integer()),

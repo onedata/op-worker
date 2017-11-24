@@ -23,10 +23,10 @@
 -type diff() :: datastore_doc:diff(record()).
 
 -type name() :: binary().
--type urls() :: [binary()].
+-type domain() :: domain().
 
 -export_type([id/0, record/0, doc/0, diff/0]).
--export_type([name/0, urls/0]).
+-export_type([name/0, domain/0]).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -100,7 +100,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    2.
+    3.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -130,6 +130,22 @@ get_record_struct(2) ->
         {eff_groups, [string]},
 
         {cache_state, #{atom => term}}
+    ]};
+get_record_struct(3) ->
+    {record, [
+        {name, string},
+        {subdomain_delegation, boolean},
+        {domain, string},
+        {subdomain, string},
+        {latitude, float},
+        {longitude, float},
+
+        {spaces, #{string => integer}},
+
+        {eff_users, [string]},
+        {eff_groups, [string]},
+
+        {cache_state, #{atom => term}}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -149,9 +165,36 @@ upgrade_record(1, Provider) ->
         _PublicOnly,
         _RevisionHistory
     } = Provider,
-    {2, #od_provider{
+    {2, {od_provider,
+        Name,
+        Urls,
+
+        #{},
+
+        [],
+        [],
+
+        #{}
+    }};
+upgrade_record(2, Provider) ->
+    {
+        od_provider,
+        Name,
+        Urls,
+
+        #{},
+
+        [],
+        [],
+
+        #{}
+    } = Provider,
+    #{host := Domain} = url_utils:parse(hd(Urls)),
+    {3, #od_provider{
         name = Name,
-        urls = Urls,
+        subdomain_delegation = false,
+        domain = Domain,
+        subdomain = undefined,
 
         spaces = #{},
 

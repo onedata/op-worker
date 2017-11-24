@@ -215,7 +215,9 @@ rest_endpoint(Node) ->
                 PStr;
             P -> P
         end,
-    {ok, Domain} = test_utils:get_env(Node, ?APP_NAME, provider_domain),
+
+    {ok, Domain} = test_utils:get_env(Node, ?APP_NAME, test_web_cert_domain),
+
     string:join(["https://", str_utils:to_list(Domain), ":", Port, "/api/v3/oneprovider/"], "").
 
 mock_space_logic(Config) ->

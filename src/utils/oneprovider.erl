@@ -16,6 +16,7 @@
 
 -include("global_definitions.hrl").
 -include_lib("public_key/include/public_key.hrl").
+-include_lib("ctool/include/global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% ID of this provider (assigned by global registry)
@@ -25,18 +26,13 @@
 
 %% API
 -export([get_node_hostname/0, get_node_ip/0]).
--export([get_provider_id/0, get_provider_domain/0, is_registered/0, get_rest_endpoint/1]).
+-export([get_provider_id/0, is_registered/0, get_rest_endpoint/1]).
 -export([get_oz_domain/0, get_oz_url/0]).
 -export([get_oz_login_page/0, get_oz_logout_page/0, get_oz_providers_page/0]).
 -export([on_connection_to_oz/0]).
 
 % Developer function
 -export([register_in_oz_dev/3]).
-
-%% Function for future use
-%% todo: in order to use identity verification based on public keys
-%% todo: use this function instead of register_in_oz_dev function
--export([register_provider_in_oz/1]).
 
 %%%===================================================================
 %%% API
@@ -72,17 +68,6 @@ get_rest_endpoint(Path) ->
 -spec get_node_ip() -> {byte(), byte(), byte(), byte()}.
 get_node_ip() ->
     node_manager:get_ip_address().
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns the domain of the provider, which is specified in env.
-%% @end
-%%--------------------------------------------------------------------
--spec get_provider_domain() -> string().
-get_provider_domain() ->
-    {ok, Domain} = application:get_env(?APP_NAME, provider_domain),
-    str_utils:to_list(Domain).
 
 
 %%--------------------------------------------------------------------
@@ -144,6 +129,13 @@ get_oz_providers_page() ->
 
 -spec on_connection_to_oz() -> ok.
 on_connection_to_oz() ->
+    % when connection is established onezone should be notified about
+    % current provider ips.
+    % cast is used as this function is called
+    % in gs_client init and a call would cause a deadlock - updating
+    % ips uses the graph sync connection.
+    gen_server2:cast(?NODE_MANAGER_NAME, update_subdomain_delegation_ips),
+
     % Make sure provider proto listener is started
     % (it won't start until provider is registered)
     ok = provider_listener:ensure_started().
@@ -167,17 +159,19 @@ register_in_oz_dev(NodeList, KeyFilePassword, ProviderName) ->
         0 = csr_creator:create_csr(KeyFilePassword, OZPKeyPath, OZPCSRPath),
         {ok, CSR} = file:read_file(OZPCSRPath),
         {ok, Key} = file:read_file(OZPKeyPath),
+
         % Send signing request to OZ
         IPAddresses = get_all_nodes_ips(NodeList),
-        %% Use IP address of first node as redirection point - this way
+        %% Use IP address of first node as provider domain - this way
         %% we don't need a DNS server to resolve provider domains in
         %% developer environment.
-        RedirectionPoint = <<"https://", (hd(IPAddresses))/binary>>,
+        Domain = <<(hd(IPAddresses))/binary>>,
+        SubdomainDelegation = false,
         Parameters = [
-            {<<"urls">>, IPAddresses},
             {<<"csr">>, CSR},
-            {<<"redirectionPoint">>, RedirectionPoint},
+            {<<"domain">>, Domain},
             {<<"name">>, ProviderName},
+            {<<"subdomainDelegation">>, SubdomainDelegation},
             {<<"uuid">>, ProviderName}
         ],
         {ok, ProviderId, Cert} = oz_providers:register_with_uuid(provider, Parameters),
@@ -197,39 +191,6 @@ register_in_oz_dev(NodeList, KeyFilePassword, ProviderName) ->
             {error, M}
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Registers in OZ using config from app.src (cert locations).
-%% @end
-%%--------------------------------------------------------------------
--spec register_provider_in_oz(NodeList :: [node()]) ->
-    {ok, ProviderID :: binary()} | {error, term()}.
-register_provider_in_oz(NodeList) ->
-    try
-        {ok, KeyFile} = application:get_env(?APP_NAME, identity_key_file),
-        {ok, CertFile} = application:get_env(?APP_NAME, identity_cert_file),
-        Domain = oneprovider:get_provider_domain(),
-        identity_utils:ensure_synced_cert_present(KeyFile, CertFile, Domain),
-        Cert = identity_utils:read_cert(CertFile),
-        PublicKey = identity_utils:get_public_key(Cert),
-        ID = identity_utils:get_id(Cert),
-
-        IPAddresses = get_all_nodes_ips(NodeList),
-        RedirectionPoint = <<"https://", (hd(IPAddresses))/binary>>,
-
-        Parameters = [
-            {<<"id">>, ID},
-            {<<"publicKey">>, identity_utils:encode(PublicKey)},
-            {<<"urls">>, IPAddresses},
-            {<<"redirectionPoint">>, RedirectionPoint}
-        ],
-        ok = oz_identities:register_provider(provider, Parameters),
-        {ok, ID}
-    catch
-        T:M ->
-            ?error_stacktrace("Cannot register in OZ - ~p:~p", [T, M]),
-            {error, M}
-    end.
 
 %%--------------------------------------------------------------------
 %% @doc

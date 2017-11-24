@@ -1003,7 +1003,6 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
     % they contain calls to the same module, which overrides the mock.
     GetProviderFun = fun(?ROOT_SESS_ID, PID) ->
         Domain = provider_id_to_domain(PID),
-        Workers = get_same_domain_workers(Config, Domain),
 
         case maps:get(PID, ProvMap, undefined) of
             undefined ->
@@ -1011,8 +1010,11 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
             Spaces ->
                 {ok, #document{key = PID, value = #od_provider{
                     name = PID,
-                    urls = [list_to_binary(utils:get_host(Worker)) || Worker <- Workers],
-                    spaces = maps:from_list([{S, 1000000000} || S <- Spaces])
+                    subdomain_delegation = false,
+                    domain = PID,
+                    spaces = maps:from_list([{S, 1000000000} || S <- Spaces]),
+                    longitude = 0.0,
+                    latitude = 0.0
                 }}}
         end
     end,
@@ -1022,9 +1024,14 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
         {ok, Name}
     end,
 
-    GetURLsFun = fun(?ROOT_SESS_ID, PID) ->
-        {ok, #document{value = #od_provider{urls = URLs}}} = GetProviderFun(?ROOT_SESS_ID, PID),
-        {ok, URLs}
+    GetDomainFun = fun(?ROOT_SESS_ID, PID) ->
+        {ok, #document{value = #od_provider{domain = Domain}}} = GetProviderFun(?ROOT_SESS_ID, PID),
+        {ok, Domain}
+    end,
+
+    ResolveIPsFun = fun(?ROOT_SESS_ID, PID) ->
+        {ok, Domain} = GetDomainFun(?ROOT_SESS_ID, PID),
+        inet:getaddrs(binary_to_list(Domain), inet)
     end,
 
     GetSpacesFun = fun(?ROOT_SESS_ID, PID) ->
@@ -1056,16 +1063,23 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
             GetNameFun(?ROOT_SESS_ID, oneprovider:get_provider_id())
         end),
 
-    test_utils:mock_expect(AllWorkers, provider_logic, get_urls, GetURLsFun),
+    test_utils:mock_expect(AllWorkers, provider_logic, get_domain, GetDomainFun),
 
-    test_utils:mock_expect(AllWorkers, provider_logic, get_urls,
+    test_utils:mock_expect(AllWorkers, provider_logic, get_domain,
         fun(PID) ->
-            GetURLsFun(?ROOT_SESS_ID, PID)
+            GetDomainFun(?ROOT_SESS_ID, PID)
         end),
 
-    test_utils:mock_expect(AllWorkers, provider_logic, get_urls,
+    test_utils:mock_expect(AllWorkers, provider_logic, get_domain,
         fun() ->
-            GetURLsFun(?ROOT_SESS_ID, oneprovider:get_provider_id())
+            GetDomainFun(?ROOT_SESS_ID, oneprovider:get_provider_id())
+        end),
+
+    test_utils:mock_expect(AllWorkers, provider_logic, resolve_ips, ResolveIPsFun),
+
+    test_utils:mock_expect(AllWorkers, provider_logic, resolve_ips,
+        fun(PID) ->
+            ResolveIPsFun(?ROOT_SESS_ID, PID)
         end),
 
     test_utils:mock_expect(AllWorkers, provider_logic, get_spaces, GetSpacesFun),
