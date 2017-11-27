@@ -115,10 +115,6 @@ get_posix_user_ctx(SessionId, UserId, GroupId, SpaceId) ->
     #{<<"uid">> := Uid, <<"gid">> := Gid} = UserCtx,
     {binary_to_integer(Uid), binary_to_integer(Gid)}.
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns storage user context associated with the chosen storage helper
@@ -142,6 +138,10 @@ get_server_user_ctx(SessionId, UserId, GroupId, SpaceId, StorageDoc, HelperName)
         {error, Reason} ->
             {error, Reason}
     end.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @private
@@ -323,13 +323,20 @@ generate_user_ctx(_UserId, _GroupId, _SpaceId, _HelperName) ->
 generate_group_ctx(?ROOT_USER_ID, _GroupId, _SpaceId, ?POSIX_HELPER_NAME) ->
     {ok, #{<<"gid">> => <<"0">>}};
 generate_group_ctx(_UserId, undefined, SpaceId, ?POSIX_HELPER_NAME) ->
-    generate_group_ctx(SpaceId, ?POSIX_HELPER_NAME);
+    generate_posix_group_ctx(SpaceId);
 generate_group_ctx(_UserId, GroupId, _SpaceId, ?POSIX_HELPER_NAME) ->
-    generate_group_ctx(GroupId, ?POSIX_HELPER_NAME);
+    generate_posix_group_ctx(GroupId);
 generate_group_ctx(_UserId, _GroupId, _SpaceId, _HelperName) ->
     undefined.
 
-generate_group_ctx(Id, ?POSIX_HELPER_NAME) ->
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Generates group context  as a hash of given Id.
+%% @end
+%%-------------------------------------------------------------------
+-spec generate_posix_group_ctx(od_space:id() | od_group:id()) -> {ok, group_ctx()}.
+generate_posix_group_ctx(Id) ->
     {ok, GidRange} = application:get_env(?APP_NAME, luma_posix_gid_range),
     Gid = generate_posix_identifier(Id, GidRange),
     {ok, #{
