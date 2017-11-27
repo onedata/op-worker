@@ -126,7 +126,7 @@ get_posix_user_ctx(UserId, GroupId, SpaceId) ->
 %% storages storage admin context is returned.
 %% @end
 %%--------------------------------------------------------------------
--spec get_server_user_ctx(od_user:id(), od_group:id(), od_space:id(),
+-spec get_server_user_ctx(od_user:id(), undefined | od_group:id(), od_space:id(),
     storage:doc(), helper:name()) -> {ok, user_ctx()} | {error, Reason :: term()}.
 get_server_user_ctx(UserId, GroupId, SpaceId, StorageDoc, HelperName) ->
     case storage:select_helper(StorageDoc, HelperName) of
