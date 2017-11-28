@@ -65,13 +65,13 @@ get_group_ctx(_GroupId, _SpaceId, _StorageDoc, #helper{name = ?S3_HELPER_NAME}) 
     undefined;
 get_group_ctx(_GroupId, _SpaceId, _StorageDoc, #helper{name = ?SWIFT_HELPER_NAME}) ->
     undefined;
-get_group_ctx(GroupId, SpaceId, #document{
+get_group_ctx(GroupId, SpaceId, StorageDoc = #document{
     value = #storage{
         luma_config = LumaConfig = #luma_config{url = LumaUrl}
 }}, Helper) ->
     Url = lists:flatten(io_lib:format("~s/map_group", [LumaUrl])),
     ReqHeaders = get_request_headers(LumaConfig),
-    ReqBody = get_group_request_body(GroupId, SpaceId),
+    ReqBody = get_group_request_body(GroupId, SpaceId, StorageDoc),
     case http_client:post(Url, ReqHeaders, ReqBody) of
         {ok, 200, _RespHeaders, RespBody} ->
             GroupCtx = json_utils:decode_map(RespBody),
@@ -130,17 +130,27 @@ get_request_body(UserId, SpaceId, StorageDoc) ->
 %% Constructs user context request that will be sent to the external LUMA service.
 %% @end
 %%--------------------------------------------------------------------
--spec get_group_request_body(od_group:id() | undefined, od_space:id()) ->
+-spec get_group_request_body(od_group:id() | undefined, od_space:id(), storage:doc()) ->
     Body :: binary().
-get_group_request_body(undefined, SpaceId) ->
+get_group_request_body(undefined, SpaceId, #document{
+    key = StorageId,
+    value = #storage{name = StorageName}
+}) ->
     Body = [
-        {<<"spaceId">>, SpaceId}
+        {<<"spaceId">>, SpaceId},
+        {<<"storageId">>, StorageId},
+        {<<"storageName">>, StorageName}
     ],
     json_utils:encode(Body);
-get_group_request_body(GroupId, SpaceId) ->
+get_group_request_body(GroupId, SpaceId, #document{
+    key = StorageId,
+    value = #storage{name = StorageName}
+}) ->
     Body = [
         {<<"groupId">>, GroupId},
-        {<<"spaceId">>, SpaceId}
+        {<<"spaceId">>, SpaceId},
+        {<<"storageId">>, StorageId},
+        {<<"storageName">>, StorageName}
     ],
     json_utils:encode(Body).
 
