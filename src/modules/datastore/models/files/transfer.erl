@@ -25,8 +25,8 @@
     mark_active_invalidation/1, mark_completed_invalidation/2, mark_failed_invalidation/2,
     mark_file_transfer_scheduled/2, mark_file_transfer_finished/2,
     mark_data_transfer_scheduled/2, mark_data_transfer_finished/2,
-    for_each_successful_transfer/2, for_each_failed_transfer/2,
-    for_each_unfinished_transfer/2, restart_unfinished_and_failed_transfers/0,
+    for_each_successful_transfer/3, for_each_failed_transfer/3,
+    for_each_unfinished_transfer/3, restart_unfinished_transfers/1,
     mark_file_invalidation_finished/2, mark_file_invalidation_scheduled/2]).
 
 %% datastore_model callbacks
@@ -119,20 +119,28 @@ start(SessionId, FileGuid, FilePath, ProviderId, Callback, InvalidateSourceRepli
         }},
     {ok, #document{key = TransferId}} = create(ToCreate),
     session:add_transfer(SessionId, TransferId),
-    add_link(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
+    ok = add_link(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
     transfer_controller:on_new_transfer_doc(ToCreate#document{key = TransferId}),
     invalidation_controller:on_new_transfer_doc(ToCreate#document{key = TransferId}),
     {ok, TransferId}.
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Restarts all unfinished and failed transfers.
+%% Restarts all unfinished transfers.
 %% @end
 %%-------------------------------------------------------------------
--spec restart_unfinished_and_failed_transfers() -> ok.
-restart_unfinished_and_failed_transfers() ->
-    restart_unfinished_transfers(),
-    ok.
+-spec restart_unfinished_transfers(od_space:id()) -> [id()].
+restart_unfinished_transfers(SpaceId) ->
+    {Restarted, Failed} = for_each_unfinished_transfer(fun(TransferId, {Restarted0, Failed0}) ->
+        case restart(TransferId) of
+            {ok, TransferId} ->
+                {[TransferId | Restarted0], Failed0};
+            {error, {not_found, transfer}} ->
+                {Restarted0, [TransferId | Failed0]}
+        end
+    end, {[], []}, SpaceId),
+    remove_unfinished_transfers_links(Failed, SpaceId),
+    Restarted.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -208,9 +216,9 @@ get(TransferId) ->
 -spec stop(id()) -> ok | {error, term()}.
 stop(TransferId) ->
     {ok, #document{value = #transfer{space_id = SpaceId}}} = datastore_model:get(?CTX, TransferId),
-    remove_link(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
-    remove_link(?FAILED_TRANSFERS_KEY, TransferId, SpaceId),
-    remove_link(?SUCCESSFUL_TRANSFERS_KEY, TransferId, SpaceId),
+    ok = remove_links(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
+    ok = remove_links(?FAILED_TRANSFERS_KEY, TransferId, SpaceId),
+    ok = remove_links(?SUCCESSFUL_TRANSFERS_KEY, TransferId, SpaceId),
     datastore_model:delete(?CTX, TransferId).
 
 %%--------------------------------------------------------------------
@@ -240,8 +248,8 @@ mark_completed(TransferId) ->
         case Transfer#transfer.invalidation_status of
             skipped ->
                 SpaceId = Transfer#transfer.space_id,
-                add_link(?SUCCESSFUL_TRANSFERS_KEY, TransferId, SpaceId),
-                remove_link(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
+                ok = add_link(?SUCCESSFUL_TRANSFERS_KEY, TransferId, SpaceId),
+                ok = remove_links(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
                 {ok, Transfer#transfer{transfer_status = completed}};
             _ ->
                 {ok, Transfer#transfer{transfer_status = completed}}
@@ -255,9 +263,9 @@ mark_completed(TransferId) ->
 %%--------------------------------------------------------------------
 -spec mark_failed(id(), od_space:id()) -> {ok, id()} | {error, term()}.
 mark_failed(TransferId, SpaceId) ->
-    add_link(?FAILED_TRANSFERS_KEY, TransferId, SpaceId),
-    remove_link(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
-    update(TransferId, fun(Transfer) ->
+    ok = add_link(?FAILED_TRANSFERS_KEY, TransferId, SpaceId),
+    ok = remove_links(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
+    {ok, _} = update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{transfer_status = failed}}
     end).
 
@@ -283,8 +291,8 @@ mark_active_invalidation(TransferId) ->
 %%--------------------------------------------------------------------
 -spec mark_completed_invalidation(id(), od_space:id()) -> {ok, id()} | {error, term()}.
 mark_completed_invalidation(TransferId, SpaceId) ->
-    add_link(?SUCCESSFUL_TRANSFERS_KEY, TransferId, SpaceId),
-    remove_link(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
+    ok = add_link(?SUCCESSFUL_TRANSFERS_KEY, TransferId, SpaceId),
+    ok = remove_links(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
     update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{invalidation_status = completed}}
     end).
@@ -296,9 +304,9 @@ mark_completed_invalidation(TransferId, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec mark_failed_invalidation(id(), od_space:id()) -> {ok, id()} | {error, term()}.
 mark_failed_invalidation(TransferId, SpaceId) ->
-    add_link(?FAILED_TRANSFERS_KEY, TransferId, SpaceId),
-    remove_link(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
     update(TransferId, fun(Transfer) ->
+        ok = add_link(?FAILED_TRANSFERS_KEY, TransferId, SpaceId),
+        ok = remove_links(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
         {ok, Transfer#transfer{invalidation_status = failed}}
     end).
 
@@ -428,9 +436,9 @@ mark_data_transfer_finished(TransferId, Bytes) ->
 %%--------------------------------------------------------------------
 -spec for_each_successful_transfer(
     Callback :: fun((id(), Acc0 :: term()) -> Acc :: term()),
-    Acc0 :: term()) -> {ok, Acc :: term()} | {error, term()}.
-for_each_successful_transfer(Callback, Acc0) ->
-    for_each_transfer(?SUCCESSFUL_TRANSFERS_KEY, Callback, Acc0).
+    Acc0 :: term(), od_space:id()) -> {ok, Acc :: term()} | {error, term()}.
+for_each_successful_transfer(Callback, Acc0, SpaceId) ->
+    for_each_transfer(?SUCCESSFUL_TRANSFERS_KEY, Callback, Acc0, SpaceId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -439,9 +447,9 @@ for_each_successful_transfer(Callback, Acc0) ->
 %%--------------------------------------------------------------------
 -spec for_each_failed_transfer(
     Callback :: fun((id(), Acc0 :: term()) -> Acc :: term()),
-    Acc0 :: term()) -> {ok, Acc :: term()} | {error, term()}.
-for_each_failed_transfer(Callback, Acc0) ->
-    for_each_transfer(?FAILED_TRANSFERS_KEY, Callback, Acc0).
+    Acc0 :: term(), od_space:id()) -> {ok, Acc :: term()} | {error, term()}.
+for_each_failed_transfer(Callback, Acc0, SpaceId) ->
+    for_each_transfer(?FAILED_TRANSFERS_KEY, Callback, Acc0, SpaceId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -450,9 +458,9 @@ for_each_failed_transfer(Callback, Acc0) ->
 %%--------------------------------------------------------------------
 -spec for_each_unfinished_transfer(
     Callback :: fun((id(), Acc0 :: term()) -> Acc :: term()),
-    Acc0 :: term()) -> {ok, Acc :: term()} | {error, term()}.
-for_each_unfinished_transfer(Callback, Acc0) ->
-    for_each_transfer(?UNFINISHED_TRANSFERS_KEY, Callback, Acc0).
+    Acc0 :: term(), od_space:id()) -> {ok, Acc :: term()} | {error, term()}.
+for_each_unfinished_transfer(Callback, Acc0, SpaceId) ->
+    for_each_transfer(?UNFINISHED_TRANSFERS_KEY, Callback, Acc0, SpaceId).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -510,7 +518,9 @@ update(TransferId, Diff) ->
 add_link(SourceId, TransferId, SpaceId) ->
     TreeId = oneprovider:get_provider_id(),
     Ctx = ?CTX#{scope => SpaceId},
-    {ok, _} = datastore_model:add_links(Ctx, SourceId, TreeId, {TransferId, <<>>}),
+    {ok, _} = datastore_model:add_links(Ctx, link_root(SourceId, SpaceId),
+        TreeId, {TransferId, <<>>}
+    ),
     ok.
 
 %%--------------------------------------------------------------------
@@ -519,12 +529,12 @@ add_link(SourceId, TransferId, SpaceId) ->
 %% Removes link to transfer.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_link(SourceId :: virtual_list_id(), TransferId :: id(),
+-spec remove_links(SourceId :: virtual_list_id(), TransferId :: id() | [id()],
     od_space:id()) -> ok.
-remove_link(SourceId, TransferId, SpaceId) ->
+remove_links(SourceId, TransferId, SpaceId) ->
     TreeId = oneprovider:get_provider_id(),
     Ctx = ?CTX#{scope => SpaceId},
-    ok = datastore_model:delete_links(Ctx, SourceId, TreeId, TransferId).
+    ok = datastore_model:delete_links(Ctx, link_root(SourceId, SpaceId), TreeId, TransferId).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -534,9 +544,9 @@ remove_link(SourceId, TransferId, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec for_each_transfer(
     virtual_list_id(), Callback :: fun((id(), Acc0 :: term()) -> Acc :: term()),
-    Acc0 :: term()) -> {ok, Acc :: term()} | {error, term()}.
-for_each_transfer(ListDocId, Callback, Acc0) ->
-    datastore_model:fold_links(?CTX, ListDocId, all, fun
+    Acc0 :: term(), od_space:id()) -> {ok, Acc :: term()} | {error, term()}.
+for_each_transfer(ListDocId, Callback, Acc0, SpaceId) ->
+    datastore_model:fold_links(?CTX, link_root(ListDocId, SpaceId), all, fun
         (#link{name = Name}, Acc) -> {ok, Callback(Name, Acc)}
     end, Acc0, #{}).
 
@@ -546,13 +556,13 @@ for_each_transfer(ListDocId, Callback, Acc0) ->
 %% Restarts transfer referenced by given TransferId.
 %% @end
 %%-------------------------------------------------------------------
--spec restart(id()) -> {ok, id()}.
+-spec restart(id()) -> {ok, id()} | {error, term()}.
 restart(TransferId) ->
     TimeSeconds = utils:system_time_seconds(),
     MinHist = time_slot_histogram:new(?MIN_TIME_WINDOW, 60),
     HrHist = time_slot_histogram:new(?HR_TIME_WINDOW, 24),
     DyHist = time_slot_histogram:new(?DY_TIME_WINDOW, 30),
-    {ok, TransferId} = update(TransferId, fun(Transfer) ->
+    UpdateFun = TransferId, fun(Transfer) ->
 
         TransferStatus = case Transfer#transfer.transfer_status of
             completed -> completed;
@@ -583,23 +593,17 @@ restart(TransferId) ->
             hr_hist = time_slot_histogram:get_histogram_values(HrHist),
             dy_hist = time_slot_histogram:get_histogram_values(DyHist)
         }}
-    end),
-    {ok, TransferDoc} = datastore_model:get(?CTX, TransferId),
-    transfer_controller:on_new_transfer_doc(TransferDoc),
-    invalidation_controller:on_new_transfer_doc(TransferDoc),
-    {ok, TransferId}.
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Restarts all unfinished transfers.
-%% @end
-%%-------------------------------------------------------------------
--spec restart_unfinished_transfers() -> term().
-restart_unfinished_transfers() ->
-    for_each_unfinished_transfer(fun(TransferId, _AccIn) ->
-        {ok, TransferId} = restart(TransferId)
-    end, []).
+    end,
+    case update(TransferId, UpdateFun) of
+        {ok, TransferId} ->
+            {ok, TransferDoc} = datastore_model:get(?CTX, TransferId),
+            transfer_controller:on_new_transfer_doc(TransferDoc),
+            invalidation_controller:on_new_transfer_doc(TransferDoc),
+            {ok, TransferId};
+        Error ->
+            ?error_stacktrace("Restarting transfer ~p faile due to ~p", [TransferId, Error]),
+            Error
+    end.
 
 %%-------------------------------------------------------------------
 %% @private
@@ -657,6 +661,29 @@ handle_updated(#transfer{
     invalidation_controller:finish_transfer(decode_pid(Pid));
 handle_updated(_) ->
     ok.
+
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Removes all TransferIds from unfinished_transfer
+%% @end
+%%-------------------------------------------------------------------
+-spec remove_unfinished_transfers_links([id()], od_space:id()) -> ok.
+remove_unfinished_transfers_links(TransferIds, SpaceId) ->
+    remove_links(?UNFINISHED_TRANSFERS_KEY, TransferIds, SpaceId).
+
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns links tree root for given space.
+%% @end
+%%-------------------------------------------------------------------
+-spec link_root(binary(), od_space:id()) -> binary().
+link_root(Prefix, SpaceId) ->
+    <<Prefix/binary, "_", SpaceId/binary>>.
+
 
 %%%===================================================================
 %%% datastore_model callbacks

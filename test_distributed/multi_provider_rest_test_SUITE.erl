@@ -306,7 +306,7 @@ restart_file_replication(Config) ->
         end, ?ATTEMPTS),
 
     resume_file_replication_time(WorkerP2),
-    rpc:call(WorkerP1, transfer, restart_unfinished_and_failed_transfers, []),
+    rpc:call(WorkerP1, transfer, restart_unfinished_transfers, [<<"space3">>]),
 
     ?assertMatch(#{
         <<"transferStatus">> := <<"completed">>,
@@ -465,7 +465,7 @@ restart_dir_replication(Config) ->
 
     resume_file_replication_time(WorkerP2),
     %% restart transfer
-    rpc:call(WorkerP1, transfer, restart_unfinished_and_failed_transfers, []),
+    rpc:call(WorkerP1, transfer, restart_unfinished_transfers, [<<"space3">>]),
 
     ?assertMatch(#{
         <<"transferStatus">> := <<"completed">>,
@@ -706,21 +706,11 @@ restart_invalidation_of_file_replica_with_migration(Config) ->
         end, ?ATTEMPTS),
 
     resume_file_replication_time(WorkerP2),
-    rpc:call(WorkerP2, transfer, restart_unfinished_and_failed_transfers, []),
+    rpc:call(WorkerP2, transfer, restart_unfinished_transfers, [<<"space3">>]),
 
-    ?assertEqual(false,
-        begin
-            {ok, Unfinished} = rpc:call(WorkerP2, transfer, for_each_unfinished_transfer, [?LIST_TRANSFER, []]),
-            lists:member(Tid1, Unfinished)
-        end,
-        ?ATTEMPTS),
 
-    ?assertEqual(false,
-        begin
-            {ok, Unfinished} = rpc:call(WorkerP1, transfer, for_each_unfinished_transfer, [?LIST_TRANSFER, []]),
-            lists:member(Tid1, Unfinished)
-        end,
-        ?ATTEMPTS),
+    ?assertEqual({ok, []}, rpc:call(WorkerP2, transfer, for_each_unfinished_transfer, [?LIST_TRANSFER, [], <<"space3">>]), ?ATTEMPTS),
+    ?assertEqual({ok, []}, rpc:call(WorkerP1, transfer, for_each_unfinished_transfer, [?LIST_TRANSFER, [], <<"space3">>]), ?ATTEMPTS),
 
     ExpectedDistribution2 = [
         #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
@@ -1791,7 +1781,7 @@ quota_exceeded_during_file_replication(Config) ->
         end, ?ATTEMPTS),
 
     {ok, FailedTransfers} = rpc:call(WorkerP2, transfer, for_each_failed_transfer, [
-        fun(Id, Acc) -> [Id | Acc] end, []
+        fun(Id, Acc) -> [Id | Acc] end, [], <<"space4">>
     ]),
     ?assert(lists:member(Tid, FailedTransfers)),
     ExpectedDistribution = [
@@ -1889,7 +1879,7 @@ quota_decreased_after_invalidation(Config) ->
         end, ?ATTEMPTS),
 
     {ok, FailedTransfers} = rpc:call(WorkerP2, transfer, for_each_failed_transfer, [
-        fun(Id, Acc) -> [Id | Acc] end, []
+        fun(Id, Acc) -> [Id | Acc] end, [], <<"space6">>
     ]),
     ?assert(lists:member(Tid2, FailedTransfers)),
 
