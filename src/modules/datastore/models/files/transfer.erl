@@ -215,7 +215,7 @@ start(SessionId, FileGuid, FilePath, ProviderId, Callback, InvalidateSourceRepli
 %%-------------------------------------------------------------------
 -spec restart_unfinished_transfers(od_space:id()) -> [id()].
 restart_unfinished_transfers(SpaceId) ->
-    {Restarted, Failed} = for_each_unfinished_transfer(fun(TransferId, {Restarted0, Failed0}) ->
+    {ok, {Restarted, Failed}} = for_each_unfinished_transfer(fun(TransferId, {Restarted0, Failed0}) ->
         case restart(TransferId) of
             {ok, TransferId} ->
                 {[TransferId | Restarted0], Failed0};
@@ -668,7 +668,9 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Adds link to transfer
+%% Adds link to transfer. Links are added to link tree associated with
+%% given space.
+%% Real link source_id will be obtained from link_root/2 function.
 %% @end
 %%--------------------------------------------------------------------
 -spec add_link(SourceId :: virtual_list_id(), TransferId :: id(),
@@ -681,7 +683,8 @@ add_link(SourceId, TransferId, SpaceId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Removes link to transfer
+%% Removes link/links to transfer/transfers
+%% Real link source_id will be obtained from link_root/2 function.
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_links(SourceId :: virtual_list_id(), TransferId :: id() | [id()],
@@ -702,10 +705,12 @@ remove_links(SourceId, TransferIds, SpaceId) ->
     virtual_list_id(), Callback :: fun((id(), Acc0 :: term()) -> Acc :: term()),
     Acc0 :: term(), od_space:id()) -> {ok, Acc :: term()} | {error, term()}.
 for_each_transfer(ListDocId, Callback, Acc0, SpaceId) ->
-    model:execute_with_default_context(?MODULE, foreach_link, [link_root(ListDocId, SpaceId),
+    model:execute_with_default_context(?MODULE, foreach_link, [
+        link_root(ListDocId, SpaceId),
         fun(LinkName, _LinkTarget, Acc) ->
             Callback(LinkName, Acc)
-        end, Acc0]).
+        end, Acc0
+    ]).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -757,7 +762,7 @@ restart(TransferId) ->
             invalidation_controller:on_new_transfer_doc(TransferDoc),
             {ok, TransferId};
         Error ->
-            ?error_stacktrace("Restarting transfer ~p faile due to ~p", [TransferId, Error]),
+            ?error_stacktrace("Restarting transfer ~p failed due to ~p", [TransferId, Error]),
             Error
     end.
 
