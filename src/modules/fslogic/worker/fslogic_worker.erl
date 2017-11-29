@@ -126,8 +126,19 @@ handle(invalidate_permissions_cache) ->
     ),
     ok;
 handle(restart_transfers) ->
-    ?debug("Restarting failed and unfinished transfers"),
-    transfer:restart_unfinished_and_failed_transfers();
+    ?debug("Restarting unfinished transfers"),
+    try od_provider:get_or_fetch(oneprovider:get_provider_id()) of
+        {ok, #document{value = #od_provider{spaces = SpaceIds}}} ->
+            lists:foreach(fun(SpaceId) ->
+                Restarted = transfer:restart_unfinished_transfers(SpaceId),
+                ?debug("Restarted following transfers: ~p", [Restarted])
+            end, SpaceIds);
+        {error, Reason} ->
+            ?error_stacktrace("Unable to restart transfers due to: ~p", [Reason])
+    catch
+        _:Reason ->
+            ?error_stacktrace("Unable to restart transfers due to: ~p", [Reason])
+    end;
 handle({fuse_request, SessId, FuseRequest}) ->
     ?debug("fuse_request(~p): ~p", [SessId, FuseRequest]),
     Response = handle_request_and_process_response(SessId, FuseRequest),
