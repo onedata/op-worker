@@ -117,7 +117,7 @@ get_user_id_on_posix_storage(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Result = rpc:call(Worker, reverse_luma, get_user_id,
         [<<"0">>, ?STORAGE_DOC(?STORAGE_ID, ?STORAGE)]),
-    ExpectedUserId = datastore_utils2:gen_key(<<"">>, str_utils:format_bin("~p:~s",
+    ExpectedUserId = datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
         [?TEST_PROVIDER_ID, ?TEST_USER_ID])),
     ?assertEqual({ok, ExpectedUserId}, Result).
 
@@ -125,7 +125,7 @@ get_user_id_on_posix_storage_by_acl_username(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Result = rpc:call(Worker, reverse_luma, get_user_id_by_name,
         [<<"user@nfsdomain.org">>, ?STORAGE_DOC(?STORAGE_ID, ?STORAGE)]),
-    ExpectedUserId = datastore_utils2:gen_key(<<"">>, str_utils:format_bin("~p:~s",
+    ExpectedUserId = datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
         [?TEST_PROVIDER_ID, ?TEST_USER_ID])),
     ?assertEqual({ok, ExpectedUserId}, Result).
 
@@ -491,9 +491,9 @@ end_per_testcase(_Case, Config) ->
 
 mock_resolve_acl_user_post(Worker, Expected) ->
     test_utils:mock_expect(Worker, http_client, post, fun
-        (Url, Headers, Body) when is_list(Url) ->
-            case lists:last(string:tokens(Url, "/")) of
-                "resolve_acl_user" ->
+        (Url, Headers, Body) when is_binary(Url) ->
+            case lists:last(binary:split(Url, <<"/">>, [global])) of
+                <<"resolve_acl_user">> ->
                     Expected;
                 _ ->
                     meck:passthrough([Url, Headers, Body])
@@ -504,9 +504,9 @@ mock_resolve_acl_user_post(Worker, Expected) ->
 
 mock_resolve_user_post(Worker, Expected) ->
     test_utils:mock_expect(Worker, http_client, post, fun
-        (Url, Headers, Body) when is_list(Url) ->
-            case lists:last(string:tokens(Url, "/")) of
-                "resolve_user" ->
+        (Url, Headers, Body) when is_binary(Url) ->
+            case lists:last(binary:split(Url, <<"/">>, [global])) of
+                <<"resolve_user">> ->
                     Expected;
                 _ ->
                     meck:passthrough([Url, Headers, Body])
@@ -517,9 +517,9 @@ mock_resolve_user_post(Worker, Expected) ->
 
 mock_resolve_group_post(Worker, ExpectedLuma) ->
     test_utils:mock_expect(Worker, http_client, post, fun
-        (Url, Headers, Body) when is_list(Url) ->
-            case lists:last(string:tokens(Url, "/")) of
-                "resolve_group" ->
+        (Url, Headers, Body) when is_binary(Url) ->
+            case lists:last(binary:split(Url, <<"/">>, [global])) of
+                <<"resolve_group">> ->
                     ExpectedLuma;
                 _ ->
                     meck:passthrough([Url, Headers, Body])
@@ -530,9 +530,9 @@ mock_resolve_group_post(Worker, ExpectedLuma) ->
 
 mock_resolve_acl_group_post(Worker, ExpectedLuma) ->
     test_utils:mock_expect(Worker, http_client, post, fun
-        (Url, Headers, Body) when is_list(Url) ->
-            case lists:last(string:tokens(Url, "/")) of
-                "resolve_acl_group" ->
+        (Url, Headers, Body) when is_binary(Url) ->
+            case lists:last(binary:split(Url, <<"/">>, [global])) of
+                <<"resolve_acl_group">> ->
                     ExpectedLuma;
                 _ ->
                     meck:passthrough([Url, Headers, Body])

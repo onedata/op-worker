@@ -132,7 +132,7 @@ get_server_user_ctx(SessionId, UserId, GroupId, SpaceId, StorageDoc, HelperName)
         {ok, Helper} ->
             get_user_ctx([
                 {fun get_admin_ctx/2, [UserId, Helper]},
-                {fun fetch_user_ctx/5, [SessionId, UserId, GroupId, SpaceId, StorageDoc, Helper]},
+                {fun fetch_user_ctx/6, [SessionId, UserId, GroupId, SpaceId, StorageDoc, Helper]},
                 {fun generate_user_ctx/4, [UserId, GroupId, SpaceId, HelperName]}
             ]);
         {error, Reason} ->
@@ -246,8 +246,6 @@ fetch_user_ctx(SessionId, UserId, SpaceId, StorageDoc, Helper) ->
     storage:helper()) -> {ok, user_ctx()} | {error, Reason :: term()} | undefined.
 fetch_user_ctx(SessionId, UserId, GroupId, SpaceId, StorageDoc, Helper) ->
     case fetch_user_ctx(SessionId, UserId, SpaceId, StorageDoc, Helper) of
-        undefined ->
-            undefined;
         {ok, UserCtx} ->
             LumaConfig = storage:get_luma_config(StorageDoc),
             LumaCacheTimeout = luma_config:get_timeout(LumaConfig),
@@ -265,8 +263,8 @@ fetch_user_ctx(SessionId, UserId, GroupId, SpaceId, StorageDoc, Helper) ->
                     {ok, GroupCtx} = generate_group_ctx(UserId, GroupId, SpaceId, Helper#helper.name),
                     {ok, maps:merge(UserCtx, GroupCtx)}
             end;
-        Error ->
-            Error
+        Other ->
+            Other
     end.
 
 %%--------------------------------------------------------------------
@@ -386,6 +384,7 @@ select_posix_storage(SpaceId) ->
     end.
 
 %%-------------------------------------------------------------------
+%% @private
 %% @doc
 %% Returns gid for given GroupId fetched from luma_cache or 3rd
 %% party LUMA service.

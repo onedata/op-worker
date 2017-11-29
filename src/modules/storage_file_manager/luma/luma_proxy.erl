@@ -68,7 +68,7 @@ get_group_ctx(GroupId, SpaceId, StorageDoc = #document{
     value = #storage{
         luma_config = LumaConfig = #luma_config{url = LumaUrl}
 }}, Helper) ->
-    Url = lists:flatten(io_lib:format("~s/map_group", [LumaUrl])),
+    Url = str_utils:format_bin("~s/map_group", [LumaUrl]),
     ReqHeaders = get_request_headers(LumaConfig),
     ReqBody = get_group_request_body(GroupId, SpaceId, StorageDoc),
     case http_client:post(Url, ReqHeaders, ReqBody) of

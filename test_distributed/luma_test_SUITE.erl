@@ -16,6 +16,7 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include("proto/common/credentials.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
@@ -368,15 +369,17 @@ get_posix_user_ctx_should_fetch_user_ctx(Config) ->
         {ok, ?POSIX_STORAGE_DOC}
     end),
     Result = rpc:call(Worker, luma, get_posix_user_ctx, [
-        <<"userId">>,
+        ?MOCK_SESS_ID,
+        ?MOCK_USER_ID,
         <<"spaceId">>
     ]),
     Result = rpc:call(Worker, luma, get_posix_user_ctx, [
-        <<"userId">>,
+        ?MOCK_SESS_ID,
+        ?MOCK_USER_ID,
         <<"spaceId">>
     ]),
     test_utils:mock_assert_num_calls(Worker, luma_proxy, get_user_ctx,
-        ['_', '_', '_', '_'], 1),
+        ['_', '_', '_', '_', '_'], 1),
     {Uid, Gid} = ?assertMatch({_, _}, Result),
     ?assert(is_integer(Uid)),
     ?assert(is_integer(Gid)).
@@ -391,17 +394,19 @@ get_posix_user_ctx_should_fetch_user_ctx_twice(Config) ->
     end),
 
     Result = rpc:call(Worker, luma, get_posix_user_ctx, [
-        <<"userId">>,
+        ?MOCK_SESS_ID,
+        ?MOCK_USER_ID,
         <<"spaceId">>
     ]),
     timer:sleep(CacheTimeout + 1),
     Result = rpc:call(Worker, luma, get_posix_user_ctx, [
-        <<"userId">>,
+        ?MOCK_SESS_ID,
+        ?MOCK_USER_ID,
         <<"spaceId">>
     ]),
 
     test_utils:mock_assert_num_calls(Worker, luma_proxy, get_user_ctx,
-        ['_', '_', '_', '_'], 2),
+        ['_', '_', '_', '_', '_'], 2),
 
     {Uid, Gid} = ?assertMatch({_, _}, Result),
     ?assertEqual(?UID1, integer_to_binary(Uid)),
@@ -414,15 +419,16 @@ get_posix_user_ctx_should_fetch_user_ctx_by_group_id(Config) ->
         {ok, ?POSIX_STORAGE_DOC}
     end),
     Result = rpc:call(Worker, luma, get_posix_user_ctx, [
-        <<"userId">>,
+        ?MOCK_SESS_ID,
+        ?MOCK_USER_ID,
         ?GROUP_ID,
         <<"spaceId">>
     ]),
     test_utils:mock_assert_num_calls(Worker, luma_proxy, get_user_ctx,
-        ['_', '_', '_', '_'], 1),
+        ['_', '_', '_', '_', '_'], 1),
     {Uid, Gid} = ?assertMatch({_, _}, Result),
-    ?assertEqual(?UID1, integer_to_binary(Uid)),
-    ?assertEqual(?GID2, integer_to_binary(Gid)).
+    ?assertEqual(binary_to_integer(?UID1), Uid),
+    ?assertEqual(binary_to_integer(?GID2), Gid).
 
 
 get_posix_user_ctx_by_group_id_should_generate_gid_by_group_id_when_mapping_is_not_found(Config) ->
@@ -432,14 +438,14 @@ get_posix_user_ctx_by_group_id_should_generate_gid_by_group_id_when_mapping_is_n
         {ok, ?POSIX_STORAGE_DOC}
     end),
     Result = rpc:call(Worker, luma, get_posix_user_ctx, [
-        <<"userId">>,
+        ?MOCK_SESS_ID,
+        ?MOCK_USER_ID,
         ?GROUP_ID,
         ?SPACE_ID
     ]),
     test_utils:mock_assert_num_calls(Worker, luma_proxy, get_user_ctx,
-        ['_', '_', '_', '_'], 1),
+        ['_', '_', '_', '_', '_'], 1),
     {Uid, Gid} = ?assertMatch({_, _}, Result),
-    ct:pal("Result: ~p", [Result]),
     ?assertEqual(?UID1, integer_to_binary(Uid)),
     ?assertEqual(generate_posix_identifier(?GROUP_ID, ?GID_RANGE), Gid).
 
@@ -450,14 +456,14 @@ get_posix_user_ctx_by_group_id_should_generate_gid_by_space_id_when_luma_returns
         {ok, ?POSIX_STORAGE_DOC}
     end),
     Result = rpc:call(Worker, luma, get_posix_user_ctx, [
-        <<"userId">>,
+        ?MOCK_SESS_ID,
+        ?MOCK_USER_ID,
         undefined,
         ?SPACE_ID
     ]),
     test_utils:mock_assert_num_calls(Worker, luma_proxy, get_user_ctx,
-        ['_', '_', '_', '_'], 1),
+        ['_', '_', '_', '_', '_'], 1),
     {Uid, Gid} = ?assertMatch({_, _}, Result),
-    ct:pal("Result: ~p", [Result]),
     ?assertEqual(?UID1, integer_to_binary(Uid)),
     ?assertEqual(generate_posix_identifier(?SPACE_ID, ?GID_RANGE), Gid).
 
@@ -509,9 +515,9 @@ init_per_testcase(Case, Config) when
     end),
     Expected = json_utils:encode_map(#{<<"uid">> => ?UID1, <<"gid">> => ?GID1}),
     test_utils:mock_expect(Worker, http_client, post, fun
-        (Url, Headers, Body) when is_list(Url) ->
-            case lists:last(string:tokens(Url, "/")) of
-                "map_user_credentials" ->
+        (Url, Headers, Body) when is_binary(Url) ->
+            case lists:last(binary:split(Url, <<"/">>, [global])) of
+                <<"map_user_credentials">> ->
                     {ok, 200, [], Expected};
                 _ ->
                     meck:passthrough([Url, Headers, Body])
@@ -533,11 +539,11 @@ init_per_testcase(Case, Config) when
     Expected = json_utils:encode_map(#{<<"uid">> => ?UID1, <<"gid">> => ?GID1}),
     Expected2 = json_utils:encode_map(#{<<"gid">> => ?GID2}),
     test_utils:mock_expect(Worker, http_client, post, fun
-        (Url, Headers, Body) when is_list(Url) ->
-            case lists:last(string:tokens(Url, "/")) of
-                "map_user_credentials" ->
+        (Url, Headers, Body) when is_binary(Url) ->
+            case lists:last(binary:split(Url, <<"/">>, [global])) of
+                <<"map_user_credentials">> ->
                     {ok, 200, [], Expected};
-                "map_group" ->
+                <<"map_group">> ->
                     {ok, 200, [], Expected2};
                 _ ->
                     meck:passthrough([Url, Headers, Body])
@@ -560,11 +566,11 @@ init_per_testcase(Case, Config) when
     Expected = json_utils:encode_map(#{<<"uid">> => ?UID1, <<"gid">> => ?GID1}),
     Expected2 = json_utils:encode_map(#{<<"error">> => <<"mapping not found">>}),
     test_utils:mock_expect(Worker, http_client, post, fun
-        (Url, Headers, Body) when is_list(Url) ->
-            case lists:last(string:tokens(Url, "/")) of
-                "map_user_credentials" ->
+        (Url, Headers, Body) when is_binary(Url) ->
+            case lists:last(binary:split(Url, <<"/">>, [global])) of
+                <<"map_user_credentials">> ->
                     {ok, 200, [], Expected};
-                "map_group" ->
+                <<"map_group">> ->
                     {ok, 404, [], Expected2};
                 _ ->
                     meck:passthrough([Url, Headers, Body])

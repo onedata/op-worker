@@ -53,7 +53,7 @@ get_user_id(Uid, StorageId, StorageName, LumaConfig = #luma_config{url = LumaUrl
 -spec get_user_id_by_name(binary(), storage:id(), storage:name(),
     luma_config:config()) -> {ok, od_user:id()}.
 get_user_id_by_name(Name, StorageId, StorageName, LumaConfig = #luma_config{url = LumaUrl}) ->
-    Url = lists:flatten(io_lib:format("~s/resolve_acl_user", [LumaUrl])),
+    Url = str_utils:format_bin("~s/resolve_acl_user", [LumaUrl]),
     ReqHeaders = luma_proxy:get_request_headers(LumaConfig),
     ReqBody = get_user_request_body_by_name(Name, StorageId, StorageName),
     {ok, 200, _RespHeaders, RespBody} = http_client:post(Url, ReqHeaders, ReqBody),
@@ -97,7 +97,7 @@ get_group_id(Gid, SpaceId, StorageId, StorageName, LumaConfig = #luma_config{url
 get_group_id_by_name(Name, SpaceId, StorageId, StorageName,
     LumaConfig = #luma_config{url = LumaUrl}
 ) ->
-    Url = lists:flatten(io_lib:format("~s/resolve_acl_group", [LumaUrl])),
+    Url = str_utils:format_bin("~s/resolve_acl_group", [LumaUrl]),
     ReqHeaders = luma_proxy:get_request_headers(LumaConfig),
     ReqBody = get_group_request_body_by_name(Name, SpaceId, StorageId, StorageName),
     {ok, 200, _RespHeaders, RespBody} = http_client:post(Url, ReqHeaders, ReqBody),
@@ -125,7 +125,7 @@ get_group_id_by_name(Name, SpaceId, StorageId, StorageName,
 idp_to_onedata_user_id(<<"onedata">>, IdpUserId) ->
     IdpUserId;
 idp_to_onedata_user_id(Idp, IdpUserId) ->
-    datastore_utils2:gen_key(<<"">>, str_utils:format_bin("~p:~s",
+    datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
         [Idp, IdpUserId]
     )).
 
