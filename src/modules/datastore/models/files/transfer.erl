@@ -131,7 +131,7 @@ start(SessionId, FileGuid, FilePath, ProviderId, Callback, InvalidateSourceRepli
 %%-------------------------------------------------------------------
 -spec restart_unfinished_transfers(od_space:id()) -> [id()].
 restart_unfinished_transfers(SpaceId) ->
-    {Restarted, Failed} = for_each_unfinished_transfer(fun(TransferId, {Restarted0, Failed0}) ->
+    {ok, {Restarted, Failed}} = for_each_unfinished_transfer(fun(TransferId, {Restarted0, Failed0}) ->
         case restart(TransferId) of
             {ok, TransferId} ->
                 {[TransferId | Restarted0], Failed0};
@@ -510,7 +510,9 @@ update(TransferId, Diff) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Adds link to transfer.
+%% Adds link to transfer. Links are added to link tree associated with
+%% given space.
+%% Real link source_id will be obtained from link_root/2 function.
 %% @end
 %%--------------------------------------------------------------------
 -spec add_link(SourceId :: virtual_list_id(), TransferId :: id(),
@@ -526,7 +528,8 @@ add_link(SourceId, TransferId, SpaceId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Removes link to transfer.
+%% Removes link/links to transfer/transfers
+%% Real link source_id will be obtained from link_root/2 function.
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_links(SourceId :: virtual_list_id(), TransferId :: id() | [id()],
@@ -601,7 +604,7 @@ restart(TransferId) ->
             invalidation_controller:on_new_transfer_doc(TransferDoc),
             {ok, TransferId};
         Error ->
-            ?error_stacktrace("Restarting transfer ~p faile due to ~p", [TransferId, Error]),
+            ?error_stacktrace("Restarting transfer ~p failed due to ~p", [TransferId, Error]),
             Error
     end.
 
