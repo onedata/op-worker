@@ -16,6 +16,7 @@
 -author("Konrad Zemek").
 -behavior(gen_server).
 
+-include("global_definitions.hrl").
 -include("modules/rtransfer/gateway.hrl").
 -include("modules/rtransfer/registered_names.hrl").
 -include("timeouts.hrl").
@@ -30,11 +31,18 @@
     rtransfer_opts :: [rtransfer:opt()]
 }).
 
+%% How many simultaneous operations can be performed per gateway_connection.
+-define(connection_load_factor,
+    application:get_env(?APP_NAME, gateway_connection_load_factor, 5)).
+
+-define(default_block_size,
+    application:get_env(?APP_NAME, rtransfer_block_size, 104857600)).
 
 -export([start_link/4]).
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
+-export([garbage_collect/1]).
 
 
 %%%===================================================================
@@ -267,6 +275,7 @@ code_change(_OldVsn, State, _Extra) ->
 -spec complete_request(Reply :: #'FetchReply'{}, State :: #gwcstate{}) -> ok.
 complete_request(#'FetchReply'{content = Content, request_hash = RequestHash}, State) ->
     TID = State#gwcstate.waiting_requests,
+    RtransferOpts = State#gwcstate.rtransfer_opts,
 
     case ets:lookup(TID, RequestHash) of
         [] -> ignore;
@@ -276,7 +285,6 @@ complete_request(#'FetchReply'{content = Content, request_hash = RequestHash}, S
             case Content of
                 undefined -> gateway:notify(fetch_complete, 0, Action);
                 _ ->
-                    RtransferOpts = State#gwcstate.rtransfer_opts,
                     OpenFun = proplists:get_value(open_fun, RtransferOpts),
                     WriteFun = proplists:get_value(write_fun, RtransferOpts),
                     CloseFun = proplists:get_value(close_fun, RtransferOpts),
@@ -308,6 +316,7 @@ complete_request(#'FetchReply'{content = Content, request_hash = RequestHash}, S
 
             ets:delete(TID, RequestHash)
     end,
+    ?MODULE:garbage_collect(RtransferOpts),
     ok.
 
 %%-------------------------------------------------------------------
@@ -332,3 +341,57 @@ notify_error(?ENOSPC, Action) ->
     gateway:notify(fetch_error, ?ENOSPC, Action#gw_fetch{retry=0});
 notify_error(Reason, Action) ->
     gateway:notify(fetch_error, Reason, Action).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Does garbage collection of the process
+%% @end
+%%-------------------------------------------------------------------
+-spec garbage_collect([rtransfer:opt()]) -> true.
+garbage_collect(RtransferOpts) ->
+    case application:get_env(?APP_NAME, rtransfer_gc, sync) of
+        sync ->
+            erlang:garbage_collect(),
+            wait_gc(RtransferOpts);
+        async ->
+            erlang:garbage_collect();
+        _ ->
+            true
+    end.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Waits until garbage collection frees enough memory.
+%% @end
+%%-------------------------------------------------------------------
+-spec wait_gc([rtransfer:opt()]) -> ok.
+wait_gc(RtransferOpts) ->
+    wait_gc(1, 20, RtransferOpts).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Waits until garbage collection frees enough memory.
+%% @end
+%%-------------------------------------------------------------------
+-spec wait_gc(non_neg_integer(), non_neg_integer(), [rtransfer:opt()]) -> ok.
+wait_gc(N, N, _RtransferOpts) ->
+    ok;
+wait_gc(N, Max, RtransferOpts) ->
+    {binary, BinList} = erlang:process_info(self(), binary),
+    Sum = lists:foldl(fun({_, S, _}, Acc) ->
+        S + Acc
+    end, 0, BinList),
+    DefaultBlockSize = ?default_block_size,
+    BlockSize = proplists:get_value(block_size,
+        RtransferOpts, DefaultBlockSize),
+    Max = BlockSize * ?connection_load_factor,
+    case Sum < Max of
+        true ->
+            ok;
+        _ ->
+            timer:sleep(100 * N),
+            wait_gc(N + 1, Max, RtransferOpts)
+    end.
