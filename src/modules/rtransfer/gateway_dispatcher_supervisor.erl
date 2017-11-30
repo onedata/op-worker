@@ -17,11 +17,14 @@
 -behavior(supervisor).
 
 -include("modules/rtransfer/registered_names.hrl").
+-include("global_definitions.hrl").
 
 -export([start_link/2]).
 %% supervisor callbacks
 -export([init/1]).
 
+-define(default_block_size,
+    application:get_env(?APP_NAME, rtransfer_block_size, 104857600)).
 
 %%%===================================================================
 %%% API
@@ -111,7 +114,9 @@ connection_manager_supervisor_spec(RtransferOpts) ->
 %%--------------------------------------------------------------------
 -spec rt_priority_queue_spec([rtransfer:opt()]) -> supervisor:child_spec().
 rt_priority_queue_spec(RtransferOpts) ->
-    BlockSize = proplists:get_value(block_size, RtransferOpts, 1024 * 1024 * 100),
+    DefaultBlockSize = ?default_block_size,
+    BlockSize = proplists:get_value(block_size,
+        RtransferOpts, DefaultBlockSize),
     ChildId = Module = rt_priority_queue,
     Function = {Module, new, [{local, ?GATEWAY_INCOMING_QUEUE}, BlockSize]},
     Restart = permanent,
