@@ -350,7 +350,7 @@ notify_error(Reason, Action) ->
 %%-------------------------------------------------------------------
 -spec garbage_collect([rtransfer:opt()]) -> true.
 garbage_collect(RtransferOpts) ->
-    case application:get_env(?APP_NAME, rtransfer_gc, sync) of
+    case application:get_env(?APP_NAME, force_rtransfer_gc, async) of
         sync ->
             erlang:garbage_collect(),
             wait_gc(RtransferOpts);
