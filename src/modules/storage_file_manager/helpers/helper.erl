@@ -23,7 +23,8 @@
 -export([new_ceph_helper/6, new_posix_helper/3, new_s3_helper/6,
     new_swift_helper/6, new_glusterfs_helper/5]).
 -export([new_ceph_user_ctx/2, new_posix_user_ctx/2, new_s3_user_ctx/2,
-    new_swift_user_ctx/2, new_glusterfs_user_ctx/2, validate_user_ctx/2]).
+    new_swift_user_ctx/2, new_glusterfs_user_ctx/2, validate_user_ctx/2,
+    validate_group_ctx/2]).
 -export([get_name/1, get_args/1, get_admin_ctx/1, is_insecure/1, get_params/2,
     get_proxy_params/2, get_timeout/1]).
 -export([set_user_ctx/2]).
@@ -32,9 +33,10 @@
 -type name() :: binary().
 -type args() :: #{binary() => binary()}.
 -type params() :: #helper_params{}.
--type user_ctx() :: #{binary() => binary()}.
+-type user_ctx() :: #{binary() => binary() | integer()}.
+-type group_ctx() :: #{binary() => binary() | integer()}.
 
--export_type([name/0, args/0, params/0, user_ctx/0]).
+-export_type([name/0, args/0, params/0, user_ctx/0, group_ctx/0]).
 
 %%%===================================================================
 %%% API
@@ -202,15 +204,29 @@ new_glusterfs_user_ctx(Uid, Gid) ->
 -spec validate_user_ctx(storage:helper(), user_ctx()) ->
     ok | {error, Reason :: term()}.
 validate_user_ctx(#helper{name = ?CEPH_HELPER_NAME}, UserCtx) ->
-    check_user_ctx_fields([<<"username">>, <<"key">>], UserCtx);
+    check_user_or_group_ctx_fields([<<"username">>, <<"key">>], UserCtx);
 validate_user_ctx(#helper{name = ?POSIX_HELPER_NAME}, UserCtx) ->
-    check_user_ctx_fields([<<"uid">>, <<"gid">>], UserCtx);
+    check_user_or_group_ctx_fields([<<"uid">>, <<"gid">>], UserCtx);
 validate_user_ctx(#helper{name = ?S3_HELPER_NAME}, UserCtx) ->
-    check_user_ctx_fields([<<"accessKey">>, <<"secretKey">>], UserCtx);
+    check_user_or_group_ctx_fields([<<"accessKey">>, <<"secretKey">>], UserCtx);
 validate_user_ctx(#helper{name = ?SWIFT_HELPER_NAME}, UserCtx) ->
-    check_user_ctx_fields([<<"username">>, <<"password">>], UserCtx);
+    check_user_or_group_ctx_fields([<<"username">>, <<"password">>], UserCtx);
 validate_user_ctx(#helper{name = ?GLUSTERFS_HELPER_NAME}, UserCtx) ->
-    check_user_ctx_fields([<<"uid">>, <<"gid">>], UserCtx).
+    check_user_or_group_ctx_fields([<<"uid">>, <<"gid">>], UserCtx).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks whether user context is valid for the storage helper.
+%% @end
+%%--------------------------------------------------------------------
+-spec validate_group_ctx(storage:helper(), group_ctx()) ->
+    ok | {error, Reason :: term()}.
+validate_group_ctx(#helper{name = ?POSIX_HELPER_NAME}, GroupCtx) ->
+    check_user_or_group_ctx_fields([<<"gid">>], GroupCtx);
+validate_group_ctx(#helper{name = ?GLUSTERFS_HELPER_NAME}, GroupCtx) ->
+    check_user_or_group_ctx_fields([<<"gid">>], GroupCtx);
+validate_group_ctx(#helper{name = HelperName}, _GroupCtx) ->
+    {error, {group_ctx_not_supported, HelperName}}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -355,23 +371,27 @@ translate_arg_name(Name) -> Name.
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Checks whether user context map contains only provided fields and they
+%% Checks whether user/group context map contains only provided fields and they
 %% have valid type.
 %% @end
 %%--------------------------------------------------------------------
--spec check_user_ctx_fields([binary()], user_ctx()) ->
+-spec check_user_or_group_ctx_fields([binary()], user_ctx() | group_ctx()) ->
     ok | {error, Reason :: term()}.
-check_user_ctx_fields([], UserCtx) ->
+check_user_or_group_ctx_fields([], UserCtx) ->
     case maps:size(UserCtx) of
         0 -> ok;
         _ -> {error, {invalid_additional_fields, UserCtx}}
     end;
-check_user_ctx_fields([Field | Fields], UserCtx) ->
+check_user_or_group_ctx_fields([Field | Fields], UserCtx) ->
     case maps:find(Field, UserCtx) of
+        {ok, Value = <<"null">>} ->
+            {error, {invalid_field_value, Field, Value}};
         {ok, <<_/binary>>} ->
-            check_user_ctx_fields(Fields, maps:remove(Field, UserCtx));
-        {ok, _} ->
-            {error, {invalid_field_value, Field}};
+            check_user_or_group_ctx_fields(Fields, maps:remove(Field, UserCtx));
+        {ok, Value} when is_integer(Value) ->
+            check_user_or_group_ctx_fields(Fields, maps:remove(Field, UserCtx));
+        {ok, Value} ->
+            {error, {invalid_field_value, Field, Value}};
         error ->
             {error, {missing_field, Field}}
     end.

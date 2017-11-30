@@ -15,6 +15,7 @@
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% model_behaviour callbacks
 -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
@@ -141,7 +142,7 @@ before(_ModelName, _Method, _Level, _Context) ->
 create(UserId, SpaceId, StorageDoc) ->
     {ok, Helper} = fslogic_storage:select_helper(StorageDoc),
     HelperName = helper:get_name(Helper),
-    {ok, UserCtx} = luma:get_server_user_ctx(UserId, SpaceId, StorageDoc, HelperName),
+    {ok, UserCtx} = luma:get_server_user_ctx(UserId, undefined, SpaceId, StorageDoc, HelperName),
     HelperHandle = helpers:get_helper_handle(Helper, UserCtx),
     HelperDoc = #document{value = HelperHandle},
     {ok, Key} = create(HelperDoc),
