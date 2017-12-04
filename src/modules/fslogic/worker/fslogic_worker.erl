@@ -19,8 +19,10 @@
 -include("proto/oneprovider/provider_messages.hrl").
 -include("modules/events/definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("cluster_worker/include/exometer_utils.hrl").
 
 -export([init/1, handle/1, cleanup/0]).
+-export([init_counters/0, init_report/0]).
 
 %%%===================================================================
 %%% Types
@@ -54,6 +56,17 @@
 
 -define(TRANSFERS_RESTART_DELAY, application:get_env(?APP_NAME,
     transfers_restart_delay, timer:seconds(10))).
+
+-define(EXOMETER_NAME(Param), ?exometer_name(?MODULE, count, Param)).
+-define(EXOMETER_TIME_NAME(Param), ?exometer_name(?MODULE, time,
+    list_to_atom(atom_to_list(Param) ++ "_time"))).
+-define(EXOMETER_DEFAULT_TIME_SPAN, 600000).
+-define(EXOMETER_COUNTERS, [get_file_attr, get_child_attr, change_mode,
+    update_times, delete_file, create_dir, get_file_children,
+    get_file_children_attrs, rename, create_file, make_file, open_file, release,
+    get_file_location, truncate, synchronize_block,
+    synchronize_block_and_compute_checksum, get_xattr, set_xattr, remove_xattr,
+    list_xattr, fsync]).
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -171,6 +184,42 @@ cleanup() ->
     ok.
 
 %%%===================================================================
+%%% Exometer API
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Initializes all counters.
+%% @end
+%%--------------------------------------------------------------------
+-spec init_counters() -> ok.
+init_counters() ->
+    TimeSpan = application:get_env(?APP_NAME,
+        exometer_datastore_time_span, ?EXOMETER_DEFAULT_TIME_SPAN),
+    Counters = lists:map(fun(Name) ->
+        {?EXOMETER_NAME(Name), counter}
+    end, ?EXOMETER_COUNTERS),
+    Counters2 = lists:map(fun(Name) ->
+        {?EXOMETER_TIME_NAME(Name), histogram, TimeSpan}
+    end, ?EXOMETER_COUNTERS),
+    ?init_counters(Counters ++ Counters2).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Subscribe for reports for all parameters.
+%% @end
+%%--------------------------------------------------------------------
+-spec init_report() -> ok.
+init_report() ->
+    Reports = lists:map(fun(Name) ->
+        {?EXOMETER_NAME(Name), [count]}
+    end, ?EXOMETER_COUNTERS),
+    Reports2 = lists:map(fun(Name) ->
+        {?EXOMETER_TIME_NAME(Name), [min, max, median, mean, n]}
+    end, ?EXOMETER_COUNTERS),
+    ?init_reports(Reports ++ Reports2).
+
+%%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
@@ -232,7 +281,13 @@ handle_request_and_process_response_locally(UserCtx, Request, FilePartialCtx) ->
 %%--------------------------------------------------------------------
 -spec handle_request_locally(user_ctx:ctx(), request(), file_ctx:ctx() | undefined) -> response().
 handle_request_locally(UserCtx, #fuse_request{fuse_request = #file_request{file_request = Req}}, FileCtx) ->
-    handle_file_request(UserCtx, Req, FileCtx);
+    [ReqName | _] = tuple_to_list(Req),
+    ?update_counter(?EXOMETER_NAME(ReqName)),
+    Now = os:timestamp(),
+    Ans = handle_file_request(UserCtx, Req, FileCtx),
+    Time = timer:now_diff(os:timestamp(), Now),
+    ?update_counter(?EXOMETER_TIME_NAME(ReqName), Time),
+    Ans;
 handle_request_locally(UserCtx, #fuse_request{fuse_request = Req}, FileCtx)  ->
     handle_fuse_request(UserCtx, Req, FileCtx);
 handle_request_locally(UserCtx, #provider_request{provider_request = Req}, FileCtx)  ->
