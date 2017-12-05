@@ -17,8 +17,8 @@
 
 
 %% API
--export([init/1, teardown/1, stat/3, truncate/4, create/4, unlink/3, open/4, close/2, close_all/1,
-    read/4, write/4, mkdir/3, mkdir/4, mv/4, ls/5, read_dir_plus/5, set_perms/4, update_times/6,
+-export([init/1, teardown/1, stat/3, truncate/4, create/4, create/5, unlink/3, open/4, close/2, close_all/1,
+    read/4, write/4, mkdir/3, mkdir/4, mkdir/5, mv/4, ls/5, read_dir_plus/5, set_perms/4, update_times/6,
     get_xattr/4, get_xattr/5, set_xattr/4, set_xattr/6, remove_xattr/4, list_xattr/5, get_acl/3, set_acl/4,
     write_and_check/4, get_transfer_encoding/3, set_transfer_encoding/4,
     get_cdmi_completion_status/3, set_cdmi_completion_status/4, get_mimetype/3,
@@ -92,6 +92,12 @@ truncate(Worker, SessId, FileKey, Size) ->
     {ok, fslogic_worker:file_guid()} | logical_file_manager:error_reply().
 create(Worker, SessId, FilePath, Mode) ->
     ?EXEC(Worker, logical_file_manager:create(SessId, FilePath, Mode)).
+
+-spec create(node(), session:id(), fslogic_worker:file_guid(),
+    file_meta:name(), file_meta:posix_permissions()) ->
+    {ok, fslogic_worker:file_guid()} | logical_file_manager:error_reply().
+create(Worker, SessId, ParentGuid, Name, Mode) ->
+    ?EXEC(Worker, logical_file_manager:create(SessId, ParentGuid, Name, Mode)).
 
 -spec unlink(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path()) ->
     ok | logical_file_manager:error_reply().
@@ -194,6 +200,12 @@ mkdir(Worker, SessId, Path) ->
     {ok, DirUuid :: file_meta:uuid()} | logical_file_manager:error_reply().
 mkdir(Worker, SessId, Path, Mode) ->
     ?EXEC(Worker, logical_file_manager:mkdir(SessId, Path, Mode)).
+
+-spec mkdir(node(), session:id(), fslogic_worker:file_guid(),
+    file_meta:name(), file_meta:posix_permissions()) ->
+    {ok, DirUuid :: file_meta:uuid()} | logical_file_manager:error_reply().
+mkdir(Worker, SessId, ParentGuid, Name, Mode) ->
+    ?EXEC(Worker, logical_file_manager:mkdir(SessId, ParentGuid, Name, Mode)).
 
 -spec ls(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), integer(), integer()) ->
     {ok, [{fslogic_worker:file_guid(), file_meta:name()}]} | logical_file_manager:error_reply().
