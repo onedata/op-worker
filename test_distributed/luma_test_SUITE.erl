@@ -286,7 +286,7 @@ get_server_user_ctx_should_fallback_to_admin_ctx(Config) ->
         ?MOCK_SESS_ID,
         ?MOCK_USER_ID,
         <<"spaceId">>,
-        ?CEPH_STORAGE_DOC_LUMA_DISABLED(false),
+        ?CEPH_STORAGE_DOC_LUMA_DISABLED(true),
         ?CEPH_HELPER_NAME
     ]),
     ?assertMatch({ok, #{<<"username">> := <<"username">>}}, Result),
