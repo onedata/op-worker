@@ -58,7 +58,7 @@ many_files_creation_tree_test(Config) ->
             [{name, spawn_beg_level}, {value, 2}, {description, "Level of tree to start spawning processes"}],
             [{name, spawn_end_level}, {value, 2}, {description, "Level of tree to stop spawning processes"}],
             [{name, dir_level}, {value, 2}, {description, "Level of last test directory"}],
-            [{name, dirs_per_parent}, {value, 32}, {description, "Child directories in single dir"}],
+            [{name, dirs_per_parent}, {value, 25}, {description, "Child directories in single dir"}],
             [{name, files_per_dir}, {value, 1000}, {description, "Number of files in single directory"}]
         ]},
         {description, "Creates directories' and files' tree using multiple process"}
