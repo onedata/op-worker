@@ -14,12 +14,14 @@
 -author("Konrad Zemek").
 -behavior(gen_server).
 
+-include("global_definitions.hrl").
 -include("modules/rtransfer/gateway.hrl").
 -include("modules/rtransfer/registered_names.hrl").
 -include("modules/rtransfer/rt_container.hrl").
 
 %% How many simultaneous operations can be performed per gateway_connection.
--define(connection_load_factor, 5).
+-define(connection_load_factor,
+    application:get_env(?APP_NAME, gateway_connection_load_factor, 5)).
 
 %% API
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,

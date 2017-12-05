@@ -43,7 +43,7 @@ get_user_ctx(UserId, SpaceId, StorageDoc = #document{
         {ok, 200, _RespHeaders, RespBody} ->
             UserCtx = json_utils:decode_map(RespBody),
             case helper:validate_user_ctx(Helper, UserCtx) of
-                ok -> {ok, UserCtx};
+                ok -> {ok, ensure_binary_values(UserCtx)};
                 {error, Reason} -> {error, Reason}
             end;
         {ok, Code, _RespHeaders, RespBody} ->
@@ -77,7 +77,7 @@ get_group_ctx(GroupId, SpaceId, StorageDoc = #document{
             GroupCtx = json_utils:decode_map(RespBody),
             case helper:validate_group_ctx(Helper, GroupCtx) of
                 ok ->
-                    {ok, GroupCtx};
+                    {ok, ensure_binary_values(GroupCtx)};
                 Error = {error, Reason} ->
                     ?error_stacktrace("Invalid group ctx returned from map_group request: ~p", [Reason]),
                     Error
@@ -199,3 +199,15 @@ format_user_accounts(Accounts) ->
             <<"name">>, <<"email_list">>, <<"groups">>], Account),
         lists:zip(Keys, Values)
     end, Accounts).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Ensures thath all values in map are binaries
+%% @end
+%%-------------------------------------------------------------------
+-spec ensure_binary_values(maps:map()) -> maps:map().
+ensure_binary_values(Map) ->
+    maps:fold(fun(Key, Value, AccIn) ->
+        AccIn#{Key => str_utils:to_binary(Value)}
+    end, #{}, Map).

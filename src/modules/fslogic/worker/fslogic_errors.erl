@@ -12,6 +12,7 @@
 -module(fslogic_errors).
 -author("Rafal Slota").
 
+-include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
@@ -40,9 +41,20 @@ handle_error(Request, Type, Error) ->
     Status = #status{code = Code} =
         fslogic_errors:gen_status_message(Error),
     LogLevel = code_to_loglevel(Code),
-    MsgFormat =
-        "Cannot process request ~p (code: ~p)~nStacktrace: ~s",
-    FormatArgs = [lager:pr(Request, ?MODULE), Code, lager:pr_stacktrace(Stacktrace, {Type, Error})],
+    LogRequest = application:get_env(?APP_NAME, log_requests_on_error, false),
+    {MsgFormat, FormatArgs} = case LogRequest of
+        true ->
+            MF =
+                "Cannot process request ~p (code: ~p)~nStacktrace: ~s",
+            FA = [lager:pr(Request, ?MODULE), Code,
+                lager:pr_stacktrace(Stacktrace, {Type, Error})],
+            {MF, FA};
+        _ ->
+            MF =
+                "Cannot process request: code: ~p~nStacktrace: ~s",
+            FA = [Code, lager:pr_stacktrace(Stacktrace, {Type, Error})],
+            {MF, FA}
+    end,
     case LogLevel of
         debug -> ?debug(MsgFormat, FormatArgs);
         error -> ?error(MsgFormat, FormatArgs)
