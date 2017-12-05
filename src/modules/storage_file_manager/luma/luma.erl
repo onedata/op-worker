@@ -134,7 +134,8 @@ get_server_user_ctx(UserId, GroupId, SpaceId, StorageDoc, HelperName) ->
             get_user_ctx([
                 {fun get_admin_ctx/2, [UserId, Helper]},
                 {fun fetch_user_ctx/5, [UserId, GroupId, SpaceId, StorageDoc, Helper]},
-                {fun generate_user_ctx/4, [UserId, GroupId, SpaceId, HelperName]}
+                {fun generate_user_ctx/4, [UserId, GroupId, SpaceId, HelperName]},
+                {fun get_admin_ctx/2, [?ROOT_USER_ID, Helper]}
             ]);
         {error, Reason} ->
             {error, Reason}
@@ -174,7 +175,7 @@ get_user_ctx(Strategies) ->
 -spec get_admin_ctx(od_user:id(), storage:helper()) -> {ok, user_ctx()} | undefined.
 get_admin_ctx(?ROOT_USER_ID, #helper{name = ?POSIX_HELPER_NAME}) ->
     {ok, helper:new_posix_user_ctx(0, 0)};
-get_admin_ctx(?ROOT_USER_ID, #helper{admin_ctx = AdminCtx}) ->
+get_admin_ctx(?ROOT_USER_ID, #helper{admin_ctx = AdminCtx, insecure = true}) ->
     {ok, AdminCtx};
 get_admin_ctx(_UserId, _Helper) ->
     undefined.
