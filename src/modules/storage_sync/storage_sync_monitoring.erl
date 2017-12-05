@@ -37,7 +37,7 @@
     update_queue_length_spirals/2, stop_queue_length_spirals/1
 ]).
 
--export([init_report/0, init_reporter/0]).
+-export([init_report/0, init_reporter/1, init_counters/0]).
 
 
 -type window() :: day | hours | minute.
@@ -432,9 +432,18 @@ init_report() ->
 %% Initialize exometer reporter used by storage_sync.
 %% @end
 %%--------------------------------------------------------------------
--spec init_reporter() -> ok.
-init_reporter() ->
+-spec init_reporter(atom()) -> ok.
+init_reporter(exometer_report_rrd_ets) ->
     exometer_report:add_reporter(exometer_report_rrd_ets, []).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback that initializes all counters.
+%% @end
+%%--------------------------------------------------------------------
+-spec init_counters() -> ok.
+init_counters() ->
+    ok.
 
 %%===================================================================
 %% Internal functions
