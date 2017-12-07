@@ -26,7 +26,7 @@
     model_init/0, 'after'/5, before/4]).
 
 %% API
--export([fetch/1, get_or_fetch/2, create_or_update/2]).
+-export([fetch/1, get_or_fetch/2, get_public_user_data/2, create_or_update/2]).
 -export([record_struct/1]).
 
 -export_type([doc/0, id/0, connected_account/0]).
@@ -245,6 +245,28 @@ fetch(Auth) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Fetch user from OZ, do not save it in cache.
+%% @end
+%%--------------------------------------------------------------------
+-spec fetch_public_user(Auth :: oz_endpoint:auth(), UserId :: od_user:id()) ->
+    {ok, datastore:document()} | {error, Reason :: term()}.
+fetch_public_user(Auth, UserId) ->
+    {ok, #user_details{
+        id = UserId, name = Name, connected_accounts = ConnectedAccounts,
+        alias = Alias, email_list = EmailList}
+    } = oz_users:get_public_details(Auth, UserId),
+
+    OnedataUser = #od_user{
+        name = Name,
+        connected_accounts = ConnectedAccounts,
+        alias = Alias,
+        email_list = EmailList
+    },
+
+    {ok, #document{key = UserId, value = OnedataUser}}.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Get user from cache or fetch from OZ and save in cache.
 %% @end
 %%--------------------------------------------------------------------
@@ -263,6 +285,28 @@ get_or_fetch(Auth, UserId) ->
                 [UserId, Reason]),
             {error, Reason}
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get public user data from cache or fetch from OZ.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_public_user_data(Auth :: oz_endpoint:auth(), UserId :: id()) ->
+    {ok, datastore:document()} | datastore:get_error().
+get_public_user_data(Auth, UserId) ->
+    try
+        case od_user:get(UserId) of
+            {ok, Doc} -> {ok, Doc};
+            {error, {not_found, _}} -> fetch_public_user(Auth, UserId);
+            Error -> Error
+        end
+    catch
+        _:Reason ->
+            ?error_stacktrace("Cannot get or fetch details of onedata user ~p due to: ~p",
+                [UserId, Reason]),
+            {error, Reason}
+    end.
+
 
 %%%===================================================================
 %%% Internal functions

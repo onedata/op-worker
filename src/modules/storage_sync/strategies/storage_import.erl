@@ -95,7 +95,7 @@ strategy_init_jobs(simple_scan, Args = #{
         space_id := SpaceId,
         storage_id := StorageId
 }) ->
-    space_strategies:update_import_start_time(SpaceId, StorageId,utils:system_time_milli_seconds()),
+    space_strategies:update_import_start_time(SpaceId, StorageId,time_utils:cluster_time_milli_seconds()),
     storage_sync_monitoring:update_queue_length_spirals(SpaceId, 1),
     storage_sync_monitoring:update_files_to_import_counter(SpaceId, 1),
     [#space_strategy_job{
@@ -223,7 +223,7 @@ update_import_finish_time_if_import_finished(SpaceId, StorageId) ->
     case storage_sync_monitoring:import_state(SpaceId) of
         finished ->
             {ok, _} = space_strategies:update_import_finish_time(SpaceId,
-                StorageId,utils:system_time_milli_seconds()),
+                StorageId,time_utils:cluster_time_milli_seconds()),
             ok;
         _ ->
             ok

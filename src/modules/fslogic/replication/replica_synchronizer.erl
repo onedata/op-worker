@@ -66,7 +66,7 @@ synchronize(UserCtx, FileCtx, Block = #file_block{size = RequestedSize}, Prefetc
                         monitoring_event:emit_rtransfer_statistics(SpaceId, UserId, Size),
                         replica_updater:update(FileCtx3,
                             [#file_block{offset = Offset, size = Size}], undefined, false),
-                        {ok, _} = transfer:mark_data_transfer_finished(TransferId, Size),
+                        {ok, _} = transfer:mark_data_transfer_finished(TransferId, ProviderId, Size),
                         Self ! {Ref, active, #file_block{offset = Offset, size = Size}}
                     end,
                     CompleteFun = fun(Ref, Status) ->

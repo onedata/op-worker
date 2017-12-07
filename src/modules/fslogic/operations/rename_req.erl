@@ -468,6 +468,6 @@ remotely_get_child_type(SessId, ParentGuid, ChildName) ->
 -spec update_parent_times(SourceParentFileCtx :: file_ctx:ctx(),
     TargetParentFileCtx :: file_ctx:ctx()) -> ok.
 update_parent_times(SourceParentFileCtx, TargetParentFileCtx) ->
-    CurrentTime = utils:system_time_seconds(),
+    CurrentTime = time_utils:cluster_time_seconds(),
     fslogic_times:update_mtime_ctime(SourceParentFileCtx, CurrentTime),
     fslogic_times:update_mtime_ctime(TargetParentFileCtx, CurrentTime).

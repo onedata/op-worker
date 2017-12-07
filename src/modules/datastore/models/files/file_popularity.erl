@@ -283,7 +283,7 @@ empty_file_popularity(FileCtx) ->
 increase_popularity(FileCtx, FilePopularity) ->
     {HourlyHistogram, DailyHistogram, MonthlyHistogram} =
         file_popularity_to_histograms(FilePopularity),
-    CurrentTimestampHours = utils:system_time_seconds() div 3600,
+    CurrentTimestampHours = time_utils:cluster_time_seconds() div 3600,
     histograms_to_file_popularity(
         time_slot_histogram:increment(HourlyHistogram, CurrentTimestampHours),
         time_slot_histogram:increment(DailyHistogram, CurrentTimestampHours),

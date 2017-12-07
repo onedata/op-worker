@@ -44,8 +44,8 @@
 -export([mkdir/2, mkdir/3, mkdir/4, ls/4, read_dir_plus/4,
     get_child_attr/3, get_children_count/2, get_parent/2]).
 %% Functions operating on directories or files
--export([mv/3, cp/3, get_file_path/2, get_file_guid/2, rm_recursive/2, unlink/3, replicate_file/3,
-    invalidate_file_replica/4]).
+-export([mv/3, cp/3, get_file_path/2, get_file_guid/2, rm_recursive/2, unlink/3]).
+-export([schedule_file_replication/3, schedule_file_replication/4, schedule_replica_invalidation/4]).
 %% Functions operating on files
 -export([create/2, create/3, create/4, open/3, fsync/1, fsync/3, write/3, read/3,
     truncate/3, release/1, get_file_distribution/2, create_and_open/4, create_and_open/5]).
@@ -206,26 +206,56 @@ unlink(SessId, FileEntry, Silent) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Replicates file on given provider.
+%% @equiv schedule_file_replication(SessId, FileKey, TargetProviderId, undefined)
 %% @end
 %%--------------------------------------------------------------------
--spec replicate_file(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
-    ProviderId :: oneprovider:id()) ->
-    ok | error_reply().
-replicate_file(SessId, FileKey, ProviderId) ->
-    ?run(fun() -> lfm_files:replicate_file(SessId, FileKey, ProviderId) end).
+-spec schedule_file_replication(session:id(), fslogic_worker:file_guid_or_path(),
+    TargetProviderId :: oneprovider:id()) -> {ok, transfer:id()} | error_reply().
+schedule_file_replication(SessId, FileKey, TargetProviderId) ->
+    schedule_file_replication(SessId, FileKey, TargetProviderId, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Invalidates file replica on given provider, migrates unique data to provider
-%% given as MigrateProviderId
+%% Schedules file replication to given provider.
 %% @end
 %%--------------------------------------------------------------------
--spec invalidate_file_replica(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
-    ProviderId :: oneprovider:id(), MigrationProviderId :: undefined | oneprovider:id()) ->
-    ok | error_reply().
-invalidate_file_replica(SessId, FileKey, ProviderId, MigrationProviderId) ->
-    ?run(fun() -> lfm_files:invalidate_file_replica(SessId, FileKey, ProviderId, MigrationProviderId) end).
+-spec schedule_file_replication(session:id(), fslogic_worker:file_guid_or_path(),
+    TargetProviderId :: oneprovider:id(), transfer:callback()) ->
+    {ok, transfer:id()} | error_reply().
+schedule_file_replication(SessId, FileKey, TargetProviderId, Callback) ->
+    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
+    SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
+    % Transfers can only be scheduled on supporting providers
+    case provider_logic:supports_space(oneprovider:get_provider_id(), SpaceId) of
+        false ->
+            {error, ?EACCES};
+        true ->
+            ?run(fun() ->
+                lfm_files:schedule_file_replication(SessId, FileKey, TargetProviderId, Callback)
+            end)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Schedules file replica invalidation on given provider, migrates unique data
+%% to provider given as MigrateProviderId.
+%% @end
+%%--------------------------------------------------------------------
+-spec schedule_replica_invalidation(session:id(), fslogic_worker:file_guid_or_path(),
+    SourceProviderId :: oneprovider:id(), TargetProviderId :: undefined | oneprovider:id()) ->
+    {ok, transfer:id()} | error_reply().
+schedule_replica_invalidation(SessId, FileKey, SourceProviderId, TargetProviderId) ->
+    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
+    SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
+    % Replica migration can only be scheduled on supporting providers
+    case provider_logic:supports_space(oneprovider:get_provider_id(), SpaceId) of
+        false ->
+            {error, ?EACCES};
+        true ->
+            ?run(fun() ->
+                lfm_files:schedule_replica_invalidation(SessId, FileKey, SourceProviderId, TargetProviderId)
+            end)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

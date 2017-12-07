@@ -65,14 +65,10 @@ get_target_providers(UserCtx, File, #fuse_request{fuse_request = #file_request{
     file_request = #get_file_attr{}
 }}) ->
     get_target_providers_for_attr_req(UserCtx, File);
-get_target_providers(_UserCtx, _File, #provider_request{provider_request = #replicate_file{
-    provider_id = ProviderId
-}}) ->
-    [ProviderId];
-get_target_providers(_UserCtx, _File, #provider_request{provider_request = #invalidate_file_replica{
-    provider_id = ProviderId
-}}) ->
-    [ProviderId];
+get_target_providers(_UserCtx, _File, #provider_request{provider_request = #schedule_file_replication{}}) ->
+    [oneprovider:get_provider_id()];
+get_target_providers(_UserCtx, _File, #provider_request{provider_request = #schedule_replica_invalidation{}}) ->
+    [oneprovider:get_provider_id()];
 get_target_providers(UserCtx, File, _Req) ->
     get_target_providers_for_file(UserCtx, File).
 
