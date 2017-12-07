@@ -20,9 +20,16 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([synchronize_block/5, synchronize_block_and_compute_checksum/3,
-    get_file_distribution/2, replicate_file/4, invalidate_file_replica/5,
-    cast_file_replication/4]).
+-export([
+    synchronize_block/5,
+    synchronize_block_and_compute_checksum/3,
+    get_file_distribution/2,
+    cast_file_replication/4
+]).
+-export([
+    schedule_file_replication/4, schedule_file_replication/5, replicate_file/4,
+    schedule_replica_invalidation/4, schedule_replica_invalidation/5, invalidate_file_replica/5
+]).
 
 %%%===================================================================
 %%% API
@@ -95,6 +102,78 @@ get_file_distribution(_UserCtx, FileCtx) ->
             provider_file_distributions = ProviderDistributions
         }
     }.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Schedules file or dir replication, returns the id of created transfer doc
+%% wrapped in 'scheduled_transfer' provider response.
+%% Resolves file path based on file guid.
+%% @end
+%%--------------------------------------------------------------------
+-spec schedule_file_replication(user_ctx:ctx(), file_ctx:ctx(),
+    od_provider:id(), transfer:callback()) -> fslogic_worker:provider_response().
+schedule_file_replication(UserCtx, FileCtx, TargetProviderId, Callback) ->
+    {FilePath, _} = file_ctx:get_logical_path(FileCtx, UserCtx),
+    schedule_file_replication(UserCtx, FileCtx, FilePath, TargetProviderId, Callback).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Schedules file or dir replication, returns the id of created transfer doc
+%% wrapped in 'scheduled_transfer' provider response.
+%% @end
+%%--------------------------------------------------------------------
+-spec schedule_file_replication(user_ctx:ctx(), file_ctx:ctx(),
+    file_meta:path(), od_provider:id(), transfer:callback()) ->
+    fslogic_worker:provider_response().
+schedule_file_replication(UserCtx, FileCtx, FilePath, TargerProviderId, Callback) ->
+    SessionId = user_ctx:get_session_id(UserCtx),
+    FileGuid = file_ctx:get_guid_const(FileCtx),
+    {ok, TransferId} = transfer:start(
+        SessionId, FileGuid, FilePath, undefined, TargerProviderId, Callback, false
+    ),
+    #provider_response{
+        status = #status{code = ?OK},
+        provider_response = #scheduled_transfer{
+            transfer_id = TransferId
+        }
+    }.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Schedules invalidation of replica, returns the id of created transfer doc
+%% wrapped in 'scheduled_transfer' provider response.
+%% Resolves file path based on file guid.
+%% @end
+%%--------------------------------------------------------------------
+-spec schedule_replica_invalidation(user_ctx:ctx(), file_ctx:ctx(),
+    SourceProviderId :: od_provider:id(), MigrationProviderId :: undefined | od_provider:id()) ->
+    fslogic_worker:provider_response().
+schedule_replica_invalidation(UserCtx, FileCtx, SourceProviderId, MigrationProviderId) ->
+    {FilePath, _} = file_ctx:get_logical_path(FileCtx, UserCtx),
+    schedule_replica_invalidation(UserCtx, FileCtx, FilePath, SourceProviderId, MigrationProviderId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Schedules invalidation of replica, returns the id of created transfer doc
+%% wrapped in 'scheduled_transfer' provider response.
+%% @end
+%%--------------------------------------------------------------------
+-spec schedule_replica_invalidation(user_ctx:ctx(), file_ctx:ctx(),
+    file_meta:path(), od_provider:id(), od_provider:id()) ->
+    fslogic_worker:provider_response().
+schedule_replica_invalidation(UserCtx, FileCtx, FilePath, SourceProviderId, MigrationProviderId) ->
+    SessionId = user_ctx:get_session_id(UserCtx),
+    FileGuid = file_ctx:get_guid_const(FileCtx),
+    {ok, TransferId} = transfer:start(
+        SessionId, FileGuid, FilePath, SourceProviderId, MigrationProviderId, undefined, true
+    ),
+    #provider_response{
+        status = #status{code = ?OK},
+        provider_response = #scheduled_transfer{
+            transfer_id = TransferId
+        }
+    }.
+
 
 %%--------------------------------------------------------------------
 %% @equiv replicate_file/4 but catches exception and notifies
@@ -282,11 +361,14 @@ invalidate_file_replica_insecure(UserCtx, FileCtx, MigrationProviderId, Offset,
     oneprovider:id() | undefined) -> fslogic_worker:provider_response().
 invalidate_partially_unique_file_replica(_UserCtx, _FileCtx, undefined) ->
     #provider_response{status = #status{code = ?OK}};
-invalidate_partially_unique_file_replica(UserCtx, FileCtx, MigrationProviderId) ->
-    SessionId = user_ctx:get_session_id(UserCtx),
-    FileGuid = file_ctx:get_guid_const(FileCtx),
-    ok = logical_file_manager:replicate_file(SessionId, {guid, FileGuid}, MigrationProviderId),
-    invalidate_fully_redundant_file_replica(UserCtx, FileCtx).
+invalidate_partially_unique_file_replica(_UserCtx, _FileCtx, _MigrationProviderId) ->
+    %% @TODO VFS-3728
+%%    SessionId = user_ctx:get_session_id(UserCtx),
+%%    FileGuid = file_ctx:get_guid_const(FileCtx),
+%%    ok = logical_file_manager:schedule_file_replication(SessionId, {guid, FileGuid}, MigrationProviderId),
+%%    invalidate_fully_redundant_file_replica(UserCtx, FileCtx).
+    #provider_response{status = #status{code = ?OK}}.
+
 
 %%--------------------------------------------------------------------
 %% @private

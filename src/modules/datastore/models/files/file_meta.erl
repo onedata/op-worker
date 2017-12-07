@@ -726,7 +726,7 @@ setup_onedata_user(_Client, UserId) ->
         {ok, #document{value = #od_user{space_aliases = Spaces}}} =
             od_user:get(UserId),
 
-        CTime = utils:system_time_seconds(),
+        CTime = time_utils:cluster_time_seconds(),
 
         lists:foreach(fun({SpaceId, _}) ->
             make_space_exist(SpaceId)
@@ -783,7 +783,7 @@ remove_share(FileCtx, ShareId) ->
 %%--------------------------------------------------------------------
 -spec make_space_exist(SpaceId :: datastore:id()) -> ok | no_return().
 make_space_exist(SpaceId) ->
-    CTime = utils:system_time_seconds(),
+    CTime = time_utils:cluster_time_seconds(),
     SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     case file_meta:exists({uuid, SpaceDirUuid}) of
         true ->

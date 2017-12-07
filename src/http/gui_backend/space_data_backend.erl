@@ -22,6 +22,8 @@
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
+-define(CURRENT_TRANSFERS_PREFIX, <<"current">>).
+-define(COMPLETED_TRANSFERS_PREFIX, <<"completed">>).
 
 %% API
 -export([init/0, terminate/0]).
@@ -78,7 +80,9 @@ find_record(PermissionsRecord, RecordId) ->
             RecordId;
         <<"space-group-list">> ->
             RecordId;
-        _ -> % covers <<"space-(user|group)-permission">>
+        <<"space-provider-list">> ->
+            RecordId;
+        _ -> % covers space-(user|group)-permission and space-transfer-list
             {_, Id} = op_gui_utils:association_to_ids(RecordId),
             Id
     end,
@@ -97,6 +101,10 @@ find_record(PermissionsRecord, RecordId) ->
                     {ok, space_user_list_record(RecordId)};
                 <<"space-group-list">> ->
                     {ok, space_group_list_record(RecordId)};
+                <<"space-provider-list">> ->
+                    {ok, space_provider_list_record(RecordId)};
+                <<"space-transfer-list">> ->
+                    {ok, space_transfer_list_record(RecordId)};
                 <<"space-user-permission">> ->
                     {ok, space_user_permission_record(RecordId)};
                 <<"space-group-permission">> ->
@@ -299,7 +307,7 @@ delete_record(<<"space">>, SpaceId) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns a client-compliant space record based on space id. Automatically
-%% check if the user has view privileges in that space and returns proper data.
+%% checks if the user has view privileges in that space and returns proper data.
 %% @end
 %%--------------------------------------------------------------------
 -spec space_record(SpaceId :: binary()) -> proplists:proplist().
@@ -335,20 +343,32 @@ space_record(SpaceId, HasViewPrivileges) ->
             )
     end,
 
-    % Depending on view privileges, show or hide info about members and privs
-    {SpaceUserList, SpaceGroupList} = case HasViewPrivileges of
-        true ->
-            {SpaceId, SpaceId};
-        false ->
-            {null, null}
+    % Depending on view privileges, show or hide info about members, privileges,
+    % providers and transfers.
+    RelationWithViewPrivileges = case HasViewPrivileges of
+        true -> SpaceId;
+        false -> null
+    end,
+    {CurrentTransferListId, CompletedTransferListId} = case HasViewPrivileges of
+        true -> {
+            op_gui_utils:ids_to_association(?CURRENT_TRANSFERS_PREFIX, SpaceId),
+            op_gui_utils:ids_to_association(?COMPLETED_TRANSFERS_PREFIX, SpaceId)
+        };
+        false -> {
+            null,
+            null
+        }
     end,
     [
         {<<"id">>, SpaceId},
         {<<"name">>, Name},
         {<<"rootDir">>, RootDir},
         {<<"hasViewPrivilege">>, HasViewPrivileges},
-        {<<"userList">>, SpaceUserList},
-        {<<"groupList">>, SpaceGroupList},
+        {<<"userList">>, RelationWithViewPrivileges},
+        {<<"groupList">>, RelationWithViewPrivileges},
+        {<<"providerList">>, RelationWithViewPrivileges},
+        {<<"currentTransferList">>, CurrentTransferListId},
+        {<<"completedTransferList">>, CompletedTransferListId},
         {<<"user">>, UserId}
     ].
 
@@ -396,6 +416,40 @@ space_group_list_record(SpaceId) ->
         {<<"id">>, SpaceId},
         {<<"space">>, SpaceId},
         {<<"permissions">>, GroupPermissions}
+    ].
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns a client-compliant space-provider-list record based on space id.
+%% @end
+%%--------------------------------------------------------------------
+-spec space_provider_list_record(SpaceId :: binary()) -> proplists:proplist().
+space_provider_list_record(SpaceId) ->
+    UserId = gui_session:get_user_id(),
+    UserAuth = op_gui_utils:get_user_auth(),
+    {ok, #document{value = #od_space{
+        providers = Providers
+    }}} = space_logic:get(UserAuth, SpaceId, UserId),
+    [
+        {<<"id">>, SpaceId},
+        {<<"list">>, Providers}
+    ].
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns a client-compliant space-transfer-list record based on space id.
+%% @end
+%%--------------------------------------------------------------------
+-spec space_transfer_list_record(RecordId :: binary()) -> proplists:proplist().
+space_transfer_list_record(RecordId) ->
+    {Prefix, SpaceId} = op_gui_utils:association_to_ids(RecordId) ,
+    Ongoing = Prefix =:= ?CURRENT_TRANSFERS_PREFIX,
+    {ok, Transfers} = transfer:list_transfers(SpaceId, Ongoing),
+    [
+        {<<"id">>, RecordId},
+        {<<"list">>, Transfers}
     ].
 
 

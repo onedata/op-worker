@@ -62,7 +62,7 @@
 save(#document{value = Sess} = Document) ->
     model:execute_with_default_context(?MODULE, save, [
         Document#document{value = Sess#session{
-            accessed = utils:system_time_seconds()
+            accessed = time_utils:cluster_time_seconds()
         }}
     ]).
 
@@ -75,13 +75,13 @@ save(#document{value = Sess} = Document) ->
     {ok, datastore:key()} | datastore:update_error().
 update(Key, Diff) when is_map(Diff) ->
     model:execute_with_default_context(?MODULE, update, [Key, Diff#{
-        accessed => utils:system_time_seconds()
+        accessed => time_utils:cluster_time_seconds()
     }]);
 update(Key, Diff) when is_function(Diff) ->
     NewDiff = fun(Sess) ->
         case Diff(Sess) of
             {ok, NewSess} -> {ok, NewSess#session{
-                accessed = utils:system_time_seconds()
+                accessed = time_utils:cluster_time_seconds()
             }};
             {error, Reason} -> {error, Reason}
         end
@@ -98,7 +98,7 @@ create(#document{value = Sess} = Document) ->
     ?update_counter(?EXOMETER_NAME(active_sessions)),
     model:execute_with_default_context(?MODULE, create, [
         Document#document{value = Sess#session{
-            accessed = utils:system_time_seconds()
+            accessed = time_utils:cluster_time_seconds()
         }}
     ]).
 

@@ -66,7 +66,7 @@ get_unpopular_files(SpaceId, SizeLowerLimit, SizeUpperLimit, HoursSinceLastOpenL
     TotalOpenLimit, HourAverageLimit, DayAverageLimit, MonthAverageLimit
 ) ->
     Ctx = model:make_disk_ctx(file_popularity:model_init()),
-    CurrentTimeInHours = utils:system_time_seconds() div 3600,
+    CurrentTimeInHours = time_utils:cluster_time_seconds() div 3600,
     HoursTimestampLimit = case HoursSinceLastOpenLimit of
         null ->
             null;
