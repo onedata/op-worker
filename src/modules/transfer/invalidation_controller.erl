@@ -1,16 +1,17 @@
 %%%--------------------------------------------------------------------
 %%% @author Tomasz Lichon
-%%% @copyright (C) 2016 ACK CYFRONET AGH
+%%% @copyright (C) 2017 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Manages data transfers, which include starting the transfer and tracking transfer's status.
-%%% Such gen_server is created for each data transfer process.
+%%% Manages replica invalidation, which include starting the invalidation and
+%%% tracking invalidation's status.
+%%% Such gen_server is created for each replica invalidation.
 %%% @end
 %%%--------------------------------------------------------------------
--module(transfer_controller).
+-module(invalidation_controller).
 -author("Tomasz Lichon").
 
 -behaviour(gen_server).
@@ -29,9 +30,8 @@
 -record(state, {
     transfer_id :: transfer:id(),
     session_id :: session:id(),
-    callback :: transfer:callback(),
     file_guid :: fslogic_worker:file_guid(),
-    invalidate_source_replica :: boolean(),
+    callback :: transfer:callback(),
     space_id :: od_space:id()
 }).
 
@@ -46,8 +46,21 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec on_new_transfer_doc(transfer:doc()) -> ok.
-on_new_transfer_doc(Transfer) ->
-    on_transfer_doc_change(Transfer).
+on_new_transfer_doc(Transfer = #document{value = #transfer{
+    status = skipped,
+    invalidation_status = scheduled,
+    source_provider_id = SourceProviderId,
+    target_provider_id = undefined,
+    invalidate_source_replica = true
+}}) ->
+    case SourceProviderId =:= oneprovider:get_provider_id()  of
+        true ->
+            new_invalidation(Transfer);
+        false ->
+            ok
+    end;
+on_new_transfer_doc(_ExistingTransfer) ->
+    ok.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -56,12 +69,13 @@ on_new_transfer_doc(Transfer) ->
 %%--------------------------------------------------------------------
 -spec on_transfer_doc_change(transfer:doc()) -> ok.
 on_transfer_doc_change(Transfer = #document{value = #transfer{
-    status = scheduled,
-    target_provider_id = TargetProviderId
-}}) ->
-    case TargetProviderId =:= oneprovider:get_provider_id() of
+    status = TransferStatus,
+    source_provider_id = SourceProviderId,
+    invalidate_source_replica = true
+}}) when TransferStatus == completed orelse TransferStatus == skipped ->
+    case SourceProviderId =:= oneprovider:get_provider_id() of
         true ->
-            new_transfer(Transfer);
+            new_invalidation(Transfer);
         false ->
             ok
     end;
@@ -70,7 +84,7 @@ on_transfer_doc_change(_ExistingTransfer) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Stops transfer_controller process and marks transfer as completed.
+%% Stops invalidation_controller process and marks invalidation as completed.
 %% @end
 %%-------------------------------------------------------------------
 -spec finish_transfer(pid()) -> ok.
@@ -87,6 +101,7 @@ finish_transfer(Pid) ->
 failed_transfer(Pid, Error) ->
     gen_server2:cast(Pid, {failed_transfer, Error}).
 
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -100,14 +115,13 @@ failed_transfer(Pid, Error) ->
 -spec init(Args :: term()) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
-init([SessionId, TransferId, FileGuid, Callback, InvalidationSourceReplica]) ->
+init([SessionId, TransferId, FileGuid, Callback]) ->
     ok = gen_server2:cast(self(), start_transfer),
     {ok, #state{
         transfer_id = TransferId,
         session_id = SessionId,
         file_guid = FileGuid,
         callback = Callback,
-        invalidate_source_replica = InvalidationSourceReplica,
         space_id = fslogic_uuid:guid_to_space_id(FileGuid)
     }}.
 
@@ -142,35 +156,35 @@ handle_call(_Request, _From, State) ->
 handle_cast(start_transfer, State = #state{
     transfer_id = TransferId,
     session_id = SessionId,
-    file_guid = FileGuid,
-    space_id = SpaceId
+    file_guid = FileGuid
 }) ->
     try
-        transfer:mark_active(TransferId),
-        ok = sync_req:cast_file_replication(user_ctx:new(SessionId),
-            file_ctx:new_by_guid(FileGuid), undefined, TransferId),
+        transfer:mark_active_invalidation(TransferId),
+        #provider_response{
+            status = #status{code = ?OK}
+        } = sync_req:invalidate_file_replica(user_ctx:new(SessionId),
+            file_ctx:new_by_guid(FileGuid), undefined, TransferId, undefined
+        ),
         {noreply, State}
     catch
-        _:E ->
-            ?error_stacktrace("Could not replicate file ~p due to ~p", [FileGuid, E]),
-            transfer:mark_failed(TransferId, SpaceId),
-            {stop, E, State}
+        _Error:Reason ->
+            ?error_stacktrace("Could not invalidate file ~p due to ~p", [FileGuid, Reason]),
+            transfer:mark_failed_invalidation(TransferId),
+            {stop, Reason, State}
     end;
 handle_cast(finish_transfer, State = #state{
     transfer_id = TransferId,
-    callback = Callback,
-    invalidate_source_replica = InvalidationSourceReplica
+    callback = Callback
 }) ->
-    transfer:mark_completed(TransferId),
-    notify_callback(Callback, InvalidationSourceReplica),
+    transfer:mark_completed_invalidation(TransferId),
+    notify_callback(Callback),
     {stop, normal, State};
 handle_cast({failed_transfer, Error}, State = #state{
     file_guid = FileGuid,
-    transfer_id = TransferId,
-    space_id = SpaceId
+    transfer_id = TransferId
 }) ->
-    ?error_stacktrace("Could not replicate file ~p due to ~p", [FileGuid, Error]),
-    transfer:mark_failed(TransferId, SpaceId),
+    ?error_stacktrace("Could not invalidate file ~p due to ~p", [FileGuid, Error]),
+    transfer:mark_failed_invalidation(TransferId),
     {stop, Error, State};
 handle_cast(_Request, State) ->
     ?log_bad_request(_Request),
@@ -228,30 +242,27 @@ code_change(_OldVsn, State, _Extra) ->
 %% Starts new transfer based on existing doc synchronized from other provider
 %% @end
 %%--------------------------------------------------------------------
--spec new_transfer(transfer:doc()) -> ok.
-new_transfer(#document{
+-spec new_invalidation(transfer:doc()) -> ok.
+new_invalidation(#document{
     key = TransferId,
     value = #transfer{
         file_uuid = FileUuid,
         space_id = SpaceId,
-        callback = Callback,
-        invalidate_source_replica = InvalidateSourceReplica
+        callback = Callback
     }
 }) ->
     FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
-    {ok, _Pid} = gen_server2:start(transfer_controller,
-        [session:root_session_id(), TransferId, FileGuid, Callback, InvalidateSourceReplica], []),
+    {ok, _Pid} = gen_server2:start(invalidation_controller,
+        [session:root_session_id(), TransferId, FileGuid, Callback], []),
     ok.
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% Notifies callback about successful transfer
 %% @end
 %%--------------------------------------------------------------------
--spec notify_callback(transfer:callback(), InvalidationSourceReplica :: boolean()) -> ok.
-notify_callback(_Callback, true) -> ok;
-notify_callback(undefined, false) -> ok;
-notify_callback(<<>>, false) -> ok;
-notify_callback(Callback, false) ->
+-spec notify_callback(transfer:callback()) -> ok.
+notify_callback(undefined) -> ok;
+notify_callback(<<>>) -> ok;
+notify_callback(Callback) ->
     {ok, _, _, _} = http_client:get(Callback).

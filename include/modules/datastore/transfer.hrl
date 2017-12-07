@@ -11,8 +11,7 @@
 
 -include("global_definitions.hrl").
 
--define(SUCCESSFUL_TRANSFERS_KEY, <<"SUCCESSFUL_TRANSFERS_KEY">>).
--define(FAILED_TRANSFERS_KEY, <<"FAILED_TRANSFERS_KEY">>).
+-define(FINISHED_TRANSFERS_KEY, <<"FINISHED_TRANSFERS_KEY">>).
 -define(UNFINISHED_TRANSFERS_KEY, <<"UNFINISHED_TRANSFERS_KEY">>).
 
 % Time windows and lengths of histograms. They offer one extra, historical value,
@@ -30,5 +29,9 @@
 -define(DAY_TIME_WINDOW, 86400).
 -define(MONTH_HIST_LENGTH, 31).
 
--define(REPLICATION_POOL, replication_pool).
--define(REPLICATION_POOL_SIZE, application:get_env(?APP_NAME, replication_pool_size, 10)).
+-define(TRANSFER_WORKERS_POOL, begin
+    {ok, __TransferWorkersPool} = application:get_env(?APP_NAME, transfer_workers_pool),
+    __TransferWorkersPool
+end).
+
+-define(TRANSFER_WORKERS_NUM, application:get_env(?APP_NAME, transfer_workers_num, 10)).
