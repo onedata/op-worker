@@ -27,18 +27,13 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
 
-
--define(TRANSFER_RETRIES,
-    application:get_env(?APP_NAME, overall_transfer_retries, 100)).
-
 -record(state, {
     transfer_id :: transfer:id(),
     session_id :: session:id(),
     callback :: transfer:callback(),
     file_guid :: fslogic_worker:file_guid(),
     invalidate_source_replica :: boolean(),
-    space_id :: od_space:id(),
-    retries = ?TRANSFER_RETRIES :: non_neg_integer()
+    space_id :: od_space:id()
 }).
 
 -type state() :: #state{}.
@@ -151,7 +146,7 @@ handle_cast(start_transfer, State = #state{
     session_id = SessionId,
     file_guid = FileGuid
 }) ->
-    ok = sync_req:cast_start_transfer(user_ctx:new(SessionId),
+    ok = sync_req:enqueue_transfer(user_ctx:new(SessionId),
         file_ctx:new_by_guid(FileGuid), TransferId),
     {noreply, State};
 handle_cast(transfer_finished, State = #state{

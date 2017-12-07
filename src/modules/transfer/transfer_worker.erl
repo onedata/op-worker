@@ -32,7 +32,7 @@
 -define(SERVER, ?MODULE).
 
 -define(FILE_TRANSFER_RETRIES,
-    application:get_env(?APP_NAME, file_transfer_retries, 5)).
+    application:get_env(?APP_NAME, max_file_transfer_retries_per_file, 5)).
 
 -record(state, {}).
 -type state() :: #state{}.
@@ -193,5 +193,5 @@ maybe_retry(UserCtx, FileCtx, Block, TransferId, Retries, Reason) ->
     {Path, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
     ?warning(
         "Replication of file ~p in scope of transfer ~p failed due to ~p~n"
-        "File transfer will be repeated. Number of retries left ~p", [Path, TransferId, Reason, Retries]),
+        "File transfer will be retried (attempts left: ~p)", [Path, TransferId, Reason, Retries - 1]),
     replicate_file(UserCtx, FileCtx2, Block, TransferId, Retries - 1).

@@ -26,7 +26,9 @@
 -define(MINIMAL_SYNC_REQUEST, application:get_env(?APP_NAME, minimal_sync_request, 4194304)).
 -define(TRIGGER_BYTE, application:get_env(?APP_NAME, trigger_byte, 52428800)).
 -define(PREFETCH_SIZE, application:get_env(?APP_NAME, prefetch_size, 104857600)).
--define(MAX_BLOCK_SIZE, 104857600). % 100MB
+% rtansfer fetch will be requested every ?REQUEST_CHUNK_SIZE of bytes
+% after each request, process will check whether transfer hasn't been cancelled/failed
+-define(REQUEST_CHUNK_SIZE, 104857600). % 100MB
 
 -define(CHECK_STATUS_INTERVAL, timer:minutes(5)).
 
@@ -36,7 +38,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sychronizes File on given range. Does prefetch data if requested.
+%% Synchronizes File on given range. Does prefetch data if requested.
 %% Fetch request for rtansfer are scheduled per MAX_BLOCK_SIZE of data.
 %% Before each request, process checks whether given transfer hasn't been
 %% marked as failed or cancelled.
@@ -62,7 +64,7 @@ synchronize(UserCtx, FileCtx, Block = #file_block{size = RequestedSize}, Prefetc
     lists:foreach(
         fun({ProviderId, Blocks}) ->
             lists:foreach(fun(FileBlock) ->
-                foreach_chunk(FileBlock, ?MAX_BLOCK_SIZE, fun(Chunk) ->
+                foreach_chunk(FileBlock, ?REQUEST_CHUNK_SIZE, fun(Chunk) ->
                     maybe_transfer_chunk(Chunk, ProviderId, FileGuid, UserId, FileCtx, TransferId)
                 end)
             end, Blocks)

@@ -24,9 +24,9 @@
     synchronize_block/5,
     synchronize_block_and_compute_checksum/3,
     get_file_distribution/2,
-    cast_file_replication/4,
+    enqueue_file_replication/4,
     start_transfer/5,
-    cast_start_transfer/3
+    enqueue_transfer/3
 ]).
 -export([
     schedule_file_replication/4, schedule_file_replication/5, replicate_file/4,
@@ -110,8 +110,8 @@ get_file_distribution(_UserCtx, FileCtx) ->
 %% Adds task for starting given transfer to worker_pool
 %% @end
 %%-------------------------------------------------------------------
--spec cast_start_transfer(user_ctx:ctx(), file_ctx:ctx(), undefined | transfer:id()) -> ok.
-cast_start_transfer(UserCtx, FileCtx, TransferId) ->
+-spec enqueue_transfer(user_ctx:ctx(), file_ctx:ctx(), undefined | transfer:id()) -> ok.
+enqueue_transfer(UserCtx, FileCtx, TransferId) ->
     worker_pool:cast(?TRANSFER_WORKERS_POOL,
         {start_transfer, UserCtx, FileCtx, undefined, TransferId, self()}).
 
@@ -124,7 +124,7 @@ cast_start_transfer(UserCtx, FileCtx, TransferId) ->
     undefined | fslogic_blocks:block(), undefined | transfer:id(), pid()) -> ok.
 start_transfer(UserCtx, FileCtx, Block, TransferId, TransferControllerPid) ->
     {ok, _} = transfer:mark_active(TransferId, TransferControllerPid),
-    cast_file_replication(UserCtx, FileCtx, Block, TransferId).
+    enqueue_file_replication(UserCtx, FileCtx, Block, TransferId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -234,12 +234,12 @@ invalidate_file_replica(UserCtx, FileCtx, MigrationProviderId, TransferId, AutoC
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Casts task of file replication to worker from ?TRANSFER_WORKERS_POOL.
+%% Adds task of file replication to worker from ?TRANSFER_WORKERS_POOL.
 %% @end
 %%-------------------------------------------------------------------
--spec cast_file_replication(user_ctx:ctx(), file_ctx:ctx(),
+-spec enqueue_file_replication(user_ctx:ctx(), file_ctx:ctx(),
     undefined | fslogic_blocks:block(), transfer:id() | undefined) -> ok.
-cast_file_replication(UserCtx, FileCtx, Block, TransferId) ->
+enqueue_file_replication(UserCtx, FileCtx, Block, TransferId) ->
     worker_pool:cast(?TRANSFER_WORKERS_POOL,
         {start_file_replication, UserCtx, FileCtx, Block, TransferId}).
 
@@ -307,7 +307,7 @@ replicate_file_insecure(UserCtx, FileCtx, Block, Offset, TransferId) ->
     fslogic_blocks:block(), undefined | transfer:id()) -> ok.
 replicate_children(UserCtx, Children, Block, TransferId) ->
     lists:foreach(fun(ChildCtx) ->
-        cast_file_replication(UserCtx, ChildCtx, Block, TransferId)
+        enqueue_file_replication(UserCtx, ChildCtx, Block, TransferId)
     end, Children).
 
 %%--------------------------------------------------------------------

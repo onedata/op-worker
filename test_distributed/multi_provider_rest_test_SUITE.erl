@@ -84,7 +84,7 @@
     replicate_big_dir/1,
     quota_decreased_after_invalidation/1,
     replicate_big_file/1,
-    too_many_file_replication_failures_should_fail_whole_transfer/1
+    file_replication_failures_should_fail_whole_transfer/1
 ]).
 
 %utils
@@ -142,7 +142,7 @@ all() ->
         spatial_flag_test,
         quota_exceeded_during_file_replication,
         quota_decreased_after_invalidation,
-        too_many_file_replication_failures_should_fail_whole_transfer,
+        file_replication_failures_should_fail_whole_transfer,
         replicate_big_dir,
         replicate_big_file
     ]).
@@ -194,7 +194,7 @@ all() ->
 -define(CREATE_FILE_COUNTER, create_file_counter).
 -define(SYNC_FILE_COUNTER, sync_file_counter).
 -define(VERIFY_POOL, verify_pool).
--define(SOFT_QUOTA, 0).
+-define(ZERO_SOFT_QUOTA, 0).
 
 %%%===================================================================
 %%% Test functions
@@ -776,8 +776,8 @@ restart_invalidation_of_file_replica_with_migration(Config) ->
     resume_file_replication_time(WorkerP2),
     rpc:call(WorkerP2, transfer, restart_unfinished_transfers, [<<"space3">>]),
 
-    ?assertEqual({ok, []}, rpc:call(WorkerP2, transfer, for_each_unfinished_transfer, [?LIST_TRANSFER, [], <<"space3">>]), ?ATTEMPTS),
-    ?assertEqual({ok, []}, rpc:call(WorkerP1, transfer, for_each_unfinished_transfer, [?LIST_TRANSFER, [], <<"space3">>]), ?ATTEMPTS),
+    ?assertEqual({ok, []}, rpc:call(WorkerP2, transfer, for_each_current_transfer, [?LIST_TRANSFER, [], <<"space3">>]), ?ATTEMPTS),
+    ?assertEqual({ok, []}, rpc:call(WorkerP1, transfer, for_each_current_transfer, [?LIST_TRANSFER, [], <<"space3">>]), ?ATTEMPTS),
 
     ExpectedDistribution2 = [
         #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
@@ -1836,7 +1836,7 @@ quota_exceeded_during_file_replication(Config) ->
             Error -> Error
         end, ?ATTEMPTS),
 
-    {ok, FailedTransfers} = rpc:call(WorkerP2, transfer, for_each_finished_transfer, [
+    {ok, FailedTransfers} = rpc:call(WorkerP2, transfer, for_each_past_transfer, [
         fun(Id, Acc) -> [Id | Acc] end, [], <<"space4">>
     ]),
     ?assert(lists:member(Tid, FailedTransfers)),
@@ -1934,7 +1934,7 @@ quota_decreased_after_invalidation(Config) ->
             Error -> Error
         end, ?ATTEMPTS),
 
-    {ok, FailedTransfers} = rpc:call(WorkerP2, transfer, for_each_finished_transfer, [
+    {ok, FailedTransfers} = rpc:call(WorkerP2, transfer, for_each_past_transfer, [
         fun(Id, Acc) -> [Id | Acc] end, [], <<"space6">>
     ]),
     ?assert(lists:member(Tid2, FailedTransfers)),
@@ -1990,14 +1990,14 @@ quota_decreased_after_invalidation(Config) ->
     ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File2),
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File2).
 
-too_many_file_replication_failures_should_fail_whole_transfer(Config) ->
-
+file_replication_failures_should_fail_whole_transfer(Config) ->
+    %soft quota on WorkerP2 is set to 0, so every write on WorkerP2 will fail
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
     Dir = <<"/space8/fail_failures_exceeded">>,
     {ok, DirGuid} = lfm_proxy:mkdir(WorkerP1, SessionId, Dir),
-    {ok, OverallFileFailuresLimit} = rpc:call(WorkerP2, application, get_env, [op_worker, overall_transfer_retries]),
+    {ok, OverallFileFailuresLimit} = rpc:call(WorkerP2, application, get_env, [op_worker, max_file_transfer_retries_per_transfer]),
     FilesNum = OverallFileFailuresLimit + 1,
 
     FileGuids = lists:map(fun(I) ->
@@ -2013,6 +2013,7 @@ too_many_file_replication_failures_should_fail_whole_transfer(Config) ->
         ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {guid, FileGuid}), ?ATTEMPTS)
     end, FileGuids),
 
+    %replication of files will fail because space quota is set to 0 on WorkerP2
     % when
     {ok, 200, _, Body0} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1,
         <<"replicas", Dir/binary, "?provider_id=", (domain(WorkerP2))/binary>>,
@@ -2195,11 +2196,11 @@ init_per_testcase(Case, Config) when
 
 init_per_testcase(Case, Config) when
     Case =:= quota_exceeded_during_file_replication;
-    Case =:= too_many_file_replication_failures_should_fail_whole_transfer
+    Case =:= file_replication_failures_should_fail_whole_transfer
 ->
     [WorkerP2, _WorkerP1] = ?config(op_worker_nodes, Config),
     OldSoftQuota = rpc:call(WorkerP2, application, get_env, [op_worker, soft_quota_limit_size]),
-    rpc:call(WorkerP2, application, set_env, [op_worker, soft_quota_limit_size, ?SOFT_QUOTA]),
+    rpc:call(WorkerP2, application, set_env, [op_worker, soft_quota_limit_size, ?ZERO_SOFT_QUOTA]),
     Config2 = [{old_soft_quota, OldSoftQuota} | Config],
     init_per_testcase(all, Config2);
 
@@ -2241,7 +2242,7 @@ end_per_testcase(Case = automatic_cleanup_should_invalidate_unpopular_files, Con
 end_per_testcase(Case, Config) when
     Case =:= quota_exceeded_during_file_replication;
     Case =:= quota_decreased_after_invalidation;
-    Case =:= too_many_file_replication_failures_should_fail_whole_transfer
+    Case =:= file_replication_failures_should_fail_whole_transfer
     ->
     [WorkerP2, _WorkerP1] = ?config(op_worker_nodes, Config),
     {ok, OldSoftQuota} = ?config(old_soft_quota, Config),
