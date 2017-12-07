@@ -269,7 +269,7 @@ clear_memory(_) ->
 %%--------------------------------------------------------------------
 -spec modules_with_exometer() -> list().
 modules_with_exometer() ->
-    [storage_sync_monitoring].
+    [storage_sync_monitoring, fslogic_worker, helpers, session].
 
 %%--------------------------------------------------------------------
 %% @doc

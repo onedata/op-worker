@@ -165,6 +165,8 @@ props_to_value(od_provider, Props) ->
     #od_provider{
         client_name = proplists:get_value(<<"client_name">>, Props),
         urls = proplists:get_value(<<"urls">>, Props, []),
+        latitude = proplists:get_value(<<"latitude">>, Props, 0.0),
+        longitude = proplists:get_value(<<"longitude">>, Props, 0.0),
 
         % Direct relations to other entities
         spaces = proplists:get_value(<<"spaces">>, Props, []),
@@ -195,7 +197,7 @@ props_to_value(od_handle, Props) ->
         resource_type = proplists:get_value(<<"resource_type">>, Props),
         resource_id = proplists:get_value(<<"resource_id">>, Props),
         metadata = proplists:get_value(<<"metadata">>, Props),
-        timestamp = timestamp_utils:datestamp_to_datetime(
+        timestamp = time_utils:datestamp_to_datetime(
             proplists:get_value(<<"timestamp">>, Props)),
 
         % Direct relations to other entities

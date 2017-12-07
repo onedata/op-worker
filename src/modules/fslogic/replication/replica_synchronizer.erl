@@ -137,7 +137,7 @@ transfer_chunk(#file_block{offset = O, size = S}, ProviderId, FileGuid, UserId,
         monitoring_event:emit_rtransfer_statistics(SpaceId, UserId, Size),
         replica_updater:update(FileCtx,
             [#file_block{offset = Offset, size = Size}], undefined, false),
-        {ok, _} = transfer:mark_data_transfer_finished(TransferId, Size),
+        {ok, _} = transfer:mark_data_transfer_finished(TransferId, ProviderId, Size),
         Self ! {Ref, active, #file_block{offset = Offset, size = Size}}
     end,
     CompleteFun = fun(Ref, Status) ->

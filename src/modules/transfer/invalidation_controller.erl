@@ -47,7 +47,7 @@
 %%--------------------------------------------------------------------
 -spec on_new_transfer_doc(transfer:doc()) -> ok.
 on_new_transfer_doc(Transfer = #document{value = #transfer{
-    transfer_status = skipped,
+    status = skipped,
     invalidation_status = scheduled,
     source_provider_id = SourceProviderId,
     target_provider_id = undefined,
@@ -69,7 +69,7 @@ on_new_transfer_doc(_ExistingTransfer) ->
 %%--------------------------------------------------------------------
 -spec on_transfer_doc_change(transfer:doc()) -> ok.
 on_transfer_doc_change(Transfer = #document{value = #transfer{
-    transfer_status = TransferStatus,
+    status = TransferStatus,
     source_provider_id = SourceProviderId,
     invalidate_source_replica = true
 }}) when TransferStatus == completed orelse TransferStatus == skipped ->

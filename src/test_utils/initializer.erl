@@ -415,7 +415,7 @@ enable_grpca_based_communication(Config) ->
     DomainMappings = [{atom_to_binary(K, utf8), V} || {K, V} <- ?config(domain_mappings, Config)],
 
     %% Enable grp certs
-    test_utils:mock_new(AllWorkers, [oz_plugin, provider_auth_manager]),
+    test_utils:mock_new(AllWorkers, [oz_plugin, provider_auth_manager, time_utils]),
     CertMappings = lists:map(fun({ProvKey, Domain}) ->
         CertPath0 = ?TEST_FILE(Config, binary_to_list(ProvKey) ++ "_" ++ "cert.pem"),
         KeyPath0 = ?TEST_FILE(Config, binary_to_list(ProvKey) ++ "_" ++ "key.pem"),
@@ -446,12 +446,22 @@ enable_grpca_based_communication(Config) ->
     test_utils:mock_expect(AllWorkers, provider_auth_manager, get_provider_id,
         fun(CertToCheck) ->
             domain_to_provider_id(proplists:get_value(CertToCheck, CertMappings))
+        end),
+
+    test_utils:mock_expect(AllWorkers, time_utils, zone_time_seconds,
+        fun() ->
+            time_utils:cluster_time_seconds()
+        end),
+
+    test_utils:mock_expect(AllWorkers, time_utils, zone_time_milli_seconds,
+        fun() ->
+            time_utils:cluster_time_milli_seconds()
         end).
 
 -spec disable_grpca_based_communication(Config :: list()) -> ok.
 disable_grpca_based_communication(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, [oz_plugin, provider_auth_manager]).
+    test_utils:mock_unload(Workers, [oz_plugin, provider_auth_manager, time_utils]).
 
 %%--------------------------------------------------------------------
 %% @doc

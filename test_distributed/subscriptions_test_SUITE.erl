@@ -1097,7 +1097,7 @@ handle_service(Name, ProxyEndpoint, ServiceProperties, UsersWithPrivs, GroupsWit
 
 handle(HandleServiceId, ResourceId, UsersWithPrivs, GroupsWithPrivs) ->
     handle(HandleServiceId, <<"">>, <<"">>, ResourceId, <<"">>, UsersWithPrivs,
-        GroupsWithPrivs, timestamp_utils:datetime_to_datestamp({{0, 0, 0}, {0, 0, 0}})).
+        GroupsWithPrivs, time_utils:datetime_to_datestamp({{0, 0, 0}, {0, 0, 0}})).
 handle(HandleService, PublicHandle, ResourceType, ResourceId, Metadata, UsersWithPrivs,
     GroupsWithPrivs, Timestamp) ->
     {od_handle, [

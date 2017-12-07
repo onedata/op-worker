@@ -7,7 +7,7 @@
 %%%--------------------------------------------------------------------
 %%% @doc
 %%% Manages data transfers, which include starting the transfer and tracking transfer's status.
-%%% Such gen_server is created for each data transfer, process.
+%%% Such gen_server is created for each data transfer process.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(transfer_controller).
@@ -64,7 +64,7 @@ on_new_transfer_doc(Transfer) ->
 %%--------------------------------------------------------------------
 -spec on_transfer_doc_change(transfer:doc()) -> ok.
 on_transfer_doc_change(Transfer = #document{value = #transfer{
-    transfer_status = scheduled,
+    status = scheduled,
     target_provider_id = TargetProviderId
 }}) ->
     case TargetProviderId =:= oneprovider:get_provider_id() of

@@ -272,7 +272,7 @@ get_server_user_ctx_should_fallback_to_admin_ctx(Config) ->
     Result = rpc:call(Worker, luma, get_server_user_ctx, [
         <<"userId">>,
         <<"spaceId">>,
-        ?CEPH_STORAGE_DOC_LUMA_DISABLED(false),
+        ?CEPH_STORAGE_DOC_LUMA_DISABLED(true),
         ?CEPH_HELPER_NAME
     ]),
     ?assertMatch({ok, #{<<"username">> := <<"username">>}}, Result),

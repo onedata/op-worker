@@ -111,7 +111,7 @@ rrd_test(Config) ->
 
     lists:foreach(fun({MonitoringId, UpdateValue, _}) ->
         %% create
-        CurrentTime = utils:system_time_seconds(),
+        CurrentTime = time_utils:system_time_seconds(),
         ?assertEqual(false, rpc:call(Worker, monitoring_state, exists, [MonitoringId])),
 
         ?assertEqual(ok, rpc:call(Worker, rrd_utils, create_rrd,
@@ -190,7 +190,7 @@ rrdtool_pool_test(Config) ->
                 main_subject_id = integer_to_binary(Id),
                 metric_type = storage_used
             },
-            CurrentTime = utils:system_time_seconds(),
+            CurrentTime = time_utils:system_time_seconds(),
             ?assertEqual(ok, rpc:call(Worker, monitoring_utils, create,
                 [?SPACE_ID, MonitoringId, CurrentTime - ?STEP_IN_SECONDS])),
             {ok, #document{value = MonitoringState}} =
