@@ -26,14 +26,14 @@
     mark_active_invalidation/1, mark_completed_invalidation/1, mark_failed_invalidation/1,
     mark_file_transfer_scheduled/2, mark_file_transfer_finished/2,
     mark_data_transfer_scheduled/2, mark_data_transfer_finished/3,
-    for_each_unfinished_transfer/3, restart_unfinished_transfers/1,
+    for_each_past_transfer/3, for_each_current_transfer/3, restart_unfinished_transfers/1,
     mark_file_invalidation_finished/2, mark_file_invalidation_scheduled/2,
     mark_cancelled/1, should_continue/1, increase_failed_file_transfers/1]).
 -export([list_transfers/2, is_ongoing/1, is_migrating/1, update/2]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_posthooks/0, get_record_version/0,
-    upgrade_record/2, for_each_finished_transfer/3]).
+    upgrade_record/2]).
 
 -type id() :: binary().
 -type diff() :: datastore:diff(transfer()).
@@ -45,8 +45,8 @@
 
 -export_type([id/0, transfer/0, status/0, callback/0, doc/0]).
 
--define(TRANSFER_RETRIES,
-    application:get_env(?APP_NAME, overall_transfer_retries, 10)).
+-define(MAX_FILE_TRANSFER_RETRIES_PER_TRANSFER,
+    application:get_env(?APP_NAME, max_file_transfer_retries_per_transfer, 10)).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -126,7 +126,7 @@ start(SessionId, FileGuid, FilePath, SourceProviderId, TargetProviderId, Callbac
         }},
     {ok, #document{key = TransferId}} = create(ToCreate),
     session:add_transfer(SessionId, TransferId),
-    ok = add_link(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
+    ok = add_link(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId),
     transfer_controller:on_new_transfer_doc(ToCreate#document{key = TransferId}),
     invalidation_controller:on_new_transfer_doc(ToCreate#document{key = TransferId}),
     {ok, TransferId}.
@@ -138,7 +138,7 @@ start(SessionId, FileGuid, FilePath, SourceProviderId, TargetProviderId, Callbac
 %%-------------------------------------------------------------------
 -spec restart_unfinished_transfers(od_space:id()) -> [id()].
 restart_unfinished_transfers(SpaceId) ->
-    {ok, {Restarted, Failed}} = for_each_unfinished_transfer(fun(TransferId, {Restarted0, Failed0}) ->
+    {ok, {Restarted, Failed}} = for_each_current_transfer(fun(TransferId, {Restarted0, Failed0}) ->
         case restart(TransferId) of
             {ok, TransferId} ->
                 {[TransferId | Restarted0], Failed0};
@@ -234,8 +234,8 @@ get(TransferId) ->
 -spec delete(id()) -> ok.
 delete(TransferId) ->
     {ok, #document{value = #transfer{space_id = SpaceId}}} = ?MODULE:get(TransferId),
-    ok = delete_links(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
-    ok = delete_links(?FINISHED_TRANSFERS_KEY, TransferId, SpaceId),
+    ok = delete_links(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId),
+    ok = delete_links(?PAST_TRANSFERS_KEY, TransferId, SpaceId),
     ok = datastore_model:delete(?CTX, TransferId).
 
 %%--------------------------------------------------------------------
@@ -275,15 +275,14 @@ mark_completed(TransferId) ->
         case is_migrating(Transfer) of
             false ->
                 SpaceId = Transfer#transfer.space_id,
-                ok = add_link(?FINISHED_TRANSFERS_KEY, TransferId, SpaceId),
-                ok = delete_links(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId);
+                ok = add_link(?PAST_TRANSFERS_KEY, TransferId, SpaceId),
+                ok = delete_links(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId);
             true ->
                 ok
         end,
-        CurrentTime = provider_logic:zone_time_seconds(),
         {ok, Transfer#transfer{
             status = completed,
-            finish_time = CurrentTime
+            finish_time = provider_logic:zone_time_seconds()
         }}
     end).
 
@@ -294,10 +293,10 @@ mark_completed(TransferId) ->
 %%--------------------------------------------------------------------
 -spec mark_failed(id()) -> {ok, id()} | {error, term()}.
 mark_failed(TransferId) ->
-    {ok, _} = update(TransferId, fun(Transfer = #transfer{space_id = SpaceId}) ->
-        ok = add_link(?FINISHED_TRANSFERS_KEY, TransferId, SpaceId),
-        ok = delete_links(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
-        {ok, Transfer#transfer{
+    {ok, _} = transfer:update(TransferId, fun(T = #transfer{space_id = SpaceId}) ->
+        ok = add_link(?PAST_TRANSFERS_KEY, TransferId, SpaceId),
+        ok = delete_links(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId),
+        {ok, T#transfer{
             status = failed,
             finish_time = provider_logic:zone_time_seconds()
         }}
@@ -322,8 +321,8 @@ increase_failed_file_transfers(TransferId) ->
 -spec mark_cancelled(id()) -> {ok, id()} | {error, term()}.
 mark_cancelled(TransferId) ->
     {ok, _} = transfer:update(TransferId, fun(Transfer = #transfer{space_id = SpaceId}) ->
-        ok = add_link(?FINISHED_TRANSFERS_KEY, TransferId, SpaceId),
-        ok = delete_links(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
+        ok = add_link(?PAST_TRANSFERS_KEY, TransferId, SpaceId),
+        ok = delete_links(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId),
         {ok, Transfer#transfer{status = cancelled}}
     end).
 
@@ -350,8 +349,8 @@ mark_active_invalidation(TransferId) ->
 -spec mark_completed_invalidation(id()) -> {ok, id()} | {error, term()}.
 mark_completed_invalidation(TransferId) ->
     update(TransferId, fun(T = #transfer{space_id = SpaceId}) ->
-        ok = add_link(?FINISHED_TRANSFERS_KEY, TransferId, SpaceId),
-        ok = delete_links(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
+        ok = add_link(?PAST_TRANSFERS_KEY, TransferId, SpaceId),
+        ok = delete_links(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId),
         {ok, T#transfer{invalidation_status = completed}}
     end).
 
@@ -363,8 +362,8 @@ mark_completed_invalidation(TransferId) ->
 -spec mark_failed_invalidation(id()) -> {ok, id()} | {error, term()}.
 mark_failed_invalidation(TransferId) ->
     transfer:update(TransferId, fun(T = #transfer{space_id = SpaceId}) ->
-        ok = add_link(?FINISHED_TRANSFERS_KEY, TransferId, SpaceId),
-        ok = delete_links(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
+        ok = add_link(?PAST_TRANSFERS_KEY, TransferId, SpaceId),
+        ok = delete_links(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId),
         T#transfer{invalidation_status = failed}
     end).
 
@@ -496,25 +495,26 @@ mark_data_transfer_finished(TransferId, ProviderId, Bytes) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Executes callback for each successfully completed transfer
+%% Executes callback for each transfer that has been finished.
+%% Its status can be one of: completed, cancelled,failed.
 %% @end
 %%--------------------------------------------------------------------
--spec for_each_finished_transfer(
+-spec for_each_past_transfer(
     Callback :: fun((id(), Acc0 :: term()) -> Acc :: term()),
     Acc0 :: term(), od_space:id()) -> {ok, Acc :: term()} | {error, term()}.
-for_each_finished_transfer(Callback, Acc0, SpaceId) ->
-    for_each_transfer(?FINISHED_TRANSFERS_KEY, Callback, Acc0, SpaceId).
+for_each_past_transfer(Callback, Acc0, SpaceId) ->
+    for_each_transfer(?PAST_TRANSFERS_KEY, Callback, Acc0, SpaceId).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Executes callback for each unfinished transfer
+%% Executes callback for each ongoing transfer.
 %% @end
 %%--------------------------------------------------------------------
--spec for_each_unfinished_transfer(
+-spec for_each_current_transfer(
     Callback :: fun((id(), Acc0 :: term()) -> Acc :: term()),
     Acc0 :: term(), od_space:id()) -> {ok, Acc :: term()} | {error, term()}.
-for_each_unfinished_transfer(Callback, Acc0, SpaceId) ->
-    for_each_transfer(?UNFINISHED_TRANSFERS_KEY, Callback, Acc0, SpaceId).
+for_each_current_transfer(Callback, Acc0, SpaceId) ->
+    for_each_transfer(?CURRENT_TRANSFERS_KEY, Callback, Acc0, SpaceId).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -568,10 +568,9 @@ get_controller(TransferId) ->
 list_transfers(SpaceId, Ongoing) ->
     Transfers = case Ongoing of
         true ->
-            list_transfers_internal(SpaceId, ?UNFINISHED_TRANSFERS_KEY);
+            list_transfers_internal(SpaceId, ?CURRENT_TRANSFERS_KEY);
         false ->
-            list_transfers_internal(SpaceId, ?FINISHED_TRANSFERS_KEY) ++
-            list_transfers_internal(SpaceId, ?UNFINISHED_TRANSFERS_KEY)
+            list_transfers_internal(SpaceId, ?PAST_TRANSFERS_KEY)
     end,
     {ok, Transfers}.
 
@@ -837,7 +836,7 @@ handle_updated(#transfer{
     failed_files = FailedFiles,
     pid = Pid
 }) ->
-    case FailedFiles > ?TRANSFER_RETRIES of
+    case FailedFiles > ?MAX_FILE_TRANSFER_RETRIES_PER_TRANSFER of
         true ->
             transfer_controller:mark_failed(decode_pid(Pid), exceeded_number_of_retries);
         false ->
@@ -867,7 +866,7 @@ handle_updated(_) ->
 %%-------------------------------------------------------------------
 -spec remove_unfinished_transfers_links([id()], od_space:id()) -> ok.
 remove_unfinished_transfers_links(TransferIds, SpaceId) ->
-    delete_links(?UNFINISHED_TRANSFERS_KEY, TransferIds, SpaceId).
+    delete_links(?CURRENT_TRANSFERS_KEY, TransferIds, SpaceId).
 
 %%-------------------------------------------------------------------
 %% @private

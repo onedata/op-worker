@@ -11,8 +11,8 @@
 
 -include("global_definitions.hrl").
 
--define(FINISHED_TRANSFERS_KEY, <<"FINISHED_TRANSFERS_KEY">>).
--define(UNFINISHED_TRANSFERS_KEY, <<"UNFINISHED_TRANSFERS_KEY">>).
+-define(PAST_TRANSFERS_KEY, <<"PAST_TRANSFERS_KEY">>).
+-define(CURRENT_TRANSFERS_KEY, <<"CURRENT_TRANSFERS_KEY">>).
 
 % Time windows and lengths of histograms. They offer one extra, historical value,
 % as the leading one is not yet measured - this way there are always full
