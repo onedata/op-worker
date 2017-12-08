@@ -127,8 +127,8 @@ handle(invalidate_permissions_cache) ->
     ok;
 handle(restart_transfers) ->
     ?debug("Restarting unfinished transfers"),
-    try od_provider:get_or_fetch(oneprovider:get_provider_id()) of
-        {ok, #document{value = #od_provider{spaces = SpaceIds}}} ->
+    try provider_logic:get_spaces() of
+        {ok, SpaceIds} ->
             lists:foreach(fun(SpaceId) ->
                 Restarted = transfer:restart_unfinished_transfers(SpaceId),
                 ?debug("Restarted following transfers: ~p", [Restarted])

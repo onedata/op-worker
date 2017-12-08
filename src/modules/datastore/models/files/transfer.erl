@@ -216,10 +216,10 @@ get(TransferId) ->
 -spec stop(id()) -> ok | {error, term()}.
 stop(TransferId) ->
     {ok, #document{value = #transfer{space_id = SpaceId}}} = datastore_model:get(?CTX, TransferId),
-    ok = remove_links(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
-    ok = remove_links(?FAILED_TRANSFERS_KEY, TransferId, SpaceId),
-    ok = remove_links(?SUCCESSFUL_TRANSFERS_KEY, TransferId, SpaceId),
-    datastore_model:delete(?CTX, TransferId).
+    ok = delete_links(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
+    ok = delete_links(?FAILED_TRANSFERS_KEY, TransferId, SpaceId),
+    ok = delete_links(?SUCCESSFUL_TRANSFERS_KEY, TransferId, SpaceId),
+    ok = datastore_model:delete(?CTX, TransferId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -244,12 +244,12 @@ mark_active(TransferId) ->
 %%--------------------------------------------------------------------
 -spec mark_completed(id()) -> {ok, id()} | {error, term()}.
 mark_completed(TransferId) ->
-    update(TransferId, fun(Transfer) ->
+    {ok, _} = update(TransferId, fun(Transfer) ->
         case Transfer#transfer.invalidation_status of
             skipped ->
                 SpaceId = Transfer#transfer.space_id,
                 ok = add_link(?SUCCESSFUL_TRANSFERS_KEY, TransferId, SpaceId),
-                ok = remove_links(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
+                ok = delete_links(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
                 {ok, Transfer#transfer{transfer_status = completed}};
             _ ->
                 {ok, Transfer#transfer{transfer_status = completed}}
@@ -263,9 +263,9 @@ mark_completed(TransferId) ->
 %%--------------------------------------------------------------------
 -spec mark_failed(id(), od_space:id()) -> {ok, id()} | {error, term()}.
 mark_failed(TransferId, SpaceId) ->
-    ok = add_link(?FAILED_TRANSFERS_KEY, TransferId, SpaceId),
-    ok = remove_links(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
     {ok, _} = update(TransferId, fun(Transfer) ->
+        ok = add_link(?FAILED_TRANSFERS_KEY, TransferId, SpaceId),
+        ok = delete_links(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
         {ok, Transfer#transfer{transfer_status = failed}}
     end).
 
@@ -292,7 +292,7 @@ mark_active_invalidation(TransferId) ->
 -spec mark_completed_invalidation(id(), od_space:id()) -> {ok, id()} | {error, term()}.
 mark_completed_invalidation(TransferId, SpaceId) ->
     ok = add_link(?SUCCESSFUL_TRANSFERS_KEY, TransferId, SpaceId),
-    ok = remove_links(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
+    ok = delete_links(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
     update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{invalidation_status = completed}}
     end).
@@ -306,7 +306,7 @@ mark_completed_invalidation(TransferId, SpaceId) ->
 mark_failed_invalidation(TransferId, SpaceId) ->
     update(TransferId, fun(Transfer) ->
         ok = add_link(?FAILED_TRANSFERS_KEY, TransferId, SpaceId),
-        ok = remove_links(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
+        ok = delete_links(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
         {ok, Transfer#transfer{invalidation_status = failed}}
     end).
 
@@ -532,12 +532,27 @@ add_link(SourceId, TransferId, SpaceId) ->
 %% Real link source_id will be obtained from link_root/2 function.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_links(SourceId :: virtual_list_id(), TransferId :: id() | [id()],
-    od_space:id()) -> ok.
-remove_links(SourceId, TransferId, SpaceId) ->
-    TreeId = oneprovider:get_provider_id(),
-    Ctx = ?CTX#{scope => SpaceId},
-    ok = datastore_model:delete_links(Ctx, link_root(SourceId, SpaceId), TreeId, TransferId).
+-spec delete_links(SourceId :: virtual_list_id(), TransferId :: id() | [id()], od_space:id()) -> ok.
+delete_links(SourceId, TransferId, SpaceId) ->
+    LinkRoot = link_root(SourceId, SpaceId),
+     case datastore_model:get_links(?CTX, LinkRoot, all, TransferId) of
+         {ok, []} ->
+             ok;
+         {error, not_found} ->
+             ok;
+         {ok, [#link{tree_id = TreeId, name = TransferId}]} ->
+             case oneprovider:get_provider_id() == TreeId of
+                 true ->
+                     ok = datastore_model:delete_links(
+                         ?CTX#{scope => SpaceId}, LinkRoot, TreeId, TransferId
+                     );
+                 false ->
+                     ok = datastore_model:mark_links_deleted(
+                         ?CTX#{scope => SpaceId}, LinkRoot, TreeId, TransferId
+                     )
+             end
+     end.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -565,7 +580,7 @@ restart(TransferId) ->
     MinHist = time_slot_histogram:new(?MIN_TIME_WINDOW, 60),
     HrHist = time_slot_histogram:new(?HR_TIME_WINDOW, 24),
     DyHist = time_slot_histogram:new(?DY_TIME_WINDOW, 30),
-    UpdateFun = TransferId, fun(Transfer) ->
+    UpdateFun = fun(Transfer) ->
 
         TransferStatus = case Transfer#transfer.transfer_status of
             completed -> completed;
@@ -674,7 +689,7 @@ handle_updated(_) ->
 %%-------------------------------------------------------------------
 -spec remove_unfinished_transfers_links([id()], od_space:id()) -> ok.
 remove_unfinished_transfers_links(TransferIds, SpaceId) ->
-    remove_links(?UNFINISHED_TRANSFERS_KEY, TransferIds, SpaceId).
+    delete_links(?UNFINISHED_TRANSFERS_KEY, TransferIds, SpaceId).
 
 
 %%-------------------------------------------------------------------
