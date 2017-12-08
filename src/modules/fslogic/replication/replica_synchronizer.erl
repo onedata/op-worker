@@ -28,9 +28,8 @@
 -define(PREFETCH_SIZE, application:get_env(?APP_NAME, prefetch_size, 104857600)).
 % rtansfer fetch will be requested every ?REQUEST_CHUNK_SIZE of bytes
 % after each request, process will check whether transfer hasn't been cancelled/failed
--define(REQUEST_CHUNK_SIZE, 104857600). % 100MB
-
--define(CHECK_STATUS_INTERVAL, timer:minutes(5)).
+-define(REQUEST_CHUNK_SIZE, application:get_env(?APP_NAME, request_chunk_size, 104857600)). % 100MB
+-define(CHECK_STATUS_INTERVAL, application:get_env(?APP_NAME, check_status_interval, timer:minutes(5))).
 
 %%%===================================================================
 %%% API
