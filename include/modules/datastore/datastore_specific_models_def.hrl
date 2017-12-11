@@ -495,6 +495,7 @@
 
     files_to_transfer = 0 :: non_neg_integer(),
     files_transferred = 0 :: non_neg_integer(),
+    failed_files = 0 :: non_neg_integer(),
     bytes_to_transfer = 0 :: non_neg_integer(),
     bytes_transferred = 0 :: non_neg_integer(),
     files_to_invalidate = 0 :: non_neg_integer(),

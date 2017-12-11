@@ -24,7 +24,9 @@
     synchronize_block/5,
     synchronize_block_and_compute_checksum/3,
     get_file_distribution/2,
-    cast_file_replication/4
+    enqueue_file_replication/4,
+    start_transfer/5,
+    enqueue_transfer/3
 ]).
 -export([
     schedule_file_replication/4, schedule_file_replication/5, replicate_file/4,
@@ -103,6 +105,27 @@ get_file_distribution(_UserCtx, FileCtx) ->
         }
     }.
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Adds task for starting given transfer to worker_pool
+%% @end
+%%-------------------------------------------------------------------
+-spec enqueue_transfer(user_ctx:ctx(), file_ctx:ctx(), undefined | transfer:id()) -> ok.
+enqueue_transfer(UserCtx, FileCtx, TransferId) ->
+    worker_pool:cast(?TRANSFER_WORKERS_POOL,
+        {start_transfer, UserCtx, FileCtx, undefined, TransferId, self()}).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Marks transfer as active and adds task for replication to worker_pool.
+%% @end
+%%-------------------------------------------------------------------
+-spec start_transfer(user_ctx:ctx(), file_ctx:ctx(),
+    undefined | fslogic_blocks:block(), undefined | transfer:id(), pid()) -> ok.
+start_transfer(UserCtx, FileCtx, Block, TransferId, TransferControllerPid) ->
+    {ok, _} = transfer:mark_active(TransferId, TransferControllerPid),
+    enqueue_file_replication(UserCtx, FileCtx, Block, TransferId).
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Schedules file or dir replication, returns the id of created transfer doc
@@ -176,28 +199,21 @@ schedule_replica_invalidation(UserCtx, FileCtx, FilePath, SourceProviderId, Migr
 
 
 %%--------------------------------------------------------------------
-%% @equiv replicate_file/4 but catches exception and notifies
-%% transfer_controller
+%% @doc
+%% @equiv replicate_file_insecure/5 with permission check
 %% @end
 %%--------------------------------------------------------------------
 -spec replicate_file(user_ctx:ctx(), file_ctx:ctx(),
     undefined | fslogic_blocks:block(), undefined | transfer:id()) ->
     fslogic_worker:provider_response().
-replicate_file(UserCtx, FileCtx, Block, undefined) ->
-    replicate_file_internal(UserCtx, FileCtx, Block, undefined);
 replicate_file(UserCtx, FileCtx, Block, TransferId) ->
-    try
-        replicate_file_internal(UserCtx, FileCtx, Block, TransferId)
-    catch
-        _:Error ->
-            {ok, #document{
-                value = #transfer{pid = Pid}
-            }} = transfer:get(TransferId),
-            transfer_controller:failed_transfer(transfer:decode_pid(Pid), Error),
-            #provider_response{status = #status{code = ?OK}}
-    end.
+    check_permissions:execute(
+        [traverse_ancestors, ?write_object],
+        [UserCtx, FileCtx, Block, 0, TransferId],
+        fun replicate_file_insecure/5).
 
 %%--------------------------------------------------------------------
+%% @doc
 %% @equiv invalidate_file_replica_internal/4 but catches exception and
 %% notifies invalidation_controller
 %% @end
@@ -218,32 +234,18 @@ invalidate_file_replica(UserCtx, FileCtx, MigrationProviderId, TransferId, AutoC
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Casts task of file replication to worker from ?REPLICATION_POOL.
+%% Adds task of file replication to worker from ?TRANSFER_WORKERS_POOL.
 %% @end
 %%-------------------------------------------------------------------
--spec cast_file_replication(user_ctx:ctx(), file_ctx:ctx(),
+-spec enqueue_file_replication(user_ctx:ctx(), file_ctx:ctx(),
     undefined | fslogic_blocks:block(), transfer:id() | undefined) -> ok.
-cast_file_replication(UserCtx, FileCtx, Block, TransferId) ->
-    worker_pool:cast(?REPLICATION_POOL,
-        {?MODULE, replicate_file, [UserCtx, FileCtx, Block, TransferId]}).
+enqueue_file_replication(UserCtx, FileCtx, Block, TransferId) ->
+    worker_pool:cast(?TRANSFER_WORKERS_POOL,
+        {start_file_replication, UserCtx, FileCtx, Block, TransferId}).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @equiv replicate_file_insecure/3 with permission check
-%% @end
-%%--------------------------------------------------------------------
--spec replicate_file_internal(user_ctx:ctx(), file_ctx:ctx(),
-    undefined | fslogic_blocks:block(), undefined | transfer:id()) ->
-    fslogic_worker:provider_response().
-replicate_file_internal(UserCtx, FileCtx, Block, TransferId) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?write_object],
-        [UserCtx, FileCtx, Block, 0, TransferId],
-        fun replicate_file_insecure/5).
 
 %%--------------------------------------------------------------------
 %% @equiv invalidate_file_replica_insecure/3 with permission check
@@ -269,25 +271,30 @@ invalidate_file_replica_internal(UserCtx, FileCtx, MigrationProviderId, Transfer
     fslogic_blocks:block(), non_neg_integer(), undefined | transfer:id()) ->
     fslogic_worker:provider_response().
 replicate_file_insecure(UserCtx, FileCtx, Block, Offset, TransferId) ->
-    {ok, Chunk} = application:get_env(?APP_NAME, ls_chunk_size),
-    case file_ctx:is_dir(FileCtx) of
-        {true, FileCtx2} ->
-            case file_ctx:get_file_children(FileCtx2, UserCtx, Offset, Chunk) of
-                {Children, _FileCtx3} when length(Children) < Chunk ->
-                    transfer:mark_file_transfer_scheduled(TransferId, length(Children)),
-                    replicate_children(UserCtx, Children, Block, TransferId),
+    case transfer:should_continue(TransferId) of
+        true ->
+            {ok, Chunk} = application:get_env(?APP_NAME, ls_chunk_size),
+            case file_ctx:is_dir(FileCtx) of
+                {true, FileCtx2} ->
+                    case file_ctx:get_file_children(FileCtx2, UserCtx, Offset, Chunk) of
+                        {Children, _FileCtx3} when length(Children) < Chunk ->
+                            transfer:mark_file_transfer_scheduled(TransferId, length(Children)),
+                            replicate_children(UserCtx, Children, Block, TransferId),
+                            transfer:mark_file_transfer_finished(TransferId, 1),
+                            #provider_response{status = #status{code = ?OK}};
+                        {Children, FileCtx3} ->
+                            transfer:mark_file_transfer_scheduled(TransferId, Chunk),
+                            replicate_children(UserCtx, Children, Block, TransferId),
+                            replicate_file_insecure(UserCtx, FileCtx3, Block, Offset + Chunk, TransferId)
+                    end;
+                {false, FileCtx2} ->
+                    #fuse_response{status = Status} =
+                        synchronize_block(UserCtx, FileCtx2, Block, false, TransferId),
                     transfer:mark_file_transfer_finished(TransferId, 1),
-                    #provider_response{status = #status{code = ?OK}};
-                {Children, FileCtx3} ->
-                    transfer:mark_file_transfer_scheduled(TransferId, Chunk),
-                    replicate_children(UserCtx, Children, Block, TransferId),
-                    replicate_file_insecure(UserCtx, FileCtx3, Block, Offset + Chunk, TransferId)
+                    #provider_response{status = Status}
             end;
-        {false, FileCtx2} ->
-            #fuse_response{status = Status} =
-                synchronize_block(UserCtx, FileCtx2, Block, false, TransferId),
-            transfer:mark_file_transfer_finished(TransferId, 1),
-            #provider_response{status = Status}
+        false ->
+            throw({transfer_cancelled, TransferId})
     end.
 
 %%--------------------------------------------------------------------
@@ -300,7 +307,7 @@ replicate_file_insecure(UserCtx, FileCtx, Block, Offset, TransferId) ->
     fslogic_blocks:block(), undefined | transfer:id()) -> ok.
 replicate_children(UserCtx, Children, Block, TransferId) ->
     lists:foreach(fun(ChildCtx) ->
-        cast_file_replication(UserCtx, ChildCtx, Block, TransferId)
+        enqueue_file_replication(UserCtx, ChildCtx, Block, TransferId)
     end, Children).
 
 %%--------------------------------------------------------------------

@@ -187,7 +187,7 @@ aggregate_block(Block, Blocks) ->
 %% Tail recursive helper function for size/1 function.
 %% @end
 %%-------------------------------------------------------------------
--spec size([blocks()], non_neg_integer()) -> non_neg_integer().
+-spec size(blocks(), non_neg_integer()) -> non_neg_integer().
 size([], AggregatedSize) -> AggregatedSize;
 size([#file_block{size = Size} | RestBlocks], AggregatedSize) ->
     size(RestBlocks, Size + AggregatedSize).
