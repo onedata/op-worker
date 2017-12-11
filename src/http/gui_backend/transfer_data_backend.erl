@@ -200,7 +200,6 @@ transfer_record(TransferId) ->
     end,
     {ok, [
         {<<"id">>, TransferId},
-        {<<"status">>, get_status(Transfer)},
         {<<"migration">>, IsMigration},
         {<<"migrationSource">>, MigrationSource},
         {<<"destination">>, Destination},
@@ -274,7 +273,7 @@ transfer_time_stat_record(StatId) ->
 %%--------------------------------------------------------------------
 -spec transfer_current_stat_record(transfer:id()) -> {ok, proplists:proplist()}.
 transfer_current_stat_record(TransferId) ->
-    {ok, #document{value = #transfer{
+    {ok, #document{value = Transfer = #transfer{
         start_time = StartTime,
         last_update = LastUpdateMap,
         bytes_transferred = BytesTransferred,
@@ -298,6 +297,7 @@ transfer_current_stat_record(TransferId) ->
     end, MinHistograms)),
     {ok, [
         {<<"id">>, TransferId},
+        {<<"status">>, get_status(Transfer)},
         {<<"timestamp">>, CurrentTime},
         {<<"transferredBytes">>, BytesTransferred},
         {<<"transferredFiles">>, FilesTransferred},
