@@ -133,21 +133,6 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     User = <<"user1">>,
 
-    case lists:member(?config(rep_num, Config), [1,2]) of
-        true ->
-            spawn(Worker, fun() ->
-                lists:foreach(fun(_) ->
-                    lists:foreach(fun(_) ->
-                        lists:foreach(fun(_) ->
-                            spawn(fun() -> ok end)
-                        end, lists:seq(1,1000))
-                    end, lists:seq(1,1000))
-                end, lists:seq(1,1000))
-            end);
-        _ ->
-            ok
-    end,
-
     SessId = ?config({session_id, {User, ?GET_DOMAIN(Worker)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
 
