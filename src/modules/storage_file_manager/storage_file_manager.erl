@@ -250,7 +250,7 @@ chown(#sfm_handle{
     space_id = SpaceId
 }, UserId, GroupId, SpaceId) ->
     {ok, HelperHandle} = session:get_helper(?ROOT_SESS_ID, SpaceId, Storage),
-    {Uid, Gid} = luma:get_posix_user_ctx(UserId, GroupId, SpaceId),
+    {Uid, Gid} = luma:get_posix_user_ctx(?ROOT_SESS_ID, UserId, GroupId, SpaceId),
     helpers:chown(HelperHandle, FileId, Uid, Gid);
 chown(_, _, _, _) ->
     throw(?EPERM).

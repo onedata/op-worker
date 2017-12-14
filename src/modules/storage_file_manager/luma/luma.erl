@@ -109,7 +109,7 @@ get_posix_user_ctx(SessionId, UserId, GroupId, SpaceId) ->
     {ok, UserCtx} = case select_posix_storage(SpaceId) of
         {ok, StorageDoc} ->
             get_server_user_ctx(SessionId, UserId, GroupId, SpaceId, StorageDoc, ?POSIX_HELPER_NAME);
-        {error, {not_found, _}} ->
+        {error, not_found} ->
             generate_user_ctx(UserId, GroupId, SpaceId, ?POSIX_HELPER_NAME)
     end,
     #{<<"uid">> := Uid, <<"gid">> := Gid} = UserCtx,
