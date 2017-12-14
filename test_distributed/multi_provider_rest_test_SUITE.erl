@@ -932,9 +932,9 @@ invalidate_dir_replica(Config) ->
     ?assertEqualList([Tid, Tid2], list_successful_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqualList([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqualList([], list_failed_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([Tid, Tid2], list_successful_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_failed_transfers(WorkerP1, SpaceId), ?ATTEMPTS).
+    ?assertEqualList([Tid, Tid2], list_successful_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqualList([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqualList([], list_failed_transfers(WorkerP2, SpaceId), ?ATTEMPTS).
 
 automatic_cleanup_should_invalidate_unpopular_files(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -1989,9 +1989,9 @@ quota_decreased_after_invalidation(Config) ->
     ?assertEqualList([Tid], list_successful_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqualList([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqualList([], list_failed_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([Tid], list_successful_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_failed_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqualList([Tid], list_successful_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqualList([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqualList([], list_failed_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
 
     % when
     {ok, 200, _, Body2} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1,
@@ -2029,9 +2029,9 @@ quota_decreased_after_invalidation(Config) ->
     ?assertEqualList([Tid], list_successful_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqualList([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqualList([Tid2], list_failed_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([Tid], list_successful_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([Tid2], list_failed_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqualList([Tid], list_successful_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqualList([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqualList([Tid2], list_failed_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
 
     ExpectedDistribution2 = [
         #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 10]]},
