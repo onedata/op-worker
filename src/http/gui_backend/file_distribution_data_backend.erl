@@ -80,31 +80,51 @@ find_all(<<"file-distribution">>) ->
 %%--------------------------------------------------------------------
 -spec query(ResourceType :: binary(), Data :: proplists:proplist()) ->
     {ok, [proplists:proplist()]} | gui_error:error_result().
-query(<<"file-distribution">>, [{<<"fileId">>, FileId}]) ->
+query(<<"file-distribution">>, [{<<"file">>, FileId}]) ->
     SessionId = gui_session:get_session_id(),
+    UserId = gui_session:get_user_id(),
+    UserAuth = op_gui_utils:get_user_auth(),
     {ok, Distributions} = logical_file_manager:get_file_distribution(
         SessionId, {guid, FileId}
     ),
-    Res = lists:map(
+    SpaceId = fslogic_uuid:guid_to_space_id(FileId),
+    % Distributions contain only the providers which has synchronized file
+    % blocks, we need to mark other providers with "neverSynchronized" flag
+    % to present that in GUI.
+    {ok, #document{value = #od_space{
+        providers = Providers
+    }}} = space_logic:get(UserAuth, SpaceId, UserId),
+    SynchronizedProviders = lists:map(
+        fun(#{<<"providerId">> := ProviderId}) ->
+            ProviderId
+        end, Distributions),
+    NeverSynchronizedProviders = Providers -- SynchronizedProviders,
+
+    BlocksOfSyncedProviders = lists:map(
         fun(#{<<"providerId">> := ProviderId, <<"blocks">> := Blocks}) ->
-            BlocksList =
-                case Blocks of
-                    [] ->
-                        [0, 0];
-                    _ ->
-                        lists:foldl(
-                            fun([Offset, Size], Acc) ->
-                                Acc ++ [Offset, Offset + Size]
-                            end, [], Blocks)
-                end,
+            BlocksList = lists:foldl(
+                fun([Offset, Size], Acc) ->
+                    Acc ++ [Offset, Offset + Size]
+                end, [], Blocks),
             [
                 {<<"id">>, op_gui_utils:ids_to_association(FileId, ProviderId)},
-                {<<"fileId">>, FileId},
+                {<<"file">>, FileId},
                 {<<"provider">>, ProviderId},
-                {<<"blocks">>, BlocksList}
+                {<<"blocks">>, BlocksList},
+                {<<"neverSynchronized">>, false}
             ]
         end, Distributions),
-    {ok, Res}.
+
+    BlocksOfNeverSyncedProviders = lists:map(
+        fun(ProviderId) ->
+            [
+                {<<"id">>, op_gui_utils:ids_to_association(FileId, ProviderId)},
+                {<<"provider">>, ProviderId},
+                {<<"neverSynchronized">>, true}
+            ]
+        end, NeverSynchronizedProviders),
+
+    {ok, BlocksOfSyncedProviders ++ BlocksOfNeverSyncedProviders}.
 
 
 %%--------------------------------------------------------------------

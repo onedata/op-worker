@@ -109,11 +109,17 @@ query_record(<<"system-provider">>, Data) ->
     % Do not check context, provider name can always be fetched
     _Context = proplists:get_value(<<"context">>, Data),
     {ok, #provider_details{
-        name = Name
+        name = Name,
+        latitude = Latitude,
+        longitude = Longitude
     }} = oz_providers:get_details(provider, ProviderId),
     {ok, [
         {<<"id">>, ProviderId},
-        {<<"name">>, Name}
+        {<<"name">>, Name},
+        {<<"latitude">>, Latitude},
+        {<<"longitude">>, Longitude},
+        % TODO Currently, provider status is not synchronized among providers
+        {<<"status">>, <<"online">>}
     ]};
 
 query_record(<<"system-user">>, Data) ->
@@ -130,9 +136,8 @@ query_record(<<"system-user">>, Data) ->
         false ->
             gui_error:unauthorized();
         true ->
-            CurrentUserAuth = op_gui_utils:get_user_auth(),
             {ok, #document{value = #od_user{name = UserName}}} =
-                user_logic:get(CurrentUserAuth, UserId),
+                od_user:get_public_user_data(provider, UserId),
             {ok, [
                 {<<"id">>, UserId},
                 {<<"name">>, UserName}

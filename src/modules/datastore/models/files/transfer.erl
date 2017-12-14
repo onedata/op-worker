@@ -20,28 +20,33 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start/6, stop/1, get_status/1, get_info/1, get/1, init/0, cleanup/0, decode_pid/1, encode_pid/1]).
--export([mark_active/1, mark_completed/1, mark_failed/2,
-    mark_active_invalidation/1, mark_completed_invalidation/2, mark_failed_invalidation/2,
+-export([start/7, stop/1, get_status/1, get_info/1, get/1, init/0, cleanup/0,
+    decode_pid/1, encode_pid/1, get_controller/1]).
+-export([mark_active/2, mark_completed/1, mark_failed/1,
+    mark_active_invalidation/1, mark_completed_invalidation/1, mark_failed_invalidation/1,
     mark_file_transfer_scheduled/2, mark_file_transfer_finished/2,
-    mark_data_transfer_scheduled/2, mark_data_transfer_finished/2,
-    for_each_successful_transfer/3, for_each_failed_transfer/3,
-    for_each_unfinished_transfer/3, restart_unfinished_transfers/1,
-    mark_file_invalidation_finished/2, mark_file_invalidation_scheduled/2]).
+    mark_data_transfer_scheduled/2, mark_data_transfer_finished/3,
+    for_each_past_transfer/3, for_each_current_transfer/3, restart_unfinished_transfers/1,
+    mark_file_invalidation_finished/2, mark_file_invalidation_scheduled/2,
+    mark_cancelled/1, should_continue/1, increase_failed_file_transfers/1]).
+-export([list_transfers/2, is_ongoing/1, is_migrating/1]).
 
 %% model_behaviour callbacks
 -export([save/1, exists/1, delete/1, update/2, create/1, create_or_update/2,
-    model_init/0, 'after'/5, before/4]).
+    model_init/0, 'after'/5, before/4, delete/2]).
 -export([record_struct/1, record_upgrade/2]).
 
 -type id() :: binary().
 -type status() :: scheduled | skipped | active | completed | cancelled | failed.
 -type callback() :: undefined | binary().
--type transfer() :: #transfer{}.
--type doc() :: #document{value :: transfer()}.
+-type record() :: #transfer{}.
+-type doc() :: #document{value :: record()}.
 -type virtual_list_id() :: binary(). % ?(SUCCESSFUL|FAILED|UNFINISHED)_TRANSFERS_KEY
 
--export_type([id/0, status/0, callback/0, doc/0]).
+-export_type([id/0, record/0, status/0, callback/0, doc/0]).
+
+-define(MAX_FILE_TRANSFER_RETRIES_PER_TRANSFER,
+    application:get_env(?APP_NAME, max_file_transfer_retries_per_transfer, 10)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -60,7 +65,7 @@ record_struct(1) ->
         {source_provider_id, string},
         {target_provider_id, string},
         {invalidate_source_replica, boolean},
-        {pid, string}, %todo VFS-3657
+        {pid, string},
         {files_to_transfer, integer},
         {files_transferred, integer},
         {bytes_to_transfer, integer},
@@ -82,7 +87,7 @@ record_struct(2) ->
         {source_provider_id, string},
         {target_provider_id, string},
         {invalidate_source_replica, boolean},
-        {pid, string}, %todo VFS-3657
+        {pid, string},
         {files_to_transfer, integer},
         {files_transferred, integer},
         {bytes_to_transfer, integer},
@@ -94,6 +99,61 @@ record_struct(2) ->
         {min_hist, [integer]},
         {hr_hist, [integer]},
         {dy_hist, [integer]}
+    ]};
+record_struct(3) ->
+    {record, [
+        {file_uuid, string},
+        {space_id, string},
+        {user_id, string},
+        {path, string},
+        {callback, string},
+        {status, atom},
+        {invalidation_status, atom},
+        {source_provider_id, string},
+        {target_provider_id, string},
+        {invalidate_source_replica, boolean},
+        {pid, string},
+        {files_to_transfer, integer},
+        {files_transferred, integer},
+        {bytes_to_transfer, integer},
+        {bytes_transferred, integer},
+        {files_to_invalidate, integer},
+        {files_invalidated, integer},
+        {start_time, integer},
+        {finish_time, integer},
+        {last_update, #{string => integer}},
+        {min_hist, #{string => [integer]}},
+        {hr_hist, #{string => [integer]}},
+        {dy_hist, #{string => [integer]}},
+        {mth_hist, #{string => [integer]}}
+    ]};
+record_struct(4) ->
+    {record, [
+        {file_uuid, string},
+        {space_id, string},
+        {user_id, string},
+        {path, string},
+        {callback, string},
+        {status, atom},
+        {invalidation_status, atom},
+        {source_provider_id, string},
+        {target_provider_id, string},
+        {invalidate_source_replica, boolean},
+        {pid, string}, %todo VFS-3657
+        {files_to_transfer, integer},
+        {files_transferred, integer},
+        {failed_files, integer},
+        {bytes_to_transfer, integer},
+        {bytes_transferred, integer},
+        {files_to_invalidate, integer},
+        {files_invalidated, integer},
+        {start_time, integer},
+        {finish_time, integer},
+        {last_update, #{string => integer}},
+        {min_hist, #{string => [integer]}},
+        {hr_hist, #{string => [integer]}},
+        {dy_hist, #{string => [integer]}},
+        {mth_hist, #{string => [integer]}}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -106,15 +166,28 @@ record_struct(2) ->
 record_upgrade(1, {?MODULE, FileUuid, SpaceId, Path, CallBack, TransferStatus,
     InvalidationStatus, SourceProviderId, TargetProviderId,
     InvalidateSourceReplica, Pid, FilesToTransfer, FilesTransferred,
-    BytesToTransfer, BytesTransferred, StartTime, LastUpdate, MinHist, HrHist,
-    DyHist}
+    BytesToTransfer, BytesTransferred, StartTime, LastUpdate,
+    MinHist, HrHist, DyHist}
 ) ->
-    {2, #transfer{
+    {2, {?MODULE, FileUuid, SpaceId, Path, CallBack, TransferStatus,
+        InvalidationStatus, SourceProviderId, TargetProviderId,
+        InvalidateSourceReplica, Pid, FilesToTransfer, FilesTransferred,
+        BytesToTransfer, BytesTransferred, 0, 0, StartTime, LastUpdate,
+        MinHist, HrHist, DyHist
+    }};
+record_upgrade(2, {?MODULE, FileUuid, SpaceId, Path, CallBack, TransferStatus,
+    InvalidationStatus, SourceProviderId, TargetProviderId,
+    InvalidateSourceReplica, Pid, FilesToTransfer, FilesTransferred,
+    BytesToTransfer, BytesTransferred, FilesToInvalidate, FilesInvalidated,
+    StartTime, LastUpdate, MinHist, HrHist, DyHist}
+) ->
+    {3, #transfer{
         file_uuid = FileUuid,
         space_id = SpaceId,
+        user_id = undefined,
         path = Path,
         callback = CallBack,
-        transfer_status = TransferStatus,
+        status = TransferStatus,
         invalidation_status = InvalidationStatus,
         source_provider_id = SourceProviderId,
         target_provider_id = TargetProviderId,
@@ -124,13 +197,59 @@ record_upgrade(1, {?MODULE, FileUuid, SpaceId, Path, CallBack, TransferStatus,
         files_transferred = FilesTransferred,
         bytes_to_transfer = BytesToTransfer,
         bytes_transferred = BytesTransferred,
-        files_to_invalidate = 0,
-        files_invalidated = 0,
+        files_to_invalidate = FilesToInvalidate,
+        files_invalidated = FilesInvalidated,
         start_time = StartTime,
+        finish_time = LastUpdate,
+        % There are three changes in histograms:
+        %   1) They are now maps #{ProviderId => Histogram}, where ProviderId is
+        %       the provider FROM which the amount of data expressed in the
+        %       histogram was transferred.
+        %   2) Histogram naming convention - minute histogram is now a histogram
+        %       that SPANS OVER one minute, here with 5 seconds window.
+        %       Other histograms are renamed analogically.
+        %   3) LastUpdate must be remembered per provider to correctly keep
+        %       track in histograms.
+        % As there is no way to deduce source providers, older transfers will
+        % only have one histogram accessible under target provider id.
+        last_update = #{TargetProviderId => LastUpdate},
+        min_hist = #{TargetProviderId => lists:duplicate(60 div ?FIVE_SEC_TIME_WINDOW, 0)},
+        hr_hist = #{TargetProviderId => MinHist},
+        dy_hist = #{TargetProviderId => HrHist},
+        mth_hist = #{TargetProviderId => DyHist}
+    }};
+record_upgrade(3, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, Status,
+    InvalidationStatus, SourceProviderId, TargetProviderId,
+    InvalidateSourceReplica, Pid, FilesToTransfer, FilesTransferred,
+    BytesToTransfer, BytesTransferred, FilesToInvalidate, FilesInvalidated,
+    StartTime, FinishTime, LastUpdate, MinHist, HrHist, DyHist, MthHist
+}) ->
+    {4, #transfer{
+        file_uuid = FileUuid,
+        space_id = SpaceId,
+        user_id = UserId,
+        path = Path,
+        callback = CallBack,
+        status = Status,
+        invalidation_status = InvalidationStatus,
+        source_provider_id = SourceProviderId,
+        target_provider_id = TargetProviderId,
+        invalidate_source_replica = InvalidateSourceReplica,
+        pid = Pid,
+        files_to_transfer = FilesToTransfer,
+        files_transferred = FilesTransferred,
+        failed_files = 0,
+        bytes_to_transfer = BytesToTransfer,
+        bytes_transferred = BytesTransferred,
+        files_to_invalidate = FilesToInvalidate,
+        files_invalidated = FilesInvalidated,
+        start_time = StartTime,
+        finish_time = FinishTime,
         last_update = LastUpdate,
         min_hist = MinHist,
         hr_hist = HrHist,
-        dy_hist = DyHist
+        dy_hist = DyHist,
+        mth_hist = MthHist
     }}.
 
 
@@ -163,9 +282,10 @@ cleanup() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec start(session:id(), fslogic_worker:file_guid(), file_meta:path(),
-    oneprovider:id(), binary(), boolean()) -> {ok, id()} | ignore | {error, Reason :: term()}.
-start(SessionId, FileGuid, FilePath, ProviderId, Callback, InvalidateSourceReplica) ->
-    TransferStatus = case ProviderId of
+    undefined | od_provider:id(), undefined | od_provider:id(), binary(), boolean()) ->
+    {ok, id()} | ignore | {error, Reason :: term()}.
+start(SessionId, FileGuid, FilePath, SourceProviderId, TargetProviderId, Callback, InvalidateSourceReplica) ->
+    TransferStatus = case TargetProviderId of
         undefined ->
             skipped;
         _ ->
@@ -177,33 +297,34 @@ start(SessionId, FileGuid, FilePath, ProviderId, Callback, InvalidateSourceRepli
         false ->
             skipped
     end,
-    TimeSeconds = utils:system_time_seconds(),
-    MinHist = time_slot_histogram:new(?MIN_TIME_WINDOW, 60),
-    HrHist = time_slot_histogram:new(?HR_TIME_WINDOW, 24),
-    DyHist = time_slot_histogram:new(?DY_TIME_WINDOW, 30),
+    TimeSeconds = time_utils:zone_time_seconds(),
     SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
+    {ok, UserId} = session:get_user_id(SessionId),
     ToCreate = #document{
         scope = fslogic_uuid:guid_to_space_id(FileGuid),
         value = #transfer{
             file_uuid = fslogic_uuid:guid_to_uuid(FileGuid),
             space_id = SpaceId,
+            user_id = UserId,
             path = FilePath,
             callback = Callback,
-            transfer_status = TransferStatus,
+            status = TransferStatus,
             invalidation_status = InvalidationStatus,
-            source_provider_id = oneprovider:get_provider_id(),
-            target_provider_id = ProviderId,
+            source_provider_id = SourceProviderId,
+            target_provider_id = TargetProviderId,
             invalidate_source_replica = InvalidateSourceReplica,
             start_time = TimeSeconds,
-            last_update = 0,
-            min_hist = time_slot_histogram:get_histogram_values(MinHist),
-            hr_hist = time_slot_histogram:get_histogram_values(HrHist),
-            dy_hist = time_slot_histogram:get_histogram_values(DyHist)
+            finish_time = 0,
+            last_update = #{},
+            min_hist = #{},
+            hr_hist = #{},
+            dy_hist = #{},
+            mth_hist = #{}
 
         }},
     {ok, TransferId} = create(ToCreate),
     session:add_transfer(SessionId, TransferId),
-    ok = add_link(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
+    ok = add_link(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId),
     transfer_controller:on_new_transfer_doc(ToCreate#document{key = TransferId}),
     invalidation_controller:on_new_transfer_doc(ToCreate#document{key = TransferId}),
     {ok, TransferId}.
@@ -215,7 +336,7 @@ start(SessionId, FileGuid, FilePath, ProviderId, Callback, InvalidateSourceRepli
 %%-------------------------------------------------------------------
 -spec restart_unfinished_transfers(od_space:id()) -> [id()].
 restart_unfinished_transfers(SpaceId) ->
-    {ok, {Restarted, Failed}} = for_each_unfinished_transfer(fun(TransferId, {Restarted0, Failed0}) ->
+    {ok, {Restarted, Failed}} = for_each_current_transfer(fun(TransferId, {Restarted0, Failed0}) ->
         case restart(TransferId) of
             {ok, TransferId} ->
                 {[TransferId | Restarted0], Failed0};
@@ -233,7 +354,7 @@ restart_unfinished_transfers(SpaceId) ->
 %%--------------------------------------------------------------------
 -spec get_status(TransferId :: id()) -> status().
 get_status(TransferId) ->
-    {ok, #document{value = #transfer{transfer_status = Status}}} = get(TransferId),
+    {ok, #document{value = #transfer{status = Status}}} = get(TransferId),
     Status.
 
 %%--------------------------------------------------------------------
@@ -246,26 +367,31 @@ get_info(TransferId) ->
     {ok, #document{value = #transfer{
         file_uuid = FileUuid,
         space_id = SpaceId,
+        user_id = UserId,
         path = Path,
-        transfer_status = TransferStatus,
+        status = TransferStatus,
         invalidation_status = InvalidationStatus,
         target_provider_id = TargetProviderId,
         callback = Callback,
         files_to_transfer = FilesToTransfer,
         files_transferred = FilesTransferred,
+        failed_files = FailedFiles,
         bytes_to_transfer = BytesToTransfer,
         bytes_transferred = BytesTransferred,
         start_time = StartTime,
+        finish_time = FinishTime,
         last_update = LastUpdate,
         min_hist = MinHist,
         hr_hist = HrHist,
-        dy_hist = DyHist
+        dy_hist = DyHist,
+        mth_hist = MthHist
     }}} = get(TransferId),
     FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
     NullableCallback = utils:ensure_defined(Callback, undefined, null),
     {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
     #{
         <<"fileId">> => FileObjectId,
+        <<"userId">> => UserId,
         <<"path">> => Path,
         <<"transferStatus">> => atom_to_binary(TransferStatus, utf8),
         <<"invalidationStatus">> => atom_to_binary(InvalidationStatus, utf8),
@@ -273,13 +399,18 @@ get_info(TransferId) ->
         <<"callback">> => NullableCallback,
         <<"filesToTransfer">> => FilesToTransfer,
         <<"filesTransferred">> => FilesTransferred,
+        <<"failedFiles">> => FailedFiles,
         <<"bytesToTransfer">> => BytesToTransfer,
         <<"bytesTransferred">> => BytesTransferred,
         <<"startTime">> => StartTime,
-        <<"lastUpdate">> => LastUpdate,
+        <<"finishTime">> => FinishTime,
+        % It is possible that there is no last update, if 0 bytes were
+        % transferred, in this case take the start time.
+        <<"lastUpdate">> => lists:max([StartTime | maps:values(LastUpdate)]),
         <<"minHist">> => MinHist,
         <<"hrHist">> => HrHist,
-        <<"dyHist">> => DyHist
+        <<"dyHist">> => DyHist,
+        <<"mthHist">> => MthHist
     }.
 
 %%--------------------------------------------------------------------
@@ -289,23 +420,20 @@ get_info(TransferId) ->
 %%--------------------------------------------------------------------
 -spec stop(id()) -> ok | {error, term()}.
 stop(TransferId) ->
-    {ok, #document{value = #transfer{space_id = SpaceId}}} = get(TransferId),
-    ok = remove_links(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
-    ok = remove_links(?FAILED_TRANSFERS_KEY, TransferId, SpaceId),
-    ok = remove_links(?SUCCESSFUL_TRANSFERS_KEY, TransferId, SpaceId),
-    delete(TransferId).
+    {ok, _} = transfer:mark_cancelled(TransferId),
+    ok.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Marks transfer as active and sets number of files to transfer to 1.
 %% @end
 %%--------------------------------------------------------------------
--spec mark_active(id()) -> {ok, id()} | {error, term()}.
-mark_active(TransferId) ->
-    Pid = encode_pid(self()),
+-spec mark_active(id(), pid()) -> {ok, id()} | {error, term()}.
+mark_active(TransferId, TransferControllerPid) ->
+    Pid = encode_pid(TransferControllerPid),
     update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{
-            transfer_status = active,
+            status = active,
             files_to_transfer = 1,
             pid = Pid
         }}
@@ -319,15 +447,19 @@ mark_active(TransferId) ->
 -spec mark_completed(id()) -> {ok, id()} | {error, term()}.
 mark_completed(TransferId) ->
     transfer:update(TransferId, fun(Transfer) ->
-        case Transfer#transfer.invalidation_status of
-            skipped ->
+        case is_migrating(Transfer) of
+            false ->
                 SpaceId = Transfer#transfer.space_id,
-                ok = add_link(?SUCCESSFUL_TRANSFERS_KEY, TransferId, SpaceId),
-                ok = remove_links(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
-                {ok, Transfer#transfer{transfer_status = completed}};
-            _ ->
-                {ok, Transfer#transfer{transfer_status = completed}}
-        end
+                ok = add_link(?PAST_TRANSFERS_KEY, TransferId, SpaceId),
+                ok = remove_links(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId);
+            true ->
+                ok
+        end,
+        CurrentTime = time_utils:zone_time_seconds(),
+        {ok, Transfer#transfer{
+            status = completed,
+            finish_time = CurrentTime
+        }}
     end).
 
 %%--------------------------------------------------------------------
@@ -335,11 +467,41 @@ mark_completed(TransferId) ->
 %% Marks transfer as failed
 %% @end
 %%--------------------------------------------------------------------
--spec mark_failed(id(), od_space:id()) -> {ok, id()} | {error, term()}.
-mark_failed(TransferId, SpaceId) ->
-    ok = add_link(?FAILED_TRANSFERS_KEY, TransferId, SpaceId),
-    ok = remove_links(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
-    {ok, _} = transfer:update(TransferId, #{transfer_status => failed}).
+-spec mark_failed(id()) -> {ok, id()} | {error, term()}.
+mark_failed(TransferId) ->
+    {ok, _} = transfer:update(TransferId, fun(T = #transfer{space_id = SpaceId}) ->
+        ok = add_link(?PAST_TRANSFERS_KEY, TransferId, SpaceId),
+        ok = remove_links(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId),
+        CurrentTime = time_utils:zone_time_seconds(),
+        {ok, T#transfer{
+            status = failed,
+            finish_time = CurrentTime
+        }}
+    end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Increase failed_files transfer
+%% @end
+%%--------------------------------------------------------------------
+-spec increase_failed_file_transfers(id()) -> {ok, id()} | {error, term()}.
+increase_failed_file_transfers(TransferId) ->
+    {ok, _} = transfer:update(TransferId, fun(T = #transfer{failed_files = FailedFiles}) ->
+        {ok, T#transfer{failed_files = FailedFiles + 1}}
+    end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Marks transfer as cancelled.
+%% @end
+%%--------------------------------------------------------------------
+-spec mark_cancelled(id()) -> {ok, id()} | {error, term()}.
+mark_cancelled(TransferId) ->
+    {ok, _} = transfer:update(TransferId, fun(Transfer = #transfer{space_id = SpaceId}) ->
+        ok = add_link(?PAST_TRANSFERS_KEY, TransferId, SpaceId),
+        ok = remove_links(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId),
+        {ok, Transfer#transfer{status = cancelled}}
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -361,12 +523,12 @@ mark_active_invalidation(TransferId) ->
 %% Marks replica invalidation as completed
 %% @end
 %%--------------------------------------------------------------------
--spec mark_completed_invalidation(id(), od_space:id()) -> {ok, id()} | {error, term()}.
-mark_completed_invalidation(TransferId, SpaceId) ->
-    ok = add_link(?SUCCESSFUL_TRANSFERS_KEY, TransferId, SpaceId),
-    ok = remove_links(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
-    update(TransferId, fun(Transfer) ->
-        {ok, Transfer#transfer{invalidation_status = completed}}
+-spec mark_completed_invalidation(id()) -> {ok, id()} | {error, term()}.
+mark_completed_invalidation(TransferId) ->
+    update(TransferId, fun(T = #transfer{space_id = SpaceId}) ->
+        ok = add_link(?PAST_TRANSFERS_KEY, TransferId, SpaceId),
+        ok = remove_links(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId),
+        {ok, T#transfer{invalidation_status = completed}}
     end).
 
 %%--------------------------------------------------------------------
@@ -374,12 +536,12 @@ mark_completed_invalidation(TransferId, SpaceId) ->
 %% Marks replica invalidation as failed
 %% @end
 %%--------------------------------------------------------------------
--spec mark_failed_invalidation(id(), od_space:id()) -> {ok, id()} | {error, term()}.
-mark_failed_invalidation(TransferId, SpaceId) ->
-    transfer:update(TransferId, fun(Transfer) ->
-        ok = add_link(?FAILED_TRANSFERS_KEY, TransferId, SpaceId),
-        ok = remove_links(?UNFINISHED_TRANSFERS_KEY, TransferId, SpaceId),
-        Transfer#transfer{invalidation_status = failed}
+-spec mark_failed_invalidation(id()) -> {ok, id()} | {error, term()}.
+mark_failed_invalidation(TransferId) ->
+    transfer:update(TransferId, fun(T = #transfer{space_id = SpaceId}) ->
+        ok = add_link(?PAST_TRANSFERS_KEY, TransferId, SpaceId),
+        ok = remove_links(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId),
+        T#transfer{invalidation_status = failed}
     end).
 
 %%--------------------------------------------------------------------
@@ -470,69 +632,66 @@ mark_data_transfer_scheduled(TransferId, Bytes) ->
 %% Marks in transfer doc successful transfer of 'Bytes' bytes.
 %% @end
 %%--------------------------------------------------------------------
--spec mark_data_transfer_finished(undefined | id(), non_neg_integer()) ->
-    {ok, id()} | {error, term()}.
-mark_data_transfer_finished(undefined, _Bytes) ->
+-spec mark_data_transfer_finished(undefined | id(), od_provider:id(),
+    non_neg_integer()) -> {ok, id()} | {error, term()}.
+mark_data_transfer_finished(undefined, _ProviderId, _Bytes) ->
     {ok, undefined};
-mark_data_transfer_finished(TransferId, Bytes) ->
+mark_data_transfer_finished(TransferId, ProviderId, Bytes) ->
     transfer:update(TransferId, fun(Transfer = #transfer{
         bytes_transferred = OldBytes,
-        last_update = LastUpdate,
-        min_hist = MinHistValues,
-        hr_hist = HrHistValues,
-        dy_hist = DyHistValues
+        start_time = StartTime,
+        last_update = LastUpdateMap,
+        min_hist = MinHistograms,
+        hr_hist = HrHistograms,
+        dy_hist = DyHistograms,
+        mth_hist = MthHistograms
     }) ->
-        MinHist = time_slot_histogram:new(LastUpdate, ?MIN_TIME_WINDOW, MinHistValues),
-        HrHist = time_slot_histogram:new(LastUpdate, ?HR_TIME_WINDOW, HrHistValues),
-        DyHist = time_slot_histogram:new(LastUpdate, ?DY_TIME_WINDOW, DyHistValues),
-        ActualTimestamp = utils:system_time_seconds(),
+        LastUpdate = maps:get(ProviderId, LastUpdateMap, StartTime),
+        CurrentTime = time_utils:zone_time_seconds(),
         {ok, Transfer#transfer{
             bytes_transferred = OldBytes + Bytes,
-            last_update = ActualTimestamp,
-            min_hist = time_slot_histogram:get_histogram_values(
-                time_slot_histogram:increment(MinHist, ActualTimestamp, Bytes)
+            last_update = maps:put(ProviderId, CurrentTime, LastUpdateMap),
+            min_hist = update_histogram(
+                ProviderId, Bytes, MinHistograms,
+                ?FIVE_SEC_TIME_WINDOW, LastUpdate, CurrentTime
             ),
-            hr_hist = time_slot_histogram:get_histogram_values(
-                time_slot_histogram:increment(HrHist, ActualTimestamp, Bytes)
+            hr_hist = update_histogram(
+                ProviderId, Bytes, HrHistograms,
+                ?MIN_TIME_WINDOW, LastUpdate, CurrentTime
             ),
-            dy_hist = time_slot_histogram:get_histogram_values(
-                time_slot_histogram:increment(DyHist, ActualTimestamp, Bytes)
+            dy_hist = update_histogram(
+                ProviderId, Bytes, DyHistograms,
+                ?HR_TIME_WINDOW, LastUpdate, CurrentTime
+            ),
+            mth_hist = update_histogram(
+                ProviderId, Bytes, MthHistograms,
+                ?DY_TIME_WINDOW, LastUpdate, CurrentTime
             )
         }}
     end).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Executes callback for each successfully completed transfer
+%% Executes callback for each transfer that has been finished.
+%% Its status can be one of: completed, cancelled,failed.
 %% @end
 %%--------------------------------------------------------------------
--spec for_each_successful_transfer(
+-spec for_each_past_transfer(
     Callback :: fun((id(), Acc0 :: term()) -> Acc :: term()),
     Acc0 :: term(), od_space:id()) -> {ok, Acc :: term()} | {error, term()}.
-for_each_successful_transfer(Callback, Acc0, SpaceId) ->
-    for_each_transfer(?SUCCESSFUL_TRANSFERS_KEY, Callback, Acc0, SpaceId).
+for_each_past_transfer(Callback, Acc0, SpaceId) ->
+    for_each_transfer(?PAST_TRANSFERS_KEY, Callback, Acc0, SpaceId).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Executes callback for each failed transfer
+%% Executes callback for each ongoing transfer.
 %% @end
 %%--------------------------------------------------------------------
--spec for_each_failed_transfer(
+-spec for_each_current_transfer(
     Callback :: fun((id(), Acc0 :: term()) -> Acc :: term()),
     Acc0 :: term(), od_space:id()) -> {ok, Acc :: term()} | {error, term()}.
-for_each_failed_transfer(Callback, Acc0, SpaceId) ->
-    for_each_transfer(?FAILED_TRANSFERS_KEY, Callback, Acc0, SpaceId).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Executes callback for each unfinished transfer
-%% @end
-%%--------------------------------------------------------------------
--spec for_each_unfinished_transfer(
-    Callback :: fun((id(), Acc0 :: term()) -> Acc :: term()),
-    Acc0 :: term(), od_space:id()) -> {ok, Acc :: term()} | {error, term()}.
-for_each_unfinished_transfer(Callback, Acc0, SpaceId) ->
-    for_each_transfer(?UNFINISHED_TRANSFERS_KEY, Callback, Acc0, SpaceId).
+for_each_current_transfer(Callback, Acc0, SpaceId) ->
+    for_each_transfer(?CURRENT_TRANSFERS_KEY, Callback, Acc0, SpaceId).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -554,6 +713,64 @@ decode_pid(Pid) ->
     % todo remove after VFS-3657
     list_to_pid(binary_to_list(Pid)).
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Checks whether transfer should be continued.
+%% @end
+%%-------------------------------------------------------------------
+-spec should_continue(id()) -> boolean().
+should_continue(undefined) ->
+    true;
+should_continue(TransferId) ->
+    {ok, #document{value = #transfer{status = Status}}} = get(TransferId),
+    (Status =/= cancelled) and (Status =/= failed).
+
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns pid of transfer_controller for given Transfer.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_controller(id()) -> pid().
+get_controller(TransferId) ->
+    {ok, #document{value = #transfer{pid = ControllerPid}}} = get(TransferId),
+    decode_pid(ControllerPid).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns all transfers for given space that are ongoing or finished.
+%% @end
+%%-------------------------------------------------------------------
+-spec list_transfers(od_space:id(), Ongoing :: boolean()) -> {ok, [id()]}.
+list_transfers(SpaceId, Ongoing) ->
+    Transfers = case Ongoing of
+        true ->
+            list_transfers_internal(SpaceId, ?CURRENT_TRANSFERS_KEY);
+        false ->
+            list_transfers_internal(SpaceId, ?PAST_TRANSFERS_KEY)
+    end,
+    {ok, Transfers}.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Predicate saying if given transfer is ongoing.
+%%  * Replication is considered ongoing when data transfer hasn't finished.
+%%  * Migration is considered ongoing when data transfer or replica
+%%      invalidation hasn't finished.
+%% @end
+%%-------------------------------------------------------------------
+-spec is_ongoing(record()) -> boolean().
+is_ongoing(Transfer) ->
+    is_transfer_ongoing(Transfer) orelse is_invalidation_ongoing(Transfer).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Predicate saying if given transfer is migrating a replica.
+%% @end
+%%-------------------------------------------------------------------
+-spec is_migrating(record()) -> boolean().
+is_migrating(#transfer{invalidate_source_replica = Flag}) -> Flag.
+
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -564,9 +781,10 @@ decode_pid(Pid) ->
 %% {@link model_behaviour} callback save/1.
 %% @end
 %%--------------------------------------------------------------------
--spec save(datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
-save(Document) ->
-    model:execute_with_default_context(?MODULE, save, [Document]).
+-spec save(datastore:document()) ->
+    {ok, datastore:key()} | datastore:generic_error().
+save(Document = #document{scope = Scope}) ->
+    model:execute_with_default_context(?MODULE, save, [Document], [{scope, Scope}]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -584,8 +802,8 @@ update(Key, Diff) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create(datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
-create(Document) ->
-    model:execute_with_default_context(?MODULE, create, [Document]).
+create(Document = #document{scope = Scope}) ->
+    model:execute_with_default_context(?MODULE, create, [Document], [{scope, Scope}]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -607,6 +825,15 @@ delete(Key) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% {@link model_behaviour} callback delete/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete(datastore:key(), od_space:id()) -> ok | datastore:generic_error().
+delete(Key, SpaceId) ->
+    model:execute_with_default_context(?MODULE, delete, [Key], [{scope, SpaceId}]).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% {@link model_behaviour} callback exists/1.
 %% @end
 %%--------------------------------------------------------------------
@@ -622,8 +849,8 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec create_or_update(datastore:document(), Diff :: datastore:document_diff()) ->
     {ok, datastore:key()} | datastore:generic_error().
-create_or_update(Doc, Diff) ->
-    model:execute_with_default_context(?MODULE, create_or_update, [Doc, Diff]).
+create_or_update(Doc = #document{scope = Scope}, Diff) ->
+    model:execute_with_default_context(?MODULE, create_or_update, [Doc, Diff], [{scope, Scope}]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -634,7 +861,10 @@ create_or_update(Doc, Diff) ->
 model_init() ->
     Config = ?MODEL_CONFIG(transfer_bucket, [{transfer, update}], ?GLOBALLY_CACHED_LEVEL,
         ?GLOBALLY_CACHED_LEVEL, true, false, oneprovider:get_provider_id()),
-    Config#model_config{version = 2, sync_enabled = true}.
+    Config#model_config{
+        version = 4,
+        sync_enabled = true
+    }.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -701,6 +931,21 @@ remove_links(SourceId, TransferIds, SpaceId) ->
 %% Executes callback for each successfully completed transfer
 %% @end
 %%--------------------------------------------------------------------
+-spec list_transfers_internal(SpaceId :: od_space:id(), virtual_list_id()) ->
+    [transfer:id()].
+list_transfers_internal(SpaceId, ListDocId) ->
+    Callback = fun(TransferId, Acc) ->
+        [TransferId | Acc]
+    end,
+    {ok, Transfers} = for_each_transfer(ListDocId, Callback, [], SpaceId),
+    Transfers.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Executes callback for each successfully completed transfer
+%% @end
+%%--------------------------------------------------------------------
 -spec for_each_transfer(
     virtual_list_id(), Callback :: fun((id(), Acc0 :: term()) -> Acc :: term()),
     Acc0 :: term(), od_space:id()) -> {ok, Acc :: term()} | {error, term()}.
@@ -720,40 +965,38 @@ for_each_transfer(ListDocId, Callback, Acc0, SpaceId) ->
 %%-------------------------------------------------------------------
 -spec restart(id()) -> {ok, id()} | {error, term()}.
 restart(TransferId) ->
-    TimeSeconds = utils:system_time_seconds(),
-    MinHist = time_slot_histogram:new(?MIN_TIME_WINDOW, 60),
-    HrHist = time_slot_histogram:new(?HR_TIME_WINDOW, 24),
-    DyHist = time_slot_histogram:new(?DY_TIME_WINDOW, 30),
+    TimeSeconds = time_utils:zone_time_seconds(),
     UpdateFun = fun(Transfer) ->
-            TransferStatus = case Transfer#transfer.transfer_status of
-                completed -> completed;
-                skipped -> skipped;
-                cancelled -> cancelled;
-                _ -> scheduled
-            end,
+        TransferStatus = case Transfer#transfer.status of
+            completed -> completed;
+            skipped -> skipped;
+            cancelled -> cancelled;
+            _ -> scheduled
+        end,
 
-            InvalidationStatus = case Transfer#transfer.invalidation_status of
-                completed -> completed;
-                skipped -> skipped;
-                cancelled -> cancelled;
-                _ -> scheduled
-            end,
+        InvalidationStatus = case Transfer#transfer.invalidation_status of
+            completed -> completed;
+            skipped -> skipped;
+            cancelled -> cancelled;
+            _ -> scheduled
+        end,
 
-            {ok, Transfer#transfer{
-                transfer_status = TransferStatus,
-                invalidation_status = InvalidationStatus,
-                files_to_transfer = 0,
-                files_transferred = 0,
-                bytes_to_transfer = 0,
-                bytes_transferred = 0,
-                files_invalidated = 0,
-                files_to_invalidate = 0,
-                start_time = TimeSeconds,
-                last_update = 0,
-                min_hist = time_slot_histogram:get_histogram_values(MinHist),
-                hr_hist = time_slot_histogram:get_histogram_values(HrHist),
-                dy_hist = time_slot_histogram:get_histogram_values(DyHist)
-            }}
+        {ok, Transfer#transfer{
+            status = TransferStatus,
+            invalidation_status = InvalidationStatus,
+            files_to_transfer = 0,
+            files_transferred = 0,
+            bytes_to_transfer = 0,
+            bytes_transferred = 0,
+            files_invalidated = 0,
+            files_to_invalidate = 0,
+            start_time = TimeSeconds,
+            last_update = #{},
+            min_hist = #{},
+            hr_hist = #{},
+            dy_hist = #{},
+            mth_hist = #{}
+        }}
     end,
     case update(TransferId, UpdateFun) of
         {ok, TransferId} ->
@@ -774,8 +1017,10 @@ restart(TransferId) ->
 %%-------------------------------------------------------------------
 -spec start_pools() -> ok.
 start_pools() ->
-    {ok, _} = worker_pool:start_sup_pool(?REPLICATION_POOL, [
-        {workers, ?REPLICATION_POOL_SIZE}, {queue_type, lifo}
+    {ok, _} = worker_pool:start_sup_pool(?TRANSFER_WORKERS_POOL, [
+        {workers, ?TRANSFER_WORKERS_NUM},
+        {worker, {transfer_worker, []}},
+        {queue_type, lifo}
     ]),
     ok.
 
@@ -787,7 +1032,7 @@ start_pools() ->
 %%-------------------------------------------------------------------
 -spec stop_pools() -> ok.
 stop_pools() ->
-    true = worker_pool:stop_pool(?REPLICATION_POOL),
+    true = worker_pool:stop_pool(?TRANSFER_WORKERS_POOL),
     ok.
 
 %%-------------------------------------------------------------------
@@ -796,18 +1041,37 @@ stop_pools() ->
 %% Posthook responsible for stopping transfer or invalidation controller.
 %% @end
 %%-------------------------------------------------------------------
--spec handle_updated(transfer()) -> ok.
+-spec handle_updated(record()) -> ok.
 handle_updated(#transfer{
-    transfer_status = active,
+    status = active,
     files_to_transfer = FilesToTransfer,
     files_transferred = FilesToTransfer,
+    failed_files = 0,
     bytes_to_transfer = BytesToTransfer,
     bytes_transferred = BytesToTransfer,
     pid = Pid
 }) ->
-    transfer_controller:finish_transfer(decode_pid(Pid));
+    transfer_controller:mark_finished(decode_pid(Pid));
 handle_updated(#transfer{
-    transfer_status = TransferStatus,
+    status = active,
+    files_to_transfer = FilesToTransfer,
+    files_transferred = FilesTransferred,
+    failed_files = FailedFiles,
+    pid = Pid
+}) ->
+    case FailedFiles > ?MAX_FILE_TRANSFER_RETRIES_PER_TRANSFER of
+        true ->
+            transfer_controller:mark_failed(decode_pid(Pid), exceeded_number_of_retries);
+        false ->
+            case FailedFiles + FilesTransferred =:= FilesToTransfer of
+                true ->
+                    transfer_controller:mark_failed(decode_pid(Pid), file_transfer_failures);
+                _ ->
+                    ok
+            end
+    end;
+handle_updated(#transfer{
+    status = TransferStatus,
     files_to_invalidate = FilesToInvalidate,
     files_invalidated = FilesToInvalidate,
     invalidation_status = active,
@@ -825,8 +1089,7 @@ handle_updated(_) ->
 %%-------------------------------------------------------------------
 -spec remove_unfinished_transfers_links([id()], od_space:id()) -> ok.
 remove_unfinished_transfers_links(TransferIds, SpaceId) ->
-    remove_links(?UNFINISHED_TRANSFERS_KEY, TransferIds, SpaceId).
-
+    remove_links(?CURRENT_TRANSFERS_KEY, TransferIds, SpaceId).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -837,3 +1100,93 @@ remove_unfinished_transfers_links(TransferIds, SpaceId) ->
 -spec link_root(binary(), od_space:id()) -> binary().
 link_root(Prefix, SpaceId) ->
     <<Prefix/binary, "_", SpaceId/binary>>.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates a new time_slot_histogram based on LastUpdate time and Window.
+%% The length of created histogram is based on the Window.
+%% @end
+%%-------------------------------------------------------------------
+-spec update_histogram(oneprovider:id(), Bytes :: non_neg_integer(),
+    Histograms, Window :: non_neg_integer(), LastUpdate :: non_neg_integer(),
+    CurrentTime :: non_neg_integer()) -> Histograms
+    when Histograms :: maps:map(od_provider:id(), histogram:histogram()).
+update_histogram(ProviderId, Bytes, Histograms, Window, LastUpdate, CurrentTime) ->
+    Histogram = case maps:find(ProviderId, Histograms) of
+        error ->
+            new_time_slot_histogram(LastUpdate, Window);
+        {ok, Values} ->
+            new_time_slot_histogram(LastUpdate, Window, Values)
+    end,
+    UpdatedHistogram = time_slot_histogram:increment(Histogram, CurrentTime, Bytes),
+    UpdatedValues = time_slot_histogram:get_histogram_values(UpdatedHistogram),
+    maps:put(ProviderId, UpdatedValues, Histograms).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates a new time_slot_histogram based on LastUpdate time and Window.
+%% The length of created histogram is based on the Window.
+%% @end
+%%-------------------------------------------------------------------
+-spec new_time_slot_histogram(LastUpdate :: non_neg_integer(),
+    Window :: non_neg_integer()) -> time_slot_histogram:histogram().
+new_time_slot_histogram(LastUpdate, ?FIVE_SEC_TIME_WINDOW) ->
+    % 12 integers for each 5 seconds of last minute + one extra historical value
+    % (sometimes the newest measurement must be rejected as it is inaccurate if
+    % too little time has passed in current time window)
+    new_time_slot_histogram(LastUpdate, ?FIVE_SEC_TIME_WINDOW, histogram:new(12));
+new_time_slot_histogram(LastUpdate, ?MIN_TIME_WINDOW) ->
+    % 60 integers for each minute of last hour
+    new_time_slot_histogram(LastUpdate, ?MIN_TIME_WINDOW, histogram:new(60));
+new_time_slot_histogram(LastUpdate, ?HR_TIME_WINDOW) ->
+    % 24 integers for each hour of last day
+    new_time_slot_histogram(LastUpdate, ?HR_TIME_WINDOW, histogram:new(24));
+new_time_slot_histogram(LastUpdate, ?DY_TIME_WINDOW) ->
+    % 30 integers for each day of last month
+    new_time_slot_histogram(LastUpdate, ?DY_TIME_WINDOW, histogram:new(30)).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates a new time_slot_histogram based on LastUpdate time, Window and values.
+%% @end
+%%-------------------------------------------------------------------
+-spec new_time_slot_histogram(LastUpdate :: non_neg_integer(),
+    Window :: non_neg_integer(), histogram:histogram()) ->
+    time_slot_histogram:histogram().
+new_time_slot_histogram(LastUpdate, Window, Values) ->
+    time_slot_histogram:new(LastUpdate, Window, Values).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Predicate saying if given transfer is ongoing. Checks only if data transfer
+%% is finished, no matter if that is a replication or migration.
+%% @end
+%%-------------------------------------------------------------------
+-spec is_transfer_ongoing(record()) -> boolean().
+is_transfer_ongoing(#transfer{status = scheduled}) -> true;
+is_transfer_ongoing(#transfer{status = skipped}) -> false;
+is_transfer_ongoing(#transfer{status = active}) -> true;
+is_transfer_ongoing(#transfer{status = completed}) -> false;
+is_transfer_ongoing(#transfer{status = cancelled}) -> false;
+is_transfer_ongoing(#transfer{status = failed}) -> false.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Predicate saying if invalidation within given transfer is ongoing. Returns
+%% false for transfers that are not a migration.
+%% @end
+%%-------------------------------------------------------------------
+-spec is_invalidation_ongoing(record()) -> boolean().
+is_invalidation_ongoing(#transfer{invalidate_source_replica = false}) -> false;
+is_invalidation_ongoing(#transfer{invalidation_status = completed}) -> false;
+is_invalidation_ongoing(#transfer{invalidation_status = skipped}) -> false;
+is_invalidation_ongoing(#transfer{invalidation_status = cancelled}) -> false;
+is_invalidation_ongoing(#transfer{invalidation_status = failed}) -> false;
+is_invalidation_ongoing(#transfer{invalidation_status = scheduled}) -> true;
+is_invalidation_ongoing(#transfer{invalidation_status = active}) -> true.
+

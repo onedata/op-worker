@@ -377,7 +377,7 @@ resolve_guid(Worker, SessId, Path) ->
 -spec invalidate_file_replica(node(), session:id(), logical_file_manager:file_key(),
     ProviderId :: oneprovider:id(), MigrationProviderId :: undefined | oneprovider:id()) -> ok.
 invalidate_file_replica(Worker, SessId, FileKey, ProviderId, MigrationProviderId) ->
-    ?EXEC(Worker, logical_file_manager:invalidate_file_replica(SessId, FileKey, ProviderId, MigrationProviderId)).
+    ?EXEC(Worker, logical_file_manager:schedule_replica_invalidation(SessId, FileKey, ProviderId, MigrationProviderId)).
 
 -spec get_file_distribution(node(), session:id(), logical_file_manager:file_key()) -> {ok, list()}.
 get_file_distribution(Worker, SessId, FileKey) ->

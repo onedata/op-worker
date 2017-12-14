@@ -107,7 +107,7 @@ strategy_init_jobs(_, _, #{import_finish_time := undefined}) ->
     []; % import hasn't been finished yet
 strategy_init_jobs(_, Args, Data = #{last_update_start_time := undefined}) ->
     % it will be first update
-    CurrentTimestamp =utils:system_time_milli_seconds(),
+    CurrentTimestamp =time_utils:cluster_time_milli_seconds(),
     init_update_job(CurrentTimestamp, Args, Data);
 strategy_init_jobs(simple_scan, _, #{last_update_finish_time := undefined}) ->
     []; %update is in progress
@@ -117,7 +117,7 @@ strategy_init_jobs(simple_scan,
         last_update_start_time := LastUpdateStartTime,
         last_update_finish_time := LastUpdateFinishTime
 }) ->
-    CurrentTimestamp =utils:system_time_milli_seconds(),
+    CurrentTimestamp =time_utils:cluster_time_milli_seconds(),
     case should_init_update_job(LastUpdateStartTime, LastUpdateFinishTime,
         ScanIntervalSeconds, CurrentTimestamp)
     of
@@ -560,7 +560,7 @@ update_last_update_finish_time_if_update_finished(SpaceId, StorageId) ->
     case storage_sync_monitoring:update_in_progress(SpaceId) of
         false ->
             {ok, _} = space_strategies:update_last_update_finish_time(SpaceId,
-                StorageId, utils:system_time_milli_seconds()),
+                StorageId, time_utils:cluster_time_milli_seconds()),
             ok;
         _ ->
             ok

@@ -16,7 +16,7 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--export([get/1, get_providers_with_common_support/0]).
+-export([get/1, supports_space/2, get_providers_with_common_support/0]).
 
 %%%===================================================================
 %%% API
@@ -31,6 +31,20 @@
     {ok, datastore:document()} | {error, Reason :: term()}.
 get(ProviderID) ->
     od_provider:get(ProviderID).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Predicate saying if given provider supports given space.
+%% @end
+%%--------------------------------------------------------------------
+-spec supports_space(od_provider:id(), od_space:id()) -> boolean().
+supports_space(ProviderId, SpaceId) ->
+    case od_provider:get(ProviderId) of
+        {ok, Provider} ->
+            lists:member(SpaceId, Provider#document.value#od_provider.spaces);
+        _ ->
+            false
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

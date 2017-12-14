@@ -24,6 +24,7 @@
 -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4]).
 -export([record_struct/1]).
+-export([record_upgrade/2]).
 
 -type id() :: binary().
 
@@ -39,6 +40,16 @@ record_struct(1) ->
     {record, [
         {client_name, string},
         {urls, [string]},
+        {spaces, [string]},
+        {public_only, boolean},
+        {revision_history, [term]}
+    ]};
+record_struct(2) ->
+    {record, [
+        {client_name, string},
+        {urls, [string]},
+        {latitude, float},
+        {longitude, float},
         {spaces, [string]},
         {public_only, boolean},
         {revision_history, [term]}
@@ -121,7 +132,10 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(provider_info_bucket, [], ?GLOBALLY_CACHED_LEVEL).
+    Config = ?MODEL_CONFIG(provider_info_bucket, [], ?GLOBALLY_CACHED_LEVEL),
+    Config#model_config{
+        version = 2
+    }.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -143,6 +157,37 @@ model_init() ->
     Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Upgrades record from specified version.
+%% @end
+%%--------------------------------------------------------------------
+-spec record_upgrade(datastore_json:record_version(), tuple()) ->
+    {datastore_json:record_version(), tuple()}.
+record_upgrade(1, Provider) ->
+    {
+        od_provider,
+        ClientName,
+        Urls,
+
+        Spaces,
+
+        PublicOnly,
+        RevisionHistory
+    } = Provider,
+    {2, #od_provider{
+        client_name = ClientName,
+        urls = Urls,
+        latitude = 0.0,
+        longitude = 0.0,
+
+        spaces = Spaces,
+
+        public_only = PublicOnly,
+        revision_history = RevisionHistory
+    }}.
+
 
 %%%===================================================================
 %%% API
@@ -184,8 +229,10 @@ get_or_fetch(ProviderId) ->
     {ok, datastore:document()} | {error, Reason :: term()}.
 fetch(ProviderId) ->
     try
-        {ok, #provider_details{name = Name, urls = URLs}} =
-            oz_providers:get_details(provider, ProviderId),
+        {ok, #provider_details{
+            name = Name, urls = URLs,
+            latitude = Latitude, longitude = Longitude
+        }} = oz_providers:get_details(provider, ProviderId),
         {PublicOnly, SpaceIDs} = case oz_providers:get_spaces(provider) of
             {ok, SIDs} -> {false, SIDs};
             {error, Res} ->
@@ -197,6 +244,8 @@ fetch(ProviderId) ->
         Doc = #document{key = ProviderId, value = #od_provider{
             client_name = Name,
             urls = URLs,
+            latitude = Latitude,
+            longitude = Longitude,
             spaces = SpaceIDs,
             public_only = PublicOnly
         }},

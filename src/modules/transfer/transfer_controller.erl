@@ -7,7 +7,7 @@
 %%%--------------------------------------------------------------------
 %%% @doc
 %%% Manages data transfers, which include starting the transfer and tracking transfer's status.
-%%% Such gen_server is created for each data transfer, process.
+%%% Such gen_server is created for each data transfer process.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(transfer_controller).
@@ -15,13 +15,14 @@
 
 -behaviour(gen_server).
 
+-include("global_definitions.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([on_new_transfer_doc/1, on_transfer_doc_change/1, finish_transfer/1, failed_transfer/2]).
-
+-export([on_new_transfer_doc/1, on_transfer_doc_change/1, mark_finished/1, mark_failed/2
+]).
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
@@ -34,6 +35,8 @@
     invalidate_source_replica :: boolean(),
     space_id :: od_space:id()
 }).
+
+-type state() :: #state{}.
 
 %%%===================================================================
 %%% API
@@ -56,7 +59,7 @@ on_new_transfer_doc(Transfer) ->
 %%--------------------------------------------------------------------
 -spec on_transfer_doc_change(transfer:doc()) -> ok.
 on_transfer_doc_change(Transfer = #document{value = #transfer{
-    transfer_status = scheduled,
+    status = scheduled,
     target_provider_id = TargetProviderId
 }}) ->
     case TargetProviderId =:= oneprovider:get_provider_id() of
@@ -73,19 +76,18 @@ on_transfer_doc_change(_ExistingTransfer) ->
 %% Stops transfer_controller process and marks transfer as completed.
 %% @end
 %%-------------------------------------------------------------------
--spec finish_transfer(pid()) -> ok.
-finish_transfer(Pid) ->
-    gen_server2:cast(Pid, finish_transfer),
-    ok.
+-spec mark_failed(pid(), term()) -> ok.
+mark_failed(Pid, Reason) ->
+    gen_server2:cast(Pid, {transfer_failed, Reason}).
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Stops transfer_controller process and marks transfer as failed.
+%% Stops transfer_controller process and marks transfer as completed.
 %% @end
 %%-------------------------------------------------------------------
--spec failed_transfer(pid(), term()) -> ok.
-failed_transfer(Pid, Error) ->
-    gen_server2:cast(Pid, {failed_transfer, Error}).
+-spec mark_finished(pid()) -> ok.
+mark_finished(Pid) ->
+    gen_server2:cast(Pid, transfer_finished).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -98,7 +100,7 @@ failed_transfer(Pid, Error) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) ->
-    {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
+    {ok, State :: state()} | {ok, State :: state(), timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
 init([SessionId, TransferId, FileGuid, Callback, InvalidationSourceReplica]) ->
     ok = gen_server2:cast(self(), start_transfer),
@@ -118,13 +120,13 @@ init([SessionId, TransferId, FileGuid, Callback, InvalidationSourceReplica]) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_call(Request :: term(), From :: {pid(), Tag :: term()},
-    State :: #state{}) ->
-    {reply, Reply :: term(), NewState :: #state{}} |
-    {reply, Reply :: term(), NewState :: #state{}, timeout() | hibernate} |
-    {noreply, NewState :: #state{}} |
-    {noreply, NewState :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
-    {stop, Reason :: term(), NewState :: #state{}}.
+    State :: state()) ->
+    {reply, Reply :: term(), NewState :: state()} |
+    {reply, Reply :: term(), NewState :: state(), timeout() | hibernate} |
+    {noreply, NewState :: state()} |
+    {noreply, NewState :: state(), timeout() | hibernate} |
+    {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
+    {stop, Reason :: term(), NewState :: state()}.
 handle_call(_Request, _From, State) ->
     ?log_bad_request(_Request),
     {reply, wrong_request, State}.
@@ -135,28 +137,19 @@ handle_call(_Request, _From, State) ->
 %% Handles cast messages.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_cast(Request :: term(), State :: #state{}) ->
-    {noreply, NewState :: #state{}} |
-    {noreply, NewState :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: #state{}}.
+-spec handle_cast(Request :: term(), State :: state()) ->
+    {noreply, NewState :: state()} |
+    {noreply, NewState :: state(), timeout() | hibernate} |
+    {stop, Reason :: term(), NewState :: state()}.
 handle_cast(start_transfer, State = #state{
     transfer_id = TransferId,
     session_id = SessionId,
-    file_guid = FileGuid,
-    space_id = SpaceId
+    file_guid = FileGuid
 }) ->
-    try
-        transfer:mark_active(TransferId),
-        ok = sync_req:cast_file_replication(user_ctx:new(SessionId),
-            file_ctx:new_by_guid(FileGuid), undefined, TransferId),
-        {noreply, State}
-    catch
-        _:E ->
-            ?error_stacktrace("Could not replicate file ~p due to ~p", [FileGuid, E]),
-            transfer:mark_failed(TransferId, SpaceId),
-            {stop, E, State}
-    end;
-handle_cast(finish_transfer, State = #state{
+    ok = sync_req:enqueue_transfer(user_ctx:new(SessionId),
+        file_ctx:new_by_guid(FileGuid), TransferId),
+    {noreply, State};
+handle_cast(transfer_finished, State = #state{
     transfer_id = TransferId,
     callback = Callback,
     invalidate_source_replica = InvalidationSourceReplica
@@ -164,14 +157,12 @@ handle_cast(finish_transfer, State = #state{
     transfer:mark_completed(TransferId),
     notify_callback(Callback, InvalidationSourceReplica),
     {stop, normal, State};
-handle_cast({failed_transfer, Error}, State = #state{
-    file_guid = FileGuid,
-    transfer_id = TransferId,
-    space_id = SpaceId
+handle_cast({transfer_failed, Reason}, State = #state{
+    transfer_id = TransferId
 }) ->
-    ?error_stacktrace("Could not replicate file ~p due to ~p", [FileGuid, Error]),
-    transfer:mark_failed(TransferId, SpaceId),
-    {stop, Error, State};
+    ?error_stacktrace("Transfer ~p failed due to ~p", [TransferId, Reason]),
+    transfer:mark_failed(TransferId),
+    {stop, normal, State};
 handle_cast(_Request, State) ->
     ?log_bad_request(_Request),
     {noreply, State}.
@@ -182,10 +173,10 @@ handle_cast(_Request, State) ->
 %% Handles all non call/cast messages.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_info(Info :: timeout() | term(), State :: #state{}) ->
-    {noreply, NewState :: #state{}} |
-    {noreply, NewState :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: #state{}}.
+-spec handle_info(Info :: timeout() | term(), State :: state()) ->
+    {noreply, NewState :: state()} |
+    {noreply, NewState :: state(), timeout() | hibernate} |
+    {stop, Reason :: term(), NewState :: state()}.
 handle_info(_Info, State) ->
     ?log_bad_request(_Info),
     {noreply, State}.
@@ -200,7 +191,7 @@ handle_info(_Info, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
-    State :: #state{}) -> term().
+    State :: state()) -> term().
 terminate(_Reason, #state{
     session_id = SessionId,
     transfer_id = TransferId
@@ -213,8 +204,8 @@ terminate(_Reason, #state{
 %% Converts process state when code is changed.
 %% @end
 %%--------------------------------------------------------------------
--spec code_change(OldVsn :: term() | {down, term()}, State :: #state{},
-    Extra :: term()) -> {ok, NewState :: #state{}} | {error, Reason :: term()}.
+-spec code_change(OldVsn :: term() | {down, term()}, State :: state(),
+    Extra :: term()) -> {ok, NewState :: state()} | {error, Reason :: term()}.
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 

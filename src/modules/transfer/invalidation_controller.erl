@@ -47,7 +47,7 @@
 %%--------------------------------------------------------------------
 -spec on_new_transfer_doc(transfer:doc()) -> ok.
 on_new_transfer_doc(Transfer = #document{value = #transfer{
-    transfer_status = skipped,
+    status = skipped,
     invalidation_status = scheduled,
     source_provider_id = SourceProviderId,
     target_provider_id = undefined,
@@ -69,7 +69,7 @@ on_new_transfer_doc(_ExistingTransfer) ->
 %%--------------------------------------------------------------------
 -spec on_transfer_doc_change(transfer:doc()) -> ok.
 on_transfer_doc_change(Transfer = #document{value = #transfer{
-    transfer_status = TransferStatus,
+    status = TransferStatus,
     source_provider_id = SourceProviderId,
     invalidate_source_replica = true
 }}) when TransferStatus == completed orelse TransferStatus == skipped ->
@@ -159,7 +159,6 @@ handle_cast(start_transfer, State = #state{
     session_id = SessionId,
     file_guid = FileGuid
 }) ->
-    SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
     try
         transfer:mark_active_invalidation(TransferId),
         #provider_response{
@@ -169,26 +168,24 @@ handle_cast(start_transfer, State = #state{
         ),
         {noreply, State}
     catch
-        _:E ->
-            ?error_stacktrace("Could not invalidate file ~p due to ~p", [FileGuid, E]),
-            transfer:mark_failed_invalidation(TransferId, SpaceId),
-            {stop, E, State}
+        _Error:Reason ->
+            ?error_stacktrace("Could not invalidate file ~p due to ~p", [FileGuid, Reason]),
+            transfer:mark_failed_invalidation(TransferId),
+            {stop, Reason, State}
     end;
 handle_cast(finish_transfer, State = #state{
     transfer_id = TransferId,
-    callback = Callback,
-    space_id = SpaceId
+    callback = Callback
 }) ->
-    transfer:mark_completed_invalidation(TransferId, SpaceId),
+    transfer:mark_completed_invalidation(TransferId),
     notify_callback(Callback),
     {stop, normal, State};
 handle_cast({failed_transfer, Error}, State = #state{
     file_guid = FileGuid,
-    transfer_id = TransferId,
-    space_id = SpaceId
+    transfer_id = TransferId
 }) ->
     ?error_stacktrace("Could not invalidate file ~p due to ~p", [FileGuid, Error]),
-    transfer:mark_failed_invalidation(TransferId, SpaceId),
+    transfer:mark_failed_invalidation(TransferId),
     {stop, Error, State};
 handle_cast(_Request, State) ->
     ?log_bad_request(_Request),
