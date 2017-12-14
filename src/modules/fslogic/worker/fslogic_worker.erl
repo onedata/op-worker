@@ -212,7 +212,7 @@ init_counters() ->
 -spec init_report() -> ok.
 init_report() ->
     Reports = lists:map(fun(Name) ->
-        {?EXOMETER_NAME(Name), [count]}
+        {?EXOMETER_NAME(Name), [value]}
     end, ?EXOMETER_COUNTERS),
     Reports2 = lists:map(fun(Name) ->
         {?EXOMETER_TIME_NAME(Name), [min, max, median, mean, n]}

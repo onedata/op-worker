@@ -64,7 +64,7 @@ many_files_creation_tree_test(Config) ->
         {description, "Creates directories' and files' tree using multiple process"}
     ]).
 many_files_creation_tree_test_base(Config) ->
-    files_stress_test_base:many_files_creation_tree_test_base(Config, false).
+    files_stress_test_base:many_files_creation_tree_test_base(Config, false, true).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

@@ -201,7 +201,7 @@ init_counters() ->
 %%--------------------------------------------------------------------
 -spec init_report() -> ok.
 init_report() ->
-    ?init_reports([{?EXOMETER_NAME(active_sessions), [count]}]).
+    ?init_reports([{?EXOMETER_NAME(active_sessions), [value]}]).
 
 %%--------------------------------------------------------------------
 %% @doc
