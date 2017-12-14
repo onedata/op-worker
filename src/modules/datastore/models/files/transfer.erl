@@ -661,11 +661,11 @@ mark_data_transfer_finished(TransferId, ProviderId, Bytes) ->
             ),
             dy_hist = update_histogram(
                 ProviderId, Bytes, DyHistograms,
-                ?HR_TIME_WINDOW, LastUpdate, CurrentTime
+                ?HOUR_TIME_WINDOW, LastUpdate, CurrentTime
             ),
             mth_hist = update_histogram(
                 ProviderId, Bytes, MthHistograms,
-                ?DY_TIME_WINDOW, LastUpdate, CurrentTime
+                ?DAY_TIME_WINDOW, LastUpdate, CurrentTime
             )
         }}
     end).
@@ -1133,19 +1133,13 @@ update_histogram(ProviderId, Bytes, Histograms, Window, LastUpdate, CurrentTime)
 -spec new_time_slot_histogram(LastUpdate :: non_neg_integer(),
     Window :: non_neg_integer()) -> time_slot_histogram:histogram().
 new_time_slot_histogram(LastUpdate, ?FIVE_SEC_TIME_WINDOW) ->
-    % 12 integers for each 5 seconds of last minute + one extra historical value
-    % (sometimes the newest measurement must be rejected as it is inaccurate if
-    % too little time has passed in current time window)
-    new_time_slot_histogram(LastUpdate, ?FIVE_SEC_TIME_WINDOW, histogram:new(12));
+    new_time_slot_histogram(LastUpdate, ?FIVE_SEC_TIME_WINDOW, histogram:new(?MIN_HIST_LENGTH));
 new_time_slot_histogram(LastUpdate, ?MIN_TIME_WINDOW) ->
-    % 60 integers for each minute of last hour
-    new_time_slot_histogram(LastUpdate, ?MIN_TIME_WINDOW, histogram:new(60));
-new_time_slot_histogram(LastUpdate, ?HR_TIME_WINDOW) ->
-    % 24 integers for each hour of last day
-    new_time_slot_histogram(LastUpdate, ?HR_TIME_WINDOW, histogram:new(24));
-new_time_slot_histogram(LastUpdate, ?DY_TIME_WINDOW) ->
-    % 30 integers for each day of last month
-    new_time_slot_histogram(LastUpdate, ?DY_TIME_WINDOW, histogram:new(30)).
+    new_time_slot_histogram(LastUpdate, ?MIN_TIME_WINDOW, histogram:new(?HOUR_HIST_LENGTH));
+new_time_slot_histogram(LastUpdate, ?HOUR_TIME_WINDOW) ->
+    new_time_slot_histogram(LastUpdate, ?HOUR_TIME_WINDOW, histogram:new(?DAY_HIST_LENGTH));
+new_time_slot_histogram(LastUpdate, ?DAY_TIME_WINDOW) ->
+    new_time_slot_histogram(LastUpdate, ?DAY_TIME_WINDOW, histogram:new(?MONTH_HIST_LENGTH)).
 
 %%-------------------------------------------------------------------
 %% @private

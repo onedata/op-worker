@@ -189,7 +189,8 @@ transfer_record(TransferId) ->
         {error, ?ENOENT} -> <<"deleted">>;
         {error, _} -> <<"unknown">>
     end,
-    FinishTime = case transfer:is_ongoing(Transfer) of
+    IsOngoing = transfer:is_ongoing(Transfer),
+    FinishTime = case IsOngoing of
         true -> null;
         false -> Transfer#transfer.finish_time
     end,
@@ -203,6 +204,7 @@ transfer_record(TransferId) ->
         {<<"migration">>, IsMigration},
         {<<"migrationSource">>, MigrationSource},
         {<<"destination">>, Destination},
+        {<<"isOngoing">>, IsOngoing},
         {<<"space">>, SpaceId},
         {<<"file">>, FileGuid},
         {<<"path">>, Path},
@@ -232,8 +234,8 @@ transfer_time_stat_record(StatId) ->
     {Histograms, TimeWindow} = case TypePrefix of
         ?MINUTE_STAT_TYPE -> {T#transfer.min_hist, ?FIVE_SEC_TIME_WINDOW};
         ?HOUR_STAT_TYPE -> {T#transfer.hr_hist, ?MIN_TIME_WINDOW};
-        ?DAY_STAT_TYPE -> {T#transfer.dy_hist, ?HR_TIME_WINDOW};
-        ?MONTH_STAT_TYPE -> {T#transfer.mth_hist, ?DY_TIME_WINDOW}
+        ?DAY_STAT_TYPE -> {T#transfer.dy_hist, ?HOUR_TIME_WINDOW};
+        ?MONTH_STAT_TYPE -> {T#transfer.mth_hist, ?DAY_TIME_WINDOW}
     end,
     StartTime = T#transfer.start_time,
     LastUpdateMap = T#transfer.last_update,
@@ -274,24 +276,25 @@ transfer_time_stat_record(StatId) ->
 -spec transfer_current_stat_record(transfer:id()) -> {ok, proplists:proplist()}.
 transfer_current_stat_record(TransferId) ->
     {ok, #document{value = Transfer = #transfer{
-        start_time = StartTime,
         last_update = LastUpdateMap,
         bytes_transferred = BytesTransferred,
         files_transferred = FilesTransferred,
         min_hist = MinHistograms
     }}} = transfer:get(TransferId),
     CurrentTime = time_utils:zone_time_seconds(),
+    % No need to use actual start time, because only the newest measurements
+    % are needed to calculate current speed.
+    StartTime = CurrentTime - 2 * ?FIVE_SEC_TIME_WINDOW,
     BytesPerSec = maps:to_list(maps:map(fun(ProviderId, HistogramValues) ->
         LastUpdate = maps:get(ProviderId, LastUpdateMap),
-        % Only first three values matter when calculating current speed
-        [V1, V2, V3 | _] = shift_histogram(
+        ShiftedHistogram = shift_histogram(
             HistogramValues, LastUpdate, CurrentTime, ?FIVE_SEC_TIME_WINDOW
         ),
         % Take the second value as current speed (the first one changes very
         % dynamically and does not show current trend from past couple of
         % seconds).
         [_, CurrentSpeed | _] = histogram_to_speed_chart(
-            [V1, V2, V3], StartTime, CurrentTime, ?FIVE_SEC_TIME_WINDOW
+            ShiftedHistogram, StartTime, CurrentTime, ?FIVE_SEC_TIME_WINDOW
         ),
         CurrentSpeed
     end, MinHistograms)),
@@ -373,51 +376,61 @@ histogram_to_speed_chart([First | Rest], Start, End, Window) when (End div Windo
     % might have not passed yet.
     % In this case, we only have measurements from one time window. We take the
     % average speed and create a simple chart with two, same measurements.
-    ThisWindowDuration = End - Start + 1,
-    Speed = round(First / ThisWindowDuration),
-    [Speed, Speed | lists:duplicate(length(Rest) - 1, null)];
-histogram_to_speed_chart([First | Rest = [Second | _]], Start, End, Window) ->
+    FirstSlotDuration = End - Start + 1,
+    Speed = round(First / FirstSlotDuration),
+    [Speed, Speed | lists:duplicate(length(Rest), null)];
+histogram_to_speed_chart([First | Rest = [Previous | _]], Start, End, Window) ->
     % First value must be handled in a special way, because the newest time slot
     % might have not passed yet.
-    % In this case, we have at least two measurements). Current speed is
+    % In this case, we have at least two measurements. Current speed is
     % calculated based on anticipated measurements in the future if current
     % trend was kept.
     Duration = End - Start + 1,
     FirstSlotDuration = min(Duration, (End rem Window) + 1),
-    SecondSlotDuration = min(Window, Duration - FirstSlotDuration),
+    PreviousSlotDuration = min(Window, Duration - FirstSlotDuration),
     FirstSpeed = First / FirstSlotDuration,
-    SecondSpeed = Second / SecondSlotDuration,
-    % Calculate the current speed as would be if current trend did not change.
-    AnticipatedNextSpeed = 2 * FirstSpeed - SecondSpeed,
-    AnticipatedSpeed = FirstSpeed +
-        (AnticipatedNextSpeed - FirstSpeed) *
-            (Window / 2 + FirstSlotDuration) / Window,
+    Average = (First + Previous) / (FirstSlotDuration + PreviousSlotDuration),
+    % Calculate the current speed as would be if current trend did not change,
+    % scale by the duration of the window.
+    AnticipatedCurrentSpeed = Average + (FirstSpeed - Average) * FirstSlotDuration / Window,
     % The above might yield a negative value
-    CurrentSpeed = max(0, round(AnticipatedSpeed)),
-    % The rest is calculated in a simpler manner.
-    [CurrentSpeed | histogram_to_speed_chart(First, Rest, Start, End, Window)].
+    CurrentSpeed = max(0, round(AnticipatedCurrentSpeed)),
+    % Calculate where the chart span starts
+    ChartStart = max(Start, End - speed_chart_span(Window) + 1),
+    [CurrentSpeed | histogram_to_speed_chart(First, Rest, Start, End, Window, ChartStart)].
 
 -spec histogram_to_speed_chart(CurrentValue :: non_neg_integer(),
     histogram:histogram(), Start :: non_neg_integer(), End :: non_neg_integer(),
-    Window :: non_neg_integer()) -> [non_neg_integer() | null].
-histogram_to_speed_chart(_Last, [], _, _, _) ->
-    % Last value should not be included (as one is added to the beginning)
-    [];
-histogram_to_speed_chart(_, Rest, Start, End, _) when End < Start ->
-    % Pad with nulls, but skip the last value
-    lists:duplicate(length(Rest), null);
-histogram_to_speed_chart(Current, [Previous | Rest], Start, End, Window) ->
-    Duration = End - Start + 1,
+    Window :: non_neg_integer(), ChartStart :: non_neg_integer()) ->
+    [non_neg_integer() | null].
+histogram_to_speed_chart(Current, [Previous | Rest], Start, End, Window, ChartStart) ->
+    Duration = End - ChartStart + 1,
     CurrentSlotDuration = min(Duration, (End rem Window) + 1),
-    PreviousSlotDuration = min(Window, Duration - CurrentSlotDuration),
-    CurrentSpeed = Current / CurrentSlotDuration,
-    Speed = case PreviousSlotDuration =< 0 of
+    DurationWithoutCurrent = Duration - CurrentSlotDuration,
+    PreviousSlotDuration = min(Window, DurationWithoutCurrent),
+    % Check if we are considering the last two slots
+    case DurationWithoutCurrent =< Window of
         true ->
-            % This is the last measured time window, ignore the previous value
-            CurrentSpeed;
+            % Calculate the time that passed when collecting data for the
+            % previous slot. It might be shorter than the window if the transfer
+            % started anywhere in the middle of the window. It might also be different
+            % than PreviousSlotDuration, if some of the measurement duration does not
+            % fit the chart.
+            PreviousSlotMeasurementTime = min(End - Start + 1 - CurrentSlotDuration, Window),
+            Speed = (Current + Previous) / (CurrentSlotDuration + PreviousSlotMeasurementTime),
+            % Scale the previous speed depending how much time of the window
+            % will not fit the chart.
+            PreviousSpeed = Previous / PreviousSlotMeasurementTime,
+            PreviousScaled = Speed + PreviousSlotDuration / PreviousSlotMeasurementTime * (PreviousSpeed - Speed),
+            [round(Speed), round(PreviousScaled) | lists:duplicate(length(Rest), null)];
         false ->
-            PreviousSpeed = Previous / PreviousSlotDuration,
-            (CurrentSpeed + PreviousSpeed) / 2
-    end,
-    [round(Speed) | histogram_to_speed_chart(Previous, Rest, Start, End - CurrentSlotDuration, Window)].
+            Speed = round((Current + Previous) / (CurrentSlotDuration + PreviousSlotDuration)),
+            [Speed | histogram_to_speed_chart(Previous, Rest, Start, End - CurrentSlotDuration, Window, ChartStart)]
+    end.
 
+
+-spec speed_chart_span(TimeWindow :: non_neg_integer()) -> non_neg_integer().
+speed_chart_span(?FIVE_SEC_TIME_WINDOW) -> 60;
+speed_chart_span(?MIN_TIME_WINDOW) -> 3600;
+speed_chart_span(?HOUR_TIME_WINDOW) -> 86400; % 24 hours
+speed_chart_span(?DAY_TIME_WINDOW) -> 2592000. % 30 days
