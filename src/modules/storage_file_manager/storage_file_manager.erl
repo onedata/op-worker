@@ -22,7 +22,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 -export([new_handle/2, new_handle/6, set_size/1, increase_size/2]).
--export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/3, link/2, readdir/3,
+-export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/4, link/2, readdir/3,
     get_child_handle/2]).
 -export([stat/1, read/3, write/3, create/2, create/3, open/2, release/1,
     truncate/2, unlink/1, fsync/2, rmdir/1]).
@@ -241,17 +241,18 @@ chmod(#sfm_handle{
 %% Changes owner of a file on storage.
 %% @end
 %%--------------------------------------------------------------------
--spec chown(FileHandle :: handle(), user_id(), group_id()) -> ok | error_reply().
+-spec chown(FileHandle :: handle(), user_id(), group_id()| undefined, od_space:id()) ->
+    ok | error_reply().
 chown(#sfm_handle{
     storage = Storage,
     file = FileId,
     session_id = ?ROOT_SESS_ID,
     space_id = SpaceId
-}, UserId, SpaceId) ->
+}, UserId, GroupId, SpaceId) ->
     {ok, HelperHandle} = session:get_helper(?ROOT_SESS_ID, SpaceId, Storage),
-    {Uid, Gid} = luma:get_posix_user_ctx(?ROOT_SESS_ID, UserId, SpaceId),
+    {Uid, Gid} = luma:get_posix_user_ctx(?ROOT_SESS_ID, UserId, GroupId, SpaceId),
     helpers:chown(HelperHandle, FileId, Uid, Gid);
-chown(_, _, _) ->
+chown(_, _, _, _) ->
     throw(?EPERM).
 
 %%--------------------------------------------------------------------
