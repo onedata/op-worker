@@ -238,6 +238,7 @@ replicate_file(Config) ->
 
     % then
     {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
+    DomainP1 = domain(WorkerP1),
     DomainP2 = domain(WorkerP2),
 
     ?assertMatch(#{
@@ -251,9 +252,10 @@ replicate_file(Config) ->
         <<"filesTransferred">> := 1,
         <<"bytesToTransfer">> := 4,
         <<"bytesTransferred">> := 4,
-        <<"minHist">> := [4 | _],
-        <<"hrHist">> := [4 | _],
-        <<"dyHist">> := [4 | _]
+        <<"minHist">> := #{DomainP1 := [4 | _]},
+        <<"hrHist">> := #{DomainP1 := [4 | _]},
+        <<"dyHist">> := #{DomainP1 := [4 | _]},
+        <<"mthHist">> := #{DomainP1 := [4 | _]}
     },
         case do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []) of
             {ok, 200, _, TransferStatus} ->
@@ -304,6 +306,7 @@ restart_file_replication(Config) ->
 
     % then
     {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
+    DomainP1 = domain(WorkerP1),
     DomainP2 = domain(WorkerP2),
 
     ?assertMatch(#{
@@ -340,9 +343,10 @@ restart_file_replication(Config) ->
         <<"filesTransferred">> := 1,
         <<"bytesToTransfer">> := 4,
         <<"bytesTransferred">> := 4,
-        <<"minHist">> := [4 | _],
-        <<"hrHist">> := [4 | _],
-        <<"dyHist">> := [4 | _]
+        <<"minHist">> := #{DomainP1 := [4 | _]},
+        <<"hrHist">> := #{DomainP1 := [4 | _]},
+        <<"dyHist">> := #{DomainP1 := [4 | _]},
+        <<"mthHist">> := #{DomainP1 := [4 | _]}
     },
         case do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []) of
             {ok, 200, _, TransferStatus} ->
@@ -1208,7 +1212,7 @@ metric_get(Config) ->
         provider_id = Prov1ID
     },
 
-    ?assertMatch(ok, rpc:call(WorkerP1, monitoring_utils, create, [<<"space3">>, MonitoringId, utils:system_time_seconds()])),
+    ?assertMatch(ok, rpc:call(WorkerP1, monitoring_utils, create, [<<"space3">>, MonitoringId, time_utils:system_time_seconds()])),
     {ok, #document{value = State}} = rpc:call(WorkerP1, monitoring_state, get, [MonitoringId]),
     ?assertMatch({ok, _}, rpc:call(WorkerP1, monitoring_state, save, [
         #document{

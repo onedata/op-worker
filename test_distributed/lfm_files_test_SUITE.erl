@@ -1079,7 +1079,7 @@ opening_file_should_increase_file_popularity(Config) ->
     SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
 
     % when
-    TimeBeforeFirstOpen = utils:system_time_seconds() div 3600,
+    TimeBeforeFirstOpen = rpc:call(W, time_utils, cluster_time_seconds, []) div 3600,
     {ok, Handle1} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, read),
     lfm_proxy:close(W, Handle1),
 
@@ -1101,7 +1101,7 @@ opening_file_should_increase_file_popularity(Config) ->
     ?assert(TimeBeforeFirstOpen =< Doc#document.value#file_popularity.last_open),
 
     % when
-    TimeBeforeSecondOpen = utils:system_time_seconds() div 3600,
+    TimeBeforeSecondOpen = rpc:call(W, time_utils, cluster_time_seconds, []) div 3600,
     lists:foreach(fun(_) ->
         {ok, Handle2} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, read),
         lfm_proxy:close(W, Handle2)

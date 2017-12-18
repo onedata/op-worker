@@ -265,7 +265,7 @@ create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
     ParentFileUuid = file_ctx:get_uuid_const(ParentFileCtx),
     {ok, FileUuid} = file_meta:create({uuid, ParentFileUuid}, File), %todo pass file_ctx
 
-    CTime = utils:system_time_seconds(),
+    CTime = time_utils:cluster_time_seconds(),
     SpaceId = file_ctx:get_space_id_const(ParentFileCtx),
     {ok, _} = times:save(#document{key = FileUuid, value = #times{
         mtime = CTime, atime = CTime, ctime = CTime

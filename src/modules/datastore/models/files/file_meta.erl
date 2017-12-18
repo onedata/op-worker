@@ -559,7 +559,7 @@ get_scope_id(Entry) ->
 setup_onedata_user(UserId, EffSpaces) ->
     ?info("Setting up user: ~p", [UserId]),
     critical_section:run([od_user, UserId], fun() ->
-        CTime = erlang:system_time(seconds),
+        CTime = time_utils:cluster_time_seconds(),
 
         lists:foreach(fun(SpaceId) ->
             make_space_exist(SpaceId)
@@ -618,7 +618,7 @@ remove_share(FileCtx, ShareId) ->
 %%--------------------------------------------------------------------
 -spec make_space_exist(SpaceId :: datastore:key()) -> ok | no_return().
 make_space_exist(SpaceId) ->
-    CTime = utils:system_time_seconds(),
+    CTime = time_utils:cluster_time_seconds(),
     SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     FileDoc = #document{
         key = SpaceDirUuid,

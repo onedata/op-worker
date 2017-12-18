@@ -127,6 +127,7 @@
 % Mocked provider data
 -define(PROVIDER_NAME(__Provider), __Provider).
 -define(PROVIDER_DOMAIN(__Provider), __Provider).
+-define(PROVIDER_ONLINE(__Provider), true).
 -define(PROVIDER_SUBDOMAIN_DELEGATION(__Provider), false).
 -define(PROVIDER_SUBDOMAIN(__Provider), undefined).
 -define(PROVIDER_SPACES_VALUE(__Provider), #{?SPACE_1 => 1000000000, ?SPACE_2 => 1000000000}).
@@ -271,6 +272,7 @@
     name = ?PROVIDER_NAME(__Provider),
     subdomain_delegation = ?PROVIDER_SUBDOMAIN_DELEGATION(__Provider),
     domain = ?PROVIDER_DOMAIN(__Provider),
+    online = ?PROVIDER_ONLINE(__Provider),
     spaces = ?PROVIDER_SPACES_MATCHER(__Provider),
     eff_users = ?PROVIDER_EFF_USERS(__Provider),
     eff_groups = ?PROVIDER_EFF_GROUPS(__Provider)
@@ -278,6 +280,7 @@
 -define(PROVIDER_PROTECTED_DATA_MATCHER(__Provider), #document{key = __Provider, value = #od_provider{
     name = ?PROVIDER_NAME(__Provider),
     domain = ?PROVIDER_DOMAIN(__Provider),
+    online = ?PROVIDER_ONLINE(__Provider),
     spaces = #{},
     eff_users = [],
     eff_groups = []
@@ -409,6 +412,7 @@ end).
     <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_provider, id = __ProviderId, aspect = instance, scope = protected}),
     <<"name">> => ?PROVIDER_NAME(__ProviderId),
     <<"domain">> => ?PROVIDER_DOMAIN(__ProviderId),
+    <<"online">> => ?PROVIDER_ONLINE(__ProviderId),
     <<"latitude">> => ?PROVIDER_LATITUDE(__ProviderId),
     <<"longitude">> => ?PROVIDER_LONGITUDE(__ProviderId)
 }).
