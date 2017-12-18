@@ -1,6 +1,7 @@
 #include "../nifpp.h"
 #include "helpers/init.h"
 #include "helpers/storageHelperCreator.h"
+#include "monitoring/monitoring.h"
 
 #include <asio.hpp>
 #include <asio/executor_work.hpp>
@@ -594,6 +595,81 @@ ERL_NIF_TERM fsync(NifCTX ctx, file_handle_ptr handle, const int isdatasync)
 
 extern "C" {
 
+static void configurePerformanceMonitoring(
+    std::unordered_map<folly::fbstring, folly::fbstring> &args)
+{
+    if (args.find("helpers_performance_monitoring_enabled") != args.end() &&
+        args["helpers_performance_monitoring_enabled"] == "true") {
+        if (args["helpers_performance_monitoring_type"] == "graphite") {
+            auto config = std::make_shared<
+                one::monitoring::GraphiteMonitoringConfiguration>();
+            config->fromGraphiteURL(
+                args["helpers_performance_monitoring_graphite_url"]
+                    .toStdString());
+            config->namespacePrefix =
+                args["helpers_performance_monitoring_namespace_prefix"]
+                    .toStdString();
+            config->reportingPeriod = std::stoul(
+                args["helpers_performance_monitoring_period"].toStdString());
+            if (args["helpers_performance_monitoring_level"] == "full") {
+                config->reportingLevel = cppmetrics::core::ReportingLevel::Full;
+            }
+            else {
+                config->reportingLevel =
+                    cppmetrics::core::ReportingLevel::Basic;
+            }
+
+            // Configure and start performance monitoring threads
+            one::helpers::configureMonitoring(config, true);
+
+            // Initialize the command line option counter values
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.ceph_helper_thread_count",
+                std::stoul(args["ceph_helper_threads_number"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.posix_helper_thread_count",
+                std::stoul(args["posix_helper_threads_number"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.s3_helper_thread_count",
+                std::stoul(args["s3_helper_threads_number"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.swift_helper_thread_count",
+                std::stoul(args["swift_helper_threads_number"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.glusterfs_helper_thread_count",
+                std::stoul(
+                    args["glusterfs_helper_threads_number"].toStdString()));
+            ONE_METRIC_COUNTER_SET("comp.oneprovider.mod.options.buffer_"
+                                   "scheduler_helper_thread_count",
+                std::stoul(
+                    args["buffer_scheduler_threads_number"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.read_buffer_min_size",
+                std::stoul(args["read_buffer_min_size"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.read_buffer_max_size",
+                std::stoul(args["read_buffer_max_size"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.write_buffer_min_size",
+                std::stoul(args["write_buffer_min_size"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.write_buffer_max_size",
+                std::stoul(args["write_buffer_max_size"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.read_buffer_prefetch_duration",
+                std::stoul(
+                    args["read_buffer_prefetch_duration"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.write_buffer_flush_delay",
+                std::stoul(args["write_buffer_flush_delay"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.monitoring_reporting_period",
+                std::stoul(args["helpers_performance_monitoring_period"]
+                               .toStdString()));
+        }
+    }
+}
+
 static int load(ErlNifEnv *env, void **priv_data, ERL_NIF_TERM load_info)
 {
     one::helpers::init();
@@ -601,6 +677,9 @@ static int load(ErlNifEnv *env, void **priv_data, ERL_NIF_TERM load_info)
     auto args =
         nifpp::get<std::unordered_map<folly::fbstring, folly::fbstring>>(
             env, load_info);
+
+    configurePerformanceMonitoring(args);
+
     application = std::make_unique<HelpersNIF>(std::move(args));
 
     return !(nifpp::register_resource<helper_ptr>(env, nullptr, "helper_ptr") &&
