@@ -454,10 +454,16 @@ map_idp_group_to_onedata(Idp, IdpGroupId) ->
 -spec zone_time_seconds() -> non_neg_integer().
 zone_time_seconds() ->
     TimeMillis = time_utils:remote_timestamp(zone_time_bias, fun() ->
-        {ok, Timestamp} = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        Req = #gs_req_graph{
             operation = get,
             gri = #gri{type = od_provider, id = undefined, aspect = current_time}
-        }),
-        Timestamp
+        },
+        case gs_client_worker:request(?ROOT_SESS_ID, Req) of
+            {ok, Timestamp} ->
+                {ok, Timestamp};
+            Error ->
+                ?warning("Cannot get zone time due to: ~p", [Error]),
+                error
+        end
     end),
     TimeMillis div 1000.
