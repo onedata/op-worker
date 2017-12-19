@@ -235,12 +235,12 @@ handle_request_locally(UserCtx, #fuse_request{fuse_request = #file_request{file_
     handle_file_request(UserCtx, Req, FileCtx);
 handle_request_locally(UserCtx, #fuse_request{fuse_request = Req}, FileCtx)  ->
     handle_fuse_request(UserCtx, Req, FileCtx);
-handle_request_locally(UserCtx, #provider_request{provider_request = Req}, FileCtx)  ->
+handle_request_locally(UserCtx, #provider_request{provider_request = Req}, FileCtx) ->
     handle_provider_request(UserCtx, Req, FileCtx);
 handle_request_locally(UserCtx, #proxyio_request{
     parameters = Parameters,
     proxyio_request = Req
-}, FileCtx)  ->
+}, FileCtx) ->
     HandleId = maps:get(?PROXYIO_PARAMETER_HANDLE_ID, Parameters, undefined),
     handle_proxyio_request(UserCtx, Req, FileCtx, HandleId).
 
@@ -251,7 +251,7 @@ handle_request_locally(UserCtx, #proxyio_request{
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_request_remotely(user_ctx:ctx(), request(), [od_provider:id()]) -> response().
-handle_request_remotely(UserCtx, Req, Providers)  ->
+handle_request_remotely(UserCtx, Req, Providers) ->
     ProviderId = fslogic_remote:get_provider_to_reroute(Providers),
     fslogic_remote:reroute(UserCtx, ProviderId, Req).
 
@@ -371,12 +371,14 @@ handle_file_request(UserCtx, #fsync{
     provider_response().
 handle_provider_request(UserCtx, #get_file_distribution{}, FileCtx) ->
     sync_req:get_file_distribution(UserCtx, FileCtx);
-handle_provider_request(UserCtx, #replicate_file{block = Block}, FileCtx) ->
-    sync_req:replicate_file(UserCtx, FileCtx, Block, undefined);
-handle_provider_request(UserCtx, #invalidate_file_replica{
-    migration_provider_id = MigrationProviderId
+handle_provider_request(UserCtx, #schedule_file_replication{
+    block = _Block, target_provider_id = TargetProviderId, callback = Callback
 }, FileCtx) ->
-    sync_req:invalidate_file_replica(UserCtx, FileCtx, MigrationProviderId, undefined, undefined);
+    sync_req:schedule_file_replication(UserCtx, FileCtx, TargetProviderId, Callback);
+handle_provider_request(UserCtx, #schedule_replica_invalidation{
+    source_provider_id = SourceProviderId, target_provider_id = TargetProviderId
+}, FileCtx) ->
+    sync_req:schedule_replica_invalidation(UserCtx, FileCtx, SourceProviderId, TargetProviderId);
 handle_provider_request(UserCtx, #get_parent{}, FileCtx) ->
     guid_req:get_parent(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #get_file_path{}, FileCtx) ->

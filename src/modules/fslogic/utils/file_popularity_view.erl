@@ -68,7 +68,7 @@ get_unpopular_files(SpaceId, SizeLowerLimit, SizeUpperLimit, HoursSinceLastOpenL
 ) ->
     Ctx = datastore_model_default:get_ctx(file_popularity),
     DiscCtx = maps:get(disc_driver_ctx, Ctx),
-    CurrentTimeInHours = utils:system_time_seconds() div 3600,
+    CurrentTimeInHours = time_utils:cluster_time_seconds() div 3600,
     HoursTimestampLimit = case HoursSinceLastOpenLimit of
         null ->
             null;

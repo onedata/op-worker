@@ -1102,6 +1102,11 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
                 Spaces ->
                     lists:member(SpaceId, Spaces)
             end
+        end),
+
+    test_utils:mock_expect(AllWorkers, provider_logic, zone_time_seconds,
+        fun() ->
+            time_utils:cluster_time_seconds()
         end).
 
 %%--------------------------------------------------------------------
