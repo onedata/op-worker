@@ -103,8 +103,9 @@ links_save(Model, RoutingKey, Doc = #document{key = Key}) ->
         sync_change => true,
         local_links_tree_id => oneprovider:get_provider_id()
     },
-    {ok, _} = datastore_router:route(Ctx2, RoutingKey, save, [
-        Ctx2, Key, Doc
+    Ctx3 = datastore_multiplier:extend_name(RoutingKey, Ctx2),
+    {ok, _} = datastore_router:route(Ctx3, RoutingKey, save, [
+        Ctx3, Key, Doc
     ]),
     ok.
 
@@ -126,13 +127,15 @@ links_delete(Doc = #document{key = Key, value = LinksMask = #links_mask{
                 sync_change => true,
                 local_links_tree_id => LocalTreeId
             },
-            DeletedLinks = get_links_mask(Ctx2, Key),
-            Deleted = apply_links_mask(Ctx2, LinksMask, DeletedLinks),
+            Ctx3 = datastore_multiplier:extend_name(Key, Ctx2),
+            DeletedLinks = get_links_mask(Ctx3, Key),
+            Deleted = apply_links_mask(Ctx3, LinksMask, DeletedLinks),
             save_links_mask(Ctx, Doc#document{deleted = Deleted});
         _ ->
             ok
     end;
 links_delete(Doc = #document{
+    key = Key,
     mutators = [TreeId, RemoteTreeId],
     value = #links_mask{model = Model, tree_id = RemoteTreeId},
     deleted = true
@@ -145,7 +148,8 @@ links_delete(Doc = #document{
                 sync_change => true,
                 local_links_tree_id => LocalTreeId
             },
-            save_links_mask(Ctx2, Doc);
+            Ctx3 = datastore_multiplier:extend_name(Key, Ctx2),
+            save_links_mask(Ctx3, Doc);
         _ ->
             ok
     end;
