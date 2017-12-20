@@ -31,6 +31,7 @@
     rename/3, link/3, chmod/3, chown/4, truncate/3, setxattr/6, getxattr/3,
     removexattr/3, listxattr/2, open/3, read/3, write/3, release/1, flush/1,
     fsync/2, readdir/4]).
+-export([start_monitoring/0, stop_monitoring/0]).
 
 %%%===================================================================
 %%% API
@@ -187,12 +188,7 @@ flush(_Handle) ->
 fsync(_Handle, _IsDataSync) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% Initialization function for the module.
 %% Loads the NIF native library. The library is first searched for
@@ -218,6 +214,18 @@ init() ->
         {error, Reason} -> {error, Reason}
     end.
 
+-spec start_monitoring() -> ok | {error, Reason :: term()}.
+start_monitoring() ->
+  erlang:nif_error(helpers_nif_not_loaded).
+
+-spec stop_monitoring() -> ok | {error, Reason :: term()}.
+stop_monitoring() ->
+  erlang:nif_error(helpers_nif_not_loaded).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -242,5 +250,11 @@ prepare_args() ->
         read_buffer_prefetch_duration,
         write_buffer_min_size,
         write_buffer_max_size,
-        write_buffer_flush_delay
+        write_buffer_flush_delay,
+        helpers_performance_monitoring_enabled,
+        helpers_performance_monitoring_type,
+        helpers_performance_monitoring_level,
+        helpers_performance_monitoring_period,
+        helpers_performance_monitoring_namespace_prefix,
+        helpers_performance_monitoring_graphite_url
     ]).
