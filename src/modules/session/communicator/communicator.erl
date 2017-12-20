@@ -49,6 +49,8 @@ send(Msg, Ref) ->
 send(#server_message{} = Msg, Ref, Retry) when Retry > 1; Retry == infinity ->
     case connection:send(Msg, Ref) of
         ok -> ok;
+        {error, empty_connection_pool} ->
+            {error, empty_connection_pool};
         {error, _} ->
             timer:sleep(?SEND_RETRY_DELAY),
             case Retry of

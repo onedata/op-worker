@@ -21,6 +21,8 @@
 -env ERL_MAX_ETS_TABLES 1000000
 
 ## Configure schedulers
+## Important: if couchbase is at the same node set number of scheduler equal
+## to half of cores' number
 ## +S 32:32
 ## +SDcpu 16:8
 +K true

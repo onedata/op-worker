@@ -46,7 +46,7 @@ all() ->
         session_create_should_set_session_access_time
     ]).
 
--define(TIMEOUT, timer:seconds(10)).
+-define(TIMEOUT, timer:seconds(20)).
 
 -define(call(N, F, A), ?call(N, session, F, A)).
 -define(call(N, M, F, A), rpc:call(N, M, F, A)).
