@@ -827,6 +827,7 @@ echo_and_delete_file_loop_test_base(Config0, IterationsNum, User) ->
 init_env(Config) ->
     lists:foreach(fun(Worker) ->
         test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
+        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, datastore_links_tree_order, 100),
         test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_update_interval, timer:seconds(1)),
         test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_stream_update_interval, timer:seconds(1)),
         test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
@@ -1150,7 +1151,7 @@ verify_dir_size(Config, DirToCheck, DSize) ->
 
     VerAns0 = verify(Config, fun(W) ->
         CountChilden = fun() ->
-            LSAns = lfm_proxy:ls(W, SessId(W), {path, DirToCheck}, 0, 1000),
+            LSAns = lfm_proxy:ls(W, SessId(W), {path, DirToCheck}, 0, 20000),
             ?assertMatch({ok, _}, LSAns),
             {ok, ListedDirs} = LSAns,
             length(ListedDirs)
