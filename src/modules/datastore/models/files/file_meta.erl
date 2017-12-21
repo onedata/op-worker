@@ -267,7 +267,7 @@ delete_child_link(ParentUuid, Scope, FileUuid, FileName) ->
     case oneprovider:get_provider_id() == TreeId of
         true ->
             ok = datastore_model:delete_links(
-                ?CTX, ParentUuid, TreeId, {FileName, Rev}
+                ?CTX#{scope => Scope}, ParentUuid, TreeId, {FileName, Rev}
             );
         false ->
             ok = datastore_model:mark_links_deleted(
