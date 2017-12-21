@@ -35,7 +35,7 @@
 %% API
 -export([new/3, get_child_ctx/2, get_children_ctxs_batch/3, reset/1]).
 -export([get_stat_buf/1, get_handle/1, get_file_id_const/1,
-    get_storage_doc/1, get_nfs4_acl/1]).
+    get_storage_doc/1, get_nfs4_acl/1, get_space_id_const/1]).
 
 
 %%-------------------------------------------------------------------
@@ -161,6 +161,17 @@ get_storage_doc(StorageFileCtx = #storage_file_ctx{
         storage = StorageDoc = #document{}
 }}) ->
     {StorageDoc, StorageFileCtx}.
+
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Getter for #storage_file_ctx field.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_space_id_const(ctx()) -> od_space:id().
+get_space_id_const(#storage_file_ctx{space_id = SpaceId}) ->
+    SpaceId.
 
 %%-------------------------------------------------------------------
 %% @doc

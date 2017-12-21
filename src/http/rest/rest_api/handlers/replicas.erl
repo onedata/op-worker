@@ -170,18 +170,18 @@ get_file_replicas(Req, State) ->
 -spec invalidate_file_replica_internal(req(), maps:map()) -> {term(), req(), maps:map()}.
 invalidate_file_replica_internal(Req, State = #{
     auth := Auth,
-    provider_id := ProviderId,
+    provider_id := SourceProviderId,
     migration_provider_id := MigrationProviderId
 }) ->
     FileGuid = get_file_guid(State),
-    FilePath = get_file_path(State),
     SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
 
     throw_if_non_local_space(SpaceId),
-    throw_if_non_local_provider(ProviderId),
     throw_if_nonexistent_provider(SpaceId, MigrationProviderId),
     {ok, _} = onedata_file_api:stat(Auth, {guid, FileGuid}),
-    {ok, TransferId} = transfer:start(Auth, FileGuid, FilePath, MigrationProviderId, undefined, true),
+    {ok, TransferId} = onedata_file_api:schedule_replica_invalidation(
+        Auth, {guid, FileGuid}, SourceProviderId, MigrationProviderId
+    ),
 
     Response = json_utils:encode_map(#{<<"transferId">> => TransferId}),
     {ok, Req2} = cowboy_req:reply(?HTTP_OK, [], Response, Req),
@@ -195,13 +195,14 @@ invalidate_file_replica_internal(Req, State = #{
 -spec replicate_file_internal(req(), maps:map()) -> {term(), req(), maps:map()}.
 replicate_file_internal(Req, #{auth := Auth, provider_id := ProviderId, callback := Callback} = State) ->
     FileGuid = get_file_guid(State),
-    FilePath = get_file_path(State),
     SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
 
     throw_if_non_local_space(SpaceId),
     throw_if_nonexistent_provider(SpaceId, ProviderId),
     {ok, _} = onedata_file_api:stat(Auth, {guid, FileGuid}),
-    {ok, TransferId} = transfer:start(Auth, FileGuid, FilePath, ProviderId, Callback, false),
+    {ok, TransferId} = onedata_file_api:schedule_file_replication(
+        Auth, {guid, FileGuid}, ProviderId, Callback
+    ),
 
     Response = json_utils:encode_map(#{<<"transferId">> => TransferId}),
     {ok, Req2} = cowboy_req:reply(?HTTP_OK, [], Response, Req),
@@ -219,19 +220,6 @@ get_file_replicas_internal(Req, #{auth := Auth} = State) ->
     {ok, Distribution} = onedata_file_api:get_file_distribution(Auth, {guid, FileGuid}),
     Response = json_utils:encode_map(Distribution),
     {Response, Req, State}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Get file path from state
-%% @end
-%%--------------------------------------------------------------------
--spec get_file_path(maps:map()) -> file_meta:path().
-get_file_path(#{path := Path}) ->
-    Path;
-get_file_path(#{auth := Auth, id := Id}) ->
-    {ok, Path} = logical_file_manager:get_file_path(Auth, Id),
-    Path.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -261,20 +249,6 @@ throw_if_non_local_space(SpaceId) ->
             ok;
         false ->
             throw(?ERROR_SPACE_NOT_SUPPORTED)
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Throws error if given provide_id is not local
-%% @end
-%%--------------------------------------------------------------------
--spec throw_if_non_local_provider(od_provider:id()) -> ok.
-throw_if_non_local_provider(ProviderId) ->
-    case ProviderId =:= oneprovider:get_provider_id() of
-        true ->
-            ok;
-        false ->
-            throw(?ERROR_NON_LOCAL_PROVIDER)
     end.
 
 %%--------------------------------------------------------------------

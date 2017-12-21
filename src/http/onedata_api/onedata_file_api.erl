@@ -22,7 +22,8 @@
 -export([mv/3, cp/3, get_file_path/2, rm_recursive/2]).
 %% Functions operating on files
 -export([create/3, create/4, open/3, write/3, read/3, truncate/3, unlink/2, fsync/1,
-    release/1, get_file_distribution/2, replicate_file/3, invalidate_file_replica/4]).
+    release/1, get_file_distribution/2]).
+-export([schedule_file_replication/4, schedule_replica_invalidation/4]).
 %% Functions concerning file permissions
 -export([set_perms/3, check_perms/3, set_acl/3, get_acl/2, remove_acl/2]).
 %% Functions concerning file attributes
@@ -91,11 +92,11 @@ mkdir(Auth, Path) ->
 mkdir(Auth, Path, Mode) ->
     logical_file_manager:mkdir(Auth, Path, Mode).
 
--spec mkdir(SessId :: onedata_auth_api:auth(), ParentGuid :: file_guid(),
+-spec mkdir(Auth :: onedata_auth_api:auth(), ParentGuid :: file_guid(),
     Name :: file_name(), Mode :: file_meta:posix_permissions() | undefined) ->
     {ok, DirUUID :: file_meta:uuid()} | error_reply().
-mkdir(SessId, ParentGuid, Name, Mode) ->
-    logical_file_manager:mkdir(SessId, ParentGuid, Name, Mode).
+mkdir(Auth, ParentGuid, Name, Mode) ->
+    logical_file_manager:mkdir(Auth, ParentGuid, Name, Mode).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -242,10 +243,11 @@ get_file_distribution(Auth, FileKey) ->
 %% @doc Replicates file on given provider.
 %% @end
 %%--------------------------------------------------------------------
--spec replicate_file(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path(), ProviderId :: binary()) ->
-    ok | error_reply().
-replicate_file(Auth, FileKey, ProviderId) ->
-    logical_file_manager:replicate_file(Auth, FileKey, ProviderId).
+-spec schedule_file_replication(Auth :: onedata_auth_api:auth(),
+    FileKey :: file_id_or_path(), ProviderId :: binary(), transfer:callback()) ->
+    {ok, transfer:id()} | error_reply().
+schedule_file_replication(Auth, FileKey, ProviderId, Callback) ->
+    logical_file_manager:schedule_file_replication(Auth, FileKey, ProviderId, Callback).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -253,11 +255,11 @@ replicate_file(Auth, FileKey, ProviderId) ->
 %% given as MigrateProviderId
 %% @end
 %%--------------------------------------------------------------------
--spec invalidate_file_replica(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path(),
+-spec schedule_replica_invalidation(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path(),
     ProviderId :: oneprovider:id(), MigrationProviderId :: undefined | oneprovider:id()) ->
-    ok | error_reply().
-invalidate_file_replica(Auth, FileKey, ProviderId, MigrationProviderId) ->
-    logical_file_manager:invalidate_file_replica(Auth, FileKey, ProviderId, MigrationProviderId).
+    {ok, transfer:id()} | error_reply().
+schedule_replica_invalidation(Auth, FileKey, SourceProviderId, TargetProviderId) ->
+    logical_file_manager:schedule_replica_invalidation(Auth, FileKey, SourceProviderId, TargetProviderId).
 
 %%--------------------------------------------------------------------
 %% @doc Changes the permissions of a file.

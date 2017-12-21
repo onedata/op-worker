@@ -29,7 +29,7 @@
 %%--------------------------------------------------------------------
 -spec update_atime(file_ctx:ctx()) -> ok.
 update_atime(FileCtx) ->
-    CurrentTime = utils:system_time_seconds(),
+    CurrentTime = time_utils:cluster_time_seconds(),
     case calculate_atime(FileCtx, CurrentTime) of
         actual ->
             ok;
@@ -40,12 +40,12 @@ update_atime(FileCtx) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @equiv update_ctime(FileCtx, utils:system_time_seconds()).
+%% @equiv update_ctime(FileCtx, time_utils:cluster_time_seconds()).
 %% @end
 %%--------------------------------------------------------------------
 -spec update_ctime(file_ctx:ctx()) -> ok.
 update_ctime(FileCtx) ->
-    update_ctime(FileCtx, utils:system_time_seconds()).
+    update_ctime(FileCtx, time_utils:cluster_time_seconds()).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -59,13 +59,13 @@ update_ctime(FileCtx, CurrentTime) ->
     end).
 
 %%--------------------------------------------------------------------
-%% @equiv update_mtime_ctime(FileCtx, utils:system_time_seconds()).
+%% @equiv update_mtime_ctime(FileCtx, time_utils:cluster_time_seconds()).
 %% @end
 %%--------------------------------------------------------------------
 -spec update_mtime_ctime(file_ctx:ctx()) ->
     ok.
 update_mtime_ctime(FileCtx) ->
-    update_mtime_ctime(FileCtx, utils:system_time_seconds()).
+    update_mtime_ctime(FileCtx, time_utils:cluster_time_seconds()).
 
 %%--------------------------------------------------------------------
 %% @doc

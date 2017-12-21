@@ -145,7 +145,7 @@ status(SpaceId) ->
 %%-------------------------------------------------------------------
 -spec list_reports_since(od_space:id(), binary()) -> [maps:map()].
 list_reports_since(SpaceId, Since) ->
-    SinceEpoch = timestamp_utils:iso8601_to_epoch(Since),
+    SinceEpoch = time_utils:iso8601_to_epoch(Since),
     autocleaning:list_reports_since(SpaceId, SinceEpoch).
 
 %%%===================================================================

@@ -35,6 +35,7 @@
 -export([is_subdomain_delegated/0, get_subdomain_delegation_ips/0]).
 -export([update_subdomain_delegation_ips/0]).
 -export([resolve_ips/1, resolve_ips/2]).
+-export([zone_time_seconds/0]).
 
 %%%===================================================================
 %%% API
@@ -344,8 +345,8 @@ update_subdomain_delegation_ips() ->
                 ok
         end
     catch Type:Message ->
-         ?error("Error updating provider IPs: ~p:~p", [Type, Message]),
-         error
+        ?error("Error updating provider IPs: ~p:~p", [Type, Message]),
+        error
     end.
 
 
@@ -362,7 +363,7 @@ get_subdomain_delegation_ips() ->
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = get,
         gri = #gri{type = od_provider, id = oneprovider:get_provider_id(),
-                   aspect = domain_config}
+            aspect = domain_config}
     }),
     case Result of
         {ok, #{<<"subdomainDelegation">> := SubdomainDelegation} = Data} ->
@@ -391,7 +392,7 @@ set_domain(Domain) ->
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = update, data = Data,
         gri = #gri{type = od_provider, id = oneprovider:get_provider_id(),
-                   aspect = domain_config}
+            aspect = domain_config}
     }),
     ?ON_SUCCESS(Result, fun(_) ->
         gs_client_worker:invalidate_cache(od_provider, oneprovider:get_provider_id())
@@ -411,13 +412,12 @@ set_subdomain_delegation(Subdomain, IPs) ->
     IPBinaries = [list_to_binary(inet:ntoa(IPTuple)) || IPTuple <- IPs],
     ProviderId = oneprovider:get_provider_id(),
     Data = #{
-      <<"subdomainDelegation">> => true,
-      <<"subdomain">> => Subdomain,
-      <<"ipList">> => IPBinaries},
+        <<"subdomainDelegation">> => true,
+        <<"subdomain">> => Subdomain,
+        <<"ipList">> => IPBinaries},
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = update, data = Data,
-        gri = #gri{type = od_provider, id = ProviderId,
-                   aspect = domain_config}
+        gri = #gri{type = od_provider, id = ProviderId, aspect = domain_config}
     }),
     ?ON_SUCCESS(Result, fun(_) ->
         gs_client_worker:invalidate_cache(od_provider, ProviderId)
@@ -440,3 +440,30 @@ map_idp_group_to_onedata(Idp, IdpGroupId) ->
             <<"groupId">> => IdpGroupId
         }
     })).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns current timestamp that is synchronized with the Onezone service.
+%% It has the accuracy of 1 second in most cases, but this might be worse under
+%% very high load. When evaluated on different providers within the same zone
+%% simultaneously, it should yield times at most one second apart from each
+%% other.
+%% @end
+%%--------------------------------------------------------------------
+-spec zone_time_seconds() -> non_neg_integer().
+zone_time_seconds() ->
+    TimeMillis = time_utils:remote_timestamp(zone_time_bias, fun() ->
+        Req = #gs_req_graph{
+            operation = get,
+            gri = #gri{type = od_provider, id = undefined, aspect = current_time}
+        },
+        case gs_client_worker:request(?ROOT_SESS_ID, Req) of
+            {ok, Timestamp} ->
+                {ok, Timestamp};
+            Error ->
+                ?warning("Cannot get zone time due to: ~p", [Error]),
+                error
+        end
+    end),
+    TimeMillis div 1000.

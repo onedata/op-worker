@@ -467,10 +467,13 @@ get_posix_storage_user_context(
             FileCtx2 = FileCtx,
             luma:get_posix_user_ctx(?ROOT_SESS_ID, ?ROOT_USER_ID, SpaceId);
         false ->
-            {#document{value = #file_meta{owner = OwnerId}}, FileCtx2} =
-                file_ctx:get_file_doc_including_deleted(FileCtx),
+            {#document{
+                value = #file_meta{
+                    owner = OwnerId,
+                    group_owner = GroupOwnerId
+            }}, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
             SessionId = user_ctx:get_session_id(UserCtx),
-            luma:get_posix_user_ctx(SessionId, OwnerId, SpaceId)
+            luma:get_posix_user_ctx(SessionId, OwnerId, GroupOwnerId, SpaceId)
     end,
     {NewUserCtx, FileCtx2#file_ctx{storage_posix_user_context = NewUserCtx}};
 get_posix_storage_user_context(
