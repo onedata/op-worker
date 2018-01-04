@@ -183,13 +183,14 @@ def remove(containers, docker_host=None, force=False,
     subprocess.check_call(cmd)
 
 
-def cp(container, src_path, dest_path, to_container=False):
+def cp(container, src_path, dest_path, to_container=False, docker_host=None):
     """Copying file between docker container and host
     :param container: str, docker id or name
     :param src_path: str
     :param dest_path: str
     :param to_container: bool, if True file will be copied from host to
     container, otherwise from docker container to host
+    :param docker_host: dict
     """
     cmd = ["docker", "cp"]
     if to_container:
