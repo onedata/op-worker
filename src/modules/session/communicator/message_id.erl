@@ -36,7 +36,7 @@
 %%--------------------------------------------------------------------
 -spec generate(Recipient :: pid() | undefined) -> {ok, MsgId :: #message_id{}}.
 generate(Recipient) ->
-    generate(Recipient, oneprovider:get_provider_id()).
+    generate(Recipient, oneprovider:get_id(fail_with_throw)).
 
 %%--------------------------------------------------------------------
 %% @doc

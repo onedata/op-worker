@@ -20,4 +20,7 @@
 %% Endpoint used to get provider's id
 -define(provider_id_path, "/get_provider_id").
 
+%% Endpoint used to get provider's identity macaroon
+-define(identity_macaroon_path, "/get_identity_macaroon").
+
 -endif.

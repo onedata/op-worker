@@ -38,8 +38,8 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
     }}
 ) ->
     file_location:critical_section(Uuid, fun() ->
-        case oneprovider:get_provider_id() =/= ProviderId of
-            true ->
+        case oneprovider:is_local(ProviderId) of
+            false ->
                 % set file_id as the same as for remote file, because
                 % computing it requires parent links which may be not here yet.
                 FileCtx2 = file_ctx:set_file_id(file_ctx:reset(FileCtx), FileId),
@@ -50,7 +50,7 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
                     {LocalLocation, FileCtx4} ->
                         update_local_location_replica(FileCtx4, LocalLocation, ChangedLocationDoc)
                 end;
-            false ->
+            true ->
                 ok
         end
     end).

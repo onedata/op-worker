@@ -89,7 +89,7 @@ start_link(SpaceId, Opts) ->
 init([SpaceId, Opts]) ->
     Stream = self(),
     Bucket = dbsync_utils:get_bucket(),
-    Since = dbsync_state:get_seq(SpaceId, oneprovider:get_provider_id()),
+    Since = dbsync_state:get_seq(SpaceId, oneprovider:get_id(fail_with_throw)),
     Callback = fun(Change) -> gen_server:cast(Stream, {change, Change}) end,
     case proplists:get_value(register, Opts, false) of
         true -> {ok, _} = couchbase_changes_worker:start_link(Bucket, SpaceId);

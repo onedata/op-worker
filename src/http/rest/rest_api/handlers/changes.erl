@@ -172,7 +172,7 @@ send_change(SendChunk, #change{seq = Seq, doc = #document{
         RequestedSpaceId);
 send_change(SendChunk, #change{seq = Seq, doc = #document{
     value = #file_location{uuid = FileUuid, provider_id = ProviderId}}}, RequestedSpaceId) ->
-    case ProviderId =:= oneprovider:get_provider_id() of
+    case oneprovider:is_local(ProviderId) of
         true ->
             {ok, FileDoc} = file_meta:get({uuid, FileUuid}),
             send_change(SendChunk, #change{seq = Seq, doc = FileDoc, model = file_meta},

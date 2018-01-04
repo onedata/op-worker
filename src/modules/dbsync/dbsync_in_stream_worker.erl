@@ -103,7 +103,7 @@ handle_cast({changes_batch, Since, Until, Docs}, State = #state{
     provider_id = ProviderId
 }) ->
     Supported = dbsync_utils:is_supported(SpaceId, [
-        oneprovider:get_provider_id(),
+        oneprovider:get_id(fail_with_throw),
         ProviderId
     ]),
     case Supported of

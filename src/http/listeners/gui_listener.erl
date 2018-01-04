@@ -47,7 +47,6 @@ port() ->
 -spec start() -> ok | {error, Reason :: term()}.
 start() ->
     % Get params from env for gui
-    {ok, GuiPort} = application:get_env(?APP_NAME, gui_https_port),
     {ok, GuiNbAcceptors} =
         application:get_env(?APP_NAME, gui_number_of_acceptors),
     {ok, MaxKeepAlive} =
@@ -56,16 +55,16 @@ start() ->
         application:get_env(?APP_NAME, gui_socket_timeout_seconds),
     {ok, KeyFile} = application:get_env(?APP_NAME, web_key_file),
     {ok, CertFile} = application:get_env(?APP_NAME, web_cert_file),
-    CaCerts = cert_utils:load_ders_in_dir(oz_plugin:get_cacerts_dir()),
+    CaCerts = oneprovider:get_ca_certs(),
 
     % Resolve static files root. First, check if there is a non-empty dir
     % located in gui_custom_static_root. If not, use default.
-    {ok, CstmRoot} = application:get_env(?APP_NAME, gui_custom_static_root),
+    {ok, CustomRoot} = application:get_env(?APP_NAME, gui_custom_static_root),
     {ok, DefRoot} = application:get_env(?APP_NAME, gui_default_static_root),
-    DocRoot = case file:list_dir_all(CstmRoot) of
+    DocRoot = case file:list_dir_all(CustomRoot) of
         {error, enoent} -> DefRoot;
         {ok, []} -> DefRoot;
-        {ok, _} -> CstmRoot
+        {ok, _} -> CustomRoot
     end,
 
     % Setup GUI dispatch opts for cowboy
@@ -83,6 +82,7 @@ start() ->
         % Proper requests are routed to handler modules
         {'_', lists:flatten([
             {?provider_id_path, get_provider_id_handler, []},
+            {?identity_macaroon_path, get_identity_macaroon_handler, []},
             {"/nagios/oz_connectivity", oz_connectivity_handler, []},
             {"/nagios/[...]", nagios_handler, []},
             {"/upload", upload_handler, []},
@@ -98,7 +98,7 @@ start() ->
     % Start the listener for web gui and nagios handler
     Result = ranch:start_listener(?HTTPS_LISTENER, GuiNbAcceptors,
         ranch_ssl, [
-            {port, GuiPort},
+            {port, port()},
             {keyfile, KeyFile},
             {certfile, CertFile},
             {cacerts, CaCerts},
@@ -145,7 +145,7 @@ stop() ->
 -spec healthcheck() -> ok | {error, server_not_responding}.
 healthcheck() ->
     Endpoint = str_utils:format_bin("https://127.0.0.1:~B", [port()]),
-    CaCerts = cert_utils:load_ders_in_dir(oz_plugin:get_cacerts_dir()),
+    CaCerts = oneprovider:get_ca_certs(),
     Opts = [{ssl_options, [{secure, only_verify_peercert}, {cacerts, CaCerts}]}],
     case http_client:get(Endpoint, #{}, <<>>, Opts) of
         {ok, _, _, _} -> ok;

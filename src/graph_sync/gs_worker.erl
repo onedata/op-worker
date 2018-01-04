@@ -21,9 +21,33 @@
 -export([init/1, handle/1, cleanup/0]).
 
 %% API
+-export([is_connected/0]).
 -export([supervisor_flags/0]).
 
 -define(GS_WORKER_SUP, gs_worker_sup).
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns supervisor flags for gs_worker.
+%% @end
+%%--------------------------------------------------------------------
+-spec supervisor_flags() -> supervisor:sup_flags().
+supervisor_flags() ->
+    #{strategy => one_for_one, intensity => 0, period => 1}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Predicate saying if the provider is actively connected to OneZone via
+%% GraphSync channel.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_connected() -> boolean().
+is_connected() ->
+    worker_proxy:call(?MODULE, is_connected).
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -52,25 +76,34 @@ handle(ping) ->
     pong;
 handle(healthcheck) ->
     ok;
+handle(is_connected) ->
+    case connection_healthcheck() of
+        alive -> true;
+        _ -> false
+    end;
 handle({connection_healthcheck, FailedRetries}) ->
-    NewFailedRetries = case connection_healthcheck() of
-        ok -> 0;
-        error -> FailedRetries + 1
-    end,
-    Interval = case NewFailedRetries of
-        0 ->
-            ?GS_HEALTHCHECK_INTERVAL;
-        _ ->
-            BackoffFactor = math:pow(?GS_RECONNECT_BACKOFF_RATE, NewFailedRetries),
-            Res = min(
+    {Interval, NewFailedRetries} = case connection_healthcheck() of
+        unregistered ->
+            ?debug("Skipping connection to OneZone as the provider is not registered."),
+            {?GS_HEALTHCHECK_INTERVAL, 0};
+        skipped ->
+            ?debug("Skipping connection to OneZone as this is not the dedicated node."),
+            {?GS_HEALTHCHECK_INTERVAL, 0};
+        alive ->
+            {?GS_HEALTHCHECK_INTERVAL, 0};
+        connection_error ->
+            FailedRetries2 = FailedRetries + 1,
+            BackoffFactor = math:pow(?GS_RECONNECT_BACKOFF_RATE, FailedRetries2),
+            Interval2 = min(
                 ?GS_RECONNECT_MAX_BACKOFF,
                 round(?GS_HEALTHCHECK_INTERVAL * BackoffFactor)
             ),
             ?info("Next OneZone connection attempt in ~B seconds.", [
-                Res div 1000
+                Interval2 div 1000
             ]),
-            Res
+            {Interval2, FailedRetries2}
     end,
+
     erlang:send_after(Interval, self(),
         {sync_timer, {connection_healthcheck, NewFailedRetries}}
     ),
@@ -88,19 +121,6 @@ cleanup() ->
     ok.
 
 %%%===================================================================
-%%% API
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns supervisor flags for gs_worker.
-%% @end
-%%--------------------------------------------------------------------
--spec supervisor_flags() -> supervisor:sup_flags().
-supervisor_flags() ->
-    #{strategy => one_for_one, intensity => 0, period => 1}.
-
-%%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
@@ -112,16 +132,17 @@ supervisor_flags() ->
 %% run on all cluster nodes).
 %% @end
 %%--------------------------------------------------------------------
--spec connection_healthcheck() -> ok | error.
+-spec connection_healthcheck() -> unregistered | skipped | alive | connection_error.
 connection_healthcheck() ->
     try
+        IsRegistered = provider_auth:is_registered(),
         Pid = global:whereis_name(?GS_CLIENT_WORKER_GLOBAL_NAME),
-        Node = consistent_hasing:get_node(?GS_CLIENT_WORKER_GLOBAL_NAME),
-        case {Pid, Node =:= node()} of
-            {undefined, true} ->
-                start_gs_client_worker();
-            _ ->
-                ok
+        LocalNode = node() == consistent_hasing:get_node(?GS_CLIENT_WORKER_GLOBAL_NAME),
+        case {IsRegistered, Pid, LocalNode} of
+            {false, _, _} -> unregistered;
+            {true, undefined, false} -> skipped;
+            {true, undefined, true} -> start_gs_client_worker();
+            {true, Pid, _} when is_pid(Pid) -> alive
         end
     catch
         _:Reason ->
@@ -133,11 +154,11 @@ connection_healthcheck() ->
     end.
 
 
--spec start_gs_client_worker() -> ok | error.
+-spec start_gs_client_worker() -> alive | connection_error.
 start_gs_client_worker() ->
     case supervisor:start_child(?GS_WORKER_SUP, gs_client_worker_spec()) of
-        {ok, _} -> ok;
-        {error, _} -> error
+        {ok, _} -> alive;
+        {error, _} -> connection_error
     end.
 
 

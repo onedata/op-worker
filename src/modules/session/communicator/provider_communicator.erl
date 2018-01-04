@@ -197,13 +197,32 @@ ensure_connected(SessId) ->
                 _ ->
                     session_manager:session_id_to_provider_id(SessId)
             end,
+
+            case oneprovider:get_id(fail_with_throw) of
+                ProviderId ->
+                    ?warning("Provider attempted to connect to itself, skipping connection."),
+                    erlang:error(connection_loop_detected);
+                _ ->
+                    ok
+            end,
+
+            case provider_logic:verify_provider_identity(ProviderId) of
+                ok ->
+                    ok;
+                Error ->
+                    ?warning("Cannot verify identity of provider ~p, skipping connection - ~p", [
+                        ProviderId, Error
+                    ]),
+                    erlang:error({cannot_verify_identity, ProviderId})
+            end,
+
             {ok, IPs} = provider_logic:resolve_ips(ProviderId),
             IPBinaries = lists:map(fun(IP) ->
                 list_to_binary(inet:ntoa(IP)) end, IPs),
             lists:foreach(
                 fun(IPBinary) ->
-                    {ok, Port} = application:get_env(?APP_NAME, provider_protocol_handler_port),
-                    connection:start_link(SessId, IPBinary, Port, ranch_ssl, timer:seconds(5))
+                    {ok, Port} = application:get_env(?APP_NAME, protocol_handler_port),
+                    connection:start_link(ProviderId, SessId, IPBinary, Port, ranch_ssl, timer:seconds(5))
                 end, IPBinaries),
             ok;
         {ok, Pid} ->

@@ -53,7 +53,7 @@ on_new_transfer_doc(Transfer = #document{value = #transfer{
     target_provider_id = undefined,
     invalidate_source_replica = true
 }}) ->
-    case SourceProviderId =:= oneprovider:get_provider_id()  of
+    case oneprovider:is_local(SourceProviderId)  of
         true ->
             new_invalidation(Transfer);
         false ->
@@ -73,7 +73,7 @@ on_transfer_doc_change(Transfer = #document{value = #transfer{
     source_provider_id = SourceProviderId,
     invalidate_source_replica = true
 }}) when TransferStatus == completed orelse TransferStatus == skipped ->
-    case SourceProviderId =:= oneprovider:get_provider_id() of
+    case oneprovider:is_local(SourceProviderId) of
         true ->
             new_invalidation(Transfer);
         false ->

@@ -101,7 +101,7 @@ links_save(Model, RoutingKey, Doc = #document{key = Key}) ->
     Ctx = datastore_model_default:get_ctx(Model),
     Ctx2 = Ctx#{
         sync_change => true,
-        local_links_tree_id => oneprovider:get_provider_id()
+        local_links_tree_id => oneprovider:get_id(fail_with_throw)
     },
     {ok, _} = datastore_router:route(Ctx2, RoutingKey, save, [
         Ctx2, Key, Doc
@@ -118,7 +118,7 @@ links_save(Model, RoutingKey, Doc = #document{key = Key}) ->
 links_delete(Doc = #document{key = Key, value = LinksMask = #links_mask{
     model = Model, tree_id = TreeId
 }, deleted = false}) ->
-    LocalTreeId = oneprovider:get_provider_id(),
+    LocalTreeId = oneprovider:get_id(fail_with_throw),
     case TreeId of
         LocalTreeId ->
             Ctx = datastore_model_default:get_ctx(Model),
@@ -137,7 +137,7 @@ links_delete(Doc = #document{
     value = #links_mask{model = Model, tree_id = RemoteTreeId},
     deleted = true
 }) ->
-    LocalTreeId = oneprovider:get_provider_id(),
+    LocalTreeId = oneprovider:get_id(fail_with_throw),
     case TreeId of
         LocalTreeId ->
             Ctx = datastore_model_default:get_ctx(Model),

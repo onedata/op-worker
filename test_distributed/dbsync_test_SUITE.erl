@@ -393,7 +393,7 @@ init_per_testcase(_Case, Config) ->
         oneprovider, dbsync_changes, dbsync_communicator
     ]),
 
-    test_utils:mock_expect(Worker, oneprovider, get_provider_id, fun() ->
+    test_utils:mock_expect(Worker, provider_auth, get_provider_id, fun() ->
         <<"p1">>
     end),
     test_utils:mock_expect(Worker, dbsync_utils, get_spaces, fun() ->
@@ -444,7 +444,7 @@ end_per_testcase(_Case, Config) ->
         end, [dbsync_in_stream, dbsync_out_stream])
     end, ?config(spaces, Config)),
     test_utils:mock_unload(Worker, [
-        oneprovider, dbsync_changes, dbsync_communicator
+        provider_auth, dbsync_changes, dbsync_communicator
     ]).
 
 %%%===================================================================

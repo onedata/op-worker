@@ -17,7 +17,7 @@
 -include("proto/oneclient/handshake_messages.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
--include_lib("cluster_worker/include/api_errors.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -26,6 +26,9 @@
 % Testing of "authorize" RPC
 -define(MOCK_CAVEAT_ID, <<"mockCaveat">>).
 -define(MOCK_DISCH_MACAROON, <<"mockDischMac">>).
+
+-define(MOCK_PROVIDER_IDENTITY_MACAROON(__ProviderId), <<"DUMMY-PROVIDER-IDENTITY-MACAROON-", __ProviderId/binary>>).
+-define(MOCK_PROVIDER_AUTH_MACAROON(__ProviderId), <<"DUMMY-PROVIDER-AUTH-MACAROON-", __ProviderId/binary>>).
 
 % WebSocket path is used to control gs_client:start_link mock behaviour
 -define(PATH_CAUSING_CONN_ERROR, "/conn_err").

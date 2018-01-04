@@ -25,7 +25,7 @@
 
 %% API
 -export([start_link/4, init/4, send/2, send_async/2]).
--export([start_link/5, init/5]).
+-export([start_link/6, init/6]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -36,7 +36,6 @@
 -export_type([ref/0]).
 
 -record(state, {
-    certificate :: public_key:der_encoded() | undefined,
     % handler responses
     ok :: atom(),
     closed :: atom(),
@@ -46,7 +45,8 @@
     transport :: module(),
     session_id :: undefined | session:id(),
     connection_type :: incoming | outgoing,
-    peer_type = fuse_client :: fuse_client | provider_incoming
+    peer_type = unknown :: unknown | fuse_client | provider,
+    peer_id = undefined :: undefined | od_user:id() | od_provider:id()
 }).
 
 -define(TIMEOUT, timer:minutes(10)).
@@ -58,20 +58,28 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Starts the incoming connection.
+%% Starts an incoming connection.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(Ref :: atom(), Socket :: ssl:socket(), Transport :: atom(),
-    Opts :: list()) -> {ok, Pid :: pid()}.
+-spec start_link(Ref :: atom(), Socket :: ssl:socket(), Transport :: atom(), Opts :: list()) ->
+    {ok, Pid :: pid()}.
 start_link(Ref, Socket, Transport, Opts) ->
     proc_lib:start_link(?MODULE, init, [Ref, Socket, Transport, Opts]).
 
-start_link(SessionId, Hostname, Port, Transport, Timeout) ->
-    proc_lib:start_link(?MODULE, init, [SessionId, Hostname, Port, Transport, Timeout]).
+%%--------------------------------------------------------------------
+%% @doc
+%% Starts an outgoing connection.
+%% @end
+%%--------------------------------------------------------------------
+-spec start_link(od_provider:id(), session:id(), Hostname :: binary(),
+    Port :: non_neg_integer(), Transport :: atom(), Timeout :: non_neg_integer()) ->
+    {ok, Pid :: pid()}.
+start_link(ProviderId, SessionId, Hostname, Port, Transport, Timeout) ->
+    proc_lib:start_link(?MODULE, init, [ProviderId, SessionId, Hostname, Port, Transport, Timeout]).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Initializes the connection.
+%% Initializes an incoming connection.
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term(), Socket :: ssl:socket(), Transport :: atom(), Opts :: list()) ->
@@ -82,20 +90,6 @@ init(Ref, Socket, Transport, _Opts) ->
     ok = ranch:accept_ack(Ref),
     ok = Transport:setopts(Socket, [binary, {active, once}, {packet, ?PACKET_VALUE}]),
     {Ok, Closed, Error} = Transport:messages(),
-    DerCert = get_cert(Socket),
-
-    PeerType = case provider_auth_manager:is_provider(DerCert) of
-        true ->
-            MyProviderId = oneprovider:get_provider_id(),
-            case provider_auth_manager:get_provider_id(DerCert) of
-                MyProviderId ->
-                    ?warning("Connection loop detected. Shutting down the connection."),
-                    erlang:error(connection_loop_detected);
-                _ ->
-                    provider_incoming
-            end;
-        false -> fuse_client
-    end,
 
     gen_server2:enter_loop(?MODULE, [], #state{
         socket = Socket,
@@ -103,45 +97,44 @@ init(Ref, Socket, Transport, _Opts) ->
         ok = Ok,
         closed = Closed,
         error = Error,
-        certificate = DerCert,
         connection_type = incoming,
-        peer_type = PeerType
+        peer_type = unknown
     }, ?TIMEOUT).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Initializes the outgoing connection.
+%% Initializes an outgoing connection.
 %% @end
 %%--------------------------------------------------------------------
--spec init(session:id(), Hostname :: binary(), Port :: non_neg_integer(), Transport :: atom(), Timeout :: non_neg_integer()) ->
+-spec init(od_provider:id(), session:id(), Hostname :: binary(),
+    Port :: non_neg_integer(), Transport :: atom(), Timeout :: non_neg_integer()) ->
     no_return().
-init(SessionId, Hostname, Port, Transport, Timeout) ->
-    TLSSettings = [
-        {certfile, oz_plugin:get_cert_file()},
-        {keyfile, oz_plugin:get_key_file()},
-        {cacerts, cert_utils:load_ders(oz_plugin:get_oz_cacert_path())}
-    ],
-    ?info("Connecting to ~p ~p", [Hostname, Port]),
-    {ok, Socket} = Transport:connect(binary_to_list(Hostname), Port, TLSSettings, Timeout),
+init(ProviderId, SessionId, Hostname, Port, Transport, Timeout) ->
+    CaCerts = oneprovider:get_ca_certs(),
+    SecureFlag = application:get_env(?APP_NAME, interprovider_connections_security, true),
+    Opts = secure_ssl_opts:expand(Hostname, [{cacerts, CaCerts}, {secure, SecureFlag}]),
+
+    ?info("Connecting to provider '~s' - ~s:~p", [ProviderId, Hostname, Port]),
+    {ok, Socket} = Transport:connect(binary_to_list(Hostname), Port, Opts, Timeout),
     ok = Transport:setopts(Socket, [binary, {active, once}, {packet, ?PACKET_VALUE}]),
 
     {Ok, Closed, Error} = Transport:messages(),
-    DerCert = get_cert(Socket),
 
     session_manager:reuse_or_create_provider_session(SessionId, provider_outgoing, #user_identity{
         provider_id = session_manager:session_id_to_provider_id(SessionId)}, self()),
 
     ok = proc_lib:init_ack({ok, self()}),
+    gen_server2:cast(self(), perform_handshake),
     gen_server2:enter_loop(?MODULE, [], #state{
         socket = Socket,
         transport = Transport,
         ok = Ok,
         closed = Closed,
         error = Error,
-        certificate = DerCert,
         connection_type = outgoing,
-        peer_type = provider_incoming
+        peer_type = provider,
+        peer_id = ProviderId
     }, ?TIMEOUT).
 
 %%--------------------------------------------------------------------
@@ -235,6 +228,18 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
+handle_cast(perform_handshake, State = #state{socket = Socket, connection_type = outgoing, transport = Transport}) ->
+    {ok, MsgId} = message_id:generate(self()),
+    {ok, IdentityMacaroon} = provider_auth:get_identity_macaroon(),
+    ClientMsg = #client_message{
+        message_id = MsgId,
+        message_body = #provider_handshake_request{
+            provider_id = oneprovider:get_id(fail_with_throw),
+            macaroon = #token_auth{token = IdentityMacaroon}
+        }
+    },
+    send_client_message(Socket, Transport, ClientMsg),
+    {noreply, State};
 handle_cast({send, #server_message{} = ServerMsg}, State = #state{socket = Socket, connection_type = incoming,
     transport = Transport}) ->
     send_server_message(Socket, Transport, ServerMsg),
@@ -335,12 +340,8 @@ code_change(_OldVsn, State, _Extra) ->
 -spec handle_client_message(#state{}, binary()) ->
     {noreply, NewState :: #state{}, timeout()} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_client_message(State = #state{session_id = SessId, certificate = DerCert}, Data) ->
-    IsProvider = provider_auth_manager:is_provider(DerCert),
+handle_client_message(State = #state{session_id = SessId}, Data) ->
     try serializator:deserialize_client_message(Data, SessId) of
-        {ok, Msg} when SessId == undefined, IsProvider ->
-            NewSessId = provider_auth_manager:handshake(DerCert, self()),
-            handle_normal_message(State#state{session_id = NewSessId}, Msg#client_message{session_id = NewSessId});
         {ok, Msg} when SessId == undefined ->
             handle_handshake(State, Msg);
         {ok, Msg} ->
@@ -362,8 +363,16 @@ handle_client_message(State = #state{session_id = SessId, certificate = DerCert}
 -spec handle_server_message(#state{}, binary()) ->
     {noreply, NewState :: #state{}, timeout()} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_server_message(State = #state{session_id = SessId}, Data) ->
+handle_server_message(State = #state{session_id = SessId, peer_id = PeerId}, Data) ->
     try serializator:deserialize_server_message(Data, SessId) of
+        {ok, #server_message{message_body = #handshake_response{status = 'OK'}}} ->
+            ?info("Successfully connected to provider '~s'", [PeerId]),
+            {noreply, State, ?TIMEOUT};
+        {ok, #server_message{message_body = #handshake_response{status = Error}}} ->
+            ?error("Handshake refused by provider '~s' due to ~p, closing connection.", [
+                PeerId, Error
+            ]),
+            {stop, {shutdown, Error}, State};
         {ok, Msg} ->
             handle_normal_message(State, Msg)
     catch
@@ -382,17 +391,24 @@ handle_server_message(State = #state{session_id = SessId}, Data) ->
 -spec handle_handshake(#state{}, #client_message{}) ->
     {noreply, NewState :: #state{}, timeout()} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_handshake(State = #state{certificate = Cert, socket = Sock,
-    transport = Transp}, Msg) ->
-    try fuse_auth_manager:handle_handshake(Msg, Cert) of
-        {ok, SessId} ->
-            send_server_message(Sock, Transp, #server_message{
-                message_body = #handshake_response{status = 'OK'}
-            }),
-            {noreply, State#state{session_id = SessId}, ?TIMEOUT}
+handle_handshake(State = #state{socket = Sock, transport = Transport}, ClientMsg) ->
+    try
+        #client_message{message_body = HandshakeMsg} = ClientMsg,
+        NewState = case HandshakeMsg of
+            #client_handshake_request{} ->
+                {UserId, SessionId} = fuse_auth_manager:handle_handshake(HandshakeMsg),
+                State#state{peer_type = fuse_client, peer_id = UserId, session_id = SessionId};
+            #provider_handshake_request{} ->
+                {ProviderId, SessionId} = provider_auth_manager:handle_handshake(HandshakeMsg),
+                State#state{peer_type = provider, peer_id = ProviderId, session_id = SessionId}
+        end,
+        send_server_message(Sock, Transport, #server_message{
+            message_body = #handshake_response{status = 'OK'}
+        }),
+        {noreply, NewState, ?TIMEOUT}
     catch
         _:Error ->
-            report_handshake_error(Sock, Transp, Error),
+            report_handshake_error(Sock, Transport, Error),
             {stop, {shutdown, Error}, State}
     end.
 
@@ -404,6 +420,12 @@ handle_handshake(State = #state{certificate = Cert, socket = Sock,
 %%--------------------------------------------------------------------
 -spec report_handshake_error(Sock :: ssl:socket(), Transp :: module(), Error :: term()) ->
     ok.
+report_handshake_error(Sock, Transp, invalid_token) ->
+    send_server_message(Sock, Transp, #server_message{
+        message_body = #handshake_response{
+            status = 'INVALID_TOKEN'
+        }
+    });
 report_handshake_error(Sock, Transp, {badmatch, {error, Error}}) ->
     report_handshake_error(Sock, Transp, Error);
 report_handshake_error(Sock, Transp, {Code, Error, _Description}) when is_integer(Code) ->
@@ -429,19 +451,19 @@ report_handshake_error(Sock, Transp, _) ->
     {noreply, NewState :: #state{}, timeout()} |
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_normal_message(State = #state{
-    certificate = Cert,
     session_id = SessId,
     socket = Sock,
-    transport = Transp
+    transport = Transport,
+    peer_type = PeerType,
+    peer_id = ProviderId
 }, Msg0) ->
-    IsProvider = provider_auth_manager:is_provider(Cert),
+    IsProvider = PeerType == provider,
     {Msg, EffectiveSessionId} =
         case {IsProvider, Msg0} of
             %% If message comes from provider and proxy session is requested - proceed
             %% with authorization and switch context to the proxy session.
             {true, #client_message{proxy_session_id = ProxySessionId, proxy_session_auth = Auth}}
                 when ProxySessionId =/= undefined, Auth =/= undefined ->
-                ProviderId = provider_auth_manager:get_provider_id(Cert),
                 {ok, _} = session_manager:reuse_or_create_proxy_session(ProxySessionId, ProviderId, Auth, fuse),
                 {Msg0, ProxySessionId};
             _ ->
@@ -458,7 +480,7 @@ handle_normal_message(State = #state{
                 ok ->
                     {noreply, State, ?TIMEOUT};
                 {ok, ServerMsg} ->
-                    send_server_message(Sock, Transp, ServerMsg),
+                    send_server_message(Sock, Transport, ServerMsg),
                     {noreply, State, ?TIMEOUT};
                 {error, Reason} ->
                     ?warning("Message ~p handling error: ~p", [Msg, Reason]),
@@ -512,21 +534,6 @@ send_client_message(Socket, Transport, #client_message{} = ClientMsg) ->
         _:Reason ->
             ?error_stacktrace("Unable to serialize client_message ~p due to: ~p", [ClientMsg, Reason]),
             ok
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns OTP certificate in DER format for given socket or 'undefined' if
-%% there isn't one.
-%% @end
-%%--------------------------------------------------------------------
--spec get_cert(ssl:socket()) -> public_key:der_encoded() | undefined.
-get_cert(Socket) ->
-    case ssl:peercert(Socket) of
-        {error, _} -> undefined;
-        {ok, Der} -> Der
     end.
 
 %%--------------------------------------------------------------------

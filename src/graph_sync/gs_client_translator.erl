@@ -16,7 +16,7 @@
 -include("graph_sync/provider_graph_sync.hrl").
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("cluster_worker/include/api_errors.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 
 %% API
 -export([translate/2, apply_scope_mask/2]).

@@ -15,9 +15,14 @@
 
 -include("proto/common/credentials.hrl").
 
--record(handshake_request, {
-    auth :: #macaroon_auth{},
+-record(client_handshake_request, {
+    auth :: #macaroon_auth{} | #token_auth{},
     session_id :: session:id()
+}).
+
+-record(provider_handshake_request, {
+    provider_id :: od_provider:id(),
+    macaroon :: #token_auth{}
 }).
 
 -record(handshake_response, {

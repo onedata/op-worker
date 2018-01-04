@@ -182,7 +182,7 @@ init_per_testcase(_Case, Config) ->
     {ok, SessId} = session_setup(Worker),
     test_utils:mock_new(Workers, space_logic),
     test_utils:mock_expect(Workers, space_logic, get_provider_ids, fun(_, _) ->
-        {ok, [oneprovider:get_provider_id()]}
+        {ok, [oneprovider:get_id(fail_with_throw)]}
     end),
     initializer:mock_test_file_context(Config, ?FILE_UUID),
     initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"),
@@ -377,7 +377,7 @@ emit(Worker, SessId, Evt) ->
 -spec flush(Worker :: node(), SubId :: subscription:id(), Notify :: pid(),
     SessId :: session:id()) -> ok.
 flush(Worker, SubId, Notify, SessId) ->
-    ProvId = rpc:call(Worker, oneprovider, get_provider_id, []),
+    ProvId = rpc:call(Worker, oneprovider, get_id, [fail_with_throw]),
     rpc:call(Worker, event, flush, [ProvId, undefined, SubId, Notify, SessId]).
 
 %%--------------------------------------------------------------------

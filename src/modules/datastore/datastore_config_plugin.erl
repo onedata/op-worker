@@ -29,6 +29,7 @@ get_models() -> [
     od_provider,
     od_handle_service,
     od_handle,
+    provider_auth,
     subscription,
     file_subscription,
     session,

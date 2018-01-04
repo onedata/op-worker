@@ -838,12 +838,10 @@ init_env(Config) ->
     hackney:start(),
     initializer:disable_quota_limit(Config),
     NewConfig = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
-    initializer:enable_grpca_based_communication(NewConfig),
     NewConfig.
 
 teardown_env(Config) ->
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
-    initializer:disable_grpca_based_communication(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:unload_quota_mocks(Config),
     hackney:stop(),
@@ -905,7 +903,7 @@ set_parent_link(Doc, ParentDoc, _LocId, _Path) ->
     }} = Doc,
     Ctx = datastore_model_default:get_ctx(file_meta),
     Ctx2 = Ctx#{scope => Scope},
-    TreeId = oneprovider:get_provider_id(),
+    TreeId = oneprovider:get_id(fail_with_throw),
     Link = {FileName, FileUuid},
     {ok, _} = datastore_model:add_links(Ctx2, ParentUuid, TreeId, Link),
     ok.
@@ -921,7 +919,7 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
     Location = #file_location{
         blocks = [#file_block{offset = 0, size = 3}],
         size = 3,
-        provider_id = oneprovider:get_provider_id(),
+        provider_id = oneprovider:get_id(fail_with_throw),
         file_id = FileId,
         storage_id = StorageId,
         uuid = FileUuid,

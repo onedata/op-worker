@@ -178,12 +178,16 @@ translate_from_protobuf(#'SubscriptionCancellation'{id = Id}) ->
 
 
 %% HANDSHAKE
-translate_from_protobuf(#'HandshakeRequest'{token = Token, session_id = SessionId}) ->
-    #handshake_request{auth = translate_from_protobuf(Token), session_id = SessionId};
+translate_from_protobuf(#'ClientHandshakeRequest'{token = Token, session_id = SessionId}) ->
+    #client_handshake_request{auth = translate_from_protobuf(Token), session_id = SessionId};
+translate_from_protobuf(#'ProviderHandshakeRequest'{provider_id = ProviderId, token = Token}) ->
+    #provider_handshake_request{macaroon = translate_from_protobuf(Token), provider_id = ProviderId};
 translate_from_protobuf(#'Token'{value = Token, secondary_values = []}) ->
     #token_auth{token = Token};
 translate_from_protobuf(#'Token'{value = Macaroon, secondary_values = DischargeMacaroons}) ->
     #macaroon_auth{macaroon = Macaroon, disch_macaroons = DischargeMacaroons};
+translate_from_protobuf(#'HandshakeResponse'{status = Status}) ->
+    #handshake_response{status = Status};
 
 
 %% DIAGNOSTIC
@@ -667,6 +671,10 @@ translate_to_protobuf(#subscription_cancellation{id = Id}) ->
 
 
 %% HANDSHAKE
+translate_to_protobuf(#provider_handshake_request{provider_id = ProviderId, macaroon = Macaroon}) ->
+    {provider_handshake_request, #'ProviderHandshakeRequest'{
+        provider_id = ProviderId, token = translate_to_protobuf(Macaroon)
+    }};
 translate_to_protobuf(#handshake_response{status = Status}) ->
     {handshake_response, #'HandshakeResponse'{status = Status}};
 translate_to_protobuf(#macaroon_auth{macaroon = Macaroon, disch_macaroons = DMacaroons}) ->

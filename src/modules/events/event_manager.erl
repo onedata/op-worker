@@ -122,7 +122,7 @@ handle_call(Request, _From, State) ->
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_cast(Request, State = #state{session_id = SessId}) ->
     try
-        ProviderId = oneprovider:get_provider_id(),
+        ProviderId = oneprovider:get_id(fail_with_undefined),
         {ok, #document{value = #session{proxy_via = ProxyVia}}} = session:get(SessId),
         case get_provider(Request, State, ProxyVia) of
             {ProviderId, NewState} ->
@@ -216,7 +216,7 @@ get_provider(#event{type = Type}, State, ProxyVia)
     orelse is_record(Type, file_renamed_event)
     orelse is_record(Type, quota_exceeded_event) ->
     {
-        utils:ensure_defined(ProxyVia, undefined, oneprovider:get_provider_id()),
+        utils:ensure_defined(ProxyVia, undefined, oneprovider:get_id(fail_with_undefined)),
         State
     };
 get_provider(Req, State, _ProxyVia) ->
@@ -235,7 +235,7 @@ get_provider(Request, #state{providers = Providers} = State) ->
     RequestCtx = get_context(Request),
     case RequestCtx of
         undefined ->
-            {oneprovider:get_provider_id(), State};
+            {oneprovider:get_id(fail_with_undefined), State};
         {file, FileCtx} ->
             FileGuid = file_ctx:get_guid_const(FileCtx),
             case maps:find(FileGuid, Providers) of
@@ -259,7 +259,7 @@ get_provider(Request, #state{providers = Providers} = State) ->
 -spec get_provider_for_file(file_ctx:ctx(), #state{}) ->
     ProviderId :: oneprovider:id() | no_return().
 get_provider_for_file(FileCtx, #state{session_id = SessId}) ->
-    ProviderId = oneprovider:get_provider_id(),
+    ProviderId = oneprovider:get_id(fail_with_throw),
     case file_ctx:is_root_dir_const(FileCtx) of
         true ->
             ProviderId;

@@ -152,7 +152,7 @@ public_rpc_backend() -> public_rpc_backend.
 -spec session_details() ->
     {ok, proplists:proplist()} | gui_error:error_result().
 session_details() ->
-    ProviderId = oneprovider:get_provider_id(),
+    ProviderId = oneprovider:get_id(fail_with_throw),
     {ok, ProviderName} = provider_logic:get_name(ProviderId),
     {_AppId, _AppName, AppVersion} = lists:keyfind(
         ?APP_NAME, 1, application:loaded_applications()

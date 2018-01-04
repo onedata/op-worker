@@ -89,21 +89,21 @@ list() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec run_after(atom(), list(), term()) -> term().
-run_after(create, _, {ok, #document{key = SpaceId}}) ->
+run_after(create, _, {ok, SpaceDoc = #document{key = SpaceId}}) ->
     space_strategies:create(space_strategies:new(SpaceId)),
     ok = permissions_cache:invalidate(),
-    emit_monitoring_event(SpaceId);
-run_after(update, [_, _, _, _], {ok, #document{key = SpaceId}}) ->
+    emit_monitoring_event(SpaceDoc);
+run_after(update, [_, _, _, _], {ok, SpaceDoc = #document{key = SpaceId}}) ->
     space_strategies:create(space_strategies:new(SpaceId)),
     ok = permissions_cache:invalidate(),
-    emit_monitoring_event(SpaceId);
-run_after(save, _, {ok, #document{key = SpaceId}}) ->
+    emit_monitoring_event(SpaceDoc);
+run_after(save, _, {ok, SpaceDoc = #document{key = SpaceId}}) ->
     space_strategies:create(space_strategies:new(SpaceId)),
     ok = permissions_cache:invalidate(),
-    emit_monitoring_event(SpaceId);
-run_after(update, _, {ok, #document{key = SpaceId}}) ->
+    emit_monitoring_event(SpaceDoc);
+run_after(update, _, {ok, SpaceDoc = #document{}}) ->
     ok = permissions_cache:invalidate(),
-    emit_monitoring_event(SpaceId);
+    emit_monitoring_event(SpaceDoc);
 run_after(_Function, _Args, Result) ->
     Result.
 
@@ -221,17 +221,14 @@ upgrade_record(1, Space) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Sends event informing about od_space update if provider supports space.
+%% Sends event informing about od_space update if provider supports the space.
 %% @end
 %%--------------------------------------------------------------------
--spec emit_monitoring_event(datastore:key()) -> no_return().
-emit_monitoring_event(SpaceId) ->
-    case od_space:get(SpaceId) of
-        {ok, #document{value = #od_space{providers = Providers}}} ->
-            case maps:is_key(oneprovider:get_provider_id(), Providers) of
-                true -> monitoring_event:emit_od_space_updated(SpaceId);
-                _ -> ok
-            end;
-        _ -> ok
+-spec emit_monitoring_event(doc()) -> no_return().
+emit_monitoring_event(SpaceDoc = #document{key = SpaceId}) ->
+    case space_logic:is_supported(SpaceDoc, oneprovider:get_id(fail_with_undefined)) of
+        true -> monitoring_event:emit_od_space_updated(SpaceId);
+        false -> ok
     end,
     {ok, SpaceId}.
+

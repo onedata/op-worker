@@ -15,6 +15,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 
 %% API
 -export([get_bucket/0]).
@@ -42,20 +43,22 @@ get_bucket() ->
 %%--------------------------------------------------------------------
 -spec get_spaces() -> [od_space:id()].
 get_spaces() ->
-    case oneprovider:get_provider_id() of
-        ?UNREGISTERED_PROVIDER_ID ->
-            [];
-        ProviderId ->
-            try provider_logic:get_spaces(ProviderId) of
-                {ok, Spaces} -> Spaces;
-                {error, _Reason} -> []
-            catch
-                _:Reason ->
-                    ?error_stacktrace(
-                        "Cannot resolve spaces of provider due to ~p", [Reason]
-                    ),
-                    []
-            end
+    try
+        case oneprovider:get_id(fail_with_undefined) of
+            undefined ->
+                [];
+            ProviderId ->
+                case provider_logic:get_spaces(ProviderId) of
+                    {ok, Spaces} -> Spaces;
+                    {error, _Reason} -> []
+                end
+        end
+    catch
+        _:Reason ->
+            ?error_stacktrace(
+                "Cannot resolve spaces of provider due to ~p", [Reason]
+            ),
+            []
     end.
 
 %%--------------------------------------------------------------------
@@ -77,8 +80,8 @@ get_provider(SessId) ->
 %%--------------------------------------------------------------------
 -spec get_providers(od_space:id()) -> [od_provider:id()].
 get_providers(SpaceId) ->
-    case oneprovider:get_provider_id() of
-        ?UNREGISTERED_PROVIDER_ID ->
+    case oneprovider:get_id(fail_with_undefined) of
+        undefined ->
             [];
         _ ->
             case space_logic:get_provider_ids(?ROOT_SESS_ID, SpaceId) of

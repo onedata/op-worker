@@ -461,7 +461,7 @@ read_should_synchronize_file(Config) ->
     [W1 | _] = Workers = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    LocalProviderId = rpc:call(W1, oneprovider, get_provider_id, []),
+    LocalProviderId = rpc:call(W1, oneprovider, get_id, [fail_with_throw]),
     ExternalProviderId = <<"external_provider_id">>,
     ExternalFileId = <<"external_file_id">>,
 
@@ -1109,7 +1109,7 @@ replica_invalidate_should_migrate_unique_data(Config) ->
     [W1 | _] = Workers = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    LocalProviderId = rpc:call(W1, oneprovider, get_provider_id, []),
+    LocalProviderId = rpc:call(W1, oneprovider, get_id, [fail_with_throw]),
     ExternalProviderId = <<"external_provider_id">>,
     ExternalFileId = <<"external_file_id">>,
 
@@ -1169,7 +1169,7 @@ replica_invalidate_should_truncate_storage_file_to_zero_size(Config) ->
     [W1 | _] = Workers = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    LocalProviderId = rpc:call(W1, oneprovider, get_provider_id, []),
+    LocalProviderId = rpc:call(W1, oneprovider, get_id, [fail_with_throw]),
     ExternalProviderId = <<"external_provider_id">>,
     ExternalFileId = <<"external_file_id">>,
 
@@ -1223,7 +1223,7 @@ dir_replica_invalidate_should_invalidate_all_children(Config) ->
     [W1 | _] = Workers = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    LocalProviderId = rpc:call(W1, oneprovider, get_provider_id, []),
+    LocalProviderId = rpc:call(W1, oneprovider, get_id, [fail_with_throw]),
     ExternalProviderId = <<"external_provider_id">>,
     ExternalFileId = <<"external_file_id">>,
 

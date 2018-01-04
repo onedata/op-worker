@@ -219,7 +219,6 @@ init_per_suite(Config) ->
         hackney:start(),
         initializer:disable_quota_limit(NewConfig),
         initializer:mock_provider_ids(NewConfig),
-        initializer:enable_grpca_based_communication(NewConfig),
         NewConfig
     end,
     [{?LOAD_MODULES, [initializer, storage_sync_test_base]}, {?ENV_UP_POSTHOOK, Posthook} | Config].
@@ -227,7 +226,6 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     initializer:unload_quota_mocks(Config),
     initializer:unmock_provider_ids(Config),
-    initializer:disable_grpca_based_communication(Config),
     ssl:stop().
 
 

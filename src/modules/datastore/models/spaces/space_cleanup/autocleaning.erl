@@ -34,8 +34,8 @@
 
 -define(CTX, #{
     model => ?MODULE,
-    mutator => oneprovider:get_provider_id(),
-    local_links_tree_id => oneprovider:get_provider_id()
+    mutator => oneprovider:get_id(fail_with_undefined),
+    local_links_tree_id => oneprovider:get_id(fail_with_undefined)
 }).
 
 %%%===================================================================
@@ -199,7 +199,7 @@ get_config(AutocleaningId) ->
 -spec add_link(AutocleaningId :: id(), SpaceId :: od_space:id()) -> ok.
 add_link(AutocleaningId, SpaceId) ->
     Ctx = ?CTX#{scope => SpaceId},
-    TreeId = oneprovider:get_provider_id(),
+    TreeId = oneprovider:get_id(fail_with_throw),
     {ok, _} = datastore_model:add_links(Ctx, space_link_root(SpaceId), TreeId, {AutocleaningId, <<>>}),
     ok.
 
@@ -212,7 +212,7 @@ add_link(AutocleaningId, SpaceId) ->
 -spec remove_link(AutocleaningId :: id(), SpaceId :: od_space:id()) -> ok.
 remove_link(AutocleaningId, SpaceId) ->
     Ctx = ?CTX#{scope => SpaceId},
-    TreeId = oneprovider:get_provider_id(),
+    TreeId = oneprovider:get_id(fail_with_throw),
     ok = datastore_model:delete_links(Ctx, space_link_root(SpaceId), TreeId, AutocleaningId).
 
 %%-------------------------------------------------------------------

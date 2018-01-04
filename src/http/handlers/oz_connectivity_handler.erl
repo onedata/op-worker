@@ -14,7 +14,7 @@
 -behaviour(cowboy_http_handler).
 
 -include_lib("ctool/include/logging.hrl").
--include_lib("cluster_worker/include/api_errors.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 
 %% API
 -export([init/3, handle/2, terminate/3]).
@@ -44,9 +44,9 @@ init(_Type, Req, _Opts) ->
 handle(Req, State) ->
     %% If connection is established, OP should be able to retrieve its own
     %% data. Any other result implies connection error.
-    Status = case provider_logic:get() of
-        {ok, _} -> <<"ok">>;
-        _ -> <<"error">>
+    Status = case oneprovider:is_connected_to_oz() of
+        true -> <<"ok">>;
+        false -> <<"error">>
     end,
     {ok, Req1} = cowboy_req:reply(
         200,

@@ -20,7 +20,8 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("graph_sync/provider_graph_sync.hrl").
 -include("modules/datastore/datastore_models.hrl").
--include_lib("cluster_worker/include/api_errors.hrl").
+-include("http/http_common.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -export([get/0, get/1, get/2, get_protected_data/2]).
@@ -28,7 +29,7 @@
 -export([get_name/0, get_name/1, get_name/2]).
 -export([get_spaces/0, get_spaces/1, get_spaces/2]).
 -export([has_eff_user/2, has_eff_user/3]).
--export([supports_space/2, supports_space/3]).
+-export([supports_space/1, supports_space/2, supports_space/3]).
 -export([map_idp_group_to_onedata/2]).
 -export([get_domain/0, get_domain/1, get_domain/2]).
 -export([set_domain/1, set_delegated_subdomain/1]).
@@ -36,6 +37,7 @@
 -export([update_subdomain_delegation_ips/0]).
 -export([resolve_ips/1, resolve_ips/2]).
 -export([zone_time_seconds/0]).
+-export([verify_provider_identity/1, verify_provider_identity/2]).
 
 %%%===================================================================
 %%% API
@@ -49,7 +51,7 @@
 -spec get() ->
     {ok, od_provider:doc()} | gs_protocol:error().
 get() ->
-    get(?ROOT_SESS_ID, oneprovider:get_provider_id()).
+    get(?ROOT_SESS_ID, oneprovider:get_id(fail_with_undefined)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -98,7 +100,7 @@ get_protected_data(SessionId, ProviderId) ->
 %%--------------------------------------------------------------------
 -spec get_as_map() -> map().
 get_as_map() ->
-    {ok, #document{value = ProviderRecord}} = ?MODULE:get(),
+    {ok, #document{key = ProviderId, value = ProviderRecord}} = ?MODULE:get(),
     #od_provider{
         name = Name,
         subdomain_delegation = SubdomainDelegation,
@@ -108,6 +110,7 @@ get_as_map() ->
         latitude = Latitude
     } = ProviderRecord,
     #{
+        id => ProviderId,
         name => Name,
         subdomain_delegation => SubdomainDelegation,
         domain => Domain,
@@ -124,7 +127,7 @@ get_as_map() ->
 %%--------------------------------------------------------------------
 -spec get_name() -> {ok, od_provider:name()} | gs_protocol:error().
 get_name() ->
-    get_name(?ROOT_SESS_ID, oneprovider:get_provider_id()).
+    get_name(?ROOT_SESS_ID, oneprovider:get_id(fail_with_undefined)).
 
 
 %%--------------------------------------------------------------------
@@ -160,7 +163,7 @@ get_name(SessionId, ProviderId) ->
 %%--------------------------------------------------------------------
 -spec get_spaces() -> {ok, [od_space:id()]} | gs_protocol:error().
 get_spaces() ->
-    get_spaces(?ROOT_SESS_ID, oneprovider:get_provider_id()).
+    get_spaces(?ROOT_SESS_ID, oneprovider:get_id(fail_with_undefined)).
 
 
 %%--------------------------------------------------------------------
@@ -205,6 +208,11 @@ has_eff_user(SessionId, ProviderId, UserId) ->
     end.
 
 
+-spec supports_space(od_space:id()) -> boolean().
+supports_space(SpaceId) ->
+    supports_space(?ROOT_SESS_ID, oneprovider:get_id(fail_with_undefined), SpaceId).
+
+
 -spec supports_space(od_provider:doc(), od_space:id()) -> boolean().
 supports_space(#document{value = #od_provider{spaces = Spaces}}, SpaceId) ->
     maps:is_key(SpaceId, Spaces).
@@ -229,7 +237,7 @@ supports_space(SessionId, ProviderId, SpaceId) ->
 -spec get_domain() ->
     {ok, od_provider:doc()} | gs_protocol:error().
 get_domain() ->
-    get_domain(?ROOT_SESS_ID, oneprovider:get_provider_id()).
+    get_domain(?ROOT_SESS_ID, oneprovider:get_id(fail_with_undefined)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -313,13 +321,13 @@ is_subdomain_delegated() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_delegated_subdomain(binary()) ->
-    ok | {error, subdomain_exists} | {error, term()}.
+    ok | {error, subdomain_exists} | gs_protocol:error().
 set_delegated_subdomain(Subdomain) ->
     {ok, NodesIPs} = node_manager:get_cluster_nodes_ips(),
     {_, IPTuples} = lists:unzip(NodesIPs),
     case set_subdomain_delegation(Subdomain, IPTuples) of
         ok ->
-            gs_client_worker:invalidate_cache(od_provider, oneprovider:get_provider_id()),
+            gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id(fail_with_undefined)),
             ok;
         ?ERROR_BAD_VALUE_IDENTIFIER_OCCUPIED(<<"subdomain">>) ->
             {error, subdomain_exists};
@@ -358,11 +366,11 @@ update_subdomain_delegation_ips() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_subdomain_delegation_ips() ->
-    {true, [inet:ip4_address()]} | false | {error, term()}.
+    {true, [inet:ip4_address()]} | false | gs_protocol:error().
 get_subdomain_delegation_ips() ->
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = get,
-        gri = #gri{type = od_provider, id = oneprovider:get_provider_id(),
+        gri = #gri{type = od_provider, id = oneprovider:get_id(fail_with_undefined),
             aspect = domain_config}
     }),
     case Result of
@@ -384,18 +392,18 @@ get_subdomain_delegation_ips() ->
 %% Sets provider domain that is NOT a subdomain of onezone domain.
 %% @end
 %%--------------------------------------------------------------------
--spec set_domain(binary()) -> ok | {error, term()}.
+-spec set_domain(binary()) -> ok | gs_protocol:error().
 set_domain(Domain) ->
     Data = #{
         <<"subdomainDelegation">> => false,
         <<"domain">> => Domain},
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = update, data = Data,
-        gri = #gri{type = od_provider, id = oneprovider:get_provider_id(),
+        gri = #gri{type = od_provider, id = oneprovider:get_id(fail_with_undefined),
             aspect = domain_config}
     }),
     ?ON_SUCCESS(Result, fun(_) ->
-        gs_client_worker:invalidate_cache(od_provider, oneprovider:get_provider_id())
+        gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id(fail_with_undefined))
     end).
 
 
@@ -407,10 +415,10 @@ set_domain(Domain) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_subdomain_delegation(binary(), [inet:ip4_address()]) ->
-    ok | {error, term()}.
+    ok | gs_protocol:error().
 set_subdomain_delegation(Subdomain, IPs) ->
     IPBinaries = [list_to_binary(inet:ntoa(IPTuple)) || IPTuple <- IPs],
-    ProviderId = oneprovider:get_provider_id(),
+    ProviderId = oneprovider:get_id(fail_with_undefined),
     Data = #{
         <<"subdomainDelegation">> => true,
         <<"subdomain">> => Subdomain,
@@ -467,3 +475,48 @@ zone_time_seconds() ->
         end
     end),
     TimeMillis div 1000.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Contacts given provider and retrieves his identity macaroon, and then
+%% verifies it in OneZone.
+%% @end
+%%--------------------------------------------------------------------
+-spec verify_provider_identity(od_provider:id()) -> ok | {error, term()}.
+verify_provider_identity(ProviderId) ->
+    {ok, Domain} = get_domain(ProviderId),
+    URL = str_utils:format_bin("https://~s~s", [
+        Domain, ?identity_macaroon_path
+    ]),
+
+    CaCerts = oneprovider:get_ca_certs(),
+    SecureFlag = application:get_env(?APP_NAME, interprovider_connections_security, true),
+    Opts = [{ssl_options, [{cacerts, CaCerts}, {secure, SecureFlag}]}],
+
+    case http_client:get(URL, #{}, <<>>, Opts) of
+        {ok, 200, _, IdentityMacaroon} ->
+            verify_provider_identity(ProviderId, IdentityMacaroon);
+        {ok, Code, _, _} ->
+            {error, {bad_http_code, Code}};
+        {error, _} = Error ->
+            Error
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Verifies given provider in OneZone based on its identity macaroon.
+%% @end
+%%--------------------------------------------------------------------
+-spec verify_provider_identity(od_provider:id(), IdentityMacaroon :: binary()) ->
+    ok | gs_protocol:error().
+verify_provider_identity(ProviderId, IdentityMacaroon) ->
+    ?CREATE_RETURN_OK(gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = create,
+        gri = #gri{type = od_provider, id = undefined, aspect = verify_provider_identity},
+        data = #{
+            <<"providerId">> => ProviderId,
+            <<"macaroon">> => IdentityMacaroon
+        }
+    })).

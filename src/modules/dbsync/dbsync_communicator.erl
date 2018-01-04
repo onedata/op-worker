@@ -61,7 +61,7 @@ forward(#tree_broadcast2{
     message_id = MsgId,
     message_body = #changes_batch{space_id = SpaceId} = Msg
 }) ->
-    case oneprovider:get_provider_id() of
+    case oneprovider:get_id(fail_with_throw) of
         LowProviderId ->
             broadcast(SpaceId, MsgId, Msg, [
                 {src_provider_id, SrcProviderId},
@@ -103,7 +103,7 @@ broadcast(SpaceId, MsgId, Msg, Opts) ->
     lists:foreach(fun({ProviderId, {LowProviderId, HighProviderId}}) ->
         Result = dbsync_communicator:send(ProviderId, #tree_broadcast2{
             src_provider_id = proplists:get_value(src_provider_id,
-                Opts, oneprovider:get_provider_id()),
+                Opts, oneprovider:get_id(fail_with_throw)),
             low_provider_id = LowProviderId,
             high_provider_id = HighProviderId,
             message_id = MsgId,
@@ -234,7 +234,7 @@ select_receiving_providers([], _Opts) ->
     [];
 select_receiving_providers(ProviderIds, Opts) ->
     ProviderIds2 = lists:usort(ProviderIds),
-    ThisProviderId = oneprovider:get_provider_id(),
+    ThisProviderId = oneprovider:get_id(fail_with_throw),
     LastProviderId = lists:last(ProviderIds2),
     SrcProviderId = proplists:get_value(src_provider_id, Opts, ThisProviderId),
     LowProviderId = proplists:get_value(low_provider_id, Opts, hd(ProviderIds2)),

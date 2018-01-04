@@ -119,7 +119,7 @@ update(#monitoring_id{main_subject_type = space, main_subject_id = SpaceId,
     metric_type = storage_quota} = MonitoringId, MonitoringState, UpdateTime, _UpdateValue) ->
 
     {ok, ProvidersSupports} = space_logic:get_providers_supports(?ROOT_SESS_ID, SpaceId),
-    SupSize = maps:get(oneprovider:get_provider_id(), ProvidersSupports, 0),
+    SupSize = maps:get(oneprovider:get_id(fail_with_throw), ProvidersSupports, 0),
 
     maybe_update(MonitoringId, MonitoringState, UpdateTime, SupSize);
 

@@ -35,64 +35,76 @@ all() ->
 -define(SPACE_ID, <<"space1">>).
 -define(USER_ID, <<"674a4b28461d31f662c8bcce592594bf674a4b28461d31f662c8bcce592594bf674a4b28461d31f662c8bcce592594bf674a4b28461d31f662c8bcce592594bf">>).
 
--define(MONITORING_TYPES, [
+-define(GET_PROVIDER_ID(__Worker), rpc:call(__Worker, oneprovider, get_id, [fail_with_throw])).
+
+-define(MONITORING_TYPES(__Worker), [
     {#monitoring_id{
         main_subject_type = space,
         main_subject_id = ?SPACE_ID,
-        metric_type = storage_used
+        metric_type = storage_used,
+        provider_id = ?GET_PROVIDER_ID(__Worker)
     }, [100], <<"<row><v>1.0000000000e+02</v></row>">>},
     {#monitoring_id{
         main_subject_type = space,
         main_subject_id = ?SPACE_ID,
-        metric_type = storage_quota
+        metric_type = storage_quota,
+        provider_id = ?GET_PROVIDER_ID(__Worker)
     }, [100], <<"<row><v>1.0000000000e+03</v></row>">>},
     {#monitoring_id{
         main_subject_type = space,
         main_subject_id = ?SPACE_ID,
-        metric_type = connected_users
+        metric_type = connected_users,
+        provider_id = ?GET_PROVIDER_ID(__Worker)
     }, [100], <<"<row><v>1.0000000000e+00</v></row>">>},
     {#monitoring_id{
         main_subject_type = space,
         main_subject_id = ?SPACE_ID,
         metric_type = storage_used,
         secondary_subject_type = user,
-        secondary_subject_id = ?USER_ID
+        secondary_subject_id = ?USER_ID,
+        provider_id = ?GET_PROVIDER_ID(__Worker)
     }, [100], <<"<row><v>1.0000000000e+06</v></row>">>},
     {#monitoring_id{
         main_subject_type = space,
         main_subject_id = ?SPACE_ID,
-        metric_type = block_access
+        metric_type = block_access,
+        provider_id = ?GET_PROVIDER_ID(__Worker)
     }, [100, 100], <<"<row><v>1.0000000000e+00</v><v>1.0000000000e+00</v></row>">>},
     {#monitoring_id{
         main_subject_type = space,
         main_subject_id = ?SPACE_ID,
         metric_type = block_access,
         secondary_subject_type = user,
-        secondary_subject_id = ?USER_ID
+        secondary_subject_id = ?USER_ID,
+        provider_id = ?GET_PROVIDER_ID(__Worker)
     }, [100, 100], <<"<row><v>1.0000000000e+00</v><v>1.0000000000e+00</v></row>">>},
     {#monitoring_id{
         main_subject_type = space,
         main_subject_id = ?SPACE_ID,
-        metric_type = data_access
+        metric_type = data_access,
+        provider_id = ?GET_PROVIDER_ID(__Worker)
     }, [100, 100], <<"<row><v>1.0000000000e+00</v><v>1.0000000000e+00</v></row>">>},
     {#monitoring_id{
         main_subject_type = space,
         main_subject_id = ?SPACE_ID,
         metric_type = data_access,
         secondary_subject_type = user,
-        secondary_subject_id = ?USER_ID
+        secondary_subject_id = ?USER_ID,
+        provider_id = ?GET_PROVIDER_ID(__Worker)
     }, [100, 100], <<"<row><v>1.0000000000e+00</v><v>1.0000000000e+00</v></row>">>},
     {#monitoring_id{
         main_subject_type = space,
         main_subject_id = ?SPACE_ID,
-        metric_type = remote_transfer
+        metric_type = remote_transfer,
+        provider_id = ?GET_PROVIDER_ID(__Worker)
     }, [100], <<"<row><v>8.0000000000e+00</v></row>">>},
     {#monitoring_id{
         main_subject_type = space,
         main_subject_id = ?SPACE_ID,
         metric_type = remote_transfer,
         secondary_subject_type = user,
-        secondary_subject_id = ?USER_ID
+        secondary_subject_id = ?USER_ID,
+        provider_id = ?GET_PROVIDER_ID(__Worker)
     }, [100], <<"<row><v>8.0000000000e+00</v></row>">>}
 ]).
 
@@ -134,7 +146,7 @@ rrd_test(Config) ->
                     [MonitoringId, Step, Format]))
             end, ?FORMATS)
         end, ?STEPS)
-    end, ?MONITORING_TYPES).
+    end, ?MONITORING_TYPES(Worker)).
 
 monitoring_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -158,9 +170,9 @@ monitoring_test(Config) ->
 
     Self = self(),
     Ref = make_ref(),
-    ProviderId = rpc:call(Worker, oneprovider, get_provider_id, []),
+    ProviderId = ?GET_PROVIDER_ID(Worker),
     rpc:call(Worker, event, flush, [#flush_events{
-        provider_id = rpc:call(Worker, oneprovider, get_provider_id, []),
+        provider_id = rpc:call(Worker, oneprovider, get_id, [fail_with_throw]),
         subscription_id = ?MONITORING_SUB_ID,
         notify = fun(_) -> Self ! {Ref, ok} end
     }, ?ROOT_SESS_ID]),
@@ -171,12 +183,11 @@ monitoring_test(Config) ->
     {ok, UpdatedDocs} = rpc:call(Worker, monitoring_state, list, []),
     ?assertEqual(10, length(UpdatedDocs)),
 
-    ProviderId = rpc:call(Worker, oneprovider, get_provider_id, []),
     lists:foreach(fun({MonitoringId, _, ExpectedValue}) ->
         {ok, ExportedMetric} = ?assertMatch({ok, _}, ?reg(Worker,
             {export, MonitoringId#monitoring_id{provider_id = ProviderId}, '5m', xml})),
         ?assertNotEqual(nomatch, binary:match(ExportedMetric, ExpectedValue))
-    end, ?MONITORING_TYPES).
+    end, ?MONITORING_TYPES(Worker)).
 
 rrdtool_pool_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -187,7 +198,8 @@ rrdtool_pool_test(Config) ->
             MonitoringId = #monitoring_id{
                 main_subject_type = space,
                 main_subject_id = integer_to_binary(Id),
-                metric_type = storage_used
+                metric_type = storage_used,
+                provider_id = ?GET_PROVIDER_ID(Worker)
             },
             CurrentTime = time_utils:system_time_seconds(),
             ?assertEqual(ok, rpc:call(Worker, monitoring_utils, create,

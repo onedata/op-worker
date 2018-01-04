@@ -83,7 +83,7 @@ get_async(#{
     source_ids := [ProviderId | _]
 }, Key) ->
     try
-        case oneprovider:get_provider_id() of
+        case oneprovider:get_id(fail_with_throw) of
             ProviderId ->
                 {error, not_found};
             _ ->
