@@ -316,7 +316,7 @@ complete_request(#'FetchReply'{content = Content, request_hash = RequestHash}, S
 
             ets:delete(TID, RequestHash)
     end,
-    ?MODULE:garbage_collect(RtransferOpts),
+    true = ?MODULE:garbage_collect(RtransferOpts),
     ok.
 
 %%-------------------------------------------------------------------
@@ -353,7 +353,8 @@ garbage_collect(RtransferOpts) ->
     case application:get_env(?APP_NAME, force_rtransfer_gc, async) of
         sync ->
             erlang:garbage_collect(),
-            wait_gc(RtransferOpts);
+            ok = wait_gc(RtransferOpts),
+            true;
         async ->
             erlang:garbage_collect();
         _ ->
@@ -387,8 +388,8 @@ wait_gc(N, Max, RtransferOpts) ->
     DefaultBlockSize = ?default_block_size,
     BlockSize = proplists:get_value(block_size,
         RtransferOpts, DefaultBlockSize),
-    Max = BlockSize * ?connection_load_factor,
-    case Sum < Max of
+    MaxBlocks = BlockSize * ?connection_load_factor,
+    case Sum < MaxBlocks of
         true ->
             ok;
         _ ->
