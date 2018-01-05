@@ -89,7 +89,7 @@ strategy_handle_job(#space_strategy_job{strategy_name = check_globally, data = D
     } = Data,
     SessionId = user_ctx:get_session_id(CTX),
     {ok, ProviderIds0} = space_logic:get_provider_ids(SessionId, SpaceId),
-    case oneprovider:is_local(ProviderId) of
+    case oneprovider:is_self(ProviderId) of
         true ->
             {MergeType, Jobs} = space_sync_worker:init(?MODULE, SpaceId, undefined, Data),
             case space_sync_worker:run({MergeType, [Job_#space_strategy_job{strategy_name = check_locally} || Job_ <- Jobs]}) of

@@ -109,7 +109,8 @@ translate(#gri{type = od_space, id = Id, aspect = instance, scope = protected}, 
     #document{
         key = Id,
         value = #od_space{
-            name = maps:get(<<"name">>, Result)
+            name = maps:get(<<"name">>, Result),
+            providers = maps:get(<<"providers">>, Result)
         }
     };
 
@@ -297,7 +298,6 @@ apply_scope_mask(Doc = #document{value = Space = #od_space{}}, protected) ->
             direct_groups = #{},
             eff_groups = #{},
 
-            providers = #{},
             shares = []
         }
     };

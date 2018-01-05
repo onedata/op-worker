@@ -264,7 +264,7 @@ delete_child_link(ParentUuid, Scope, FileUuid, FileName) ->
     [#link{tree_id = ProviderId, name = FileName, rev = Rev}] = lists:filter(fun
         (#link{target = Uuid}) -> Uuid == FileUuid
     end, Links),
-    case oneprovider:is_local(ProviderId) of
+    case oneprovider:is_self(ProviderId) of
         true ->
             ok = datastore_model:delete_links(
                 ?CTX#{scope => Scope}, ParentUuid, ProviderId, {FileName, Rev}

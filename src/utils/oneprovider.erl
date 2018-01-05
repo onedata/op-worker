@@ -26,7 +26,7 @@
 
 %% API
 -export([get_node_hostname/0, get_node_ip/0, get_rest_endpoint/1]).
--export([get_id/1, is_local/1, is_registered/0]).
+-export([get_id/1, is_self/1, is_registered/0]).
 -export([get_ca_certs/0]).
 -export([get_oz_domain/0, get_oz_url/0]).
 -export([get_oz_login_page/0, get_oz_logout_page/0, get_oz_providers_page/0]).
@@ -55,7 +55,7 @@ get_node_hostname() ->
 %% acquired it by contacting OZ.
 %% @end
 %%--------------------------------------------------------------------
--spec get_node_ip() -> {byte(), byte(), byte(), byte()}.
+-spec get_node_ip() -> inet:ip4_address().
 get_node_ip() ->
     node_manager:get_ip_address().
 
@@ -98,8 +98,8 @@ get_id(ErrorHandling) ->
 %% Predicate saying if given ProviderId is the Id of this provider.
 %% @end
 %%--------------------------------------------------------------------
--spec is_local(od_provider:id()) -> boolean().
-is_local(ProviderId) ->
+-spec is_self(od_provider:id()) -> boolean().
+is_self(ProviderId) ->
     ProviderId =:= provider_auth:get_provider_id().
 
 

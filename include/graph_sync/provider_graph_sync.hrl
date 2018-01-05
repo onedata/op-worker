@@ -27,7 +27,7 @@
     graph_sync_port, 8443)).
 
 -define(GS_CHANNEL_PATH, application:get_env(?APP_NAME,
-    graph_sync_path, "/graph_sync")).
+    graph_sync_path, "/graph_sync/provider")).
 
 -define(GS_REQUEST_TIMEOUT, application:get_env(?APP_NAME,
     graph_sync_request_timeout, timer:seconds(6))).

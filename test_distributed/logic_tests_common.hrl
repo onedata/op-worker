@@ -377,7 +377,8 @@ end).
 
 -define(SPACE_PROTECTED_DATA_VALUE(__SpaceId), #{
     <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_space, id = __SpaceId, aspect = instance, scope = protected}),
-    <<"name">> => ?SPACE_NAME(__SpaceId)
+    <<"name">> => ?SPACE_NAME(__SpaceId),
+    <<"providers">> => ?SPACE_PROVIDERS_VALUE(__SpaceId)
 }).
 -define(SPACE_PRIVATE_DATA_VALUE(__SpaceId), begin
     __ProtectedData = ?SPACE_PROTECTED_DATA_VALUE(__SpaceId),

@@ -633,7 +633,7 @@ delete_links(SourceId, TransferId, SpaceId) ->
         {error, not_found} ->
             ok;
         {ok, [#link{tree_id = ProviderId, name = TransferId}]} ->
-            case oneprovider:is_local(ProviderId) of
+            case oneprovider:is_self(ProviderId) of
                 true ->
                     ok = datastore_model:delete_links(
                         ?CTX#{scope => SpaceId}, LinkRoot, ProviderId, TransferId

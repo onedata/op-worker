@@ -38,7 +38,7 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
     }}
 ) ->
     file_location:critical_section(Uuid, fun() ->
-        case oneprovider:is_local(ProviderId) of
+        case oneprovider:is_self(ProviderId) of
             false ->
                 % set file_id as the same as for remote file, because
                 % computing it requires parent links which may be not here yet.
