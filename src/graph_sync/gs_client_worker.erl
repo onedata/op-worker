@@ -558,7 +558,7 @@ is_authorized(?ROOT_SESS_ID, _, #gri{type = od_space, scope = protected}, _) ->
 is_authorized(?ROOT_SESS_ID, _, #gri{type = od_share, scope = private}, CachedDoc) ->
     provider_logic:supports_space(
         ?ROOT_SESS_ID,
-        oneprovider:get_id(fail_with_undefined),
+        oneprovider:get_id_or_undefined(),
         CachedDoc#document.value#od_share.space
     );
 

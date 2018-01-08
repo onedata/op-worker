@@ -198,7 +198,7 @@ ensure_connected(SessId) ->
                     session_manager:session_id_to_provider_id(SessId)
             end,
 
-            case oneprovider:get_id(fail_with_throw) of
+            case oneprovider:get_id() of
                 ProviderId ->
                     ?warning("Provider attempted to connect to itself, skipping connection."),
                     erlang:error(connection_loop_detected);

@@ -353,7 +353,7 @@ get_auth(#document{value = Session}) ->
 %%--------------------------------------------------------------------
 -spec get_rest_session_id(identity()) -> id().
 get_rest_session_id(#user_identity{user_id = Uid}) ->
-    <<(oneprovider:get_id(fail_with_throw))/binary, "_", Uid/binary, "_rest_session">>.
+    <<(oneprovider:get_id())/binary, "_", Uid/binary, "_rest_session">>.
 
 %%--------------------------------------------------------------------
 %% @doc

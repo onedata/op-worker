@@ -187,7 +187,7 @@ handle_request_and_process_response(SessId, Request) ->
         FilePartialCtx = fslogic_request:get_file_partial_ctx(UserCtx, Request),
         Providers = fslogic_request:get_target_providers(UserCtx,
             FilePartialCtx, Request),
-        case lists:member(oneprovider:get_id(fail_with_throw), Providers) of
+        case lists:member(oneprovider:get_id(), Providers) of
             true ->
                 handle_request_and_process_response_locally(UserCtx, Request,
                     FilePartialCtx);

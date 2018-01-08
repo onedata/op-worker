@@ -226,7 +226,7 @@ upgrade_record(1, Space) ->
 %%--------------------------------------------------------------------
 -spec emit_monitoring_event(doc()) -> no_return().
 emit_monitoring_event(SpaceDoc = #document{key = SpaceId}) ->
-    case space_logic:is_supported(SpaceDoc, oneprovider:get_id(fail_with_undefined)) of
+    case space_logic:is_supported(SpaceDoc, oneprovider:get_id_or_undefined()) of
         true -> monitoring_event:emit_od_space_updated(SpaceId);
         false -> ok
     end,

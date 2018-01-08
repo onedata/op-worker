@@ -997,7 +997,7 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup) ->
 
     test_utils:mock_expect(AllWorkers, provider_logic, get,
         fun() ->
-            GetProviderFun(?ROOT_SESS_ID, oneprovider:get_id(fail_with_throw))
+            GetProviderFun(?ROOT_SESS_ID, oneprovider:get_id())
         end),
 
     test_utils:mock_expect(AllWorkers, provider_logic, get_name, GetNameFun),
@@ -1009,7 +1009,7 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup) ->
 
     test_utils:mock_expect(AllWorkers, provider_logic, get_name,
         fun() ->
-            GetNameFun(?ROOT_SESS_ID, oneprovider:get_id(fail_with_throw))
+            GetNameFun(?ROOT_SESS_ID, oneprovider:get_id())
         end),
 
     test_utils:mock_expect(AllWorkers, provider_logic, get_domain, GetDomainFun),
@@ -1021,7 +1021,7 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup) ->
 
     test_utils:mock_expect(AllWorkers, provider_logic, get_domain,
         fun() ->
-            GetDomainFun(?ROOT_SESS_ID, oneprovider:get_id(fail_with_throw))
+            GetDomainFun(?ROOT_SESS_ID, oneprovider:get_id())
         end),
 
     test_utils:mock_expect(AllWorkers, provider_logic, resolve_ips, ResolveIPsFun),
@@ -1040,7 +1040,7 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup) ->
 
     test_utils:mock_expect(AllWorkers, provider_logic, get_spaces,
         fun() ->
-            GetSpacesFun(?ROOT_SESS_ID, oneprovider:get_id(fail_with_throw))
+            GetSpacesFun(?ROOT_SESS_ID, oneprovider:get_id())
         end),
 
     SupportsSpaceFun = fun(?ROOT_SESS_ID, ProviderId, SpaceId) ->
@@ -1054,7 +1054,7 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup) ->
 
     test_utils:mock_expect(AllWorkers, provider_logic, supports_space,
         fun(SpaceId) ->
-            SupportsSpaceFun(?ROOT_SESS_ID, oneprovider:get_id(fail_with_throw), SpaceId)
+            SupportsSpaceFun(?ROOT_SESS_ID, oneprovider:get_id(), SpaceId)
         end),
 
     test_utils:mock_expect(AllWorkers, provider_logic, supports_space,

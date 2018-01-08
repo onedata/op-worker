@@ -43,7 +43,7 @@ init(_Type, Req, _Opts) ->
 -spec handle(term(), term()) -> {ok, cowboy_req:req(), term()}.
 handle(Req, State) ->
     Body = try
-        oneprovider:get_id(fail_with_throw)
+        oneprovider:get_id()
     catch _:_ ->
         <<"This provider is not registered yet">>
     end,

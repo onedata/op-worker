@@ -67,8 +67,8 @@
     model => ?MODULE,
     sync_enabled => true,
     remote_driver => datastore_remote_driver,
-    mutator => oneprovider:get_id(fail_with_undefined),
-    local_links_tree_id => oneprovider:get_id(fail_with_undefined)
+    mutator => oneprovider:get_id_or_undefined(),
+    local_links_tree_id => oneprovider:get_id_or_undefined()
 }).
 
 %%%===================================================================
@@ -115,11 +115,11 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{
             scope = SpaceId,
             value = FileMeta#file_meta{
                 scope = SpaceDirUuid,
-                provider_id = oneprovider:get_id(fail_with_throw),
+                provider_id = oneprovider:get_id(),
                 parent_uuid = ParentUuid
             }
         },
-        TreeId = oneprovider:get_id(fail_with_throw),
+        TreeId = oneprovider:get_id(),
         Ctx = ?CTX#{scope => SpaceId},
         Link = {FileName, FileUuid},
         case datastore_model:add_links(Ctx, ParentUuid, TreeId, Link) of
@@ -308,7 +308,7 @@ get_child(ParentUuid, Name) ->
     Tokens = binary:split(Name, <<"@">>, [global]),
     case lists:reverse(Tokens) of
         [Name] ->
-            case get_child(ParentUuid, oneprovider:get_id(fail_with_throw), Name) of
+            case get_child(ParentUuid, oneprovider:get_id(), Name) of
                 {ok, Doc} -> {ok, Doc};
                 {error, not_found} -> get_child(ParentUuid, all, Name);
                 {error, Reason} -> {error, Reason}
@@ -402,7 +402,7 @@ tag_children(Links) ->
                 name = Name
             } | Children];
         (Group, Children) ->
-            LocalTreeId = oneprovider:get_id(fail_with_throw),
+            LocalTreeId = oneprovider:get_id(),
             {LocalLinks, RemoteLinks} = lists:partition(fun
                 (#link{tree_id = TreeId}) -> TreeId == LocalTreeId
             end, Group),
@@ -483,7 +483,7 @@ rename(SourceDoc, SourceParentDoc, TargetParentDoc, TargetName) ->
         }}
     end),
     Ctx = ?CTX#{scope => TargetParentDoc#document.scope},
-    TreeId = oneprovider:get_id(fail_with_throw),
+    TreeId = oneprovider:get_id(),
     {ok, _} = datastore_model:add_links(Ctx, TargetParentDoc#document.key,
         TreeId, {TargetName, FileUuid}
     ),

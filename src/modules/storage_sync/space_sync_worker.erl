@@ -160,7 +160,7 @@ run({return_none, Jobs}) ->
 -spec check_strategies() -> ok.
 check_strategies() ->
     try
-        ProviderId = oneprovider:get_id(fail_with_throw),
+        ProviderId = oneprovider:get_id(),
         case provider_logic:get_spaces(ProviderId) of
             {ok, Spaces} ->
                 check_strategies(Spaces);

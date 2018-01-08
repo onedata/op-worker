@@ -152,7 +152,7 @@ concurrent_create_test(Config) ->
     FileCount = 3,
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
     ProvIDs0 = lists:map(fun(Worker) ->
-        rpc:call(Worker, oneprovider, get_id, [fail_with_throw])
+        rpc:call(Worker, oneprovider, get_id, [])
     end, Workers),
 
     ProvIdCount = length(lists:usort(ProvIDs0)),
@@ -395,7 +395,7 @@ remote_driver_test(Config) ->
     LinkName = <<"someName">>,
     LinkTarget = <<"someTarget">>,
     Link = {LinkName, LinkTarget},
-    TreeId1 = rpc:call(Worker1, oneprovider, get_id, [fail_with_throw]),
+    TreeId1 = rpc:call(Worker1, oneprovider, get_id, []),
     Ctx1 = rpc:call(Worker1, datastore_model_default, get_ctx, [file_meta]),
     Ctx2 = rpc:call(Worker2, datastore_model_default, get_ctx, [file_meta]),
     ?assertMatch({ok, #link{}}, rpc:call(Worker1, datastore_model, add_links, [

@@ -377,7 +377,7 @@ init_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
     end),
     test_utils:mock_new(Workers, space_logic),
     test_utils:mock_expect(Workers, space_logic, get_provider_ids, fun(_, _) ->
-        {ok, [oneprovider:get_id(fail_with_throw)]}
+        {ok, [oneprovider:get_id()]}
     end),
     initializer:mock_test_file_context(Config, <<"file_id">>),
     initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config);
@@ -394,7 +394,7 @@ init_per_testcase(_Case, Config) ->
     end),
     test_utils:mock_new(Workers, space_logic),
     test_utils:mock_expect(Workers, space_logic, get_provider_ids, fun(_, _) ->
-        {ok, [oneprovider:get_id(fail_with_throw)]}
+        {ok, [oneprovider:get_id()]}
     end),
     session_setup(Worker, SessId, Iden, Self),
     initializer:mock_test_file_context(Config, <<"file_id">>),
@@ -574,7 +574,7 @@ receive_file_written_events(SubId, SessId, AggRule, AggEvts) ->
 %%--------------------------------------------------------------------
 -spec flush(Worker :: node(), SubId :: subscription:id(), SessId :: session:id()) -> ok.
 flush(Worker, SubId, SessId) ->
-    ProviderId = rpc:call(Worker, oneprovider, get_id, [fail_with_throw]),
+    ProviderId = rpc:call(Worker, oneprovider, get_id, []),
     rpc:call(Worker, event, flush, [#flush_events{
         provider_id = ProviderId,
         subscription_id = SubId

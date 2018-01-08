@@ -387,7 +387,7 @@
     metric_type = undefined :: atom(),
     secondary_subject_type = undefined :: atom(),
     secondary_subject_id = <<"">> :: datastore:id(),
-    provider_id = oneprovider:get_id(fail_with_undefined) :: oneprovider:id()
+    provider_id = oneprovider:get_id_or_undefined() :: oneprovider:id()
 }).
 
 %% Model for holding state of monitoring

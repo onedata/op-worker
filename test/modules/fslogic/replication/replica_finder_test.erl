@@ -190,7 +190,7 @@ finder_should_not_return_data_available_locally_in_many_locations(_) ->
 
 start() ->
     meck:new([oneprovider]),
-    meck:expect(oneprovider, get_id, fun(_) -> ?LOCAL_PID end),
+    meck:expect(oneprovider, get_id, fun() -> ?LOCAL_PID end),
     ok.
 
 

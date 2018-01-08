@@ -26,7 +26,7 @@
 
 %% API
 -export([get_node_hostname/0, get_node_ip/0, get_rest_endpoint/1]).
--export([get_id/1, is_self/1, is_registered/0]).
+-export([get_id/0, get_id_or_undefined/0, is_self/1, is_registered/0]).
 -export([get_ca_certs/0]).
 -export([get_oz_domain/0, get_oz_url/0]).
 -export([get_oz_login_page/0, get_oz_logout_page/0, get_oz_providers_page/0]).
@@ -74,22 +74,29 @@ get_rest_endpoint(Path) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns Provider ID for current oneprovider instance.
-%% Fails with exception or returns undefined if this provider is not registered,
-%% depending on the ErrorHandling option.
+%% Returns Provider Id for current oneprovider instance.
+%% Fails with exception if this provider is not registered.
 %% @end
 %%--------------------------------------------------------------------
--spec get_id(ErrorHandling :: fail_with_undefined | fail_with_throw) ->
-    undefined | od_provider:id() | no_return().
-get_id(ErrorHandling) ->
+-spec get_id() -> od_provider:id() | no_return().
+get_id() ->
     case provider_auth:get_provider_id() of
-        {error, _} ->
-            case ErrorHandling of
-                fail_with_throw -> throw(?ERROR_UNREGISTERED_PROVIDER);
-                fail_with_undefined -> undefined
-            end;
-        ProviderId ->
-            ProviderId
+        {error, _} -> throw(?ERROR_UNREGISTERED_PROVIDER);
+        ProviderId -> ProviderId
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns Provider Id for current oneprovider instance.
+%% Returns undefined if this provider is not registered.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_id_or_undefined() -> od_provider:id() | undefined.
+get_id_or_undefined() ->
+    case provider_auth:get_provider_id() of
+        {error, _} -> undefined;
+        ProviderId -> ProviderId
     end.
 
 

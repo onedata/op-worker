@@ -234,7 +234,7 @@ handle_cast(perform_handshake, State = #state{socket = Socket, connection_type =
     ClientMsg = #client_message{
         message_id = MsgId,
         message_body = #provider_handshake_request{
-            provider_id = oneprovider:get_id(fail_with_throw),
+            provider_id = oneprovider:get_id(),
             macaroon = #token_auth{token = IdentityMacaroon}
         }
     },

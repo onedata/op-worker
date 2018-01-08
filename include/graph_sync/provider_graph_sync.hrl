@@ -24,7 +24,7 @@
 
 % Graph Sync config
 -define(GS_CHANNEL_PORT, application:get_env(?APP_NAME,
-    graph_sync_port, 8443)).
+    graph_sync_port, 443)).
 
 -define(GS_CHANNEL_PATH, application:get_env(?APP_NAME,
     graph_sync_path, "/graph_sync/provider")).

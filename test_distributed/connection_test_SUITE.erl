@@ -288,7 +288,7 @@ client_communicate_async_test(Config) ->
     test_utils:mock_expect(Workers, router, route_message, fun
         (#client_message{message_id = Id = #message_id{issuer = Issuer,
             recipient = undefined}}) ->
-            Issuer = oneprovider:get_id(fail_with_throw),
+            Issuer = oneprovider:get_id(),
             Self ! {router_message_called, Id},
             ok
     end),

@@ -182,7 +182,7 @@ start_in_stream(SpaceId) ->
 start_out_stream(SpaceId) ->
     Filter = fun
         (#document{mutators = [Mutator | _]}) ->
-            Mutator =:= oneprovider:get_id(fail_with_throw);
+            Mutator =:= oneprovider:get_id();
         (#document{}) ->
             false
     end,
@@ -190,7 +190,7 @@ start_out_stream(SpaceId) ->
         (Since, Until, Docs) when Since =:= Until ->
             dbsync_communicator:broadcast_changes(SpaceId, Since, Until, Docs);
         (Since, Until, Docs) ->
-            ProviderId = oneprovider:get_id(fail_with_throw),
+            ProviderId = oneprovider:get_id(),
             dbsync_communicator:broadcast_changes(SpaceId, Since, Until, Docs),
             dbsync_state:set_seq(SpaceId, ProviderId, Until)
     end,

@@ -48,8 +48,8 @@
     model => ?MODULE,
     sync_enabled => true,
     remote_driver => datastore_remote_driver,
-    mutator => oneprovider:get_id(fail_with_undefined),
-    local_links_tree_id => oneprovider:get_id(fail_with_undefined)
+    mutator => oneprovider:get_id_or_undefined(),
+    local_links_tree_id => oneprovider:get_id_or_undefined()
 }).
 
 %%%===================================================================
@@ -610,7 +610,7 @@ update(TransferId, Diff) ->
 -spec add_link(SourceId :: virtual_list_id(), TransferId :: id(),
     od_space:id()) -> ok.
 add_link(SourceId, TransferId, SpaceId) ->
-    TreeId = oneprovider:get_id(fail_with_throw),
+    TreeId = oneprovider:get_id(),
     Ctx = ?CTX#{scope => SpaceId},
     {ok, _} = datastore_model:add_links(Ctx, link_root(SourceId, SpaceId),
         TreeId, {TransferId, <<>>}

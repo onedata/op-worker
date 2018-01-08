@@ -67,7 +67,7 @@ available_strategies() ->
     [space_strategy:job()].
 strategy_init_jobs(check_globally, StrategyArgs, InitData) ->
     [#space_strategy_job{strategy_name = check_globally, strategy_args = StrategyArgs,
-        data = InitData#{provider_id => oneprovider:get_id(fail_with_throw)}}];
+        data = InitData#{provider_id => oneprovider:get_id()}}];
 strategy_init_jobs(StrategyName, StrategyArgs, InitData) ->
     [#space_strategy_job{strategy_name = StrategyName, strategy_args = StrategyArgs, data = InitData}].
 
@@ -96,7 +96,7 @@ strategy_handle_job(#space_strategy_job{strategy_name = check_globally, data = D
                 #fuse_response{status = #status{code = ?OK}} = Response ->
                     {Response, []};
                 _OtherResp ->
-                    ProviderIds = ProviderIds0 -- [oneprovider:get_id(fail_with_throw)],
+                    ProviderIds = ProviderIds0 -- [oneprovider:get_id()],
                     SessionId = user_ctx:get_session_id(CTX),
                     {ok, #document{value = #session{proxy_via = ProxyVia}}} = session:get(SessionId),
                     NewJobs = case lists:member(ProxyVia, ProviderIds) of
@@ -175,7 +175,7 @@ strategy_merge_result([_ | JobsR], [_ | R]) ->
     space_strategy:job_result().
 strategy_merge_result(#space_strategy_job{}, _LocalResult, #fuse_response{status = #status{code = ?OK}, fuse_response = FResponse} = ChildrenResult) ->
     #file_attr{guid = FileGuid, provider_id = ProviderId} = FResponse,
-    case oneprovider:get_id(fail_with_throw) of
+    case oneprovider:get_id() of
         ProviderId -> ChildrenResult;
         _ ->
             #file_attr{guid = FileGuid} = FResponse,

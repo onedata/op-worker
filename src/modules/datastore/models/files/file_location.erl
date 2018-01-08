@@ -34,8 +34,8 @@
     model => ?MODULE,
     sync_enabled => true,
     remote_driver => datastore_remote_driver,
-    mutator => oneprovider:get_id(fail_with_undefined),
-    local_links_tree_id => oneprovider:get_id(fail_with_undefined)
+    mutator => oneprovider:get_id_or_undefined(),
+    local_links_tree_id => oneprovider:get_id_or_undefined()
 }).
 
 %%%===================================================================
@@ -49,7 +49,7 @@
 %%--------------------------------------------------------------------
 -spec local_id(file_meta:uuid()) -> file_location:id().
 local_id(FileUuid) ->
-    id(FileUuid, oneprovider:get_id(fail_with_throw)).
+    id(FileUuid, oneprovider:get_id()).
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -903,7 +903,7 @@ set_parent_link(Doc, ParentDoc, _LocId, _Path) ->
     }} = Doc,
     Ctx = datastore_model_default:get_ctx(file_meta),
     Ctx2 = Ctx#{scope => Scope},
-    TreeId = oneprovider:get_id(fail_with_throw),
+    TreeId = oneprovider:get_id(),
     Link = {FileName, FileUuid},
     {ok, _} = datastore_model:add_links(Ctx2, ParentUuid, TreeId, Link),
     ok.
@@ -919,7 +919,7 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
     Location = #file_location{
         blocks = [#file_block{offset = 0, size = 3}],
         size = 3,
-        provider_id = oneprovider:get_id(fail_with_throw),
+        provider_id = oneprovider:get_id(),
         file_id = FileId,
         storage_id = StorageId,
         uuid = FileUuid,

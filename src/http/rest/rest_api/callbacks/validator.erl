@@ -184,7 +184,7 @@ parse_attribute_body(Req, State = #{extended := Extended}) ->
 -spec parse_provider_id(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_provider_id(Req, State) ->
-    {ProviderId, NewReq} = cowboy_req:qs_val(<<"provider_id">>, Req, oneprovider:get_id(fail_with_throw)),
+    {ProviderId, NewReq} = cowboy_req:qs_val(<<"provider_id">>, Req, oneprovider:get_id()),
     {State#{provider_id => ProviderId}, NewReq}.
 
 %%--------------------------------------------------------------------
@@ -268,7 +268,7 @@ parse_last_seq(Req, #{space_id := SpaceId} = State) ->
     {RawLastSeq, NewReq} = cowboy_req:qs_val(<<"last_seq">>, Req, ?DEFAULT_LAST_SEQ),
     case RawLastSeq of
         <<"now">> ->
-            LastSeq = dbsync_state:get_seq(SpaceId, oneprovider:get_id(fail_with_throw)),
+            LastSeq = dbsync_state:get_seq(SpaceId, oneprovider:get_id()),
             {State#{last_seq => LastSeq}, NewReq};
         Number ->
             try binary_to_integer(Number) of

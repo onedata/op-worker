@@ -35,7 +35,7 @@ all() ->
 -define(SPACE_ID, <<"space1">>).
 -define(USER_ID, <<"674a4b28461d31f662c8bcce592594bf674a4b28461d31f662c8bcce592594bf674a4b28461d31f662c8bcce592594bf674a4b28461d31f662c8bcce592594bf">>).
 
--define(GET_PROVIDER_ID(__Worker), rpc:call(__Worker, oneprovider, get_id, [fail_with_throw])).
+-define(GET_PROVIDER_ID(__Worker), rpc:call(__Worker, oneprovider, get_id, [])).
 
 -define(MONITORING_TYPES(__Worker), [
     {#monitoring_id{
@@ -172,7 +172,7 @@ monitoring_test(Config) ->
     Ref = make_ref(),
     ProviderId = ?GET_PROVIDER_ID(Worker),
     rpc:call(Worker, event, flush, [#flush_events{
-        provider_id = rpc:call(Worker, oneprovider, get_id, [fail_with_throw]),
+        provider_id = rpc:call(Worker, oneprovider, get_id, []),
         subscription_id = ?MONITORING_SUB_ID,
         notify = fun(_) -> Self ! {Ref, ok} end
     }, ?ROOT_SESS_ID]),

@@ -44,7 +44,7 @@ get_bucket() ->
 -spec get_spaces() -> [od_space:id()].
 get_spaces() ->
     try
-        case oneprovider:get_id(fail_with_undefined) of
+        case oneprovider:get_id_or_undefined() of
             undefined ->
                 [];
             ProviderId ->
@@ -80,7 +80,7 @@ get_provider(SessId) ->
 %%--------------------------------------------------------------------
 -spec get_providers(od_space:id()) -> [od_provider:id()].
 get_providers(SpaceId) ->
-    case oneprovider:get_id(fail_with_undefined) of
+    case oneprovider:get_id_or_undefined() of
         undefined ->
             [];
         _ ->

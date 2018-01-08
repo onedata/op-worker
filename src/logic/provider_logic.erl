@@ -51,7 +51,7 @@
 -spec get() ->
     {ok, od_provider:doc()} | gs_protocol:error().
 get() ->
-    get(?ROOT_SESS_ID, oneprovider:get_id(fail_with_undefined)).
+    get(?ROOT_SESS_ID, oneprovider:get_id_or_undefined()).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -127,7 +127,7 @@ get_as_map() ->
 %%--------------------------------------------------------------------
 -spec get_name() -> {ok, od_provider:name()} | gs_protocol:error().
 get_name() ->
-    get_name(?ROOT_SESS_ID, oneprovider:get_id(fail_with_undefined)).
+    get_name(?ROOT_SESS_ID, oneprovider:get_id_or_undefined()).
 
 
 %%--------------------------------------------------------------------
@@ -163,7 +163,7 @@ get_name(SessionId, ProviderId) ->
 %%--------------------------------------------------------------------
 -spec get_spaces() -> {ok, [od_space:id()]} | gs_protocol:error().
 get_spaces() ->
-    get_spaces(?ROOT_SESS_ID, oneprovider:get_id(fail_with_undefined)).
+    get_spaces(?ROOT_SESS_ID, oneprovider:get_id_or_undefined()).
 
 
 %%--------------------------------------------------------------------
@@ -210,7 +210,7 @@ has_eff_user(SessionId, ProviderId, UserId) ->
 
 -spec supports_space(od_space:id()) -> boolean().
 supports_space(SpaceId) ->
-    supports_space(?ROOT_SESS_ID, oneprovider:get_id(fail_with_undefined), SpaceId).
+    supports_space(?ROOT_SESS_ID, oneprovider:get_id_or_undefined(), SpaceId).
 
 
 -spec supports_space(od_provider:doc(), od_space:id()) -> boolean().
@@ -237,7 +237,7 @@ supports_space(SessionId, ProviderId, SpaceId) ->
 -spec get_domain() ->
     {ok, od_provider:doc()} | gs_protocol:error().
 get_domain() ->
-    get_domain(?ROOT_SESS_ID, oneprovider:get_id(fail_with_undefined)).
+    get_domain(?ROOT_SESS_ID, oneprovider:get_id_or_undefined()).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -327,7 +327,7 @@ set_delegated_subdomain(Subdomain) ->
     {_, IPTuples} = lists:unzip(NodesIPs),
     case set_subdomain_delegation(Subdomain, IPTuples) of
         ok ->
-            gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id(fail_with_undefined)),
+            gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id_or_undefined()),
             ok;
         ?ERROR_BAD_VALUE_IDENTIFIER_OCCUPIED(<<"subdomain">>) ->
             {error, subdomain_exists};
@@ -370,7 +370,7 @@ update_subdomain_delegation_ips() ->
 get_subdomain_delegation_ips() ->
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = get,
-        gri = #gri{type = od_provider, id = oneprovider:get_id(fail_with_undefined),
+        gri = #gri{type = od_provider, id = oneprovider:get_id_or_undefined(),
             aspect = domain_config}
     }),
     case Result of
@@ -399,11 +399,11 @@ set_domain(Domain) ->
         <<"domain">> => Domain},
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = update, data = Data,
-        gri = #gri{type = od_provider, id = oneprovider:get_id(fail_with_undefined),
+        gri = #gri{type = od_provider, id = oneprovider:get_id_or_undefined(),
             aspect = domain_config}
     }),
     ?ON_SUCCESS(Result, fun(_) ->
-        gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id(fail_with_undefined))
+        gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id_or_undefined())
     end).
 
 
@@ -418,7 +418,7 @@ set_domain(Domain) ->
     ok | gs_protocol:error().
 set_subdomain_delegation(Subdomain, IPs) ->
     IPBinaries = [list_to_binary(inet:ntoa(IPTuple)) || IPTuple <- IPs],
-    ProviderId = oneprovider:get_id(fail_with_undefined),
+    ProviderId = oneprovider:get_id_or_undefined(),
     Data = #{
         <<"subdomainDelegation">> => true,
         <<"subdomain">> => Subdomain,

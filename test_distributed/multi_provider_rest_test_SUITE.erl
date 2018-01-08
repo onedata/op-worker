@@ -985,8 +985,8 @@ automatic_cleanup_should_invalidate_unpopular_files(Config) ->
     lfm_proxy:write(WorkerP1, Handle5, 0, ?TEST_DATA2),
     lfm_proxy:close(WorkerP1, Handle5),
 
-    Provider1Id = rpc:call(WorkerP1, oneprovider, get_id, [fail_with_throw]),
-    Provider2Id = rpc:call(WorkerP2, oneprovider, get_id, [fail_with_throw]),
+    Provider1Id = rpc:call(WorkerP1, oneprovider, get_id, []),
+    Provider2Id = rpc:call(WorkerP2, oneprovider, get_id, []),
 
     % synchronize files
     {ok, ReadHandle1} = ?assertMatch({ok, _}, lfm_proxy:open(WorkerP2, SessionIdP2, {guid, File1Guid}, read), ?ATTEMPTS),
@@ -1202,8 +1202,8 @@ xattr_list(Config) ->
 metric_get(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
 
-    Prov1ID = rpc:call(WorkerP1, oneprovider, get_id, [fail_with_throw]),
-    Prov2ID = rpc:call(WorkerP2, oneprovider, get_id, [fail_with_throw]),
+    Prov1ID = rpc:call(WorkerP1, oneprovider, get_id, []),
+    Prov2ID = rpc:call(WorkerP2, oneprovider, get_id, []),
 
     MonitoringId = #monitoring_id{
         main_subject_type = space,

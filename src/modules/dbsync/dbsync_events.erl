@@ -30,7 +30,7 @@
 -spec change_replicated(SpaceId :: binary(), datastore:doc()) ->
     any().
 change_replicated(SpaceId, Change) ->
-    true = dbsync_utils:is_supported(SpaceId, [oneprovider:get_id(fail_with_throw)]),
+    true = dbsync_utils:is_supported(SpaceId, [oneprovider:get_id()]),
     change_replicated_internal(SpaceId, Change).
 
 %%%===================================================================

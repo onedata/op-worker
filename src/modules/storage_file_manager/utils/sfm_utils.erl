@@ -151,7 +151,7 @@ create_storage_file_location(FileCtx, StorageFileCreated) ->
     {FileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
     {StorageId, FileCtx3} = file_ctx:get_storage_id(FileCtx2),
     Location = #file_location{
-        provider_id = oneprovider:get_id(fail_with_throw),
+        provider_id = oneprovider:get_id(),
         file_id = FileId,
         storage_id = StorageId,
         uuid = FileUuid,
