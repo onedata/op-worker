@@ -118,7 +118,7 @@ fslogic_get_file_attr_test(Config) ->
 
 fslogic_get_file_children_attrs_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    ProviderID = rpc:call(Worker, oneprovider, get_provider_id, []),
+    ProviderID = rpc:call(Worker, oneprovider, get_id, []),
 
     {SessId1, UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     {SessId2, UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user2">>}, Config)},

@@ -59,7 +59,7 @@ on_transfer_doc_change(Transfer = #document{value = #transfer{
     status = scheduled,
     target_provider_id = TargetProviderId
 }}) ->
-    case TargetProviderId =:= oneprovider:get_provider_id() of
+    case oneprovider:is_self(TargetProviderId) of
         true ->
             new_transfer(Transfer);
         false ->

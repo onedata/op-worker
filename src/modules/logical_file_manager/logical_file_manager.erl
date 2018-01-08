@@ -227,7 +227,7 @@ schedule_file_replication(SessId, FileKey, TargetProviderId, Callback) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
     % Transfers can only be scheduled on supporting providers
-    case provider_logic:supports_space(?ROOT_SESS_ID, oneprovider:get_provider_id(), SpaceId) of
+    case provider_logic:supports_space(SpaceId) of
         false ->
             {error, ?EACCES};
         true ->
@@ -249,7 +249,7 @@ schedule_replica_invalidation(SessId, FileKey, SourceProviderId, TargetProviderI
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
     % Replica migration can only be scheduled on supporting providers
-    case provider_logic:supports_space(?ROOT_SESS_ID, oneprovider:get_provider_id(), SpaceId) of
+    case provider_logic:supports_space(SpaceId) of
         false ->
             {error, ?EACCES};
         true ->

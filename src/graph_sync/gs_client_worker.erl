@@ -20,7 +20,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
--include_lib("cluster_worker/include/api_errors.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 
 
 %% @formatter:off
@@ -67,7 +67,7 @@
 %%--------------------------------------------------------------------
 -spec start_link() -> {ok, pid()} | gs_protocol:error().
 start_link() ->
-    gen_server2:start_link({global, ?GS_CLIENT_WORKER_GLOBAL_NAME}, ?MODULE, [], []).
+    gen_server2:start_link(?MODULE, [], []).
 
 
 %%--------------------------------------------------------------------
@@ -146,13 +146,10 @@ init([]) ->
         {ok, _ClientRef, #gs_resp_handshake{identity = nobody}} ->
             {stop, normal};
         {ok, ClientRef, #gs_resp_handshake{identity = {provider, _}}} ->
+            yes = global:register_name(?GS_CLIENT_WORKER_GLOBAL_NAME, self()),
             ?info("Started connection to OneZone: ~p", [ClientRef]),
             oneprovider:on_connection_to_oz(),
-
             {ok, #state{client_ref = ClientRef}};
-        {error, {options, {keyfile, _, {error, enoent}}}} ->
-            ?warning("Cannot start connection to OneZone - provider certificate not found"),
-            {stop, normal};
         {error, _} = Error ->
             ?warning("Cannot start connection to OneZone: ~p", [Error]),
             {stop, normal}
@@ -268,18 +265,13 @@ start_gs_connection() ->
     Address = "wss://" ++ oneprovider:get_oz_domain() ++
         ":" ++ integer_to_list(Port) ++ ?GS_CHANNEL_PATH,
 
-    KeyFile = oz_plugin:get_key_file(),
-    CertFile = oz_plugin:get_cert_file(),
-    CaCerts = cert_utils:load_ders_in_dir(oz_plugin:get_cacerts_dir()),
-    Opts = [{keyfile, KeyFile}, {certfile, CertFile}, {cacerts, CaCerts}],
-
-    % If provider's certs have changed since last connection, ssl pem cache
-    % should be cleared to make sure new certs are used to connect.
-    ssl_manager:clear_pem_cache(),
+    CaCerts = oneprovider:get_ca_certs(),
+    Opts = [{cacerts, CaCerts}],
+    {ok, ProviderMacaroon} = provider_auth:get_auth_macaroon(),
 
     try
         gs_client:start_link(
-            Address, undefined, [?GS_PROTOCOL_VERSION],
+            Address, {macaroon, ProviderMacaroon}, [?GS_PROTOCOL_VERSION],
             fun process_push_message/1, Opts
         )
     catch
@@ -476,12 +468,12 @@ resolve_authorization(#macaroon_auth{} = Auth) ->
     #macaroon_auth{
         macaroon = MacaroonBin, disch_macaroons = DischargeMacaroonsBin
     } = Auth,
-    {ok, Macaroon} = token_utils:deserialize(MacaroonBin),
+    {ok, Macaroon} = onedata_macaroons:deserialize(MacaroonBin),
     BoundMacaroons = lists:map(
         fun(DischargeMacaroonBin) ->
-            {ok, DM} = token_utils:deserialize(DischargeMacaroonBin),
+            {ok, DM} = onedata_macaroons:deserialize(DischargeMacaroonBin),
             BDM = macaroon:prepare_for_request(Macaroon, DM),
-            {ok, SerializedBDM} = token_utils:serialize62(BDM),
+            {ok, SerializedBDM} = onedata_macaroons:serialize(BDM),
             SerializedBDM
         end, DischargeMacaroonsBin),
     {macaroon, MacaroonBin, BoundMacaroons};
@@ -566,7 +558,7 @@ is_authorized(?ROOT_SESS_ID, _, #gri{type = od_space, scope = protected}, _) ->
 is_authorized(?ROOT_SESS_ID, _, #gri{type = od_share, scope = private}, CachedDoc) ->
     provider_logic:supports_space(
         ?ROOT_SESS_ID,
-        oneprovider:get_provider_id(),
+        oneprovider:get_id_or_undefined(),
         CachedDoc#document.value#od_share.space
     );
 

@@ -20,7 +20,7 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1]).
+-export([all/0, init_per_suite/1, end_per_suite/1]).
 %% tests
 -export([basic_operations_test/1, rename_test/1]).
 %% test_bases
@@ -117,4 +117,21 @@ rename_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    [{?LOAD_MODULES, [model_file_meta_test_base]} | Config].
+    Posthook = fun(NewConfig) ->
+        Workers = ?config(op_worker_nodes, NewConfig),
+        test_utils:mock_new(Workers, [dbsync_utils]),
+        test_utils:mock_expect(Workers, dbsync_utils, get_providers,
+            fun(_) -> [] end),
+        NewConfig,
+        test_utils:mock_new(Workers, [provider_auth]),
+        test_utils:mock_expect(Workers, provider_auth, get_provider_id,
+            fun() -> <<"provider1">> end),
+        NewConfig
+    end,
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [model_file_meta_test_base]} | Config].
+
+
+end_per_suite(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, [dbsync_utils]),
+    test_utils:mock_unload(Workers, [provider_auth]).

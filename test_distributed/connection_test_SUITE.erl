@@ -288,7 +288,7 @@ client_communicate_async_test(Config) ->
     test_utils:mock_expect(Workers, router, route_message, fun
         (#client_message{message_id = Id = #message_id{issuer = Issuer,
             recipient = undefined}}) ->
-            Issuer = oneprovider:get_provider_id(),
+            Issuer = oneprovider:get_id(),
             Self ! {router_message_called, Id},
             ok
     end),
@@ -529,8 +529,8 @@ python_client_test_base(Config) ->
     Packet = #'ClientMessage'{message_body = {ping, #'Ping'{data = Data}}},
     PacketRaw = messages:encode_msg(Packet),
 
-    HandshakeMessage = #'ClientMessage'{message_body = {handshake_request,
-        #'HandshakeRequest'{session_id = <<"session_id">>, token = #'Token'{
+    HandshakeMessage = #'ClientMessage'{message_body = {client_handshake_request,
+        #'ClientHandshakeRequest'{session_id = <<"session_id">>, token = #'Token'{
             value = ?MACAROON
         }}
     }},
@@ -541,6 +541,8 @@ python_client_test_base(Config) ->
     test_utils:mock_expect(Workers, router, route_message, fun
         (#client_message{message_body = #ping{}}) ->
             Self ! router_message_called,
+            ok;
+        (_) ->
             ok
     end),
 
@@ -568,7 +570,7 @@ python_client_test_base(Config) ->
         ?assertReceivedMatch(router_message_called, timer:seconds(15))
     end, lists:seq(1, PacketNum)),
     T2 = erlang:monotonic_time(milli_seconds),
-        catch port_close(PythonClient),
+    catch port_close(PythonClient),
     #parameter{name = full_time, value = T2 - T1, unit = "ms"}.
 
 proto_version_test(Config) ->
@@ -605,11 +607,8 @@ init_per_suite(Config) ->
 
 init_per_testcase(cert_connection_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    ssl:start(),
-    initializer:remove_pending_messages(),
     test_utils:mock_new(Workers, serializator),
-    mock_identity(Workers),
-    Config;
+    init_per_testcase(default, Config);
 
 init_per_testcase(Case, Config) when
     Case =:= protobuf_msg_test;
@@ -618,44 +617,49 @@ init_per_testcase(Case, Config) when
     Case =:= bandwidth_test;
     Case =:= python_client_test ->
     Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, router),
+    init_per_testcase(default, Config);
+
+init_per_testcase(default, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
     ssl:start(),
     initializer:remove_pending_messages(),
-    test_utils:mock_new(Workers, router),
     mock_identity(Workers),
+    test_utils:mock_new(Workers, provider_auth),
+    test_utils:mock_expect(Workers, provider_auth, get_provider_id, fun() -> <<"providerId">> end),
     Config;
 
 init_per_testcase(_Case, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    ssl:start(),
-    initializer:remove_pending_messages(),
-    mock_identity(Workers),
-    Config.
+    init_per_testcase(default, Config).
+
 
 end_per_testcase(cert_connection_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, [user_identity, serializator]),
-    ssl:stop();
+    test_utils:mock_validate_and_unload(Workers, [serializator]),
+    end_per_testcase(default, Config);
 
 end_per_testcase(Case, Config) when
     Case =:= protobuf_msg_test;
     Case =:= multi_message_test;
     Case =:= client_communicate_async_test;
-    Case =:= bandwidth_test ->
+    Case =:= bandwidth_test;
+    Case =:= python_client_test ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, [user_identity, router]),
-    ssl:stop();
+    test_utils:mock_validate_and_unload(Workers, [router]),
+    end_per_testcase(default, Config);
 
 end_per_testcase(python_client_test, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
     file:delete(?TEST_FILE(Config, "handshake.arg")),
     file:delete(?TEST_FILE(Config, "message.arg")),
-    test_utils:mock_validate_and_unload(Workers, [user_identity, router]),
+    end_per_testcase(default, Config);
+
+end_per_testcase(default, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_validate_and_unload(Workers, [provider_auth, user_identity]),
     ssl:stop();
 
 end_per_testcase(_Case, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, user_identity),
-    ssl:stop().
+    end_per_testcase(default, Config).
 
 %%%===================================================================
 %%% Internal functions
@@ -684,8 +688,8 @@ connect_via_token(Node, SocketOpts) ->
     {ok, {Sock :: term(), SessId :: session:id()}}.
 connect_via_token(Node, SocketOpts, SessId) ->
     % given
-    TokenAuthMessage = #'ClientMessage'{message_body = {handshake_request,
-        #'HandshakeRequest'{session_id = SessId, token = #'Token'{
+    TokenAuthMessage = #'ClientMessage'{message_body = {client_handshake_request,
+        #'ClientHandshakeRequest'{session_id = SessId, token = #'Token'{
             value = ?MACAROON
         }}
     }},

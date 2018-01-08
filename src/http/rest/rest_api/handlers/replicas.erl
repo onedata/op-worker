@@ -241,10 +241,7 @@ get_file_guid(#{auth := Auth, path := Path}) ->
 %%--------------------------------------------------------------------
 -spec throw_if_non_local_space(od_space:id()) -> ok.
 throw_if_non_local_space(SpaceId) ->
-    SupportsSpace = provider_logic:supports_space(
-        ?ROOT_SESS_ID, oneprovider:get_provider_id(), SpaceId
-    ),
-    case SupportsSpace of
+    case provider_logic:supports_space(SpaceId) of
         true ->
             ok;
         false ->

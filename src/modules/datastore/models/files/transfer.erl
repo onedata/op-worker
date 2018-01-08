@@ -48,8 +48,8 @@
     model => ?MODULE,
     sync_enabled => true,
     remote_driver => datastore_remote_driver,
-    mutator => oneprovider:get_provider_id(),
-    local_links_tree_id => oneprovider:get_provider_id()
+    mutator => oneprovider:get_id_or_undefined(),
+    local_links_tree_id => oneprovider:get_id_or_undefined()
 }).
 
 %%%===================================================================
@@ -610,7 +610,7 @@ update(TransferId, Diff) ->
 -spec add_link(SourceId :: virtual_list_id(), TransferId :: id(),
     od_space:id()) -> ok.
 add_link(SourceId, TransferId, SpaceId) ->
-    TreeId = oneprovider:get_provider_id(),
+    TreeId = oneprovider:get_id(),
     Ctx = ?CTX#{scope => SpaceId},
     {ok, _} = datastore_model:add_links(Ctx, link_root(SourceId, SpaceId),
         TreeId, {TransferId, <<>>}
@@ -632,15 +632,15 @@ delete_links(SourceId, TransferId, SpaceId) ->
             ok;
         {error, not_found} ->
             ok;
-        {ok, [#link{tree_id = TreeId, name = TransferId}]} ->
-            case oneprovider:get_provider_id() == TreeId of
+        {ok, [#link{tree_id = ProviderId, name = TransferId}]} ->
+            case oneprovider:is_self(ProviderId) of
                 true ->
                     ok = datastore_model:delete_links(
-                        ?CTX#{scope => SpaceId}, LinkRoot, TreeId, TransferId
+                        ?CTX#{scope => SpaceId}, LinkRoot, ProviderId, TransferId
                     );
                 false ->
                     ok = datastore_model:mark_links_deleted(
-                        ?CTX#{scope => SpaceId}, LinkRoot, TreeId, TransferId
+                        ?CTX#{scope => SpaceId}, LinkRoot, ProviderId, TransferId
                     )
             end
     end.

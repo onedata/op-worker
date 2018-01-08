@@ -28,11 +28,13 @@
     remove_pending_messages/1, clear_models/2, space_storage_mock/2,
     communicator_mock/1, clean_test_users_and_spaces_no_validate/1,
     domain_to_provider_id/1, mock_test_file_context/2, unmock_test_file_context/1]).
--export([enable_grpca_based_communication/1, disable_grpca_based_communication/1]).
 -export([mock_provider_ids/1, unmock_provider_ids/1]).
 -export([unload_quota_mocks/1, disable_quota_limit/1]).
 
--define(DUMMY_MACAROON(__UserId), <<"DUMMY-MACAROON-", __UserId/binary>>).
+-define(DUMMY_USER_MACAROON(__UserId), <<"DUMMY-USER-MACAROON-", __UserId/binary>>).
+
+-define(DUMMY_PROVIDER_IDENTITY_MACAROON(__ProviderId), <<"DUMMY-PROVIDER-IDENTITY-MACAROON-", __ProviderId/binary>>).
+-define(DUMMY_PROVIDER_AUTH_MACAROON(__ProviderId), <<"DUMMY-PROVIDER-AUTH-MACAROON-", __ProviderId/binary>>).
 
 -record(user_config, {
     id :: od_user:id(),
@@ -401,65 +403,6 @@ communicator_mock(Workers) ->
     test_utils:mock_expect(Workers, communicator, send, fun(_, _) -> ok end),
     test_utils:mock_expect(Workers, communicator, send, fun(_, _, _) -> ok end).
 
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Can only be used after create_test_users_and_spaces is run, which mocks
-%% modules required by provider listener to run.
-%% @end
-%%--------------------------------------------------------------------
--spec enable_grpca_based_communication(Config :: list()) -> ok.
-enable_grpca_based_communication(Config) ->
-    AllWorkers = ?config(op_worker_nodes, Config),
-    DomainMappings = [{atom_to_binary(K, utf8), V} || {K, V} <- ?config(domain_mappings, Config)],
-
-    %% Enable grp certs
-    test_utils:mock_new(AllWorkers, [oz_plugin, provider_auth_manager]),
-    CertMappings = lists:map(fun({ProvKey, Domain}) ->
-        CertPath0 = ?TEST_FILE(Config, binary_to_list(ProvKey) ++ "_" ++ "cert.pem"),
-        KeyPath0 = ?TEST_FILE(Config, binary_to_list(ProvKey) ++ "_" ++ "key.pem"),
-        CertPath = re:replace(CertPath0, ".*/test_distributed/", "../../build/test_distributed/", [{return, list}]),
-        KeyPath = re:replace(KeyPath0, ".*/test_distributed/", "../../build/test_distributed/", [{return, list}]),
-
-
-        test_utils:mock_expect(get_same_domain_workers(Config, Domain), oz_plugin, get_cert_file,
-            fun() -> CertPath end),
-        test_utils:mock_expect(get_same_domain_workers(Config, Domain), oz_plugin, get_key_file,
-            fun() -> KeyPath end),
-
-        {ok, PEMBin} = file:read_file(CertPath0),
-        [{_, CertDer, _}] = public_key:pem_decode(PEMBin),
-        {CertDer, Domain}
-    end, DomainMappings),
-
-    test_utils:mock_expect(AllWorkers, provider_auth_manager, is_provider,
-        fun(CertToCheck) ->
-            case lists:keyfind(CertToCheck, 1, CertMappings) of
-                false -> false;
-                _ -> true
-            end
-        end),
-
-    test_utils:mock_expect(AllWorkers, provider_auth_manager, get_provider_id,
-        fun(CertToCheck) ->
-            domain_to_provider_id(proplists:get_value(CertToCheck, CertMappings))
-        end),
-
-    % Save OZ CA cert (that signed provider certs) under expected location
-    % on all nodes and run the listeners.
-    OzCaPath = rpc:call(hd(AllWorkers), oz_plugin, get_oz_cacert_path, []),
-    {ok, OzCaPem} = file:read_file(?TEST_FILE(Config, "ozp_cacert.pem")),
-    lists:foreach(
-        fun(Worker) ->
-            rpc:call(Worker, utils, save_file, [OzCaPath, OzCaPem]),
-            rpc:call(Worker, provider_listener, ensure_started, [])
-        end, AllWorkers).
-
--spec disable_grpca_based_communication(Config :: list()) -> ok.
-disable_grpca_based_communication(Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, [oz_plugin, provider_auth_manager]).
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Disables all quota checks. Should be unloaded via unload_quota_mocks/1.
@@ -537,16 +480,22 @@ unmock_test_file_context(Config) ->
 -spec mock_provider_ids(proplists:proplist()) -> ok.
 mock_provider_ids(Config) ->
     AllWorkers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(AllWorkers, oneprovider),
+    test_utils:mock_new(AllWorkers, provider_auth),
     Domains = lists:usort([?GET_DOMAIN(W) || W <- AllWorkers]),
     lists:foreach(fun(Domain) ->
         CWorkers = get_same_domain_workers(Config, Domain),
         ProviderId = domain_to_provider_id(Domain),
-        test_utils:mock_expect(CWorkers, oneprovider, get_provider_id, fun() ->
+        test_utils:mock_expect(CWorkers, provider_auth, get_provider_id, fun() ->
             ProviderId
         end),
-        ok = test_utils:mock_expect(CWorkers, oneprovider, is_registered, fun() ->
+        test_utils:mock_expect(CWorkers, provider_auth, is_registered, fun() ->
             true
+        end),
+        test_utils:mock_expect(CWorkers, provider_auth, get_identity_macaroon, fun() ->
+            {ok, ?DUMMY_PROVIDER_IDENTITY_MACAROON(ProviderId)}
+        end),
+        test_utils:mock_expect(CWorkers, provider_auth, get_auth_macaroon, fun() ->
+            {ok, ?DUMMY_PROVIDER_AUTH_MACAROON(ProviderId)}
         end)
     end, Domains).
 
@@ -558,7 +507,7 @@ mock_provider_ids(Config) ->
 -spec unmock_provider_ids(proplists:proplist()) -> ok.
 unmock_provider_ids(Config) ->
     AllWorkers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(AllWorkers, [oneprovider]).
+    test_utils:mock_unload(AllWorkers, [provider_auth]).
 
 %%%===================================================================
 %%% Internal functions
@@ -680,7 +629,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     Users = maps:fold(fun(UserId, SpacesList, AccIn) ->
         UserConfig = proplists:get_value(UserId, UsersSetup),
         DefaultSpaceId = proplists:get_value(<<"default_space">>, UserConfig),
-        Macaroon = ?DUMMY_MACAROON(UserId),
+        Macaroon = ?DUMMY_USER_MACAROON(UserId),
         Name = fun(Text, User) ->
             list_to_binary(Text ++ "_" ++ binary_to_list(User)) end,
         AccIn ++ [{UserId, #user_config{
@@ -988,7 +937,7 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToProviders) ->
 %%--------------------------------------------------------------------
 -spec provider_logic_mock_setup(Config :: list(), Workers :: node() | [node()],
     proplists:proplist(), proplists:proplist()) -> ok.
-provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
+provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup) ->
     test_utils:mock_new(AllWorkers, provider_logic),
 
     ProvMap = lists:foldl(fun({SpaceId, SpaceConfig}, AccIn) ->
@@ -999,7 +948,7 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
         end, AccIn, Providers0)
     end, #{}, SpacesSetup),
 
-    % Different arities of below functions must be mocked separately, because
+    % Different arity of below functions must be mocked separately, because
     % they contain calls to the same module, which overrides the mock.
     GetProviderFun = fun(?ROOT_SESS_ID, PID) ->
         Domain = provider_id_to_domain(PID),
@@ -1048,7 +997,7 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
 
     test_utils:mock_expect(AllWorkers, provider_logic, get,
         fun() ->
-            GetProviderFun(?ROOT_SESS_ID, oneprovider:get_provider_id())
+            GetProviderFun(?ROOT_SESS_ID, oneprovider:get_id())
         end),
 
     test_utils:mock_expect(AllWorkers, provider_logic, get_name, GetNameFun),
@@ -1060,7 +1009,7 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
 
     test_utils:mock_expect(AllWorkers, provider_logic, get_name,
         fun() ->
-            GetNameFun(?ROOT_SESS_ID, oneprovider:get_provider_id())
+            GetNameFun(?ROOT_SESS_ID, oneprovider:get_id())
         end),
 
     test_utils:mock_expect(AllWorkers, provider_logic, get_domain, GetDomainFun),
@@ -1072,7 +1021,7 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
 
     test_utils:mock_expect(AllWorkers, provider_logic, get_domain,
         fun() ->
-            GetDomainFun(?ROOT_SESS_ID, oneprovider:get_provider_id())
+            GetDomainFun(?ROOT_SESS_ID, oneprovider:get_id())
         end),
 
     test_utils:mock_expect(AllWorkers, provider_logic, resolve_ips, ResolveIPsFun),
@@ -1091,22 +1040,43 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
 
     test_utils:mock_expect(AllWorkers, provider_logic, get_spaces,
         fun() ->
-            GetSpacesFun(?ROOT_SESS_ID, oneprovider:get_provider_id())
+            GetSpacesFun(?ROOT_SESS_ID, oneprovider:get_id())
+        end),
+
+    SupportsSpaceFun = fun(?ROOT_SESS_ID, ProviderId, SpaceId) ->
+        case maps:get(ProviderId, ProvMap, undefined) of
+            undefined ->
+                false;
+            Spaces ->
+                lists:member(SpaceId, Spaces)
+        end
+    end,
+
+    test_utils:mock_expect(AllWorkers, provider_logic, supports_space,
+        fun(SpaceId) ->
+            SupportsSpaceFun(?ROOT_SESS_ID, oneprovider:get_id(), SpaceId)
         end),
 
     test_utils:mock_expect(AllWorkers, provider_logic, supports_space,
-        fun(?ROOT_SESS_ID, ProviderId, SpaceId) ->
-            case maps:get(ProviderId, ProvMap, undefined) of
-                undefined ->
-                    false;
-                Spaces ->
-                    lists:member(SpaceId, Spaces)
-            end
-        end),
+        SupportsSpaceFun
+    ),
 
     test_utils:mock_expect(AllWorkers, provider_logic, zone_time_seconds,
         fun() ->
             time_utils:cluster_time_seconds()
+        end),
+
+    test_utils:mock_expect(AllWorkers, provider_logic, verify_provider_identity,
+        fun(_) ->
+            ok
+        end),
+
+    test_utils:mock_expect(AllWorkers, provider_logic, verify_provider_identity,
+        fun(ProviderId, Macaroon) ->
+            case Macaroon of
+                ?DUMMY_PROVIDER_IDENTITY_MACAROON(ProviderId) -> ok;
+                _ -> {error, bad_macaroon}
+            end
         end).
 
 %%--------------------------------------------------------------------

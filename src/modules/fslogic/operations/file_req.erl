@@ -257,7 +257,7 @@ get_file_location_insecure(_UserCtx, FileCtx) ->
         status = #status{code = ?OK},
         fuse_response = #file_location{
             uuid = FileUuid,
-            provider_id = oneprovider:get_provider_id(),
+            provider_id = oneprovider:get_id(),
             storage_id = StorageId,
             file_id = FileId,
             blocks = Blocks,
@@ -382,7 +382,7 @@ fsync_insecure(UserCtx, FileCtx, DataOnly, HandleId) ->
 flush_event_queue(UserCtx, FileCtx) ->
     SessId = user_ctx:get_session_id(UserCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    lfm_event_utils:flush_event_queue(SessId, oneprovider:get_provider_id(), FileUuid),
+    lfm_event_utils:flush_event_queue(SessId, oneprovider:get_id(), FileUuid),
     #fuse_response{
         status = #status{code = ?OK}
     }.

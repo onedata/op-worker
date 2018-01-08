@@ -985,8 +985,8 @@ automatic_cleanup_should_invalidate_unpopular_files(Config) ->
     lfm_proxy:write(WorkerP1, Handle5, 0, ?TEST_DATA2),
     lfm_proxy:close(WorkerP1, Handle5),
 
-    Provider1Id = rpc:call(WorkerP1, oneprovider, get_provider_id, []),
-    Provider2Id = rpc:call(WorkerP2, oneprovider, get_provider_id, []),
+    Provider1Id = rpc:call(WorkerP1, oneprovider, get_id, []),
+    Provider2Id = rpc:call(WorkerP2, oneprovider, get_id, []),
 
     % synchronize files
     {ok, ReadHandle1} = ?assertMatch({ok, _}, lfm_proxy:open(WorkerP2, SessionIdP2, {guid, File1Guid}, read), ?ATTEMPTS),
@@ -1202,8 +1202,8 @@ xattr_list(Config) ->
 metric_get(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
 
-    Prov1ID = rpc:call(WorkerP1, oneprovider, get_provider_id, []),
-    Prov2ID = rpc:call(WorkerP2, oneprovider, get_provider_id, []),
+    Prov1ID = rpc:call(WorkerP1, oneprovider, get_id, []),
+    Prov2ID = rpc:call(WorkerP2, oneprovider, get_id, []),
 
     MonitoringId = #monitoring_id{
         main_subject_type = space,
@@ -2189,7 +2189,6 @@ init_per_suite(Config) ->
         application:start(ssl),
         hackney:start(),
         NewConfig3 = initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2),
-        initializer:enable_grpca_based_communication(NewConfig3),
         NewConfig3
     end,
     [
@@ -2201,7 +2200,6 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
-    initializer:disable_grpca_based_communication(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     hackney:stop(),
     application:stop(ssl),
@@ -2346,16 +2344,19 @@ do_request(Node, URL, Method, Headers, Body, Opts) ->
     end.
 
 rest_endpoint(Node) ->
-    Port =
-        case get(port) of
-            undefined ->
-                {ok, P} = test_utils:get_env(Node, ?APP_NAME, rest_port),
-                PStr = integer_to_binary(P),
-                PStr;
-            P -> P
-        end,
+    Port = case get(port) of
+        undefined ->
+            {ok, P} = test_utils:get_env(Node, ?APP_NAME, gui_https_port),
+            PStr = case P of
+                443 -> <<"">>;
+                _ -> <<":", (integer_to_binary(P))/binary>>
+            end,
+            put(port, PStr),
+            PStr;
+        P -> P
+    end,
     {ok, Domain} = test_utils:get_env(Node, ?APP_NAME, test_web_cert_domain),
-    <<"https://", (str_utils:to_binary(Domain))/binary, ":", Port/binary, "/api/v3/oneprovider/">>.
+    <<"https://", (str_utils:to_binary(Domain))/binary, Port/binary, "/api/v3/oneprovider/">>.
 
 
 user_1_token_header(Config) ->

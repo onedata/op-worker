@@ -67,7 +67,7 @@ available_strategies() ->
     [space_strategy:job()].
 strategy_init_jobs(check_globally, StrategyArgs, InitData) ->
     [#space_strategy_job{strategy_name = check_globally, strategy_args = StrategyArgs,
-        data = InitData#{provider_id => oneprovider:get_provider_id()}}];
+        data = InitData#{provider_id => oneprovider:get_id()}}];
 strategy_init_jobs(StrategyName, StrategyArgs, InitData) ->
     [#space_strategy_job{strategy_name = StrategyName, strategy_args = StrategyArgs, data = InitData}].
 
@@ -89,14 +89,14 @@ strategy_handle_job(#space_strategy_job{strategy_name = check_globally, data = D
     } = Data,
     SessionId = user_ctx:get_session_id(CTX),
     {ok, ProviderIds0} = space_logic:get_provider_ids(SessionId, SpaceId),
-    case oneprovider:get_provider_id() == ProviderId of
+    case oneprovider:is_self(ProviderId) of
         true ->
             {MergeType, Jobs} = space_sync_worker:init(?MODULE, SpaceId, undefined, Data),
             case space_sync_worker:run({MergeType, [Job_#space_strategy_job{strategy_name = check_locally} || Job_ <- Jobs]}) of
                 #fuse_response{status = #status{code = ?OK}} = Response ->
                     {Response, []};
                 _OtherResp ->
-                    ProviderIds = ProviderIds0 -- [oneprovider:get_provider_id()],
+                    ProviderIds = ProviderIds0 -- [oneprovider:get_id()],
                     SessionId = user_ctx:get_session_id(CTX),
                     {ok, #document{value = #session{proxy_via = ProxyVia}}} = session:get(SessionId),
                     NewJobs = case lists:member(ProxyVia, ProviderIds) of
@@ -175,7 +175,7 @@ strategy_merge_result([_ | JobsR], [_ | R]) ->
     space_strategy:job_result().
 strategy_merge_result(#space_strategy_job{}, _LocalResult, #fuse_response{status = #status{code = ?OK}, fuse_response = FResponse} = ChildrenResult) ->
     #file_attr{guid = FileGuid, provider_id = ProviderId} = FResponse,
-    case oneprovider:get_provider_id() of
+    case oneprovider:get_id() of
         ProviderId -> ChildrenResult;
         _ ->
             #file_attr{guid = FileGuid} = FResponse,

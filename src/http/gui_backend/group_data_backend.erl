@@ -62,13 +62,13 @@ terminate() ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find_record(<<"group">>, GroupId) ->
     SessionId = gui_session:get_session_id(),
-    UserId = gui_session:get_user_id(),
-    % Check if the user belongs to this group
-    case group_logic:has_eff_user(SessionId, GroupId, UserId) of
-        false ->
-            gui_error:unauthorized();
-        true ->
-            {ok, group_record(GroupId)}
+    % Check if the user belongs to this group - he should be able to get
+    % protected group data.
+    case group_logic:get_protected_data(SessionId, GroupId) of
+        {ok, _} ->
+            {ok, group_record(GroupId)};
+        _ ->
+            gui_error:unauthorized()
     end;
 
 % PermissionsRecord matches <<"group-(user|group)-(list|permission)">>
@@ -316,24 +316,26 @@ group_record(GroupId) ->
 group_record(GroupId, HasViewPrivs) ->
     SessionId = gui_session:get_session_id(),
     UserId = gui_session:get_user_id(),
-    {ok, #document{
-        value = #od_group{
-            name = Name,
-            direct_children = ChildrenWithPerms,
-            direct_parents = ParentGroups
-        }}} = group_logic:get(SessionId, GroupId),
-    ChildGroups = maps:keys(ChildrenWithPerms),
+    {ok, #document{value = Group}} = case HasViewPrivs of
+        true -> group_logic:get(SessionId, GroupId);
+        false -> group_logic:get_protected_data(SessionId, GroupId)
+    end,
 
     % Depending on view privileges, show or hide info about members and privs
     {GroupUserListId, GroupGroupListId, Parents, Children} = case HasViewPrivs of
         true ->
+            #od_group{
+                direct_children = ChildrenWithPerms,
+                direct_parents = ParentGroups
+            } = Group,
+            ChildGroups = maps:keys(ChildrenWithPerms),
             {GroupId, GroupId, ParentGroups, ChildGroups};
         false ->
             {null, null, [], []}
     end,
     [
         {<<"id">>, GroupId},
-        {<<"name">>, Name},
+        {<<"name">>, Group#od_group.name},
         {<<"hasViewPrivilege">>, HasViewPrivs},
         {<<"userList">>, GroupUserListId},
         {<<"groupList">>, GroupGroupListId},
@@ -451,7 +453,7 @@ perms_db_to_gui(Perms) ->
                     HasPerm = lists:member(Perm, Perms),
                     [{PermBin, HasPerm} | Acc]
             end
-    end, [], privileges:group_privileges()).
+        end, [], privileges:group_privileges()).
 
 
 %%--------------------------------------------------------------------

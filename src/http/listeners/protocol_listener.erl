@@ -5,8 +5,8 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
-%%% @doc This module is responsible for clients' protocol listener starting
-%%% and stopping.
+%%% @doc This module is responsible for starting and stopping protocol listener
+%%% for clients and providers.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(protocol_listener).
@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 % Cowboy listener references
--define(TCP_PROTO_LISTENER, tcp_proto).
+-define(PROTO_LISTENER, tcp_proto).
 
 
 %% listener_behaviour callbacks
@@ -47,15 +47,15 @@ port() ->
 -spec start() -> ok | {error, Reason :: term()}.
 start() ->
     {ok, Port} = application:get_env(?APP_NAME, protocol_handler_port),
-    {ok, DispatcherPoolSize} =
+    {ok, AcceptorPoolSize} =
         application:get_env(?APP_NAME, protocol_handler_pool_size),
     {ok, KeyFile} =
-        application:get_env(?APP_NAME, protocol_handler_key_file),
+        application:get_env(?APP_NAME, web_key_file),
     {ok, CertFile} =
-        application:get_env(?APP_NAME, protocol_handler_cert_file),
-    CaCerts = cert_utils:load_ders_in_dir(oz_plugin:get_cacerts_dir()),
+        application:get_env(?APP_NAME, web_cert_file),
+    CaCerts = oneprovider:get_ca_certs(),
 
-    Result = ranch:start_listener(?TCP_PROTO_LISTENER, DispatcherPoolSize,
+    Result = ranch:start_listener(?PROTO_LISTENER, AcceptorPoolSize,
         ranch_ssl, [
             {port, Port},
             {keyfile, KeyFile},
@@ -78,12 +78,12 @@ start() ->
 %%--------------------------------------------------------------------
 -spec stop() -> ok | {error, Reason :: term()}.
 stop() ->
-    case catch cowboy:stop_listener(?TCP_PROTO_LISTENER) of
+    case catch cowboy:stop_listener(?PROTO_LISTENER) of
         (ok) ->
             ok;
         (Error) ->
             ?error("Error on stopping listener ~p: ~p",
-                [?TCP_PROTO_LISTENER, Error]),
+                [?PROTO_LISTENER, Error]),
             {error, protocol_listener_stop_error}
     end.
 

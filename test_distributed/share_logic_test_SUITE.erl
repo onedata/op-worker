@@ -365,14 +365,12 @@ init_per_suite(Config) ->
 
 init_per_testcase(get_test, Config) ->
     % Provider must be aware of its ID to check access to cached share
-    logic_tests_common:mock_provider_id(Config, ?PROVIDER_1),
     init_per_testcase(default, Config);
 init_per_testcase(_, Config) ->
     logic_tests_common:wait_for_mocked_connection(Config),
     Config.
 
 end_per_testcase(get_test, Config) ->
-    logic_tests_common:unmock_provider_id(Config),
     end_per_testcase(default, Config);
 end_per_testcase(_, Config) ->
     logic_tests_common:invalidate_all_test_records(Config),
