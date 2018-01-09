@@ -18,7 +18,7 @@
 
 %% API
 -export([take_children_storage_ctxs_for_batch/2, take_hash_for_batch/2, module/1,
-    all_subfiles_imported/2]).
+    all_children_imported/2]).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -55,10 +55,10 @@ module(#space_strategy_job{strategy_type = Module}) ->
 %% If true it means that some children haven't been imported yet.
 %% @end
 %%-------------------------------------------------------------------
--spec all_subfiles_imported([space_strategy:job()], file_meta:uuid()) ->
+-spec all_children_imported([space_strategy:job()], file_meta:uuid()) ->
     boolean().
-all_subfiles_imported([], _FileUuid) -> true;
-all_subfiles_imported(Jobs, FileUuid) ->
+all_children_imported([], _FileUuid) -> true;
+all_children_imported(Jobs, FileUuid) ->
     not job_matches_file(hd(Jobs), FileUuid).
 
 %%===================================================================

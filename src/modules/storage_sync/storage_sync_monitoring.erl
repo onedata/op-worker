@@ -17,31 +17,40 @@
 
 
 %% counters API
--export([start_imported_files_counter/1, increase_imported_files_counter/1,
-    get_imported_files_value/1, stop_imported_files_counter/1,
-    start_files_to_import_counter/1, update_files_to_import_counter/2,
-    get_files_to_import_value/1, stop_files_to_import_counter/1,
-    start_files_to_update_counter/1, get_files_to_update_value/1,
-    update_files_to_update_counter/2, stop_files_to_update_counter/1,
-    update_to_do_counter/3
+
+% starting & stopping
+-export([start_counters/1, stop_counters/1, reset_sync_counters/1,
+    start_imported_files_spirals/1, stop_imported_files_spirals/1,
+    start_updated_files_spirals/1, stop_updated_files_spirals/1,
+    start_deleted_files_spirals/1, stop_deleted_files_spirals/1,
+    start_queue_length_spirals/1, stop_queue_length_spirals/1,
+    ensure_all_metrics_stopped/1, get_update_state/1, get_import_state/1,
+    get_metric/3
 ]).
 
--export([update_in_progress/1, get_metric/3, ensure_all_metrics_stopped/1,
-    import_state/1]).
+% getters
+-export([get_unhandled_files_value/1, get_files_to_sync_value/1,
+    get_imported_files_value/1, get_failed_file_imports_value/1,
+    get_updated_files_value/1, get_failed_file_updates_value/1,
+    get_failed_file_deletions_value/1, get_deleted_files_value/1
+]).
 
--export([start_imported_files_spirals/1, increase_imported_files_spirals/1,
-    stop_imported_files_spirals/1, start_updated_files_spirals/1,
-    increase_updated_files_spirals/1, stop_updated_files_spirals/1,
-    start_deleted_files_spirals/1, increase_deleted_files_spirals/1,
-    stop_deleted_files_spirals/1, start_queue_length_spirals/1,
-    update_queue_length_spirals/2, stop_queue_length_spirals/1
+
+% setters
+-export([increase_imported_files_counter/1, increase_failed_file_imports_counter/1,
+    increase_updated_files_counter/1, increase_failed_file_updates_counter/1,
+    increase_deleted_files_counter/1, increase_failed_file_deletions_counter/1,
+    update_files_to_sync_counter/2, increase_imported_files_spirals/1,
+    increase_updated_files_spirals/1, increase_deleted_files_spirals/1,
+    update_queue_length_spirals/2
 ]).
 
 -export([init_report/0, init_reporter/1, init_counters/0]).
 
 
 -type window() :: day | hours | minute.
--type counter_type() :: imported_files | files_to_import | files_to_update.
+-type counter_type() :: files_to_sync | imported_files | deleted_files | updated_files |
+                        failed_file_imports | failed_file_deletions | failed_file_updates.
 -type spiral_type() :: imported_files | updated_files | deleted_files | queue_length.
 -type error() :: {error, term()}.
 
@@ -63,16 +72,22 @@
 -define(ETS_REPORTER_NAME, exometer_report_rrd_ets).
 
 %%metric types
+-define(FILES_TO_SYNC, files_to_sync).
+-define(QUEUE_LENGTH, queue_length).
+
 -define(IMPORTED_FILES, imported_files).
 -define(DELETED_FILES, deleted_files).
 -define(UPDATED_FILES, updated_files).
 
--define(FILES_TO_IMPORT, files_to_import).
--define(FILES_TO_UPDATE, files_to_update).
--define(QUEUE_LENGTH, queue_length).
+-define(FAILED_FILE_IMPORTS, failed_file_imports).
+-define(FAILED_FILE_UPDATES, failed_file_updates).
+-define(FAILED_FILE_DELETIONS, failed_file_deletions).
 
--define(COUNTER_TYPES, [
-    ?IMPORTED_FILES, ?FILES_TO_IMPORT, ?FILES_TO_UPDATE
+-define(SYNC_COUNTERS, [
+    ?IMPORTED_FILES, ?FAILED_FILE_IMPORTS, 
+    ?UPDATED_FILES, ?FAILED_FILE_UPDATES, 
+    ?DELETED_FILES, ?FAILED_FILE_DELETIONS,
+    ?FILES_TO_SYNC
 ]).
 
 -define(SPIRAL_TYPES, [
@@ -86,30 +101,14 @@
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Starts counter of imported files.
+%% Starts counters required by storage_import and storage_update
 %% @end
 %%-------------------------------------------------------------------
--spec start_imported_files_counter(od_space:id()) -> ok.
-start_imported_files_counter(SpaceId) ->
-    start_and_subscribe_storage_sync_counter(SpaceId, ?IMPORTED_FILES).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Starts counter of files to be imported
-%% @end
-%%-------------------------------------------------------------------
--spec start_files_to_import_counter(od_space:id()) -> ok.
-start_files_to_import_counter(SpaceId) ->
-    start_and_subscribe_storage_sync_counter(SpaceId, ?FILES_TO_IMPORT).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Starts counter of files to be imported
-%% @end
-%%-------------------------------------------------------------------
--spec start_files_to_update_counter(od_space:id()) -> ok.
-start_files_to_update_counter(SpaceId) ->
-    start_and_subscribe_storage_sync_counter(SpaceId, ?FILES_TO_UPDATE).
+-spec start_counters(od_space:id()) -> ok.
+start_counters(SpaceId) ->
+    lists:foreach(fun(CounterType) ->
+        start_and_subscribe_storage_sync_counter(SpaceId, CounterType)
+    end, ?SYNC_COUNTERS).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -156,32 +155,16 @@ start_updated_files_spirals(SpaceId) ->
     end, ?WINDOWS).
 
 %%-------------------------------------------------------------------
+%% @private
 %% @doc
-%% Stops counter of imported files
+%% Stops and unsubscribes counters required by storage_import and storage_update
 %% @end
 %%-------------------------------------------------------------------
--spec stop_imported_files_counter(od_space:id()) -> ok | {error, term()}.
-stop_imported_files_counter(SpaceId) ->
-    stop_and_unsubscribe_storage_sync_counter(SpaceId, ?IMPORTED_FILES).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Stops counter of files to be imported
-%% @end
-%%-------------------------------------------------------------------
--spec stop_files_to_import_counter(od_space:id()) -> ok | {error, term()}.
-stop_files_to_import_counter(SpaceId) ->
-    stop_and_unsubscribe_storage_sync_counter(SpaceId, ?FILES_TO_IMPORT).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Stops counter of files to be updated
-%% @end
-%%-------------------------------------------------------------------
--spec stop_files_to_update_counter(od_space:id()) ->
-    ok | {error, term()}.
-stop_files_to_update_counter(SpaceId) ->
-    stop_and_unsubscribe_storage_sync_counter(SpaceId, ?FILES_TO_UPDATE).
+-spec stop_counters(od_space:id()) -> ok.
+stop_counters(SpaceId) ->
+    lists:foreach(fun(CounterType) ->
+       stop_and_unsubscribe_storage_sync_counter(SpaceId, CounterType)
+    end, ?SYNC_COUNTERS).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -229,6 +212,17 @@ stop_queue_length_spirals(SpaceId) ->
 
 %%-------------------------------------------------------------------
 %% @doc
+%% Reset counters used by storage_import and storage_update
+%% @end
+%%-------------------------------------------------------------------
+-spec reset_sync_counters(od_space:id()) -> ok.
+reset_sync_counters(SpaceId) ->
+    lists:foreach(fun(CounterType) ->
+        ok = reset_counter(SpaceId, CounterType)
+    end, ?SYNC_COUNTERS).
+
+%%-------------------------------------------------------------------
+%% @doc
 %% Increases counter of imported files
 %% @end
 %%-------------------------------------------------------------------
@@ -239,16 +233,53 @@ increase_imported_files_counter(SpaceId) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Updates counter of files to be imported with given Value.
-%% Value can be negative.
+%% Increases counter of imported files
 %% @end
 %%-------------------------------------------------------------------
--spec update_to_do_counter(od_space:id(),
-    space_strategy:type(), integer()) -> ok | error().
-update_to_do_counter(SpaceId, storage_import, Value) ->
-    update_files_to_import_counter(SpaceId, Value);
-update_to_do_counter(SpaceId, storage_update, Value) ->
-    update_files_to_update_counter(SpaceId, Value).
+-spec increase_failed_file_imports_counter(od_space:id()) ->
+    ok | {error, term()}.
+increase_failed_file_imports_counter(SpaceId) ->
+    update_counter(SpaceId, ?FAILED_FILE_IMPORTS, 1).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Increases counter of updated files
+%% @end
+%%-------------------------------------------------------------------
+-spec increase_updated_files_counter(od_space:id()) ->
+    ok | {error, term()}.
+increase_updated_files_counter(SpaceId) ->
+    update_counter(SpaceId, ?UPDATED_FILES, 1).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Increases counter of updated files
+%% @end
+%%-------------------------------------------------------------------
+-spec increase_failed_file_updates_counter(od_space:id()) ->
+    ok | {error, term()}.
+increase_failed_file_updates_counter(SpaceId) ->
+    update_counter(SpaceId, ?FAILED_FILE_UPDATES, 1).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Increases counter of deleted files
+%% @end
+%%-------------------------------------------------------------------
+-spec increase_deleted_files_counter(od_space:id()) ->
+    ok | {error, term()}.
+increase_deleted_files_counter(SpaceId) ->
+    update_counter(SpaceId, ?DELETED_FILES, 1).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Increases counter of deleted files
+%% @end
+%%-------------------------------------------------------------------
+-spec increase_failed_file_deletions_counter(od_space:id()) ->
+    ok | {error, term()}.
+increase_failed_file_deletions_counter(SpaceId) ->
+    update_counter(SpaceId, ?FAILED_FILE_DELETIONS, 1).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -304,79 +335,137 @@ update_queue_length_spirals(SpaceId, Value) ->
 %% Value can be negative.
 %% @end
 %%-------------------------------------------------------------------
--spec update_files_to_import_counter(od_space:id(), integer()) -> ok | error().
-update_files_to_import_counter(SpaceId, Value) ->
-    update_counter(SpaceId, ?FILES_TO_IMPORT, Value).
+-spec update_files_to_sync_counter(od_space:id(), integer()) -> ok | error().
+update_files_to_sync_counter(SpaceId, Value) ->
+    update_counter(SpaceId, ?FILES_TO_SYNC, Value).
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Updates counter of files to be updated with given Value.
-%% Value can be negative.
+%% Returns value of files to be imported counter
 %% @end
 %%-------------------------------------------------------------------
--spec update_files_to_update_counter(od_space:id(), integer()) -> ok | error().
-update_files_to_update_counter(SpaceId, Value) ->
-    update_counter(SpaceId, ?FILES_TO_UPDATE, Value).
+-spec get_files_to_sync_value(od_space:id()) -> integer().
+get_files_to_sync_value(SpaceId) ->
+    get_value(SpaceId, ?FILES_TO_SYNC).
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Returns values of files to be imported counter
-%% @end
-%%-------------------------------------------------------------------
--spec get_files_to_import_value(od_space:id()) -> integer().
-get_files_to_import_value(SpaceId) ->
-    get_value(SpaceId, ?FILES_TO_IMPORT).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Returns values of imported files counter
+%% Returns value of imported files counter
 %% @end
 %%-------------------------------------------------------------------
 -spec get_imported_files_value(od_space:id()) -> integer().
 get_imported_files_value(SpaceId) ->
     get_value(SpaceId, ?IMPORTED_FILES).
 
-
 %%-------------------------------------------------------------------
 %% @doc
-%% Returns values of imported files counter
+%% Returns value of updated files counter
 %% @end
 %%-------------------------------------------------------------------
--spec get_files_to_update_value(od_space:id()) -> integer().
-get_files_to_update_value(SpaceId) ->
-    get_value(SpaceId, ?FILES_TO_UPDATE).
+-spec get_updated_files_value(od_space:id()) -> integer().
+get_updated_files_value(SpaceId) ->
+    get_value(SpaceId, ?UPDATED_FILES).
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Returns state of import. Can be not_started, in_progress, finished.
+%% Returns value of failed file imports counter
+%% @end
+%%-------------------------------------------------------------------
+-spec get_failed_file_imports_value(od_space:id()) -> integer().
+get_failed_file_imports_value(SpaceId) ->
+    get_value(SpaceId, ?FAILED_FILE_IMPORTS).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns value of failed file updates counter
+%% @end
+%%-------------------------------------------------------------------
+-spec get_failed_file_updates_value(od_space:id()) -> integer().
+get_failed_file_updates_value(SpaceId) ->
+    get_value(SpaceId, ?FAILED_FILE_UPDATES).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns value of failed file deletions counter
+%% @end
+%%-------------------------------------------------------------------
+-spec get_failed_file_deletions_value(od_space:id()) -> integer().
+get_failed_file_deletions_value(SpaceId) ->
+    get_value(SpaceId, ?FAILED_FILE_DELETIONS).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns value of deleted_files
+%% @end
+%%-------------------------------------------------------------------
+-spec get_deleted_files_value(od_space:id()) -> integer().
+get_deleted_files_value(SpaceId) ->
+    get_value(SpaceId, ?DELETED_FILES).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns balance of sync counters.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_unhandled_files_value(od_space:id()) -> integer().
+get_unhandled_files_value(SpaceId) ->
+    get_files_to_sync_value(SpaceId) -
+    get_imported_files_value(SpaceId) -
+    get_failed_file_imports_value(SpaceId) -
+    get_updated_files_value(SpaceId) -
+    get_failed_file_updates_value(SpaceId) -
+    get_deleted_files_value(SpaceId) -
+    get_failed_file_deletions_value(SpaceId).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns state of import. Possible values: not_started, in_progress, finished.
 %% @end
 %%-------------------------------------------
--spec import_state(od_space:id()) -> storage_import:state().
-import_state(SpaceId) ->
+-spec get_import_state(od_space:id()) -> storage_import:state().
+get_import_state(SpaceId) ->
     {ok, #document{
         value = #space_strategies{
             storage_strategies = StorageStrategies
         }}} = space_strategies:get(SpaceId),
     StorageId = hd(maps:keys(StorageStrategies)),
-    ImportStartTime = space_strategies:get_import_start_time(SpaceId, StorageId),
-    FilesToImport = get_files_to_import_value(SpaceId),
-    case {ImportStartTime, FilesToImport} of
-        {undefined, 0} ->
+    ImportStartTime = space_strategies:get_import_start_time(StorageStrategies, StorageId),
+    ImportFinishTime = space_strategies:get_import_finish_time(StorageStrategies, StorageId),
+    case {ImportStartTime, ImportFinishTime} of
+        {undefined, undefined} ->
             not_started;
-        {_, FilesToImport} when FilesToImport > 0 ->
+        {_, undefined} ->
             in_progress;
-        {_, 0} ->
+        {ImportStartTime, ImportFinishTime} when ImportStartTime =/= undefined ->
             finished
     end.
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Checks if storage_update is in progress
+%% Returns state of update. Possible values: not_started, in_progress, finished.
 %% @end
 %%-------------------------------------------------------------------
--spec update_in_progress(od_space:id()) -> boolean().
-update_in_progress(SpaceId) ->
-    get_files_to_update_value(SpaceId) > 0.
+-spec get_update_state(od_space:id()) -> storage_update:state().
+get_update_state(SpaceId) ->
+    {ok, #document{
+        value = #space_strategies{
+            storage_strategies = StorageStrategies
+        }}} = space_strategies:get(SpaceId),
+    {ok, #document{
+        value = #space_strategies{
+            storage_strategies = StorageStrategies
+        }}} = space_strategies:get(SpaceId),
+    StorageId = hd(maps:keys(StorageStrategies)),
+    LastUpdateStartTime = space_strategies:get_last_update_start_time(StorageStrategies, StorageId),
+    LastUpdateFinishTime = space_strategies:get_last_update_finish_time(StorageStrategies, StorageId),
+    case {LastUpdateStartTime, LastUpdateFinishTime} of
+        {undefined, undefined} ->
+            not_started;
+        {_, undefined} ->
+            in_progress;
+        {LastUpdateStartTime, LastUpdateFinishTime} when LastUpdateStartTime =/= undefined ->
+            finished
+    end.
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -403,9 +492,7 @@ get_metric(SpaceId, Type, Window) ->
 %%-------------------------------------------------------------------
 -spec ensure_all_metrics_stopped(od_space:id()) -> ok.
 ensure_all_metrics_stopped(SpaceId) ->
-    storage_sync_monitoring:stop_files_to_update_counter(SpaceId),
-    storage_sync_monitoring:stop_imported_files_counter(SpaceId),
-    storage_sync_monitoring:stop_files_to_import_counter(SpaceId),
+    stop_counters(SpaceId),
     storage_sync_monitoring:stop_updated_files_spirals(SpaceId),
     storage_sync_monitoring:stop_deleted_files_spirals(SpaceId),
     storage_sync_monitoring:stop_imported_files_spirals(SpaceId),
@@ -478,9 +565,7 @@ init_report([SpaceId | Rest]) ->
 %%-------------------------------------------------------------------
 -spec resubscribe(atom(), od_space:id()) -> ok.
 resubscribe(?LAGER_REPORTER_NAME, SpaceId) ->
-    start_imported_files_counter(SpaceId),
-    start_files_to_import_counter(SpaceId),
-    start_files_to_update_counter(SpaceId);
+    start_counters(SpaceId);
 resubscribe(?ETS_REPORTER_NAME, SpaceId) ->
     start_imported_files_spirals(SpaceId),
     start_deleted_files_spirals(SpaceId),
@@ -626,7 +711,7 @@ update_queue_length_spiral(SpaceId, Window, Value) ->
     ok | error().
 start_and_subscribe_storage_sync_counter(SpaceId, CounterType) ->
     CounterName = ?COUNTER_NAME(SpaceId, CounterType),
-    exometer:new(CounterName, counter),
+    catch exometer:new(CounterName, counter),
     ok = exometer_report:subscribe(?LAGER_REPORTER_NAME, CounterName, [value],
         ?COUNTER_LOGGING_INTERVAL).
 
@@ -647,12 +732,12 @@ start_and_subscribe_storage_sync_spiral(SpaceId, Type, Window, Resolution) ->
 %% Starts and subscribes to given type of spiral.
 %% @end
 %%-------------------------------------------------------------------
-%%-spec start_and_subscribe_storage_sync_spiral(od_space:id(), spiral_type(),
-%%    window(), non_neg_integer()) -> ok | error().
+-spec start_and_subscribe_storage_sync_spiral(od_space:id(), spiral_type(),
+    window(), non_neg_integer(), exometer:datapoint()) -> ok.
 start_and_subscribe_storage_sync_spiral(SpaceId, Type, Window, Resolution, Metric) ->
     SpiralName = ?SPIRAL_NAME(SpaceId, Type, Window),
     TimeSpan = resolution_to_time_span(Window, Resolution),
-    exometer:new(SpiralName, spiral, [{time_span, TimeSpan}]),
+    catch exometer:new(SpiralName, spiral, [{time_span, TimeSpan}]),
     ok = exometer_report:subscribe(?ETS_REPORTER_NAME, SpiralName, [Metric], TimeSpan).
 
 %%-------------------------------------------------------------------
@@ -680,6 +765,17 @@ stop_and_unsubscribe_storage_sync_spiral(SpaceId, Type, Window) ->
     SpiralName = ?SPIRAL_NAME(SpaceId, Type, Window),
     exometer_report:unsubscribe_all(?ETS_REPORTER_NAME, SpiralName),
     exometer:delete(SpiralName).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Updates given counter with given Value.
+%% @end
+%%-------------------------------------------------------------------
+-spec reset_counter(od_space:id(), counter_type()) -> ok | error().
+reset_counter(SpaceId, CounterType) ->
+    CounterName = ?COUNTER_NAME(SpaceId, CounterType),
+    exometer:reset(CounterName).
 
 %%-------------------------------------------------------------------
 %% @private

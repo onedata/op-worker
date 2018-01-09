@@ -148,6 +148,7 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec delete(datastore:key()) -> ok | datastore:generic_error().
 delete(Key) ->
+    space_strategies:delete(Key),
     model:execute_with_default_context(?MODULE, delete, [Key]).
 
 %%--------------------------------------------------------------------
