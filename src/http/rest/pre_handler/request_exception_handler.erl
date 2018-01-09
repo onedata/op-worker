@@ -42,9 +42,6 @@ handle(Req, State, error, {badmatch, Badmatch}) ->
     handle(Req, State, error, Badmatch);
 handle(Req, State, error, {case_clause, CaseClause}) ->
     handle(Req, State, error, CaseClause);
-handle(Req, State, error, {error, no_peer_certificate}) ->
-    {ok, Req2} = cowboy_req:reply(?NOT_AUTHORIZED, [], [], Req),
-    {halt, Req2, State};
 handle(Req, State, error, {error, not_found}) ->
     handle(Req, State, error, ?ERROR_NOT_FOUND);
 handle(Req, State, error, {error, {<<"not_found">>, _}}) ->

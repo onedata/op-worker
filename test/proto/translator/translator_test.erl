@@ -71,8 +71,7 @@ translate_client_handshake_request_from_protobuf_test() ->
     ?assertEqual(Internal, translator:translate_from_protobuf(Protobuf)).
 
 translate_provider_handshake_request_from_protobuf_test() ->
-    Token = <<"DUMMY-MACAROON">>,
-    {Internal, Protobuf} = get_provider_handshake_request(Token, <<"abcd">>),
+    {Internal, Protobuf} = get_provider_handshake_request(<<"abcd">>, <<"nonce">>),
     ?assertEqual(Internal, translator:translate_from_protobuf(Protobuf)).
 
 translate_message_stream_from_protobuf_test() ->
@@ -329,11 +328,10 @@ get_client_handshake_request(TokenVal, SessionId) ->
         #'ClientHandshakeRequest'{token = PBToken, session_id = SessionId}
     }.
 
-get_provider_handshake_request(TokenVal, ProviderId) ->
-    {IntToken, PBToken} = get_token(TokenVal),
+get_provider_handshake_request(ProviderId, Nonce) ->
     {
-        #provider_handshake_request{provider_id = ProviderId, macaroon = IntToken},
-        #'ProviderHandshakeRequest'{provider_id = ProviderId, token = PBToken}
+        #provider_handshake_request{provider_id = ProviderId, nonce = Nonce},
+        #'ProviderHandshakeRequest'{provider_id = ProviderId, nonce = Nonce}
     }.
 
 get_message_stream(StmId, SeqNum) ->

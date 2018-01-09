@@ -25,7 +25,6 @@
 
 -export([
     token_auth/1,
-    cert_auth/1,
     basic_auth/1,
     internal_error_when_handler_crashes/1,
     custom_code_when_handler_throws_code/1,
@@ -35,7 +34,6 @@
 
 all() -> ?ALL([
     token_auth,
-%%    cert_auth, %todo reenable rest_cert_auth after appmock repair
     basic_auth,
     internal_error_when_handler_crashes,
     custom_code_when_handler_throws_code,
@@ -72,27 +70,6 @@ token_auth(Config) ->
     ?assertMatch({ok, 401, _, _}, AuthFail),
     ?assertMatch({ok, 200, _, _}, AuthSuccess1),
     ?assertMatch({ok, 200, _, _}, AuthSuccess2).
-
-cert_auth(Config) ->
-    % given
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    Endpoint = rest_endpoint(Worker),
-    CertUnknown = ?TEST_FILE(Config, "unknown_peer.pem"),
-    CertKnown = ?TEST_FILE(Config, "known_peer.pem"),
-    UnknownCertOpt = {ssl_options, [{certfile, CertUnknown}, {reuse_sessions, false}]},
-    KnownCertOpt = {ssl_options, [{certfile, CertKnown}, {reuse_sessions, false}]},
-
-    % then - unauthorized access
-    {ok, 307, Headers, _} = do_request(Config, get, Endpoint ++ "files", #{}, <<>>, [UnknownCertOpt]),
-    Loc = maps:get(<<"location">>, Headers),
-    ?assertMatch({ok, 401, _, _}, do_request(Config, get, Loc, #{}, <<>>, [UnknownCertOpt])),
-
-    % then - authorized access
-    {ok, 307, Headers2, _} = do_request(Config, get, Endpoint ++ "files", #{}, <<>>, [KnownCertOpt]),
-    Loc2 = maps:get(<<"location">>, Headers2),
-    {ok, 307, Headers3, _} = do_request(Config, get, Loc2, #{}, <<>>, [KnownCertOpt]),
-    Loc3 = maps:get(<<"location">>, Headers3),
-    ?assertMatch({ok, 404, _, _}, do_request(Config, get, Loc3, #{}, <<>>, [KnownCertOpt])).
 
 basic_auth(Config) ->
     % given

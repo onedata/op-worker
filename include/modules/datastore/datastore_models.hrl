@@ -129,7 +129,7 @@
 %% Model for caching provider details fetched from OZ
 -record(od_provider, {
     name :: undefined | binary(),
-    subdomain_delegation = false :: boolean(),
+    subdomain_delegation = false :: undefined | boolean(),
     domain :: binary(),
     subdomain = undefined :: undefined |  binary(),
     latitude = 0.0 :: float(),
@@ -186,6 +186,10 @@
     root_macaroon :: binary(),
     cached_auth_macaroon = {0, <<"">>} :: {Timestamp :: integer(), binary()},
     cached_identity_macaroon = {0, <<"">>} :: {Timestamp :: integer(), binary()}
+}).
+
+-record(authorization_nonce, {
+    timestamp :: integer()
 }).
 
 %% Identity containing user_id

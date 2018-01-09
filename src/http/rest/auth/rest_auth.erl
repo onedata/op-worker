@@ -46,7 +46,7 @@ is_authorized(Req, State) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Authenticates user based on request headers or certificate.
+%% Authenticates user based on request headers.
 %% @end
 %%--------------------------------------------------------------------
 -spec authenticate(Req :: req()) -> {ok, session:id()} | {error, term()}.
@@ -81,7 +81,6 @@ authenticate(Req) ->
 %% - macaroon
 %% - token
 %% - basic auth
-%% - certificate
 %% @end
 %%--------------------------------------------------------------------
 -spec resolve_auth(Req :: req()) -> user_identity:credentials() | {error, term()}.
@@ -97,10 +96,9 @@ resolve_auth(Req) ->
 %% - macaroon
 %% - token
 %% - basic auth
-%% - certificate
 %% @end
 %%--------------------------------------------------------------------
--spec resolve_auth(Type :: macaroon | token | basic | certificate, Req :: req()) ->
+-spec resolve_auth(Type :: macaroon | token | basic, Req :: req()) ->
     user_identity:credentials() | {error, term()}.
 resolve_auth(macaroon, Req) ->
     case cowboy_req:header(<<"macaroon">>, Req) of
@@ -119,18 +117,9 @@ resolve_auth(token, Req) ->
 resolve_auth(basic, Req) ->
     case cowboy_req:header(<<"authorization">>, Req) of
         {undefined, _} ->
-            resolve_auth(certificate, Req);
+            {error, not_found};
         {<<"Basic ", UserPasswdB64/binary>>, _} ->
             #basic_auth{credentials = UserPasswdB64};
         {_, _} ->
-            resolve_auth(certificate, Req)
-    end;
-resolve_auth(certificate, Req) ->
-    Socket = cowboy_req:get(socket, Req),
-    case ssl:peercert(Socket) of
-        {ok, Der} ->
-            Certificate = public_key:pkix_decode_cert(Der, otp),
-            #certificate_auth{otp_cert = Certificate};
-        {error, Reason} ->
-            {error, Reason}
+            {error, not_found}
     end.

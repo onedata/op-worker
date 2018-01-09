@@ -22,6 +22,7 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("clproto/include/messages.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -32,7 +33,7 @@
 
 %%tests
 -export([
-    cert_connection_test/1,
+    provider_connection_test/1,
     token_connection_test/1,
     protobuf_msg_test/1,
     multi_message_test/1,
@@ -58,8 +59,8 @@
 ]).
 
 -define(NORMAL_CASES_NAMES, [
+    provider_connection_test,
     token_connection_test,
-    cert_connection_test,
     protobuf_msg_test,
     multi_message_test,
     client_send_test,
@@ -85,11 +86,37 @@
 all() -> ?ALL(?NORMAL_CASES_NAMES, ?PERFORMANCE_CASES_NAMES).
 
 -define(MACAROON, <<"DUMMY-MACAROON">>).
+-define(CORRECT_PROVIDER_ID, <<"correct-iden-mac">>).
+-define(INCORRECT_PROVIDER_ID, <<"incorrect-iden-mac">>).
+-define(CORRECT_NONCE, <<"correct-nonce">>).
+-define(INCORRECT_NONCE, <<"incorrect-nonce">>).
 -define(TIMEOUT, timer:seconds(5)).
 
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
+
+provider_connection_test(Config) ->
+    % given
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+
+    % then
+    ?assertMatch(
+        {ok, #'HandshakeResponse'{status = 'INVALID_PROVIDER'}},
+        connect_as_provider(Worker1, ?INCORRECT_PROVIDER_ID, ?CORRECT_NONCE)
+    ),
+    ?assertMatch(
+        {ok, #'HandshakeResponse'{status = 'INVALID_PROVIDER'}},
+        connect_as_provider(Worker1, ?INCORRECT_PROVIDER_ID, ?INCORRECT_NONCE)
+    ),
+    ?assertMatch(
+        {ok, #'HandshakeResponse'{status = 'INVALID_NONCE'}},
+        connect_as_provider(Worker1, ?CORRECT_PROVIDER_ID, ?INCORRECT_NONCE)
+    ),
+    ?assertMatch(
+        {ok, #'HandshakeResponse'{status = 'OK'}},
+        connect_as_provider(Worker1, ?CORRECT_PROVIDER_ID, ?CORRECT_NONCE)
+    ).
 
 token_connection_test(Config) ->
     % given
@@ -98,48 +125,6 @@ token_connection_test(Config) ->
     % then
     {ok, {Sock, _}} = connect_via_token(Worker1),
     ok = ssl:close(Sock).
-
-% todo VFS-1158 Modify & enable the test after veryfing client certificate.
-cert_connection_test(_Config) ->
-%%     % given
-%%     remove_pending_messages(),
-%%     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
-%%     HandshakeReq = #'ClientMessage'{message_body = {handshake_request, #'HandshakeRequest'{
-%%         session_id = <<"session_id">>
-%%     }}},
-%%     HandshakeReqRaw = messages:encode_msg(HandshakeReq),
-%%     Cert = ?TEST_FILE(Config, "peer.pem"),
-%%
-%%     {ok, CertPem} = file:read_file(Cert),
-%%     PemEntries = public_key:pem_decode(CertPem),
-%%     CertDer = lists:keyfind('Certificate', 1, PemEntries),
-%%
-%%     Self = self(),
-%%     test_utils:mock_expect(Workers, connection, init,
-%%         fun(Ref, Socket, Transport, Opts) ->
-%%             Self ! self(),
-%%             meck:passthrough([Ref, Socket, Transport, Opts])
-%%         end),
-%%
-%%     % when
-%%     {ok, Sock} = ssl:connect(utils:get_host_as_atom(Worker1), 5555, [binary, {packet, 4},
-%%         {active, true}, {certfile, Cert}, {cacertfile, Cert}]),
-%%
-%%     {ok, Pid} = ?assertReceivedMatch(_, ?TIMEOUT),
-%%     State = sys:get_state(Pid),
-%%     #'OTPCertificate'{} = Cert = erlang:element(2, State),
-%%
-%%     ok = ssl:send(Sock, HandshakeReqRaw),
-%%     ?assertReceivedMatch({ssl, _, RawHandshakeResponse}, ?TIMEOUT),
-%%
-%%     % then
-%%     ?assertEqual(CertDer, ssl:peercert(Sock)),
-%%     HandshakeResponse = messages:decode_msg(RawHandshakeResponse, 'ServerMessage'),
-%%     #'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{session_id =
-%%     SessionId}}} = HandshakeResponse,
-%%     ?assert(is_binary(SessionId)),
-%%     ok = ssl:close(Sock),
-    ok.
 
 protobuf_msg_test(Config) ->
     % given
@@ -605,9 +590,24 @@ proto_version_test(Config) ->
 init_per_suite(Config) ->
     [{?LOAD_MODULES, [initializer]} | Config].
 
-init_per_testcase(cert_connection_test, Config) ->
+init_per_testcase(provider_connection_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, serializator),
+    test_utils:mock_new(Workers, provider_logic, [passthrough]),
+
+    test_utils:mock_expect(Workers, provider_logic, verify_provider_identity, fun(ProviderId) ->
+        case ProviderId of
+            ?CORRECT_PROVIDER_ID -> ok;
+            ?INCORRECT_PROVIDER_ID -> ?ERROR_UNAUTHORIZED
+        end
+    end),
+
+    test_utils:mock_expect(Workers, provider_logic, verify_provider_nonce, fun(_ProviderId, Nonce) ->
+        case Nonce of
+            ?CORRECT_NONCE -> ok;
+            ?INCORRECT_NONCE -> ?ERROR_UNAUTHORIZED
+        end
+    end),
+
     init_per_testcase(default, Config);
 
 init_per_testcase(Case, Config) when
@@ -626,16 +626,17 @@ init_per_testcase(default, Config) ->
     initializer:remove_pending_messages(),
     mock_identity(Workers),
     test_utils:mock_new(Workers, provider_auth),
-    test_utils:mock_expect(Workers, provider_auth, get_provider_id, fun() -> <<"providerId">> end),
+    test_utils:mock_expect(Workers, provider_auth, get_provider_id, fun() ->
+        <<"providerId">> end),
     Config;
 
 init_per_testcase(_Case, Config) ->
     init_per_testcase(default, Config).
 
 
-end_per_testcase(cert_connection_test, Config) ->
+end_per_testcase(provider_connection_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, [serializator]),
+    test_utils:mock_validate_and_unload(Workers, [provider_logic]),
     end_per_testcase(default, Config);
 
 end_per_testcase(Case, Config) when
@@ -715,6 +716,31 @@ connect_via_token(Node, SocketOpts, SessId) ->
     ),
     ssl:setopts(Sock, ActiveOpt),
     {ok, {Sock, SessId}}.
+
+
+
+connect_as_provider(Node, ProviderId, Nonce) ->
+    SocketOpts = [{active, true}],
+    TokenAuthMessage = #'ClientMessage'{message_body = {provider_handshake_request,
+        #'ProviderHandshakeRequest'{provider_id = ProviderId, nonce = Nonce}
+    }},
+    TokenAuthMessageRaw = messages:encode_msg(TokenAuthMessage),
+    NewSocketOpts = proplists:delete(active, SocketOpts),
+    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, protocol_handler_port),
+
+    % when
+    {ok, Sock} = (catch ssl:connect(utils:get_host(Node), Port, [binary,
+        {packet, 4}, {active, once}, {reuse_sessions, false} | NewSocketOpts
+    ], timer:minutes(1))),
+    ok = ssl:send(Sock, TokenAuthMessageRaw),
+
+    % then
+    #'ServerMessage'{
+        message_body = {handshake_response, HandshakeResp}
+    } = receive_server_message(),
+    ok = ssl:close(Sock),
+    {ok, HandshakeResp}.
+
 
 %%--------------------------------------------------------------------
 %% @doc
