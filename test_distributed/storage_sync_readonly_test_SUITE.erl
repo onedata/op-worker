@@ -56,10 +56,15 @@
     create_file_import_check_user_id_error_test/1,
     import_nfs_acl_test/1,
     update_nfs_acl_test/1,
-    import_nfs_acl_with_disabled_luma_should_fail_test/1]).
+    import_nfs_acl_with_disabled_luma_should_fail_test/1,
+    create_directory_import_error_test/1,
+    delete_and_update_files_simultaneously_update_test/1, update_syncs_files_after_import_failed_test/1, update_syncs_files_after_previous_update_failed_test/1]).
 
 -define(TEST_CASES, [
     create_directory_import_test,
+    create_directory_import_error_test,
+    update_syncs_files_after_import_failed_test,
+    update_syncs_files_after_previous_update_failed_test,
     create_directory_import_check_user_id_test,
     create_directory_import_check_user_id_error_test,
     create_directory_import_without_read_permission_test,
@@ -75,6 +80,7 @@
     create_file_in_dir_exceed_batch_update_test,
     delete_empty_directory_update_test,
     delete_non_empty_directory_update_test,
+    delete_and_update_files_simultaneously_update_test,
     delete_file_update_test,
     append_file_update_test,
     copy_file_update_test,
@@ -100,6 +106,15 @@ all() -> ?ALL(?TEST_CASES).
 
 create_directory_import_test(Config) ->
     storage_sync_test_base:create_directory_import_test(Config, true).
+
+create_directory_import_error_test(Config) ->
+    storage_sync_test_base:create_directory_import_error_test(Config, true).
+
+update_syncs_files_after_import_failed_test(Config) ->
+    storage_sync_test_base:update_syncs_files_after_import_failed_test(Config, true).
+
+update_syncs_files_after_previous_update_failed_test(Config) ->
+    storage_sync_test_base:update_syncs_files_after_previous_update_failed_test(Config, true).
 
 create_directory_import_check_user_id_test(Config) ->
     storage_sync_test_base:create_directory_import_check_user_id_test(Config, true).
@@ -145,6 +160,9 @@ delete_empty_directory_update_test(Config) ->
 
 delete_non_empty_directory_update_test(Config) ->
     storage_sync_test_base:delete_non_empty_directory_update_test(Config, true).
+
+delete_and_update_files_simultaneously_update_test(Config) ->
+    storage_sync_test_base:delete_and_update_files_simultaneously_update_test(Config, true).
 
 delete_file_update_test(Config) ->
     storage_sync_test_base:delete_file_update_test(Config, true).
@@ -268,6 +286,15 @@ init_per_testcase(Case, Config) when
         {update_config, #{
             delete_enable => true,
             write_once => true}} | Config
+    ],
+    init_per_testcase(default, Config2);
+
+init_per_testcase(Case, Config) when
+    Case =:= delete_and_update_files_simultaneously_update_test ->
+    Config2 = [
+        {update_config, #{
+            delete_enable => true,
+            write_once => false}} | Config
     ],
     init_per_testcase(default, Config2);
 

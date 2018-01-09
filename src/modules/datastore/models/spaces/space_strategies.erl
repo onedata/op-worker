@@ -83,6 +83,7 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec delete(key()) -> ok | {error, term()}.
 delete(Key) ->
+    storage_sync_monitoring:ensure_all_metrics_stopped(Key),
     datastore_model:delete(?CTX, Key).
 
 %%--------------------------------------------------------------------
@@ -226,7 +227,9 @@ get_storage_update_details(SpaceId, StorageId) ->
 %% Returns value of import_finish_time for given SpaceId and StorageId.
 %% @end
 %%-------------------------------------------------------------------
--spec get_import_finish_time(od_space:id(), storage:id()) -> space_strategy:timestamp().
+-spec get_import_finish_time(od_space:id() | maps:map(), storage:id()) -> space_strategy:timestamp().
+get_import_finish_time(StorageStrategies, StorageId) when is_map(StorageStrategies) ->
+    storage_strategies:get_import_finish_time(StorageId, StorageStrategies);
 get_import_finish_time(SpaceId, StorageId) ->
     {ok, #document{
         value = #space_strategies{
@@ -239,7 +242,9 @@ get_import_finish_time(SpaceId, StorageId) ->
 %% Returns value of import_start_time for given SpaceId and StorageId.
 %% @end
 %%-------------------------------------------------------------------
--spec get_import_start_time(od_space:id(), storage:id()) -> space_strategy:timestamp().
+-spec get_import_start_time(od_space:id() | maps:map(), storage:id()) -> space_strategy:timestamp().
+get_import_start_time(StorageStrategies, StorageId) when is_map(StorageStrategies) ->
+    storage_strategies:get_import_start_time(StorageId, StorageStrategies);
 get_import_start_time(SpaceId, StorageId) ->
     {ok, #document{
         value = #space_strategies{
@@ -252,7 +257,9 @@ get_import_start_time(SpaceId, StorageId) ->
 %% Returns value of last_update_start_time for given SpaceId and StorageId.
 %% @end
 %%-------------------------------------------------------------------
--spec get_last_update_start_time(od_space:id(), storage:id()) -> space_strategy:timestamp().
+-spec get_last_update_start_time(od_space:id() | maps:map(), storage:id()) -> space_strategy:timestamp().
+get_last_update_start_time(StorageStrategies, StorageId) when is_map(StorageStrategies) ->
+    storage_strategies:get_last_update_start_time(StorageId, StorageStrategies);
 get_last_update_start_time(SpaceId, StorageId) ->
     {ok, #document{
         value = #space_strategies{
@@ -265,7 +272,9 @@ get_last_update_start_time(SpaceId, StorageId) ->
 %% Returns value of last_update_finish_time for given SpaceId and StorageId.
 %% @end
 %%-------------------------------------------------------------------
--spec get_last_update_finish_time(od_space:id(), storage:id()) -> space_strategy:timestamp().
+-spec get_last_update_finish_time(od_space:id() | maps:map(), storage:id()) -> space_strategy:timestamp().
+get_last_update_finish_time(StorageStrategies, StorageId) when is_map(StorageStrategies) ->
+    storage_strategies:get_last_update_finish_time(StorageId, StorageStrategies);
 get_last_update_finish_time(SpaceId, StorageId) ->
     {ok, #document{
         value = #space_strategies{
