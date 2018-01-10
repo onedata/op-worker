@@ -85,7 +85,7 @@ connect_via_token(Node, TokenVal, SessionId) ->
     % given
     {ok, Port} = test_utils:get_env(Node, ?APP_NAME, protocol_handler_port),
     TokenAuthMessage = #'ClientMessage'{message_body =
-    {handshake_request, #'HandshakeRequest'{
+    {client_handshake_request, #'ClientHandshakeRequest'{
         session_id = SessionId,
         token = #'Token'{value = TokenVal}
     }}},

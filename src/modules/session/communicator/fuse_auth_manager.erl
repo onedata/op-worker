@@ -20,7 +20,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([handle_handshake/2, authenticate_using_token/1]).
+-export([handle_handshake/1]).
 
 %%%===================================================================
 %%% API
@@ -28,47 +28,15 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Handle first client message, which describes authentication method
-%% (cert/token)
+%% Handles client handshake request
 %% @end
 %%--------------------------------------------------------------------
--spec handle_handshake(#client_message{}, DerCert :: binary()) ->
-    {ok, SessId :: session:id()} | no_return().
-handle_handshake(#client_message{message_body = #handshake_request{
-    session_id = SessId, auth = Auth}}, _)
+-spec handle_handshake(#client_handshake_request{}) -> {od_user:id(), session:id()} | no_return().
+handle_handshake(#client_handshake_request{session_id = SessId, auth = Auth})
     when is_binary(SessId) andalso (is_record(Auth, macaroon_auth) orelse is_record(Auth, token_auth)) ->
-    {ok, Iden} = authenticate_using_token(Auth),
+
+    {ok, #document{
+        value = Iden = #user_identity{user_id = UserId}
+    }} = user_identity:get_or_fetch(Auth),
     {ok, _} = session_manager:reuse_or_create_fuse_session(SessId, Iden, Auth, self()),
-    {ok, SessId};
-
-handle_handshake(#client_message{message_body = #handshake_request{
-    session_id = SessId}}, DerCert) when is_binary(SessId) ->
-    {ok, Iden} = authenticate_using_certificate(DerCert),
-    {ok, _} = session_manager:reuse_or_create_fuse_session(SessId, Iden, self()),
-    {ok, SessId}.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Authenticate client using given token, returns client identity.
-%% @end
-%%--------------------------------------------------------------------
--spec authenticate_using_token(#macaroon_auth{}) -> {ok, #user_identity{}} | {error, term()}.
-authenticate_using_token(Auth) ->
-    {ok, #document{value = Iden}} = user_identity:get_or_fetch(Auth),
-    {ok, Iden}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Authenticate client using given certificate. Returns client identity.
-%% @end
-%%--------------------------------------------------------------------
--spec authenticate_using_certificate(DerCert :: binary()) -> {ok, #user_identity{}}.
-authenticate_using_certificate(_DerCert) ->
-    %identity:get_or_fetch(_CertInfo). todo integrate with identity model
-    {ok, #user_identity{}}.
+    {UserId, SessId}.

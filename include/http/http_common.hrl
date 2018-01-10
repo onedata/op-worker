@@ -20,4 +20,10 @@
 %% Endpoint used to get provider's id
 -define(provider_id_path, "/get_provider_id").
 
+%% Endpoint used to get provider's identity macaroon
+-define(identity_macaroon_path, "/get_identity_macaroon").
+
+%% Endpoint used to verify authorization nonces issued by this provider
+-define(nonce_verify_path, "/verify_authorization_nonce").
+
 -endif.

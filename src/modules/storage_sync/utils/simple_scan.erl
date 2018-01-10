@@ -706,7 +706,7 @@ create_file_location(SpaceId, StorageId, FileUuid, CanonicalPath, Size) ->
             offset = 0,
             size = Size
         }],
-        provider_id = oneprovider:get_provider_id(),
+        provider_id = oneprovider:get_id(),
         file_id = CanonicalPath,
         storage_id = StorageId,
         uuid = FileUuid,

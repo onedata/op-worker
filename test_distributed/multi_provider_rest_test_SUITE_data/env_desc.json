@@ -186,22 +186,76 @@
                 }
             },
             "space6": {
-            "displayed_name": "space6",
-            "users": [
-                "user1"
-            ],
-            "groups": [
-            ],
-            "providers": {
-                "p1": {
-                    "storage": "/mnt/st1"
-                },
-                "p2": {
-                    "storage": "/mnt/st2",
-                    "supported_size": 1
+                "displayed_name": "space6",
+                "users": [
+                    "user1"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st1"
+                    },
+                    "p2": {
+                        "storage": "/mnt/st2",
+                        "supported_size": 1
+                    }
+                }
+            },
+            "space7": {
+                "displayed_name": "space7",
+                "users": [
+                    "user1"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st1",
+                        "supported_size": 10737418240
+                    },
+                    "p2": {
+                        "storage": "/mnt/st2",
+                        "supported_size": 10737418240
+                    }
+                }
+            },
+            "space8": {
+                "displayed_name": "space8",
+                "users": [
+                    "user1"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st1",
+                        "supported_size": 10737418240
+                    },
+                    "p2": {
+                        "storage": "/mnt/st2",
+                        "supported_size": 1
+                    }
+                }
+            },
+            "space9": {
+                "displayed_name": "space9",
+                "users": [
+                    "user1"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st1",
+                        "supported_size": 10737418240
+                    },
+                    "p2": {
+                        "storage": "/mnt/st2",
+                        "supported_size": 1
+                    }
                 }
             }
-        }
         }
     }
 }

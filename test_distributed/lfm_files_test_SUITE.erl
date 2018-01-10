@@ -508,7 +508,7 @@ fslogic_new_file_test(Config) ->
     ?assertMatch(TestStorageId, StorageId11),
     ?assertMatch(TestStorageId, StorageId21),
 
-    TestProviderId = rpc:call(Worker, oneprovider, get_provider_id, []),
+    TestProviderId = rpc:call(Worker, oneprovider, get_id, []),
     ?assertMatch(TestProviderId, ProviderId11),
     ?assertMatch(TestProviderId, ProviderId21).
 
@@ -1017,7 +1017,7 @@ delayed_creation_should_not_prevent_mv(Config) ->
 delayed_creation_should_not_prevent_truncate(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    ProviderId = rpc:call(W, oneprovider, get_provider_id, []),
+    ProviderId = rpc:call(W, oneprovider, get_id, []),
     {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_truncate">>, 8#755),
 
     % move empty file

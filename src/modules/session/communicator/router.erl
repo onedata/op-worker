@@ -113,7 +113,7 @@ route_message(Msg = #client_message{message_id = #message_id{
     issuer = Issuer,
     recipient = Recipient
 }}) ->
-    case oneprovider:get_provider_id() == Issuer of
+    case oneprovider:is_self(Issuer) of
         true when Recipient =:= undefined ->
             route_and_ignore_answer(Msg);
         true ->
@@ -127,7 +127,7 @@ route_message(Msg = #server_message{message_id = #message_id{
     issuer = Issuer,
     recipient = Recipient
 }}) ->
-    case oneprovider:get_provider_id() == Issuer of
+    case oneprovider:is_self(Issuer) of
         true when Recipient =:= undefined ->
             ok;
         true ->

@@ -129,7 +129,7 @@
 %% Model for caching provider details fetched from OZ
 -record(od_provider, {
     name :: undefined | binary(),
-    subdomain_delegation = false :: boolean(),
+    subdomain_delegation = false :: undefined | boolean(),
     domain :: binary(),
     subdomain = undefined :: undefined |  binary(),
     latitude = 0.0 :: float(),
@@ -178,6 +178,19 @@
 %%%===================================================================
 %%% Records specific for oneprovider
 %%%===================================================================
+
+%% Authorization of this provider, auth and identity macaroons are derived from
+%% the root macaroon and cached for a configurable time.
+-record(provider_auth, {
+    provider_id :: od_provider:id(),
+    root_macaroon :: binary(),
+    cached_auth_macaroon = {0, <<"">>} :: {Timestamp :: integer(), binary()},
+    cached_identity_macaroon = {0, <<"">>} :: {Timestamp :: integer(), binary()}
+}).
+
+-record(authorization_nonce, {
+    timestamp :: integer()
+}).
 
 %% Identity containing user_id
 -record(user_identity, {
@@ -378,7 +391,7 @@
     metric_type = undefined :: atom(),
     secondary_subject_type = undefined :: atom(),
     secondary_subject_id = <<"">> :: datastore:id(),
-    provider_id = oneprovider:get_provider_id() :: oneprovider:id()
+    provider_id = oneprovider:get_id_or_undefined() :: oneprovider:id()
 }).
 
 %% Model for holding state of monitoring
@@ -462,6 +475,7 @@
 
     files_to_transfer = 0 :: non_neg_integer(),
     files_transferred = 0 :: non_neg_integer(),
+    failed_files = 0 :: non_neg_integer(),
     bytes_to_transfer = 0 :: non_neg_integer(),
     bytes_transferred = 0 :: non_neg_integer(),
     files_to_invalidate = 0 :: non_neg_integer(),

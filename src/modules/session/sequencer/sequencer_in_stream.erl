@@ -300,7 +300,7 @@ requesting(#client_message{} = Msg, State) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Registers sequencer stream in the sequecner manager.
+%% Registers sequencer stream in the sequencer manager.
 %% @end
 %%--------------------------------------------------------------------
 -spec register_stream(SeqMan :: pid(), StmId :: stream_id()) -> ok.

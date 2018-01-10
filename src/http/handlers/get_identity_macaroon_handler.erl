@@ -1,20 +1,19 @@
-%% ====================================================================
-%%% @author Jakub Kudzia
-%%% @copyright (C) 2015, ACK CYFRONET AGH
+%%%-------------------------------------------------------------------
+%%% @author Lukasz Opiola
+%%% @copyright (C) 2017 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
-%% ====================================================================
+%%%-------------------------------------------------------------------
 %%% @doc
-%%% This module handles request that resolve provider id.
+%%% This module handles HTTP requests to retrieve provider's identity macaroon.
 %%% @end
-%% ====================================================================
--module(get_provider_id_handler).
--author("Jakub Kudzia").
+%%%-------------------------------------------------------------------
+-module(get_identity_macaroon_handler).
+-author("Lukasz Opiola").
 -behaviour(cowboy_http_handler).
 
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
 
 %% API
 -export([init/3, handle/2, terminate/3]).
@@ -42,15 +41,10 @@ init(_Type, Req, _Opts) ->
 %%--------------------------------------------------------------------
 -spec handle(term(), term()) -> {ok, cowboy_req:req(), term()}.
 handle(Req, State) ->
-    Body = try
-        oneprovider:get_id()
-    catch _:_ ->
-        <<"This provider is not registered yet">>
-    end,
-    {ok, Req1} = cowboy_req:reply(
-        200, [{<<"content-type">>, <<"text/plain">>}], Body, Req
-    ),
-    {ok, Req1, State}.
+    {ok, IdentityMacaroon} = provider_auth:get_identity_macaroon(),
+    {ok, NewReq} = cowboy_req:reply(
+        200, [{<<"content-type">>, <<"text/plain">>}], IdentityMacaroon, Req),
+    {ok, NewReq, State}.
 
 
 %%--------------------------------------------------------------------

@@ -65,13 +65,13 @@ terminate() ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find_record(<<"space">>, SpaceId) ->
     SessionId = gui_session:get_session_id(),
-    UserId = gui_session:get_user_id(),
-    % Check if the user belongs to this space
-    case space_logic:has_eff_user(SessionId, SpaceId, UserId) of
-        false ->
-            gui_error:unauthorized();
-        true ->
-            {ok, space_record(SpaceId)}
+    % Check if the user belongs to this space -
+    % he should be able to get protected space data.
+    case space_logic:get_protected_data(SessionId, SpaceId) of
+        {ok, _} ->
+            {ok, space_record(SpaceId)};
+        _ ->
+            gui_error:unauthorized()
     end;
 
 % PermissionsRecord matches <<"space-(user|group)-(list|permission)">>
@@ -336,7 +336,7 @@ space_record(SpaceId, HasViewPrivileges) ->
     {ok, #document{value = #od_space{
         name = Name,
         providers = Providers
-    }}} = space_logic:get(SessionId, SpaceId),
+    }}} = space_logic:get_protected_data(SessionId, SpaceId),
     RootDir = case Providers of
         EmptyMap when map_size(EmptyMap) =:= 0 ->
             null;
@@ -442,7 +442,7 @@ space_provider_list_record(SpaceId) ->
 %%--------------------------------------------------------------------
 -spec space_transfer_list_record(RecordId :: binary()) -> proplists:proplist().
 space_transfer_list_record(RecordId) ->
-    {Prefix, SpaceId} = op_gui_utils:association_to_ids(RecordId) ,
+    {Prefix, SpaceId} = op_gui_utils:association_to_ids(RecordId),
     Ongoing = Prefix =:= ?CURRENT_TRANSFERS_PREFIX,
     {ok, Transfers} = transfer:list_transfers(SpaceId, Ongoing),
     [

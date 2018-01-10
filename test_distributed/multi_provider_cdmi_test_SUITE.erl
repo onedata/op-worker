@@ -189,14 +189,12 @@ init_per_suite(Config) ->
         ssl:start(),
         hackney:start(),
         NewConfig3 = initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2),
-        initializer:enable_grpca_based_communication(NewConfig3),
         NewConfig3
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
 end_per_suite(Config) ->
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
-    initializer:disable_grpca_based_communication(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     hackney:stop(),
     ssl:stop(),

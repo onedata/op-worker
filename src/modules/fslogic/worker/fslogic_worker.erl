@@ -133,8 +133,8 @@ handle(restart_transfers) ->
                 Restarted = transfer:restart_unfinished_transfers(SpaceId),
                 ?debug("Restarted following transfers: ~p", [Restarted])
             end, SpaceIds);
-        {error, Reason} ->
-            ?error_stacktrace("Unable to restart transfers due to: ~p", [Reason])
+        Error = {error, _} ->
+            ?error("Unable to restart transfers due to: ~p", [Error])
     catch
         _:Reason ->
             ?error_stacktrace("Unable to restart transfers due to: ~p", [Reason])
@@ -187,7 +187,7 @@ handle_request_and_process_response(SessId, Request) ->
         FilePartialCtx = fslogic_request:get_file_partial_ctx(UserCtx, Request),
         Providers = fslogic_request:get_target_providers(UserCtx,
             FilePartialCtx, Request),
-        case lists:member(oneprovider:get_provider_id(), Providers) of
+        case lists:member(oneprovider:get_id(), Providers) of
             true ->
                 handle_request_and_process_response_locally(UserCtx, Request,
                     FilePartialCtx);

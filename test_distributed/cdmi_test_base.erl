@@ -1887,17 +1887,19 @@ do_request_impl(Node, RestSubpath, Method, Headers, Body) ->
     end.
 
 cdmi_endpoint(Node) ->
-    Port =
-        case get(port) of
-            undefined ->
-                {ok, P} = test_utils:get_env(Node, ?APP_NAME, rest_port),
-                PStr = integer_to_list(P),
-                put(port, PStr),
-                PStr;
-            P -> P
-        end,
+    Port = case get(port) of
+        undefined ->
+            {ok, P} = test_utils:get_env(Node, ?APP_NAME, gui_https_port),
+            PStr = case P of
+                443 -> "";
+                _ -> ":" ++ integer_to_list(P)
+            end,
+            put(port, PStr),
+            PStr;
+        P -> P
+    end,
     {ok, Domain} = test_utils:get_env(Node, ?APP_NAME, test_web_cert_domain),
-    string:join(["https://", str_utils:to_list(Domain), ":", Port, "/cdmi/"], "").
+    string:join(["https://", str_utils:to_list(Domain), Port, "/cdmi/"], "").
 
 create_test_dir_and_file(Config) ->
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),

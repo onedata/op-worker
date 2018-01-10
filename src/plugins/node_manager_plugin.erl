@@ -69,9 +69,7 @@ db_nodes() ->
 -spec listeners() -> Listeners :: [atom()].
 listeners() -> node_manager:cluster_worker_listeners() ++ [
     gui_listener,
-    protocol_listener,
-    rest_listener,
-    provider_listener
+    protocol_listener
 ].
 
 %%--------------------------------------------------------------------
@@ -171,7 +169,7 @@ handle_cast(Request, State) ->
 -spec check_node_ip_address() -> inet:ip4_address().
 check_node_ip_address() ->
     try
-        {ok, IPBin} = oz_providers:check_ip_address(provider),
+        {ok, IPBin} = oz_providers:check_ip_address(none),
         {ok, IP} = inet_parse:ipv4_address(binary_to_list(IPBin)),
         IP
     catch T:M ->

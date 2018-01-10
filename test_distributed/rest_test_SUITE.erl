@@ -25,7 +25,6 @@
 
 -export([
     token_auth/1,
-    cert_auth/1,
     basic_auth/1,
     internal_error_when_handler_crashes/1,
     custom_code_when_handler_throws_code/1,
@@ -35,7 +34,6 @@
 
 all() -> ?ALL([
     token_auth,
-%%    cert_auth, %todo reenable rest_cert_auth after appmock repair
     basic_auth,
     internal_error_when_handler_crashes,
     custom_code_when_handler_throws_code,
@@ -51,6 +49,8 @@ all() -> ?ALL([
 
 -define(SPACE_ID, <<"space0">>).
 -define(SPACE_NAME, <<"Space 0">>).
+
+-define(PROVIDER_ID, <<"provider1">>).
 
 %%%===================================================================
 %%% Test functions
@@ -70,27 +70,6 @@ token_auth(Config) ->
     ?assertMatch({ok, 401, _, _}, AuthFail),
     ?assertMatch({ok, 200, _, _}, AuthSuccess1),
     ?assertMatch({ok, 200, _, _}, AuthSuccess2).
-
-cert_auth(Config) ->
-    % given
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    Endpoint = rest_endpoint(Worker),
-    CertUnknown = ?TEST_FILE(Config, "unknown_peer.pem"),
-    CertKnown = ?TEST_FILE(Config, "known_peer.pem"),
-    UnknownCertOpt = {ssl_options, [{certfile, CertUnknown}, {reuse_sessions, false}]},
-    KnownCertOpt = {ssl_options, [{certfile, CertKnown}, {reuse_sessions, false}]},
-
-    % then - unauthorized access
-    {ok, 307, Headers, _} = do_request(Config, get, Endpoint ++ "files", #{}, <<>>, [UnknownCertOpt]),
-    Loc = maps:get(<<"location">>, Headers),
-    ?assertMatch({ok, 401, _, _}, do_request(Config, get, Loc, #{}, <<>>, [UnknownCertOpt])),
-
-    % then - authorized access
-    {ok, 307, Headers2, _} = do_request(Config, get, Endpoint ++ "files", #{}, <<>>, [KnownCertOpt]),
-    Loc2 = maps:get(<<"location">>, Headers2),
-    {ok, 307, Headers3, _} = do_request(Config, get, Loc2, #{}, <<>>, [KnownCertOpt]),
-    Loc3 = maps:get(<<"location">>, Headers3),
-    ?assertMatch({ok, 404, _, _}, do_request(Config, get, Loc3, #{}, <<>>, [KnownCertOpt])).
 
 basic_auth(Config) ->
     % given
@@ -164,10 +143,12 @@ init_per_testcase(Case, Config) when
     ssl:start(),
     hackney:start(),
     test_utils:mock_new(Workers, files),
+    mock_provider_id(Config),
     Config;
 init_per_testcase(_Case, Config) ->
     ssl:start(),
     hackney:start(),
+    mock_provider_id(Config),
     mock_space_logic(Config),
     mock_user_logic(Config),
     Config.
@@ -178,9 +159,11 @@ end_per_testcase(Case, Config) when
     Case =:= custom_error_when_handler_throws_error ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, files),
+    unmock_provider_id(Config),
     hackney:stop(),
     ssl:stop();
 end_per_testcase(_Case, Config) ->
+    unmock_provider_id(Config),
     unmock_space_logic(Config),
     unmock_user_logic(Config),
     hackney:stop(),
@@ -206,19 +189,19 @@ do_request(Config, Method, URL, Headers, Body, Opts) ->
 
 
 rest_endpoint(Node) ->
-    Port =
-        case get(port) of
-            undefined ->
-                {ok, P} = test_utils:get_env(Node, ?APP_NAME, rest_port),
-                PStr = integer_to_list(P),
-                put(port, PStr),
-                PStr;
-            P -> P
-        end,
-
+    Port = case get(port) of
+        undefined ->
+            {ok, P} = test_utils:get_env(Node, ?APP_NAME, gui_https_port),
+            PStr = case P of
+                443 -> "";
+                _ -> ":" ++ integer_to_list(P)
+            end,
+            put(port, PStr),
+            PStr;
+        P -> P
+    end,
     {ok, Domain} = test_utils:get_env(Node, ?APP_NAME, test_web_cert_domain),
-
-    string:join(["https://", str_utils:to_list(Domain), ":", Port, "/api/v3/oneprovider/"], "").
+    string:join(["https://", str_utils:to_list(Domain), Port, "/api/v3/oneprovider/"], "").
 
 mock_space_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -227,7 +210,8 @@ mock_space_logic(Config) ->
         fun(_, ?SPACE_ID) ->
             {ok, #document{value = #od_space{
                 name = ?SPACE_NAME,
-                eff_users = #{?USER_ID => []}
+                eff_users = #{?USER_ID => []},
+                providers = #{?PROVIDER_ID => 1000000000}
             }}}
         end),
     test_utils:mock_expect(Workers, space_logic, get_name,
@@ -284,9 +268,23 @@ mock_user_logic(Config) ->
     ),
     [rpc:call(W, file_meta, setup_onedata_user, [?USER_ID, []]) || W <- Workers].
 
+
 unmock_user_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Workers, user_logic).
+
+
+mock_provider_id(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, provider_auth),
+    test_utils:mock_expect(Workers, provider_auth, get_provider_id,
+        fun() -> ?PROVIDER_ID end
+    ).
+
+
+unmock_provider_id(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, [provider_auth]).
 
 
 -spec test_crash(term(), term()) -> no_return().

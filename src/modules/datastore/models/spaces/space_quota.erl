@@ -137,7 +137,7 @@ available_size(SpaceId) ->
     try
         {ok, #document{value = #space_quota{current_size = CSize}}} = ?MODULE:get(SpaceId),
         {ok, Supports} = space_logic:get_providers_supports(?ROOT_SESS_ID, SpaceId),
-        SupSize = maps:get(oneprovider:get_provider_id(), Supports, 0),
+        SupSize = maps:get(oneprovider:get_id(), Supports, 0),
         SupSize - CSize
     catch
         _:Reason ->

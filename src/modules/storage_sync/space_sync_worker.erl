@@ -19,6 +19,7 @@
 -include("global_definitions.hrl").
 -include_lib("cluster_worker/include/elements/worker_host/worker_protocol.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 
 -define(SYNC_JOB_TIMEOUT, timer:hours(24)).
@@ -159,18 +160,16 @@ run({return_none, Jobs}) ->
 -spec check_strategies() -> ok.
 check_strategies() ->
     try
-        case oneprovider:get_provider_id() of
-            ?UNREGISTERED_PROVIDER_ID ->
-                ok;
-            ProviderId ->
-                case provider_logic:get_spaces(ProviderId) of
-                    {ok, Spaces} ->
-                        check_strategies(Spaces);
-                    {error, _} ->
-                        ok
-                end
+        ProviderId = oneprovider:get_id(),
+        case provider_logic:get_spaces(ProviderId) of
+            {ok, Spaces} ->
+                check_strategies(Spaces);
+            {error, _} ->
+                ok
         end
     catch
+        throw:?ERROR_UNREGISTERED_PROVIDER ->
+            ok;
         _:TReason ->
             ?error_stacktrace("Unable to check space strategies due to: ~p", [TReason])
     end.
@@ -504,7 +503,7 @@ start_pools() ->
 %%--------------------------------------------------------------------
 -spec start_pool(atom(), non_neg_integer()) -> {ok, pid()}.
 start_pool(PoolName, WorkersNum) ->
-    {ok, _ } = worker_pool:start_sup_pool(PoolName, [{workers, WorkersNum}, {queue_type, lifo}]).
+    {ok, _} = worker_pool:start_sup_pool(PoolName, [{workers, WorkersNum}, {queue_type, lifo}]).
 
 %%--------------------------------------------------------------------
 %% @private

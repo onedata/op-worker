@@ -16,7 +16,7 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("cluster_worker/include/api_errors.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).

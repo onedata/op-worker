@@ -33,7 +33,7 @@
 get_blocks_for_sync(_, []) ->
     [];
 get_blocks_for_sync(Locations, Blocks) ->
-    LocalProviderId = oneprovider:get_provider_id(),
+    LocalProviderId = oneprovider:get_id(),
     LocalLocations = [Loc || Loc = #document{value = #file_location{provider_id = Id}} <- Locations, Id =:= LocalProviderId],
     RemoteLocations = Locations -- LocalLocations,
     LocalBlocksList = [LocalBlocks || #document{value = #file_location{blocks = LocalBlocks}} <- LocalLocations],
@@ -73,7 +73,7 @@ get_blocks_for_sync(Locations, Blocks) ->
 -spec get_unique_blocks(file_ctx:ctx()) -> {fslogic_blocks:blocks(), file_ctx:ctx()}.
 get_unique_blocks(FileCtx) ->
     {LocationDocs, FileCtx2} = file_ctx:get_file_location_docs(FileCtx),
-    LocalProviderId = oneprovider:get_provider_id(),
+    LocalProviderId = oneprovider:get_id(),
     LocalLocations = [Loc || Loc = #document{value = #file_location{provider_id = Id}} <- LocationDocs, Id =:= LocalProviderId],
     RemoteLocations = LocationDocs -- LocalLocations,
     LocalBlocksList = get_all_blocks(LocalLocations),
