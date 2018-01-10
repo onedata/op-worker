@@ -230,12 +230,12 @@ handle_call(_Request, _From, State) ->
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_cast(perform_handshake, State = #state{socket = Socket, connection_type = outgoing, transport = Transport}) ->
     {ok, MsgId} = message_id:generate(self()),
-    {ok, IdentityMacaroon} = provider_auth:get_identity_macaroon(),
+    {ok, Nonce} = authorization_nonce:create(),
     ClientMsg = #client_message{
         message_id = MsgId,
         message_body = #provider_handshake_request{
             provider_id = oneprovider:get_id(),
-            macaroon = #token_auth{token = IdentityMacaroon}
+            nonce = Nonce
         }
     },
     send_client_message(Socket, Transport, ClientMsg),
@@ -424,6 +424,18 @@ report_handshake_error(Sock, Transp, invalid_token) ->
     send_server_message(Sock, Transp, #server_message{
         message_body = #handshake_response{
             status = 'INVALID_TOKEN'
+        }
+    });
+report_handshake_error(Sock, Transp, invalid_provider) ->
+    send_server_message(Sock, Transp, #server_message{
+        message_body = #handshake_response{
+            status = 'INVALID_PROVIDER'
+        }
+    });
+report_handshake_error(Sock, Transp, invalid_nonce) ->
+    send_server_message(Sock, Transp, #server_message{
+        message_body = #handshake_response{
+            status = 'INVALID_NONCE'
         }
     });
 report_handshake_error(Sock, Transp, {badmatch, {error, Error}}) ->

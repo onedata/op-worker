@@ -83,6 +83,7 @@ start() ->
         {'_', lists:flatten([
             {?provider_id_path, get_provider_id_handler, []},
             {?identity_macaroon_path, get_identity_macaroon_handler, []},
+            {?nonce_verify_path, nonce_verify_handler, []},
             {"/nagios/oz_connectivity", oz_connectivity_handler, []},
             {"/nagios/[...]", nagios_handler, []},
             {"/upload", upload_handler, []},

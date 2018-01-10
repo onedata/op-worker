@@ -32,9 +32,4 @@
     credentials = <<"">> :: binary()
 }).
 
--record(certificate_auth, {
-    otp_cert :: #'OTPCertificate'{},
-    chain = [] :: [#'OTPCertificate'{}]
-}).
-
 -endif.

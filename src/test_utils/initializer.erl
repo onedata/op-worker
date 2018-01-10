@@ -18,6 +18,7 @@
 -include("proto/oneclient/message_id.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("global_definitions.hrl").
+-include("http/http_common.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
 -include_lib("public_key/include/public_key.hrl").
@@ -135,7 +136,7 @@
 %%--------------------------------------------------------------------
 -spec domain_to_provider_id(Domain :: atom()) -> binary().
 domain_to_provider_id(Domain) ->
-    atom_to_binary(Domain, unicode).
+    atom_to_binary(Domain, utf8).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -144,7 +145,7 @@ domain_to_provider_id(Domain) ->
 %%--------------------------------------------------------------------
 -spec provider_id_to_domain(ProviderId :: binary()) -> atom().
 provider_id_to_domain(ProviderId) ->
-    binary_to_atom(ProviderId, unicode).
+    binary_to_atom(ProviderId, utf8).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -937,7 +938,7 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToProviders) ->
 %%--------------------------------------------------------------------
 -spec provider_logic_mock_setup(Config :: list(), Workers :: node() | [node()],
     proplists:proplist(), proplists:proplist()) -> ok.
-provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup) ->
+provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
     test_utils:mock_new(AllWorkers, provider_logic),
 
     ProvMap = lists:foldl(fun({SpaceId, SpaceConfig}, AccIn) ->
@@ -988,6 +989,15 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup) ->
         {ok, maps:keys(Spaces)}
     end,
 
+    SupportsSpaceFun = fun(?ROOT_SESS_ID, ProviderId, SpaceId) ->
+        case maps:get(ProviderId, ProvMap, undefined) of
+            undefined ->
+                false;
+            Spaces ->
+                lists:member(SpaceId, Spaces)
+        end
+    end,
+
     test_utils:mock_expect(AllWorkers, provider_logic, get, GetProviderFun),
 
     test_utils:mock_expect(AllWorkers, provider_logic, get,
@@ -999,6 +1009,23 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup) ->
         fun() ->
             GetProviderFun(?ROOT_SESS_ID, oneprovider:get_id())
         end),
+
+
+    test_utils:mock_expect(AllWorkers, provider_logic, get_protected_data, fun(?ROOT_SESS_ID, PID) ->
+        case GetProviderFun(?ROOT_SESS_ID, PID) of
+            {ok, Doc = #document{value = Provider}} ->
+                {ok, Doc#document{value = Provider#od_provider{
+                    subdomain_delegation = undefined,
+                    subdomain = undefined,
+                    spaces = #{},
+                    eff_users = [],
+                    eff_groups = []
+                }}};
+            Error ->
+                Error
+        end
+    end),
+
 
     test_utils:mock_expect(AllWorkers, provider_logic, get_name, GetNameFun),
 
@@ -1012,6 +1039,7 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup) ->
             GetNameFun(?ROOT_SESS_ID, oneprovider:get_id())
         end),
 
+
     test_utils:mock_expect(AllWorkers, provider_logic, get_domain, GetDomainFun),
 
     test_utils:mock_expect(AllWorkers, provider_logic, get_domain,
@@ -1024,12 +1052,14 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup) ->
             GetDomainFun(?ROOT_SESS_ID, oneprovider:get_id())
         end),
 
+
     test_utils:mock_expect(AllWorkers, provider_logic, resolve_ips, ResolveIPsFun),
 
     test_utils:mock_expect(AllWorkers, provider_logic, resolve_ips,
         fun(PID) ->
             ResolveIPsFun(?ROOT_SESS_ID, PID)
         end),
+
 
     test_utils:mock_expect(AllWorkers, provider_logic, get_spaces, GetSpacesFun),
 
@@ -1043,14 +1073,6 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup) ->
             GetSpacesFun(?ROOT_SESS_ID, oneprovider:get_id())
         end),
 
-    SupportsSpaceFun = fun(?ROOT_SESS_ID, ProviderId, SpaceId) ->
-        case maps:get(ProviderId, ProvMap, undefined) of
-            undefined ->
-                false;
-            Spaces ->
-                lists:member(SpaceId, Spaces)
-        end
-    end,
 
     test_utils:mock_expect(AllWorkers, provider_logic, supports_space,
         fun(SpaceId) ->
@@ -1061,10 +1083,12 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup) ->
         SupportsSpaceFun
     ),
 
+
     test_utils:mock_expect(AllWorkers, provider_logic, zone_time_seconds,
         fun() ->
             time_utils:cluster_time_seconds()
         end),
+
 
     test_utils:mock_expect(AllWorkers, provider_logic, verify_provider_identity,
         fun(_) ->
@@ -1076,6 +1100,38 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup) ->
             case Macaroon of
                 ?DUMMY_PROVIDER_IDENTITY_MACAROON(ProviderId) -> ok;
                 _ -> {error, bad_macaroon}
+            end
+        end),
+
+    test_utils:mock_expect(AllWorkers, provider_logic, verify_provider_nonce,
+        fun(ProviderId, Nonce) ->
+            {ok, #document{value = #od_provider{
+                domain = Domain
+            }}} = GetProviderFun(?ROOT_SESS_ID, ProviderId),
+            [Worker | _] = get_same_domain_workers(Config, binary_to_atom(Domain, utf8)),
+            Hostname = ?GET_HOSTNAME(Worker),
+            try
+                URL = str_utils:format_bin("https://~s~s?nonce=~s", [
+                    Hostname, ?nonce_verify_path, Nonce
+                ]),
+
+                CaCerts = oneprovider:get_ca_certs(),
+                SecureFlag = application:get_env(?APP_NAME, interprovider_connections_security, true),
+                Opts = [{ssl_options, [{cacerts, CaCerts}, {secure, SecureFlag}]}],
+
+                case http_client:get(URL, #{}, <<>>, Opts) of
+                    {ok, 200, _, JSON} ->
+                        case json_utils:decode_map(JSON) of
+                            #{<<"status">> := <<"ok">>} -> ok;
+                            _ -> {error, invalid_nonce}
+                        end;
+                    {ok, Code, _, _} ->
+                        {error, {bad_http_code, Code}};
+                    {error, _} = Error ->
+                        Error
+                end
+            catch _:_ ->
+                {error, unauthorized}
             end
         end).
 

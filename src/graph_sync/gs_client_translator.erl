@@ -312,6 +312,8 @@ apply_scope_mask(Doc = #document{value = Share = #od_share{}}, public) ->
 apply_scope_mask(Doc = #document{value = Provider = #od_provider{}}, protected) ->
     Doc#document{
         value = Provider#od_provider{
+            subdomain_delegation = undefined,
+            subdomain = undefined,
             spaces = #{},
             eff_users = [],
             eff_groups = []
