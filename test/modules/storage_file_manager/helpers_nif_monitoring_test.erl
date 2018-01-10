@@ -78,11 +78,13 @@ prepare_environment() ->
                         <<"graphite">>),
     application:set_env(?APP_NAME, helpers_performance_monitoring_level,
                         <<"full">>),
-    application:set_env(?APP_NAME, helpers_performance_monitoring_namespace_prefix,
-                        <<"eunit">>),
-    application:set_env(?APP_NAME, helpers_performance_monitoring_graphite_url,
-                        <<"tcp://127.0.0.1:20030">>),
-    application:set_env(?APP_NAME, helpers_performance_monitoring_period, 1).
+    application:set_env(?APP_NAME, helpers_performance_monitoring_period, 1),
+    application:set_env(?CLUSTER_WORKER_APP_NAME, graphite_host,
+                        <<"127.0.0.1">>),
+    application:set_env(?CLUSTER_WORKER_APP_NAME, graphite_port,
+                        ?TCP_PORT),
+    application:set_env(?CLUSTER_WORKER_APP_NAME, graphite_prefix,
+                        <<"eunit">>).
 -endif.
 
 %%--------------------------------------------------------------------
