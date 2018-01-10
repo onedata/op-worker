@@ -117,7 +117,7 @@ links_save(Model, RoutingKey, Doc = #document{key = Key}) ->
 %%--------------------------------------------------------------------
 -spec links_delete(doc()) -> ok.
 links_delete(Doc = #document{key = Key, value = LinksMask = #links_mask{
-    model = Model, tree_id = TreeId
+    key = RoutingKey, model = Model, tree_id = TreeId
 }, deleted = false}) ->
     LocalTreeId = oneprovider:get_provider_id(),
     case TreeId of
@@ -127,17 +127,17 @@ links_delete(Doc = #document{key = Key, value = LinksMask = #links_mask{
                 sync_change => true,
                 local_links_tree_id => LocalTreeId
             },
-            Ctx3 = datastore_multiplier:extend_name(Key, Ctx2),
-            DeletedLinks = get_links_mask(Ctx3, Key),
+            Ctx3 = datastore_multiplier:extend_name(RoutingKey, Ctx2),
+            DeletedLinks = get_links_mask(Ctx3, Key, RoutingKey),
             Deleted = apply_links_mask(Ctx3, LinksMask, DeletedLinks),
-            save_links_mask(Ctx, Doc#document{deleted = Deleted});
+            Ctx2_2 = datastore_multiplier:extend_name(RoutingKey, Ctx),
+            save_links_mask(Ctx2_2, Doc#document{deleted = Deleted});
         _ ->
             ok
     end;
 links_delete(Doc = #document{
-    key = Key,
     mutators = [TreeId, RemoteTreeId],
-    value = #links_mask{model = Model, tree_id = RemoteTreeId},
+    value = #links_mask{key = RoutingKey, model = Model, tree_id = RemoteTreeId},
     deleted = true
 }) ->
     LocalTreeId = oneprovider:get_provider_id(),
@@ -148,7 +148,7 @@ links_delete(Doc = #document{
                 sync_change => true,
                 local_links_tree_id => LocalTreeId
             },
-            Ctx3 = datastore_multiplier:extend_name(Key, Ctx2),
+            Ctx3 = datastore_multiplier:extend_name(RoutingKey, Ctx2),
             save_links_mask(Ctx3, Doc);
         _ ->
             ok
@@ -162,9 +162,9 @@ links_delete(#document{}) ->
 %% Returns list of masked links that have been already deleted.
 %% @end
 %%--------------------------------------------------------------------
--spec get_links_mask(ctx(), key()) -> [links_mask:link()].
-get_links_mask(Ctx, Key) ->
-    case datastore_router:route(Ctx, Key, get, [Ctx, Key]) of
+-spec get_links_mask(ctx(), key(), key()) -> [links_mask:link()].
+get_links_mask(Ctx, Key, RoutingKey) ->
+    case datastore_router:route(Ctx, RoutingKey, get, [Ctx, Key]) of
         {ok, #document{value = #links_mask{links = Links}}} -> Links;
         {error, not_found} -> []
     end.
@@ -196,8 +196,9 @@ apply_links_mask(Ctx, #links_mask{key = Key, tree_id = TreeId, links = Links},
 %% @end
 %%--------------------------------------------------------------------
 -spec save_links_mask(ctx(), doc()) -> ok.
-save_links_mask(Ctx, Doc = #document{key = Key}) ->
-    {ok, _} = datastore_router:route(Ctx, Key, save, [
+save_links_mask(Ctx, Doc = #document{key = Key,
+    value = #links_mask{key = RoutingKey}}) ->
+    {ok, _} = datastore_router:route(Ctx, RoutingKey, save, [
         Ctx, Key, Doc
     ]),
     ok.
