@@ -234,7 +234,7 @@ stop_monitoring() ->
 %%--------------------------------------------------------------------
 -spec prepare_args() -> #{binary() => binary()}.
 prepare_args() ->
-    lists:foldl(fun(EnvKey, Map) ->
+    OpWorkerArgs = lists:foldl(fun(EnvKey, Map) ->
         {ok, EnvValue} = application:get_env(?APP_NAME, EnvKey),
         maps:put(str_utils:to_binary(EnvKey), str_utils:to_binary(EnvValue), Map)
     end, #{}, [
@@ -254,7 +254,13 @@ prepare_args() ->
         helpers_performance_monitoring_enabled,
         helpers_performance_monitoring_type,
         helpers_performance_monitoring_level,
-        helpers_performance_monitoring_period,
-        helpers_performance_monitoring_namespace_prefix,
-        helpers_performance_monitoring_graphite_url
+        helpers_performance_monitoring_period
+    ]),
+    lists:foldl(fun(EnvKey, Map) ->
+        {ok, EnvValue} = application:get_env(?CLUSTER_WORKER_APP_NAME, EnvKey),
+        maps:put(str_utils:to_binary(EnvKey), str_utils:to_binary(EnvValue), Map)
+    end, OpWorkerArgs, [
+        graphite_host,
+        graphite_port,
+        graphite_prefix
     ]).

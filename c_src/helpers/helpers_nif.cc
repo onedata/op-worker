@@ -428,12 +428,10 @@ static void configurePerformanceMonitoring(
         if (args["helpers_performance_monitoring_type"] == "graphite") {
             auto config = std::make_shared<
                 one::monitoring::GraphiteMonitoringConfiguration>();
-            config->fromGraphiteURL(
-                args["helpers_performance_monitoring_graphite_url"]
-                    .toStdString());
-            config->namespacePrefix =
-                args["helpers_performance_monitoring_namespace_prefix"]
-                    .toStdString();
+            config->fromGraphiteURL("tcp://" +
+                args["graphite_host"].toStdString() + ":" +
+                args["graphite_port"].toStdString());
+            config->namespacePrefix = args["graphite_prefix"].toStdString();
             config->reportingPeriod = std::stoul(
                 args["helpers_performance_monitoring_period"].toStdString());
             if (args["helpers_performance_monitoring_level"] == "full") {
@@ -494,7 +492,6 @@ static void configurePerformanceMonitoring(
         }
     }
 }
-
 
 /*********************************************************************
 *
@@ -671,13 +668,15 @@ ERL_NIF_TERM fsync(NifCTX ctx, file_handle_ptr handle, const int isdatasync)
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
-ERL_NIF_TERM start_monitoring(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+ERL_NIF_TERM start_monitoring(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     ONE_MONITORING_COLLECTOR()->start();
     return nifpp::make(env, std::make_tuple(ok, 1));
 }
 
-ERL_NIF_TERM stop_monitoring(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+ERL_NIF_TERM stop_monitoring(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     ONE_MONITORING_COLLECTOR()->stop();
     return nifpp::make(env, std::make_tuple(ok, 1));
@@ -840,17 +839,17 @@ static ERL_NIF_TERM sh_fsync(
 }
 
 static ErlNifFunc nif_funcs[] = {{"get_handle", 2, get_handle},
-    {"start_monitoring", 0, start_monitoring}, {"stop_monitoring", 0, stop_monitoring},
-    {"getattr", 2, sh_getattr}, {"access", 3, sh_access},
-    {"readdir", 4, sh_readdir}, {"mknod", 5, sh_mknod}, {"mkdir", 3, sh_mkdir},
-    {"unlink", 2, sh_unlink}, {"rmdir", 2, sh_rmdir},
-    {"symlink", 3, sh_symlink}, {"rename", 3, sh_rename}, {"link", 3, sh_link},
-    {"chmod", 3, sh_chmod}, {"chown", 4, sh_chown},
-    {"truncate", 3, sh_truncate}, {"setxattr", 6, sh_setxattr},
-    {"getxattr", 3, sh_getxattr}, {"removexattr", 3, sh_removexattr},
-    {"listxattr", 2, sh_listxattr}, {"open", 3, sh_open}, {"read", 3, sh_read},
-    {"write", 3, sh_write}, {"release", 1, sh_release}, {"flush", 1, sh_flush},
-    {"fsync", 2, sh_fsync}};
+    {"start_monitoring", 0, start_monitoring},
+    {"stop_monitoring", 0, stop_monitoring}, {"getattr", 2, sh_getattr},
+    {"access", 3, sh_access}, {"readdir", 4, sh_readdir},
+    {"mknod", 5, sh_mknod}, {"mkdir", 3, sh_mkdir}, {"unlink", 2, sh_unlink},
+    {"rmdir", 2, sh_rmdir}, {"symlink", 3, sh_symlink},
+    {"rename", 3, sh_rename}, {"link", 3, sh_link}, {"chmod", 3, sh_chmod},
+    {"chown", 4, sh_chown}, {"truncate", 3, sh_truncate},
+    {"setxattr", 6, sh_setxattr}, {"getxattr", 3, sh_getxattr},
+    {"removexattr", 3, sh_removexattr}, {"listxattr", 2, sh_listxattr},
+    {"open", 3, sh_open}, {"read", 3, sh_read}, {"write", 3, sh_write},
+    {"release", 1, sh_release}, {"flush", 1, sh_flush}, {"fsync", 2, sh_fsync}};
 
 ERL_NIF_INIT(helpers_nif, nif_funcs, load, NULL, NULL, NULL);
 
