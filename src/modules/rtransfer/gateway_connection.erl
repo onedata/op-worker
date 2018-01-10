@@ -186,11 +186,13 @@ handle_cast(_Request, State) ->
 handle_info({tcp, Socket, Data}, #gwcstate{} = State) ->
     ok = inet:setopts(Socket, [{active, once}]),
     try
+        ?critical("BEFORE MESSAGE DECODE~n~p", [erlang:process_info(self(), binary)]),
         Reply = messages:decode_msg(Data, 'FetchReply'),
+        ?critical("AFTER MESSAGE DECODE~n~p", [erlang:process_info(self(), binary)]),
         complete_request(Reply, State)
     catch
         Error:Reason ->
-            ?debug_stacktrace("~p: Couldn't decode reply: {~p, ~p}", [?MODULE, Error, Reason])
+            ?error_stacktrace("~p: Couldn't decode reply: {~p, ~p}", [?MODULE, Error, Reason])
     end,
     {noreply, State, ?connection_close_timeout};
 
@@ -292,31 +294,37 @@ complete_request(#'FetchReply'{content = Content, request_hash = RequestHash}, S
                     #gw_fetch{file_id = FileId, offset = Offset, size = RequestedSize} = Action,
                     Size = erlang:min(byte_size(Content), RequestedSize),
                     Data = binary_part(Content, 0, Size),
-
+                    ?critical("BEFORE OPEN~n~p", [erlang:process_info(self(), binary)]),
                     case OpenFun(FileId, write) of
                         {ok, Handle} ->
+                            ?critical("BEFORE WRITE~n~p", [erlang:process_info(self(), binary)]),
                             %% TODO: loop!
                             %% TODO: {error, {storage
                             NewHandle = case WriteFun(Handle, Offset, Data) of
                                 {ok, NH, Wrote} ->
+                                    ?critical("WROTE ~p BYTES~n~p", [Wrote, erlang:process_info(self(), binary)]),
                                     notify_complete(Wrote, Action),
                                     NH;
 
                                 {error, Reason} ->
+                                    ?critical("WRITE ERROR: ~p~n~p", [Reason, erlang:process_info(self(), binary)]),
                                     notify_error(Reason, Action),
                                     Handle
                             end,
-
-                            CloseFun(NewHandle);
+                            ?critical("BEFORE CLOSE~n~p", [erlang:process_info(self(), binary)]),
+                            Res = CloseFun(NewHandle),
+                            ?critical("AFTER CLOSE: ~p~n~p", [Res, erlang:process_info(self(), binary)]),
+                            Res;
 
                         {error, Reason} ->
+                            ?critical("OPEN ERROR: ~P~n~p", [Reason, erlang:process_info(self(), binary)]),
                             notify_error(Reason, Action)
                     end
             end,
 
             ets:delete(TID, RequestHash)
     end,
-    ?MODULE:garbage_collect(RtransferOpts),
+    true = ?MODULE:garbage_collect(RtransferOpts),
     ok.
 
 %%-------------------------------------------------------------------
