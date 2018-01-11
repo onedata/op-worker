@@ -30,7 +30,6 @@
 % after each request, process will check whether transfer hasn't been cancelled/failed
 -define(REQUEST_CHUNK_SIZE, application:get_env(?APP_NAME, request_chunk_size, 104857600)). % 100MB
 -define(CHECK_STATUS_INTERVAL, application:get_env(?APP_NAME, check_status_interval, timer:minutes(5))).
--define(CHUNK_MAX_RETRIES, application:get_env(?APP_NAME, chunk_max_retries, 5)).
 
 %%%===================================================================
 %%% API
@@ -111,7 +110,7 @@ maybe_transfer_chunk(Chunk = #file_block{size = BlockSize}, ProviderId, FileGuid
         true ->
             try
                 {ok, _} = transfer:mark_data_transfer_scheduled(TransferId, BlockSize),
-                transfer_chunk(Chunk, ProviderId, FileGuid, UserId, FileCtx, TransferId, ?CHUNK_MAX_RETRIES)
+                transfer_chunk(Chunk, ProviderId, FileGuid, UserId, FileCtx, TransferId)
             catch
                 Error:Reason ->
                     transfer:mark_data_transfer_scheduled(TransferId, -BlockSize),
@@ -120,32 +119,6 @@ maybe_transfer_chunk(Chunk = #file_block{size = BlockSize}, ProviderId, FileGuid
         false ->
             throw({transfer_cancelled, TransferId})
     end.
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Transfers one chunk of data.
-%% @end
-%%-------------------------------------------------------------------
--spec transfer_chunk(fslogic_blocks:block(), oneprovider:id(), file_meta:uuid(),
-    od_user:id(), file_ctx:ctx(), transfer:id() | undefined, non_neg_integer()) -> ok.
-transfer_chunk(#file_block{offset = O, size = S}, _ProviderId, FileGuid, _UserId,
-    _FileCtx, TransferId, Retries
-) when Retries =< 0 ->
-    throw({max_retries_per_chunk_reached, TransferId, FileGuid, {O, S}});
-transfer_chunk(FileBlock = #file_block{offset = O, size = S}, ProviderId, FileGuid, UserId,
-    FileCtx, TransferId, Retries
-) ->
-    try
-        transfer_chunk(FileBlock, ProviderId, FileGuid, UserId, FileCtx, TransferId)
-    catch
-        throw:{transfer_timeout, _}  ->
-            ?error("Transfer of chunk {~p, ~p} of file ~p failed in transfer ~p, retries left: ~p", [O, S, FileGuid, TransferId, Retries - 1]),
-            transfer_chunk(FileBlock, ProviderId, FileGuid, UserId, FileCtx, TransferId, Retries - 1);
-        Error:Reason ->
-            erlang:Error(Reason)
-    end.
-
 
 %%-------------------------------------------------------------------
 %% @private
@@ -238,7 +211,7 @@ receive_rtransfer_notification(Ref, TransferId) ->
          ?CHECK_STATUS_INTERVAL ->
             case transfer:should_continue(TransferId) of
                 true ->
-                    throw({transfer_timeout, TransferId});
+                    receive_rtransfer_notification(Ref, TransferId);
                 false ->
                     throw({transfer_cancelled, TransferId})
             end
