@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
-%%% @author Rafal Slota
-%%% @copyright (C) 2016 ACK CYFRONET AGH
+%%% @author Lukasz Opiola
+%%% @copyright (C) 2017 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -9,14 +9,14 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(provider_auth_manager).
--author("Rafal Slota").
+-author("Lukasz Opiola").
 
 -include("modules/datastore/datastore_models.hrl").
--include_lib("public_key/include/public_key.hrl").
+-include("proto/oneclient/handshake_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([is_provider/1, handshake/2, get_provider_id/1]).
+-export([handle_handshake/1]).
 
 %%%===================================================================
 %%% API
@@ -24,85 +24,35 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Checks whether given certificate belongs to provider or not.
+%% Handles provider handshake request
 %% @end
 %%--------------------------------------------------------------------
--spec is_provider(public_key:der_encoded()) -> boolean().
-is_provider(DerCert) ->
-    try
-        OTPCert = public_key:pkix_decode_cert(DerCert, otp),
-        #'OTPCertificate'{tbsCertificate = #'OTPTBSCertificate'{
-            subject = {rdnSequence, Attrs}
-        }} = OTPCert,
+-spec handle_handshake(#provider_handshake_request{}) ->
+    {od_provider:id(), session:id()} | no_return().
+handle_handshake(#provider_handshake_request{provider_id = ProviderId, nonce = Nonce})
+    when is_binary(ProviderId) andalso is_binary(Nonce) ->
 
-        OU = lists:filtermap(
-            fun([Attribute]) ->
-                case Attribute#'AttributeTypeAndValue'.type of
-                    ?'id-at-organizationalUnitName' ->
-                        {_, Id} = Attribute#'AttributeTypeAndValue'.value,
-                        {true, str_utils:to_binary(Id)};
-                    _ -> false
-                end
-            end, Attrs),
-        [<<"Providers">>] =:= OU andalso verify_provider_cert(DerCert)
-    catch
-        _:_ -> false
-    end.
+    case provider_logic:verify_provider_identity(ProviderId) of
+        ok ->
+            ok;
+        Error ->
+            ?debug("Discarding provider connection as its identity cannot be verified: ~p", [
+                Error
+            ]),
+            throw(invalid_provider)
+    end,
 
+    case provider_logic:verify_provider_nonce(ProviderId, Nonce) of
+        ok ->
+            ok;
+        Error1 ->
+            ?debug("Discarding provider connection as its nonce cannot be verified: ~p", [
+                Error1
+            ]),
+            throw(invalid_nonce)
+    end,
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Initializes provider's session based on its certificate.
-%% @end
-%%--------------------------------------------------------------------
--spec handshake(public_key:der_encoded(), Conn :: pid()) ->
-    session:id() | no_return().
-handshake(DerCert, Conn) ->
-    ProviderId = provider_auth_manager:get_provider_id(DerCert),
     Identity = #user_identity{provider_id = ProviderId},
     SessionId = session_manager:get_provider_session_id(incoming, ProviderId),
-    {ok, _} = session_manager:reuse_or_create_provider_session(SessionId, provider_incoming, Identity, Conn),
-    SessionId.
-
-
-%%--------------------------------------------------------------------
-%% @doc Returns ProviderId based on provider's certificate (issued by OZ).
-%% @end
-%%--------------------------------------------------------------------
--spec get_provider_id(public_key:der_encoded()) -> oneprovider:id() | no_return().
-get_provider_id(DerCert) ->
-    OTPCert = public_key:pkix_decode_cert(DerCert, otp),
-    #'OTPCertificate'{tbsCertificate = #'OTPTBSCertificate'{
-        subject = {rdnSequence, Attrs}
-    }} = OTPCert,
-
-    [ProviderId] = lists:filtermap(
-        fun([Attribute]) ->
-            case Attribute#'AttributeTypeAndValue'.type of
-                ?'id-at-commonName' ->
-                    {_, Id} = Attribute#'AttributeTypeAndValue'.value,
-                    {true, str_utils:to_binary(Id)};
-                _ -> false
-            end
-        end, Attrs),
-
-    str_utils:to_binary(ProviderId).
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks if given provider cert was issued by OZ CA.
-%% @end
-%%--------------------------------------------------------------------
--spec verify_provider_cert(public_key:der_encoded()) -> boolean().
-verify_provider_cert(DerCert) ->
-    % Zone CA is always a single cert so below match is safe
-    [OzCaCertDer] = cert_utils:load_ders(oz_plugin:get_oz_cacert_path()),
-    OzCaCert = #'OTPCertificate'{} = public_key:pkix_decode_cert(OzCaCertDer, otp),
-    case public_key:pkix_path_validation(OzCaCert, [DerCert], [{max_path_length, 0}]) of
-        {ok, _} -> true;
-        _ -> false
-    end.
+    {ok, _} = session_manager:reuse_or_create_provider_session(SessionId, provider_incoming, Identity, self()),
+    {ProviderId, SessionId}.

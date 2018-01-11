@@ -16,7 +16,6 @@ CXXFLAGS += -fPIC -std=c++14 -O3 -Wall -D_FILE_OFFSET_BITS=64 -DASIO_STANDALONE 
 	-isystem ../priv/helpers/include -isystem ../helpers/src -isystem ../helpers/deps/cppmetrics -isystem $(ERTS_INCLUDE_DIR)
 
 all: \
-		../priv/csr_creator_drv.so \
 		../priv/helpers_nif.so \
 		../priv/rt_priority_queue_drv.so \
 		../priv/rt_map_drv.so
@@ -36,11 +35,6 @@ all: \
 
 %.o: %.cc ../priv/helpers/lib/libhelpers.a
 	$(CXX) $(CXXFLAGS) $(CFLAGS) -c $< -o $@
-
-../priv/csr_creator_drv.so: \
-		csr_creator/csr_creator.o \
-		csr_creator/csr_creator_nif.o
-	$(CXX) $? -o $@ $(LDFLAGS)
 
 ../priv/helpers_nif.so: \
 		helpers/helpers_nif.o

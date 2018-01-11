@@ -17,7 +17,7 @@
 -include("proto/oneclient/handshake_messages.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
--include_lib("cluster_worker/include/api_errors.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -26,6 +26,9 @@
 % Testing of "authorize" RPC
 -define(MOCK_CAVEAT_ID, <<"mockCaveat">>).
 -define(MOCK_DISCH_MACAROON, <<"mockDischMac">>).
+
+-define(MOCK_PROVIDER_IDENTITY_MACAROON(__ProviderId), <<"DUMMY-PROVIDER-IDENTITY-MACAROON-", __ProviderId/binary>>).
+-define(MOCK_PROVIDER_AUTH_MACAROON(__ProviderId), <<"DUMMY-PROVIDER-AUTH-MACAROON-", __ProviderId/binary>>).
 
 % WebSocket path is used to control gs_client:start_link mock behaviour
 -define(PATH_CAUSING_CONN_ERROR, "/conn_err").
@@ -127,6 +130,7 @@
 % Mocked provider data
 -define(PROVIDER_NAME(__Provider), __Provider).
 -define(PROVIDER_DOMAIN(__Provider), __Provider).
+-define(PROVIDER_ONLINE(__Provider), true).
 -define(PROVIDER_SUBDOMAIN_DELEGATION(__Provider), false).
 -define(PROVIDER_SUBDOMAIN(__Provider), undefined).
 -define(PROVIDER_SPACES_VALUE(__Provider), #{?SPACE_1 => 1000000000, ?SPACE_2 => 1000000000}).
@@ -271,6 +275,7 @@
     name = ?PROVIDER_NAME(__Provider),
     subdomain_delegation = ?PROVIDER_SUBDOMAIN_DELEGATION(__Provider),
     domain = ?PROVIDER_DOMAIN(__Provider),
+    online = ?PROVIDER_ONLINE(__Provider),
     spaces = ?PROVIDER_SPACES_MATCHER(__Provider),
     eff_users = ?PROVIDER_EFF_USERS(__Provider),
     eff_groups = ?PROVIDER_EFF_GROUPS(__Provider)
@@ -278,6 +283,7 @@
 -define(PROVIDER_PROTECTED_DATA_MATCHER(__Provider), #document{key = __Provider, value = #od_provider{
     name = ?PROVIDER_NAME(__Provider),
     domain = ?PROVIDER_DOMAIN(__Provider),
+    online = ?PROVIDER_ONLINE(__Provider),
     spaces = #{},
     eff_users = [],
     eff_groups = []
@@ -371,7 +377,8 @@ end).
 
 -define(SPACE_PROTECTED_DATA_VALUE(__SpaceId), #{
     <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_space, id = __SpaceId, aspect = instance, scope = protected}),
-    <<"name">> => ?SPACE_NAME(__SpaceId)
+    <<"name">> => ?SPACE_NAME(__SpaceId),
+    <<"providers">> => ?SPACE_PROVIDERS_VALUE(__SpaceId)
 }).
 -define(SPACE_PRIVATE_DATA_VALUE(__SpaceId), begin
     __ProtectedData = ?SPACE_PROTECTED_DATA_VALUE(__SpaceId),
@@ -409,6 +416,7 @@ end).
     <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_provider, id = __ProviderId, aspect = instance, scope = protected}),
     <<"name">> => ?PROVIDER_NAME(__ProviderId),
     <<"domain">> => ?PROVIDER_DOMAIN(__ProviderId),
+    <<"online">> => ?PROVIDER_ONLINE(__ProviderId),
     <<"latitude">> => ?PROVIDER_LATITUDE(__ProviderId),
     <<"longitude">> => ?PROVIDER_LONGITUDE(__ProviderId)
 }).

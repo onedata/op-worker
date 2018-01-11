@@ -60,14 +60,15 @@
 -record(get_file_distribution, {
 }).
 
--record(replicate_file, {
-    provider_id :: oneprovider:id(),
-    block :: #file_block{} | undefined
+-record(schedule_file_replication, {
+    target_provider_id :: oneprovider:id(),
+    block :: #file_block{} | undefined,
+    callback :: transfer:callback()
 }).
 
--record(invalidate_file_replica, {
-    provider_id :: oneprovider:id(),
-    migration_provider_id :: undefined | oneprovider:id()
+-record(schedule_replica_invalidation, {
+    source_provider_id :: oneprovider:id(),
+    target_provider_id :: undefined | oneprovider:id()
 }).
 
 -record(get_metadata, {
@@ -101,7 +102,7 @@
 #get_transfer_encoding{} | #set_transfer_encoding{} |
 #get_cdmi_completion_status{} | #set_cdmi_completion_status{} |
 #get_mimetype{} | #set_mimetype{} | #get_file_path{} |
-#get_file_distribution{} | #replicate_file{} | #invalidate_file_replica{} |
+#get_file_distribution{} | #schedule_file_replication{} | #schedule_replica_invalidation{} |
 #get_metadata{} | #remove_metadata{} | #set_metadata{} | #check_perms{} |
 #create_share{} | #remove_share{}.
 
@@ -140,10 +141,14 @@
     share_file_guid :: od_share:share_guid()
 }).
 
+-record(scheduled_transfer, {
+    transfer_id :: transfer:id()
+}).
+
 -type provider_response_type() ::
     #transfer_encoding{} | #cdmi_completion_status{} |#mimetype{} | #acl{} |
     #dir{} | #file_path{} | #file_distribution{} | #metadata{} | #share{} |
-    undefined.
+    #scheduled_transfer{} | undefined.
 
 -record(provider_request, {
     context_guid :: fslogic_worker:file_guid(),

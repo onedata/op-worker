@@ -34,8 +34,8 @@
 
 -define(CTX, #{
     model => ?MODULE,
-    mutator => oneprovider:get_provider_id(),
-    local_links_tree_id => oneprovider:get_provider_id()
+    mutator => oneprovider:get_id_or_undefined(),
+    local_links_tree_id => oneprovider:get_id_or_undefined()
 }).
 
 %%%===================================================================
@@ -59,7 +59,7 @@ start(SpaceId, CleanupConfig, CurrentSize) ->
                 scope = SpaceId,
                 value = Autocleaning = #autocleaning{
                     space_id = SpaceId,
-                    started_at = utils:system_time_seconds(),
+                    started_at = time_utils:cluster_time_seconds(),
                     bytes_to_release = CurrentSize - Target,
                     status = scheduled,
                     config = CleanupConfig
@@ -147,7 +147,7 @@ mark_failed(AutocleaningId) ->
     datastore_model:update(?CTX, AutocleaningId, fun(AC = #autocleaning{space_id = SpaceId}) ->
         {ok, _} = space_storage:mark_cleanup_finished(SpaceId),
         {ok, AC#autocleaning{
-            stopped_at = utils:system_time_seconds(),
+            stopped_at = time_utils:cluster_time_seconds(),
             status = failed
         }}
     end).
@@ -164,7 +164,7 @@ mark_completed(AutocleaningId) ->
     datastore_model:update(?CTX, AutocleaningId, fun(AC = #autocleaning{space_id = SpaceId}) ->
         {ok, _} = space_storage:mark_cleanup_finished(SpaceId),
         {ok, AC#autocleaning{
-            stopped_at = utils:system_time_seconds(),
+            stopped_at = time_utils:cluster_time_seconds(),
             status = completed
         }}
     end).
@@ -199,7 +199,7 @@ get_config(AutocleaningId) ->
 -spec add_link(AutocleaningId :: id(), SpaceId :: od_space:id()) -> ok.
 add_link(AutocleaningId, SpaceId) ->
     Ctx = ?CTX#{scope => SpaceId},
-    TreeId = oneprovider:get_provider_id(),
+    TreeId = oneprovider:get_id(),
     {ok, _} = datastore_model:add_links(Ctx, space_link_root(SpaceId), TreeId, {AutocleaningId, <<>>}),
     ok.
 
@@ -212,7 +212,7 @@ add_link(AutocleaningId, SpaceId) ->
 -spec remove_link(AutocleaningId :: id(), SpaceId :: od_space:id()) -> ok.
 remove_link(AutocleaningId, SpaceId) ->
     Ctx = ?CTX#{scope => SpaceId},
-    TreeId = oneprovider:get_provider_id(),
+    TreeId = oneprovider:get_id(),
     ok = datastore_model:delete_links(Ctx, space_link_root(SpaceId), TreeId, AutocleaningId).
 
 %%-------------------------------------------------------------------
@@ -269,10 +269,10 @@ get_info(#autocleaning{
     StoppedAt2 = case StoppedAt of
         undefined -> null;
         StoppedAt ->
-            timestamp_utils:epoch_to_iso8601(StoppedAt)
+            time_utils:epoch_to_iso8601(StoppedAt)
     end,
     [
-        {startedAt, timestamp_utils:epoch_to_iso8601(StartedAt)},
+        {startedAt, time_utils:epoch_to_iso8601(StartedAt)},
         {stoppedAt, StoppedAt2},
         {releasedBytes, ReleasedBytes},
         {bytesToRelease, BytesToRelease},

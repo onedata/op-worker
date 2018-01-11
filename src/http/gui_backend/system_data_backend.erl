@@ -26,7 +26,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
--include_lib("cluster_worker/include/api_errors.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 
 %% API
@@ -107,13 +107,20 @@ query(_ResourceType, _Data) ->
 query_record(<<"system-provider">>, Data) ->
     SessionId = gui_session:get_session_id(),
     ProviderId = proplists:get_value(<<"id">>, Data),
-    case provider_logic:get_name(SessionId, ProviderId) of
+    case provider_logic:get_protected_data(SessionId, ProviderId) of
         ?ERROR_FORBIDDEN ->
             gui_error:unauthorized();
-        {ok, ProviderName} ->
+        {ok, #document{value = Provider}} ->
+            Status = case Provider#od_provider.online of
+                true -> <<"online">>;
+                false -> <<"offline">>
+            end,
             {ok, [
                 {<<"id">>, ProviderId},
-                {<<"name">>, ProviderName}
+                {<<"name">>, Provider#od_provider.name},
+                {<<"latitude">>, Provider#od_provider.latitude},
+                {<<"longitude">>, Provider#od_provider.longitude},
+                {<<"status">>, Status}
             ]}
     end;
 

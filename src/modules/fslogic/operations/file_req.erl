@@ -166,41 +166,50 @@ release(UserCtx, FileCtx, HandleId) ->
     fslogic_worker:fuse_response().
 create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
     FileCtx = create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
-    FileCtx2 = sfm_utils:create_storage_file(UserCtx, FileCtx),
-    {FileLocation, FileCtx3} = sfm_utils:create_storage_file_location(FileCtx2, true),
-    fslogic_times:update_mtime_ctime(ParentFileCtx),
+    try
+        FileCtx2 = sfm_utils:create_storage_file(UserCtx, FileCtx),
+        {FileLocation, FileCtx3} = sfm_utils:create_storage_file_location(FileCtx2, true),
+        fslogic_times:update_mtime_ctime(ParentFileCtx),
 
-    HandleId = case user_ctx:is_direct_io(UserCtx) of
-        true ->
-            ?NEW_HANDLE_ID;
-        _ ->
-            % open file on adequate node
-            FileGuid = file_ctx:get_guid_const(FileCtx3),
-            Node = consistent_hasing:get_node(FileGuid),
-            #fuse_response{
-                status = #status{code = ?OK},
-                fuse_response = #file_opened{handle_id = HId}
-            } = rpc:call(Node, file_req, open_file_insecure,
-                [UserCtx, FileCtx3, rdwr]),
-            HId
-    end,
+        HandleId = case user_ctx:is_direct_io(UserCtx) of
+            true ->
+                ?NEW_HANDLE_ID;
+            _ ->
+                % open file on adequate node
+                FileGuid = file_ctx:get_guid_const(FileCtx3),
+                Node = consistent_hasing:get_node(FileGuid),
+                #fuse_response{
+                    status = #status{code = ?OK},
+                    fuse_response = #file_opened{handle_id = HId}
+                } = rpc:call(Node, file_req, open_file_insecure,
+                    [UserCtx, FileCtx3, rdwr]),
+                HId
+        end,
 
-    #fuse_response{fuse_response = #file_attr{size = Size} = FileAttr} =
-        attr_req:get_file_attr_insecure(UserCtx, FileCtx3, false, false),
-    FileAttr2 = case Size of
-        undefined ->
-            FileAttr#file_attr{size = 0};
-        _ ->
-            FileAttr
-    end,
-    #fuse_response{
+        #fuse_response{fuse_response = #file_attr{size = Size} = FileAttr} =
+            attr_req:get_file_attr_insecure(UserCtx, FileCtx3, false, false),
+        FileAttr2 = case Size of
+            undefined ->
+                FileAttr#file_attr{size = 0};
+            _ ->
+                FileAttr
+        end,
+        #fuse_response{
         status = #status{code = ?OK},
-        fuse_response = #file_created{
-            handle_id = HandleId,
-            file_attr = FileAttr2,
-            file_location = FileLocation
+            fuse_response = #file_created{
+                handle_id = HandleId,
+                file_attr = FileAttr2,
+                file_location = FileLocation
+            }
         }
-    }.
+    catch
+        Error:Reason ->
+            sfm_utils:delete_storage_file(FileCtx, UserCtx),
+            FileUuid = file_ctx:get_uuid_const(FileCtx),
+            file_meta:delete(FileUuid),
+            times:delete(FileUuid),
+            erlang:Error(Reason)
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -212,9 +221,18 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
     Mode :: file_meta:posix_permissions()) -> fslogic_worker:fuse_response().
 make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     FileCtx = create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
-    {_, FileCtx2} = sfm_utils:create_storage_file_location(FileCtx, false),
-    fslogic_times:update_mtime_ctime(ParentFileCtx),
-    attr_req:get_file_attr_insecure(UserCtx, FileCtx2).
+    try
+        {_, FileCtx2} = sfm_utils:create_storage_file_location(FileCtx, false),
+        fslogic_times:update_mtime_ctime(ParentFileCtx),
+        attr_req:get_file_attr_insecure(UserCtx, FileCtx2)
+    catch
+        Error:Reason ->
+            FileUuid = file_ctx:get_uuid_const(FileCtx),
+            file_location:delete(file_location:local_id(FileUuid)),
+            file_meta:delete(FileUuid),
+            times:delete(FileUuid),
+            erlang:Error(Reason)
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -239,7 +257,7 @@ get_file_location_insecure(_UserCtx, FileCtx) ->
         status = #status{code = ?OK},
         fuse_response = #file_location{
             uuid = FileUuid,
-            provider_id = oneprovider:get_provider_id(),
+            provider_id = oneprovider:get_id(),
             storage_id = StorageId,
             file_id = FileId,
             blocks = Blocks,
@@ -265,7 +283,7 @@ create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
     ParentFileUuid = file_ctx:get_uuid_const(ParentFileCtx),
     {ok, FileUuid} = file_meta:create({uuid, ParentFileUuid}, File), %todo pass file_ctx
 
-    CTime = utils:system_time_seconds(),
+    CTime = time_utils:cluster_time_seconds(),
     SpaceId = file_ctx:get_space_id_const(ParentFileCtx),
     {ok, _} = times:save(#document{key = FileUuid, value = #times{
         mtime = CTime, atime = CTime, ctime = CTime
@@ -364,7 +382,7 @@ fsync_insecure(UserCtx, FileCtx, DataOnly, HandleId) ->
 flush_event_queue(UserCtx, FileCtx) ->
     SessId = user_ctx:get_session_id(UserCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    lfm_event_utils:flush_event_queue(SessId, oneprovider:get_provider_id(), FileUuid),
+    lfm_event_utils:flush_event_queue(SessId, oneprovider:get_id(), FileUuid),
     #fuse_response{
         status = #status{code = ?OK}
     }.

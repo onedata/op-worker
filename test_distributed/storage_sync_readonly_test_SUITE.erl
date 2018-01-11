@@ -201,7 +201,6 @@ init_per_suite(Config) ->
         hackney:start(),
         initializer:disable_quota_limit(NewConfig),
         initializer:mock_provider_ids(NewConfig),
-        initializer:enable_grpca_based_communication(NewConfig),
         NewConfig
     end,
     [{?LOAD_MODULES, [initializer, storage_sync_test_base]}, {?ENV_UP_POSTHOOK, Posthook} | Config].
@@ -209,7 +208,6 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     initializer:unload_quota_mocks(Config),
     initializer:unmock_provider_ids(Config),
-    initializer:disable_grpca_based_communication(Config),
     ssl:stop().
 
 init_per_testcase(Case, Config) when
@@ -222,7 +220,7 @@ init_per_testcase(Case, Config) when
         {StorageDoc = #document{value = Storage = #storage{}}, Ctx} = meck:passthrough([Ctx]),
         {StorageDoc#document{value = Storage#storage{luma_config = ?LUMA_CONFIG}}, Ctx}
     end),
-    test_utils:mock_expect(Workers, reverse_luma_proxy, get_group_id, fun(_, _, _, _) ->
+    test_utils:mock_expect(Workers, reverse_luma_proxy, get_group_id, fun(_, _, _, _, _) ->
         {ok, ?GROUP}
     end),
     test_utils:mock_expect(Workers, reverse_luma_proxy, get_user_id, fun(_, _, _, _) ->
@@ -240,7 +238,7 @@ init_per_testcase(Case, Config) when
         {StorageDoc = #document{value = Storage = #storage{}}, Ctx} = meck:passthrough([Ctx]),
         {StorageDoc#document{value = Storage#storage{luma_config = ?LUMA_CONFIG}}, Ctx}
     end),
-    test_utils:mock_expect(Workers, reverse_luma_proxy, get_group_id, fun(_, _, _, _) ->
+    test_utils:mock_expect(Workers, reverse_luma_proxy, get_group_id, fun(_, _, _, _, _) ->
         {ok, ?GROUP}
     end),
     test_utils:mock_expect(Workers, reverse_luma_proxy, get_user_id, fun(_, _, _, _) ->
@@ -309,17 +307,20 @@ init_per_testcase(Case, Config) when
         {StorageDoc#document{value = Storage#storage{luma_config = ?LUMA_CONFIG}}, Ctx2}
     end),
 
+    test_utils:mock_expect(Workers, reverse_luma_proxy, get_user_id_by_name, fun(_, _, _, _) ->
+        {ok, ?USER}
+    end),
+
     test_utils:mock_expect(Workers, reverse_luma_proxy, get_user_id, fun(_, _, _, _) ->
         {ok, ?USER}
     end),
 
-    test_utils:mock_expect(Workers, reverse_luma_proxy, get_group_id, fun(Args, _, _, _) ->
-        case maps:keys(Args) of
-            [<<"gid">>] ->
-                {ok, ?GROUP};
-            [<<"name">>] ->
-                {ok, ?GROUP2}
-        end
+    test_utils:mock_expect(Workers, reverse_luma_proxy, get_group_id, fun(_, _, _, _, _) ->
+        {ok, ?GROUP}
+    end),
+
+    test_utils:mock_expect(Workers, reverse_luma_proxy, get_group_id_by_name, fun(_, _, _, _, _) ->
+        {ok, ?GROUP2}
     end),
 
     EncACL = nfs4_acl:encode(?ACL),

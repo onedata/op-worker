@@ -24,8 +24,7 @@
 
 -type record() :: #user_identity{}.
 -type doc() :: datastore_doc:doc(record()).
--type credentials() :: #macaroon_auth{} | #token_auth{} | #basic_auth{} |
-                       #certificate_auth{}.
+-type credentials() :: #macaroon_auth{} | #token_auth{} | #basic_auth{}.
 -export_type([credentials/0]).
 
 -define(CTX, #{
@@ -53,8 +52,6 @@ get(Auth) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch(credentials()) -> {ok, doc()} | {error, term()}.
-fetch(#certificate_auth{}) ->
-    {error, not_supported};
 fetch(Auth) ->
     try
         case user_logic:get_by_auth(Auth) of

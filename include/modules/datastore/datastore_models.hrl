@@ -129,11 +129,12 @@
 %% Model for caching provider details fetched from OZ
 -record(od_provider, {
     name :: undefined | binary(),
-    subdomain_delegation = false :: boolean(),
+    subdomain_delegation = false :: undefined | boolean(),
     domain :: binary(),
     subdomain = undefined :: undefined |  binary(),
     latitude = 0.0 :: float(),
     longitude = 0.0 :: float(),
+    online = false :: boolean(),
 
     % Direct relations to other entities
     spaces = #{} :: maps:map(od_space:id(), Size :: integer()),
@@ -177,6 +178,19 @@
 %%%===================================================================
 %%% Records specific for oneprovider
 %%%===================================================================
+
+%% Authorization of this provider, auth and identity macaroons are derived from
+%% the root macaroon and cached for a configurable time.
+-record(provider_auth, {
+    provider_id :: od_provider:id(),
+    root_macaroon :: binary(),
+    cached_auth_macaroon = {0, <<"">>} :: {Timestamp :: integer(), binary()},
+    cached_identity_macaroon = {0, <<"">>} :: {Timestamp :: integer(), binary()}
+}).
+
+-record(authorization_nonce, {
+    timestamp :: integer()
+}).
 
 %% Identity containing user_id
 -record(user_identity, {
@@ -377,7 +391,7 @@
     metric_type = undefined :: atom(),
     secondary_subject_type = undefined :: atom(),
     secondary_subject_id = <<"">> :: datastore:id(),
-    provider_id = oneprovider:get_provider_id() :: oneprovider:id()
+    provider_id = oneprovider:get_id_or_undefined() :: oneprovider:id()
 }).
 
 %% Model for holding state of monitoring
@@ -443,16 +457,17 @@
     mth_mov_avg = 0 :: non_neg_integer()
 }).
 
-%% Model holds information about ongoing transfer
+%% Model that holds information about an ongoing (or completed) transfer
 -record(transfer, {
     file_uuid :: undefined | file_meta:uuid(),
     space_id :: undefined | od_space:id(),
+    user_id :: undefined | od_user:id(),
     path :: undefined | file_meta:path(),
     callback :: undefined | transfer:callback(),
-    transfer_status :: undefined | transfer:status(),
+    status :: undefined | transfer:status(),
     invalidation_status :: undefined | transfer:status(),
-    source_provider_id :: undefined | oneprovider:id(),
-    target_provider_id :: undefined | oneprovider:id(),
+    source_provider_id :: undefined | od_provider:id(),
+    target_provider_id :: undefined | od_provider:id(),
     invalidate_source_replica :: undefined | boolean(),
     % pid of transfer or invalidation controller, as both cannot execute
     % simultaneously for given TransferId
@@ -460,20 +475,26 @@
 
     files_to_transfer = 0 :: non_neg_integer(),
     files_transferred = 0 :: non_neg_integer(),
+    failed_files = 0 :: non_neg_integer(),
     bytes_to_transfer = 0 :: non_neg_integer(),
     bytes_transferred = 0 :: non_neg_integer(),
     files_to_invalidate = 0 :: non_neg_integer(),
     files_invalidated = 0 :: non_neg_integer(),
     start_time = 0 :: non_neg_integer(),
-    last_update = 0 :: non_neg_integer(),
+    finish_time = 0 :: non_neg_integer(),
 
-    % Histograms of transferred bytes, head of list is most recent:
-    % list of 60 integers counting bytes transferred during each minute of last hour,
-    min_hist :: undefined | [non_neg_integer()],
-    % list of 24 integers counting bytes transferred during each hour of last day,
-    hr_hist :: undefined | [non_neg_integer()],
-    % list of 30 integers counting bytes transferred during each day of last month,
-    dy_hist :: undefined | [non_neg_integer()]
+    % Histograms of transferred bytes per provider, last_update per provider is
+    % required to keep track in histograms.
+    last_update = #{} :: maps:map(od_provider:id(), non_neg_integer()),
+    % Histogram types (head of list is most recent):
+    % list of 12 integers counting bytes transferred during each 5 seconds of last minute
+    min_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
+    % list of 60 integers counting bytes transferred during each minute of last hour
+    hr_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
+    % list of 24 integers counting bytes transferred during each hour of last day
+    dy_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
+    % list of 30 integers counting bytes transferred during each day of last month
+    mth_hist = #{} :: maps:map(od_provider:id(), histogram:histogram())
 }).
 
 %% Model for storing storage_sync monitoring data.

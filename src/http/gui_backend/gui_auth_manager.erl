@@ -32,7 +32,7 @@
     {ok, #macaroon_auth{}} | {error, term()}.
 authenticate(MacaroonBin) ->
     try
-        {ok, Macaroon} = token_utils:deserialize(MacaroonBin),
+        {ok, Macaroon} = onedata_macaroons:deserialize(MacaroonBin),
         Caveats = macaroon:third_party_caveats(Macaroon),
         DischMacaroonsBin = lists:map(
             fun({_, CaveatId}) ->

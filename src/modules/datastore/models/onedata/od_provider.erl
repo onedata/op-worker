@@ -139,6 +139,7 @@ get_record_struct(3) ->
         {subdomain, string},
         {latitude, float},
         {longitude, float},
+        {online, boolean},
 
         {spaces, #{string => integer}},
 
@@ -195,6 +196,9 @@ upgrade_record(2, Provider) ->
         subdomain_delegation = false,
         domain = Domain,
         subdomain = undefined,
+        latitude = 0.0,
+        longitude = 0.0,
+        online = false,
 
         spaces = #{},
 

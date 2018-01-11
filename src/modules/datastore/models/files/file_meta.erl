@@ -67,8 +67,8 @@
     model => ?MODULE,
     sync_enabled => true,
     remote_driver => datastore_remote_driver,
-    mutator => oneprovider:get_provider_id(),
-    local_links_tree_id => oneprovider:get_provider_id()
+    mutator => oneprovider:get_id_or_undefined(),
+    local_links_tree_id => oneprovider:get_id_or_undefined()
 }).
 
 %%%===================================================================
@@ -115,11 +115,11 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{
             scope = SpaceId,
             value = FileMeta#file_meta{
                 scope = SpaceDirUuid,
-                provider_id = oneprovider:get_provider_id(),
+                provider_id = oneprovider:get_id(),
                 parent_uuid = ParentUuid
             }
         },
-        TreeId = oneprovider:get_provider_id(),
+        TreeId = oneprovider:get_id(),
         Ctx = ?CTX#{scope => SpaceId},
         Link = {FileName, FileUuid},
         case datastore_model:add_links(Ctx, ParentUuid, TreeId, Link) of
@@ -261,17 +261,17 @@ delete_without_link(FileUuid) ->
     FileUuid :: uuid(), FileName :: name()) -> ok.
 delete_child_link(ParentUuid, Scope, FileUuid, FileName) ->
     {ok, Links} = datastore_model:get_links(?CTX, ParentUuid, all, FileName),
-    [#link{tree_id = TreeId, name = FileName, rev = Rev}] = lists:filter(fun
+    [#link{tree_id = ProviderId, name = FileName, rev = Rev}] = lists:filter(fun
         (#link{target = Uuid}) -> Uuid == FileUuid
     end, Links),
-    case oneprovider:get_provider_id() == TreeId of
+    case oneprovider:is_self(ProviderId) of
         true ->
             ok = datastore_model:delete_links(
-                ?CTX, ParentUuid, TreeId, {FileName, Rev}
+                ?CTX#{scope => Scope}, ParentUuid, ProviderId, {FileName, Rev}
             );
         false ->
             ok = datastore_model:mark_links_deleted(
-                ?CTX#{scope => Scope}, ParentUuid, TreeId, {FileName, Rev}
+                ?CTX#{scope => Scope}, ParentUuid, ProviderId, {FileName, Rev}
             )
     end,
     ok.
@@ -308,7 +308,7 @@ get_child(ParentUuid, Name) ->
     Tokens = binary:split(Name, <<"@">>, [global]),
     case lists:reverse(Tokens) of
         [Name] ->
-            case get_child(ParentUuid, oneprovider:get_provider_id(), Name) of
+            case get_child(ParentUuid, oneprovider:get_id(), Name) of
                 {ok, Doc} -> {ok, Doc};
                 {error, not_found} -> get_child(ParentUuid, all, Name);
                 {error, Reason} -> {error, Reason}
@@ -402,7 +402,7 @@ tag_children(Links) ->
                 name = Name
             } | Children];
         (Group, Children) ->
-            LocalTreeId = oneprovider:get_provider_id(),
+            LocalTreeId = oneprovider:get_id(),
             {LocalLinks, RemoteLinks} = lists:partition(fun
                 (#link{tree_id = TreeId}) -> TreeId == LocalTreeId
             end, Group),
@@ -483,7 +483,7 @@ rename(SourceDoc, SourceParentDoc, TargetParentDoc, TargetName) ->
         }}
     end),
     Ctx = ?CTX#{scope => TargetParentDoc#document.scope},
-    TreeId = oneprovider:get_provider_id(),
+    TreeId = oneprovider:get_id(),
     {ok, _} = datastore_model:add_links(Ctx, TargetParentDoc#document.key,
         TreeId, {TargetName, FileUuid}
     ),
@@ -559,29 +559,35 @@ get_scope_id(Entry) ->
 setup_onedata_user(UserId, EffSpaces) ->
     ?info("Setting up user: ~p", [UserId]),
     critical_section:run([od_user, UserId], fun() ->
-        CTime = erlang:system_time(seconds),
+        try
+            CTime = time_utils:cluster_time_seconds(),
 
-        lists:foreach(fun(SpaceId) ->
-            make_space_exist(SpaceId)
-        end, EffSpaces),
+            lists:foreach(fun(SpaceId) ->
+                make_space_exist(SpaceId)
+            end, EffSpaces),
 
-        FileUuid = fslogic_uuid:user_root_dir_uuid(UserId),
-        ScopeId = <<>>, % TODO - do we need scope for user dir
-        case create({uuid, ?ROOT_DIR_UUID},
-            #document{key = FileUuid,
-                value = #file_meta{
-                    name = UserId, type = ?DIRECTORY_TYPE, mode = 8#1755,
-                    owner = ?ROOT_USER_ID, is_scope = true,
-                    parent_uuid = ?ROOT_DIR_UUID
-                }
-            }) of
-            {ok, _RootUuid} ->
-                {ok, _} = times:save(#document{key = FileUuid, value =
-                #times{mtime = CTime, atime = CTime, ctime = CTime},
-                    scope = ScopeId}),
-                ok;
-            {error, already_exists} ->
-                ok
+            FileUuid = fslogic_uuid:user_root_dir_uuid(UserId),
+            ScopeId = <<>>, % TODO - do we need scope for user dir
+            case create({uuid, ?ROOT_DIR_UUID},
+                #document{key = FileUuid,
+                    value = #file_meta{
+                        name = UserId, type = ?DIRECTORY_TYPE, mode = 8#1755,
+                        owner = ?ROOT_USER_ID, is_scope = true,
+                        parent_uuid = ?ROOT_DIR_UUID
+                    }
+                }) of
+                {ok, _RootUuid} ->
+                    {ok, _} = times:save(#document{key = FileUuid, value =
+                    #times{mtime = CTime, atime = CTime, ctime = CTime},
+                        scope = ScopeId}),
+                    ok;
+                {error, already_exists} ->
+                    ok
+            end
+        catch Type:Message ->
+            ?error_stacktrace("Failed to setup user ~s - ~p:~p", [
+                UserId, Type, Message
+            ])
         end
     end).
 
@@ -618,7 +624,7 @@ remove_share(FileCtx, ShareId) ->
 %%--------------------------------------------------------------------
 -spec make_space_exist(SpaceId :: datastore:key()) -> ok | no_return().
 make_space_exist(SpaceId) ->
-    CTime = utils:system_time_seconds(),
+    CTime = time_utils:cluster_time_seconds(),
     SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     FileDoc = #document{
         key = SpaceDirUuid,

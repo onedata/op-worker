@@ -16,7 +16,7 @@
 -include("graph_sync/provider_graph_sync.hrl").
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("cluster_worker/include/api_errors.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 
 %% API
 -export([translate/2, apply_scope_mask/2]).
@@ -33,6 +33,10 @@
 %%--------------------------------------------------------------------
 -spec translate(gs_protocol:gri(), Result :: gs_protocol:data()) ->
     datastore:document().
+translate(#gri{type = od_provider, aspect = current_time}, #{<<"timeMillis">> := TimeMillis}) ->
+    TimeMillis;
+
+
 translate(#gri{type = od_user, id = Id, aspect = instance, scope = private}, Result) ->
     #document{
         key = Id,
@@ -105,7 +109,8 @@ translate(#gri{type = od_space, id = Id, aspect = instance, scope = protected}, 
     #document{
         key = Id,
         value = #od_space{
-            name = maps:get(<<"name">>, Result)
+            name = maps:get(<<"name">>, Result),
+            providers = maps:get(<<"providers">>, Result)
         }
     };
 
@@ -159,6 +164,7 @@ translate(#gri{type = od_provider, id = Id, aspect = instance, scope = private},
             subdomain = maps:get(<<"subdomain">>, Result),
             longitude = maps:get(<<"longitude">>, Result),
             latitude = maps:get(<<"latitude">>, Result),
+            online = maps:get(<<"online">>, Result),
             spaces = maps:get(<<"spaces">>, Result),
             eff_users = maps:get(<<"effectiveUsers">>, Result),
             eff_groups = maps:get(<<"effectiveGroups">>, Result)
@@ -170,7 +176,10 @@ translate(#gri{type = od_provider, id = Id, aspect = instance, scope = protected
         key = Id,
         value = #od_provider{
             name = maps:get(<<"name">>, Result),
-            domain = maps:get(<<"domain">>, Result)
+            domain = maps:get(<<"domain">>, Result),
+            longitude = maps:get(<<"longitude">>, Result),
+            latitude = maps:get(<<"latitude">>, Result),
+            online = maps:get(<<"online">>, Result)
         }
     };
 
@@ -204,7 +213,7 @@ translate(#gri{type = od_handle, id = Id, aspect = instance, scope = private}, R
             resource_type = maps:get(<<"resourceType">>, Result),
             resource_id = maps:get(<<"resourceId">>, Result),
             metadata = maps:get(<<"metadata">>, Result),
-            timestamp = timestamp_utils:datestamp_to_datetime(maps:get(<<"timestamp">>, Result)),
+            timestamp = time_utils:datestamp_to_datetime(maps:get(<<"timestamp">>, Result)),
             handle_service = maps:get(<<"handleServiceId">>, Result),
 
             eff_users = privileges_to_atoms(maps:get(<<"effectiveUsers">>, Result)),
@@ -218,7 +227,7 @@ translate(#gri{type = od_handle, id = Id, aspect = instance, scope = public}, Re
         value = #od_handle{
             public_handle = maps:get(<<"publicHandle">>, Result),
             metadata = maps:get(<<"metadata">>, Result),
-            timestamp = timestamp_utils:datestamp_to_datetime(maps:get(<<"timestamp">>, Result))
+            timestamp = time_utils:datestamp_to_datetime(maps:get(<<"timestamp">>, Result))
         }
     };
 
@@ -289,7 +298,6 @@ apply_scope_mask(Doc = #document{value = Space = #od_space{}}, protected) ->
             direct_groups = #{},
             eff_groups = #{},
 
-            providers = #{},
             shares = []
         }
     };
@@ -304,6 +312,8 @@ apply_scope_mask(Doc = #document{value = Share = #od_share{}}, public) ->
 apply_scope_mask(Doc = #document{value = Provider = #od_provider{}}, protected) ->
     Doc#document{
         value = Provider#od_provider{
+            subdomain_delegation = undefined,
+            subdomain = undefined,
             spaces = #{},
             eff_users = [],
             eff_groups = []

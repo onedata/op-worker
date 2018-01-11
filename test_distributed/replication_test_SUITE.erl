@@ -68,10 +68,11 @@ all() ->
         remote_change_of_blocks_should_notify_clients,
         remote_irrelevant_change_should_not_notify_clients,
         conflicting_remote_changes_should_be_reconciled,
-        rtransfer_config_should_work,
-        replica_invalidate_should_migrate_unique_data,
-        replica_invalidate_should_truncate_storage_file_to_zero_size,
-        dir_replica_invalidate_should_invalidate_all_children
+        rtransfer_config_should_work
+        %% @TODO VFS-3728
+        %% replica_invalidate_should_migrate_unique_data,
+        %% replica_invalidate_should_truncate_storage_file_to_zero_size,
+        %% dir_replica_invalidate_should_invalidate_all_children
     ]).
 
 
@@ -460,7 +461,7 @@ read_should_synchronize_file(Config) ->
     [W1 | _] = Workers = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    LocalProviderId = rpc:call(W1, oneprovider, get_provider_id, []),
+    LocalProviderId = rpc:call(W1, oneprovider, get_id, []),
     ExternalProviderId = <<"external_provider_id">>,
     ExternalFileId = <<"external_file_id">>,
 
@@ -1108,7 +1109,7 @@ replica_invalidate_should_migrate_unique_data(Config) ->
     [W1 | _] = Workers = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    LocalProviderId = rpc:call(W1, oneprovider, get_provider_id, []),
+    LocalProviderId = rpc:call(W1, oneprovider, get_id, []),
     ExternalProviderId = <<"external_provider_id">>,
     ExternalFileId = <<"external_file_id">>,
 
@@ -1145,7 +1146,7 @@ replica_invalidate_should_migrate_unique_data(Config) ->
     override_space_providers_mock(Workers, SpaceId, [LocalProviderId, ExternalProviderId]),
 
     test_utils:mock_new(Workers, logical_file_manager, [passthrough]),
-    test_utils:mock_expect(Workers, logical_file_manager, replicate_file,
+    test_utils:mock_expect(Workers, logical_file_manager, schedule_file_replication,
         fun(_SessId, _FileKey, _ProviderId) -> ok end),
 
     % when
@@ -1155,20 +1156,20 @@ replica_invalidate_should_migrate_unique_data(Config) ->
     ok = lfm_proxy:close(W1, Handle2),
 
     % then
-    test_utils:mock_assert_num_calls(W1, logical_file_manager, replicate_file, [SessionId, {guid, FileGuid}, ExternalProviderId], 1),
+    test_utils:mock_assert_num_calls(W1, logical_file_manager, schedule_file_replication, [SessionId, {guid, FileGuid}, ExternalProviderId], 1),
 
     % when
     ok = lfm_proxy:invalidate_file_replica(W1, SessionId, {guid, FileGuid}, LocalProviderId, undefined),
 
     % then
-    test_utils:mock_assert_num_calls(W1, logical_file_manager, replicate_file, [SessionId, {guid, FileGuid}, ExternalProviderId], 1),
-    test_utils:mock_validate_and_unload(Workers, [logical_file_manager]).
+    test_utils:mock_assert_num_calls(W1, logical_file_manager, schedule_file_replication, [SessionId, {guid, FileGuid}, ExternalProviderId], 1),
+    test_utils:mock_validate_and_unload(Workers, [od_space, logical_file_manager]).
 
 replica_invalidate_should_truncate_storage_file_to_zero_size(Config) ->
     [W1 | _] = Workers = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    LocalProviderId = rpc:call(W1, oneprovider, get_provider_id, []),
+    LocalProviderId = rpc:call(W1, oneprovider, get_id, []),
     ExternalProviderId = <<"external_provider_id">>,
     ExternalFileId = <<"external_file_id">>,
 
@@ -1206,7 +1207,7 @@ replica_invalidate_should_truncate_storage_file_to_zero_size(Config) ->
     override_space_providers_mock(Workers, SpaceId, [LocalProviderId, ExternalProviderId]),
 
     test_utils:mock_new(Workers, logical_file_manager, [passthrough]),
-    test_utils:mock_expect(Workers, logical_file_manager, replicate_file,
+    test_utils:mock_expect(Workers, logical_file_manager, schedule_file_replication,
         fun(_SessId, _FileKey, _ProviderId) -> ok end),
 
     % when
@@ -1222,7 +1223,7 @@ dir_replica_invalidate_should_invalidate_all_children(Config) ->
     [W1 | _] = Workers = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    LocalProviderId = rpc:call(W1, oneprovider, get_provider_id, []),
+    LocalProviderId = rpc:call(W1, oneprovider, get_id, []),
     ExternalProviderId = <<"external_provider_id">>,
     ExternalFileId = <<"external_file_id">>,
 
@@ -1288,7 +1289,7 @@ dir_replica_invalidate_should_invalidate_all_children(Config) ->
     override_space_providers_mock(Workers, SpaceId, [LocalProviderId, ExternalProviderId]),
 
     test_utils:mock_new(Workers, logical_file_manager, [passthrough]),
-    test_utils:mock_expect(Workers, logical_file_manager, replicate_file,
+    test_utils:mock_expect(Workers, logical_file_manager, schedule_file_replication,
         fun(_SessId, _FileKey, _ProviderId) -> ok end),
 
     % when

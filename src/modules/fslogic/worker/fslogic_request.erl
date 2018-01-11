@@ -56,7 +56,7 @@ get_file_partial_ctx(_UserCtx, Req) ->
 -spec get_target_providers(user_ctx:ctx(), file_partial_ctx:ctx(), fslogic_worker:request()) ->
     [oneprovider:id()].
 get_target_providers(_UserCtx, undefined, _) ->
-    [oneprovider:get_provider_id()];
+    [oneprovider:get_id()];
 get_target_providers(UserCtx, File, #fuse_request{
     fuse_request = #resolve_guid{}
 }) ->
@@ -65,14 +65,10 @@ get_target_providers(UserCtx, File, #fuse_request{fuse_request = #file_request{
     file_request = #get_file_attr{}
 }}) ->
     get_target_providers_for_attr_req(UserCtx, File);
-get_target_providers(_UserCtx, _File, #provider_request{provider_request = #replicate_file{
-    provider_id = ProviderId
-}}) ->
-    [ProviderId];
-get_target_providers(_UserCtx, _File, #provider_request{provider_request = #invalidate_file_replica{
-    provider_id = ProviderId
-}}) ->
-    [ProviderId];
+get_target_providers(_UserCtx, _File, #provider_request{provider_request = #schedule_file_replication{}}) ->
+    [oneprovider:get_id()];
+get_target_providers(_UserCtx, _File, #provider_request{provider_request = #schedule_replica_invalidation{}}) ->
+    [oneprovider:get_id()];
 get_target_providers(UserCtx, File, _Req) ->
     get_target_providers_for_file(UserCtx, File).
 
@@ -92,7 +88,7 @@ get_target_providers_for_attr_req(UserCtx, FileCtx) ->
     %todo TL handle guids stored in file_force_proxy
     case file_partial_ctx:is_space_dir_const(FileCtx) of
         true ->
-            [oneprovider:get_provider_id()];
+            [oneprovider:get_id()];
         false ->
             get_target_providers_for_file(UserCtx, FileCtx)
     end.
@@ -100,7 +96,7 @@ get_target_providers_for_attr_req(UserCtx, FileCtx) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Get providers cappable of handling generic request.
+%% Get providers capable of handling generic request.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_target_providers_for_file(user_ctx:ctx(), file_partial_ctx:ctx()) ->
@@ -108,14 +104,14 @@ get_target_providers_for_attr_req(UserCtx, FileCtx) ->
 get_target_providers_for_file(UserCtx, FilePartialCtx) ->
     case file_partial_ctx:is_user_root_dir_const(FilePartialCtx, UserCtx) of
         true ->
-            [oneprovider:get_provider_id()];
+            [oneprovider:get_id()];
         false ->
             SpaceId = file_partial_ctx:get_space_id_const(FilePartialCtx),
             SessionId = user_ctx:get_session_id(UserCtx),
             {ok, Providers} = space_logic:get_provider_ids(SessionId, SpaceId),
-            case lists:member(oneprovider:get_provider_id(), Providers) of
+            case lists:member(oneprovider:get_id(), Providers) of
                 true ->
-                    [oneprovider:get_provider_id()];
+                    [oneprovider:get_id()];
                 false ->
                     Providers
             end

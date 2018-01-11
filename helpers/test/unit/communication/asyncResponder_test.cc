@@ -45,8 +45,8 @@ TEST_F(AsyncResponderTest, messageShouldBeHandledInAThread)
 
     auto threadIdPromise = std::make_shared<std::promise<std::thread::id>>();
     responder.setOnMessageCallback(
-        [&](auto) { threadIdPromise->set_value(std::this_thread::get_id()); });
+        [&](auto) { threadIdPromise->set_value(std::this_thread::get_id(fail_with_throw)); });
 
     onMessageCallback(nullptr);
-    ASSERT_NE(std::this_thread::get_id(), threadIdPromise->get_future().get());
+    ASSERT_NE(std::this_thread::get_id(fail_with_throw), threadIdPromise->get_future().get());
 }

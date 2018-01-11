@@ -14,6 +14,7 @@
 -behaviour(cowboy_http_handler).
 
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 
 %% API
 -export([init/3, handle/2, terminate/3]).
@@ -41,9 +42,14 @@ init(_Type, Req, _Opts) ->
 %%--------------------------------------------------------------------
 -spec handle(term(), term()) -> {ok, cowboy_req:req(), term()}.
 handle(Req, State) ->
-    ProviderId = oneprovider:get_provider_id(),
+    Body = try
+        oneprovider:get_id()
+    catch _:_ ->
+        <<"This provider is not registered yet">>
+    end,
     {ok, Req1} = cowboy_req:reply(
-        200, [{<<"content-type">>, <<"text/plain">>}], [ProviderId], Req),
+        200, [{<<"content-type">>, <<"text/plain">>}], Body, Req
+    ),
     {ok, Req1, State}.
 
 

@@ -14,9 +14,11 @@
 -author("Krzysztof Trzepla").
 
 -include("global_definitions.hrl").
+-include("modules/storage_file_manager/helpers/helpers.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_user_ctx/5, get_request_headers/1]).
+-export([get_user_ctx/5, get_request_headers/1, get_group_ctx/4]).
 
 %%%===================================================================
 %%% API functions
@@ -48,6 +50,43 @@ get_user_ctx(SessionId, UserId, SpaceId, StorageDoc = #document{
         {error, Reason} ->
             {error, Reason}
     end.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Queries third party LUMA service for the storage GID for given GroupId.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_group_ctx(od_group:id() | undefined, od_space:id(), storage:doc(), helper:name()) ->
+    {ok, luma:group_ctx()} | {error, term()}.
+get_group_ctx(_GroupId, _SpaceId, _StorageDoc, #helper{name = ?CEPH_HELPER_NAME}) ->
+    undefined;
+get_group_ctx(_GroupId, _SpaceId, _StorageDoc, #helper{name = ?S3_HELPER_NAME}) ->
+    undefined;
+get_group_ctx(_GroupId, _SpaceId, _StorageDoc, #helper{name = ?SWIFT_HELPER_NAME}) ->
+    undefined;
+get_group_ctx(GroupId, SpaceId, StorageDoc = #document{
+    value = #storage{
+        luma_config = LumaConfig = #luma_config{url = LumaUrl}
+}}, Helper) ->
+    Url = str_utils:format_bin("~s/map_group", [LumaUrl]),
+    ReqHeaders = get_request_headers(LumaConfig),
+    ReqBody = get_group_request_body(GroupId, SpaceId, StorageDoc),
+    case http_client:post(Url, ReqHeaders, ReqBody) of
+        {ok, 200, _RespHeaders, RespBody} ->
+            GroupCtx = json_utils:decode_map(RespBody),
+            case helper:validate_group_ctx(Helper, GroupCtx) of
+                ok ->
+                    {ok, GroupCtx};
+                Error = {error, Reason} ->
+                    ?error_stacktrace("Invalid group ctx returned from map_group request: ~p", [Reason]),
+                    Error
+            end;
+        {ok, Code, _RespHeaders, RespBody} ->
+            {error, {Code, json_utils:decode(RespBody)}};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -83,6 +122,36 @@ get_request_body(SessionId, UserId, SpaceId, StorageDoc) ->
         <<"userDetails">> => get_user_details(SessionId, UserId)
     },
     json_utils:encode_map(Body).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Constructs user context request that will be sent to the external LUMA service.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_group_request_body(od_group:id() | undefined, od_space:id(), storage:doc()) ->
+    Body :: binary().
+get_group_request_body(undefined, SpaceId, #document{
+    key = StorageId,
+    value = #storage{name = StorageName}
+}) ->
+    Body = [
+        {<<"spaceId">>, SpaceId},
+        {<<"storageId">>, StorageId},
+        {<<"storageName">>, StorageName}
+    ],
+    json_utils:encode(Body);
+get_group_request_body(GroupId, SpaceId, #document{
+    key = StorageId,
+    value = #storage{name = StorageName}
+}) ->
+    Body = [
+        {<<"groupId">>, GroupId},
+        {<<"spaceId">>, SpaceId},
+        {<<"storageId">>, StorageId},
+        {<<"storageName">>, StorageName}
+    ],
+    json_utils:encode(Body).
 
 %%--------------------------------------------------------------------
 %% @private

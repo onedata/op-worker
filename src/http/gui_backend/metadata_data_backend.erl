@@ -167,8 +167,13 @@ update_record(ModelType, ResourceId, Data) ->
             % Update all xattrs that were sent by the client
             lists:foreach(
                 fun({K, V}) ->
+                    EncodedValue = try
+                        json_utils:decode_map(V)
+                    catch _:_ ->
+                        V
+                    end,
                     ok = logical_file_manager:set_xattr(
-                        SessionId, {guid, FileId}, #xattr{name = K, value = V}
+                        SessionId, {guid, FileId}, #xattr{name = K, value = EncodedValue}
                     )
                 end, NewXattrs)
     end,
@@ -281,7 +286,11 @@ metadata_record(ModelType, SessionId, ResId) ->
             {ok, #xattr{value = Value}} = logical_file_manager:get_xattr(
                 SessionId, {guid, FileId}, Key, false
             ),
-            {Key, Value}
+            EncodedValue = case Value of
+                Map when is_map(Map) -> json_utils:encode_map(Map);
+                _ -> Value
+            end,
+            {Key, EncodedValue}
         end, XattrKeys),
     BasicVal = case Basic of
         [] -> null;

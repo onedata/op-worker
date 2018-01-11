@@ -41,7 +41,7 @@ create_and_update(SpaceId, MonitoringId) ->
 -spec create_and_update(datastore:key(), #monitoring_id{}, maps:map()) -> ok.
 create_and_update(SpaceId, MonitoringId, UpdateValue) ->
     try
-        CurrentTime = utils:system_time_seconds(),
+        CurrentTime = time_utils:cluster_time_seconds(),
         {PreviousPDPTime, CurrentPDPTime, WaitingTime} =
             case CurrentTime rem ?STEP_IN_SECONDS of
                 0 ->
@@ -119,7 +119,7 @@ update(#monitoring_id{main_subject_type = space, main_subject_id = SpaceId,
     metric_type = storage_quota} = MonitoringId, MonitoringState, UpdateTime, _UpdateValue) ->
 
     {ok, ProvidersSupports} = space_logic:get_providers_supports(?ROOT_SESS_ID, SpaceId),
-    SupSize = maps:get(oneprovider:get_provider_id(), ProvidersSupports, 0),
+    SupSize = maps:get(oneprovider:get_id(), ProvidersSupports, 0),
 
     maybe_update(MonitoringId, MonitoringState, UpdateTime, SupSize);
 

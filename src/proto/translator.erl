@@ -178,12 +178,16 @@ translate_from_protobuf(#'SubscriptionCancellation'{id = Id}) ->
 
 
 %% HANDSHAKE
-translate_from_protobuf(#'HandshakeRequest'{token = Token, session_id = SessionId}) ->
-    #handshake_request{auth = translate_from_protobuf(Token), session_id = SessionId};
+translate_from_protobuf(#'ClientHandshakeRequest'{token = Token, session_id = SessionId}) ->
+    #client_handshake_request{auth = translate_from_protobuf(Token), session_id = SessionId};
+translate_from_protobuf(#'ProviderHandshakeRequest'{provider_id = ProviderId, nonce = Nonce}) ->
+    #provider_handshake_request{provider_id = ProviderId, nonce = Nonce};
 translate_from_protobuf(#'Token'{value = Token, secondary_values = []}) ->
     #token_auth{token = Token};
 translate_from_protobuf(#'Token'{value = Macaroon, secondary_values = DischargeMacaroons}) ->
     #macaroon_auth{macaroon = Macaroon, disch_macaroons = DischargeMacaroons};
+translate_from_protobuf(#'HandshakeResponse'{status = Status}) ->
+    #handshake_response{status = Status};
 
 
 %% DIAGNOSTIC
@@ -419,17 +423,23 @@ translate_from_protobuf(#'FSync'{data_only = DataOnly, handle_id = HandleId}) ->
     #fsync{data_only = DataOnly, handle_id = HandleId};
 translate_from_protobuf(#'GetFileDistribution'{}) ->
     #get_file_distribution{};
-translate_from_protobuf(#'ReplicateFile'{provider_id = ProviderId,
-    block = Block}) ->
-    #replicate_file{provider_id = ProviderId,
-        block = translate_from_protobuf(Block)};
-translate_from_protobuf(#'InvalidateFileReplica'{
-    provider_id = ProviderId,
-    migration_provider_id = MigrationProviderId
+translate_from_protobuf(#'ScheduleFileReplication'{
+    target_provider_id = ProviderId,
+    block = Block,
+    callback = Callback
 }) ->
-    #invalidate_file_replica{
-        provider_id = ProviderId,
-        migration_provider_id = MigrationProviderId
+    #schedule_file_replication{
+        target_provider_id = ProviderId,
+        block = translate_from_protobuf(Block),
+        callback = Callback
+    };
+translate_from_protobuf(#'ScheduleReplicaInvalidation'{
+    source_provider_id = SourceProviderId,
+    target_provider_id = TargetProviderId
+}) ->
+    #schedule_replica_invalidation{
+        source_provider_id = SourceProviderId,
+        target_provider_id = TargetProviderId
     };
 translate_from_protobuf(#'ReadMetadata'{type = Type, names = Names, inherited = Inherited}) ->
     #get_metadata{type = binary_to_existing_atom(Type, utf8), names = Names, inherited = Inherited};
@@ -479,6 +489,8 @@ translate_from_protobuf(#'RemoveShare'{}) ->
     #remove_share{};
 translate_from_protobuf(#'Share'{share_id = ShareId, share_file_uuid = ShareGuid}) ->
     #share{share_id = ShareId, share_file_guid = ShareGuid};
+translate_from_protobuf(#'ScheduledTransfer'{transfer_id = TransferId}) ->
+    #scheduled_transfer{transfer_id = TransferId};
 
 %% DBSYNC
 translate_from_protobuf(#'DBSyncRequest'{message_body = {_, MessageBody}}) ->
@@ -659,6 +671,10 @@ translate_to_protobuf(#subscription_cancellation{id = Id}) ->
 
 
 %% HANDSHAKE
+translate_to_protobuf(#provider_handshake_request{provider_id = ProviderId, nonce = Nonce}) ->
+    {provider_handshake_request, #'ProviderHandshakeRequest'{
+        provider_id = ProviderId, nonce = Nonce
+    }};
 translate_to_protobuf(#handshake_response{status = Status}) ->
     {handshake_response, #'HandshakeResponse'{status = Status}};
 translate_to_protobuf(#macaroon_auth{macaroon = Macaroon, disch_macaroons = DMacaroons}) ->
@@ -902,17 +918,23 @@ translate_to_protobuf(#fsync{data_only = DataOnly, handle_id = HandleId}) ->
     {fsync, #'FSync'{data_only = DataOnly, handle_id = HandleId}};
 translate_to_protobuf(#get_file_distribution{}) ->
     {get_file_distribution, #'GetFileDistribution'{}};
-translate_to_protobuf(#replicate_file{provider_id = ProviderId,
-    block = Block}) ->
-    {replicate_file, #'ReplicateFile'{provider_id = ProviderId,
-        block = translate_to_protobuf(Block)}};
-translate_to_protobuf(#invalidate_file_replica{
-    provider_id = ProviderId,
-    migration_provider_id = MigrationProviderId
+translate_to_protobuf(#schedule_file_replication{
+    target_provider_id = ProviderId,
+    block = Block,
+    callback = Callback
 }) ->
-    {invalidate_file_replica, #'InvalidateFileReplica'{
-        provider_id = ProviderId,
-        migration_provider_id = MigrationProviderId
+    {replicate_file, #'ScheduleFileReplication'{
+        target_provider_id = ProviderId,
+        block = translate_to_protobuf(Block),
+        callback = Callback
+    }};
+translate_to_protobuf(#schedule_replica_invalidation{
+    source_provider_id = ProviderId,
+    target_provider_id = MigrationProviderId
+}) ->
+    {invalidate_file_replica, #'ScheduleReplicaInvalidation'{
+        source_provider_id = ProviderId,
+        target_provider_id = MigrationProviderId
     }};
 translate_to_protobuf(#get_metadata{type = Type, names = Names, inherited = Inherited}) ->
     {read_metadata, #'ReadMetadata'{type = atom_to_binary(Type, utf8), names = Names, inherited = Inherited}};
@@ -960,6 +982,8 @@ translate_to_protobuf(#remove_share{}) ->
     {remove_share, #'RemoveShare'{}};
 translate_to_protobuf(#share{share_id = ShareId, share_file_guid = ShareGuid}) ->
     {share, #'Share'{share_id = ShareId, share_file_uuid = ShareGuid}};
+translate_to_protobuf(#scheduled_transfer{transfer_id = TransferId}) ->
+    {scheduled_transfer, #'ScheduledTransfer'{transfer_id = TransferId}};
 
 %% DBSYNC
 translate_to_protobuf(#dbsync_request{message_body = MessageBody}) ->

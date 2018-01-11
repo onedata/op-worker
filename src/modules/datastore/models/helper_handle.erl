@@ -46,7 +46,7 @@ create(SessionId, UserId, SpaceId, StorageDoc) ->
     {ok, Helper} = fslogic_storage:select_helper(StorageDoc),
     HelperName = helper:get_name(Helper),
     {ok, UserCtx} = luma:get_server_user_ctx(
-        SessionId, UserId, SpaceId, StorageDoc, HelperName
+        SessionId, UserId, undefined, SpaceId, StorageDoc, HelperName
     ),
     HelperHandle = helpers:get_helper_handle(Helper, UserCtx),
     HelperDoc = #document{value = HelperHandle},

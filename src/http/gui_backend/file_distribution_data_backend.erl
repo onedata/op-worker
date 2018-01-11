@@ -77,7 +77,7 @@ find_all(<<"file-distribution">>) ->
 %%--------------------------------------------------------------------
 -spec query(ResourceType :: binary(), Data :: proplists:proplist()) ->
     {ok, [proplists:proplist()]} | gui_error:error_result().
-query(<<"file-distribution">>, [{<<"fileId">>, FileId}]) ->
+query(<<"file-distribution">>, [{<<"file">>, FileId}]) ->
     SessionId = gui_session:get_session_id(),
     {ok, Distributions} = logical_file_manager:get_file_distribution(
         SessionId, {guid, FileId}
@@ -95,18 +95,13 @@ query(<<"file-distribution">>, [{<<"fileId">>, FileId}]) ->
 
     BlocksOfSyncedProviders = lists:map(
         fun(#{<<"providerId">> := ProviderId, <<"blocks">> := Blocks}) ->
-            BlocksList = case Blocks of
-                [] ->
-                    [0, 0];
-                _ ->
-                    lists:foldl(
-                        fun([Offset, Size], Acc) ->
-                            Acc ++ [Offset, Offset + Size]
-                        end, [], Blocks)
-            end,
+            BlocksList = lists:foldl(
+                fun([Offset, Size], Acc) ->
+                    Acc ++ [Offset, Offset + Size]
+                end, [], Blocks),
             [
                 {<<"id">>, op_gui_utils:ids_to_association(FileId, ProviderId)},
-                {<<"fileId">>, FileId},
+                {<<"file">>, FileId},
                 {<<"provider">>, ProviderId},
                 {<<"blocks">>, BlocksList},
                 {<<"neverSynchronized">>, false}

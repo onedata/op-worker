@@ -12,6 +12,7 @@
 -module(fslogic_errors).
 -author("Rafal Slota").
 
+-include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
@@ -33,16 +34,25 @@
 %% Handle error caught during processing of fslogic request.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_error(fslogic_worker:request(), Type :: atom(),  Reason :: term()) ->
+-spec handle_error(fslogic_worker:request(), Type :: atom(), Reason :: term()) ->
     fslogic_worker:response().
 handle_error(Request, Type, Error) ->
     Stacktrace = erlang:get_stacktrace(),
     Status = #status{code = Code} =
         fslogic_errors:gen_status_message(Error),
     LogLevel = code_to_loglevel(Code),
-    MsgFormat =
-        "Cannot process request ~p (code: ~p)~nStacktrace: ~s",
-    FormatArgs = [lager:pr(Request, ?MODULE), Code, lager:pr_stacktrace(Stacktrace, {Type, Error})],
+    LogRequest = application:get_env(?APP_NAME, log_requests_on_error, false),
+    {MsgFormat, FormatArgs} = case LogRequest of
+        true ->
+            MF = "Cannot process request ~p (code: ~p)~nStacktrace: ~s",
+            FA = [lager:pr(Request, ?MODULE), Code,
+                lager:pr_stacktrace(Stacktrace, {Type, Error})],
+            {MF, FA};
+        _ ->
+            MF = "Cannot process request: code: ~p~nStacktrace: ~s",
+            FA = [Code, lager:pr_stacktrace(Stacktrace, {Type, Error})],
+            {MF, FA}
+    end,
     case LogLevel of
         debug -> ?debug(MsgFormat, FormatArgs);
         error -> ?error(MsgFormat, FormatArgs)
@@ -70,7 +80,7 @@ gen_status_message(not_found) ->
     #status{code = ?ENOENT, description = describe_error(?ENOENT)};
 gen_status_message(already_exists) ->
     #status{code = ?EEXIST, description = describe_error(?EEXIST)};
-gen_status_message({403,<<>>,<<>>}) ->
+gen_status_message({403, <<>>, <<>>}) ->
     #status{code = ?EACCES, description = describe_error(?EACCES)};
 gen_status_message(Error) when is_atom(Error) ->
     case ordsets:is_element(Error, ?ERROR_CODES) of

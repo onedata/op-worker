@@ -827,6 +827,7 @@ echo_and_delete_file_loop_test_base(Config0, IterationsNum, User) ->
 init_env(Config) ->
     lists:foreach(fun(Worker) ->
         test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
+        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, datastore_links_tree_order, 100),
         test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_update_interval, timer:seconds(1)),
         test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_stream_update_interval, timer:seconds(1)),
         test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
@@ -837,12 +838,10 @@ init_env(Config) ->
     hackney:start(),
     initializer:disable_quota_limit(Config),
     NewConfig = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
-    initializer:enable_grpca_based_communication(NewConfig),
     NewConfig.
 
 teardown_env(Config) ->
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
-    initializer:disable_grpca_based_communication(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:unload_quota_mocks(Config),
     hackney:stop(),
@@ -904,7 +903,7 @@ set_parent_link(Doc, ParentDoc, _LocId, _Path) ->
     }} = Doc,
     Ctx = datastore_model_default:get_ctx(file_meta),
     Ctx2 = Ctx#{scope => Scope},
-    TreeId = oneprovider:get_provider_id(),
+    TreeId = oneprovider:get_id(),
     Link = {FileName, FileUuid},
     {ok, _} = datastore_model:add_links(Ctx2, ParentUuid, TreeId, Link),
     ok.
@@ -920,7 +919,7 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
     Location = #file_location{
         blocks = [#file_block{offset = 0, size = 3}],
         size = 3,
-        provider_id = oneprovider:get_provider_id(),
+        provider_id = oneprovider:get_id(),
         file_id = FileId,
         storage_id = StorageId,
         uuid = FileUuid,
@@ -1150,7 +1149,7 @@ verify_dir_size(Config, DirToCheck, DSize) ->
 
     VerAns0 = verify(Config, fun(W) ->
         CountChilden = fun() ->
-            LSAns = lfm_proxy:ls(W, SessId(W), {path, DirToCheck}, 0, 1000),
+            LSAns = lfm_proxy:ls(W, SessId(W), {path, DirToCheck}, 0, 20000),
             ?assertMatch({ok, _}, LSAns),
             {ok, ListedDirs} = LSAns,
             length(ListedDirs)
