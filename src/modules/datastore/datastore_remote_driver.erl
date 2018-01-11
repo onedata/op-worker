@@ -47,7 +47,8 @@ handle(#get_remote_document{
     model = Model, key = Key, routing_key = RoutingKey
 }) ->
     Ctx = datastore_model_default:get_ctx(Model),
-    case datastore_router:route(Ctx, RoutingKey, get, [Ctx, Key]) of
+    Ctx2 = datastore_multiplier:extend_name(RoutingKey, Ctx),
+    case datastore_router:route(Ctx2, RoutingKey, get, [Ctx2, Key]) of
         {ok, Doc} ->
             Data = zlib:compress(jiffy:encode(datastore_json:encode(Doc))),
             #remote_document{

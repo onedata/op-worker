@@ -838,6 +838,10 @@ init_env(Config) ->
     hackney:start(),
     initializer:disable_quota_limit(Config),
     NewConfig = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
+
+    % time to react for changes done by initializer
+    timer:sleep(5000),
+
     NewConfig.
 
 teardown_env(Config) ->
