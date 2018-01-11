@@ -94,9 +94,13 @@ get_id() ->
 %%--------------------------------------------------------------------
 -spec get_id_or_undefined() -> od_provider:id() | undefined.
 get_id_or_undefined() ->
-    case provider_auth:get_provider_id() of
+    try provider_auth:get_provider_id() of
         {error, _} -> undefined;
         ProviderId -> ProviderId
+    catch
+        _:_ ->
+            % Can appear before cluster is initialized
+            undefined
     end.
 
 
