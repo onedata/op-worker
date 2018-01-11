@@ -22,7 +22,8 @@
 
 %% export for ct
 -export([init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
--export([many_files_creation_tree_test_base/2, single_dir_creation_test_base/2]).
+-export([many_files_creation_tree_test_base/2, many_files_creation_tree_test_base/3,
+    single_dir_creation_test_base/2]).
 -export([create_single_call/4]).
 
 -define(TIMEOUT, timer:minutes(20)).
@@ -118,6 +119,9 @@ single_dir_creation_test_base(Config, Clear) ->
     end.
 
 many_files_creation_tree_test_base(Config, WriteToFile) ->
+    many_files_creation_tree_test_base(Config, WriteToFile, false).
+
+many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS) ->
     % Get test and environment description
     SpawnBegLevel = ?config(spawn_beg_level, Config),
     SpawnEndLevel = ?config(spawn_end_level, Config),
@@ -174,26 +178,52 @@ many_files_creation_tree_test_base(Config, WriteToFile) ->
             Dirs = create_dirs_names(BaseDir, SpawnBegLevel, DirLevel, DirsPerParent),
 
             % Function that creates test directories and measures performance
-            Fun = fun(D) ->
-                {T, A} = measure_execution_time(fun() ->
-                    case lfm_proxy:mkdir(Worker, SessId, D, 8#755) of
-                        {ok, _} ->
-                            dir_ok;
-                        Other ->
-                            Other
-                    end
-                end),
-                Master ! {worker_ans, A, T}
+            Fun = fun
+                ({{D, DName}, DParent}) ->
+                    {T, {A, GUID}} = measure_execution_time(fun() ->
+                        MkdirAns = case CacheGUIDS of
+                            false ->
+                                lfm_proxy:mkdir(Worker, SessId, D, 8#755);
+                            _ ->
+                                lfm_proxy:mkdir(Worker, SessId, DParent, DName, 8#755)
+                        end,
+                        case MkdirAns of
+                            {ok, DirGuid} ->
+                                {dir_ok, DirGuid};
+                            Other ->
+                                {Other, error}
+                        end
+                    end),
+                    Master ! {worker_ans, A, T},
+                    GUID;
+                ({D, _}) ->
+                    {T, {A, GUID}} = measure_execution_time(fun() ->
+                        case lfm_proxy:mkdir(Worker, SessId, D, 8#755) of
+                            {ok, DirGuid} ->
+                                {dir_ok, DirGuid};
+                            Other ->
+                                {Other, error}
+                        end
+                    end),
+                    Master ! {worker_ans, A, T},
+                    GUID
             end,
 
             % Function that creates test files and measures performance
-            Fun2 = fun(D) ->
-                lists:foreach(fun(N) ->
+            Fun2 = fun(D, GUID) ->
+%%                lists:foreach(fun(N) ->
+                ToSend = lists:foldl(fun(N, Answers) ->
                     N2 = integer_to_binary(N),
                     F = <<D/binary, "/", N2/binary>>,
-                    {T, A} = measure_execution_time(fun() ->
+%%                    {T, A} = measure_execution_time(fun() ->
+                    {ToAddV, Ans} = measure_execution_time(fun() ->
                         try
-                            {ok, _} = lfm_proxy:create(Worker, SessId, F, 8#755),
+                            {ok, _} = case CacheGUIDS of
+                                false ->
+                                    lfm_proxy:create(Worker, SessId, F, 8#755);
+                                _ ->
+                                    lfm_proxy:create(Worker, SessId, GUID, N2, 8#755)
+                            end,
                             % Fill file if needed (depends on test config)
                             case WriteToFile of
                                 true ->
@@ -211,8 +241,11 @@ many_files_creation_tree_test_base(Config, WriteToFile) ->
                                 {error, {E1, E2}}
                         end
                     end),
-                    Master ! {worker_ans, A, T}
-                end, lists:seq(1, FilesPerDir))
+%%                    Master ! {worker_ans, A, T}
+%%                end, lists:seq(1, FilesPerDir))
+                    process_answer(Answers, Ans, ToAddV)
+                end, [{file_ok, {0,0}}], lists:seq(1, FilesPerDir)),
+                Master ! {worker_ans, ToSend}
             end,
 
             % Spawn processes that execute both test functions
@@ -221,7 +254,9 @@ many_files_creation_tree_test_base(Config, WriteToFile) ->
             DirsToDo = DirsPerParent * (1 - LastLevelDirs) / (1 - DirsPerParent),
             FilesToDo = LastLevelDirs * FilesPerDir,
             % Gather test results
-            GatherAns = gather_answers([{file_ok, {0,0}}, {dir_ok, {0,0}}], round(DirsToDo + FilesToDo)),
+%%            GatherAns = gather_answers([{file_ok, {0,0}}, {dir_ok, {0,0}}], round(DirsToDo + FilesToDo)),
+            GatherAns = gather_answers([{file_ok, {0,0}}, {dir_ok, {0,0}},
+                {other, {0,0}}], round(DirsToDo + LastLevelDirs)),
 
             % Calculate and log output
             NewLevels = lists:foldl(fun
@@ -297,6 +332,7 @@ init_per_testcase(stress_test, Config) ->
     hackney:start(),
     initializer:disable_quota_limit(Config),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
+
     lfm_proxy:init(ConfigWithSessionInfo);
 
 init_per_testcase(_Case, Config) ->
@@ -323,14 +359,14 @@ create_dirs_names(BaseDir, BegLevel, EndLevel, EntriesNumber) ->
 create_dirs_names(_CurrentParent, _CurrentNum, LevelLimit, LevelLimit, _EntriesLimit, _TmpAns) ->
     [];
 create_dirs_names(_CurrentParent, EntriesLimit, CurrentLevel, LevelLimit, EntriesLimit, TmpAns) ->
-    lists:foldl(fun(Dir, Acc) ->
-        Children = create_dirs_names(Dir, 1, CurrentLevel + 1, LevelLimit, EntriesLimit, []),
+    lists:foldl(fun({DPath, _} = Dir, Acc) ->
+        Children = create_dirs_names(DPath, 1, CurrentLevel + 1, LevelLimit, EntriesLimit, []),
         [{Dir, Children} | Acc]
     end, [], TmpAns);
 create_dirs_names(CurrentParent, CurrentNum, CurrentLevel, LevelLimit, EntriesLimit, TmpAns) ->
     CN = integer_to_binary(CurrentNum),
     NewDir = <<CurrentParent/binary, "/", CN/binary>>,
-    create_dirs_names(CurrentParent, CurrentNum + 1, CurrentLevel, LevelLimit, EntriesLimit, [NewDir | TmpAns]).
+    create_dirs_names(CurrentParent, CurrentNum + 1, CurrentLevel, LevelLimit, EntriesLimit, [{NewDir, CN} | TmpAns]).
 
 spawn_workers([], _Fun, _Fun2, _Level, _EndSpawnLevel) ->
     ok;
@@ -342,23 +378,32 @@ spawn_workers(L, Fun, Fun2, Level, EndSpawnLevel) when is_list(L) ->
     lists:foreach(fun(E) ->
         spawn(fun() -> spawn_workers(E, Fun, Fun2, Level, EndSpawnLevel) end)
     end, L);
-spawn_workers({Dir, []}, Fun, Fun2, _Level, _EndSpawnLevel) ->
-    Fun(Dir),
-    Fun2(Dir);
+spawn_workers({{{DirPath, _}, _} = Dir, []}, Fun, Fun2, _Level, _EndSpawnLevel) ->
+    GUID = Fun(Dir),
+    Fun2(DirPath, GUID);
+spawn_workers({{DirPath, _} = Dir, []}, Fun, Fun2, _Level, _EndSpawnLevel) ->
+    GUID = Fun(Dir),
+    Fun2(DirPath, GUID);
 spawn_workers({Dir, Children}, Fun, Fun2, Level, EndSpawnLevel) ->
-    Fun(Dir),
-    spawn_workers(Children, Fun, Fun2, Level + 1, EndSpawnLevel).
+    GUID = Fun(Dir),
+    Children2 = lists:map(fun({D2, C2}) ->
+        {{D2, GUID}, C2}
+    end, Children),
+    spawn_workers(Children2, Fun, Fun2, Level + 1, EndSpawnLevel).
 
-gather_answers(Answers, 0) ->
-    {ok, Answers};
 gather_answers(Answers, Num) ->
-    case Num rem 1000 of
-        0 ->
-            ct:print("Gather answers num ~p", [Num]);
-        _ ->
-            ok
-    end,
+    gather_answers(Answers, Num, 0, 0).
 
+gather_answers(Answers, 0, _, _) ->
+    {ok, Answers};
+gather_answers(Answers, Num, Gathered, LastReport) ->
+    NewLastReport = case (Gathered - LastReport) >= 1000 of
+        true ->
+            ct:print("Gather answers num ~p", [Gathered]),
+            Gathered;
+        _ ->
+            LastReport
+    end,
     receive
         {worker_ans, Ans, ToAddV} ->
             {K, _} = ToAdd = case proplists:lookup(Ans, Answers) of
@@ -369,7 +414,18 @@ gather_answers(Answers, Num) ->
                     {other, {V1 + 1, V2 + ToAddV}}
             end,
             NewAnswers = [ToAdd | proplists:delete(K, Answers)],
-            gather_answers(NewAnswers, Num - 1)
+            gather_answers(NewAnswers, Num - 1, Gathered + 1, NewLastReport);
+        {worker_ans, AnswersBatch} ->
+            {NewAnswers, Sum} = lists:foldl(fun({K, {V1, V2}} = CurrentV, {Acc, TmpSum}) ->
+                {NewV, Add} = case proplists:lookup(K, AnswersBatch) of
+                    {K, {V1_2, V2_2}} ->
+                        {{K, {V1 + V1_2, V2 + V2_2}}, V1_2};
+                    none ->
+                        {CurrentV, 0}
+                end,
+                {[NewV | Acc], TmpSum + Add}
+            end, {[], 0}, Answers),
+            gather_answers(NewAnswers, Num - 1, Gathered + Sum, NewLastReport)
     after
         ?TIMEOUT ->
             {timeout, Answers}
@@ -443,3 +499,13 @@ create_single_call(SessId, Dir, FilesNum, NameExtBin) ->
                 {OkNum, OkTime, ErrorNum+1, ErrorTime+T}
         end
     end, {0,0,0,0}, lists:seq(1,FilesNum)).
+
+process_answer(Answers, Ans, ToAddV) ->
+    {K, _} = ToAdd = case proplists:lookup(Ans, Answers) of
+        {Ans, {V1, V2}} ->
+            {Ans, {V1 + 1, V2 + ToAddV}};
+        none ->
+            {V1, V2} = proplists:get_value(other, Answers, {0,0}),
+            {other, {V1 + 1, V2 + ToAddV}}
+    end,
+    [ToAdd | proplists:delete(K, Answers)].

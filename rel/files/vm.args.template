@@ -37,4 +37,4 @@
 -smp enable
 
 ## Set default heap size (256 MB with 8byte word)
-+hmax 33554432
++hmax 67108864

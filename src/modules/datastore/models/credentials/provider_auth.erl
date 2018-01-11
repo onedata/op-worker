@@ -76,6 +76,7 @@ save(ProviderId, Macaroon) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_provider_id() -> od_provider:id() | {error, term()}.
+% TODO bootleneck !!!
 get_provider_id() ->
     case datastore_model:get(?CTX, ?PROVIDER_AUTH_KEY) of
         {error, not_found} ->
