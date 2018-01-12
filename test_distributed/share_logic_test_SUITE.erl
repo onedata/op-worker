@@ -361,7 +361,7 @@ init_per_suite(Config) ->
         logic_tests_common:mock_gs_client(NewConfig),
         NewConfig
     end,
-    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [logic_tests_common]} | Config].
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [logic_tests_common, initializer]} | Config].
 
 init_per_testcase(get_test, Config) ->
     % Provider must be aware of its ID to check access to cached share

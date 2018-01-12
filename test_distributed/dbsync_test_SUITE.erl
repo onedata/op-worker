@@ -390,12 +390,13 @@ init_per_testcase(_Case, Config) ->
     Self = self(),
 
     test_utils:mock_new(Worker, [
-        oneprovider, dbsync_changes, dbsync_communicator
+        dbsync_changes, dbsync_communicator
     ]),
 
-    test_utils:mock_expect(Worker, provider_auth, get_provider_id, fun() ->
-        <<"p1">>
-    end),
+    initializer:mock_provider_id(
+        Workers, <<"p1">>, <<"auth-macaroon">>, <<"identity-macaroon">>
+    ),
+
     test_utils:mock_expect(Worker, dbsync_utils, get_spaces, fun() ->
         [<<"s1">>, <<"s2">>, <<"s3">>]
     end),
@@ -435,7 +436,7 @@ init_per_testcase(_Case, Config) ->
     [{spaces, [<<"s1">>, <<"s2">>, <<"s3">>]} | Config].
 
 end_per_testcase(_Case, Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
+    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     lists:foreach(fun(SpaceId) ->
         rpc:call(Worker, dbsync_state, delete, [SpaceId]),
         lists:foreach(fun(Module) ->
@@ -443,8 +444,9 @@ end_per_testcase(_Case, Config) ->
             exit(Pid, kill)
         end, [dbsync_in_stream, dbsync_out_stream])
     end, ?config(spaces, Config)),
+    initializer:unmock_provider_ids(Workers),
     test_utils:mock_unload(Worker, [
-        provider_auth, dbsync_changes, dbsync_communicator
+        dbsync_changes, dbsync_communicator
     ]).
 
 %%%===================================================================

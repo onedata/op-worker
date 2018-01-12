@@ -18,12 +18,14 @@
 -include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/global_definitions.hrl").
 -include_lib("ctool/include/auth/onedata_macaroons.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 
 %% API
 -export([save/2, delete/0]).
 -export([get_provider_id/0, is_registered/0]).
+-export([clear_provider_id_cache/0]).
 -export([get_auth_macaroon/0, get_identity_macaroon/0]).
 
 %% datastore_model callbacks
@@ -38,6 +40,7 @@
 -define(CTX, #{
     model => ?MODULE
 }).
+-define(PROVIDER_ID_CACHE_KEY, provider_id_cache).
 
 -define(PROVIDER_AUTH_KEY, <<"provider_auth">>).
 -define(MACAROON_TTL, application:get_env(
@@ -66,25 +69,43 @@ save(ProviderId, Macaroon) ->
             root_macaroon = Macaroon
         }
     }),
+    application:set_env(?APP_NAME, ?PROVIDER_ID_CACHE_KEY, ProviderId),
     ok.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns provider Id, or special UNREGISTERED_PROVIDER_ID string if
-%% it is not yet registered.
+%% Returns provider Id, or ?ERROR_UNREGISTERED_PROVIDER if it is not yet
+%% registered. Upon success, the ProviderId is cached in env variable to be
+%% accessible quickly.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_provider_id() -> od_provider:id() | {error, term()}.
 get_provider_id() ->
-    case datastore_model:get(?CTX, ?PROVIDER_AUTH_KEY) of
-        {error, not_found} ->
-            ?ERROR_UNREGISTERED_PROVIDER;
-        {error, _} = Error ->
-            Error;
-        {ok, #document{value = #provider_auth{provider_id = Id}}} ->
-            Id
+    case application:get_env(?APP_NAME, ?PROVIDER_ID_CACHE_KEY) of
+        {ok, ProviderId} ->
+            ProviderId;
+        _ ->
+            case datastore_model:get(?CTX, ?PROVIDER_AUTH_KEY) of
+                {error, not_found} ->
+                    ?ERROR_UNREGISTERED_PROVIDER;
+                {error, _} = Error ->
+                    Error;
+                {ok, #document{value = #provider_auth{provider_id = Id}}} ->
+                    application:set_env(?APP_NAME, ?PROVIDER_ID_CACHE_KEY, Id),
+                    Id
+            end
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Invalidates provider Id cache.
+%% @end
+%%--------------------------------------------------------------------
+-spec clear_provider_id_cache() -> ok.
+clear_provider_id_cache() ->
+    application:set_env(?APP_NAME, ?PROVIDER_ID_CACHE_KEY, undefined).
 
 
 %%--------------------------------------------------------------------
@@ -94,9 +115,9 @@ get_provider_id() ->
 %%--------------------------------------------------------------------
 -spec is_registered() -> boolean().
 is_registered() ->
-    case datastore_model:get(?CTX, ?PROVIDER_AUTH_KEY) of
-        {ok, #document{value = #provider_auth{}}} -> true;
-        _ -> false
+    case get_provider_id() of
+        {error, _} -> false;
+        _ProviderId -> true
     end.
 
 
@@ -125,12 +146,17 @@ get_identity_macaroon() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Deletes user's identity from cache.
+%% Deletes provider's identity from database.
 %% @end
 %%--------------------------------------------------------------------
 -spec delete() -> ok | {error, term()}.
 delete() ->
-    datastore_model:delete(?CTX, ?PROVIDER_AUTH_KEY).
+    ok = datastore_model:delete(?CTX, ?PROVIDER_AUTH_KEY),
+    ClusterNodes = proplists:get_keys(
+        gen_server2:call({global, ?CLUSTER_MANAGER}, get_nodes)
+    ),
+    rpc:multicall(ClusterNodes, ?MODULE, clear_provider_id_cache, []),
+    ok.
 
 %%%===================================================================
 %%% datastore_model callbacks
@@ -181,9 +207,9 @@ get_macaroon(Type) ->
         {error, _} = Error ->
             Error;
         {ok, #document{value = ProviderAuth}} ->
-            {Timestamp, CachedMacaroon} = get_cached_macaroon(Type, ProviderAuth),
-            CacheAge = time_utils:cluster_time_seconds() - Timestamp,
-            case CacheAge < ?MACAROON_TTL andalso CacheAge > ?MIN_TTL_FROM_CACHE of
+            {ExpirationTime, CachedMacaroon} = get_cached_macaroon(Type, ProviderAuth),
+            TTL = ExpirationTime - time_utils:cluster_time_seconds(),
+            case TTL > ?MIN_TTL_FROM_CACHE of
                 true ->
                     {ok, CachedMacaroon};
                 false ->
@@ -197,7 +223,7 @@ get_macaroon(Type) ->
 
 
 -spec get_cached_macaroon(Type :: auth | identity, record()) ->
-    {Timestamp :: non_neg_integer(), Macaroon :: binary()}.
+    {ExpirationTime :: non_neg_integer(), Macaroon :: binary()}.
 get_cached_macaroon(auth, ProviderAuth) ->
     ProviderAuth#provider_auth.cached_auth_macaroon;
 get_cached_macaroon(identity, ProviderAuth) ->
@@ -206,9 +232,9 @@ get_cached_macaroon(identity, ProviderAuth) ->
 
 -spec cache_macaroon(Type :: auth | identity, Macaroon :: binary()) -> ok.
 cache_macaroon(Type, Macaroon) ->
-    Timestamp = time_utils:cluster_time_seconds(),
+    ExpirationTime = time_utils:cluster_time_seconds() + ?MACAROON_TTL,
     {ok, _} = datastore_model:update(?CTX, ?PROVIDER_AUTH_KEY, fun(ProviderAuth) ->
-        CacheValue = {Timestamp, Macaroon},
+        CacheValue = {ExpirationTime, Macaroon},
         {ok, case Type of
             auth ->
                 ProviderAuth#provider_auth{cached_auth_macaroon = CacheValue};

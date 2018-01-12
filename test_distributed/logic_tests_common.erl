@@ -33,24 +33,13 @@ mock_gs_client(Config) ->
     ok = test_utils:mock_expect(Nodes, gs_client, start_link, fun mock_start_link/5),
     ok = test_utils:mock_expect(Nodes, gs_client, sync_request, fun mock_sync_request/2),
 
+    initializer:mock_provider_id(
+        Nodes, ?PROVIDER_1, ?MOCK_PROVIDER_AUTH_MACAROON(?PROVIDER_1), ?MOCK_PROVIDER_IDENTITY_MACAROON(?PROVIDER_1)
+    ),
+
     % gs_client requires successful setting of subdomain delegation IPs, but it cannot
     % be achieved in test environment
     ok = test_utils:mock_expect(Nodes, provider_logic, update_subdomain_delegation_ips, fun () -> ok end),
-
-    % Mock provider registration
-    ok = test_utils:mock_new(Nodes, provider_auth, []),
-    ok = test_utils:mock_expect(Nodes, provider_auth, get_provider_id, fun() ->
-        ?PROVIDER_1
-    end),
-    test_utils:mock_expect(Nodes, provider_auth, is_registered, fun() ->
-        true
-    end),
-    test_utils:mock_expect(Nodes, provider_auth, get_identity_macaroon, fun() ->
-        {ok, ?MOCK_PROVIDER_IDENTITY_MACAROON(?PROVIDER_1)}
-    end),
-    test_utils:mock_expect(Nodes, provider_auth, get_auth_macaroon, fun() ->
-        {ok, ?MOCK_PROVIDER_AUTH_MACAROON(?PROVIDER_1)}
-    end),
 
     ok.
 
@@ -58,7 +47,7 @@ mock_gs_client(Config) ->
 unmock_gs_client(Config) ->
     Nodes = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Nodes, gs_client),
-    test_utils:mock_unload(Nodes, provider_auth),
+    initializer:unmock_provider_ids(Nodes),
     ok.
 
 

@@ -70,7 +70,7 @@ init_per_suite(Config) ->
         logic_tests_common:mock_gs_client(NewConfig),
         NewConfig
     end,
-    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [logic_tests_common]} | Config].
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [logic_tests_common, initializer]} | Config].
 
 init_per_testcase(oz_connection_test, Config) ->
     Nodes = ?config(op_worker_nodes, Config),

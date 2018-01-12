@@ -172,7 +172,7 @@ monitoring_test(Config) ->
     Ref = make_ref(),
     ProviderId = ?GET_PROVIDER_ID(Worker),
     rpc:call(Worker, event, flush, [#flush_events{
-        provider_id = rpc:call(Worker, oneprovider, get_id, []),
+        provider_id = ?GET_PROVIDER_ID(Worker),
         subscription_id = ?MONITORING_SUB_ID,
         notify = fun(_) -> Self ! {Ref, ok} end
     }, ?ROOT_SESS_ID]),

@@ -276,15 +276,14 @@ unmock_user_logic(Config) ->
 
 mock_provider_id(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, provider_auth),
-    test_utils:mock_expect(Workers, provider_auth, get_provider_id,
-        fun() -> ?PROVIDER_ID end
+    initializer:mock_provider_id(
+        Workers, ?PROVIDER_ID, <<"auth-macaroon">>, <<"identity-macaroon">>
     ).
 
 
 unmock_provider_id(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, [provider_auth]).
+    initializer:unmock_provider_ids(Workers).
 
 
 -spec test_crash(term(), term()) -> no_return().
