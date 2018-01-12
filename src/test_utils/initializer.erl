@@ -29,7 +29,7 @@
     remove_pending_messages/1, clear_models/2, space_storage_mock/2,
     communicator_mock/1, clean_test_users_and_spaces_no_validate/1,
     domain_to_provider_id/1, mock_test_file_context/2, unmock_test_file_context/1]).
--export([mock_provider_ids/1, unmock_provider_ids/1]).
+-export([mock_provider_ids/1, mock_provider_id/4, unmock_provider_ids/1]).
 -export([unload_quota_mocks/1, disable_quota_limit/1]).
 
 -define(DUMMY_USER_MACAROON(__UserId), <<"DUMMY-USER-MACAROON-", __UserId/binary>>).
@@ -173,7 +173,7 @@ clean_test_users_and_spaces(Config) ->
 
     test_utils:mock_validate_and_unload(Workers, [user_logic, group_logic,
         space_logic, provider_logic, space_storage]),
-    unmock_provider_ids(Config).
+    unmock_provider_ids(Workers).
 
 %%TODO this function can be deleted after resolving VFS-1811 and replacing call
 %%to this function in cdmi_test_SUITE with call to clean_test_users_and_spaces.
@@ -474,31 +474,37 @@ unmock_test_file_context(Config) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Mocks oneprovider module which makes the providers think they have been given
-%% certain ID by onezone.
+%% Mocks provider ids for all providers in given environment.
 %% @end
 %%--------------------------------------------------------------------
 -spec mock_provider_ids(proplists:proplist()) -> ok.
 mock_provider_ids(Config) ->
     AllWorkers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(AllWorkers, provider_auth),
     Domains = lists:usort([?GET_DOMAIN(W) || W <- AllWorkers]),
     lists:foreach(fun(Domain) ->
         CWorkers = get_same_domain_workers(Config, Domain),
         ProviderId = domain_to_provider_id(Domain),
-        test_utils:mock_expect(CWorkers, provider_auth, get_provider_id, fun() ->
-            ProviderId
-        end),
-        test_utils:mock_expect(CWorkers, provider_auth, is_registered, fun() ->
-            true
-        end),
-        test_utils:mock_expect(CWorkers, provider_auth, get_identity_macaroon, fun() ->
-            {ok, ?DUMMY_PROVIDER_IDENTITY_MACAROON(ProviderId)}
-        end),
-        test_utils:mock_expect(CWorkers, provider_auth, get_auth_macaroon, fun() ->
-            {ok, ?DUMMY_PROVIDER_AUTH_MACAROON(ProviderId)}
-        end)
+        mock_provider_id(CWorkers, ProviderId, <<"AuthMacaroon">>, <<"IdentityMacaroon">>)
     end, Domains).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Mocks provider ids for certain provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec mock_provider_id([node()], od_provider:id(), binary(), binary()) -> ok.
+mock_provider_id(Workers, ProviderId, AuthMacaroon, IdentityMacaroon) ->
+    % Mock cached auth and identity macaroons with large TTL
+    ExpirationTime = time_utils:system_time_seconds() + 999999999,
+    rpc:call(hd(Workers), datastore_model, save, [#{model => provider_auth}, #document{
+        key = <<"provider_auth">>,
+        value = #provider_auth{
+            provider_id = ProviderId,
+            root_macaroon = <<>>,
+            cached_auth_macaroon = {ExpirationTime, AuthMacaroon},
+            cached_identity_macaroon = {ExpirationTime, IdentityMacaroon}
+        }}]),
+    ok.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -506,9 +512,9 @@ mock_provider_ids(Config) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec unmock_provider_ids(proplists:proplist()) -> ok.
-unmock_provider_ids(Config) ->
-    AllWorkers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(AllWorkers, [provider_auth]).
+unmock_provider_ids(Workers) ->
+    rpc:multicall(Workers, provider_auth, delete, []),
+    ok.
 
 %%%===================================================================
 %%% Internal functions
@@ -544,7 +550,28 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     UsersSetup = proplists:get_value(<<"users">>, GlobalSetup),
     Domains = lists:usort([?GET_DOMAIN(W) || W <- AllWorkers]),
 
-    mock_provider_ids(Config),
+
+    lists:foreach(fun({_, SpaceConfig}) ->
+        Providers0 = proplists:get_value(<<"providers">>, SpaceConfig),
+        lists:foreach(fun({ProviderId, _}) ->
+            Domain = proplists:get_value(ProviderId, DomainMappings),
+            % If provider does not belong to any domain (was not started in env,
+            % but included in space supports), just use its Id.
+            Id = case proplists:get_value(ProviderId, DomainMappings) of
+                undefined -> ProviderId;
+                Domain -> domain_to_provider_id(Domain)
+            end,
+            case get_same_domain_workers(Config, Domain) of
+                [] ->
+                    ok;
+                Workers ->
+                    mock_provider_id(
+                        Workers, Id, ?DUMMY_PROVIDER_AUTH_MACAROON(Id), ?DUMMY_PROVIDER_IDENTITY_MACAROON(Id)
+                    )
+            end
+        end, Providers0)
+    end, SpacesSetup),
+
     MasterWorkers = lists:map(fun(Domain) ->
         [MWorker | _] = CWorkers = get_same_domain_workers(Config, Domain),
         case ?config({storage_id, Domain}, Config) of
