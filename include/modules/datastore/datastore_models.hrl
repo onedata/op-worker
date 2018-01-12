@@ -184,8 +184,8 @@
 -record(provider_auth, {
     provider_id :: od_provider:id(),
     root_macaroon :: binary(),
-    cached_auth_macaroon = {0, <<"">>} :: {Timestamp :: integer(), binary()},
-    cached_identity_macaroon = {0, <<"">>} :: {Timestamp :: integer(), binary()}
+    cached_auth_macaroon = {0, <<"">>} :: {ExpirationTime :: integer(), binary()},
+    cached_identity_macaroon = {0, <<"">>} :: {ExpirationTime :: integer(), binary()}
 }).
 
 -record(authorization_nonce, {

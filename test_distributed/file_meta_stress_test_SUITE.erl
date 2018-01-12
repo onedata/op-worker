@@ -206,9 +206,9 @@ init_per_suite(Config) ->
         test_utils:mock_expect(Workers, dbsync_utils, get_providers,
             fun(_) -> [] end),
         NewConfig,
-        test_utils:mock_new(Workers, [provider_auth]),
-        test_utils:mock_expect(Workers, provider_auth, get_provider_id,
-            fun() -> <<"provider1">> end),
+        initializer:mock_provider_id(
+            Workers, <<"provider1">>, <<"auth-macaroon">>, <<"identity-macaroon">>
+        ),
         NewConfig
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [model_file_meta_test_base]} | Config].
@@ -216,8 +216,8 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, [dbsync_utils]),
-    test_utils:mock_unload(Workers, [provider_auth]).
+    initializer:unmock_provider_ids(Workers),
+    test_utils:mock_unload(Workers, [dbsync_utils]).
 
 %%%===================================================================
 %%% Internal functions

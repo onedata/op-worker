@@ -625,9 +625,10 @@ init_per_testcase(default, Config) ->
     ssl:start(),
     initializer:remove_pending_messages(),
     mock_identity(Workers),
-    test_utils:mock_new(Workers, provider_auth),
-    test_utils:mock_expect(Workers, provider_auth, get_provider_id, fun() ->
-        <<"providerId">> end),
+
+    initializer:mock_provider_id(
+        Workers, <<"providerId">>, <<"auth-macaroon">>, <<"identity-macaroon">>
+    ),
     Config;
 
 init_per_testcase(_Case, Config) ->
@@ -656,7 +657,8 @@ end_per_testcase(python_client_test, Config) ->
 
 end_per_testcase(default, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, [provider_auth, user_identity]),
+    initializer:unmock_provider_ids(Workers),
+    test_utils:mock_validate_and_unload(Workers, [user_identity]),
     ssl:stop();
 
 end_per_testcase(_Case, Config) ->
