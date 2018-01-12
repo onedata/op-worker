@@ -186,6 +186,7 @@ ensure_connection_running() ->
 %%--------------------------------------------------------------------
 %% @doc @private
 %% Attempts to start a new WebSocket subscriptions connection to OneZone.
+%% Check first if version of OneZone is supported and exit if not.
 %% The procedure is wrapped in a global lock and reattempted in increasing
 %% intervals to prevent the provider from flooding OneZone with
 %% connection requests. If a reconnect is attempted during the grace period
@@ -194,37 +195,49 @@ ensure_connection_running() ->
 %%--------------------------------------------------------------------
 -spec start_provider_connection() -> ok.
 start_provider_connection() ->
-    critical_section:run(subscriptions_wss, fun() ->
-        case timestamp_in_seconds() >= get_next_reconnect() of
-            false ->
-                ?debug("Discarding subscriptions connection request as the "
-                "grace period has not passed yet.");
-            true ->
-                Result = try
-                    case subscription_wss:start_link() of
-                        {ok, Pid} ->
-                            ?info("Subscriptions connection started ~p", [Pid]),
-                            ok;
-                        {error, R1} ->
-                            {error, R1}
-                    end
-                catch
-                    E:R2 ->
-                        {E, R2}
-                end,
-                case Result of
-                    ok ->
-                        reset_reconnect_interval();
-                    {Type, Reason} ->
-                        Interval = postpone_next_reconnect(),
-                        ?debug("Subscriptions connection failed to start - ~p:~p. "
-                        "Next retry not sooner than ~p seconds.", [
-                            Type, Reason, Interval
-                        ])
+    {ok, 200, _RespHeaders, ResponseBody} = http_client:get(
+        oneprovider:get_oz_url() ++ "/get_zone_version", #{}, <<>>, [insecure]
+    ),
+    ZoneVersion = binary_to_list(ResponseBody),
+    SupportedZoneVersions = application:get_env(?APP_NAME, supported_oz_versions),
+    case lists:member(ZoneVersion, SupportedZoneVersions) of
+        false ->
+            ?critical("Exiting due to connection attempt with unsupported version
+            of Onezone: ~p", [ZoneVersion]),
+            init:stop();
+        true ->
+            critical_section:run(subscriptions_wss, fun() ->
+                case timestamp_in_seconds() >= get_next_reconnect() of
+                    false ->
+                        ?debug("Discarding subscriptions connection request as the "
+                        "grace period has not passed yet.");
+                    true ->
+                        Result = try
+                            case subscription_wss:start_link() of
+                                {ok, Pid} ->
+                                    ?info("Subscriptions connection started ~p", [Pid]),
+                                    ok;
+                                {error, R1} ->
+                                    {error, R1}
+                            end
+                        catch
+                            E:R2 ->
+                                {E, R2}
+                        end,
+                        case Result of
+                            ok ->
+                                reset_reconnect_interval();
+                            {Type, Reason} ->
+                                Interval = postpone_next_reconnect(),
+                                ?debug("Subscriptions connection failed to start - ~p:~p. "
+                                "Next retry not sooner than ~p seconds.", [
+                                    Type, Reason, Interval
+                                ])
+                        end
                 end
-        end
-    end),
-    ok.
+            end),
+            ok
+    end.
 
 
 %%--------------------------------------------------------------------

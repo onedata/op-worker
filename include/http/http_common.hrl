@@ -19,5 +19,6 @@
 
 %% Endpoint used to get provider's id
 -define(provider_id_path, "/get_provider_id").
+-define(provider_version_path, "/get_provider_version").
 
 -endif.
