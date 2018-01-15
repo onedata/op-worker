@@ -199,11 +199,11 @@ start_provider_connection() ->
         oneprovider:get_oz_url() ++ "/get_zone_version", #{}, <<>>, [insecure]
     ),
     ZoneVersion = binary_to_list(ResponseBody),
-    SupportedZoneVersions = application:get_env(?APP_NAME, supported_oz_versions),
+    {ok, SupportedZoneVersions} = application:get_env(?APP_NAME, supported_oz_versions),
     case lists:member(ZoneVersion, SupportedZoneVersions) of
         false ->
-            ?critical("Exiting due to connection attempt with unsupported version
-            of Onezone: ~p", [ZoneVersion]),
+            ?critical("Exiting due to connection attempt with unsupported version "
+                      "of Onezone: ~p. Supported ones: ~p", [ZoneVersion, SupportedZoneVersions]),
             init:stop();
         true ->
             critical_section:run(subscriptions_wss, fun() ->
