@@ -478,6 +478,7 @@ get_posix_user_ctx_by_group_id_should_return_0_for_root(Config) ->
         undefined,
         ?SPACE_ID
     ]),
+    ct:pal("Result: ~p", [Result]),
     {Uid, Gid} = ?assertMatch({_, _}, Result),
     ?assertEqual(0, Uid),
     ?assertEqual(0, Gid).
