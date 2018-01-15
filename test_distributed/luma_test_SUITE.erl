@@ -560,7 +560,7 @@ end_per_testcase(Case, Config) when
 end_per_testcase(_Case, Config) ->
     Workers = [Worker | _] = ?config(op_worker_nodes, Config),
     rpc:call(Worker, luma_cache, invalidate, []),
-    test_utils:mock_unload(Workers, [http_client, luma]).
+    test_utils:mock_unload(Workers, [http_client, luma_proxy]).
 
 generate_posix_identifier(Id, {Low, High}) ->
     PosixId = crypto:bytes_to_integer(Id),
