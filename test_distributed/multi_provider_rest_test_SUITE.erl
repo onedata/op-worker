@@ -818,9 +818,9 @@ invalidate_dir_replica(Config) ->
         <<"replicas", Dir1/binary, "?provider_id=", (domain(WorkerP2))/binary>>,
         post, [user_1_token_header(Config)], []),
     ?ATTEMPTS),
-
     DecodedBody = json_utils:decode_map(Body),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
+
     {ok, FileObjectId} = cdmi_id:guid_to_objectid(Dir1Guid),
     DomainP2 = domain(WorkerP2),
     ?assertMatch(#{
@@ -852,10 +852,35 @@ invalidate_dir_replica(Config) ->
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File2),
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File3),
 
-    {ok, 200, _, _} = do_request(WorkerP2,
+    {ok, 200, _, Body2} = do_request(WorkerP2,
         <<"replicas", Dir1/binary, "?provider_id=", (domain(WorkerP2))/binary>>,
         delete, [user_1_token_header(Config)], []
     ),
+
+    DecodedBody2 = json_utils:decode_map(Body2),
+    #{<<"transferId">> := Tid2} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody2),
+    {ok, FileObjectId} = cdmi_id:guid_to_objectid(Dir1Guid),
+    DomainP2 = domain(WorkerP2),
+    ?assertMatch(#{
+        <<"path">> := Dir1,
+        <<"callback">> := null,
+        <<"transferStatus">> := <<"skipped">>,
+        <<"invalidationStatus">> := <<"completed">>,
+        <<"targetProviderId">> := <<"undefined">>,
+        <<"fileId">> := FileObjectId,
+        <<"filesToTransfer">> := 0,
+        <<"filesTransferred">> := 0,
+        <<"bytesToTransfer">> := 0,
+        <<"bytesTransferred">> := 0,
+        <<"filesInvalidated">> := 5,
+        <<"filesToInvalidate">> := 5
+    },
+        case do_request(WorkerP1, <<"transfers/", Tid2/binary>>, get, [user_1_token_header(Config)], []) of
+            {ok, 200, _, TransferStatus} ->
+                json_utils:decode_map(TransferStatus);
+            Error -> Error
+        end, ?ATTEMPTS),
+
 
     %then
     ExpectedDistribution2 = [

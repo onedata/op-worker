@@ -18,6 +18,7 @@
 -include("global_definitions.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/transfer.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -78,7 +79,7 @@ on_transfer_doc_change(_ExistingTransfer) ->
 %%-------------------------------------------------------------------
 -spec mark_failed(pid(), term()) -> ok.
 mark_failed(Pid, Reason) ->
-    gen_server2:cast(Pid, {transfer_failed, Reason}).
+    Pid ! {transfer_failed, Reason}.
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -87,7 +88,7 @@ mark_failed(Pid, Reason) ->
 %%-------------------------------------------------------------------
 -spec mark_finished(pid()) -> ok.
 mark_finished(Pid) ->
-    gen_server2:cast(Pid, transfer_finished).
+    Pid ! transfer_finished.
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -102,17 +103,8 @@ mark_finished(Pid) ->
 -spec init(Args :: term()) ->
     {ok, State :: state()} | {ok, State :: state(), timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
-init([SessionId, TransferId, FileGuid, Callback, InvalidationSourceReplica]) ->
-    ok = gen_server2:cast(self(), start_transfer),
-    ?info("transfer_controller of transfer ~p started", [TransferId]),
-    {ok, #state{
-        transfer_id = TransferId,
-        session_id = SessionId,
-        file_guid = FileGuid,
-        callback = Callback,
-        invalidate_source_replica = InvalidationSourceReplica,
-        space_id = fslogic_uuid:guid_to_space_id(FileGuid)
-    }}.
+init(_Args) ->
+    {ok, #state{}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -142,29 +134,17 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_cast(start_transfer, State = #state{
-    transfer_id = TransferId,
-    session_id = SessionId,
-    file_guid = FileGuid
-}) ->
-    ok = sync_req:enqueue_transfer(user_ctx:new(SessionId),
-        file_ctx:new_by_guid(FileGuid), TransferId),
-    {noreply, State};
-handle_cast(transfer_finished, State = #state{
-    transfer_id = TransferId,
-    space_id = SpaceId,
-    callback = Callback,
-    invalidate_source_replica = InvalidationSourceReplica
-}) ->
-    transfer:mark_completed(TransferId, SpaceId, InvalidationSourceReplica),
-    notify_callback(Callback, InvalidationSourceReplica),
-    {stop, normal, State};
-handle_cast({transfer_failed, Reason}, State = #state{
-    space_id = SpaceId,
-    transfer_id = TransferId
-}) ->
-    ?error_stacktrace("Transfer ~p failed due to ~p", [TransferId, Reason]),
-    transfer:mark_failed(TransferId, SpaceId),
+handle_cast({start_transfer, SessionId, TransferId, FileGuid, Callback, InvalidateSourceReplica}, State) ->
+    sync_req:start_transfer(user_ctx:new(SessionId), file_ctx:new_by_guid(FileGuid), undefined, TransferId, self()),
+    {ok, #document{value = #transfer{space_id = SpaceId}}} = transfer:get(SpaceId), %todo maybe pass spaceid here
+    receive
+        transfer_finished ->
+            transfer:mark_completed(TransferId, SpaceId, InvalidateSourceReplica),
+            notify_callback(Callback, InvalidateSourceReplica);
+        {transfer_failed, Reason} ->
+            ?error_stacktrace("Transfer ~p failed due to ~p", [TransferId, Reason]),
+            transfer:mark_failed(TransferId, SpaceId)
+    end,
     {stop, normal, State};
 handle_cast(_Request, State) ->
     ?log_bad_request(_Request),
@@ -233,9 +213,14 @@ new_transfer(#document{
     }
 }) ->
     FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
-    {ok, _Pid} = gen_server2:start(transfer_controller,
-        [session:root_session_id(), TransferId, FileGuid, Callback, InvalidateSourceReplica], []),
-    ok.
+    worker_pool:cast(?TRANSFER_CONTROLLERS_POOL, {
+        start_transfer,
+        session:root_session_id(),
+        TransferId,
+        FileGuid,
+        Callback,
+        InvalidateSourceReplica
+    }).
 
 %%--------------------------------------------------------------------
 %% @private

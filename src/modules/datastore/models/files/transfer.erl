@@ -201,7 +201,7 @@ record_upgrade(2, {?MODULE, FileUuid, SpaceId, Path, CallBack, TransferStatus,
         #{TargetProviderId => LastUpdate},
         % min_hist
         #{TargetProviderId => lists:duplicate(60 div ?FIVE_SEC_TIME_WINDOW, 0)},
-        %hr_hist
+        % hr_hist
         #{TargetProviderId => MinHist},
         % dy_hist
         #{TargetProviderId => HrHist},
@@ -396,6 +396,8 @@ get_info(TransferId) ->
         failed_files = FailedFiles,
         bytes_to_transfer = BytesToTransfer,
         bytes_transferred = BytesTransferred,
+        files_to_invalidate = FilesToInvalidate,
+        files_invalidated = FilesInvalidated,
         start_time = StartTime,
         finish_time = FinishTime,
         last_update = LastUpdate,
@@ -418,6 +420,8 @@ get_info(TransferId) ->
         <<"filesToTransfer">> => FilesToTransfer,
         <<"filesTransferred">> => FilesTransferred,
         <<"failedFiles">> => FailedFiles,
+        <<"filesToInvalidate">> => FilesToInvalidate,
+        <<"filesInvalidated">> => FilesInvalidated,
         <<"bytesToTransfer">> => BytesToTransfer,
         <<"bytesTransferred">> => BytesTransferred,
         <<"startTime">> => StartTime,
@@ -552,6 +556,7 @@ mark_active_invalidation(TransferId) ->
     update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{
             invalidation_status = active,
+            files_to_invalidate = 1,
             pid = Pid
         }}
     end).
@@ -589,6 +594,19 @@ mark_failed_invalidation(TransferId, SpaceId) ->
         Error ->
             Error
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Marks replica invalidation as failed
+%% @end
+%%--------------------------------------------------------------------
+-spec mark_cancelled_invalidation(id()) -> {ok, id()} | {error, term()}.
+mark_cancelled_invalidation(TransferId) ->
+    transfer:update(TransferId, fun(T = #transfer{space_id = SpaceId}) ->
+        ok = add_link(?PAST_TRANSFERS_KEY, TransferId, SpaceId),
+        ok = remove_links(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId),
+        T#transfer{invalidation_status = failed}
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1137,6 +1155,14 @@ start_pools() ->
         {worker, {transfer_worker, []}},
         {queue_type, lifo}
     ]),
+    {ok, _} = worker_pool:start_sup_pool(?TRANSFER_CONTROLLERS_POOL, [
+        {workers, ?TRANSFER_CONTROLLERS_NUM},
+        {worker, {transfer_controller, []}}
+    ]),
+    {ok, _} = worker_pool:start_sup_pool(?INVALIDATION_WORKERS_POOL, [
+        {workers, ?INVALIDATION_WORKERS_NUM}
+%%        {worker, {transfer_controller, []}}
+    ]),
     ok.
 
 %%-------------------------------------------------------------------
@@ -1148,6 +1174,8 @@ start_pools() ->
 -spec stop_pools() -> ok.
 stop_pools() ->
     true = worker_pool:stop_pool(?TRANSFER_WORKERS_POOL),
+    true = worker_pool:stop_pool(?TRANSFER_CONTROLLERS_POOL),
+    true = worker_pool:stop_pool(?INVALIDATION_WORKERS_POOL),
     ok.
 
 %%-------------------------------------------------------------------
