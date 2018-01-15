@@ -211,11 +211,9 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS) ->
 
             % Function that creates test files and measures performance
             Fun2 = fun(D, GUID) ->
-%%                lists:foreach(fun(N) ->
                 ToSend = lists:foldl(fun(N, Answers) ->
                     N2 = integer_to_binary(N),
                     F = <<D/binary, "/", N2/binary>>,
-%%                    {T, A} = measure_execution_time(fun() ->
                     {ToAddV, Ans} = measure_execution_time(fun() ->
                         try
                             {ok, _} = case CacheGUIDS of
@@ -241,8 +239,6 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS) ->
                                 {error, {E1, E2}}
                         end
                     end),
-%%                    Master ! {worker_ans, A, T}
-%%                end, lists:seq(1, FilesPerDir))
                     process_answer(Answers, Ans, ToAddV)
                 end, [{file_ok, {0,0}}], lists:seq(1, FilesPerDir)),
                 Master ! {worker_ans, ToSend}
@@ -254,7 +250,6 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS) ->
             DirsToDo = DirsPerParent * (1 - LastLevelDirs) / (1 - DirsPerParent),
             FilesToDo = LastLevelDirs * FilesPerDir,
             % Gather test results
-%%            GatherAns = gather_answers([{file_ok, {0,0}}, {dir_ok, {0,0}}], round(DirsToDo + FilesToDo)),
             GatherAns = gather_answers([{file_ok, {0,0}}, {dir_ok, {0,0}},
                 {other, {0,0}}], round(DirsToDo + LastLevelDirs)),
 

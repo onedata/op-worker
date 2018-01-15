@@ -81,7 +81,6 @@ save(ProviderId, Macaroon) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_provider_id() -> od_provider:id() | {error, term()}.
-% TODO bootleneck !!!
 get_provider_id() ->
     case application:get_env(?APP_NAME, ?PROVIDER_ID_CACHE_KEY) of
         {ok, ProviderId} ->
