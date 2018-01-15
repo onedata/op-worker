@@ -79,7 +79,18 @@ on_transfer_doc_change(Transfer = #document{value = #transfer{
         false ->
             ok
     end;
-on_transfer_doc_change(_ExistingTransfer) ->
+on_transfer_doc_change(#document{
+    key = TransferId,
+    value = #transfer{status = failed}}
+)  ->
+    transfer:mark_failed_invalidation(TransferId),
+    ok;
+on_transfer_doc_change(#document{
+    key = TransferId,
+    value = #transfer{status = cancelled}}
+)  ->
+    transfer:mark_cancelled_invalidation(TransferId),
+    ok;on_transfer_doc_change(_ExistingTransfer) ->
     ok.
 
 %%-------------------------------------------------------------------

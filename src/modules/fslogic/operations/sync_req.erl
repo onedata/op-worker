@@ -18,6 +18,7 @@
 -include("proto/oneprovider/provider_messages.hrl").
 -include("modules/datastore/transfer.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([
@@ -25,8 +26,7 @@
     synchronize_block_and_compute_checksum/3,
     get_file_distribution/2,
     enqueue_file_replication/4,
-    start_transfer/5,
-    enqueue_transfer/3
+    start_transfer/5
 ]).
 -export([
     schedule_file_replication/4, schedule_file_replication/5, replicate_file/4,
@@ -103,16 +103,6 @@ get_file_distribution(_UserCtx, FileCtx) ->
             provider_file_distributions = ProviderDistributions
         }
     }.
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Adds task for starting given transfer to worker_pool
-%% @end
-%%-------------------------------------------------------------------
--spec enqueue_transfer(user_ctx:ctx(), file_ctx:ctx(), undefined | transfer:id()) -> ok.
-enqueue_transfer(UserCtx, FileCtx, TransferId) ->
-    worker_pool:cast(?TRANSFER_WORKERS_POOL,
-        {start_transfer, UserCtx, FileCtx, undefined, TransferId, self()}).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -409,6 +399,8 @@ invalidate_children_replicas(UserCtx, Children, MigrationProviderId, TransferId,
     lists:foreach(fun(ChildCtx) ->
         %todo possible parallelization on a process pool, cannot parallelize as
         %todo in replication because you must be sure that all children are invalidated before parent
-        invalidate_file_replica(UserCtx, ChildCtx, MigrationProviderId, TransferId, AutoCleaningId)
+        worker_pool:cast(?INVALIDATION_WORKERS_POOL,
+            {?MODULE, invalidate_file_replica, [UserCtx, ChildCtx, MigrationProviderId, TransferId, AutoCleaningId]})
+%%        invalidate_file_replica(UserCtx, ChildCtx, MigrationProviderId, TransferId, AutoCleaningId)
     end, Children).
 
