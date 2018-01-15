@@ -33,7 +33,7 @@
     overloaded_connections = #{} :: #{pid() => non_neg_integer()}
 }).
 
--define(SESSION_REMOVAL_RETRY_DELAY, timer:seconds(5)).
+-define(SESSION_REMOVAL_RETRY_DELAY, timer:seconds(15)).
 -define(CONNECTION_CHECK_INTERVAL, timer:seconds(30)).
 -define(MAX_PENDING_REQUESTS_PER_CONNECTION, 100).
 
