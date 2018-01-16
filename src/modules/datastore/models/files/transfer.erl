@@ -952,7 +952,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    3.
+    4.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1022,6 +1022,33 @@ get_record_struct(3) ->
         {pid, string}, %todo VFS-3657
         {files_to_transfer, integer},
         {files_transferred, integer},
+        {bytes_to_transfer, integer},
+        {bytes_transferred, integer},
+        {files_to_invalidate, integer},
+        {files_invalidated, integer},
+        {start_time, integer},
+        {finish_time, integer},
+        {last_update, #{string => integer}},
+        {min_hist, #{string => [integer]}},
+        {hr_hist, #{string => [integer]}},
+        {dy_hist, #{string => [integer]}},
+        {mth_hist, #{string => [integer]}}
+    ]};
+get_record_struct(4) ->
+    {record, [
+        {file_uuid, string},
+        {space_id, string},
+        {user_id, string},
+        {path, string},
+        {callback, string},
+        {status, atom},
+        {invalidation_status, atom},
+        {source_provider_id, string},
+        {target_provider_id, string},
+        {invalidate_source_replica, boolean},
+        {pid, string}, %todo VFS-3657
+        {files_to_transfer, integer},
+        {files_transferred, integer},
         {failed_files, integer},
         {bytes_to_transfer, integer},
         {bytes_transferred, integer},
@@ -1061,13 +1088,46 @@ upgrade_record(2, {?MODULE, FileUuid, SpaceId, Path, CallBack, TransferStatus,
     FilesToInvalidate, FilesInvalidated, BytesToTransfer, BytesTransferred,
     StartTime, LastUpdate, MinHist, HrHist, DyHist}
 ) ->
-    {3, #transfer{
+    {3,  {?MODULE, FileUuid, SpaceId, undefined, Path, CallBack, TransferStatus,
+        InvalidationStatus, SourceProviderId, TargetProviderId,
+        InvalidateSourceReplica, Pid, FilesToTransfer, FilesTransferred,
+        BytesToTransfer, BytesTransferred, FilesToInvalidate, FilesInvalidated,
+        StartTime, LastUpdate,
+        % There are three changes in histograms:
+        %   1) They are now maps #{ProviderId => Histogram}, where ProviderId is
+        %       the provider FROM which the amount of data expressed in the
+        %       histogram was transferred.
+        %   2) Histogram naming convention - minute histogram is now a histogram
+        %       that SPANS OVER one minute, here with 5 seconds window.
+        %       Other histograms are renamed analogically.
+        %   3) LastUpdate must be remembered per provider to correctly keep
+        %       track in histograms.
+        % As there is no way to deduce source providers, older transfers will
+        % only have one histogram accessible under target provider id.
+        % last_update
+        #{TargetProviderId => LastUpdate},
+        % min_hist
+        #{TargetProviderId => lists:duplicate(60 div ?FIVE_SEC_TIME_WINDOW, 0)},
+        %hr_hist
+        #{TargetProviderId => MinHist},
+        % dy_hist
+        #{TargetProviderId => HrHist},
+        % mth_hist
+        #{TargetProviderId => DyHist}
+    }};
+upgrade_record(3, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, Status,
+    InvalidationStatus, SourceProviderId, TargetProviderId,
+    InvalidateSourceReplica, Pid, FilesToTransfer, FilesTransferred,
+    BytesToTransfer, BytesTransferred, FilesToInvalidate, FilesInvalidated,
+    StartTime, FinishTime, LastUpdate, MinHist, HrHist, DyHist, MthHist
+}) ->
+    {4, #transfer{
         file_uuid = FileUuid,
         space_id = SpaceId,
-        user_id = undefined,
+        user_id = UserId,
         path = Path,
         callback = CallBack,
-        status = TransferStatus,
+        status = Status,
         invalidation_status = InvalidationStatus,
         source_provider_id = SourceProviderId,
         target_provider_id = TargetProviderId,
@@ -1081,23 +1141,12 @@ upgrade_record(2, {?MODULE, FileUuid, SpaceId, Path, CallBack, TransferStatus,
         files_to_invalidate = FilesToInvalidate,
         files_invalidated = FilesInvalidated,
         start_time = StartTime,
-        finish_time = LastUpdate,
-        % There are three changes in histograms:
-        %   1) They are now maps #{ProviderId => Histogram}, where ProviderId is
-        %       the provider FROM which the amount of data expressed in the
-        %       histogram was transferred.
-        %   2) Histogram naming convention - minute histogram is now a histogram
-        %       that SPANS OVER one minute, here with 5 seconds window.
-        %       Other histograms are renamed analogically.
-        %   3) LastUpdate must be remembered per provider to correctly keep
-        %       track in histograms.
-        % As there is no way to deduce source providers, older transfers will
-        % only have one histogram accessible under target provider id.
-        last_update = #{TargetProviderId => LastUpdate},
-        min_hist = #{TargetProviderId => lists:duplicate(60 div ?FIVE_SEC_TIME_WINDOW, 0)},
-        hr_hist = #{TargetProviderId => MinHist},
-        dy_hist = #{TargetProviderId => HrHist},
-        mth_hist = #{TargetProviderId => DyHist}
+        finish_time = FinishTime,
+        last_update = LastUpdate,
+        min_hist = MinHist,
+        hr_hist = HrHist,
+        dy_hist = DyHist,
+        mth_hist = MthHist
     }}.
 
 %%--------------------------------------------------------------------

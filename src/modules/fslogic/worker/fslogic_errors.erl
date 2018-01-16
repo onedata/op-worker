@@ -41,7 +41,8 @@ handle_error(Request, Type, Error) ->
     Status = #status{code = Code} =
         fslogic_errors:gen_status_message(Error),
     LogLevel = code_to_loglevel(Code),
-    LogRequest = application:get_env(?APP_NAME, log_requests_on_error, false),
+    LogRequest = application:get_env(?CLUSTER_WORKER_APP_NAME,
+        log_requests_on_error, false),
     {MsgFormat, FormatArgs} = case LogRequest of
         true ->
             MF = "Cannot process request ~p (code: ~p)~nStacktrace: ~s",

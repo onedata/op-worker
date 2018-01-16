@@ -478,6 +478,7 @@ get_posix_user_ctx_by_group_id_should_return_0_for_root(Config) ->
         undefined,
         ?SPACE_ID
     ]),
+    ct:pal("Result: ~p", [Result]),
     {Uid, Gid} = ?assertMatch({_, _}, Result),
     ?assertEqual(0, Uid),
     ?assertEqual(0, Gid).
@@ -595,7 +596,7 @@ end_per_testcase(Case, Config) when
 end_per_testcase(_Case, Config) ->
     Workers = [Worker | _] = ?config(op_worker_nodes, Config),
     rpc:call(Worker, luma_cache, invalidate, []),
-    test_utils:mock_unload(Workers, [http_client, luma]).
+    test_utils:mock_unload(Workers, [http_client, luma_proxy]).
 
 generate_posix_identifier(Id, {Low, High}) ->
     PosixId = crypto:bytes_to_integer(Id),

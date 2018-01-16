@@ -36,5 +36,5 @@
 ## Enable Symmetric Multiprocessing
 -smp enable
 
-## Set default heap size (256 MB with 8byte word)
+## Set default heap size (512 MB with 8byte word)
 +hmax 67108864
