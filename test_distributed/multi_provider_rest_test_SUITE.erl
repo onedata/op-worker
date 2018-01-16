@@ -84,6 +84,7 @@
     replicate_big_dir/1,
     quota_decreased_after_invalidation/1,
     replicate_big_file/1,
+    invalidate_big_dir/1,
     file_replication_failures_should_fail_whole_transfer/1
 ]).
 
@@ -143,7 +144,8 @@ all() ->
         quota_decreased_after_invalidation,
         file_replication_failures_should_fail_whole_transfer,
         replicate_big_dir,
-        replicate_big_file
+        replicate_big_file,
+        invalidate_big_dir
     ]).
 
 -define(LIST_TRANSFER, fun(Id, Acc) -> [Id | Acc] end).
@@ -2324,6 +2326,58 @@ replicate_big_file(Config) ->
                 json_utils:decode_map(TransferStatus);
             Error -> Error
         end, 3600).
+
+invalidate_big_dir(Config) ->
+    ct:timetrap({minutes, 10}),
+    {ok, _} = application:ensure_all_started(worker_pool),
+    {ok, _} = worker_pool:start_sup_pool(?VERIFY_POOL, [{workers, 8}]),
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
+    Space = <<"/space3">>,
+    RootDir = filename:join(Space, <<"big_dir_invalidation">>),
+    Structure = [10, 10],   % last level are files
+    FilesToCreate = lists:foldl(fun(N, AccIn) -> 1 + AccIn * N end, 1, Structure),
+
+    true = register(?CREATE_FILE_COUNTER, spawn_link(?MODULE, create_file_counter, [0, FilesToCreate, self(), []])),
+    true = register(?SYNC_FILE_COUNTER, spawn_link(?MODULE, sync_file_counter, [0, FilesToCreate, self()])),
+
+    create_nested_directory_tree(WorkerP1, SessionId, Structure, RootDir),
+
+    FileGuids = receive {create, FileGuids0} -> FileGuids0 end,
+
+    lists:foreach(fun(FileGuid) ->
+        worker_pool:cast(?VERIFY_POOL, {?MODULE, verify_file, [WorkerP2, SessionId2, FileGuid]})
+    end, FileGuids),
+
+    receive files_synchronized -> ok end,
+    DomainP2 = domain(WorkerP2),
+
+    {ok, 200, _, Body} = do_request(WorkerP2,
+        <<"replicas", RootDir/binary, "?provider_id=", (domain(WorkerP1))/binary, "&migration_provider_id=", (domain(WorkerP2))/binary>>,
+        delete, [user_1_token_header(Config)], []
+    ),
+    DecodedBody = json_utils:decode_map(Body),
+    #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
+
+    % then
+    ?assertMatch(#{
+        <<"transferStatus">> := <<"completed">>,
+        <<"targetProviderId">> := DomainP2,
+        <<"path">> := RootDir,
+        <<"invalidationStatus">> := <<"completed">>,
+        <<"callback">> := null,
+        <<"filesToTransfer">> := FilesToCreate,
+        <<"filesTransferred">> := FilesToCreate,
+        <<"filesToInvalidate">> := FilesToCreate,
+        <<"filesInvalidated">> := FilesToCreate
+    },
+        case do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []) of
+            {ok, 200, _, TransferStatus} ->
+                json_utils:decode_map(TransferStatus);
+            Error -> Error
+        end, 600),
+    worker_pool:stop_pool(?VERIFY_POOL).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
