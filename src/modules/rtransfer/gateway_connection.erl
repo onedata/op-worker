@@ -185,12 +185,11 @@ handle_cast(_Request, State) ->
     Reason :: normal | term().
 handle_info({tcp, Socket, Data}, #gwcstate{} = State) ->
     ok = inet:setopts(Socket, [{active, once}]),
-    try
-        Reply = messages:decode_msg(Data, 'FetchReply'),
-        complete_request(Reply, State)
-    catch
-        Error:Reason ->
-            ?debug_stacktrace("~p: Couldn't decode reply: {~p, ~p}", [?MODULE, Error, Reason])
+    case decode_message(Data) of
+        {error, Reason} ->
+            ?error_stacktrace("~p: Couldn't decode reply: ~p", [?MODULE, Reason]);
+        Reply ->
+            complete_request_safe(Reply, State)
     end,
     {noreply, State, ?connection_close_timeout};
 
@@ -265,6 +264,36 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Save equivalent of call to messages:decode_msg(Data, 'FetchReply')
+%% @end
+%%-------------------------------------------------------------------
+-spec decode_message(binary()) -> #'FetchReply'{} | {error, term()}.
+decode_message(Data) ->
+    try
+        messages:decode_msg(Data, 'FetchReply')
+    catch
+        Error:Reason ->
+            {error, {Error, Reason}}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Completes a fetch request, saving data to a file and notifying a process
+%% that registered itself for notifications.
+%% @end
+%%--------------------------------------------------------------------
+-spec complete_request_safe(Reply :: #'FetchReply'{}, State :: #gwcstate{}) -> ok.
+complete_request_safe(Reply, State) ->
+    try
+        complete_request(Reply, State)
+    catch
+        Error:Reason ->
+            ?error_stacktrace("~p: Couldn't complete_request: {~p, ~p}", [?MODULE, Error, Reason])
+    end.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -297,12 +326,16 @@ complete_request(#'FetchReply'{content = Content, request_hash = RequestHash}, S
                         {ok, Handle} ->
                             %% TODO: loop!
                             %% TODO: {error, {storage
-                            NewHandle = case WriteFun(Handle, Offset, Data) of
+                            NewHandle = try WriteFun(Handle, Offset, Data) of
                                 {ok, NH, Wrote} ->
                                     notify_complete(Wrote, Action),
                                     NH;
 
                                 {error, Reason} ->
+                                    notify_error(Reason, Action),
+                                    Handle
+                            catch
+                                _Error:Reason ->
                                     notify_error(Reason, Action),
                                     Handle
                             end,
@@ -316,7 +349,7 @@ complete_request(#'FetchReply'{content = Content, request_hash = RequestHash}, S
 
             ets:delete(TID, RequestHash)
     end,
-    ?MODULE:garbage_collect(RtransferOpts),
+    true = ?MODULE:garbage_collect(RtransferOpts),
     ok.
 
 %%-------------------------------------------------------------------
@@ -353,7 +386,8 @@ garbage_collect(RtransferOpts) ->
     case application:get_env(?APP_NAME, force_rtransfer_gc, async) of
         sync ->
             erlang:garbage_collect(),
-            wait_gc(RtransferOpts);
+            ok = wait_gc(RtransferOpts),
+            true;
         async ->
             erlang:garbage_collect();
         _ ->
@@ -387,8 +421,8 @@ wait_gc(N, Max, RtransferOpts) ->
     DefaultBlockSize = ?default_block_size,
     BlockSize = proplists:get_value(block_size,
         RtransferOpts, DefaultBlockSize),
-    Max = BlockSize * ?connection_load_factor,
-    case Sum < Max of
+    MaxBlocks = BlockSize * ?connection_load_factor,
+    case Sum < MaxBlocks of
         true ->
             ok;
         _ ->
