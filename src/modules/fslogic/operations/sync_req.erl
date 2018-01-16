@@ -220,7 +220,7 @@ invalidate_file_replica(UserCtx, FileCtx, MigrationProviderId, TransferId, AutoC
     catch
         _:Error ->
             {ok, #document{value = #transfer{pid = Pid}}} = transfer:get(TransferId),
-            invalidation_controller:failed_transfer(transfer:decode_pid(Pid), Error)
+            invalidation_controller:failed_invalidation(transfer:decode_pid(Pid), Error)
     end.
 
 %%-------------------------------------------------------------------

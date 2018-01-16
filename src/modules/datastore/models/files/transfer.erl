@@ -1161,7 +1161,6 @@ start_pools() ->
     ]),
     {ok, _} = worker_pool:start_sup_pool(?INVALIDATION_WORKERS_POOL, [
         {workers, ?INVALIDATION_WORKERS_NUM}
-%%        {worker, {transfer_controller, []}}
     ]),
     ok.
 
@@ -1220,7 +1219,7 @@ handle_updated(#transfer{
     invalidation_status = active,
     pid = Pid
 }) when TransferStatus =:= completed orelse TransferStatus =:= skipped ->
-    invalidation_controller:finish_transfer(decode_pid(Pid));
+    invalidation_controller:finish_invalidation(decode_pid(Pid));
 handle_updated(_) ->
     ok.
 
