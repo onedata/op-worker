@@ -28,14 +28,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
 
--record(state, {
-    transfer_id :: transfer:id(),
-    session_id :: session:id(),
-    callback :: transfer:callback(),
-    file_guid :: fslogic_worker:file_guid(),
-    invalidate_source_replica :: boolean(),
-    space_id :: od_space:id()
-}).
+-record(state, {}).
 
 -type state() :: #state{}.
 
@@ -79,7 +72,8 @@ on_transfer_doc_change(_ExistingTransfer) ->
 %%-------------------------------------------------------------------
 -spec mark_failed(pid(), term()) -> ok.
 mark_failed(Pid, Reason) ->
-    Pid ! {transfer_failed, Reason}.
+    Pid ! {transfer_failed, Reason},
+    ok.
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -88,7 +82,8 @@ mark_failed(Pid, Reason) ->
 %%-------------------------------------------------------------------
 -spec mark_finished(pid()) -> ok.
 mark_finished(Pid) ->
-    Pid ! transfer_finished.
+    Pid ! transfer_finished,
+    ok.
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -175,11 +170,8 @@ handle_info(_Info, State) ->
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: state()) -> term().
-terminate(_Reason, #state{
-    session_id = SessionId,
-    transfer_id = TransferId
-}) ->
-    session:remove_transfer(SessionId, TransferId).
+terminate(_Reason, #state{}) ->
+    ok.
 
 %%--------------------------------------------------------------------
 %% @private

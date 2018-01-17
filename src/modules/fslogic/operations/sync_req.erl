@@ -261,7 +261,7 @@ invalidate_file_replica_internal(UserCtx, FileCtx, MigrationProviderId, Transfer
     fslogic_blocks:block(), non_neg_integer(), undefined | transfer:id()) ->
     fslogic_worker:provider_response().
 replicate_file_insecure(UserCtx, FileCtx, Block, Offset, TransferId) ->
-    case transfer:should_continue(TransferId) of
+    case transfer:is_ongoing(TransferId) of
         true ->
             {ok, Chunk} = application:get_env(?APP_NAME, ls_chunk_size),
             case file_ctx:is_dir(FileCtx) of
@@ -313,38 +313,43 @@ replicate_children(UserCtx, Children, Block, TransferId) ->
 invalidate_file_replica_insecure(UserCtx, FileCtx, MigrationProviderId, Offset,
     TransferId, AutoCleaningId
 ) ->
-    {ok, Chunk} = application:get_env(?APP_NAME, ls_chunk_size),
-    case file_ctx:is_dir(FileCtx) of
-        {true, FileCtx2} ->
-            case file_ctx:get_file_children(FileCtx2, UserCtx, Offset, Chunk) of
-                {Children, _FileCtx3} when length(Children) < Chunk ->
-                    transfer:mark_file_invalidation_scheduled(TransferId, length(Children)),
-                    invalidate_children_replicas(UserCtx, Children, MigrationProviderId, TransferId, AutoCleaningId),
-                    transfer:mark_file_invalidation_finished(TransferId, 1),
-                    #provider_response{status = #status{code = ?OK}};
-                {Children, FileCtx3} ->
-                    transfer:mark_file_invalidation_scheduled(TransferId, Chunk),
-                    invalidate_children_replicas(UserCtx, Children, MigrationProviderId, TransferId, AutoCleaningId),
-                    invalidate_file_replica_insecure(UserCtx, FileCtx3,
-                        MigrationProviderId, Offset + Chunk, TransferId, AutoCleaningId)
+    case transfer:is_ongoing(TransferId) of
+        true ->
+            {ok, Chunk} = application:get_env(?APP_NAME, ls_chunk_size),
+            case file_ctx:is_dir(FileCtx) of
+                {true, FileCtx2} ->
+                    case file_ctx:get_file_children(FileCtx2, UserCtx, Offset, Chunk) of
+                        {Children, _FileCtx3} when length(Children) < Chunk ->
+                            transfer:mark_file_invalidation_scheduled(TransferId, length(Children)),
+                            invalidate_children_replicas(UserCtx, Children, MigrationProviderId, TransferId, AutoCleaningId),
+                            transfer:mark_file_invalidation_finished(TransferId, 1),
+                            #provider_response{status = #status{code = ?OK}};
+                        {Children, FileCtx3} ->
+                            transfer:mark_file_invalidation_scheduled(TransferId, Chunk),
+                            invalidate_children_replicas(UserCtx, Children, MigrationProviderId, TransferId, AutoCleaningId),
+                            invalidate_file_replica_insecure(UserCtx, FileCtx3,
+                                MigrationProviderId, Offset + Chunk, TransferId, AutoCleaningId)
+                    end;
+                {false, FileCtx2} ->
+                    case replica_finder:get_unique_blocks(FileCtx2) of
+                        {[], FileCtx3} ->
+                            {ReleasedSize, _FileCtx4} = file_ctx:get_local_storage_file_size(FileCtx3),
+                            Response = #provider_response{status = #status{code = ?OK}}
+                                = invalidate_fully_redundant_file_replica(UserCtx, FileCtx3),
+                            autocleaning:mark_released_file(AutoCleaningId, ReleasedSize),
+                            transfer:mark_file_invalidation_finished(TransferId, 1),
+                            Response;
+                        {_Other, FileCtx3} ->
+                            Response = invalidate_partially_unique_file_replica(UserCtx,
+                                FileCtx3, MigrationProviderId
+                            ),
+                            % todo VFS-3795
+                            transfer:mark_file_invalidation_finished(TransferId, 1),
+                            Response
+                    end
             end;
-        {false, FileCtx2} ->
-            case replica_finder:get_unique_blocks(FileCtx2) of
-                {[], FileCtx3} ->
-                    {ReleasedSize, _FileCtx4} = file_ctx:get_local_storage_file_size(FileCtx3),
-                    Response = #provider_response{status = #status{code = ?OK}}
-                        = invalidate_fully_redundant_file_replica(UserCtx, FileCtx3),
-                    autocleaning:mark_released_file(AutoCleaningId, ReleasedSize),
-                    transfer:mark_file_invalidation_finished(TransferId, 1),
-                    Response;
-                {_Other, FileCtx3} ->
-                    Response = invalidate_partially_unique_file_replica(UserCtx,
-                        FileCtx3, MigrationProviderId
-                    ),
-                    % todo VFS-3795
-                    transfer:mark_file_invalidation_finished(TransferId, 1),
-                    Response
-            end
+        false ->
+            #provider_response{status = #status{code = ?OK}}
     end.
 
 %%--------------------------------------------------------------------

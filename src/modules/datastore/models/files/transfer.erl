@@ -20,15 +20,15 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start/7, stop/1, get_status/1, get_info/1, get/1, init/0, cleanup/0,
-    decode_pid/1, encode_pid/1, get_controller/1, delete/1, delete_links/3, restart/2, restart/1, mark_cancelled_invalidation/1]).
+-export([start/7, cancel/1, get_status/1, get_info/1, get/1, init/0, cleanup/0,
+    decode_pid/1, encode_pid/1, get_controller/1, delete_links/3, restart/2, delete/1]).
 -export([mark_active/2, mark_completed/3, mark_failed/2,
     mark_active_invalidation/1, mark_completed_invalidation/2, mark_failed_invalidation/2,
     mark_file_transfer_scheduled/2, mark_file_transfer_finished/2,
     mark_data_transfer_scheduled/2, mark_data_transfer_finished/3,
     for_each_past_transfer/3, for_each_current_transfer/3, restart_unfinished_transfers/1,
     mark_file_invalidation_finished/2, mark_file_invalidation_scheduled/2,
-    mark_cancelled/1, should_continue/1, increase_failed_file_transfers/1]).
+    mark_cancelled/1, should_continue/1, increase_failed_file_transfers/1, mark_cancelled_invalidation/1, restart/1]).
 -export([list_transfers/2, is_ongoing/1, is_migrating/1, update/2]).
 
 %% datastore_model callbacks
@@ -275,8 +275,8 @@ delete(TransferId) ->
 %% Stop transfer
 %% @end
 %%--------------------------------------------------------------------
--spec stop(id()) -> ok | {error, term()}.
-stop(TransferId) ->
+-spec cancel(id()) -> ok | {error, term()}.
+cancel(TransferId) ->
     {ok, _} = transfer:mark_cancelled(TransferId),
     ok.
 
@@ -431,7 +431,7 @@ mark_failed_invalidation(TransferId, SpaceId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Marks replica invalidation as failed
+%% Marks replica invalidation as cancelled
 %% @end
 %%--------------------------------------------------------------------
 -spec mark_cancelled_invalidation(id()) -> {ok, id()} | {error, term()}.
@@ -439,7 +439,7 @@ mark_cancelled_invalidation(TransferId) ->
     transfer:update(TransferId, fun(T = #transfer{space_id = SpaceId}) ->
         ok = add_link(?PAST_TRANSFERS_KEY, TransferId, SpaceId),
         ok = delete_links(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId),
-        T#transfer{invalidation_status = failed}
+        T#transfer{invalidation_status = cancelled}
     end).
 
 %%--------------------------------------------------------------------
@@ -661,9 +661,14 @@ list_transfers(SpaceId, Ongoing) ->
 %%      invalidation hasn't finished.
 %% @end
 %%-------------------------------------------------------------------
--spec is_ongoing(transfer()) -> boolean().
-is_ongoing(Transfer) ->
-    is_transfer_ongoing(Transfer) orelse is_invalidation_ongoing(Transfer).
+-spec is_ongoing(transfer() | id() | undefined) -> boolean().
+is_ongoing(undefined) ->
+    true;
+is_ongoing(Transfer = #transfer{}) ->
+    is_transfer_ongoing(Transfer) orelse is_invalidation_ongoing(Transfer);
+is_ongoing(TransferId) ->
+    {ok, #document{value = Transfer}} = ?MODULE:get(TransferId),
+    is_ongoing(Transfer).
 
 %%-------------------------------------------------------------------
 %% @private

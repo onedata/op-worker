@@ -2233,8 +2233,6 @@ file_replication_failures_should_fail_whole_transfer(Config) ->
 
 replicate_big_dir(Config) ->
     ct:timetrap({minutes, 10}),
-    {ok, _} = application:ensure_all_started(worker_pool),
-    {ok, _} = worker_pool:start_sup_pool(?VERIFY_POOL, [{workers, 8}]),
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
@@ -2283,8 +2281,7 @@ replicate_big_dir(Config) ->
             {ok, 200, _, TransferStatus} ->
                 json_utils:decode_map(TransferStatus);
             Error -> Error
-        end, 600),
-    worker_pool:stop_pool(?VERIFY_POOL).
+        end, 600).
 
 replicate_big_file(Config) ->
     ct:timetrap({hours, 1}),
@@ -2329,8 +2326,6 @@ replicate_big_file(Config) ->
 
 invalidate_big_dir(Config) ->
     ct:timetrap({minutes, 10}),
-    {ok, _} = application:ensure_all_started(worker_pool),
-    {ok, _} = worker_pool:start_sup_pool(?VERIFY_POOL, [{workers, 8}]),
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
@@ -2376,8 +2371,7 @@ invalidate_big_dir(Config) ->
             {ok, 200, _, TransferStatus} ->
                 json_utils:decode_map(TransferStatus);
             Error -> Error
-        end, 600),
-    worker_pool:stop_pool(?VERIFY_POOL).
+        end, 600).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -2401,6 +2395,8 @@ init_per_suite(Config) ->
         NewConfig3 = initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2),
         NewConfig3
     end,
+    {ok, _} = application:ensure_all_started(worker_pool),
+    {ok, _} = worker_pool:start_sup_pool(?VERIFY_POOL, [{workers, 8}]),
     [
         {?ENV_UP_POSTHOOK, Posthook},
         {?LOAD_MODULES, [initializer, multi_provider_rest_test_SUITE]}
@@ -2410,6 +2406,7 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
+    true = worker_pool:stop_pool(?VERIFY_POOL),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     hackney:stop(),
     application:stop(ssl),
@@ -2605,14 +2602,14 @@ create_nested_directory_tree(Node, SessionId, [SubFilesNum], Root) ->
     create_dir(Node, SessionId, Root),
     lists:foreach(fun(N) ->
         FilePath = filename:join([Root, integer_to_binary(N)]),
-        worker_pool:cast(?VERIFY_POOL, {?MODULE, create_file, [Node, SessionId, FilePath]})
+        ok = worker_pool:cast(?VERIFY_POOL, {?MODULE, create_file, [Node, SessionId, FilePath]})
     end, lists:seq(1, SubFilesNum));
 create_nested_directory_tree(Node, SessionId, [SubDirsNum | Rest], Root) ->
     create_dir(Node, SessionId, Root),
     lists:foreach(fun(N) ->
         NBin = integer_to_binary(N),
         DirPath = filename:join([Root, NBin]),
-        worker_pool:cast(?VERIFY_POOL,
+        ok = worker_pool:cast(?VERIFY_POOL,
             {?MODULE, create_nested_directory_tree, [Node, SessionId, Rest, DirPath]}
         )
     end, lists:seq(1, SubDirsNum)).
@@ -2698,3 +2695,6 @@ remove_transfers(Config) ->
             end, Current ++ Past)
         end, SpaceIds)
     end, Workers).
+
+
+%todo test of cancel_invalidation
