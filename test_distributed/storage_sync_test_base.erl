@@ -772,7 +772,7 @@ create_file_in_dir_exceed_batch_update_test(Config, MountSpaceInRoot) ->
     assertImportTimes(W1, ?SPACE_ID),
 
     test_utils:mock_new(W1, storage_sync_changes, [passthrough]),
-
+    ok = file:write_file(StorageTestFileinDirPath1, ?TEST_DATA),
     enable_storage_update(Config),
 
     %% Check if files were imported on W1
