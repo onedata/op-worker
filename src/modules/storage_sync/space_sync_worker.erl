@@ -59,8 +59,6 @@
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
     start_pools(),
-    storage_sync_monitoring:start_lager_reporter(),
-    storage_sync_monitoring:start_ets_reporter(),
     schedule_check_strategy(),
     {ok, #{}}.
 
@@ -100,8 +98,6 @@ handle(_Request) ->
     Error :: timeout | term().
 cleanup() ->
     stop_pools(),
-    storage_sync_monitoring:delete_lager_reporter(),
-    storage_sync_monitoring:delete_ets_reporter(),
     ok.
 
 %%%===================================================================

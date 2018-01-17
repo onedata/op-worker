@@ -24,6 +24,7 @@
 -export([before_init/1, on_cluster_initialized/1]).
 -export([handle_cast/2]).
 -export([check_node_ip_address/0, renamed_models/0]).
+-export([modules_with_exometer/0, exometer_reporters/0]).
 
 -type model() :: datastore_model:model().
 -type record_version() :: datastore_model:record_version().
@@ -176,6 +177,24 @@ check_node_ip_address() ->
         ?alert_stacktrace("Cannot check external IP of node, defaulting to 127.0.0.1 - ~p:~p", [T, M]),
         {127, 0, 0, 1}
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of modules that register exometer reporters.
+%% @end
+%%--------------------------------------------------------------------
+-spec modules_with_exometer() -> list().
+modules_with_exometer() ->
+    [storage_sync_monitoring, fslogic_worker, helpers, session].
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of exometer reporters.
+%% @end
+%%--------------------------------------------------------------------
+-spec exometer_reporters() -> list().
+exometer_reporters() ->
+    [{exometer_report_rrd_ets, storage_sync_monitoring}].
 
 %%%===================================================================
 %%% Internal functions
