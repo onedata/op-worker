@@ -90,7 +90,8 @@ on_transfer_doc_change(#document{
     value = #transfer{status = cancelled}}
 )  ->
     transfer:mark_cancelled_invalidation(TransferId),
-    ok;on_transfer_doc_change(_ExistingTransfer) ->
+    ok;
+on_transfer_doc_change(_ExistingTransfer) ->
     ok.
 
 %%-------------------------------------------------------------------

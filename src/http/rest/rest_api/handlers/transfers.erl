@@ -84,7 +84,7 @@ delete_resource(Req, State) ->
 
     #{id := Id} = State2,
 
-    ok = transfer:stop(Id),
+    ok = transfer:cancel(Id),
     {true, Req2, State2}.
 
 %%%===================================================================
