@@ -78,7 +78,7 @@ listeners() -> node_manager:cluster_worker_listeners() ++ [
 %% @end
 %%--------------------------------------------------------------------
 -spec modules_with_args() -> Models :: [{atom(), [any()]}].
-modules_with_args() -> node_manager:cluster_worker_modules() ++ [
+modules_with_args() -> node_manager:cluster_worker_modules() ++ filter_turned_off_plugins([
     {session_manager_worker, [
         {supervisor_flags, session_manager_worker:supervisor_flags()},
         {supervisor_children_spec, session_manager_worker:supervisor_children_spec()}
@@ -91,7 +91,24 @@ modules_with_args() -> node_manager:cluster_worker_modules() ++ [
     {monitoring_worker, []},
     {fslogic_deletion_worker, []},
     {space_sync_worker, []}
-].
+]).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Filters node_manager_plugins that were turned off in app.config
+%% @end
+%%-------------------------------------------------------------------
+-spec filter_turned_off_plugins([{atom(), [any()]}]) -> [{atom(), [any()]}].
+filter_turned_off_plugins(PluginsConfig) ->
+    lists:filter(fun({Plugin, _PluginConfig}) ->
+        case application:get_env(?APP_NAME, Plugin, on) of
+            off ->
+                false;
+            _ ->
+                true
+        end
+    end, PluginsConfig).
 
 %%--------------------------------------------------------------------
 %% @doc

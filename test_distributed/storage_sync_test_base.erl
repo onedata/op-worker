@@ -710,7 +710,7 @@ create_file_in_dir_update_test(Config, MountSpaceInRoot) ->
 
 create_file_in_dir_exceed_batch_update_test(Config, MountSpaceInRoot) ->
     % in this test dir_batch_size is set in init_per_testcase to 2
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W1 | _] = ?config(op_worker_nodes, Config),
     W1MountPoint = get_host_mount_point(W1, Config),
     SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
 %%    SessId2 = ?config({session_id, {?USER, ?GET_DOMAIN(W2)}}, Config),
@@ -767,7 +767,7 @@ create_file_in_dir_exceed_batch_update_test(Config, MountSpaceInRoot) ->
     assertImportTimes(W1, ?SPACE_ID),
 
     test_utils:mock_new(W1, storage_sync_changes, [passthrough]),
-    ok = file:write_file(StorageTestFileinDirPath1, ?TEST_DATA),
+
     enable_storage_update(Config),
 
     %% Check if files were imported on W1
@@ -781,6 +781,9 @@ create_file_in_dir_exceed_batch_update_test(Config, MountSpaceInRoot) ->
         lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle5, 0, byte_size(?TEST_DATA))),
+    assert_num_results(History, ?assertHashChangedFun(?TEST_DIR2, true), 0),
+    assert_num_results(History, ?assertMtimeChangedFun(?TEST_DIR2, true), 0),
+    assert_num_results_gte(History, ?assertMtimeChangedFun(?TEST_DIR, true), 1),
 
     ?assertEqual(7, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
     ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
@@ -791,17 +794,14 @@ create_file_in_dir_exceed_batch_update_test(Config, MountSpaceInRoot) ->
     ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
     ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS),
     assertImportFinishTimeDefined(W1, ?SPACE_ID),
-    assertUpdateTimes(W1, ?SPACE_ID),
+    assertUpdateTimes(W1, ?SPACE_ID).
 
-    assert_num_results(History, ?assertHashChangedFun(?TEST_DIR2, true), 0),
-    assert_num_results(History, ?assertMtimeChangedFun(?TEST_DIR2, true), 0),
-    assert_num_results_gte(History, ?assertMtimeChangedFun(?TEST_DIR, true), 1).
 
 %%  TODO VFS-3966
 %%    %% Check if file was imported on W2
 %%    ?assertMatch({ok, #file_attr{}},
 %%        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}), 5 * ?ATTEMPTS),
-%%    {ok, Handle2} = ?assertMatch({ok, _},
+%%    {ok, Handle2} = ?assertMatch({ok, _},k
 %%        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}, read)),
 %%    ?assertMatch({ok, ?TEST_DATA},
 %%        lfm_proxy:read(W2, Handle2, 0, byte_size(?TEST_DATA))),
