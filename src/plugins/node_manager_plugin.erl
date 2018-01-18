@@ -79,7 +79,7 @@ listeners() -> node_manager:cluster_worker_listeners() ++ [
 %% @end
 %%--------------------------------------------------------------------
 -spec modules_with_args() -> Models :: [{atom(), [any()]}].
-modules_with_args() -> filter_turned_off_plugins([
+modules_with_args() -> filter_disabled_workers([
     {session_manager_worker, [
         {supervisor_flags, session_manager_worker:supervisor_flags()},
         {supervisor_children_spec, session_manager_worker:supervisor_children_spec()}
@@ -105,15 +105,12 @@ modules_with_args() -> filter_turned_off_plugins([
 %% Filters node_manager_plugins that were turned off in app.config
 %% @end
 %%-------------------------------------------------------------------
--spec filter_turned_off_plugins([{atom(), [any()]}]) -> [{atom(), [any()]}].
-filter_turned_off_plugins(PluginsConfig) ->
+-spec filter_disabled_workers([{atom(), [any()]}]) -> [{atom(), [any()]}].
+filter_disabled_workers(PluginsConfig) ->
+    DisabledWorkers = application:get_env(?APP_NAME, disabled_workers, []),
+    DisabledWorkersSet = sets:from_list(DisabledWorkers),
     lists:filter(fun({Plugin, _PluginConfig}) ->
-        case application:get_env(?APP_NAME, Plugin, on) of
-            off ->
-                false;
-            _ ->
-                true
-        end
+        not sets:is_element(Plugin, DisabledWorkersSet)
     end, PluginsConfig).
 
 %%--------------------------------------------------------------------
