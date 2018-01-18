@@ -16,6 +16,7 @@
 -behaviour(gen_server).
 
 -include("global_definitions.hrl").
+-include("http/http_common.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
@@ -23,6 +24,11 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
+
+% Definitions of reconnect intervals for provider connection.
+-define(INITIAL_RECONNECT_INTERVAL_SEC, 2).
+-define(RECONNECT_INTERVAL_INCREASE_RATE, 2).
+-define(MAX_RECONNECT_INTERVAL, timer:minutes(15)).
 
 %% API
 -export([start_link/4, init/4, send/2, send_async/2]).
@@ -118,35 +124,41 @@ init(Ref, Socket, Transport, _Opts) ->
 -spec init(session:id(), Hostname :: binary(), Port :: non_neg_integer(), Transport :: atom(), Timeout :: non_neg_integer()) ->
     no_return().
 init(SessionId, Hostname, Port, Transport, Timeout) ->
-    {ok, CaCertsDir} = application:get_env(?APP_NAME, cacerts_dir),
-    {ok, CaCertPems} = file_utils:read_files({dir, CaCertsDir}),
-    CaCerts = lists:map(fun cert_decoder:pem_to_der/1, CaCertPems),
-    TLSSettings = [
-        {certfile, oz_plugin:get_cert_file()},
-        {keyfile, oz_plugin:get_key_file()},
-        {cacerts, CaCerts}
-    ],
-    ?info("Connecting to ~p ~p", [Hostname, Port]),
-    {ok, Socket} = Transport:connect(binary_to_list(Hostname), Port, TLSSettings, Timeout),
-    ok = Transport:setopts(Socket, [binary, {active, once}, {packet, ?PACKET_VALUE}]),
+    {ok, Intervals} = application:get_env(
+        ?APP_NAME, providers_reconnect_intervals
+    ),
+    ProviderId = session_manager:session_id_to_provider_id(SessionId),
+    {NextReconnect, Interval} = maps:get(ProviderId, Intervals,
+        {timestamp_in_seconds(), ?INITIAL_RECONNECT_INTERVAL_SEC}
+    ),
+    case timestamp_in_seconds() >= NextReconnect of
+        false ->
+            ?debug("Discarding connection request to provider(~p) as the "
+                   "grace period has not passed yet.", [ProviderId]),
+            exit(normal);
+        true ->
+            try
+                init_provider_conn(
+                    SessionId, ProviderId, Hostname, Port, Transport, Timeout
+                )
+            of
+                State ->
+                    reset_reconnect_interval(Intervals, ProviderId),
+                    gen_server2:enter_loop(?MODULE, [], State, ?TIMEOUT)
+            catch
+                throw:incompatible_peer_op_version ->
+                    postpone_next_reconnect(Intervals, ProviderId, Interval),
+                    exit(normal);
+                Type:Reason  ->
+                    ?debug("Failed to connect to peer provider(~p) - ~p:~p. "
+                           "Next retry not sooner than ~p seconds.", [
+                        ProviderId, Type, Reason, Interval
+                    ]),
+                    postpone_next_reconnect(Intervals, ProviderId, Interval),
+                    exit(Reason)
+            end
+    end.
 
-    {Ok, Closed, Error} = Transport:messages(),
-    Certificate = get_cert(Socket),
-
-    session_manager:reuse_or_create_provider_session(SessionId, provider_outgoing, #user_identity{
-        provider_id = session_manager:session_id_to_provider_id(SessionId)}, self()),
-
-    ok = proc_lib:init_ack({ok, self()}),
-    gen_server2:enter_loop(?MODULE, [], #state{
-        socket = Socket,
-        transport = Transport,
-        ok = Ok,
-        closed = Closed,
-        error = Error,
-        certificate = Certificate,
-        connection_type = outgoing,
-        peer_type = provider_incoming
-    }, ?TIMEOUT).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -557,3 +569,121 @@ fill_proxy_info(Msg, SessionId) ->
         _ ->
             Msg
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Attempt to connect to peer provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec init_provider_conn(session:id(), od_provider:id(), Hostname :: binary(),
+    Port :: non_neg_integer(), Transport :: atom(),
+    Timeout :: non_neg_integer()) -> #state{} | no_return().
+init_provider_conn(SessionId, ProviderId, Hostname, Port, Transport, Timeout) ->
+    assert_version_compatibility(Hostname, ProviderId),
+
+    {ok, CaCertsDir} = application:get_env(?APP_NAME, cacerts_dir),
+    {ok, CaCertPems} = file_utils:read_files({dir, CaCertsDir}),
+    CaCerts = lists:map(fun cert_decoder:pem_to_der/1, CaCertPems),
+    TLSSettings = [
+        {certfile, oz_plugin:get_cert_file()},
+        {keyfile, oz_plugin:get_key_file()},
+        {cacerts, CaCerts}
+    ],
+    ?info("Connecting to ~p ~p", [Hostname, Port]),
+    {ok, Socket} = Transport:connect(binary_to_list(Hostname), Port, TLSSettings, Timeout),
+    ok = Transport:setopts(Socket, [binary, {active, once}, {packet, ?PACKET_VALUE}]),
+
+    {Ok, Closed, Error} = Transport:messages(),
+    Certificate = get_cert(Socket),
+
+    session_manager:reuse_or_create_provider_session(SessionId,
+        provider_outgoing, #user_identity{provider_id = ProviderId}, self()
+    ),
+
+    ok = proc_lib:init_ack({ok, self()}),
+    #state{
+        socket = Socket,
+        transport = Transport,
+        ok = Ok,
+        closed = Closed,
+        error = Error,
+        certificate = Certificate,
+        connection_type = outgoing,
+        peer_type = provider_incoming
+    }.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Assert that peer provider is of compatible version.
+%% @end
+%%--------------------------------------------------------------------
+-spec assert_version_compatibility(binary() | string(), od_provider:id()) ->
+    ok | no_return().
+assert_version_compatibility(Hostname, ProviderId) when is_binary(Hostname)->
+    assert_version_compatibility(binary_to_list(Hostname), ProviderId);
+assert_version_compatibility(Hostname, ProviderId) ->
+    {ok, 200, _RespHeaders, ResponseBody} = http_client:get(
+        "https://" ++ Hostname ++ ?provider_version_path, #{}, <<>>, [insecure]
+    ),
+    PeerProviderVersion = binary_to_list(ResponseBody),
+    {ok, SupportedProviderVersions} = application:get_env(
+        ?APP_NAME, supported_op_versions
+    ),
+    case lists:member(PeerProviderVersion, SupportedProviderVersions) of
+        true ->
+            ok;
+        false ->
+            ?error("Aborting connection request to peer provider(~p) "
+                   "because of incompatible versions ~p. Supported ones: ~p.",
+                [ProviderId, PeerProviderVersion, SupportedProviderVersions]
+            ),
+            throw(incompatible_peer_op_version)
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc @private
+%% Postpones the time of next reconnect in an increasing manner,
+%% according to RECONNECT_INTERVAL_INCREASE_RATE.
+%% @end
+%%--------------------------------------------------------------------
+-spec postpone_next_reconnect(Intervals :: #{},
+    ProviderId :: od_provider:id(), Interval :: integer()) -> integer().
+postpone_next_reconnect(Intervals, ProviderId, Interval) ->
+    NewInterval = min(
+        Interval * ?RECONNECT_INTERVAL_INCREASE_RATE,
+        ?MAX_RECONNECT_INTERVAL
+    ),
+    NewIntervals = Intervals#{
+        ProviderId => {timestamp_in_seconds() + Interval, NewInterval}
+    },
+    application:set_env(?APP_NAME, providers_reconnect_intervals, NewIntervals),
+    NewInterval.
+
+
+%%--------------------------------------------------------------------
+%% @doc @private
+%% Resets the reconnect interval to its initial value and next reconnect to
+%% current time (which means next reconnect can be performed immediately).
+%% @end
+%%--------------------------------------------------------------------
+-spec reset_reconnect_interval(Intervals :: #{},
+    ProviderId :: od_provider:id()) -> ok.
+reset_reconnect_interval(Intervals, ProviderId) ->
+    NewIntervals = Intervals#{
+        ProviderId => {timestamp_in_seconds(), ?INITIAL_RECONNECT_INTERVAL_SEC}
+    },
+    application:set_env(?APP_NAME, providers_reconnect_intervals, NewIntervals).
+
+
+%%--------------------------------------------------------------------
+%% @doc @private
+%% Returns current timestamp rounded to seconds.
+%% @end
+%%--------------------------------------------------------------------
+-spec timestamp_in_seconds() -> integer().
+timestamp_in_seconds() ->
+    {MegaSeconds, Seconds, MicroSeconds} = erlang:timestamp(),
+    MegaSeconds * 1000000 + Seconds + round(MicroSeconds / 1000000).
