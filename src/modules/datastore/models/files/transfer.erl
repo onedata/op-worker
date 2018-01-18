@@ -181,26 +181,11 @@ record_upgrade(2, {?MODULE, FileUuid, SpaceId, Path, CallBack, TransferStatus,
     BytesToTransfer, BytesTransferred, FilesToInvalidate, FilesInvalidated,
     StartTime, LastUpdate, MinHist, HrHist, DyHist}
 ) ->
-    {3, #transfer{
-        file_uuid = FileUuid,
-        space_id = SpaceId,
-        user_id = undefined,
-        path = Path,
-        callback = CallBack,
-        status = TransferStatus,
-        invalidation_status = InvalidationStatus,
-        source_provider_id = SourceProviderId,
-        target_provider_id = TargetProviderId,
-        invalidate_source_replica = InvalidateSourceReplica,
-        pid = Pid,
-        files_to_transfer = FilesToTransfer,
-        files_transferred = FilesTransferred,
-        bytes_to_transfer = BytesToTransfer,
-        bytes_transferred = BytesTransferred,
-        files_to_invalidate = FilesToInvalidate,
-        files_invalidated = FilesInvalidated,
-        start_time = StartTime,
-        finish_time = LastUpdate,
+    {3,  {?MODULE, FileUuid, SpaceId, undefined, Path, CallBack, TransferStatus,
+        InvalidationStatus, SourceProviderId, TargetProviderId,
+        InvalidateSourceReplica, Pid, FilesToTransfer, FilesTransferred,
+        BytesToTransfer, BytesTransferred, FilesToInvalidate, FilesInvalidated,
+        StartTime, LastUpdate,
         % There are three changes in histograms:
         %   1) They are now maps #{ProviderId => Histogram}, where ProviderId is
         %       the provider FROM which the amount of data expressed in the
@@ -212,11 +197,16 @@ record_upgrade(2, {?MODULE, FileUuid, SpaceId, Path, CallBack, TransferStatus,
         %       track in histograms.
         % As there is no way to deduce source providers, older transfers will
         % only have one histogram accessible under target provider id.
-        last_update = #{TargetProviderId => LastUpdate},
-        min_hist = #{TargetProviderId => lists:duplicate(60 div ?FIVE_SEC_TIME_WINDOW, 0)},
-        hr_hist = #{TargetProviderId => MinHist},
-        dy_hist = #{TargetProviderId => HrHist},
-        mth_hist = #{TargetProviderId => DyHist}
+        % last_update
+        #{TargetProviderId => LastUpdate},
+        % min_hist
+        #{TargetProviderId => lists:duplicate(60 div ?FIVE_SEC_TIME_WINDOW, 0)},
+        %hr_hist
+        #{TargetProviderId => MinHist},
+        % dy_hist
+        #{TargetProviderId => HrHist},
+        % mth_hist
+        #{TargetProviderId => DyHist}
     }};
 record_upgrade(3, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, Status,
     InvalidationStatus, SourceProviderId, TargetProviderId,
