@@ -179,7 +179,7 @@ check_strategies(SpaceIds) ->
             {ok, #document{value = #space_storage{storage_ids = StorageIds}}} ->
                 check_strategies(SpaceId, StorageIds);
             _ ->
-                storage_sync_monitoring:ensure_all_metrics_stopped(SpaceId)
+                ok
         end
     end, SpaceIds).
 

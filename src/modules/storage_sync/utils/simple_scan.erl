@@ -27,7 +27,7 @@
 -export([run/1, maybe_import_storage_file_and_children/1,
     maybe_import_storage_file/1, import_children/5,
     handle_already_imported_file/3, generate_jobs_for_importing_children/4,
-    import_regular_subfiles/1, increase_files_to_handle_counter/3]).
+    import_regular_subfiles/1, import_file_safe/1, import_file/1]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -41,10 +41,8 @@ run(Job = #space_strategy_job{
         space_id := SpaceId,
         storage_file_ctx := StorageFileCtx
 }}) when StorageFileCtx =/= undefined ->
-
-    Module = storage_sync_utils:module(Job),
     storage_sync_monitoring:update_queue_length_spirals(SpaceId, -1),
-    delegate(Module, maybe_import_storage_file_and_children, [Job], 1);
+    maybe_import_storage_file_and_children(Job);
 run(Job = #space_strategy_job{
     data = Data = #{
         parent_ctx := ParentCtx,
@@ -102,7 +100,8 @@ maybe_import_storage_file_and_children(Job0 = #space_strategy_job{
             space_strategy:update_job_data(mtime, StorageMtime, Job2);
         _ -> Job2
     end,
-    SubJobs = import_children(Job3, Type, Offset, FileCtx, ?DIR_BATCH),
+    Module = storage_sync_utils:module(Job3),
+    SubJobs = delegate(Module, import_children, [Job3, Type, Offset, FileCtx, ?DIR_BATCH], 5),
     {LocalResult, SubJobs}.
 
 %%--------------------------------------------------------------------
@@ -141,7 +140,8 @@ import_children(Job = #space_strategy_job{
     data = #{
         max_depth := MaxDepth,
         storage_file_ctx := StorageFileCtx,
-        mtime := Mtime
+        mtime := Mtime,
+        space_id := SpaceId
     }},
     ?DIRECTORY_TYPE, Offset, FileCtx, BatchSize
 ) when MaxDepth > 0 ->
@@ -151,17 +151,18 @@ import_children(Job = #space_strategy_job{
         storage_file_ctx:get_children_ctxs_batch(StorageFileCtx, Offset, BatchSize),
     {BatchHash, ChildrenStorageCtxsBatch2} =
         storage_sync_changes:count_files_attrs_hash(ChildrenStorageCtxsBatch1),
-    SubJobs = {FilesJobs, DirsJobs} = generate_jobs_for_importing_children(Job, Offset,
+    {FilesJobs, DirsJobs} = generate_jobs_for_importing_children(Job, Offset,
         FileCtx, ChildrenStorageCtxsBatch2),
+    FilesToHandleNum = length(FilesJobs) + length(DirsJobs),
+    storage_sync_monitoring:update_queue_length_spirals(SpaceId, FilesToHandleNum),
+    storage_sync_monitoring:update_files_to_sync_counter(SpaceId, FilesToHandleNum),
 
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    increase_files_to_handle_counter(Job, FileCtx, SubJobs),
     FilesResults = import_regular_subfiles(FilesJobs),
 
     case StrategyType:strategy_merge_result(FilesJobs, FilesResults) of
         ok ->
             FileUuid = file_ctx:get_uuid_const(FileCtx),
-            case storage_sync_utils:all_subfiles_imported(DirsJobs, FileUuid) of
+            case storage_sync_utils:all_children_imported(DirsJobs, FileUuid) of
                 true ->
                     storage_sync_info:update(FileUuid, Mtime, BatchKey, BatchHash);
                 _ ->
@@ -184,31 +185,6 @@ import_regular_subfiles(FilesJobs) ->
         worker_pool:call(?STORAGE_SYNC_FILE_POOL_NAME, {?MODULE, run, [Job]},
             worker_pool:default_strategy(), ?FILES_IMPORT_TIMEOUT)
     end, FilesJobs).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Increases files_to_import counter basing on number of SubJobs.
-%% @end
-%%-------------------------------------------------------------------
--spec increase_files_to_handle_counter(space_strategy:job(), file_ctx:ctx(),
-    {[space_strategy:job()], [space_strategy:job()]}) -> ok.
-increase_files_to_handle_counter(#space_strategy_job{
-    strategy_type = StrategyType,
-    data = #{
-        space_id := SpaceId
-    }},
-    FileCtx, {FilesJobs, DirJobs}
-) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    FilesToImportNum = case storage_sync_utils:all_subfiles_imported(DirJobs, FileUuid) of
-        true ->
-            length(FilesJobs) + length(DirJobs);
-        _ ->
-            length(FilesJobs) + length(DirJobs) - 1 %not counting base directory
-
-    end,
-    storage_sync_monitoring:update_queue_length_spirals(SpaceId, length(FilesJobs) + length(DirJobs)),
-    storage_sync_monitoring:update_to_do_counter(SpaceId, StrategyType, FilesToImportNum).
 
 %%%===================================================================
 %%% Internal functions
@@ -249,7 +225,6 @@ maybe_import_file_with_existing_metadata(Job = #space_strategy_job{
     end.
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% Imports given storage file to onedata filesystem.
 %% @end
@@ -257,14 +232,19 @@ maybe_import_file_with_existing_metadata(Job = #space_strategy_job{
 -spec import_file_safe(space_strategy:job()) -> {ok, file_ctx:ctx()}| no_return().
 import_file_safe(Job = #space_strategy_job{
     data = #{
+        space_id := SpaceId,
         file_name := FileName,
         parent_ctx := ParentCtx
 }}) ->
     try
-        import_file(Job)
+        Result = ?MODULE:import_file(Job),
+        storage_sync_monitoring:increase_imported_files_spirals(SpaceId),
+        storage_sync_monitoring:increase_imported_files_counter(SpaceId),
+        Result
     catch
         Error:Reason ->
             full_update:delete_imported_file(FileName, ParentCtx),
+            storage_sync_monitoring:increase_failed_file_imports_counter(SpaceId),
             erlang:Error(Reason)
     end.
 
@@ -276,7 +256,6 @@ import_file_safe(Job = #space_strategy_job{
 %%--------------------------------------------------------------------
 -spec import_file(space_strategy:job()) -> {ok, file_ctx:ctx()}| no_return().
 import_file(#space_strategy_job{
-    strategy_type = StrategyType,
     strategy_args = Args,
     data = #{
         file_name := FileName,
@@ -317,9 +296,6 @@ import_file(#space_strategy_job{
         _ ->
             ok
     end,
-    storage_sync_monitoring:increase_imported_files_spirals(SpaceId),
-    storage_sync_monitoring:increase_imported_files_counter(SpaceId),
-    storage_sync_monitoring:update_to_do_counter(SpaceId, StrategyType, -1),
     StorageFileId = SFMHandle#sfm_handle.file,
     ?debug("Import storage file ~p", [{StorageFileId, CanonicalPath}]),
     {ok, FileCtx}.
@@ -488,9 +464,8 @@ new_job(Job, Data, StorageFileCtx) ->
 -spec handle_already_imported_file(space_strategy:job(), #file_attr{},
     file_ctx:ctx()) -> {ok, space_strategy:job()}.
 handle_already_imported_file(Job = #space_strategy_job{
-    strategy_type = StrategyType,
     strategy_args = Args,
-    data = Data = #{
+    data = #{
         space_id := SpaceId,
         storage_file_ctx := StorageFileCtx
 }}, FileAttr, FileCtx) ->
@@ -498,22 +473,12 @@ handle_already_imported_file(Job = #space_strategy_job{
     SyncAcl = maps:get(sync_acl, Args, false),
     try
         {#statbuf{st_mode = Mode}, StorageFileCtx2} = storage_file_ctx:get_stat_buf(StorageFileCtx),
-        maybe_update_attrs(FileAttr, FileCtx, StorageFileCtx2, Mode, SpaceId, SyncAcl)
+        maybe_update_attrs(FileAttr, FileCtx, StorageFileCtx2, Mode, SpaceId, SyncAcl),
+        storage_sync_monitoring:increase_updated_files_spirals(SpaceId),
+        storage_sync_monitoring:increase_updated_files_counter(SpaceId)
     catch
-        error:?ENOENT ->
-            ok
-    end,
-
-    case file_ctx:is_dir(FileCtx) of
-        {true, _} ->
-            case maps:get(dir_offset, Data, 0) of
-                0 ->
-                    storage_sync_monitoring:update_to_do_counter(SpaceId, StrategyType, -1);
-                _ ->
-                    ok
-            end;
-        _ ->
-            storage_sync_monitoring:update_to_do_counter(SpaceId, StrategyType, -1)
+        _:_ ->
+            storage_sync_monitoring:increase_failed_file_updates_counter(SpaceId)
     end,
     {ok, Job}.
 

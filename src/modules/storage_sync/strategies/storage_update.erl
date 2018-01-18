@@ -23,13 +23,13 @@
 %%%===================================================================
 %%% Types
 %%%===================================================================
-
+-type state() :: not_started | in_progress | finished.
 %%%===================================================================
 %%% Exports
 %%%===================================================================
 
 %% Types
--export_type([]).
+-export_type([state/0]).
 
 %% space_strategy_behaviour callbacks
 -export([available_strategies/0, strategy_init_jobs/3, strategy_handle_job/1,
@@ -38,7 +38,7 @@
 ]).
 
 %%simple_scan callbacks
--export([handle_already_imported_file/3, maybe_import_storage_file_and_children/1]).
+-export([handle_already_imported_file/3, import_children/5]).
 
 %% API
 -export([start/7]).
@@ -105,9 +105,10 @@ strategy_init_jobs(no_update, _, _) ->
     [];
 strategy_init_jobs(_, _, #{import_finish_time := undefined}) ->
     []; % import hasn't been finished yet
-strategy_init_jobs(_, Args, Data = #{last_update_start_time := undefined}) ->
+strategy_init_jobs(_, Args, Data = #{last_update_start_time := undefined, space_id := SpaceId}) ->
     % it will be first update
-    CurrentTimestamp =time_utils:cluster_time_milli_seconds(),
+    CurrentTimestamp = time_utils:cluster_time_seconds(),
+    ?debug("Starting storage_update for space: ~p at time ~p", [SpaceId, CurrentTimestamp]),
     init_update_job(CurrentTimestamp, Args, Data);
 strategy_init_jobs(simple_scan, _, #{last_update_finish_time := undefined}) ->
     []; %update is in progress
@@ -115,13 +116,15 @@ strategy_init_jobs(simple_scan,
     Args = #{scan_interval := ScanIntervalSeconds},
     Data = #{
         last_update_start_time := LastUpdateStartTime,
-        last_update_finish_time := LastUpdateFinishTime
+        last_update_finish_time := LastUpdateFinishTime,
+        space_id := SpaceId
 }) ->
-    CurrentTimestamp =time_utils:cluster_time_milli_seconds(),
+    CurrentTimestamp = time_utils:cluster_time_seconds(),
     case should_init_update_job(LastUpdateStartTime, LastUpdateFinishTime,
         ScanIntervalSeconds, CurrentTimestamp)
     of
         true ->
+            ?debug("Starting storage_update for space: ~p at time ~p", [SpaceId, CurrentTimestamp]),
             init_update_job(CurrentTimestamp, Args, Data);
         false ->
             []
@@ -171,12 +174,27 @@ strategy_merge_result(#space_strategy_job{
         space_id := SpaceId,
         storage_id := StorageId
 }}, ok, ok) ->
-    update_last_update_finish_time_if_update_finished(SpaceId, StorageId);
-strategy_merge_result(_Job, Error, ok) ->
+    update_last_update_finish_time_if_update_is_finished(SpaceId, StorageId);
+strategy_merge_result(#space_strategy_job{
+    data = #{
+        space_id := SpaceId,
+        storage_id := StorageId
+}}, Error, ok) ->
+    update_last_update_finish_time_if_update_is_finished(SpaceId, StorageId),
     Error;
-strategy_merge_result(_Job, ok, Error) ->
+strategy_merge_result(#space_strategy_job{
+    data = #{
+        space_id := SpaceId,
+        storage_id := StorageId
+}}, ok, Error) ->
+    update_last_update_finish_time_if_update_is_finished(SpaceId, StorageId),
     Error;
-strategy_merge_result(_Job, {error, Reason1}, {error, Reason2}) ->
+strategy_merge_result(#space_strategy_job{
+    data = #{
+        space_id := SpaceId,
+        storage_id := StorageId
+}}, {error, Reason1}, {error, Reason2}) ->
+    update_last_update_finish_time_if_update_is_finished(SpaceId, StorageId),
     {error, [Reason1, Reason2]}.
 
 %%--------------------------------------------------------------------
@@ -198,7 +216,6 @@ worker_pools_config() -> [
 -spec main_worker_pool() -> worker_pool:name().
 main_worker_pool() ->
     ?STORAGE_SYNC_DIR_POOL_NAME.
-
 
 %%===================================================================
 %% API functions
@@ -232,35 +249,6 @@ start(SpaceId, StorageId, ImportFinishTime, LastUpdateStartTime, LastUpdateFinis
 %%===================================================================
 %% simple_scan callbacks
 %%===================================================================
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Imports file associated with SFMHandle that hasn't been imported yet.
-%% File may be space's dir.
-%% @end
-%%--------------------------------------------------------------------
--spec maybe_import_storage_file_and_children(space_strategy:job()) ->
-    {space_strategy:job_result(), [space_strategy:job()]}.
-maybe_import_storage_file_and_children(Job0 = #space_strategy_job{
-    data = #{storage_file_ctx := StorageFileCtx0}
-}) ->
-    {#statbuf{
-        st_mtime = StorageMtime,
-        st_mode = Mode
-    }, StorageFileCtx1} = storage_file_ctx:get_stat_buf(StorageFileCtx0),
-    Job1 = space_strategy:update_job_data(storage_file_ctx, StorageFileCtx1, Job0),
-    {LocalResult, FileCtx, Job2} = simple_scan:maybe_import_storage_file(Job1),
-    Data2 = Job2#space_strategy_job.data,
-    Offset = maps:get(dir_offset, Data2, 0),
-    Job3 = case Offset of
-        0 ->
-            %remember mtime to save after importing all subfiles
-            space_strategy:update_job_data(mtime, StorageMtime, Job2);
-        _ -> Job2
-    end,
-    SubJobs = import_children(Job3, file_meta:type(Mode), Offset, FileCtx, ?DIR_BATCH),
-    {LocalResult, SubJobs}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -304,7 +292,8 @@ import_children(Job = #space_strategy_job{
     data = Data0 = #{
         max_depth := MaxDepth,
         storage_file_ctx := StorageFileCtx,
-        mtime := Mtime
+        mtime := Mtime,
+        space_id := SpaceId
     }},
     ?DIRECTORY_TYPE, Offset, FileCtx, BatchSize
 ) when MaxDepth > 0 ->
@@ -319,16 +308,18 @@ import_children(Job = #space_strategy_job{
                     storage_sync_utils:take_children_storage_ctxs_for_batch(BatchKey, Data1),
                 {BatchHash0, ChildrenStorageCtxsBatch0, Data2}
         end,
-    SubJobs = {FilesJobs, DirsJobs} = simple_scan:generate_jobs_for_importing_children(
+    {FilesJobs, DirsJobs} = simple_scan:generate_jobs_for_importing_children(
         Job#space_strategy_job{data = Data}, Offset, FileCtx, ChildrenStorageCtxsBatch),
+    FilesToHandleNum = length(FilesJobs) + length(DirsJobs),
+    storage_sync_monitoring:update_queue_length_spirals(SpaceId, FilesToHandleNum),
+    storage_sync_monitoring:update_files_to_sync_counter(SpaceId, FilesToHandleNum),
 
-    simple_scan:increase_files_to_handle_counter(Job, FileCtx, SubJobs),
     FilesResults = simple_scan:import_regular_subfiles(FilesJobs),
 
     case StrategyType:strategy_merge_result(FilesJobs, FilesResults) of
         ok ->
             FileUuid = file_ctx:get_uuid_const(FileCtx),
-            case storage_sync_utils:all_subfiles_imported(DirsJobs, FileUuid) of
+            case storage_sync_utils:all_children_imported(DirsJobs, FileUuid) of
                 true ->
                     storage_sync_info:update(FileUuid, Mtime, BatchKey, BatchHash);
                 _ ->
@@ -380,9 +371,10 @@ handle_already_imported_directory_changed_mtime(Job = #space_strategy_job{
 }, FileAttr, FileCtx) ->
     case maps:get(dir_offset, Data, 0) of
         0 ->
+            %todo usuwanie i update nie zadzialaja na tym samym skanie naisac test i sprawdzic
             full_update:run(Job, FileCtx);
         _ ->
-            simple_scan:handle_already_imported_file(Job, FileAttr, FileCtx)
+            simple_scan:handle_already_imported_file(Job, FileAttr, FileCtx)    %todo to obsluzymy i zliczymy ten deletowany
     end;
 handle_already_imported_directory_changed_mtime(Job = #space_strategy_job{
     strategy_args = #{delete_enable := false}
@@ -526,7 +518,7 @@ should_init_update_job(LastUpdateStartTime, LastUpdateFinishTime,
         true -> %update is in progress
             false;
         _ ->
-            LastUpdateFinishTime + timer:seconds(ScanIntervalSeconds) < CurrentTimestamp
+            LastUpdateFinishTime + ScanIntervalSeconds < CurrentTimestamp
     end.
 
 %%-------------------------------------------------------------------
@@ -541,8 +533,9 @@ init_update_job(CurrentTimestamp, Args = #{max_depth := MaxDepth}, Data = #{
     storage_id := StorageId
 }) ->
     space_strategies:update_last_update_start_time(SpaceId, StorageId, CurrentTimestamp),
+    storage_sync_monitoring:reset_sync_counters(SpaceId),
     storage_sync_monitoring:update_queue_length_spirals(SpaceId, 1),
-    storage_sync_monitoring:update_files_to_update_counter(SpaceId, 1),
+    storage_sync_monitoring:update_files_to_sync_counter(SpaceId, 1),
     [#space_strategy_job{
         strategy_name = simple_scan,
         strategy_args = Args,
@@ -555,12 +548,12 @@ init_update_job(CurrentTimestamp, Args = #{max_depth := MaxDepth}, Data = #{
 %% Checks if update has finished. If true, updates last_update_finish_time.
 %% @end
 %%-------------------------------------------------------------------
--spec update_last_update_finish_time_if_update_finished(od_space:id(), storage:id()) -> ok.
-update_last_update_finish_time_if_update_finished(SpaceId, StorageId) ->
-    case storage_sync_monitoring:update_in_progress(SpaceId) of
-        false ->
+-spec update_last_update_finish_time_if_update_is_finished(od_space:id(), storage:id()) -> ok.
+update_last_update_finish_time_if_update_is_finished(SpaceId, StorageId) ->
+    case storage_sync_monitoring:get_unhandled_files_value(SpaceId) of
+        0 ->
             {ok, _} = space_strategies:update_last_update_finish_time(SpaceId,
-                StorageId, time_utils:cluster_time_milli_seconds()),
+                StorageId, time_utils:cluster_time_seconds()),
             ok;
         _ ->
             ok
