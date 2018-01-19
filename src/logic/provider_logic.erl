@@ -36,6 +36,7 @@
 -export([is_subdomain_delegated/0, get_subdomain_delegation_ips/0]).
 -export([update_subdomain_delegation_ips/0]).
 -export([resolve_ips/1, resolve_ips/2]).
+-export([set_txt_record/2, remove_txt_record/1]).
 -export([zone_time_seconds/0]).
 -export([assert_zone_compatibility/0]).
 -export([verify_provider_identity/1, verify_provider_identity/2]).
@@ -98,6 +99,7 @@ get_protected_data(SessionId, ProviderId) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns current provider's data in a map.
+%% Useful for RPC calls from onepanel where od_provider record is not defined.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_as_map() -> map().
@@ -407,6 +409,35 @@ set_domain(Domain) ->
     ?ON_SUCCESS(Result, fun(_) ->
         gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id_or_undefined())
     end).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets TXT type dns record in onezone DNS.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_txt_record(Name :: binary(), Content :: binary()) -> ok | no_return().
+set_txt_record(Name, Content) ->
+    Data = #{<<"content">> => Content},
+    ok = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = create, data = Data,
+        gri = #gri{type = od_provider, id = oneprovider:get_id_or_undefined(),
+                   aspect = {dns_txt_record, Name}}
+    }).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes TXT type dns record in onezone DNS.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_txt_record(Name :: binary()) -> ok | no_return().
+remove_txt_record(Name) ->
+    ok = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = delete,
+        gri = #gri{type = od_provider, id = oneprovider:get_id_or_undefined(),
+            aspect = {dns_txt_record, Name}}
+    }).
 
 
 %%--------------------------------------------------------------------
