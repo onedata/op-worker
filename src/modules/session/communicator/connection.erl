@@ -417,6 +417,12 @@ handle_handshake(State = #state{certificate = Cert, socket = Sock,
 %%--------------------------------------------------------------------
 -spec report_handshake_error(Sock :: ssl:socket(), Transp :: module(), Error :: term()) ->
     ok.
+report_handshake_error(Sock, Transp, incompatible_client_version) ->
+    send_server_message(Sock, Transp, #server_message{
+        message_body = #handshake_response{
+            status = 'INCOMPATIBLE_CLIENT_VERSION'
+        }
+    });
 report_handshake_error(Sock, Transp, {badmatch, {error, Error}}) ->
     report_handshake_error(Sock, Transp, Error);
 report_handshake_error(Sock, Transp, {Code, Error, _Description}) when is_integer(Code) ->
@@ -624,22 +630,30 @@ init_provider_conn(SessionId, ProviderId, Hostname, Port, Transport, Timeout) ->
 assert_version_compatibility(Hostname, ProviderId) when is_binary(Hostname)->
     assert_version_compatibility(binary_to_list(Hostname), ProviderId);
 assert_version_compatibility(Hostname, ProviderId) ->
-    {ok, 200, _RespHeaders, ResponseBody} = http_client:get(
-        "https://" ++ Hostname ++ ?provider_version_path, #{}, <<>>, [insecure]
-    ),
-    PeerProviderVersion = binary_to_list(ResponseBody),
     {ok, SupportedProviderVersions} = application:get_env(
         ?APP_NAME, supported_op_versions
     ),
-    case lists:member(PeerProviderVersion, SupportedProviderVersions) of
-        true ->
-            ok;
-        false ->
-            ?error("Aborting connection request to peer provider(~p) "
-                   "because of incompatible versions ~p. Supported ones: ~p.",
-                [ProviderId, PeerProviderVersion, SupportedProviderVersions]
-            ),
-            throw(incompatible_peer_op_version)
+    {ok, Code, _RespHeaders, ResponseBody} = http_client:get(
+        "https://" ++ Hostname ++ ?provider_version_path, #{}, <<>>, [insecure]
+    ),
+    case Code of
+        200 ->
+            PeerProviderVersion = binary_to_list(ResponseBody),
+            case lists:member(PeerProviderVersion, SupportedProviderVersions) of
+                false ->
+                    ?error("Aborting connection request to peer provider(~p) "
+                    "because of incompatible versions ~p. Supported ones: ~p.",
+                        [ProviderId, PeerProviderVersion,
+                            SupportedProviderVersions]
+                    ),
+                    throw(incompatible_peer_op_version);
+                true ->
+                    ok
+            end;
+        _ ->
+            ?debug("Exiting due to inability to check Onezone version before "
+                   "attempting conection."),
+            throw(cannot_check_peer_op_version)
     end.
 
 

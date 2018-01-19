@@ -195,48 +195,70 @@ ensure_connection_running() ->
 %%--------------------------------------------------------------------
 -spec start_provider_connection() -> ok.
 start_provider_connection() ->
-    {ok, 200, _RespHeaders, ResponseBody} = http_client:get(
+    assert_zone_compatibility(),
+    critical_section:run(subscriptions_wss, fun() ->
+        case timestamp_in_seconds() >= get_next_reconnect() of
+            false ->
+                ?debug("Discarding subscriptions connection request as the "
+                "grace period has not passed yet.");
+            true ->
+                Result = try
+                    case subscription_wss:start_link() of
+                        {ok, Pid} ->
+                            ?info("Subscriptions connection started ~p", [Pid]),
+                            ok;
+                        {error, R1} ->
+                            {error, R1}
+                    end
+                catch
+                    E:R2 ->
+                        {E, R2}
+                end,
+                case Result of
+                    ok ->
+                        reset_reconnect_interval();
+                    {Type, Reason} ->
+                        Interval = postpone_next_reconnect(),
+                        ?debug("Subscriptions connection failed to start - ~p:~p. "
+                        "Next retry not sooner than ~p seconds.", [
+                            Type, Reason, Interval
+                        ])
+                end
+        end
+    end),
+    ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc @private
+%% Check compatibility of Onezone and exit if it is not compatible.
+%% @end
+%%--------------------------------------------------------------------
+-spec assert_zone_compatibility() -> ok | no_return().
+assert_zone_compatibility() ->
+    {ok, SupportedZoneVersions} = application:get_env(
+        ?APP_NAME, supported_oz_versions
+    ),
+    {ok, Code, _RespHeaders, ResponseBody} = http_client:get(
         oneprovider:get_oz_url() ++ "/get_zone_version", #{}, <<>>, [insecure]
     ),
-    ZoneVersion = binary_to_list(ResponseBody),
-    {ok, SupportedZoneVersions} = application:get_env(?APP_NAME, supported_oz_versions),
-    case lists:member(ZoneVersion, SupportedZoneVersions) of
-        false ->
-            ?critical("Exiting due to connection attempt with unsupported version "
-                      "of Onezone: ~p. Supported ones: ~p", [ZoneVersion, SupportedZoneVersions]),
-            init:stop();
-        true ->
-            critical_section:run(subscriptions_wss, fun() ->
-                case timestamp_in_seconds() >= get_next_reconnect() of
-                    false ->
-                        ?debug("Discarding subscriptions connection request as the "
-                        "grace period has not passed yet.");
-                    true ->
-                        Result = try
-                            case subscription_wss:start_link() of
-                                {ok, Pid} ->
-                                    ?info("Subscriptions connection started ~p", [Pid]),
-                                    ok;
-                                {error, R1} ->
-                                    {error, R1}
-                            end
-                        catch
-                            E:R2 ->
-                                {E, R2}
-                        end,
-                        case Result of
-                            ok ->
-                                reset_reconnect_interval();
-                            {Type, Reason} ->
-                                Interval = postpone_next_reconnect(),
-                                ?debug("Subscriptions connection failed to start - ~p:~p. "
-                                "Next retry not sooner than ~p seconds.", [
-                                    Type, Reason, Interval
-                                ])
-                        end
-                end
-            end),
-            ok
+    case Code of
+        200 ->
+            ZoneVersion = binary_to_list(ResponseBody),
+            case lists:member(ZoneVersion, SupportedZoneVersions) of
+                false ->
+                    ?critical("Exiting due to connection attempt with unsupported "
+                              "version of Onezone: ~p. Supported ones: ~p", [
+                        ZoneVersion, SupportedZoneVersions
+                    ]),
+                    init:stop();
+                true ->
+                    ok
+            end;
+        _ ->
+            ?critical("Exiting due to inability to check Onezone version before "
+                      "attempting conection."),
+            init:stop()
     end.
 
 
