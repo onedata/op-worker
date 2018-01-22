@@ -293,12 +293,21 @@ mark_completed(TransferId) ->
 %%--------------------------------------------------------------------
 -spec mark_failed(id()) -> {ok, id()} | {error, term()}.
 mark_failed(TransferId) ->
-    {ok, _} = transfer:update(TransferId, fun(T = #transfer{space_id = SpaceId}) ->
+    {ok, _} = transfer:update(TransferId, fun(T = #transfer{
+        space_id = SpaceId,
+        invalidation_status = InvalidationStatus
+    }) ->
         ok = add_link(?PAST_TRANSFERS_KEY, TransferId, SpaceId),
         ok = delete_links(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId),
         {ok, T#transfer{
             status = failed,
-            finish_time = provider_logic:zone_time_seconds()
+            finish_time = provider_logic:zone_time_seconds(),
+            invalidation_status = case InvalidationStatus of
+                scheduled ->
+                    failed;
+                _ ->
+                    InvalidationStatus
+            end
         }}
     end).
 
@@ -428,7 +437,9 @@ mark_file_invalidation_finished(undefined, _FilesNum) ->
     {ok, undefined};
 mark_file_invalidation_finished(TransferId, FilesNum) ->
     update(TransferId, fun(Transfer) ->
+        CurrentTime = provider_logic:zone_time_seconds(),
         {ok, Transfer#transfer{
+            finish_time = CurrentTime,
             files_invalidated = Transfer#transfer.files_invalidated + FilesNum
         }}
     end).
@@ -445,7 +456,9 @@ mark_data_transfer_scheduled(undefined, _Bytes) ->
     {ok, undefined};
 mark_data_transfer_scheduled(TransferId, Bytes) ->
     update(TransferId, fun(Transfer) ->
+        CurrentTime = provider_logic:zone_time_seconds(),
         {ok, Transfer#transfer{
+            finish_time = CurrentTime,
             bytes_to_transfer = Transfer#transfer.bytes_to_transfer + Bytes
         }}
     end).
