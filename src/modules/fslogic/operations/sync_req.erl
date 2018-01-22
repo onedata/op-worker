@@ -148,11 +148,12 @@ schedule_file_replication(UserCtx, FileCtx, TargetProviderId, Callback) ->
 -spec schedule_file_replication(user_ctx:ctx(), file_ctx:ctx(),
     file_meta:path(), od_provider:id(), transfer:callback()) ->
     fslogic_worker:provider_response().
-schedule_file_replication(UserCtx, FileCtx, FilePath, TargerProviderId, Callback) ->
+schedule_file_replication(UserCtx, FileCtx, FilePath, TargetProviderId, Callback) ->
     SessionId = user_ctx:get_session_id(UserCtx),
     FileGuid = file_ctx:get_guid_const(FileCtx),
     {ok, TransferId} = transfer:start(
-        SessionId, FileGuid, FilePath, undefined, TargerProviderId, Callback, false
+        SessionId, FileGuid, FilePath, oneprovider:get_provider_id(),
+        TargetProviderId, Callback, false
     ),
     #provider_response{
         status = #status{code = ?OK},
