@@ -124,8 +124,10 @@ init(Ref, Socket, Transport, _Opts) ->
 -spec init(session:id(), Hostname :: binary(), Port :: non_neg_integer(), Transport :: atom(), Timeout :: non_neg_integer()) ->
     no_return().
 init(SessionId, Hostname, Port, Transport, Timeout) ->
-    {ok, Intervals} = application:get_env(
-        ?APP_NAME, providers_reconnect_intervals
+    % Map keeping reconnect interval and time between provider connection
+    % retries; needed to implement backoff algorithm
+    Intervals = application:get_env(
+        ?APP_NAME, providers_reconnect_intervals, #{}
     ),
     ProviderId = session_manager:session_id_to_provider_id(SessionId),
     {NextReconnect, Interval} = maps:get(ProviderId, Intervals,
@@ -138,20 +140,18 @@ init(SessionId, Hostname, Port, Transport, Timeout) ->
             exit(normal);
         true ->
             try
-                init_provider_conn(
+                State = init_provider_conn(
                     SessionId, ProviderId, Hostname, Port, Transport, Timeout
-                )
-            of
-                State ->
-                    reset_reconnect_interval(Intervals, ProviderId),
-                    gen_server2:enter_loop(?MODULE, [], State, ?TIMEOUT)
+                ),
+                reset_reconnect_interval(Intervals, ProviderId),
+                gen_server2:enter_loop(?MODULE, [], State, ?TIMEOUT)
             catch
                 throw:incompatible_peer_op_version ->
                     postpone_next_reconnect(Intervals, ProviderId, Interval),
                     exit(normal);
                 Type:Reason  ->
-                    ?debug("Failed to connect to peer provider(~p) - ~p:~p. "
-                           "Next retry not sooner than ~p seconds.", [
+                    ?warning("Failed to connect to peer provider(~p) - ~p:~p. "
+                             "Next retry not sooner than ~p seconds.", [
                         ProviderId, Type, Reason, Interval
                     ]),
                     postpone_next_reconnect(Intervals, ProviderId, Interval),
@@ -586,7 +586,7 @@ fill_proxy_info(Msg, SessionId) ->
     Port :: non_neg_integer(), Transport :: atom(),
     Timeout :: non_neg_integer()) -> #state{} | no_return().
 init_provider_conn(SessionId, ProviderId, Hostname, Port, Transport, Timeout) ->
-    assert_version_compatibility(Hostname, ProviderId),
+    assert_compatibility(Hostname, ProviderId),
 
     {ok, CaCertsDir} = application:get_env(?APP_NAME, cacerts_dir),
     {ok, CaCertPems} = file_utils:read_files({dir, CaCertsDir}),
@@ -625,34 +625,35 @@ init_provider_conn(SessionId, ProviderId, Hostname, Port, Transport, Timeout) ->
 %% Assert that peer provider is of compatible version.
 %% @end
 %%--------------------------------------------------------------------
--spec assert_version_compatibility(binary() | string(), od_provider:id()) ->
-    ok | no_return().
-assert_version_compatibility(Hostname, ProviderId) when is_binary(Hostname)->
-    assert_version_compatibility(binary_to_list(Hostname), ProviderId);
-assert_version_compatibility(Hostname, ProviderId) ->
-    {ok, SupportedProviderVersions} = application:get_env(
-        ?APP_NAME, supported_op_versions
+-spec assert_compatibility(binary(), od_provider:id()) -> ok | no_return().
+assert_compatibility(Hostname, ProviderId) ->
+    {ok, CompatibleProviderVersions} = application:get_env(
+        ?APP_NAME, compatible_op_versions
     ),
-    {ok, Code, _RespHeaders, ResponseBody} = http_client:get(
-        "https://" ++ Hostname ++ ?provider_version_path, #{}, <<>>, [insecure]
-    ),
+
+    URL = str_utils:format_bin("https://~s~s", [Hostname, ?provider_version_path]),
+    Response = http_client:get(URL, #{}, <<>>, [insecure]),
+    {Code, Body} = case Response of
+        {ok, RespCode, _RespHeaders, ResponseBody} ->
+            {RespCode, ResponseBody};
+        {error, Reason} ->
+            throw(Reason)
+    end,
+
     case Code of
         200 ->
-            PeerProviderVersion = binary_to_list(ResponseBody),
-            case lists:member(PeerProviderVersion, SupportedProviderVersions) of
-                false ->
-                    ?error("Aborting connection request to peer provider(~p) "
-                    "because of incompatible versions ~p. Supported ones: ~p.",
-                        [ProviderId, PeerProviderVersion,
-                            SupportedProviderVersions]
-                    ),
-                    throw(incompatible_peer_op_version);
+            PeerProviderVersion = binary_to_list(Body),
+            case lists:member(PeerProviderVersion, CompatibleProviderVersions) of
                 true ->
-                    ok
+                    ok;
+                false ->
+                    ?error("Discarding connection to provider ~p because of "
+                           "incompatible version (~s). Version must be one of: ~p",
+                        [ProviderId, PeerProviderVersion, CompatibleProviderVersions]
+                    ),
+                    throw(incompatible_peer_op_version)
             end;
         _ ->
-            ?debug("Exiting due to inability to check Onezone version before "
-                   "attempting conection."),
             throw(cannot_check_peer_op_version)
     end.
 
@@ -699,5 +700,4 @@ reset_reconnect_interval(Intervals, ProviderId) ->
 %%--------------------------------------------------------------------
 -spec timestamp_in_seconds() -> integer().
 timestamp_in_seconds() ->
-    {MegaSeconds, Seconds, MicroSeconds} = erlang:timestamp(),
-    MegaSeconds * 1000000 + Seconds + round(MicroSeconds / 1000000).
+    time_utils:system_time_seconds().

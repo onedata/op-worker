@@ -18,6 +18,7 @@
 -behaviour(worker_plugin_behaviour).
 
 -include("global_definitions.hrl").
+-include("http/http_common.hrl").
 -include("proto/common/credentials.hrl").
 -include("modules/subscriptions/subscriptions.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
@@ -236,24 +237,24 @@ start_provider_connection() ->
 %%--------------------------------------------------------------------
 -spec assert_zone_compatibility() -> ok | no_return().
 assert_zone_compatibility() ->
-    {ok, SupportedZoneVersions} = application:get_env(
-        ?APP_NAME, supported_oz_versions
+    {ok, CompatibleZoneVersions} = application:get_env(
+        ?APP_NAME, compatible_oz_versions
     ),
     {ok, Code, _RespHeaders, ResponseBody} = http_client:get(
-        oneprovider:get_oz_url() ++ "/get_zone_version", #{}, <<>>, [insecure]
+        oneprovider:get_oz_url() ++ ?zone_version_path, #{}, <<>>, [insecure]
     ),
     case Code of
         200 ->
             ZoneVersion = binary_to_list(ResponseBody),
-            case lists:member(ZoneVersion, SupportedZoneVersions) of
+            case lists:member(ZoneVersion, CompatibleZoneVersions) of
+                true ->
+                    ok;
                 false ->
                     ?critical("Exiting due to connection attempt with unsupported "
                               "version of Onezone: ~p. Supported ones: ~p", [
-                        ZoneVersion, SupportedZoneVersions
+                        ZoneVersion, CompatibleZoneVersions
                     ]),
-                    init:stop();
-                true ->
-                    ok
+                    init:stop()
             end;
         _ ->
             ?critical("Exiting due to inability to check Onezone version before "

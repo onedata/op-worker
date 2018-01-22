@@ -54,7 +54,7 @@
                         "setcookie": "test_cookie1"
                     },
                     "sys.config": {
-                        "supported_op_versions": ["16.09"],
+                        "compatible_op_versions": ["16.09"],
                         "cm_nodes": [
                             "cm"
                         ],
@@ -88,7 +88,7 @@
                         "setcookie": "test_cookie2"
                     },
                     "sys.config": {
-                        "supported_op_versions": ["16.09"],
+                        "compatible_op_versions": ["16.09"],
                         "cm_nodes": [
                             "cm"
                         ],

@@ -85,17 +85,19 @@ authenticate_using_certificate(_OtpCert) ->
 %%--------------------------------------------------------------------
 -spec assert_client_compatibility(string()) -> ok | no_return().
 assert_client_compatibility(ClientVersion) ->
-    {ok, SupportedClientVersions} = application:get_env(
-        ?APP_NAME, supported_oc_versions
+    {ok, CompatibleClientVersions} = application:get_env(
+        ?APP_NAME, compatible_oc_versions
     ),
+    % Client sends full build version (e.g. 17.06.0-rc9-aiosufshx) so instead
+    % of matching whole build version we check only prefix
     Pred = fun(Ver) -> string:find(ClientVersion, Ver) =:= ClientVersion end,
-    case lists:any(Pred, SupportedClientVersions) of
+    case lists:any(Pred, CompatibleClientVersions) of
         true ->
             ok;
         false ->
-            ?error("Refusing client connection because of incompatible "
-                   "versions ~p. Supported ones: ~p.",
-                [ClientVersion, SupportedClientVersions]
+            ?error("Discarding connection to oneclient because of "
+                   "incompatible version (~s). Version must be one of: ~p",
+                [ClientVersion, CompatibleClientVersions]
             ),
             throw(incompatible_client_version)
     end.

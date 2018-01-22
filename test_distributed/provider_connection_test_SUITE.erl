@@ -48,21 +48,22 @@ all() ->
 % env variables are defined using env_desc.json
 incompatible_providers_should_not_connect(Config) ->
     % providers should start connecting right after init_per_testcase
-    % (spaces creation), alas wait some time before checking that connection failed
-    timer:sleep(20 * 1000),
+    % (spaces creation); just in case wait some time before checking
+    % that connection failed
+    timer:sleep(30 * 1000),
 
     Workers = [P1, P2] = ?config(op_worker_nodes, Config),
-    ?assertMatch(false, connection_exists(P1, P2), 10),
-    ?assertMatch(false, connection_exists(P2, P1), 10),
+    ?assertMatch(false, connection_exists(P1, P2)),
+    ?assertMatch(false, connection_exists(P2, P1)),
 
     {_AppId, _AppName, AppVersion} = lists:keyfind(
         ?APP_NAME, 1, rpc:call(hd(Workers), application, loaded_applications, [])
     ),
     rpc:multicall(Workers, application, set_env, [
-        ?APP_NAME, supported_op_versions, [AppVersion]
+        ?APP_NAME, compatible_op_versions, [AppVersion]
     ]),
-    ?assertMatch(true, connection_exists(P1, P2), 60),
-    ?assertMatch(true, connection_exists(P2, P1), 60),
+    ?assertMatch(true, connection_exists(P1, P2), 90),
+    ?assertMatch(true, connection_exists(P2, P1)),
 
     ok.
 
@@ -73,12 +74,11 @@ incompatible_providers_should_not_connect(Config) ->
 
 
 init_per_suite(Config) ->
-    Posthook = fun(NewConfig) -> initializer:setup_storage(NewConfig) end,
-    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
+    [{?LOAD_MODULES, [initializer]} | Config].
 
 
-end_per_suite(Config) ->
-    initializer:teardown_storage(Config).
+end_per_suite(_Config) ->
+    ok.
 
 
 init_per_testcase(_Case, Config) ->
@@ -101,15 +101,17 @@ end_per_testcase(_Case, Config) ->
 
 connection_exists(Provider, PeerProvider) ->
     PeerProviderId = initializer:domain_to_provider_id(?GET_DOMAIN(PeerProvider)),
-    IncomingSessId = rpc:call(Provider, session_manager, get_provider_session_id,
-        [incoming, PeerProviderId]
-    ),
-    OutgoingSessId = rpc:call(Provider, session_manager, get_provider_session_id,
-        [outgoing, PeerProviderId]
-    ),
+    IncomingSessId = get_provider_session_id(Provider, incoming, PeerProviderId),
+    OutgoingSessId = get_provider_session_id(Provider, outgoing, PeerProviderId),
     session_exists(Provider, IncomingSessId)
         orelse session_exists(Provider, OutgoingSessId).
 
 
+get_provider_session_id(Worker, Type, ProviderId) ->
+    rpc:call(Worker, session_manager, get_provider_session_id,
+        [Type, ProviderId]
+    ).
+
+
 session_exists(Provider, SessId) ->
-    rpc:call(Provider, provider_communicator, session_exists, [SessId]).
+    rpc:call(Provider, session, exists, [SessId]).

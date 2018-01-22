@@ -21,7 +21,7 @@
 
 %% API
 -export([send/2, send/3, stream/3, stream/4, send_async/2, communicate/2, communicate_async/2,
-    communicate_async/3, ensure_connected/1, session_exists/1]).
+    communicate_async/3, ensure_connected/1]).
 
 %%%===================================================================
 %%% API
@@ -173,20 +173,6 @@ communicate_async(#client_message{} = Msg, Ref, Recipient) ->
     end;
 communicate_async(Msg, Ref, Recipient) ->
     communicate_async(#client_message{message_body = Msg}, Ref, Recipient).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Check if given session exists.
-%% @end
-%%--------------------------------------------------------------------
--spec session_exists(session:id()) -> boolean().
-session_exists(SessionId) ->
-    case session:get(SessionId) of
-        {ok, #document{key = SessionId}} -> true;
-        _ -> false
-    end.
-
 
 %%%===================================================================
 %%% Internal functions
