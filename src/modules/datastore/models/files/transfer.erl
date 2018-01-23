@@ -140,12 +140,12 @@ start(SessionId, FileGuid, FilePath, SourceProviderId, TargetProviderId, Callbac
 restart_unfinished_transfers(SpaceId) ->
     {ok, {Restarted, Failed}} = for_each_current_transfer(fun(TransferId, {Restarted0, Failed0}) ->
         case restart(TransferId) of
-            {ok, not_target_provider} ->
-                {Restarted0, Failed0};
-            {ok, not_source_provider} ->
-                {Restarted0, Failed0};
             {ok, TransferId} ->
                 {[TransferId | Restarted0], Failed0};
+            {error, not_target_provider} ->
+                {Restarted0, Failed0};
+            {error, not_source_provider} ->
+                {Restarted0, Failed0};
             {error, {not_found, transfer}} ->
                 {Restarted0, [TransferId | Failed0]}
         end
@@ -777,9 +777,9 @@ restart(TransferId) ->
             invalidation_controller:on_new_transfer_doc(TransferDoc),
             {ok, TransferId};
         {error, not_target_provider} ->
-            {ok, undefined};
+            {error, not_target_provider};
         {error, not_source_provdier} ->
-            {ok, undefined};
+            {error, not_source_provdier};
         Error ->
             ?error_stacktrace("Restarting transfer ~p failed due to ~p", [TransferId, Error]),
             Error
