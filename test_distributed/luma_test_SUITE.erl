@@ -357,6 +357,7 @@ get_posix_user_ctx_should_fetch_user_ctx(Config) ->
         <<"userId">>,
         <<"spaceId">>
     ]),
+    ct:pal("Result: ~p", [Result]),
     {Uid, Gid} = ?assertMatch({_, _}, Result),
     ?assert(is_integer(Uid)),
     ?assert(is_integer(Gid)),
@@ -384,7 +385,7 @@ get_posix_user_ctx_should_fetch_user_ctx_twice(Config) ->
 
     test_utils:mock_assert_num_calls(Worker, luma_proxy, get_user_ctx,
         ['_', '_', '_', '_'], 2),
-
+    ct:pal("Result: ~p", [Result]),
     {Uid, Gid} = ?assertMatch({_, _}, Result),
     ?assertEqual(?UID1, Uid),
     ?assertEqual(?GID1, Gid).
@@ -402,6 +403,7 @@ get_posix_user_ctx_should_fetch_user_ctx_by_group_id(Config) ->
     ]),
     test_utils:mock_assert_num_calls(Worker, luma_proxy, get_user_ctx,
         ['_', '_', '_', '_'], 1),
+    ct:pal("Result: ~p", [Result]),
     {Uid, Gid} = ?assertMatch({_, _}, Result),
     ?assertEqual(?UID1, Uid),
     ?assertEqual(?GID2, Gid).
@@ -420,6 +422,7 @@ get_posix_user_ctx_by_group_id_should_generate_gid_by_group_id_when_mapping_is_n
     ]),
     test_utils:mock_assert_num_calls(Worker, luma_proxy, get_user_ctx,
         ['_', '_', '_', '_'], 1),
+    ct:pal("Result: ~p", [Result]),
     {Uid, Gid} = ?assertMatch({_, _}, Result),
     ?assertEqual(?UID1, Uid),
     ?assertEqual(generate_posix_identifier(?GROUP_ID, ?GID_RANGE), Gid).
@@ -437,6 +440,7 @@ get_posix_user_ctx_by_group_id_should_generate_gid_by_space_id_when_luma_returns
     ]),
     test_utils:mock_assert_num_calls(Worker, luma_proxy, get_user_ctx,
         ['_', '_', '_', '_'], 1),
+    ct:pal("Result: ~p", [Result]),
     {Uid, Gid} = ?assertMatch({_, _}, Result),
     ?assertEqual(?UID1, Uid),
     ?assertEqual(generate_posix_identifier(?SPACE_ID, ?GID_RANGE), Gid).
@@ -452,6 +456,7 @@ get_posix_user_ctx_by_group_id_should_return_0_for_root(Config) ->
         undefined,
         ?SPACE_ID
     ]),
+    ct:pal("Result: ~p", [Result]),
     {Uid, Gid} = ?assertMatch({_, _}, Result),
     ?assertEqual(0, Uid),
     ?assertEqual(0, Gid).
@@ -560,7 +565,7 @@ end_per_testcase(Case, Config) when
 end_per_testcase(_Case, Config) ->
     Workers = [Worker | _] = ?config(op_worker_nodes, Config),
     rpc:call(Worker, luma_cache, invalidate, []),
-    test_utils:mock_unload(Workers, [http_client, luma]).
+    test_utils:mock_unload(Workers, [http_client, luma_proxy]).
 
 generate_posix_identifier(Id, {Low, High}) ->
     PosixId = crypto:bytes_to_integer(Id),

@@ -21,7 +21,6 @@
     start_simple_scan_update/7
 ]).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Modifies storage_import strategy for given space
@@ -92,11 +91,17 @@ modify_storage_update(SpaceId, StrategyName, Args) ->
     space_strategy:arguments()) -> {ok, datastore:ext_key()} | datastore:update_error().
 modify_storage_update(SpaceId, StrategyName, StorageId, Args) ->
     file_meta:make_space_exist(SpaceId),
-    {CurrentStrategyName, _} = space_strategies:get_storage_update_details(SpaceId, StorageId),
-    switch_monitoring_status(SpaceId, storage_update, CurrentStrategyName,
-        StrategyName),
-    space_strategies:set_strategy(SpaceId, StorageId, storage_update,
-        StrategyName, Args).
+    {CurrentImportStrategyName, _} = space_strategies:get_storage_import_details(SpaceId, StorageId),
+    case {StrategyName, CurrentImportStrategyName} of
+        {StrategyName, no_import} when StrategyName =/= no_update ->
+            {error, import_disabled};
+        _ ->
+            {CurrentStrategyName, _} = space_strategies:get_storage_update_details(SpaceId, StorageId),
+            switch_monitoring_status(SpaceId, storage_update, CurrentStrategyName,
+                StrategyName),
+            space_strategies:set_strategy(SpaceId, StorageId, storage_update,
+                StrategyName, Args)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -202,8 +207,7 @@ switch_update_monitoring_status(_SpaceId, _, _) ->
 %%-------------------------------------------------------------------
 -spec turn_import_monitoring_on(od_space:id()) -> ok.
 turn_import_monitoring_on(SpaceId) ->
-    storage_sync_monitoring:start_imported_files_counter(SpaceId),
-    storage_sync_monitoring:start_files_to_import_counter(SpaceId),
+    storage_sync_monitoring:start_counters(SpaceId),
     storage_sync_monitoring:start_imported_files_spirals(SpaceId),
     storage_sync_monitoring:start_queue_length_spirals(SpaceId).
 
@@ -215,8 +219,7 @@ turn_import_monitoring_on(SpaceId) ->
 %%-------------------------------------------------------------------
 -spec turn_import_monitoring_off(od_space:id()) -> ok.
 turn_import_monitoring_off(SpaceId) ->
-    storage_sync_monitoring:stop_imported_files_counter(SpaceId),
-    storage_sync_monitoring:stop_files_to_import_counter(SpaceId),
+    storage_sync_monitoring:stop_counters(SpaceId),
     storage_sync_monitoring:stop_imported_files_spirals(SpaceId),
     storage_sync_monitoring:stop_queue_length_spirals(SpaceId).
 
@@ -229,8 +232,7 @@ turn_import_monitoring_off(SpaceId) ->
 -spec turn_update_monitoring_on(od_space:id()) -> ok.
 turn_update_monitoring_on(SpaceId) ->
     storage_sync_monitoring:start_updated_files_spirals(SpaceId),
-    storage_sync_monitoring:start_deleted_files_spirals(SpaceId),
-    storage_sync_monitoring:start_files_to_update_counter(SpaceId).
+    storage_sync_monitoring:start_deleted_files_spirals(SpaceId).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -241,5 +243,4 @@ turn_update_monitoring_on(SpaceId) ->
 -spec turn_update_monitoring_off(od_space:id()) -> ok.
 turn_update_monitoring_off(SpaceId) ->
     storage_sync_monitoring:stop_updated_files_spirals(SpaceId),
-    storage_sync_monitoring:stop_deleted_files_spirals(SpaceId),
-    storage_sync_monitoring:stop_files_to_update_counter(SpaceId).
+    storage_sync_monitoring:stop_deleted_files_spirals(SpaceId).

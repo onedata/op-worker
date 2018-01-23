@@ -37,7 +37,8 @@
 run(Job = #space_strategy_job{
     data = #{
         space_id := SpaceId,
-        storage_file_ctx := StorageFileCtx
+        storage_file_ctx := StorageFileCtx,
+        file_name := FileName
     }}, FileCtx) ->
 
     FileUuid = file_ctx:get_uuid_const(FileCtx),
@@ -48,11 +49,16 @@ run(Job = #space_strategy_job{
     try
         save_db_children_names(DBTable, FileCtx),
         save_storage_children_names(StorageTable, StorageFileCtx),
-        ok = remove_files_not_existing_on_storage(StorageTable, DBTable, FileCtx, SpaceId)
+        ok = remove_files_not_existing_on_storage(StorageTable, DBTable, FileCtx, SpaceId),
+        storage_sync_monitoring:increase_updated_files_counter(SpaceId)
+    catch
+        _:_ ->
+            ?error("Error in full_update:run for file: ~p", [FileName]),
+            storage_sync_monitoring:increase_failed_file_updates_counter(SpaceId)
+
     after
         true = ets:delete(StorageTable),
-        true = ets:delete(DBTable),
-        storage_sync_monitoring:update_files_to_update_counter(SpaceId, -1)
+        true = ets:delete(DBTable)
     end,
     {ok, Job}.
 
@@ -67,10 +73,11 @@ delete_imported_file_and_update_counters(ChildName, FileCtx, SpaceId) ->
     storage_sync_monitoring:update_queue_length_spirals(SpaceId, -1),
     try
         delete_imported_file(ChildName, FileCtx),
-        storage_sync_monitoring:increase_deleted_files_spirals(SpaceId)
+        storage_sync_monitoring:increase_deleted_files_spirals(SpaceId),
+        storage_sync_monitoring:increase_deleted_files_counter(SpaceId)
     catch
         _:_ ->
-            ok
+            storage_sync_monitoring:increase_failed_file_deletions_counter(SpaceId)
     end.
 
 %%-------------------------------------------------------------------
@@ -161,6 +168,7 @@ iterate_and_remove(StKey, StorageTable, DBKey, DBTable, Offset, BatchSize,
     FileCtx, SpaceId)
 when (Offset + 1) rem BatchSize == 0  ->
     % finished batch
+    storage_sync_monitoring:update_files_to_sync_counter(SpaceId, 1),
     iterate_and_remove(StKey, StorageTable, DBKey, DBTable, Offset + 1,
         BatchSize, FileCtx, SpaceId);
 iterate_and_remove('$end_of_table', _, '$end_of_table', _,  _Offset, _BatchSize,
@@ -176,6 +184,7 @@ iterate_and_remove(StKey = '$end_of_table', StTable, DBKey, DBTable, Offset,
     BatchSize, FileCtx, SpaceId
 ) ->
     Next = ets:next(DBTable, DBKey),
+    storage_sync_monitoring:update_files_to_sync_counter(SpaceId, 1),
     cast_deletion_of_imported_file(DBKey, FileCtx, SpaceId),
     iterate_and_remove(StKey, StTable, Next, DBTable, Offset,
         BatchSize, FileCtx, SpaceId);
@@ -190,6 +199,7 @@ iterate_and_remove(StKey, StorageTable, DBKey, DBTable, Offset, BatchSize,
     FileCtx, SpaceId)
 when StKey > DBKey ->
     Next = ets:next(DBTable, DBKey),
+    storage_sync_monitoring:update_files_to_sync_counter(SpaceId, 1),
     cast_deletion_of_imported_file(DBKey, FileCtx, SpaceId),
     iterate_and_remove(StKey, StorageTable, Next, DBTable, Offset, BatchSize,
         FileCtx, SpaceId);

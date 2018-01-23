@@ -214,7 +214,7 @@ rrdtool_pool_test(Config) ->
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         [Worker | _] = ?config(op_worker_nodes, NewConfig),
-
+        rpc:call(Worker, node_manager, start_worker, [monitoring_worker, []]),
         ?assertMatch({ok, _}, rpc:call(Worker, space_quota, create, [#document{
             key = ?SPACE_ID, value = #space_quota{current_size = 100}}])),
         initializer:setup_storage(NewConfig)

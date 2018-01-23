@@ -1,6 +1,7 @@
 #include "../nifpp.h"
 #include "helpers/init.h"
 #include "helpers/storageHelperCreator.h"
+#include "monitoring/monitoring.h"
 
 #include <asio.hpp>
 #include <asio/executor_work.hpp>
@@ -415,6 +416,83 @@ template <class T> void handle_result(NifCTX ctx, folly::Future<T> future)
         });
 }
 
+/**
+ * Configure performance monitoring metrics based on environment
+ * configuration.
+ */
+static void configurePerformanceMonitoring(
+    std::unordered_map<folly::fbstring, folly::fbstring> &args)
+{
+    if (args.find("helpers_performance_monitoring_enabled") != args.end() &&
+        args["helpers_performance_monitoring_enabled"] == "true") {
+        if (args["helpers_performance_monitoring_type"] == "graphite") {
+            auto config = std::make_shared<
+                one::monitoring::GraphiteMonitoringConfiguration>();
+            config->fromGraphiteURL("tcp://" +
+                args["graphite_host"].toStdString() + ":" +
+                args["graphite_port"].toStdString());
+            config->namespacePrefix = args["graphite_prefix"].toStdString();
+            config->reportingPeriod = std::stoul(
+                args["helpers_performance_monitoring_period"].toStdString());
+            if (args["helpers_performance_monitoring_level"] == "full") {
+                config->reportingLevel = cppmetrics::core::ReportingLevel::Full;
+            }
+            else {
+                config->reportingLevel =
+                    cppmetrics::core::ReportingLevel::Basic;
+            }
+
+            // Configure and start performance monitoring threads
+            one::helpers::configureMonitoring(config, true);
+
+            // Initialize the configuration options counter values
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.ceph_helper_thread_count",
+                std::stoul(args["ceph_helper_threads_number"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.posix_helper_thread_count",
+                std::stoul(args["posix_helper_threads_number"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.s3_helper_thread_count",
+                std::stoul(args["s3_helper_threads_number"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.swift_helper_thread_count",
+                std::stoul(args["swift_helper_threads_number"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.glusterfs_helper_thread_count",
+                std::stoul(
+                    args["glusterfs_helper_threads_number"].toStdString()));
+            ONE_METRIC_COUNTER_SET("comp.oneprovider.mod.options.buffer_"
+                                   "scheduler_helper_thread_count",
+                std::stoul(
+                    args["buffer_scheduler_threads_number"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.read_buffer_min_size",
+                std::stoul(args["read_buffer_min_size"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.read_buffer_max_size",
+                std::stoul(args["read_buffer_max_size"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.write_buffer_min_size",
+                std::stoul(args["write_buffer_min_size"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.write_buffer_max_size",
+                std::stoul(args["write_buffer_max_size"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.read_buffer_prefetch_duration",
+                std::stoul(
+                    args["read_buffer_prefetch_duration"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.write_buffer_flush_delay",
+                std::stoul(args["write_buffer_flush_delay"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.monitoring_reporting_period",
+                std::stoul(args["helpers_performance_monitoring_period"]
+                               .toStdString()));
+        }
+    }
+}
+
 /*********************************************************************
 *
 *                          WRAPPERS (NIF based)
@@ -590,6 +668,20 @@ ERL_NIF_TERM fsync(NifCTX ctx, file_handle_ptr handle, const int isdatasync)
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
+ERL_NIF_TERM start_monitoring(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    ONE_MONITORING_COLLECTOR()->start();
+    return nifpp::make(env, std::make_tuple(ok, 1));
+}
+
+ERL_NIF_TERM stop_monitoring(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    ONE_MONITORING_COLLECTOR()->stop();
+    return nifpp::make(env, std::make_tuple(ok, 1));
+}
+
 } // namespace
 
 extern "C" {
@@ -601,6 +693,9 @@ static int load(ErlNifEnv *env, void **priv_data, ERL_NIF_TERM load_info)
     auto args =
         nifpp::get<std::unordered_map<folly::fbstring, folly::fbstring>>(
             env, load_info);
+
+    configurePerformanceMonitoring(args);
+
     application = std::make_unique<HelpersNIF>(std::move(args));
 
     return !(nifpp::register_resource<helper_ptr>(env, nullptr, "helper_ptr") &&
@@ -744,16 +839,17 @@ static ERL_NIF_TERM sh_fsync(
 }
 
 static ErlNifFunc nif_funcs[] = {{"get_handle", 2, get_handle},
-    {"getattr", 2, sh_getattr}, {"access", 3, sh_access},
-    {"readdir", 4, sh_readdir}, {"mknod", 5, sh_mknod}, {"mkdir", 3, sh_mkdir},
-    {"unlink", 2, sh_unlink}, {"rmdir", 2, sh_rmdir},
-    {"symlink", 3, sh_symlink}, {"rename", 3, sh_rename}, {"link", 3, sh_link},
-    {"chmod", 3, sh_chmod}, {"chown", 4, sh_chown},
-    {"truncate", 3, sh_truncate}, {"setxattr", 6, sh_setxattr},
-    {"getxattr", 3, sh_getxattr}, {"removexattr", 3, sh_removexattr},
-    {"listxattr", 2, sh_listxattr}, {"open", 3, sh_open}, {"read", 3, sh_read},
-    {"write", 3, sh_write}, {"release", 1, sh_release}, {"flush", 1, sh_flush},
-    {"fsync", 2, sh_fsync}};
+    {"start_monitoring", 0, start_monitoring},
+    {"stop_monitoring", 0, stop_monitoring}, {"getattr", 2, sh_getattr},
+    {"access", 3, sh_access}, {"readdir", 4, sh_readdir},
+    {"mknod", 5, sh_mknod}, {"mkdir", 3, sh_mkdir}, {"unlink", 2, sh_unlink},
+    {"rmdir", 2, sh_rmdir}, {"symlink", 3, sh_symlink},
+    {"rename", 3, sh_rename}, {"link", 3, sh_link}, {"chmod", 3, sh_chmod},
+    {"chown", 4, sh_chown}, {"truncate", 3, sh_truncate},
+    {"setxattr", 6, sh_setxattr}, {"getxattr", 3, sh_getxattr},
+    {"removexattr", 3, sh_removexattr}, {"listxattr", 2, sh_listxattr},
+    {"open", 3, sh_open}, {"read", 3, sh_read}, {"write", 3, sh_write},
+    {"release", 1, sh_release}, {"flush", 1, sh_flush}, {"fsync", 2, sh_fsync}};
 
 ERL_NIF_INIT(helpers_nif, nif_funcs, load, NULL, NULL, NULL);
 
