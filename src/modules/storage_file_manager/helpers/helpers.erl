@@ -320,7 +320,20 @@ apply_helper_nif(#file_handle{handle = Handle, timeout = Timeout}, Function, Arg
     ok | {ok, term()} | {error, Reason :: term()}.
 apply_helper_nif(Handle, Timeout, Function, Args) ->
     {ok, ResponseRef} = apply(helpers_nif, Function, [Handle | Args]),
+    receive_loop(ResponseRef, Timeout).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Waits for helper answer.
+%% @end
+%%--------------------------------------------------------------------
+-spec receive_loop(helpers_nif:response_ref(), timeout()) ->
+    ok | {ok, term()} | {error, Reason :: term()}.
+receive_loop(ResponseRef, Timeout) ->
     receive
+        {ResponseRef, heartbeat} ->
+            receive_loop(ResponseRef, Timeout);
         {ResponseRef, Result} -> Result
     after
         Timeout -> {error, nif_timeout}

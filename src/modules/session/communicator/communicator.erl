@@ -88,6 +88,7 @@ communicate(#server_message{} = ServerMsg, Ref) ->
     receive
         #client_message{message_id = MsgId} = ClientMsg -> {ok, ClientMsg}
     after
+        % TODO - ile klient moze czasu przetwarzac wiadomosc?
         ?DEFAULT_REQUEST_TIMEOUT ->
             {error, timeout}
     end;

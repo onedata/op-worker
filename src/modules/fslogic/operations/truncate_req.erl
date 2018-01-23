@@ -47,6 +47,7 @@ truncate(UserCtx, FileCtx, Size) ->
 truncate_insecure(UserCtx, FileCtx, Size, UpdateTimes) ->
     FileCtx2 = update_quota(FileCtx, Size),
     SessId = user_ctx:get_session_id(UserCtx),
+    % TODO - czy potrzeba?
     {SFMHandle, FileCtx3} = storage_file_manager:new_handle(SessId, FileCtx2),
     case storage_file_manager:open(SFMHandle, write) of
         {ok, Handle} ->

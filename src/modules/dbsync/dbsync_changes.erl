@@ -240,6 +240,7 @@ group_changes(Docs) ->
 parallel_apply(DocsList, Ref) ->
     Master = self(),
     lists:foreach(fun({_, DocList}) ->
+        % TODO - sprawdzac pidy czy dzialaja
         spawn(fun() ->
             SlaveAns = lists:foldl(fun
                 (Doc, ok) ->

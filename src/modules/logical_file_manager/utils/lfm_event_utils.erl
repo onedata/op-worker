@@ -92,6 +92,7 @@ flush_event_queue(SessionId, ProviderId, FileUuid) ->
                 {RecvRef, Response} ->
                     Response
             after ?DEFAULT_REQUEST_TIMEOUT ->
+                % TODO - moze trwac?
                 {error, timeout}
             end
     end.

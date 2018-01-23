@@ -30,6 +30,8 @@
 -export([preroute_message/2, route_message/1, route_proxy_message/2]).
 -export([effective_session_id/1]).
 
+-define(TIMEOUT, 30000).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -117,6 +119,7 @@ route_message(Msg = #client_message{message_id = #message_id{
         true when Recipient =:= undefined ->
             route_and_ignore_answer(Msg);
         true ->
+            % TODO - to chyba odpowiedz - sprawdzic
             Pid = binary_to_term(Recipient),
             Pid ! Msg,
             ok;
@@ -138,11 +141,24 @@ route_message(Msg = #server_message{message_id = #message_id{
             ok
     end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns session's ID that shall be used for given message.
+%% @end
+%%--------------------------------------------------------------------
+-spec effective_session_id(#client_message{}) ->
+    session:id().
+effective_session_id(#client_message{session_id = SessionId, proxy_session_id = undefined}) ->
+    SessionId;
+effective_session_id(#client_message{proxy_session_id = ProxySessionId}) ->
+    ProxySessionId.
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Route message to adequate worker and return ok
 %% @end
@@ -187,6 +203,7 @@ route_and_ignore_answer(ClientMsg = #client_message{
     ).
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Route message to adequate worker, asynchronously wait for answer
 %% repack it into server_message and send to the client
@@ -201,6 +218,8 @@ route_and_send_answer(Msg = #client_message{
 }) ->
     event:flush(FlushMsg#flush_events{notify =
         fun(Result) ->
+            % TODO - flush moze trwac? dlaczego robimy tak dziwnie
+            % Trzeba bedzie customowy mechanizm
             communicator:send(Result#server_message{message_id = MsgId}, OriginSessId)
         end
     }, effective_session_id(Msg)),
@@ -219,8 +238,10 @@ route_and_send_answer(Msg = #client_message{
     message_id = Id,
     message_body = #get_configuration{}
 }) ->
-    Configuration = storage_req:get_configuration(effective_session_id(Msg)),
-    {ok, #server_message{message_id = Id, message_body = Configuration}};
+    route_and_supervise(fun() ->
+        Configuration = storage_req:get_configuration(effective_session_id(Msg)),
+        {ok, #server_message{message_id = Id, message_body = Configuration}}
+    end, get_heartbeat_fun());
 route_and_send_answer(Msg = #client_message{
     message_id = Id,
     message_body = FuseRequest = #fuse_request{
@@ -231,27 +252,33 @@ route_and_send_answer(Msg = #client_message{
 }) when is_record(Req, open_file) orelse is_record(Req, release) ->
     Node = consistent_hasing:get_node(FileGuid),
     {ok, FuseResponse} = worker_proxy:call({fslogic_worker, Node},
-        {fuse_request, effective_session_id(Msg), FuseRequest}),
+        {fuse_request, effective_session_id(Msg), FuseRequest},
+        {?TIMEOUT, get_heartbeat_fun()}, spawn),
     {ok, #server_message{message_id = Id, message_body = FuseResponse}};
 route_and_send_answer(Msg = #client_message{
     message_id = Id,
     message_body = FuseRequest = #fuse_request{}
 }) ->
-    {ok, FuseResponse} = worker_proxy:call(fslogic_worker, {fuse_request, effective_session_id(Msg), FuseRequest}),
+    {ok, FuseResponse} = worker_proxy:call(fslogic_worker,
+        {fuse_request, effective_session_id(Msg), FuseRequest},
+        {?TIMEOUT, get_heartbeat_fun()}, spawn),
     {ok, #server_message{message_id = Id, message_body = FuseResponse}};
 route_and_send_answer(Msg = #client_message{
     message_id = Id,
     message_body = ProviderRequest = #provider_request{}
 }) ->
     {ok, ProviderResponse} = worker_proxy:call(fslogic_worker,
-        {provider_request, effective_session_id(Msg), ProviderRequest}),
+        {provider_request, effective_session_id(Msg), ProviderRequest},
+        {?TIMEOUT, get_heartbeat_fun()}, spawn),
     {ok, #server_message{message_id = Id, message_body = ProviderResponse}};
 route_and_send_answer(#client_message{
     message_id = Id,
     message_body = Request = #get_remote_document{}
 }) ->
-    Response = datastore_remote_driver:handle(Request),
-    {ok, #server_message{message_id = Id, message_body = Response}};
+    route_and_supervise(fun() ->
+        Response = datastore_remote_driver:handle(Request),
+        {ok, #server_message{message_id = Id, message_body = Response}}
+    end, get_heartbeat_fun());
 route_and_send_answer(Msg = #client_message{
     message_id = Id,
     message_body = ProxyIORequest = #proxyio_request{
@@ -260,24 +287,65 @@ route_and_send_answer(Msg = #client_message{
 }) ->
     Node = consistent_hasing:get_node(FileGuid),
     {ok, ProxyIOResponse} = worker_proxy:call({fslogic_worker, Node},
-        {proxyio_request, effective_session_id(Msg), ProxyIORequest}),
+        {proxyio_request, effective_session_id(Msg), ProxyIORequest},
+        {?TIMEOUT, get_heartbeat_fun()}, spawn),
     {ok, #server_message{message_id = Id, message_body = ProxyIOResponse}};
 route_and_send_answer(Msg = #client_message{
     message_id = Id,
     message_body = #dbsync_request{} = DBSyncRequest
 }) ->
     {ok, DBSyncResponse} = worker_proxy:call(dbsync_worker,
-        {dbsync_request, effective_session_id(Msg), DBSyncRequest}),
+        {dbsync_request, effective_session_id(Msg), DBSyncRequest},
+        {?TIMEOUT, get_heartbeat_fun()}, spawn),
     {ok, #server_message{message_id = Id, message_body = DBSyncResponse}}.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Returns session's ID that shall be used for given message.
+%% Executes function that handles message and asynchronously wait for answer.
 %% @end
 %%--------------------------------------------------------------------
--spec effective_session_id(#client_message{}) ->
-    session:id().
-effective_session_id(#client_message{session_id = SessionId, proxy_session_id = undefined}) ->
-    SessionId;
-effective_session_id(#client_message{proxy_session_id = ProxySessionId}) ->
-    ProxySessionId.
+-spec route_and_supervise(fun(() -> term()), fun(() -> ok)) ->
+    ok | {ok, #server_message{}} | {error, term()}.
+route_and_supervise(Fun, TimeoutFun) ->
+    Master = self(),
+    Ref = make_ref(),
+    Pid = spawn(fun() ->
+        Ans = Fun(),
+        Master ! {slave_ans, Ref, Ans}
+    end),
+    receive_loop(Ref, Pid, TimeoutFun).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Waits for worker asynchronous process answer.
+%% @end
+%%--------------------------------------------------------------------
+-spec receive_loop(reference(), pid(), fun(() -> ok)) ->
+    ok | {ok, #server_message{}} | {error, term()}.
+receive_loop(Ref, Pid, TimeoutFun) ->
+    receive
+        {slave_ans, Ref, Ans} ->
+            Ans
+    after
+        ?TIMEOUT ->
+            case erlang:is_process_alive(Pid) of
+                true ->
+                    TimeoutFun(),
+                    receive_loop(Ref, Pid, TimeoutFun);
+                _ ->
+                    % TODO - jaki blad?
+                    {error, timeout}
+            end
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Provides function that sends heartbeat.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_heartbeat_fun() -> fun(() -> ok).
+get_heartbeat_fun() ->
+    fun() -> ok end.
