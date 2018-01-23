@@ -317,7 +317,7 @@ restart_file_replication(Config) ->
         end, ?ATTEMPTS),
 
     resume_file_replication_time(WorkerP2),
-    rpc:call(WorkerP1, transfer, restart_unfinished_transfers, [<<"space3">>]),
+    rpc:call(WorkerP2, transfer, restart_unfinished_transfers, [<<"space3">>]),
 
     ?assertMatch(#{
         <<"transferStatus">> := <<"completed">>,
@@ -533,7 +533,7 @@ restart_dir_replication(Config) ->
 
     resume_file_replication_time(WorkerP2),
     %% restart transfer
-    rpc:call(WorkerP1, transfer, restart_unfinished_transfers, [<<"space3">>]),
+    rpc:call(WorkerP2, transfer, restart_unfinished_transfers, [<<"space3">>]),
 
     ?assertMatch(#{
         <<"transferStatus">> := <<"completed">>,
