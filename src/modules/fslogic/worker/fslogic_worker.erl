@@ -386,8 +386,8 @@ handle_file_request(UserCtx, #release{handle_id = HandleId}, FileCtx) ->
     file_req:release(UserCtx, FileCtx, HandleId);
 handle_file_request(UserCtx, #get_file_location{}, FileCtx) ->
     file_req:get_file_location(UserCtx, FileCtx);
-handle_file_request(UserCtx, #truncate{size = Size}, FileCtx) ->
-    truncate_req:truncate(UserCtx, FileCtx, Size);
+handle_file_request(UserCtx, #truncate{size = Size, on_storage = OnStorage}, FileCtx) ->
+    truncate_req:truncate(UserCtx, FileCtx, Size, OnStorage);
 handle_file_request(UserCtx, #synchronize_block{block = Block, prefetch = Prefetch}, FileCtx) ->
     sync_req:synchronize_block(UserCtx, FileCtx, Block, Prefetch, undefined);
 handle_file_request(UserCtx, #synchronize_block_and_compute_checksum{block = Block}, FileCtx) ->

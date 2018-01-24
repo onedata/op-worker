@@ -267,7 +267,7 @@ translate_from_protobuf(#'GetFileLocation'{}) ->
 translate_from_protobuf(#'Release'{handle_id = HandleId}) ->
     #release{handle_id = HandleId};
 translate_from_protobuf(#'Truncate'{size = Size}) ->
-    #truncate{size = Size};
+    #truncate{size = Size, on_storage = true};
 translate_from_protobuf(#'SynchronizeBlock'{block = #'FileBlock'{offset = O, size = S}, prefetch = Prefetch}) ->
     #synchronize_block{block = #file_block{offset = O, size = S}, prefetch = Prefetch};
 translate_from_protobuf(#'SynchronizeBlockAndComputeChecksum'{
@@ -330,7 +330,8 @@ translate_from_protobuf(#'HelperParams'{helper_name = HelperName, helper_args = 
         helper_args = lists:map(
             fun(HelpersArg) ->
                 translate_from_protobuf(HelpersArg)
-            end, HelpersArgs)};
+            end, HelpersArgs),
+        delayed_sync = true};
 translate_from_protobuf(#'HelperArg'{key = Key, value = Value}) ->
     #helper_arg{key = Key, value = Value};
 translate_from_protobuf(#'Parameter'{key = Key, value = Value}) ->
@@ -755,7 +756,7 @@ translate_to_protobuf(#get_file_location{}) ->
     {get_file_location, #'GetFileLocation'{}};
 translate_to_protobuf(#release{handle_id = HandleId}) ->
     {release, #'Release'{handle_id = HandleId}};
-translate_to_protobuf(#truncate{size = Size}) ->
+translate_to_protobuf(#truncate{size = Size, on_storage = OnStorage}) ->
     {truncate, #'Truncate'{size = Size}};
 translate_to_protobuf(#synchronize_block{block = Block, prefetch = Prefetch}) ->
     {synchronize_block,
@@ -814,7 +815,8 @@ translate_to_protobuf(#file_location{} = Record) ->
             }
         end, Record#file_location.blocks)
     }};
-translate_to_protobuf(#helper_params{helper_name = HelperName, helper_args = HelpersArgs}) ->
+translate_to_protobuf(#helper_params{helper_name = HelperName,
+    helper_args = HelpersArgs, delayed_sync = DelayedSync}) ->
     {helper_params, #'HelperParams'{helper_name = HelperName,
         helper_args = lists:map(fun(HelpersArg) ->
             translate_to_protobuf(HelpersArg)

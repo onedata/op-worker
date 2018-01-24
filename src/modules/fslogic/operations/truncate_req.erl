@@ -16,23 +16,42 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([truncate/3, truncate_insecure/4]).
+-export([truncate/3, truncate/4, truncate_insecure/4, truncate_insecure/5]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @equiv truncate_insecure/3 with permission checks
+%% @equiv truncate(UserCtx, FileCtx, Size, OnStorage)
 %% @end
 %%--------------------------------------------------------------------
 -spec truncate(user_ctx:ctx(), file_ctx:ctx(), Size :: non_neg_integer()) ->
     fslogic_worker:fuse_response().
 truncate(UserCtx, FileCtx, Size) ->
+    truncate(UserCtx, FileCtx, Size, true).
+
+%%--------------------------------------------------------------------
+%% @equiv truncate_insecure/4 with permission checks
+%% @end
+%%--------------------------------------------------------------------
+-spec truncate(user_ctx:ctx(), file_ctx:ctx(), Size :: non_neg_integer(),
+    OnStorage :: boolean()) -> fslogic_worker:fuse_response().
+truncate(UserCtx, FileCtx, Size, OnStorage) ->
     check_permissions:execute(
         [traverse_ancestors, ?write_object],
-        [UserCtx, FileCtx, Size, true],
-        fun truncate_insecure/4).
+        [UserCtx, FileCtx, Size, true, OnStorage],
+        fun truncate_insecure/5).
+
+%%--------------------------------------------------------------------
+%% @equiv truncate_insecure(UserCtx, FileCtx, Size, UpdateTimes, true)
+%% @end
+%%--------------------------------------------------------------------
+-spec truncate_insecure(user_ctx:ctx(), file_ctx:ctx(),
+    Size :: non_neg_integer(), UpdateTimes :: boolean()) ->
+    fslogic_worker:fuse_response().
+truncate_insecure(UserCtx, FileCtx, Size, UpdateTimes) ->
+    truncate_insecure(UserCtx, FileCtx, Size, UpdateTimes, true).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -42,24 +61,31 @@ truncate(UserCtx, FileCtx, Size) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec truncate_insecure(user_ctx:ctx(), file_ctx:ctx(),
-    Size :: non_neg_integer(), UpdateTimes :: boolean()) ->
-    fslogic_worker:fuse_response().
-truncate_insecure(UserCtx, FileCtx, Size, UpdateTimes) ->
+    Size :: non_neg_integer(), UpdateTimes :: boolean(),
+    OnStorage :: boolean()) -> fslogic_worker:fuse_response().
+truncate_insecure(UserCtx, FileCtx, Size, UpdateTimes, OnStorage) ->
     FileCtx2 = update_quota(FileCtx, Size),
-    SessId = user_ctx:get_session_id(UserCtx),
-    % TODO - czy potrzeba?
-    {SFMHandle, FileCtx3} = storage_file_manager:new_handle(SessId, FileCtx2),
-    case storage_file_manager:open(SFMHandle, write) of
-        {ok, Handle} ->
-            ok = storage_file_manager:truncate(Handle, Size),
-            ok = storage_file_manager:release(Handle),
-            ok = file_popularity:update_size(FileCtx3, Size);
-        {error, ?ENOENT} ->
-            ok
+
+    FileCtx4 = case OnStorage of
+        true ->
+            SessId = user_ctx:get_session_id(UserCtx),
+            {SFMHandle, FileCtx3} = storage_file_manager:new_handle(SessId, FileCtx2),
+            case storage_file_manager:open(SFMHandle, write) of
+                {ok, Handle} ->
+                    ok = storage_file_manager:truncate(Handle, Size),
+                    ok = storage_file_manager:release(Handle),
+                    ok = file_popularity:update_size(FileCtx3, Size);
+                {error, ?ENOENT} ->
+                    ok
+            end,
+            FileCtx3;
+        _ ->
+            FileCtx2
     end,
+
     case UpdateTimes of
         true ->
-            fslogic_times:update_mtime_ctime(FileCtx3);
+            fslogic_times:update_mtime_ctime(FileCtx4);
         false ->
             ok
     end,

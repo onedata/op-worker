@@ -60,7 +60,8 @@ new_ceph_helper(MonitorHostname, ClusterName, PoolName, OptArgs, AdminCtx,
             <<"poolName">> => PoolName
         }),
         admin_ctx = AdminCtx,
-        insecure = Insecure
+        insecure = Insecure,
+        delayed_sync = false
     }.
 
 %%--------------------------------------------------------------------
@@ -96,7 +97,8 @@ new_s3_helper(Hostname, BucketName, UseHttps, OptArgs, AdminCtx, Insecure) ->
             end
         }),
         admin_ctx = AdminCtx,
-        insecure = Insecure
+        insecure = Insecure,
+        delayed_sync = false
     }.
 
 %%--------------------------------------------------------------------
@@ -115,7 +117,8 @@ new_swift_helper(AuthUrl, ContainerName, TenantName, OptArgs, AdminCtx, Insecure
             <<"tenantName">> => TenantName
         }),
         admin_ctx = AdminCtx,
-        insecure = Insecure
+        insecure = Insecure,
+        delayed_sync = false
     }.
 
 %%--------------------------------------------------------------------
@@ -133,7 +136,8 @@ new_glusterfs_helper(Volume, Hostname, OptArgs, AdminCtx, Insecure) ->
             <<"hostname">> => Hostname
         }),
         admin_ctx = AdminCtx,
-        insecure = Insecure
+        insecure = Insecure,
+        delayed_sync = false
     }.
 
 %%--------------------------------------------------------------------
@@ -271,12 +275,14 @@ is_insecure(#helper{insecure = Insecure}) ->
 %%--------------------------------------------------------------------
 -spec get_params(helpers:helper(), user_ctx()) -> params().
 get_params(Helper, UserCtx) ->
-    {ok, #helper{name = Name, args = Args}} = set_user_ctx(Helper, UserCtx),
+    {ok, #helper{name = Name, args = Args, delayed_sync = DS}} =
+        set_user_ctx(Helper, UserCtx),
     #helper_params{
         helper_name = Name,
         helper_args = maps:fold(fun(Key, Value, Acc) ->
             [#helper_arg{key = Key, value = Value} | Acc]
-        end, [], Args)
+        end, [], Args),
+        delayed_sync = DS
     }.
 
 %%--------------------------------------------------------------------

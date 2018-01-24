@@ -91,7 +91,8 @@
 }).
 
 -record(truncate, {
-    size :: non_neg_integer()
+    size :: non_neg_integer(),
+    on_storage :: boolean()
 }).
 
 -record(synchronize_block, {
@@ -185,7 +186,8 @@
 
 -record(helper_params, {
     helper_name :: helper:name(),
-    helper_args :: [#helper_arg{}]
+    helper_args :: [#helper_arg{}],
+    delayed_sync :: boolean()
 }).
 
 -record(storage_test_file, {

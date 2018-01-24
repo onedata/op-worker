@@ -30,7 +30,8 @@
     name :: helper:name(),
     args = #{} :: helper:args(),
     admin_ctx = #{} :: helper:user_ctx(),
-    insecure = false :: boolean()
+    insecure = false :: boolean(),
+    delayed_sync = true :: boolean()
 }).
 
 -endif.
