@@ -260,7 +260,7 @@ parallel_apply(DocsList, Ref) ->
 -spec gather_answers(list(), reference()) ->
     ok | timeout | {error, datastore:seq(), term()}.
 gather_answers(SlavesList, Ref) ->
-    gather_answers(length(SlavesList), Ref, ok).
+    gather_answers(SlavesList, Ref, ok).
 
 %%--------------------------------------------------------------------
 %% @private
