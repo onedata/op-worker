@@ -394,7 +394,7 @@ silent_read(FileHandle, Offset, MaxSize) ->
 truncate(SessId, FileKey, Size) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
-        #truncate{size = Size},
+        #truncate{size = Size, on_storage = true},
         fun(_) ->
             ok = lfm_event_utils:emit_file_truncated(FileGuid, Size, SessId)
         end).
