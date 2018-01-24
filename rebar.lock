@@ -25,7 +25,7 @@
   0},
  {<<"cluster_worker">>,
   {git,"ssh://git@git.plgrid.pl:7999/vfs/cluster-worker.git",
-       {ref,"2e03f0384902537a6a08e2c4785b32929415b198"}},
+       {ref,"af75903619d817bda8a5e555dbf002c43641ae39"}},
   0},
  {<<"cowboy">>,
   {git,"git://github.com/RoXeon/cowboy.git",
