@@ -18,6 +18,7 @@
 -include("modules/storage_file_manager/helpers/helpers.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include_lib("cluster_worker/include/exometer_utils.hrl").
 
 %% API
 -export([get_helper_handle/2]).
@@ -25,6 +26,7 @@
     rename/3, link/3, chmod/3, chown/4, truncate/3, setxattr/6, getxattr/3,
     removexattr/3, listxattr/2, open/3, read/3, write/3, release/1, flush/1,
     fsync/2, readdir/4]).
+-export([init_counters/0, init_report/0]).
 
 -record(file_handle, {
     handle :: helpers_nif:file_handle(),
@@ -39,6 +41,15 @@
 -type file_handle() :: #file_handle{}.
 
 -export_type([file_id/0, open_flag/0, helper/0, helper_handle/0, file_handle/0]).
+
+-define(EXOMETER_NAME(Param), ?exometer_name(?MODULE, count, Param)).
+-define(EXOMETER_TIME_NAME(Param), ?exometer_name(?MODULE, time,
+    list_to_atom(atom_to_list(Param) ++ "_time"))).
+-define(EXOMETER_DEFAULT_TIME_SPAN, 600000).
+-define(EXOMETER_COUNTERS, [get_helper_handle, readdir, getattr, access, mknod,
+    mkdir, unlink, rmdir, symlink, rename, link, chmod, chown, truncate,
+    setxattr, getxattr, removexattr, listxattr, open, read, write, release,
+    flush, fsync]).
 
 %%%===================================================================
 %%% API
@@ -292,6 +303,42 @@ fsync(Handle, IsDataSync) ->
     apply_helper_nif(Handle, fsync, [boolean_for_nif(IsDataSync)]).
 
 %%%===================================================================
+%%% Exometer API
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Initializes all counters.
+%% @end
+%%--------------------------------------------------------------------
+-spec init_counters() -> ok.
+init_counters() ->
+    TimeSpan = application:get_env(?APP_NAME,
+        exometer_datastore_time_span, ?EXOMETER_DEFAULT_TIME_SPAN),
+    Counters = lists:map(fun(Name) ->
+        {?EXOMETER_NAME(Name), counter}
+    end, ?EXOMETER_COUNTERS),
+    Counters2 = lists:map(fun(Name) ->
+        {?EXOMETER_TIME_NAME(Name), histogram, TimeSpan}
+    end, ?EXOMETER_COUNTERS),
+    ?init_counters(Counters ++ Counters2).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Subscribe for reports for all parameters.
+%% @end
+%%--------------------------------------------------------------------
+-spec init_report() -> ok.
+init_report() ->
+    Reports = lists:map(fun(Name) ->
+        {?EXOMETER_NAME(Name), [value]}
+    end, ?EXOMETER_COUNTERS),
+    Reports2 = lists:map(fun(Name) ->
+        {?EXOMETER_TIME_NAME(Name), [min, max, median, mean, n]}
+    end, ?EXOMETER_COUNTERS),
+    ?init_reports(Reports ++ Reports2).
+
+%%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
@@ -319,8 +366,13 @@ apply_helper_nif(#file_handle{handle = Handle, timeout = Timeout}, Function, Arg
     timeout(), Function :: atom(), Args :: [term()]) ->
     ok | {ok, term()} | {error, Reason :: term()}.
 apply_helper_nif(Handle, Timeout, Function, Args) ->
+    ?update_counter(?EXOMETER_NAME(Function)),
+    Now = os:timestamp(),
     {ok, ResponseRef} = apply(helpers_nif, Function, [Handle | Args]),
-    receive_loop(ResponseRef, Timeout).
+    Ans = receive_loop(ResponseRef, Timeout),
+    Time = timer:now_diff(os:timestamp(), Now),
+    ?update_counter(?EXOMETER_TIME_NAME(Function), Time),
+    Ans.
 
 %%--------------------------------------------------------------------
 %% @private

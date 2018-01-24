@@ -20,6 +20,7 @@
 -include("proto/common/credentials.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
+-include_lib("cluster_worker/include/exometer_utils.hrl").
 
 %% API
 -export([create/1, save/1, get/1, update/2, delete/1, list/0]).
@@ -34,6 +35,7 @@
 -export([add_handle/3, remove_handle/2, get_handle/2]).
 -export([is_special/1, is_root/1, is_guest/1, root_session_id/0]).
 -export([set_direct_io/2]).
+-export([init_counters/0, init_report/0]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -58,6 +60,7 @@
 
 -define(FILE_HANDLES_TREE_ID, <<"storage_file_handles">>).
 -define(HELPER_HANDLES_TREE_ID, <<"helper_handles">>).
+-define(EXOMETER_NAME(Param), ?exometer_name(?MODULE, Param)).
 
 %%%===================================================================
 %%% API
@@ -70,6 +73,7 @@
 %%--------------------------------------------------------------------
 -spec create(doc()) -> {ok, id()} | {error, term()}.
 create(Doc = #document{value = Sess}) ->
+    ?update_counter(?EXOMETER_NAME(active_sessions)),
     ?extract_key(datastore_model:create(?CTX, Doc#document{value = Sess#session{
         accessed = time_utils:cluster_time_seconds()
     }})).
@@ -140,6 +144,8 @@ delete(SessId) ->
         _ ->
             ok
     end,
+
+    ?update_counter(?EXOMETER_NAME(active_sessions), -1),
     datastore_model:delete(?CTX, SessId).
 
 %%--------------------------------------------------------------------
@@ -562,6 +568,24 @@ set_direct_io(SessId, DirectIO) ->
         {ok, SessId} -> ok;
         Other -> Other
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Initializes exometer counters used by this module.
+%% @end
+%%--------------------------------------------------------------------
+-spec init_counters() -> ok.
+init_counters() ->
+    ?init_counters([{?EXOMETER_NAME(active_sessions), counter}]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets exometer report connected with counters used by this module.
+%% @end
+%%--------------------------------------------------------------------
+-spec init_report() -> ok.
+init_report() ->
+    ?init_reports([{?EXOMETER_NAME(active_sessions), [value]}]).
 
 %%%===================================================================
 %%% Internal functions
