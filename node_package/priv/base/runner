@@ -197,7 +197,7 @@ do_start() {
         # up we check for the $WAIT_FOR_PROCESS} process. If that's running
         # then we assume things are good enough. This will at least let
         # the user know when the node is crashing right after startup.
-        WAIT=${WAIT_FOR_ERLANG:-15}
+        WAIT=${WAIT_FOR_ERLANG:-60}
         while [ $WAIT -gt 0 ]; do
             WAIT=`expr $WAIT - 1`
             sleep 1
@@ -215,7 +215,7 @@ do_start() {
                 exit 0
             fi
         done
-        echo "${SCRIPT} failed to start within ${WAIT_FOR_ERLANG:-15} seconds,"
+        echo "${SCRIPT} failed to start within ${WAIT_FOR_ERLANG:-60} seconds,"
         echo "see the output of '${SCRIPT} console' for more information."
         echo "If you want to wait longer, set the environment variable"
         echo "WAIT_FOR_ERLANG to the number of seconds to wait."
