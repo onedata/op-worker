@@ -529,7 +529,14 @@ init_reporter(exometer_report_rrd_ets) ->
 %%--------------------------------------------------------------------
 -spec init_counters() -> ok.
 init_counters() ->
-    ok.
+    try  od_provider:get_or_fetch(oneprovider:get_provider_id()) of
+        {ok, #document{value = #od_provider{spaces = SpaceIds}}} ->
+            init_counters(SpaceIds);
+        {error, _} -> ok
+    catch
+        _:TReason ->
+            ?error_stacktrace("Unable to start storage_sync counters due to: ~p", [TReason])
+    end.
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -554,6 +561,25 @@ init_report([SpaceId | Rest]) ->
 %%===================================================================
 %% Internal functions
 %%===================================================================
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function is responsible for starting counters required by
+%% storage_sync.
+%% @end
+%%-------------------------------------------------------------------
+-spec init_report([od_space:id()]) -> ok.
+init_counters([]) ->
+    ok;
+init_counters([SpaceId | Rest]) ->
+    case space_strategies:is_import_on(SpaceId) of
+        false ->
+            ok;
+        true ->
+            start_counters(SpaceId)
+    end,
+    init_counters(Rest).
 
 %%-------------------------------------------------------------------
 %% @private

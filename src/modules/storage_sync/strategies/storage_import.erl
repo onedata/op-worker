@@ -96,8 +96,8 @@ strategy_init_jobs(simple_scan, Args = #{
         storage_id := StorageId
 }) ->
     CurrentTimestamp = time_utils:cluster_time_seconds(),
-    space_strategies:update_import_start_time(SpaceId, StorageId,CurrentTimestamp),
     storage_sync_monitoring:reset_sync_counters(SpaceId),
+    space_strategies:update_import_start_time(SpaceId, StorageId,CurrentTimestamp),
     storage_sync_monitoring:update_queue_length_spirals(SpaceId, 1),
     storage_sync_monitoring:update_files_to_sync_counter(SpaceId, 1),
     ?debug("Starting storage_import for space: ~p at time ~p", [SpaceId, CurrentTimestamp]),
