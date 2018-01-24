@@ -175,7 +175,7 @@ transfer_record(TransferId) ->
     SessionId = gui_session:get_session_id(),
     {ok, #document{value = Transfer = #transfer{
         source_provider_id = SourceProviderId,
-        target_provider_id = Destination,
+        target_provider_id = DestinationProviderId,
         file_uuid = FileUuid,
         path = Path,
         user_id = UserId,
@@ -195,15 +195,11 @@ transfer_record(TransferId) ->
         false -> Transfer#transfer.finish_time
     end,
     IsMigration = transfer:is_migrating(Transfer),
-    MigrationSource = case IsMigration of
-        true -> SourceProviderId;
-        false -> null
-    end,
     {ok, [
         {<<"id">>, TransferId},
         {<<"migration">>, IsMigration},
-        {<<"migrationSource">>, MigrationSource},
-        {<<"destination">>, Destination},
+        {<<"migrationSource">>, SourceProviderId},
+        {<<"destination">>, utils:ensure_defined(DestinationProviderId, undefined, null)},
         {<<"isOngoing">>, IsOngoing},
         {<<"space">>, SpaceId},
         {<<"file">>, FileGuid},

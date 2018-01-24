@@ -16,7 +16,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--define(RTRANSFER_PORT, 6665).
+-define(RTRANSFER_PORT, application:get_env(?APP_NAME, rtransfer_port, 6665)).
 -define(RTRANSFER_NUM_ACCEPTORS, 10).
 
 %% API
