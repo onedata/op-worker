@@ -43,8 +43,8 @@ apply_batch(Docs, BatchRange) ->
         DocsGroups = group_changes(Docs),
         DocsList = maps:to_list(DocsGroups),
         Ref = make_ref(),
-        parallel_apply(DocsList, Ref),
-        Ans = gather_answers(DocsList, Ref),
+        Pids = parallel_apply(DocsList, Ref),
+        Ans = gather_answers(Pids, Ref),
         Master ! {batch_applied, BatchRange, Ans}
     end),
     ok.
@@ -236,11 +236,10 @@ group_changes(Docs) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec parallel_apply([{datastore:key(),
-    [datastore:doc()]}], reference()) -> ok.
+    [datastore:doc()]}], reference()) -> [pid()].
 parallel_apply(DocsList, Ref) ->
     Master = self(),
-    Pids = lists:map(fun({_, DocList}) ->
-        % TODO - sprawdzac pidy czy dzialaja
+    lists:map(fun({_, DocList}) ->
         spawn(fun() ->
             SlaveAns = lists:foldl(fun
                 (Doc, ok) ->
@@ -248,7 +247,7 @@ parallel_apply(DocsList, Ref) ->
                 (_, Acc) ->
                     Acc
             end, ok, lists:reverse(DocList)),
-            Master ! {changes_worker_ans, Ref, SlaveAns}
+            Master ! {changes_worker_ans, Ref, self(), SlaveAns}
         end)
     end, DocsList).
 
@@ -269,21 +268,33 @@ gather_answers(SlavesList, Ref) ->
 %% Gather appropriate number of workers' answers.
 %% @end
 %%--------------------------------------------------------------------
--spec gather_answers(non_neg_integer(), reference(),
+-spec gather_answers(list(), reference(),
     ok | {error, datastore:seq(), term()}) ->
     ok | timeout | {error, datastore:seq(), term()}.
-gather_answers(0, _Ref, Ans) ->
+gather_answers([], _Ref, Ans) ->
     Ans;
-gather_answers(N, Ref, TmpAns) ->
+gather_answers(Pids, Ref, TmpAns) ->
     receive
-        {changes_worker_ans, Ref, Ans} ->
+        {changes_worker_ans, Ref, Pid, Ans} ->
             Merged = case {Ans, TmpAns} of
                 {ok, _} -> TmpAns;
                 {{error, Seq, _}, {error, Seq2, _}} when Seq < Seq2 -> Ans;
                 {{error, _, _}, {error, _, _}} -> TmpAns;
                 _ -> Ans
             end,
-            gather_answers(N - 1, Ref, Merged)
+            gather_answers(Pids -- [Pid], Ref, Merged)
     after
-        ?WORKER_TIMEOUT -> timeout
+        ?WORKER_TIMEOUT ->
+            IsAnyAlive = lists:foldl(fun
+                (_, true) ->
+                    true;
+                (Pid, _Acc) ->
+                    erlang:is_process_alive(Pid)
+            end, false, Pids),
+            case IsAnyAlive of
+                true ->
+                    gather_answers(Pids, Ref, TmpAns);
+                false ->
+                    timeout
+            end
     end.
