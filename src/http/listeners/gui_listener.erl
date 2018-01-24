@@ -103,7 +103,7 @@ start() ->
             {keyfile, KeyFile},
             {certfile, CertFile},
             {cacerts, CaCerts},
-            {ciphers, ssl:cipher_suites() -- ssl_utils:weak_ciphers()}
+            {ciphers, ssl_utils:safe_ciphers()}
         ], cowboy_protocol, [
             {env, [{dispatch, Dispatch}]},
             {max_keepalive, MaxKeepAlive},
