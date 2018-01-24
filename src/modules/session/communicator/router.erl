@@ -253,7 +253,7 @@ route_and_send_answer(Msg = #client_message{
     Node = consistent_hasing:get_node(FileGuid),
     {ok, FuseResponse} = worker_proxy:call({fslogic_worker, Node},
         {fuse_request, effective_session_id(Msg), FuseRequest},
-        {?TIMEOUT, get_heartbeat_fun()}, spawn),
+        {?TIMEOUT, get_heartbeat_fun()}),
     {ok, #server_message{message_id = Id, message_body = FuseResponse}};
 route_and_send_answer(Msg = #client_message{
     message_id = Id,
@@ -261,7 +261,7 @@ route_and_send_answer(Msg = #client_message{
 }) ->
     {ok, FuseResponse} = worker_proxy:call(fslogic_worker,
         {fuse_request, effective_session_id(Msg), FuseRequest},
-        {?TIMEOUT, get_heartbeat_fun()}, spawn),
+        {?TIMEOUT, get_heartbeat_fun()}),
     {ok, #server_message{message_id = Id, message_body = FuseResponse}};
 route_and_send_answer(Msg = #client_message{
     message_id = Id,
@@ -269,7 +269,7 @@ route_and_send_answer(Msg = #client_message{
 }) ->
     {ok, ProviderResponse} = worker_proxy:call(fslogic_worker,
         {provider_request, effective_session_id(Msg), ProviderRequest},
-        {?TIMEOUT, get_heartbeat_fun()}, spawn),
+        {?TIMEOUT, get_heartbeat_fun()}),
     {ok, #server_message{message_id = Id, message_body = ProviderResponse}};
 route_and_send_answer(#client_message{
     message_id = Id,
@@ -288,7 +288,7 @@ route_and_send_answer(Msg = #client_message{
     Node = consistent_hasing:get_node(FileGuid),
     {ok, ProxyIOResponse} = worker_proxy:call({fslogic_worker, Node},
         {proxyio_request, effective_session_id(Msg), ProxyIORequest},
-        {?TIMEOUT, get_heartbeat_fun()}, spawn),
+        {?TIMEOUT, get_heartbeat_fun()}),
     {ok, #server_message{message_id = Id, message_body = ProxyIOResponse}};
 route_and_send_answer(Msg = #client_message{
     message_id = Id,
@@ -296,7 +296,7 @@ route_and_send_answer(Msg = #client_message{
 }) ->
     {ok, DBSyncResponse} = worker_proxy:call(dbsync_worker,
         {dbsync_request, effective_session_id(Msg), DBSyncRequest},
-        {?TIMEOUT, get_heartbeat_fun()}, spawn),
+        {?TIMEOUT, get_heartbeat_fun()}),
     {ok, #server_message{message_id = Id, message_body = DBSyncResponse}}.
 
 %%--------------------------------------------------------------------
