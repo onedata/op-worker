@@ -420,7 +420,7 @@ handle_handshake(State = #state{certificate = Cert, socket = Sock,
 report_handshake_error(Sock, Transp, incompatible_client_version) ->
     send_server_message(Sock, Transp, #server_message{
         message_body = #handshake_response{
-            status = 'INCOMPATIBLE_CLIENT_VERSION'
+            status = 'INCOMPATIBLE_VERSION'
         }
     });
 report_handshake_error(Sock, Transp, {badmatch, {error, Error}}) ->

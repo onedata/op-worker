@@ -157,7 +157,7 @@ incompatible_client_connection_test(Config) ->
     }}} = ?assertMatch(#'ServerMessage'{message_body = {handshake_response, _}},
         receive_server_message()
     ),
-    ?assertMatch('INCOMPATIBLE_CLIENT_VERSION', Status),
+    ?assertMatch('INCOMPATIBLE_VERSION', Status),
     ok.
 
 % todo VFS-1158 Modify & enable the test after veryfing client certificate.
