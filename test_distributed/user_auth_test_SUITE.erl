@@ -87,12 +87,17 @@ end_per_testcase(_Case, Config) ->
 -spec connect_via_token(Node :: node(), TokenVal :: binary(), SessionId :: session:id()) ->
     {ok, Sock :: term()}.
 connect_via_token(Node, TokenVal, SessionId) ->
+    {ok, [Version | _]} = rpc:call(
+        Node, application, get_env, [?APP_NAME, compatible_oc_versions]
+    ),
+
     % given
     {ok, Port} = test_utils:get_env(Node, ?APP_NAME, protocol_handler_port),
     TokenAuthMessage = #'ClientMessage'{message_body =
     {handshake_request, #'HandshakeRequest'{
         session_id = SessionId,
-        token = #'Token'{value = TokenVal}
+        token = #'Token'{value = TokenVal},
+        version = list_to_binary(Version)
     }}},
     TokenAuthMessageRaw = messages:encode_msg(TokenAuthMessage),
 

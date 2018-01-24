@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2016 ACK CYFRONET AGH
+%%% @copyright (C) 2018 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -44,7 +44,7 @@ all() ->
 %%%===================================================================
 
 
-% Providers should not connect because incorrect supported_op_versions
+% Providers should not connect because incorrect compatible_op_versions
 % env variables are defined using env_desc.json
 incompatible_providers_should_not_connect(Config) ->
     % providers should start connecting right after init_per_testcase
