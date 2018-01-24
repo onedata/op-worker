@@ -131,9 +131,9 @@ init(SessionId, Hostname, Port, Transport, Timeout) ->
     ),
     ProviderId = session_manager:session_id_to_provider_id(SessionId),
     {NextReconnect, Interval} = maps:get(ProviderId, Intervals,
-        {timestamp_in_seconds(), ?INITIAL_RECONNECT_INTERVAL_SEC}
+        {time_utils:system_time_seconds(), ?INITIAL_RECONNECT_INTERVAL_SEC}
     ),
-    case timestamp_in_seconds() >= NextReconnect of
+    case time_utils:system_time_seconds() >= NextReconnect of
         false ->
             ?debug("Discarding connection request to provider(~p) as the "
                    "grace period has not passed yet.", [ProviderId]),
@@ -627,34 +627,27 @@ init_provider_conn(SessionId, ProviderId, Hostname, Port, Transport, Timeout) ->
 %%--------------------------------------------------------------------
 -spec assert_compatibility(binary(), od_provider:id()) -> ok | no_return().
 assert_compatibility(Hostname, ProviderId) ->
+    URL = str_utils:format_bin("https://~s~s", [Hostname, ?provider_version_path]),
     {ok, CompatibleProviderVersions} = application:get_env(
         ?APP_NAME, compatible_op_versions
     ),
-
-    URL = str_utils:format_bin("https://~s~s", [Hostname, ?provider_version_path]),
-    Response = http_client:get(URL, #{}, <<>>, [insecure]),
-    {Code, Body} = case Response of
-        {ok, RespCode, _RespHeaders, ResponseBody} ->
-            {RespCode, ResponseBody};
-        {error, Reason} ->
-            throw(Reason)
-    end,
-
-    case Code of
-        200 ->
-            PeerProviderVersion = binary_to_list(Body),
+    case http_client:get(URL, #{}, <<>>, [insecure]) of
+        {ok, 200, _RespHeaders, ResponseBody} ->
+            PeerProviderVersion = binary_to_list(ResponseBody),
             case lists:member(PeerProviderVersion, CompatibleProviderVersions) of
                 true ->
                     ok;
                 false ->
                     ?error("Discarding connection to provider ~p because of "
-                           "incompatible version (~s). Version must be one of: ~p",
+                    "incompatible version (~s). Version must be one of: ~p",
                         [ProviderId, PeerProviderVersion, CompatibleProviderVersions]
                     ),
                     throw(incompatible_peer_op_version)
             end;
-        _ ->
-            throw(cannot_check_peer_op_version)
+        {ok, _Code, _RespHeaders, _ResponseBody} ->
+            throw(cannot_check_peer_op_version);
+        {error, Error} ->
+            error(Error)
     end.
 
 
@@ -672,7 +665,7 @@ postpone_next_reconnect(Intervals, ProviderId, Interval) ->
         ?MAX_RECONNECT_INTERVAL
     ),
     NewIntervals = Intervals#{
-        ProviderId => {timestamp_in_seconds() + Interval, NewInterval}
+        ProviderId => {time_utils:system_time_seconds() + Interval, NewInterval}
     },
     application:set_env(?APP_NAME, providers_reconnect_intervals, NewIntervals),
     NewInterval.
@@ -688,16 +681,9 @@ postpone_next_reconnect(Intervals, ProviderId, Interval) ->
     ProviderId :: od_provider:id()) -> ok.
 reset_reconnect_interval(Intervals, ProviderId) ->
     NewIntervals = Intervals#{
-        ProviderId => {timestamp_in_seconds(), ?INITIAL_RECONNECT_INTERVAL_SEC}
+        ProviderId => {
+            time_utils:system_time_seconds(),
+            ?INITIAL_RECONNECT_INTERVAL_SEC
+        }
     },
     application:set_env(?APP_NAME, providers_reconnect_intervals, NewIntervals).
-
-
-%%--------------------------------------------------------------------
-%% @doc @private
-%% Returns current timestamp rounded to seconds.
-%% @end
-%%--------------------------------------------------------------------
--spec timestamp_in_seconds() -> integer().
-timestamp_in_seconds() ->
-    time_utils:system_time_seconds().

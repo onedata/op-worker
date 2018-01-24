@@ -83,14 +83,16 @@ authenticate_using_certificate(_OtpCert) ->
 %% Check if client is of compatible version.
 %% @end
 %%--------------------------------------------------------------------
--spec assert_client_compatibility(string()) -> ok | no_return().
+-spec assert_client_compatibility(string() | binary()) -> ok | no_return().
+assert_client_compatibility(ClientVersion) when is_binary(ClientVersion)->
+    assert_client_compatibility(binary_to_list(ClientVersion));
 assert_client_compatibility(ClientVersion) ->
     {ok, CompatibleClientVersions} = application:get_env(
         ?APP_NAME, compatible_oc_versions
     ),
     % Client sends full build version (e.g. 17.06.0-rc9-aiosufshx) so instead
     % of matching whole build version we check only prefix
-    Pred = fun(Ver) -> string:find(ClientVersion, Ver) =:= ClientVersion end,
+    Pred = fun(Ver) -> lists:prefix(Ver, ClientVersion) end,
     case lists:any(Pred, CompatibleClientVersions) of
         true ->
             ok;

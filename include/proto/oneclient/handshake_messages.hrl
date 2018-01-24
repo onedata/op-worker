@@ -18,7 +18,7 @@
 -record(handshake_request, {
     auth :: #macaroon_auth{},
     session_id :: session:id(),
-    version :: string()
+    version :: string() | binary()
 }).
 
 -record(handshake_response, {

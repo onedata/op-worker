@@ -196,7 +196,6 @@ ensure_connection_running() ->
 %%--------------------------------------------------------------------
 -spec start_provider_connection() -> ok.
 start_provider_connection() ->
-    assert_zone_compatibility(),
     critical_section:run(subscriptions_wss, fun() ->
         case timestamp_in_seconds() >= get_next_reconnect() of
             false ->
@@ -204,6 +203,7 @@ start_provider_connection() ->
                 "grace period has not passed yet.");
             true ->
                 Result = try
+                    assert_zone_compatibility(),
                     case subscription_wss:start_link() of
                         {ok, Pid} ->
                             ?info("Subscriptions connection started ~p", [Pid]),
@@ -237,29 +237,30 @@ start_provider_connection() ->
 %%--------------------------------------------------------------------
 -spec assert_zone_compatibility() -> ok | no_return().
 assert_zone_compatibility() ->
+    URL = oneprovider:get_oz_url() ++ ?zone_version_path,
     {ok, CompatibleZoneVersions} = application:get_env(
         ?APP_NAME, compatible_oz_versions
     ),
-    {ok, Code, _RespHeaders, ResponseBody} = http_client:get(
-        oneprovider:get_oz_url() ++ ?zone_version_path, #{}, <<>>, [insecure]
-    ),
-    case Code of
-        200 ->
+    case http_client:get(URL, #{}, <<>>, [insecure]) of
+        {ok, 200, _RespHeaders, ResponseBody} ->
             ZoneVersion = binary_to_list(ResponseBody),
             case lists:member(ZoneVersion, CompatibleZoneVersions) of
                 true ->
                     ok;
                 false ->
-                    ?critical("Exiting due to connection attempt with unsupported "
-                              "version of Onezone: ~p. Supported ones: ~p", [
+                    ?critical("This provider is not compatible with its Onezone "
+                              "service. Onezone version: ~s. Compatible versions: ~p. "
+                              "The application will be terminated.", [
                         ZoneVersion, CompatibleZoneVersions
                     ]),
                     init:stop()
             end;
-        _ ->
+        {ok, Code, _RespHeaders, _ResponseBody} ->
             ?critical("Exiting due to inability to check Onezone version before "
-                      "attempting conection."),
-            init:stop()
+                      "attempting conection. HTTP response: ~p", [Code]),
+            init:stop();
+        {error, Error} ->
+            error(Error)
     end.
 
 
