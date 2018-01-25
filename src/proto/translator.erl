@@ -177,8 +177,8 @@ translate_from_protobuf(#'SubscriptionCancellation'{id = Id}) ->
 
 
 %% HANDSHAKE
-translate_from_protobuf(#'HandshakeRequest'{token = Token, session_id = SessionId}) ->
-    #handshake_request{auth = translate_from_protobuf(Token), session_id = SessionId};
+translate_from_protobuf(#'HandshakeRequest'{token = Token, session_id = SessionId, version = Version}) ->
+    #handshake_request{auth = translate_from_protobuf(Token), session_id = SessionId, version = Version};
 translate_from_protobuf(#'Token'{value = Token, secondary_values = []}) ->
     #token_auth{token = Token};
 translate_from_protobuf(#'Token'{value = Macaroon, secondary_values = DischargeMacaroons}) ->

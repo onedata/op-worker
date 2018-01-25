@@ -18,6 +18,7 @@
 -behaviour(worker_plugin_behaviour).
 
 -include("global_definitions.hrl").
+-include("http/http_common.hrl").
 -include("proto/common/credentials.hrl").
 -include("modules/subscriptions/subscriptions.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
@@ -186,6 +187,7 @@ ensure_connection_running() ->
 %%--------------------------------------------------------------------
 %% @doc @private
 %% Attempts to start a new WebSocket subscriptions connection to OneZone.
+%% Check first if version of OneZone is supported and exit if not.
 %% The procedure is wrapped in a global lock and reattempted in increasing
 %% intervals to prevent the provider from flooding OneZone with
 %% connection requests. If a reconnect is attempted during the grace period
@@ -201,6 +203,7 @@ start_provider_connection() ->
                 "grace period has not passed yet.");
             true ->
                 Result = try
+                    assert_zone_compatibility(),
                     case subscription_wss:start_link() of
                         {ok, Pid} ->
                             ?info("Subscriptions connection started ~p", [Pid]),
@@ -225,6 +228,40 @@ start_provider_connection() ->
         end
     end),
     ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc @private
+%% Check compatibility of Onezone and exit if it is not compatible.
+%% @end
+%%--------------------------------------------------------------------
+-spec assert_zone_compatibility() -> ok | no_return().
+assert_zone_compatibility() ->
+    URL = oneprovider:get_oz_url() ++ ?zone_version_path,
+    {ok, CompatibleZoneVersions} = application:get_env(
+        ?APP_NAME, compatible_oz_versions
+    ),
+    case http_client:get(URL, #{}, <<>>, [insecure]) of
+        {ok, 200, _RespHeaders, ResponseBody} ->
+            ZoneVersion = binary_to_list(ResponseBody),
+            case lists:member(ZoneVersion, CompatibleZoneVersions) of
+                true ->
+                    ok;
+                false ->
+                    ?critical("This provider is not compatible with its Onezone "
+                              "service. Onezone version: ~s. Compatible versions: ~p. "
+                              "The application will be terminated.", [
+                        ZoneVersion, CompatibleZoneVersions
+                    ]),
+                    init:stop()
+            end;
+        {ok, Code, _RespHeaders, _ResponseBody} ->
+            ?critical("Exiting due to inability to check Onezone version before "
+                      "attempting conection. HTTP response: ~p", [Code]),
+            init:stop();
+        {error, Error} ->
+            error(Error)
+    end.
 
 
 %%--------------------------------------------------------------------
