@@ -221,7 +221,7 @@ get_change_key(#document{key = Uuid}) ->
 %% Group changes - documents connected with single file are grouped together.
 %% @end
 %%--------------------------------------------------------------------
--spec group_changes([datastore:doc()]) -> #{}.
+-spec group_changes([datastore:doc()]) -> map().
 group_changes(Docs) ->
     lists:foldl(fun(Doc, Acc) ->
         ChangeKey = get_change_key(Doc),
