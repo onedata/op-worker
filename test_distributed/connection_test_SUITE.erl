@@ -537,7 +537,7 @@ python_client_test_base(Config) ->
     file:write_file(MessagePath, PacketRaw),
     file:write_file(HandshakeMsgPath, HandshakeMessageRaw),
     Host = utils:get_host(Worker1),
-    {ok, Port} = test_utils:get_env(Worker1, ?APP_NAME, protocol_handler_port),
+    {ok, Port} = test_utils:get_env(Worker1, ?APP_NAME, gui_https_port),
 
     % when
     T1 = erlang:monotonic_time(milli_seconds),
@@ -701,13 +701,10 @@ connect_via_token(Node, SocketOpts, SessId) ->
         undefined -> [];
         Other -> [{active, Other}]
     end,
-    NewSocketOpts = proplists:delete(active, SocketOpts),
-    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, protocol_handler_port),
+    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, gui_https_port),
 
     % when
-    {ok, Sock} = (catch ssl:connect(utils:get_host(Node), Port, [binary,
-        {packet, 4}, {active, once}, {reuse_sessions, false} | NewSocketOpts
-    ], timer:minutes(1))),
+    {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),
     ok = ssl:send(Sock, TokenAuthMessageRaw),
 
     % then
@@ -720,20 +717,15 @@ connect_via_token(Node, SocketOpts, SessId) ->
     {ok, {Sock, SessId}}.
 
 
-
 connect_as_provider(Node, ProviderId, Nonce) ->
-    SocketOpts = [{active, true}],
     TokenAuthMessage = #'ClientMessage'{message_body = {provider_handshake_request,
         #'ProviderHandshakeRequest'{provider_id = ProviderId, nonce = Nonce}
     }},
     TokenAuthMessageRaw = messages:encode_msg(TokenAuthMessage),
-    NewSocketOpts = proplists:delete(active, SocketOpts),
-    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, protocol_handler_port),
+    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, gui_https_port),
 
     % when
-    {ok, Sock} = (catch ssl:connect(utils:get_host(Node), Port, [binary,
-        {packet, 4}, {active, once}, {reuse_sessions, false} | NewSocketOpts
-    ], timer:minutes(1))),
+    {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),
     ok = ssl:send(Sock, TokenAuthMessageRaw),
 
     % then
@@ -742,6 +734,20 @@ connect_as_provider(Node, ProviderId, Nonce) ->
     } = receive_server_message(),
     ok = ssl:close(Sock),
     {ok, HandshakeResp}.
+
+
+connect_and_upgrade_proto(Hostname, Port) ->
+    {ok, Sock} = (catch ssl:connect(Hostname, Port, [binary,
+        {active, once}, {reuse_sessions, false}
+    ], timer:minutes(1))),
+    ssl:send(Sock, connection:protocol_upgrade_request(list_to_binary(Hostname))),
+    receive {ssl, Sock, Data} ->
+        ?assert(connection:verify_protocol_upgrade_response(Data)),
+        ssl:setopts(Sock, [{active, once}, {packet, 4}]),
+        {ok, Sock}
+    after timer:minutes(1) ->
+        exit(timeout)
+    end.
 
 
 %%--------------------------------------------------------------------

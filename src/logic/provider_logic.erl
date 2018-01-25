@@ -8,7 +8,7 @@
 %%% @doc
 %%% Interface for reading and manipulating od_provider records synchronized
 %%% via Graph Sync. Requests are delegated to gs_client_worker, which decides
-%%% if they should be served from cache or handled by OneZone.
+%%% if they should be served from cache or handled by Onezone.
 %%% NOTE: This is the only valid way to interact with od_provider records, to
 %%% ensure consistency, no direct requests to datastore or OZ REST should
 %%% be performed.
@@ -361,7 +361,7 @@ update_subdomain_delegation_ips() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Retrieves IPs of this provider as known to OneZone DNS.
+%% Retrieves IPs of this provider as known to Onezone DNS.
 %% Returns the atom 'false' if subdomain delegation is not enabled for this
 %% provider.
 %% @end
@@ -481,7 +481,7 @@ zone_time_seconds() ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Contacts given provider and retrieves his identity macaroon, and then
-%% verifies it in OneZone.
+%% verifies it in Onezone.
 %% @end
 %%--------------------------------------------------------------------
 -spec verify_provider_identity(od_provider:id()) -> ok | {error, term()}.
@@ -511,7 +511,7 @@ verify_provider_identity(ProviderId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Verifies given provider in OneZone based on its identity macaroon.
+%% Verifies given provider in Onezone based on its identity macaroon.
 %% @end
 %%--------------------------------------------------------------------
 -spec verify_provider_identity(od_provider:id(), IdentityMacaroon :: binary()) ->

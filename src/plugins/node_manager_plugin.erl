@@ -69,8 +69,7 @@ db_nodes() ->
 %%--------------------------------------------------------------------
 -spec listeners() -> Listeners :: [atom()].
 listeners() -> node_manager:cluster_worker_listeners() ++ [
-    gui_listener,
-    protocol_listener
+    gui_listener
 ].
 
 %%--------------------------------------------------------------------
@@ -152,7 +151,7 @@ handle_cast(update_subdomain_delegation_ips, State) ->
         ok ->
             ok;
         error ->
-            % Kill the connection to OneZone in case provider IPs cannot be
+            % Kill the connection to Onezone in case provider IPs cannot be
             % updated, which will cause a reconnection and update retry.
             gen_server2:call({global, ?GS_CLIENT_WORKER_GLOBAL_NAME},
                 {terminate, normal})

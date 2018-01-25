@@ -32,7 +32,7 @@ parser.add_argument(
 parser.add_argument(
     '--port',
     action='store',
-    default=5555,
+    default=443,
     help='server port',
     dest='port')
 
@@ -53,12 +53,20 @@ message = open(args.message, "rb").read()
 message_length = socket.htonl(len(message))
 message_bytes = struct.pack("I", message_length) + message
 
+proto_upgrade_msg = "GET /clproto HTTP/1.1\r\n" \
+                    "Host: " + args.host + "\r\n" \
+                    "Connection: upgrade\r\n" \
+                    "Upgrade: clproto\r\n" \
+                    "\r\n"
+
 # prepare socket
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 sslSocket = ssl.wrap_socket(s)
 
 # connect
 sslSocket.connect((args.host, port))
+sslSocket.write(proto_upgrade_msg)
+sslSocket.read()
 sslSocket.write(handshake_bytes)
 sslSocket.read()
 

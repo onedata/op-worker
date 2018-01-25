@@ -110,7 +110,7 @@ clear_provider_id_cache() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Predicate saying if this provider is registered in OneZone.
+%% Predicate saying if this provider is registered in Onezone.
 %% @end
 %%--------------------------------------------------------------------
 -spec is_registered() -> boolean().
