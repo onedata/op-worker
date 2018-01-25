@@ -257,7 +257,7 @@ parallel_apply(DocsList, Ref) ->
 %% Gather answers from workers.
 %% @end
 %%--------------------------------------------------------------------
--spec gather_answers(list(), reference()) ->
+-spec gather_answers([pid()], reference()) ->
     ok | timeout | {error, datastore:seq(), term()}.
 gather_answers(SlavesList, Ref) ->
     gather_answers(SlavesList, Ref, ok).
@@ -268,7 +268,7 @@ gather_answers(SlavesList, Ref) ->
 %% Gather appropriate number of workers' answers.
 %% @end
 %%--------------------------------------------------------------------
--spec gather_answers(list(), reference(),
+-spec gather_answers([pid()], reference(),
     ok | {error, datastore:seq(), term()}) ->
     ok | timeout | {error, datastore:seq(), term()}.
 gather_answers([], _Ref, Ans) ->

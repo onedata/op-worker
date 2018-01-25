@@ -300,7 +300,8 @@ get_proxy_params(Helper, StorageId) ->
         helper_args = [
             #helper_arg{key = <<"storageId">>, value = StorageId},
             #helper_arg{key = <<"timeout">>, value = TimeoutValue}
-        ]
+        ],
+        delayed_sync = true
     }.
 
 %%--------------------------------------------------------------------

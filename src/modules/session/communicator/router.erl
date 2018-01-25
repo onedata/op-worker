@@ -107,7 +107,7 @@ preroute_message(Msg, SessId) ->
 %% Route message to adequate handler, this function should never throw
 %% @end
 %%--------------------------------------------------------------------
--spec route_message(Msg :: #client_message{}) ->
+-spec route_message(Msg :: #client_message{} | #server_message{}) ->
     ok | {ok, #server_message{}} | {error, term()}.
 route_message(Msg = #client_message{message_id = undefined}) ->
     route_and_ignore_answer(Msg);
