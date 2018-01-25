@@ -157,7 +157,8 @@ handle_call(_Request, _From, State) ->
 handle_cast(start_transfer, State = #state{
     transfer_id = TransferId,
     session_id = SessionId,
-    file_guid = FileGuid
+    file_guid = FileGuid,
+    space_id = SpaceId
 }) ->
     try
         transfer:mark_active_invalidation(TransferId),
@@ -170,22 +171,24 @@ handle_cast(start_transfer, State = #state{
     catch
         _Error:Reason ->
             ?error_stacktrace("Could not invalidate file ~p due to ~p", [FileGuid, Reason]),
-            transfer:mark_failed_invalidation(TransferId),
+            transfer:mark_failed_invalidation(TransferId, SpaceId),
             {stop, Reason, State}
     end;
 handle_cast(finish_transfer, State = #state{
     transfer_id = TransferId,
+    space_id = SpaceId,
     callback = Callback
 }) ->
-    transfer:mark_completed_invalidation(TransferId),
+    transfer:mark_completed_invalidation(TransferId, SpaceId),
     notify_callback(Callback),
     {stop, normal, State};
 handle_cast({failed_transfer, Error}, State = #state{
     file_guid = FileGuid,
+    space_id = SpaceId,
     transfer_id = TransferId
 }) ->
     ?error_stacktrace("Could not invalidate file ~p due to ~p", [FileGuid, Error]),
-    transfer:mark_failed_invalidation(TransferId),
+    transfer:mark_failed_invalidation(TransferId, SpaceId),
     {stop, Error, State};
 handle_cast(_Request, State) ->
     ?log_bad_request(_Request),
