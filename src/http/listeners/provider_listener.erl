@@ -64,7 +64,7 @@ start() ->
             {cacerts, CaCerts},
             {verify, verify_peer},
             {fail_if_no_peer_cert, true},
-            {ciphers, ssl:cipher_suites() -- ssl_utils:weak_ciphers()}
+            {ciphers, ssl_utils:safe_ciphers()}
         ],
         connection, []
     ),
