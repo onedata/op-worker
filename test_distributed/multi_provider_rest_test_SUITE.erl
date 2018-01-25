@@ -88,7 +88,7 @@
 ]).
 
 %utils
--export([kill/1, verify_file/3, create_file/3, create_dir/3,
+-export([verify_file/3, create_file/3, create_dir/3,
     create_nested_directory_tree/4, sync_file_counter/3, create_file_counter/4]).
 
 all() ->
@@ -274,7 +274,6 @@ replicate_file(Config) ->
         #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
         #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
     ],
-
     ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File),
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
 
@@ -296,7 +295,7 @@ restart_file_replication(Config) ->
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
 
     % when
-    lengthen_file_replication_time(WorkerP2, 60),
+    fail_file_replication(WorkerP2),
     {ok, 200, _, Body0} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1,
         <<"replicas", File/binary, "?provider_id=", (domain(WorkerP2))/binary>>,
         post, [user_1_token_header(Config)], []),
@@ -305,17 +304,13 @@ restart_file_replication(Config) ->
     DecodedBody0 = json_utils:decode_map(Body0),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody0),
 
-    Pid = check_pid(WorkerP2, ?ATTEMPTS, Tid),
-    %% stop transfer
-    true = rpc:call(WorkerP2, multi_provider_rest_test_SUITE, kill, [Pid]),
-
     % then
     {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
     DomainP1 = domain(WorkerP1),
     DomainP2 = domain(WorkerP2),
 
     ?assertMatch(#{
-        <<"transferStatus">> := <<"active">>,
+        <<"transferStatus">> := <<"failed">>,
         <<"targetProviderId">> := DomainP2,
         <<"path">> := File,
         <<"invalidationStatus">> := <<"skipped">>,
@@ -332,8 +327,8 @@ restart_file_replication(Config) ->
     ?assertEqualList([], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqualList([Tid], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
 
-    resume_file_replication_time(WorkerP2),
-    rpc:call(WorkerP1, transfer, restart_unfinished_transfers, [SpaceId]),
+    resume_file_replication(WorkerP2),
+    {ok, _} = rpc:call(WorkerP2, transfer, restart, [Tid, <<"space3">>]),
 
     ?assertMatch(#{
         <<"transferStatus">> := <<"completed">>,
@@ -422,7 +417,7 @@ cancel_file_replication(Config) ->
                 json_utils:decode_map(TransferStatus);
             Error -> Error
         end, ?ATTEMPTS),
-    resume_file_replication_time(WorkerP2).
+    resume_file_replication(WorkerP2).
 
 replicate_dir(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -527,7 +522,7 @@ restart_dir_replication(Config) ->
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File2}), ?ATTEMPTS),
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File3}), ?ATTEMPTS),
 
-    lengthen_file_replication_time(WorkerP2, 60),
+    fail_file_replication(WorkerP2),
 
     % when
     {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1, <<"replicas", Dir1/binary,
@@ -536,17 +531,12 @@ restart_dir_replication(Config) ->
     DecodedBody = json_utils:decode_map(Body),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
 
-    Pid = check_pid(WorkerP2, ?ATTEMPTS, Tid),
-
-    %% stop transfer
-    true = rpc:call(WorkerP2, multi_provider_rest_test_SUITE, kill, [Pid]),
-
     % then
     {ok, FileObjectId} = cdmi_id:guid_to_objectid(Dir1Guid),
     DomainP2 = domain(WorkerP2),
 
     ?assertMatch(#{
-        <<"transferStatus">> := <<"active">>,
+        <<"transferStatus">> := <<"failed">>,
         <<"targetProviderId">> := DomainP2,
         <<"path">> := Dir1,
         <<"invalidationStatus">> := <<"skipped">>,
@@ -563,9 +553,9 @@ restart_dir_replication(Config) ->
     ?assertEqualList([], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqualList([Tid], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
 
-    resume_file_replication_time(WorkerP2),
+    resume_file_replication(WorkerP2),
     %% restart transfer
-    rpc:call(WorkerP1, transfer, restart_unfinished_transfers, [SpaceId]),
+    rpc:call(WorkerP2, transfer, restart, [Tid, <<"space3">>]),
 
     ?assertMatch(#{
         <<"transferStatus">> := <<"completed">>,
@@ -646,6 +636,7 @@ replicate_file_by_id(Config) ->
         #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
         #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
     ],
+
     ?assertDistributionById(WorkerP1, ExpectedDistribution, Config, FileObjectId),
     ?assertDistributionById(WorkerP2, ExpectedDistribution, Config, FileObjectId),
 
@@ -758,6 +749,7 @@ invalidate_file_replica(Config) ->
     ExpectedDistribution2 = [
         #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]}
     ],
+
     ?assertDistribution(WorkerP1, ExpectedDistribution2, Config, File),
     ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, File),
 
@@ -835,7 +827,7 @@ restart_invalidation_of_file_replica_with_migration(Config) ->
     ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File),
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
 
-    lengthen_file_replication_time(WorkerP2, 60),
+    fail_file_replication(WorkerP2),
     % then
     {ok, 200, _, Body1} = do_request(WorkerP1, <<"replicas", File/binary, "?provider_id=",
         (domain(WorkerP1))/binary, "&migration_provider_id=", (domain(WorkerP2))/binary>>,
@@ -844,12 +836,9 @@ restart_invalidation_of_file_replica_with_migration(Config) ->
     DecodedBody1 = json_utils:decode_map(Body1),
     #{<<"transferId">> := Tid1} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody1),
 
-    Pid = check_pid(WorkerP2, ?ATTEMPTS, Tid1),
-    true = rpc:call(WorkerP2, multi_provider_rest_test_SUITE, kill, [Pid]),
-
     ?assertMatch(#{
-        <<"transferStatus">> := <<"active">>,
-        <<"invalidationStatus">> := <<"scheduled">>
+        <<"transferStatus">> := <<"failed">>,
+        <<"invalidationStatus">> := <<"failed">>
     },
         case do_request(WorkerP1, <<"transfers/", Tid1/binary>>, get, [user_1_token_header(Config)], []) of
             {ok, 200, _, TransferStatus} ->
@@ -857,8 +846,19 @@ restart_invalidation_of_file_replica_with_migration(Config) ->
             Error -> Error
         end, ?ATTEMPTS),
 
-    resume_file_replication_time(WorkerP2),
-    rpc:call(WorkerP2, transfer, restart_unfinished_transfers, [SpaceId]),
+    resume_file_replication(WorkerP2),
+    rpc:call(WorkerP2, transfer, restart, [Tid1, <<"space3">>]),
+
+
+    ?assertMatch(#{
+        <<"transferStatus">> := <<"completed">>,
+        <<"invalidationStatus">> := <<"completed">>
+    },
+        case do_request(WorkerP1, <<"transfers/", Tid1/binary>>, get, [user_1_token_header(Config)], []) of
+            {ok, 200, _, TransferStatus} ->
+                json_utils:decode_map(TransferStatus);
+            Error -> Error
+        end, ?ATTEMPTS),
 
     ?assertEqualList([Tid1], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqualList([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
@@ -2313,7 +2313,8 @@ init_per_suite(Config) ->
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_update_interval, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_stream_update_interval, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
-            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(1)) % TODO - change to 2 seconds
+            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(1)), % TODO - change to 2 seconds
+            test_utils:set_env(Worker, ?APP_NAME, prefetching, off)
         end, ?config(op_worker_nodes, NewConfig2)),
 
         application:start(ssl),
@@ -2454,6 +2455,7 @@ end_per_testcase(Case, Config) when
     end_per_testcase(all, Config);
 
 end_per_testcase(_Case, Config) ->
+    remove_transfers(Config),
     lfm_proxy:teardown(Config).
 
 %%%===================================================================
@@ -2500,6 +2502,14 @@ user_1_token_header(Config) ->
 domain(Node) ->
     atom_to_binary(?GET_DOMAIN(Node), utf8).
 
+fail_file_replication(Node) ->
+    test_utils:mock_new(Node, replica_synchronizer),
+    test_utils:mock_expect(Node, replica_synchronizer, synchronize,
+        fun(_, _, _, _, _) ->
+            throw(test_error)
+        end
+    ).
+
 lengthen_file_replication_time(Node, SleepTimeInSeconds) ->
     test_utils:mock_new(Node, replica_synchronizer),
     test_utils:mock_expect(Node, replica_synchronizer, synchronize,
@@ -2509,25 +2519,8 @@ lengthen_file_replication_time(Node, SleepTimeInSeconds) ->
         end
     ).
 
-resume_file_replication_time(Node) ->
+resume_file_replication(Node) ->
     ok = test_utils:mock_unload(Node, replica_synchronizer).
-
-kill(Pid) ->
-    true = exit(list_to_pid(binary_to_list(Pid)), kill).
-
-check_pid(_Node, 0, _Tid) ->
-    undefined;
-check_pid(Node, Attempts, Tid) ->
-    case rpc:call(Node, transfer, get, [Tid]) of
-        {ok, #document{value = #transfer{pid = undefined}}} ->
-            timer:sleep(timer:seconds(1)),
-            check_pid(Node, Attempts - 1, Tid);
-        {ok, #document{value = #transfer{pid = Pid}}} ->
-            Pid;
-        _Other ->
-            timer:sleep(timer:seconds(1)),
-            check_pid(Node, Attempts - 1, Tid)
-    end.
 
 create_nested_directory_tree(Node, SessionId, [SubFilesNum], Root) ->
     create_dir(Node, SessionId, Root),
@@ -2610,3 +2603,19 @@ start_monitoring_worker(Node) ->
         {supervisor_children_spec, rpc:call(Node, monitoring_worker, supervisor_children_spec, [])}
     ],
     ok = rpc:call(Node, node_manager, start_worker, [monitoring_worker, Args]).
+
+remove_transfers(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    lists:foreach(fun(Worker) ->
+        {ok, #document{value = #od_provider{spaces = SpaceIds}}} =
+            rpc:call(Worker, od_provider, get_or_fetch, [rpc:call(Worker, oneprovider, get_provider_id, [])]),
+        lists:foreach(fun(SpaceId) ->
+            {ok, Current} = rpc:call(Worker, transfer, list_transfers, [SpaceId, true]),
+            {ok, Past} = rpc:call(Worker, transfer, list_transfers, [SpaceId, false]),
+            lists:foreach(fun(Tid) ->
+                rpc:call(Worker, transfer, delete, [Tid, SpaceId]),
+                rpc:call(Worker, transfer, remove_links, [<<"PAST_TRANSFERS_KEY">>, Tid, SpaceId]),
+                rpc:call(Worker, transfer, remove_links, [<<"CURRENT_TRANSFERS_KEY">>, Tid, SpaceId])
+            end, Current ++ Past)
+        end, SpaceIds)
+    end, Workers).

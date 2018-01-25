@@ -569,7 +569,7 @@ init_report([SpaceId | Rest]) ->
 %% storage_sync.
 %% @end
 %%-------------------------------------------------------------------
--spec init_report([od_space:id()]) -> ok.
+-spec init_counters([od_space:id()]) -> ok.
 init_counters([]) ->
     ok;
 init_counters([SpaceId | Rest]) ->

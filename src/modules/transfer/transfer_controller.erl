@@ -104,6 +104,7 @@ mark_finished(Pid) ->
     {stop, Reason :: term()} | ignore.
 init([SessionId, TransferId, FileGuid, Callback, InvalidationSourceReplica]) ->
     ok = gen_server2:cast(self(), start_transfer),
+    ?info("transfer_controller of transfer ~p started", [TransferId]),
     {ok, #state{
         transfer_id = TransferId,
         session_id = SessionId,
@@ -151,17 +152,19 @@ handle_cast(start_transfer, State = #state{
     {noreply, State};
 handle_cast(transfer_finished, State = #state{
     transfer_id = TransferId,
+    space_id = SpaceId,
     callback = Callback,
     invalidate_source_replica = InvalidationSourceReplica
 }) ->
-    transfer:mark_completed(TransferId),
+    transfer:mark_completed(TransferId, SpaceId, InvalidationSourceReplica),
     notify_callback(Callback, InvalidationSourceReplica),
     {stop, normal, State};
 handle_cast({transfer_failed, Reason}, State = #state{
+    space_id = SpaceId,
     transfer_id = TransferId
 }) ->
     ?error_stacktrace("Transfer ~p failed due to ~p", [TransferId, Reason]),
-    transfer:mark_failed(TransferId),
+    transfer:mark_failed(TransferId, SpaceId),
     {stop, normal, State};
 handle_cast(_Request, State) ->
     ?log_bad_request(_Request),
