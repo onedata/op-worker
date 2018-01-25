@@ -45,7 +45,7 @@ all() ->
 
 
 % Providers should not connect because incorrect compatible_op_versions
-% env variables are defined using env_desc.json
+% env variables are defined using in env_up_posthook
 incompatible_providers_should_not_connect(Config) ->
     % providers should start connecting right after init_per_testcase
     % (spaces creation); just in case wait some time before checking
@@ -74,7 +74,14 @@ incompatible_providers_should_not_connect(Config) ->
 
 
 init_per_suite(Config) ->
-    [{?LOAD_MODULES, [initializer]} | Config].
+    Posthook = fun(NewConfig) ->
+        Nodes = ?config(op_worker_nodes, NewConfig),
+        rpc:multicall(Nodes, application, set_env, [
+            ?APP_NAME, compatible_op_versions, ["16.04-rc5"]
+        ]),
+        NewConfig
+    end,
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
 
 end_per_suite(_Config) ->

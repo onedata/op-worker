@@ -111,36 +111,6 @@
         "groups": {
         },
         "spaces": {
-            "space_id0": {
-                "displayed_name": "space0",
-                "users": [
-                    "user1",
-                    "user2"
-                ],
-                "groups": [
-                ],
-                "providers": {
-                    "p1": {
-                        "storage": "/mnt/st1",
-                        "supported_size": 20
-                    }
-                }
-            },
-            "space_id1": {
-                "displayed_name": "space1",
-                "users": [
-                    "user1",
-                    "user2"
-                ],
-                "groups": [
-                ],
-                "providers": {
-                    "p1": {
-                        "storage": "/mnt/st1",
-                        "supported_size": 30
-                    }
-                }
-            },
             "space_id2": {
                 "displayed_name": "space2",
                 "users": [
