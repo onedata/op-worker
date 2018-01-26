@@ -106,7 +106,7 @@ foreach_chunk(#file_block{offset = O, size = S}, ChunkSize ,  Fun) ->
 maybe_transfer_chunk(Chunk = #file_block{size = BlockSize}, ProviderId, FileGuid,
     UserId, FileCtx, TransferId
 ) ->
-    case transfer:should_continue(TransferId) of
+    case transfer:is_ongoing(TransferId) of
         true ->
             try
                 {ok, _} = transfer:mark_data_transfer_scheduled(TransferId, BlockSize),
@@ -209,7 +209,7 @@ receive_rtransfer_notification(Ref, TransferId) ->
             Status
     after
          ?CHECK_STATUS_INTERVAL ->
-            case transfer:should_continue(TransferId) of
+            case transfer:is_ongoing(TransferId) of
                 true ->
                     receive_rtransfer_notification(Ref, TransferId);
                 false ->
