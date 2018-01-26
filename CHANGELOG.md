@@ -4,6 +4,92 @@
 CHANGELOG
 ---------
 
+### 17.06.0-rc9
+
+* VFS-3951 add zone connection test suite
+* VFS-4004 Update ctool to include safe ciphers in TLS
+* fix storage_update not restarting after provider restart
+* move setting of rtransfer port to app.config, fix transfer destination being send as string "undefined" instead of null
+* lower rtransfer_block_size, increase number of transfer_workers
+* do not allow provider to restart all transfers in supported space
+* Updating GUI, including: VFS-4002 * VFS-4002 Showing transfer type (replication/migration/invalidation) in transfers table
+* change finalizing state of transfer in gui to invalidating, update finish time when invalidation is finished
+* Updating GUI, including: VFS-4000, VFS-3956, VFS-3595, VFS-3591, VFS-3210, VFS-3710 
+* VFS-4000 Fixed fetching wrong transfer statistics for chosen timespan 
+* VFS-3956 Fixed provider name tooltip rendering in migrate menu of data distribution modal 
+* VFS-3595 Fixed locking ACL edit when switching between ACL and POSIX in permissions modal
+* VFS-3591 Fixed infinite loading of metadata panel when failed to fetch metadata for file 
+* VFS-3210 Fixed displaying long text in basic file metadata keys and values 
+* VFS-3710 Using binary prefix units for displaying sizes (MiB, GiB, etc.)
+* VFS-3951 add op ver compatibility check
+* VFS-3911 - mechanism for turning node_manager plugins on/off in app.config, turn monitoring_worker off by default
+* changes in throttling_config
+* VFS-3951 add build_version env var for op
+* VFS-3972 Fix attach-direct consoles in releases not being run with xterm terminal
+* VFS-3951 add rest endpoint for checking op version
+* add try-catch around rtransfer write, remove debug logs
+* fix bug in gateway_connection:garbage_collect function add retrying of fetching file chunk
+* VFS-3932 Reuse cluster worker graphite args
+* VFS-3911 - use exometer counter to control execution of storage_import and storage_update
+* VFS-3932 Added helper performance metrics
+* VFS-3892 Use weighted average (rather than arithmetic) to calculate transfer speeds between time windows, improve calculations on the edges of speedchart
+* VFS-3892 Move status field from transfer record to transfer-current-stat record
+* VFS-3857 make request_chunk_size and check_status_interval constants in replica_synchronizer configurable in app.config
+* VFS-3857 canceling and automatic retries of transfers
+* fallback to admin_ctx when luma is disabled
+* VFS-3811 Add exometer counters
+* handle luma returning integer values
+* Hotfix - Improve environment variables names
+* Hotfix - prevent rtransfer from crush
+* VFS-3864 Lower default request timeout to 30 seconds
+* do not restart transfers which has been deleted, create separate links trees for different spaces
+* add storageId and storageName to map_group luma request
+* create files on storage with appropriate uids and gids
+
+
+### 17.06.0-rc8
+
+* fallback to admin_ctx when luma is disabled
+* handle luma returning integer values
+* Hotfix - Improve environment variables names
+* Hotfix - update deps
+* Hotfix - prevent rtransfer from crush
+* improvements according to PR
+* improve docs according to PR, please dialyzer
+* VFS-3864 Lower default request timeout to 30 seconds
+* do not restart transfers which has been deleted, create separate links trees for different spaces
+* add storageId and storageName to map_group luma request
+* please dialyzer
+* create files on storage with appropriate uids and gids
+* VFS-3846 Do not mock oneprovider in initializer
+* Releasing new version 17.06.0-rc8
+* Update vsn in app.src file
+* do not restart failed transfers
+* Hotfix - update cluster_worker
+* VFS-3851 - fix dialyzer
+* VFS-3851 - fix rtransfer not binding to many interfaces
+* VFS-3851 fix not casting replication of first file in the tree (replication was handled by transfer_controller itself)
+* VFS-3851 - remove timeout from function awaiting rtransfer completion, delete old TODO
+* handling onedata groups in luma, added tests for luma improvements, cleaning docs after make_file or create_file failed
+* VFS-3813 Update tests
+* VFS-3813 Improve files creation performance
+* VFS-3813 Add comment to vm.args
+* refactor luma map_group request
+* fix handling uid and gid from luma as integers
+* fix storage_sync tests that use luma
+* handling onedata groups in luma, added tests for luma improvements
+* VFS-3813 Update get_provider_id
+* add spaceId to resolve_group request, split resolving acl user id and group id to different functions
+* VFS-3808 Update deps
+* add case for onedata idp in reverse_luma_proxy:get_user_id
+* VFS-3808 Update deps
+* VFS-3808 Update deps
+* VFS-3808 Update deps
+* VFS-3808 Update deps
+* Update deps
+* Update deps
+
+
 ### 17.06.0-rc8
 
 * do not restart failed transfers
