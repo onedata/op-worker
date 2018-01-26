@@ -402,10 +402,7 @@ invalidate_fully_redundant_file_replica(UserCtx, FileCtx) ->
     oneprovider:id(), undefined | transfer:id(), undefined | autocleaning:id()) -> ok.
 invalidate_children_replicas(UserCtx, Children, MigrationProviderId, TransferId, AutoCleaningId) ->
     lists:foreach(fun(ChildCtx) ->
-        %todo possible parallelization on a process pool, cannot parallelize as
-        %todo in replication because you must be sure that all children are invalidated before parent
         worker_pool:cast(?INVALIDATION_WORKERS_POOL,
             {?MODULE, invalidate_file_replica, [UserCtx, ChildCtx, MigrationProviderId, TransferId, AutoCleaningId]})
-%%        invalidate_file_replica(UserCtx, ChildCtx, MigrationProviderId, TransferId, AutoCleaningId)
     end, Children).
 
