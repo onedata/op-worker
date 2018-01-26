@@ -20,15 +20,15 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start/7, stop/1, get_status/1, get_info/1, get/1, init/0, cleanup/0,
-    decode_pid/1, encode_pid/1, get_controller/1, remove_links/3, restart/2]).
+-export([start/7, cancel/1, get_status/1, get_info/1, get/1, init/0, cleanup/0,
+    decode_pid/1, encode_pid/1, get_controller/1, remove_links/3, restart/1]).
 -export([mark_active/2, mark_completed/3, mark_failed/2,
     mark_active_invalidation/1, mark_completed_invalidation/2, mark_failed_invalidation/2,
     mark_file_transfer_scheduled/2, mark_file_transfer_finished/2,
     mark_data_transfer_scheduled/2, mark_data_transfer_finished/3,
     for_each_past_transfer/3, for_each_current_transfer/3, restart_unfinished_transfers/1,
     mark_file_invalidation_finished/2, mark_file_invalidation_scheduled/2,
-    mark_cancelled/1, should_continue/1, increase_failed_file_transfers/1]).
+    mark_cancelled/1, increase_failed_file_transfers/1, mark_cancelled_invalidation/1]).
 -export([list_transfers/2, is_ongoing/1, is_migrating/1]).
 
 %% model_behaviour callbacks
@@ -201,7 +201,7 @@ record_upgrade(2, {?MODULE, FileUuid, SpaceId, Path, CallBack, TransferStatus,
         #{TargetProviderId => LastUpdate},
         % min_hist
         #{TargetProviderId => lists:duplicate(60 div ?FIVE_SEC_TIME_WINDOW, 0)},
-        %hr_hist
+        % hr_hist
         #{TargetProviderId => MinHist},
         % dy_hist
         #{TargetProviderId => HrHist},
@@ -327,7 +327,7 @@ start(SessionId, FileGuid, FilePath, SourceProviderId, TargetProviderId, Callbac
 -spec restart_unfinished_transfers(od_space:id()) -> [id()].
 restart_unfinished_transfers(SpaceId) ->
     {ok, {Restarted, Failed}} = for_each_current_transfer(fun(TransferId, {Restarted0, Failed0}) ->
-        case restart(TransferId, SpaceId) of
+        case restart(TransferId) of
             {ok, TransferId} ->
                 {[TransferId | Restarted0], Failed0};
             {error, not_target_provider} ->
@@ -338,7 +338,12 @@ restart_unfinished_transfers(SpaceId) ->
                 {Restarted0, [TransferId | Failed0]}
         end
     end, {[], []}, SpaceId),
-    ?info("Restarted transfers: ~p", [Restarted]),
+
+    case Restarted of
+        [] -> ok;
+        _ ->
+            ?info("Restarted transfers ~p in space ~p", [Restarted, SpaceId])
+    end,
     remove_unfinished_transfers_links(Failed, SpaceId),
     Restarted.
 
@@ -347,11 +352,11 @@ restart_unfinished_transfers(SpaceId) ->
 %% Restarts transfer referenced by given TransferId.
 %% @end
 %%-------------------------------------------------------------------
--spec restart(id(), od_space:id()) -> {ok, id()} | {error, term()}.
-restart(TransferId, SpaceId) ->
+-spec restart(id()) -> {ok, id()} | {error, term()}.
+restart(TransferId) ->
     case update(TransferId, fun maybe_restart/1) of
         {ok, TransferId} ->
-            {ok, TransferDoc} = get(TransferId),
+            {ok, TransferDoc = #document{value = #transfer{space_id = SpaceId}}} = get(TransferId),
             move_from_past_to_current_links_tree(TransferId, SpaceId),
             transfer_controller:on_new_transfer_doc(TransferDoc),
             invalidation_controller:on_new_transfer_doc(TransferDoc),
@@ -396,6 +401,8 @@ get_info(TransferId) ->
         failed_files = FailedFiles,
         bytes_to_transfer = BytesToTransfer,
         bytes_transferred = BytesTransferred,
+        files_to_invalidate = FilesToInvalidate,
+        files_invalidated = FilesInvalidated,
         start_time = StartTime,
         finish_time = FinishTime,
         last_update = LastUpdate,
@@ -413,11 +420,13 @@ get_info(TransferId) ->
         <<"path">> => Path,
         <<"transferStatus">> => atom_to_binary(TransferStatus, utf8),
         <<"invalidationStatus">> => atom_to_binary(InvalidationStatus, utf8),
-        <<"targetProviderId">> => TargetProviderId,
+        <<"targetProviderId">> => utils:ensure_defined(TargetProviderId, undefined, null),
         <<"callback">> => NullableCallback,
         <<"filesToTransfer">> => FilesToTransfer,
         <<"filesTransferred">> => FilesTransferred,
         <<"failedFiles">> => FailedFiles,
+        <<"filesToInvalidate">> => FilesToInvalidate,
+        <<"filesInvalidated">> => FilesInvalidated,
         <<"bytesToTransfer">> => BytesToTransfer,
         <<"bytesTransferred">> => BytesTransferred,
         <<"startTime">> => StartTime,
@@ -436,8 +445,8 @@ get_info(TransferId) ->
 %% Stop transfer
 %% @end
 %%--------------------------------------------------------------------
--spec stop(id()) -> ok | {error, term()}.
-stop(TransferId) ->
+-spec cancel(id()) -> ok | {error, term()}.
+cancel(TransferId) ->
     {ok, _} = transfer:mark_cancelled(TransferId),
     ok.
 
@@ -477,7 +486,7 @@ mark_completed(TransferId, SpaceId, InvalidateSourceReplica) ->
                     move_from_current_to_past_links_tree(TransferId, SpaceId),
                     {ok, TransferId};
                 true ->
-                    ok
+                    {ok, TransferId}
             end;
         Error ->
             Error
@@ -552,6 +561,7 @@ mark_active_invalidation(TransferId) ->
     update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{
             invalidation_status = active,
+            files_to_invalidate = 1,
             pid = Pid
         }}
     end).
@@ -589,6 +599,19 @@ mark_failed_invalidation(TransferId, SpaceId) ->
         Error ->
             Error
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Marks replica invalidation as cancelled
+%% @end
+%%--------------------------------------------------------------------
+-spec mark_cancelled_invalidation(id()) -> {ok, id()} | {error, term()}.
+mark_cancelled_invalidation(TransferId) ->
+    transfer:update(TransferId, fun(T = #transfer{space_id = SpaceId}) ->
+        ok = add_link(?PAST_TRANSFERS_KEY, TransferId, SpaceId),
+        ok = remove_links(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId),
+        T#transfer{invalidation_status = cancelled}
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -765,19 +788,6 @@ decode_pid(Pid) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Checks whether transfer should be continued.
-%% @end
-%%-------------------------------------------------------------------
--spec should_continue(id()) -> boolean().
-should_continue(undefined) ->
-    true;
-should_continue(TransferId) ->
-    {ok, #document{value = #transfer{status = Status}}} = get(TransferId),
-    (Status =/= cancelled) and (Status =/= failed).
-
-
-%%-------------------------------------------------------------------
-%% @doc
 %% Returns pid of transfer_controller for given Transfer.
 %% @end
 %%-------------------------------------------------------------------
@@ -809,9 +819,14 @@ list_transfers(SpaceId, Ongoing) ->
 %%      invalidation hasn't finished.
 %% @end
 %%-------------------------------------------------------------------
--spec is_ongoing(record()) -> boolean().
-is_ongoing(Transfer) ->
-    is_transfer_ongoing(Transfer) orelse is_invalidation_ongoing(Transfer).
+-spec is_ongoing(record() | id() | undefined) -> boolean().
+is_ongoing(undefined) ->
+    true;
+is_ongoing(Transfer = #transfer{}) ->
+    is_transfer_ongoing(Transfer) orelse is_invalidation_ongoing(Transfer);
+is_ongoing(TransferId) ->
+    {ok, #document{value = Transfer}} = get(TransferId),
+    is_ongoing(Transfer).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -1036,12 +1051,15 @@ maybe_restart(Transfer) ->
 %%-------------------------------------------------------------------
 -spec maybe_reset_replication_record(record()) -> {ok, id()} | {error, term()}.
 maybe_reset_replication_record(Transfer = #transfer{
+    status = Status,
+    invalidation_status = InvalidationStatus,
     target_provider_id = TargetProviderId
 }) ->
     case oneprovider:get_provider_id() =:= TargetProviderId of
         true ->
             {ok, Transfer#transfer{
-                status = scheduled,
+                status = reset_status(Status),
+                invalidation_status = reset_status(InvalidationStatus),
                 files_to_transfer = 0,
                 files_transferred = 0,
                 failed_files = 0,
@@ -1137,6 +1155,13 @@ start_pools() ->
         {worker, {transfer_worker, []}},
         {queue_type, lifo}
     ]),
+    {ok, _} = worker_pool:start_sup_pool(?TRANSFER_CONTROLLERS_POOL, [
+        {workers, ?TRANSFER_CONTROLLERS_NUM},
+        {worker, {transfer_controller, []}}
+    ]),
+    {ok, _} = worker_pool:start_sup_pool(?INVALIDATION_WORKERS_POOL, [
+        {workers, ?INVALIDATION_WORKERS_NUM}
+    ]),
     ok.
 
 %%-------------------------------------------------------------------
@@ -1148,6 +1173,8 @@ start_pools() ->
 -spec stop_pools() -> ok.
 stop_pools() ->
     true = worker_pool:stop_pool(?TRANSFER_WORKERS_POOL),
+    true = worker_pool:stop_pool(?TRANSFER_CONTROLLERS_POOL),
+    true = worker_pool:stop_pool(?INVALIDATION_WORKERS_POOL),
     ok.
 
 %%-------------------------------------------------------------------
@@ -1192,7 +1219,7 @@ handle_updated(#transfer{
     invalidation_status = active,
     pid = Pid
 }) when TransferStatus =:= completed orelse TransferStatus =:= skipped ->
-    invalidation_controller:finish_transfer(decode_pid(Pid));
+    invalidation_controller:finish_invalidation(decode_pid(Pid));
 handle_updated(_) ->
     ok.
 
@@ -1336,3 +1363,13 @@ is_invalidating(#transfer{
     Flag;
 is_invalidating(_) ->
     false.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Resets transfer status if it's different than skipped.
+%% @end
+%%-------------------------------------------------------------------
+-spec reset_status(status()) -> status().
+reset_status(skipped) -> skipped;
+reset_status(_) -> scheduled.
