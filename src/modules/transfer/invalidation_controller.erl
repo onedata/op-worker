@@ -71,7 +71,8 @@ on_new_transfer_doc(_ExistingTransfer) ->
 on_transfer_doc_change(Transfer = #document{value = #transfer{
     status = TransferStatus,
     source_provider_id = SourceProviderId,
-    invalidate_source_replica = true
+    invalidate_source_replica = true,
+    invalidation_status = scheduled
 }}) when TransferStatus == completed orelse TransferStatus == skipped ->
     case oneprovider:is_self(SourceProviderId) of
         true ->
@@ -81,15 +82,9 @@ on_transfer_doc_change(Transfer = #document{value = #transfer{
     end;
 on_transfer_doc_change(#document{
     key = TransferId,
-    value = #transfer{status = failed}}
-)  ->
-    transfer:mark_failed_invalidation(TransferId),
-    ok;
-on_transfer_doc_change(#document{
-    key = TransferId,
     value = #transfer{status = cancelled}}
 )  ->
-    transfer:mark_cancelled_invalidation(TransferId),
+    transfer:mark_cancelled_invalidation(TransferId),   %todo improve handling of cancellation vfs-3990
     ok;
 on_transfer_doc_change(_ExistingTransfer) ->
     ok.
@@ -128,7 +123,7 @@ failed_invalidation(Pid, Error) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
 init([SessionId, TransferId, FileGuid, Callback]) ->
-    {ok, TransferId} = transfer:update(TransferId, #{pid => list_to_binary(pid_to_list(self()))}),
+    {ok, _} = transfer:update(TransferId, #{pid => list_to_binary(pid_to_list(self()))}),
     ok = gen_server2:cast(self(), start_invalidation),
     {ok, #state{
         transfer_id = TransferId,
@@ -169,8 +164,7 @@ handle_call(_Request, _From, State) ->
 handle_cast(start_invalidation, State = #state{
     transfer_id = TransferId,
     session_id = SessionId,
-    file_guid = FileGuid,
-    space_id = SpaceId
+    file_guid = FileGuid
 }) ->
     try
         transfer:mark_active_invalidation(TransferId),
@@ -183,7 +177,7 @@ handle_cast(start_invalidation, State = #state{
     catch
         _Error:Reason ->
             ?error_stacktrace("Could not invalidate file ~p due to ~p", [FileGuid, Reason]),
-            transfer:mark_failed_invalidation(TransferId, SpaceId),
+            transfer:mark_failed_invalidation(TransferId),
             {stop, Reason, State}
     end;
 handle_cast(finish_invalidation, State = #state{
@@ -196,11 +190,10 @@ handle_cast(finish_invalidation, State = #state{
     {stop, normal, State};
 handle_cast({failed_invalidation, Error}, State = #state{
     file_guid = FileGuid,
-    space_id = SpaceId,
     transfer_id = TransferId
 }) ->
     ?error_stacktrace("Could not invalidate file ~p due to ~p", [FileGuid, Error]),
-    transfer:mark_failed_invalidation(TransferId, SpaceId),
+    transfer:mark_failed_invalidation(TransferId),
     {stop, Error, State};
 handle_cast(_Request, State) ->
     ?log_bad_request(_Request),

@@ -141,7 +141,7 @@ schedule_file_replication(UserCtx, FileCtx, FilePath, TargetProviderId, Callback
     SessionId = user_ctx:get_session_id(UserCtx),
     FileGuid = file_ctx:get_guid_const(FileCtx),
     {ok, TransferId} = transfer:start(
-        SessionId, FileGuid, FilePath, oneprovider:get_provider_id(),
+        SessionId, FileGuid, FilePath, oneprovider:get_id(),
         TargetProviderId, Callback, false
     ),
     #provider_response{

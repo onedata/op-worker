@@ -529,7 +529,7 @@ init_reporter(exometer_report_rrd_ets) ->
 %%--------------------------------------------------------------------
 -spec init_counters() -> ok.
 init_counters() ->
-    try  od_provider:get_or_fetch(oneprovider:get_provider_id()) of
+    try  od_provider:get_or_fetch(oneprovider:get_id()) of
         {ok, #document{value = #od_provider{spaces = SpaceIds}}} ->
             init_counters(SpaceIds);
         {error, _} -> ok
