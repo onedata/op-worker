@@ -42,8 +42,6 @@ mtime_has_changed(#file_meta{storage_sync_info = StSyncInfo}, StorageFileCtx) ->
         _ -> true
     end.
 
-
-
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
@@ -64,7 +62,6 @@ children_attrs_hash_has_changed(#file_meta{storage_sync_info = StSyncInfo},
         CurrentChildrenAttrsHash -> false;
         _ -> true
     end.
-
 
 %%-------------------------------------------------------------------
 %% @private
@@ -140,8 +137,6 @@ count_file_attrs_hash(StorageFileCtx) ->
         ?REGULAR_FILE_TYPE ->
             {hash([StMode, StSize, StAtime, STMtime, STCtime, Xattr]), StorageFileCtx3}
     end.
-
-
 
 %%-------------------------------------------------------------------
 %% @private

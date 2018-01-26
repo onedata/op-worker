@@ -2352,7 +2352,7 @@ init_per_testcase(Case, Config) when
 
 init_per_testcase(metric_get, Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-
+    start_monitoring_worker(WorkerP1),
     test_utils:mock_new(WorkerP1, rrd_utils),
     test_utils:mock_expect(WorkerP1, rrd_utils, export_rrd, fun(_, _, _) ->
         {ok, <<"{\"test\":\"rrd\"}">>}
@@ -2603,3 +2603,10 @@ list_finished_transfers(Worker, SpaceId) ->
 list_unfinished_transfers(Worker, SpaceId) ->
     {ok, Transfers} = rpc:call(Worker, transfer, for_each_current_transfer, [?LIST_TRANSFER, [], SpaceId]),
     Transfers.
+
+start_monitoring_worker(Node) ->
+    Args = [
+        {supervisor_flags, rpc:call(Node, monitoring_worker, supervisor_flags, [])},
+        {supervisor_children_spec, rpc:call(Node, monitoring_worker, supervisor_children_spec, [])}
+    ],
+    ok = rpc:call(Node, node_manager, start_worker, [monitoring_worker, Args]).
