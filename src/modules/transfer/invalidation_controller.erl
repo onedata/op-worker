@@ -71,7 +71,8 @@ on_new_transfer_doc(_ExistingTransfer) ->
 on_transfer_doc_change(Transfer = #document{value = #transfer{
     status = TransferStatus,
     source_provider_id = SourceProviderId,
-    invalidate_source_replica = true
+    invalidate_source_replica = true,
+    invalidation_status = scheduled
 }}) when TransferStatus == completed orelse TransferStatus == skipped ->
     case SourceProviderId =:= oneprovider:get_provider_id() of
         true ->
@@ -81,15 +82,9 @@ on_transfer_doc_change(Transfer = #document{value = #transfer{
     end;
 on_transfer_doc_change(#document{
     key = TransferId,
-    value = #transfer{status = failed}}
-)  ->
-    transfer:mark_failed_invalidation(TransferId),
-    ok;
-on_transfer_doc_change(#document{
-    key = TransferId,
     value = #transfer{status = cancelled}}
 )  ->
-    transfer:mark_cancelled_invalidation(TransferId),
+    transfer:mark_cancelled_invalidation(TransferId),   %todo improve handling of cancellation vfs-3990
     ok;
 on_transfer_doc_change(_ExistingTransfer) ->
     ok.

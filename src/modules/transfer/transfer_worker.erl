@@ -181,7 +181,7 @@ replicate_file(UserCtx, FileCtx, Block, TransferId, Retries) ->
     transfer:id(), non_neg_integer(), term()) -> ok | {error, term()}.
 maybe_retry(_UserCtx, FileCtx, _Block, TransferId, 0, Reason) ->
     {Path, _FileCtx2} = file_ctx:get_canonical_path(FileCtx),
-    ?error_stacktrace(
+    ?error(
         "Replication of file ~p in scope of transfer ~p failed due to ~p~n"
         "No retries left", [Path, TransferId, Reason]),
     {error, retries_per_file_transfer_exceeded};

@@ -129,18 +129,17 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_cast({start_transfer, SessionId, TransferId, FileGuid, Callback, InvalidateSourceReplica}, State) ->
+handle_cast({start_transfer, SessionId, TransferId, SpaceId, FileGuid, Callback, InvalidateSourceReplica}, State) ->
     sync_req:start_transfer(user_ctx:new(SessionId), file_ctx:new_by_guid(FileGuid), undefined, TransferId, self()),
-    {ok, #document{value = #transfer{space_id = SpaceId}}} = transfer:get(SpaceId), %todo maybe pass spaceid here
     receive
         transfer_finished ->
-            transfer:mark_completed(TransferId, SpaceId, InvalidateSourceReplica),
+            {ok, _}  = transfer:mark_completed(TransferId, SpaceId, InvalidateSourceReplica),
             notify_callback(Callback, InvalidateSourceReplica);
         {transfer_failed, Reason} ->
             ?error_stacktrace("Transfer ~p failed due to ~p", [TransferId, Reason]),
-            transfer:mark_failed(TransferId, SpaceId)
+            {ok, _} = transfer:mark_failed(TransferId, SpaceId)
     end,
-    {stop, normal, State};
+    {noreply, State, hibernate};
 handle_cast(_Request, State) ->
     ?log_bad_request(_Request),
     {noreply, State}.
@@ -209,6 +208,7 @@ new_transfer(#document{
         start_transfer,
         session:root_session_id(),
         TransferId,
+        SpaceId,
         FileGuid,
         Callback,
         InvalidateSourceReplica

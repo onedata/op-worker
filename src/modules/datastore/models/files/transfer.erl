@@ -21,7 +21,7 @@
 
 %% API
 -export([start/7, cancel/1, get_status/1, get_info/1, get/1, init/0, cleanup/0,
-    decode_pid/1, encode_pid/1, get_controller/1, remove_links/3, restart/2]).
+    decode_pid/1, encode_pid/1, get_controller/1, remove_links/3, restart/1]).
 -export([mark_active/2, mark_completed/3, mark_failed/2,
     mark_active_invalidation/1, mark_completed_invalidation/2, mark_failed_invalidation/2,
     mark_file_transfer_scheduled/2, mark_file_transfer_finished/2,
@@ -327,7 +327,7 @@ start(SessionId, FileGuid, FilePath, SourceProviderId, TargetProviderId, Callbac
 -spec restart_unfinished_transfers(od_space:id()) -> [id()].
 restart_unfinished_transfers(SpaceId) ->
     {ok, {Restarted, Failed}} = for_each_current_transfer(fun(TransferId, {Restarted0, Failed0}) ->
-        case restart(TransferId, SpaceId) of
+        case restart(TransferId) of
             {ok, TransferId} ->
                 {[TransferId | Restarted0], Failed0};
             {error, not_target_provider} ->
@@ -338,7 +338,12 @@ restart_unfinished_transfers(SpaceId) ->
                 {Restarted0, [TransferId | Failed0]}
         end
     end, {[], []}, SpaceId),
-    ?info("Restarted transfers: ~p", [Restarted]),
+
+    case Restarted of
+        [] -> ok;
+        _ ->
+            ?info("Restarted transfers ~p in space ~p", [Restarted, SpaceId])
+    end,
     remove_unfinished_transfers_links(Failed, SpaceId),
     Restarted.
 
@@ -347,11 +352,11 @@ restart_unfinished_transfers(SpaceId) ->
 %% Restarts transfer referenced by given TransferId.
 %% @end
 %%-------------------------------------------------------------------
--spec restart(id(), od_space:id()) -> {ok, id()} | {error, term()}.
-restart(TransferId, SpaceId) ->
+-spec restart(id()) -> {ok, id()} | {error, term()}.
+restart(TransferId) ->
     case update(TransferId, fun maybe_restart/1) of
         {ok, TransferId} ->
-            {ok, TransferDoc} = get(TransferId),
+            {ok, TransferDoc = #document{value = #transfer{space_id = SpaceId}}} = get(TransferId),
             move_from_past_to_current_links_tree(TransferId, SpaceId),
             transfer_controller:on_new_transfer_doc(TransferDoc),
             invalidation_controller:on_new_transfer_doc(TransferDoc),
@@ -415,7 +420,7 @@ get_info(TransferId) ->
         <<"path">> => Path,
         <<"transferStatus">> => atom_to_binary(TransferStatus, utf8),
         <<"invalidationStatus">> => atom_to_binary(InvalidationStatus, utf8),
-        <<"targetProviderId">> => TargetProviderId,
+        <<"targetProviderId">> => utils:ensure_defined(TargetProviderId, undefined, null),
         <<"callback">> => NullableCallback,
         <<"filesToTransfer">> => FilesToTransfer,
         <<"filesTransferred">> => FilesTransferred,
@@ -481,7 +486,7 @@ mark_completed(TransferId, SpaceId, InvalidateSourceReplica) ->
                     move_from_current_to_past_links_tree(TransferId, SpaceId),
                     {ok, TransferId};
                 true ->
-                    ok
+                    {ok, TransferId}
             end;
         Error ->
             Error
@@ -1046,12 +1051,15 @@ maybe_restart(Transfer) ->
 %%-------------------------------------------------------------------
 -spec maybe_reset_replication_record(record()) -> {ok, id()} | {error, term()}.
 maybe_reset_replication_record(Transfer = #transfer{
+    status = Status,
+    invalidation_status = InvalidationStatus,
     target_provider_id = TargetProviderId
 }) ->
     case oneprovider:get_provider_id() =:= TargetProviderId of
         true ->
             {ok, Transfer#transfer{
-                status = scheduled,
+                status = reset_status(Status),
+                invalidation_status = reset_status(InvalidationStatus),
                 files_to_transfer = 0,
                 files_transferred = 0,
                 failed_files = 0,
@@ -1355,3 +1363,13 @@ is_invalidating(#transfer{
     Flag;
 is_invalidating(_) ->
     false.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Resets transfer status if it's different than skipped.
+%% @end
+%%-------------------------------------------------------------------
+-spec reset_status(status()) -> status().
+reset_status(skipped) -> skipped;
+reset_status(_) -> scheduled.

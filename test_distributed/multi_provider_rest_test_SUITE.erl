@@ -85,8 +85,8 @@
     quota_decreased_after_invalidation/1,
     replicate_big_file/1,
     invalidate_big_dir/1,
-    file_replication_failures_should_fail_whole_transfer/1
-]).
+    file_replication_failures_should_fail_whole_transfer/1,
+    many_simultaneous_transfers/1]).
 
 %utils
 -export([verify_file/3, create_file/3, create_dir/3,
@@ -142,6 +142,7 @@ all() ->
         empty_metadata_invalid_json_test,
         spatial_flag_test,
         quota_exceeded_during_file_replication,
+        many_simultaneous_transfers,
         quota_decreased_after_invalidation,
         file_replication_failures_should_fail_whole_transfer,
         replicate_big_dir,
@@ -314,7 +315,9 @@ restart_file_replication(Config) ->
         end, ?ATTEMPTS),
 
     resume_file_replication(WorkerP2),
-    {ok, _} = rpc:call(WorkerP2, transfer, restart, [Tid, <<"space3">>]),
+
+    ?assertMatch({ok, 204, _, _},
+        do_request(WorkerP2, <<"transfers/", Tid/binary>>, patch, [user_1_token_header(Config)], [])),
 
     ?assertMatch(#{
         <<"transferStatus">> := <<"completed">>,
@@ -525,7 +528,9 @@ restart_dir_replication(Config) ->
 
     resume_file_replication(WorkerP2),
     %% restart transfer
-    rpc:call(WorkerP2, transfer, restart, [Tid, <<"space3">>]),
+
+    ?assertMatch({ok, 204, _, _},
+        do_request(WorkerP2, <<"transfers/", Tid/binary>>, patch, [user_1_token_header(Config)], [])),
 
     ?assertMatch(#{
         <<"transferStatus">> := <<"completed">>,
@@ -685,13 +690,32 @@ invalidate_file_replica(Config) ->
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
 
     % then
-    {ok, 200, _, _} = do_request(WorkerP2,
+    {ok, 200, _, Body1} = do_request(WorkerP2,
         <<"replicas", File/binary, "?provider_id=", (domain(WorkerP2))/binary>>,
         delete, [user_1_token_header(Config)], []
     ),
+    DecodedBody1 = json_utils:decode_map(Body1),
+    #{<<"transferId">> := Tid1} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody1),
+
     ExpectedDistribution2 = [
         #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]}
     ],
+
+    ?assertMatch(#{
+        <<"transferStatus">> := <<"skipped">>,
+        <<"targetProviderId">> := null,
+        <<"path">> := File,
+        <<"invalidationStatus">> := <<"completed">>,
+        <<"fileId">> := FileObjectId,
+        <<"callback">> := null,
+        <<"filesToInvalidate">> := 1,
+        <<"filesInvalidated">> := 1
+    },
+        case do_request(WorkerP1, <<"transfers/", Tid1/binary>>, get, [user_1_token_header(Config)], []) of
+            {ok, 200, _, TransferStatus} ->
+                json_utils:decode_map(TransferStatus);
+            Error -> Error
+        end, ?ATTEMPTS),
 
     ?assertDistribution(WorkerP1, ExpectedDistribution2, Config, File),
     ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, File).
@@ -715,10 +739,36 @@ invalidate_file_replica_with_migration(Config) ->
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
 
     % then
-    {ok, 200, _, _} = do_request(WorkerP1, <<"replicas", File/binary, "?provider_id=",
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"replicas", File/binary, "?provider_id=",
         (domain(WorkerP1))/binary, "&migration_provider_id=", (domain(WorkerP2))/binary>>,
         delete, [user_1_token_header(Config)], []
     ),
+
+    {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
+    DomainP2 = domain(WorkerP2),
+
+    DecodedBody = json_utils:decode_map(Body),
+    #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
+    ?assertMatch(#{
+        <<"transferStatus">> := <<"completed">>,
+        <<"targetProviderId">> := DomainP2,
+        <<"path">> := File,
+        <<"invalidationStatus">> := <<"completed">>,
+        <<"fileId">> := FileObjectId,
+        <<"callback">> := null,
+        <<"filesToTransfer">> := 1,
+        <<"filesTransferred">> := 1,
+        <<"bytesToTransfer">> := 4,
+        <<"bytesTransferred">> := 4,
+        <<"callback">> := null,
+        <<"filesToInvalidate">> := 1,
+        <<"filesInvalidated">> := 1
+    },
+        case do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []) of
+            {ok, 200, _, TransferStatus} ->
+                json_utils:decode_map(TransferStatus);
+            Error -> Error
+        end, ?ATTEMPTS),
 
     ExpectedDistribution2 = [
         #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => []},
@@ -765,8 +815,8 @@ restart_invalidation_of_file_replica_with_migration(Config) ->
         end, ?ATTEMPTS),
 
     resume_file_replication(WorkerP2),
-    rpc:call(WorkerP2, transfer, restart, [Tid1, <<"space3">>]),
-
+    ?assertMatch({ok, 204, _, _},
+        do_request(WorkerP2, <<"transfers/", Tid1/binary>>, patch, [user_1_token_header(Config)], [])),
 
     ?assertMatch(#{
         <<"transferStatus">> := <<"completed">>,
@@ -868,7 +918,7 @@ invalidate_dir_replica(Config) ->
         <<"callback">> := null,
         <<"transferStatus">> := <<"skipped">>,
         <<"invalidationStatus">> := <<"completed">>,
-        <<"targetProviderId">> := <<"undefined">>,
+        <<"targetProviderId">> := null,
         <<"fileId">> := FileObjectId,
         <<"filesToTransfer">> := 0,
         <<"filesTransferred">> := 0,
@@ -1875,6 +1925,61 @@ quota_exceeded_during_file_replication(Config) ->
     ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File),
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File).
 
+many_simultaneous_transfers(Config) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
+    Space = <<"/space4">>,
+    RootDir = filename:join(Space, <<"simultaneous_transfers">>),
+    FilesNum = 1000,
+    {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, RootDir),
+
+    FileGuids = lists:map(fun(N) ->
+        File = filename:join(RootDir, integer_to_binary(N)),
+        {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
+        {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
+        lfm_proxy:write(WorkerP1, Handle, 0, ?TEST_DATA),
+        lfm_proxy:fsync(WorkerP1, Handle),
+        FileGuid
+    end, lists:seq(1, FilesNum)),
+
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, RootDir}), ?ATTEMPTS),
+    lists:foreach(fun(FileGuid) ->
+        ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {guid, FileGuid}), ?ATTEMPTS)
+    end, FileGuids),
+
+    TidsAndGuids = lists:map(fun(FileGuid) ->
+        {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
+        {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1,
+            <<"replicas-id/", FileObjectId/binary, "?provider_id=", (domain(WorkerP2))/binary>>,
+            post, [user_1_token_header(Config)], []),
+        ?ATTEMPTS),
+        DecodedBody = json_utils:decode_map(Body),
+        #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
+        {Tid, FileGuid}
+    end, FileGuids),
+
+    % then
+    lists:foreach(fun({Tid, FileGuid}) ->
+        {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
+        DomainP2 = domain(WorkerP2),
+        ?assertMatch(#{
+            <<"transferStatus">> := <<"failed">>,
+            <<"targetProviderId">> := DomainP2,
+            <<"invalidationStatus">> := <<"skipped">>,
+            <<"fileId">> := FileObjectId,
+            <<"callback">> := null,
+            <<"filesToTransfer">> := 1,
+            <<"filesTransferred">> := 0,
+            <<"failedFiles">> := 1
+        },
+            case do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []) of
+                {ok, 200, _, TransferStatus} ->
+                    json_utils:decode_map(TransferStatus);
+                Error -> Error
+            end, ?ATTEMPTS)
+    end, TidsAndGuids).
+
 quota_decreased_after_invalidation(Config) ->
     ct:timetrap({hours, 1}),
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -2272,7 +2377,8 @@ init_per_testcase(Case, Config) when
 
 init_per_testcase(Case, Config) when
     Case =:= quota_exceeded_during_file_replication;
-    Case =:= file_replication_failures_should_fail_whole_transfer
+    Case =:= file_replication_failures_should_fail_whole_transfer;
+    Case =:= many_simultaneous_transfers
 ->
     [WorkerP2, _WorkerP1] = ?config(op_worker_nodes, Config),
     OldSoftQuota = rpc:call(WorkerP2, application, get_env, [op_worker, soft_quota_limit_size]),
@@ -2318,7 +2424,8 @@ end_per_testcase(Case = automatic_cleanup_should_invalidate_unpopular_files, Con
 end_per_testcase(Case, Config) when
     Case =:= quota_exceeded_during_file_replication;
     Case =:= quota_decreased_after_invalidation;
-    Case =:= file_replication_failures_should_fail_whole_transfer
+    Case =:= file_replication_failures_should_fail_whole_transfer;
+    Case =:= many_simultaneous_transfers
     ->
     [WorkerP2, _WorkerP1] = ?config(op_worker_nodes, Config),
     {ok, OldSoftQuota} = ?config(old_soft_quota, Config),
