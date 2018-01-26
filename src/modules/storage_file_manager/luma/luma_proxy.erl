@@ -167,7 +167,7 @@ get_user_details(SessionId, UserId) ->
                 <<"id">> => UserId,
                 <<"name">> => User#od_user.name,
                 <<"login">> => User#od_user.login,
-                <<"connectedAccounts">> => User#od_user.linked_accounts,
+                <<"linkedAccounts">> => User#od_user.linked_accounts,
                 <<"emailList">> => User#od_user.email_list
             };
         {error, _} ->
@@ -175,7 +175,7 @@ get_user_details(SessionId, UserId) ->
                 <<"id">> => UserId,
                 <<"name">> => <<>>,
                 <<"login">> => <<>>,
-                <<"connectedAccounts">> => [],
+                <<"linkedAccounts">> => [],
                 <<"emailList">> => []
             }
     end.

@@ -40,8 +40,8 @@ get_user_id(Uid, StorageId, StorageName, LumaConfig = #luma_config{url = LumaUrl
     {ok, 200, _RespHeaders, RespBody} = http_client:post(Url, ReqHeaders, ReqBody),
     Response = json_utils:decode_map(RespBody),
     Idp = maps:get(<<"idp">>, Response),
-    IdpUserId = maps:get(<<"userId">>, Response),
-    UserId = idp_to_onedata_user_id(Idp, IdpUserId),
+    SubjectId = maps:get(<<"subjectId">>, Response),
+    UserId = idp_to_onedata_user_id(Idp, SubjectId),
     {ok, UserId}.
 
 %%--------------------------------------------------------------------
@@ -59,8 +59,8 @@ get_user_id_by_name(Name, StorageId, StorageName, LumaConfig = #luma_config{url 
     {ok, 200, _RespHeaders, RespBody} = http_client:post(Url, ReqHeaders, ReqBody),
     Response = json_utils:decode_map(RespBody),
     Idp = maps:get(<<"idp">>, Response),
-    IdpUserId = maps:get(<<"userId">>, Response),
-    UserId = idp_to_onedata_user_id(Idp, IdpUserId),
+    SubjectId = maps:get(<<"subjectId">>, Response),
+    UserId = idp_to_onedata_user_id(Idp, SubjectId),
     {ok, UserId}.
 
 %%--------------------------------------------------------------------
