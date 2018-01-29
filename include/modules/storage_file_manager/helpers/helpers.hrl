@@ -31,7 +31,7 @@
     args = #{} :: helper:args(),
     admin_ctx = #{} :: helper:user_ctx(),
     insecure = false :: boolean(),
-    delayed_sync = true :: boolean()
+    extended_direct_io = true :: boolean()
 }).
 
 -endif.

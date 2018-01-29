@@ -21,6 +21,7 @@
 -include("proto/oneclient/event_messages.hrl").
 -include("proto/oneclient/diagnostic_messages.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
+-include("proto/oneclient/server_messages.hrl").
 -include("proto/oneprovider/dbsync_messages.hrl").
 -include("proto/oneprovider/dbsync_messages2.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
@@ -189,6 +190,9 @@ translate_from_protobuf(#'Token'{value = Macaroon, secondary_values = DischargeM
 translate_from_protobuf(#'HandshakeResponse'{status = Status}) ->
     #handshake_response{status = Status};
 
+% PROCESSING STATUS
+translate_from_protobuf(#'ProcessingStatus'{code = Code}) ->
+    #processing_status{code = Code};
 
 %% DIAGNOSTIC
 translate_from_protobuf(#'Ping'{data = Data}) ->
@@ -260,14 +264,14 @@ translate_from_protobuf(#'CreateFile'{name = Name, mode = Mode, flag = Flag}) ->
     #create_file{name = Name, mode = Mode, flag = open_flag_translate_from_protobuf(Flag)};
 translate_from_protobuf(#'MakeFile'{name = Name, mode = Mode}) ->
     #make_file{name = Name, mode = Mode};
-translate_from_protobuf(#'OpenFile'{flag = Flag}) ->
-    #open_file{flag = open_flag_translate_from_protobuf(Flag)};
+translate_from_protobuf(#'OpenFile'{flag = Flag, created = Created}) ->
+    #open_file{flag = open_flag_translate_from_protobuf(Flag), created = Created};
 translate_from_protobuf(#'GetFileLocation'{}) ->
     #get_file_location{};
 translate_from_protobuf(#'Release'{handle_id = HandleId}) ->
     #release{handle_id = HandleId};
-translate_from_protobuf(#'Truncate'{size = Size}) ->
-    #truncate{size = Size, on_storage = true};
+translate_from_protobuf(#'Truncate'{size = Size, on_storage = OnStorage}) ->
+    #truncate{size = Size, on_storage = OnStorage};
 translate_from_protobuf(#'SynchronizeBlock'{block = #'FileBlock'{offset = O, size = S}, prefetch = Prefetch}) ->
     #synchronize_block{block = #file_block{offset = O, size = S}, prefetch = Prefetch};
 translate_from_protobuf(#'SynchronizeBlockAndComputeChecksum'{
@@ -325,13 +329,14 @@ translate_from_protobuf(#'FileLocation'{} = Record) ->
                 #file_block{offset = Offset, size = Size}
             end, Record#'FileLocation'.blocks)
     };
-translate_from_protobuf(#'HelperParams'{helper_name = HelperName, helper_args = HelpersArgs}) ->
+translate_from_protobuf(#'HelperParams'{helper_name = HelperName,
+    helper_args = HelpersArgs, extended_direct_io = ExtendedDirectIO}) ->
     #helper_params{helper_name = HelperName,
         helper_args = lists:map(
             fun(HelpersArg) ->
                 translate_from_protobuf(HelpersArg)
             end, HelpersArgs),
-        delayed_sync = true};
+        extended_direct_io = ExtendedDirectIO};
 translate_from_protobuf(#'HelperArg'{key = Key, value = Value}) ->
     #helper_arg{key = Key, value = Value};
 translate_from_protobuf(#'Parameter'{key = Key, value = Value}) ->
@@ -683,6 +688,9 @@ translate_to_protobuf(#macaroon_auth{macaroon = Macaroon, disch_macaroons = DMac
 translate_to_protobuf(#token_auth{token = Token}) ->
     #'Token'{value = Token};
 
+% PROCESSING STATUS
+translate_to_protobuf(#processing_status{code = Code}) ->
+    {handshake_response, #'ProcessingStatus'{code = Code}};
 
 %% DIAGNOSTIC
 translate_to_protobuf(#pong{data = Data}) ->
@@ -750,14 +758,15 @@ translate_to_protobuf(#create_file{name = Name, mode = Mode, flag = Flag}) ->
         flag = open_flag_translate_to_protobuf(Flag)}};
 translate_to_protobuf(#make_file{name = Name, mode = Mode}) ->
     {make_file, #'MakeFile'{name = Name, mode = Mode}};
-translate_to_protobuf(#open_file{flag = Flag}) ->
-    {open_file, #'OpenFile'{flag = open_flag_translate_to_protobuf(Flag)}};
+translate_to_protobuf(#open_file{flag = Flag, created = Created}) ->
+    {open_file, #'OpenFile'{flag = open_flag_translate_to_protobuf(Flag),
+        created = Created}};
 translate_to_protobuf(#get_file_location{}) ->
     {get_file_location, #'GetFileLocation'{}};
 translate_to_protobuf(#release{handle_id = HandleId}) ->
     {release, #'Release'{handle_id = HandleId}};
 translate_to_protobuf(#truncate{size = Size, on_storage = OnStorage}) ->
-    {truncate, #'Truncate'{size = Size}};
+    {truncate, #'Truncate'{size = Size, on_storage = OnStorage}};
 translate_to_protobuf(#synchronize_block{block = Block, prefetch = Prefetch}) ->
     {synchronize_block,
         #'SynchronizeBlock'{block = translate_to_protobuf(Block), prefetch = Prefetch}};
@@ -816,11 +825,12 @@ translate_to_protobuf(#file_location{} = Record) ->
         end, Record#file_location.blocks)
     }};
 translate_to_protobuf(#helper_params{helper_name = HelperName,
-    helper_args = HelpersArgs, delayed_sync = DelayedSync}) ->
+    helper_args = HelpersArgs, extended_direct_io = ExtendedDirectIO}) ->
     {helper_params, #'HelperParams'{helper_name = HelperName,
         helper_args = lists:map(fun(HelpersArg) ->
             translate_to_protobuf(HelpersArg)
-        end, HelpersArgs)}};
+        end, HelpersArgs),
+        extended_direct_io = ExtendedDirectIO}};
 translate_to_protobuf(#helper_arg{key = Key, value = Value}) ->
     #'HelperArg'{key = Key, value = Value};
 translate_to_protobuf(#storage_test_file{helper_params = HelperParams,

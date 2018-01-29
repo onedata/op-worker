@@ -380,8 +380,9 @@ handle_file_request(UserCtx, #create_file{name = Name, flag = Flag, mode = Mode}
     file_req:create_file(UserCtx, ParentFileCtx, Name, Mode, Flag);
 handle_file_request(UserCtx, #make_file{name = Name, mode = Mode}, ParentFileCtx) ->
     file_req:make_file(UserCtx, ParentFileCtx, Name, Mode);
-handle_file_request(UserCtx, #open_file{flag = Flag}, FileCtx) ->
-    file_req:open_file(UserCtx, FileCtx, Flag);
+handle_file_request(UserCtx, #open_file{flag = Flag, created = Created}, FileCtx) ->
+    FileCtx2 = file_ctx:set_created_by_client(FileCtx, Created),
+    file_req:open_file(UserCtx, FileCtx2, Flag);
 handle_file_request(UserCtx, #release{handle_id = HandleId}, FileCtx) ->
     file_req:release(UserCtx, FileCtx, HandleId);
 handle_file_request(UserCtx, #get_file_location{}, FileCtx) ->

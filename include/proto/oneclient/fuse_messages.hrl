@@ -80,7 +80,8 @@
 }).
 
 -record(open_file, {
-    flag :: fslogic_worker:open_flag()
+    flag :: fslogic_worker:open_flag(),
+    created :: boolean()
 }).
 
 -record(get_file_location, {
@@ -187,7 +188,7 @@
 -record(helper_params, {
     helper_name :: helper:name(),
     helper_args :: [#helper_arg{}],
-    delayed_sync :: boolean()
+    extended_direct_io :: boolean()
 }).
 
 -record(storage_test_file, {

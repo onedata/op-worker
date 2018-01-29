@@ -353,7 +353,7 @@ get_record_struct(4) ->
             {args, #{string => string}},
             {admin_ctx, #{string => string}},
             {insecure, boolean},
-            {delayed_sync, boolean}
+            {extended_direct_io, boolean}
         ]}]},
         {readonly, boolean},
         {luma_config, {record, [
@@ -398,7 +398,7 @@ upgrade_record(3, {?MODULE, Name, Helpers, Readonly, LumaConfig}) ->
                 args = HelperArgs,
                 admin_ctx = AdminCtx,
                 insecure = Insecure,
-                delayed_sync = true
+                extended_direct_io = false
             } || {_, HelperName, HelperArgs, AdminCtx, Insecure} <- Helpers
         ],
         readonly = Readonly,

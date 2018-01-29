@@ -119,7 +119,6 @@ route_message(Msg = #client_message{message_id = #message_id{
         true when Recipient =:= undefined ->
             route_and_ignore_answer(Msg);
         true ->
-            % TODO - to chyba odpowiedz - sprawdzic
             Pid = binary_to_term(Recipient),
             Pid ! Msg,
             ok;
@@ -218,8 +217,7 @@ route_and_send_answer(Msg = #client_message{
 }) ->
     event:flush(FlushMsg#flush_events{notify =
         fun(Result) ->
-            % TODO - flush moze trwac? dlaczego robimy tak dziwnie
-            % Trzeba bedzie customowy mechanizm
+            % TODO - not used by client, why custom mechanism
             communicator:send(Result#server_message{message_id = MsgId}, OriginSessId)
         end
     }, effective_session_id(Msg)),
@@ -235,14 +233,16 @@ route_and_send_answer(#client_message{
 }) ->
     {ok, #server_message{message_id = Id, message_body = #protocol_version{}}};
 route_and_send_answer(Msg = #client_message{
+    session_id = OriginSessId,
     message_id = Id,
     message_body = #get_configuration{}
 }) ->
     route_and_supervise(fun() ->
         Configuration = storage_req:get_configuration(effective_session_id(Msg)),
         {ok, #server_message{message_id = Id, message_body = Configuration}}
-    end, get_heartbeat_fun());
+    end, get_heartbeat_fun(Id, OriginSessId), Id);
 route_and_send_answer(Msg = #client_message{
+    session_id = OriginSessId,
     message_id = Id,
     message_body = FuseRequest = #fuse_request{
          fuse_request = #file_request{
@@ -253,33 +253,37 @@ route_and_send_answer(Msg = #client_message{
     Node = consistent_hasing:get_node(FileGuid),
     {ok, FuseResponse} = worker_proxy:call({fslogic_worker, Node},
         {fuse_request, effective_session_id(Msg), FuseRequest},
-        {?TIMEOUT, get_heartbeat_fun()}),
+        {?TIMEOUT, get_heartbeat_fun(Id, OriginSessId)}),
     {ok, #server_message{message_id = Id, message_body = FuseResponse}};
 route_and_send_answer(Msg = #client_message{
+    session_id = OriginSessId,
     message_id = Id,
     message_body = FuseRequest = #fuse_request{}
 }) ->
     {ok, FuseResponse} = worker_proxy:call(fslogic_worker,
         {fuse_request, effective_session_id(Msg), FuseRequest},
-        {?TIMEOUT, get_heartbeat_fun()}),
+        {?TIMEOUT, get_heartbeat_fun(Id, OriginSessId)}),
     {ok, #server_message{message_id = Id, message_body = FuseResponse}};
 route_and_send_answer(Msg = #client_message{
+    session_id = OriginSessId,
     message_id = Id,
     message_body = ProviderRequest = #provider_request{}
 }) ->
     {ok, ProviderResponse} = worker_proxy:call(fslogic_worker,
         {provider_request, effective_session_id(Msg), ProviderRequest},
-        {?TIMEOUT, get_heartbeat_fun()}),
+        {?TIMEOUT, get_heartbeat_fun(Id, OriginSessId)}),
     {ok, #server_message{message_id = Id, message_body = ProviderResponse}};
 route_and_send_answer(#client_message{
+    session_id = OriginSessId,
     message_id = Id,
     message_body = Request = #get_remote_document{}
 }) ->
     route_and_supervise(fun() ->
         Response = datastore_remote_driver:handle(Request),
         {ok, #server_message{message_id = Id, message_body = Response}}
-    end, get_heartbeat_fun());
+    end, get_heartbeat_fun(Id, OriginSessId), Id);
 route_and_send_answer(Msg = #client_message{
+    session_id = OriginSessId,
     message_id = Id,
     message_body = ProxyIORequest = #proxyio_request{
         parameters = #{?PROXYIO_PARAMETER_FILE_GUID := FileGuid}
@@ -288,15 +292,16 @@ route_and_send_answer(Msg = #client_message{
     Node = consistent_hasing:get_node(FileGuid),
     {ok, ProxyIOResponse} = worker_proxy:call({fslogic_worker, Node},
         {proxyio_request, effective_session_id(Msg), ProxyIORequest},
-        {?TIMEOUT, get_heartbeat_fun()}),
+        {?TIMEOUT, get_heartbeat_fun(Id, OriginSessId)}),
     {ok, #server_message{message_id = Id, message_body = ProxyIOResponse}};
 route_and_send_answer(Msg = #client_message{
+    session_id = OriginSessId,
     message_id = Id,
     message_body = #dbsync_request{} = DBSyncRequest
 }) ->
     {ok, DBSyncResponse} = worker_proxy:call(dbsync_worker,
         {dbsync_request, effective_session_id(Msg), DBSyncRequest},
-        {?TIMEOUT, get_heartbeat_fun()}),
+        {?TIMEOUT, get_heartbeat_fun(Id, OriginSessId)}),
     {ok, #server_message{message_id = Id, message_body = DBSyncResponse}}.
 
 %%--------------------------------------------------------------------
@@ -305,16 +310,16 @@ route_and_send_answer(Msg = #client_message{
 %% Executes function that handles message and asynchronously wait for answer.
 %% @end
 %%--------------------------------------------------------------------
--spec route_and_supervise(fun(() -> term()), fun(() -> ok)) ->
+-spec route_and_supervise(fun(() -> term()), fun(() -> ok), message_id:id()) ->
     ok | {ok, #server_message{}} | {error, term()}.
-route_and_supervise(Fun, TimeoutFun) ->
+route_and_supervise(Fun, TimeoutFun, Id) ->
     Master = self(),
     Ref = make_ref(),
     Pid = spawn(fun() ->
         Ans = Fun(),
         Master ! {slave_ans, Ref, Ans}
     end),
-    receive_loop(Ref, Pid, TimeoutFun).
+    receive_loop(Ref, Pid, TimeoutFun, Id).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -322,9 +327,9 @@ route_and_supervise(Fun, TimeoutFun) ->
 %% Waits for worker asynchronous process answer.
 %% @end
 %%--------------------------------------------------------------------
--spec receive_loop(reference(), pid(), fun(() -> ok)) ->
+-spec receive_loop(reference(), pid(), fun(() -> ok), message_id:id()) ->
     ok | {ok, #server_message{}} | {error, term()}.
-receive_loop(Ref, Pid, TimeoutFun) ->
+receive_loop(Ref, Pid, TimeoutFun, Id) ->
     receive
         {slave_ans, Ref, Ans} ->
             Ans
@@ -333,10 +338,10 @@ receive_loop(Ref, Pid, TimeoutFun) ->
             case erlang:is_process_alive(Pid) of
                 true ->
                     TimeoutFun(),
-                    receive_loop(Ref, Pid, TimeoutFun);
+                    receive_loop(Ref, Pid, TimeoutFun, Id);
                 _ ->
-                    % TODO - jaki blad?
-                    {error, timeout}
+                    {ok, #server_message{message_id = Id,
+                        message_body = #processing_status{code = 'ERROR'}}}
             end
     end.
 
@@ -346,6 +351,10 @@ receive_loop(Ref, Pid, TimeoutFun) ->
 %% Provides function that sends heartbeat.
 %% @end
 %%--------------------------------------------------------------------
--spec get_heartbeat_fun() -> fun(() -> ok).
-get_heartbeat_fun() ->
-    fun() -> ok end.
+-spec get_heartbeat_fun(message_id:id(), session:id()) -> fun(() -> ok).
+get_heartbeat_fun(MsgId, OriginSessId) ->
+    fun() ->
+        communicator:send(#server_message{message_id = MsgId,
+            message_body = #processing_status{code = 'IN_PROGRESS'}
+        }, OriginSessId)
+    end.

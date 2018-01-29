@@ -29,6 +29,9 @@
     delete_storage_file_without_location/2, delete_storage_dir/2,
     create_parent_dirs/1]).
 
+% TODO - kasowanie/kopiowanie rownolegle?
+% TODO - pozostale operacje na storeage - chmod itp
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -118,22 +121,33 @@ create_delayed_storage_file(FileCtx) ->
 
     case StorageFileCreated of
         false ->
-            file_location:update(FileLocationId, fun
+            UpdateAns = file_location:update(FileLocationId, fun
                 (#file_location{storage_file_created = true}) ->
                     {error, already_created};
                 (FileLocation = #file_location{storage_file_created = false}) ->
-                    try
-                        FileCtx3 = create_storage_file(user_ctx:new(?ROOT_SESS_ID), FileCtx2),
-                        files_to_chown:chown_or_schedule_chowning(FileCtx3),
-                        {ok, FileLocation#file_location{storage_file_created = true}}
-                    catch
-                        Error:Reason ->
-                            ?error_stacktrace("Error during storage file creation: ~p:~p",
-                                [Error, Reason]),
-                            {error, {Error, Reason}}
+                    case file_ctx:get_created_by_client_const(FileCtx) of
+                        false ->
+                            try
+                                FileCtx3 = create_storage_file(user_ctx:new(?ROOT_SESS_ID), FileCtx2),
+                                files_to_chown:chown_or_schedule_chowning(FileCtx3),
+                                {ok, FileLocation#file_location{storage_file_created = true}}
+                            catch
+                                Error:Reason ->
+                                    ?error_stacktrace("Error during storage file creation: ~p:~p",
+                                        [Error, Reason]),
+                                    {error, {Error, Reason}}
+                            end;
+                        _ ->
+                            {ok, FileLocation#file_location{storage_file_created = true}}
                     end
             end),
-            FileCtx2;
+
+            case UpdateAns of
+                {ok, #document{} = Doc} ->
+                    file_ctx:update_location_doc(FileCtx2, Doc);
+                _ ->
+                    FileCtx2
+            end;
         true ->
             FileCtx2
     end.

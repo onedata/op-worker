@@ -271,7 +271,7 @@ open(SessId, FileKey, Flag) ->
         fun(#file_location{provider_id = ProviderId, file_id = FileId,
             storage_id = StorageId}) ->
             remote_utils:call_fslogic(SessId, file_request, FileGuid,
-                #open_file{flag = Flag},
+                #open_file{flag = Flag, created = false},
                 fun(#file_opened{handle_id = HandleId}) ->
                     {ok, lfm_context:new(
                         HandleId,

@@ -17,7 +17,7 @@
  {<<"certifi">>,{pkg,<<"certifi">>,<<"0.7.0">>},3},
  {<<"clproto">>,
   {git,"ssh://git@git.plgrid.pl:7999/vfs/clproto.git",
-       {ref,"e3dca37d55445265d15470aa8a7088fa3643823d"}},
+       {ref,"4b183a4b77ea4c08f759ff1abe068d45f3aee175"}},
   0},
  {<<"cluster_manager">>,
   {raw,{git,"ssh://git@git.plgrid.pl:7999/vfs/cluster-manager.git",
