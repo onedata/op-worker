@@ -25,6 +25,7 @@
 -define(S3_HELPER_NAME, <<"s3">>).
 -define(SWIFT_HELPER_NAME, <<"swift">>).
 -define(GLUSTERFS_HELPER_NAME, <<"glusterfs">>).
+-define(NULL_DEVICE_HELPER_NAME, <<"nulldevice">>).
 
 -record(helper, {
     name :: helper:name(),
