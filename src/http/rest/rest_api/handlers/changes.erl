@@ -274,7 +274,7 @@ prepare_response(#change{seq = Seq, doc = FileDoc = #document{
             <<"name">> => Name,
             <<"seq">> => Seq
         },
-    json_utils:encode_map(Response).
+    json_utils:encode(Response).
 
 
 %%--------------------------------------------------------------------

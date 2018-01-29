@@ -545,7 +545,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     timer:sleep(2000), % Sometimes the posthook starts too fast
 
     {ok, ConfigJSONBin} = file:read_file(ConfigPath),
-    ConfigJSON = json_utils:decode(ConfigJSONBin),
+    ConfigJSON = json_utils:decode_deprecated(ConfigJSONBin),
 
     GlobalSetup = proplists:get_value(<<"test_global_setup">>, ConfigJSON, ?DEFAULT_GLOBAL_SETUP),
     DomainMappings = [{atom_to_binary(K, utf8), V} || {K, V} <- ?config(domain_mappings, Config)],
@@ -1162,7 +1162,7 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
 
                 case http_client:get(URL, #{}, <<>>, Opts) of
                     {ok, 200, _, JSON} ->
-                        case json_utils:decode_map(JSON) of
+                        case json_utils:decode(JSON) of
                             #{<<"status">> := <<"ok">>} -> ok;
                             _ -> {error, invalid_nonce}
                         end;

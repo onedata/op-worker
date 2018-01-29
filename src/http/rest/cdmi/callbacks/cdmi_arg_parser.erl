@@ -104,7 +104,7 @@ parse_body(Req) ->
         <<>> ->
             #{};
         _ ->
-            json_utils:decode_map(RawBody)
+            json_utils:decode(RawBody)
     end,
     ok = validate_body(Body),
     {ok, Body, Req1}.

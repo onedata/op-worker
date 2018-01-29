@@ -103,7 +103,7 @@ get_metric(Req, State) ->
                         transform_metric(Metric, SubjectType, SecondarySubjectType), transform_step(Step), ProviderId, json)
                     of
                         {ok, Data} ->
-                            DecodedJson = json_utils:decode_map(Data),
+                            DecodedJson = json_utils:decode(Data),
                             #{
                                 <<"providerId">> => ProviderId,
                                 <<"rrd">> => DecodedJson
@@ -115,7 +115,7 @@ get_metric(Req, State) ->
                             }
                     end
                 end, Providers),
-            Response = json_utils:encode_map(Json),
+            Response = json_utils:encode(Json),
             {Response, Req3, State3};
         {error, not_found} ->
             throw(?ERROR_NOT_FOUND)

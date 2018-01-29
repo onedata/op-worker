@@ -40,7 +40,7 @@ get_user_ctx(SessionId, UserId, SpaceId, StorageDoc = #document{
     ReqBody = get_request_body(SessionId, UserId, SpaceId, StorageDoc),
     case http_client:post(Url, ReqHeaders, ReqBody) of
         {ok, 200, _RespHeaders, RespBody} ->
-            UserCtx = json_utils:decode_map(RespBody),
+            UserCtx = json_utils:decode(RespBody),
             case helper:validate_user_ctx(Helper, UserCtx) of
                 ok -> {ok, ensure_binary_values(UserCtx)};
                 {error, Reason} -> {error, Reason}
@@ -73,7 +73,7 @@ get_group_ctx(GroupId, SpaceId, StorageDoc = #document{
     ReqBody = get_group_request_body(GroupId, SpaceId, StorageDoc),
     case http_client:post(Url, ReqHeaders, ReqBody) of
         {ok, 200, _RespHeaders, RespBody} ->
-            GroupCtx = json_utils:decode_map(RespBody),
+            GroupCtx = json_utils:decode(RespBody),
             case helper:validate_group_ctx(Helper, GroupCtx) of
                 ok ->
                     {ok, ensure_binary_values(GroupCtx)};
@@ -121,7 +121,7 @@ get_request_body(SessionId, UserId, SpaceId, StorageDoc) ->
         <<"spaceId">> => SpaceId,
         <<"userDetails">> => get_user_details(SessionId, UserId)
     },
-    json_utils:encode_map(Body).
+    json_utils:encode(Body).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -135,22 +135,22 @@ get_group_request_body(undefined, SpaceId, #document{
     key = StorageId,
     value = #storage{name = StorageName}
 }) ->
-    Body = [
-        {<<"spaceId">>, SpaceId},
-        {<<"storageId">>, StorageId},
-        {<<"storageName">>, StorageName}
-    ],
+    Body = #{
+        <<"spaceId">> => SpaceId,
+        <<"storageId">> => StorageId,
+        <<"storageName">> => StorageName
+    },
     json_utils:encode(Body);
 get_group_request_body(GroupId, SpaceId, #document{
     key = StorageId,
     value = #storage{name = StorageName}
 }) ->
-    Body = [
-        {<<"groupId">>, GroupId},
-        {<<"spaceId">>, SpaceId},
-        {<<"storageId">>, StorageId},
-        {<<"storageName">>, StorageName}
-    ],
+    Body = #{
+        <<"groupId">> => GroupId,
+        <<"spaceId">> => SpaceId,
+        <<"storageId">> => StorageId,
+        <<"storageName">> => StorageName
+    },
     json_utils:encode(Body).
 
 %%--------------------------------------------------------------------

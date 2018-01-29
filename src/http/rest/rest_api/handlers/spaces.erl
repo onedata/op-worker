@@ -81,5 +81,5 @@ list_spaces(Req, State = #{auth := SessionId}) ->
             {ok, SpaceName} = space_logic:get_name(SessionId, SpaceId),
             #{<<"spaceId">> => SpaceId, <<"name">> => SpaceName}
         end, EffSpaces),
-    Response = json_utils:encode_map(RawResponse),
+    Response = json_utils:encode(RawResponse),
     {Response, Req, State}.
