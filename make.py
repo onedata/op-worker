@@ -1,1 +1,1 @@
-bamboos/docker/make.py
+docker/make.py
