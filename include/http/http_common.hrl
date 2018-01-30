@@ -32,4 +32,8 @@
 %% Protocol name for HTTP upgrade headers on client protocol endpoint
 -define(client_protocol_upgrade_name, "clproto").
 
+%% Endpoints used to get Onezone or Oneprovider version
+-define(provider_version_path, "/version").
+-define(zone_version_path, "/version").
+
 -endif.
