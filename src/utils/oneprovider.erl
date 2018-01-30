@@ -116,7 +116,7 @@ is_self(ProviderId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns whether this provider is registered in OneZone.
+%% Returns whether this provider is registered in Onezone.
 %% @end
 %%--------------------------------------------------------------------
 -spec is_registered() -> boolean().
@@ -193,7 +193,7 @@ get_oz_providers_page() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Predicate saying if the provider is actively connected to OneZone via
+%% Predicate saying if the provider is actively connected to Onezone via
 %% GraphSync channel.
 %% @end
 %%--------------------------------------------------------------------
@@ -204,7 +204,7 @@ is_connected_to_oz() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Callback called when connection to OneZone is established.
+%% Callback called when connection to Onezone is established.
 %% @end
 %%--------------------------------------------------------------------
 -spec on_connection_to_oz() -> ok.
@@ -219,7 +219,7 @@ on_connection_to_oz() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Registers the provider in OneZone.
+%% Registers the provider in Onezone.
 %% This functionality is dedicated for test environments - in production,
 %% onepanel is responsible for registering the provider.
 %% @end

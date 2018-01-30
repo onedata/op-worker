@@ -6,7 +6,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module is responsible for starting and monitoring a global
-%%% gs_client_worker instance that maintains Graph Sync channel with OneZone.
+%%% gs_client_worker instance that maintains Graph Sync channel with Onezone.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(gs_worker).
@@ -41,7 +41,7 @@ supervisor_flags() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Predicate saying if the provider is actively connected to OneZone via
+%% Predicate saying if the provider is actively connected to Onezone via
 %% GraphSync channel.
 %% @end
 %%--------------------------------------------------------------------
@@ -84,10 +84,10 @@ handle(is_connected) ->
 handle({connection_healthcheck, FailedRetries}) ->
     {Interval, NewFailedRetries} = case connection_healthcheck() of
         unregistered ->
-            ?debug("Skipping connection to OneZone as the provider is not registered."),
+            ?debug("Skipping connection to Onezone as the provider is not registered."),
             {?GS_HEALTHCHECK_INTERVAL, 0};
         skipped ->
-            ?debug("Skipping connection to OneZone as this is not the dedicated node."),
+            ?debug("Skipping connection to Onezone as this is not the dedicated node."),
             {?GS_HEALTHCHECK_INTERVAL, 0};
         alive ->
             {?GS_HEALTHCHECK_INTERVAL, 0};
@@ -98,7 +98,7 @@ handle({connection_healthcheck, FailedRetries}) ->
                 ?GS_RECONNECT_MAX_BACKOFF,
                 round(?GS_HEALTHCHECK_INTERVAL * BackoffFactor)
             ),
-            ?info("Next OneZone connection attempt in ~B seconds.", [
+            ?info("Next Onezone connection attempt in ~B seconds.", [
                 Interval2 div 1000
             ]),
             {Interval2, FailedRetries2}
@@ -147,7 +147,7 @@ connection_healthcheck() ->
     catch
         _:Reason ->
             ?error_stacktrace(
-                "Failed to start connection to OneZone due to: ~p",
+                "Failed to start connection to Onezone due to: ~p",
                 [Reason]
             ),
             error

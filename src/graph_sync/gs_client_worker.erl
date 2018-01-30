@@ -5,7 +5,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module is responsible for maintaining graph sync connection to OneZone
+%%% This module is responsible for maintaining graph sync connection to Onezone
 %%% and handling incoming push messages Whenever the connection dies, this
 %%% gen_server is killed and new one is instantiated by gs_worker.
 %%% @end
@@ -72,7 +72,7 @@ start_link() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Handles a Graph Sync request by contacting OneZone or serving the response
+%% Handles a Graph Sync request by contacting Onezone or serving the response
 %% from cache if possible. Uses default client (this provider).
 %% @end
 %%--------------------------------------------------------------------
@@ -83,7 +83,7 @@ request(Req) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Handles a Graph Sync request by contacting OneZone or serving the response
+%% Handles a Graph Sync request by contacting Onezone or serving the response
 %% from cache if possible.
 %% @end
 %%--------------------------------------------------------------------
@@ -147,11 +147,11 @@ init([]) ->
             {stop, normal};
         {ok, ClientRef, #gs_resp_handshake{identity = {provider, _}}} ->
             yes = global:register_name(?GS_CLIENT_WORKER_GLOBAL_NAME, self()),
-            ?info("Started connection to OneZone: ~p", [ClientRef]),
+            ?info("Started connection to Onezone: ~p", [ClientRef]),
             oneprovider:on_connection_to_oz(),
             {ok, #state{client_ref = ClientRef}};
         {error, _} = Error ->
-            ?warning("Cannot start connection to OneZone: ~p", [Error]),
+            ?warning("Cannot start connection to Onezone: ~p", [Error]),
             {stop, normal}
     end.
 
@@ -206,7 +206,7 @@ handle_cast(Request, #state{} = State) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
 handle_info({'EXIT', Pid, Reason}, #state{client_ref = Pid} = State) ->
-    ?warning("Connection to OneZone lost, reason: ~p", [Reason]),
+    ?warning("Connection to Onezone lost, reason: ~p", [Reason]),
     {stop, normal, State};
 handle_info(Info, #state{} = State) ->
     ?log_bad_request(Info),
