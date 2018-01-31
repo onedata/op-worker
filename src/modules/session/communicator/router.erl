@@ -27,7 +27,8 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([preroute_message/2, route_message/1, route_proxy_message/2]).
+-export([preroute_message/4, route_message/1, route_message/3,
+    route_proxy_message/2]).
 -export([effective_session_id/1]).
 
 -define(TIMEOUT, 30000).
@@ -58,43 +59,56 @@ route_proxy_message(#client_message{message_body = #event{} = Evt} = Msg, Target
 %% Check if message is sequential, if so - proxy it throught sequencer
 %% @end
 %%--------------------------------------------------------------------
--spec preroute_message(Msg :: #client_message{} | #server_message{}, SessId :: session:id()) ->
+-spec preroute_message(Msg :: #client_message{} | #server_message{},
+    SessId :: session:id(), Sock :: ssl:socket(), Transport :: module()) ->
     ok | {ok, #server_message{}} | {error, term()}.
-preroute_message(#client_message{message_body = #message_request{}} = Msg, SessId) ->
+preroute_message(#client_message{message_body = #message_request{}} = Msg,
+    SessId, _Sock, _Transport) ->
     sequencer:route_message(Msg, SessId);
-preroute_message(#client_message{message_body = #message_acknowledgement{}} = Msg, SessId) ->
+preroute_message(#client_message{message_body = #message_acknowledgement{}} = Msg,
+    SessId, _Sock, _Transport) ->
     sequencer:route_message(Msg, SessId);
-preroute_message(#client_message{message_body = #end_of_message_stream{}} = Msg, SessId) ->
+preroute_message(#client_message{message_body = #end_of_message_stream{}} = Msg,
+    SessId, _Sock, _Transport) ->
     sequencer:route_message(Msg, SessId);
-preroute_message(#client_message{message_body = #message_stream_reset{}} = Msg, SessId) ->
+preroute_message(#client_message{message_body = #message_stream_reset{}} = Msg,
+    SessId, _Sock, _Transport) ->
     sequencer:route_message(Msg, SessId);
-preroute_message(#server_message{message_body = #message_request{}} = Msg, SessId) ->
+preroute_message(#server_message{message_body = #message_request{}} = Msg,
+    SessId, _Sock, _Transport) ->
     sequencer:route_message(Msg, SessId);
-preroute_message(#server_message{message_body = #message_acknowledgement{}} = Msg, SessId) ->
+preroute_message(#server_message{message_body = #message_acknowledgement{}} = Msg,
+    SessId, _Sock, _Transport) ->
     sequencer:route_message(Msg, SessId);
-preroute_message(#server_message{message_body = #end_of_message_stream{}} = Msg, SessId) ->
+preroute_message(#server_message{message_body = #end_of_message_stream{}} = Msg,
+    SessId, _Sock, _Transport) ->
     sequencer:route_message(Msg, SessId);
-preroute_message(#server_message{message_body = #message_stream_reset{}} = Msg, SessId) ->
+preroute_message(#server_message{message_body = #message_stream_reset{}} = Msg,
+    SessId, _Sock, _Transport) ->
     sequencer:route_message(Msg, SessId);
-preroute_message(#client_message{message_stream = undefined} = Msg, _SessId) ->
-    router:route_message(Msg);
-preroute_message(#client_message{message_body = #subscription{}} = Msg, SessId) ->
+preroute_message(#client_message{message_stream = undefined} = Msg,
+    _SessId, Sock, Transport) ->
+    router:route_message(Msg, Sock, Transport);
+preroute_message(#client_message{message_body = #subscription{}} = Msg,
+    SessId, _Sock, _Transport) ->
     case session_manager:is_provider_session_id(SessId) of
         true ->
             ok;
         false ->
             sequencer:route_message(Msg, SessId)
     end;
-preroute_message(#client_message{message_body = #subscription_cancellation{}} = Msg, SessId) ->
+preroute_message(#client_message{message_body = #subscription_cancellation{}} = Msg,
+    SessId, _Sock, _Transport) ->
     case session_manager:is_provider_session_id(SessId) of
         true ->
             ok;
         false ->
             sequencer:route_message(Msg, SessId)
     end;
-preroute_message(#server_message{message_stream = undefined} = Msg, _SessId) ->
-    router:route_message(Msg);
-preroute_message(Msg, SessId) ->
+preroute_message(#server_message{message_stream = undefined} = Msg,
+    _SessId, Sock, Transport) ->
+    router:route_message(Msg, Sock, Transport);
+preroute_message(Msg, SessId, _Sock, _Transport) ->
     case session_manager:is_provider_session_id(SessId) of
         true ->
             ok;
@@ -109,12 +123,23 @@ preroute_message(Msg, SessId) ->
 %%--------------------------------------------------------------------
 -spec route_message(Msg :: #client_message{} | #server_message{}) ->
     ok | {ok, #server_message{}} | {error, term()}.
-route_message(Msg = #client_message{message_id = undefined}) ->
+route_message(Msg) ->
+    route_message(Msg, undefined, undefined).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Route message to adequate handler, this function should never throw
+%% @end
+%%--------------------------------------------------------------------
+-spec route_message(Msg :: #client_message{} | #server_message{},
+    Sock :: ssl:socket() | undefined, Transport :: module() | undefined) ->
+    ok | {ok, #server_message{}} | {error, term()}.
+route_message(Msg = #client_message{message_id = undefined}, _Sock, _Transport) ->
     route_and_ignore_answer(Msg);
 route_message(Msg = #client_message{message_id = #message_id{
     issuer = Issuer,
     recipient = Recipient
-}}) ->
+}}, Sock, Transport) ->
     case oneprovider:is_self(Issuer) of
         true when Recipient =:= undefined ->
             route_and_ignore_answer(Msg);
@@ -123,12 +148,12 @@ route_message(Msg = #client_message{message_id = #message_id{
             Pid ! Msg,
             ok;
         false ->
-            route_and_send_answer(Msg)
+            route_and_send_answer(Msg, Sock, Transport)
     end;
 route_message(Msg = #server_message{message_id = #message_id{
     issuer = Issuer,
     recipient = Recipient
-}}) ->
+}}, _Sock, _Transport) ->
     case oneprovider:is_self(Issuer) of
         true when Recipient =:= undefined ->
             ok;
@@ -208,13 +233,14 @@ route_and_ignore_answer(ClientMsg = #client_message{
 %% repack it into server_message and send to the client
 %% @end
 %%--------------------------------------------------------------------
--spec route_and_send_answer(#client_message{}) ->
+-spec route_and_send_answer(#client_message{}, Sock :: ssl:socket() | undefined,
+    Transport :: module() | undefined) ->
     ok | {ok, #server_message{}} | {error, term()}.
 route_and_send_answer(Msg = #client_message{
     session_id = OriginSessId,
     message_id = MsgId,
     message_body = FlushMsg = #flush_events{}
-}) ->
+}, _Sock, _Transport) ->
     event:flush(FlushMsg#flush_events{notify =
         fun(Result) ->
             % TODO - not used by client, why custom mechanism
@@ -225,83 +251,77 @@ route_and_send_answer(Msg = #client_message{
 route_and_send_answer(#client_message{
     message_id = Id,
     message_body = #ping{data = Data}
-}) ->
+}, _Sock, _Transport) ->
     {ok, #server_message{message_id = Id, message_body = #pong{data = Data}}};
 route_and_send_answer(#client_message{
     message_id = Id,
     message_body = #get_protocol_version{}
-}) ->
+}, _Sock, _Transport) ->
     {ok, #server_message{message_id = Id, message_body = #protocol_version{}}};
 route_and_send_answer(Msg = #client_message{
-    session_id = OriginSessId,
     message_id = Id,
     message_body = #get_configuration{}
-}) ->
+}, Sock, Transport) ->
     route_and_supervise(fun() ->
         Configuration = storage_req:get_configuration(effective_session_id(Msg)),
         {ok, #server_message{message_id = Id, message_body = Configuration}}
-    end, get_heartbeat_fun(Id, OriginSessId), Id);
+    end, get_heartbeat_fun(Id, Sock, Transport), Id);
 route_and_send_answer(Msg = #client_message{
-    session_id = OriginSessId,
     message_id = Id,
     message_body = FuseRequest = #fuse_request{
          fuse_request = #file_request{
              context_guid = FileGuid,
              file_request = Req
         }}
-}) when is_record(Req, open_file) orelse is_record(Req, release) ->
+}, Sock, Transport) when is_record(Req, open_file) orelse is_record(Req, release) ->
     Node = consistent_hasing:get_node(FileGuid),
     {ok, FuseResponse} = worker_proxy:call({fslogic_worker, Node},
         {fuse_request, effective_session_id(Msg), FuseRequest},
-        {?TIMEOUT, get_heartbeat_fun(Id, OriginSessId)}),
+        {?TIMEOUT, get_heartbeat_fun(Id, Sock, Transport)}),
     {ok, #server_message{message_id = Id, message_body = FuseResponse}};
 route_and_send_answer(Msg = #client_message{
-    session_id = OriginSessId,
     message_id = Id,
     message_body = FuseRequest = #fuse_request{}
-}) ->
+}, Sock, Transport) ->
     {ok, FuseResponse} = worker_proxy:call(fslogic_worker,
         {fuse_request, effective_session_id(Msg), FuseRequest},
-        {?TIMEOUT, get_heartbeat_fun(Id, OriginSessId)}),
+        {?TIMEOUT, get_heartbeat_fun(Id, Sock, Transport)}),
     {ok, #server_message{message_id = Id, message_body = FuseResponse}};
 route_and_send_answer(Msg = #client_message{
-    session_id = OriginSessId,
     message_id = Id,
     message_body = ProviderRequest = #provider_request{}
-}) ->
+}, Sock, Transport) ->
     {ok, ProviderResponse} = worker_proxy:call(fslogic_worker,
         {provider_request, effective_session_id(Msg), ProviderRequest},
-        {?TIMEOUT, get_heartbeat_fun(Id, OriginSessId)}),
+        {?TIMEOUT, get_heartbeat_fun(Id, Sock, Transport)}),
     {ok, #server_message{message_id = Id, message_body = ProviderResponse}};
 route_and_send_answer(#client_message{
-    session_id = OriginSessId,
     message_id = Id,
     message_body = Request = #get_remote_document{}
-}) ->
+}, Sock, Transport) ->
     route_and_supervise(fun() ->
         Response = datastore_remote_driver:handle(Request),
         {ok, #server_message{message_id = Id, message_body = Response}}
-    end, get_heartbeat_fun(Id, OriginSessId), Id);
+    end, get_heartbeat_fun(Id, Sock, Transport), Id);
 route_and_send_answer(Msg = #client_message{
     session_id = OriginSessId,
     message_id = Id,
     message_body = ProxyIORequest = #proxyio_request{
         parameters = #{?PROXYIO_PARAMETER_FILE_GUID := FileGuid}
     }
-}) ->
+}, Sock, Transport) ->
     Node = consistent_hasing:get_node(FileGuid),
     {ok, ProxyIOResponse} = worker_proxy:call({fslogic_worker, Node},
         {proxyio_request, effective_session_id(Msg), ProxyIORequest},
-        {?TIMEOUT, get_heartbeat_fun(Id, OriginSessId)}),
+        {?TIMEOUT, Sock, Transport(Id, OriginSessId)}),
     {ok, #server_message{message_id = Id, message_body = ProxyIOResponse}};
 route_and_send_answer(Msg = #client_message{
-    session_id = OriginSessId,
     message_id = Id,
     message_body = #dbsync_request{} = DBSyncRequest
-}) ->
+}, Sock, Transport) ->
     {ok, DBSyncResponse} = worker_proxy:call(dbsync_worker,
         {dbsync_request, effective_session_id(Msg), DBSyncRequest},
-        {?TIMEOUT, get_heartbeat_fun(Id, OriginSessId)}),
+        {?TIMEOUT, get_heartbeat_fun(Id, Sock, Transport)}),
     {ok, #server_message{message_id = Id, message_body = DBSyncResponse}}.
 
 %%--------------------------------------------------------------------
@@ -351,13 +371,18 @@ receive_loop(Ref, Pid, TimeoutFun, Id) ->
 %% Provides function that sends heartbeat.
 %% @end
 %%--------------------------------------------------------------------
--spec get_heartbeat_fun(message_id:id(), session:id()) -> fun(() -> ok).
-get_heartbeat_fun(MsgId, OriginSessId) ->
-    {Sock, Transport} = get(heartbeat_info),
-    fun() ->
-        connection:send_server_message(Sock, Transport,
-            #server_message{message_id = MsgId,
-                message_body = #processing_status{code = 'IN_PROGRESS'}
-            }),
-        ok
+-spec get_heartbeat_fun(message_id:id(), Sock :: ssl:socket() | undefined,
+    Transport :: module() | undefined) -> fun(() -> ok).
+get_heartbeat_fun(MsgId, Sock, Transport) ->
+    case Sock of
+        undefined ->
+            fun() -> ok end;
+        _ ->
+            fun() ->
+                connection:send_server_message(Sock, Transport,
+                    #server_message{message_id = MsgId,
+                        message_body = #processing_status{code = 'IN_PROGRESS'}
+                    }),
+                ok
+            end
     end.
