@@ -353,8 +353,11 @@ receive_loop(Ref, Pid, TimeoutFun, Id) ->
 %%--------------------------------------------------------------------
 -spec get_heartbeat_fun(message_id:id(), session:id()) -> fun(() -> ok).
 get_heartbeat_fun(MsgId, OriginSessId) ->
+    {Sock, Transport} = get(heartbeat_info),
     fun() ->
-        communicator:send(#server_message{message_id = MsgId,
-            message_body = #processing_status{code = 'IN_PROGRESS'}
-        }, OriginSessId)
+        connection:send_server_message(Sock, Transport,
+            #server_message{message_id = MsgId,
+                message_body = #processing_status{code = 'IN_PROGRESS'}
+            }),
+        ok
     end.

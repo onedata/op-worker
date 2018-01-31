@@ -31,6 +31,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
 
+-export([send_server_message/3]).
+
 -type ref() :: pid() | session:id().
 
 -export_type([ref/0]).
@@ -488,6 +490,7 @@ handle_normal_message(State = #state{
             router:route_proxy_message(Msg, TargetSessionId),
             {noreply, State, ?TIMEOUT};
         _ -> %% Non-proxy case
+            put(heartbeat_info, {Sock, Transport}),
             case router:preroute_message(Msg, EffectiveSessionId) of
                 ok ->
                     {noreply, State, ?TIMEOUT};

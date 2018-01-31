@@ -45,7 +45,8 @@
     multi_connection_test/1,
     bandwidth_test/1,
     python_client_test/1,
-    proto_version_test/1
+    proto_version_test/1,
+    timeouts_test/1
 ]).
 
 %%test_bases
@@ -71,7 +72,8 @@
     multi_connection_test,
     bandwidth_test,
     python_client_test,
-    proto_version_test
+    proto_version_test,
+    timeouts_test
 ]).
 
 -define(PERFORMANCE_CASES_NAMES, [
@@ -90,11 +92,187 @@ all() -> ?ALL(?NORMAL_CASES_NAMES, ?PERFORMANCE_CASES_NAMES).
 -define(INCORRECT_PROVIDER_ID, <<"incorrect-iden-mac">>).
 -define(CORRECT_NONCE, <<"correct-nonce">>).
 -define(INCORRECT_NONCE, <<"incorrect-nonce">>).
--define(TIMEOUT, timer:seconds(5)).
+-define(TIMEOUT, timer:minutes(1)).
+
+-define(assertMatchTwo(Guard1, Guard2, Expr),
+    begin
+        ((fun () ->
+            case (Expr) of
+                Guard1 -> 1;
+                Guard2 -> 2;
+                __V ->
+                    erlang:error({assertMatch,
+                    [{module, ?MODULE},
+                        {line, ?LINE},
+                        {expression, (??Expr)},
+                        {pattern, (??Guard1), (??Guard2)},
+                        {value, __V}]})
+            end
+        end)())
+    end).
+
+-define(req(W, SessId, FuseRequest), element(2, rpc:call(W, worker_proxy, call,
+    [fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = FuseRequest}}]))).
+
+-record(file_handle, {
+    handle :: helpers_nif:file_handle(),
+    timeout :: timeout()
+}).
 
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
+
+timeouts_test(Config) ->
+    % given
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    SID = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+
+    RootGuid = get_guid(Worker1, SID, <<"/space_name1">>),
+    initializer:remove_pending_messages(),
+    {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}], SID),
+
+    % send
+    ok = ssl:send(Sock, generate_create_message(RootGuid, <<"1">>, <<"f1">>)),
+    % receive & validate
+    ?assertMatch(#'ServerMessage'{message_body = {
+        fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
+    }, message_id = <<"1">>}, receive_server_message()),
+
+    configure_helper(Config, timeout),
+    % send
+    ok = ssl:send(Sock, generate_create_message(RootGuid, <<"2">>, <<"f2">>)),
+    % receive & validate
+    check_answer(fun() -> ?assertMatchTwo(
+        #'ServerMessage'{message_body = {
+            fuse_response, #'FuseResponse'{status = #'Status'{code = eagain}
+            }
+        }, message_id = <<"2">>},
+        #'ServerMessage'{message_body = {
+            processing_status, #'ProcessingStatus'{code = 'IN_PROGRESS'}
+        }, message_id = <<"2">>},
+        receive_server_message()) end
+        ),
+
+    configure_helper(Config, delay),
+    ok = ssl:send(Sock, generate_create_message(RootGuid, <<"3">>, <<"f3">>)),
+    % receive & validate
+    check_answer(fun() -> ?assertMatchTwo(
+        #'ServerMessage'{message_body = {
+            fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
+        }, message_id = <<"3">>},
+        #'ServerMessage'{message_body = {
+            processing_status, #'ProcessingStatus'{code = 'IN_PROGRESS'}
+        }, message_id = <<"3">>},
+        receive_server_message()) end,
+        3
+    ),
+
+    % then
+    ok = ssl:close(Sock).
+
+check_answer(AsertFun) ->
+    check_answer(AsertFun, 0).
+
+check_answer(AsertFun, MinHeartbeatNum) ->
+    timer:sleep(100), % wait for pending messages
+    initializer:remove_pending_messages(),
+    check_answer(AsertFun, 0, MinHeartbeatNum).
+
+check_answer(AsertFun, HeartbeatNum, MinHeartbeatNum) ->
+    AnsNum = AsertFun(),
+    case AnsNum of
+        1 ->
+            ?assert(HeartbeatNum >= MinHeartbeatNum);
+        _ ->
+            check_answer(AsertFun, HeartbeatNum + 1, MinHeartbeatNum)
+    end.
+
+
+
+get_guid(Worker, SessId, Path) ->
+    #fuse_response{fuse_response = #guid{guid = Guid}} =
+        ?assertMatch(
+            #fuse_response{status = #status{code = ?OK}},
+            ?req(Worker, SessId, #resolve_guid{path = Path}),
+            30
+        ),
+    Guid.
+
+spawn_control_proc() ->
+    spawn(fun() ->
+        control_proc(ok)
+    end).
+
+stop_control_proc(Pid) ->
+    Pid ! stop.
+
+control_proc(Value) ->
+    receive
+        {get_value, Pid} ->
+            Pid ! {value, Value},
+            control_proc(Value);
+        {set_value, NewValue, Pid} ->
+            Pid ! value_changed,
+            control_proc(NewValue);
+        stop ->
+            ok
+    end.
+
+configure_helper(CP_Pid, Value) when is_pid(CP_Pid) ->
+    CP_Pid ! {set_value, Value, self()},
+    receive
+        value_changed -> ok
+    end;
+configure_helper(Config, Value) ->
+    CP_Pid = ?config(control_proc, Config),
+    configure_helper(CP_Pid, Value).
+
+get_helper_settings(CP_Pid) ->
+    CP_Pid ! {get_value, self()},
+    receive
+        {value, Value} -> Value
+    end.
+
+aplly_helper(Handle, Timeout, Function, Args, CP_Pid) ->
+    case get_helper_settings(CP_Pid) of
+        ok ->
+            {ok, ResponseRef} = apply(helpers_nif, Function, [Handle | Args]),
+            helpers:receive_loop(ResponseRef, Timeout);
+        timeout ->
+            helpers:receive_loop(make_ref(), Timeout);
+        delay ->
+            configure_helper(CP_Pid, ok),
+            Master = self(),
+            spawn(fun() ->
+                {ok, ResponseRef} = apply(helpers_nif, Function, [Handle | Args]),
+                Master ! {ref, ResponseRef},
+                heartbeat(10, Master, ResponseRef),
+                Ans = helpers:receive_loop(ResponseRef, Timeout),
+                Master ! {ResponseRef, Ans}
+            end),
+            receive
+                {ref, ResponseRef} ->
+                    helpers:receive_loop(ResponseRef, Timeout)
+            end
+    end.
+
+heartbeat(0, _Master, _ResponseRef) ->
+    ok;
+heartbeat(N, Master, ResponseRef) ->
+    timer:sleep(timer:seconds(10)),
+    Master ! {ResponseRef, heartbeat},
+    heartbeat(N - 1, Master, ResponseRef).
+
+generate_create_message(RootGuid, MsgId, File) ->
+    Message = #'ClientMessage'{message_id = MsgId, message_body =
+    {fuse_request, #'FuseRequest'{fuse_request = {file_request,
+        #'FileRequest'{context_guid = RootGuid,
+            file_request = {create_file, #'CreateFile'{name = File,
+                mode = 8#644, flag = 'READ_WRITE'}}}
+    }}}
+    },
+    messages:encode_msg(Message).
 
 provider_connection_test(Config) ->
     % given
@@ -588,7 +766,8 @@ proto_version_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    [{?LOAD_MODULES, [initializer]} | Config].
+    Posthook = fun(NewConfig) -> initializer:setup_storage(NewConfig) end,
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
 init_per_testcase(provider_connection_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -619,6 +798,31 @@ init_per_testcase(Case, Config) when
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, router),
     init_per_testcase(default, Config);
+
+init_per_testcase(timeouts_test, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    initializer:remove_pending_messages(),
+    ssl:start(),
+
+    test_utils:mock_new(Workers, user_identity),
+    test_utils:mock_expect(Workers, user_identity, get_or_fetch,
+        fun(#token_auth{token = ?MACAROON}) ->
+            {ok, #document{value = #user_identity{user_id = <<"user1">>}}}
+        end
+    ),
+
+    CP_Pid = spawn_control_proc(),
+
+    test_utils:mock_new(Workers, helpers),
+    test_utils:mock_expect(Workers, helpers, apply_helper_nif, fun
+        (#helper_handle{handle = Handle, timeout = Timeout}, Function, Args) ->
+            aplly_helper(Handle, Timeout, Function, Args, CP_Pid);
+        (#file_handle{handle = Handle, timeout = Timeout}, Function, Args) ->
+            aplly_helper(Handle, Timeout, Function, Args, CP_Pid)
+    end),
+
+    [{control_proc, CP_Pid} |
+        initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config)];
 
 init_per_testcase(default, Config) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -654,6 +858,13 @@ end_per_testcase(python_client_test, Config) ->
     file:delete(?TEST_FILE(Config, "handshake.arg")),
     file:delete(?TEST_FILE(Config, "message.arg")),
     end_per_testcase(default, Config);
+
+end_per_testcase(timeouts_test, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    CP_Pid = ?config(control_proc, Config),
+    stop_control_proc(CP_Pid),
+    test_utils:mock_validate_and_unload(Workers, [user_identity, helpers]),
+    initializer:clean_test_users_and_spaces_no_validate(Config);
 
 end_per_testcase(default, Config) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -711,10 +922,11 @@ connect_via_token(Node, SocketOpts, SessId) ->
     ok = ssl:send(Sock, TokenAuthMessageRaw),
 
     % then
+    RM = receive_server_message(),
     #'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{
         status = 'OK'
     }}} = ?assertMatch(#'ServerMessage'{message_body = {handshake_response, _}},
-        receive_server_message()
+        RM
     ),
     ssl:setopts(Sock, ActiveOpt),
     {ok, {Sock, SessId}}.

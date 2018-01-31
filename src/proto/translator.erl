@@ -690,7 +690,7 @@ translate_to_protobuf(#token_auth{token = Token}) ->
 
 % PROCESSING STATUS
 translate_to_protobuf(#processing_status{code = Code}) ->
-    {handshake_response, #'ProcessingStatus'{code = Code}};
+    {processing_status, #'ProcessingStatus'{code = Code}};
 
 %% DIAGNOSTIC
 translate_to_protobuf(#pong{data = Data}) ->
