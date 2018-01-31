@@ -325,13 +325,12 @@ restart_file_replication(Config) ->
             Error -> Error
         end, ?ATTEMPTS),
 
-    ?assertEqualList([], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([Tid], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([Tid], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqualList([Tid], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqualList([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqualList([Tid], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqualList([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
 
     resume_file_replication(WorkerP2),
-
     ?assertMatch({ok, 204, _, _},
         do_request(WorkerP2, <<"transfers/", Tid/binary>>, patch, [user_1_token_header(Config)], [])),
 
@@ -356,6 +355,7 @@ restart_file_replication(Config) ->
                 json_utils:decode_map(TransferStatus);
             Error -> Error
         end, ?ATTEMPTS),
+    tracer:stop(),
 
     ExpectedDistribution = [
         #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
@@ -494,10 +494,10 @@ replicate_dir(Config) ->
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File2),
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File3),
 
-    ?assertEqualList([Tid], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqualList([Tid], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS).
+    ?assertEqualList([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqualList([Tid], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqualList([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS).
 
 restart_dir_replication(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -553,10 +553,10 @@ restart_dir_replication(Config) ->
             Error -> Error
         end, ?ATTEMPTS),
 
-    ?assertEqualList([], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([Tid], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([Tid], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqualList([Tid], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqualList([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqualList([Tid], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqualList([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
 
     resume_file_replication(WorkerP2),
     %% restart transfer
@@ -978,7 +978,7 @@ invalidate_dir_replica(Config) ->
 
     ?assertMatch(#{
         <<"transferStatus">> := <<"skipped">>,
-        <<"targetProviderId">> := <<"undefined">>,
+        <<"targetProviderId">> := null,
         <<"path">> := Dir1,
         <<"invalidationStatus">> := <<"completed">>,
         <<"callback">> := null
@@ -2199,7 +2199,7 @@ quota_decreased_after_invalidation(Config) ->
 
     ?assertMatch(#{
         <<"transferStatus">> := <<"skipped">>,
-        <<"targetProviderId">> := <<"undefined">>,
+        <<"targetProviderId">> := null,
         <<"path">> := File,
         <<"invalidationStatus">> := <<"completed">>,
         <<"callback">> := null
@@ -2764,8 +2764,7 @@ start_monitoring_worker(Node) ->
 remove_transfers(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lists:foreach(fun(Worker) ->
-        {ok, #document{value = #od_provider{spaces = SpaceIds}}} =
-            rpc:call(Worker, od_provider, get_or_fetch, [rpc:call(Worker, oneprovider, get_provider_id, [])]),
+        {ok, SpaceIds} = rpc:call(Worker, provider_logic, get_spaces, []),
         lists:foreach(fun(SpaceId) ->
             {ok, Current} = rpc:call(Worker, transfer, list_transfers, [SpaceId, true]),
             {ok, Past} = rpc:call(Worker, transfer, list_transfers, [SpaceId, false]),

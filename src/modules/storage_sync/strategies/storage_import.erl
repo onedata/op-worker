@@ -116,10 +116,7 @@ strategy_init_jobs(StrategyName, StrategyArgs, InitData) ->
 %%--------------------------------------------------------------------
 -spec strategy_handle_job(space_strategy:job()) ->
     {space_strategy:job_result(), [space_strategy:job()]}.
-strategy_handle_job(Job = #space_strategy_job{
-    strategy_name = simple_scan,
-    data = #{space_id := SpaceId}
-}) ->
+strategy_handle_job(Job = #space_strategy_job{strategy_name = simple_scan}) ->
     ok = datastore_throttling:throttle(import),
     simple_scan:run(Job);
 strategy_handle_job(#space_strategy_job{strategy_name = no_import}) ->

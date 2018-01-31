@@ -529,13 +529,11 @@ init_reporter(exometer_report_rrd_ets) ->
 %%--------------------------------------------------------------------
 -spec init_counters() -> ok.
 init_counters() ->
-    try  od_provider:get_or_fetch(oneprovider:get_id()) of
-        {ok, #document{value = #od_provider{spaces = SpaceIds}}} ->
+    case provider_logic:get_spaces() of
+        {ok, SpaceIds} ->
             init_counters(SpaceIds);
-        {error, _} -> ok
-    catch
-        _:TReason ->
-            ?error_stacktrace("Unable to start storage_sync counters due to: ~p", [TReason])
+        {error, Reason} ->
+            ?error_stacktrace("Unable to start storage_sync counters due to: ~p", [Reason])
     end.
 
 %%-------------------------------------------------------------------

@@ -207,7 +207,6 @@ new_transfer(#document{
     worker_pool:cast(?TRANSFER_CONTROLLERS_POOL, {
         start_transfer,
         session:root_session_id(),
-        SpaceId,
         TransferId,
         FileGuid,
         Callback,

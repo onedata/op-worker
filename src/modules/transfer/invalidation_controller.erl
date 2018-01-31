@@ -80,12 +80,6 @@ on_transfer_doc_change(Transfer = #document{value = #transfer{
         false ->
             ok
     end;
-on_transfer_doc_change(#document{
-    key = TransferId,
-    value = #transfer{status = cancelled}}
-)  ->
-    transfer:mark_cancelled_invalidation(TransferId),   %todo improve handling of cancellation vfs-3990
-    ok;
 on_transfer_doc_change(_ExistingTransfer) ->
     ok.
 
@@ -123,7 +117,9 @@ failed_invalidation(Pid, Error) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
 init([SessionId, TransferId, FileGuid, Callback]) ->
-    {ok, _} = transfer:update(TransferId, #{pid => list_to_binary(pid_to_list(self()))}),
+    {ok, _} = transfer:update(TransferId,fun(T) ->
+        {ok, T#transfer{pid = list_to_binary(pid_to_list(self()))}}
+    end),
     ok = gen_server2:cast(self(), start_invalidation),
     {ok, #state{
         transfer_id = TransferId,

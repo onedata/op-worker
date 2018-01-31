@@ -146,7 +146,7 @@ restart_unfinished_transfers(SpaceId) ->
                 {Restarted0, Failed0};
             {error, not_source_provider} ->
                 {Restarted0, Failed0};
-            {error, {not_found, transfer}} ->
+            {error, not_found} ->
                 {Restarted0, [TransferId | Failed0]}
         end
     end, {[], []}, SpaceId),
@@ -281,7 +281,7 @@ delete(TransferId) ->
 %%--------------------------------------------------------------------
 -spec cancel(id()) -> ok | {error, term()}.
 cancel(TransferId) ->
-    {ok, _} = transfer:mark_cancelled(TransferId),
+    {ok, _} = mark_cancelled(TransferId),
     ok.
 
 %%--------------------------------------------------------------------
@@ -351,7 +351,7 @@ mark_failed(TransferId) ->
             end}}
     end,
     case update(TransferId, UpdateFun) of
-        {{ok, #document{value = #transfer{space_id = SpaceId}}}}  ->
+        {ok, #document{value = #transfer{space_id = SpaceId}}}  ->
             move_from_current_to_past_links_tree(TransferId, SpaceId),
             {ok, TransferId};
         Error ->
@@ -376,9 +376,18 @@ increase_failed_file_transfers(TransferId) ->
 %%--------------------------------------------------------------------
 -spec mark_cancelled(id()) -> {ok, id()} | {error, term()}.
 mark_cancelled(TransferId) ->
-    case transfer:update(TransferId, fun(Transfer) ->
-        {ok, Transfer#transfer{status = cancelled}}
-    end) of
+    UpdateFun = fun(T = #transfer{invalidation_status = InvalidationStatus}) ->
+        {ok, T#transfer{
+            status = cancelled,
+            invalidation_status = case is_migrating(T) of
+                true ->
+                    cancelled;
+                _ ->
+                    InvalidationStatus
+            end}
+        }
+    end,
+    case transfer:update(TransferId, UpdateFun) of
         {ok, #document{value = #transfer{space_id = SpaceId}}} ->
             move_from_current_to_past_links_tree(TransferId, SpaceId),
             {ok, TransferId};
@@ -427,7 +436,7 @@ mark_completed_invalidation(TransferId, SpaceId) ->
 -spec mark_failed_invalidation(id()) -> {ok, id()} | {error, term()}.
 mark_failed_invalidation(TransferId) ->
     case transfer:update(TransferId, fun(T) ->
-        T#transfer{invalidation_status = failed}
+        {ok, T#transfer{invalidation_status = failed}}
     end) of
         {ok, #document{value = #transfer{space_id = SpaceId}}} ->
             move_from_current_to_past_links_tree(TransferId, SpaceId),
@@ -444,7 +453,7 @@ mark_failed_invalidation(TransferId) ->
 -spec mark_cancelled_invalidation(id()) -> {ok, id()} | {error, term()}.
 mark_cancelled_invalidation(TransferId) ->
     case transfer:update(TransferId, fun(Transfer) ->
-        Transfer#transfer{invalidation_status = cancelled}
+        {ok, Transfer#transfer{invalidation_status = cancelled}}
     end) of
         {ok, #document{value = #transfer{space_id = SpaceId}}} ->
             ok = add_link(?PAST_TRANSFERS_KEY, TransferId, SpaceId),
@@ -755,7 +764,7 @@ create(Doc) ->
 %% Updates transfer.
 %% @end
 %%--------------------------------------------------------------------
--spec update(id(), diff()) -> {ok, id()} | {error, term()}.
+-spec update(id(), diff()) -> {ok, doc()} | {error, term()}.
 update(TransferId, Diff) ->
     datastore_model:update(?CTX, TransferId, Diff).
 
