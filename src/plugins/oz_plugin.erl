@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements oz_plugin_behaviour in order
-%%% to customize connection settings to OneZone.
+%%% to customize connection settings to Onezone.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(oz_plugin).
@@ -30,7 +30,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Should return a OneZone URL.
+%% Should return a Onezone URL.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_oz_url() -> string().

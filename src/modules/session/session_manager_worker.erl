@@ -148,5 +148,5 @@ remove_session(SessId) ->
 -spec close_connections(Cons :: [pid()]) -> ok.
 close_connections(Cons) ->
     lists:foreach(fun(Con) ->
-        gen_server2:cast(Con, disconnect)
+        Con ! disconnect
     end, Cons).

@@ -59,8 +59,9 @@ struct HelpersNIF {
                     {POSIX_HELPER_NAME, "posix_helper_threads_number"},
                     {S3_HELPER_NAME, "s3_helper_threads_number"},
                     {SWIFT_HELPER_NAME, "swift_helper_threads_number"},
-                    {GLUSTERFS_HELPER_NAME,
-                        "glusterfs_helper_threads_number"}})) {
+                    {GLUSTERFS_HELPER_NAME, "glusterfs_helper_threads_number"},
+                    {NULL_DEVICE_HELPER_NAME,
+                        "nulldevice_helper_threads_number"}})) {
             auto threads = std::stoul(args[entry.second].toStdString());
             services.emplace(entry.first, std::make_unique<HelperIOService>());
             auto &service = services[entry.first]->service;
@@ -76,6 +77,7 @@ struct HelpersNIF {
             services[S3_HELPER_NAME]->service,
             services[SWIFT_HELPER_NAME]->service,
             services[GLUSTERFS_HELPER_NAME]->service,
+            services[NULL_DEVICE_HELPER_NAME]->service,
             std::stoul(args["buffer_scheduler_threads_number"].toStdString()),
             buffering::BufferLimits{
                 std::stoul(args["read_buffer_min_size"].toStdString()),
@@ -462,6 +464,10 @@ static void configurePerformanceMonitoring(
                 "comp.oneprovider.mod.options.glusterfs_helper_thread_count",
                 std::stoul(
                     args["glusterfs_helper_threads_number"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.nulldevice_helper_thread_count",
+                std::stoul(
+                    args["nulldevice_helper_threads_number"].toStdString()));
             ONE_METRIC_COUNTER_SET("comp.oneprovider.mod.options.buffer_"
                                    "scheduler_helper_thread_count",
                 std::stoul(

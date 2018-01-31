@@ -38,7 +38,7 @@ all() -> ?ALL([token_authentication]).
 
 token_authentication(Config) ->
     % given
-    [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
     SessionId = <<"SessionId">>,
 
     % when
@@ -83,22 +83,40 @@ end_per_testcase(_Case, Config) ->
     {ok, Sock :: term()}.
 connect_via_token(Node, TokenVal, SessionId) ->
     % given
-    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, protocol_handler_port),
-    TokenAuthMessage = #'ClientMessage'{message_body =
-    {client_handshake_request, #'ClientHandshakeRequest'{
-        session_id = SessionId,
-        token = #'Token'{value = TokenVal}
-    }}},
+    TokenAuthMessage = #'ClientMessage'{message_body = {client_handshake_request,
+        #'ClientHandshakeRequest'{session_id = SessionId, token = #'Token'{
+            value = TokenVal
+        }}
+    }},
     TokenAuthMessageRaw = messages:encode_msg(TokenAuthMessage),
+    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, gui_https_port),
 
     % when
-    {ok, Sock} = ssl:connect(utils:get_host(Node), Port, [binary, {packet, 4}, {active, true}]),
+    {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),
     ok = ssl:send(Sock, TokenAuthMessageRaw),
 
     % then
-    HandshakeResponse = receive_server_message(),
-    ?assertMatch(#'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{}}}, HandshakeResponse),
+    #'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{
+        status = 'OK'
+    }}} = ?assertMatch(#'ServerMessage'{message_body = {handshake_response, _}},
+        receive_server_message()
+    ),
     {ok, Sock}.
+
+
+connect_and_upgrade_proto(Hostname, Port) ->
+    {ok, Sock} = (catch ssl:connect(Hostname, Port, [binary,
+        {active, once}, {reuse_sessions, false}
+    ], timer:minutes(1))),
+    ssl:send(Sock, connection:protocol_upgrade_request(list_to_binary(Hostname))),
+    receive {ssl, Sock, Data} ->
+        ?assert(connection:verify_protocol_upgrade_response(Data)),
+        ssl:setopts(Sock, [{active, once}, {packet, 4}]),
+        {ok, Sock}
+    after timer:minutes(1) ->
+        exit(timeout)
+    end.
+
 
 receive_server_message() ->
     receive_server_message([message_stream_reset]).
