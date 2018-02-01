@@ -107,6 +107,7 @@ get_as_map() ->
     {ok, #document{key = ProviderId, value = ProviderRecord}} = ?MODULE:get(),
     #od_provider{
         name = Name,
+        admin_email = AdminEmail,
         subdomain_delegation = SubdomainDelegation,
         domain = Domain,
         subdomain = Subdomain,
@@ -116,6 +117,7 @@ get_as_map() ->
     #{
         id => ProviderId,
         name => Name,
+        admin_email => AdminEmail,
         subdomain_delegation => SubdomainDelegation,
         domain => Domain,
         subdomain => Subdomain,

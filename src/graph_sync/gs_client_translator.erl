@@ -159,6 +159,7 @@ translate(#gri{type = od_provider, id = Id, aspect = instance, scope = private},
         key = Id,
         value = #od_provider{
             name = maps:get(<<"name">>, Result),
+            admin_email = maps:get(<<"adminEmail">>, Result),
             subdomain_delegation = maps:get(<<"subdomainDelegation">>, Result),
             domain = maps:get(<<"domain">>, Result),
             subdomain = maps:get(<<"subdomain">>, Result),
@@ -312,6 +313,7 @@ apply_scope_mask(Doc = #document{value = Share = #od_share{}}, public) ->
 apply_scope_mask(Doc = #document{value = Provider = #od_provider{}}, protected) ->
     Doc#document{
         value = Provider#od_provider{
+            admin_email = undefined,
             subdomain_delegation = undefined,
             subdomain = undefined,
             spaces = #{},

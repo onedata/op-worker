@@ -134,6 +134,7 @@ get_record_struct(2) ->
 get_record_struct(3) ->
     {record, [
         {name, string},
+        {admin_email, string},
         {subdomain_delegation, boolean},
         {domain, string},
         {subdomain, string},
@@ -193,6 +194,7 @@ upgrade_record(2, Provider) ->
     #{host := Domain} = url_utils:parse(hd(Urls)),
     {3, #od_provider{
         name = Name,
+        admin_email = undefined,
         subdomain_delegation = false,
         domain = Domain,
         subdomain = undefined,
