@@ -29,9 +29,6 @@
     delete_storage_file_without_location/2, delete_storage_dir/2,
     create_parent_dirs/1]).
 
-% TODO - kasowanie/kopiowanie rownolegle?
-% TODO - pozostale operacje na storeage - chmod itp
-
 %%%===================================================================
 %%% API
 %%%===================================================================

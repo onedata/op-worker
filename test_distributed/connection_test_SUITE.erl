@@ -125,10 +125,6 @@ all() -> ?ALL(?NORMAL_CASES_NAMES, ?PERFORMANCE_CASES_NAMES).
 
 % to samo dla #fsync{} | #get_file_children_attrs{}
 timeouts_test(Config) ->
-    create_timeouts_test(Config).
-
-create_timeouts_test(Config) ->
-    % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     SID = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
 
@@ -136,6 +132,11 @@ create_timeouts_test(Config) ->
     initializer:remove_pending_messages(),
     {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}], SID),
 
+    create_timeouts_test(Config, Sock, RootGuid),
+    ls_timeouts_test(Config, Sock, RootGuid),
+    fsync_timeouts_test(Config, Sock, RootGuid).
+
+create_timeouts_test(Config, Sock, RootGuid) ->
     % send
     ok = ssl:send(Sock, generate_create_message(RootGuid, <<"1">>, <<"f1">>)),
     % receive & validate
@@ -143,7 +144,7 @@ create_timeouts_test(Config) ->
         fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
     }, message_id = <<"1">>}, receive_server_message()),
 
-    configure_helper(Config, timeout),
+    configure_cp(Config, helper_timeout),
     % send
     ok = ssl:send(Sock, generate_create_message(RootGuid, <<"2">>, <<"f2">>)),
     % receive & validate
@@ -158,7 +159,7 @@ create_timeouts_test(Config) ->
         receive_server_message()) end
         ),
 
-    configure_helper(Config, delay),
+    configure_cp(Config, helper_delay),
     ok = ssl:send(Sock, generate_create_message(RootGuid, <<"3">>, <<"f3">>)),
     % receive & validate
     check_answer(fun() -> ?assertMatchTwo(
@@ -170,113 +171,52 @@ create_timeouts_test(Config) ->
         }, message_id = <<"3">>},
         receive_server_message()) end,
         3
-    ),
+    ).
 
-    % then
-    ok = ssl:close(Sock).
+ls_timeouts_test(Config, Sock, RootGuid) ->
+    % send
+    configure_cp(Config, ok),
+    ok = ssl:send(Sock, generate_get_children_message(RootGuid, <<"ls1">>)),
+    % receive & validate
+    ?assertMatch(#'ServerMessage'{message_body = {
+        fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
+    }, message_id = <<"ls1">>}, receive_server_message()),
 
-check_answer(AsertFun) ->
-    check_answer(AsertFun, 0).
+    configure_cp(Config, attr_delay),
+    ok = ssl:send(Sock, generate_get_children_message(RootGuid, <<"ls2">>)),
+    % receive & validate
+    check_answer(fun() -> ?assertMatchTwo(
+        #'ServerMessage'{message_body = {
+            fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
+        }, message_id = <<"ls2">>},
+        #'ServerMessage'{message_body = {
+            processing_status, #'ProcessingStatus'{code = 'IN_PROGRESS'}
+        }, message_id = <<"ls2">>},
+        receive_server_message()) end,
+        2
+    ).
 
-check_answer(AsertFun, MinHeartbeatNum) ->
-    timer:sleep(100), % wait for pending messages
-    initializer:remove_pending_messages(),
-    check_answer(AsertFun, 0, MinHeartbeatNum).
+fsync_timeouts_test(Config, Sock, RootGuid) ->
+    configure_cp(Config, ok),
+    ok = ssl:send(Sock, generate_fsync_message(RootGuid, <<"fs1">>)),
+    % receive & validate
+    ?assertMatch(#'ServerMessage'{message_body = {
+        fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
+    }, message_id = <<"fs1">>}, receive_server_message()),
 
-check_answer(AsertFun, HeartbeatNum, MinHeartbeatNum) ->
-    AnsNum = AsertFun(),
-    case AnsNum of
-        1 ->
-            ?assert(HeartbeatNum >= MinHeartbeatNum);
-        _ ->
-            check_answer(AsertFun, HeartbeatNum + 1, MinHeartbeatNum)
-    end.
-
-
-
-get_guid(Worker, SessId, Path) ->
-    #fuse_response{fuse_response = #guid{guid = Guid}} =
-        ?assertMatch(
-            #fuse_response{status = #status{code = ?OK}},
-            ?req(Worker, SessId, #resolve_guid{path = Path}),
-            30
-        ),
-    Guid.
-
-spawn_control_proc() ->
-    spawn(fun() ->
-        control_proc(ok)
-    end).
-
-stop_control_proc(Pid) ->
-    Pid ! stop.
-
-control_proc(Value) ->
-    receive
-        {get_value, Pid} ->
-            Pid ! {value, Value},
-            control_proc(Value);
-        {set_value, NewValue, Pid} ->
-            Pid ! value_changed,
-            control_proc(NewValue);
-        stop ->
-            ok
-    end.
-
-configure_helper(CP_Pid, Value) when is_pid(CP_Pid) ->
-    CP_Pid ! {set_value, Value, self()},
-    receive
-        value_changed -> ok
-    end;
-configure_helper(Config, Value) ->
-    CP_Pid = ?config(control_proc, Config),
-    configure_helper(CP_Pid, Value).
-
-get_helper_settings(CP_Pid) ->
-    CP_Pid ! {get_value, self()},
-    receive
-        {value, Value} -> Value
-    end.
-
-aplly_helper(Handle, Timeout, Function, Args, CP_Pid) ->
-    case get_helper_settings(CP_Pid) of
-        ok ->
-            {ok, ResponseRef} = apply(helpers_nif, Function, [Handle | Args]),
-            helpers:receive_loop(ResponseRef, Timeout);
-        timeout ->
-            helpers:receive_loop(make_ref(), Timeout);
-        delay ->
-            configure_helper(CP_Pid, ok),
-            Master = self(),
-            spawn(fun() ->
-                {ok, ResponseRef} = apply(helpers_nif, Function, [Handle | Args]),
-                Master ! {ref, ResponseRef},
-                heartbeat(10, Master, ResponseRef),
-                Ans = helpers:receive_loop(ResponseRef, Timeout),
-                Master ! {ResponseRef, Ans}
-            end),
-            receive
-                {ref, ResponseRef} ->
-                    helpers:receive_loop(ResponseRef, Timeout)
-            end
-    end.
-
-heartbeat(0, _Master, _ResponseRef) ->
-    ok;
-heartbeat(N, Master, ResponseRef) ->
-    timer:sleep(timer:seconds(10)),
-    Master ! {ResponseRef, heartbeat},
-    heartbeat(N - 1, Master, ResponseRef).
-
-generate_create_message(RootGuid, MsgId, File) ->
-    Message = #'ClientMessage'{message_id = MsgId, message_body =
-    {fuse_request, #'FuseRequest'{fuse_request = {file_request,
-        #'FileRequest'{context_guid = RootGuid,
-            file_request = {create_file, #'CreateFile'{name = File,
-                mode = 8#644, flag = 'READ_WRITE'}}}
-    }}}
-    },
-    messages:encode_msg(Message).
+    configure_cp(Config, events_delay),
+    ok = ssl:send(Sock, generate_fsync_message(RootGuid, <<"fs2">>)),
+    % receive & validate
+    check_answer(fun() -> ?assertMatchTwo(
+        #'ServerMessage'{message_body = {
+            fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
+        }, message_id = <<"fs2">>},
+        #'ServerMessage'{message_body = {
+            processing_status, #'ProcessingStatus'{code = 'IN_PROGRESS'}
+        }, message_id = <<"fs2">>},
+        receive_server_message()) end,
+        2
+    ).
 
 provider_connection_test(Config) ->
     % given
@@ -825,6 +765,19 @@ init_per_testcase(timeouts_test, Config) ->
             aplly_helper(Handle, Timeout, Function, Args, CP_Pid)
     end),
 
+    test_utils:mock_new(Workers, attr_req),
+    test_utils:mock_expect(Workers, attr_req, get_file_attr_insecure, fun
+        (UserCtx, FileCtx) ->
+            get_file_attr_insecure(UserCtx, FileCtx, CP_Pid)
+    end),
+
+    test_utils:mock_new(Workers, fslogic_event_handler),
+    test_utils:mock_expect(Workers, fslogic_event_handler, handle_file_written_events, fun
+        (Evts, UserCtxMap) ->
+            handle_file_written_events(CP_Pid),
+            meck:passthrough([Evts, UserCtxMap])
+    end),
+
     [{control_proc, CP_Pid} |
         initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config)];
 
@@ -866,8 +819,10 @@ end_per_testcase(python_client_test, Config) ->
 end_per_testcase(timeouts_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     CP_Pid = ?config(control_proc, Config),
+    ssl:stop(),
     stop_control_proc(CP_Pid),
-    test_utils:mock_validate_and_unload(Workers, [user_identity, helpers]),
+    test_utils:mock_validate_and_unload(Workers, [user_identity, helpers,
+        attr_req, fslogic_event_handler]),
     initializer:clean_test_users_and_spaces_no_validate(Config);
 
 end_per_testcase(default, Config) ->
@@ -1021,3 +976,145 @@ receive_server_message(IgnoredMsgList) ->
     after ?TIMEOUT ->
         {error, timeout}
     end.
+
+%%%===================================================================
+%%% Timeouts test helper functions
+%%%===================================================================
+
+check_answer(AsertFun) ->
+    check_answer(AsertFun, 0).
+
+check_answer(AsertFun, MinHeartbeatNum) ->
+    timer:sleep(100), % wait for pending messages
+    initializer:remove_pending_messages(),
+    check_answer(AsertFun, 0, MinHeartbeatNum).
+
+check_answer(AsertFun, HeartbeatNum, MinHeartbeatNum) ->
+    AnsNum = AsertFun(),
+    case AnsNum of
+        1 ->
+            ?assert(HeartbeatNum >= MinHeartbeatNum);
+        _ ->
+            check_answer(AsertFun, HeartbeatNum + 1, MinHeartbeatNum)
+    end.
+
+get_guid(Worker, SessId, Path) ->
+    #fuse_response{fuse_response = #guid{guid = Guid}} =
+        ?assertMatch(
+            #fuse_response{status = #status{code = ?OK}},
+            ?req(Worker, SessId, #resolve_guid{path = Path}),
+            30
+        ),
+    Guid.
+
+spawn_control_proc() ->
+    spawn(fun() ->
+        control_proc(ok)
+    end).
+
+stop_control_proc(Pid) ->
+    Pid ! stop.
+
+control_proc(Value) ->
+    receive
+        {get_value, Pid} ->
+            Pid ! {value, Value},
+            control_proc(Value);
+        {set_value, NewValue, Pid} ->
+            Pid ! value_changed,
+            control_proc(NewValue);
+        stop ->
+            ok
+    end.
+
+configure_cp(CP_Pid, Value) when is_pid(CP_Pid) ->
+    CP_Pid ! {set_value, Value, self()},
+    receive
+        value_changed -> ok
+    end;
+configure_cp(Config, Value) ->
+    CP_Pid = ?config(control_proc, Config),
+    configure_cp(CP_Pid, Value).
+
+get_cp_settings(CP_Pid) ->
+    CP_Pid ! {get_value, self()},
+    receive
+        {value, Value} -> Value
+    end.
+
+aplly_helper(Handle, Timeout, Function, Args, CP_Pid) ->
+    case get_cp_settings(CP_Pid) of
+        helper_timeout ->
+            helpers:receive_loop(make_ref(), Timeout);
+        helper_delay ->
+            configure_cp(CP_Pid, ok),
+            Master = self(),
+            spawn(fun() ->
+                {ok, ResponseRef} = apply(helpers_nif, Function, [Handle | Args]),
+                Master ! {ref, ResponseRef},
+                heartbeat(10, Master, ResponseRef),
+                Ans = helpers:receive_loop(ResponseRef, Timeout),
+                Master ! {ResponseRef, Ans}
+            end),
+            receive
+                {ref, ResponseRef} ->
+                    helpers:receive_loop(ResponseRef, Timeout)
+            end;
+        _ ->
+            {ok, ResponseRef} = apply(helpers_nif, Function, [Handle | Args]),
+            helpers:receive_loop(ResponseRef, Timeout)
+    end.
+
+get_file_attr_insecure(UserCtx, FileCtx, CP_Pid) ->
+    case get_cp_settings(CP_Pid) of
+        attr_delay ->
+            timer:sleep(timer:seconds(70)),
+            attr_req:get_file_attr_insecure(UserCtx, FileCtx, false);
+        _ ->
+            attr_req:get_file_attr_insecure(UserCtx, FileCtx, false)
+    end.
+
+handle_file_written_events(CP_Pid) ->
+    case get_cp_settings(CP_Pid) of
+        events_delay ->
+            timer:sleep(timer:seconds(70));
+        _ ->
+            ok
+    end.
+
+heartbeat(0, _Master, _ResponseRef) ->
+    ok;
+heartbeat(N, Master, ResponseRef) ->
+    timer:sleep(timer:seconds(10)),
+    Master ! {ResponseRef, heartbeat},
+    heartbeat(N - 1, Master, ResponseRef).
+
+generate_create_message(RootGuid, MsgId, File) ->
+    Message = #'ClientMessage'{message_id = MsgId, message_body =
+    {fuse_request, #'FuseRequest'{fuse_request = {file_request,
+        #'FileRequest'{context_guid = RootGuid,
+            file_request = {create_file, #'CreateFile'{name = File,
+                mode = 8#644, flag = 'READ_WRITE'}}}
+    }}}
+    },
+    messages:encode_msg(Message).
+
+generate_get_children_message(RootGuid, MsgId) ->
+    Message = #'ClientMessage'{message_id = MsgId, message_body =
+    {fuse_request, #'FuseRequest'{fuse_request = {file_request,
+        #'FileRequest'{context_guid = RootGuid,
+            file_request = {get_file_children_attrs,
+                #'GetFileChildrenAttrs'{offset = 0, size = 100}}}
+    }}}
+    },
+    messages:encode_msg(Message).
+
+generate_fsync_message(RootGuid, MsgId) ->
+    Message = #'ClientMessage'{message_id = MsgId, message_body =
+    {fuse_request, #'FuseRequest'{fuse_request = {file_request,
+        #'FileRequest'{context_guid = RootGuid,
+            file_request = {fsync,
+                #'FSync'{data_only = false}}}
+    }}}
+    },
+    messages:encode_msg(Message).

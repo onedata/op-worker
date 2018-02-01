@@ -19,6 +19,7 @@
 
 %% API
 -export([emit/1, emit/2, flush/2, flush/5, subscribe/2, unsubscribe/2]).
+-export([get_event_managers/1]).
 
 -export_type([key/0, base/0, type/0, stream/0, manager_ref/0]).
 
@@ -140,6 +141,27 @@ unsubscribe(#subscription_cancellation{} = SubCan, MgrRef) ->
 unsubscribe(SubId, MgrRef) ->
     unsubscribe(#subscription_cancellation{id = SubId}, MgrRef).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of event managers associated with provided references.
+%% A reference can be either an event manager pids or a session IDs.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_event_managers(MgrRef :: manager_ref()) -> Mgrs :: [pid()].
+get_event_managers([]) ->
+    [];
+
+get_event_managers([_ | _] = MgrRefs) ->
+    lists:foldl(fun(MgrRef, Mgrs) ->
+        case get_event_manager(MgrRef) of
+            {ok, Mgr} -> [Mgr | Mgrs];
+            {error, _} -> Mgrs
+        end
+    end, [], MgrRefs);
+
+get_event_managers(MgrRef) ->
+    get_event_managers([MgrRef]).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -167,28 +189,6 @@ get_event_manager(MgrRef) ->
                 [MgrRef, Reason]),
             {error, Reason}
     end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns list of event managers associated with provided references.
-%% A reference can be either an event manager pids or a session IDs.
-%% @end
-%%--------------------------------------------------------------------
--spec get_event_managers(MgrRef :: manager_ref()) -> Mgrs :: [pid()].
-get_event_managers([]) ->
-    [];
-
-get_event_managers([_ | _] = MgrRefs) ->
-    lists:foldl(fun(MgrRef, Mgrs) ->
-        case get_event_manager(MgrRef) of
-            {ok, Mgr} -> [Mgr | Mgrs];
-            {error, _} -> Mgrs
-        end
-    end, [], MgrRefs);
-
-get_event_managers(MgrRef) ->
-    get_event_managers([MgrRef]).
 
 %%--------------------------------------------------------------------
 %% @private  @doc

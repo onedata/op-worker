@@ -153,7 +153,7 @@ stream_loop(SendChunk, State = #{timeout := Timeout, ref := Ref, space_id := Spa
             stream_loop(SendChunk, State)
     after
         Timeout ->
-            % TODO - sprawdzic kiedy to wystepuje
+            % TODO VFS-4025 - is it always ok?
             ok
     end.
 

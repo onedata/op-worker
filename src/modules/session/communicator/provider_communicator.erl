@@ -128,7 +128,7 @@ communicate(#client_message{} = ClientMsg, Ref) ->
     receive
         #server_message{message_id = MsgId} = ServerMsg -> {ok, ServerMsg}
     after
-        % TODO - mechanizm na multiprovider
+        % TODO VFS-4025 - multiprovider communication
         ?DEFAULT_REQUEST_TIMEOUT ->
             {error, timeout}
     end;

@@ -23,7 +23,7 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @equiv truncate(UserCtx, FileCtx, Size, OnStorage)
+%% @equiv truncate_insecure/3 with permission checks
 %% @end
 %%--------------------------------------------------------------------
 -spec truncate(user_ctx:ctx(), file_ctx:ctx(), Size :: non_neg_integer()) ->
@@ -35,7 +35,10 @@ truncate(UserCtx, FileCtx, Size) ->
         fun truncate_insecure/4).
 
 %%--------------------------------------------------------------------
-%% @equiv truncate_insecure(UserCtx, FileCtx, Size, UpdateTimes, true)
+%% @doc
+%% Truncates file on storage and returns only if operation is complete.
+%% Does not change file size in #file_meta model. Model's size should be
+%% changed by write events.
 %% @end
 %%--------------------------------------------------------------------
 -spec truncate_insecure(user_ctx:ctx(), file_ctx:ctx(),

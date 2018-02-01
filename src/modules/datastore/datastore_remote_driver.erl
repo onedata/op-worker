@@ -134,7 +134,7 @@ wait({ok, MsgId}) ->
             }
         } -> {error, binary_to_term(Description)}
     after
-        % TODO - komunkacja miedzyproviderowa
+        % TODO VFS-4025 - multiprovider communication
         Timeout -> {error, timeout}
     end;
 wait({error, Reason}) ->

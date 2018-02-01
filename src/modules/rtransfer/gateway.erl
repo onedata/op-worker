@@ -191,7 +191,7 @@ wait_for_messages(SubRef) ->
         {_What, _Details, #gw_fetch{}} -> -1
     after
         timer:minutes(1) ->
-            % TODO - sprawdzic kiedy wystepuje
+            % TODO VFS-4025
             0
     end.
 
