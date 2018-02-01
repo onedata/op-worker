@@ -327,9 +327,8 @@ is_subdomain_delegated() ->
 -spec set_delegated_subdomain(binary()) ->
     ok | {error, subdomain_exists} | gs_protocol:error().
 set_delegated_subdomain(Subdomain) ->
-    {ok, NodesIPs} = node_manager:get_cluster_nodes_ips(),
-    {_, IPTuples} = lists:unzip(NodesIPs),
-    case set_subdomain_delegation(Subdomain, IPTuples) of
+    IPs = node_manager_plugin:get_cluster_ips(),
+    case set_subdomain_delegation(Subdomain, IPs) of
         ok ->
             gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id_or_undefined()),
             ok;
@@ -348,11 +347,10 @@ set_delegated_subdomain(Subdomain) ->
 -spec update_subdomain_delegation_ips() -> ok | error.
 update_subdomain_delegation_ips() ->
     try
-        {ok, NodesIPs} = node_manager:get_cluster_nodes_ips(),
-        {_, IPTuples} = lists:unzip(NodesIPs),
         case is_subdomain_delegated() of
             {true, Subdomain} ->
-                ok = set_subdomain_delegation(Subdomain, IPTuples);
+                IPs = node_manager_plugin:get_cluster_ips(),
+                ok = set_subdomain_delegation(Subdomain, IPs);
             false ->
                 ok
         end
@@ -447,10 +445,14 @@ remove_txt_record(Name) ->
 %% and sets its subdomain and ips.
 %% @end
 %%--------------------------------------------------------------------
--spec set_subdomain_delegation(binary(), [inet:ip4_address()]) ->
+-spec set_subdomain_delegation(binary(), [inet:ip4_address() | binary()]) ->
     ok | gs_protocol:error().
 set_subdomain_delegation(Subdomain, IPs) ->
-    IPBinaries = [list_to_binary(inet:ntoa(IPTuple)) || IPTuple <- IPs],
+    IPBinaries = lists:map(fun
+        (IP) when is_binary(IP) -> IP;
+        (IP) when is_tuple(IP) -> list_to_binary(inet:ntoa(IP))
+    end, IPs),
+
     ProviderId = oneprovider:get_id_or_undefined(),
     Data = #{
         <<"subdomainDelegation">> => true,

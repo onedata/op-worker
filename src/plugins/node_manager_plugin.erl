@@ -25,6 +25,7 @@
 -export([handle_cast/2]).
 -export([check_node_ip_address/0, renamed_models/0]).
 -export([modules_with_exometer/0, exometer_reporters/0]).
+-export([get_cluster_ips/0]).
 
 -type model() :: datastore_model:model().
 -type record_version() :: datastore_model:record_version().
@@ -208,6 +209,20 @@ modules_with_exometer() ->
 -spec exometer_reporters() -> list().
 exometer_reporters() ->
     [{exometer_report_rrd_ets, storage_sync_monitoring}].
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get up to date information about IPs in the cluster.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_cluster_ips() -> [binary()] | no_return().
+get_cluster_ips() ->
+    {ok, NodesIPs} = node_manager:get_cluster_nodes_ips(),
+    % discard received IPs - they might be wrongly set before Onezone domain is known
+    {Nodes, _} = lists:unzip(NodesIPs),
+
+    {Responses, []} = rpc:multicall(Nodes, oz_providers, check_ip_address, [none]),
+    lists:map(fun({ok, IP}) -> IP end, Responses).
 
 %%%===================================================================
 %%% Internal functions
