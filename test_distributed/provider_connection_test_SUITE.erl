@@ -63,7 +63,7 @@ incompatible_providers_should_not_connect(Config) ->
         ?APP_NAME, compatible_op_versions, [AppVersion]
     ]),
     ?assertMatch(true, connection_exists(P1, P2), 90),
-    ?assertMatch(true, connection_exists(P2, P1)),
+    ?assertMatch(true, connection_exists(P2, P1), 90),
 
     ok.
 
@@ -90,15 +90,13 @@ end_per_suite(_Config) ->
 
 init_per_testcase(_Case, Config) ->
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
-    initializer:enable_grpca_based_communication(Config),
     lfm_proxy:init(ConfigWithSessionInfo).
 
 
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config),
      %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
-    initializer:clean_test_users_and_spaces_no_validate(Config),
-    initializer:disable_grpca_based_communication(Config).
+    initializer:clean_test_users_and_spaces_no_validate(Config).
 
 
 %%%===================================================================

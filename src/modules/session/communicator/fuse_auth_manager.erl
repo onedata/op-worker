@@ -17,7 +17,7 @@
 -include("modules/events/definitions.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
--include("proto/oneclient/handshake_messages.hrl").
+-include("proto/common/handshake_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -36,7 +36,7 @@
 handle_handshake(#client_handshake_request{session_id = SessId, auth = Auth, version = Version})
     when is_binary(SessId) andalso (is_record(Auth, macaroon_auth) orelse is_record(Auth, token_auth)) ->
 
-%%    assert_client_compatibility(Version),
+    assert_client_compatibility(Version),
     {ok, #document{
         value = Iden = #user_identity{user_id = UserId}
     }} = user_identity:get_or_fetch(Auth),

@@ -17,7 +17,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("proto/oneclient/handshake_messages.hrl").
+-include("proto/common/handshake_messages.hrl").
 
 %% oz_plugin_behaviour API
 -export([get_oz_url/0, get_oz_rest_port/0, get_oz_rest_api_prefix/0, get_oz_rest_endpoint/1]).

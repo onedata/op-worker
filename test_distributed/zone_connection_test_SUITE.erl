@@ -44,7 +44,6 @@ all() ->
 %%% Test functions
 %%%===================================================================
 
-
 % One of providers should not connect (and go down) because incorrect
 % compatible_oz_versions env variables are defined using env_desc.json
 incompatible_zone_should_not_connect(Config) ->
@@ -52,7 +51,7 @@ incompatible_zone_should_not_connect(Config) ->
     % To avoid going down by test master it should trap exits
     process_flag(trap_exit, true),
     [P1, P2] = ?config(op_worker_nodes, Config),
-    ?assertMatch(true, is_down(P1), 120),
+    ?assertMatch(true, is_down(P1), 150),
     ?assertMatch(true, is_alive(P2)),
     ok.
 
@@ -61,25 +60,24 @@ incompatible_zone_should_not_connect(Config) ->
 %%% SetUp and TearDown functions
 %%%===================================================================
 
-
 % Mack oz endpoint returning its versions and for one of providers
 % set incorrect compatible_oz_versions env var so it should go down
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
-        Nodes = [P1 | _] = ?config(op_worker_nodes, NewConfig),
+        Workers = [P1 | _] = ?config(op_worker_nodes, NewConfig),
         rpc:call(P1, application, set_env, [
             ?APP_NAME, compatible_oz_versions, ["16.04-rc5"]
         ]),
-
+        % Mock OZ version
         {_AppId, _AppName, AppVersion} = lists:keyfind(
-            ?APP_NAME, 1, rpc:call(hd(Nodes), application, loaded_applications, [])
+            ?APP_NAME, 1, rpc:call(hd(Workers), application, loaded_applications, [])
         ),
-        ZoneDomain = rpc:call(hd(Nodes), oneprovider, get_oz_domain, []),
+        ZoneDomain = rpc:call(hd(Workers), oneprovider, get_oz_domain, []),
         ZoneVersionURL = str_utils:format("https://~s~s", [
             ZoneDomain, ?zone_version_path
         ]),
-        ok = test_utils:mock_new(Nodes, http_client, [passthrough]),
-        ok = test_utils:mock_expect(Nodes, http_client, get,
+        ok = test_utils:mock_new(Workers, http_client, [passthrough]),
+        ok = test_utils:mock_expect(Workers, http_client, get,
             fun(Url, Headers, Body, Options) ->
                 case Url of
                     ZoneVersionURL ->
@@ -101,14 +99,12 @@ init_per_testcase(_Case, Config) ->
     % Try to init env to ensure op will make attempt to connect to oz
     % but, while connecting, op will go down (due to oz incompatible version)
     % so init will fail
-    NewConfig = try
-        ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
-        initializer:enable_grpca_based_communication(Config),
-        ConfigWithSessionInfo
+    try
+        initializer:mock_provider_ids(Config),
+        Config
     catch
-        _T:_E -> Config
-    end,
-    lfm_proxy:init(NewConfig).
+        _:_ -> Config
+    end.
 
 
 end_per_testcase(_Case, _Config) ->
@@ -121,10 +117,8 @@ end_per_testcase(_Case, _Config) ->
 %%% Internal functions
 %%%===================================================================
 
-
 is_alive(Provider) ->
     not is_down(Provider).
-
 
 is_down(Provider) ->
     case net_adm:ping(Provider) of

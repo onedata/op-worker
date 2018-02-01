@@ -21,7 +21,7 @@
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("modules/datastore/datastore_models.hrl").
--include("proto/oneclient/handshake_messages.hrl").
+-include("proto/common/handshake_messages.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -85,12 +85,12 @@ init(ProviderId, SessionId, Hostname, Port, Transport, Timeout) ->
     ),
     ProviderId = session_manager:session_id_to_provider_id(SessionId),
     {NextReconnect, Interval} = maps:get(ProviderId, Intervals,
-        {time_utils:system_time_seconds(), ?INITIAL_RECONNECT_INTERVAL_SEC}
+        {time_utils:cluster_time_seconds(), ?INITIAL_RECONNECT_INTERVAL_SEC}
     ),
-    case time_utils:system_time_seconds() >= NextReconnect of
+    case time_utils:cluster_time_seconds() >= NextReconnect of
         false ->
             ?debug("Discarding connection request to provider(~p) as the "
-                   "grace period has not passed yet.", [ProviderId]),
+            "grace period has not passed yet.", [ProviderId]),
             exit(normal);
         true ->
             try
@@ -103,9 +103,9 @@ init(ProviderId, SessionId, Hostname, Port, Transport, Timeout) ->
                 throw:incompatible_peer_op_version ->
                     postpone_next_reconnect(Intervals, ProviderId, Interval),
                     exit(normal);
-                Type:Reason  ->
+                Type:Reason ->
                     ?warning("Failed to connect to peer provider(~p) - ~p:~p. "
-                             "Next retry not sooner than ~p seconds.", [
+                    "Next retry not sooner than ~p seconds.", [
                         ProviderId, Type, Reason, Interval
                     ]),
                     postpone_next_reconnect(Intervals, ProviderId, Interval),
@@ -432,14 +432,15 @@ socket_send(#state{transport = Transport, socket = Socket}, Data) ->
     Port :: non_neg_integer(), Transport :: atom(),
     Timeout :: non_neg_integer()) -> #state{} | no_return().
 init_provider_conn(SessionId, ProviderId, Hostname, Port, Transport, Timeout) ->
-    assert_compatibility(Hostname, ProviderId),
-
     CaCerts = oneprovider:get_ca_certs(),
     SecureFlag = application:get_env(?APP_NAME, interprovider_connections_security, true),
-    Opts = secure_ssl_opts:expand(Hostname, [{cacerts, CaCerts}, {secure, SecureFlag}]),
+    SslOpts = [{cacerts, CaCerts}, {secure, SecureFlag}],
+
+    assert_compatibility(Hostname, ProviderId, SslOpts),
 
     ?info("Connecting to provider '~s' - ~s:~p", [ProviderId, Hostname, Port]),
-    {ok, Socket} = Transport:connect(binary_to_list(Hostname), Port, Opts, Timeout),
+    ConnectOpts = secure_ssl_opts:expand(Hostname, SslOpts),
+    {ok, Socket} = Transport:connect(binary_to_list(Hostname), Port, ConnectOpts, Timeout),
 
     {Ok, Closed, Error} = Transport:messages(),
 
@@ -463,26 +464,25 @@ init_provider_conn(SessionId, ProviderId, Hostname, Port, Transport, Timeout) ->
 
 
 %%--------------------------------------------------------------------
-%% @doc
+%% @doc @private
 %% Assert that peer provider is of compatible version.
 %% @end
 %%--------------------------------------------------------------------
--spec assert_compatibility(binary(), od_provider:id()) -> ok | no_return().
-assert_compatibility(Hostname, ProviderId) ->
+-spec assert_compatibility(binary(), od_provider:id(), [http_client:ssl_opt()]) ->
+    ok | no_return().
+assert_compatibility(Hostname, ProviderId, SslOpts) ->
     URL = str_utils:format_bin("https://~s~s", [Hostname, ?provider_version_path]),
-    {ok, CompatibleProviderVersions} = application:get_env(
-        ?APP_NAME, compatible_op_versions
-    ),
-    case http_client:get(URL, #{}, <<>>, [insecure]) of
+    {ok, CompatibleVersions} = application:get_env(?APP_NAME, compatible_op_versions),
+    case http_client:get(URL, #{}, <<>>, [{ssl_options, SslOpts}]) of
         {ok, 200, _RespHeaders, ResponseBody} ->
             PeerProviderVersion = binary_to_list(ResponseBody),
-            case lists:member(PeerProviderVersion, CompatibleProviderVersions) of
+            case lists:member(PeerProviderVersion, CompatibleVersions) of
                 true ->
                     ok;
                 false ->
                     ?error("Discarding connection to provider ~p because of "
-                           "incompatible version (~s). Version must be one of: ~p",
-                        [ProviderId, PeerProviderVersion, CompatibleProviderVersions]
+                    "incompatible version (~s). Version must be one of: ~p",
+                        [ProviderId, PeerProviderVersion, CompatibleVersions]
                     ),
                     throw(incompatible_peer_op_version)
             end;
@@ -500,17 +500,16 @@ assert_compatibility(Hostname, ProviderId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec postpone_next_reconnect(Intervals :: #{},
-    ProviderId :: od_provider:id(), Interval :: integer()) -> integer().
+    ProviderId :: od_provider:id(), Interval :: integer()) -> ok.
 postpone_next_reconnect(Intervals, ProviderId, Interval) ->
     NewInterval = min(
         Interval * ?RECONNECT_INTERVAL_INCREASE_RATE,
         ?MAX_RECONNECT_INTERVAL
     ),
     NewIntervals = Intervals#{
-        ProviderId => {time_utils:system_time_seconds() + Interval, NewInterval}
+        ProviderId => {time_utils:cluster_time_seconds() + Interval, NewInterval}
     },
-    application:set_env(?APP_NAME, providers_reconnect_intervals, NewIntervals),
-    NewInterval.
+    application:set_env(?APP_NAME, providers_reconnect_intervals, NewIntervals).
 
 
 %%--------------------------------------------------------------------
@@ -524,7 +523,7 @@ postpone_next_reconnect(Intervals, ProviderId, Interval) ->
 reset_reconnect_interval(Intervals, ProviderId) ->
     NewIntervals = Intervals#{
         ProviderId => {
-            time_utils:system_time_seconds(),
+            time_utils:cluster_time_seconds(),
             ?INITIAL_RECONNECT_INTERVAL_SEC
         }
     },

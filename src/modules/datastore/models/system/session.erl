@@ -23,7 +23,7 @@
 -include_lib("cluster_worker/include/exometer_utils.hrl").
 
 %% API
--export([create/1, save/1, get/1, update/2, delete/1, list/0]).
+-export([create/1, save/1, get/1, exists/1, update/2, delete/1, list/0]).
 -export([get_random_connection/1, get_random_connection/2, remove_connection/2]).
 -export([get_connections/1, get_connections/2]).
 -export([get_session_supervisor_and_node/1]).
@@ -97,6 +97,16 @@ save(Doc = #document{value = Sess}) ->
 -spec get(id()) -> {ok, doc()} | {error, term()}.
 get(SessId) ->
     datastore_model:get(?CTX, SessId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks whether session exists.
+%% @end
+%%--------------------------------------------------------------------
+-spec exists(id()) -> boolean().
+exists(Key) ->
+    {ok, Exists} = datastore_model:exists(?CTX, Key),
+    Exists.
 
 %%--------------------------------------------------------------------
 %% @doc

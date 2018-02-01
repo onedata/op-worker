@@ -18,7 +18,7 @@
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/diagnostic_messages.hrl").
--include("proto/oneclient/handshake_messages.hrl").
+-include("proto/common/handshake_messages.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
 -include("proto/oneprovider/dbsync_messages.hrl").
 -include("proto/oneprovider/dbsync_messages2.hrl").
