@@ -60,6 +60,7 @@
 ]).
 
 -define(NORMAL_CASES_NAMES, [
+    timeouts_test,
     provider_connection_test,
     token_connection_test,
     protobuf_msg_test,
@@ -72,8 +73,7 @@
     multi_connection_test,
     bandwidth_test,
     python_client_test,
-    proto_version_test,
-    timeouts_test
+    proto_version_test
 ]).
 
 -define(PERFORMANCE_CASES_NAMES, [
@@ -314,7 +314,7 @@ protobuf_msg_test(Config) ->
     test_utils:mock_expect(Workers, router, preroute_message, fun
         (#client_message{message_body = #events{events = [#event{
             type = #file_read_event{}
-        }]}}, _) -> ok
+        }]}}, _, _, _) -> ok
     end),
     Msg = #'ClientMessage'{
         message_id = <<"0">>,
@@ -368,7 +368,7 @@ multi_message_test_base(Config) ->
     test_utils:mock_expect(Workers, router, route_message, fun
         (#client_message{message_body = #events{events = [#event{
             type = #file_read_event{counter = Counter}
-        }]}}) ->
+        }]}}, _, _) ->
             Self ! Counter,
             ok
     end),
@@ -454,7 +454,7 @@ client_communicate_async_test(Config) ->
     % given
     test_utils:mock_expect(Workers, router, route_message, fun
         (#client_message{message_id = Id = #message_id{issuer = Issuer,
-            recipient = undefined}}) ->
+            recipient = undefined}}, _, _) ->
             Issuer = oneprovider:get_id(),
             Self ! {router_message_called, Id},
             ok
@@ -645,7 +645,7 @@ bandwidth_test_base(Config) ->
     initializer:remove_pending_messages(),
     Self = self(),
     test_utils:mock_expect(Workers, router, route_message, fun
-        (#client_message{message_body = #ping{}}) ->
+        (#client_message{message_body = #ping{}}, _, _) ->
             Self ! router_message_called,
             ok
     end),
@@ -706,10 +706,10 @@ python_client_test_base(Config) ->
     initializer:remove_pending_messages(),
     Self = self(),
     test_utils:mock_expect(Workers, router, route_message, fun
-        (#client_message{message_body = #ping{}}) ->
+        (#client_message{message_body = #ping{}}, _, _) ->
             Self ! router_message_called,
             ok;
-        (_) ->
+        (_, _, _) ->
             ok
     end),
 

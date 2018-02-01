@@ -313,7 +313,6 @@ route_and_send_answer(#client_message{
         {ok, #server_message{message_id = Id, message_body = Response}}
     end, get_heartbeat_fun(Id, Sock, Transport), Id);
 route_and_send_answer(Msg = #client_message{
-    session_id = OriginSessId,
     message_id = Id,
     message_body = ProxyIORequest = #proxyio_request{
         parameters = #{?PROXYIO_PARAMETER_FILE_GUID := FileGuid}
@@ -322,7 +321,7 @@ route_and_send_answer(Msg = #client_message{
     Node = consistent_hasing:get_node(FileGuid),
     {ok, ProxyIOResponse} = worker_proxy:call({fslogic_worker, Node},
         {proxyio_request, effective_session_id(Msg), ProxyIORequest},
-        {?TIMEOUT, Sock, Transport(Id, OriginSessId)}),
+        {?TIMEOUT,  get_heartbeat_fun(Id, Sock, Transport)}),
     {ok, #server_message{message_id = Id, message_body = ProxyIOResponse}};
 route_and_send_answer(Msg = #client_message{
     message_id = Id,
