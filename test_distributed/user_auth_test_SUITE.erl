@@ -13,7 +13,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
--include("proto/oneclient/handshake_messages.hrl").
+-include("proto/common/handshake_messages.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("clproto/include/messages.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -82,11 +82,16 @@ end_per_testcase(_Case, Config) ->
 -spec connect_via_token(Node :: node(), TokenVal :: binary(), SessionId :: session:id()) ->
     {ok, Sock :: term()}.
 connect_via_token(Node, TokenVal, SessionId) ->
+    {ok, [Version | _]} = rpc:call(
+        Node, application, get_env, [?APP_NAME, compatible_oc_versions]
+    ),
+
     % given
     TokenAuthMessage = #'ClientMessage'{message_body = {client_handshake_request,
-        #'ClientHandshakeRequest'{session_id = SessionId, token = #'Token'{
-            value = TokenVal
-        }}
+        #'ClientHandshakeRequest'{
+            session_id = SessionId,
+            token = #'Token'{value = TokenVal},
+            version = list_to_binary(Version)}
     }},
     TokenAuthMessageRaw = messages:encode_msg(TokenAuthMessage),
     {ok, Port} = test_utils:get_env(Node, ?APP_NAME, gui_https_port),

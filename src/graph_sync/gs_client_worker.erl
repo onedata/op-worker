@@ -18,6 +18,7 @@
 -include("graph_sync/provider_graph_sync.hrl").
 -include("proto/common/credentials.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("http/http_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/api_errors.hrl").
@@ -261,15 +262,17 @@ process_push_message(#gs_push_graph{gri = GRI, data = Data, change_type = update
 -spec start_gs_connection() ->
     {ok, gs_client:client_ref(), gs_protocol:handshake_resp()} | gs_protocol:error().
 start_gs_connection() ->
-    Port = ?GS_CHANNEL_PORT,
-    Address = "wss://" ++ oneprovider:get_oz_domain() ++
-        ":" ++ integer_to_list(Port) ++ ?GS_CHANNEL_PATH,
-
-    CaCerts = oneprovider:get_ca_certs(),
-    Opts = [{cacerts, CaCerts}],
-    {ok, ProviderMacaroon} = provider_auth:get_auth_macaroon(),
-
     try
+        provider_logic:assert_zone_compatibility(),
+
+        Port = ?GS_CHANNEL_PORT,
+        Address = "wss://" ++ oneprovider:get_oz_domain() ++
+            ":" ++ integer_to_list(Port) ++ ?GS_CHANNEL_PATH,
+
+        CaCerts = oneprovider:get_ca_certs(),
+        Opts = [{cacerts, CaCerts}],
+        {ok, ProviderMacaroon} = provider_auth:get_auth_macaroon(),
+
         gs_client:start_link(
             Address, {macaroon, ProviderMacaroon}, [?GS_PROTOCOL_VERSION],
             fun process_push_message/1, Opts

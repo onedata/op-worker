@@ -17,7 +17,7 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/stream_messages.hrl").
--include("proto/oneclient/handshake_messages.hrl").
+-include("proto/common/handshake_messages.hrl").
 -include("proto/oneclient/event_messages.hrl").
 -include("proto/oneclient/diagnostic_messages.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
@@ -178,8 +178,8 @@ translate_from_protobuf(#'SubscriptionCancellation'{id = Id}) ->
 
 
 %% HANDSHAKE
-translate_from_protobuf(#'ClientHandshakeRequest'{token = Token, session_id = SessionId}) ->
-    #client_handshake_request{auth = translate_from_protobuf(Token), session_id = SessionId};
+translate_from_protobuf(#'ClientHandshakeRequest'{token = Token, session_id = SessionId, version = Version}) ->
+    #client_handshake_request{auth = translate_from_protobuf(Token), session_id = SessionId, version = Version};
 translate_from_protobuf(#'ProviderHandshakeRequest'{provider_id = ProviderId, nonce = Nonce}) ->
     #provider_handshake_request{provider_id = ProviderId, nonce = Nonce};
 translate_from_protobuf(#'Token'{value = Token, secondary_values = []}) ->

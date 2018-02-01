@@ -14,7 +14,7 @@
 -define(CLIENT_MESSAGES_HRL, 1).
 
 -include("stream_messages.hrl").
--include("handshake_messages.hrl").
+-include("proto/common/handshake_messages.hrl").
 
 -record(client_message, {
     message_id :: undefined | message_id:id(),

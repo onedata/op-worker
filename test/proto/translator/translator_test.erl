@@ -24,7 +24,7 @@
 -include_lib("proto/oneclient/common_messages.hrl").
 -include_lib("proto/oneclient/diagnostic_messages.hrl").
 -include_lib("proto/oneclient/event_messages.hrl").
--include_lib("proto/oneclient/handshake_messages.hrl").
+-include_lib("proto/common/handshake_messages.hrl").
 -include_lib("proto/oneclient/stream_messages.hrl").
 -include_lib("proto/oneclient/proxyio_messages.hrl").
 

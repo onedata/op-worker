@@ -192,7 +192,8 @@ clean_test_users_and_spaces_no_validate(Config) ->
     end, DomainWorkers),
 
     test_utils:mock_unload(Workers, [user_logic, group_logic, space_logic,
-        provider_logic, space_storage]).
+        provider_logic, space_storage]),
+    unmock_provider_ids(Workers).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -541,6 +542,7 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
 -spec create_test_users_and_spaces_unsafe([Worker :: node()], ConfigPath :: string(), Config :: list()) -> list().
 create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     timer:sleep(2000), % Sometimes the posthook starts too fast
+
     {ok, ConfigJSONBin} = file:read_file(ConfigPath),
     ConfigJSON = json_utils:decode(ConfigJSONBin),
 
@@ -1117,18 +1119,31 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
         end),
 
 
-    test_utils:mock_expect(AllWorkers, provider_logic, verify_provider_identity,
-        fun(_) ->
+    test_utils:mock_expect(AllWorkers, provider_logic, zone_time_seconds,
+        fun() ->
+            time_utils:cluster_time_seconds()
+        end),
+
+
+    test_utils:mock_expect(AllWorkers, provider_logic, assert_zone_compatibility,
+        fun() ->
             ok
         end),
 
+    VerifyProviderIdentityFun = fun(ProviderId, Macaroon) ->
+        case Macaroon of
+            ?DUMMY_PROVIDER_IDENTITY_MACAROON(ProviderId) -> ok;
+            _ -> {error, bad_macaroon}
+        end
+    end,
+
     test_utils:mock_expect(AllWorkers, provider_logic, verify_provider_identity,
-        fun(ProviderId, Macaroon) ->
-            case Macaroon of
-                ?DUMMY_PROVIDER_IDENTITY_MACAROON(ProviderId) -> ok;
-                _ -> {error, bad_macaroon}
-            end
+        fun(ProviderId) ->
+            VerifyProviderIdentityFun(ProviderId, ?DUMMY_PROVIDER_IDENTITY_MACAROON(ProviderId))
         end),
+
+    test_utils:mock_expect(AllWorkers, provider_logic, verify_provider_identity,
+        VerifyProviderIdentityFun),
 
     test_utils:mock_expect(AllWorkers, provider_logic, verify_provider_nonce,
         fun(ProviderId, Nonce) ->

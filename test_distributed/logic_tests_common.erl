@@ -14,6 +14,7 @@
 -author("Lukasz Opiola").
 
 -include("logic_tests_common.hrl").
+-include("http/http_common.hrl").
 
 %% API
 -export([
@@ -29,6 +30,7 @@
 
 mock_gs_client(Config) ->
     Nodes = ?config(op_worker_nodes, Config),
+    ok = test_utils:mock_new(Nodes, http_client, [passthrough]),
     ok = test_utils:mock_new(Nodes, gs_client, []),
     ok = test_utils:mock_expect(Nodes, gs_client, start_link, fun mock_start_link/5),
     ok = test_utils:mock_expect(Nodes, gs_client, sync_request, fun mock_sync_request/2),
@@ -39,15 +41,19 @@ mock_gs_client(Config) ->
 
     % gs_client requires successful setting of subdomain delegation IPs, but it cannot
     % be achieved in test environment
-    ok = test_utils:mock_expect(Nodes, provider_logic, update_subdomain_delegation_ips, fun () -> ok end),
-
-    ok.
+    ok = test_utils:mock_expect(Nodes, provider_logic, update_subdomain_delegation_ips, fun() ->
+        ok
+    end),
+    ok = test_utils:mock_expect(Nodes, provider_logic, assert_zone_compatibility, fun() ->
+        ok
+    end).
 
 
 unmock_gs_client(Config) ->
     Nodes = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Nodes, gs_client),
     initializer:unmock_provider_ids(Nodes),
+    initializer:unmock_oz_version(Nodes),
     ok.
 
 
