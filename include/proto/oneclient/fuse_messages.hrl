@@ -80,8 +80,7 @@
 }).
 
 -record(open_file, {
-    flag :: fslogic_worker:open_flag(),
-    created :: boolean()
+    flag :: fslogic_worker:open_flag()
 }).
 
 -record(get_file_location, {
@@ -92,8 +91,7 @@
 }).
 
 -record(truncate, {
-    size :: non_neg_integer(),
-    on_storage :: boolean()
+    size :: non_neg_integer()
 }).
 
 -record(synchronize_block, {
@@ -140,6 +138,7 @@
 
 -record(file_request, {
     context_guid :: fslogic_worker:file_guid(),
+    extended_direct_io :: boolean(),
     file_request :: file_request_type()
 }).
 
@@ -224,6 +223,9 @@
 
 -record(xattr_list, {
     names :: [xattr:name()]
+}).
+
+-record(storage_file_created, {
 }).
 
 -type fuse_response_type() ::

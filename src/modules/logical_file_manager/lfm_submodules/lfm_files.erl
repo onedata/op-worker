@@ -271,7 +271,7 @@ open(SessId, FileKey, Flag) ->
         fun(#file_location{provider_id = ProviderId, file_id = FileId,
             storage_id = StorageId}) ->
             remote_utils:call_fslogic(SessId, file_request, FileGuid,
-                #open_file{flag = Flag, created = false},
+                #open_file{flag = Flag},
                 fun(#file_opened{handle_id = HandleId}) ->
                     {ok, lfm_context:new(
                         HandleId,
@@ -394,7 +394,7 @@ silent_read(FileHandle, Offset, MaxSize) ->
 truncate(SessId, FileKey, Size) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
-        #truncate{size = Size, on_storage = true},
+        #truncate{size = Size},
         fun(_) ->
             ok = lfm_event_utils:emit_file_truncated(FileGuid, Size, SessId)
         end).

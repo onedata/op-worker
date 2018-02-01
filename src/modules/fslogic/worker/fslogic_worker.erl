@@ -280,11 +280,13 @@ handle_request_and_process_response_locally(UserCtx, Request, FilePartialCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_request_locally(user_ctx:ctx(), request(), file_ctx:ctx() | undefined) -> response().
-handle_request_locally(UserCtx, #fuse_request{fuse_request = #file_request{file_request = Req}}, FileCtx) ->
+handle_request_locally(UserCtx, #fuse_request{fuse_request = #file_request{
+    file_request = Req, extended_direct_io = ExtDIO}}, FileCtx) ->
     [ReqName | _] = tuple_to_list(Req),
     ?update_counter(?EXOMETER_NAME(ReqName)),
     Now = os:timestamp(),
-    Ans = handle_file_request(UserCtx, Req, FileCtx),
+    FileCtx2 = file_ctx:set_extended_direct_io(FileCtx, ExtDIO),
+    Ans = handle_file_request(UserCtx, Req, FileCtx2),
     Time = timer:now_diff(os:timestamp(), Now),
     ?update_counter(?EXOMETER_TIME_NAME(ReqName), Time),
     Ans;
@@ -378,17 +380,18 @@ handle_file_request(UserCtx, #rename{
     rename_req:rename(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName);
 handle_file_request(UserCtx, #create_file{name = Name, flag = Flag, mode = Mode}, ParentFileCtx) ->
     file_req:create_file(UserCtx, ParentFileCtx, Name, Mode, Flag);
+handle_file_request(UserCtx, #storage_file_created{}, FileCtx) ->
+    file_req:storage_file_created(UserCtx, FileCtx);
 handle_file_request(UserCtx, #make_file{name = Name, mode = Mode}, ParentFileCtx) ->
     file_req:make_file(UserCtx, ParentFileCtx, Name, Mode);
-handle_file_request(UserCtx, #open_file{flag = Flag, created = Created}, FileCtx) ->
-    FileCtx2 = file_ctx:set_created_by_client(FileCtx, Created),
-    file_req:open_file(UserCtx, FileCtx2, Flag);
+handle_file_request(UserCtx, #open_file{flag = Flag}, FileCtx) ->
+    file_req:open_file(UserCtx, FileCtx, Flag);
 handle_file_request(UserCtx, #release{handle_id = HandleId}, FileCtx) ->
     file_req:release(UserCtx, FileCtx, HandleId);
 handle_file_request(UserCtx, #get_file_location{}, FileCtx) ->
     file_req:get_file_location(UserCtx, FileCtx);
-handle_file_request(UserCtx, #truncate{size = Size, on_storage = OnStorage}, FileCtx) ->
-    truncate_req:truncate(UserCtx, FileCtx, Size, OnStorage);
+handle_file_request(UserCtx, #truncate{size = Size}, FileCtx) ->
+    truncate_req:truncate(UserCtx, FileCtx, Size);
 handle_file_request(UserCtx, #synchronize_block{block = Block, prefetch = Prefetch}, FileCtx) ->
     sync_req:synchronize_block(UserCtx, FileCtx, Block, Prefetch, undefined);
 handle_file_request(UserCtx, #synchronize_block_and_compute_checksum{block = Block}, FileCtx) ->

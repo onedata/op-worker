@@ -125,20 +125,15 @@ create_delayed_storage_file(FileCtx) ->
                 (#file_location{storage_file_created = true}) ->
                     {error, already_created};
                 (FileLocation = #file_location{storage_file_created = false}) ->
-                    case file_ctx:get_created_by_client_const(FileCtx) of
-                        false ->
-                            try
-                                FileCtx3 = create_storage_file(user_ctx:new(?ROOT_SESS_ID), FileCtx2),
-                                files_to_chown:chown_or_schedule_chowning(FileCtx3),
-                                {ok, FileLocation#file_location{storage_file_created = true}}
-                            catch
-                                Error:Reason ->
-                                    ?error_stacktrace("Error during storage file creation: ~p:~p",
-                                        [Error, Reason]),
-                                    {error, {Error, Reason}}
-                            end;
-                        _ ->
-                            {ok, FileLocation#file_location{storage_file_created = true}}
+                    try
+                        FileCtx3 = create_storage_file(user_ctx:new(?ROOT_SESS_ID), FileCtx2),
+                        files_to_chown:chown_or_schedule_chowning(FileCtx3),
+                        {ok, FileLocation#file_location{storage_file_created = true}}
+                    catch
+                        Error:Reason ->
+                            ?error_stacktrace("Error during storage file creation: ~p:~p",
+                                [Error, Reason]),
+                            {error, {Error, Reason}}
                     end
             end),
 

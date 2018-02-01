@@ -18,8 +18,10 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([create_file/5, make_file/4, get_file_location/2, open_file/3,
-    open_file_insecure/3, open_file_insecure/4, fsync/4, release/3]).
+-export([create_file/5, storage_file_created/2, make_file/4,
+    get_file_location/2, open_file/3,
+    open_file_insecure/3, storage_file_created_insecure/2,
+    open_file_insecure/4, fsync/4, release/3]).
 
 -define(NEW_HANDLE_ID, base64:encode(crypto:strong_rand_bytes(20))).
 
@@ -39,6 +41,18 @@ create_file(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
         [traverse_ancestors, ?traverse_container, ?add_object],
         [UserCtx, ParentFileCtx, Name, Mode, _Flag],
         fun create_file_insecure/5).
+
+%%--------------------------------------------------------------------
+%% @equiv storage_file_created_insecure/5 with permission checks
+%% @end
+%%--------------------------------------------------------------------
+-spec storage_file_created(user_ctx:ctx(), FileCtx :: file_ctx:ctx()) ->
+    fslogic_worker:fuse_response().
+storage_file_created(UserCtx, FileCtx) ->
+    check_permissions:execute(
+        [traverse_ancestors, ?traverse_container, ?add_object],
+        [UserCtx, FileCtx],
+        fun storage_file_created_insecure/2).
 
 %%--------------------------------------------------------------------
 %% @equiv make_file_insecure/4 with permission checks
@@ -167,8 +181,15 @@ release(UserCtx, FileCtx, HandleId) ->
 create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
     FileCtx = create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
     try
-        FileCtx2 = sfm_utils:create_storage_file(UserCtx, FileCtx),
-        {FileLocation, FileCtx3} = sfm_utils:create_storage_file_location(FileCtx2, true),
+        ExtDIO = file_ctx:get_extended_direct_io_const(FileCtx),
+        FileCtx2 = case ExtDIO of
+            true ->
+                FileCtx;
+            _ ->
+                sfm_utils:create_storage_file(UserCtx, FileCtx)
+        end,
+        {FileLocation, FileCtx3} =
+            sfm_utils:create_storage_file_location(FileCtx2, not ExtDIO),
         fslogic_times:update_mtime_ctime(ParentFileCtx),
 
         HandleId = case user_ctx:is_direct_io(UserCtx) of
@@ -209,6 +230,48 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
             file_meta:delete(FileUuid),
             times:delete(FileUuid),
             erlang:Error(Reason)
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Confirms that file was created on storage.
+%% @end
+%%--------------------------------------------------------------------
+-spec storage_file_created_insecure(user_ctx:ctx(), FileCtx :: file_ctx:ctx()) ->
+    fslogic_worker:fuse_response().
+storage_file_created_insecure(_UserCtx, FileCtx) ->
+    {#document{
+        key = FileLocationId,
+        value = #file_location{storage_file_created = StorageFileCreated}
+    }, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
+
+    case StorageFileCreated of
+        false ->
+            UpdateAns = file_location:update(FileLocationId, fun
+                (#file_location{storage_file_created = true}) ->
+                    {error, already_created};
+                (FileLocation = #file_location{storage_file_created = false}) ->
+                    {ok, FileLocation#file_location{storage_file_created = true}}
+            end),
+
+            case UpdateAns of
+                {ok, #document{}} ->
+                    #fuse_response{
+                        status = #status{code = ?OK}
+                    };
+                {error, already_created} ->
+                    #fuse_response{
+                        status = #status{code = ?EAGAIN,
+                            description = <<"Location_update_error">>}
+                    };
+                _ ->
+                    FileCtx2
+            end;
+        true ->
+            #fuse_response{
+                status = #status{code = ?OK}
+            }
     end.
 
 %%--------------------------------------------------------------------

@@ -267,6 +267,15 @@ route_and_send_answer(Msg = #client_message{
         {ok, #server_message{message_id = Id, message_body = Configuration}}
     end, get_heartbeat_fun(Id, Sock, Transport), Id);
 route_and_send_answer(Msg = #client_message{
+    message_body = FuseRequest = #fuse_request{
+        fuse_request = #file_request{
+            file_request = #storage_file_created{}
+        }}
+}, _Sock, _Transport) ->
+    ok = worker_proxy:cast(fslogic_worker,
+        {fuse_request, effective_session_id(Msg), FuseRequest}),
+    ok;
+route_and_send_answer(Msg = #client_message{
     message_id = Id,
     message_body = FuseRequest = #fuse_request{
          fuse_request = #file_request{

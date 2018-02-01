@@ -16,7 +16,7 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([truncate/3, truncate/4, truncate_insecure/4, truncate_insecure/5]).
+-export([truncate/3, truncate_insecure/4]).
 
 %%%===================================================================
 %%% API
@@ -29,19 +29,10 @@
 -spec truncate(user_ctx:ctx(), file_ctx:ctx(), Size :: non_neg_integer()) ->
     fslogic_worker:fuse_response().
 truncate(UserCtx, FileCtx, Size) ->
-    truncate(UserCtx, FileCtx, Size, true).
-
-%%--------------------------------------------------------------------
-%% @equiv truncate_insecure/4 with permission checks
-%% @end
-%%--------------------------------------------------------------------
--spec truncate(user_ctx:ctx(), file_ctx:ctx(), Size :: non_neg_integer(),
-    OnStorage :: boolean()) -> fslogic_worker:fuse_response().
-truncate(UserCtx, FileCtx, Size, OnStorage) ->
     check_permissions:execute(
         [traverse_ancestors, ?write_object],
-        [UserCtx, FileCtx, Size, true, OnStorage],
-        fun truncate_insecure/5).
+        [UserCtx, FileCtx, Size, true],
+        fun truncate_insecure/4).
 
 %%--------------------------------------------------------------------
 %% @equiv truncate_insecure(UserCtx, FileCtx, Size, UpdateTimes, true)
@@ -51,23 +42,12 @@ truncate(UserCtx, FileCtx, Size, OnStorage) ->
     Size :: non_neg_integer(), UpdateTimes :: boolean()) ->
     fslogic_worker:fuse_response().
 truncate_insecure(UserCtx, FileCtx, Size, UpdateTimes) ->
-    truncate_insecure(UserCtx, FileCtx, Size, UpdateTimes, true).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Truncates file on storage and returns only if operation is complete.
-%% Does not change file size in #file_meta model. Model's size should be
-%% changed by write events.
-%% @end
-%%--------------------------------------------------------------------
--spec truncate_insecure(user_ctx:ctx(), file_ctx:ctx(),
-    Size :: non_neg_integer(), UpdateTimes :: boolean(),
-    OnStorage :: boolean()) -> fslogic_worker:fuse_response().
-truncate_insecure(UserCtx, FileCtx, Size, UpdateTimes, OnStorage) ->
     FileCtx2 = update_quota(FileCtx, Size),
 
-    FileCtx4 = case OnStorage of
+    FileCtx4 = case file_ctx:get_extended_direct_io_const(FileCtx2) of
         true ->
+            FileCtx2;
+        _ ->
             SessId = user_ctx:get_session_id(UserCtx),
             {SFMHandle, FileCtx3} = storage_file_manager:new_handle(SessId, FileCtx2),
             case storage_file_manager:open(SFMHandle, write) of
@@ -78,9 +58,7 @@ truncate_insecure(UserCtx, FileCtx, Size, UpdateTimes, OnStorage) ->
                 {error, ?ENOENT} ->
                     ok
             end,
-            FileCtx3;
-        _ ->
-            FileCtx2
+            FileCtx3
     end,
 
     case UpdateTimes of

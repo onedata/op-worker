@@ -239,8 +239,10 @@ translate_from_protobuf(#'VerifyStorageTestFile'{storage_id = SId, space_id = Sp
     #verify_storage_test_file{storage_id = SId, space_id = SpaceId,
         file_id = FId, file_content = FContent};
 
-translate_from_protobuf(#'FileRequest'{context_guid = ContextGuid, file_request = {_, Record}}) ->
-    #file_request{context_guid = ContextGuid, file_request = translate_from_protobuf(Record)};
+translate_from_protobuf(#'FileRequest'{context_guid = ContextGuid,
+    extended_direct_io = ExtDIO, file_request = {_, Record}}) ->
+    #file_request{context_guid = ContextGuid, extended_direct_io = ExtDIO,
+        file_request = translate_from_protobuf(Record)};
 translate_from_protobuf(#'GetFileAttr'{}) ->
     #get_file_attr{};
 translate_from_protobuf(#'GetChildAttr'{name = Name}) ->
@@ -262,16 +264,18 @@ translate_from_protobuf(#'Rename'{target_parent_uuid = TargetParentGuid, target_
     #rename{target_parent_guid = TargetParentGuid, target_name = TargetName};
 translate_from_protobuf(#'CreateFile'{name = Name, mode = Mode, flag = Flag}) ->
     #create_file{name = Name, mode = Mode, flag = open_flag_translate_from_protobuf(Flag)};
+translate_from_protobuf(#'StorageFileCreated'{}) ->
+    #storage_file_created{};
 translate_from_protobuf(#'MakeFile'{name = Name, mode = Mode}) ->
     #make_file{name = Name, mode = Mode};
-translate_from_protobuf(#'OpenFile'{flag = Flag, created = Created}) ->
-    #open_file{flag = open_flag_translate_from_protobuf(Flag), created = Created};
+translate_from_protobuf(#'OpenFile'{flag = Flag}) ->
+    #open_file{flag = open_flag_translate_from_protobuf(Flag)};
 translate_from_protobuf(#'GetFileLocation'{}) ->
     #get_file_location{};
 translate_from_protobuf(#'Release'{handle_id = HandleId}) ->
     #release{handle_id = HandleId};
-translate_from_protobuf(#'Truncate'{size = Size, on_storage = OnStorage}) ->
-    #truncate{size = Size, on_storage = OnStorage};
+translate_from_protobuf(#'Truncate'{size = Size}) ->
+    #truncate{size = Size};
 translate_from_protobuf(#'SynchronizeBlock'{block = #'FileBlock'{offset = O, size = S}, prefetch = Prefetch}) ->
     #synchronize_block{block = #file_block{offset = O, size = S}, prefetch = Prefetch};
 translate_from_protobuf(#'SynchronizeBlockAndComputeChecksum'{
@@ -733,8 +737,10 @@ translate_to_protobuf(#resolve_guid{path = Path}) ->
 translate_to_protobuf(#get_helper_params{storage_id = SID, force_proxy_io = ForceProxy}) ->
     {get_helper_params, #'GetHelperParams'{storage_id = SID, force_proxy_io = ForceProxy}};
 
-translate_to_protobuf(#file_request{context_guid = ContextGuid, file_request = Record}) ->
-    {file_request, #'FileRequest'{context_guid = ContextGuid, file_request = translate_to_protobuf(Record)}};
+translate_to_protobuf(#file_request{context_guid = ContextGuid,
+    extended_direct_io = ExtDIO, file_request = Record}) ->
+    {file_request, #'FileRequest'{context_guid = ContextGuid,
+        extended_direct_io = ExtDIO, file_request = translate_to_protobuf(Record)}};
 translate_to_protobuf(#get_file_attr{}) ->
     {get_file_attr, #'GetFileAttr'{}};
 translate_to_protobuf(#get_child_attr{name = Name}) ->
@@ -756,17 +762,18 @@ translate_to_protobuf(#rename{target_parent_guid = TargetParentGuid, target_name
 translate_to_protobuf(#create_file{name = Name, mode = Mode, flag = Flag}) ->
     {create_file, #'CreateFile'{name = Name, mode = Mode,
         flag = open_flag_translate_to_protobuf(Flag)}};
+translate_to_protobuf(#storage_file_created{}) ->
+    {storage_file_created, #'StorageFileCreated'{}};
 translate_to_protobuf(#make_file{name = Name, mode = Mode}) ->
     {make_file, #'MakeFile'{name = Name, mode = Mode}};
-translate_to_protobuf(#open_file{flag = Flag, created = Created}) ->
-    {open_file, #'OpenFile'{flag = open_flag_translate_to_protobuf(Flag),
-        created = Created}};
+translate_to_protobuf(#open_file{flag = Flag}) ->
+    {open_file, #'OpenFile'{flag = open_flag_translate_to_protobuf(Flag)}};
 translate_to_protobuf(#get_file_location{}) ->
     {get_file_location, #'GetFileLocation'{}};
 translate_to_protobuf(#release{handle_id = HandleId}) ->
     {release, #'Release'{handle_id = HandleId}};
-translate_to_protobuf(#truncate{size = Size, on_storage = OnStorage}) ->
-    {truncate, #'Truncate'{size = Size, on_storage = OnStorage}};
+translate_to_protobuf(#truncate{size = Size}) ->
+    {truncate, #'Truncate'{size = Size}};
 translate_to_protobuf(#synchronize_block{block = Block, prefetch = Prefetch}) ->
     {synchronize_block,
         #'SynchronizeBlock'{block = translate_to_protobuf(Block), prefetch = Prefetch}};

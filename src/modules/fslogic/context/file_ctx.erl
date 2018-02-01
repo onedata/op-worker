@@ -47,7 +47,7 @@
     acl :: undefined | acl:acl(),
     is_dir :: undefined | boolean(),
     is_import_on :: undefined | boolean(),
-    created_by_client = false :: boolean()
+    extended_direct_io = false :: boolean()
 }).
 
 -type ctx() :: #file_ctx{}.
@@ -55,11 +55,11 @@
 %% Functions creating context and filling its data
 -export([new_by_canonical_path/2, new_by_guid/1, new_by_doc/3, new_root_ctx/0]).
 -export([reset/1, new_by_partial_context/1, add_file_location/2, set_file_id/2,
-    set_is_dir/2, set_created_by_client/2, update_location_doc/2]).
+    set_is_dir/2, set_extended_direct_io/2, update_location_doc/2]).
 
 %% Functions that do not modify context
 -export([get_share_id_const/1, get_space_id_const/1, get_space_dir_uuid_const/1,
-    get_guid_const/1, get_uuid_const/1, get_created_by_client_const/1]).
+    get_guid_const/1, get_uuid_const/1, get_extended_direct_io_const/1]).
 -export([is_file_ctx_const/1, is_space_dir_const/1, is_user_root_dir_const/2,
     is_root_dir_const/1, has_acl_const/1, file_exists_const/1, is_in_user_space_const/2]).
 -export([equals/2]).
@@ -180,20 +180,20 @@ set_is_dir(FileCtx, IsDir) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sets created_by_client field in context record
+%% Sets extended_direct_io field in context record
 %% @end
 %%--------------------------------------------------------------------
--spec set_created_by_client(ctx(), boolean()) -> ctx().
-set_created_by_client(FileCtx, Created) ->
-    FileCtx#file_ctx{created_by_client = Created}.
+-spec set_extended_direct_io(ctx(), boolean()) -> ctx().
+set_extended_direct_io(FileCtx, Created) ->
+    FileCtx#file_ctx{extended_direct_io = Created}.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns information if file was created by client.
+%% Returns value of extended_direct_io field.
 %% @end
 %%--------------------------------------------------------------------
--spec get_created_by_client_const(ctx()) -> boolean().
-get_created_by_client_const(#file_ctx{created_by_client = Ans}) ->
+-spec get_extended_direct_io_const(ctx()) -> boolean().
+get_extended_direct_io_const(#file_ctx{extended_direct_io = Ans}) ->
     Ans.
 
 %%--------------------------------------------------------------------
