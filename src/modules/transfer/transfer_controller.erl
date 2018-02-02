@@ -18,6 +18,7 @@
 -include("global_definitions.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/transfer.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -27,14 +28,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
 
--record(state, {
-    transfer_id :: transfer:id(),
-    session_id :: session:id(),
-    callback :: transfer:callback(),
-    file_guid :: fslogic_worker:file_guid(),
-    invalidate_source_replica :: boolean(),
-    space_id :: od_space:id()
-}).
+-record(state, {}).
 
 -type state() :: #state{}.
 
@@ -78,7 +72,8 @@ on_transfer_doc_change(_ExistingTransfer) ->
 %%-------------------------------------------------------------------
 -spec mark_failed(pid(), term()) -> ok.
 mark_failed(Pid, Reason) ->
-    gen_server2:cast(Pid, {transfer_failed, Reason}).
+    Pid ! {transfer_failed, Reason},
+    ok.
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -87,7 +82,8 @@ mark_failed(Pid, Reason) ->
 %%-------------------------------------------------------------------
 -spec mark_finished(pid()) -> ok.
 mark_finished(Pid) ->
-    gen_server2:cast(Pid, transfer_finished).
+    Pid ! transfer_finished,
+    ok.
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -102,16 +98,8 @@ mark_finished(Pid) ->
 -spec init(Args :: term()) ->
     {ok, State :: state()} | {ok, State :: state(), timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
-init([SessionId, TransferId, FileGuid, Callback, InvalidationSourceReplica]) ->
-    ok = gen_server2:cast(self(), start_transfer),
-    {ok, #state{
-        transfer_id = TransferId,
-        session_id = SessionId,
-        file_guid = FileGuid,
-        callback = Callback,
-        invalidate_source_replica = InvalidationSourceReplica,
-        space_id = fslogic_uuid:guid_to_space_id(FileGuid)
-    }}.
+init(_Args) ->
+    {ok, #state{}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -141,28 +129,17 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_cast(start_transfer, State = #state{
-    transfer_id = TransferId,
-    session_id = SessionId,
-    file_guid = FileGuid
-}) ->
-    ok = sync_req:enqueue_transfer(user_ctx:new(SessionId),
-        file_ctx:new_by_guid(FileGuid), TransferId),
-    {noreply, State};
-handle_cast(transfer_finished, State = #state{
-    transfer_id = TransferId,
-    callback = Callback,
-    invalidate_source_replica = InvalidationSourceReplica
-}) ->
-    transfer:mark_completed(TransferId),
-    notify_callback(Callback, InvalidationSourceReplica),
-    {stop, normal, State};
-handle_cast({transfer_failed, Reason}, State = #state{
-    transfer_id = TransferId
-}) ->
-    ?error_stacktrace("Transfer ~p failed due to ~p", [TransferId, Reason]),
-    transfer:mark_failed(TransferId),
-    {stop, normal, State};
+handle_cast({start_transfer, SessionId, TransferId, FileGuid, Callback, InvalidateSourceReplica}, State) ->
+    sync_req:start_transfer(user_ctx:new(SessionId), file_ctx:new_by_guid(FileGuid), undefined, TransferId, self()),
+    receive
+        transfer_finished ->
+            {ok, _}  = transfer:mark_completed(TransferId),
+            notify_callback(Callback, InvalidateSourceReplica);
+        {transfer_failed, Reason} ->
+            ?error_stacktrace("Transfer ~p failed due to ~p", [TransferId, Reason]),
+            {ok, _} = transfer:mark_failed(TransferId)
+    end,
+    {noreply, State, hibernate};
 handle_cast(_Request, State) ->
     ?log_bad_request(_Request),
     {noreply, State}.
@@ -192,11 +169,8 @@ handle_info(_Info, State) ->
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: state()) -> term().
-terminate(_Reason, #state{
-    session_id = SessionId,
-    transfer_id = TransferId
-}) ->
-    session:remove_transfer(SessionId, TransferId).
+terminate(_Reason, #state{}) ->
+    ok.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -230,9 +204,14 @@ new_transfer(#document{
     }
 }) ->
     FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
-    {ok, _Pid} = gen_server2:start(transfer_controller,
-        [session:root_session_id(), TransferId, FileGuid, Callback, InvalidateSourceReplica], []),
-    ok.
+    worker_pool:cast(?TRANSFER_CONTROLLERS_POOL, {
+        start_transfer,
+        session:root_session_id(),
+        TransferId,
+        FileGuid,
+        Callback,
+        InvalidateSourceReplica
+    }).
 
 %%--------------------------------------------------------------------
 %% @private

@@ -139,10 +139,7 @@ strategy_init_jobs(StrategyName, StrategyArgs, InitData) ->
 %%--------------------------------------------------------------------
 -spec strategy_handle_job(space_strategy:job()) ->
     {space_strategy:job_result(), [space_strategy:job()]}.
-strategy_handle_job(Job = #space_strategy_job{
-    strategy_name = simple_scan,
-    data = #{space_id := SpaceId}
-}) ->
+strategy_handle_job(Job = #space_strategy_job{strategy_name = simple_scan}) ->
     ok = datastore_throttling:throttle(import),
     simple_scan:run(Job);
 strategy_handle_job(#space_strategy_job{strategy_name = no_update}) ->
@@ -533,8 +530,8 @@ init_update_job(CurrentTimestamp, Args = #{max_depth := MaxDepth}, Data = #{
     space_id := SpaceId,
     storage_id := StorageId
 }) ->
-    space_strategies:update_last_update_start_time(SpaceId, StorageId, CurrentTimestamp),
     storage_sync_monitoring:reset_sync_counters(SpaceId),
+    space_strategies:update_last_update_start_time(SpaceId, StorageId, CurrentTimestamp),
     storage_sync_monitoring:update_queue_length_spirals(SpaceId, 1),
     storage_sync_monitoring:update_files_to_sync_counter(SpaceId, 1),
     [#space_strategy_job{

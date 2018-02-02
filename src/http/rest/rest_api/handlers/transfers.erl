@@ -22,10 +22,10 @@
 
 %% API
 -export([rest_init/2, terminate/3, allowed_methods/2, is_authorized/2,
-    content_types_provided/2, delete_resource/2]).
+    content_types_provided/2, delete_resource/2, content_types_accepted/2]).
 
 %% resource functions
--export([list_transfers/2]).
+-export([list_transfers/2, restart_transfer/2]).
 
 %%%===================================================================
 %%% API
@@ -50,7 +50,7 @@ terminate(_, _, _) ->
 %%--------------------------------------------------------------------
 -spec allowed_methods(req(), maps:map() | {error, term()}) -> {[binary()], req(), maps:map()}.
 allowed_methods(Req, State) ->
-    {[<<"GET">>, <<"DELETE">>], Req, State}.
+    {[<<"GET">>, <<"DELETE">>, <<"PATCH">>], Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
@@ -83,8 +83,19 @@ delete_resource(Req, State) ->
 
     #{id := Id} = State2,
 
-    ok = transfer:stop(Id),
+    ok = transfer:cancel(Id),
     {true, Req2, State2}.
+
+
+%%--------------------------------------------------------------------
+%% @doc @equiv pre_handler:content_types_accepted/2
+%%--------------------------------------------------------------------
+-spec content_types_accepted(req(), maps:map()) ->
+    {[{atom() | binary(), atom()}], req(), maps:map()}.
+content_types_accepted(Req, State) ->
+    {[
+        {'*', restart_transfer}
+    ], Req, State}.
 
 %%%===================================================================
 %%% Content type handler functions
@@ -143,3 +154,27 @@ list_transfers(Req, State) ->
     Transfer = transfer:get_info(Id),
     Response = json_utils:encode_map(Transfer),
     {Response, Req2, State2}.
+
+%%-------------------------------------------------------------------
+%% '/api/v3/oneprovider/transfers/{tid}'
+%% @doc Restarts transfer with given tid.
+%%
+%% HTTP method: PATCH
+%%
+%% @param tid Transfer ID.
+%%-------------------------------------------------------------------
+-spec restart_transfer(req(), maps:map()) -> {term(), req(), maps:map()}.
+restart_transfer(Req, State) ->
+    {State2, Req2} = validator:parse_id(Req, State),
+    #{id := Id} = State2,
+    case transfer:restart(Id) of
+        {ok, _} ->
+            ok;
+        {error, not_target_provider} ->
+            throw(?ERROR_NOT_TARGET_PROVIDER);
+        {error, not_source_provdier} ->
+            throw(?ERROR_NOT_SOURCE_PROVIDER);
+        {error, {not_found, transfer}} ->
+            throw(?ERROR_TRANSFER_NOT_FOUND)
+    end,
+    {true, Req2, State2}.

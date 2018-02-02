@@ -24,10 +24,6 @@
 -export([get_ctx/0]).
 
 -type nonce() :: binary().
--type record() :: #authorization_nonce{}.
--type doc() :: datastore_doc:doc(record()).
-
--export_type([record/0, doc/0]).
 
 -define(NONCE_TTL, application:get_env(
     ?APP_NAME, provider_authorization_nonce_ttl_sec, 30

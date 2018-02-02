@@ -96,10 +96,6 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}).
-handle_cast({start_transfer, UserCtx, FileCtx, Block, TransferId, TransferControllerPid}, State) ->
-    %todo VFS-3889 this request should be handled by transfer_controllers after introducing pool of controllers
-    sync_req:start_transfer(UserCtx, FileCtx, Block, TransferId, TransferControllerPid),
-    {noreply, State};
 handle_cast({start_file_replication, UserCtx, FileCtx, Block, TransferId}, State) ->
     case replicate_file(UserCtx, FileCtx, Block, TransferId, ?FILE_TRANSFER_RETRIES) of
         ok ->
@@ -185,7 +181,7 @@ replicate_file(UserCtx, FileCtx, Block, TransferId, Retries) ->
     transfer:id(), non_neg_integer(), term()) -> ok | {error, term()}.
 maybe_retry(_UserCtx, FileCtx, _Block, TransferId, 0, Reason) ->
     {Path, _FileCtx2} = file_ctx:get_canonical_path(FileCtx),
-    ?error_stacktrace(
+    ?error(
         "Replication of file ~p in scope of transfer ~p failed due to ~p~n"
         "No retries left", [Path, TransferId, Reason]),
     {error, retries_per_file_transfer_exceeded};
