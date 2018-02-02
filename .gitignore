@@ -44,3 +44,4 @@ _build
 compile_commands.json
 
 rel/files/vm.args
+rel/vars.config

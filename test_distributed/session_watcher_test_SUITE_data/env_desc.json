@@ -47,7 +47,8 @@
                             ],
                             "db_nodes": [
                                 "127.0.0.1:49161"
-                            ]
+                            ],
+                            "graph_sync_healthcheck_interval": 999999999
                         }
                     }
                 }

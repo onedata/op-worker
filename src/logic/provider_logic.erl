@@ -37,6 +37,7 @@
 -export([update_subdomain_delegation_ips/0]).
 -export([resolve_ips/1, resolve_ips/2]).
 -export([zone_time_seconds/0]).
+-export([assert_zone_compatibility/0]).
 -export([verify_provider_identity/1, verify_provider_identity/2]).
 -export([verify_provider_nonce/2]).
 
@@ -476,6 +477,42 @@ zone_time_seconds() ->
         end
     end),
     TimeMillis div 1000.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Check compatibility of Onezone and exit if it is not compatible.
+%% @end
+%%--------------------------------------------------------------------
+-spec assert_zone_compatibility() -> ok | no_return().
+assert_zone_compatibility() ->
+    URL = oneprovider:get_oz_url() ++ ?zone_version_path,
+    {ok, CompatibleVersions} = application:get_env(?APP_NAME, compatible_oz_versions),
+    CaCerts = oneprovider:get_ca_certs(),
+
+    case http_client:get(URL, #{}, <<>>, [{ssl_options, [{cacerts, CaCerts}]}]) of
+        {ok, 200, _RespHeaders, ResponseBody} ->
+            ZoneVersion = binary_to_list(ResponseBody),
+            case lists:member(ZoneVersion, CompatibleVersions) of
+                true ->
+                    ok;
+                false ->
+                    ?critical("This provider is not compatible with its Onezone "
+                    "service. Onezone version: ~s. Compatible versions: ~p. "
+                    "The application will be terminated.", [
+                        ZoneVersion, CompatibleVersions
+                    ]),
+                    init:stop()
+            end;
+        {ok, Code, _RespHeaders, ResponseBody} ->
+            ?critical("Failure while checking Onezone version. The application "
+            "will be terminated. HTTP response: ~B: ~s", [
+                Code, ResponseBody
+            ]),
+            init:stop();
+        {error, Error} ->
+            error(Error)
+    end.
 
 
 %%--------------------------------------------------------------------

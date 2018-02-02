@@ -283,6 +283,12 @@ handle_handshake(State, ClientMsg) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec report_handshake_error(state(), Error :: term()) -> ok.
+report_handshake_error(State, incompatible_client_version) ->
+    send_server_message(State, #server_message{
+        message_body = #handshake_response{
+            status = 'INCOMPATIBLE_VERSION'
+        }
+    });
 report_handshake_error(State, invalid_token) ->
     send_server_message(State, #server_message{
         message_body = #handshake_response{

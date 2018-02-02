@@ -24,7 +24,7 @@
 %% tests
 -export([
     stream_should_be_started_on_init/1,
-    stream_should_be_stared_for_new_space/1,
+    stream_should_be_started_for_new_space/1,
     stream_should_be_restarted_after_crash/1,
     status_should_be_broadcast_periodically/1,
     local_changes_should_be_broadcast/1,
@@ -41,7 +41,7 @@
 all() ->
     ?ALL([
         stream_should_be_started_on_init,
-        stream_should_be_stared_for_new_space,
+        stream_should_be_started_for_new_space,
         stream_should_be_restarted_after_crash,
         status_should_be_broadcast_periodically,
         local_changes_should_be_broadcast,
@@ -84,7 +84,7 @@ stream_should_be_started_on_init(Config) ->
         end, SpaceIds)
     end, [dbsync_in_stream, dbsync_out_stream]).
 
-stream_should_be_stared_for_new_space(Config) ->
+stream_should_be_started_for_new_space(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SpaceIds = ?config(spaces, Config),
     NewSpaceId = <<"s4">>,
@@ -390,12 +390,16 @@ init_per_testcase(_Case, Config) ->
     Self = self(),
 
     test_utils:mock_new(Worker, [
-        dbsync_changes, dbsync_communicator
+        dbsync_changes, dbsync_communicator, provider_logic
     ]),
 
     initializer:mock_provider_id(
         Workers, <<"p1">>, <<"auth-macaroon">>, <<"identity-macaroon">>
     ),
+
+    test_utils:mock_expect(Workers, provider_logic, assert_zone_compatibility, fun() ->
+        ok
+    end),
 
     test_utils:mock_expect(Worker, dbsync_utils, get_spaces, fun() ->
         [<<"s1">>, <<"s2">>, <<"s3">>]
@@ -445,8 +449,9 @@ end_per_testcase(_Case, Config) ->
         end, [dbsync_in_stream, dbsync_out_stream])
     end, ?config(spaces, Config)),
     initializer:unmock_provider_ids(Workers),
+    initializer:unmock_oz_version(Workers),
     test_utils:mock_unload(Worker, [
-        dbsync_changes, dbsync_communicator
+        dbsync_changes, dbsync_communicator, provider_logic
     ]).
 
 %%%===================================================================

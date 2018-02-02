@@ -17,7 +17,7 @@
 -include("proto/oneclient/event_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
--include("proto/oneclient/handshake_messages.hrl").
+-include("proto/common/handshake_messages.hrl").
 -include("proto/oneclient/diagnostic_messages.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -35,6 +35,8 @@
 -export([
     provider_connection_test/1,
     token_connection_test/1,
+    compatible_client_connection_test/1,
+    incompatible_client_connection_test/1,
     protobuf_msg_test/1,
     multi_message_test/1,
     client_send_test/1,
@@ -61,6 +63,8 @@
 -define(NORMAL_CASES_NAMES, [
     provider_connection_test,
     token_connection_test,
+    compatible_client_connection_test,
+    incompatible_client_connection_test,
     protobuf_msg_test,
     multi_message_test,
     client_send_test,
@@ -126,6 +130,59 @@ token_connection_test(Config) ->
     {ok, {Sock, _}} = connect_via_token(Worker1),
     ok = ssl:close(Sock).
 
+compatible_client_connection_test(Config) ->
+    % given
+    [Node | _] = ?config(op_worker_nodes, Config),
+    {ok, [Version | _]} = rpc:call(
+        Node, application, get_env, [?APP_NAME, compatible_oc_versions]
+    ),
+
+    TokenAuthMessage = #'ClientMessage'{message_body = {client_handshake_request,
+        #'ClientHandshakeRequest'{session_id = crypto:strong_rand_bytes(10),
+            token = #'Token'{value = ?MACAROON}, version = list_to_binary(Version)
+        }
+    }},
+    TokenAuthMessageRaw = messages:encode_msg(TokenAuthMessage),
+    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, gui_https_port),
+
+    % when
+    {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),
+    ok = ssl:send(Sock, TokenAuthMessageRaw),
+
+    % then
+    #'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{
+        status = Status
+    }}} = ?assertMatch(#'ServerMessage'{message_body = {handshake_response, _}},
+        receive_server_message()
+    ),
+    ?assertMatch('OK', Status),
+    ok.
+
+incompatible_client_connection_test(Config) ->
+    % given
+    [Node | _] = ?config(op_worker_nodes, Config),
+
+    TokenAuthMessage = #'ClientMessage'{message_body = {client_handshake_request,
+        #'ClientHandshakeRequest'{session_id = crypto:strong_rand_bytes(10),
+            token = #'Token'{value = ?MACAROON}, version = <<"16.07-rc2">>
+        }
+    }},
+    TokenAuthMessageRaw = messages:encode_msg(TokenAuthMessage),
+    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, gui_https_port),
+
+    % when
+    {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),
+    ok = ssl:send(Sock, TokenAuthMessageRaw),
+
+    % then
+    #'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{
+        status = Status
+    }}} = ?assertMatch(#'ServerMessage'{message_body = {handshake_response, _}},
+        receive_server_message()
+    ),
+    ?assertMatch('INCOMPATIBLE_VERSION', Status),
+    ok.
+
 protobuf_msg_test(Config) ->
     % given
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
@@ -148,7 +205,7 @@ protobuf_msg_test(Config) ->
     {ok, {Sock, _}} = connect_via_token(Worker1),
     ok = ssl:send(Sock, RawMsg),
 
-% then
+    % then
     ok = ssl:close(Sock).
 
 multi_message_test(Config) ->
@@ -514,10 +571,16 @@ python_client_test_base(Config) ->
     Packet = #'ClientMessage'{message_body = {ping, #'Ping'{data = Data}}},
     PacketRaw = messages:encode_msg(Packet),
 
+    {ok, [Version | _]} = rpc:call(
+        Worker1, application, get_env, [?APP_NAME, compatible_oc_versions]
+    ),
+
     HandshakeMessage = #'ClientMessage'{message_body = {client_handshake_request,
-        #'ClientHandshakeRequest'{session_id = <<"session_id">>, token = #'Token'{
-            value = ?MACAROON
-        }}
+        #'ClientHandshakeRequest'{
+            session_id = <<"session_id">>,
+            token = #'Token'{value = ?MACAROON},
+            version = list_to_binary(Version)
+        }
     }},
     HandshakeMessageRaw = messages:encode_msg(HandshakeMessage),
 
@@ -608,6 +671,10 @@ init_per_testcase(provider_connection_test, Config) ->
         end
     end),
 
+    test_utils:mock_expect(Workers, provider_logic, assert_zone_compatibility, fun() ->
+        ok
+    end),
+
     init_per_testcase(default, Config);
 
 init_per_testcase(Case, Config) when
@@ -658,6 +725,7 @@ end_per_testcase(python_client_test, Config) ->
 end_per_testcase(default, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:unmock_provider_ids(Workers),
+    initializer:unmock_oz_version(Workers),
     test_utils:mock_validate_and_unload(Workers, [user_identity]),
     ssl:stop();
 
@@ -691,10 +759,16 @@ connect_via_token(Node, SocketOpts) ->
     {ok, {Sock :: term(), SessId :: session:id()}}.
 connect_via_token(Node, SocketOpts, SessId) ->
     % given
+    {ok, [Version | _]} = rpc:call(
+        Node, application, get_env, [?APP_NAME, compatible_oc_versions]
+    ),
+
     TokenAuthMessage = #'ClientMessage'{message_body = {client_handshake_request,
-        #'ClientHandshakeRequest'{session_id = SessId, token = #'Token'{
-            value = ?MACAROON
-        }}
+        #'ClientHandshakeRequest'{
+            session_id = SessId,
+            token = #'Token'{value = ?MACAROON},
+            version = list_to_binary(Version)
+        }
     }},
     TokenAuthMessageRaw = messages:encode_msg(TokenAuthMessage),
     ActiveOpt = case proplists:get_value(active, SocketOpts) of
