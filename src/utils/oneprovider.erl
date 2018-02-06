@@ -238,6 +238,7 @@ register_in_oz_dev(NodeList, ProviderName) ->
         Parameters = [
             {<<"domain">>, Domain},
             {<<"name">>, ProviderName},
+            {<<"adminEmail">>, <<ProviderName/binary, "@onedata.org">>},
             {<<"subdomainDelegation">>, SubdomainDelegation},
             {<<"uuid">>, ProviderName}
         ],

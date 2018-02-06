@@ -105,7 +105,7 @@ get_provider_id() ->
 %%--------------------------------------------------------------------
 -spec clear_provider_id_cache() -> ok.
 clear_provider_id_cache() ->
-    application:set_env(?APP_NAME, ?PROVIDER_ID_CACHE_KEY, undefined).
+    application:unset_env(?APP_NAME, ?PROVIDER_ID_CACHE_KEY).
 
 
 %%--------------------------------------------------------------------
@@ -152,9 +152,8 @@ get_identity_macaroon() ->
 -spec delete() -> ok | {error, term()}.
 delete() ->
     ok = datastore_model:delete(?CTX, ?PROVIDER_AUTH_KEY),
-    ClusterNodes = proplists:get_keys(
-        gen_server2:call({global, ?CLUSTER_MANAGER}, get_nodes)
-    ),
+    {ok, NodesIPs} = gen_server2:call({global, ?CLUSTER_MANAGER}, get_nodes),
+    ClusterNodes = proplists:get_keys(NodesIPs),
     rpc:multicall(ClusterNodes, ?MODULE, clear_provider_id_cache, []),
     ok.
 

@@ -36,6 +36,7 @@
 -export([is_subdomain_delegated/0, get_subdomain_delegation_ips/0]).
 -export([update_subdomain_delegation_ips/0]).
 -export([resolve_ips/1, resolve_ips/2]).
+-export([set_txt_record/2, remove_txt_record/1]).
 -export([zone_time_seconds/0]).
 -export([assert_zone_compatibility/0]).
 -export([verify_provider_identity/1, verify_provider_identity/2]).
@@ -98,6 +99,7 @@ get_protected_data(SessionId, ProviderId) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns current provider's data in a map.
+%% Useful for RPC calls from onepanel where od_provider record is not defined.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_as_map() -> map().
@@ -105,6 +107,7 @@ get_as_map() ->
     {ok, #document{key = ProviderId, value = ProviderRecord}} = ?MODULE:get(),
     #od_provider{
         name = Name,
+        admin_email = AdminEmail,
         subdomain_delegation = SubdomainDelegation,
         domain = Domain,
         subdomain = Subdomain,
@@ -114,6 +117,7 @@ get_as_map() ->
     #{
         id => ProviderId,
         name => Name,
+        admin_email => AdminEmail,
         subdomain_delegation => SubdomainDelegation,
         domain => Domain,
         subdomain => Subdomain,
@@ -325,9 +329,8 @@ is_subdomain_delegated() ->
 -spec set_delegated_subdomain(binary()) ->
     ok | {error, subdomain_exists} | gs_protocol:error().
 set_delegated_subdomain(Subdomain) ->
-    {ok, NodesIPs} = node_manager:get_cluster_nodes_ips(),
-    {_, IPTuples} = lists:unzip(NodesIPs),
-    case set_subdomain_delegation(Subdomain, IPTuples) of
+    IPs = node_manager_plugin:get_cluster_ips(),
+    case set_subdomain_delegation(Subdomain, IPs) of
         ok ->
             gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id_or_undefined()),
             ok;
@@ -346,11 +349,10 @@ set_delegated_subdomain(Subdomain) ->
 -spec update_subdomain_delegation_ips() -> ok | error.
 update_subdomain_delegation_ips() ->
     try
-        {ok, NodesIPs} = node_manager:get_cluster_nodes_ips(),
-        {_, IPTuples} = lists:unzip(NodesIPs),
         case is_subdomain_delegated() of
             {true, Subdomain} ->
-                ok = set_subdomain_delegation(Subdomain, IPTuples);
+                IPs = node_manager_plugin:get_cluster_ips(),
+                ok = set_subdomain_delegation(Subdomain, IPs);
             false ->
                 ok
         end
@@ -410,16 +412,49 @@ set_domain(Domain) ->
 
 
 %%--------------------------------------------------------------------
+%% @doc
+%% Sets TXT type dns record in onezone DNS.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_txt_record(Name :: binary(), Content :: binary()) -> ok | no_return().
+set_txt_record(Name, Content) ->
+    Data = #{<<"content">> => Content},
+    ok = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = create, data = Data,
+        gri = #gri{type = od_provider, id = oneprovider:get_id_or_undefined(),
+                   aspect = {dns_txt_record, Name}}
+    }).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes TXT type dns record in onezone DNS.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_txt_record(Name :: binary()) -> ok | no_return().
+remove_txt_record(Name) ->
+    ok = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = delete,
+        gri = #gri{type = od_provider, id = oneprovider:get_id_or_undefined(),
+            aspect = {dns_txt_record, Name}}
+    }).
+
+
+%%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% Turns on subdomain delegation for this provider
 %% and sets its subdomain and ips.
 %% @end
 %%--------------------------------------------------------------------
--spec set_subdomain_delegation(binary(), [inet:ip4_address()]) ->
+-spec set_subdomain_delegation(binary(), [inet:ip4_address() | binary()]) ->
     ok | gs_protocol:error().
 set_subdomain_delegation(Subdomain, IPs) ->
-    IPBinaries = [list_to_binary(inet:ntoa(IPTuple)) || IPTuple <- IPs],
+    IPBinaries = lists:map(fun
+        (IP) when is_binary(IP) -> IP;
+        (IP) when is_tuple(IP) -> list_to_binary(inet:ntoa(IP))
+    end, IPs),
+
     ProviderId = oneprovider:get_id_or_undefined(),
     Data = #{
         <<"subdomainDelegation">> => true,
