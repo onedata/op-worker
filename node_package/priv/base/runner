@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # -*- tab-width:4;indent-tabs-mode:nil -*-
 # ex: ts=4 sw=4 et
 
@@ -188,7 +188,7 @@ do_start() {
     mkdir -p $PIPE_DIR
     export TERM=xterm
     $ERTS_PATH/run_erl -daemon $PIPE_DIR/ $RUNNER_LOG_DIR \
-        "exec $RUNNER_SCRIPT_DIR/$RUNNER_SCRIPT console" 2>&1
+        "exec $RUNNER_SCRIPT_DIR/$RUNNER_SCRIPT console ${CONFIG_OPTION}" 2>&1
 
     if [ ! -z "$WAIT_FOR_PROCESS" ]; then
         # Wait for the node to come up. We can't just ping it because
@@ -255,6 +255,13 @@ case "$1" in
     start)
         # Bootstrap daemon command (check perms & drop to $RUNNER_USER)
         bootstrapd $@
+
+        if [[ -f "$RUNNER_ETC_DIR/overlay.config" ]]; then
+            CONFIG_OPTION="-config $RUNNER_ETC_DIR/overlay.config"
+        else
+            CONFIG_OPTION=""
+        fi
+
         do_start
         ;;
 
