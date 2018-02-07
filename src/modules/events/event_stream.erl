@@ -16,8 +16,10 @@
 
 -behaviour(gen_server).
 
+-include("global_definitions.hrl").
 -include("modules/events/definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("cluster_worker/include/exometer_utils.hrl").
 
 %% API
 -export([start_link/3, execute_event_handler/2]).
@@ -25,6 +27,8 @@
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
+
+-export([init_counters/0, init_report/0]).
 
 -export_type([key/0, ctx/0, metadata/0, init_handler/0, terminate_handler/0,
     event_handler/0, aggregation_rule/0, transition_rule/0, emission_rule/0,
@@ -66,6 +70,12 @@
     handler_ref :: undefined | {pid(), reference()}
 }).
 
+-define(EXOMETER_NAME(Param), ?exometer_name(?MODULE, Param)).
+-define(EXOMETER_COUNTERS, [events_handler_execution]).
+-define(EXOMETER_HISTOGRAM_COUNTERS, [events_handler_map_size,
+    events_handler_execution_time_ms]).
+-define(EXOMETER_DEFAULT_TIME_SPAN, 600000).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -93,12 +103,19 @@ execute_event_handler(Force, #state{events = Evts, handler_ref = undefined,
     try
         Start = erlang:monotonic_time(milli_seconds),
         EvtsList = maps:values(Evts),
+
+        ?update_counter(?EXOMETER_NAME(events_handler_execution)),
+        ?update_counter(?EXOMETER_NAME(events_handler_map_size), length(EvtsList)),
+
         case {Force, EvtsList} of
             {true, _} -> Handler(EvtsList, Ctx);
             {false, []} -> ok;
             {_, _} -> Handler(EvtsList, Ctx)
         end,
+
         Duration = erlang:monotonic_time(milli_seconds) - Start,
+        ?update_counter(?EXOMETER_NAME(events_handler_execution_time_ms),
+            Duration),
         ?debug("Execution of handler on events ~p in event stream ~p and session
         ~p took ~p milliseconds", [EvtsList, StmKey, SessId, Duration])
     catch
@@ -114,6 +131,41 @@ execute_event_handler(Force, #state{handler_ref = {Pid, _}} = State) ->
     end,
     execute_event_handler(Force, State#state{handler_ref = undefined}).
 
+%%%===================================================================
+%%% Exometer API
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Initializes all counters.
+%% @end
+%%--------------------------------------------------------------------
+-spec init_counters() -> ok.
+init_counters() ->
+    TimeSpan = application:get_env(?APP_NAME,
+        exometer_events_time_span, ?EXOMETER_DEFAULT_TIME_SPAN),
+    Counters = lists:map(fun(Name) ->
+        {?EXOMETER_NAME(Name), counter}
+    end, ?EXOMETER_COUNTERS),
+    Counters2 = lists:map(fun(Name) ->
+        {?EXOMETER_NAME(Name), histogram, TimeSpan}
+    end, ?EXOMETER_HISTOGRAM_COUNTERS),
+    ?init_counters(Counters ++ Counters2).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Subscribe for reports for all parameters.
+%% @end
+%%--------------------------------------------------------------------
+-spec init_report() -> ok.
+init_report() ->
+    Reports = lists:map(fun(Name) ->
+        {?EXOMETER_NAME(Name), [value]}
+    end, ?EXOMETER_COUNTERS),
+    Reports2 = lists:map(fun(Name) ->
+        {?EXOMETER_NAME(Name), [min, max, median, mean, n]}
+    end, ?EXOMETER_HISTOGRAM_COUNTERS),
+    ?init_reports(Reports ++ Reports2).
 
 %%%===================================================================
 %%% gen_server callbacks

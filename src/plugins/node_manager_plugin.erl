@@ -199,7 +199,8 @@ check_node_ip_address() ->
 %%--------------------------------------------------------------------
 -spec modules_with_exometer() -> list().
 modules_with_exometer() ->
-    [storage_sync_monitoring, fslogic_worker, helpers, session].
+    [storage_sync_monitoring, fslogic_worker, helpers, session, router,
+        event_stream, event].
 
 %%--------------------------------------------------------------------
 %% @doc
