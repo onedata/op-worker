@@ -226,8 +226,8 @@ translate_from_protobuf(#'FuseRequest'{fuse_request = {_, Record}}) ->
     #fuse_request{fuse_request = translate_from_protobuf(Record)};
 translate_from_protobuf(#'ResolveGuid'{path = Path}) ->
     #resolve_guid{path = Path};
-translate_from_protobuf(#'GetHelperParams'{storage_id = SID, force_proxy_io = ForceProxy}) ->
-    #get_helper_params{storage_id = SID, force_proxy_io = ForceProxy};
+translate_from_protobuf(#'GetHelperParams'{storage_id = StorageId, space_id = SpaceId, helper_mode = HelperMode}) ->
+    #get_helper_params{storage_id = StorageId, space_id = SpaceId, helper_mode = HelperMode};
 translate_from_protobuf(#'CreateStorageTestFile'{storage_id = Id, file_uuid = FileGuid}) ->
     #create_storage_test_file{storage_id = Id, file_guid = FileGuid};
 translate_from_protobuf(#'VerifyStorageTestFile'{storage_id = SId, space_id = SpaceId,
@@ -721,9 +721,8 @@ translate_to_protobuf(#fuse_request{fuse_request = Record}) ->
     {fuse_request, #'FuseRequest'{fuse_request = translate_to_protobuf(Record)}};
 translate_to_protobuf(#resolve_guid{path = Path}) ->
     {resolve_guid, #'ResolveGuid'{path = Path}};
-translate_to_protobuf(#get_helper_params{storage_id = SID, force_proxy_io = ForceProxy}) ->
-    {get_helper_params, #'GetHelperParams'{storage_id = SID, force_proxy_io = ForceProxy}};
-
+translate_to_protobuf(#get_helper_params{storage_id = StorageId, space_id = SpaceId, helper_mode = HelperMode}) ->
+    {get_helper_params, #'GetHelperParams'{storage_id = StorageId, space_id = SpaceId, helper_mode = HelperMode}};
 translate_to_protobuf(#file_request{context_guid = ContextGuid, file_request = Record}) ->
     {file_request, #'FileRequest'{context_guid = ContextGuid, file_request = translate_to_protobuf(Record)}};
 translate_to_protobuf(#get_file_attr{}) ->

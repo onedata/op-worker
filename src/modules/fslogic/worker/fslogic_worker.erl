@@ -321,10 +321,11 @@ handle_request_remotely(UserCtx, Req, Providers) ->
 handle_fuse_request(UserCtx, #resolve_guid{}, FileCtx) ->
     guid_req:resolve_guid(UserCtx, FileCtx);
 handle_fuse_request(UserCtx, #get_helper_params{
-    storage_id = SID,
-    force_proxy_io = ForceProxy
+    storage_id = StorageId,
+    space_id = SpaceId,
+    helper_mode = HelperMode
 }, undefined) ->
-    storage_req:get_helper_params(UserCtx, SID, ForceProxy);
+    storage_req:get_helper_params(UserCtx, StorageId, SpaceId, HelperMode);
 handle_fuse_request(UserCtx, #create_storage_test_file{
     file_guid = Guid,
     storage_id = StorageId
