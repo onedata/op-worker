@@ -258,6 +258,8 @@ maybe_generate_web_cert_unsafe(ClusterNodes) ->
     ),
     {ok, WebKeyPath} = application:get_env(?APP_NAME, web_key_file),
     {ok, WebCertPath} = application:get_env(?APP_NAME, web_cert_file),
+    {ok, WebChainPath} = application:get_env(?APP_NAME, web_cert_chain_file),
+
     CertExists = filelib:is_regular(WebKeyPath) andalso
         filelib:is_regular(WebCertPath),
     case GenerateIfAbsent andalso not CertExists of
@@ -278,7 +280,9 @@ maybe_generate_web_cert_unsafe(ClusterNodes) ->
             OtherWorkers = ClusterNodes -- [node()],
             {ok, Key} = file:read_file(WebKeyPath),
             {ok, Cert} = file:read_file(WebCertPath),
+            {ok, Chain} = file:read_file(CAPath),
             ok = utils:save_file_on_hosts(OtherWorkers, WebKeyPath, Key),
             ok = utils:save_file_on_hosts(OtherWorkers, WebCertPath, Cert),
+            ok = utils:save_file_on_hosts(OtherWorkers, WebChainPath, Chain),
             ?info("Synchronized the new web server cert across all nodes")
     end.
