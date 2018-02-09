@@ -1,4 +1,4 @@
-%% ====================================================================
+%%%-------------------------------------------------------------------
 %%% @author Lukasz Opiola
 %%% @copyright (C) 2018 ACK CYFRONET AGH
 %%% This software is released under the MIT license
@@ -6,64 +6,40 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This handler serves as a public endpoint to check OP's connectivity to OZ.
+%%% This module handles requests that verify authorization nonce, which is used
+%%% during handshake in inter-provider communication.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(nonce_verify_handler).
 -author("Lukasz Opiola").
--behaviour(cowboy_http_handler).
+
+-behaviour(cowboy_handler).
 
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 
 %% API
--export([init/3, handle/2, terminate/3]).
+-export([init/2]).
 
-%% ====================================================================
-%% Cowboy API functions
-%% ====================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Cowboy handler callback.
+%% @doc Cowboy handler callback.
+%% Handles a request returning status of nonce authorization.
 %% @end
 %%--------------------------------------------------------------------
--spec init({TransportName :: atom(), ProtocolName :: http},
-    Req :: cowboy_req:req(), Opts :: any()) ->
-    {ok, cowboy_req:req(), []}.
-init(_Type, Req, _Opts) ->
-    {ok, Req, []}.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Handles a request returning provider's id.
-%% @end
-%%--------------------------------------------------------------------
--spec handle(term(), term()) -> {ok, cowboy_req:req(), term()}.
-handle(Req, State) ->
-    {Nonce, _} = cowboy_req:qs_val(<<"nonce">>, Req, undefined),
-
-    %% If connection is established, OP should be able to retrieve its own
-    %% data. Any other result implies connection error.
+-spec init(cowboy_req:req(), term()) -> {ok, cowboy_req:req(), term()}.
+init(#{method := <<"GET">>} = Req, State) ->
+    Nonce = proplists:get_value(<<"nonce">>, cowboy_req:parse_qs(Req)),
     Status = case authorization_nonce:verify(Nonce) of
         true -> <<"ok">>;
         false -> <<"error">>
     end,
-    {ok, Req1} = cowboy_req:reply(
-        200,
-        [{<<"content-type">>, <<"application/json">>}],
+    NewReq = cowboy_req:reply(200,
+        #{<<"content-type">> => <<"application/json">>},
         json_utils:encode_map(#{<<"status">> => Status}),
         Req
     ),
-    {ok, Req1, State}.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Cowboy handler callback, no cleanup needed
-%% @end
-%%--------------------------------------------------------------------
--spec terminate(term(), term(), term()) -> ok.
-terminate(_Reason, _Req, _State) ->
-    ok.
+    {ok, NewReq, State};
+init(Req, State) ->
+    NewReq = cowboy_req:reply(405, #{<<"allow">> => <<"GET">>}, Req),
+    {ok, NewReq, State}.

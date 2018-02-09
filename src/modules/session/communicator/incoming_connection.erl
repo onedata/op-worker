@@ -39,7 +39,7 @@
 -define(PACKET_VALUE, 4).
 
 %% API
--export([init/3, upgrade/4]).
+-export([init/2, upgrade/4, upgrade/5, takeover/7]).
 
 %% ====================================================================
 %% Cowboy API functions
@@ -50,75 +50,58 @@
 %% Cowboy handler callback - causes the upgrade callback to be called.
 %% @end
 %%--------------------------------------------------------------------
--spec init({tcp | ssl | atom(), http | atom()}, cowboy_req:req(), any()) ->
-    {upgrade, protocol, ?MODULE}.
-init(_Protocol, _Req, _Opts) ->
-    {upgrade, protocol, ?MODULE}.
+-spec init(cowboy_req:req(), any()) -> {?MODULE, cowboy_req:req(), any()}.
+init(Req, Opts) ->
+    {?MODULE, Req, Opts}.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Cowboy callback - upgrades protocol and sends a HTTP 101 Switching Protocol
-%% response to the client.
-%% Initialized from client_protocol_handler module.
+%% Cowboy callback - handle upgrade protocol request.
+%% If correct initiate protocol switch, otherwise respond with either 426 or 400.
 %% @end
 %%--------------------------------------------------------------------
 -spec upgrade(cowboy_req:req(), cowboy_middleware:env(), module(), any()) ->
-    {halt, cowboy_req:req()} | no_return().
-upgrade(Req, Env, _Handler, _HandlerOpts) ->
-    case process_upgrade_request(Req, Env) of
-        error -> {halt, Req};
-        {ok, Req2} -> init_handler_loop(Req2)
-    end.
+    {ok, cowboy_req:req(), cowboy_middleware:env()} | {stop, cowboy_req:req()}.
+upgrade(Req, Env, Handler, HandlerState) ->
+    upgrade(Req, Env, Handler, HandlerState, #{}).
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Processes protocol upgrade request, responds with 101 on success or 400 on
-%% failure.
-%% @end
-%%--------------------------------------------------------------------
--spec process_upgrade_request(cowboy_req:req(), cowboy_middleware:env()) ->
-    {ok, cowboy_req:req()} | error.
-process_upgrade_request(Req, Env) ->
-    try
-        {_, Ref} = lists:keyfind(listener, 1, Env),
-        ranch:remove_connection(Ref),
-        {ok, ConnTokens, Req2} = cowboy_req:parse_header(<<"connection">>, Req),
-        true = lists:member(<<"upgrade">>, ConnTokens),
-        {ok, [<<?client_protocol_upgrade_name>>], _} = cowboy_req:parse_header(<<"upgrade">>, Req2),
-        {ok, Req3} = cowboy_req:upgrade_reply(101, [
-            {<<"Upgrade">>, <<?client_protocol_upgrade_name>>}
-        ], Req2),
-        %% Flush the resp_sent message before moving on.
-        receive {cowboy_req, resp_sent} -> ok after 0 -> ok end,
-        {ok, Req3}
+-spec upgrade(cowboy_req:req(), cowboy_middleware:env(), module(), any(), any()) ->
+    {ok, cowboy_req:req(), cowboy_middleware:env()} | {stop, cowboy_req:req()}.
+upgrade(Req, Env, _Handler, HandlerOpts, _Opts) ->
+    try process_upgrade_request(Req) of
+        ok ->
+            Headers = cowboy_req:response_headers(#{
+                <<"connection">> => <<"Upgrade">>,
+                <<"upgrade">> => <<?client_protocol_upgrade_name>>
+            }, Req),
+            #{pid := Pid, streamid := StreamID} = Req,
+            Pid ! {{Pid, StreamID}, {switch_protocol, Headers, ?MODULE, HandlerOpts}},
+            {ok, Req, Env};
+        {error, upgrade_required} ->
+            NewReq = cowboy_req:reply(426, #{
+                <<"connection">> => <<"Upgrade">>,
+                <<"upgrade">> => <<?client_protocol_upgrade_name>>
+            }, Req),
+            {stop, NewReq}
     catch Type:Reason ->
         ?debug_stacktrace("Invalid protocol upgrade request - ~p:~p", [
             Type, Reason
         ]),
-        receive
-            {cowboy_req, resp_sent} -> ok
-        after 0 ->
-            _ = cowboy_req:reply(400, Req)
-        end,
-        error
+        cowboy_req:reply(400, Req),
+        {stop, Req}
     end.
 
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
-%% Initializes the handler loop by configuring socket opts and enters the loop.
+%% Cowboy callback - takeover connection process.
 %% @end
 %%--------------------------------------------------------------------
--spec init_handler_loop(cowboy_req:req()) -> {halt, cowboy_req:req()}.
-init_handler_loop(Req) ->
-    [Socket, Transport] = cowboy_req:get([socket, transport], Req),
+-spec takeover(pid(), ranch:ref(), inet:socket(), module(), any(), binary(),
+    any()) -> no_return().
+takeover(_Parent, Ref, Socket, Transport, _Opts, _Buffer, _HandlerState) ->
+    ranch:remove_connection(Ref),
     {Ok, Closed, Error} = Transport:messages(),
     State = #state{
         socket = Socket,
@@ -135,7 +118,32 @@ init_handler_loop(Req) ->
         undefined -> ok;
         SessId -> session:remove_connection(SessId, self())
     end,
-    {halt, Req}.
+    exit(normal).
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Processes protocol upgrade request, responds with 101 on success or 400 on
+%% failure.
+%% @end
+%%--------------------------------------------------------------------
+-spec process_upgrade_request(cowboy_req:req()) -> ok | {error, update_required}.
+process_upgrade_request(Req) ->
+    ConnTokens = cowboy_req:parse_header(<<"connection">>, Req, []),
+    case lists:member(<<"upgrade">>, ConnTokens) of
+        false ->
+            {error, upgrade_required};
+        true ->
+            case cowboy_req:parse_header(<<"upgrade">>, Req, []) of
+                [<<?client_protocol_upgrade_name>>] -> ok;
+                _ -> {error, upgrade_required}
+            end
+    end.
 
 
 %%--------------------------------------------------------------------

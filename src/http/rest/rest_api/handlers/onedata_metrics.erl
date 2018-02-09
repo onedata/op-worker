@@ -30,7 +30,7 @@
 -define(AVAILABLE_STEPS, ['5m', '1h', '1d', '1m']).
 
 %% API
--export([rest_init/2, terminate/3, allowed_methods/2,
+-export([terminate/3, allowed_methods/2,
     is_authorized/2, content_types_provided/2]).
 
 %% resource functions
@@ -39,13 +39,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:rest_init/2
-%%--------------------------------------------------------------------
--spec rest_init(req(), term()) -> {ok, req(), term()} | {shutdown, req()}.
-rest_init(Req, State) ->
-    {ok, Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3
@@ -64,7 +57,7 @@ allowed_methods(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
 %%--------------------------------------------------------------------
--spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | halt, req(), maps:map()}.
+-spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | stop, req(), maps:map()}.
 is_authorized(Req, State) ->
     onedata_auth_api:is_authorized(Req, State).
 
@@ -89,8 +82,9 @@ content_types_provided(Req, State) ->
 get_metric(Req, State) ->
     {State2, Req2} = validator:parse_space_id(Req, State),
     {State3, Req3} = validator:parse_user_id(Req2, State2),
-    {Metric, Req4} = cowboy_req:qs_val(<<"metric">>, Req3), %todo use validator
-    {Step, Req5} = cowboy_req:qs_val(<<"step">>, Req4),
+    ParsedQs = cowboy_req:parse_qs(Req3),
+    Metric = proplists:get_value(<<"metric">>, ParsedQs),
+    Step = proplists:get_value(<<"step">>, ParsedQs),
 
     #{
         auth := SessionId,
@@ -122,7 +116,7 @@ get_metric(Req, State) ->
                     end
                 end, Providers),
             Response = json_utils:encode_map(Json),
-            {Response, Req5, State3};
+            {Response, Req3, State3};
         {error, not_found} ->
             throw(?ERROR_NOT_FOUND)
     end.

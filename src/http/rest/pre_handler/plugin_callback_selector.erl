@@ -38,8 +38,8 @@
 select_accept_callback(Req) ->
     ContentTypesAccepted = request_context:get_content_types_accepted(),
     NormalizedContentTypesAccepted = normalize_content_types(ContentTypesAccepted),
-    {ok, ContentType, Req2} = cowboy_req:parse_header(<<"content-type">>, Req),
-    {ok, {Req2, choose_accept_content_type_callback(ContentType, NormalizedContentTypesAccepted)}}.
+    ContentType = cowboy_req:parse_header(<<"content-type">>, Req),
+    {ok, {Req, choose_accept_content_type_callback(ContentType, NormalizedContentTypesAccepted)}}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -51,14 +51,14 @@ select_provide_callback(Req) ->
     ContentTypesProvided = request_context:get_content_types_provided(),
     NormalizedContentTypesProvided = normalize_content_types(ContentTypesProvided),
     case cowboy_req:parse_header(<<"accept">>, Req) of
-        {ok, undefined, Req2} ->
+        undefined ->
             [{_, Fun} | _] = NormalizedContentTypesProvided,
-            {ok, {Req2, Fun}};
-        {ok, Accepts, Req2} ->
+            {ok, {Req, Fun}};
+        Accepts ->
             PrioritizedAccepts = prioritize_accept(Accepts),
             {ok,
-                {Req2,
-                    choose_provide_content_type_callback(Req2, NormalizedContentTypesProvided, PrioritizedAccepts)
+                {Req,
+                    choose_provide_content_type_callback(Req, NormalizedContentTypesProvided, PrioritizedAccepts)
             }}
     end.
 
@@ -76,7 +76,7 @@ select_provide_callback(Req) ->
 normalize_content_types([]) ->
     [];
 normalize_content_types([{ContentType, Callback} | Rest]) when is_binary(ContentType) ->
-    [{cowboy_http:content_type(ContentType), Callback} | normalize_content_types(Rest)];
+    [{cow_http_hd:parse_content_type(ContentType), Callback} | normalize_content_types(Rest)];
 normalize_content_types([Normalized | Rest]) ->
     [Normalized | normalize_content_types(Rest)].
 

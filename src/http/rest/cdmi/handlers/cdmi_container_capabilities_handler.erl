@@ -16,15 +16,9 @@
 -include("http/rest/cdmi/cdmi_capabilities.hrl").
 
 %% API
--export([rest_init/2, terminate/3, allowed_methods/2, malformed_request/2, content_types_provided/2]).
+-export([terminate/3, allowed_methods/2, malformed_request/2, content_types_provided/2]).
 -export([get_cdmi_capability/2]).
 
-%%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:rest_init/2
-%%--------------------------------------------------------------------
--spec rest_init(req(), term()) -> {ok, req(), maps:map()} | {shutdown, req()}.
-rest_init(Req, _Opts) ->
-    {ok, Req, #{}}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3

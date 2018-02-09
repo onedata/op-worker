@@ -19,8 +19,8 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([binary_stream_size/2, cdmi_stream_size/5, stream_binary/2,
-    stream_cdmi/5, stream_range/7, write_body_to_file/3]).
+-export([binary_stream_size/2, cdmi_stream_size/5, stream_binary/5,
+    stream_cdmi/7, stream_range/6, write_body_to_file/3]).
 
 %%%===================================================================
 %%% API
@@ -66,18 +66,26 @@ cdmi_stream_size(Range, FileSize, ValueTransferEncoding, JsonBodyPrefix, JsonBod
 %% Returns fun that reads given ranges of file and streams to given Socket
 %% @end
 %%--------------------------------------------------------------------
--spec stream_binary(Stata ::maps:map(),
-  Ranges :: [{non_neg_integer(), non_neg_integer()}] | undefined) -> function().
-stream_binary(#{attributes := #file_attr{size = Size}} = State, undefined) ->
-    stream_binary(State, [{0, Size -1}]);
-stream_binary(#{path := Path, auth := Auth} = State, Ranges) ->
+-spec stream_binary(HttpStatus :: non_neg_integer(), Req :: req(),
+    State ::maps:map(), Size :: non_neg_integer(),
+    Ranges :: [{non_neg_integer(), non_neg_integer()}] | undefined) -> req().
+stream_binary(
+    HttpStatus, Req, #{attributes := #file_attr{size = Size}} = State, Size, undefined
+) ->
+    stream_binary(HttpStatus, Req, State, Size, [{0, Size -1}]);
+stream_binary(HttpStatus, Req, #{path := Path, auth := Auth} = State, Size, Ranges) ->
+    StreamSize = binary_stream_size(Ranges, Size),
     {ok, FileHandle} = onedata_file_api:open(Auth, {path, Path} ,read),
-    fun(Socket, Transport) ->
-            {ok, BufferSize} = application:get_env(?APP_NAME, download_buffer_size),
-            lists:foreach(fun(Rng) ->
-                stream_range(Socket, Transport, State, Rng, <<"utf-8">>, BufferSize, FileHandle)
-            end, Ranges)
-    end.
+    {ok, BufferSize} = application:get_env(?APP_NAME, download_buffer_size),
+
+    Req2 = cowboy_req:stream_reply(HttpStatus, #{
+        <<"content-length">> => integer_to_binary(StreamSize)
+    }, Req),
+    lists:foreach(fun(Range) ->
+        stream_range(Req2, State, Range, <<"utf-8">>, BufferSize, FileHandle)
+    end, Ranges),
+    cowboy_req:stream_body(<<"">>, fin, Req2),
+    Req2.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -85,50 +93,56 @@ stream_binary(#{path := Path, auth := Auth} = State, Ranges) ->
 %% json representing cdmi object.
 %% @end
 %%--------------------------------------------------------------------
--spec stream_cdmi(Stata ::maps:map(), Range :: {non_neg_integer(), non_neg_integer()},
-  ValueTransferEncoding :: binary(), JsonBodyPrefix :: binary(),
-  JsonBodySuffix :: binary()) -> function().
-stream_cdmi(#{path := Path, auth := Auth} = State, Range, ValueTransferEncoding,
-  JsonBodyPrefix, JsonBodySuffix) ->
+-spec stream_cdmi(Req :: req(), State ::maps:map(), Size :: non_neg_integer(),
+    Range :: {non_neg_integer(), non_neg_integer()},
+    ValueTransferEncoding :: binary(), JsonBodyPrefix :: binary(),
+    JsonBodySuffix :: binary()) -> req().
+stream_cdmi(Req, #{path := Path, auth := Auth} = State, Size, Range,
+    ValueTransferEncoding, JsonBodyPrefix, JsonBodySuffix
+) ->
+    StreamSize = cdmi_streamer:cdmi_stream_size(
+        Range, Size, ValueTransferEncoding, JsonBodyPrefix, JsonBodySuffix
+    ),
     {ok, FileHandle} = onedata_file_api:open(Auth, {path, Path} ,read),
-    fun(Socket, Transport) ->
-        Transport:send(Socket, JsonBodyPrefix),
-        {ok, BufferSize} = application:get_env(?APP_NAME, download_buffer_size),
-        stream_range(Socket, Transport, State, Range,
-            ValueTransferEncoding, BufferSize, FileHandle),
-        Transport:send(Socket,JsonBodySuffix)
-    end.
+    {ok, BufferSize} = application:get_env(?APP_NAME, download_buffer_size),
+    Req2 = cowboy_req:stream_reply(?HTTP_OK, #{
+        <<"content-length">> => integer_to_binary(StreamSize)
+    }, Req),
+    cowboy_req:stream_body(JsonBodyPrefix, nofin, Req2),
+    stream_range(Req2, State, Range, ValueTransferEncoding, BufferSize, FileHandle),
+    cowboy_req:stream_body(JsonBodySuffix, fin, Req2),
+    Req2.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Reads given range of bytes (defaults to whole file) from file (obtained
 %% from state path), result is encoded according to 'Encoding' argument
-%% and streamed to given Socket
+%% and streamed to given Request object.
 %% @end
 %%--------------------------------------------------------------------
--spec stream_range(Socket :: term(), Transport :: atom(), State :: maps:map(), Range, Encoding :: binary(),
+-spec stream_range(Req :: req(), State :: maps:map(), Range, Encoding :: binary(),
   BufferSize :: integer(), FileHandle :: onedata_file_api:file_handle()) -> Result when
     Range :: default | {From :: integer(), To :: integer()},
     Result :: ok | no_return().
-stream_range(Socket, Transport, State, Range, Encoding, BufferSize, FileHandle)
+stream_range(Req, State, Range, Encoding, BufferSize, FileHandle)
     when (BufferSize rem 3) =/= 0 ->
     %buffer size is extended, so it's divisible by 3 to allow base64 on the fly conversion
-    stream_range(Socket, Transport, State, Range, Encoding, BufferSize - (BufferSize rem 3), FileHandle);
-stream_range(Socket, Transport, #{attributes := #file_attr{size = Size}} = State,
+    stream_range(Req, State, Range, Encoding, BufferSize - (BufferSize rem 3), FileHandle);
+stream_range(Req, #{attributes := #file_attr{size = Size}} = State,
   default, Encoding, BufferSize, FileHandle) ->
-    %default range should remain consistent with parse_object_ans/2 valuerange clause
-    stream_range(Socket, Transport, State, {0, Size - 1}, Encoding, BufferSize, FileHandle);
-stream_range(Socket, Transport, State, {From, To}, Encoding, BufferSize, FileHandle) ->
+    %default range should remain consistent with parse_object_ans/2 value range clause
+    stream_range(Req, State, {0, Size - 1}, Encoding, BufferSize, FileHandle);
+stream_range(Req, State, {From, To}, Encoding, BufferSize, FileHandle) ->
     ToRead = To - From + 1,
     ReadBufSize = min(ToRead, BufferSize),
     {ok, NewFileHandle, Data} = onedata_file_api:read(FileHandle, From, ReadBufSize),
-    Transport:send(Socket, cdmi_encoder:encode(Data, Encoding)),
     DataSize = size(Data),
     case DataSize of
         0 ->
            ok;
         _ ->
-            stream_range(Socket, Transport, State, {From + DataSize, To},
+            cowboy_req:stream_body(cdmi_encoder:encode(Data, Encoding), nofin, Req),
+            stream_range(Req, State, {From + DataSize, To},
                 Encoding, BufferSize, NewFileHandle)
     end.
 
@@ -147,7 +161,7 @@ stream_range(Socket, Transport, State, {From, To}, Encoding, BufferSize, FileHan
     {ok, req()}.
 write_body_to_file(Req0, Offset, FileHandle) ->
     WriteFun = fun Write(Req, WriteOffset, Handle) ->
-        {Status, Chunk, Req1} = cowboy_req:body(Req),
+        {Status, Chunk, Req1} = cowboy_req:read_body(Req),
         {ok, _NewHandle, Bytes} = onedata_file_api:write(Handle, WriteOffset, Chunk),
         case Status of
             more -> Write(Req1, WriteOffset + Bytes, Handle);

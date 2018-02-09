@@ -11,7 +11,8 @@
 %%%-------------------------------------------------------------------
 -module(download_handler).
 -author("Lukasz Opiola").
--behaviour(cowboy_http_handler).
+
+-behaviour(cowboy_handler).
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
@@ -22,7 +23,7 @@
 -define(DEFAULT_DOWNLOAD_BUFFER_SIZE, 4194304). % 4MB
 
 %% Cowboy API
--export([init/3, handle/2, terminate/3]).
+-export([init/2]).
 
 
 %% ====================================================================
@@ -30,37 +31,18 @@
 %% ====================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Cowboy handler callback.
+%% @doc Cowboy handler callback.
+%% Handles a request returning current version of Onezone.
 %% @end
 %%--------------------------------------------------------------------
--spec init({TransportName :: atom(), ProtocolName :: http},
-    Req :: cowboy_req:req(), Opts :: any()) ->
-    {ok, cowboy_req:req(), []}.
-init(_Type, Req, _Opts) ->
-    {ok, Req, []}.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Handles an upload request.
-%% @end
-%%--------------------------------------------------------------------
--spec handle(Req :: cowboy_req:req(), term()) -> {ok, cowboy_req:req(), term()}.
-handle(Req, State) ->
-    {FileId, _} = cowboy_req:binding(id, Req),
+-spec init(cowboy_req:req(), term()) -> {ok, cowboy_req:req(), term()}.
+init(#{method := <<"GET">>} = Req, State) ->
+    FileId = cowboy_req:binding(id, Req),
     NewReq = handle_http_download(Req, FileId),
+    {ok, NewReq, State};
+init(Req, State) ->
+    NewReq = cowboy_req:reply(405, #{<<"allow">> => <<"GET">>}, Req),
     {ok, NewReq, State}.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Cowboy handler callback, no cleanup needed
-%% @end
-%%--------------------------------------------------------------------
--spec terminate(term(), Req :: cowboy_req:req(), term()) -> ok.
-terminate(_Reason, _Req, _State) ->
-    ok.
 
 
 %% ====================================================================
@@ -130,12 +112,12 @@ handle_http_download(Req, FileId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec cowboy_file_stream_fun(FileHandle :: lfm_context:ctx(), Size :: integer()) ->
-    fun((any(), module()) -> ok).
+    fun((cowboy_req:req()) -> ok).
 cowboy_file_stream_fun(FileHandle, Size) ->
-    fun(Socket, Transport) ->
+    fun(Req) ->
         try
             BufSize = get_download_buffer_size(),
-            stream_file(Socket, Transport, FileHandle, Size, BufSize)
+            stream_file(Req, FileHandle, Size, BufSize)
         catch T:M ->
             % Any exceptions that occur during file streaming must be caught
             % here for cowboy to close the connection cleanly.
@@ -153,10 +135,10 @@ cowboy_file_stream_fun(FileHandle, Size) ->
 %% NOTE! Filename must be a unicode string (not utf8)
 %% @end
 %%--------------------------------------------------------------------
--spec stream_file(Socket :: term(), Transport :: atom(),
-    FileHandle :: lfm_context:ctx(), Size :: integer(), BufSize :: integer()) -> ok.
-stream_file(Socket, Transport, FileHandle, Size, BufSize) ->
-    stream_file(Socket, Transport, FileHandle, Size, 0, BufSize).
+-spec stream_file(Req :: cowboy_req:req(), FileHandle :: lfm_context:ctx(),
+    Size :: integer(), BufSize :: integer()) -> ok.
+stream_file(Req, FileHandle, Size, BufSize) ->
+    stream_file(Req, FileHandle, Size, 0, BufSize).
 
 
 %%--------------------------------------------------------------------
@@ -166,21 +148,22 @@ stream_file(Socket, Transport, FileHandle, Size, BufSize) ->
 %% NOTE! Filename must be a unicode string (not utf8)
 %% @end
 %%--------------------------------------------------------------------
--spec stream_file(Socket :: term(), Transport :: atom(),
-    FileHandle :: lfm_context:ctx(), Size :: integer(),
-    Sent :: integer(), BufSize :: integer()) -> ok.
-stream_file(_, _, FileHandle, Size, BytesSent, _) when BytesSent >= Size ->
+-spec stream_file(Req :: cowboy_req:req(), FileHandle :: lfm_context:ctx(),
+    Size :: integer(), Sent :: integer(), BufSize :: integer()) -> ok.
+stream_file(Req, FileHandle, Size, BytesSent, _) when BytesSent >= Size ->
+    cowboy_req:stream_body(<<"">>, fin, Req),
     ok = logical_file_manager:release(FileHandle);
-stream_file(Socket, Transport, FileHandle, Size, BytesSent, BufSize) ->
+stream_file(Req, FileHandle, Size, BytesSent, BufSize) ->
     {ok, NewHandle, BytesRead} = logical_file_manager:read(
         FileHandle, BytesSent, min(Size - BytesSent, BufSize)),
-    ok = Transport:send(Socket, BytesRead),
     NewSent = BytesSent + size(BytesRead),
     case size(BytesRead) of
         0 ->
+            cowboy_req:stream_body(<<"">>, fin, Req),
             ok = logical_file_manager:release(FileHandle);
         _ ->
-            stream_file(Socket, Transport, NewHandle, Size, NewSent, BufSize)
+            cowboy_req:stream_body(BytesRead, nofin, Req),
+            stream_file(Req, NewHandle, Size, NewSent, BufSize)
     end.
 
 
