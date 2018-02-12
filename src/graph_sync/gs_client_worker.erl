@@ -269,7 +269,7 @@ start_gs_connection() ->
         Address = "wss://" ++ oneprovider:get_oz_domain() ++
             ":" ++ integer_to_list(Port) ++ ?GS_CHANNEL_PATH,
 
-        CaCerts = oneprovider:get_ca_certs(),
+        CaCerts = oneprovider:trusted_ca_certs(),
         Opts = [{cacerts, CaCerts}],
         {ok, ProviderMacaroon} = provider_auth:get_auth_macaroon(),
 

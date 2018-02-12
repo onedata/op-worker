@@ -523,7 +523,7 @@ zone_time_seconds() ->
 assert_zone_compatibility() ->
     URL = oneprovider:get_oz_url() ++ ?zone_version_path,
     {ok, CompatibleVersions} = application:get_env(?APP_NAME, compatible_oz_versions),
-    CaCerts = oneprovider:get_ca_certs(),
+    CaCerts = oneprovider:trusted_ca_certs(),
 
     case http_client:get(URL, #{}, <<>>, [{ssl_options, [{cacerts, CaCerts}]}]) of
         {ok, 200, _RespHeaders, ResponseBody} ->
@@ -564,7 +564,7 @@ verify_provider_identity(ProviderId) ->
             Domain, ?identity_macaroon_path
         ]),
 
-        CaCerts = oneprovider:get_ca_certs(),
+        CaCerts = oneprovider:trusted_ca_certs(),
         SecureFlag = application:get_env(?APP_NAME, interprovider_connections_security, true),
         Opts = [{ssl_options, [{cacerts, CaCerts}, {secure, SecureFlag}]}],
 
@@ -613,7 +613,7 @@ verify_provider_nonce(ProviderId, Nonce) ->
             Domain, ?nonce_verify_path, Nonce
         ]),
 
-        CaCerts = oneprovider:get_ca_certs(),
+        CaCerts = oneprovider:trusted_ca_certs(),
         SecureFlag = application:get_env(?APP_NAME, interprovider_connections_security, true),
         Opts = [{ssl_options, [{cacerts, CaCerts}, {secure, SecureFlag}]}],
 

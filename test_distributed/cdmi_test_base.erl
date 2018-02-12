@@ -1866,8 +1866,7 @@ remove_times_metadata(ResponseJSON) ->
 
 % Performs a single request using http_client
 do_request_impl(Node, RestSubpath, Method, Headers, Body) ->
-    CaCertsDir = rpc:call(Node, oz_plugin, get_cacerts_dir, []),
-    CaCerts = rpc:call(Node, cert_utils, load_ders_in_dir, [CaCertsDir]),
+    CaCerts = rpc:call(Node, gui_listener, get_cert_chain, []),
     Result = http_client:request(
         Method,
         cdmi_endpoint(Node) ++ RestSubpath,

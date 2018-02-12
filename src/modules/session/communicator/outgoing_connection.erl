@@ -432,7 +432,7 @@ socket_send(#state{transport = Transport, socket = Socket}, Data) ->
     Port :: non_neg_integer(), Transport :: atom(),
     Timeout :: non_neg_integer()) -> #state{} | no_return().
 init_provider_conn(SessionId, ProviderId, Hostname, Port, Transport, Timeout) ->
-    CaCerts = oneprovider:get_ca_certs(),
+    CaCerts = oneprovider:trusted_ca_certs(),
     SecureFlag = application:get_env(?APP_NAME, interprovider_connections_security, true),
     SslOpts = [{cacerts, CaCerts}, {secure, SecureFlag}],
 

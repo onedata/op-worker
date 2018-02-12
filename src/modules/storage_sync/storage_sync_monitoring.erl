@@ -533,7 +533,9 @@ init_counters() ->
         {ok, SpaceIds} ->
             init_counters(SpaceIds);
         {error, Reason} ->
-            ?error_stacktrace("Unable to start storage_sync counters due to: ~p", [Reason])
+            ?error("Unable to start storage_sync counters due to: ~p", [
+                {error, Reason}
+            ])
     end.
 
 %%-------------------------------------------------------------------

@@ -146,8 +146,8 @@ before_init([]) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec on_cluster_initialized(Nodes :: [node()]) -> Result :: ok | {error, Reason :: term()}.
-on_cluster_initialized(Nodes) ->
-    maybe_generate_web_cert(Nodes).
+on_cluster_initialized(_Nodes) ->
+    ok.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -160,7 +160,7 @@ on_cluster_initialized(Nodes) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
 handle_cast(update_subdomain_delegation_ips, State) ->
-    % This cast will be usually used only after aquiring connection
+    % This cast will be usually used only after acquiring connection
     % to onezone in order to send current cluster IPs
     case provider_logic:update_subdomain_delegation_ips() of
         ok ->
@@ -224,65 +224,3 @@ get_cluster_ips() ->
 
     {Responses, []} = rpc:multicall(Nodes, oz_providers, check_ip_address, [none]),
     lists:map(fun({ok, IP}) -> IP end, Responses).
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Generates a new test web server cert if none is found under expected path,
-%% given that this option is enabled in env config. The new cert is then
-%% distributed among cluster nodes. The procedure is run within critical section
-%% to avoid race conditions across multiple nodes.
-%% @end
-%%--------------------------------------------------------------------
--spec maybe_generate_web_cert(Nodes :: [node()]) -> ok.
-maybe_generate_web_cert(Nodes) ->
-    critical_section:run(oz_web_cert, fun () -> maybe_generate_web_cert_unsafe(Nodes) end).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Generates a new test web server cert if none is found under expected path,
-%% given that this option is enabled in env config. The new cert is then
-%% distributed among cluster nodes.
-%% Should not be called in parallel to prevent race conditions.
-%% @end
-%%--------------------------------------------------------------------
--spec maybe_generate_web_cert_unsafe(ClusterNodes :: [node()]) -> ok.
-maybe_generate_web_cert_unsafe(ClusterNodes) ->
-    GenerateIfAbsent = application:get_env(
-        ?APP_NAME, generate_web_cert_if_absent, false
-    ),
-    {ok, WebKeyPath} = application:get_env(?APP_NAME, web_key_file),
-    {ok, WebCertPath} = application:get_env(?APP_NAME, web_cert_file),
-    {ok, WebChainPath} = application:get_env(?APP_NAME, web_cert_chain_file),
-
-    CertExists = filelib:is_regular(WebKeyPath) andalso
-        filelib:is_regular(WebCertPath),
-    case GenerateIfAbsent andalso not CertExists of
-        false ->
-            ok;
-        true ->
-            % Both key and cert are expected in the same file
-            {ok, CAPath} = application:get_env(?APP_NAME, test_web_cert_ca_path),
-            {ok, Hostname} = application:get_env(?APP_NAME, test_web_cert_domain),
-            cert_utils:create_signed_webcert(
-                WebKeyPath, WebCertPath, Hostname, CAPath, CAPath
-            ),
-            ?warning(
-                "Web server cert not found (~s). Generated a new cert for "
-                "hostname '~s'. Use only for test purposes.",
-                [WebCertPath, Hostname]
-            ),
-            OtherWorkers = ClusterNodes -- [node()],
-            {ok, Key} = file:read_file(WebKeyPath),
-            {ok, Cert} = file:read_file(WebCertPath),
-            {ok, Chain} = file:read_file(CAPath),
-            ok = utils:save_file_on_hosts(OtherWorkers, WebKeyPath, Key),
-            ok = utils:save_file_on_hosts(OtherWorkers, WebCertPath, Cert),
-            ok = utils:save_file_on_hosts(OtherWorkers, WebChainPath, Chain),
-            ?info("Synchronized the new web server cert across all nodes")
-    end.

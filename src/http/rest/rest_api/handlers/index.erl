@@ -107,7 +107,7 @@ delete_resource(Req, State) ->
 %% **Get list of indexes for space**
 %% &#x60;&#x60;&#x60;bash
 %% curl --tlsv1.2 -H \&quot;X-Auth-Token: $TOKEN\&quot; -X GET \\
-%% https://$HOST:8443/api/v1/oneprovider/index/f209c965-e212-4149-af72-860faea4187a
+%% https://$HOST:443/api/v1/oneprovider/index/f209c965-e212-4149-af72-860faea4187a
 %%
 %%
 %% function(x) {
@@ -144,7 +144,7 @@ get_index(Req, State) ->
 %% curl --tlsv1.2 -H \&quot;X-Auth-Token: $TOKEN\&quot; -X PUT \\
 %% -H \&quot;Content-type: application/javascript\&quot; \\
 %% -d \&quot;@./my_improved_index1.js\&quot; \\
-%% https://$HOST:8443/api/v1/oneprovider/index/f209c965-e212-4149-af72-860faea4187a
+%% https://$HOST:443/api/v1/oneprovider/index/f209c965-e212-4149-af72-860faea4187a
 %% &#x60;&#x60;&#x60;
 %%
 %% HTTP method: PUT
