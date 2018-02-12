@@ -25,7 +25,7 @@
 
 %% API
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
-    code_change/3]).
+    code_change/3, start_link/1]).
 
 -export([notify/3, compute_request_hash/1, start_queue_loop/1, queue_loop/3]).
 
@@ -34,6 +34,14 @@
 %%% API
 %%%===================================================================
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Starts gateway gen_server.
+%% @end
+%%-------------------------------------------------------------------
+-spec start_link(rtransfer:config()) -> {ok, pid()}.
+start_link(RtransferOpts) ->
+    gen_server2:start_link({local, ?GATEWAY}, ?MODULE, RtransferOpts, []).
 
 %%--------------------------------------------------------------------
 %% @doc

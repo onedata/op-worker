@@ -21,9 +21,6 @@
 -define(RTRANSFER_NUM_ACCEPTORS, 10).
 
 %% API
--export([start_rtransfer/0]).
-
-%% Test API
 -export([rtransfer_opts/0]).
 
 -define(STREAMS_NUM, application:get_env(?APP_NAME, streams_number, 10)).
@@ -31,15 +28,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Start rtransfer server
-%% @end
-%%--------------------------------------------------------------------
--spec start_rtransfer() -> {ok, pid()}.
-start_rtransfer() ->
-    {ok, _} = rtransfer:start_link(rtransfer_opts()).
 
 %%--------------------------------------------------------------------
 %% @doc

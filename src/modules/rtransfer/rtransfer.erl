@@ -66,11 +66,20 @@ fun((Ref :: ref(),
 
 %% API
 -export_type([ref/0, opt/0, notify_fun/0, on_complete_fun/0]).
--export([start_link/1, prepare_request/4, fetch/3, cancel/1]).
+-export([start_link/0, start_link/1, prepare_request/4, fetch/3, cancel/1]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%-------------------------------------------------------------------
+%% @doc
+%% @equiv start_link(rtransfer_config:rtransfer_opts()).
+%% @end
+%%-------------------------------------------------------------------
+-spec start_link() -> {ok, pid()}.
+start_link() ->
+    start_link(rtransfer_config:rtransfer_opts()).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -101,8 +110,7 @@ fun((Ref :: ref(),
 %%--------------------------------------------------------------------
 -spec start_link(RtransferOpts :: [opt()]) -> {ok, pid()}.
 start_link(RtransferOpts) ->
-    gen_server2:start({global, rtransfer}, rtransfer_server, RtransferOpts, []),
-    gen_server2:start_link({local, gateway}, gateway, RtransferOpts, []).
+    rtransfer_server_sup:start_link(RtransferOpts).
 
 %%--------------------------------------------------------------------
 %% @doc
