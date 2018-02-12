@@ -411,7 +411,7 @@ remote_driver_test(Config) ->
     ])).
 
 db_sync_with_delays_test(Config) ->
-    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {4,0,0,2}, 180, 100, 100).
+    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {4,0,0,2}, 180, 200, 200).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
