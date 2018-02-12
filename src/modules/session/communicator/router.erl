@@ -434,7 +434,7 @@ get_heartbeat_fun(MsgId, Sock, Transport) ->
             fun() -> ok end;
         _ ->
             fun() ->
-                connection:send_server_message(Sock, Transport,
+                outgoing_connection:send_server_message(Sock, Transport,
                     #server_message{message_id = MsgId,
                         message_body = #processing_status{code = 'IN_PROGRESS'}
                     }),
