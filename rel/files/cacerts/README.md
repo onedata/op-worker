@@ -1,6 +1,6 @@
 # CA certs directory
 
-This directory is used too add trusted certificates to the application.
+This directory is used to add trusted certificates to the application.
 By default, a standard CA bundle is used, so in most cases there
 is no need to add additional certificates. If your environment uses its
 own certification, your should add your trusted chain here.
