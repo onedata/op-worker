@@ -81,7 +81,7 @@
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
     case application:get_env(?APP_NAME, start_rtransfer_on_init) of
-        {ok, true} -> rtransfer_config:start_rtransfer();
+        {ok, true} -> rtransfer:start_link();
         _ -> ok
     end,
 
