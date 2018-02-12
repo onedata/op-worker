@@ -34,8 +34,8 @@
 %% Starts rtransfer_server_sup supervisor
 %% @end
 %%--------------------------------------------------------------------
--spec(start_link([rtransfer:opt()]) ->
-    {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
+-spec start_link([rtransfer:opt()]) ->
+    {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
 start_link(RtransferOpts) ->
     supervisor:start_link({local, ?RTRANSFER_SUPERVISOR}, ?MODULE, RtransferOpts).
 
@@ -52,10 +52,8 @@ start_link(RtransferOpts) ->
 %% specifications.
 %% @end
 %%--------------------------------------------------------------------
--spec(init([rtransfer:opt()]) ->
-    {ok, {supervisor:sup_flags(), [supervisor:child_spec()]}} |
-    ignore |
-    {error, Reason :: term()}).
+-spec init([rtransfer:opt()]) ->
+    {ok, {supervisor:sup_flags(), [supervisor:child_spec()]}} | ignore.
 init(RtransferOpts) ->
     SupFlags = #{
         strategy => one_for_all,
