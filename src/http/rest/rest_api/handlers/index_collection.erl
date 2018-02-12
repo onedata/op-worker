@@ -90,7 +90,7 @@ content_types_accepted(Req, State) ->
 %% **Get list of indexes for space**
 %% &#x60;&#x60;&#x60;bash
 %% curl --tlsv1.2 -H \&quot;X-Auth-Token: $TOKEN\&quot; -X GET \\
-%% https://$HOST:8443/api/v1/oneprovider/index?space_id&#x3D;2e462492-a4d7-46b9-8641-abfdf50f06af
+%% https://$HOST:443/api/v1/oneprovider/index?space_id&#x3D;2e462492-a4d7-46b9-8641-abfdf50f06af
 %%
 %% [
 %% {
@@ -144,7 +144,7 @@ list_indexes(Req, State) ->
 %% curl --tlsv1.2 -H \&quot;X-Auth-Token: $TOKEN\&quot; -X POST \\
 %% -H \&quot;Content-type: application/json\&quot; \\
 %% -d \&quot;@./my_index_1.js\&quot;
-%% https://$HOST:8443/api/v1/oneprovider/index?space_id&#x3D;7f85c115-8631-4602-b7d5-47cd969280a2&amp;name&#x3D;MyIndex1
+%% https://$HOST:443/api/v1/oneprovider/index?space_id&#x3D;7f85c115-8631-4602-b7d5-47cd969280a2&amp;name&#x3D;MyIndex1
 %% &#x60;&#x60;&#x60;
 %%
 %% HTTP method: POST

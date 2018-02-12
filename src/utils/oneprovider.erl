@@ -27,7 +27,7 @@
 %% API
 -export([get_node_hostname/0, get_node_ip/0, get_rest_endpoint/1]).
 -export([get_id/0, get_id_or_undefined/0, is_self/1, is_registered/0]).
--export([get_ca_certs/0]).
+-export([trusted_ca_certs/0]).
 -export([get_oz_domain/0, get_oz_url/0]).
 -export([get_oz_login_page/0, get_oz_logout_page/0, get_oz_providers_page/0]).
 -export([is_connected_to_oz/0, on_connection_to_oz/0]).
@@ -129,8 +129,8 @@ is_registered() ->
 %% Returns CA certs trusted by this provider in DER format.
 %% @end
 %%--------------------------------------------------------------------
--spec get_ca_certs() -> [DerCert :: binary()].
-get_ca_certs() ->
+-spec trusted_ca_certs() -> [DerCert :: binary()].
+trusted_ca_certs() ->
     cert_utils:load_ders_in_dir(oz_plugin:get_cacerts_dir()).
 
 

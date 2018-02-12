@@ -449,7 +449,6 @@ end_per_testcase(_Case, Config) ->
         end, [dbsync_in_stream, dbsync_out_stream])
     end, ?config(spaces, Config)),
     initializer:unmock_provider_ids(Workers),
-    initializer:unmock_oz_version(Workers),
     test_utils:mock_unload(Worker, [
         dbsync_changes, dbsync_communicator, provider_logic
     ]).
