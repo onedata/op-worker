@@ -5,7 +5,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module is responsible for maintaining graph sync connection to OneZone
+%%% This module is responsible for maintaining graph sync connection to Onezone
 %%% and handling incoming push messages Whenever the connection dies, this
 %%% gen_server is killed and new one is instantiated by gs_worker.
 %%% @end
@@ -18,6 +18,7 @@
 -include("graph_sync/provider_graph_sync.hrl").
 -include("proto/common/credentials.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("http/http_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/api_errors.hrl").
@@ -72,7 +73,7 @@ start_link() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Handles a Graph Sync request by contacting OneZone or serving the response
+%% Handles a Graph Sync request by contacting Onezone or serving the response
 %% from cache if possible. Uses default client (this provider).
 %% @end
 %%--------------------------------------------------------------------
@@ -83,7 +84,7 @@ request(Req) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Handles a Graph Sync request by contacting OneZone or serving the response
+%% Handles a Graph Sync request by contacting Onezone or serving the response
 %% from cache if possible.
 %% @end
 %%--------------------------------------------------------------------
@@ -147,11 +148,11 @@ init([]) ->
             {stop, normal};
         {ok, ClientRef, #gs_resp_handshake{identity = {provider, _}}} ->
             yes = global:register_name(?GS_CLIENT_WORKER_GLOBAL_NAME, self()),
-            ?info("Started connection to OneZone: ~p", [ClientRef]),
+            ?info("Started connection to Onezone: ~p", [ClientRef]),
             oneprovider:on_connection_to_oz(),
             {ok, #state{client_ref = ClientRef}};
         {error, _} = Error ->
-            ?warning("Cannot start connection to OneZone: ~p", [Error]),
+            ?warning("Cannot start connection to Onezone: ~p", [Error]),
             {stop, normal}
     end.
 
@@ -206,7 +207,7 @@ handle_cast(Request, #state{} = State) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
 handle_info({'EXIT', Pid, Reason}, #state{client_ref = Pid} = State) ->
-    ?warning("Connection to OneZone lost, reason: ~p", [Reason]),
+    ?warning("Connection to Onezone lost, reason: ~p", [Reason]),
     {stop, normal, State};
 handle_info(Info, #state{} = State) ->
     ?log_bad_request(Info),
@@ -261,15 +262,17 @@ process_push_message(#gs_push_graph{gri = GRI, data = Data, change_type = update
 -spec start_gs_connection() ->
     {ok, gs_client:client_ref(), gs_protocol:handshake_resp()} | gs_protocol:error().
 start_gs_connection() ->
-    Port = ?GS_CHANNEL_PORT,
-    Address = "wss://" ++ oneprovider:get_oz_domain() ++
-        ":" ++ integer_to_list(Port) ++ ?GS_CHANNEL_PATH,
-
-    CaCerts = oneprovider:get_ca_certs(),
-    Opts = [{cacerts, CaCerts}],
-    {ok, ProviderMacaroon} = provider_auth:get_auth_macaroon(),
-
     try
+        provider_logic:assert_zone_compatibility(),
+
+        Port = ?GS_CHANNEL_PORT,
+        Address = "wss://" ++ oneprovider:get_oz_domain() ++
+            ":" ++ integer_to_list(Port) ++ ?GS_CHANNEL_PATH,
+
+        CaCerts = oneprovider:get_ca_certs(),
+        Opts = [{cacerts, CaCerts}],
+        {ok, ProviderMacaroon} = provider_auth:get_auth_macaroon(),
+
         gs_client:start_link(
             Address, {macaroon, ProviderMacaroon}, [?GS_PROTOCOL_VERSION],
             fun process_push_message/1, Opts

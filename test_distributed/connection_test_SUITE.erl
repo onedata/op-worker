@@ -17,7 +17,7 @@
 -include("proto/oneclient/event_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
--include("proto/oneclient/handshake_messages.hrl").
+-include("proto/common/handshake_messages.hrl").
 -include("proto/oneclient/diagnostic_messages.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -35,6 +35,8 @@
 -export([
     provider_connection_test/1,
     token_connection_test/1,
+    compatible_client_connection_test/1,
+    incompatible_client_connection_test/1,
     protobuf_msg_test/1,
     multi_message_test/1,
     client_send_test/1,
@@ -63,6 +65,8 @@
     timeouts_test,
     provider_connection_test,
     token_connection_test,
+    compatible_client_connection_test,
+    incompatible_client_connection_test,
     protobuf_msg_test,
     multi_message_test,
     client_send_test,
@@ -248,6 +252,59 @@ token_connection_test(Config) ->
     {ok, {Sock, _}} = connect_via_token(Worker1),
     ok = ssl:close(Sock).
 
+compatible_client_connection_test(Config) ->
+    % given
+    [Node | _] = ?config(op_worker_nodes, Config),
+    {ok, [Version | _]} = rpc:call(
+        Node, application, get_env, [?APP_NAME, compatible_oc_versions]
+    ),
+
+    TokenAuthMessage = #'ClientMessage'{message_body = {client_handshake_request,
+        #'ClientHandshakeRequest'{session_id = crypto:strong_rand_bytes(10),
+            token = #'Token'{value = ?MACAROON}, version = list_to_binary(Version)
+        }
+    }},
+    TokenAuthMessageRaw = messages:encode_msg(TokenAuthMessage),
+    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, gui_https_port),
+
+    % when
+    {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),
+    ok = ssl:send(Sock, TokenAuthMessageRaw),
+
+    % then
+    #'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{
+        status = Status
+    }}} = ?assertMatch(#'ServerMessage'{message_body = {handshake_response, _}},
+        receive_server_message()
+    ),
+    ?assertMatch('OK', Status),
+    ok.
+
+incompatible_client_connection_test(Config) ->
+    % given
+    [Node | _] = ?config(op_worker_nodes, Config),
+
+    TokenAuthMessage = #'ClientMessage'{message_body = {client_handshake_request,
+        #'ClientHandshakeRequest'{session_id = crypto:strong_rand_bytes(10),
+            token = #'Token'{value = ?MACAROON}, version = <<"16.07-rc2">>
+        }
+    }},
+    TokenAuthMessageRaw = messages:encode_msg(TokenAuthMessage),
+    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, gui_https_port),
+
+    % when
+    {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),
+    ok = ssl:send(Sock, TokenAuthMessageRaw),
+
+    % then
+    #'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{
+        status = Status
+    }}} = ?assertMatch(#'ServerMessage'{message_body = {handshake_response, _}},
+        receive_server_message()
+    ),
+    ?assertMatch('INCOMPATIBLE_VERSION', Status),
+    ok.
+
 protobuf_msg_test(Config) ->
     % given
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
@@ -270,7 +327,7 @@ protobuf_msg_test(Config) ->
     {ok, {Sock, _}} = connect_via_token(Worker1),
     ok = ssl:send(Sock, RawMsg),
 
-% then
+    % then
     ok = ssl:close(Sock).
 
 multi_message_test(Config) ->
@@ -636,10 +693,16 @@ python_client_test_base(Config) ->
     Packet = #'ClientMessage'{message_body = {ping, #'Ping'{data = Data}}},
     PacketRaw = messages:encode_msg(Packet),
 
+    {ok, [Version | _]} = rpc:call(
+        Worker1, application, get_env, [?APP_NAME, compatible_oc_versions]
+    ),
+
     HandshakeMessage = #'ClientMessage'{message_body = {client_handshake_request,
-        #'ClientHandshakeRequest'{session_id = <<"session_id">>, token = #'Token'{
-            value = ?MACAROON
-        }}
+        #'ClientHandshakeRequest'{
+            session_id = <<"session_id">>,
+            token = #'Token'{value = ?MACAROON},
+            version = list_to_binary(Version)
+        }
     }},
     HandshakeMessageRaw = messages:encode_msg(HandshakeMessage),
 
@@ -659,7 +722,7 @@ python_client_test_base(Config) ->
     file:write_file(MessagePath, PacketRaw),
     file:write_file(HandshakeMsgPath, HandshakeMessageRaw),
     Host = utils:get_host(Worker1),
-    {ok, Port} = test_utils:get_env(Worker1, ?APP_NAME, protocol_handler_port),
+    {ok, Port} = test_utils:get_env(Worker1, ?APP_NAME, gui_https_port),
 
     % when
     T1 = erlang:monotonic_time(milli_seconds),
@@ -729,6 +792,10 @@ init_per_testcase(provider_connection_test, Config) ->
             ?CORRECT_NONCE -> ok;
             ?INCORRECT_NONCE -> ?ERROR_UNAUTHORIZED
         end
+    end),
+
+    test_utils:mock_expect(Workers, provider_logic, assert_zone_compatibility, fun() ->
+        ok
     end),
 
     init_per_testcase(default, Config);
@@ -828,6 +895,7 @@ end_per_testcase(timeouts_test, Config) ->
 end_per_testcase(default, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:unmock_provider_ids(Workers),
+    initializer:unmock_oz_version(Workers),
     test_utils:mock_validate_and_unload(Workers, [user_identity]),
     ssl:stop();
 
@@ -861,23 +929,26 @@ connect_via_token(Node, SocketOpts) ->
     {ok, {Sock :: term(), SessId :: session:id()}}.
 connect_via_token(Node, SocketOpts, SessId) ->
     % given
+    {ok, [Version | _]} = rpc:call(
+        Node, application, get_env, [?APP_NAME, compatible_oc_versions]
+    ),
+
     TokenAuthMessage = #'ClientMessage'{message_body = {client_handshake_request,
-        #'ClientHandshakeRequest'{session_id = SessId, token = #'Token'{
-            value = ?MACAROON
-        }}
+        #'ClientHandshakeRequest'{
+            session_id = SessId,
+            token = #'Token'{value = ?MACAROON},
+            version = list_to_binary(Version)
+        }
     }},
     TokenAuthMessageRaw = messages:encode_msg(TokenAuthMessage),
     ActiveOpt = case proplists:get_value(active, SocketOpts) of
         undefined -> [];
         Other -> [{active, Other}]
     end,
-    NewSocketOpts = proplists:delete(active, SocketOpts),
-    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, protocol_handler_port),
+    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, gui_https_port),
 
     % when
-    {ok, Sock} = (catch ssl:connect(utils:get_host(Node), Port, [binary,
-        {packet, 4}, {active, once}, {reuse_sessions, false} | NewSocketOpts
-    ], timer:minutes(1))),
+    {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),
     ok = ssl:send(Sock, TokenAuthMessageRaw),
 
     % then
@@ -891,20 +962,15 @@ connect_via_token(Node, SocketOpts, SessId) ->
     {ok, {Sock, SessId}}.
 
 
-
 connect_as_provider(Node, ProviderId, Nonce) ->
-    SocketOpts = [{active, true}],
     TokenAuthMessage = #'ClientMessage'{message_body = {provider_handshake_request,
         #'ProviderHandshakeRequest'{provider_id = ProviderId, nonce = Nonce}
     }},
     TokenAuthMessageRaw = messages:encode_msg(TokenAuthMessage),
-    NewSocketOpts = proplists:delete(active, SocketOpts),
-    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, protocol_handler_port),
+    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, gui_https_port),
 
     % when
-    {ok, Sock} = (catch ssl:connect(utils:get_host(Node), Port, [binary,
-        {packet, 4}, {active, once}, {reuse_sessions, false} | NewSocketOpts
-    ], timer:minutes(1))),
+    {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),
     ok = ssl:send(Sock, TokenAuthMessageRaw),
 
     % then
@@ -913,6 +979,20 @@ connect_as_provider(Node, ProviderId, Nonce) ->
     } = receive_server_message(),
     ok = ssl:close(Sock),
     {ok, HandshakeResp}.
+
+
+connect_and_upgrade_proto(Hostname, Port) ->
+    {ok, Sock} = (catch ssl:connect(Hostname, Port, [binary,
+        {active, once}, {reuse_sessions, false}
+    ], timer:minutes(1))),
+    ssl:send(Sock, connection:protocol_upgrade_request(list_to_binary(Hostname))),
+    receive {ssl, Sock, Data} ->
+        ?assert(connection:verify_protocol_upgrade_response(Data)),
+        ssl:setopts(Sock, [{active, once}, {packet, 4}]),
+        {ok, Sock}
+    after timer:minutes(1) ->
+        exit(timeout)
+    end.
 
 
 %%--------------------------------------------------------------------

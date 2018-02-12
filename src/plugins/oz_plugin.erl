@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements oz_plugin_behaviour in order
-%%% to customize connection settings to OneZone.
+%%% to customize connection settings to Onezone.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(oz_plugin).
@@ -17,7 +17,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("proto/oneclient/handshake_messages.hrl").
+-include("proto/common/handshake_messages.hrl").
 
 %% oz_plugin_behaviour API
 -export([get_oz_url/0, get_oz_rest_port/0, get_oz_rest_api_prefix/0, get_oz_rest_endpoint/1]).
@@ -30,7 +30,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Should return a OneZone URL.
+%% Should return a Onezone URL.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_oz_url() -> string().

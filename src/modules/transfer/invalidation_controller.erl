@@ -21,7 +21,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([on_new_transfer_doc/1, on_transfer_doc_change/1, finish_transfer/1, failed_transfer/2]).
+-export([on_new_transfer_doc/1, on_transfer_doc_change/1, finish_invalidation/1, failed_invalidation/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -71,7 +71,8 @@ on_new_transfer_doc(_ExistingTransfer) ->
 on_transfer_doc_change(Transfer = #document{value = #transfer{
     status = TransferStatus,
     source_provider_id = SourceProviderId,
-    invalidate_source_replica = true
+    invalidate_source_replica = true,
+    invalidation_status = scheduled
 }}) when TransferStatus == completed orelse TransferStatus == skipped ->
     case oneprovider:is_self(SourceProviderId) of
         true ->
@@ -87,9 +88,9 @@ on_transfer_doc_change(_ExistingTransfer) ->
 %% Stops invalidation_controller process and marks invalidation as completed.
 %% @end
 %%-------------------------------------------------------------------
--spec finish_transfer(pid()) -> ok.
-finish_transfer(Pid) ->
-    gen_server2:cast(Pid, finish_transfer),
+-spec finish_invalidation(pid()) -> ok.
+finish_invalidation(Pid) ->
+    gen_server2:cast(Pid, finish_invalidation),
     ok.
 
 %%-------------------------------------------------------------------
@@ -97,9 +98,9 @@ finish_transfer(Pid) ->
 %% Stops transfer_controller process and marks transfer as failed.
 %% @end
 %%-------------------------------------------------------------------
--spec failed_transfer(pid(), term()) -> ok.
-failed_transfer(Pid, Error) ->
-    gen_server2:cast(Pid, {failed_transfer, Error}).
+-spec failed_invalidation(pid(), term()) -> ok.
+failed_invalidation(Pid, Error) ->
+    gen_server2:cast(Pid, {failed_invalidation, Error}).
 
 
 %%%===================================================================
@@ -116,7 +117,10 @@ failed_transfer(Pid, Error) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
 init([SessionId, TransferId, FileGuid, Callback]) ->
-    ok = gen_server2:cast(self(), start_transfer),
+    {ok, _} = transfer:update(TransferId,fun(T) ->
+        {ok, T#transfer{pid = list_to_binary(pid_to_list(self()))}}
+    end),
+    ok = gen_server2:cast(self(), start_invalidation),
     {ok, #state{
         transfer_id = TransferId,
         session_id = SessionId,
@@ -153,7 +157,7 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_cast(start_transfer, State = #state{
+handle_cast(start_invalidation, State = #state{
     transfer_id = TransferId,
     session_id = SessionId,
     file_guid = FileGuid
@@ -172,14 +176,15 @@ handle_cast(start_transfer, State = #state{
             transfer:mark_failed_invalidation(TransferId),
             {stop, Reason, State}
     end;
-handle_cast(finish_transfer, State = #state{
+handle_cast(finish_invalidation, State = #state{
     transfer_id = TransferId,
+    space_id = SpaceId,
     callback = Callback
 }) ->
-    transfer:mark_completed_invalidation(TransferId),
+    transfer:mark_completed_invalidation(TransferId, SpaceId),
     notify_callback(Callback),
     {stop, normal, State};
-handle_cast({failed_transfer, Error}, State = #state{
+handle_cast({failed_invalidation, Error}, State = #state{
     file_guid = FileGuid,
     transfer_id = TransferId
 }) ->

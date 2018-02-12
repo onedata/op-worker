@@ -25,6 +25,7 @@
 -export([handle_cast/2]).
 -export([check_node_ip_address/0, renamed_models/0]).
 -export([modules_with_exometer/0, exometer_reporters/0]).
+-export([get_cluster_ips/0]).
 
 -type model() :: datastore_model:model().
 -type record_version() :: datastore_model:record_version().
@@ -69,8 +70,7 @@ db_nodes() ->
 %%--------------------------------------------------------------------
 -spec listeners() -> Listeners :: [atom()].
 listeners() -> node_manager:cluster_worker_listeners() ++ [
-    gui_listener,
-    protocol_listener
+    gui_listener
 ].
 
 %%--------------------------------------------------------------------
@@ -79,7 +79,7 @@ listeners() -> node_manager:cluster_worker_listeners() ++ [
 %% @end
 %%--------------------------------------------------------------------
 -spec modules_with_args() -> Models :: [{atom(), [any()]}].
-modules_with_args() -> [
+modules_with_args() -> filter_disabled_workers([
     {session_manager_worker, [
         {supervisor_flags, session_manager_worker:supervisor_flags()},
         {supervisor_children_spec, session_manager_worker:supervisor_children_spec()}
@@ -97,7 +97,21 @@ modules_with_args() -> [
     ]},
     {fslogic_deletion_worker, []},
     {space_sync_worker, []}
-].
+]).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Filters node_manager_plugins that were turned off in app.config
+%% @end
+%%-------------------------------------------------------------------
+-spec filter_disabled_workers([{atom(), [any()]}]) -> [{atom(), [any()]}].
+filter_disabled_workers(PluginsConfig) ->
+    DisabledWorkers = application:get_env(?APP_NAME, disabled_workers, []),
+    DisabledWorkersSet = sets:from_list(DisabledWorkers),
+    lists:filter(fun({Plugin, _PluginConfig}) ->
+        not sets:is_element(Plugin, DisabledWorkersSet)
+    end, PluginsConfig).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -152,7 +166,7 @@ handle_cast(update_subdomain_delegation_ips, State) ->
         ok ->
             ok;
         error ->
-            % Kill the connection to OneZone in case provider IPs cannot be
+            % Kill the connection to Onezone in case provider IPs cannot be
             % updated, which will cause a reconnection and update retry.
             gen_server2:call({global, ?GS_CLIENT_WORKER_GLOBAL_NAME},
                 {terminate, normal})
@@ -185,7 +199,8 @@ check_node_ip_address() ->
 %%--------------------------------------------------------------------
 -spec modules_with_exometer() -> list().
 modules_with_exometer() ->
-    [storage_sync_monitoring, fslogic_worker, helpers, session].
+    [storage_sync_monitoring, fslogic_worker, helpers, session, router,
+        event_stream, event].
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -195,6 +210,20 @@ modules_with_exometer() ->
 -spec exometer_reporters() -> list().
 exometer_reporters() ->
     [{exometer_report_rrd_ets, storage_sync_monitoring}].
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get up to date information about IPs in the cluster.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_cluster_ips() -> [binary()] | no_return().
+get_cluster_ips() ->
+    {ok, NodesIPs} = node_manager:get_cluster_nodes_ips(),
+    % discard received IPs - they might be wrongly set before Onezone domain is known
+    {Nodes, _} = lists:unzip(NodesIPs),
+
+    {Responses, []} = rpc:multicall(Nodes, oz_providers, check_ip_address, [none]),
+    lists:map(fun({ok, IP}) -> IP end, Responses).
 
 %%%===================================================================
 %%% Internal functions
@@ -229,6 +258,8 @@ maybe_generate_web_cert_unsafe(ClusterNodes) ->
     ),
     {ok, WebKeyPath} = application:get_env(?APP_NAME, web_key_file),
     {ok, WebCertPath} = application:get_env(?APP_NAME, web_cert_file),
+    {ok, WebChainPath} = application:get_env(?APP_NAME, web_cert_chain_file),
+
     CertExists = filelib:is_regular(WebKeyPath) andalso
         filelib:is_regular(WebCertPath),
     case GenerateIfAbsent andalso not CertExists of
@@ -249,7 +280,9 @@ maybe_generate_web_cert_unsafe(ClusterNodes) ->
             OtherWorkers = ClusterNodes -- [node()],
             {ok, Key} = file:read_file(WebKeyPath),
             {ok, Cert} = file:read_file(WebCertPath),
+            {ok, Chain} = file:read_file(CAPath),
             ok = utils:save_file_on_hosts(OtherWorkers, WebKeyPath, Key),
             ok = utils:save_file_on_hosts(OtherWorkers, WebCertPath, Cert),
+            ok = utils:save_file_on_hosts(OtherWorkers, WebChainPath, Chain),
             ?info("Synchronized the new web server cert across all nodes")
     end.

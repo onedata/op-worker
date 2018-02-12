@@ -117,17 +117,17 @@ get_user_id_on_posix_storage(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Result = rpc:call(Worker, reverse_luma, get_user_id,
         [<<"0">>, ?STORAGE_DOC(?STORAGE_ID, ?STORAGE)]),
-    ExpectedUserId = datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
+    ExpectedSubjectId = datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
         [?TEST_PROVIDER_ID, ?TEST_USER_ID])),
-    ?assertEqual({ok, ExpectedUserId}, Result).
+    ?assertEqual({ok, ExpectedSubjectId}, Result).
 
 get_user_id_on_posix_storage_by_acl_username(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Result = rpc:call(Worker, reverse_luma, get_user_id_by_name,
         [<<"user@nfsdomain.org">>, ?STORAGE_DOC(?STORAGE_ID, ?STORAGE)]),
-    ExpectedUserId = datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
+    ExpectedSubjectId = datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
         [?TEST_PROVIDER_ID, ?TEST_USER_ID])),
-    ?assertEqual({ok, ExpectedUserId}, Result).
+    ?assertEqual({ok, ExpectedSubjectId}, Result).
 
 get_user_id_on_posix_storage_should_return_root_user_id_when_reverse_luma_is_disabled(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -170,16 +170,16 @@ get_user_id_by_acl_username_should_fail_with_not_supported_storage_error(Config)
 get_user_id_on_posix_storage_should_query_reverse_luma_once(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, reverse_luma_proxy, [passthrough]),
-    ExpectedUserId = datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
+    ExpectedSubjectId = datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
         [?TEST_PROVIDER_ID, ?TEST_USER_ID])),
 
     Result = rpc:call(Worker, reverse_luma, get_user_id,
         [<<"0">>, ?STORAGE_DOC(?STORAGE_ID, ?STORAGE)]),
-    ?assertEqual({ok, ExpectedUserId}, Result),
+    ?assertEqual({ok, ExpectedSubjectId}, Result),
 
     Result2 = rpc:call(Worker, reverse_luma, get_user_id,
         [<<"0">>, ?STORAGE_DOC(?STORAGE_ID, ?STORAGE)]),
-    ?assertEqual({ok, ExpectedUserId}, Result2),
+    ?assertEqual({ok, ExpectedSubjectId}, Result2),
 
     test_utils:mock_assert_num_calls(Worker, reverse_luma_proxy, get_user_id,
         ['_', '_', '_', '_'], 1).
@@ -187,16 +187,16 @@ get_user_id_on_posix_storage_should_query_reverse_luma_once(Config) ->
 get_user_id_on_posix_storage_by_acl_username_should_query_reverse_luma_once(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, reverse_luma_proxy, [passthrough]),
-    ExpectedUserId = datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
+    ExpectedSubjectId = datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
         [?TEST_PROVIDER_ID, ?TEST_USER_ID])),
 
     Result = rpc:call(Worker, reverse_luma, get_user_id_by_name,
         [<<"user@nfsdomain.org">>, ?STORAGE_DOC(?STORAGE_ID, ?STORAGE)]),
-    ?assertEqual({ok, ExpectedUserId}, Result),
+    ?assertEqual({ok, ExpectedSubjectId}, Result),
 
     Result2 = rpc:call(Worker, reverse_luma, get_user_id_by_name,
         [<<"user@nfsdomain.org">>, ?STORAGE_DOC(?STORAGE_ID, ?STORAGE)]),
-    ?assertEqual({ok, ExpectedUserId}, Result2),
+    ?assertEqual({ok, ExpectedSubjectId}, Result2),
 
     test_utils:mock_assert_num_calls(Worker, reverse_luma_proxy, get_user_id_by_name,
         ['_', '_', '_', '_'], 1).
@@ -206,19 +206,19 @@ get_user_id_on_posix_storage_should_query_reverse_luma_twice(Config) ->
     CacheTimeout = 5,
     LumaConfig = ?LUMA_CONFIG(CacheTimeout),
     test_utils:mock_new(Worker, reverse_luma_proxy, [passthrough]),
-    ExpectedUserId = datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
+    ExpectedSubjectId = datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
         [?TEST_PROVIDER_ID, ?TEST_USER_ID])),
 
     Result = rpc:call(Worker, reverse_luma, get_user_id,
         [<<"0">>, ?STORAGE_ID, ?STORAGE(LumaConfig)]),
-    ?assertEqual({ok, ExpectedUserId}, Result),
+    ?assertEqual({ok, ExpectedSubjectId}, Result),
 
     timer:sleep(timer:seconds(CacheTimeout + 1)),
 
     Result2 = rpc:call(Worker, reverse_luma, get_user_id,
         [<<"0">>, ?STORAGE_ID, ?STORAGE(LumaConfig)]),
 
-    ?assertEqual({ok, ExpectedUserId}, Result2),
+    ?assertEqual({ok, ExpectedSubjectId}, Result2),
 
     test_utils:mock_assert_num_calls(Worker, reverse_luma_proxy, get_user_id,
         ['_', '_', '_', '_'], 2).
@@ -228,19 +228,19 @@ get_user_id_on_posix_storage_by_acl_username_should_query_reverse_luma_twice(Con
     CacheTimeout = 5,
     LumaConfig = ?LUMA_CONFIG(CacheTimeout),
     test_utils:mock_new(Worker, reverse_luma_proxy, [passthrough]),
-    ExpectedUserId = datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
+    ExpectedSubjectId = datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
         [?TEST_PROVIDER_ID, ?TEST_USER_ID])),
 
     Result = rpc:call(Worker, reverse_luma, get_user_id_by_name,
         [<<"user@nfsdomain.org">>, ?STORAGE_ID, ?STORAGE(LumaConfig)]),
-    ?assertEqual({ok, ExpectedUserId}, Result),
+    ?assertEqual({ok, ExpectedSubjectId}, Result),
 
     timer:sleep(timer:seconds(CacheTimeout + 1)),
 
     Result2 = rpc:call(Worker, reverse_luma, get_user_id_by_name,
         [<<"user@nfsdomain.org">>, ?STORAGE_ID, ?STORAGE(LumaConfig)]),
 
-    ?assertEqual({ok, ExpectedUserId}, Result2),
+    ?assertEqual({ok, ExpectedSubjectId}, Result2),
 
     test_utils:mock_assert_num_calls(Worker, reverse_luma_proxy, get_user_id_by_name,
         ['_', '_', '_', '_'], 2).
@@ -379,7 +379,7 @@ init_per_testcase(Case, Config) when
     mock_resolve_user_post(Worker,
         {ok, 200, [], str_utils:format_bin("{
         \"idp\": \"~s\",
-        \"userId\": \"~s\"
+        \"subjectId\": \"~s\"
         \}", [?TEST_PROVIDER_ID, ?TEST_USER_ID])}),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
@@ -392,7 +392,7 @@ init_per_testcase(Case, Config) when
     mock_resolve_acl_user_post(Worker,
         {ok, 200, [], str_utils:format_bin("{
         \"idp\": \"~s\",
-        \"userId\": \"~s\"
+        \"subjectId\": \"~s\"
         \}", [?TEST_PROVIDER_ID, ?TEST_USER_ID])}),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
@@ -402,7 +402,7 @@ init_per_testcase(Case = get_user_id_on_posix_storage_should_query_reverse_luma_
     mock_resolve_user_post(Worker,
         {ok, 200, [], str_utils:format_bin("{
         \"idp\": \"~s\",
-        \"userId\": \"~s\"
+        \"subjectId\": \"~s\"
         \}", [?TEST_PROVIDER_ID, ?TEST_USER_ID])}),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
@@ -412,7 +412,7 @@ init_per_testcase(Case = get_user_id_on_posix_storage_by_acl_username_should_que
     mock_resolve_acl_user_post(Worker,
         {ok, 200, [], str_utils:format_bin("{
         \"idp\": \"~s\",
-        \"userId\": \"~s\"
+        \"subjectId\": \"~s\"
         \}", [?TEST_PROVIDER_ID, ?TEST_USER_ID])}),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 

@@ -20,15 +20,15 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start/7, stop/1, get_status/1, get_info/1, get/1, init/0, cleanup/0,
-    decode_pid/1, encode_pid/1, get_controller/1, delete/1]).
+-export([start/7, cancel/1, get_status/1, get_info/1, get/1, init/0, cleanup/0,
+    decode_pid/1, encode_pid/1, get_controller/1, delete_links/3, restart/1, delete/1]).
 -export([mark_active/2, mark_completed/1, mark_failed/1,
-    mark_active_invalidation/1, mark_completed_invalidation/1, mark_failed_invalidation/1,
+    mark_active_invalidation/1, mark_completed_invalidation/2, mark_failed_invalidation/1,
     mark_file_transfer_scheduled/2, mark_file_transfer_finished/2,
     mark_data_transfer_scheduled/2, mark_data_transfer_finished/3,
     for_each_past_transfer/3, for_each_current_transfer/3, restart_unfinished_transfers/1,
     mark_file_invalidation_finished/2, mark_file_invalidation_scheduled/2,
-    mark_cancelled/1, should_continue/1, increase_failed_file_transfers/1]).
+    mark_cancelled/1, should_continue/1, increase_failed_file_transfers/1, mark_cancelled_invalidation/1]).
 -export([list_transfers/2, is_ongoing/1, is_migrating/1, update/2]).
 
 %% datastore_model callbacks
@@ -142,12 +142,44 @@ restart_unfinished_transfers(SpaceId) ->
         case restart(TransferId) of
             {ok, TransferId} ->
                 {[TransferId | Restarted0], Failed0};
-            {error, {not_found, transfer}} ->
+            {error, not_target_provider} ->
+                {Restarted0, Failed0};
+            {error, not_source_provider} ->
+                {Restarted0, Failed0};
+            {error, not_found} ->
                 {Restarted0, [TransferId | Failed0]}
         end
     end, {[], []}, SpaceId),
+
+    case Restarted of
+        [] -> ok;
+        _ ->
+            ?info("Restarted transfers ~p in space ~p", [Restarted, SpaceId])
+    end,
     remove_unfinished_transfers_links(Failed, SpaceId),
     Restarted.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Restarts transfer referenced by given TransferId.
+%% @end
+%%-------------------------------------------------------------------
+-spec restart(id()) -> {ok, id()} | {error, term()}.
+restart(TransferId) ->
+    case update(TransferId, fun maybe_restart/1) of
+        {ok, TransferDoc = #document{value = #transfer{space_id = SpaceId}}} ->
+            move_from_past_to_current_links_tree(TransferId, SpaceId),
+            transfer_controller:on_new_transfer_doc(TransferDoc),
+            invalidation_controller:on_new_transfer_doc(TransferDoc),
+            {ok, TransferId};
+        {error, not_target_provider} ->
+            {error, not_target_provider};
+        {error, not_source_provdier} ->
+            {error, not_source_provdier};
+        Error ->
+            ?error_stacktrace("Restarting transfer ~p failed due to ~p", [TransferId, Error]),
+            Error
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -182,6 +214,8 @@ get_info(TransferId) ->
         failed_files = FailedFiles,
         bytes_to_transfer = BytesToTransfer,
         bytes_transferred = BytesTransferred,
+        files_to_invalidate = FilesToInvalidate,
+        files_invalidated = FilesInvalidated,
         start_time = StartTime,
         finish_time = FinishTime,
         last_update = LastUpdate,
@@ -199,11 +233,13 @@ get_info(TransferId) ->
         <<"path">> => Path,
         <<"transferStatus">> => atom_to_binary(TransferStatus, utf8),
         <<"invalidationStatus">> => atom_to_binary(InvalidationStatus, utf8),
-        <<"targetProviderId">> => TargetProviderId,
+        <<"targetProviderId">> => utils:ensure_defined(TargetProviderId, undefined, null),
         <<"callback">> => NullableCallback,
         <<"filesToTransfer">> => FilesToTransfer,
         <<"filesTransferred">> => FilesTransferred,
         <<"failedFiles">> => FailedFiles,
+        <<"filesToInvalidate">> => FilesToInvalidate,
+        <<"filesInvalidated">> => FilesInvalidated,
         <<"bytesToTransfer">> => BytesToTransfer,
         <<"bytesTransferred">> => BytesTransferred,
         <<"startTime">> => StartTime,
@@ -243,9 +279,9 @@ delete(TransferId) ->
 %% Stop transfer
 %% @end
 %%--------------------------------------------------------------------
--spec stop(id()) -> ok | {error, term()}.
-stop(TransferId) ->
-    {ok, _} = transfer:mark_cancelled(TransferId),
+-spec cancel(id()) -> ok | {error, term()}.
+cancel(TransferId) ->
+    {ok, _} = mark_cancelled(TransferId),
     ok.
 
 %%--------------------------------------------------------------------
@@ -256,13 +292,13 @@ stop(TransferId) ->
 -spec mark_active(id(), pid()) -> {ok, id()} | {error, term()}.
 mark_active(TransferId, TransferControllerPid) ->
     Pid = encode_pid(TransferControllerPid),
-    update(TransferId, fun(Transfer) ->
+    ?extract_key(update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{
             status = active,
             files_to_transfer = 1,
             pid = Pid
         }}
-    end).
+    end)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -271,36 +307,56 @@ mark_active(TransferId, TransferControllerPid) ->
 %%--------------------------------------------------------------------
 -spec mark_completed(id()) -> {ok, id()} | {error, term()}.
 mark_completed(TransferId) ->
-    {ok, _} = update(TransferId, fun(Transfer) ->
-        case is_migrating(Transfer) of
-            false ->
-                SpaceId = Transfer#transfer.space_id,
-                ok = add_link(?PAST_TRANSFERS_KEY, TransferId, SpaceId),
-                ok = delete_links(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId);
-            true ->
-                ok
-        end,
+    UpdateFun = fun(Transfer) ->
         {ok, Transfer#transfer{
             status = completed,
             finish_time = provider_logic:zone_time_seconds()
         }}
-    end).
+    end,
+    case update(TransferId, UpdateFun) of
+        {ok, #document{value = #transfer{
+            space_id = SpaceId,
+            invalidate_source_replica = InvalidateSourceReplica
+        }}} ->
+            case InvalidateSourceReplica of
+                false ->
+                    move_from_current_to_past_links_tree(TransferId, SpaceId),
+                    {ok, TransferId};
+                true ->
+                    {ok, TransferId}
+            end;
+        Error ->
+            Error
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Marks transfer as failed
+%% Marks status in transfer (replication, migration, invalidation)
+%% document as failed.
+%% If given document describes migration transfer,
+%% invalidation_status is also marked as failed.
 %% @end
 %%--------------------------------------------------------------------
 -spec mark_failed(id()) -> {ok, id()} | {error, term()}.
 mark_failed(TransferId) ->
-    {ok, _} = transfer:update(TransferId, fun(T = #transfer{space_id = SpaceId}) ->
-        ok = add_link(?PAST_TRANSFERS_KEY, TransferId, SpaceId),
-        ok = delete_links(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId),
+    UpdateFun =  fun(T = #transfer{invalidation_status = InvalidationStatus}) ->
         {ok, T#transfer{
             status = failed,
-            finish_time = provider_logic:zone_time_seconds()
-        }}
-    end).
+            finish_time = provider_logic:zone_time_seconds(),
+            invalidation_status = case is_migrating(T) of
+                true ->
+                    failed;
+                _ ->
+                    InvalidationStatus
+            end}}
+    end,
+    case update(TransferId, UpdateFun) of
+        {ok, #document{value = #transfer{space_id = SpaceId}}}  ->
+            move_from_current_to_past_links_tree(TransferId, SpaceId),
+            {ok, TransferId};
+        Error ->
+            Error
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -309,9 +365,9 @@ mark_failed(TransferId) ->
 %%--------------------------------------------------------------------
 -spec increase_failed_file_transfers(id()) -> {ok, id()} | {error, term()}.
 increase_failed_file_transfers(TransferId) ->
-    {ok, _} = transfer:update(TransferId, fun(T = #transfer{failed_files = FailedFiles}) ->
+    {ok, _} = ?extract_key(update(TransferId, fun(T = #transfer{failed_files = FailedFiles}) ->
         {ok, T#transfer{failed_files = FailedFiles + 1}}
-    end).
+    end)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -320,11 +376,24 @@ increase_failed_file_transfers(TransferId) ->
 %%--------------------------------------------------------------------
 -spec mark_cancelled(id()) -> {ok, id()} | {error, term()}.
 mark_cancelled(TransferId) ->
-    {ok, _} = transfer:update(TransferId, fun(Transfer = #transfer{space_id = SpaceId}) ->
-        ok = add_link(?PAST_TRANSFERS_KEY, TransferId, SpaceId),
-        ok = delete_links(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId),
-        {ok, Transfer#transfer{status = cancelled}}
-    end).
+    UpdateFun = fun(T = #transfer{invalidation_status = InvalidationStatus}) ->
+        {ok, T#transfer{
+            status = cancelled,
+            invalidation_status = case is_migrating(T) of
+                true ->
+                    cancelled;
+                _ ->
+                    InvalidationStatus
+            end}
+        }
+    end,
+    case transfer:update(TransferId, UpdateFun) of
+        {ok, #document{value = #transfer{space_id = SpaceId}}} ->
+            move_from_current_to_past_links_tree(TransferId, SpaceId),
+            {ok, TransferId};
+        Error ->
+            Error
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -334,25 +403,30 @@ mark_cancelled(TransferId) ->
 -spec mark_active_invalidation(id()) -> {ok, id()} | {error, term()}.
 mark_active_invalidation(TransferId) ->
     Pid = encode_pid(self()),
-    update(TransferId, fun(Transfer) ->
+    {ok, _} = ?extract_key(update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{
             invalidation_status = active,
+            files_to_invalidate = 1,
             pid = Pid
         }}
-    end).
+    end)).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Marks replica invalidation as completed
 %% @end
 %%--------------------------------------------------------------------
--spec mark_completed_invalidation(id()) -> {ok, id()} | {error, term()}.
-mark_completed_invalidation(TransferId) ->
-    update(TransferId, fun(T = #transfer{space_id = SpaceId}) ->
-        ok = add_link(?PAST_TRANSFERS_KEY, TransferId, SpaceId),
-        ok = delete_links(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId),
+-spec mark_completed_invalidation(id(), od_space:id()) -> {ok, id()} | {error, term()}.
+mark_completed_invalidation(TransferId, SpaceId) ->
+    case update(TransferId, fun(T) ->
         {ok, T#transfer{invalidation_status = completed}}
-    end).
+    end) of
+        {ok, _} ->
+            move_from_current_to_past_links_tree(TransferId, SpaceId),
+            {ok, TransferId};
+        Error ->
+            Error
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -361,11 +435,32 @@ mark_completed_invalidation(TransferId) ->
 %%--------------------------------------------------------------------
 -spec mark_failed_invalidation(id()) -> {ok, id()} | {error, term()}.
 mark_failed_invalidation(TransferId) ->
-    transfer:update(TransferId, fun(T = #transfer{space_id = SpaceId}) ->
-        ok = add_link(?PAST_TRANSFERS_KEY, TransferId, SpaceId),
-        ok = delete_links(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId),
-        T#transfer{invalidation_status = failed}
-    end).
+    case transfer:update(TransferId, fun(T) ->
+        {ok, T#transfer{invalidation_status = failed}}
+    end) of
+        {ok, #document{value = #transfer{space_id = SpaceId}}} ->
+            move_from_current_to_past_links_tree(TransferId, SpaceId),
+            {ok, TransferId};
+        Error ->
+            Error
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Marks replica invalidation as cancelled
+%% @end
+%%--------------------------------------------------------------------
+-spec mark_cancelled_invalidation(id()) -> {ok, id()} | {error, term()}.
+mark_cancelled_invalidation(TransferId) ->
+    case transfer:update(TransferId, fun(Transfer) ->
+        {ok, Transfer#transfer{invalidation_status = cancelled}}
+    end) of
+        {ok, #document{value = #transfer{space_id = SpaceId}}} ->
+            ok = add_link(?PAST_TRANSFERS_KEY, TransferId, SpaceId),
+            ok = delete_links(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId);
+        Error ->
+            Error
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -428,7 +523,9 @@ mark_file_invalidation_finished(undefined, _FilesNum) ->
     {ok, undefined};
 mark_file_invalidation_finished(TransferId, FilesNum) ->
     update(TransferId, fun(Transfer) ->
+        CurrentTime = provider_logic:zone_time_seconds(),
         {ok, Transfer#transfer{
+            finish_time = CurrentTime,
             files_invalidated = Transfer#transfer.files_invalidated + FilesNum
         }}
     end).
@@ -445,7 +542,9 @@ mark_data_transfer_scheduled(undefined, _Bytes) ->
     {ok, undefined};
 mark_data_transfer_scheduled(TransferId, Bytes) ->
     update(TransferId, fun(Transfer) ->
+        CurrentTime = provider_logic:zone_time_seconds(),
         {ok, Transfer#transfer{
+            finish_time = CurrentTime,
             bytes_to_transfer = Transfer#transfer.bytes_to_transfer + Bytes
         }}
     end).
@@ -582,9 +681,14 @@ list_transfers(SpaceId, Ongoing) ->
 %%      invalidation hasn't finished.
 %% @end
 %%-------------------------------------------------------------------
--spec is_ongoing(transfer()) -> boolean().
-is_ongoing(Transfer) ->
-    is_transfer_ongoing(Transfer) orelse is_invalidation_ongoing(Transfer).
+-spec is_ongoing(transfer() | id() | undefined) -> boolean().
+is_ongoing(undefined) ->
+    true;
+is_ongoing(Transfer = #transfer{}) ->
+    is_transfer_ongoing(Transfer) orelse is_invalidation_ongoing(Transfer);
+is_ongoing(TransferId) ->
+    {ok, #document{value = Transfer}} = ?MODULE:get(TransferId),
+    is_ongoing(Transfer).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -602,6 +706,28 @@ is_transfer_ongoing(#transfer{status = cancelled}) -> false;
 is_transfer_ongoing(#transfer{status = failed}) -> false.
 
 %%-------------------------------------------------------------------
+%% @doc
+%% Predicate saying if given transfer is migrating a replica.
+%% @end
+%%-------------------------------------------------------------------
+-spec is_migrating(transfer()) -> boolean().
+is_migrating(#transfer{invalidate_source_replica = Flag}) -> Flag.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Predicate saying if given transfer is only invalidating replica.
+%% @end
+%%-------------------------------------------------------------------
+-spec is_invalidating(transfer()) -> boolean().
+is_invalidating(#transfer{
+    invalidate_source_replica = Flag,
+    target_provider_id = undefined
+}) ->
+    Flag;
+is_invalidating(_) ->
+    false.
+
+%%-------------------------------------------------------------------
 %% @private
 %% @doc
 %% Predicate saying if invalidation within given transfer is ongoing. Returns
@@ -617,13 +743,6 @@ is_invalidation_ongoing(#transfer{invalidation_status = failed}) -> false;
 is_invalidation_ongoing(#transfer{invalidation_status = scheduled}) -> true;
 is_invalidation_ongoing(#transfer{invalidation_status = active}) -> true.
 
-%%-------------------------------------------------------------------
-%% @doc
-%% Predicate saying if given transfer is migrating a replica.
-%% @end
-%%-------------------------------------------------------------------
--spec is_migrating(transfer()) -> boolean().
-is_migrating(#transfer{invalidate_source_replica = Flag}) -> Flag.
 
 %%%===================================================================
 %%% Internal functions
@@ -645,9 +764,9 @@ create(Doc) ->
 %% Updates transfer.
 %% @end
 %%--------------------------------------------------------------------
--spec update(id(), diff()) -> {ok, id()} | {error, term()}.
+-spec update(id(), diff()) -> {ok, doc()} | {error, term()}.
 update(TransferId, Diff) ->
-    ?extract_key(datastore_model:update(?CTX, TransferId, Diff)).
+    datastore_model:update(?CTX, TransferId, Diff).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -668,7 +787,6 @@ add_link(SourceId, TransferId, SpaceId) ->
     ok.
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% Removes link/links to transfer/transfers
 %% Real link source_id will be obtained from link_root/2 function.
@@ -696,7 +814,6 @@ delete_links(SourceId, TransferId, SpaceId) ->
                     )
             end
     end.
-
 
 %%--------------------------------------------------------------------
 %% @private
@@ -730,54 +847,123 @@ for_each_transfer(ListDocId, Callback, Acc0, SpaceId) ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Restarts transfer referenced by given TransferId.
+%% This function checks whether calling provider can reset given
+%% transfer (replication, migration or invalidation).
+%% If true, it resets transfer document.
 %% @end
 %%-------------------------------------------------------------------
--spec restart(id()) -> {ok, id()} | {error, term()}.
-restart(TransferId) ->
-    TimeSeconds = provider_logic:zone_time_seconds(),
-    UpdateFun = fun(Transfer) ->
+-spec maybe_restart(transfer()) -> {ok, id()} | {error, term()}.
+maybe_restart(Transfer) ->
+    case {is_migrating(Transfer), is_invalidating(Transfer)} of
+        {false, false} ->
+            % transfer
+            maybe_reset_replication_record(Transfer);
+        {true, true} ->
+            % invalidation
+            maybe_reset_invalidation_record(Transfer);
+        {true, false} ->
+            % migration
+            maybe_reset_migration_record(Transfer)
+    end.
 
-        TransferStatus = case Transfer#transfer.status of
-            completed -> completed;
-            skipped -> skipped;
-            cancelled -> cancelled;
-            _ -> scheduled
-        end,
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function checks whether calling provider can reset given
+%% replication transfer. If true, it resets transfer document.
+%% @end
+%%-------------------------------------------------------------------
+-spec maybe_reset_replication_record(transfer()) -> {ok, id()} | {error, term()}.
+maybe_reset_replication_record(Transfer = #transfer{
+    status = Status,
+    invalidation_status = InvalidationStatus,
+    target_provider_id = TargetProviderId
+}) ->
+    case oneprovider:get_id() =:= TargetProviderId of
+        true ->
+            {ok, Transfer#transfer{
+                status = reset_status(Status),
+                invalidation_status = reset_status(InvalidationStatus),
+                files_to_transfer = 0,
+                files_transferred = 0,
+                failed_files = 0,
+                bytes_to_transfer = 0,
+                bytes_transferred = 0,
+                start_time = provider_logic:zone_time_seconds(),
+                finish_time = 0,
+                last_update = #{},
+                min_hist = #{},
+                hr_hist = #{},
+                dy_hist = #{},
+                mth_hist = #{}
+            }};
+        false ->
+            {error, not_target_provider}
+    end.
 
-        InvalidationStatus = case Transfer#transfer.invalidation_status of
-            completed -> completed;
-            skipped -> skipped;
-            cancelled -> cancelled;
-            _ -> scheduled
-        end,
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function checks whether calling provider can reset given
+%% invalidation transfer. If true, it resets transfer document.
+%% @end
+%%-------------------------------------------------------------------
+-spec maybe_reset_invalidation_record(transfer()) -> {ok, id()} | {error, term()}.
+maybe_reset_invalidation_record(Transfer = #transfer{
+    source_provider_id = SourceProviderId
+}) ->
+    case oneprovider:get_id() =:= SourceProviderId of
+        true ->
+            {ok, Transfer#transfer{
+                invalidation_status = scheduled,
+                files_invalidated = 0,
+                files_to_invalidate = 0,
+                start_time = provider_logic:zone_time_seconds(),
+                finish_time = 0
+            }};
+        false ->
+            {error, not_source_provider}
+    end.
 
-        {ok, Transfer#transfer{
-            status = TransferStatus,
-            invalidation_status = InvalidationStatus,
-            files_to_transfer = 0,
-            files_transferred = 0,
-            bytes_to_transfer = 0,
-            bytes_transferred = 0,
-            files_invalidated = 0,
-            files_to_invalidate = 0,
-            start_time = TimeSeconds,
-            last_update = #{},
-            min_hist = #{},
-            hr_hist = #{},
-            dy_hist = #{},
-            mth_hist = #{}
-        }}
-    end,
-    case update(TransferId, UpdateFun) of
-        {ok, TransferId} ->
-            {ok, TransferDoc} = datastore_model:get(?CTX, TransferId),
-            transfer_controller:on_new_transfer_doc(TransferDoc),
-            invalidation_controller:on_new_transfer_doc(TransferDoc),
-            {ok, TransferId};
-        Error ->
-            ?error_stacktrace("Restarting transfer ~p failed due to ~p", [TransferId, Error]),
-            Error
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function checks whether calling provider can reset given
+%% migration transfer. If true, it resets transfer document.
+%% @end
+%%-------------------------------------------------------------------
+-spec maybe_reset_migration_record(transfer()) -> {ok, id()} | {error, term()}.
+maybe_reset_migration_record(Transfer = #transfer{
+    source_provider_id = SourceProviderId
+}) ->
+    case {is_transfer_ongoing(Transfer), is_invalidation_ongoing(Transfer)} of
+        {true, _} ->
+            maybe_reset_replication_record(Transfer);
+        {_, true} ->
+            case SourceProviderId =:= oneprovider:get_id() of
+                true ->
+                    {ok, Transfer#transfer{
+                        status = scheduled,
+                        invalidation_status = scheduled,
+                        files_to_transfer = 0,
+                        files_transferred = 0,
+                        bytes_to_transfer = 0,
+                        bytes_transferred = 0,
+                        files_invalidated = 0,
+                        files_to_invalidate = 0,
+                        start_time = provider_logic:zone_time_seconds(),
+                        finish_time = 0,
+                        last_update = #{},
+                        min_hist = #{},
+                        hr_hist = #{},
+                        dy_hist = #{},
+                        mth_hist = #{}
+                    }};
+                false ->
+                    {error, not_source_provider}
+            end;
+        {false, false} ->
+            maybe_reset_replication_record(Transfer)
     end.
 
 %%-------------------------------------------------------------------
@@ -793,6 +979,13 @@ start_pools() ->
         {worker, {transfer_worker, []}},
         {queue_type, lifo}
     ]),
+    {ok, _} = worker_pool:start_sup_pool(?TRANSFER_CONTROLLERS_POOL, [
+        {workers, ?TRANSFER_CONTROLLERS_NUM},
+        {worker, {transfer_controller, []}}
+    ]),
+    {ok, _} = worker_pool:start_sup_pool(?INVALIDATION_WORKERS_POOL, [
+        {workers, ?INVALIDATION_WORKERS_NUM}
+    ]),
     ok.
 
 %%-------------------------------------------------------------------
@@ -804,6 +997,8 @@ start_pools() ->
 -spec stop_pools() -> ok.
 stop_pools() ->
     true = worker_pool:stop_pool(?TRANSFER_WORKERS_POOL),
+    true = worker_pool:stop_pool(?TRANSFER_CONTROLLERS_POOL),
+    true = worker_pool:stop_pool(?INVALIDATION_WORKERS_POOL),
     ok.
 
 %%-------------------------------------------------------------------
@@ -854,7 +1049,7 @@ handle_updated(#transfer{
     invalidation_status = active,
     pid = Pid
 }) when TransferStatus =:= completed orelse TransferStatus =:= skipped ->
-    invalidation_controller:finish_transfer(decode_pid(Pid));
+    invalidation_controller:finish_invalidation(decode_pid(Pid));
 handle_updated(_) ->
     ok.
 
@@ -1158,3 +1353,35 @@ upgrade_record(3, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, Status,
 -spec get_posthooks() -> [datastore_hooks:posthook()].
 get_posthooks() ->
     [fun maybe_mark_completed/3].
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Moves given TransferId from past to current transfers links tree.
+%% @end
+%%-------------------------------------------------------------------
+-spec move_from_past_to_current_links_tree(id(), od_space:id()) -> ok.
+move_from_past_to_current_links_tree(TransferId, SpaceId) ->
+    ok = add_link(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId),
+    ok = delete_links(?PAST_TRANSFERS_KEY, TransferId, SpaceId).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Moves given TransferId from current to past transfers links tree.
+%% @end
+%%-------------------------------------------------------------------
+-spec move_from_current_to_past_links_tree(id(), od_space:id()) -> ok.
+move_from_current_to_past_links_tree(TransferId, SpaceId) ->
+    ok = add_link(?PAST_TRANSFERS_KEY, TransferId, SpaceId),
+    ok = delete_links(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Resets transfer status if it's different than skipped.
+%% @end
+%%-------------------------------------------------------------------
+-spec reset_status(status()) -> status().
+reset_status(skipped) -> skipped;
+reset_status(_) -> scheduled.

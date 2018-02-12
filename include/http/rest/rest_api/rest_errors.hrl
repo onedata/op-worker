@@ -211,6 +211,23 @@
     <<"error_non_local_provider">>,
     <<"The given provider is not the local one. Currently invalidation is only supported on provider handling the request.">>)
 ).
+-define(ERROR_NOT_TARGET_PROVIDER, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"error_not_target_provider">>,
+    <<"Local provider is not target provider for given replication transfer.
+    Replication transfers can only be restarted by target providers">>)
+).
+-define(ERROR_NOT_SOURCE_PROVIDER, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"error_not_source_provider">>,
+    <<"Local provider is not source provider for given migration/invalidation transfer.
+    Replication and invalidation transfers can only be restarted by source providers">>)
+).
+-define(ERROR_TRANSFER_NOT_FOUND, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"error_transfer_not_found">>,
+    <<"Given transfer could not be found.">>)
+).
 
 %% HTTP 401 errors
 -define(ERROR_UNAUTHORIZED, ?ERROR_REPLY(

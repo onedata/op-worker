@@ -29,9 +29,11 @@
 -define(DAY_TIME_WINDOW, 86400).
 -define(MONTH_HIST_LENGTH, 31).
 
--define(TRANSFER_WORKERS_POOL, begin
-    {ok, __TransferWorkersPool} = application:get_env(?APP_NAME, transfer_workers_pool),
-    __TransferWorkersPool
-end).
+-define(TRANSFER_WORKERS_POOL, transfer_workers_pool).
+-define(TRANSFER_WORKERS_NUM, application:get_env(?APP_NAME, transfer_workers_num, 50)).
 
--define(TRANSFER_WORKERS_NUM, application:get_env(?APP_NAME, transfer_workers_num, 10)).
+-define(TRANSFER_CONTROLLERS_POOL, transfer_controllers_pool).
+-define(TRANSFER_CONTROLLERS_NUM, application:get_env(?APP_NAME, transfer_controllers_num, 10)).
+
+-define(INVALIDATION_WORKERS_POOL, invalidation_workers_pool).
+-define(INVALIDATION_WORKERS_NUM, application:get_env(?APP_NAME, invalidation_workers_num, 10)).

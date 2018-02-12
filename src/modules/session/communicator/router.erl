@@ -12,31 +12,39 @@
 -module(router).
 -author("Tomasz Lichon").
 
+-include("global_definitions.hrl").
 -include("proto/oneclient/message_id.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneclient/event_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/diagnostic_messages.hrl").
--include("proto/oneclient/handshake_messages.hrl").
+-include("proto/common/handshake_messages.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
 -include("proto/oneprovider/dbsync_messages.hrl").
 -include("proto/oneprovider/dbsync_messages2.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include("proto/oneprovider/remote_driver_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("cluster_worker/include/exometer_utils.hrl").
 
 %% API
 -export([preroute_message/4, route_message/1, route_message/3,
     route_proxy_message/2]).
 -export([effective_session_id/1]).
 
+-export([init_counters/0, init_report/0]).
+
+-define(EXOMETER_NAME(Param), ?exometer_name(?MODULE, Param)).
+-define(EXOMETER_COUNTERS, [events, event]).
+-define(EXOMETER_HISTOGRAM_COUNTERS, [events_length]).
+-define(EXOMETER_DEFAULT_TIME_SPAN, 600000).
+
 -define(TIMEOUT, 30000).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -46,11 +54,14 @@
 -spec route_proxy_message(Msg :: #client_message{}, TargetSessionId :: session:id()) -> ok.
 route_proxy_message(#client_message{message_body = #events{events = Events}} = Msg, TargetSessionId) ->
     ?debug("route_proxy_message ~p ~p", [TargetSessionId, Msg]),
+    ?update_counter(?EXOMETER_NAME(events)),
+    ?update_counter(?EXOMETER_NAME(events_length), length(Events)),
     lists:foreach(fun(Evt) ->
         event:emit(Evt, TargetSessionId)
     end, Events);
 route_proxy_message(#client_message{message_body = #event{} = Evt} = Msg, TargetSessionId) ->
     ?debug("route_proxy_message ~p ~p", [TargetSessionId, Msg]),
+    ?update_counter(?EXOMETER_NAME(event)),
     event:emit(Evt, TargetSessionId),
     ok.
 
@@ -171,11 +182,47 @@ route_message(Msg = #server_message{message_id = #message_id{
 %% @end
 %%--------------------------------------------------------------------
 -spec effective_session_id(#client_message{}) ->
-    session:id().
+  session:id().
 effective_session_id(#client_message{session_id = SessionId, proxy_session_id = undefined}) ->
-    SessionId;
+  SessionId;
 effective_session_id(#client_message{proxy_session_id = ProxySessionId}) ->
-    ProxySessionId.
+  ProxySessionId.
+
+%%%===================================================================
+%%% Exometer API
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Initializes all counters.
+%% @end
+%%--------------------------------------------------------------------
+-spec init_counters() -> ok.
+init_counters() ->
+    TimeSpan = application:get_env(?APP_NAME,
+        exometer_events_time_span, ?EXOMETER_DEFAULT_TIME_SPAN),
+    Counters = lists:map(fun(Name) ->
+        {?EXOMETER_NAME(Name), counter}
+    end, ?EXOMETER_COUNTERS),
+    Counters2 = lists:map(fun(Name) ->
+        {?EXOMETER_NAME(Name), histogram, TimeSpan}
+    end, ?EXOMETER_HISTOGRAM_COUNTERS),
+    ?init_counters(Counters ++ Counters2).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Subscribe for reports for all parameters.
+%% @end
+%%--------------------------------------------------------------------
+-spec init_report() -> ok.
+init_report() ->
+    Reports = lists:map(fun(Name) ->
+        {?EXOMETER_NAME(Name), [value]}
+    end, ?EXOMETER_COUNTERS),
+    Reports2 = lists:map(fun(Name) ->
+        {?EXOMETER_NAME(Name), [min, max, median, mean, n]}
+    end, ?EXOMETER_HISTOGRAM_COUNTERS),
+    ?init_reports(Reports ++ Reports2).
 
 %%%===================================================================
 %%% Internal functions

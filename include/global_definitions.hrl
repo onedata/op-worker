@@ -37,7 +37,7 @@
 %% Local name (name and node is used to identify it) of rrdtool supervisor.
 -define(RRDTOOL_SUPERVISOR, rrdtool_supervisor).
 
-%% ID of provider that is not currently registered in OneZone
+%% ID of provider that is not currently registered in Onezone
 -define(UNREGISTERED_PROVIDER_ID, <<"unregistered_provider">>).
 
 %%%===================================================================

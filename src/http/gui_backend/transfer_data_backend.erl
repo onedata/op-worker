@@ -175,7 +175,7 @@ transfer_record(TransferId) ->
     SessionId = gui_session:get_session_id(),
     {ok, #document{value = Transfer = #transfer{
         source_provider_id = SourceProviderId,
-        target_provider_id = Destination,
+        target_provider_id = DestinationProviderId,
         file_uuid = FileUuid,
         path = Path,
         user_id = UserId,
@@ -195,15 +195,11 @@ transfer_record(TransferId) ->
         false -> Transfer#transfer.finish_time
     end,
     IsMigration = transfer:is_migrating(Transfer),
-    MigrationSource = case IsMigration of
-        true -> SourceProviderId;
-        false -> null
-    end,
     {ok, [
         {<<"id">>, TransferId},
         {<<"migration">>, IsMigration},
-        {<<"migrationSource">>, MigrationSource},
-        {<<"destination">>, Destination},
+        {<<"migrationSource">>, SourceProviderId},
+        {<<"destination">>, utils:ensure_defined(DestinationProviderId, undefined, null)},
         {<<"isOngoing">>, IsOngoing},
         {<<"space">>, SpaceId},
         {<<"file">>, FileGuid},
@@ -238,30 +234,14 @@ transfer_time_stat_record(StatId) ->
         ?MONTH_STAT_TYPE -> {T#transfer.mth_hist, ?DAY_TIME_WINDOW}
     end,
     StartTime = T#transfer.start_time,
-    LastUpdateMap = T#transfer.last_update,
-    {Timestamp, ShiftedHistograms} = case transfer:is_ongoing(T) of
-        true ->
-            % Shift the histograms to show up-to-date values
-            CurrentTime = provider_logic:zone_time_seconds(),
-            ShiftedHists = maps:map(fun(ProviderId, HistogramValues) ->
-                LastUpdate = maps:get(ProviderId, LastUpdateMap),
-                shift_histogram(HistogramValues, LastUpdate, CurrentTime, TimeWindow)
-            end, Histograms),
-            {CurrentTime, ShiftedHists};
-        false ->
-            % Do not shift - we want historical values, last update time is the
-            % end. It is possible that there is no last update, if 0 bytes were
-            % transferred, in this case take the start time.
-            LastUpdate = lists:max([StartTime | maps:values(LastUpdateMap)]),
-            {LastUpdate, Histograms}
-    end,
+    LastUpdate = get_last_update(T),
     % Calculate bytes per sec histograms
     StatsMap = maps:map(fun(_ProviderId, HistogramValues) ->
-        histogram_to_speed_chart(HistogramValues, StartTime, Timestamp, TimeWindow)
-    end, ShiftedHistograms),
+        histogram_to_speed_chart(HistogramValues, StartTime, LastUpdate, TimeWindow)
+    end, Histograms),
     {ok, [
         {<<"id">>, StatId},
-        {<<"timestamp">>, Timestamp},
+        {<<"timestamp">>, LastUpdate},
         {<<"type">>, TypePrefix},
         {<<"stats">>, maps:to_list(StatsMap)}
     ]}.
@@ -281,27 +261,29 @@ transfer_current_stat_record(TransferId) ->
         files_transferred = FilesTransferred,
         min_hist = MinHistograms
     }}} = transfer:get(TransferId),
-    CurrentTime = provider_logic:zone_time_seconds(),
+    LastUpdate = get_last_update(Transfer),
     % No need to use actual start time, because only the newest measurements
     % are needed to calculate current speed.
-    StartTime = CurrentTime - 2 * ?FIVE_SEC_TIME_WINDOW,
+    StartTime = LastUpdate - 2 * ?FIVE_SEC_TIME_WINDOW,
     BytesPerSec = maps:to_list(maps:map(fun(ProviderId, HistogramValues) ->
-        LastUpdate = maps:get(ProviderId, LastUpdateMap),
+        % Shift all histograms to the time of latest update (in any provider),
+        % extrapolating with zeros
+        LastUpdateInThisProvider = maps:get(ProviderId, LastUpdateMap),
         ShiftedHistogram = shift_histogram(
-            HistogramValues, LastUpdate, CurrentTime, ?FIVE_SEC_TIME_WINDOW
+            HistogramValues, LastUpdateInThisProvider, LastUpdate, ?FIVE_SEC_TIME_WINDOW
         ),
         % Take the second value as current speed (the first one changes very
         % dynamically and does not show current trend from past couple of
         % seconds).
         [_, CurrentSpeed | _] = histogram_to_speed_chart(
-            ShiftedHistogram, StartTime, CurrentTime, ?FIVE_SEC_TIME_WINDOW
+            ShiftedHistogram, StartTime, LastUpdate, ?FIVE_SEC_TIME_WINDOW
         ),
         CurrentSpeed
     end, MinHistograms)),
     {ok, [
         {<<"id">>, TransferId},
         {<<"status">>, get_status(Transfer)},
-        {<<"timestamp">>, CurrentTime},
+        {<<"timestamp">>, LastUpdate},
         {<<"transferredBytes">>, BytesTransferred},
         {<<"transferredFiles">>, FilesTransferred},
         {<<"bytesPerSec">>, BytesPerSec}
@@ -311,20 +293,29 @@ transfer_current_stat_record(TransferId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns status of given transfer. Adds one special status 'finalizing' to
+%% Returns status of given transfer. Adds one special status 'invalidating' to
 %% indicate that the transfer itself has finished, but source replica
 %% invalidation is still in progress (concerns only replica migration transfers).
 %% @end
 %%--------------------------------------------------------------------
--spec get_status(transfer:transfer()) -> transfer:status() | finalizing.
+-spec get_status(transfer:record()) -> transfer:status() | invalidating.
 get_status(T = #transfer{invalidate_source_replica = true, status = completed}) ->
     case T#transfer.invalidation_status of
         completed -> completed;
         skipped -> completed;
         cancelled -> cancelled;
         failed -> failed;
-        scheduled -> finalizing;
-        active -> finalizing
+        scheduled -> invalidating;
+        active -> invalidating
+    end;
+get_status(T = #transfer{invalidate_source_replica = true, status = skipped}) ->
+    case T#transfer.invalidation_status of
+        completed -> completed;
+        skipped -> skipped;
+        cancelled -> cancelled;
+        failed -> failed;
+        scheduled -> invalidating;
+        active -> invalidating
     end;
 get_status(#transfer{status = Status}) ->
     Status.
@@ -434,3 +425,10 @@ speed_chart_span(?FIVE_SEC_TIME_WINDOW) -> 60;
 speed_chart_span(?MIN_TIME_WINDOW) -> 3600;
 speed_chart_span(?HOUR_TIME_WINDOW) -> 86400; % 24 hours
 speed_chart_span(?DAY_TIME_WINDOW) -> 2592000. % 30 days
+
+
+-spec get_last_update(#transfer{}) -> non_neg_integer().
+get_last_update(#transfer{start_time = StartTime, last_update = LastUpdateMap}) ->
+    % It is possible that there is no last update, if 0 bytes were
+    % transferred, in this case take the start time.
+    lists:max([StartTime | maps:values(LastUpdateMap)]).

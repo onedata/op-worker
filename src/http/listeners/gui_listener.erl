@@ -55,7 +55,7 @@ start() ->
         application:get_env(?APP_NAME, gui_socket_timeout_seconds),
     {ok, KeyFile} = application:get_env(?APP_NAME, web_key_file),
     {ok, CertFile} = application:get_env(?APP_NAME, web_cert_file),
-    CaCerts = oneprovider:get_ca_certs(),
+    {ok, ChainFile} = application:get_env(?APP_NAME, web_cert_chain_file),
 
     % Resolve static files root. First, check if there is a non-empty dir
     % located in gui_custom_static_root. If not, use default.
@@ -82,8 +82,10 @@ start() ->
         % Proper requests are routed to handler modules
         {'_', lists:flatten([
             {?provider_id_path, get_provider_id_handler, []},
+            {?provider_version_path, get_provider_version_handler, []},
             {?identity_macaroon_path, get_identity_macaroon_handler, []},
             {?nonce_verify_path, nonce_verify_handler, []},
+            {?client_protocol_path, incoming_connection, []},
             {"/nagios/oz_connectivity", oz_connectivity_handler, []},
             {"/nagios/[...]", nagios_handler, []},
             {"/upload", upload_handler, []},
@@ -94,17 +96,24 @@ start() ->
         ])}
     ]),
 
+    SslOpts = [
+        {port, port()},
+        {keyfile, KeyFile},
+        {certfile, CertFile},
+        {ciphers, ssl_utils:safe_ciphers()}],
+
+    SslOptsWithChain = case filelib:is_regular(ChainFile) of
+        true -> [{cacertfile, ChainFile} | SslOpts];
+        _ -> SslOpts
+    end,
+
+
     % Call gui init, which will call init on all modules that might need state.
     gui:init(),
     % Start the listener for web gui and nagios handler
     Result = ranch:start_listener(?HTTPS_LISTENER, GuiNbAcceptors,
-        ranch_ssl, [
-            {port, port()},
-            {keyfile, KeyFile},
-            {certfile, CertFile},
-            {cacerts, CaCerts},
-            {ciphers, ssl:cipher_suites() -- ssl_utils:weak_ciphers()}
-        ], cowboy_protocol, [
+        ranch_ssl, SslOptsWithChain,
+        cowboy_protocol, [
             {env, [{dispatch, Dispatch}]},
             {max_keepalive, MaxKeepAlive},
             {timeout, timer:seconds(Timeout)},

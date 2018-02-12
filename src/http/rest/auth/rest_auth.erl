@@ -14,7 +14,7 @@
 
 -include("http/http_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
--include("proto/oneclient/handshake_messages.hrl").
+-include("proto/common/handshake_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API

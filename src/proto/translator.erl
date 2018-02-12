@@ -17,7 +17,7 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/stream_messages.hrl").
--include("proto/oneclient/handshake_messages.hrl").
+-include("proto/common/handshake_messages.hrl").
 -include("proto/oneclient/event_messages.hrl").
 -include("proto/oneclient/diagnostic_messages.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
@@ -179,8 +179,8 @@ translate_from_protobuf(#'SubscriptionCancellation'{id = Id}) ->
 
 
 %% HANDSHAKE
-translate_from_protobuf(#'ClientHandshakeRequest'{token = Token, session_id = SessionId}) ->
-    #client_handshake_request{auth = translate_from_protobuf(Token), session_id = SessionId};
+translate_from_protobuf(#'ClientHandshakeRequest'{token = Token, session_id = SessionId, version = Version}) ->
+    #client_handshake_request{auth = translate_from_protobuf(Token), session_id = SessionId, version = Version};
 translate_from_protobuf(#'ProviderHandshakeRequest'{provider_id = ProviderId, nonce = Nonce}) ->
     #provider_handshake_request{provider_id = ProviderId, nonce = Nonce};
 translate_from_protobuf(#'Token'{value = Token, secondary_values = []}) ->
@@ -230,8 +230,8 @@ translate_from_protobuf(#'FuseRequest'{fuse_request = {_, Record}}) ->
     #fuse_request{fuse_request = translate_from_protobuf(Record)};
 translate_from_protobuf(#'ResolveGuid'{path = Path}) ->
     #resolve_guid{path = Path};
-translate_from_protobuf(#'GetHelperParams'{storage_id = SID, force_proxy_io = ForceProxy}) ->
-    #get_helper_params{storage_id = SID, force_proxy_io = ForceProxy};
+translate_from_protobuf(#'GetHelperParams'{storage_id = StorageId, space_id = SpaceId, helper_mode = HelperMode}) ->
+    #get_helper_params{storage_id = StorageId, space_id = SpaceId, helper_mode = HelperMode};
 translate_from_protobuf(#'CreateStorageTestFile'{storage_id = Id, file_uuid = FileGuid}) ->
     #create_storage_test_file{storage_id = Id, file_guid = FileGuid};
 translate_from_protobuf(#'VerifyStorageTestFile'{storage_id = SId, space_id = SpaceId,
@@ -734,13 +734,12 @@ translate_to_protobuf(#fuse_request{fuse_request = Record}) ->
     {fuse_request, #'FuseRequest'{fuse_request = translate_to_protobuf(Record)}};
 translate_to_protobuf(#resolve_guid{path = Path}) ->
     {resolve_guid, #'ResolveGuid'{path = Path}};
-translate_to_protobuf(#get_helper_params{storage_id = SID, force_proxy_io = ForceProxy}) ->
-    {get_helper_params, #'GetHelperParams'{storage_id = SID, force_proxy_io = ForceProxy}};
-
+translate_to_protobuf(#get_helper_params{storage_id = StorageId, space_id = SpaceId, helper_mode = HelperMode}) ->
+    {get_helper_params, #'GetHelperParams'{storage_id = StorageId, space_id = SpaceId, helper_mode = HelperMode}};
 translate_to_protobuf(#file_request{context_guid = ContextGuid,
-    extended_direct_io = ExtDIO, file_request = Record}) ->
-    {file_request, #'FileRequest'{context_guid = ContextGuid,
-        extended_direct_io = ExtDIO, file_request = translate_to_protobuf(Record)}};
+  extended_direct_io = ExtDIO, file_request = Record}) ->
+  {file_request, #'FileRequest'{context_guid = ContextGuid,
+    extended_direct_io = ExtDIO, file_request = translate_to_protobuf(Record)}};
 translate_to_protobuf(#get_file_attr{}) ->
     {get_file_attr, #'GetFileAttr'{}};
 translate_to_protobuf(#get_child_attr{name = Name}) ->

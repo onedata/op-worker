@@ -84,11 +84,12 @@
     replicate_big_dir/1,
     quota_decreased_after_invalidation/1,
     replicate_big_file/1,
-    file_replication_failures_should_fail_whole_transfer/1
-]).
+    invalidate_big_dir/1,
+    file_replication_failures_should_fail_whole_transfer/1,
+    many_simultaneous_transfers/1]).
 
 %utils
--export([kill/1, verify_file/3, create_file/3, create_dir/3,
+-export([verify_file/3, create_file/3, create_dir/3,
     create_nested_directory_tree/4, sync_file_counter/3, create_file_counter/4]).
 
 all() ->
@@ -140,10 +141,12 @@ all() ->
         empty_metadata_invalid_json_test,
         spatial_flag_test,
         quota_exceeded_during_file_replication,
+        many_simultaneous_transfers,
         quota_decreased_after_invalidation,
         file_replication_failures_should_fail_whole_transfer,
         replicate_big_dir,
-        replicate_big_file
+        replicate_big_file,
+        invalidate_big_dir
     ]).
 
 -define(LIST_TRANSFER, fun(Id, Acc) -> [Id | Acc] end).
@@ -274,7 +277,6 @@ replicate_file(Config) ->
         #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
         #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
     ],
-
     ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File),
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
 
@@ -296,7 +298,7 @@ restart_file_replication(Config) ->
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
 
     % when
-    lengthen_file_replication_time(WorkerP2, 60),
+    fail_file_replication(WorkerP2),
     {ok, 200, _, Body0} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1,
         <<"replicas", File/binary, "?provider_id=", (domain(WorkerP2))/binary>>,
         post, [user_1_token_header(Config)], []),
@@ -305,17 +307,13 @@ restart_file_replication(Config) ->
     DecodedBody0 = json_utils:decode_map(Body0),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody0),
 
-    Pid = check_pid(WorkerP2, ?ATTEMPTS, Tid),
-    %% stop transfer
-    true = rpc:call(WorkerP2, multi_provider_rest_test_SUITE, kill, [Pid]),
-
     % then
     {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
     DomainP1 = domain(WorkerP1),
     DomainP2 = domain(WorkerP2),
 
     ?assertMatch(#{
-        <<"transferStatus">> := <<"active">>,
+        <<"transferStatus">> := <<"failed">>,
         <<"targetProviderId">> := DomainP2,
         <<"path">> := File,
         <<"invalidationStatus">> := <<"skipped">>,
@@ -327,13 +325,14 @@ restart_file_replication(Config) ->
             Error -> Error
         end, ?ATTEMPTS),
 
-    ?assertEqualList([], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([Tid], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([Tid], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqualList([Tid], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqualList([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqualList([Tid], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqualList([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
 
-    resume_file_replication_time(WorkerP2),
-    rpc:call(WorkerP1, transfer, restart_unfinished_transfers, [SpaceId]),
+    resume_file_replication(WorkerP2),
+    ?assertMatch({ok, 204, _, _},
+        do_request(WorkerP2, <<"transfers/", Tid/binary>>, patch, [user_1_token_header(Config)], [])),
 
     ?assertMatch(#{
         <<"transferStatus">> := <<"completed">>,
@@ -356,6 +355,7 @@ restart_file_replication(Config) ->
                 json_utils:decode_map(TransferStatus);
             Error -> Error
         end, ?ATTEMPTS),
+    tracer:stop(),
 
     ExpectedDistribution = [
         #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
@@ -422,7 +422,7 @@ cancel_file_replication(Config) ->
                 json_utils:decode_map(TransferStatus);
             Error -> Error
         end, ?ATTEMPTS),
-    resume_file_replication_time(WorkerP2).
+    resume_file_replication(WorkerP2).
 
 replicate_dir(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -494,10 +494,10 @@ replicate_dir(Config) ->
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File2),
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File3),
 
-    ?assertEqualList([Tid], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqualList([Tid], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS).
+    ?assertEqualList([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqualList([Tid], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqualList([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS).
 
 restart_dir_replication(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -527,7 +527,7 @@ restart_dir_replication(Config) ->
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File2}), ?ATTEMPTS),
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File3}), ?ATTEMPTS),
 
-    lengthen_file_replication_time(WorkerP2, 60),
+    fail_file_replication(WorkerP2),
 
     % when
     {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1, <<"replicas", Dir1/binary,
@@ -536,17 +536,12 @@ restart_dir_replication(Config) ->
     DecodedBody = json_utils:decode_map(Body),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
 
-    Pid = check_pid(WorkerP2, ?ATTEMPTS, Tid),
-
-    %% stop transfer
-    true = rpc:call(WorkerP2, multi_provider_rest_test_SUITE, kill, [Pid]),
-
     % then
     {ok, FileObjectId} = cdmi_id:guid_to_objectid(Dir1Guid),
     DomainP2 = domain(WorkerP2),
 
     ?assertMatch(#{
-        <<"transferStatus">> := <<"active">>,
+        <<"transferStatus">> := <<"failed">>,
         <<"targetProviderId">> := DomainP2,
         <<"path">> := Dir1,
         <<"invalidationStatus">> := <<"skipped">>,
@@ -558,14 +553,16 @@ restart_dir_replication(Config) ->
             Error -> Error
         end, ?ATTEMPTS),
 
-    ?assertEqualList([], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([Tid], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([Tid], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqualList([Tid], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqualList([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqualList([Tid], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqualList([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
 
-    resume_file_replication_time(WorkerP2),
+    resume_file_replication(WorkerP2),
     %% restart transfer
-    rpc:call(WorkerP1, transfer, restart_unfinished_transfers, [SpaceId]),
+
+    ?assertMatch({ok, 204, _, _},
+        do_request(WorkerP2, <<"transfers/", Tid/binary>>, patch, [user_1_token_header(Config)], [])),
 
     ?assertMatch(#{
         <<"transferStatus">> := <<"completed">>,
@@ -646,6 +643,7 @@ replicate_file_by_id(Config) ->
         #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
         #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
     ],
+
     ?assertDistributionById(WorkerP1, ExpectedDistribution, Config, FileObjectId),
     ?assertDistributionById(WorkerP2, ExpectedDistribution, Config, FileObjectId),
 
@@ -745,9 +743,19 @@ invalidate_file_replica(Config) ->
     DecodedBody1 = json_utils:decode_map(Body1),
     #{<<"transferId">> := Tid1} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody1),
 
+    ExpectedDistribution2 = [
+        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]}
+    ],
+
     ?assertMatch(#{
         <<"transferStatus">> := <<"skipped">>,
-        <<"invalidationStatus">> := <<"completed">>
+        <<"targetProviderId">> := null,
+        <<"path">> := File,
+        <<"invalidationStatus">> := <<"completed">>,
+        <<"fileId">> := FileObjectId,
+        <<"callback">> := null,
+        <<"filesToInvalidate">> := 1,
+        <<"filesInvalidated">> := 1
     },
         case do_request(WorkerP1, <<"transfers/", Tid1/binary>>, get, [user_1_token_header(Config)], []) of
             {ok, 200, _, TransferStatus} ->
@@ -755,9 +763,6 @@ invalidate_file_replica(Config) ->
             Error -> Error
         end, ?ATTEMPTS),
 
-    ExpectedDistribution2 = [
-        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]}
-    ],
     ?assertDistribution(WorkerP1, ExpectedDistribution2, Config, File),
     ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, File),
 
@@ -791,12 +796,25 @@ invalidate_file_replica_with_migration(Config) ->
         delete, [user_1_token_header(Config)], []
     ),
 
+    {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
+    DomainP2 = domain(WorkerP2),
+
     DecodedBody = json_utils:decode_map(Body),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
-
     ?assertMatch(#{
         <<"transferStatus">> := <<"completed">>,
-        <<"invalidationStatus">> := <<"completed">>
+        <<"targetProviderId">> := DomainP2,
+        <<"path">> := File,
+        <<"invalidationStatus">> := <<"completed">>,
+        <<"fileId">> := FileObjectId,
+        <<"callback">> := null,
+        <<"filesToTransfer">> := 1,
+        <<"filesTransferred">> := 1,
+        <<"bytesToTransfer">> := 4,
+        <<"bytesTransferred">> := 4,
+        <<"callback">> := null,
+        <<"filesToInvalidate">> := 1,
+        <<"filesInvalidated">> := 1
     },
         case do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []) of
             {ok, 200, _, TransferStatus} ->
@@ -835,7 +853,7 @@ restart_invalidation_of_file_replica_with_migration(Config) ->
     ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File),
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
 
-    lengthen_file_replication_time(WorkerP2, 60),
+    fail_file_replication(WorkerP2),
     % then
     {ok, 200, _, Body1} = do_request(WorkerP1, <<"replicas", File/binary, "?provider_id=",
         (domain(WorkerP1))/binary, "&migration_provider_id=", (domain(WorkerP2))/binary>>,
@@ -844,12 +862,9 @@ restart_invalidation_of_file_replica_with_migration(Config) ->
     DecodedBody1 = json_utils:decode_map(Body1),
     #{<<"transferId">> := Tid1} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody1),
 
-    Pid = check_pid(WorkerP2, ?ATTEMPTS, Tid1),
-    true = rpc:call(WorkerP2, multi_provider_rest_test_SUITE, kill, [Pid]),
-
     ?assertMatch(#{
-        <<"transferStatus">> := <<"active">>,
-        <<"invalidationStatus">> := <<"scheduled">>
+        <<"transferStatus">> := <<"failed">>,
+        <<"invalidationStatus">> := <<"failed">>
     },
         case do_request(WorkerP1, <<"transfers/", Tid1/binary>>, get, [user_1_token_header(Config)], []) of
             {ok, 200, _, TransferStatus} ->
@@ -857,8 +872,19 @@ restart_invalidation_of_file_replica_with_migration(Config) ->
             Error -> Error
         end, ?ATTEMPTS),
 
-    resume_file_replication_time(WorkerP2),
-    rpc:call(WorkerP2, transfer, restart_unfinished_transfers, [SpaceId]),
+    resume_file_replication(WorkerP2),
+    ?assertMatch({ok, 204, _, _},
+        do_request(WorkerP2, <<"transfers/", Tid1/binary>>, patch, [user_1_token_header(Config)], [])),
+
+    ?assertMatch(#{
+        <<"transferStatus">> := <<"completed">>,
+        <<"invalidationStatus">> := <<"completed">>
+    },
+        case do_request(WorkerP1, <<"transfers/", Tid1/binary>>, get, [user_1_token_header(Config)], []) of
+            {ok, 200, _, TransferStatus} ->
+                json_utils:decode_map(TransferStatus);
+            Error -> Error
+        end, ?ATTEMPTS),
 
     ?assertEqualList([Tid1], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqualList([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
@@ -904,10 +930,10 @@ invalidate_dir_replica(Config) ->
     {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1,
         <<"replicas", Dir1/binary, "?provider_id=", (domain(WorkerP2))/binary>>,
         post, [user_1_token_header(Config)], []),
-        ?ATTEMPTS),
-
+    ?ATTEMPTS),
     DecodedBody = json_utils:decode_map(Body),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
+
     {ok, FileObjectId} = cdmi_id:guid_to_objectid(Dir1Guid),
     DomainP2 = domain(WorkerP2),
     ?assertMatch(#{
@@ -952,10 +978,35 @@ invalidate_dir_replica(Config) ->
 
     ?assertMatch(#{
         <<"transferStatus">> := <<"skipped">>,
-        <<"targetProviderId">> := <<"undefined">>,
+        <<"targetProviderId">> := null,
         <<"path">> := Dir1,
         <<"invalidationStatus">> := <<"completed">>,
         <<"callback">> := null
+    },
+        case do_request(WorkerP1, <<"transfers/", Tid2/binary>>, get, [user_1_token_header(Config)], []) of
+            {ok, 200, _, TransferStatus} ->
+                json_utils:decode_map(TransferStatus);
+            Error -> Error
+        end, ?ATTEMPTS),
+
+
+    DecodedBody2 = json_utils:decode_map(Body2),
+    #{<<"transferId">> := Tid2} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody2),
+    {ok, FileObjectId} = cdmi_id:guid_to_objectid(Dir1Guid),
+    DomainP2 = domain(WorkerP2),
+    ?assertMatch(#{
+        <<"path">> := Dir1,
+        <<"callback">> := null,
+        <<"transferStatus">> := <<"skipped">>,
+        <<"invalidationStatus">> := <<"completed">>,
+        <<"targetProviderId">> := null,
+        <<"fileId">> := FileObjectId,
+        <<"filesToTransfer">> := 0,
+        <<"filesTransferred">> := 0,
+        <<"bytesToTransfer">> := 0,
+        <<"bytesTransferred">> := 0,
+        <<"filesInvalidated">> := 5,
+        <<"filesToInvalidate">> := 5
     },
         case do_request(WorkerP1, <<"transfers/", Tid2/binary>>, get, [user_1_token_header(Config)], []) of
             {ok, 200, _, TransferStatus} ->
@@ -1976,6 +2027,61 @@ quota_exceeded_during_file_replication(Config) ->
     ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File),
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File).
 
+many_simultaneous_transfers(Config) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
+    Space = <<"/space4">>,
+    RootDir = filename:join(Space, <<"simultaneous_transfers">>),
+    FilesNum = 1000,
+    {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, RootDir),
+
+    FileGuids = lists:map(fun(N) ->
+        File = filename:join(RootDir, integer_to_binary(N)),
+        {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
+        {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
+        lfm_proxy:write(WorkerP1, Handle, 0, ?TEST_DATA),
+        lfm_proxy:fsync(WorkerP1, Handle),
+        FileGuid
+    end, lists:seq(1, FilesNum)),
+
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, RootDir}), ?ATTEMPTS),
+    lists:foreach(fun(FileGuid) ->
+        ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {guid, FileGuid}), ?ATTEMPTS)
+    end, FileGuids),
+
+    TidsAndGuids = lists:map(fun(FileGuid) ->
+        {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
+        {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1,
+            <<"replicas-id/", FileObjectId/binary, "?provider_id=", (domain(WorkerP2))/binary>>,
+            post, [user_1_token_header(Config)], []),
+        ?ATTEMPTS),
+        DecodedBody = json_utils:decode_map(Body),
+        #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
+        {Tid, FileGuid}
+    end, FileGuids),
+
+    % then
+    lists:foreach(fun({Tid, FileGuid}) ->
+        {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
+        DomainP2 = domain(WorkerP2),
+        ?assertMatch(#{
+            <<"transferStatus">> := <<"failed">>,
+            <<"targetProviderId">> := DomainP2,
+            <<"invalidationStatus">> := <<"skipped">>,
+            <<"fileId">> := FileObjectId,
+            <<"callback">> := null,
+            <<"filesToTransfer">> := 1,
+            <<"filesTransferred">> := 0,
+            <<"failedFiles">> := 1
+        },
+            case do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []) of
+                {ok, 200, _, TransferStatus} ->
+                    json_utils:decode_map(TransferStatus);
+                Error -> Error
+            end, ?ATTEMPTS)
+    end, TidsAndGuids).
+
 quota_decreased_after_invalidation(Config) ->
     ct:timetrap({hours, 1}),
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -2093,7 +2199,7 @@ quota_decreased_after_invalidation(Config) ->
 
     ?assertMatch(#{
         <<"transferStatus">> := <<"skipped">>,
-        <<"targetProviderId">> := <<"undefined">>,
+        <<"targetProviderId">> := null,
         <<"path">> := File,
         <<"invalidationStatus">> := <<"completed">>,
         <<"callback">> := null
@@ -2206,8 +2312,6 @@ file_replication_failures_should_fail_whole_transfer(Config) ->
 
 replicate_big_dir(Config) ->
     ct:timetrap({minutes, 10}),
-    {ok, _} = application:ensure_all_started(worker_pool),
-    {ok, _} = worker_pool:start_sup_pool(?VERIFY_POOL, [{workers, 8}]),
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
@@ -2256,8 +2360,7 @@ replicate_big_dir(Config) ->
             {ok, 200, _, TransferStatus} ->
                 json_utils:decode_map(TransferStatus);
             Error -> Error
-        end, 600),
-    worker_pool:stop_pool(?VERIFY_POOL).
+        end, 600).
 
 replicate_big_file(Config) ->
     ct:timetrap({hours, 1}),
@@ -2300,6 +2403,55 @@ replicate_big_file(Config) ->
             Error -> Error
         end, 3600).
 
+invalidate_big_dir(Config) ->
+    ct:timetrap({minutes, 10}),
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
+    Space = <<"/space3">>,
+    RootDir = filename:join(Space, <<"big_dir_invalidation">>),
+    Structure = [10, 10],   % last level are files
+    FilesToCreate = lists:foldl(fun(N, AccIn) -> 1 + AccIn * N end, 1, Structure),
+
+    true = register(?CREATE_FILE_COUNTER, spawn_link(?MODULE, create_file_counter, [0, FilesToCreate, self(), []])),
+    true = register(?SYNC_FILE_COUNTER, spawn_link(?MODULE, sync_file_counter, [0, FilesToCreate, self()])),
+
+    create_nested_directory_tree(WorkerP1, SessionId, Structure, RootDir),
+
+    FileGuids = receive {create, FileGuids0} -> FileGuids0 end,
+
+    lists:foreach(fun(FileGuid) ->
+        worker_pool:cast(?VERIFY_POOL, {?MODULE, verify_file, [WorkerP2, SessionId2, FileGuid]})
+    end, FileGuids),
+
+    receive files_synchronized -> ok end,
+    DomainP2 = domain(WorkerP2),
+
+    {ok, 200, _, Body} = do_request(WorkerP2,
+        <<"replicas", RootDir/binary, "?provider_id=", (domain(WorkerP1))/binary, "&migration_provider_id=", (domain(WorkerP2))/binary>>,
+        delete, [user_1_token_header(Config)], []
+    ),
+    DecodedBody = json_utils:decode_map(Body),
+    #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
+
+    % then
+    ?assertMatch(#{
+        <<"transferStatus">> := <<"completed">>,
+        <<"targetProviderId">> := DomainP2,
+        <<"path">> := RootDir,
+        <<"invalidationStatus">> := <<"completed">>,
+        <<"callback">> := null,
+        <<"filesToTransfer">> := FilesToCreate,
+        <<"filesTransferred">> := FilesToCreate,
+        <<"filesToInvalidate">> := FilesToCreate,
+        <<"filesInvalidated">> := FilesToCreate
+    },
+        case do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []) of
+            {ok, 200, _, TransferStatus} ->
+                json_utils:decode_map(TransferStatus);
+            Error -> Error
+        end, 600).
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -2313,7 +2465,8 @@ init_per_suite(Config) ->
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_update_interval, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_stream_update_interval, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
-            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(1)) % TODO - change to 2 seconds
+            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(1)), % TODO - change to 2 seconds
+            test_utils:set_env(Worker, ?APP_NAME, prefetching, off)
         end, ?config(op_worker_nodes, NewConfig2)),
 
         application:start(ssl),
@@ -2321,6 +2474,8 @@ init_per_suite(Config) ->
         NewConfig3 = initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2),
         NewConfig3
     end,
+    {ok, _} = application:ensure_all_started(worker_pool),
+    {ok, _} = worker_pool:start_sup_pool(?VERIFY_POOL, [{workers, 8}]),
     [
         {?ENV_UP_POSTHOOK, Posthook},
         {?LOAD_MODULES, [initializer, multi_provider_rest_test_SUITE]}
@@ -2330,6 +2485,7 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
+    true = worker_pool:stop_pool(?VERIFY_POOL),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     hackney:stop(),
     application:stop(ssl),
@@ -2352,7 +2508,7 @@ init_per_testcase(Case, Config) when
 
 init_per_testcase(metric_get, Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-
+    start_monitoring_worker(WorkerP1),
     test_utils:mock_new(WorkerP1, rrd_utils),
     test_utils:mock_expect(WorkerP1, rrd_utils, export_rrd, fun(_, _, _) ->
         {ok, <<"{\"test\":\"rrd\"}">>}
@@ -2369,7 +2525,8 @@ init_per_testcase(Case, Config) when
 
 init_per_testcase(Case, Config) when
     Case =:= quota_exceeded_during_file_replication;
-    Case =:= file_replication_failures_should_fail_whole_transfer
+    Case =:= file_replication_failures_should_fail_whole_transfer;
+    Case =:= many_simultaneous_transfers
 ->
     [WorkerP2, _WorkerP1] = ?config(op_worker_nodes, Config),
     OldSoftQuota = rpc:call(WorkerP2, application, get_env, [op_worker, soft_quota_limit_size]),
@@ -2416,7 +2573,8 @@ end_per_testcase(Case = automatic_cleanup_should_invalidate_unpopular_files, Con
 end_per_testcase(Case, Config) when
     Case =:= quota_exceeded_during_file_replication;
     Case =:= quota_decreased_after_invalidation;
-    Case =:= file_replication_failures_should_fail_whole_transfer
+    Case =:= file_replication_failures_should_fail_whole_transfer;
+    Case =:= many_simultaneous_transfers
     ->
     [WorkerP2, _WorkerP1] = ?config(op_worker_nodes, Config),
     {ok, OldSoftQuota} = ?config(old_soft_quota, Config),
@@ -2454,6 +2612,7 @@ end_per_testcase(Case, Config) when
     end_per_testcase(all, Config);
 
 end_per_testcase(_Case, Config) ->
+    remove_transfers(Config),
     lfm_proxy:teardown(Config).
 
 %%%===================================================================
@@ -2500,6 +2659,14 @@ user_1_token_header(Config) ->
 domain(Node) ->
     atom_to_binary(?GET_DOMAIN(Node), utf8).
 
+fail_file_replication(Node) ->
+    test_utils:mock_new(Node, replica_synchronizer),
+    test_utils:mock_expect(Node, replica_synchronizer, synchronize,
+        fun(_, _, _, _, _) ->
+            throw(test_error)
+        end
+    ).
+
 lengthen_file_replication_time(Node, SleepTimeInSeconds) ->
     test_utils:mock_new(Node, replica_synchronizer),
     test_utils:mock_expect(Node, replica_synchronizer, synchronize,
@@ -2509,38 +2676,21 @@ lengthen_file_replication_time(Node, SleepTimeInSeconds) ->
         end
     ).
 
-resume_file_replication_time(Node) ->
+resume_file_replication(Node) ->
     ok = test_utils:mock_unload(Node, replica_synchronizer).
-
-kill(Pid) ->
-    true = exit(list_to_pid(binary_to_list(Pid)), kill).
-
-check_pid(_Node, 0, _Tid) ->
-    undefined;
-check_pid(Node, Attempts, Tid) ->
-    case rpc:call(Node, transfer, get, [Tid]) of
-        {ok, #document{value = #transfer{pid = undefined}}} ->
-            timer:sleep(timer:seconds(1)),
-            check_pid(Node, Attempts - 1, Tid);
-        {ok, #document{value = #transfer{pid = Pid}}} ->
-            Pid;
-        _Other ->
-            timer:sleep(timer:seconds(1)),
-            check_pid(Node, Attempts - 1, Tid)
-    end.
 
 create_nested_directory_tree(Node, SessionId, [SubFilesNum], Root) ->
     create_dir(Node, SessionId, Root),
     lists:foreach(fun(N) ->
         FilePath = filename:join([Root, integer_to_binary(N)]),
-        worker_pool:cast(?VERIFY_POOL, {?MODULE, create_file, [Node, SessionId, FilePath]})
+        ok = worker_pool:cast(?VERIFY_POOL, {?MODULE, create_file, [Node, SessionId, FilePath]})
     end, lists:seq(1, SubFilesNum));
 create_nested_directory_tree(Node, SessionId, [SubDirsNum | Rest], Root) ->
     create_dir(Node, SessionId, Root),
     lists:foreach(fun(N) ->
         NBin = integer_to_binary(N),
         DirPath = filename:join([Root, NBin]),
-        worker_pool:cast(?VERIFY_POOL,
+        ok = worker_pool:cast(?VERIFY_POOL,
             {?MODULE, create_nested_directory_tree, [Node, SessionId, Rest, DirPath]}
         )
     end, lists:seq(1, SubDirsNum)).
@@ -2603,3 +2753,28 @@ list_finished_transfers(Worker, SpaceId) ->
 list_unfinished_transfers(Worker, SpaceId) ->
     {ok, Transfers} = rpc:call(Worker, transfer, for_each_current_transfer, [?LIST_TRANSFER, [], SpaceId]),
     Transfers.
+
+start_monitoring_worker(Node) ->
+    Args = [
+        {supervisor_flags, rpc:call(Node, monitoring_worker, supervisor_flags, [])},
+        {supervisor_children_spec, rpc:call(Node, monitoring_worker, supervisor_children_spec, [])}
+    ],
+    ok = rpc:call(Node, node_manager, start_worker, [monitoring_worker, Args]).
+
+remove_transfers(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    lists:foreach(fun(Worker) ->
+        {ok, SpaceIds} = rpc:call(Worker, provider_logic, get_spaces, []),
+        lists:foreach(fun(SpaceId) ->
+            {ok, Current} = rpc:call(Worker, transfer, list_transfers, [SpaceId, true]),
+            {ok, Past} = rpc:call(Worker, transfer, list_transfers, [SpaceId, false]),
+            lists:foreach(fun(Tid) ->
+                rpc:call(Worker, transfer, delete, [Tid, SpaceId]),
+                rpc:call(Worker, transfer, remove_links, [<<"PAST_TRANSFERS_KEY">>, Tid, SpaceId]),
+                rpc:call(Worker, transfer, remove_links, [<<"CURRENT_TRANSFERS_KEY">>, Tid, SpaceId])
+            end, Current ++ Past)
+        end, SpaceIds)
+    end, Workers).
+
+
+%todo test of cancel_invalidation

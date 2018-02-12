@@ -222,8 +222,8 @@ ensure_connected(SessId) ->
                 list_to_binary(inet:ntoa(IP)) end, IPs),
             lists:foreach(
                 fun(IPBinary) ->
-                    {ok, Port} = application:get_env(?APP_NAME, protocol_handler_port),
-                    connection:start_link(ProviderId, SessId, IPBinary, Port, ranch_ssl, timer:seconds(5))
+                    {ok, Port} = application:get_env(?APP_NAME, gui_https_port),
+                    outgoing_connection:start_link(ProviderId, SessId, IPBinary, Port, ranch_ssl, timer:seconds(5))
                 end, IPBinaries),
             ok;
         {ok, Pid} ->

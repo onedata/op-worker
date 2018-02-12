@@ -16,10 +16,13 @@
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("cluster_worker/include/exometer_utils.hrl").
 
 %% API
 -export([emit/1, emit/2, flush/2, flush/5, subscribe/2, unsubscribe/2]).
 -export([get_event_managers/1]).
+
+-export([init_counters/0, init_report/0]).
 
 -export_type([key/0, base/0, type/0, stream/0, manager_ref/0]).
 
@@ -36,6 +39,9 @@
 {exclude, pid() | session:id()} |
 % reference all event managers except those provided in list
 {exclude, [pid() | session:id()]}.
+
+-define(EXOMETER_NAME(Param), ?exometer_name(?MODULE, Param)).
+-define(EXOMETER_COUNTERS, [emit]).
 
 %%%===================================================================
 %%% API
@@ -71,6 +77,7 @@ emit(Evt, {exclude, MgrRef}) ->
     end;
 
 emit(#event{} = Evt, MgrRef) ->
+    ?update_counter(?EXOMETER_NAME(emit)),
     send_to_event_managers(Evt, get_event_managers(MgrRef));
 
 emit(Evt, MgrRef) ->
@@ -161,6 +168,34 @@ get_event_managers([_ | _] = MgrRefs) ->
 
 get_event_managers(MgrRef) ->
     get_event_managers([MgrRef]).
+
+%%%===================================================================
+%%% Exometer API
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Initializes all counters.
+%% @end
+%%--------------------------------------------------------------------
+-spec init_counters() -> ok.
+init_counters() ->
+    Counters = lists:map(fun(Name) ->
+        {?EXOMETER_NAME(Name), counter}
+    end, ?EXOMETER_COUNTERS),
+    ?init_counters(Counters).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Subscribe for reports for all parameters.
+%% @end
+%%--------------------------------------------------------------------
+-spec init_report() -> ok.
+init_report() ->
+    Reports = lists:map(fun(Name) ->
+        {?EXOMETER_NAME(Name), [value]}
+    end, ?EXOMETER_COUNTERS),
+    ?init_reports(Reports).
 
 %%%===================================================================
 %%% Internal functions

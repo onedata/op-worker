@@ -17,6 +17,10 @@
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
+-define(AUTO_HELPER_MODE, 'AUTO').
+-define(FORCE_PROXY_HELPER_MODE, 'FORCE_PROXY').
+-define(FORCE_DIRECT_HELPER_MODE, 'FORCE_DIRECT').
+
 -record(child_link_uuid, {
     uuid :: file_meta:uuid(),
     name :: binary()
@@ -152,7 +156,8 @@
 
 -record(get_helper_params, {
     storage_id :: storage:id(),
-    force_proxy_io = false :: boolean()
+    space_id :: od_space:id(),
+    helper_mode :: ?AUTO_HELPER_MODE | ?FORCE_PROXY_HELPER_MODE | ?FORCE_DIRECT_HELPER_MODE
 }).
 
 -record(create_storage_test_file, {

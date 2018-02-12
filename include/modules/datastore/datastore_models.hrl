@@ -129,6 +129,7 @@
 %% Model for caching provider details fetched from OZ
 -record(od_provider, {
     name :: undefined | binary(),
+    admin_email :: undefined | binary(),
     subdomain_delegation = false :: undefined | boolean(),
     domain :: binary(),
     subdomain = undefined :: undefined |  binary(),

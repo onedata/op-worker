@@ -8,7 +8,7 @@
 %%% @doc
 %%% Interface for reading and manipulating od_handle_service records
 %%% synchronized via Graph Sync. Requests are delegated to gs_client_worker,
-%%% which decides if they should be served from cache or handled by OneZone.
+%%% which decides if they should be served from cache or handled by Onezone.
 %%% NOTE: This is the only valid way to interact with od_handle_service records,
 %%% to ensure consistency, no direct requests to datastore or OZ REST should
 %%% be performed.

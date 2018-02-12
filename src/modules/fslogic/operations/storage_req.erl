@@ -28,7 +28,7 @@
     remove_storage_test_file_attempts, 10)).
 
 %% API
--export([get_configuration/1, get_helper_params/3, create_storage_test_file/3,
+-export([get_configuration/1, get_helper_params/4, create_storage_test_file/3,
     verify_storage_test_file/5, remove_storage_test_file/4]).
 
 %%%===================================================================
@@ -58,22 +58,41 @@ get_configuration(SessId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets helper params based on given storage ID.
+%% Gets helper params based on given storage id and space id.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_helper_params(user_ctx:ctx(), storage:id(),
-    ForceCL :: boolean()) -> #fuse_response{}.
-get_helper_params(_UserCtx, StorageId, true = _ForceProxy) ->
+    od_space:id(), atom()) -> #fuse_response{}.
+get_helper_params(UserCtx, StorageId, SpaceId, HelperMode) ->
     {ok, Helper} = case storage:get(StorageId) of
         {ok, StorageDoc} ->
             fslogic_storage:select_helper(StorageDoc);
         {error, not_found} ->
             {ok, undefined}
     end,
-    HelperParams = helper:get_proxy_params(Helper, StorageId),
-    #fuse_response{status = #status{code = ?OK}, fuse_response = HelperParams};
-get_helper_params(_UserCtx, _StorageId, false = _ForceProxy) ->
-    #fuse_response{status = #status{code = ?ENOTSUP}}.
+    case HelperMode of
+        ?FORCE_DIRECT_HELPER_MODE ->
+            SessionId = user_ctx:get_session_id(UserCtx),
+            UserId = user_ctx:get_user_id(UserCtx),
+            HelperName = helper:get_name(Helper),
+            {ok, StorageDoc2} = storage:get(StorageId),
+            case luma:get_client_user_ctx(SessionId, UserId, SpaceId,
+                StorageDoc2, HelperName) of
+                {ok, ClientStorageUserUserCtx} ->
+                    HelperParams = helper:get_params(Helper,
+                        ClientStorageUserUserCtx),
+                    #fuse_response{
+                        status = #status{code = ?OK},
+                        fuse_response = HelperParams};
+                {error, _} ->
+                    #fuse_response{status = #status{code = ?ENOENT}}
+            end;
+        _ProxyOrAutoMode ->
+            HelperParams = helper:get_proxy_params(Helper, StorageId),
+            #fuse_response{
+               status = #status{code = ?OK},
+               fuse_response = HelperParams}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

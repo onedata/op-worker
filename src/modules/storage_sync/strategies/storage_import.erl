@@ -95,9 +95,12 @@ strategy_init_jobs(simple_scan, Args = #{
         space_id := SpaceId,
         storage_id := StorageId
 }) ->
-    space_strategies:update_import_start_time(SpaceId, StorageId,time_utils:cluster_time_milli_seconds()),
+    CurrentTimestamp = time_utils:cluster_time_seconds(),
+    storage_sync_monitoring:reset_sync_counters(SpaceId),
+    space_strategies:update_import_start_time(SpaceId, StorageId,CurrentTimestamp),
     storage_sync_monitoring:update_queue_length_spirals(SpaceId, 1),
-    storage_sync_monitoring:update_files_to_import_counter(SpaceId, 1),
+    storage_sync_monitoring:update_files_to_sync_counter(SpaceId, 1),
+    ?debug("Starting storage_import for space: ~p at time ~p", [SpaceId, CurrentTimestamp]),
     [#space_strategy_job{
         strategy_name = simple_scan,
         strategy_args = Args,
@@ -113,10 +116,7 @@ strategy_init_jobs(StrategyName, StrategyArgs, InitData) ->
 %%--------------------------------------------------------------------
 -spec strategy_handle_job(space_strategy:job()) ->
     {space_strategy:job_result(), [space_strategy:job()]}.
-strategy_handle_job(Job = #space_strategy_job{
-    strategy_name = simple_scan,
-    data = #{space_id := SpaceId}
-}) ->
+strategy_handle_job(Job = #space_strategy_job{strategy_name = simple_scan}) ->
     ok = datastore_throttling:throttle(import),
     simple_scan:run(Job);
 strategy_handle_job(#space_strategy_job{strategy_name = no_import}) ->
@@ -154,12 +154,27 @@ strategy_merge_result(#space_strategy_job{
         space_id := SpaceId,
         storage_id := StorageId
 }}, ok, ok) ->
-    update_import_finish_time_if_import_finished(SpaceId, StorageId);
-strategy_merge_result(_Job, Error, ok) ->
+    update_import_finish_time_if_import_is_finished(SpaceId, StorageId);
+strategy_merge_result(#space_strategy_job{
+    data = #{
+        space_id := SpaceId,
+        storage_id := StorageId
+}}, Error, ok) ->
+    update_import_finish_time_if_import_is_finished(SpaceId, StorageId),
     Error;
-strategy_merge_result(_Job, ok, Error) ->
+strategy_merge_result(#space_strategy_job{
+    data = #{
+        space_id := SpaceId,
+        storage_id := StorageId
+}}, ok, Error) ->
+    update_import_finish_time_if_import_is_finished(SpaceId, StorageId),
     Error;
-strategy_merge_result(_Job, {error, Reason1}, {error, Reason2}) ->
+strategy_merge_result(#space_strategy_job{
+    data = #{
+        space_id := SpaceId,
+        storage_id := StorageId
+}}, {error, Reason1}, {error, Reason2}) ->
+    update_import_finish_time_if_import_is_finished(SpaceId, StorageId),
     {error, [Reason1, Reason2]}.
 
 %%--------------------------------------------------------------------
@@ -182,11 +197,9 @@ worker_pools_config() -> [
 main_worker_pool() ->
     ?STORAGE_SYNC_DIR_POOL_NAME.
 
-
 %%%===================================================================
 %%% API functions
 %%%===================================================================
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -219,12 +232,12 @@ start(SpaceId, StorageId, ImportStartTime, ImportFinishTime, ParentCtx, FileName
 %% Checks if import has finished. If true, updates import_finish_time.
 %% @end
 %%-------------------------------------------------------------------
--spec update_import_finish_time_if_import_finished(od_space:id(), storage:id()) -> ok.
-update_import_finish_time_if_import_finished(SpaceId, StorageId) ->
-    case storage_sync_monitoring:import_state(SpaceId) of
-        finished ->
+-spec update_import_finish_time_if_import_is_finished(od_space:id(), storage:id()) -> ok.
+update_import_finish_time_if_import_is_finished(SpaceId, StorageId) ->
+    case storage_sync_monitoring:get_unhandled_files_value(SpaceId) of
+        0 ->
             {ok, _} = space_strategies:update_import_finish_time(SpaceId,
-                StorageId,time_utils:cluster_time_milli_seconds()),
+                StorageId, time_utils:cluster_time_seconds()),
             ok;
         _ ->
             ok

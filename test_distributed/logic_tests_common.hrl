@@ -14,7 +14,7 @@
 -include("global_definitions.hrl").
 -include("graph_sync/provider_graph_sync.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("proto/oneclient/handshake_messages.hrl").
+-include("proto/common/handshake_messages.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 -include_lib("ctool/include/api_errors.hrl").
@@ -129,6 +129,7 @@
 
 % Mocked provider data
 -define(PROVIDER_NAME(__Provider), __Provider).
+-define(PROVIDER_ADMIN_EMAIL(__Provider), __Provider).
 -define(PROVIDER_DOMAIN(__Provider), __Provider).
 -define(PROVIDER_ONLINE(__Provider), true).
 -define(PROVIDER_SUBDOMAIN_DELEGATION(__Provider), false).
@@ -273,6 +274,7 @@
 
 -define(PROVIDER_PRIVATE_DATA_MATCHER(__Provider), #document{key = __Provider, value = #od_provider{
     name = ?PROVIDER_NAME(__Provider),
+    admin_email = ?PROVIDER_ADMIN_EMAIL(__Provider),
     subdomain_delegation = ?PROVIDER_SUBDOMAIN_DELEGATION(__Provider),
     domain = ?PROVIDER_DOMAIN(__Provider),
     online = ?PROVIDER_ONLINE(__Provider),
@@ -423,6 +425,7 @@ end).
 -define(PROVIDER_PRIVATE_DATA_VALUE(__ProviderId), begin
     __ProtectedData = ?PROVIDER_PROTECTED_DATA_VALUE(__ProviderId),
     __ProtectedData#{
+        <<"adminEmail">> => ?PROVIDER_ADMIN_EMAIL(__ProviderId),
         <<"subdomainDelegation">> => ?PROVIDER_SUBDOMAIN_DELEGATION(__ProviderId),
         <<"subdomain">> => ?PROVIDER_SUBDOMAIN(__ProviderId),
         <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_provider, id = __ProviderId, aspect = instance, scope = private}),

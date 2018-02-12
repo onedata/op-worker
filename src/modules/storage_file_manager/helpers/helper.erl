@@ -21,10 +21,10 @@
 
 %% API
 -export([new_ceph_helper/6, new_posix_helper/3, new_s3_helper/6,
-    new_swift_helper/6, new_glusterfs_helper/5]).
+    new_swift_helper/6, new_glusterfs_helper/5, new_nulldevice_helper/3]).
 -export([new_ceph_user_ctx/2, new_posix_user_ctx/2, new_s3_user_ctx/2,
-    new_swift_user_ctx/2, new_glusterfs_user_ctx/2, validate_user_ctx/2,
-    validate_group_ctx/2]).
+    new_swift_user_ctx/2, new_glusterfs_user_ctx/2, new_nulldevice_user_ctx/2,
+    validate_user_ctx/2, validate_group_ctx/2]).
 -export([get_name/1, get_args/1, get_admin_ctx/1, is_insecure/1, get_params/2,
     get_proxy_params/2, get_timeout/1]).
 -export([set_user_ctx/2]).
@@ -143,6 +143,20 @@ new_glusterfs_helper(Volume, Hostname, OptArgs, AdminCtx, Insecure) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Constructs Null Device storage helper record.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_nulldevice_helper(args(), user_ctx(), boolean()) -> helpers:helper().
+new_nulldevice_helper(OptArgs, AdminCtx, Insecure) ->
+    #helper{
+        name = ?NULL_DEVICE_HELPER_NAME,
+        args = OptArgs,
+        admin_ctx = AdminCtx,
+        insecure = Insecure
+    }.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Constructs Ceph storage helper user context record.
 %% @end
 %%--------------------------------------------------------------------
@@ -203,6 +217,18 @@ new_glusterfs_user_ctx(Uid, Gid) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Constructs Null Device storage helper user context record.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_nulldevice_user_ctx(integer(), integer()) -> user_ctx().
+new_nulldevice_user_ctx(Uid, Gid) ->
+    #{
+        <<"uid">> => integer_to_binary(Uid),
+        <<"gid">> => integer_to_binary(Gid)
+    }.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Checks whether user context is valid for the storage helper.
 %% @end
 %%--------------------------------------------------------------------
@@ -217,6 +243,8 @@ validate_user_ctx(#helper{name = ?S3_HELPER_NAME}, UserCtx) ->
 validate_user_ctx(#helper{name = ?SWIFT_HELPER_NAME}, UserCtx) ->
     check_user_or_group_ctx_fields([<<"username">>, <<"password">>], UserCtx);
 validate_user_ctx(#helper{name = ?GLUSTERFS_HELPER_NAME}, UserCtx) ->
+    check_user_or_group_ctx_fields([<<"uid">>, <<"gid">>], UserCtx);
+validate_user_ctx(#helper{name = ?NULL_DEVICE_HELPER_NAME}, UserCtx) ->
     check_user_or_group_ctx_fields([<<"uid">>, <<"gid">>], UserCtx).
 
 %%--------------------------------------------------------------------
@@ -229,6 +257,8 @@ validate_user_ctx(#helper{name = ?GLUSTERFS_HELPER_NAME}, UserCtx) ->
 validate_group_ctx(#helper{name = ?POSIX_HELPER_NAME}, GroupCtx) ->
     check_user_or_group_ctx_fields([<<"gid">>], GroupCtx);
 validate_group_ctx(#helper{name = ?GLUSTERFS_HELPER_NAME}, GroupCtx) ->
+    check_user_or_group_ctx_fields([<<"gid">>], GroupCtx);
+validate_group_ctx(#helper{name = ?NULL_DEVICE_HELPER_NAME}, GroupCtx) ->
     check_user_or_group_ctx_fields([<<"gid">>], GroupCtx);
 validate_group_ctx(#helper{name = HelperName}, _GroupCtx) ->
     {error, {group_ctx_not_supported, HelperName}}.
@@ -348,6 +378,7 @@ translate_name(<<"ProxyIO">>) -> ?PROXY_HELPER_NAME;
 translate_name(<<"AmazonS3">>) -> ?S3_HELPER_NAME;
 translate_name(<<"Swift">>) -> ?SWIFT_HELPER_NAME;
 translate_name(<<"GlusterFS">>) -> ?GLUSTERFS_HELPER_NAME;
+translate_name(<<"NullDevice">>) -> ?NULL_DEVICE_HELPER_NAME;
 translate_name(Name) -> Name.
 
 %%--------------------------------------------------------------------
@@ -370,6 +401,9 @@ translate_arg_name(<<"secret_key">>) -> <<"secretKey">>;
 translate_arg_name(<<"tenant_name">>) -> <<"tenantName">>;
 translate_arg_name(<<"user_name">>) -> <<"username">>;
 translate_arg_name(<<"xlator_options">>) -> <<"xlatorOptions">>;
+translate_arg_name(<<"latency_min">>) -> <<"latencyMin">>;
+translate_arg_name(<<"latency_max">>) -> <<"latencyMax">>;
+translate_arg_name(<<"timeout_probability">>) -> <<"timeoutProbability">>;
 translate_arg_name(Name) -> Name.
 
 %%%===================================================================

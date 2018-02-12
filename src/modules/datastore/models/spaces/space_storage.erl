@@ -69,6 +69,7 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec delete(id()) -> ok | {error, term()}.
 delete(Key) ->
+    space_strategies:delete(Key),
     datastore_model:delete(?CTX, Key).
 
 %%--------------------------------------------------------------------
