@@ -14,7 +14,6 @@
 -define(GATEWAY_REGISTERED_NAMES_HRL, true).
 
 -define(RTRANSFER, rtransfer).
--define(RTRANSFER_SUPERVISOR, rtransfer_supervisor).
 -define(GATEWAY, gateway).
 -define(GATEWAY_LISTENER, gateway_listener).
 -define(GATEWAY_DISPATCHER, gateway_dispatcher).

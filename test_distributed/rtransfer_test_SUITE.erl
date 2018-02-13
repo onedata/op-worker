@@ -16,6 +16,8 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
+-include_lib("ctool/include/oz/oz_providers.hrl").
+
 
 %% API
 -export([all/0, init_per_testcase/2, end_per_testcase/2, init_per_suite/1]).
@@ -24,13 +26,15 @@
     more_than_block_fetch_test/1, more_than_block_fetch_test2/1, cancel_fetch_test/1,
     error_open_fun_test/1, error_read_fun_test/1, error_write_fun_test/1, many_requests_test/1,
     many_same_requests_test/1, many_requests_to_one_file/1, request_bigger_than_file_test/1,
-    offset_greater_than_file_size_test/1]).
+    offset_greater_than_file_size_test/1, restart_gateway_test/1, restart_rtransfer_server_test/1]).
 
 -export([read_fun/1, write_fun/1, counter/1, onCompleteCounter/1, data_counter/2]).
 
 all() ->
     ?ALL([
         less_than_block_fetch_test,
+        restart_gateway_test,
+        restart_rtransfer_server_test,
         exact_block_size_fetch_test,
         more_than_block_fetch_test,
         more_than_block_fetch_test2,
@@ -97,6 +101,59 @@ less_than_block_fetch_test(Config) ->
         ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize,
         notify_fun(CounterPid), on_complete_fun(self())
     ),
+
+    %% then
+    ?assertReceivedMatch({on_complete, {ok, DataSize}}, ?TIMEOUT),
+    stop_counter(CounterPid),
+    ?assertReceivedMatch({counter, 1}, ?TIMEOUT).
+
+restart_gateway_test(Config) ->
+    %% test fetching data of size smaller then rtransfer block_size
+    [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
+
+    %% given
+    DataSize = 32,
+    Data = generate_binary(DataSize),
+    ReadFunOpt = make_opt_fun(read_fun, {ok, ?FILE_HANDLE2, Data}),
+    WriteFunOpt = make_opt_fun(write_fun, {ok, ?FILE_HANDLE2, DataSize}),
+    CounterPid = spawn(?MODULE, counter, [0]),
+    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
+
+    %% when
+    ?assertMatch({ok, _}, start_gateway(Worker1, RtransferOpts1)),
+    ?assertMatch({ok, _}, start_gateway(Worker2, RtransferOpts2)),
+
+    Ref = prepare_fetch_request(Worker1, Worker2, ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize),
+    ok = rpc:call(Worker1, gen_server2, stop, [gateway, test_reason, infinity]),
+    fetch_data(Worker1, Ref, notify_fun(CounterPid), on_complete_fun(self())),
+
+
+    %% then
+    ?assertReceivedMatch({on_complete, {ok, DataSize}}, ?TIMEOUT),
+    stop_counter(CounterPid),
+    ?assertReceivedMatch({counter, 1}, ?TIMEOUT).
+
+restart_rtransfer_server_test(Config) ->
+    %% test fetching data of size smaller then rtransfer block_size
+    [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
+
+    %% given
+    DataSize = 32,
+    Data = generate_binary(DataSize),
+    ReadFunOpt = make_opt_fun(read_fun, {ok, ?FILE_HANDLE2, Data}),
+    WriteFunOpt = make_opt_fun(write_fun, {ok, ?FILE_HANDLE2, DataSize}),
+    CounterPid = spawn(?MODULE, counter, [0]),
+    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
+
+    %% when
+    ?assertMatch({ok, _}, start_gateway(Worker1, RtransferOpts1)),
+    ?assertMatch({ok, _}, start_gateway(Worker2, RtransferOpts2)),
+
+    Ref = prepare_fetch_request(Worker1, Worker2, ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize),
+    ok = rpc:call(Worker2, gen_server2, stop, [{global, rtransfer}, test_reason, infinity]),
+    fetch_data(Worker1, Ref, notify_fun(CounterPid), on_complete_fun(self())),
 
     %% then
     ?assertReceivedMatch({on_complete, {ok, DataSize}}, ?TIMEOUT),
@@ -230,8 +287,8 @@ many_requests_test(Config) ->
     RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
-    ?assertMatch({ok, _}, start_rtransfer(Worker1, RtransferOpts1)),
-    ?assertMatch({ok, _}, start_rtransfer(Worker2, RtransferOpts2)),
+    ?assertMatch({ok, _}, start_gateway(Worker1, RtransferOpts1)),
+    ?assertMatch({ok, _}, start_gateway(Worker2, RtransferOpts2)),
     Refs = generate_requests_to_many_files(RequestsNum, Worker1, Worker2, DataSize),
     fetch_many(Refs, Worker1, notify_fun(), on_complete_fun(CounterPid)),
 
@@ -256,8 +313,8 @@ many_same_requests_test(Config) ->
     RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
-    ?assertMatch({ok, _}, start_rtransfer(Worker1, RtransferOpts1)),
-    ?assertMatch({ok, _}, start_rtransfer(Worker2, RtransferOpts2)),
+    ?assertMatch({ok, _}, start_gateway(Worker1, RtransferOpts1)),
+    ?assertMatch({ok, _}, start_gateway(Worker2, RtransferOpts2)),
     Refs = generate_many_same_requests(RequestsNum, Worker1, Worker2, DataSize),
     fetch_many(Refs, Worker1, notify_fun(), on_complete_fun(CounterPid)),
 
@@ -285,8 +342,8 @@ many_requests_to_one_file(Config) ->
     RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
-    ?assertMatch({ok, _}, start_rtransfer(Worker1, RtransferOpts1)),
-    ?assertMatch({ok, _}, start_rtransfer(Worker2, RtransferOpts2)),
+    ?assertMatch({ok, _}, start_gateway(Worker1, RtransferOpts1)),
+    ?assertMatch({ok, _}, start_gateway(Worker2, RtransferOpts2)),
     Refs = generate_requests_to_one_file(RequestsNum, Worker1, Worker2, Chunk),
     fetch_many(Refs, Worker1, notify_fun(), on_complete_fun(CounterPid)),
 
@@ -439,9 +496,11 @@ init_per_testcase(_Case, Config) ->
     NewConfig = test_node_starter:prepare_test_environment(Config, ?MODULE),
     ssl:start(),
     hackney:start(),
-    [Worker1, Worker2 | _] = ?config(op_worker_nodes, NewConfig),
+    Workers = [Worker1, Worker2 | _] = ?config(op_worker_nodes, NewConfig),
     start_applier(Worker1, ?REMOTE_APPLIER),
     start_applier(Worker2, ?REMOTE_APPLIER),
+    rpc:multicall(Workers, mock_manager, start, []),
+    mock_providers_get_details(Workers),
     NewConfig.
 
 end_per_testcase(_Case, Config) ->
@@ -449,11 +508,31 @@ end_per_testcase(_Case, Config) ->
     lists:foreach(fun stop_applier/1, Workers),
     hackney:stop(),
     ssl:stop(),
+    unmock_providers_get_details(Workers),
     test_node_starter:clean_environment(Config).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+mock_providers_get_details(Nodes) ->
+    [Node1, Node2] = Nodes,
+    ProviderId1 = provider_id(Node1),
+    ProviderId2 = provider_id(Node2),
+    test_utils:mock_new(Nodes, oz_providers),
+    test_utils:mock_expect(Nodes, oz_providers, get_details, fun(Auth, ProviderId) ->
+        case ProviderId of
+            ProviderId1 ->
+                {ok, #provider_details{urls = [list_to_binary(utils:get_host(Node1))]}};
+            ProviderId2 ->
+                {ok, #provider_details{urls = [list_to_binary(utils:get_host(Node2))]}};
+            _ ->
+                meck:passthrough([Auth, ProviderId])
+        end
+    end).
+
+unmock_providers_get_details(Nodes) ->
+    test_utils:mock_unload(Nodes, oz_providers).
 
 get_nodes() ->
     fun(ProviderId) ->
@@ -585,24 +664,27 @@ onCompleteCounter(#{ok := OK, errors := Errors, reason := Reason} = State) ->
     end.
 
 generate_requests_to_many_files(RequestsNum, Worker1, Worker2, DataSize) ->
+    ProviderId2 = provider_id(Worker2),
     [
         remote_apply(Worker1, rtransfer, prepare_request,
-            [Worker2, <<?TEST_FILE_UUID/binary, (list_to_binary(integer_to_list(I)))/binary>>,
+            [ProviderId2, <<?TEST_FILE_UUID/binary, (list_to_binary(integer_to_list(I)))/binary>>,
                 ?TEST_OFFSET, DataSize])
         || I <- lists:seq(1, RequestsNum)
     ].
 
 generate_many_same_requests(RequestsNum, Worker1, Worker2, DataSize) ->
+    ProviderId2 = provider_id(Worker2),
     [
         remote_apply(Worker1, rtransfer, prepare_request,
-            [Worker2, <<?TEST_FILE_UUID/binary>>, ?TEST_OFFSET, DataSize])
+            [ProviderId2, <<?TEST_FILE_UUID/binary>>, ?TEST_OFFSET, DataSize])
         || _ <- lists:seq(1, RequestsNum)
     ].
 
 generate_requests_to_one_file(RequestsNum, Worker1, Worker2, Chunk) ->
+    ProviderId2 = provider_id(Worker2),
     [
         remote_apply(Worker1, rtransfer, prepare_request,
-            [Worker2, ?TEST_FILE_UUID, Offset, Chunk])
+            [ProviderId2, ?TEST_FILE_UUID, Offset, Chunk])
         || Offset <- lists:seq(0, 2 * RequestsNum - 1 , Chunk div 2)
     ].
 
@@ -622,13 +704,14 @@ get_node_ip(Node) ->
     re:replace(os:cmd(CMD), "\\s+", "", [global, {return, list}]).
 
 
-start_rtransfer(Node, RtransferOpts) ->
-    remote_apply(Node, rtransfer, start_link, [RtransferOpts]).
+start_gateway(Node, RtransferOpts) ->
+    remote_apply(Node, fslogic_worker, start_gateway, [RtransferOpts]).
 
 prepare_fetch_request(Node1, Node2, FileUUID, Offset, DataSize) ->
 %% Node1 is the one who fetches data from Node2
+    ProviderId2 = provider_id(Node2),
     remote_apply(
-        Node1, rtransfer, prepare_request, [Node2, FileUUID, Offset, DataSize]
+        Node1, rtransfer, prepare_request, [ProviderId2, FileUUID, Offset, DataSize]
     ).
 
 fetch_data(Node, Ref, NotifyFun, OnCompleteFun) ->
@@ -638,8 +721,11 @@ cancel_fetching(Node, Ref) ->
     remote_apply(Node, rtransfer, cancel, [Ref]).
 
 prepare_rtransfer({Worker1, Ropts1}, {Worker2, Ropts2}, FileUUID, Offset, DataSize, NotifyFun, OnCompleteFun) ->
-    ?assertMatch({ok, _}, start_rtransfer(Worker1, Ropts1)),
-    ?assertMatch({ok, _}, start_rtransfer(Worker2, Ropts2)),
+    ?assertMatch({ok, _}, start_gateway(Worker1, Ropts1)),
+    ?assertMatch({ok, _}, start_gateway(Worker2, Ropts2)),
     Ref = prepare_fetch_request(Worker1, Worker2, FileUUID, Offset, DataSize),
     NewRef = fetch_data(Worker1, Ref, NotifyFun, OnCompleteFun),
     NewRef.
+
+provider_id(Node) ->
+    rpc:call(Node, oneprovider, get_provider_id, []).

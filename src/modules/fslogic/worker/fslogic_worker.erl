@@ -8,7 +8,7 @@
 %%% @doc
 %%% This module implements worker_plugin_behaviour callbacks.
 %%% Also it decides whether request has to be handled locally or rerouted
-%%% to other priovider.
+%%% to other provider.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(fslogic_worker).
@@ -18,11 +18,14 @@
 -include("proto/oneclient/proxyio_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include("modules/events/definitions.hrl").
+-include("modules/rtransfer/registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/exometer_utils.hrl").
 
 -export([init/1, handle/1, cleanup/0]).
 -export([init_counters/0, init_report/0]).
+% for tests
+-export([start_gateway/1]).
 
 %%%===================================================================
 %%% Types
@@ -68,6 +71,8 @@
     synchronize_block_and_compute_checksum, get_xattr, set_xattr, remove_xattr,
     list_xattr, fsync]).
 
+-define(FSLOGIC_WORKER_SUP, ?WORKER_HOST_SUPERVISOR_NAME(?MODULE)).
+
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
 %%%===================================================================
@@ -80,10 +85,8 @@
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    case application:get_env(?APP_NAME, start_rtransfer_on_init) of
-        {ok, true} -> rtransfer:start_link();
-        _ -> ok
-    end,
+
+    maybe_start_gateway(),
 
     transfer:init(),
 
@@ -218,6 +221,19 @@ init_report() ->
         {?EXOMETER_TIME_NAME(Name), [min, max, median, mean, n]}
     end, ?EXOMETER_COUNTERS),
     ?init_reports(Reports ++ Reports2).
+
+
+%%%===================================================================
+%%% functions exported for tests
+%%%===================================================================
+%%-------------------------------------------------------------------
+%% @doc
+%% Starts gateway gen_server as fslogic_worker_sup child.
+%% @end
+%%-------------------------------------------------------------------
+-spec start_gateway([rtransfer:opt()]) -> {ok, pid()}.
+start_gateway(RtransferOpts) ->
+    supervisor:start_child(?FSLOGIC_WORKER_SUP, gateway_spec(RtransferOpts)).
 
 %%%===================================================================
 %%% Internal functions
@@ -557,3 +573,32 @@ process_response(UserCtx,
 process_response(_, _, Response, _) ->
     Response.
 
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Starts gateway if start_rtransfer_on_init is set to true in app.config.
+%% @end
+%%-------------------------------------------------------------------
+-spec maybe_start_gateway() -> term().
+maybe_start_gateway() ->
+    case application:get_env(?APP_NAME, start_rtransfer_on_init) of
+        {ok, true} ->
+            start_gateway(rtransfer_config:options());
+        _ -> ok
+    end.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns supervisor child_spec for gateway gen_server.
+%% @end
+%%-------------------------------------------------------------------
+-spec gateway_spec([rtransfer:opt()]) -> supervisor:child_spec().
+gateway_spec(RtransferOpts) ->
+    #{
+        id => ?GATEWAY,
+        start => {gateway, start_link, [RtransferOpts]},
+        restart => permanent,
+        shutdown => timer:seconds(10),
+        type => worker
+    }.

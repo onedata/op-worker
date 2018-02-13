@@ -25,7 +25,7 @@
 
 %% API
 -export([init/1, handle_call/3, handle_cast/2,
-    handle_info/2, terminate/2, code_change/3, start/1]).
+    handle_info/2, terminate/2, code_change/3, start_link/1]).
 
 
 %%%===================================================================
@@ -37,9 +37,9 @@
 %% Starts rtransfer_server gen_server.
 %% @end
 %%-------------------------------------------------------------------
--spec start(rtransfer:config()) -> {ok, pid()}.
-start(RtransferOpts) ->
-    gen_server2:start({global, ?RTRANSFER}, ?MODULE, RtransferOpts, []).
+-spec start_link(rtransfer:config()) -> {ok, pid()}.
+start_link(RtransferOpts) ->
+    gen_server2:start_link({global, ?RTRANSFER}, ?MODULE, RtransferOpts, []).
 
 %%--------------------------------------------------------------------
 %% @doc
