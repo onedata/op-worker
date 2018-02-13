@@ -34,7 +34,7 @@
 %%tests
 -export([
     provider_connection_test/1,
-    token_connection_test/1,
+    macaroon_connection_test/1,
     compatible_client_connection_test/1,
     incompatible_client_connection_test/1,
     protobuf_msg_test/1,
@@ -64,7 +64,7 @@
 -define(NORMAL_CASES_NAMES, [
     timeouts_test,
     provider_connection_test,
-    token_connection_test,
+    macaroon_connection_test,
     compatible_client_connection_test,
     incompatible_client_connection_test,
     protobuf_msg_test,
@@ -92,6 +92,7 @@
 all() -> ?ALL(?NORMAL_CASES_NAMES, ?PERFORMANCE_CASES_NAMES).
 
 -define(MACAROON, <<"DUMMY-MACAROON">>).
+-define(DISCH_MACAROONS, [<<"DM1">>, <<"DM2">>]).
 -define(CORRECT_PROVIDER_ID, <<"correct-iden-mac">>).
 -define(INCORRECT_PROVIDER_ID, <<"incorrect-iden-mac">>).
 -define(CORRECT_NONCE, <<"correct-nonce">>).
@@ -244,12 +245,12 @@ provider_connection_test(Config) ->
         connect_as_provider(Worker1, ?CORRECT_PROVIDER_ID, ?CORRECT_NONCE)
     ).
 
-token_connection_test(Config) ->
+macaroon_connection_test(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
 
     % then
-    {ok, {Sock, _}} = connect_via_token(Worker1),
+    {ok, {Sock, _}} = connect_via_macaroon(Worker1),
     ok = ssl:close(Sock).
 
 compatible_client_connection_test(Config) ->
@@ -259,17 +260,18 @@ compatible_client_connection_test(Config) ->
         Node, application, get_env, [?APP_NAME, compatible_oc_versions]
     ),
 
-    TokenAuthMessage = #'ClientMessage'{message_body = {client_handshake_request,
+    MacaroonAuthMessage = #'ClientMessage'{message_body = {client_handshake_request,
         #'ClientHandshakeRequest'{session_id = crypto:strong_rand_bytes(10),
-            token = #'Token'{value = ?MACAROON}, version = list_to_binary(Version)
+            macaroon = #'Macaroon'{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS},
+            version = list_to_binary(Version)
         }
     }},
-    TokenAuthMessageRaw = messages:encode_msg(TokenAuthMessage),
+    MacaroonAuthMessageRaw = messages:encode_msg(MacaroonAuthMessage),
     {ok, Port} = test_utils:get_env(Node, ?APP_NAME, gui_https_port),
 
     % when
     {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),
-    ok = ssl:send(Sock, TokenAuthMessageRaw),
+    ok = ssl:send(Sock, MacaroonAuthMessageRaw),
 
     % then
     #'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{
@@ -284,17 +286,18 @@ incompatible_client_connection_test(Config) ->
     % given
     [Node | _] = ?config(op_worker_nodes, Config),
 
-    TokenAuthMessage = #'ClientMessage'{message_body = {client_handshake_request,
+    MacaroonAuthMessage = #'ClientMessage'{message_body = {client_handshake_request,
         #'ClientHandshakeRequest'{session_id = crypto:strong_rand_bytes(10),
-            token = #'Token'{value = ?MACAROON}, version = <<"16.07-rc2">>
+            macaroon = #'Macaroon'{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS},
+            version = <<"16.07-rc2">>
         }
     }},
-    TokenAuthMessageRaw = messages:encode_msg(TokenAuthMessage),
+    MacaroonAuthMessageRaw = messages:encode_msg(MacaroonAuthMessage),
     {ok, Port} = test_utils:get_env(Node, ?APP_NAME, gui_https_port),
 
     % when
     {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),
-    ok = ssl:send(Sock, TokenAuthMessageRaw),
+    ok = ssl:send(Sock, MacaroonAuthMessageRaw),
 
     % then
     #'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{
@@ -324,7 +327,7 @@ protobuf_msg_test(Config) ->
     RawMsg = messages:encode_msg(Msg),
 
     % when
-    {ok, {Sock, _}} = connect_via_token(Worker1),
+    {ok, {Sock, _}} = connect_via_macaroon(Worker1),
     ok = ssl:send(Sock, RawMsg),
 
     % then
@@ -371,7 +374,7 @@ multi_message_test_base(Config) ->
     end),
 
     % when
-    {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}]),
+    {ok, {Sock, _}} = connect_via_macaroon(Worker1, [{active, true}]),
     T1 = erlang:monotonic_time(milli_seconds),
     lists:foreach(fun(E) -> ok = ssl:send(Sock, E) end, RawEvents),
     T2 = erlang:monotonic_time(milli_seconds),
@@ -391,7 +394,7 @@ multi_message_test_base(Config) ->
 client_send_test(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    {ok, {Sock, SessionId}} = connect_via_token(Worker1),
+    {ok, {Sock, SessionId}} = connect_via_macaroon(Worker1),
     Code = ?OK,
     Description = <<"desc">>,
     ServerMsgInternal = #server_message{message_body = #status{
@@ -503,7 +506,7 @@ multi_ping_pong_test_base(Config) ->
     [
         spawn_link(fun() ->
             % when
-            {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}]),
+            {ok, {Sock, _}} = connect_via_macaroon(Worker1, [{active, true}]),
             lists:foreach(fun(E) ->
                 ok = ssl:send(Sock, E)
             end, RawPings),
@@ -557,7 +560,7 @@ sequential_ping_pong_test_base(Config) ->
     initializer:remove_pending_messages(),
 
     % when
-    {ok, {Sock, _}} = connect_via_token(Worker1),
+    {ok, {Sock, _}} = connect_via_macaroon(Worker1),
     T1 = erlang:monotonic_time(milli_seconds),
     lists:foldl(fun(E, N) ->
         % send ping
@@ -602,7 +605,7 @@ multi_connection_test_base(Config) ->
 
     % when
     Connections = lists:map(fun(_) ->
-        connect_via_token(Worker1, [])
+        connect_via_macaroon(Worker1, [])
     end, ConnNumbersList),
 
     % then
@@ -648,7 +651,7 @@ bandwidth_test_base(Config) ->
     end),
 
     % when
-    {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}]),
+    {ok, {Sock, _}} = connect_via_macaroon(Worker1, [{active, true}]),
     T1 = erlang:monotonic_time(milli_seconds),
     lists:foreach(fun(_) ->
         ok = ssl:send(Sock, PacketRaw)
@@ -700,7 +703,8 @@ python_client_test_base(Config) ->
     HandshakeMessage = #'ClientMessage'{message_body = {client_handshake_request,
         #'ClientHandshakeRequest'{
             session_id = <<"session_id">>,
-            token = #'Token'{value = ?MACAROON},
+            macaroon = #'Macaroon'{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS},
+
             version = list_to_binary(Version)
         }
     }},
@@ -752,7 +756,7 @@ proto_version_test(Config) ->
         message_body = {get_protocol_version, #'GetProtocolVersion'{}}
     },
     GetProtoVersionRaw = messages:encode_msg(GetProtoVersion),
-    {ok, {Sock, _}} = connect_via_token(Worker1),
+    {ok, {Sock, _}} = connect_via_macaroon(Worker1),
 
     % when
     ok = ssl:send(Sock, GetProtoVersionRaw),
@@ -907,39 +911,39 @@ end_per_testcase(_Case, Config) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Connect to given node using token, with default socket_opts
-%% @equiv connect_via_token(Node, [{active, true}], ssl)
+%% Connect to given node using macaroon, with default socket_opts
+%% @equiv connect_via_macaroon(Node, [{active, true}], ssl)
 %% @end
 %%--------------------------------------------------------------------
--spec connect_via_token(Node :: node()) ->
+-spec connect_via_macaroon(Node :: node()) ->
     {ok, {Sock :: ssl:socket(), SessId :: session:id()}} | no_return().
-connect_via_token(Node) ->
-    connect_via_token(Node, [{active, true}]).
+connect_via_macaroon(Node) ->
+    connect_via_macaroon(Node, [{active, true}]).
 
-connect_via_token(Node, SocketOpts) ->
-    connect_via_token(Node, SocketOpts, crypto:strong_rand_bytes(10)).
+connect_via_macaroon(Node, SocketOpts) ->
+    connect_via_macaroon(Node, SocketOpts, crypto:strong_rand_bytes(10)).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Connect to given node using token, with custom socket opts
+%% Connect to given node using a macaroon, with custom socket opts
 %% @end
 %%--------------------------------------------------------------------
--spec connect_via_token(Node :: node(), SocketOpts :: list(), session:id()) ->
+-spec connect_via_macaroon(Node :: node(), SocketOpts :: list(), session:id()) ->
     {ok, {Sock :: term(), SessId :: session:id()}}.
-connect_via_token(Node, SocketOpts, SessId) ->
+connect_via_macaroon(Node, SocketOpts, SessId) ->
     % given
     {ok, [Version | _]} = rpc:call(
         Node, application, get_env, [?APP_NAME, compatible_oc_versions]
     ),
 
-    TokenAuthMessage = #'ClientMessage'{message_body = {client_handshake_request,
+    MacaroonAuthMessage = #'ClientMessage'{message_body = {client_handshake_request,
         #'ClientHandshakeRequest'{
             session_id = SessId,
-            token = #'Token'{value = ?MACAROON},
+            macaroon = #'Macaroon'{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS},
             version = list_to_binary(Version)
         }
     }},
-    TokenAuthMessageRaw = messages:encode_msg(TokenAuthMessage),
+    MacaroonAuthMessageRaw = messages:encode_msg(MacaroonAuthMessage),
     ActiveOpt = case proplists:get_value(active, SocketOpts) of
         undefined -> [];
         Other -> [{active, Other}]
@@ -948,7 +952,7 @@ connect_via_token(Node, SocketOpts, SessId) ->
 
     % when
     {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),
-    ok = ssl:send(Sock, TokenAuthMessageRaw),
+    ok = ssl:send(Sock, MacaroonAuthMessageRaw),
 
     % then
     RM = receive_server_message(),
@@ -962,15 +966,15 @@ connect_via_token(Node, SocketOpts, SessId) ->
 
 
 connect_as_provider(Node, ProviderId, Nonce) ->
-    TokenAuthMessage = #'ClientMessage'{message_body = {provider_handshake_request,
+    MacaroonAuthMessage = #'ClientMessage'{message_body = {provider_handshake_request,
         #'ProviderHandshakeRequest'{provider_id = ProviderId, nonce = Nonce}
     }},
-    TokenAuthMessageRaw = messages:encode_msg(TokenAuthMessage),
+    MacaroonAuthMessageRaw = messages:encode_msg(MacaroonAuthMessage),
     {ok, Port} = test_utils:get_env(Node, ?APP_NAME, gui_https_port),
 
     % when
     {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),
-    ok = ssl:send(Sock, TokenAuthMessageRaw),
+    ok = ssl:send(Sock, MacaroonAuthMessageRaw),
 
     % then
     #'ServerMessage'{
@@ -1002,7 +1006,7 @@ connect_and_upgrade_proto(Hostname, Port) ->
 -spec spawn_ssl_echo_client(NodeToConnect :: node()) ->
     {ok, {Sock :: ssl:socket(), SessId :: session:id()}}.
 spawn_ssl_echo_client(NodeToConnect) ->
-    {ok, {Sock, SessionId}} = connect_via_token(NodeToConnect, []),
+    {ok, {Sock, SessionId}} = connect_via_macaroon(NodeToConnect, []),
     SslEchoClient =
         fun Loop() ->
             % receive data from server
@@ -1034,7 +1038,7 @@ spawn_ssl_echo_client(NodeToConnect) ->
 mock_identity(Workers) ->
     test_utils:mock_new(Workers, user_identity),
     test_utils:mock_expect(Workers, user_identity, get_or_fetch,
-        fun(#token_auth{token = ?MACAROON}) ->
+        fun(#macaroon_auth{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS}) ->
             {ok, #document{value = #user_identity{}}}
         end
     ).

@@ -24,8 +24,7 @@
 -export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
 -export([
-    token_auth/1,
-    basic_auth/1,
+    macaroon_auth/1,
     internal_error_when_handler_crashes/1,
     custom_code_when_handler_throws_code/1,
     custom_error_when_handler_throws_error/1
@@ -33,16 +32,13 @@
 
 
 all() -> ?ALL([
-    token_auth,
-    basic_auth,
+    macaroon_auth,
     internal_error_when_handler_crashes,
     custom_code_when_handler_throws_code,
     custom_error_when_handler_throws_error
 ]).
 
 -define(MACAROON, <<"DUMMY-MACAROON">>).
--define(BASIC_AUTH_CREDENTIALS, <<"dXNlcjpwYXNzd29yZAo=">>).
--define(BASIC_AUTH_HEADER, <<"Basic ", (?BASIC_AUTH_CREDENTIALS)/binary>>).
 
 -define(USER_ID, <<"test_id">>).
 -define(USER_NAME, <<"test_name">>).
@@ -56,7 +52,7 @@ all() -> ?ALL([
 %%% Test functions
 %%%===================================================================
 
-token_auth(Config) ->
+macaroon_auth(Config) ->
     % given
     [Worker | _] = ?config(op_worker_nodes, Config),
     Endpoint = rest_endpoint(Worker),
@@ -70,19 +66,6 @@ token_auth(Config) ->
     ?assertMatch({ok, 401, _, _}, AuthFail),
     ?assertMatch({ok, 200, _, _}, AuthSuccess1),
     ?assertMatch({ok, 200, _, _}, AuthSuccess2).
-
-basic_auth(Config) ->
-    % given
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    Endpoint = rest_endpoint(Worker),
-
-    % when
-    AuthFail = do_request(Config, get, Endpoint ++ "files", #{<<"Authorization">> => <<"invalid">>}),
-    AuthSuccess = do_request(Config, get, Endpoint ++ "files", #{<<"Authorization">> => ?BASIC_AUTH_HEADER}),
-
-    % then
-    ?assertMatch({ok, 401, _, _}, AuthFail),
-    ?assertMatch({ok, 200, _, _}, AuthSuccess).
 
 internal_error_when_handler_crashes(Config) ->
     % given
@@ -233,10 +216,6 @@ mock_user_logic(Config) ->
 
     GetUserFun = fun
         (#macaroon_auth{macaroon = ?MACAROON}, ?USER_ID) ->
-            UserDoc;
-        (#token_auth{token = ?MACAROON}, ?USER_ID) ->
-            UserDoc;
-        (#basic_auth{credentials = ?BASIC_AUTH_CREDENTIALS}, ?USER_ID) ->
             UserDoc;
         (?ROOT_SESS_ID, ?USER_ID) ->
             UserDoc;

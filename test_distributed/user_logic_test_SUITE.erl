@@ -77,7 +77,7 @@ get_by_auth_test(Config) ->
 
     ?assertMatch(
         {ok, ?USER_PRIVATE_DATA_MATCHER(?USER_1)},
-        rpc:call(Node, user_logic, get_by_auth, [?USER_INTERNAL_TOKEN_AUTH(?USER_1)])
+        rpc:call(Node, user_logic, get_by_auth, [?USER_INTERNAL_MACAROON_AUTH(?USER_1)])
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
@@ -85,7 +85,7 @@ get_by_auth_test(Config) ->
     % works here
     ?assertMatch(
         {ok, ?USER_PRIVATE_DATA_MATCHER(?USER_1)},
-        rpc:call(Node, user_logic, get_by_auth, [?USER_INTERNAL_TOKEN_AUTH(?USER_1)])
+        rpc:call(Node, user_logic, get_by_auth, [?USER_INTERNAL_MACAROON_AUTH(?USER_1)])
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
 

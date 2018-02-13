@@ -90,20 +90,15 @@ get_cacerts_dir() ->
 %% when request is done.
 %% @end
 %%--------------------------------------------------------------------
--spec auth_to_rest_client(Auth :: term()) -> {user, token, binary()} |
-{user, macaroon, {Macaroon :: binary(), DischargeMacaroons :: [binary()]}} |
-{user, basic, binary()} | {provider, Macaroon :: binary()} | none.
+-spec auth_to_rest_client(Auth :: term()) ->
+    {user, macaroon, {Macaroon :: binary(), DischargeMacaroons :: [binary()]}} |
+    {provider, Macaroon :: binary()} |
+    none.
 auth_to_rest_client(none) ->
     none;
 
 auth_to_rest_client(#macaroon_auth{macaroon = Mac, disch_macaroons = DMacs}) ->
     {user, macaroon, {Mac, DMacs}};
-
-auth_to_rest_client(#token_auth{token = Token}) ->
-    {user, token, Token};
-
-auth_to_rest_client(#basic_auth{credentials = Credentials}) ->
-    {user, basic, Credentials};
 
 auth_to_rest_client(provider) ->
     {ok, ProviderMacaroon} = provider_auth:get_auth_macaroon(),
@@ -127,6 +122,5 @@ auth_to_rest_client(SessId) when is_binary(SessId) ->
         provider_incoming ->
             auth_to_rest_client(provider);
         _ ->
-            % This will evaluate either to user_token, user_basic or provider.
             auth_to_rest_client(Auth)
     end.

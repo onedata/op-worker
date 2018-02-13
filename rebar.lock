@@ -111,7 +111,7 @@
   1},
  {<<"macaroons">>,
   {git,"https://github.com/kzemek/macaroons.git",
-       {ref,"9d2fef9f37e6b96a68aaaa81c0e5272d61a8b3b0"}},
+       {ref,"b15b13f1747210caf1152fc4444239d90b1b21cd"}},
   1},
  {<<"meck">>,
   {git,"https://github.com/eproxus/meck.git",

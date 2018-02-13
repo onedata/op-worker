@@ -13,23 +13,10 @@
 -ifndef(CREDENTIALS_HRL).
 -define(CREDENTIALS_HRL, 1).
 
--include_lib("public_key/include/public_key.hrl").
-
 % Record containing macaroons for user authorization in OZ.
 -record(macaroon_auth, {
-    macaroon = <<"">> :: binary(),
+    macaroon :: binary(),
     disch_macaroons = [] :: [binary()]
-}).
-
-% Record containing a (generic) token for user authorization in OZ.
--record(token_auth, {
-    token = <<"">> :: binary()
-}).
-
-% Record containing HTTP basic auth headers for user authorization in OZ.
--record(basic_auth, {
-    % Credentials are in form "Basic base64(user:password)"
-    credentials = <<"">> :: binary()
 }).
 
 -endif.

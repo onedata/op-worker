@@ -256,9 +256,9 @@ route_and_ignore_answer(#client_message{message_body = #subscription_cancellatio
             ok
     end;
 % Message that updates the #macaroon_auth{} record in given session (originates from
-% #'Token' client message).
+% #'Macaroon' client message).
 route_and_ignore_answer(#client_message{message_body = Auth} = Msg)
-    when is_record(Auth, macaroon_auth) orelse is_record(Auth, token_auth) ->
+    when is_record(Auth, macaroon_auth) ->
     % This function performs an async call to session manager worker.
     {ok, _} = session:update(effective_session_id(Msg), fun(Session = #session{}) ->
         {ok, Session#session{auth = Auth}}
