@@ -66,51 +66,11 @@ fun((Ref :: ref(),
 
 %% API
 -export_type([ref/0, opt/0, notify_fun/0, on_complete_fun/0]).
--export([start_link/0, start_link/1, prepare_request/4, fetch/3, cancel/1]).
+-export([prepare_request/4, fetch/3, cancel/1]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-%%-------------------------------------------------------------------
-%% @doc
-%% @equiv start_link(rtransfer_config:rtransfer_opts()).
-%% @end
-%%-------------------------------------------------------------------
--spec start_link() -> {ok, pid()}.
-start_link() ->
-    start_link(rtransfer_config:rtransfer_opts()).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Starts a rtransfer gen_server on this node.
-%% The server will periodically send heartbeats to a leader node
-%% (registered as `{global, rtransfer}'). {@module} server handles
-%% requests from the leader and listens for network connections on the
-%% current node to handle requests from remote providers.
-%%
-%% If the started rtransfer is elected as leader, it will store a list
-%% of active nodes and distribute requests between them. All methods
-%% in {@module} interface with the leader.
-%%
-%% Options:<br/>
-%% `block_size' - {@module} will split big requests and attempt to
-%% merge adjacent ones so that the actual fetch requests ask for
-%% exactly `block_size' bytes. Default: 100 MB<br/>
-%% `get_nodes_fun' - function returning a set of gateway nodes for
-%% a remote provider.<br/>
-%% `open_fun' - function returning a file handle passed to read and
-%% write functions.<br/>
-%% `read_fun' - function returning data for given offset and size.<br/>
-%% `write_fun' - function saving data for a given offset.<br/>
-%% `close_fun' - function closing the file handle obtained through
-%% open function.<br/>
-%% `ranch_opts' - options passed to {@link ranch:start_listener/6}.
-%% @end
-%%--------------------------------------------------------------------
--spec start_link(RtransferOpts :: [opt()]) -> {ok, pid()}.
-start_link(RtransferOpts) ->
-    rtransfer_server_sup:start_link(RtransferOpts).
 
 %%--------------------------------------------------------------------
 %% @doc

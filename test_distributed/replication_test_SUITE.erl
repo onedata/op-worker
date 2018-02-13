@@ -1089,7 +1089,7 @@ rtransfer_config_should_work(Config) ->
 
     ?assertEqual(ok, rpc:call(W1, erlang, apply, [
         fun() ->
-            Opts = rtransfer_config:rtransfer_opts(),
+            Opts = rtransfer_config:options(),
             Open = proplists:get_value(open_fun, Opts),
             Close = proplists:get_value(close_fun, Opts),
             Read = proplists:get_value(read_fun, Opts),

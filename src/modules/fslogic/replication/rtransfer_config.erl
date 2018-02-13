@@ -20,7 +20,7 @@
 -define(RTRANSFER_NUM_ACCEPTORS, 10).
 
 %% API
--export([rtransfer_opts/0]).
+-export([options/0]).
 
 -define(STREAMS_NUM, application:get_env(?APP_NAME, streams_number, 10)).
 
@@ -33,8 +33,8 @@
 %% Get default rtransfer config
 %% @end
 %%--------------------------------------------------------------------
--spec rtransfer_opts() -> list().
-rtransfer_opts() ->
+-spec options() -> [rtransfer:opt()].
+options() ->
     [
         {bind, lists:duplicate(?STREAMS_NUM, {0, 0, 0, 0})},
         {get_nodes_fun,
