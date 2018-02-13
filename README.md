@@ -1,50 +1,94 @@
-# op-worker
+helpers
+=======
 
-*op-worker* is a component of [Onedata](http://onedata.org) distributed data management platform, which serves as a worker process of [Oneprovider] service. Oneprovider service requires at least one *op-worker* instance.  Adding more *op-worker* nodes scales the cluster allowing for processing more requests in parallel. *op-worker* instances are coordinated by [cluster-manager](https://github.com/onedata/cluster-manager) process, which should be deployed at least in one instance per entire cluster. Adding *cluster-manager* nodes increases fault tolerance of the Oneprovider service.
+[![Build Status](https://api.travis-ci.org/onedata/helpers.svg?branch=develop)](https://travis-ci.org/onedata/helpers)
 
-*op-worker* is a specialization of generic Onedata worker process [cluster-worker](https://github.com/onedata/cluster-worker). The *cluster-worker* provides generic funcitonalities such as persistence and cluster management, while *op-worker* augments it with its specific logic.
+*helpers* is a part of *onedata* system that unifies access to files stored at heterogeneous data storage systems that belong
+to geographically distributed organizations.
 
-The main objective of *op-worker*, and *oneprovider* as a whole, is to unify access to files stored at heterogeneous data storage systems that belong to geographically distributed organizations. The *oneprovider* provides a self-scalable cluster, which manages the *onedata* system in a single data centre, i.e. it stores meta-data about actual users' data from the data centre, decides how to distribute users' files among available storage systems, and executes data management rules, which can be defined by administrators or users.
+Goals
+-----
 
+The goal of *helpers* is provision of a "storage helpers" - libraries allowing access to all supported by *onedata*
+(self-scalable cluster that will is a central point of each data centre that uses *onedata*) filesystems.
 
-# Using
+Getting Started
+---------------
+*helpers* is built with CMake. More information about compiling the project in "Compilation" section.
 
-*oz-worker* is an internal component of Oneprovider service and it should only be started as part of its deployment.
+Prerequisites
+-------------
 
-## Dependencies
+In order to compile the project, you need to have fallowing additional libraries, its headers and all its prerequisites
+in include/ld path:
 
-* docker client > 1.10
-* python >= 2.7
+* libfuse (only headers needed)
+* libboost
+* libprotobuf
+* libtbb
+* folly
+* librados (when compiling with Ceph support)
+* aws-sdk-cpp-s3 (when compiling with S3 support)
+* Swift_CPP_SDK (when compiling with Swift support)
+* OpenSSL (when compiling with OpenSSL instead of BoringSSL)
 
-## Documentation
+Also you need cmake 2.8+. Use this command to install the required dependency packages:
 
-Comprehensive [documentation](https://beta.onedata.org/docs/index.html) explains basic concepts of onedata, provides "Getting started" and introduces to advanced topics.
+* Debian/Ubuntu Dependencies (.deb packages):
 
-## Building
-To build *oz-worker* use the provided build script:
-```
-./make.py
-```
+        apt-get install libfuse-dev libboost-dev libprotobuf-dev
 
-## Configuration and Running
-*op-worker* can be started using [bamboo](https://github.com/onedata/bamboo) scripts that are included in the repository. *oneprovider* cluster needs to be connected to *onezone* in order to operate, so we should clone it and build. Run the following commands from root of *op-worker* repository:
+* RHEL/CentOS/Fedora Dependencies (.rpm packages):
 
-```
-git clone git@github.com:onedata/oz-worker.git
-cd oz-worker && ./make.py
-cd ..
-./bamboos/docker/env_up.py --bin-worker . --bin-oz oz-worker --bin-cm cluster_manager bamboos/example_env/single_gr_and_provider.json
-```
+        yum install fuse-libs fuse-devel cmake28 boost-devel boost-static subversion protobuf-devel
 
-As *op-worker* won't work without *cluster_manager*, both those applications will be started and connected into a small cluster. The section "provider_domains" in the JSON file defines all instances of oneprovider clusters that should be started and allows for basic configuration. The *onezone* will be started also and its configuration is defined in "zone_domains" section.
+Compilation
+-----------
 
-After the script has finished, you should have a running, dockerized *oneprovider* instance, attached to *onezone*. Enter the graphical user interface of *onezone* on https://&lt;onezone-docker-ip&gt; (its name is in format node1.oz.&lt;timestamp&gt;.dev). In there you may log in to one of the test users and then select "go to your files" to move to the *oneprovider*'s graphical user interface. 
+If 'PREFER_STATIC_LINK' env variable is set during compilation, shared library - libhelpers.so/dylib
+will be linked statically against protobuf, boost_ and openssl (if it's possible).
 
+In order to build with only selected helpers the following variables should
+be added to the make command line:
 
-# APIs
+* WITH_CEPH=OFF - disables Ceph helper
+* WITH_S3=OFF - disables S3 helper
+* WITH_SWIFT=OFF - disables Swift helper
+* WITH_GLUSTERFS=OFF - disables GlusterFS helper
 
-- web - web-based, graphical user interface for managing user account and accessing data, available on https://&lt;oneprovider-hostname&gt:/
-- [oneclient](https://github.com/onedata/oneclient) - FUSE client for accessing user's spaces of data,
-- [CDMI](http://www.snia.org/cdmi) - Cloud Data Management Interface in version 1.1.1 is available on https://&lt;ip&gt;:443/cdmi/ endpoint. To authorize yourself the X-Auth-Token header should be provided to each request, with valid user token obtained from [onezone](https://github.com/onedata/onezone),
-- [REST](https://beta.onedata.org/docs/doc/advanced/rest.html) - rest api for operations such as data replication or reading metrics, available on  https://&lt;oneprovider-hostname&gt:443/api/v3/oneprovider/ endpoint.
+In order to build the helpers using other Git repository than default, environment
+variable ONEDATA_GIT_URL must be exported before calling `make`, e.g.:
 
+    export ONEDATA_GIT_URL=https://github.com/onedata
+
+#### Build Release binaries
+
+    make -s release
+
+#### Build Debug binaries
+
+    make -s debug
+
+after this step you should have your libhelpers.a and libhelpers.so/dylib in "release" or "debug" subdirectory.
+
+#### Building on OSX
+
+In order to build `helpers` on OSX all dependecies must be installed using
+Homebrew (see [Travis build specification](.travis.yml)). Currently helper for
+Ceph is not supported on OSX, furthermore NSS library is by default linked to a 
+special folder on OSX, thus `make` has to called with the following
+paremeters':
+
+    PKG_CONFIG_PATH=/usr/local/opt/nss/lib/pkgconfig make release WITH_CEPH=OFF OPENSSL_ROOT_DIR=/usr/local/opt/openssl OPENSSL_LIBRARIES=/usr/local/opt/openssl/lib
+
+#### Testing
+
+There are two testing targets:
+
+    make -s test
+
+which has summarized output (per test case) and:
+
+    make -s cunit
+
+which shows detailed test results.

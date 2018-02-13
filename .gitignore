@@ -1,47 +1,55 @@
-.git
-.settings
-.eunit
-.dialyzer.plt
-.idea
-.rebar
-rebar3.crashdump
+src/proto
+/release
+/debug
 
-cluster_manager
-
-*.iml
-*.sublime*
-*.beam
-*.pyc
+# Compiled Object files
+*.slo
+*.lo
 *.o
-*.d
+*.obj
 
-rel/op_worker
-rel/test_cluster
-rel/*.rpm
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
 
-test/eunit_results
-test_distributed/cover_tmp.spec
-test_coverage
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
 
-doc
-logs
-priv
-.rebar
-rebar3.crashdump
+# Executables
+*.exe
+*.out
+*.app
 
-c_lib
-c_src/helpers_nif/*.o
-c_src/rt_container/*.o
-c_src/oneproxy/build/*
+# Compiled Python files
+*.pyc
 
-docs/_build/
+# CMake
+CMakeCache.txt
+CMakeFiles
+Makefile
+cmake_install.cmake
+install_manifest.txt
 
-# OS X
-.DS_Store
-._*
+# workspace files are user-specific
+*.sublime-workspace
 
-_build
+# project files should be checked into the repository, unless a significant
+# proportion of contributors will probably not be using SublimeText
+# *.sublime-project
+
+# XCode project files
+*.xcodeproj
+
+# Clion project files
+.idea
+
+# YouCompleteMe database
+.ycm_extra_conf.py
 compile_commands.json
 
-rel/files/vm.args
-rel/vars.config
+# Valgrind reports
+valgrind-*.txt

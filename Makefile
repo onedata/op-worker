@@ -1,146 +1,72 @@
-.EXPORT_ALL_VARIABLES:
+.PHONY: all
+all: test
 
-REPO	        ?= op-worker
+INSTALL_PREFIX ?= ${HOME}/.local/helpers
+BUILD_PROXY_IO ?= ON
+WITH_COVERAGE  ?= OFF
 
-# distro for package building (oneof: wily, fedora-23-x86_64)
-DISTRIBUTION    ?= none
-export DISTRIBUTION
+# Build with Ceph storge helper by default
+WITH_CEPH    		?= ON
+# Build with Swift storage helper by default
+WITH_SWIFT   		?= ON
+# Build with S3 storage helper by default
+WITH_S3      		?= ON
+# Build with GlusterFS storage helper by default
+WITH_GLUSTERFS		?= ON
 
-PKG_REVISION    ?= $(shell git describe --tags --always)
-PKG_VERSION     ?= $(shell git describe --tags --always | tr - .)
-PKG_ID           = op-worker-$(PKG_VERSION)
-PKG_BUILD        = 1
-BASE_DIR         = $(shell pwd)
-ERLANG_BIN       = $(shell dirname $(shell which erl))
-REBAR           ?= $(BASE_DIR)/rebar3
-BUILD_DIR        = _build
-LIB_DIR          = $(BUILD_DIR)/default/lib
-REL_DIR          = $(BUILD_DIR)/default/rel
-PKG_VARS_CONFIG  = pkg.vars.config
-OVERLAY_VARS    ?= --overlay_vars=rel/vars.config
-TEMPLATE_SCRIPT := ./rel/overlay.escript
 
-GIT_URL := $(shell git config --get remote.origin.url | sed -e 's/\(\/[^/]*\)$$//g')
-GIT_URL := $(shell if [ "${GIT_URL}" = "file:/" ]; then echo 'ssh://git@git.plgrid.pl:7999/vfs'; else echo ${GIT_URL}; fi)
-ONEDATA_GIT_URL := $(shell if [ "${ONEDATA_GIT_URL}" = "" ]; then echo ${GIT_URL}; else echo ${ONEDATA_GIT_URL}; fi)
-export ONEDATA_GIT_URL
+%/CMakeCache.txt: **/CMakeLists.txt test/integration/* test/integration/**/*
+	mkdir -p $*
+	cd $* && cmake -GNinja -DCMAKE_BUILD_TYPE=$* \
+	                       -DCODE_COVERAGE=${WITH_COVERAGE} \
+	                       -DCMAKE_INSTALL_PREFIX=${INSTALL_PREFIX} \
+	                       -DBUILD_PROXY_IO=${BUILD_PROXY_IO} \
+	                       -DWITH_CEPH=${WITH_CEPH} \
+	                       -DWITH_SWIFT=${WITH_SWIFT} \
+	                       -DWITH_S3=${WITH_S3} \
+	                       -DWITH_GLUSTERFS=${WITH_GLUSTERFS} \
+	                       -DOPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR} \
+	                       -DOPENSSL_LIBRARIES=${OPENSSL_LIBRARIES} ..
+	touch $@
 
-BUILD_VERSION := $(subst $(shell git describe --tags --abbrev=0)-,,$(shell git describe --tags --long))
+.PHONY: release
+release: release/CMakeCache.txt
+	cmake --build release --target helpersStatic
+	cmake --build release --target helpersShared
 
-.PHONY: deps package test
+.PHONY: debug
+debug: debug/CMakeCache.txt
+	cmake --build debug --target helpersStatic
+	cmake --build debug --target helpersShared
 
-all: test_rel
+.PHONY: test
+test: debug
+	cmake --build debug
+	cmake --build debug --target test
 
-##
-## Rebar targets
-##
+.PHONY: cunit
+cunit: debug
+	cmake --build debug
+	cmake --build debug --target cunit
 
-compile:
-	$(REBAR) compile
+.PHONY: install
+install: release
+	cmake --build release --target install
 
-deps:
-	$(LIB_DIR)/gui/pull-gui.sh gui-config.sh
-
-upgrade:
-	$(REBAR) upgrade
-
-## Generates a production release
-generate: compile deps template
-	$(REBAR) release $(OVERLAY_VARS)
-
-clean: relclean pkgclean
-	$(REBAR) clean
-
-clean_all: clean distclean
-	rm -rf $(BUILD_DIR)
-	rm -rf test_distributed/logs/*
-	rm -rf priv/*
-	rm -rf rebar.lock
-
-distclean:
-	$(REBAR) clean --all
-
-.PHONY: template
-template:
-	sed "s/{build_version, \".*\"}/{build_version, \"${BUILD_VERSION}\"}/" ./rel/vars.config.template > ./rel/vars.config
-	$(TEMPLATE_SCRIPT) rel/vars.config ./rel/files/vm.args.template
-
-##
-## Release targets
-##
-
-rel: generate
-
-test_rel: generate cm_rel appmock_rel
-
-cm_rel:
-	mkdir -p cluster_manager/bamboos/gen_dev
-	cp -rf $(LIB_DIR)/cluster_manager/bamboos/gen_dev cluster_manager/bamboos
-	printf "\n{base_dir, \"$(BASE_DIR)/cluster_manager/_build\"}." >> $(LIB_DIR)/cluster_manager/rebar.config
-	make -C $(LIB_DIR)/cluster_manager/ rel
-	sed -i "s@{base_dir, \"$(PWD)/cluster_manager/_build\"}\.@@" $(LIB_DIR)/cluster_manager/rebar.config
-
-appmock_rel:
-	make -C appmock/ rel
-
-relclean:
-	rm -rf $(REL_DIR)/test_cluster
-	rm -rf $(REL_DIR)/op_worker
-	rm -rf appmock/$(REL_DIR)/appmock
-	rm -rf cluster_manager/$(REL_DIR)/cluster_manager
-
-##
-## Testing targets
-##
-
-eunit:
-	$(REBAR) do eunit skip_deps=true --suite=${SUITES}, cover
-## Rename all tests in order to remove duplicated names (add _(++i) suffix to each test)
-	@for tout in `find test -name "TEST-*.xml"`; do awk '/testcase/{gsub("_[0-9]+\"", "_" ++i "\"")}1' $$tout > $$tout.tmp; mv $$tout.tmp $$tout; done
-
+.PHONY: coverage
 coverage:
-## Set on_bamboo=true so that coverage.escript will collect coverdata from all ct_logs directories
-	$(BASE_DIR)/bamboos/docker/coverage.escript $(BASE_DIR) $(on_bamboo)
+	lcov --directory `pwd`/debug --capture --output-file `pwd`/helpers.info
+	lcov --remove `pwd`/helpers.info 'test/*' '/usr/*' 'asio/*' '**/messages/*' \
+	                           'relwithdebinfo/*' 'debug/*' 'release/*' \
+	                           'erlang-tls/*' \
+														 --output-file `pwd`/helpers.info.cleaned
+	genhtml -o `pwd`/coverage `pwd`/helpers.info.cleaned
+	echo "Coverage written to `pwd`/coverage/index.html"
 
-##
-## Dialyzer targets local
-##
+.PHONY: clean
+clean:
+	rm -rf debug release
 
-# Dialyzes the project.
-dialyzer:
-	$(REBAR) dialyzer
-
-##
-## Packaging targets
-##
-
-check_distribution:
-ifeq ($(DISTRIBUTION), none)
-	@echo "Please provide package distribution. Oneof: 'wily', 'fedora-23-x86_64'"
-	@exit 1
-else
-	@echo "Building package for distribution $(DISTRIBUTION)"
-endif
-
-package/$(PKG_ID).tar.gz:
-	mkdir -p package
-	rm -rf package/$(PKG_ID)
-	git archive --format=tar --prefix=$(PKG_ID)/ $(PKG_REVISION) | (cd package && tar -xf -)
-	${MAKE} -C package/$(PKG_ID) upgrade deps
-	for dep in package/$(PKG_ID) package/$(PKG_ID)/$(LIB_DIR)/*; do \
-	     echo "Processing dependency: `basename $${dep}`"; \
-	     vsn=`git --git-dir=$${dep}/.git describe --tags 2>/dev/null`; \
-	     mkdir -p $${dep}/priv; \
-	     echo "$${vsn}" > $${dep}/priv/vsn.git; \
-	     sed -i'' "s/{vsn,\\s*git}/{vsn, \"$${vsn}\"}/" $${dep}/src/*.app.src 2>/dev/null || true; \
-	done
-	tar -C package -czf package/$(PKG_ID).tar.gz $(PKG_ID)
-
-dist: package/$(PKG_ID).tar.gz
-	cp package/$(PKG_ID).tar.gz .
-
-package: check_distribution package/$(PKG_ID).tar.gz
-	${MAKE} -C package -f $(PKG_ID)/node_package/Makefile
-
-pkgclean:
-	rm -rf package
+.PHONY: clang-format
+clang-format:
+	docker run --rm -e CHOWNUID=${UID} -v ${PWD}:/root/sources onedata/clang-format-check:1.1
