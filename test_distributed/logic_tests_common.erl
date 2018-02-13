@@ -53,7 +53,6 @@ unmock_gs_client(Config) ->
     Nodes = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Nodes, gs_client),
     initializer:unmock_provider_ids(Nodes),
-    initializer:unmock_oz_version(Nodes),
     ok.
 
 

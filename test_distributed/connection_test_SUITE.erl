@@ -895,7 +895,6 @@ end_per_testcase(timeouts_test, Config) ->
 end_per_testcase(default, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:unmock_provider_ids(Workers),
-    initializer:unmock_oz_version(Workers),
     test_utils:mock_validate_and_unload(Workers, [user_identity]),
     ssl:stop();
 

@@ -2622,8 +2622,7 @@ end_per_testcase(_Case, Config) ->
 do_request(Node, URL, Method, Headers, Body) ->
     do_request(Node, URL, Method, Headers, Body, [{recv_timeout, 15000}]).
 do_request(Node, URL, Method, Headers, Body, Opts) ->
-    CaCertsDir = rpc:call(Node, oz_plugin, get_cacerts_dir, []),
-    CaCerts = rpc:call(Node, cert_utils, load_ders_in_dir, [CaCertsDir]),
+    CaCerts = rpc:call(Node, gui_listener, get_cert_chain, []),
     Opts2 = [{ssl_options, [{cacerts, CaCerts}]} | Opts],
     Result = http_client:request(
         Method, <<(rest_endpoint(Node))/binary, URL/binary>>,

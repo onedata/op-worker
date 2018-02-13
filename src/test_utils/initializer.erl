@@ -1157,7 +1157,7 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
                     Hostname, ?nonce_verify_path, Nonce
                 ]),
 
-                CaCerts = oneprovider:get_ca_certs(),
+                CaCerts = oneprovider:trusted_ca_certs(),
                 SecureFlag = application:get_env(?APP_NAME, interprovider_connections_security, true),
                 Opts = [{ssl_options, [{cacerts, CaCerts}, {secure, SecureFlag}]}],
 

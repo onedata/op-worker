@@ -49,7 +49,7 @@
 
 -type window() :: day | hours | minute.
 -type counter_type() :: files_to_sync | imported_files | deleted_files | updated_files |
-                        failed_file_imports | failed_file_deletions | failed_file_updates.
+failed_file_imports | failed_file_deletions | failed_file_updates.
 -type spiral_type() :: imported_files | updated_files | deleted_files | queue_length.
 -type error() :: {error, term()}.
 
@@ -83,8 +83,8 @@
 -define(FAILED_FILE_DELETIONS, failed_file_deletions).
 
 -define(SYNC_COUNTERS, [
-    ?IMPORTED_FILES, ?FAILED_FILE_IMPORTS, 
-    ?UPDATED_FILES, ?FAILED_FILE_UPDATES, 
+    ?IMPORTED_FILES, ?FAILED_FILE_IMPORTS,
+    ?UPDATED_FILES, ?FAILED_FILE_UPDATES,
     ?DELETED_FILES, ?FAILED_FILE_DELETIONS,
     ?FILES_TO_SYNC
 ]).
@@ -95,7 +95,7 @@
 
 
 -define(WINDOWS, [
-   minute, hour, day
+    minute, hour, day
 ]).
 
 %%-------------------------------------------------------------------
@@ -162,7 +162,7 @@ start_updated_files_spirals(SpaceId) ->
 -spec stop_counters(od_space:id()) -> ok.
 stop_counters(SpaceId) ->
     lists:foreach(fun(CounterType) ->
-       stop_and_unsubscribe_storage_sync_counter(SpaceId, CounterType)
+        stop_and_unsubscribe_storage_sync_counter(SpaceId, CounterType)
     end, ?SYNC_COUNTERS).
 
 %%-------------------------------------------------------------------
@@ -226,7 +226,7 @@ reset_sync_counters(SpaceId) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec increase_imported_files_counter(od_space:id()) ->
-        ok | {error, term()}.
+    ok | {error, term()}.
 increase_imported_files_counter(SpaceId) ->
     update_counter(SpaceId, ?IMPORTED_FILES, 1).
 
@@ -409,12 +409,12 @@ get_deleted_files_value(SpaceId) ->
 -spec get_unhandled_files_value(od_space:id()) -> integer().
 get_unhandled_files_value(SpaceId) ->
     get_files_to_sync_value(SpaceId) -
-    get_imported_files_value(SpaceId) -
-    get_failed_file_imports_value(SpaceId) -
-    get_updated_files_value(SpaceId) -
-    get_failed_file_updates_value(SpaceId) -
-    get_deleted_files_value(SpaceId) -
-    get_failed_file_deletions_value(SpaceId).
+        get_imported_files_value(SpaceId) -
+        get_failed_file_imports_value(SpaceId) -
+        get_updated_files_value(SpaceId) -
+        get_failed_file_updates_value(SpaceId) -
+        get_deleted_files_value(SpaceId) -
+        get_failed_file_deletions_value(SpaceId).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -509,8 +509,8 @@ init_report() ->
             init_report(SpaceIds);
         {error, _} -> ok
     catch
-        _:TReason ->
-            ?error_stacktrace("Unable to restart reporters due to: ~p", [TReason])
+        _:Reason ->
+            ?error_stacktrace("Unable to restart reporters due to: ~p", [Reason])
     end.
 
 %%--------------------------------------------------------------------
@@ -532,8 +532,8 @@ init_counters() ->
     case provider_logic:get_spaces() of
         {ok, SpaceIds} ->
             init_counters(SpaceIds);
-        {error, Reason} ->
-            ?error_stacktrace("Unable to start storage_sync counters due to: ~p", [Reason])
+        Error = {error, _} ->
+            ?error("Unable to start storage_sync counters due to: ~p", [Error])
     end.
 
 %%-------------------------------------------------------------------
@@ -679,7 +679,7 @@ stop_deleted_files_spiral(SpaceId, Window) ->
 %%-------------------------------------------------------------------
 -spec stop_queue_length_spiral(od_space:id(), window()) -> ok.
 stop_queue_length_spiral(SpaceId, Window) ->
-    stop_and_unsubscribe_storage_sync_spiral(SpaceId, ?QUEUE_LENGTH,Window).
+    stop_and_unsubscribe_storage_sync_spiral(SpaceId, ?QUEUE_LENGTH, Window).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -731,7 +731,7 @@ update_queue_length_spiral(SpaceId, Window, Value) ->
 %% Starts and subscribes to given type of counter.
 %% @end
 %%-------------------------------------------------------------------
--spec start_and_subscribe_storage_sync_counter(od_space:id(), counter_type()) -> 
+-spec start_and_subscribe_storage_sync_counter(od_space:id(), counter_type()) ->
     ok | error().
 start_and_subscribe_storage_sync_counter(SpaceId, CounterType) ->
     CounterName = ?COUNTER_NAME(SpaceId, CounterType),
@@ -808,7 +808,7 @@ reset_counter(SpaceId, CounterType) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec update_counter(od_space:id(), counter_type(), integer()) ->
-        ok | error().
+    ok | error().
 update_counter(SpaceId, CounterType, Value) ->
     CounterName = ?COUNTER_NAME(SpaceId, CounterType),
     exometer:update(CounterName, Value).

@@ -182,8 +182,7 @@ do_request(Config, Method, URL, Headers, Body) ->
     do_request(Config, Method, URL, Headers, Body, []).
 do_request(Config, Method, URL, Headers, Body, Opts) ->
     [Node | _] = ?config(op_worker_nodes, Config),
-    CaCertsDir = rpc:call(Node, oz_plugin, get_cacerts_dir, []),
-    CaCerts = rpc:call(Node, cert_utils, load_ders_in_dir, [CaCertsDir]),
+    CaCerts = rpc:call(Node, gui_listener, get_cert_chain, []),
     Opts2 = [{ssl_options, [{cacerts, CaCerts}]} | Opts],
     http_client:request(Method, URL, Headers, Body, Opts2).
 

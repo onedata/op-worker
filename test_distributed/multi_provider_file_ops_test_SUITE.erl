@@ -48,7 +48,8 @@
     echo_and_delete_file_loop_test/1,
     echo_and_delete_file_loop_test_base/1,
     distributed_delete_test/1,
-    remote_driver_test/1
+    remote_driver_test/1,
+    db_sync_with_delays_test/1
 ]).
 
 -define(TEST_CASES, [
@@ -78,7 +79,8 @@
     mkdir_and_rmdir_loop_test,
     file_consistency_test,
     create_and_delete_file_loop_test,
-    echo_and_delete_file_loop_test
+    echo_and_delete_file_loop_test,
+    db_sync_with_delays_test
 ]).
 
 all() ->
@@ -408,6 +410,9 @@ remote_driver_test(Config) ->
         Ctx2, Key, TreeId1, LinkName
     ])).
 
+db_sync_with_delays_test(Config) ->
+    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {4,0,0,2}, 180, 200, 200).
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -423,6 +428,35 @@ init_per_testcase(file_consistency_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, file_meta, [passthrough]),
     init_per_testcase(?DEFAULT_CASE(file_consistency_test), Config);
+init_per_testcase(db_sync_with_delays_test, Config) ->
+    Config2 = init_per_testcase(?DEFAULT_CASE(db_sync_with_delays_test), Config),
+
+    Workers = ?config(op_worker_nodes, Config),
+    {_Workers1, WorkersNot1} = lists:foldl(fun(W, {Acc2, Acc3}) ->
+        case string:str(atom_to_list(W), "p1") of
+            0 -> {Acc2, [W | Acc3]};
+            _ -> {[W | Acc2], Acc3}
+        end
+    end, {[], []}, Workers),
+
+    test_utils:mock_new(WorkersNot1, [
+        datastore_throttling
+    ]),
+    test_utils:mock_expect(WorkersNot1, datastore_throttling, configure_throttling,
+        fun() ->
+            ok
+        end
+    ),
+    test_utils:mock_expect(WorkersNot1, datastore_throttling, throttle_model, fun
+        (file_meta) ->
+            timer:sleep(100),
+            ok;
+        (_) ->
+            ok
+    end
+    ),
+
+    Config2;
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 60}),
     lfm_proxy:init(Config).
@@ -431,5 +465,12 @@ end_per_testcase(file_consistency_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, file_meta),
     end_per_testcase(?DEFAULT_CASE(file_consistency_test), Config);
+end_per_testcase(db_sync_with_delays_test, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, [
+        datastore_throttling
+    ]),
+
+    end_per_testcase(?DEFAULT_CASE(db_sync_with_delays_test), Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).
