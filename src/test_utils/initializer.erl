@@ -765,9 +765,7 @@ user_logic_mock_setup(Workers, Users) ->
 
     UsersByAuth = lists:flatmap(
         fun({UserId, #user_config{macaroon = Macaroon}}) -> [
-            % Allow both for macaroons and tokens
-            {#macaroon_auth{macaroon = Macaroon}, UserId},
-            {#token_auth{token = Macaroon}, UserId}
+            {#macaroon_auth{macaroon = Macaroon}, UserId}
         ]
         end, Users),
 

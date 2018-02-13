@@ -43,11 +43,11 @@
 %%--------------------------------------------------------------------
 -spec translate_handshake_error(Type :: binary()) -> Type :: atom().
 translate_handshake_error(<<"token_expired">>) ->
-    'TOKEN_EXPIRED';
+    'MACAROON_EXPIRED';
 translate_handshake_error(<<"token_not_found">>) ->
-    'TOKEN_NOT_FOUND';
+    'MACAROON_NOT_FOUND';
 translate_handshake_error(<<"invalid_token">>) ->
-    'INVALID_TOKEN';
+    'INVALID_MACAROON';
 translate_handshake_error(<<"invalid_method">>) ->
     'INVALID_METHOD';
 translate_handshake_error(<<"root_resource_not_found">>) ->
@@ -178,13 +178,11 @@ translate_from_protobuf(#'SubscriptionCancellation'{id = Id}) ->
 
 
 %% HANDSHAKE
-translate_from_protobuf(#'ClientHandshakeRequest'{token = Token, session_id = SessionId, version = Version}) ->
-    #client_handshake_request{auth = translate_from_protobuf(Token), session_id = SessionId, version = Version};
+translate_from_protobuf(#'ClientHandshakeRequest'{macaroon = Macaroon, session_id = SessionId, version = Version}) ->
+    #client_handshake_request{auth = translate_from_protobuf(Macaroon), session_id = SessionId, version = Version};
 translate_from_protobuf(#'ProviderHandshakeRequest'{provider_id = ProviderId, nonce = Nonce}) ->
     #provider_handshake_request{provider_id = ProviderId, nonce = Nonce};
-translate_from_protobuf(#'Token'{value = Token, secondary_values = []}) ->
-    #token_auth{token = Token};
-translate_from_protobuf(#'Token'{value = Macaroon, secondary_values = DischargeMacaroons}) ->
+translate_from_protobuf(#'Macaroon'{macaroon = Macaroon, disch_macaroons = DischargeMacaroons}) ->
     #macaroon_auth{macaroon = Macaroon, disch_macaroons = DischargeMacaroons};
 translate_from_protobuf(#'HandshakeResponse'{status = Status}) ->
     #handshake_response{status = Status};
@@ -678,9 +676,7 @@ translate_to_protobuf(#provider_handshake_request{provider_id = ProviderId, nonc
 translate_to_protobuf(#handshake_response{status = Status}) ->
     {handshake_response, #'HandshakeResponse'{status = Status}};
 translate_to_protobuf(#macaroon_auth{macaroon = Macaroon, disch_macaroons = DMacaroons}) ->
-    #'Token'{value = Macaroon, secondary_values = DMacaroons};
-translate_to_protobuf(#token_auth{token = Token}) ->
-    #'Token'{value = Token};
+    #'Macaroon'{macaroon = Macaroon, disch_macaroons = DMacaroons};
 
 
 %% DIAGNOSTIC

@@ -69,57 +69,39 @@ authenticate(Req) ->
             end
     end.
 
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Resolves authorization carried by request (if any). Types of authorization
-%% supported:
-%% - macaroon
-%% - token
-%% - basic auth
+%% Resolves authorization carried by request (if any).
 %% @end
 %%--------------------------------------------------------------------
 -spec resolve_auth(Req :: req()) -> user_identity:credentials() | {error, term()}.
 resolve_auth(Req) ->
-    resolve_auth(macaroon, Req).
+    case parse_macaroon_from_header(Req) of
+        undefined -> {error, not_found};
+        Macaroon -> #macaroon_auth{macaroon = Macaroon}
+    end.
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Resolves authorization carried by request (if any). Tries all possible types
-%% of authorization, starting with macaroon.
-%% Types of authorization supported:
-%% - macaroon
-%% - token
-%% - basic auth
+%% Parses macaroon from request headers, accepted headers:
+%%  * Macaroon
+%%  * X-Auth-Token
 %% @end
 %%--------------------------------------------------------------------
--spec resolve_auth(Type :: macaroon | token | basic, Req :: req()) ->
-    user_identity:credentials() | {error, term()}.
-resolve_auth(macaroon, Req) ->
+-spec parse_macaroon_from_header(Req :: req()) -> undefined | binary().
+parse_macaroon_from_header(Req) ->
     case cowboy_req:header(<<"macaroon">>, Req) of
         {undefined, _} ->
-            resolve_auth(token, Req);
-        {Macaroon, _} ->
-            #macaroon_auth{macaroon = Macaroon}
-    end;
-resolve_auth(token, Req) ->
-    case cowboy_req:header(<<"x-auth-token">>, Req) of
-        {undefined, _} ->
-            resolve_auth(basic, Req);
-        {Token, _} ->
-            #token_auth{token = Token}
-    end;
-resolve_auth(basic, Req) ->
-    case cowboy_req:header(<<"authorization">>, Req) of
-        {undefined, _} ->
-            {error, not_found};
-        {<<"Basic ", UserPasswdB64/binary>>, _} ->
-            #basic_auth{credentials = UserPasswdB64};
-        {_, _} ->
-            {error, not_found}
+            {ValueOrUndef, _} = cowboy_req:header(<<"x-auth-token">>, Req),
+            ValueOrUndef;
+        {Value, _} ->
+            Value
     end.
+

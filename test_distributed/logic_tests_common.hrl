@@ -53,9 +53,9 @@
 -define(HANDLE_2, <<"handle2Id">>).
 
 % User authorizations
-% Token auth is translated to {token, Token} before graph sync request.
--define(USER_INTERNAL_TOKEN_AUTH(__User), #token_auth{token = __User}).
--define(USER_GS_TOKEN_AUTH(__User), {token, __User}).
+% Macaroon auth is translated to {macaroon, Macaroon, DischMacaroons} before graph sync request.
+-define(USER_INTERNAL_MACAROON_AUTH(__User), #macaroon_auth{macaroon = __User, disch_macaroons = [__User]}).
+-define(USER_GS_MACAROON_AUTH(__User), {macaroon, __User, [__User]}).
 
 
 -define(USER_PERMS_IN_GROUP_VALUE_BINARIES, #{?USER_1 => [atom_to_binary(?GROUP_VIEW, utf8)], ?USER_2 => [atom_to_binary(?GROUP_VIEW, utf8)]}).
