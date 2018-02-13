@@ -16,7 +16,7 @@
 -include("proto/common/credentials.hrl").
 
 -record(client_handshake_request, {
-    auth :: #macaroon_auth{} | #token_auth{},
+    auth :: #macaroon_auth{},
     session_id :: session:id(),
     version :: binary()
 }).
@@ -27,10 +27,10 @@
 }).
 
 -record(handshake_response, {
-    status = 'OK' :: 'OK' | 'TOKEN_EXPIRED' | 'TOKEN_NOT_FOUND' |
+    status = 'OK' :: 'OK' | 'MACAROON_EXPIRED' | 'MACAROON_NOT_FOUND' |
     'INVALID_METHOD' | 'ROOT_RESOURCE_NOT_FOUND' | 'INVALID_PROVIDER' |
     'BAD_SIGNATURE_FOR_MACAROON' | 'FAILED_TO_DESCRYPT_CAVEAT' |
-    'NO_DISCHARGE_MACAROON_FOR_CAVEAT' | 'INVALID_TOKEN' | 'INVALID_NONCE' |
+    'NO_DISCHARGE_MACAROON_FOR_CAVEAT' | 'INVALID_MACAROON' | 'INVALID_NONCE' |
     'INCOMPATIBLE_VERSION' | 'INTERNAL_SERVER_ERROR'
 }).
 

@@ -292,7 +292,7 @@ report_handshake_error(State, incompatible_client_version) ->
 report_handshake_error(State, invalid_token) ->
     send_server_message(State, #server_message{
         message_body = #handshake_response{
-            status = 'INVALID_TOKEN'
+            status = 'INVALID_MACAROON'
         }
     });
 report_handshake_error(State, invalid_provider) ->
