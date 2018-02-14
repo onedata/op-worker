@@ -360,6 +360,7 @@ handle_remotely(#flush_events{} = Request, ProviderId, #state{} = State) ->
     Ref = session_manager:get_provider_session_id(outgoing, ProviderId),
     RequestTranslator = spawn(fun() ->
         receive
+            % TODO VFS-4025 - multiprovider communication
             #server_message{message_body = #status{}} = Msg ->
                 Notify(Msg)
         after timer:minutes(10) ->

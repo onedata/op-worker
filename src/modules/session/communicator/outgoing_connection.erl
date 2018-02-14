@@ -48,6 +48,7 @@
 
 %% API
 -export([start_link/6, init/6]).
+-export([send_server_message/3]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -111,6 +112,24 @@ init(ProviderId, SessionId, Hostname, Port, Transport, Timeout) ->
                     postpone_next_reconnect(Intervals, ProviderId, Interval),
                     exit(Reason)
             end
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Sends #server_message via given socket.
+%% @end
+%%--------------------------------------------------------------------
+-spec send_server_message(#state{}, #server_message{}) -> ok.
+send_server_message(State, #server_message{} = ServerMsg) ->
+    try serializator:serialize_server_message(ServerMsg) of
+        {ok, Data} ->
+            socket_send(State, Data)
+    catch
+        _:Reason ->
+            ?error_stacktrace("Unable to serialize server_message ~p due to: ~p", [ServerMsg, Reason]),
+            ok
     end.
 
 
@@ -345,8 +364,9 @@ handle_server_message(State = #state{session_id = SessId}, Data) ->
 -spec handle_server_message_unsafe(#state{}, #client_message{} | #server_message{}) ->
     {noreply, NewState :: #state{}, timeout()} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_server_message_unsafe(State = #state{session_id = SessId}, Msg) ->
-    case router:preroute_message(Msg, SessId) of
+handle_server_message_unsafe(State = #state{session_id = SessId,
+    socket = Socket, transport = Transport}, Msg) ->
+    case router:preroute_message(Msg, SessId, Socket, Transport) of
         ok ->
             {noreply, State, ?PROTO_CONNECTION_TIMEOUT};
         {ok, ServerMsg} ->
@@ -376,14 +396,16 @@ activate_socket_once(#state{transport = Transport, socket = Socket}) ->
 %% Sends #server_message via given socket.
 %% @end
 %%--------------------------------------------------------------------
--spec send_server_message(#state{}, #server_message{}) -> ok.
-send_server_message(State, #server_message{} = ServerMsg) ->
+-spec send_server_message(Socket :: ssl:socket(), Transport :: module(),
+    #server_message{}) -> ok.
+send_server_message(Socket, Transport, #server_message{} = ServerMsg) ->
     try serializator:serialize_server_message(ServerMsg) of
         {ok, Data} ->
-            socket_send(State, Data)
+            Transport:send(Socket, Data)
     catch
         _:Reason ->
-            ?error_stacktrace("Unable to serialize server_message ~p due to: ~p", [ServerMsg, Reason]),
+            ?error_stacktrace("Unable to serialize server_message ~p due to: ~p",
+                [ServerMsg, Reason]),
             ok
     end.
 
