@@ -377,7 +377,7 @@ route_and_send_answer(Msg = #client_message{
 route_and_send_answer(#client_message{
     message_id = Id = #message_id{issuer = ProviderId},
     message_body = #generate_rtransfer_conn_secret{}
-}) ->
+}, _Sock, _Transport) ->
     Response = #rtransfer_conn_secret{secret = <<ProviderId/binary, "-secret">>},
     {ok, #server_message{message_id = Id, message_body = Response}};
 route_and_send_answer(Msg = #client_message{
