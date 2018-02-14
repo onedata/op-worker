@@ -26,6 +26,7 @@
 -include("proto/oneprovider/dbsync_messages2.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include("proto/oneprovider/remote_driver_messages.hrl").
+-include("proto/oneprovider/rtransfer_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("clproto/include/messages.hrl").
 
@@ -567,6 +568,12 @@ translate_from_protobuf(#'RemoteDocument'{
         compressed_data = Data
     };
 
+%% RTRANSFER
+translate_from_protobuf(#'GenerateRTransferConnSecret'{}) ->
+    #generate_rtransfer_conn_secret{};
+translate_from_protobuf(#'RTransferConnSecret'{secret = Secret}) ->
+    #rtransfer_conn_secret{secret = Secret};
+
 translate_from_protobuf(undefined) ->
     undefined.
 
@@ -1063,6 +1070,12 @@ translate_to_protobuf(#remote_document{
     {remote_document, #'RemoteDocument'{
         status = StatusProto, compressed_data = Data
     }};
+
+%% RTRANSFER
+translate_to_protobuf(#generate_rtransfer_conn_secret{}) ->
+    {generate_rtransfer_conn_secret, #'GenerateRTransferConnSecret'{}};
+translate_to_protobuf(#rtransfer_conn_secret{secret = Secret}) ->
+    {rtransfer_conn_secret, #'RTransferConnSecret'{secret = Secret}};
 
 translate_to_protobuf(undefined) ->
     undefined.

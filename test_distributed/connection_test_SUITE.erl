@@ -34,6 +34,7 @@
 %%tests
 -export([
     provider_connection_test/1,
+    rtransfer_connection_secret_test/1,
     macaroon_connection_test/1,
     compatible_client_connection_test/1,
     incompatible_client_connection_test/1,
@@ -64,6 +65,7 @@
 -define(NORMAL_CASES_NAMES, [
     timeouts_test,
     provider_connection_test,
+    rtransfer_connection_secret_test,
     macaroon_connection_test,
     compatible_client_connection_test,
     incompatible_client_connection_test,
@@ -230,20 +232,47 @@ provider_connection_test(Config) ->
     % then
     ?assertMatch(
         {ok, #'HandshakeResponse'{status = 'INVALID_PROVIDER'}},
-        connect_as_provider(Worker1, ?INCORRECT_PROVIDER_ID, ?CORRECT_NONCE)
+        handshake_as_provider(Worker1, ?INCORRECT_PROVIDER_ID, ?CORRECT_NONCE)
     ),
     ?assertMatch(
         {ok, #'HandshakeResponse'{status = 'INVALID_PROVIDER'}},
-        connect_as_provider(Worker1, ?INCORRECT_PROVIDER_ID, ?INCORRECT_NONCE)
+        handshake_as_provider(Worker1, ?INCORRECT_PROVIDER_ID, ?INCORRECT_NONCE)
     ),
     ?assertMatch(
         {ok, #'HandshakeResponse'{status = 'INVALID_NONCE'}},
-        connect_as_provider(Worker1, ?CORRECT_PROVIDER_ID, ?INCORRECT_NONCE)
+        handshake_as_provider(Worker1, ?CORRECT_PROVIDER_ID, ?INCORRECT_NONCE)
     ),
     ?assertMatch(
         {ok, #'HandshakeResponse'{status = 'OK'}},
-        connect_as_provider(Worker1, ?CORRECT_PROVIDER_ID, ?CORRECT_NONCE)
+        handshake_as_provider(Worker1, ?CORRECT_PROVIDER_ID, ?CORRECT_NONCE)
     ).
+
+rtransfer_connection_secret_test(Config) ->
+    % given
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+
+    {ok, #'HandshakeResponse'{status = 'OK'}, Sock} = connect_as_provider(
+        Worker1, ?CORRECT_PROVIDER_ID, ?CORRECT_NONCE
+    ),
+
+    {ok, MsgId} = message_id:generate(self(), <<"provId">>),
+    {ok, EncodedId} = message_id:encode(MsgId),
+    ClientMsg = #'ClientMessage'{
+        message_id = EncodedId,
+        message_body = {generate_rtransfer_conn_secret, #'GenerateRTransferConnSecret'{}}
+    },
+    RawMsg = messages:encode_msg(ClientMsg),
+    ssl:send(Sock, RawMsg),
+    ssl:setopts(Sock, [{active, once}, {packet, 4}]),
+
+    #'ServerMessage'{message_body = Msg} = ?assertMatch(#'ServerMessage'{}, receive_server_message()),
+
+    {rtransfer_conn_secret, #'RTransferConnSecret'{secret = Secret}} = ?assertMatch(
+        {rtransfer_conn_secret, #'RTransferConnSecret'{}},
+        Msg
+    ),
+    ?assert(is_binary(Secret)),
+    ok = ssl:close(Sock).
 
 macaroon_connection_test(Config) ->
     % given
@@ -780,7 +809,9 @@ init_per_suite(Config) ->
     Posthook = fun(NewConfig) -> initializer:setup_storage(NewConfig) end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
-init_per_testcase(provider_connection_test, Config) ->
+init_per_testcase(Case, Config) when
+    Case =:= provider_connection_test;
+    Case =:= rtransfer_connection_secret_test ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, provider_logic, [passthrough]),
 
@@ -980,6 +1011,11 @@ connect_as_provider(Node, ProviderId, Nonce) ->
     #'ServerMessage'{
         message_body = {handshake_response, HandshakeResp}
     } = receive_server_message(),
+    {ok, HandshakeResp, Sock}.
+
+
+handshake_as_provider(Node, ProviderId, Nonce) ->
+    {ok, HandshakeResp, Sock} = connect_as_provider(Node, ProviderId, Nonce),
     ok = ssl:close(Sock),
     {ok, HandshakeResp}.
 
