@@ -135,7 +135,7 @@ timeouts_test(Config) ->
 
     RootGuid = get_guid(Worker1, SID, <<"/space_name1">>),
     initializer:remove_pending_messages(),
-    {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}], SID),
+    {ok, {Sock, _}} = connect_via_macaroon(Worker1, [{active, true}], SID),
 
     create_timeouts_test(Config, Sock, RootGuid),
     ls_timeouts_test(Config, Sock, RootGuid),
@@ -821,7 +821,7 @@ init_per_testcase(timeouts_test, Config) ->
 
     test_utils:mock_new(Workers, user_identity),
     test_utils:mock_expect(Workers, user_identity, get_or_fetch,
-        fun(#token_auth{token = ?MACAROON}) ->
+        fun(#macaroon_auth{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS}) ->
             {ok, #document{value = #user_identity{user_id = <<"user1">>}}}
         end
     ),
