@@ -25,6 +25,7 @@
 -include("proto/oneprovider/dbsync_messages2.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include("proto/oneprovider/remote_driver_messages.hrl").
+-include("proto/oneprovider/rtransfer_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/exometer_utils.hrl").
 
@@ -239,18 +240,21 @@ route_and_ignore_answer(#client_message{message_body = #event{} = Evt} = Msg) ->
     event:emit(Evt, effective_session_id(Msg)),
     ok;
 route_and_ignore_answer(#client_message{message_body = #events{events = Evts}} = Msg) ->
-    lists:foreach(fun(#event{} = Evt) -> event:emit(Evt, effective_session_id(Msg)) end, Evts),
+    lists:foreach(fun(#event{} = Evt) ->
+        event:emit(Evt, effective_session_id(Msg)) end, Evts),
     ok;
 route_and_ignore_answer(#client_message{message_body = #subscription{} = Sub} = Msg) ->
     case session_manager:is_provider_session_id(effective_session_id(Msg)) of
-        true -> ok; %% Do not route subscriptions from other providers (route only subscriptions from users)
+        true ->
+            ok; %% Do not route subscriptions from other providers (route only subscriptions from users)
         false ->
             event:subscribe(Sub, effective_session_id(Msg)),
             ok
     end;
 route_and_ignore_answer(#client_message{message_body = #subscription_cancellation{} = SubCan} = Msg) ->
     case session_manager:is_provider_session_id(effective_session_id(Msg)) of
-        true -> ok; %% Do not route subscription_cancellations from other providers
+        true ->
+            ok; %% Do not route subscription_cancellations from other providers
         false ->
             event:unsubscribe(SubCan, effective_session_id(Msg)),
             ok
@@ -325,9 +329,9 @@ route_and_send_answer(Msg = #client_message{
 route_and_send_answer(Msg = #client_message{
     message_id = Id,
     message_body = FuseRequest = #fuse_request{
-         fuse_request = #file_request{
-             context_guid = FileGuid,
-             file_request = Req
+        fuse_request = #file_request{
+            context_guid = FileGuid,
+            file_request = Req
         }}
 }, Sock, Transport) when is_record(Req, open_file) orelse is_record(Req, release) ->
     Node = consistent_hasing:get_node(FileGuid),
@@ -370,6 +374,12 @@ route_and_send_answer(Msg = #client_message{
         {proxyio_request, effective_session_id(Msg), ProxyIORequest},
         {?TIMEOUT,  get_heartbeat_fun(Id, Sock, Transport)}),
     {ok, #server_message{message_id = Id, message_body = ProxyIOResponse}};
+route_and_send_answer(#client_message{
+    message_id = Id = #message_id{issuer = ProviderId},
+    message_body = #generate_rtransfer_conn_secret{}
+}) ->
+    Response = #rtransfer_conn_secret{secret = <<ProviderId/binary, "-secret">>},
+    {ok, #server_message{message_id = Id, message_body = Response}};
 route_and_send_answer(Msg = #client_message{
     message_id = Id,
     message_body = #dbsync_request{} = DBSyncRequest

@@ -454,6 +454,16 @@ socket_send(#state{transport = Transport, socket = Socket}, Data) ->
     Port :: non_neg_integer(), Transport :: atom(),
     Timeout :: non_neg_integer()) -> #state{} | no_return().
 init_provider_conn(SessionId, ProviderId, Domain, IP, Port, Transport, Timeout) ->
+    case provider_logic:verify_provider_identity(ProviderId) of
+        ok ->
+            ok;
+        Err ->
+            ?warning("Cannot verify identity of provider ~p, skipping connection - ~p", [
+                ProviderId, Err
+            ]),
+            erlang:error({cannot_verify_identity, ProviderId})
+    end,
+
     CaCerts = oneprovider:trusted_ca_certs(),
     SecureFlag = application:get_env(?APP_NAME, interprovider_connections_security, true),
     SslOpts = [{cacerts, CaCerts}, {secure, SecureFlag}, {hostname, Domain}],

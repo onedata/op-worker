@@ -207,16 +207,6 @@ ensure_connected(SessId) ->
                     ok
             end,
 
-            case provider_logic:verify_provider_identity(ProviderId) of
-                ok ->
-                    ok;
-                Error ->
-                    ?warning("Cannot verify identity of provider ~p, skipping connection - ~p", [
-                        ProviderId, Error
-                    ]),
-                    erlang:error({cannot_verify_identity, ProviderId})
-            end,
-
             {ok, Domain} = provider_logic:get_domain(ProviderId),
             {ok, IPs} = inet:getaddrs(binary_to_list(Domain), inet),
             IPBinaries = lists:map(fun(IP) ->
