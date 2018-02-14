@@ -542,9 +542,7 @@ mark_data_transfer_scheduled(undefined, _Bytes) ->
     {ok, undefined};
 mark_data_transfer_scheduled(TransferId, Bytes) ->
     update(TransferId, fun(Transfer) ->
-        CurrentTime = provider_logic:zone_time_seconds(),
         {ok, Transfer#transfer{
-            finish_time = CurrentTime,
             bytes_to_transfer = Transfer#transfer.bytes_to_transfer + Bytes
         }}
     end).
@@ -1362,8 +1360,8 @@ get_posthooks() ->
 %%-------------------------------------------------------------------
 -spec move_from_past_to_current_links_tree(id(), od_space:id()) -> ok.
 move_from_past_to_current_links_tree(TransferId, SpaceId) ->
-    ok = add_link(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId),
-    ok = delete_links(?PAST_TRANSFERS_KEY, TransferId, SpaceId).
+    add_link(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId),
+    delete_links(?PAST_TRANSFERS_KEY, TransferId, SpaceId).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -1373,8 +1371,8 @@ move_from_past_to_current_links_tree(TransferId, SpaceId) ->
 %%-------------------------------------------------------------------
 -spec move_from_current_to_past_links_tree(id(), od_space:id()) -> ok.
 move_from_current_to_past_links_tree(TransferId, SpaceId) ->
-    ok = add_link(?PAST_TRANSFERS_KEY, TransferId, SpaceId),
-    ok = delete_links(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId).
+    add_link(?PAST_TRANSFERS_KEY, TransferId, SpaceId),
+    delete_links(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId).
 
 %%-------------------------------------------------------------------
 %% @private
