@@ -217,13 +217,15 @@ ensure_connected(SessId) ->
                     erlang:error({cannot_verify_identity, ProviderId})
             end,
 
-            {ok, IPs} = provider_logic:resolve_ips(ProviderId),
+            {ok, Domain} = provider_logic:get_domain(ProviderId),
+            {ok, IPs} = inet:getaddrs(binary_to_list(Domain), inet),
             IPBinaries = lists:map(fun(IP) ->
-                list_to_binary(inet:ntoa(IP)) end, IPs),
+                list_to_binary(inet:ntoa(IP))
+            end, IPs),
             lists:foreach(
                 fun(IPBinary) ->
                     {ok, Port} = application:get_env(?APP_NAME, gui_https_port),
-                    outgoing_connection:start_link(ProviderId, SessId, IPBinary, Port, ranch_ssl, timer:seconds(5))
+                    outgoing_connection:start_link(ProviderId, SessId, Domain, IPBinary, Port, ranch_ssl, timer:seconds(5))
                 end, IPBinaries),
             ok;
         {ok, Pid} ->
