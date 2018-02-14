@@ -21,7 +21,7 @@
 
 %% API
 -export([start/7, cancel/1, get_status/1, get_info/1, get/1, init/0, cleanup/0,
-    decode_pid/1, encode_pid/1, get_controller/1, remove_links/3, restart/1]).
+    decode_pid/1, encode_pid/1, get_controller/1, remove_links/3, restart/1, add_link/3]).
 -export([mark_active/2, mark_completed/3, mark_failed/2,
     mark_active_invalidation/1, mark_completed_invalidation/2, mark_failed_invalidation/2,
     mark_file_transfer_scheduled/2, mark_file_transfer_finished/2,
@@ -692,10 +692,8 @@ mark_file_invalidation_finished(TransferId, FilesNum) ->
 mark_data_transfer_scheduled(undefined, _Bytes) ->
     {ok, undefined};
 mark_data_transfer_scheduled(TransferId, Bytes) ->
-    transfer:update(TransferId, fun(Transfer) ->
-        CurrentTime = time_utils:zone_time_seconds(),
+    update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{
-            finish_time = CurrentTime,
             bytes_to_transfer = Transfer#transfer.bytes_to_transfer + Bytes
         }}
     end).
@@ -894,6 +892,8 @@ delete(Key) ->
 %%--------------------------------------------------------------------
 -spec delete(datastore:key(), od_space:id()) -> ok | datastore:generic_error().
 delete(Key, SpaceId) ->
+    ok = remove_links(?CURRENT_TRANSFERS_KEY, Key, SpaceId),
+    ok = remove_links(?PAST_TRANSFERS_KEY, Key, SpaceId),
     model:execute_with_default_context(?MODULE, delete, [Key], [{scope, SpaceId}]).
 
 %%--------------------------------------------------------------------

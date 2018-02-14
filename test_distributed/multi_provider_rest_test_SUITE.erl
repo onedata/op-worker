@@ -151,7 +151,7 @@ all() ->
     ]).
 
 -define(LIST_TRANSFER, fun(Id, Acc) -> [Id | Acc] end).
--define(ATTEMPTS, 30).
+-define(ATTEMPTS, 300).
 
 -define(assertDistribution(Worker, ExpectedDistribution, Config, File),
     ?assertEqual(lists:sort(ExpectedDistribution), begin
@@ -1926,6 +1926,7 @@ quota_exceeded_during_file_replication(Config) ->
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File).
 
 many_simultaneous_transfers(Config) ->
+    ct:timetrap({minutes, 10}),
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
@@ -2443,6 +2444,7 @@ end_per_testcase(Case, Config) when
 
 end_per_testcase(_Case, Config) ->
     remove_transfers(Config),
+    ensure_transfers_removed(Config),
     lfm_proxy:teardown(Config).
 
 %%%===================================================================
@@ -2563,6 +2565,14 @@ clean_monitoring_dir(Worker, SpaceId) ->
             ok
     end.
 
+list_finished_transfers(Worker, SpaceId) ->
+    {ok, Transfers} = rpc:call(Worker, transfer, for_each_past_transfer, [?LIST_TRANSFER, [], SpaceId]),
+    Transfers.
+
+list_unfinished_transfers(Worker, SpaceId) ->
+    {ok, Transfers} = rpc:call(Worker, transfer, for_each_current_transfer, [?LIST_TRANSFER, [], SpaceId]),
+    Transfers.
+
 remove_transfers(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lists:foreach(fun(Worker) ->
@@ -2572,12 +2582,24 @@ remove_transfers(Config) ->
             {ok, Current} = rpc:call(Worker, transfer, list_transfers, [SpaceId, true]),
             {ok, Past} = rpc:call(Worker, transfer, list_transfers, [SpaceId, false]),
             lists:foreach(fun(Tid) ->
-                rpc:call(Worker, transfer, delete, [Tid, SpaceId]),
-                rpc:call(Worker, transfer, remove_links, [<<"PAST_TRANSFERS_KEY">>, Tid, SpaceId]),
-                rpc:call(Worker, transfer, remove_links, [<<"CURRENT_TRANSFERS_KEY">>, Tid, SpaceId])
-            end, Current ++ Past)
+                rpc:call(Worker, transfer, delete, [Tid, SpaceId])
+            end, lists:usort(Current ++ Past))
         end, SpaceIds)
     end, Workers).
 
+ensure_transfers_removed(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    lists:foreach(fun(Worker) ->
+        {ok, #document{
+            value = #od_provider{
+                spaces = SpaceIds}}} = rpc:call(Worker, od_provider, get_or_fetch, [provider_id(Worker)]),
+        lists:foreach(fun(SpaceId) ->
+            ?assertMatch([], list_finished_transfers(Worker, SpaceId), ?ATTEMPTS),
+            ?assertMatch([], list_unfinished_transfers(Worker, SpaceId), ?ATTEMPTS)
+        end, SpaceIds)
+    end, Workers).
 
-%todo test of cancel_invalidation
+provider_id(Node) ->
+    Hostname = list_to_binary(utils:get_host(Node)),
+    [_, Id | _] = binary:split(Hostname, <<".">>, [global]),
+    Id.
