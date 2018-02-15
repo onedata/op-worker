@@ -132,16 +132,21 @@
     handle_id :: undefined | binary()
 }).
 
+-record(storage_file_created, {
+}).
+
 -type file_request_type() ::
     #get_file_attr{} | #get_file_children{} | #create_dir{} | #delete_file{} |
     #update_times{} | #change_mode{} | #rename{} | #create_file{} | #make_file{} |
     #open_file{} | #get_file_location{} | #release{} | #truncate{} |
     #synchronize_block{} | #synchronize_block_and_compute_checksum{} |
     #get_child_attr{} | #get_xattr{} | #set_xattr{} | #remove_xattr{} |
-    #list_xattr{} | #fsync{} | #get_file_children_attrs{}.
+    #list_xattr{} | #fsync{} | #get_file_children_attrs{} |
+    #storage_file_created{}.
 
 -record(file_request, {
     context_guid :: fslogic_worker:file_guid(),
+    extended_direct_io :: boolean(),
     file_request :: file_request_type()
 }).
 
@@ -190,7 +195,8 @@
 
 -record(helper_params, {
     helper_name :: helper:name(),
-    helper_args :: [#helper_arg{}]
+    helper_args :: [#helper_arg{}],
+    extended_direct_io :: boolean()
 }).
 
 -record(storage_test_file, {

@@ -146,9 +146,9 @@ get(Key) ->
 %% Updates file location.
 %% @end
 %%--------------------------------------------------------------------
--spec update(id(), diff()) -> {ok, id()} | {error, term()}.
+-spec update(id(), diff()) -> {ok, doc()} | {error, term()}.
 update(Key, Diff) ->
-    ?extract_key(datastore_model:update(?CTX, Key, Diff)).
+    datastore_model:update(?CTX, Key, Diff).
 
 %%--------------------------------------------------------------------
 %% @doc

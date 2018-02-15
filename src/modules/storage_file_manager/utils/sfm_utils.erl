@@ -118,7 +118,7 @@ create_delayed_storage_file(FileCtx) ->
 
     case StorageFileCreated of
         false ->
-            file_location:update(FileLocationId, fun
+            UpdateAns = file_location:update(FileLocationId, fun
                 (#file_location{storage_file_created = true}) ->
                     {error, already_created};
                 (FileLocation = #file_location{storage_file_created = false}) ->
@@ -133,7 +133,13 @@ create_delayed_storage_file(FileCtx) ->
                             {error, {Error, Reason}}
                     end
             end),
-            FileCtx2;
+
+            case UpdateAns of
+                {ok, #document{} = Doc} ->
+                    file_ctx:update_location_doc(FileCtx2, Doc);
+                _ ->
+                    FileCtx2
+            end;
         true ->
             FileCtx2
     end.

@@ -86,19 +86,36 @@ flush_event_queue(SessionId, ProviderId, FileUuid) ->
         true ->
             ok;
         false ->
+            [Manager] = event:get_event_managers(SessionId),
             RecvRef = event:flush(ProviderId, FileUuid, ?FILE_WRITTEN_SUB_ID,
-                self(), SessionId),
-            receive
-                {RecvRef, Response} ->
-                    Response
-            after ?DEFAULT_REQUEST_TIMEOUT ->
-                {error, timeout}
-            end
+                self(), Manager),
+            receive_loop(RecvRef, Manager)
     end.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Waits for worker asynchronous process answer.
+%% @end
+%%--------------------------------------------------------------------
+-spec receive_loop(reference(), pid()) -> ok | {error, term()}.
+receive_loop(RecvRef, Manager) ->
+    receive
+        {RecvRef, Response} ->
+            Response
+    after
+        ?DEFAULT_REQUEST_TIMEOUT ->
+            case erlang:is_process_alive(Manager) of
+                true ->
+                    receive_loop(RecvRef, Manager);
+                _ ->
+                    {error, timeout}
+            end
+    end.
 
 %%--------------------------------------------------------------------
 %% @private

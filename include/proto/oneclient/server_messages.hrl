@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Internal version of server protocol message.
+%%% Internal version of server protocol and processing status messages.
 %%% @end
 %%%-------------------------------------------------------------------
 
@@ -21,6 +21,10 @@
     message_stream :: undefined | #message_stream{},
     message_body :: tuple(),
     proxy_session_id :: undefined | session:id()
+}).
+
+-record(processing_status, {
+    code :: 'IN_PROGRESS' | 'ERROR'
 }).
 
 -endif.

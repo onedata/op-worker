@@ -190,7 +190,9 @@ wait_for_messages(SubRef) ->
         {not_empty, SubRef} -> 0;
         {_What, _Details, #gw_fetch{}} -> -1
     after
-        timer:minutes(1) -> 0
+        timer:minutes(1) ->
+            % TODO VFS-4025
+            0
     end.
 
 

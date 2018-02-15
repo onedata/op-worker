@@ -280,11 +280,13 @@ handle_request_and_process_response_locally(UserCtx, Request, FilePartialCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_request_locally(user_ctx:ctx(), request(), file_ctx:ctx() | undefined) -> response().
-handle_request_locally(UserCtx, #fuse_request{fuse_request = #file_request{file_request = Req}}, FileCtx) ->
+handle_request_locally(UserCtx, #fuse_request{fuse_request = #file_request{
+    file_request = Req, extended_direct_io = ExtDIO}}, FileCtx) ->
     [ReqName | _] = tuple_to_list(Req),
     ?update_counter(?EXOMETER_NAME(ReqName)),
     Now = os:timestamp(),
-    Ans = handle_file_request(UserCtx, Req, FileCtx),
+    FileCtx2 = file_ctx:set_extended_direct_io(FileCtx, ExtDIO),
+    Ans = handle_file_request(UserCtx, Req, FileCtx2),
     Time = timer:now_diff(os:timestamp(), Now),
     ?update_counter(?EXOMETER_TIME_NAME(ReqName), Time),
     Ans;
@@ -379,6 +381,8 @@ handle_file_request(UserCtx, #rename{
     rename_req:rename(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName);
 handle_file_request(UserCtx, #create_file{name = Name, flag = Flag, mode = Mode}, ParentFileCtx) ->
     file_req:create_file(UserCtx, ParentFileCtx, Name, Mode, Flag);
+handle_file_request(UserCtx, #storage_file_created{}, FileCtx) ->
+    file_req:storage_file_created(UserCtx, FileCtx);
 handle_file_request(UserCtx, #make_file{name = Name, mode = Mode}, ParentFileCtx) ->
     file_req:make_file(UserCtx, ParentFileCtx, Name, Mode);
 handle_file_request(UserCtx, #open_file{flag = Flag}, FileCtx) ->

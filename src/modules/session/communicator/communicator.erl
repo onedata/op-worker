@@ -88,6 +88,7 @@ communicate(#server_message{} = ServerMsg, Ref) ->
     receive
         #client_message{message_id = MsgId} = ClientMsg -> {ok, ClientMsg}
     after
+        % TODO VFS-4025 - how long should we wait for client answer?
         ?DEFAULT_REQUEST_TIMEOUT ->
             {error, timeout}
     end;

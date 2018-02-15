@@ -46,19 +46,27 @@ truncate(UserCtx, FileCtx, Size) ->
     fslogic_worker:fuse_response().
 truncate_insecure(UserCtx, FileCtx, Size, UpdateTimes) ->
     FileCtx2 = update_quota(FileCtx, Size),
-    SessId = user_ctx:get_session_id(UserCtx),
-    {SFMHandle, FileCtx3} = storage_file_manager:new_handle(SessId, FileCtx2),
-    case storage_file_manager:open(SFMHandle, write) of
-        {ok, Handle} ->
-            ok = storage_file_manager:truncate(Handle, Size),
-            ok = storage_file_manager:release(Handle),
-            ok = file_popularity:update_size(FileCtx3, Size);
-        {error, ?ENOENT} ->
-            ok
+
+    FileCtx4 = case file_ctx:get_extended_direct_io_const(FileCtx2) of
+        true ->
+            FileCtx2;
+        _ ->
+            SessId = user_ctx:get_session_id(UserCtx),
+            {SFMHandle, FileCtx3} = storage_file_manager:new_handle(SessId, FileCtx2),
+            case storage_file_manager:open(SFMHandle, write) of
+                {ok, Handle} ->
+                    ok = storage_file_manager:truncate(Handle, Size),
+                    ok = storage_file_manager:release(Handle),
+                    ok = file_popularity:update_size(FileCtx3, Size);
+                {error, ?ENOENT} ->
+                    ok
+            end,
+            FileCtx3
     end,
+
     case UpdateTimes of
         true ->
-            fslogic_times:update_mtime_ctime(FileCtx3);
+            fslogic_times:update_mtime_ctime(FileCtx4);
         false ->
             ok
     end,
