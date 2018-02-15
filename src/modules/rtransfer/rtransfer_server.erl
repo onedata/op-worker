@@ -16,6 +16,7 @@
 -include("modules/rtransfer/gateway.hrl").
 -include("modules/rtransfer/rtransfer.hrl").
 -include("modules/rtransfer/rt_container.hrl").
+-include("modules/rtransfer/registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -define(RTRANSFER_RUNNING_JOBS, rtransfer_running_jobs).
@@ -24,13 +25,21 @@
 
 %% API
 -export([init/1, handle_call/3, handle_cast/2,
-    handle_info/2, terminate/2, code_change/3]).
+    handle_info/2, terminate/2, code_change/3, start_link/1]).
 
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Starts rtransfer_server gen_server.
+%% @end
+%%-------------------------------------------------------------------
+-spec start_link(rtransfer:config()) -> {ok, pid()}.
+start_link(RtransferOpts) ->
+    gen_server2:start_link({global, ?RTRANSFER}, ?MODULE, RtransferOpts, []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -65,7 +74,6 @@ handle_cast(#request_transfer{} = Request, State) ->
     Aggregator = spawn(fun() -> aggregator(Request, 0) end),
 
     Remote = provider_id_to_remote(ProviderId, State),
-
     {ok, ExistingBlocks} = rt_map:get(?gateways_map, FileId, Offset, Size),
     BaseBlock = #rt_block{file_id = FileId, offset = Offset, size = Size,
         provider_ref = ProviderId, terms = []},

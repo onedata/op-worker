@@ -46,7 +46,8 @@
                             "127.0.0.1:49161"
                         ],
                         "subscription_renew_seconds": 2,
-                        "zone_domain": "oz"
+                        "zone_domain": "oz",
+                        "subscriptions_initial_reconnect_interval": 99999999999
                     }
                 }
             }

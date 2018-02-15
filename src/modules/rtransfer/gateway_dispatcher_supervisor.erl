@@ -67,7 +67,6 @@ init({NetworkInterfaces, RtransferOpts}) ->
     {ok, {{RestartStrategy, MaxR, MaxT},
         [connection_manager_supervisor_spec(RtransferOpts),
             dispatcher_spec(NetworkInterfaces),
-            rt_priority_queue_spec(RtransferOpts),
             rt_map_spec()]}}.
 
 
@@ -104,24 +103,6 @@ connection_manager_supervisor_spec(RtransferOpts) ->
     Restart = permanent,
     ExitTimeout = timer:seconds(10),
     Type = supervisor,
-    {ChildId, Function, Restart, ExitTimeout, Type, [Module]}.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates a supervisor child_spec for a rt_containter child.
-%% @end
-%%--------------------------------------------------------------------
--spec rt_priority_queue_spec([rtransfer:opt()]) -> supervisor:child_spec().
-rt_priority_queue_spec(RtransferOpts) ->
-    DefaultBlockSize = ?default_block_size,
-    BlockSize = proplists:get_value(block_size,
-        RtransferOpts, DefaultBlockSize),
-    ChildId = Module = rt_priority_queue,
-    Function = {Module, new, [{local, ?GATEWAY_INCOMING_QUEUE}, BlockSize]},
-    Restart = permanent,
-    ExitTimeout = timer:seconds(10),
-    Type = worker,
     {ChildId, Function, Restart, ExitTimeout, Type, [Module]}.
 
 

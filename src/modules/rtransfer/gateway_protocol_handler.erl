@@ -35,7 +35,7 @@
 %% @end
 %%--------------------------------------------------------------------
 start_link(Ref, Socket, Transport, RtransferOpts) ->
-    Pid = spawn_link(?MODULE, init, [Ref, Socket, Transport, RtransferOpts]),
+    Pid = proc_lib:spawn_link(?MODULE, init, [Ref, Socket, Transport, RtransferOpts]),
     {ok, Pid}.
 
 

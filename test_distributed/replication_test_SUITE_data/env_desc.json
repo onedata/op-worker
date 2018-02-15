@@ -45,8 +45,9 @@
                         "db_nodes": [
                             "127.0.0.1:49161"
                         ],
-                        "global_registry_domain": "gr",
-                        "verify_gr_cert": false
+                        "oz_domain": "oz",
+                        "verify_gr_cert": false,
+                        "subscriptions_initial_reconnect_interval": 99999999999
                     }
                 }
             }

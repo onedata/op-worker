@@ -100,7 +100,8 @@
                         "db_nodes": [
                             "127.0.0.1:49161"
                         ],
-                        "oz_domain": "oz"
+                        "oz_domain": "oz",
+                        "subscriptions_initial_reconnect_interval": 99999999999
                     }
                 }
             }
@@ -133,7 +134,8 @@
                         "db_nodes": [
                             "127.0.0.1:49162"
                         ],
-                        "oz_domain": "oz"
+                        "oz_domain": "oz",
+                        "subscriptions_initial_reconnect_interval": 99999999999
                     }
                 }
             }
@@ -166,7 +168,8 @@
                         "db_nodes": [
                             "127.0.0.1:49163"
                         ],
-                        "oz_domain": "oz"
+                        "oz_domain": "oz",
+                        "subscriptions_initial_reconnect_interval": 99999999999
                     }
                 }
             }
@@ -199,7 +202,8 @@
                         "db_nodes": [
                             "127.0.0.1:49164"
                         ],
-                        "oz_domain": "oz"
+                        "oz_domain": "oz",
+                        "subscriptions_initial_reconnect_interval": 99999999999
                     }
                 }
             }
@@ -232,7 +236,8 @@
                         "db_nodes": [
                             "127.0.0.1:49165"
                         ],
-                        "oz_domain": "oz"
+                        "oz_domain": "oz",
+                        "subscriptions_initial_reconnect_interval": 99999999999
                     }
                 }
             }
@@ -265,7 +270,8 @@
                         "db_nodes": [
                             "127.0.0.1:49166"
                         ],
-                        "oz_domain": "oz"
+                        "oz_domain": "oz",
+                        "subscriptions_initial_reconnect_interval": 99999999999
                     }
                 }
             }
