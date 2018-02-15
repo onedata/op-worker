@@ -501,7 +501,7 @@ init_per_suite(Config) ->
         lists:foreach(fun(Worker) ->
             start_applier(Worker, ?REMOTE_APPLIER)
         end, Workers),
-        mock_providers_get_details(Workers),
+        mock_resolve_ips(Workers),
         NewConfig
     end,
     ssl:start(),
@@ -528,28 +528,30 @@ end_per_suite(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     hackney:stop(),
     ssl:stop(),
-    unmock_providers_get_details(Workers).
+    unmock_resolve_ips(Workers).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-mock_providers_get_details(Nodes) ->
+mock_resolve_ips(Nodes) ->
     [Node1, Node2] = Nodes,
-    ok = test_utils:mock_new(Nodes, oz_providers),
-    ok = test_utils:mock_expect(Nodes, oz_providers, get_details, fun(Auth, ProviderId) ->
+    {ok, Ip1} = inet:parse_address(binary_to_list(test_utils:get_docker_ip(Node1))),
+    {ok, Ip2} = inet:parse_address(binary_to_list(test_utils:get_docker_ip(Node2))),
+    ok = test_utils:mock_new(Nodes, provider_logic),
+    ok = test_utils:mock_expect(Nodes, provider_logic, resolve_ips, fun(ProviderId) ->
         case ProviderId of
             <<"p1">> ->
-                {ok, #provider_details{urls = [list_to_binary(utils:get_host(Node2))]}};
+                {ok, [Ip2]};
             <<"p2">> ->
-                {ok, #provider_details{urls = [list_to_binary(utils:get_host(Node1))]}};
+                {ok, [Ip1]};
             _ ->
-                meck:passthrough([Auth, ProviderId])
+                meck:passthrough([ProviderId])
         end
     end).
 
-unmock_providers_get_details(Nodes) ->
-    ok = test_utils:mock_unload(Nodes, oz_providers).
+unmock_resolve_ips(Nodes) ->
+    ok = test_utils:mock_unload(Nodes, provider_logic).
 
 get_nodes() ->
     fun(ProviderId) ->
