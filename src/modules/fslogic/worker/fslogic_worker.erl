@@ -25,7 +25,7 @@
 -export([init/1, handle/1, cleanup/0]).
 -export([init_counters/0, init_report/0]).
 % for tests
--export([start_gateway/1, restart_gateway/1]).
+-export([restart_gateway/1]).
 
 %%%===================================================================
 %%% Types
@@ -226,16 +226,15 @@ init_report() ->
 %%%===================================================================
 %%% functions exported for tests
 %%%===================================================================
+
 %%-------------------------------------------------------------------
 %% @doc
-%% Starts gateway gen_server as fslogic_worker_sup child.
+%% This function is responsible for restarting whole gateway supervision
+%% tree with new rtransfer options.
+%% NOTE: This function is intended to be used only in tests!!!
 %% @end
 %%-------------------------------------------------------------------
--spec start_gateway([rtransfer:opt()]) -> {ok, pid()}.
-start_gateway(RtransferOpts) ->
-    supervisor:start_child(?FSLOGIC_WORKER_SUP, gateway_supervisor_spec(RtransferOpts)).
-
-
+-spec restart_gateway([rtransfer:opt()]) -> {ok, pid()}.
 restart_gateway(RtransferOpts) ->
     supervisor:terminate_child(?FSLOGIC_WORKER_SUP, ?GATEWAY_SUPERVISOR),
     supervisor:delete_child(?FSLOGIC_WORKER_SUP, ?GATEWAY_SUPERVISOR),
@@ -594,6 +593,16 @@ maybe_start_gateway_supervisor() ->
         true ->
             ok
     end.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Starts gateway gen_server as fslogic_worker_sup child.
+%% @end
+%%-------------------------------------------------------------------
+-spec start_gateway([rtransfer:opt()]) -> {ok, pid()}.
+start_gateway(RtransferOpts) ->
+    supervisor:start_child(?FSLOGIC_WORKER_SUP, gateway_supervisor_spec(RtransferOpts)).
 
 %%-------------------------------------------------------------------
 %% @private
