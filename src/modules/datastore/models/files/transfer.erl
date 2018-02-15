@@ -774,15 +774,18 @@ update(TransferId, Diff) ->
 %% Real link source_id will be obtained from link_root/2 function.
 %% @end
 %%--------------------------------------------------------------------
--spec add_link(SourceId :: virtual_list_id(), TransferId :: id(),
-    od_space:id()) -> ok.
+-spec add_link(SourceId :: virtual_list_id(), TransferId :: id(), od_space:id()) -> ok.
 add_link(SourceId, TransferId, SpaceId) ->
     TreeId = oneprovider:get_id(),
     Ctx = ?CTX#{scope => SpaceId},
-    {ok, _} = datastore_model:add_links(Ctx, link_root(SourceId, SpaceId),
-        TreeId, {TransferId, <<>>}
-    ),
-    ok.
+    case datastore_model:add_links(Ctx, link_root(SourceId, SpaceId), TreeId,
+        {TransferId, <<>>})
+    of
+        {ok, _} ->
+            ok;
+        {error, already_exists} ->
+            ok
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1059,7 +1062,7 @@ handle_updated(_) ->
 %%-------------------------------------------------------------------
 -spec remove_unfinished_transfers_links([id()], od_space:id()) -> ok.
 remove_unfinished_transfers_links(TransferIds, SpaceId) ->
-    delete_links(?CURRENT_TRANSFERS_KEY, TransferIds, SpaceId).
+    ok = delete_links(?CURRENT_TRANSFERS_KEY, TransferIds, SpaceId).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -1360,8 +1363,8 @@ get_posthooks() ->
 %%-------------------------------------------------------------------
 -spec move_from_past_to_current_links_tree(id(), od_space:id()) -> ok.
 move_from_past_to_current_links_tree(TransferId, SpaceId) ->
-    add_link(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId),
-    delete_links(?PAST_TRANSFERS_KEY, TransferId, SpaceId).
+    ok = add_link(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId),
+    ok = delete_links(?PAST_TRANSFERS_KEY, TransferId, SpaceId).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -1371,8 +1374,8 @@ move_from_past_to_current_links_tree(TransferId, SpaceId) ->
 %%-------------------------------------------------------------------
 -spec move_from_current_to_past_links_tree(id(), od_space:id()) -> ok.
 move_from_current_to_past_links_tree(TransferId, SpaceId) ->
-    add_link(?PAST_TRANSFERS_KEY, TransferId, SpaceId),
-    delete_links(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId).
+    ok = add_link(?PAST_TRANSFERS_KEY, TransferId, SpaceId),
+    ok = delete_links(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId).
 
 %%-------------------------------------------------------------------
 %% @private

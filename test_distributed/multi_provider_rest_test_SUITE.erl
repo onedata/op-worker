@@ -2027,7 +2027,7 @@ quota_exceeded_during_file_replication(Config) ->
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File).
 
 many_simultaneous_transfers(Config) ->
-    ct:timetrap({minutes, 10}),
+    ct:timetrap({hours, 1}),
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
@@ -2306,7 +2306,7 @@ file_replication_failures_should_fail_whole_transfer(Config) ->
         end, ?ATTEMPTS).
 
 replicate_big_dir(Config) ->
-    ct:timetrap({minutes, 10}),
+    ct:timetrap({hours, 1}),
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
@@ -2399,7 +2399,7 @@ replicate_big_file(Config) ->
         end, 3600).
 
 invalidate_big_dir(Config) ->
-    ct:timetrap({minutes, 10}),
+    ct:timetrap({hours, 1}),
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
