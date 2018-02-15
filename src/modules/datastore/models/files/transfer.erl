@@ -1231,7 +1231,7 @@ handle_updated(_) ->
 %%-------------------------------------------------------------------
 -spec remove_unfinished_transfers_links([id()], od_space:id()) -> ok.
 remove_unfinished_transfers_links(TransferIds, SpaceId) ->
-    remove_links(?CURRENT_TRANSFERS_KEY, TransferIds, SpaceId).
+    ok = remove_links(?CURRENT_TRANSFERS_KEY, TransferIds, SpaceId).
 
 %%-------------------------------------------------------------------
 %% @private
