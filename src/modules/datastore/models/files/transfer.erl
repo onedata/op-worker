@@ -542,9 +542,7 @@ mark_data_transfer_scheduled(undefined, _Bytes) ->
     {ok, undefined};
 mark_data_transfer_scheduled(TransferId, Bytes) ->
     update(TransferId, fun(Transfer) ->
-        CurrentTime = provider_logic:zone_time_seconds(),
         {ok, Transfer#transfer{
-            finish_time = CurrentTime,
             bytes_to_transfer = Transfer#transfer.bytes_to_transfer + Bytes
         }}
     end).
@@ -776,15 +774,18 @@ update(TransferId, Diff) ->
 %% Real link source_id will be obtained from link_root/2 function.
 %% @end
 %%--------------------------------------------------------------------
--spec add_link(SourceId :: virtual_list_id(), TransferId :: id(),
-    od_space:id()) -> ok.
+-spec add_link(SourceId :: virtual_list_id(), TransferId :: id(), od_space:id()) -> ok.
 add_link(SourceId, TransferId, SpaceId) ->
     TreeId = oneprovider:get_id(),
     Ctx = ?CTX#{scope => SpaceId},
-    {ok, _} = datastore_model:add_links(Ctx, link_root(SourceId, SpaceId),
-        TreeId, {TransferId, <<>>}
-    ),
-    ok.
+    case datastore_model:add_links(Ctx, link_root(SourceId, SpaceId), TreeId,
+        {TransferId, <<>>})
+    of
+        {ok, _} ->
+            ok;
+        {error, already_exists} ->
+            ok
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1061,7 +1062,7 @@ handle_updated(_) ->
 %%-------------------------------------------------------------------
 -spec remove_unfinished_transfers_links([id()], od_space:id()) -> ok.
 remove_unfinished_transfers_links(TransferIds, SpaceId) ->
-    delete_links(?CURRENT_TRANSFERS_KEY, TransferIds, SpaceId).
+    ok = delete_links(?CURRENT_TRANSFERS_KEY, TransferIds, SpaceId).
 
 %%-------------------------------------------------------------------
 %% @private
