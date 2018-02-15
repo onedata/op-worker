@@ -85,7 +85,6 @@
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-
     maybe_start_gateway_supervisor(),
 
     transfer:init(),
