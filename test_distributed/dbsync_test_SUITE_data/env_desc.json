@@ -60,7 +60,8 @@
                         "db_nodes": [
                             "127.0.0.1:49161"
                         ],
-                        "verify_gr_cert": false
+                        "verify_gr_cert": false,
+                        "subscriptions_initial_reconnect_interval": 99999999999
                     }
                 }
             }
@@ -93,7 +94,8 @@
                         "db_nodes": [
                             "127.0.0.1:49162"
                         ],
-                        "verify_gr_cert": false
+                        "verify_gr_cert": false,
+                        "subscriptions_initial_reconnect_interval": 99999999999
                     }
                 }
             }

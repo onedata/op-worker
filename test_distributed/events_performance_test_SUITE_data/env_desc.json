@@ -49,7 +49,8 @@
                         ],
                         "db_nodes": [
                             "127.0.0.1:49161"
-                        ]
+                        ],
+                        "subscriptions_initial_reconnect_interval": 99999999999
                     }
                 }
             }

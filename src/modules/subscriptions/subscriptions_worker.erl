@@ -26,7 +26,8 @@
 -include_lib("ctool/include/oz/oz_runner.hrl").
 
 % Definitions of reconnect intervals for subscriptions websocket client.
--define(INITIAL_RECONNECT_INTERVAL_SEC, 2).
+-define(INITIAL_RECONNECT_INTERVAL_SEC,
+    application:get_env(?APP_NAME, subscriptions_initial_reconnect_interval, 2)).
 -define(RECONNECT_INTERVAL_INCREASE_RATE, 2).
 -define(MAX_RECONNECT_INTERVAL, timer:minutes(15)).
 
@@ -329,7 +330,7 @@ set_reconnect_interval(Interval) ->
 -spec get_next_reconnect() -> integer().
 get_next_reconnect() ->
     case worker_host:state_get(?MODULE, next_reconnect) of
-        undefined -> timestamp_in_seconds();
+        undefined -> timestamp_in_seconds() + ?INITIAL_RECONNECT_INTERVAL_SEC;
         Value -> Value
     end.
 
