@@ -39,7 +39,7 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec(start_link([rtransfer:options()]) ->
+-spec(start_link([rtransfer:opt()]) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link(RtransferOpts) ->
     supervisor:start_link({local, ?GATEWAY_SUPERVISOR}, ?MODULE, RtransferOpts).
@@ -58,13 +58,8 @@ start_link(RtransferOpts) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec(init([rtransfer:options()]) ->
-    {ok, {SupFlags :: {RestartStrategy :: supervisor:strategy(),
-        MaxR :: non_neg_integer(), MaxT :: non_neg_integer()},
-        [ChildSpec :: supervisor:child_spec()]
-    }} |
-    ignore |
-    {error, Reason :: term()}).
+-spec init([rtransfer:opt()]) ->
+    {ok, {supervisor:sup_flags(), [supervisor:child_spec()]}} | ignore.
 init(RtransferOpts) ->
     SupFlags = #{
         strategy => one_for_all,
@@ -116,17 +111,18 @@ gateway_dispatcher_supervisor_spec(RtransferOpts) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates a supervisor child_spec for a rt_containter child.
+%% Returns a supervisor child_spec for a rt_priority_queue child.
 %% @end
 %%--------------------------------------------------------------------
 -spec rt_priority_queue_spec([rtransfer:opt()]) -> supervisor:child_spec().
 rt_priority_queue_spec(RtransferOpts) ->
     DefaultBlockSize = ?default_block_size,
-    BlockSize = proplists:get_value(block_size,
-        RtransferOpts, DefaultBlockSize),
+    BlockSize = proplists:get_value(block_size, RtransferOpts, DefaultBlockSize),
     ChildId = Module = rt_priority_queue,
-    Function = {Module, new, [{local, ?GATEWAY_INCOMING_QUEUE}, BlockSize]},
-    Restart = permanent,
-    ExitTimeout = timer:seconds(10),
-    Type = worker,
-    {ChildId, Function, Restart, ExitTimeout, Type, [Module]}.
+    #{
+        id => ChildId,
+        start => {Module, new, [{local, ?GATEWAY_INCOMING_QUEUE}, BlockSize]},
+        restart => permanent,
+        shutdown => timer:seconds(10),
+        type => worker
+    }.
