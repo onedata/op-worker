@@ -45,8 +45,7 @@
                         "db_nodes": [
                             "127.0.0.1:49161"
                         ],
-                        "oz_domain": "oz",
-                        "start_rtransfer_on_init": false
+                        "oz_domain": "oz"
                     }
                 }
             }
@@ -79,8 +78,7 @@
                         "db_nodes": [
                             "127.0.0.1:49161"
                         ],
-                        "oz_domain": "oz",
-                        "start_rtransfer_on_init": false
+                        "oz_domain": "oz"
                     }
                 }
             }

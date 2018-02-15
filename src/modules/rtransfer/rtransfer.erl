@@ -13,6 +13,8 @@
 -author("Konrad Zemek").
 
 -include("modules/rtransfer/rtransfer.hrl").
+-include_lib("ctool/include/logging.hrl").
+
 
 -type address() :: {inet:hostname() | inet:ip_address(), inet:port_number()}.
 -type ref() :: #request_transfer{}.

@@ -25,7 +25,7 @@
 -export([init/1, handle/1, cleanup/0]).
 -export([init_counters/0, init_report/0]).
 % for tests
--export([start_gateway/1]).
+-export([start_gateway/1, restart_gateway/1]).
 
 %%%===================================================================
 %%% Types
@@ -86,7 +86,7 @@
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
 
-    maybe_start_gateway(),
+    maybe_start_gateway_supervisor(),
 
     transfer:init(),
 
@@ -233,7 +233,13 @@ init_report() ->
 %%-------------------------------------------------------------------
 -spec start_gateway([rtransfer:opt()]) -> {ok, pid()}.
 start_gateway(RtransferOpts) ->
-    supervisor:start_child(?FSLOGIC_WORKER_SUP, gateway_spec(RtransferOpts)).
+    supervisor:start_child(?FSLOGIC_WORKER_SUP, gateway_supervisor_spec(RtransferOpts)).
+
+
+restart_gateway(RtransferOpts) ->
+    supervisor:terminate_child(?FSLOGIC_WORKER_SUP, ?GATEWAY_SUPERVISOR),
+    supervisor:delete_child(?FSLOGIC_WORKER_SUP, ?GATEWAY_SUPERVISOR),
+    {ok, _} = start_gateway(RtransferOpts).
 
 %%%===================================================================
 %%% Internal functions
@@ -579,12 +585,14 @@ process_response(_, _, Response, _) ->
 %% Starts gateway if start_rtransfer_on_init is set to true in app.config.
 %% @end
 %%-------------------------------------------------------------------
--spec maybe_start_gateway() -> term().
-maybe_start_gateway() ->
-    case application:get_env(?APP_NAME, start_rtransfer_on_init) of
-        {ok, true} ->
+-spec maybe_start_gateway_supervisor() -> term().
+maybe_start_gateway_supervisor() ->
+    DisabledWorkers = application:get_env(?APP_NAME, disabled_workers, []),
+    case lists:member(rtransfer_worker, DisabledWorkers) of
+        false ->
             start_gateway(rtransfer_config:options());
-        _ -> ok
+        true ->
+            ok
     end.
 
 %%-------------------------------------------------------------------
@@ -593,12 +601,12 @@ maybe_start_gateway() ->
 %% Returns supervisor child_spec for gateway gen_server.
 %% @end
 %%-------------------------------------------------------------------
--spec gateway_spec([rtransfer:opt()]) -> supervisor:child_spec().
-gateway_spec(RtransferOpts) ->
+-spec gateway_supervisor_spec([rtransfer:opt()]) -> supervisor:child_spec().
+gateway_supervisor_spec(RtransferOpts) ->
     #{
-        id => ?GATEWAY,
-        start => {gateway, start_link, [RtransferOpts]},
+        id => ?GATEWAY_SUPERVISOR,
+        start => {gateway_supervisor, start_link, [RtransferOpts]},
         restart => permanent,
-        shutdown => timer:seconds(10),
+        shutdown => infinity,
         type => worker
     }.

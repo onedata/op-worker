@@ -74,7 +74,6 @@ handle_cast(#request_transfer{} = Request, State) ->
     Aggregator = spawn(fun() -> aggregator(Request, 0) end),
 
     Remote = provider_id_to_remote(ProviderId, State),
-
     {ok, ExistingBlocks} = rt_map:get(?gateways_map, FileId, Offset, Size),
     BaseBlock = #rt_block{file_id = FileId, offset = Offset, size = Size,
         provider_ref = ProviderId, terms = []},
