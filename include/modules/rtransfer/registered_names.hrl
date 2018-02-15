@@ -15,6 +15,7 @@
 
 -define(RTRANSFER, rtransfer).
 -define(GATEWAY, gateway).
+-define(GATEWAY_SUPERVISOR, gateway_supervisor).
 -define(GATEWAY_LISTENER, gateway_listener).
 -define(GATEWAY_DISPATCHER, gateway_dispatcher).
 -define(GATEWAY_DISPATCHER_SUPERVISOR, gateway_dispatcher_supervisor).

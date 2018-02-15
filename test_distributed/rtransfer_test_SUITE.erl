@@ -20,7 +20,8 @@
 
 
 %% API
--export([all/0, init_per_testcase/2, end_per_testcase/2, init_per_suite/1]).
+-export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
+%%-export([all/0, init_per_testcase/2, end_per_testcase/2, init_per_suite/1, end_per_suite/1]).
 
 -export([less_than_block_fetch_test/1, exact_block_size_fetch_test/1,
     more_than_block_fetch_test/1, more_than_block_fetch_test2/1, cancel_fetch_test/1,
@@ -38,15 +39,15 @@ all() ->
         exact_block_size_fetch_test,
         more_than_block_fetch_test,
         more_than_block_fetch_test2,
-        %% TODO - uncomment below test after resolving VFS-1573
-        %% cancel_fetch_test,
+%%         TODO - uncomment below test after resolving VFS-1573
+%%         cancel_fetch_test,
         many_requests_test,
         many_same_requests_test,
         many_requests_to_one_file,
-        %% TODO - uncomment below 3 tests after resolving VFS-1574
-        %% error_open_fun_test,
-        %% error_read_fun_test,
-        %% error_write_fun_test,
+%%         TODO - uncomment below 3 tests after resolving VFS-1574
+%%         error_open_fun_test,
+%%         error_read_fun_test,
+%%         error_write_fun_test,
         offset_greater_than_file_size_test,
         request_bigger_than_file_test
     ]).
@@ -60,6 +61,7 @@ all() ->
 -define(TEST_OFFSET, 0).
 -define(TIMEOUT, timer:seconds(120)).
 -define(SLEEP_TIMEOUT, timer:seconds(120)).
+-define(STREAMS_NUM, 50).
 
 -define(DEFAULT_RTRANSFER_OPTS,
     [
@@ -73,7 +75,8 @@ all() ->
                 {transport, ranch_tcp},
                 {trans_opts, [{port, ?RTRANSFER_PORT}]}
             ]
-        }
+        },
+        {bind, lists:duplicate(?STREAMS_NUM, {0, 0, 0, 0})}
     ]
 ).
 
@@ -93,8 +96,8 @@ less_than_block_fetch_test(Config) ->
     ReadFunOpt = make_opt_fun(read_fun, {ok, ?FILE_HANDLE2, Data}),
     WriteFunOpt = make_opt_fun(write_fun, {ok, ?FILE_HANDLE2, DataSize}),
     CounterPid = spawn(?MODULE, counter, [0]),
-    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
-    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts1 = [ReadFunOpt, WriteFunOpt | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts2 = [ReadFunOpt, WriteFunOpt | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
     prepare_rtransfer({Worker1, RtransferOpts1}, {Worker2, RtransferOpts2},
@@ -117,8 +120,8 @@ restart_gateway_test(Config) ->
     ReadFunOpt = make_opt_fun(read_fun, {ok, ?FILE_HANDLE2, Data}),
     WriteFunOpt = make_opt_fun(write_fun, {ok, ?FILE_HANDLE2, DataSize}),
     CounterPid = spawn(?MODULE, counter, [0]),
-    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
-    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts1 = [ReadFunOpt, WriteFunOpt | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts2 = [ReadFunOpt, WriteFunOpt | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
     ?assertMatch({ok, _}, start_gateway(Worker1, RtransferOpts1)),
@@ -126,6 +129,7 @@ restart_gateway_test(Config) ->
 
     Ref = prepare_fetch_request(Worker1, Worker2, ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize),
     ok = rpc:call(Worker1, gen_server2, stop, [gateway, test_reason, infinity]),
+    timer:sleep(timer:seconds(1)),
     fetch_data(Worker1, Ref, notify_fun(CounterPid), on_complete_fun(self())),
 
 
@@ -144,8 +148,8 @@ restart_rtransfer_server_test(Config) ->
     ReadFunOpt = make_opt_fun(read_fun, {ok, ?FILE_HANDLE2, Data}),
     WriteFunOpt = make_opt_fun(write_fun, {ok, ?FILE_HANDLE2, DataSize}),
     CounterPid = spawn(?MODULE, counter, [0]),
-    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
-    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts1 = [ReadFunOpt, WriteFunOpt | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts2 = [ReadFunOpt, WriteFunOpt | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
     ?assertMatch({ok, _}, start_gateway(Worker1, RtransferOpts1)),
@@ -170,8 +174,8 @@ exact_block_size_fetch_test(Config) ->
     ReadFunOpt = make_opt_fun(read_fun, {ok, ?FILE_HANDLE2, Data}),
     WriteFunOpt = make_opt_fun(write_fun, {ok, ?FILE_HANDLE2, DataSize}),
     CounterPid = spawn(?MODULE, counter, [0]),
-    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
-    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts1 = [ReadFunOpt, WriteFunOpt | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts2 = [ReadFunOpt, WriteFunOpt | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
     prepare_rtransfer({Worker1, RtransferOpts1}, {Worker2, RtransferOpts2},
@@ -197,8 +201,8 @@ more_than_block_fetch_test(Config) ->
     CounterPid = spawn(?MODULE, counter, [0]),
     WriteFunOpt = make_opt_fun(write_fun, {ok, ?FILE_HANDLE2, ?TEST_BLOCK_SIZE}),
     ReadFunOpt = make_opt_fun(read_fun, {ok, ?FILE_HANDLE2, Data}),
-    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
-    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts1 = [ReadFunOpt, WriteFunOpt | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts2 = [ReadFunOpt, WriteFunOpt | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
     prepare_rtransfer({Worker1, RtransferOpts1}, {Worker2, RtransferOpts2},
@@ -230,8 +234,8 @@ more_than_block_fetch_test2(Config) ->
             {ok, ?FILE_HANDLE2, byte_size(_Data) }
         end
     },
-    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
-    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts1 = [ReadFunOpt, WriteFunOpt | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts2 = [ReadFunOpt, WriteFunOpt | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
     prepare_rtransfer({Worker1, RtransferOpts1}, {Worker2, RtransferOpts2},
@@ -258,8 +262,8 @@ cancel_fetch_test(Config) ->
         end
     },
     WriteFunOpt = make_opt_fun(write_fun, {ok, ?FILE_HANDLE2, DataSize}),
-    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
-    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts1 = [ReadFunOpt, WriteFunOpt | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts2 = [ReadFunOpt, WriteFunOpt | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
     Ref = prepare_rtransfer({Worker1, RtransferOpts1}, {Worker2, RtransferOpts2},
@@ -283,8 +287,8 @@ many_requests_test(Config) ->
     CounterPid = spawn(?MODULE, onCompleteCounter, [#{ok => 0, errors => 0, reason => []}]),
     WriteFunOpt = make_opt_fun(write_fun, {ok, ?FILE_HANDLE2, DataSize}),
     ReadFunOpt = make_opt_fun(read_fun, {ok, ?FILE_HANDLE2, Data}),
-    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
-    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts1 = [ReadFunOpt, WriteFunOpt | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts2 = [ReadFunOpt, WriteFunOpt | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
     ?assertMatch({ok, _}, start_gateway(Worker1, RtransferOpts1)),
@@ -309,8 +313,8 @@ many_same_requests_test(Config) ->
     CounterPid = spawn(?MODULE, onCompleteCounter, [#{ok => 0, errors => 0, reason => []}]),
     WriteFunOpt = make_opt_fun(write_fun, {ok, ?FILE_HANDLE2, DataSize}),
     ReadFunOpt = make_opt_fun(read_fun, {ok, ?FILE_HANDLE2, Data}),
-    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
-    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts1 = [ReadFunOpt, WriteFunOpt | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts2 = [ReadFunOpt, WriteFunOpt | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
     ?assertMatch({ok, _}, start_gateway(Worker1, RtransferOpts1)),
@@ -338,8 +342,8 @@ many_requests_to_one_file(Config) ->
     CounterPid = spawn(?MODULE, onCompleteCounter, [#{ok => 0, errors => 0, reason => []}]),
     WriteFunOpt = make_opt_fun(write_fun, {ok, ?FILE_HANDLE2, DataSize}),
     ReadFunOpt = make_opt_fun(read_fun, {ok, ?FILE_HANDLE2, Data}),
-    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
-    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts1 = [ReadFunOpt, WriteFunOpt | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts2 = [ReadFunOpt, WriteFunOpt | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
     ?assertMatch({ok, _}, start_gateway(Worker1, RtransferOpts1)),
@@ -368,8 +372,8 @@ error_open_fun_test(Config) ->
 
     %% when
     prepare_rtransfer(
-        {Worker1, [[get_binding(Worker1) | RtransferOpts2]]},
-        {Worker2, [[get_binding(Worker2) | RtransferOpts2]]},
+        {Worker1, [RtransferOpts2]},
+        {Worker2, [RtransferOpts2]},
         ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize,
         notify_fun(), on_complete_fun(self())
     ),
@@ -385,13 +389,13 @@ error_read_fun_test(Config) ->
     DataSize = ?TEST_BLOCK_SIZE,
     WriteFunOpt = make_opt_fun(write_fun, {ok, ?FILE_HANDLE2, DataSize}),
     ReadFunOpt = make_opt_fun(read_fun, {error, ?FILE_HANDLE2, test_error}),
-    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
-    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts1 = [ReadFunOpt, WriteFunOpt | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts2 = [ReadFunOpt, WriteFunOpt | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
     prepare_rtransfer(
-        {Worker1, [[get_binding(Worker1) | RtransferOpts1]]},
-        {Worker2, [[get_binding(Worker2) | RtransferOpts2]]},
+        {Worker1, [RtransferOpts1]},
+        {Worker2, [RtransferOpts2]},
         ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize,
         notify_fun(), on_complete_fun(self())
     ),
@@ -408,13 +412,13 @@ error_write_fun_test(Config) ->
     Data = generate_binary(DataSize),
     WriteFunOpt = make_opt_fun(write_fun, {error, ?FILE_HANDLE2, test_error}),
     ReadFunOpt = make_opt_fun(read_fun, {ok, ?FILE_HANDLE2, Data}),
-    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
-    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts1 = [ReadFunOpt, WriteFunOpt | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts2 = [ReadFunOpt, WriteFunOpt | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
     prepare_rtransfer(
-        {Worker1, [[get_binding(Worker1) | RtransferOpts1]]},
-        {Worker2, [[get_binding(Worker2) | RtransferOpts2]]},
+        {Worker1, [RtransferOpts1]},
+        {Worker2, [RtransferOpts2]},
         ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize,
         notify_fun(), on_complete_fun(self())
     ),
@@ -432,8 +436,8 @@ offset_greater_than_file_size_test(Config) ->
     Offset = DataSize + 10,
     WriteFunOpt = make_opt_fun(write_fun, {ok, ?FILE_HANDLE2, 0}),
     ReadFunOpt = make_opt_fun(read_fun, {ok, ?FILE_HANDLE2, <<"">>}),
-    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
-    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts1 = [ReadFunOpt, WriteFunOpt | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts2 = [ReadFunOpt, WriteFunOpt | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
     prepare_rtransfer({Worker1, RtransferOpts1}, {Worker2, RtransferOpts2},
@@ -473,8 +477,8 @@ request_bigger_than_file_test(Config) ->
         end
     },
 
-    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
-    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts1 = [ReadFunOpt, WriteFunOpt | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts2 = [ReadFunOpt, WriteFunOpt | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
     prepare_rtransfer({Worker1, RtransferOpts1}, {Worker2, RtransferOpts2},
@@ -490,26 +494,41 @@ request_bigger_than_file_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    [{?CTH_ENV_UP, ?DISABLE} | Config].
-
-init_per_testcase(_Case, Config) ->
-    NewConfig = test_node_starter:prepare_test_environment(Config, ?MODULE),
+    Posthook = fun(NewConfig) ->
+        Workers = ?config(op_worker_nodes, NewConfig),
+        application:start(ssl),
+        hackney:start(),
+        lists:foreach(fun(Worker) ->
+            start_applier(Worker, ?REMOTE_APPLIER)
+        end, Workers),
+        mock_providers_get_details(Workers),
+        NewConfig
+    end,
     ssl:start(),
     hackney:start(),
-    Workers = [Worker1, Worker2 | _] = ?config(op_worker_nodes, NewConfig),
-    start_applier(Worker1, ?REMOTE_APPLIER),
-    start_applier(Worker2, ?REMOTE_APPLIER),
-    rpc:multicall(Workers, mock_manager, start, []),
-    mock_providers_get_details(Workers),
-    NewConfig.
+    [
+        {?ENV_UP_POSTHOOK, Posthook},
+        {?LOAD_MODULES, [initializer]}
+        | Config
+    ].
+
+init_per_testcase(_Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    lists:foreach(fun(Worker) ->
+        start_applier(Worker, ?REMOTE_APPLIER)
+    end, Workers),
+    Config.
 
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lists:foreach(fun stop_applier/1, Workers),
+    Config.
+
+end_per_suite(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
     hackney:stop(),
     ssl:stop(),
-    unmock_providers_get_details(Workers),
-    test_node_starter:clean_environment(Config).
+    unmock_providers_get_details(Workers).
 
 %%%===================================================================
 %%% Internal functions
@@ -517,22 +536,20 @@ end_per_testcase(_Case, Config) ->
 
 mock_providers_get_details(Nodes) ->
     [Node1, Node2] = Nodes,
-    ProviderId1 = provider_id(Node1),
-    ProviderId2 = provider_id(Node2),
-    test_utils:mock_new(Nodes, oz_providers),
-    test_utils:mock_expect(Nodes, oz_providers, get_details, fun(Auth, ProviderId) ->
+    ok = test_utils:mock_new(Nodes, oz_providers),
+    ok = test_utils:mock_expect(Nodes, oz_providers, get_details, fun(Auth, ProviderId) ->
         case ProviderId of
-            ProviderId1 ->
-                {ok, #provider_details{urls = [list_to_binary(utils:get_host(Node1))]}};
-            ProviderId2 ->
+            <<"p1">> ->
                 {ok, #provider_details{urls = [list_to_binary(utils:get_host(Node2))]}};
+            <<"p2">> ->
+                {ok, #provider_details{urls = [list_to_binary(utils:get_host(Node1))]}};
             _ ->
                 meck:passthrough([Auth, ProviderId])
         end
     end).
 
 unmock_providers_get_details(Nodes) ->
-    test_utils:mock_unload(Nodes, oz_providers).
+    ok = test_utils:mock_unload(Nodes, oz_providers).
 
 get_nodes() ->
     fun(ProviderId) ->
@@ -571,11 +588,6 @@ on_complete_fun(Pid) ->
         Pid ! {on_complete, Arg},
         ok
     end.
-
-get_binding(Node) ->
-    Ip = get_node_ip(Node),
-    {ok, InetIp} = inet:parse_address(Ip),
-    {bind, [InetIp]}.
 
 change_rtransfer_opt({OptKey, OptValue}, Opts) ->
     case lists:keysearch(OptKey, 1, Opts) of
@@ -705,7 +717,7 @@ get_node_ip(Node) ->
 
 
 start_gateway(Node, RtransferOpts) ->
-    remote_apply(Node, fslogic_worker, start_gateway, [RtransferOpts]).
+    remote_apply(Node, fslogic_worker, restart_gateway, [RtransferOpts]).
 
 prepare_fetch_request(Node1, Node2, FileUUID, Offset, DataSize) ->
 %% Node1 is the one who fetches data from Node2
@@ -724,8 +736,9 @@ prepare_rtransfer({Worker1, Ropts1}, {Worker2, Ropts2}, FileUUID, Offset, DataSi
     ?assertMatch({ok, _}, start_gateway(Worker1, Ropts1)),
     ?assertMatch({ok, _}, start_gateway(Worker2, Ropts2)),
     Ref = prepare_fetch_request(Worker1, Worker2, FileUUID, Offset, DataSize),
-    NewRef = fetch_data(Worker1, Ref, NotifyFun, OnCompleteFun),
-    NewRef.
+    fetch_data(Worker1, Ref, NotifyFun, OnCompleteFun).
 
 provider_id(Node) ->
-    rpc:call(Node, oneprovider, get_provider_id, []).
+    Hostname = list_to_binary(utils:get_host(Node)),
+    [_, Id | _] = binary:split(Hostname, <<".">>, [global]),
+    Id.

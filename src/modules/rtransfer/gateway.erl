@@ -18,6 +18,7 @@
 -include("modules/rtransfer/gateway.hrl").
 -include("modules/rtransfer/registered_names.hrl").
 -include("modules/rtransfer/rt_container.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% How many simultaneous operations can be performed per gateway_connection.
 -define(connection_load_factor,
@@ -53,6 +54,7 @@ start_link(RtransferOpts) ->
     {ok, State :: [rtransfer:opt()], timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
 init(RtransferOpts) ->
+    process_flag(trap_exit, true),
     RanchOpts = proplists:get_value(ranch_opts, RtransferOpts, []),
     NbAcceptors = proplists:get_value(num_acceptors, RanchOpts, 100),
     Transport = proplists:get_value(transport, RanchOpts, ranch_tcp),
@@ -62,9 +64,7 @@ init(RtransferOpts) ->
     {ok, _} = ranch:start_listener(?GATEWAY_LISTENER, NbAcceptors, Transport,
         TransOpts, gateway_protocol_handler, RtransferOpts),
 
-    {ok, _} = gateway_dispatcher_supervisor:start_link(NICs, RtransferOpts),
-
-    QueueLoopPid = spawn_link(?MODULE, start_queue_loop,
+    QueueLoopPid = proc_lib:spawn_link(?MODULE, start_queue_loop,
         [length(NICs) * ?connection_load_factor]),
 
     register(gw_queue_loop, QueueLoopPid),
@@ -91,9 +91,8 @@ handle_cast(#gw_fetch{} = Request, State) ->
 %% @end
 %%--------------------------------------------------------------------
 terminate(_Reason, _State) ->
-    ranch:stop_listener(?GATEWAY_LISTENER),
+    ok = ranch:stop_listener(?GATEWAY_LISTENER),
     catch exit(whereis(gw_queue_loop), shutdown),
-    catch exit(whereis(?GATEWAY_DISPATCHER_SUPERVISOR), shutdown),
     ok.
 
 

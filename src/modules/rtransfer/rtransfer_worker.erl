@@ -79,14 +79,14 @@ supervisor_flags() ->
 %% Returns a rtransfer_worker supervisor children_spec()
 %% @end
 %%--------------------------------------------------------------------
--spec supervisor_children_spec() -> supervisor:child_spec().
+-spec supervisor_children_spec() -> [supervisor:child_spec()].
 supervisor_children_spec() ->
     [#{
         id => ?RTRANSFER,
         start => {rtransfer_server, start_link, [rtransfer_config:options()]},
         restart => permanent,
-        shutdown => timer:seconds(10),
-        type => worker
+        shutdown => infinity,
+        type => supervisor
     }].
 
 

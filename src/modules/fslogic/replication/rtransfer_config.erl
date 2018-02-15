@@ -22,7 +22,7 @@
 %% API
 -export([options/0]).
 
--define(STREAMS_NUM, application:get_env(?APP_NAME, streams_number, 10)).
+-define(STREAMS_NUM, application:get_env(?APP_NAME, streams_number, 50)).
 
 %%%===================================================================
 %%% API
