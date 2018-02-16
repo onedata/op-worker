@@ -34,7 +34,7 @@
 %%--------------------------------------------------------------------
 -spec handle_handshake(#client_handshake_request{}) -> {od_user:id(), session:id()} | no_return().
 handle_handshake(#client_handshake_request{session_id = SessId, auth = Auth, version = Version})
-    when is_binary(SessId) andalso (is_record(Auth, macaroon_auth) orelse is_record(Auth, token_auth)) ->
+    when is_binary(SessId) andalso is_record(Auth, macaroon_auth) ->
 
     assert_client_compatibility(Version),
     {ok, #document{

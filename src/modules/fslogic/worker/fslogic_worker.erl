@@ -8,7 +8,7 @@
 %%% @doc
 %%% This module implements worker_plugin_behaviour callbacks.
 %%% Also it decides whether request has to be handled locally or rerouted
-%%% to other priovider.
+%%% to other provider.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(fslogic_worker).
@@ -18,11 +18,14 @@
 -include("proto/oneclient/proxyio_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include("modules/events/definitions.hrl").
+-include("modules/rtransfer/registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/exometer_utils.hrl").
 
 -export([init/1, handle/1, cleanup/0]).
 -export([init_counters/0, init_report/0]).
+% for tests
+-export([restart_gateway/1]).
 
 %%%===================================================================
 %%% Types
@@ -68,6 +71,8 @@
     synchronize_block_and_compute_checksum, get_xattr, set_xattr, remove_xattr,
     list_xattr, fsync]).
 
+-define(FSLOGIC_WORKER_SUP, ?WORKER_HOST_SUPERVISOR_NAME(?MODULE)).
+
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
 %%%===================================================================
@@ -80,10 +85,7 @@
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    case application:get_env(?APP_NAME, start_rtransfer_on_init) of
-        {ok, true} -> rtransfer_config:start_rtransfer();
-        _ -> ok
-    end,
+    maybe_start_gateway_supervisor(),
 
     transfer:init(),
 
@@ -219,6 +221,24 @@ init_report() ->
     end, ?EXOMETER_COUNTERS),
     ?init_reports(Reports ++ Reports2).
 
+
+%%%===================================================================
+%%% functions exported for tests
+%%%===================================================================
+
+%%-------------------------------------------------------------------
+%% @doc
+%% This function is responsible for restarting whole gateway supervision
+%% tree with new rtransfer options.
+%% NOTE: This function is intended to be used only in tests!!!
+%% @end
+%%-------------------------------------------------------------------
+-spec restart_gateway([rtransfer:opt()]) -> {ok, pid()}.
+restart_gateway(RtransferOpts) ->
+    supervisor:terminate_child(?FSLOGIC_WORKER_SUP, ?GATEWAY_SUPERVISOR),
+    supervisor:delete_child(?FSLOGIC_WORKER_SUP, ?GATEWAY_SUPERVISOR),
+    {ok, _} = start_gateway(RtransferOpts).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -280,11 +300,13 @@ handle_request_and_process_response_locally(UserCtx, Request, FilePartialCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_request_locally(user_ctx:ctx(), request(), file_ctx:ctx() | undefined) -> response().
-handle_request_locally(UserCtx, #fuse_request{fuse_request = #file_request{file_request = Req}}, FileCtx) ->
+handle_request_locally(UserCtx, #fuse_request{fuse_request = #file_request{
+    file_request = Req, extended_direct_io = ExtDIO}}, FileCtx) ->
     [ReqName | _] = tuple_to_list(Req),
     ?update_counter(?EXOMETER_NAME(ReqName)),
     Now = os:timestamp(),
-    Ans = handle_file_request(UserCtx, Req, FileCtx),
+    FileCtx2 = file_ctx:set_extended_direct_io(FileCtx, ExtDIO),
+    Ans = handle_file_request(UserCtx, Req, FileCtx2),
     Time = timer:now_diff(os:timestamp(), Now),
     ?update_counter(?EXOMETER_TIME_NAME(ReqName), Time),
     Ans;
@@ -379,6 +401,8 @@ handle_file_request(UserCtx, #rename{
     rename_req:rename(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName);
 handle_file_request(UserCtx, #create_file{name = Name, flag = Flag, mode = Mode}, ParentFileCtx) ->
     file_req:create_file(UserCtx, ParentFileCtx, Name, Mode, Flag);
+handle_file_request(UserCtx, #storage_file_created{}, FileCtx) ->
+    file_req:storage_file_created(UserCtx, FileCtx);
 handle_file_request(UserCtx, #make_file{name = Name, mode = Mode}, ParentFileCtx) ->
     file_req:make_file(UserCtx, ParentFileCtx, Name, Mode);
 handle_file_request(UserCtx, #open_file{flag = Flag}, FileCtx) ->
@@ -558,3 +582,44 @@ process_response(UserCtx,
 process_response(_, _, Response, _) ->
     Response.
 
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Starts gateway if start_rtransfer_on_init is set to true in app.config.
+%% @end
+%%-------------------------------------------------------------------
+-spec maybe_start_gateway_supervisor() -> term().
+maybe_start_gateway_supervisor() ->
+    DisabledWorkers = application:get_env(?APP_NAME, disabled_workers, []),
+    case lists:member(rtransfer_worker, DisabledWorkers) of
+        false ->
+            start_gateway(rtransfer_config:options());
+        true ->
+            ok
+    end.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Starts gateway gen_server as fslogic_worker_sup child.
+%% @end
+%%-------------------------------------------------------------------
+-spec start_gateway([rtransfer:opt()]) -> {ok, pid()}.
+start_gateway(RtransferOpts) ->
+    supervisor:start_child(?FSLOGIC_WORKER_SUP, gateway_supervisor_spec(RtransferOpts)).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns supervisor child_spec for gateway gen_server.
+%% @end
+%%-------------------------------------------------------------------
+-spec gateway_supervisor_spec([rtransfer:opt()]) -> supervisor:child_spec().
+gateway_supervisor_spec(RtransferOpts) ->
+    #{
+        id => ?GATEWAY_SUPERVISOR,
+        start => {gateway_supervisor, start_link, [RtransferOpts]},
+        restart => permanent,
+        shutdown => infinity,
+        type => worker
+    }.

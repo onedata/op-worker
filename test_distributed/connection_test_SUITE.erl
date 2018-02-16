@@ -34,7 +34,8 @@
 %%tests
 -export([
     provider_connection_test/1,
-    token_connection_test/1,
+    rtransfer_connection_secret_test/1,
+    macaroon_connection_test/1,
     compatible_client_connection_test/1,
     incompatible_client_connection_test/1,
     protobuf_msg_test/1,
@@ -47,7 +48,8 @@
     multi_connection_test/1,
     bandwidth_test/1,
     python_client_test/1,
-    proto_version_test/1
+    proto_version_test/1,
+    timeouts_test/1
 ]).
 
 %%test_bases
@@ -61,8 +63,10 @@
 ]).
 
 -define(NORMAL_CASES_NAMES, [
+    timeouts_test,
     provider_connection_test,
-    token_connection_test,
+    rtransfer_connection_secret_test,
+    macaroon_connection_test,
     compatible_client_connection_test,
     incompatible_client_connection_test,
     protobuf_msg_test,
@@ -90,15 +94,136 @@
 all() -> ?ALL(?NORMAL_CASES_NAMES, ?PERFORMANCE_CASES_NAMES).
 
 -define(MACAROON, <<"DUMMY-MACAROON">>).
+-define(DISCH_MACAROONS, [<<"DM1">>, <<"DM2">>]).
 -define(CORRECT_PROVIDER_ID, <<"correct-iden-mac">>).
 -define(INCORRECT_PROVIDER_ID, <<"incorrect-iden-mac">>).
 -define(CORRECT_NONCE, <<"correct-nonce">>).
 -define(INCORRECT_NONCE, <<"incorrect-nonce">>).
--define(TIMEOUT, timer:seconds(5)).
+-define(TIMEOUT, timer:minutes(1)).
+
+-define(assertMatchTwo(Guard1, Guard2, Expr),
+    begin
+        ((fun () ->
+            case (Expr) of
+                Guard1 -> 1;
+                Guard2 -> 2;
+                __V ->
+                    erlang:error({assertMatch,
+                    [{module, ?MODULE},
+                        {line, ?LINE},
+                        {expression, (??Expr)},
+                        {pattern, (??Guard1), (??Guard2)},
+                        {value, __V}]})
+            end
+        end)())
+    end).
+
+-define(req(W, SessId, FuseRequest), element(2, rpc:call(W, worker_proxy, call,
+    [fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = FuseRequest}}]))).
+
+-record(file_handle, {
+    handle :: helpers_nif:file_handle(),
+    timeout :: timeout()
+}).
 
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
+
+% to samo dla #fsync{} | #get_file_children_attrs{}
+timeouts_test(Config) ->
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    SID = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+
+    RootGuid = get_guid(Worker1, SID, <<"/space_name1">>),
+    initializer:remove_pending_messages(),
+    {ok, {Sock, _}} = connect_via_macaroon(Worker1, [{active, true}], SID),
+
+    create_timeouts_test(Config, Sock, RootGuid),
+    ls_timeouts_test(Config, Sock, RootGuid),
+    fsync_timeouts_test(Config, Sock, RootGuid).
+
+create_timeouts_test(Config, Sock, RootGuid) ->
+    % send
+    ok = ssl:send(Sock, generate_create_message(RootGuid, <<"1">>, <<"f1">>)),
+    % receive & validate
+    ?assertMatch(#'ServerMessage'{message_body = {
+        fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
+    }, message_id = <<"1">>}, receive_server_message()),
+
+    configure_cp(Config, helper_timeout),
+    % send
+    ok = ssl:send(Sock, generate_create_message(RootGuid, <<"2">>, <<"f2">>)),
+    % receive & validate
+    check_answer(fun() -> ?assertMatchTwo(
+        #'ServerMessage'{message_body = {
+            fuse_response, #'FuseResponse'{status = #'Status'{code = eagain}
+            }
+        }, message_id = <<"2">>},
+        #'ServerMessage'{message_body = {
+            processing_status, #'ProcessingStatus'{code = 'IN_PROGRESS'}
+        }, message_id = <<"2">>},
+        receive_server_message()) end
+        ),
+
+    configure_cp(Config, helper_delay),
+    ok = ssl:send(Sock, generate_create_message(RootGuid, <<"3">>, <<"f3">>)),
+    % receive & validate
+    check_answer(fun() -> ?assertMatchTwo(
+        #'ServerMessage'{message_body = {
+            fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
+        }, message_id = <<"3">>},
+        #'ServerMessage'{message_body = {
+            processing_status, #'ProcessingStatus'{code = 'IN_PROGRESS'}
+        }, message_id = <<"3">>},
+        receive_server_message()) end,
+        3
+    ).
+
+ls_timeouts_test(Config, Sock, RootGuid) ->
+    % send
+    configure_cp(Config, ok),
+    ok = ssl:send(Sock, generate_get_children_message(RootGuid, <<"ls1">>)),
+    % receive & validate
+    ?assertMatch(#'ServerMessage'{message_body = {
+        fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
+    }, message_id = <<"ls1">>}, receive_server_message()),
+
+    configure_cp(Config, attr_delay),
+    ok = ssl:send(Sock, generate_get_children_message(RootGuid, <<"ls2">>)),
+    % receive & validate
+    check_answer(fun() -> ?assertMatchTwo(
+        #'ServerMessage'{message_body = {
+            fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
+        }, message_id = <<"ls2">>},
+        #'ServerMessage'{message_body = {
+            processing_status, #'ProcessingStatus'{code = 'IN_PROGRESS'}
+        }, message_id = <<"ls2">>},
+        receive_server_message()) end,
+        2
+    ).
+
+fsync_timeouts_test(Config, Sock, RootGuid) ->
+    configure_cp(Config, ok),
+    ok = ssl:send(Sock, generate_fsync_message(RootGuid, <<"fs1">>)),
+    % receive & validate
+    ?assertMatch(#'ServerMessage'{message_body = {
+        fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
+    }, message_id = <<"fs1">>}, receive_server_message()),
+
+    configure_cp(Config, events_delay),
+    ok = ssl:send(Sock, generate_fsync_message(RootGuid, <<"fs2">>)),
+    % receive & validate
+    check_answer(fun() -> ?assertMatchTwo(
+        #'ServerMessage'{message_body = {
+            fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
+        }, message_id = <<"fs2">>},
+        #'ServerMessage'{message_body = {
+            processing_status, #'ProcessingStatus'{code = 'IN_PROGRESS'}
+        }, message_id = <<"fs2">>},
+        receive_server_message()) end,
+        2
+    ).
 
 provider_connection_test(Config) ->
     % given
@@ -107,27 +232,54 @@ provider_connection_test(Config) ->
     % then
     ?assertMatch(
         {ok, #'HandshakeResponse'{status = 'INVALID_PROVIDER'}},
-        connect_as_provider(Worker1, ?INCORRECT_PROVIDER_ID, ?CORRECT_NONCE)
+        handshake_as_provider(Worker1, ?INCORRECT_PROVIDER_ID, ?CORRECT_NONCE)
     ),
     ?assertMatch(
         {ok, #'HandshakeResponse'{status = 'INVALID_PROVIDER'}},
-        connect_as_provider(Worker1, ?INCORRECT_PROVIDER_ID, ?INCORRECT_NONCE)
+        handshake_as_provider(Worker1, ?INCORRECT_PROVIDER_ID, ?INCORRECT_NONCE)
     ),
     ?assertMatch(
         {ok, #'HandshakeResponse'{status = 'INVALID_NONCE'}},
-        connect_as_provider(Worker1, ?CORRECT_PROVIDER_ID, ?INCORRECT_NONCE)
+        handshake_as_provider(Worker1, ?CORRECT_PROVIDER_ID, ?INCORRECT_NONCE)
     ),
     ?assertMatch(
         {ok, #'HandshakeResponse'{status = 'OK'}},
-        connect_as_provider(Worker1, ?CORRECT_PROVIDER_ID, ?CORRECT_NONCE)
+        handshake_as_provider(Worker1, ?CORRECT_PROVIDER_ID, ?CORRECT_NONCE)
     ).
 
-token_connection_test(Config) ->
+rtransfer_connection_secret_test(Config) ->
+    % given
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+
+    {ok, #'HandshakeResponse'{status = 'OK'}, Sock} = connect_as_provider(
+        Worker1, ?CORRECT_PROVIDER_ID, ?CORRECT_NONCE
+    ),
+
+    {ok, MsgId} = message_id:generate(self(), <<"provId">>),
+    {ok, EncodedId} = message_id:encode(MsgId),
+    ClientMsg = #'ClientMessage'{
+        message_id = EncodedId,
+        message_body = {generate_rtransfer_conn_secret, #'GenerateRTransferConnSecret'{}}
+    },
+    RawMsg = messages:encode_msg(ClientMsg),
+    ssl:send(Sock, RawMsg),
+    ssl:setopts(Sock, [{active, once}, {packet, 4}]),
+
+    #'ServerMessage'{message_body = Msg} = ?assertMatch(#'ServerMessage'{}, receive_server_message()),
+
+    {rtransfer_conn_secret, #'RTransferConnSecret'{secret = Secret}} = ?assertMatch(
+        {rtransfer_conn_secret, #'RTransferConnSecret'{}},
+        Msg
+    ),
+    ?assert(is_binary(Secret)),
+    ok = ssl:close(Sock).
+
+macaroon_connection_test(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
 
     % then
-    {ok, {Sock, _}} = connect_via_token(Worker1),
+    {ok, {Sock, _}} = connect_via_macaroon(Worker1),
     ok = ssl:close(Sock).
 
 compatible_client_connection_test(Config) ->
@@ -137,17 +289,18 @@ compatible_client_connection_test(Config) ->
         Node, application, get_env, [?APP_NAME, compatible_oc_versions]
     ),
 
-    TokenAuthMessage = #'ClientMessage'{message_body = {client_handshake_request,
+    MacaroonAuthMessage = #'ClientMessage'{message_body = {client_handshake_request,
         #'ClientHandshakeRequest'{session_id = crypto:strong_rand_bytes(10),
-            token = #'Token'{value = ?MACAROON}, version = list_to_binary(Version)
+            macaroon = #'Macaroon'{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS},
+            version = list_to_binary(Version)
         }
     }},
-    TokenAuthMessageRaw = messages:encode_msg(TokenAuthMessage),
+    MacaroonAuthMessageRaw = messages:encode_msg(MacaroonAuthMessage),
     {ok, Port} = test_utils:get_env(Node, ?APP_NAME, gui_https_port),
 
     % when
     {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),
-    ok = ssl:send(Sock, TokenAuthMessageRaw),
+    ok = ssl:send(Sock, MacaroonAuthMessageRaw),
 
     % then
     #'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{
@@ -162,17 +315,18 @@ incompatible_client_connection_test(Config) ->
     % given
     [Node | _] = ?config(op_worker_nodes, Config),
 
-    TokenAuthMessage = #'ClientMessage'{message_body = {client_handshake_request,
+    MacaroonAuthMessage = #'ClientMessage'{message_body = {client_handshake_request,
         #'ClientHandshakeRequest'{session_id = crypto:strong_rand_bytes(10),
-            token = #'Token'{value = ?MACAROON}, version = <<"16.07-rc2">>
+            macaroon = #'Macaroon'{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS},
+            version = <<"16.07-rc2">>
         }
     }},
-    TokenAuthMessageRaw = messages:encode_msg(TokenAuthMessage),
+    MacaroonAuthMessageRaw = messages:encode_msg(MacaroonAuthMessage),
     {ok, Port} = test_utils:get_env(Node, ?APP_NAME, gui_https_port),
 
     % when
     {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),
-    ok = ssl:send(Sock, TokenAuthMessageRaw),
+    ok = ssl:send(Sock, MacaroonAuthMessageRaw),
 
     % then
     #'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{
@@ -189,7 +343,7 @@ protobuf_msg_test(Config) ->
     test_utils:mock_expect(Workers, router, preroute_message, fun
         (#client_message{message_body = #events{events = [#event{
             type = #file_read_event{}
-        }]}}, _) -> ok
+        }]}}, _, _, _) -> ok
     end),
     Msg = #'ClientMessage'{
         message_id = <<"0">>,
@@ -202,7 +356,7 @@ protobuf_msg_test(Config) ->
     RawMsg = messages:encode_msg(Msg),
 
     % when
-    {ok, {Sock, _}} = connect_via_token(Worker1),
+    {ok, {Sock, _}} = connect_via_macaroon(Worker1),
     ok = ssl:send(Sock, RawMsg),
 
     % then
@@ -243,13 +397,13 @@ multi_message_test_base(Config) ->
     test_utils:mock_expect(Workers, router, route_message, fun
         (#client_message{message_body = #events{events = [#event{
             type = #file_read_event{counter = Counter}
-        }]}}) ->
+        }]}}, _, _) ->
             Self ! Counter,
             ok
     end),
 
     % when
-    {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}]),
+    {ok, {Sock, _}} = connect_via_macaroon(Worker1, [{active, true}]),
     T1 = erlang:monotonic_time(milli_seconds),
     lists:foreach(fun(E) -> ok = ssl:send(Sock, E) end, RawEvents),
     T2 = erlang:monotonic_time(milli_seconds),
@@ -269,7 +423,7 @@ multi_message_test_base(Config) ->
 client_send_test(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    {ok, {Sock, SessionId}} = connect_via_token(Worker1),
+    {ok, {Sock, SessionId}} = connect_via_macaroon(Worker1),
     Code = ?OK,
     Description = <<"desc">>,
     ServerMsgInternal = #server_message{message_body = #status{
@@ -329,7 +483,7 @@ client_communicate_async_test(Config) ->
     % given
     test_utils:mock_expect(Workers, router, route_message, fun
         (#client_message{message_id = Id = #message_id{issuer = Issuer,
-            recipient = undefined}}) ->
+            recipient = undefined}}, _, _) ->
             Issuer = oneprovider:get_id(),
             Self ! {router_message_called, Id},
             ok
@@ -381,7 +535,7 @@ multi_ping_pong_test_base(Config) ->
     [
         spawn_link(fun() ->
             % when
-            {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}]),
+            {ok, {Sock, _}} = connect_via_macaroon(Worker1, [{active, true}]),
             lists:foreach(fun(E) ->
                 ok = ssl:send(Sock, E)
             end, RawPings),
@@ -435,7 +589,7 @@ sequential_ping_pong_test_base(Config) ->
     initializer:remove_pending_messages(),
 
     % when
-    {ok, {Sock, _}} = connect_via_token(Worker1),
+    {ok, {Sock, _}} = connect_via_macaroon(Worker1),
     T1 = erlang:monotonic_time(milli_seconds),
     lists:foldl(fun(E, N) ->
         % send ping
@@ -480,7 +634,7 @@ multi_connection_test_base(Config) ->
 
     % when
     Connections = lists:map(fun(_) ->
-        connect_via_token(Worker1, [])
+        connect_via_macaroon(Worker1, [])
     end, ConnNumbersList),
 
     % then
@@ -520,13 +674,13 @@ bandwidth_test_base(Config) ->
     initializer:remove_pending_messages(),
     Self = self(),
     test_utils:mock_expect(Workers, router, route_message, fun
-        (#client_message{message_body = #ping{}}) ->
+        (#client_message{message_body = #ping{}}, _, _) ->
             Self ! router_message_called,
             ok
     end),
 
     % when
-    {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}]),
+    {ok, {Sock, _}} = connect_via_macaroon(Worker1, [{active, true}]),
     T1 = erlang:monotonic_time(milli_seconds),
     lists:foreach(fun(_) ->
         ok = ssl:send(Sock, PacketRaw)
@@ -578,7 +732,8 @@ python_client_test_base(Config) ->
     HandshakeMessage = #'ClientMessage'{message_body = {client_handshake_request,
         #'ClientHandshakeRequest'{
             session_id = <<"session_id">>,
-            token = #'Token'{value = ?MACAROON},
+            macaroon = #'Macaroon'{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS},
+
             version = list_to_binary(Version)
         }
     }},
@@ -587,10 +742,10 @@ python_client_test_base(Config) ->
     initializer:remove_pending_messages(),
     Self = self(),
     test_utils:mock_expect(Workers, router, route_message, fun
-        (#client_message{message_body = #ping{}}) ->
+        (#client_message{message_body = #ping{}}, _, _) ->
             Self ! router_message_called,
             ok;
-        (_) ->
+        (_, _, _) ->
             ok
     end),
 
@@ -630,7 +785,7 @@ proto_version_test(Config) ->
         message_body = {get_protocol_version, #'GetProtocolVersion'{}}
     },
     GetProtoVersionRaw = messages:encode_msg(GetProtoVersion),
-    {ok, {Sock, _}} = connect_via_token(Worker1),
+    {ok, {Sock, _}} = connect_via_macaroon(Worker1),
 
     % when
     ok = ssl:send(Sock, GetProtoVersionRaw),
@@ -651,9 +806,12 @@ proto_version_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    [{?LOAD_MODULES, [initializer]} | Config].
+    Posthook = fun(NewConfig) -> initializer:setup_storage(NewConfig) end,
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
-init_per_testcase(provider_connection_test, Config) ->
+init_per_testcase(Case, Config) when
+    Case =:= provider_connection_test;
+    Case =:= rtransfer_connection_secret_test ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, provider_logic, [passthrough]),
 
@@ -686,6 +844,44 @@ init_per_testcase(Case, Config) when
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, router),
     init_per_testcase(default, Config);
+
+init_per_testcase(timeouts_test, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    initializer:remove_pending_messages(),
+    ssl:start(),
+
+    test_utils:mock_new(Workers, user_identity),
+    test_utils:mock_expect(Workers, user_identity, get_or_fetch,
+        fun(#macaroon_auth{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS}) ->
+            {ok, #document{value = #user_identity{user_id = <<"user1">>}}}
+        end
+    ),
+
+    CP_Pid = spawn_control_proc(),
+
+    test_utils:mock_new(Workers, helpers),
+    test_utils:mock_expect(Workers, helpers, apply_helper_nif, fun
+        (#helper_handle{handle = Handle, timeout = Timeout}, Function, Args) ->
+            aplly_helper(Handle, Timeout, Function, Args, CP_Pid);
+        (#file_handle{handle = Handle, timeout = Timeout}, Function, Args) ->
+            aplly_helper(Handle, Timeout, Function, Args, CP_Pid)
+    end),
+
+    test_utils:mock_new(Workers, attr_req),
+    test_utils:mock_expect(Workers, attr_req, get_file_attr_insecure, fun
+        (UserCtx, FileCtx) ->
+            get_file_attr_insecure(UserCtx, FileCtx, CP_Pid)
+    end),
+
+    test_utils:mock_new(Workers, fslogic_event_handler),
+    test_utils:mock_expect(Workers, fslogic_event_handler, handle_file_written_events, fun
+        (Evts, UserCtxMap) ->
+            handle_file_written_events(CP_Pid),
+            meck:passthrough([Evts, UserCtxMap])
+    end),
+
+    [{control_proc, CP_Pid} |
+        initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config)];
 
 init_per_testcase(default, Config) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -722,6 +918,15 @@ end_per_testcase(python_client_test, Config) ->
     file:delete(?TEST_FILE(Config, "message.arg")),
     end_per_testcase(default, Config);
 
+end_per_testcase(timeouts_test, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    CP_Pid = ?config(control_proc, Config),
+    ssl:stop(),
+    stop_control_proc(CP_Pid),
+    test_utils:mock_validate_and_unload(Workers, [user_identity, helpers,
+        attr_req, fslogic_event_handler]),
+    initializer:clean_test_users_and_spaces_no_validate(Config);
+
 end_per_testcase(default, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:unmock_provider_ids(Workers),
@@ -737,39 +942,39 @@ end_per_testcase(_Case, Config) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Connect to given node using token, with default socket_opts
-%% @equiv connect_via_token(Node, [{active, true}], ssl)
+%% Connect to given node using macaroon, with default socket_opts
+%% @equiv connect_via_macaroon(Node, [{active, true}], ssl)
 %% @end
 %%--------------------------------------------------------------------
--spec connect_via_token(Node :: node()) ->
+-spec connect_via_macaroon(Node :: node()) ->
     {ok, {Sock :: ssl:socket(), SessId :: session:id()}} | no_return().
-connect_via_token(Node) ->
-    connect_via_token(Node, [{active, true}]).
+connect_via_macaroon(Node) ->
+    connect_via_macaroon(Node, [{active, true}]).
 
-connect_via_token(Node, SocketOpts) ->
-    connect_via_token(Node, SocketOpts, crypto:strong_rand_bytes(10)).
+connect_via_macaroon(Node, SocketOpts) ->
+    connect_via_macaroon(Node, SocketOpts, crypto:strong_rand_bytes(10)).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Connect to given node using token, with custom socket opts
+%% Connect to given node using a macaroon, with custom socket opts
 %% @end
 %%--------------------------------------------------------------------
--spec connect_via_token(Node :: node(), SocketOpts :: list(), session:id()) ->
+-spec connect_via_macaroon(Node :: node(), SocketOpts :: list(), session:id()) ->
     {ok, {Sock :: term(), SessId :: session:id()}}.
-connect_via_token(Node, SocketOpts, SessId) ->
+connect_via_macaroon(Node, SocketOpts, SessId) ->
     % given
     {ok, [Version | _]} = rpc:call(
         Node, application, get_env, [?APP_NAME, compatible_oc_versions]
     ),
 
-    TokenAuthMessage = #'ClientMessage'{message_body = {client_handshake_request,
+    MacaroonAuthMessage = #'ClientMessage'{message_body = {client_handshake_request,
         #'ClientHandshakeRequest'{
             session_id = SessId,
-            token = #'Token'{value = ?MACAROON},
+            macaroon = #'Macaroon'{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS},
             version = list_to_binary(Version)
         }
     }},
-    TokenAuthMessageRaw = messages:encode_msg(TokenAuthMessage),
+    MacaroonAuthMessageRaw = messages:encode_msg(MacaroonAuthMessage),
     ActiveOpt = case proplists:get_value(active, SocketOpts) of
         undefined -> [];
         Other -> [{active, Other}]
@@ -778,33 +983,39 @@ connect_via_token(Node, SocketOpts, SessId) ->
 
     % when
     {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),
-    ok = ssl:send(Sock, TokenAuthMessageRaw),
+    ok = ssl:send(Sock, MacaroonAuthMessageRaw),
 
     % then
+    RM = receive_server_message(),
     #'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{
         status = 'OK'
     }}} = ?assertMatch(#'ServerMessage'{message_body = {handshake_response, _}},
-        receive_server_message()
+        RM
     ),
     ssl:setopts(Sock, ActiveOpt),
     {ok, {Sock, SessId}}.
 
 
 connect_as_provider(Node, ProviderId, Nonce) ->
-    TokenAuthMessage = #'ClientMessage'{message_body = {provider_handshake_request,
+    MacaroonAuthMessage = #'ClientMessage'{message_body = {provider_handshake_request,
         #'ProviderHandshakeRequest'{provider_id = ProviderId, nonce = Nonce}
     }},
-    TokenAuthMessageRaw = messages:encode_msg(TokenAuthMessage),
+    MacaroonAuthMessageRaw = messages:encode_msg(MacaroonAuthMessage),
     {ok, Port} = test_utils:get_env(Node, ?APP_NAME, gui_https_port),
 
     % when
     {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),
-    ok = ssl:send(Sock, TokenAuthMessageRaw),
+    ok = ssl:send(Sock, MacaroonAuthMessageRaw),
 
     % then
     #'ServerMessage'{
         message_body = {handshake_response, HandshakeResp}
     } = receive_server_message(),
+    {ok, HandshakeResp, Sock}.
+
+
+handshake_as_provider(Node, ProviderId, Nonce) ->
+    {ok, HandshakeResp, Sock} = connect_as_provider(Node, ProviderId, Nonce),
     ok = ssl:close(Sock),
     {ok, HandshakeResp}.
 
@@ -831,7 +1042,7 @@ connect_and_upgrade_proto(Hostname, Port) ->
 -spec spawn_ssl_echo_client(NodeToConnect :: node()) ->
     {ok, {Sock :: ssl:socket(), SessId :: session:id()}}.
 spawn_ssl_echo_client(NodeToConnect) ->
-    {ok, {Sock, SessionId}} = connect_via_token(NodeToConnect, []),
+    {ok, {Sock, SessionId}} = connect_via_macaroon(NodeToConnect, []),
     SslEchoClient =
         fun Loop() ->
             % receive data from server
@@ -863,7 +1074,7 @@ spawn_ssl_echo_client(NodeToConnect) ->
 mock_identity(Workers) ->
     test_utils:mock_new(Workers, user_identity),
     test_utils:mock_expect(Workers, user_identity, get_or_fetch,
-        fun(#token_auth{token = ?MACAROON}) ->
+        fun(#macaroon_auth{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS}) ->
             {ok, #document{value = #user_identity{}}}
         end
     ).
@@ -884,3 +1095,145 @@ receive_server_message(IgnoredMsgList) ->
     after ?TIMEOUT ->
         {error, timeout}
     end.
+
+%%%===================================================================
+%%% Timeouts test helper functions
+%%%===================================================================
+
+check_answer(AsertFun) ->
+    check_answer(AsertFun, 0).
+
+check_answer(AsertFun, MinHeartbeatNum) ->
+    timer:sleep(100), % wait for pending messages
+    initializer:remove_pending_messages(),
+    check_answer(AsertFun, 0, MinHeartbeatNum).
+
+check_answer(AsertFun, HeartbeatNum, MinHeartbeatNum) ->
+    AnsNum = AsertFun(),
+    case AnsNum of
+        1 ->
+            ?assert(HeartbeatNum >= MinHeartbeatNum);
+        _ ->
+            check_answer(AsertFun, HeartbeatNum + 1, MinHeartbeatNum)
+    end.
+
+get_guid(Worker, SessId, Path) ->
+    #fuse_response{fuse_response = #guid{guid = Guid}} =
+        ?assertMatch(
+            #fuse_response{status = #status{code = ?OK}},
+            ?req(Worker, SessId, #resolve_guid{path = Path}),
+            30
+        ),
+    Guid.
+
+spawn_control_proc() ->
+    spawn(fun() ->
+        control_proc(ok)
+    end).
+
+stop_control_proc(Pid) ->
+    Pid ! stop.
+
+control_proc(Value) ->
+    receive
+        {get_value, Pid} ->
+            Pid ! {value, Value},
+            control_proc(Value);
+        {set_value, NewValue, Pid} ->
+            Pid ! value_changed,
+            control_proc(NewValue);
+        stop ->
+            ok
+    end.
+
+configure_cp(CP_Pid, Value) when is_pid(CP_Pid) ->
+    CP_Pid ! {set_value, Value, self()},
+    receive
+        value_changed -> ok
+    end;
+configure_cp(Config, Value) ->
+    CP_Pid = ?config(control_proc, Config),
+    configure_cp(CP_Pid, Value).
+
+get_cp_settings(CP_Pid) ->
+    CP_Pid ! {get_value, self()},
+    receive
+        {value, Value} -> Value
+    end.
+
+aplly_helper(Handle, Timeout, Function, Args, CP_Pid) ->
+    case get_cp_settings(CP_Pid) of
+        helper_timeout ->
+            helpers:receive_loop(make_ref(), Timeout);
+        helper_delay ->
+            configure_cp(CP_Pid, ok),
+            Master = self(),
+            spawn(fun() ->
+                {ok, ResponseRef} = apply(helpers_nif, Function, [Handle | Args]),
+                Master ! {ref, ResponseRef},
+                heartbeat(10, Master, ResponseRef),
+                Ans = helpers:receive_loop(ResponseRef, Timeout),
+                Master ! {ResponseRef, Ans}
+            end),
+            receive
+                {ref, ResponseRef} ->
+                    helpers:receive_loop(ResponseRef, Timeout)
+            end;
+        _ ->
+            {ok, ResponseRef} = apply(helpers_nif, Function, [Handle | Args]),
+            helpers:receive_loop(ResponseRef, Timeout)
+    end.
+
+get_file_attr_insecure(UserCtx, FileCtx, CP_Pid) ->
+    case get_cp_settings(CP_Pid) of
+        attr_delay ->
+            timer:sleep(timer:seconds(70)),
+            attr_req:get_file_attr_insecure(UserCtx, FileCtx, false);
+        _ ->
+            attr_req:get_file_attr_insecure(UserCtx, FileCtx, false)
+    end.
+
+handle_file_written_events(CP_Pid) ->
+    case get_cp_settings(CP_Pid) of
+        events_delay ->
+            timer:sleep(timer:seconds(70));
+        _ ->
+            ok
+    end.
+
+heartbeat(0, _Master, _ResponseRef) ->
+    ok;
+heartbeat(N, Master, ResponseRef) ->
+    timer:sleep(timer:seconds(10)),
+    Master ! {ResponseRef, heartbeat},
+    heartbeat(N - 1, Master, ResponseRef).
+
+generate_create_message(RootGuid, MsgId, File) ->
+    Message = #'ClientMessage'{message_id = MsgId, message_body =
+    {fuse_request, #'FuseRequest'{fuse_request = {file_request,
+        #'FileRequest'{context_guid = RootGuid,
+            file_request = {create_file, #'CreateFile'{name = File,
+                mode = 8#644, flag = 'READ_WRITE'}}}
+    }}}
+    },
+    messages:encode_msg(Message).
+
+generate_get_children_message(RootGuid, MsgId) ->
+    Message = #'ClientMessage'{message_id = MsgId, message_body =
+    {fuse_request, #'FuseRequest'{fuse_request = {file_request,
+        #'FileRequest'{context_guid = RootGuid,
+            file_request = {get_file_children_attrs,
+                #'GetFileChildrenAttrs'{offset = 0, size = 100}}}
+    }}}
+    },
+    messages:encode_msg(Message).
+
+generate_fsync_message(RootGuid, MsgId) ->
+    Message = #'ClientMessage'{message_id = MsgId, message_body =
+    {fuse_request, #'FuseRequest'{fuse_request = {file_request,
+        #'FileRequest'{context_guid = RootGuid,
+            file_request = {fsync,
+                #'FSync'{data_only = false}}}
+    }}}
+    },
+    messages:encode_msg(Message).

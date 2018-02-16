@@ -301,7 +301,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    3.
+    4.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -344,6 +344,23 @@ get_record_struct(3) ->
             {cache_timeout, integer},
             {api_key, string}
         ]}}
+    ]};
+get_record_struct(4) ->
+    {record, [
+        {name, string},
+        {helpers, [{record, [
+            {name, string},
+            {args, #{string => string}},
+            {admin_ctx, #{string => string}},
+            {insecure, boolean},
+            {extended_direct_io, boolean}
+        ]}]},
+        {readonly, boolean},
+        {luma_config, {record, [
+            {url, string},
+            {cache_timeout, integer},
+            {api_key, string}
+        ]}}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -371,4 +388,19 @@ upgrade_record(2, {?MODULE, Name, Helpers, Readonly}) ->
         helpers = Helpers,
         readonly = Readonly,
         luma_config = undefined
+    }};
+upgrade_record(3, {?MODULE, Name, Helpers, Readonly, LumaConfig}) ->
+    {4, #storage{
+        name = Name,
+        helpers = [
+            #helper{
+                name = HelperName,
+                args = HelperArgs,
+                admin_ctx = AdminCtx,
+                insecure = Insecure,
+                extended_direct_io = false
+            } || {_, HelperName, HelperArgs, AdminCtx, Insecure} <- Helpers
+        ],
+        readonly = Readonly,
+        luma_config = LumaConfig
     }}.

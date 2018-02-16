@@ -28,7 +28,7 @@
 -record(state, {
     socket :: ssl:socket(),
     transport :: module(),
-    hostname :: binary(),
+    ip :: binary(),
     % transport messages
     ok :: atom(),
     closed :: atom(),
@@ -47,7 +47,8 @@
 -define(MAX_RECONNECT_INTERVAL, timer:minutes(15)).
 
 %% API
--export([start_link/6, init/6]).
+-export([start_link/7, init/7]).
+-export([send_server_message/3]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -62,11 +63,11 @@
 %% Starts an outgoing connection.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(od_provider:id(), session:id(), Hostname :: binary(),
+-spec start_link(od_provider:id(), session:id(), Domain :: binary(), IP :: binary(),
     Port :: non_neg_integer(), Transport :: atom(), Timeout :: non_neg_integer()) ->
     {ok, Pid :: pid()}.
-start_link(ProviderId, SessionId, Hostname, Port, Transport, Timeout) ->
-    proc_lib:start_link(?MODULE, init, [ProviderId, SessionId, Hostname, Port, Transport, Timeout]).
+start_link(ProviderId, SessionId, Domain, IP, Port, Transport, Timeout) ->
+    proc_lib:start_link(?MODULE, init, [ProviderId, SessionId, Domain, IP, Port, Transport, Timeout]).
 
 
 %%--------------------------------------------------------------------
@@ -74,10 +75,10 @@ start_link(ProviderId, SessionId, Hostname, Port, Transport, Timeout) ->
 %% Initializes an outgoing connection.
 %% @end
 %%--------------------------------------------------------------------
--spec init(od_provider:id(), session:id(), Hostname :: binary(),
+-spec init(od_provider:id(), session:id(), Domain :: binary(), IP :: binary(),
     Port :: non_neg_integer(), Transport :: atom(), Timeout :: non_neg_integer()) ->
     no_return().
-init(ProviderId, SessionId, Hostname, Port, Transport, Timeout) ->
+init(ProviderId, SessionId, Domain, IP, Port, Transport, Timeout) ->
     % Map keeping reconnect interval and time between provider connection
     % retries; needed to implement backoff algorithm
     Intervals = application:get_env(
@@ -95,7 +96,7 @@ init(ProviderId, SessionId, Hostname, Port, Transport, Timeout) ->
         true ->
             try
                 State = init_provider_conn(
-                    SessionId, ProviderId, Hostname, Port, Transport, Timeout
+                    SessionId, ProviderId, Domain, IP, Port, Transport, Timeout
                 ),
                 reset_reconnect_interval(Intervals, ProviderId),
                 gen_server2:enter_loop(?MODULE, [], State, ?PROTO_CONNECTION_TIMEOUT)
@@ -111,6 +112,24 @@ init(ProviderId, SessionId, Hostname, Port, Transport, Timeout) ->
                     postpone_next_reconnect(Intervals, ProviderId, Interval),
                     exit(Reason)
             end
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Sends #server_message via given socket.
+%% @end
+%%--------------------------------------------------------------------
+-spec send_server_message(#state{}, #server_message{}) -> ok.
+send_server_message(State, #server_message{} = ServerMsg) ->
+    try serializator:serialize_server_message(ServerMsg) of
+        {ok, Data} ->
+            socket_send(State, Data)
+    catch
+        _:Reason ->
+            ?error_stacktrace("Unable to serialize server_message ~p due to: ~p", [ServerMsg, Reason]),
+            ok
     end.
 
 
@@ -175,7 +194,7 @@ handle_cast(_Request, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_info(upgrade_protocol, State = #state{hostname = Hostname}) ->
+handle_info(upgrade_protocol, State = #state{ip = Hostname}) ->
     socket_send(State, connection:protocol_upgrade_request(Hostname)),
     {noreply, State, ?PROTO_CONNECTION_TIMEOUT};
 
@@ -345,8 +364,9 @@ handle_server_message(State = #state{session_id = SessId}, Data) ->
 -spec handle_server_message_unsafe(#state{}, #client_message{} | #server_message{}) ->
     {noreply, NewState :: #state{}, timeout()} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_server_message_unsafe(State = #state{session_id = SessId}, Msg) ->
-    case router:preroute_message(Msg, SessId) of
+handle_server_message_unsafe(State = #state{session_id = SessId,
+    socket = Socket, transport = Transport}, Msg) ->
+    case router:preroute_message(Msg, SessId, Socket, Transport) of
         ok ->
             {noreply, State, ?PROTO_CONNECTION_TIMEOUT};
         {ok, ServerMsg} ->
@@ -376,14 +396,16 @@ activate_socket_once(#state{transport = Transport, socket = Socket}) ->
 %% Sends #server_message via given socket.
 %% @end
 %%--------------------------------------------------------------------
--spec send_server_message(#state{}, #server_message{}) -> ok.
-send_server_message(State, #server_message{} = ServerMsg) ->
+-spec send_server_message(Socket :: ssl:socket(), Transport :: module(),
+    #server_message{}) -> ok.
+send_server_message(Socket, Transport, #server_message{} = ServerMsg) ->
     try serializator:serialize_server_message(ServerMsg) of
         {ok, Data} ->
-            socket_send(State, Data)
+            Transport:send(Socket, Data)
     catch
         _:Reason ->
-            ?error_stacktrace("Unable to serialize server_message ~p due to: ~p", [ServerMsg, Reason]),
+            ?error_stacktrace("Unable to serialize server_message ~p due to: ~p",
+                [ServerMsg, Reason]),
             ok
     end.
 
@@ -428,19 +450,33 @@ socket_send(#state{transport = Transport, socket = Socket}, Data) ->
 %% Attempt to connect to peer provider.
 %% @end
 %%--------------------------------------------------------------------
--spec init_provider_conn(session:id(), od_provider:id(), Hostname :: binary(),
+-spec init_provider_conn(session:id(), od_provider:id(), Domain :: binary(), IP :: binary(),
     Port :: non_neg_integer(), Transport :: atom(),
     Timeout :: non_neg_integer()) -> #state{} | no_return().
-init_provider_conn(SessionId, ProviderId, Hostname, Port, Transport, Timeout) ->
+init_provider_conn(SessionId, ProviderId, Domain, IP, Port, Transport, Timeout) ->
+    case provider_logic:verify_provider_identity(ProviderId) of
+        ok ->
+            ok;
+        Err ->
+            ?warning("Cannot verify identity of provider ~p, skipping connection - ~p", [
+                ProviderId, Err
+            ]),
+            erlang:error({cannot_verify_identity, ProviderId})
+    end,
+
     CaCerts = oneprovider:trusted_ca_certs(),
     SecureFlag = application:get_env(?APP_NAME, interprovider_connections_security, true),
-    SslOpts = [{cacerts, CaCerts}, {secure, SecureFlag}],
+    SslOpts = [{cacerts, CaCerts}, {secure, SecureFlag}, {hostname, Domain}],
 
-    assert_compatibility(Hostname, ProviderId, SslOpts),
+    assert_compatibility(IP, ProviderId, SslOpts),
 
-    ?info("Connecting to provider '~s' - ~s:~p", [ProviderId, Hostname, Port]),
-    ConnectOpts = secure_ssl_opts:expand(Hostname, SslOpts),
-    {ok, Socket} = Transport:connect(binary_to_list(Hostname), Port, ConnectOpts, Timeout),
+    DomainAndIpInfo = case Domain of
+        IP -> str_utils:format("@ ~s:~b", [IP, Port]);
+        _ -> str_utils:format("(~s) @ ~s:~b", [Domain, IP, Port])
+    end,
+    ?info("Connecting to provider '~s' ~s", [ProviderId, DomainAndIpInfo]),
+    ConnectOpts = secure_ssl_opts:expand(IP, SslOpts),
+    {ok, Socket} = Transport:connect(binary_to_list(IP), Port, ConnectOpts, Timeout),
 
     {Ok, Closed, Error} = Transport:messages(),
 
@@ -452,7 +488,7 @@ init_provider_conn(SessionId, ProviderId, Hostname, Port, Transport, Timeout) ->
     State = #state{
         socket = Socket,
         transport = Transport,
-        hostname = Hostname,
+        ip = IP,
         ok = Ok,
         closed = Closed,
         error = Error,

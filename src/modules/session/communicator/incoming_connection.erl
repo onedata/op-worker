@@ -292,7 +292,7 @@ report_handshake_error(State, incompatible_client_version) ->
 report_handshake_error(State, invalid_token) ->
     send_server_message(State, #server_message{
         message_body = #handshake_response{
-            status = 'INVALID_TOKEN'
+            status = 'INVALID_MACAROON'
         }
     });
 report_handshake_error(State, invalid_provider) ->
@@ -330,7 +330,8 @@ report_handshake_error(State, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_normal_message(state(), #client_message{} | #server_message{}) -> state().
-handle_normal_message(State = #state{session_id = SessId, peer_type = PeerType, peer_id = ProviderId}, Msg0) ->
+handle_normal_message(State = #state{session_id = SessId, peer_type = PeerType,
+    peer_id = ProviderId, socket = Socket, transport = Transport}, Msg0) ->
     {Msg, EffectiveSessionId} = case {PeerType, Msg0} of
         %% If message comes from provider and proxy session is requested - proceed
         %% with authorization and switch context to the proxy session.
@@ -348,7 +349,7 @@ handle_normal_message(State = #state{session_id = SessId, peer_type = PeerType, 
             router:route_proxy_message(Msg, TargetSessionId),
             State;
         _ -> %% Non-proxy case
-            case router:preroute_message(Msg, EffectiveSessionId) of
+            case router:preroute_message(Msg, EffectiveSessionId, Socket, Transport) of
                 ok ->
                     State;
                 {ok, ServerMsg} ->

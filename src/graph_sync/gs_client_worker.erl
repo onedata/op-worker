@@ -479,13 +479,7 @@ resolve_authorization(#macaroon_auth{} = Auth) ->
             {ok, SerializedBDM} = onedata_macaroons:serialize(BDM),
             SerializedBDM
         end, DischargeMacaroonsBin),
-    {macaroon, MacaroonBin, BoundMacaroons};
-
-resolve_authorization(#token_auth{token = Token}) ->
-    {token, Token};
-
-resolve_authorization(#basic_auth{credentials = UserPasswdB64}) ->
-    {basic, UserPasswdB64}.
+    {macaroon, MacaroonBin, BoundMacaroons}.
 
 
 -spec put_cache_state(cache_state(), doc()) -> doc().

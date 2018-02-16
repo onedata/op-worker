@@ -21,10 +21,12 @@
 -include("proto/oneclient/event_messages.hrl").
 -include("proto/oneclient/diagnostic_messages.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
+-include("proto/oneclient/server_messages.hrl").
 -include("proto/oneprovider/dbsync_messages.hrl").
 -include("proto/oneprovider/dbsync_messages2.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include("proto/oneprovider/remote_driver_messages.hrl").
+-include("proto/oneprovider/rtransfer_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("clproto/include/messages.hrl").
 
@@ -43,11 +45,11 @@
 %%--------------------------------------------------------------------
 -spec translate_handshake_error(Type :: binary()) -> Type :: atom().
 translate_handshake_error(<<"token_expired">>) ->
-    'TOKEN_EXPIRED';
+    'MACAROON_EXPIRED';
 translate_handshake_error(<<"token_not_found">>) ->
-    'TOKEN_NOT_FOUND';
+    'MACAROON_NOT_FOUND';
 translate_handshake_error(<<"invalid_token">>) ->
-    'INVALID_TOKEN';
+    'INVALID_MACAROON';
 translate_handshake_error(<<"invalid_method">>) ->
     'INVALID_METHOD';
 translate_handshake_error(<<"root_resource_not_found">>) ->
@@ -178,17 +180,18 @@ translate_from_protobuf(#'SubscriptionCancellation'{id = Id}) ->
 
 
 %% HANDSHAKE
-translate_from_protobuf(#'ClientHandshakeRequest'{token = Token, session_id = SessionId, version = Version}) ->
-    #client_handshake_request{auth = translate_from_protobuf(Token), session_id = SessionId, version = Version};
+translate_from_protobuf(#'ClientHandshakeRequest'{macaroon = Macaroon, session_id = SessionId, version = Version}) ->
+    #client_handshake_request{auth = translate_from_protobuf(Macaroon), session_id = SessionId, version = Version};
 translate_from_protobuf(#'ProviderHandshakeRequest'{provider_id = ProviderId, nonce = Nonce}) ->
     #provider_handshake_request{provider_id = ProviderId, nonce = Nonce};
-translate_from_protobuf(#'Token'{value = Token, secondary_values = []}) ->
-    #token_auth{token = Token};
-translate_from_protobuf(#'Token'{value = Macaroon, secondary_values = DischargeMacaroons}) ->
+translate_from_protobuf(#'Macaroon'{macaroon = Macaroon, disch_macaroons = DischargeMacaroons}) ->
     #macaroon_auth{macaroon = Macaroon, disch_macaroons = DischargeMacaroons};
 translate_from_protobuf(#'HandshakeResponse'{status = Status}) ->
     #handshake_response{status = Status};
 
+% PROCESSING STATUS
+translate_from_protobuf(#'ProcessingStatus'{code = Code}) ->
+    #processing_status{code = Code};
 
 %% DIAGNOSTIC
 translate_from_protobuf(#'Ping'{data = Data}) ->
@@ -235,8 +238,10 @@ translate_from_protobuf(#'VerifyStorageTestFile'{storage_id = SId, space_id = Sp
     #verify_storage_test_file{storage_id = SId, space_id = SpaceId,
         file_id = FId, file_content = FContent};
 
-translate_from_protobuf(#'FileRequest'{context_guid = ContextGuid, file_request = {_, Record}}) ->
-    #file_request{context_guid = ContextGuid, file_request = translate_from_protobuf(Record)};
+translate_from_protobuf(#'FileRequest'{context_guid = ContextGuid,
+    extended_direct_io = ExtDIO, file_request = {_, Record}}) ->
+    #file_request{context_guid = ContextGuid, extended_direct_io = ExtDIO,
+        file_request = translate_from_protobuf(Record)};
 translate_from_protobuf(#'GetFileAttr'{}) ->
     #get_file_attr{};
 translate_from_protobuf(#'GetChildAttr'{name = Name}) ->
@@ -258,6 +263,8 @@ translate_from_protobuf(#'Rename'{target_parent_uuid = TargetParentGuid, target_
     #rename{target_parent_guid = TargetParentGuid, target_name = TargetName};
 translate_from_protobuf(#'CreateFile'{name = Name, mode = Mode, flag = Flag}) ->
     #create_file{name = Name, mode = Mode, flag = open_flag_translate_from_protobuf(Flag)};
+translate_from_protobuf(#'StorageFileCreated'{}) ->
+    #storage_file_created{};
 translate_from_protobuf(#'MakeFile'{name = Name, mode = Mode}) ->
     #make_file{name = Name, mode = Mode};
 translate_from_protobuf(#'OpenFile'{flag = Flag}) ->
@@ -325,12 +332,14 @@ translate_from_protobuf(#'FileLocation'{} = Record) ->
                 #file_block{offset = Offset, size = Size}
             end, Record#'FileLocation'.blocks)
     };
-translate_from_protobuf(#'HelperParams'{helper_name = HelperName, helper_args = HelpersArgs}) ->
+translate_from_protobuf(#'HelperParams'{helper_name = HelperName,
+    helper_args = HelpersArgs, extended_direct_io = ExtendedDirectIO}) ->
     #helper_params{helper_name = HelperName,
         helper_args = lists:map(
             fun(HelpersArg) ->
                 translate_from_protobuf(HelpersArg)
-            end, HelpersArgs)};
+            end, HelpersArgs),
+        extended_direct_io = ExtendedDirectIO};
 translate_from_protobuf(#'HelperArg'{key = Key, value = Value}) ->
     #helper_arg{key = Key, value = Value};
 translate_from_protobuf(#'Parameter'{key = Key, value = Value}) ->
@@ -559,6 +568,12 @@ translate_from_protobuf(#'RemoteDocument'{
         compressed_data = Data
     };
 
+%% RTRANSFER
+translate_from_protobuf(#'GenerateRTransferConnSecret'{}) ->
+    #generate_rtransfer_conn_secret{};
+translate_from_protobuf(#'RTransferConnSecret'{secret = Secret}) ->
+    #rtransfer_conn_secret{secret = Secret};
+
 translate_from_protobuf(undefined) ->
     undefined.
 
@@ -678,10 +693,11 @@ translate_to_protobuf(#provider_handshake_request{provider_id = ProviderId, nonc
 translate_to_protobuf(#handshake_response{status = Status}) ->
     {handshake_response, #'HandshakeResponse'{status = Status}};
 translate_to_protobuf(#macaroon_auth{macaroon = Macaroon, disch_macaroons = DMacaroons}) ->
-    #'Token'{value = Macaroon, secondary_values = DMacaroons};
-translate_to_protobuf(#token_auth{token = Token}) ->
-    #'Token'{value = Token};
+    #'Macaroon'{macaroon = Macaroon, disch_macaroons = DMacaroons};
 
+% PROCESSING STATUS
+translate_to_protobuf(#processing_status{code = Code}) ->
+    {processing_status, #'ProcessingStatus'{code = Code}};
 
 %% DIAGNOSTIC
 translate_to_protobuf(#pong{data = Data}) ->
@@ -723,8 +739,10 @@ translate_to_protobuf(#resolve_guid{path = Path}) ->
     {resolve_guid, #'ResolveGuid'{path = Path}};
 translate_to_protobuf(#get_helper_params{storage_id = StorageId, space_id = SpaceId, helper_mode = HelperMode}) ->
     {get_helper_params, #'GetHelperParams'{storage_id = StorageId, space_id = SpaceId, helper_mode = HelperMode}};
-translate_to_protobuf(#file_request{context_guid = ContextGuid, file_request = Record}) ->
-    {file_request, #'FileRequest'{context_guid = ContextGuid, file_request = translate_to_protobuf(Record)}};
+translate_to_protobuf(#file_request{context_guid = ContextGuid,
+  extended_direct_io = ExtDIO, file_request = Record}) ->
+  {file_request, #'FileRequest'{context_guid = ContextGuid,
+    extended_direct_io = ExtDIO, file_request = translate_to_protobuf(Record)}};
 translate_to_protobuf(#get_file_attr{}) ->
     {get_file_attr, #'GetFileAttr'{}};
 translate_to_protobuf(#get_child_attr{name = Name}) ->
@@ -746,6 +764,8 @@ translate_to_protobuf(#rename{target_parent_guid = TargetParentGuid, target_name
 translate_to_protobuf(#create_file{name = Name, mode = Mode, flag = Flag}) ->
     {create_file, #'CreateFile'{name = Name, mode = Mode,
         flag = open_flag_translate_to_protobuf(Flag)}};
+translate_to_protobuf(#storage_file_created{}) ->
+    {storage_file_created, #'StorageFileCreated'{}};
 translate_to_protobuf(#make_file{name = Name, mode = Mode}) ->
     {make_file, #'MakeFile'{name = Name, mode = Mode}};
 translate_to_protobuf(#open_file{flag = Flag}) ->
@@ -813,11 +833,13 @@ translate_to_protobuf(#file_location{} = Record) ->
             }
         end, Record#file_location.blocks)
     }};
-translate_to_protobuf(#helper_params{helper_name = HelperName, helper_args = HelpersArgs}) ->
+translate_to_protobuf(#helper_params{helper_name = HelperName,
+    helper_args = HelpersArgs, extended_direct_io = ExtendedDirectIO}) ->
     {helper_params, #'HelperParams'{helper_name = HelperName,
         helper_args = lists:map(fun(HelpersArg) ->
             translate_to_protobuf(HelpersArg)
-        end, HelpersArgs)}};
+        end, HelpersArgs),
+        extended_direct_io = ExtendedDirectIO}};
 translate_to_protobuf(#helper_arg{key = Key, value = Value}) ->
     #'HelperArg'{key = Key, value = Value};
 translate_to_protobuf(#storage_test_file{helper_params = HelperParams,
@@ -1048,6 +1070,12 @@ translate_to_protobuf(#remote_document{
     {remote_document, #'RemoteDocument'{
         status = StatusProto, compressed_data = Data
     }};
+
+%% RTRANSFER
+translate_to_protobuf(#generate_rtransfer_conn_secret{}) ->
+    {generate_rtransfer_conn_secret, #'GenerateRTransferConnSecret'{}};
+translate_to_protobuf(#rtransfer_conn_secret{secret = Secret}) ->
+    {rtransfer_conn_secret, #'RTransferConnSecret'{secret = Secret}};
 
 translate_to_protobuf(undefined) ->
     undefined.

@@ -60,7 +60,8 @@ new_ceph_helper(MonitorHostname, ClusterName, PoolName, OptArgs, AdminCtx,
             <<"poolName">> => PoolName
         }),
         admin_ctx = AdminCtx,
-        insecure = Insecure
+        insecure = Insecure,
+        extended_direct_io = true
     }.
 
 %%--------------------------------------------------------------------
@@ -74,7 +75,8 @@ new_posix_helper(MountPoint, OptArgs, AdminCtx) ->
         name = ?POSIX_HELPER_NAME,
         args = maps:merge(OptArgs, #{<<"mountPoint">> => MountPoint}),
         admin_ctx = AdminCtx,
-        insecure = false
+        insecure = false,
+        extended_direct_io = false
     }.
 
 %%--------------------------------------------------------------------
@@ -96,7 +98,8 @@ new_s3_helper(Hostname, BucketName, UseHttps, OptArgs, AdminCtx, Insecure) ->
             end
         }),
         admin_ctx = AdminCtx,
-        insecure = Insecure
+        insecure = Insecure,
+        extended_direct_io = true
     }.
 
 %%--------------------------------------------------------------------
@@ -115,7 +118,8 @@ new_swift_helper(AuthUrl, ContainerName, TenantName, OptArgs, AdminCtx, Insecure
             <<"tenantName">> => TenantName
         }),
         admin_ctx = AdminCtx,
-        insecure = Insecure
+        insecure = Insecure,
+        extended_direct_io = true
     }.
 
 %%--------------------------------------------------------------------
@@ -133,7 +137,8 @@ new_glusterfs_helper(Volume, Hostname, OptArgs, AdminCtx, Insecure) ->
             <<"hostname">> => Hostname
         }),
         admin_ctx = AdminCtx,
-        insecure = Insecure
+        insecure = Insecure,
+        extended_direct_io = true
     }.
 
 %%--------------------------------------------------------------------
@@ -301,12 +306,14 @@ is_insecure(#helper{insecure = Insecure}) ->
 %%--------------------------------------------------------------------
 -spec get_params(helpers:helper(), user_ctx()) -> params().
 get_params(Helper, UserCtx) ->
-    {ok, #helper{name = Name, args = Args}} = set_user_ctx(Helper, UserCtx),
+    {ok, #helper{name = Name, args = Args, extended_direct_io = DS}} =
+        set_user_ctx(Helper, UserCtx),
     #helper_params{
         helper_name = Name,
         helper_args = maps:fold(fun(Key, Value, Acc) ->
             [#helper_arg{key = Key, value = Value} | Acc]
-        end, [], Args)
+        end, [], Args),
+        extended_direct_io = DS
     }.
 
 %%--------------------------------------------------------------------
@@ -324,7 +331,8 @@ get_proxy_params(Helper, StorageId) ->
         helper_args = [
             #helper_arg{key = <<"storageId">>, value = StorageId},
             #helper_arg{key = <<"timeout">>, value = TimeoutValue}
-        ]
+        ],
+        extended_direct_io = false
     }.
 
 %%--------------------------------------------------------------------

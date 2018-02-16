@@ -128,6 +128,7 @@ communicate(#client_message{} = ClientMsg, Ref) ->
     receive
         #server_message{message_id = MsgId} = ServerMsg -> {ok, ServerMsg}
     after
+        % TODO VFS-4025 - multiprovider communication
         ?DEFAULT_REQUEST_TIMEOUT ->
             {error, timeout}
     end;
@@ -206,23 +207,15 @@ ensure_connected(SessId) ->
                     ok
             end,
 
-            case provider_logic:verify_provider_identity(ProviderId) of
-                ok ->
-                    ok;
-                Error ->
-                    ?warning("Cannot verify identity of provider ~p, skipping connection - ~p", [
-                        ProviderId, Error
-                    ]),
-                    erlang:error({cannot_verify_identity, ProviderId})
-            end,
-
-            {ok, IPs} = provider_logic:resolve_ips(ProviderId),
+            {ok, Domain} = provider_logic:get_domain(ProviderId),
+            {ok, IPs} = inet:getaddrs(binary_to_list(Domain), inet),
             IPBinaries = lists:map(fun(IP) ->
-                list_to_binary(inet:ntoa(IP)) end, IPs),
+                list_to_binary(inet:ntoa(IP))
+            end, IPs),
             lists:foreach(
                 fun(IPBinary) ->
                     {ok, Port} = application:get_env(?APP_NAME, gui_https_port),
-                    outgoing_connection:start_link(ProviderId, SessId, IPBinary, Port, ranch_ssl, timer:seconds(5))
+                    outgoing_connection:start_link(ProviderId, SessId, Domain, IPBinary, Port, ranch_ssl, timer:seconds(5))
                 end, IPBinaries),
             ok;
         {ok, Pid} ->

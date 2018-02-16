@@ -96,6 +96,10 @@ modules_with_args() -> filter_disabled_workers([
         {supervisor_flags, gs_worker:supervisor_flags()}
     ]},
     {fslogic_deletion_worker, []},
+    {singleton, rtransfer_worker, [
+        {supervisor_flags, rtransfer_worker:supervisor_flags()},
+        {supervisor_children_spec, rtransfer_worker:supervisor_children_spec()}
+    ]},
     {space_sync_worker, []}
 ]).
 
@@ -105,13 +109,20 @@ modules_with_args() -> filter_disabled_workers([
 %% Filters node_manager_plugins that were turned off in app.config
 %% @end
 %%-------------------------------------------------------------------
--spec filter_disabled_workers([{atom(), [any()]}]) -> [{atom(), [any()]}].
-filter_disabled_workers(PluginsConfig) ->
+-spec filter_disabled_workers(
+    [{atom(), [any()]} |{singleton | early_init, atom(), [any()]}]) ->
+    [{atom(), [any()]} |{singleton | early_init, atom(), [any()]}].
+filter_disabled_workers(WorkersSpecs) ->
     DisabledWorkers = application:get_env(?APP_NAME, disabled_workers, []),
     DisabledWorkersSet = sets:from_list(DisabledWorkers),
-    lists:filter(fun({Plugin, _PluginConfig}) ->
-        not sets:is_element(Plugin, DisabledWorkersSet)
-    end, PluginsConfig).
+    lists:filter(fun
+        ({Worker, _WorkerArgs}) ->
+            not sets:is_element(Worker, DisabledWorkersSet);
+        ({early_init, Worker, _WorkerArgs}) ->
+            not sets:is_element(Worker, DisabledWorkersSet);
+        ({singleton, Worker, _WorkerArgs}) ->
+            not sets:is_element(Worker, DisabledWorkersSet)
+    end, WorkersSpecs).
 
 %%--------------------------------------------------------------------
 %% @doc

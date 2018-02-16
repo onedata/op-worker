@@ -24,25 +24,26 @@
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 
--export([token_authentication/1]).
+-export([macaroon_authentication/1]).
 
 -define(MACAROON, <<"DUMMY-MACAROON">>).
+-define(DISCH_MACAROONS, [<<"DM1">>, <<"DM2">>]).
 -define(USER_ID, <<"test_id">>).
 -define(USER_NAME, <<"test_name">>).
 
-all() -> ?ALL([token_authentication]).
+all() -> ?ALL([macaroon_authentication]).
 
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
 
-token_authentication(Config) ->
+macaroon_authentication(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     SessionId = <<"SessionId">>,
 
     % when
-    {ok, Sock} = connect_via_token(Worker1, ?MACAROON, SessionId),
+    {ok, Sock} = connect_via_macaroon(Worker1, ?MACAROON, ?DISCH_MACAROONS, SessionId),
 
     % then
     ?assertMatch(
@@ -51,7 +52,9 @@ token_authentication(Config) ->
     ),
     ?assertMatch(
         {ok, #document{value = #user_identity{user_id = ?USER_ID}}},
-        rpc:call(Worker1, user_identity, get, [#token_auth{token = ?MACAROON}])
+        rpc:call(Worker1, user_identity, get, [#macaroon_auth{
+            macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS
+        }])
     ),
     ok = ssl:close(Sock).
 
@@ -76,29 +79,30 @@ end_per_testcase(_Case, Config) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Connect to given node using token, and custom sessionId
+%% Connect to given node using macaroon, and custom sessionId
 %% @end
 %%--------------------------------------------------------------------
--spec connect_via_token(Node :: node(), TokenVal :: binary(), SessionId :: session:id()) ->
+-spec connect_via_macaroon(Node :: node(), MacaroonVal :: binary(),
+    DischMacaroons :: [binary()], SessionId :: session:id()) ->
     {ok, Sock :: term()}.
-connect_via_token(Node, TokenVal, SessionId) ->
+connect_via_macaroon(Node, Macaroon, DischMacaroons, SessionId) ->
     {ok, [Version | _]} = rpc:call(
         Node, application, get_env, [?APP_NAME, compatible_oc_versions]
     ),
 
     % given
-    TokenAuthMessage = #'ClientMessage'{message_body = {client_handshake_request,
+    MacaroonAuthMessage = #'ClientMessage'{message_body = {client_handshake_request,
         #'ClientHandshakeRequest'{
             session_id = SessionId,
-            token = #'Token'{value = TokenVal},
+            macaroon = #'Macaroon'{macaroon = Macaroon, disch_macaroons = DischMacaroons},
             version = list_to_binary(Version)}
     }},
-    TokenAuthMessageRaw = messages:encode_msg(TokenAuthMessage),
+    MacaroonAuthMessageRaw = messages:encode_msg(MacaroonAuthMessage),
     {ok, Port} = test_utils:get_env(Node, ?APP_NAME, gui_https_port),
 
     % when
     {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),
-    ok = ssl:send(Sock, TokenAuthMessageRaw),
+    ok = ssl:send(Sock, MacaroonAuthMessageRaw),
 
     % then
     #'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{
@@ -157,7 +161,7 @@ mock_user_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, user_logic, []),
     test_utils:mock_expect(Workers, user_logic, get_by_auth,
-        fun(#token_auth{token = ?MACAROON}) ->
+        fun(#macaroon_auth{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS}) ->
             {ok, #document{key = ?USER_ID, value = #od_user{name = ?USER_NAME}}}
         end).
 

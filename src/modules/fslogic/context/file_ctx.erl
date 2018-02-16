@@ -46,7 +46,8 @@
     file_location_ids :: undefined | [file_location:id()],
     acl :: undefined | acl:acl(),
     is_dir :: undefined | boolean(),
-    is_import_on :: undefined | boolean()
+    is_import_on :: undefined | boolean(),
+    extended_direct_io = false :: boolean()
 }).
 
 -type ctx() :: #file_ctx{}.
@@ -54,11 +55,11 @@
 %% Functions creating context and filling its data
 -export([new_by_canonical_path/2, new_by_guid/1, new_by_doc/3, new_root_ctx/0]).
 -export([reset/1, new_by_partial_context/1, add_file_location/2, set_file_id/2,
-    set_is_dir/2]).
+    set_is_dir/2, set_extended_direct_io/2, update_location_doc/2]).
 
 %% Functions that do not modify context
 -export([get_share_id_const/1, get_space_id_const/1, get_space_dir_uuid_const/1,
-    get_guid_const/1, get_uuid_const/1]).
+    get_guid_const/1, get_uuid_const/1, get_extended_direct_io_const/1]).
 -export([is_file_ctx_const/1, is_space_dir_const/1, is_user_root_dir_const/2,
     is_root_dir_const/1, has_acl_const/1, file_exists_const/1, is_in_user_space_const/2]).
 -export([equals/2]).
@@ -176,6 +177,24 @@ set_file_id(FileCtx, FileId) ->
 -spec set_is_dir(ctx(), boolean()) -> ctx().
 set_is_dir(FileCtx, IsDir) ->
     FileCtx#file_ctx{is_dir = IsDir}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets extended_direct_io field in context record
+%% @end
+%%--------------------------------------------------------------------
+-spec set_extended_direct_io(ctx(), boolean()) -> ctx().
+set_extended_direct_io(FileCtx, Created) ->
+    FileCtx#file_ctx{extended_direct_io = Created}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns value of extended_direct_io field.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_extended_direct_io_const(ctx()) -> boolean().
+get_extended_direct_io_const(#file_ctx{extended_direct_io = Ans}) ->
+    Ans.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -709,6 +728,24 @@ get_file_location_docs(FileCtx = #file_ctx{file_location_docs = undefined}) ->
     {LocationDocs, FileCtx2#file_ctx{file_location_docs = LocationDocs}};
 get_file_location_docs(FileCtx = #file_ctx{file_location_docs = LocationDocs}) ->
     {LocationDocs, FileCtx}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates file location docs.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_location_doc(ctx(), file_location:doc()) -> ctx().
+update_location_doc(#file_ctx{file_location_docs = undefined} = FileCtx, _Doc) ->
+    FileCtx;
+update_location_doc(#file_ctx{file_location_docs = LocationDocs} = FileCtx,
+    #document{key = FileLocationId} = Doc) ->
+    LocationDocs2 = lists:map(fun(#document{key = LocId} = LocDoc) ->
+        case LocId of
+            FileLocationId -> Doc;
+            _ -> LocDoc
+        end
+    end, LocationDocs),
+    FileCtx#file_ctx{file_location_docs = LocationDocs2}.
 
 %%--------------------------------------------------------------------
 %% @doc
