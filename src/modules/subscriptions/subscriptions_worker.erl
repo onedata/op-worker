@@ -330,7 +330,10 @@ set_reconnect_interval(Interval) ->
 -spec get_next_reconnect() -> integer().
 get_next_reconnect() ->
     case worker_host:state_get(?MODULE, next_reconnect) of
-        undefined -> timestamp_in_seconds() + ?INITIAL_RECONNECT_INTERVAL_SEC;
+        undefined ->
+            NextReconnect = timestamp_in_seconds() + ?INITIAL_RECONNECT_INTERVAL_SEC,
+            set_next_reconnect(NextReconnect),
+            NextReconnect;
         Value -> Value
     end.
 
