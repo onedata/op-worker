@@ -141,7 +141,7 @@ all() ->
         empty_metadata_invalid_json_test,
         spatial_flag_test,
         quota_exceeded_during_file_replication,
-        many_simultaneous_transfers,
+%%        many_simultaneous_transfers,
         quota_decreased_after_invalidation,
         file_replication_failures_should_fail_whole_transfer,
         replicate_big_dir,
