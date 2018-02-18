@@ -571,8 +571,8 @@ translate_from_protobuf(#'RemoteDocument'{
     };
 
 %% RTRANSFER
-translate_from_protobuf(#'GenerateRTransferConnSecret'{}) ->
-    #generate_rtransfer_conn_secret{};
+translate_from_protobuf(#'GenerateRTransferConnSecret'{secret = Secret}) ->
+    #generate_rtransfer_conn_secret{secret = Secret};
 translate_from_protobuf(#'RTransferConnSecret'{secret = Secret}) ->
     #rtransfer_conn_secret{secret = Secret};
 
@@ -1077,8 +1077,8 @@ translate_to_protobuf(#remote_document{
     }};
 
 %% RTRANSFER
-translate_to_protobuf(#generate_rtransfer_conn_secret{}) ->
-    {generate_rtransfer_conn_secret, #'GenerateRTransferConnSecret'{}};
+translate_to_protobuf(#generate_rtransfer_conn_secret{secret = Secret}) ->
+    {generate_rtransfer_conn_secret, #'GenerateRTransferConnSecret'{secret = Secret}};
 translate_to_protobuf(#rtransfer_conn_secret{secret = Secret}) ->
     {rtransfer_conn_secret, #'RTransferConnSecret'{secret = Secret}};
 

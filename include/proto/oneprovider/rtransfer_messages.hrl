@@ -13,6 +13,7 @@
 -define(RTRANSFER_MESSAGES_HRL, 1).
 
 -record(generate_rtransfer_conn_secret, {
+    secret :: binary()
 }).
 
 -record(rtransfer_conn_secret, {

@@ -83,7 +83,7 @@ supervisor_flags() ->
 supervisor_children_spec() ->
     [#{
         id => ?RTRANSFER,
-        start => {rtransfer_server, start_link, [rtransfer_config:options()]},
+        start => {rtransfer_config, start_rtransfer, []},
         restart => permanent,
         shutdown => infinity,
         type => supervisor
@@ -94,4 +94,3 @@ supervisor_children_spec() ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-

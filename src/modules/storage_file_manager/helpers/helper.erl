@@ -279,8 +279,10 @@ validate_group_ctx(#helper{name = HelperName}, _GroupCtx) ->
 %% Returns helper name.
 %% @end
 %%--------------------------------------------------------------------
--spec get_name(helpers:helper()) -> name().
+-spec get_name(helpers:helper() | params()) -> name().
 get_name(#helper{name = Name}) ->
+    Name;
+get_name(#helper_params{helper_name = Name}) ->
     Name.
 
 %%--------------------------------------------------------------------
@@ -288,9 +290,11 @@ get_name(#helper{name = Name}) ->
 %% Returns helper arguments.
 %% @end
 %%--------------------------------------------------------------------
--spec get_args(helpers:helper()) -> args().
+-spec get_args(helpers:helper() | params()) -> args().
 get_args(#helper{args = Args}) ->
-    Args.
+    Args;
+get_args(#helper_params{helper_args = Args}) ->
+    maps:from_list([{K, V} || #helper_arg{key = K, value = V} <- Args]).
 
 %%--------------------------------------------------------------------
 %% @doc

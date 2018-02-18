@@ -491,14 +491,14 @@ read_should_synchronize_file(Config) ->
         rpc:call(W1, file_location, create, [RemoteLocation])
     ),
 
-    % mock rtransfer
-    test_utils:mock_new(Workers, rtransfer, [passthrough]),
-    test_utils:mock_expect(Workers, rtransfer, prepare_request,
-        fun(_ProvId, _Uuid, 1, Size) when Size >= 3 ->
+    % mock rtransfer_link
+    test_utils:mock_new(Workers, rtransfer_link, [passthrough]),
+    test_utils:mock_expect(Workers, rtransfer_link, prepare_request,
+        fun(_ProvId, _Uuid, _, _, _, _, _, 1, Size, _) when Size >= 3 ->
             ref
         end
     ),
-    test_utils:mock_expect(Workers, rtransfer, fetch,
+    test_utils:mock_expect(Workers, rtransfer_link, fetch,
         fun(ref, NotifyFun, OnCompleteFun) ->
             NotifyFun(ref, 1, 3),
             OnCompleteFun(ref, {ok, 3}),
@@ -514,12 +514,12 @@ read_should_synchronize_file(Config) ->
 
     % then
     ?assertEqual({ok, <<>>}, Ans),
-    ?assertEqual(1, rpc:call(W1, meck, num_calls, [rtransfer, prepare_request, '_'])),
+    ?assertEqual(1, rpc:call(W1, meck, num_calls, [rtransfer_link, prepare_request, '_'])),
     ?assert(rpc:call(W1, meck, called,
-        [rtransfer, prepare_request, [ExternalProviderId, FileGuid, 1, '_']])),
-    ?assertEqual(1, rpc:call(W1, meck, num_calls, [rtransfer, fetch, '_'])),
-    ?assert(rpc:call(W1, meck, called, [rtransfer, fetch, [ref, '_', '_']])),
-    test_utils:mock_validate_and_unload(Workers, [rtransfer]),
+        [rtransfer_link, prepare_request, [ExternalProviderId, FileGuid, '_', '_', '_', '_', '_', 1, '_', '_']])),
+    ?assertEqual(1, rpc:call(W1, meck, num_calls, [rtransfer_link, fetch, '_'])),
+    ?assert(rpc:call(W1, meck, called, [rtransfer_link, fetch, [ref, '_', '_']])),
+    test_utils:mock_validate_and_unload(Workers, [rtransfer_link]),
     ?assertMatch({
         #document{
             value = #file_location{

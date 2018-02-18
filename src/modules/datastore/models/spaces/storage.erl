@@ -70,7 +70,13 @@ update(Key, Diff) ->
 %%--------------------------------------------------------------------
 -spec create(doc()) -> {ok, id()} | {error, term()}.
 create(#document{value = #storage{}} = Doc) ->
-    ?extract_key(datastore_model:create(?CTX, Doc)).
+    case ?extract_key(datastore_model:create(?CTX, Doc)) of
+        {ok, StorageId} ->
+            rtransfer_config:add_storage(Doc#document{key = StorageId}),
+            {ok, StorageId};
+        Other ->
+            Other
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
