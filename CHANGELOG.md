@@ -4,6 +4,32 @@
 CHANGELOG
 ---------
 
+### 18.02.0-beta1
+
+* VFS-4080 Verify other providers' domains while connecting via IP addresses
+* VFS-3927 Remove support for IdP access token authorization and basic auth, only macaroon auth is now supported
+* VFS-3978 Do not distribute test CA with op-worker
+* VFS-3965 Provider now uses port 443 for protocol server
+* VFS-3965 Added an HTTP Upgrade Protocol procedure before handshake
+* VFS-3947 Use random nonce during every inter-provider connection to verify provider identity
+* VFS-3751 Ensure users can view basic info about their spaces and groups if they do not have view privileges
+* VFS-3751 Authorize providers using macaroons rather than certificates
+* VFS-3751 Rework provider communicator to work with macaroons and support verification 
+* VFS-3751 Merge provider_listener and protocol_listener into one
+* VFS-3751 Add handshake message for providers
+* VFS-3635 Remove default OZ CA cert, download it every time before registration
+* VFS-3279 Implement new synchronization channel between OP and OZ (Graph Sync)
+* VFS-3730 Separate trusted CAs from certificate chain
+* VFS-3526 Implement subdomain delegation; Combine provider record fields "redirection_point" and "urls"  into "domain"
+* VFS-3526 Remove old dns plugin module
+* Refactor datastore models to integrate them with new datastore
+* Change links storing model to use dedicated links tree for each provider
+* VFS-4088 GUI: Fixed incorrect ordering and stacking of transfer chart series
+* VFS-4068 GUI: Fixed incorrect icons positioning in transfers table
+* VFS-4062 GUI: Remember opened space when switching between data-spaces-transfers views; fixes in data-space sidebar
+* VFS-4059 GUI: Fixed provider icon scaling in transfers view
+
+
 ### 17.06.2
 
 * Updating GUI, including: VFS-4088 * VFS-4088 Fixed incorrect ordering and stacking of transfer chart series
