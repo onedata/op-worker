@@ -4,6 +4,19 @@
 CHANGELOG
 ---------
 
+### 17.06.2
+
+* Updating GUI, including: VFS-4088 * VFS-4088 Fixed incorrect ordering and stacking of transfer chart series
+* VFS-4074 removes option start_rtransfer_on_init, added gateway_supervisor
+* VFS-4074 add rtransfer to supervision tree
+* Updating GUI, including: VFS-4068, VFS-4062, VFS-4059 * VFS-4068 Fixed incorrect icons positioning in transfers table * VFS-4062 Remember opened space when switching between data-spaces-transfers views; fixes in data-space sidebar * VFS-4059 Fixed provider icon scaling in transfers view
+* VFS-3889 increase transfer_workers_num to 50, remove commented out code and todo
+* VFS-3889 restart transfers via rest, add test for many simultaneous transfers
+* Bump compatible versions to 17.06.0-rc9 and 17.06.0
+* VFS-3906 Transfer GUI displays charts from before several seconds rather than approximate them to present
+* VFS-3889 add cancellation of invalidation transfers
+
+
 ### 17.06.1
 
 * Releasing new version 17.06.1
