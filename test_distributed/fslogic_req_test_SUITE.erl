@@ -13,7 +13,7 @@
 -author("Krzysztof Trzepla").
 -author("Rafal Slota").
 
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
+-include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -22,6 +22,7 @@
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -120,6 +121,9 @@ fslogic_get_file_children_attrs_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     ProviderID = rpc:call(Worker, oneprovider, get_id, []),
 
+    ?assertMatch(ok, test_utils:set_env(Worker, ?APP_NAME,
+        max_read_dir_plus_procs, 2)),
+
     {SessId1, UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     {SessId2, UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user2">>}, Config)},
     {SessId3, UserId3} = {?config({session_id, {<<"user3">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user3">>}, Config)},
@@ -212,6 +216,9 @@ fslogic_get_file_children_attrs_test(Config) ->
         {SessId3, <<"/">>, [<<"space_name3">>, <<"space_name4">>], UserRootGuid3},
         {SessId4, <<"/">>, [<<"space_name4">>], UserRootGuid4}
     ]),
+
+    ?assertMatch(ok, test_utils:set_env(Worker, ?APP_NAME,
+        max_read_dir_plus_procs, 1000)),
 
     ok.
 

@@ -12,6 +12,7 @@
 -module(dir_req).
 -author("Tomasz Lichon").
 
+-include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 
@@ -162,12 +163,33 @@ read_dir_plus_insecure(UserCtx, FileCtx, Offset, Limit) ->
 %% @private
 %% @doc
 %% A parallel function similar to lists:filtermap/2. See {@link lists:filtermap/2}.
-%% However, Filter and Map functions are separeted.
+%% However, Filter and Map functions are separeted and number of parallel
+%% processes is limited.
 %% @end
 %%--------------------------------------------------------------------
 -spec filtermap(Map :: fun((X :: A) -> B), Filter :: fun((X :: A) -> boolean()),
     L :: [A]) -> [B].
 filtermap(Map, Filter, L) ->
+    MaxChunk = application:get_env(?APP_NAME, max_read_dir_plus_procs, 1000),
+    Length = length(L),
+    case Length > MaxChunk of
+        true ->
+            {L1, L2} = lists:split(MaxChunk, L),
+            filtermap2(Map, Filter, L1) ++ filtermap(Map, Filter, L2);
+        _ ->
+            filtermap2(Map, Filter, L)
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% A parallel function similar to lists:filtermap/2. See {@link lists:filtermap/2}.
+%% However, Filter and Map functions are separeted.
+%% @end
+%%--------------------------------------------------------------------
+-spec filtermap2(Map :: fun((X :: A) -> B), Filter :: fun((X :: A) -> boolean()),
+    L :: [A]) -> [B].
+filtermap2(Map, Filter, L) ->
     LWithNum = lists:zip(lists:seq(1, length(L)), L),
     Mapped = utils:pmap(fun({Num, Element}) ->
         {Num, Map(Element)}
