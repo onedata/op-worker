@@ -118,28 +118,28 @@ create_delayed_storage_file(FileCtx) ->
 
     case StorageFileCreated of
         false ->
-            UpdateAns = file_location:update(FileLocationId, fun
-                (#file_location{storage_file_created = true}) ->
-                    {error, already_created};
-                (FileLocation = #file_location{storage_file_created = false}) ->
-                    try
+            FileUuid = file_ctx:get_uuid_const(FileCtx),
+            file_location:critical_section(FileUuid, fun() ->
+                case file_location:get(FileLocationId) of
+                    {ok, #document{
+                        key = FileLocationId,
+                        value = #file_location{storage_file_created = false}
+                    }} ->
                         FileCtx3 = create_storage_file(user_ctx:new(?ROOT_SESS_ID), FileCtx2),
                         files_to_chown:chown_or_schedule_chowning(FileCtx3),
-                        {ok, FileLocation#file_location{storage_file_created = true}}
-                    catch
-                        Error:Reason ->
-                            ?error_stacktrace("Error during storage file creation: ~p:~p",
-                                [Error, Reason]),
-                            {error, {Error, Reason}}
-                    end
-            end),
 
-            case UpdateAns of
-                {ok, #document{} = Doc} ->
-                    file_ctx:update_location_doc(FileCtx2, Doc);
-                _ ->
-                    FileCtx2
-            end;
+                        {ok, #document{} = Doc} = file_location:update(FileLocationId, fun
+                            (FileLocation = #file_location{storage_file_created = false}) ->
+                                {ok, FileLocation#file_location{storage_file_created = true}}
+                        end),
+                        file_ctx:update_location_doc(FileCtx3, Doc);
+                    {ok, #document{
+                        key = FileLocationId,
+                        value = #file_location{storage_file_created = true}
+                    }} ->
+                        FileCtx2
+                end
+            end);
         true ->
             FileCtx2
     end.
