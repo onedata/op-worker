@@ -760,12 +760,12 @@ choose_adequate_handler(Config) ->
     % when
     {ok, _, _, _} = do_request(Workers, File, get, [], []),
     % then
-    ?assert(rpc:call(WorkerP1, meck, called, [cdmi_object_handler, rest_init, '_'])),
+    ?assert(rpc:call(WorkerP1, meck, called, [cdmi_object_handler, allowed_methods, '_'])),
 
     % when
     {ok, _, _, _} = do_request(Workers, Dir, get, [], []),
     % then
-    ?assert(rpc:call(WorkerP1, meck, called, [cdmi_container_handler, rest_init, '_'])).
+    ?assert(rpc:call(WorkerP1, meck, called, [cdmi_container_handler, allowed_methods, '_'])).
 
 use_supported_cdmi_version(Config) ->
     % given
@@ -1063,7 +1063,7 @@ moved_permanently(Config) ->
         do_request(Workers, DirNameWithoutSlash, get, RequestHeaders1, []),
     ?assertEqual(?MOVED_PERMANENTLY, Code1),
     ?assertEqual(Location1,
-        proplists:get_value(<<"Location">>, Headers1)),
+        proplists:get_value(<<"location">>, Headers1)),
     %%------------------------------
 
     %%--------- dir test with QS-----------
@@ -1077,7 +1077,7 @@ moved_permanently(Config) ->
         do_request(Workers, DirNameWithoutSlash ++ "?example_qs=1", get, RequestHeaders2, []),
     ?assertEqual(?MOVED_PERMANENTLY, Code2),
     ?assertEqual(Location2,
-        proplists:get_value(<<"Location">>, Headers2)),
+        proplists:get_value(<<"location">>, Headers2)),
     %%------------------------------
 
     %%--------- file test ----------
@@ -1091,7 +1091,7 @@ moved_permanently(Config) ->
         do_request(Workers, FileNameWithSlash, get, RequestHeaders3, []),
     ?assertEqual(?MOVED_PERMANENTLY, Code3),
     ?assertEqual(Location3,
-        proplists:get_value(<<"Location">>, Headers3)).
+        proplists:get_value(<<"location">>, Headers3)).
 %%------------------------------
 
 % tests req format checking
