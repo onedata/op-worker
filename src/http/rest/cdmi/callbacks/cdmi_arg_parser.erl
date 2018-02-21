@@ -84,13 +84,13 @@ malformed_objectid_request(Req, State) ->
 -spec get_ranges(Req :: req(), Size :: non_neg_integer()) ->
     {[{non_neg_integer(), non_neg_integer()}] | undefined, req()}.
 get_ranges(Req, Size) ->
-    {RawRange, Req1} = cowboy_req:header(<<"range">>, Req),
-    case RawRange of
-        undefined -> {undefined, Req1};
-        _ ->
+    case cowboy_req:header(<<"range">>, Req) of
+        undefined ->
+            {undefined, Req};
+        RawRange ->
             case parse_byte_range(RawRange, Size) of
                 invalid -> throw(?ERROR_INVALID_RANGE);
-                Ranges -> {Ranges, Req1}
+                Ranges -> {Ranges, Req}
             end
     end.
 
@@ -99,7 +99,7 @@ get_ranges(Req, Size) ->
 %%--------------------------------------------------------------------
 -spec parse_body(cowboy_req:req()) -> {ok, maps:map(), cowboy_req:req()}.
 parse_body(Req) ->
-    {ok, RawBody, Req1} = cowboy_req:body(Req),
+    {ok, RawBody, Req1} = cowboy_req:read_body(Req),
     Body = case RawBody of
         <<>> ->
             #{};
@@ -204,9 +204,9 @@ path => onedata_file_api:file_path()}.
 -spec add_version_to_state(cowboy_req:req(), maps:map()) ->
     {result_state(), cowboy_req:req()}.
 add_version_to_state(Req, State) ->
-    {RawVersion, NewReq} = cowboy_req:header(?CDMI_VERSION_HEADER, Req),
+    RawVersion = cowboy_req:header(?CDMI_VERSION_HEADER, Req),
     Version = get_supported_version(RawVersion),
-    {State#{cdmi_version => Version}, NewReq}.
+    {State#{cdmi_version => Version}, Req}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -215,10 +215,8 @@ add_version_to_state(Req, State) ->
 %%--------------------------------------------------------------------
 -spec add_opts_to_state(cowboy_req:req(), maps:map()) ->
     {result_state(), cowboy_req:req()}.
-add_opts_to_state(Req, State) ->
-    {Qs, NewReq} = cowboy_req:qs(Req),
-    Opts = parse_opts(Qs),
-    {State#{options => Opts}, NewReq}.
+add_opts_to_state(#{qs := Qs} = Req, State) ->
+    {State#{options => parse_opts(Qs)}, Req}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -247,8 +245,8 @@ add_path_to_state(Req, State) ->
     {result_state(), cowboy_req:req()}.
 add_objectid_path_to_state(Req, State) ->
     % get objectid
-    {Id, Req2} = cowboy_req:binding(id, Req),
-    {Path, Req3} = cdmi_path:get_path_of_id_request(Req2),
+    Id = cowboy_req:binding(id, Req),
+    {Path, Req2} = cdmi_path:get_path_of_id_request(Req),
 
     % get GUID from objectid
     Guid =
@@ -259,13 +257,13 @@ add_objectid_path_to_state(Req, State) ->
 
     % get path of object with that GUID
     {BasePath, Req4} =
-        case is_capability_object(Req3) of
-            {true, Req3_1} ->
-                {proplists:get_value(Id, ?CapabilityPathById), Req3_1};
-            {false, Req3_1} ->
-                Auth = try_authenticate(Req3_1),
+        case is_capability_object(Req2) of
+            {true, Req2_1} ->
+                {proplists:get_value(Id, ?CapabilityPathById), Req2_1};
+            {false, Req2_1} ->
+                Auth = try_authenticate(Req2_1),
                 {ok, NewPath} = onedata_file_api:get_file_path(Auth, Guid),
-                {NewPath, Req3_1}
+                {NewPath, Req2_1}
         end,
 
     % concatenate BasePath and Path to FullPath
@@ -367,15 +365,14 @@ choose_handler(Req, Path) ->
 %% @doc Checks if this objectid request points to capability object
 %%--------------------------------------------------------------------
 -spec is_capability_object(req()) -> {boolean(), cowboy_req:req()}.
-is_capability_object(Req) ->
-    {Path, NewReq} = cowboy_req:path(Req),
+is_capability_object(#{path := Path} = Req) ->
     Answer =
         case binary:split(Path, <<"/">>, [global]) of
             [<<"">>, <<"cdmi">>, <<"cdmi_objectid">>, Id | _Rest] ->
                 proplists:is_defined(Id, ?CapabilityPathById);
             _ -> false
         end,
-    {Answer, NewReq}.
+    {Answer, Req}.
 
 %%--------------------------------------------------------------------
 %% @doc Authenticate user or throw ERROR_UNAUTHORIZED in case of error

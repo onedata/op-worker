@@ -61,23 +61,23 @@ handle(Req, State, error, {error, ?EPERM}) ->
 handle(Req, State, error, {error, ?EEXIST}) ->
     handle(Req, State, error, ?ERROR_EXISTS);
 handle(Req, State, _Type, Status) when is_integer(Status) ->
-    {ok, Req2} = cowboy_req:reply(Status, [], [], Req),
-    {halt, Req2, State};
+    NewReq = cowboy_req:reply(Status, Req),
+    {stop, NewReq, State};
 handle(Req, State, _Type, {error, {Type, Error}})
     when is_binary(Type), is_binary(Error) ->
     handle(Req, State, error, ?ERROR_REPLY(?INTERNAL_SERVER_ERROR, Type, Error));
 handle(Req, State, _Type, {Status, BodyBinary})
     when is_integer(Status) andalso is_binary(BodyBinary) ->
-    {ok, Req2} = cowboy_req:reply(Status, [], BodyBinary, Req),
-    {halt, Req2, State};
+    NewReq = cowboy_req:reply(Status, #{}, BodyBinary, Req),
+    {stop, NewReq, State};
 handle(Req, State, _Type, {Status, Body}) when is_integer(Status) ->
     BodyBinary = json_utils:encode_map(Body),
-    {ok, Req2} = cowboy_req:reply(Status, [], BodyBinary, Req),
-    {halt, Req2, State};
+    NewReq = cowboy_req:reply(Status, #{}, BodyBinary, Req),
+    {stop, NewReq, State};
 handle(Req, State, Type, Error) ->
     ?error_stacktrace("Unhandled exception in rest request ~p:~p", [Type, Error]),
-    {ok, Req2} = cowboy_req:reply(?INTERNAL_SERVER_ERROR, [], [], Req),
-    {halt, Req2, State}.
+    NewReq = cowboy_req:reply(?INTERNAL_SERVER_ERROR, Req),
+    {stop, NewReq, State}.
 
 %%%===================================================================
 %%% Internal functions
