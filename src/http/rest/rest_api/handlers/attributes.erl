@@ -20,7 +20,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([rest_init/2, terminate/3, allowed_methods/2, is_authorized/2,
+-export([terminate/3, allowed_methods/2, is_authorized/2,
     content_types_provided/2, content_types_accepted/2]).
 
 %% resource functions
@@ -33,13 +33,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:rest_init/2
-%%--------------------------------------------------------------------
--spec rest_init(req(), term()) -> {ok, req(), term()} | {shutdown, req()}.
-rest_init(Req, State) ->
-    {ok, Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3
@@ -58,7 +51,7 @@ allowed_methods(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
 %%--------------------------------------------------------------------
--spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | halt, req(), maps:map()}.
+-spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | stop, req(), maps:map()}.
 is_authorized(Req, State) ->
     onedata_auth_api:is_authorized(Req, State).
 

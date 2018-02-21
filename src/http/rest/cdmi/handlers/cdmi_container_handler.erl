@@ -22,7 +22,7 @@
     <<"completionStatus">>, <<"metadata">>, <<"childrenrange">>, <<"children">>]).
 
 %% API
--export([rest_init/2, terminate/3, allowed_methods/2, malformed_request/2,
+-export([terminate/3, allowed_methods/2, malformed_request/2,
     is_authorized/2, resource_exists/2, content_types_provided/2,
     content_types_accepted/2, delete_resource/2]).
 
@@ -33,14 +33,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @equiv pre_handler:rest_init/2
-%% @end
-%%--------------------------------------------------------------------
--spec rest_init(cowboy_req:req(), term()) -> {ok, req(), term()} | {shutdown, req()}.
-rest_init(Req, _Opts) ->
-    {ok, Req, #{}}.
 
 %%--------------------------------------------------------------------
 %% @equiv pre_handler:terminate/3
@@ -70,7 +62,7 @@ malformed_request(Req, State) ->
 %% @equiv pre_handler:is_authorized/2
 %% @end
 %%--------------------------------------------------------------------
--spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | halt, req(), maps:map()}.
+-spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | stop, req(), maps:map()}.
 is_authorized(Req, State) ->
     onedata_auth_api:is_authorized(Req, State).
 

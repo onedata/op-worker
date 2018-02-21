@@ -30,14 +30,14 @@
 %% request's State
 %% @end
 %%--------------------------------------------------------------------
--spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | halt, req(), maps:map()}.
+-spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | stop, req(), maps:map()}.
 is_authorized(Req, State) ->
     case authenticate(Req) of
         {ok, Auth} ->
             {true, Req, State#{auth => Auth}};
         {error, not_found} ->
-            {ok, Req2} = cowboy_req:reply(401, [], <<"">>, Req),
-            {halt, Req2, State};
+            NewReq = cowboy_req:reply(401, Req),
+            {stop, NewReq, State};
         {error, Error} ->
             ?debug("Authentication error ~p", [Error]),
             {{false, <<"authentication_error">>}, Req, State}
@@ -98,10 +98,8 @@ resolve_auth(Req) ->
 -spec parse_macaroon_from_header(Req :: req()) -> undefined | binary().
 parse_macaroon_from_header(Req) ->
     case cowboy_req:header(<<"macaroon">>, Req) of
-        {undefined, _} ->
-            {ValueOrUndef, _} = cowboy_req:header(<<"x-auth-token">>, Req),
-            ValueOrUndef;
-        {Value, _} ->
+        undefined ->
+            cowboy_req:header(<<"x-auth-token">>, Req);
+        Value ->
             Value
     end.
-

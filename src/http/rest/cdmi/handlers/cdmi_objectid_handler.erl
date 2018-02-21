@@ -18,18 +18,11 @@
 -include_lib("ctool/include/posix/errors.hrl").
 
 %% API
--export([rest_init/2, terminate/3, allowed_methods/2, malformed_request/2]).
+-export([terminate/3, allowed_methods/2, malformed_request/2]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:rest_init/2
-%%--------------------------------------------------------------------
--spec rest_init(cowboy_req:req(), term()) -> {ok, req(), term()} | {shutdown, req()}.
-rest_init(Req, _Opts) ->
-    {ok, Req, #{}}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3

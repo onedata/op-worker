@@ -14,11 +14,11 @@
 -author("Tomasz Lichon").
 
 %% Cowboy handler API
--export([init/3, terminate/3]).
+-export([init/2, terminate/3]).
 
 %% Cowboy REST handler API
 %% This is not the full cowboy API. If needed, more functions can be added to this bridge.
--export([rest_init/2, malformed_request/2, known_methods/2, allowed_methods/2, is_authorized/2, options/2, resource_exists/2]).
+-export([malformed_request/2, known_methods/2, allowed_methods/2, is_authorized/2, options/2, resource_exists/2]).
 -export([content_types_provided/2, languages_provided/2, charsets_provided/2]).
 -export([moved_permanently/2, moved_temporarily/2, content_types_accepted/2, delete_resource/2]).
 -export([generate_etag/2, last_modified/2, expires/2, forbidden/2]).
@@ -37,22 +37,22 @@
 %% Cowboy handler callback, called to initialize request handling flow.
 %% @end
 %%--------------------------------------------------------------------
--spec init(term(), cowboy_req:req(), protocol_plugin_behaviour:handler()) ->
-    {upgrade, protocol, cowboy_rest, cowboy_req:req(), term()}.
-init(Arg, Req, Description) when is_function(Description) ->
+-spec init(cowboy_req:req(), protocol_plugin_behaviour:handler()) ->
+    {cowboy_rest, cowboy_req:req(), term()}.
+init(Req, Description) when is_function(Description) ->
     {HandlerDesc, Req2} = Description(Req),
-    init(Arg, Req2, HandlerDesc);
-init(Arg, Req, Description)
+    init(Req2, HandlerDesc);
+init(Req, Description)
     when map_size(Description) < ?HANDLER_DESCRIPTION_REQUIRED_PROPERTIES ->
-    init(Arg, Req, plugin_properties:fill_with_default(Description));
-init(_, Req, #{
+    init(Req, plugin_properties:fill_with_default(Description));
+init(Req, #{
     handler := Handler,
     handler_initial_opts := HandlerInitialOpts,
     exception_handler := ExceptionHandler
 }) ->
     request_context:set_handler(Handler),
     request_context:set_exception_handler(ExceptionHandler),
-    {upgrade, protocol, cowboy_rest, Req, HandlerInitialOpts}.
+    {cowboy_rest, Req, HandlerInitialOpts}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -67,14 +67,6 @@ terminate(Reason, Req, State) ->
 %%% Cowboy REST handler API
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Cowboy handler callback, called right after protocol upgrade to init the request context.
-%% @end
-%%--------------------------------------------------------------------
--spec rest_init(Req :: cowboy_req:req(), Opts :: term()) -> {ok, NewReq :: cowboy_req:req(), State :: term()} | {shutdown, NewReq :: cowboy_req:req()}.
-rest_init(Req, HandlerInitialOpts) ->
-    request_delegator:delegate_rest_init(Req, HandlerInitialOpts).
 
 %%--------------------------------------------------------------------
 %% @doc

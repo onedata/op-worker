@@ -21,7 +21,7 @@
 -include("http/rest/rest_api/rest_errors.hrl").
 
 %% API
--export([rest_init/2, terminate/3, allowed_methods/2, is_authorized/2,
+-export([terminate/3, allowed_methods/2, is_authorized/2,
     content_types_provided/2]).
 
 %% resource functions
@@ -36,13 +36,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:rest_init/2
-%%--------------------------------------------------------------------
--spec rest_init(req(), term()) -> {ok, req(), term()} | {shutdown, req()}.
-rest_init(Req, State) ->
-    {ok, Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3
@@ -102,12 +95,13 @@ get_space_changes(Req, State) ->
 
     space_membership:check_with_auth(Auth, SpaceId),
     State5 = init_stream(State4),
-    StreamFun = fun(SendChunk) ->
-        stream_loop(SendChunk, State5)
-    end,
-    Req5 = cowboy_req:set_resp_body_fun(chunked, StreamFun, Req4),
-    {ok, Req6} = cowboy_req:reply(?HTTP_OK, [], same(Req5)),
-    {halt, Req6, State5}.
+
+    Req5 = cowboy_req:stream_reply(
+        ?HTTP_OK, #{<<"content-type">> => <<"application/json">>}, Req4
+    ),
+    ok = stream_loop(Req5, State5),
+    {stop, Req5, State5}.
+
 
 %%%===================================================================
 %%% Internal functions
@@ -138,19 +132,19 @@ init_stream(State = #{last_seq := Since, space_id := SpaceId}) ->
 %% Listens for events and pushes them to the socket
 %% @end
 %%--------------------------------------------------------------------
--spec stream_loop(function(), maps:map()) -> ok | no_return().
-stream_loop(SendChunk, State = #{timeout := Timeout, ref := Ref, space_id := SpaceId}) ->
+-spec stream_loop(req(), maps:map()) -> ok | no_return().
+stream_loop(Req, State = #{timeout := Timeout, ref := Ref, space_id := SpaceId}) ->
     receive
         {Ref, stream_ended} ->
-            ok;
+            cowboy_req:stream_body(<<"">>, fin, Req);
         {Ref, Change} ->
             try
-                send_change(SendChunk, Change, SpaceId)
+                send_change(Req, Change, SpaceId)
             catch
                 _:E ->
                     ?error_stacktrace("Cannot stream change of ~p due to: ~p", [Change, E])
             end,
-            stream_loop(SendChunk, State)
+            stream_loop(Req, State)
     after
         Timeout ->
             % TODO VFS-4025 - is it always ok?
@@ -160,28 +154,28 @@ stream_loop(SendChunk, State = #{timeout := Timeout, ref := Ref, space_id := Spa
 %%--------------------------------------------------------------------
 %% @doc Parse and send change received from db stream, to the client.
 %%--------------------------------------------------------------------
--spec send_change(function(), #change{}, od_space:id()) -> ok.
-send_change(SendChunk, #change{seq = Seq, doc = #document{
+-spec send_change(req(), #change{}, od_space:id()) -> ok.
+send_change(Req, #change{seq = Seq, doc = #document{
     key = FileUuid, value = #custom_metadata{}}}, RequestedSpaceId) ->
     {ok, FileDoc} = file_meta:get({uuid, FileUuid}),
-    send_change(SendChunk, #change{seq = Seq, doc = FileDoc, model = file_meta},
+    send_change(Req, #change{seq = Seq, doc = FileDoc, model = file_meta},
         RequestedSpaceId);
-send_change(SendChunk, #change{seq = Seq, doc = #document{
+send_change(Req, #change{seq = Seq, doc = #document{
     key = FileUuid, value = #times{}}}, RequestedSpaceId) ->
     {ok, FileDoc} = file_meta:get({uuid, FileUuid}),
-    send_change(SendChunk, #change{seq = Seq, doc = FileDoc, model = file_meta},
+    send_change(Req, #change{seq = Seq, doc = FileDoc, model = file_meta},
         RequestedSpaceId);
-send_change(SendChunk, #change{seq = Seq, doc = #document{
+send_change(Req, #change{seq = Seq, doc = #document{
     value = #file_location{uuid = FileUuid, provider_id = ProviderId}}}, RequestedSpaceId) ->
     case oneprovider:is_self(ProviderId) of
         true ->
             {ok, FileDoc} = file_meta:get({uuid, FileUuid}),
-            send_change(SendChunk, #change{seq = Seq, doc = FileDoc, model = file_meta},
+            send_change(Req, #change{seq = Seq, doc = FileDoc, model = file_meta},
                 RequestedSpaceId);
         false ->
             ok
     end;
-send_change(SendChunk, Change, RequestedSpaceId) ->
+send_change(Req, Change, RequestedSpaceId) ->
     SpaceDirUuid =
         case Change#change.doc#document.value#file_meta.is_scope of
             true ->
@@ -194,7 +188,7 @@ send_change(SendChunk, Change, RequestedSpaceId) ->
     case SpaceId =:= RequestedSpaceId of
         true ->
             Json = prepare_response(Change, SpaceId),
-            SendChunk(<<Json/binary, "\r\n">>);
+            cowboy_req:stream_body(<<Json/binary, "\r\n">>, nofin, Req);
         false ->
             ok
     end.
@@ -280,17 +274,6 @@ prepare_response(#change{seq = Seq, doc = FileDoc = #document{
             <<"seq">> => Seq
         },
     json_utils:encode_map(Response).
-
-%%--------------------------------------------------------------------
-%% @todo fix types in cowboy_req
-%% @doc
-%% Returns the same object in a way that dialyzer will not know its type.
-%% @end
-%%--------------------------------------------------------------------
--spec same(term()) -> term().
-same(X) ->
-    put(x, X),
-    get(x).
 
 
 %%--------------------------------------------------------------------

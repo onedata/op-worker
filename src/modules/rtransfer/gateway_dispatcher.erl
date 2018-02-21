@@ -49,6 +49,7 @@
      Pid :: pid(),
      Error :: {already_started,Pid} | term().
 start_link(NetworkInterfaces) ->
+    process_flag(trap_exit, true),
     gen_server2:start_link({local, ?GATEWAY_DISPATCHER}, ?MODULE,
         NetworkInterfaces, []).
 

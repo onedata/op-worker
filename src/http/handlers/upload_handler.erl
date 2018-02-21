@@ -12,7 +12,8 @@
 %%%-------------------------------------------------------------------
 -module(upload_handler).
 -author("Lukasz Opiola").
--behaviour(cowboy_http_handler).
+
+-behaviour(cowboy_handler).
 
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -30,7 +31,7 @@
 -define(INTERVAL_WAIT_FOR_FILE_HANDLE, 300).
 
 %% Cowboy API
--export([init/3, handle/2, terminate/3]).
+-export([init/2]).
 %% API
 -export([upload_map_insert/2, upload_map_delete/1]).
 -export([wait_for_file_new_file_id/1]).
@@ -135,36 +136,17 @@ clean_upload_map() ->
 %% ====================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Cowboy handler callback.
-%% @end
-%%--------------------------------------------------------------------
--spec init({TransportName :: atom(), ProtocolName :: http},
-    Req :: cowboy_req:req(), Opts :: any()) ->
-    {ok, cowboy_req:req(), []}.
-init(_Type, Req, _Opts) ->
-    {ok, Req, []}.
-
-
-%%--------------------------------------------------------------------
-%% @doc
+%% @doc Cowboy handler callback.
 %% Handles an upload request.
 %% @end
 %%--------------------------------------------------------------------
--spec handle(term(), term()) -> {ok, cowboy_req:req(), term()}.
-handle(Req, State) ->
+-spec init(cowboy_req:req(), term()) -> {ok, cowboy_req:req(), term()}.
+init(#{method := <<"POST">>} = Req, State) ->
     NewReq = handle_http_upload(Req),
+    {ok, NewReq, State};
+init(Req, State) ->
+    NewReq = cowboy_req:reply(405, #{<<"allow">> => <<"POST">>}, Req),
     {ok, NewReq, State}.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Cowboy handler callback, no cleanup needed
-%% @end
-%%--------------------------------------------------------------------
--spec terminate(term(), term(), term()) -> ok.
-terminate(_Reason, _Req, _State) ->
-    ok.
 
 
 %% ====================================================================
@@ -227,15 +209,15 @@ handle_http_upload(Req) ->
 multipart(Req, Params) ->
     {ok, UploadWriteSize} = application:get_env(?APP_NAME, upload_write_size),
     {ok, UploadReadTimeout} = application:get_env(?APP_NAME, upload_read_timeout),
-    {ok, UploadReadSize} = application:get_env(?APP_NAME, upload_read_size),
+    {ok, UploadPeriod} = application:get_env(?APP_NAME, upload_read_period),
 
-    case cowboy_req:part(Req) of
+    case cowboy_req:read_part(Req) of
         {ok, Headers, Req2} ->
             case cow_multipart:form_data(Headers) of
                 {data, FieldName} ->
-                    {ok, FieldValue, Req3} = cowboy_req:part_body(Req2),
+                    {ok, FieldValue, Req3} = cowboy_req:read_part_body(Req2),
                     multipart(Req3, [{FieldName, FieldValue} | Params]);
-                {file, _FieldName, _Filename, _CType, _CTransferEncoding} ->
+                {file, _FieldName, _Filename, _CType} ->
                     FileId = get_new_file_id(Params),
                     SessionId = gui_session:get_session_id(),
                     {ok, FileHandle} = logical_file_manager:open(
@@ -247,18 +229,19 @@ multipart(Req, Params) ->
                     % First chunk number in resumable is 1
                     Offset = ChunkSize * (ChunkNumber - 1),
                     % Set options for reading from socket
-                    Opts = [
+                    Opts = #{
                         % length is chunk size - how much the cowboy read
                         % function returns at once.
-                        {length, UploadWriteSize},
-                        % read_length means how much will be read from socket
-                        % at once - cowboy will repeat reading until it
-                        % accumulates a chunk, then it returns it.
-                        {read_length, UploadReadSize},
+                        length => UploadWriteSize,
+                        % Maximum timeout after which body read from request
+                        % is passed to upload handler process.
+                        % Note that the body is returned immediately
+                        % if its size reaches the buffer size (length above).
+                        period => UploadPeriod,
                         % read timeout - the read will fail if read_length
                         % is not satisfied within this time.
-                        {read_timeout, UploadReadTimeout}
-                    ],
+                        timeout => UploadReadTimeout
+                    },
                     Req3 = try
                         stream_file(Req2, FileHandle, Offset, Opts)
                     catch Type:Message ->
@@ -283,9 +266,9 @@ multipart(Req, Params) ->
 %%--------------------------------------------------------------------
 -spec stream_file(Req :: cowboy_req:req(),
     FileHandle :: logical_file_manager:handle(), Offset :: non_neg_integer(),
-    Opts :: proplists:proplist()) -> cowboy_req:req().
+    Opts :: cowboy_req:read_body_opts()) -> cowboy_req:req().
 stream_file(Req, FileHandle, Offset, Opts) ->
-    case cowboy_req:part_body(Req, Opts) of
+    case cowboy_req:read_part_body(Req, Opts) of
         {ok, Body, Req2} ->
             {ok, _, _} = logical_file_manager:write(FileHandle, Offset, Body),
             ok = logical_file_manager:release(FileHandle),

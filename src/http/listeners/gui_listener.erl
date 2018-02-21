@@ -99,6 +99,7 @@ start() ->
 
     SslOpts = [
         {port, port()},
+        {num_acceptors, GuiNbAcceptors},
         {keyfile, KeyFile},
         {certfile, CertFile},
         {ciphers, ssl_utils:safe_ciphers()}],
@@ -112,16 +113,12 @@ start() ->
     % Call gui init, which will call init on all modules that might need state.
     gui:init(),
     % Start the listener for web gui and nagios handler
-    Result = ranch:start_listener(?HTTPS_LISTENER, GuiNbAcceptors,
-        ranch_ssl, SslOptsWithChain,
-        cowboy_protocol, [
-            {env, [{dispatch, Dispatch}]},
-            {max_keepalive, MaxKeepAlive},
-            {timeout, timer:seconds(Timeout)},
-            % On every request, add headers that improve
-            % security to the response
-            {onrequest, fun gui:response_headers/1}
-        ]),
+    Result = cowboy:start_tls(?HTTPS_LISTENER, SslOptsWithChain,
+        #{
+            env => #{dispatch => Dispatch},
+            max_keepalive => MaxKeepAlive,
+            request_timeout => timer:seconds(Timeout)
+        }),
     case Result of
         {ok, _} -> ok;
         _ -> Result
@@ -138,10 +135,10 @@ stop() ->
     % Call gui cleanup, which will call cleanup on all modules that
     % were previously set up with gui:init/0.
     gui:cleanup(),
-    case catch cowboy:stop_listener(?HTTPS_LISTENER) of
-        (ok) ->
+    case cowboy:stop_listener(?HTTPS_LISTENER) of
+        ok ->
             ok;
-        (Error) ->
+        {error, Error} ->
             ?error("Error on stopping listener ~p: ~p",
                 [?HTTPS_LISTENER, Error]),
             {error, https_listener_stop_error}

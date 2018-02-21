@@ -141,16 +141,16 @@ all() ->
         empty_metadata_invalid_json_test,
         spatial_flag_test,
         quota_exceeded_during_file_replication,
-        many_simultaneous_transfers,
         quota_decreased_after_invalidation,
         file_replication_failures_should_fail_whole_transfer,
         replicate_big_dir,
         replicate_big_file,
-        invalidate_big_dir
+        invalidate_big_dir,
+        many_simultaneous_transfers
     ]).
 
 -define(LIST_TRANSFER, fun(Id, Acc) -> [Id | Acc] end).
--define(ATTEMPTS, 30).
+-define(ATTEMPTS, 300).
 
 -define(assertDistribution(Worker, ExpectedDistribution, Config, File),
     ?assertEqual(lists:sort(ExpectedDistribution), begin
@@ -355,7 +355,6 @@ restart_file_replication(Config) ->
                 json_utils:decode_map(TransferStatus);
             Error -> Error
         end, ?ATTEMPTS),
-    tracer:stop(),
 
     ExpectedDistribution = [
         #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
@@ -886,10 +885,10 @@ restart_invalidation_of_file_replica_with_migration(Config) ->
             Error -> Error
         end, ?ATTEMPTS),
 
-    ?assertEqualList([Tid1], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqualList([Tid1], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqualList([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqualList([Tid1], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqualList([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
 
     ExpectedDistribution2 = [
         #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
@@ -2028,6 +2027,7 @@ quota_exceeded_during_file_replication(Config) ->
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File).
 
 many_simultaneous_transfers(Config) ->
+    ct:timetrap({hours, 1}),
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
@@ -2173,11 +2173,6 @@ quota_decreased_after_invalidation(Config) ->
             Error -> Error
         end, ?ATTEMPTS),
 
-    {ok, FailedTransfers} = rpc:call(WorkerP2, transfer, for_each_past_transfer, [
-        fun(Id, Acc) -> [Id | Acc] end, [], <<"space6">>
-    ]),
-    ?assert(lists:member(Tid2, FailedTransfers)),
-
     ?assertEqualList([Tid, Tid2], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqualList([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqualList([Tid, Tid2], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
@@ -2311,7 +2306,7 @@ file_replication_failures_should_fail_whole_transfer(Config) ->
         end, ?ATTEMPTS).
 
 replicate_big_dir(Config) ->
-    ct:timetrap({minutes, 10}),
+    ct:timetrap({hours, 1}),
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
@@ -2404,7 +2399,7 @@ replicate_big_file(Config) ->
         end, 3600).
 
 invalidate_big_dir(Config) ->
-    ct:timetrap({minutes, 10}),
+    ct:timetrap({hours, 1}),
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
@@ -2578,8 +2573,6 @@ end_per_testcase(Case, Config) when
     ->
     [WorkerP2, _WorkerP1] = ?config(op_worker_nodes, Config),
     {ok, OldSoftQuota} = ?config(old_soft_quota, Config),
-    SpaceId = ?config(space_id, Config),
-    delete_transfers(WorkerP2, SpaceId),
     rpc:call(WorkerP2, application, set_env, [op_worker, soft_quota_limit_size, OldSoftQuota]),
     end_per_testcase(all, Config);
 
@@ -2606,13 +2599,11 @@ end_per_testcase(Case, Config) when
     Case =:= restart_invalidation_of_file_replica_with_migration;
     Case =:= invalidate_dir_replica
     ->
-    [WorkerP2, _WorkerP1] = ?config(op_worker_nodes, Config),
-    SpaceId = ?config(space_id, Config),
-    delete_transfers(WorkerP2, SpaceId),
     end_per_testcase(all, Config);
 
 end_per_testcase(_Case, Config) ->
     remove_transfers(Config),
+    ensure_transfers_removed(Config),
     lfm_proxy:teardown(Config).
 
 %%%===================================================================
@@ -2737,14 +2728,6 @@ clean_monitoring_dir(Worker, SpaceId) ->
         _ -> ok
     end.
 
-delete_transfers(Worker, SpaceId) ->
-    SuccessfulTransfers = list_finished_transfers(Worker, SpaceId),
-    UnfinishedTransfers = list_unfinished_transfers(Worker, SpaceId),
-    Transfers = SuccessfulTransfers ++ UnfinishedTransfers ,
-    lists:foreach(fun(Tid) ->
-        rpc:call(Worker, transfer, delete, [Tid])
-    end, Transfers).
-
 list_finished_transfers(Worker, SpaceId) ->
     {ok, Transfers} = rpc:call(Worker, transfer, for_each_past_transfer, [?LIST_TRANSFER, [], SpaceId]),
     Transfers.
@@ -2768,12 +2751,17 @@ remove_transfers(Config) ->
             {ok, Current} = rpc:call(Worker, transfer, list_transfers, [SpaceId, true]),
             {ok, Past} = rpc:call(Worker, transfer, list_transfers, [SpaceId, false]),
             lists:foreach(fun(Tid) ->
-                rpc:call(Worker, transfer, delete, [Tid, SpaceId]),
-                rpc:call(Worker, transfer, remove_links, [<<"PAST_TRANSFERS_KEY">>, Tid, SpaceId]),
-                rpc:call(Worker, transfer, remove_links, [<<"CURRENT_TRANSFERS_KEY">>, Tid, SpaceId])
-            end, Current ++ Past)
+                rpc:call(Worker, transfer, delete, [Tid])
+            end, lists:usort(Current ++ Past))
         end, SpaceIds)
     end, Workers).
 
-
-%todo test of cancel_invalidation
+ensure_transfers_removed(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    lists:foreach(fun(Worker) ->
+        {ok, SpaceIds} = rpc:call(Worker, provider_logic, get_spaces, []),
+        lists:foreach(fun(SpaceId) ->
+            ?assertMatch([], list_finished_transfers(Worker, SpaceId), ?ATTEMPTS),
+            ?assertMatch([], list_unfinished_transfers(Worker, SpaceId), ?ATTEMPTS)
+        end, SpaceIds)
+    end, Workers).
