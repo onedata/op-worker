@@ -45,14 +45,6 @@ handle_error(Request, Type, Error) ->
         log_requests_on_error, false),
     {MsgFormat, FormatArgs} = case LogRequest of
         true ->
-            case is_tuple(Request) of
-                true ->
-                    [X | _] = tuple_to_list(Request),
-                    ?error("xxxxxx ~p", [X]);
-                _ ->
-                    ok
-            end,
-
             MF = "Cannot process request ~p (code: ~p)~nStacktrace: ~s",
             FA = [lager:pr(Request, ?MODULE), Code,
                 lager:pr_stacktrace(Stacktrace, {Type, Error})],
