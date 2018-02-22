@@ -26,7 +26,7 @@
     single_dir_creation_test_base/2]).
 -export([create_single_call/4]).
 
--define(TIMEOUT, timer:minutes(20)).
+-define(TIMEOUT, timer:minutes(30)).
 
 %%%===================================================================
 %%% Test functions
