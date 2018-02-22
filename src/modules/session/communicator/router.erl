@@ -294,8 +294,10 @@ route_and_send_answer(Msg = #client_message{
 }, _Sock, _Transport) ->
     event:flush(FlushMsg#flush_events{notify =
         fun(Result) ->
-            % TODO - not used by client, why custom mechanism
-            communicator:send(Result#server_message{message_id = MsgId}, OriginSessId)
+            % Spawn because send can wait and block event_stream
+            spawn(fun() ->
+                communicator:send(Result#server_message{message_id = MsgId}, OriginSessId)
+            end)
         end
     }, effective_session_id(Msg)),
     ok;
