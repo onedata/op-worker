@@ -109,7 +109,7 @@ receive_loop(RecvRef, Manager) ->
             Response
     after
         ?DEFAULT_REQUEST_TIMEOUT ->
-            case erlang:is_process_alive(Manager) of
+            case rpc:call(node(Manager), erlang, is_process_alive, [Manager]) of
                 true ->
                     receive_loop(RecvRef, Manager);
                 _ ->
