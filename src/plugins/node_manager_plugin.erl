@@ -23,9 +23,8 @@
 -export([listeners/0, modules_with_args/0]).
 -export([before_init/1, on_cluster_initialized/1]).
 -export([handle_cast/2]).
--export([check_node_ip_address/0, renamed_models/0]).
+-export([renamed_models/0]).
 -export([modules_with_exometer/0, exometer_reporters/0]).
--export([get_cluster_ips/0]).
 
 -type model() :: datastore_model:model().
 -type record_version() :: datastore_model:record_version().
@@ -186,22 +185,6 @@ handle_cast(update_subdomain_delegation_ips, State) ->
 handle_cast(Request, State) ->
     ?log_bad_request(Request),
     {noreply, State}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Overrides {@link node_manager_plugin_default:check_node_ip_address/0}.
-%% @end
-%%--------------------------------------------------------------------
--spec check_node_ip_address() -> inet:ip4_address().
-check_node_ip_address() ->
-    try
-        {ok, IPBin} = oz_providers:check_ip_address(none),
-        {ok, IP} = inet_parse:ipv4_address(binary_to_list(IPBin)),
-        IP
-    catch T:M ->
-        ?alert_stacktrace("Cannot check external IP of node, defaulting to 127.0.0.1 - ~p:~p", [T, M]),
-        {127, 0, 0, 1}
-    end.
 
 %%--------------------------------------------------------------------
 %% @doc
