@@ -125,13 +125,7 @@ send_async(Msg, Ref) ->
     {ok, #server_message{}} | {error, timeout} | {error, Reason :: term()}.
 communicate(#client_message{} = ClientMsg, Ref) ->
     {ok, MsgId} = communicate_async(ClientMsg, Ref, self()),
-    receive
-        #server_message{message_id = MsgId} = ServerMsg -> {ok, ServerMsg}
-    after
-        % TODO VFS-4025 - multiprovider communication
-        ?DEFAULT_REQUEST_TIMEOUT ->
-            {error, timeout}
-    end;
+    receive_server_message(MsgId);
 communicate(Msg, Ref) ->
     communicate(#client_message{message_body = Msg}, Ref).
 
@@ -226,4 +220,24 @@ ensure_connected(SessId) ->
                 _ ->
                     ok
             end
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Receives reply from other provider
+%% @end
+%%--------------------------------------------------------------------
+-spec receive_server_message(MsgId :: #message_id{}) ->
+    {ok, #server_message{}} | {error, timeout} | {error, Reason :: term()}.
+receive_server_message(MsgId) ->
+    receive
+        #server_message{message_id = MsgId,
+            message_body = #processing_status{code = 'IN_PROGRESS'}} ->
+            receive_server_message(MsgId);
+        #server_message{message_id = MsgId} = ServerMsg ->
+            {ok, ServerMsg}
+    after
+        ?DEFAULT_REQUEST_TIMEOUT ->
+            {error, timeout}
     end.
