@@ -122,22 +122,19 @@ create_delayed_storage_file(FileCtx) ->
             file_location:critical_section(FileUuid, fun() ->
                 case file_location:get(FileLocationId) of
                     {ok, #document{
-                        key = FileLocationId,
-                        value = #file_location{storage_file_created = false}
+                        value = #file_location{storage_file_created = true}
                     }} ->
-                        FileCtx3 = create_storage_file(user_ctx:new(?ROOT_SESS_ID), FileCtx2),
+                        FileCtx2;
+                    {ok, _} ->
+                        FileCtx3 = create_storage_file(
+                            user_ctx:new(?ROOT_SESS_ID), FileCtx2),
                         files_to_chown:chown_or_schedule_chowning(FileCtx3),
 
                         {ok, #document{} = Doc} = file_location:update(FileLocationId, fun
                             (FileLocation = #file_location{storage_file_created = false}) ->
                                 {ok, FileLocation#file_location{storage_file_created = true}}
                         end),
-                        file_ctx:update_location_doc(FileCtx3, Doc);
-                    {ok, #document{
-                        key = FileLocationId,
-                        value = #file_location{storage_file_created = true}
-                    }} ->
-                        FileCtx2
+                        file_ctx:update_location_doc(FileCtx3, Doc)
                 end
             end);
         true ->
