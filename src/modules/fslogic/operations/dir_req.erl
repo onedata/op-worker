@@ -150,9 +150,9 @@ read_dir_plus_insecure(UserCtx, FileCtx, Offset, Limit, _Token) ->
         (error) -> false;
         (_Attrs) -> true
     end,
-    MaxChunk = application:get_env(?APP_NAME, max_read_dir_plus_procs, 200),
+    MaxProcs = application:get_env(?APP_NAME, max_read_dir_plus_procs, 200),
     Length = length(Children),
-    ChildrenAttrs = filtermap(MapFun, FilterFun, Children, MaxChunk, Length),
+    ChildrenAttrs = filtermap(MapFun, FilterFun, Children, MaxProcs, Length),
 
     fslogic_times:update_atime(FileCtx2),
     #fuse_response{status = #status{code = ?OK},
@@ -171,13 +171,13 @@ read_dir_plus_insecure(UserCtx, FileCtx, Offset, Limit, _Token) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec filtermap(Map :: fun((X :: A) -> B), Filter :: fun((X :: A) -> boolean()),
-    L :: [A], MaxChunk :: non_neg_integer(), Length :: non_neg_integer()) -> [B].
-filtermap(Map, Filter, L, MaxChunk, Length) ->
-    case Length > MaxChunk of
+    L :: [A], MaxProcs :: non_neg_integer(), Length :: non_neg_integer()) -> [B].
+filtermap(Map, Filter, L, MaxProcs, Length) ->
+    case Length > MaxProcs of
         true ->
-            {L1, L2} = lists:split(MaxChunk, L),
+            {L1, L2} = lists:split(MaxProcs, L),
             filtermap(Map, Filter, L1) ++
-                filtermap(Map, Filter, L2, MaxChunk, Length - MaxChunk);
+                filtermap(Map, Filter, L2, MaxProcs, Length - MaxProcs);
         _ ->
             filtermap(Map, Filter, L)
     end.
