@@ -175,14 +175,17 @@ rename_into_itself(FileGuid) ->
     TargetName :: file_meta:name(), SourceFileType :: file_meta:type(),
     TargetFileType :: file_meta:type(), TargetParentFileCtx :: file_ctx:ctx()) ->
     no_return() | #fuse_response{}.
-rename_into_different_place_within_space(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName,
-    SourceFileType, TargetFileType, TargetFileCtx) ->
-    case file_ctx:get_storage_doc(SourceFileCtx) of
-        {#document{value = #storage{helpers = [#helper{name = ?POSIX_HELPER_NAME} | _]}}, SourceFileCtx2} ->
+rename_into_different_place_within_space(UserCtx, SourceFileCtx, TargetParentFileCtx,
+    TargetName, SourceFileType, TargetFileType, TargetFileCtx) ->
+    {#document{value = #storage{helpers = [#helper{name = HelperName} | _]}},
+        SourceFileCtx2} = file_ctx:get_storage_doc(SourceFileCtx),
+    case lists:member(HelperName,
+        [?POSIX_HELPER_NAME, ?NULL_DEVICE_HELPER_NAME, ?GLUSTERFS_HELPER_NAME]) of
+        true ->
             rename_into_different_place_within_posix_space(UserCtx, SourceFileCtx2,
                 TargetParentFileCtx, TargetName, SourceFileType, TargetFileType,
                 TargetFileCtx);
-        {_, SourceFileCtx2} ->
+        _ ->
             rename_into_different_place_within_non_posix_space(UserCtx, SourceFileCtx2,
                 TargetParentFileCtx, TargetName, SourceFileType, TargetFileType,
                 TargetFileCtx)
