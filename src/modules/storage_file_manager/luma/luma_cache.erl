@@ -56,7 +56,7 @@
 -spec get(key(), function(), [term()], luma_config:cache_timeout()) ->
     {ok, Value :: value()} | {error, Reason :: term()}.
 get(Key, QueryFun, QueryArgs, LumaCacheTimeout) ->
-    CurrentTimestamp = time_utils:system_time_milli_seconds(),
+    CurrentTimestamp = time_utils:system_time_millis(),
     case datastore_model:get(?CTX, Key) of
         {error, not_found} ->
             query_and_cache_value(Key, QueryFun, QueryArgs,
