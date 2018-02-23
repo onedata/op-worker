@@ -45,7 +45,8 @@
 
 -record(get_file_children_attrs, {
     offset :: file_meta:offset(),
-    size :: file_meta:size()
+    size :: file_meta:size(),
+    index_token :: undefined | binary()
 }).
 
 -record(create_dir, {
@@ -185,7 +186,9 @@
 }).
 
 -record(file_children_attrs, {
-    child_attrs :: [#file_attr{}]
+    child_attrs :: [#file_attr{}],
+    index_token :: undefined | binary(),
+    is_last :: boolean()
 }).
 
 -record(helper_arg, {

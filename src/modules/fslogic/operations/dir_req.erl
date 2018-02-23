@@ -12,11 +12,12 @@
 -module(dir_req).
 -author("Tomasz Lichon").
 
+-include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([mkdir/4, read_dir/4, read_dir_plus/4]).
+-export([mkdir/4, read_dir/4, read_dir_plus/5]).
 
 %%%===================================================================
 %%% API
@@ -49,17 +50,17 @@ read_dir(UserCtx, FileCtx, Offset, Limit) ->
         fun read_dir_insecure/4).
 
 %%--------------------------------------------------------------------
-%% @equiv read_dir_plus_insecure/4 with permission checks
+%% @equiv read_dir_plus_insecure/5 with permission checks
 %% @end
 %%--------------------------------------------------------------------
 -spec read_dir_plus(user_ctx:ctx(), file_ctx:ctx(),
-    Offset :: non_neg_integer(), Limit :: non_neg_integer()) ->
-    fslogic_worker:fuse_response().
-read_dir_plus(UserCtx, FileCtx, Offset, Limit) ->
+    Offset :: non_neg_integer(), Limit :: non_neg_integer(),
+    Token :: undefined | binary()) -> fslogic_worker:fuse_response().
+read_dir_plus(UserCtx, FileCtx, Offset, Limit, Token) ->
     check_permissions:execute(
         [traverse_ancestors, ?traverse_container, ?list_container],
-        [UserCtx, FileCtx, Offset, Limit],
-        fun read_dir_plus_insecure/4).
+        [UserCtx, FileCtx, Offset, Limit, Token],
+        fun read_dir_plus_insecure/5).
 
 %%%===================================================================
 %%% Internal functions
@@ -127,9 +128,9 @@ read_dir_insecure(UserCtx, FileCtx, Offset, Limit) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec read_dir_plus_insecure(user_ctx:ctx(), file_ctx:ctx(),
-    Offset :: non_neg_integer(), Limit :: non_neg_integer()) ->
-    fslogic_worker:fuse_response().
-read_dir_plus_insecure(UserCtx, FileCtx, Offset, Limit) ->
+    Offset :: non_neg_integer(), Limit :: non_neg_integer(),
+    Token :: undefined | binary()) -> fslogic_worker:fuse_response().
+read_dir_plus_insecure(UserCtx, FileCtx, Offset, Limit, _Token) ->
     {Children, FileCtx2} = file_ctx:get_file_children(FileCtx, UserCtx, Offset, Limit),
 
     MapFun = fun(ChildCtx) ->
@@ -149,14 +150,37 @@ read_dir_plus_insecure(UserCtx, FileCtx, Offset, Limit) ->
         (error) -> false;
         (_Attrs) -> true
     end,
-    ChildrenAttrs = filtermap(MapFun, FilterFun, Children),
+    MaxProcs = application:get_env(?APP_NAME, max_read_dir_plus_procs, 200),
+    Length = length(Children),
+    ChildrenAttrs = filtermap(MapFun, FilterFun, Children, MaxProcs, Length),
 
     fslogic_times:update_atime(FileCtx2),
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_children_attrs{
-            child_attrs = ChildrenAttrs
+            child_attrs = ChildrenAttrs,
+            is_last = Length < Limit
         }
     }.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% A parallel function similar to lists:filtermap/2. See {@link lists:filtermap/2}.
+%% However, Filter and Map functions are separeted and number of parallel
+%% processes is limited.
+%% @end
+%%--------------------------------------------------------------------
+-spec filtermap(Map :: fun((X :: A) -> B), Filter :: fun((X :: A) -> boolean()),
+    L :: [A], MaxProcs :: non_neg_integer(), Length :: non_neg_integer()) -> [B].
+filtermap(Map, Filter, L, MaxProcs, Length) ->
+    case Length > MaxProcs of
+        true ->
+            {L1, L2} = lists:split(MaxProcs, L),
+            filtermap(Map, Filter, L1) ++
+                filtermap(Map, Filter, L2, MaxProcs, Length - MaxProcs);
+        _ ->
+            filtermap(Map, Filter, L)
+    end.
 
 %%--------------------------------------------------------------------
 %% @private

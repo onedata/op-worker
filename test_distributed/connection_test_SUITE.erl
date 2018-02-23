@@ -130,7 +130,6 @@ all() -> ?ALL(?NORMAL_CASES_NAMES, ?PERFORMANCE_CASES_NAMES).
 %%% Test functions
 %%%===================================================================
 
-% to samo dla #fsync{} | #get_file_children_attrs{}
 timeouts_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     SID = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
