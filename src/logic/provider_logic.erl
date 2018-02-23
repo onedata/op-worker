@@ -504,11 +504,16 @@ zone_time_seconds() ->
             gri = #gri{type = od_provider, id = undefined, aspect = current_time}
         },
         case gs_client_worker:request(?ROOT_SESS_ID, Req) of
-            {ok, Timestamp} ->
-                {ok, Timestamp};
-            Error ->
-                ?warning("Cannot get zone time due to: ~p", [Error]),
-                error
+            {ok, Timestamp1} ->
+                {ok, Timestamp1};
+            _ ->
+                % Fallback to REST in case GS returned an error
+                case oz_providers:get_zone_time(none) of
+                    {ok, Timestamp2} ->
+                        {ok, Timestamp2};
+                    _ ->
+                        error
+                end
         end
     end),
     TimeMillis div 1000.
