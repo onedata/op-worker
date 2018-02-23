@@ -397,7 +397,7 @@ multi_message_test_base(Config) ->
     test_utils:mock_expect(Workers, router, route_message, fun
         (#client_message{message_body = #events{events = [#event{
             type = #file_read_event{counter = Counter}
-        }]}}, _, _) ->
+        }]}}, _, _, _) ->
             Self ! Counter,
             ok
     end),
@@ -483,7 +483,7 @@ client_communicate_async_test(Config) ->
     % given
     test_utils:mock_expect(Workers, router, route_message, fun
         (#client_message{message_id = Id = #message_id{issuer = Issuer,
-            recipient = undefined}}, _, _) ->
+            recipient = undefined}}, _, _, _) ->
             Issuer = oneprovider:get_id(),
             Self ! {router_message_called, Id},
             ok
@@ -674,7 +674,7 @@ bandwidth_test_base(Config) ->
     initializer:remove_pending_messages(),
     Self = self(),
     test_utils:mock_expect(Workers, router, route_message, fun
-        (#client_message{message_body = #ping{}}, _, _) ->
+        (#client_message{message_body = #ping{}}, _, _, _) ->
             Self ! router_message_called,
             ok
     end),
@@ -742,10 +742,10 @@ python_client_test_base(Config) ->
     initializer:remove_pending_messages(),
     Self = self(),
     test_utils:mock_expect(Workers, router, route_message, fun
-        (#client_message{message_body = #ping{}}, _, _) ->
+        (#client_message{message_body = #ping{}}, _, _, _) ->
             Self ! router_message_called,
             ok;
-        (_, _, _) ->
+        (_, _, _, _) ->
             ok
     end),
 
