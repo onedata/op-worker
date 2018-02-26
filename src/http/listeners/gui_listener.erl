@@ -102,7 +102,11 @@ start() ->
         {num_acceptors, GuiNbAcceptors},
         {keyfile, KeyFile},
         {certfile, CertFile},
-        {ciphers, ssl_utils:safe_ciphers()}],
+        {ciphers, ssl_utils:safe_ciphers()},
+        {connection_type, supervisor},
+        {next_protocols_advertised, [<<"http/1.1">>]},
+        {alpn_preferred_protocols, [<<"http/1.1">>]}
+    ],
 
     SslOptsWithChain = case filelib:is_regular(ChainFile) of
         true -> [{cacertfile, ChainFile} | SslOpts];
@@ -113,11 +117,12 @@ start() ->
     % Call gui init, which will call init on all modules that might need state.
     gui:init(),
     % Start the listener for web gui and nagios handler
-    Result = cowboy:start_tls(?HTTPS_LISTENER, SslOptsWithChain,
-        #{
+    Result = ranch:start_listener(?HTTPS_LISTENER, ranch_ssl, SslOptsWithChain,
+        cowboy_tls, #{
             env => #{dispatch => Dispatch},
             max_keepalive => MaxKeepAlive,
-            request_timeout => timer:seconds(Timeout)
+            request_timeout => timer:seconds(Timeout),
+            connection_type => supervisor
         }),
     case Result of
         {ok, _} -> ok;
