@@ -140,34 +140,45 @@ mark_active(AutocleaningId) ->
 %% Mark given autocleaning as failed.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_failed(undefined | id()) -> {ok, id() | undefined}.
+-spec mark_failed(undefined | id()) -> {ok, id() | undefined} | {error, term()}.
 mark_failed(undefined) ->
     {ok, undefined};
 mark_failed(AutocleaningId) ->
-    datastore_model:update(?CTX, AutocleaningId, fun(AC = #autocleaning{space_id = SpaceId}) ->
-        {ok, _} = space_storage:mark_cleanup_finished(SpaceId),
+    case datastore_model:update(?CTX, AutocleaningId, fun(AC) ->
         {ok, AC#autocleaning{
             stopped_at = time_utils:cluster_time_seconds(),
             status = failed
         }}
-    end).
+    end) of
+        {ok, #document{value = #autocleaning{space_id = SpaceId}}} ->
+            {ok, _} = space_storage:mark_cleanup_finished(SpaceId);
+        Error ->
+            ?error_stacktrace("Fail to mark autocleaning ~p as failed due to ~p", [AutocleaningId, Error]),
+            Error
+    end.
 
 %%-------------------------------------------------------------------
 %% @doc
 %% Mark given autocleaning as completed.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_completed(undefined | id()) -> {ok, id() | undefined}.
+-spec mark_completed(undefined | id()) -> {ok, id() | undefined} | {error, term()}.
 mark_completed(undefined) ->
     {ok, undefined};
 mark_completed(AutocleaningId) ->
-    datastore_model:update(?CTX, AutocleaningId, fun(AC = #autocleaning{space_id = SpaceId}) ->
-        {ok, _} = space_storage:mark_cleanup_finished(SpaceId),
+    case datastore_model:update(?CTX, AutocleaningId, fun(AC) ->
         {ok, AC#autocleaning{
             stopped_at = time_utils:cluster_time_seconds(),
             status = completed
         }}
-    end).
+    end) of
+        {ok, #document{value = #autocleaning{space_id = SpaceId}}} ->
+            {ok, _} = space_storage:mark_cleanup_finished(SpaceId);
+        Error ->
+            ?error_stacktrace("Fail to mark autocleaning ~p as completed due to ~p", [AutocleaningId, Error]),
+            Error
+    end.
+
 
 %%-------------------------------------------------------------------
 %% @private
