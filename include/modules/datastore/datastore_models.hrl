@@ -421,13 +421,18 @@
     value = #{} :: indexes_value()
 }).
 
-%% Model that caches files' permissions
+%% Model that manages caches of files' permissions
 -record(permissions_cache, {
     value = undefined :: term()
 }).
 
 %% Helper model for caching files' permissions
 -record(permissions_cache_helper, {
+    value = undefined :: term()
+}).
+
+%% Helper model for caching files' permissions
+-record(permissions_cache_helper2, {
     value = undefined :: term()
 }).
 

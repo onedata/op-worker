@@ -123,8 +123,8 @@ close(Worker, TestHandle) ->
     ?EXEC(Worker,
         begin
             [{_, Handle}] = ets:lookup(lfm_handles, TestHandle),
-            logical_file_manager:fsync(Handle),
-            logical_file_manager:release(Handle),
+            ok = logical_file_manager:fsync(Handle),
+            ok = logical_file_manager:release(Handle),
             ets:delete(lfm_handles, TestHandle),
             ok
         end).

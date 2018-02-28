@@ -1049,9 +1049,9 @@ permission_cache_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
     case ?rpcCache(W, get, [?PERMISSION_CACHE_STATUS_UUID]) of
-        {ok, #document{value = #permissions_cache{value = {permissions_cache_helper, _}}}} ->
+        {ok, #document{value = #permissions_cache{value = {permissions_cache_helper2, _}}}} ->
             ?assertEqual(ok, ?rpcCache(W, invalidate, [])),
-            ?assertMatch({ok, #document{value = #permissions_cache{value = {permissions_cache, permissions_cache_helper}}}},
+            ?assertMatch({ok, #document{value = #permissions_cache{value = {permissions_cache_helper, permissions_cache_helper2}}}},
                 ?rpcCache(W, get, [?PERMISSION_CACHE_STATUS_UUID]), 3);
         _ ->
             ok
@@ -1067,17 +1067,17 @@ permission_cache_test(Config) ->
     ?assertEqual(calculate, ?rpcCache(W, check_permission, [p3])),
 
     ?assertEqual(ok, ?rpcCache(W, invalidate, [])),
-    ?assertMatch({ok, #document{value = #permissions_cache{value = {permissions_cache_helper, _}}}},
+    ?assertMatch({ok, #document{value = #permissions_cache{value = {permissions_cache_helper2, _}}}},
         ?rpcCache(W, get, [?PERMISSION_CACHE_STATUS_UUID])),
     ?assertMatch({ok, _}, ?rpcCache(W, cache_permission, [p2, ok])),
     ?assertEqual(calculate, ?rpcCache(W, check_permission, [p1])),
     ?assertEqual({ok, ok}, ?rpcCache(W, check_permission, [p2])),
     ?assertEqual(calculate, ?rpcCache(W, check_permission, [p3])),
 
-    ?assertMatch({ok, #document{value = #permissions_cache{value = {permissions_cache_helper, permissions_cache}}}},
+    ?assertMatch({ok, #document{value = #permissions_cache{value = {permissions_cache_helper2, permissions_cache_helper}}}},
         ?rpcCache(W, get, [?PERMISSION_CACHE_STATUS_UUID]), 2),
     ?assertEqual(ok, ?rpcCache(W, invalidate, [])),
-    ?assertMatch({ok, #document{value = #permissions_cache{value = {permissions_cache, _}}}},
+    ?assertMatch({ok, #document{value = #permissions_cache{value = {permissions_cache_helper, _}}}},
         ?rpcCache(W, get, [?PERMISSION_CACHE_STATUS_UUID]), 2),
     ?assertEqual(calculate, ?rpcCache(W, check_permission, [p1])),
     ?assertEqual(calculate, ?rpcCache(W, check_permission, [p2])),
@@ -1086,9 +1086,9 @@ permission_cache_test(Config) ->
     for(50, fun() -> ?assertEqual(ok, ?rpcCache(W, invalidate, [])) end),
     CheckFun = fun() ->
         case ?rpcCache(W, get, [?PERMISSION_CACHE_STATUS_UUID]) of
-            {ok, #document{value = #permissions_cache{value = {permissions_cache, permissions_cache_helper}}}} ->
+            {ok, #document{value = #permissions_cache{value = {permissions_cache_helper, permissions_cache_helper2}}}} ->
                 ok;
-            {ok, #document{value = #permissions_cache{value = {permissions_cache_helper, permissions_cache}}}} ->
+            {ok, #document{value = #permissions_cache{value = {permissions_cache_helper2, permissions_cache_helper}}}} ->
                 ok;
             Other ->
                 Other

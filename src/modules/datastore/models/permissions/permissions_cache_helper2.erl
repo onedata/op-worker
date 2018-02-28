@@ -9,7 +9,7 @@
 %%% Helper model used for caching permissions to files (main model is permissions_cache).
 %%% @end
 %%%-------------------------------------------------------------------
--module(permissions_cache_helper).
+-module(permissions_cache_helper2).
 -author("Michal Wrzeszcz").
 
 -include("modules/datastore/datastore_models.hrl").

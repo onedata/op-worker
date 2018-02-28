@@ -415,6 +415,9 @@ gather_answers(Answers, Num, Gathered, LastReport) ->
                 {NewV, Add} = case proplists:lookup(K, AnswersBatch) of
                     {K, {V1_2, V2_2}} ->
                         {{K, {V1 + V1_2, V2 + V2_2}}, V1_2};
+%%                    {K, {V1_2, V2_2, V3_2}} ->
+%%                        ct:print("Error ~p", [V3_2]),
+%%                        {{K, {V1 + V1_2, V2 + V2_2}}, V1_2};
                     none ->
                         {CurrentV, 0}
                 end,
@@ -499,8 +502,12 @@ process_answer(Answers, Ans, ToAddV) ->
     {K, _} = ToAdd = case proplists:lookup(Ans, Answers) of
         {Ans, {V1, V2}} ->
             {Ans, {V1 + 1, V2 + ToAddV}};
+%%        {Ans, {V1, V2, V3}} ->
+%%            {Ans, {V1 + 1, V2 + ToAddV, [Ans | V3]}};
         none ->
             {V1, V2} = proplists:get_value(other, Answers, {0,0}),
             {other, {V1 + 1, V2 + ToAddV}}
+%%            {V1, V2, V3} = proplists:get_value(other, Answers, {0,0, []}),
+%%            {other, {V1 + 1, V2 + ToAddV, [Ans | V3]}}
     end,
     [ToAdd | proplists:delete(K, Answers)].

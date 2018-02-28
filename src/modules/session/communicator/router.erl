@@ -341,7 +341,8 @@ route_check_session_and_send_answer(Msg = #client_message{
                                 message_body = #processing_status{code = 'ERROR'}
                             })
                 end
-            end);
+            end),
+            ok;
         _ ->
             route_and_send_answer(Msg,  Sock, Transport)
     end.

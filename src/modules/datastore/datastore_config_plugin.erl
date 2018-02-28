@@ -49,6 +49,7 @@ get_models() -> [
     indexes,
     permissions_cache,
     permissions_cache_helper,
+    permissions_cache_helper2,
     times,
     helper_handle,
     space_strategies,
