@@ -594,12 +594,18 @@ maybe_update_times(#file_attr{atime = _ATime, mtime = _MTime, ctime = _CTime},
     #statbuf{st_atime = StorageATime, st_mtime = StorageMTime, st_ctime = StorageCTime},
     FileCtx
 ) ->
-    ok = fslogic_times:update_times_and_emit(FileCtx, fun(Times = #times{}) ->
-        {ok, Times#times{
-            atime = StorageATime,
-            mtime = StorageMTime,
-            ctime = StorageCTime
-        }}
+    ok = fslogic_times:update_times_and_emit(FileCtx, fun(Times =
+      #times{atime = ATime, mtime = MTime, ctime = CTime}) ->
+        case {ATime, MTime, CTime} of
+            {StorageATime, StorageMTime, StorageCTime} ->
+                {error, not_changed};
+            _ ->
+                {ok, Times#times{
+                    atime = StorageATime,
+                    mtime = StorageMTime,
+                    ctime = StorageCTime
+                }}
+        end
     end),
     updated.
 

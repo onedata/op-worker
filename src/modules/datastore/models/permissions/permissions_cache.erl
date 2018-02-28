@@ -19,8 +19,7 @@
 -include_lib("cluster_worker/include/elements/task_manager/task_manager.hrl").
 
 %% API
--export([save/1, get/1, exists/1, delete/1, update/2, create/1, create_or_update/2,
-    list/0, count/0]).
+-export([save/1, get/1, exists/1, delete/1, update/2, create/1, create_or_update/2]).
 -export([check_permission/1, cache_permission/2, invalidate/0]).
 
 %% datastore_model callbacks
@@ -37,9 +36,11 @@
 -define(CTX, #{
     model => ?MODULE,
     disc_driver => undefined,
-    volatile => true,
-    fold_enabled => true
+    volatile => true
 }).
+
+%% First helper module to be used
+-define(START_MODULE, permissions_cache_helper).
 
 %%%===================================================================
 %%% API
@@ -117,32 +118,6 @@ exists(Key) ->
     {ok, Exists} = datastore_model:exists(?CTX, Key),
     Exists.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of all records.
-%% @end
-%%--------------------------------------------------------------------
--spec list() -> {ok, [key()]} | {error, term()}.
-list() ->
-    Fun = fun
-        (?STATUS_UUID, Acc) -> {ok, Acc};
-        (Uuid, Acc) -> {ok, [Uuid | Acc]}
-    end,
-    datastore_model:fold_keys(?CTX, Fun, []).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns count of all records.
-%% @end
-%%--------------------------------------------------------------------
--spec count() -> {ok, non_neg_integer()} | {error, term()} | no_return().
-count() ->
-    Fun = fun
-        (?STATUS_UUID, Acc) -> {ok, Acc};
-        (_Uuid, Acc) -> {ok, Acc + 1}
-    end,
-    datastore_model:fold_keys(?CTX, Fun, 0).
-
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -160,7 +135,7 @@ check_permission(Rule) ->
         {ok, #document{value = #permissions_cache{value = {Model, _}}}} ->
             get_rule(Model, Rule);
         {error, not_found} ->
-            get_rule(?MODULE, Rule)
+            get_rule(?START_MODULE, Rule)
     end.
 
 %%--------------------------------------------------------------------
@@ -175,18 +150,18 @@ cache_permission(Rule, Value) ->
         {ok, #document{value = #permissions_cache{value = {Model, _}}}} ->
             Model;
         {error, not_found} ->
-            ?MODULE
+            ?START_MODULE
     end,
 
     case CurrentModel of
         clearing ->
             ok;
-        permissions_cache ->
-            save(#document{key = get_uuid(Rule), value =
-            #permissions_cache{value = Value}});
         permissions_cache_helper ->
             permissions_cache_helper:save(#document{key = get_uuid(Rule), value =
-            #permissions_cache_helper{value = Value}})
+            #permissions_cache_helper{value = Value}});
+        permissions_cache_helper2 ->
+            permissions_cache_helper2:save(#document{key = get_uuid(Rule), value =
+            #permissions_cache_helper2{value = Value}})
     end.
 
 %%--------------------------------------------------------------------
@@ -200,7 +175,7 @@ invalidate() ->
         {ok, #document{value = #permissions_cache{value = {Model, _}}}} ->
             Model;
         {error, not_found} ->
-            ?MODULE
+            ?START_MODULE
     end,
 
     case CurrentModel of
@@ -210,12 +185,8 @@ invalidate() ->
             case start_clearing(CurrentModel) of
                 {ok, _} ->
                     task_manager:start_task(fun() ->
-                        {ok, Uuids} = erlang:apply(CurrentModel, list, []),
-                        lists:foreach(fun(Uuid) ->
-                            ok = erlang:apply(CurrentModel, delete, [Uuid])
-                        end, Uuids),
-                        ok = stop_clearing(CurrentModel),
-                        ok
+                        erlang:apply(CurrentModel, delete_all, []),
+                        ok = stop_clearing(CurrentModel)
                     end, ?CLUSTER_LEVEL);
                 {error, parallel_cleaning} ->
                     ok
@@ -245,9 +216,9 @@ get_uuid(Rule) ->
 -spec get_rule(Model :: atom(), Rule :: term()) -> {ok, term()} | calculate | no_return().
 get_rule(Model, Rule) ->
     case erlang:apply(Model, get, [get_uuid(Rule)]) of
-        {ok, #document{value = #permissions_cache{value = V}}} ->
-            {ok, V};
         {ok, #document{value = #permissions_cache_helper{value = V}}} ->
+            {ok, V};
+        {ok, #document{value = #permissions_cache_helper2{value = V}}} ->
             {ok, V};
         {error, not_found} ->
             calculate
@@ -261,7 +232,7 @@ get_rule(Model, Rule) ->
 %%--------------------------------------------------------------------
 -spec start_clearing(CurrentModel :: atom()) -> {ok, key()} | {error, term()}.
 start_clearing(CurrentModel) ->
-    NewDoc = #document{key = ?STATUS_UUID, value = #permissions_cache{value = {permissions_cache_helper, clearing}}},
+    NewDoc = #document{key = ?STATUS_UUID, value = #permissions_cache{value = {permissions_cache_helper2, clearing}}},
     UpdateFun = fun
         (#permissions_cache{value = {S1, clearing}}) ->
             case S1 of

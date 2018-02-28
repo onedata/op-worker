@@ -34,8 +34,13 @@ update_atime(FileCtx) ->
         actual ->
             ok;
         NewATime ->
-            ok = update_times_and_emit(FileCtx, fun(Times = #times{}) ->
-                {ok, Times#times{atime = NewATime}}
+            ok = update_times_and_emit(FileCtx, fun(Times = #times{atime = Time}) ->
+                case Time of
+                    NewATime ->
+                        {error, not_changed};
+                    _ ->
+                        {ok, Times#times{atime = NewATime}}
+                end
             end)
     end.
 
@@ -54,8 +59,13 @@ update_ctime(FileCtx) ->
 %%--------------------------------------------------------------------
 -spec update_ctime(file_ctx:ctx(), CurrentTime :: file_meta:time()) -> ok.
 update_ctime(FileCtx, CurrentTime) ->
-    ok = update_times_and_emit(FileCtx, fun(Times = #times{}) ->
-        {ok, Times#times{ctime = CurrentTime}}
+    ok = update_times_and_emit(FileCtx, fun(Times = #times{ctime = Time}) ->
+        case Time of
+            CurrentTime ->
+                {error, not_changed};
+            _ ->
+                {ok, Times#times{ctime = CurrentTime}}
+        end
     end).
 
 %%--------------------------------------------------------------------
@@ -74,8 +84,13 @@ update_mtime_ctime(FileCtx) ->
 %%--------------------------------------------------------------------
 -spec update_mtime_ctime(file_ctx:ctx(), CurrentTime :: file_meta:time()) -> ok.
 update_mtime_ctime(FileCtx, CurrentTime) ->
-    ok = update_times_and_emit(FileCtx, fun(Times = #times{}) ->
-        {ok, Times#times{mtime = CurrentTime, ctime = CurrentTime}}
+    ok = update_times_and_emit(FileCtx, fun(Times = #times{mtime = MTime, ctime = CTime}) ->
+        case {MTime, CTime} of
+            {CurrentTime, CurrentTime} ->
+                {error, not_changed};
+            _ ->
+                {ok, Times#times{mtime = CurrentTime, ctime = CurrentTime}}
+        end
     end).
 
 %%--------------------------------------------------------------------
@@ -87,8 +102,11 @@ update_mtime_ctime(FileCtx, CurrentTime) ->
 update_times_and_emit(FileCtx, TimesDiff) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     Times = prepare_times(TimesDiff),
-    {ok, FileUuid} = times:create_or_update(#document{key = FileUuid,
-        value = Times, scope = file_ctx:get_space_id_const(FileCtx)}, TimesDiff),
+    case times:create_or_update(#document{key = FileUuid,
+        value = Times, scope = file_ctx:get_space_id_const(FileCtx)}, TimesDiff) of
+        {ok, FileUuid} -> ok;
+        {error, not_changed} -> ok
+    end,
     spawn(fun() ->
         fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx)
     end),
