@@ -296,7 +296,8 @@ new_helper(Config) ->
         ?CEPH_POOL_NAME,
         #{},
         UserCtx,
-        false
+        false,
+        ?FLAT_STORAGE_PATH
     ),
 
     spawn_link(Node, fun() ->
