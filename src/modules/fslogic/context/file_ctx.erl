@@ -209,7 +209,7 @@ set_storage_path_type(FileCtx, StoragePathType) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns value of filename_mapping field.
+%% Returns value of storage_path_type field.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_storage_path_type_const(ctx()) -> helpers:storage_path_type().
@@ -445,7 +445,10 @@ get_parent_guid(FileCtx, UserCtx) ->
 %%--------------------------------------------------------------------
 -spec get_storage_file_id(ctx()) -> {StorageFileId :: helpers:file_id(), ctx()}.
 get_storage_file_id(FileCtx = #file_ctx{storage_file_id = undefined}) ->
-    case get_storage_path_type_const(FileCtx) of
+    {StorageDoc, _} = file_ctx:get_storage_doc(FileCtx),
+    #document{value = #storage{helpers
+      = [#helper{storage_path_type = StoragePathType} | _]}} = StorageDoc,
+    case StoragePathType of
       ?FLAT_STORAGE_PATH ->
         {FileId, FileCtx2} = get_flat_path(FileCtx),
         {FileId, FileCtx2#file_ctx{storage_file_id = FileId}};
