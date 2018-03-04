@@ -253,10 +253,10 @@ rename_file_on_flat_storage(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetN
     {SourceParentDoc, SourceParentFileCtx2} = file_ctx:get_file_doc(SourceParentFileCtx),
     ok = case TargetGuid of
         undefined ->
-          ok;
+            ok;
         _ ->
             SessId = user_ctx:get_session_id(UserCtx),
-            logical_file_manager:unlink(SessId, {guid, TargetGuid}, false)
+            ok = logical_file_manager:unlink(SessId, {guid, TargetGuid}, false)
     end,
     ok = file_meta:rename(SourceDoc, SourceParentDoc, ParentDoc, TargetName),
     fslogic_times:update_mtime_ctime(SourceFileCtx3, time_utils:cluster_time_seconds()),

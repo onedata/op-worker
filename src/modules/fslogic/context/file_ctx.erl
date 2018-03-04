@@ -48,7 +48,7 @@
     is_dir :: undefined | boolean(),
     is_import_on :: undefined | boolean(),
     extended_direct_io = false :: boolean(),
-    storage_path_type :: undefined | helpers:filename_mapping()
+    storage_path_type :: helpers:storage_path_type()
 }).
 
 -type ctx() :: #file_ctx{}.
@@ -452,7 +452,7 @@ get_storage_file_id(FileCtx = #file_ctx{storage_file_id = undefined}) ->
       ?FLAT_STORAGE_PATH ->
         {FileId, FileCtx2} = get_flat_path(FileCtx),
         {FileId, FileCtx2#file_ctx{storage_file_id = FileId}};
-      _ ->
+      ?CANONICAL_STORAGE_PATH ->
         {FileId, FileCtx2} = get_canonical_path(FileCtx),
         {FileId, FileCtx2#file_ctx{storage_file_id = FileId}}
     end;
