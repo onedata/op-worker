@@ -431,9 +431,10 @@ upgrade_record(4, {?MODULE, Name, Helpers, Readonly, LumaConfig}) ->
                 args = HelperArgs,
                 admin_ctx = AdminCtx,
                 insecure = Insecure,
-                extended_direct_io = false,
+                extended_direct_io = ExtendedDirectIO,
                 storage_path_type = ?CANONICAL_STORAGE_PATH
-            } || {_, HelperName, HelperArgs, AdminCtx, Insecure} <- Helpers
+            } || {_, HelperName, HelperArgs, AdminCtx, Insecure,
+                  ExtendedDirectIO} <- Helpers
         ],
         readonly = Readonly,
         luma_config = LumaConfig
