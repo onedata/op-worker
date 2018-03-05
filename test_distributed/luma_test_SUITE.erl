@@ -87,7 +87,8 @@ all() ->
         helpers = [helper:new_posix_helper(
             <<"mountPoint">>,
             #{},
-            helper:new_posix_user_ctx(0, 0)
+            helper:new_posix_user_ctx(0, 0),
+            ?CANONICAL_STORAGE_PATH
         )],
         luma_config = undefined
     }
@@ -100,7 +101,8 @@ all() ->
         helpers = [helper:new_posix_helper(
             <<"mountPoint">>,
             #{},
-            helper:new_posix_user_ctx(0, 0)
+            helper:new_posix_user_ctx(0, 0),
+            ?CANONICAL_STORAGE_PATH
         )],
         luma_config = ?LUMA_CONFIG
     }
@@ -113,7 +115,8 @@ all() ->
         helpers = [helper:new_posix_helper(
             <<"mountPoint">>,
             #{},
-            helper:new_posix_user_ctx(0, 0)
+            helper:new_posix_user_ctx(0, 0),
+            ?CANONICAL_STORAGE_PATH
         )],
         luma_config = LumaConfig
     }
@@ -129,7 +132,8 @@ all() ->
             <<"poolName">>,
             #{},
             helper:new_ceph_user_ctx(<<"username">>, <<"key">>),
-            Insecure
+            Insecure,
+            ?FLAT_STORAGE_PATH
         )],
         luma_config = ?LUMA_CONFIG
     }
@@ -146,7 +150,8 @@ all() ->
             <<"poolName">>,
             #{},
             helper:new_ceph_user_ctx(<<"username">>, <<"key">>),
-            Insecure
+            Insecure,
+            ?FLAT_STORAGE_PATH
         )],
         luma_config = LumaConfig
     }
@@ -162,7 +167,8 @@ all() ->
             <<"poolName">>,
             #{},
             helper:new_ceph_user_ctx(<<"username">>, <<"key">>),
-            Insecure
+            Insecure,
+            ?FLAT_STORAGE_PATH
         )],
         luma_config = undefined
     }

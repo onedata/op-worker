@@ -18,7 +18,7 @@
     st_ctime, st_blksize, st_blocks
 }).
 
-%% Helpers types
+%% Helper types
 -define(CEPH_HELPER_NAME, <<"ceph">>).
 -define(POSIX_HELPER_NAME, <<"posix">>).
 -define(PROXY_HELPER_NAME, <<"proxy">>).
@@ -27,12 +27,23 @@
 -define(GLUSTERFS_HELPER_NAME, <<"glusterfs">>).
 -define(NULL_DEVICE_HELPER_NAME, <<"nulldevice">>).
 
+%% Storage path types
+-define(CANONICAL_STORAGE_PATH, <<"canonical">>).
+-define(FLAT_STORAGE_PATH, <<"flat">>).
+
+%% This type determines the filename and path generation
+%% on the storage. Currently 2 modes are supported:
+%% - 'canonical' - posix-style
+%% - 'flat' - based on UUID
+-type storage_path_type() :: binary().
+
 -record(helper, {
     name :: helper:name(),
     args = #{} :: helper:args(),
     admin_ctx = #{} :: helper:user_ctx(),
     insecure = false :: boolean(),
-    extended_direct_io = true :: boolean()
+    extended_direct_io = true :: boolean(),
+    storage_path_type :: storage_path_type()
 }).
 
 -endif.

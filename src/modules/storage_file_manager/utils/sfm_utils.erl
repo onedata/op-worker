@@ -151,11 +151,11 @@ create_delayed_storage_file(FileCtx) ->
 create_storage_file_location(FileCtx, StorageFileCreated) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    {FileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
+    {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
     {StorageId, FileCtx3} = file_ctx:get_storage_id(FileCtx2),
     Location = #file_location{
         provider_id = oneprovider:get_id(),
-        file_id = FileId,
+        file_id = StorageFileId,
         storage_id = StorageId,
         uuid = FileUuid,
         space_id = SpaceId,

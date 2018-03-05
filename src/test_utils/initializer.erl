@@ -352,7 +352,8 @@ setup_storage([Worker | Rest], Config) ->
         [helper:new_posix_helper(
             list_to_binary(TmpDir),
             #{},
-            helper:new_posix_user_ctx(0, 0)
+            helper:new_posix_user_ctx(0, 0),
+            ?CANONICAL_STORAGE_PATH
         )]
     ),
     {ok, StorageId} = rpc:call(Worker, storage, create, [StorageDoc]),

@@ -239,7 +239,7 @@ update_helper(StorageId, HelperName, NewArgs) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Selects storage by its name form the list of configured storages.
+%% Selects storage by its name from the list of configured storages.
 %% @end
 %%--------------------------------------------------------------------
 -spec select(name()) -> {ok, doc()} | {error, term()}.
@@ -301,7 +301,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    4.
+    5.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -361,6 +361,24 @@ get_record_struct(4) ->
             {cache_timeout, integer},
             {api_key, string}
         ]}}
+    ]};
+get_record_struct(5) ->
+    {record, [
+        {name, string},
+        {helpers, [{record, [
+            {name, string},
+            {args, #{string => string}},
+            {admin_ctx, #{string => string}},
+            {insecure, boolean},
+            {extended_direct_io, boolean},
+            {storage_path_type, string}
+        ]}]},
+        {readonly, boolean},
+        {luma_config, {record, [
+            {url, string},
+            {cache_timeout, integer},
+            {api_key, string}
+        ]}}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -373,14 +391,15 @@ get_record_struct(4) ->
 upgrade_record(1, {?MODULE, Name, Helpers}) ->
     {2, #storage{
         name = Name,
-        helpers = [
-            #helper{
-                name = helper:translate_name(HelperName),
-                args = maps:fold(fun(K, V, Args) ->
-                    maps:put(helper:translate_arg_name(K), V, Args)
-                end, #{}, HelperArgs)
-            } || {_, HelperName, HelperArgs} <- Helpers
-        ]
+        helpers = [{
+            helper,
+            helper:translate_name(HelperName),
+            maps:fold(fun(K, V, Args) ->
+                maps:put(helper:translate_arg_name(K), V, Args)
+            end, #{}, HelperArgs),
+            #{},
+            false
+        } || {_, HelperName, HelperArgs} <- Helpers]
     }};
 upgrade_record(2, {?MODULE, Name, Helpers, Readonly}) ->
     {3, #storage{
@@ -392,14 +411,30 @@ upgrade_record(2, {?MODULE, Name, Helpers, Readonly}) ->
 upgrade_record(3, {?MODULE, Name, Helpers, Readonly, LumaConfig}) ->
     {4, #storage{
         name = Name,
+        helpers = [{
+            helper,
+            HelperName,
+            HelperArgs,
+            AdminCtx,
+            Insecure,
+            false
+        } || {_, HelperName, HelperArgs, AdminCtx, Insecure} <- Helpers],
+        readonly = Readonly,
+        luma_config = LumaConfig
+    }};
+upgrade_record(4, {?MODULE, Name, Helpers, Readonly, LumaConfig}) ->
+    {5, #storage{
+        name = Name,
         helpers = [
             #helper{
                 name = HelperName,
                 args = HelperArgs,
                 admin_ctx = AdminCtx,
                 insecure = Insecure,
-                extended_direct_io = false
-            } || {_, HelperName, HelperArgs, AdminCtx, Insecure} <- Helpers
+                extended_direct_io = ExtendedDirectIO,
+                storage_path_type = ?CANONICAL_STORAGE_PATH
+            } || {_, HelperName, HelperArgs, AdminCtx, Insecure,
+                  ExtendedDirectIO} <- Helpers
         ],
         readonly = Readonly,
         luma_config = LumaConfig
