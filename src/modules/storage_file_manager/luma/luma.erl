@@ -401,7 +401,7 @@ luma_cache_group_key(GroupId, _SpaceId, _StorageId) when is_binary(GroupId)->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Ensures that return value is a binary.
+%% Ensures that returned value is integer.
 %% @end
 %%-------------------------------------------------------------------
 -spec ensure_integer(integer() | binary()) -> integer().
