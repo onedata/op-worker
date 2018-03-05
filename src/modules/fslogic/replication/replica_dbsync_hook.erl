@@ -132,7 +132,7 @@ reconcile_replicas(FileCtx,
         }}
 ) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
-    ?info("Conflicting changes detected on file ~p, versions: ~p vs ~p", [FileGuid, VV1, VV2]),
+    ?debug("Conflicting changes detected on file ~p, versions: ~p vs ~p", [FileGuid, VV1, VV2]),
     ExternalChangesNum = version_vector:version_diff(LocalDoc, ExternalDoc),
     LocalChangesNum = version_vector:version_diff(ExternalDoc, LocalDoc),
     {ExternalChanges, ExternalShrink, ExternalRename} =
