@@ -20,13 +20,13 @@
 -include("proto/oneclient/fuse_messages.hrl").
 
 %% API
--export([new_ceph_helper/6, new_posix_helper/3, new_s3_helper/6,
-    new_swift_helper/6, new_glusterfs_helper/5, new_nulldevice_helper/3]).
+-export([new_ceph_helper/7, new_posix_helper/4, new_s3_helper/7,
+    new_swift_helper/7, new_glusterfs_helper/6, new_nulldevice_helper/4]).
 -export([new_ceph_user_ctx/2, new_posix_user_ctx/2, new_s3_user_ctx/2,
     new_swift_user_ctx/2, new_glusterfs_user_ctx/2, new_nulldevice_user_ctx/2,
     validate_user_ctx/2, validate_group_ctx/2]).
 -export([get_name/1, get_args/1, get_admin_ctx/1, is_insecure/1, get_params/2,
-    get_proxy_params/2, get_timeout/1]).
+    get_proxy_params/2, get_timeout/1, get_storage_path_type/1]).
 -export([set_user_ctx/2]).
 -export([translate_name/1, translate_arg_name/1]).
 
@@ -47,10 +47,10 @@
 %% Constructs Ceph storage helper record.
 %% @end
 %%--------------------------------------------------------------------
--spec new_ceph_helper(binary(), binary(), binary(), args(), user_ctx(), boolean()) ->
-    helpers:helper().
+-spec new_ceph_helper(binary(), binary(), binary(), args(), user_ctx(),
+    boolean(), helpers:storage_path_type()) -> helpers:helper().
 new_ceph_helper(MonitorHostname, ClusterName, PoolName, OptArgs, AdminCtx,
-    Insecure) ->
+    Insecure, StoragePathType) ->
 
     #helper{
         name = ?CEPH_HELPER_NAME,
@@ -61,7 +61,8 @@ new_ceph_helper(MonitorHostname, ClusterName, PoolName, OptArgs, AdminCtx,
         }),
         admin_ctx = AdminCtx,
         insecure = Insecure,
-        extended_direct_io = true
+        extended_direct_io = true,
+        storage_path_type = StoragePathType
     }.
 
 %%--------------------------------------------------------------------
@@ -69,14 +70,16 @@ new_ceph_helper(MonitorHostname, ClusterName, PoolName, OptArgs, AdminCtx,
 %% Constructs POSIX storage helper record.
 %% @end
 %%--------------------------------------------------------------------
--spec new_posix_helper(binary(), args(), user_ctx()) -> helpers:helper().
-new_posix_helper(MountPoint, OptArgs, AdminCtx) ->
+-spec new_posix_helper(binary(), args(), user_ctx(), helpers:storage_path_type())
+      -> helpers:helper().
+new_posix_helper(MountPoint, OptArgs, AdminCtx, StoragePathType) ->
     #helper{
         name = ?POSIX_HELPER_NAME,
         args = maps:merge(OptArgs, #{<<"mountPoint">> => MountPoint}),
         admin_ctx = AdminCtx,
         insecure = false,
-        extended_direct_io = false
+        extended_direct_io = false,
+        storage_path_type = StoragePathType
     }.
 
 %%--------------------------------------------------------------------
@@ -84,9 +87,10 @@ new_posix_helper(MountPoint, OptArgs, AdminCtx) ->
 %% Constructs S3 storage helper record.
 %% @end
 %%--------------------------------------------------------------------
--spec new_s3_helper(binary(), binary(), boolean(), args(), user_ctx(), boolean()) ->
-    helpers:helper().
-new_s3_helper(Hostname, BucketName, UseHttps, OptArgs, AdminCtx, Insecure) ->
+-spec new_s3_helper(binary(), binary(), boolean(), args(), user_ctx(),
+    boolean(), helpers:storage_path_type()) -> helpers:helper().
+new_s3_helper(Hostname, BucketName, UseHttps, OptArgs, AdminCtx, Insecure,
+    StoragePathType) ->
     #helper{
         name = ?S3_HELPER_NAME,
         args = maps:merge(OptArgs, #{
@@ -99,7 +103,8 @@ new_s3_helper(Hostname, BucketName, UseHttps, OptArgs, AdminCtx, Insecure) ->
         }),
         admin_ctx = AdminCtx,
         insecure = Insecure,
-        extended_direct_io = true
+        extended_direct_io = true,
+        storage_path_type = StoragePathType
     }.
 
 %%--------------------------------------------------------------------
@@ -107,9 +112,10 @@ new_s3_helper(Hostname, BucketName, UseHttps, OptArgs, AdminCtx, Insecure) ->
 %% Constructs Swift storage helper record.
 %% @end
 %%--------------------------------------------------------------------
--spec new_swift_helper(binary(), binary(), binary(), args(), user_ctx(), boolean()) ->
-    helpers:helper().
-new_swift_helper(AuthUrl, ContainerName, TenantName, OptArgs, AdminCtx, Insecure) ->
+-spec new_swift_helper(binary(), binary(), binary(), args(), user_ctx(),
+    boolean(), helpers:storage_path_type()) -> helpers:helper().
+new_swift_helper(AuthUrl, ContainerName, TenantName, OptArgs, AdminCtx,
+    Insecure, StoragePathType) ->
     #helper{
         name = ?SWIFT_HELPER_NAME,
         args = maps:merge(OptArgs, #{
@@ -119,7 +125,8 @@ new_swift_helper(AuthUrl, ContainerName, TenantName, OptArgs, AdminCtx, Insecure
         }),
         admin_ctx = AdminCtx,
         insecure = Insecure,
-        extended_direct_io = true
+        extended_direct_io = true,
+        storage_path_type = StoragePathType
     }.
 
 %%--------------------------------------------------------------------
@@ -127,9 +134,10 @@ new_swift_helper(AuthUrl, ContainerName, TenantName, OptArgs, AdminCtx, Insecure
 %% Constructs GlusterFS storage helper record.
 %% @end
 %%--------------------------------------------------------------------
--spec new_glusterfs_helper(binary(), binary(), args(), user_ctx(), boolean()) ->
-    helpers:helper().
-new_glusterfs_helper(Volume, Hostname, OptArgs, AdminCtx, Insecure) ->
+-spec new_glusterfs_helper(binary(), binary(), args(), user_ctx(),
+    boolean(), helpers:storage_path_type()) -> helpers:helper().
+new_glusterfs_helper(Volume, Hostname, OptArgs, AdminCtx, Insecure,
+    StoragePathType) ->
     #helper{
         name = ?GLUSTERFS_HELPER_NAME,
         args = maps:merge(OptArgs, #{
@@ -138,7 +146,8 @@ new_glusterfs_helper(Volume, Hostname, OptArgs, AdminCtx, Insecure) ->
         }),
         admin_ctx = AdminCtx,
         insecure = Insecure,
-        extended_direct_io = true
+        extended_direct_io = true,
+        storage_path_type = StoragePathType
     }.
 
 %%--------------------------------------------------------------------
@@ -146,13 +155,15 @@ new_glusterfs_helper(Volume, Hostname, OptArgs, AdminCtx, Insecure) ->
 %% Constructs Null Device storage helper record.
 %% @end
 %%--------------------------------------------------------------------
--spec new_nulldevice_helper(args(), user_ctx(), boolean()) -> helpers:helper().
-new_nulldevice_helper(OptArgs, AdminCtx, Insecure) ->
+-spec new_nulldevice_helper(args(), user_ctx(), boolean(),
+    helpers:storage_path_type()) -> helpers:helper().
+new_nulldevice_helper(OptArgs, AdminCtx, Insecure, StoragePathType) ->
     #helper{
         name = ?NULL_DEVICE_HELPER_NAME,
         args = OptArgs,
         admin_ctx = AdminCtx,
-        insecure = Insecure
+        insecure = Insecure,
+        storage_path_type = StoragePathType
     }.
 
 %%--------------------------------------------------------------------
@@ -301,6 +312,15 @@ is_insecure(#helper{insecure = Insecure}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns helper storage path type.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_storage_path_type(helpers:helper()) -> helper:storage_path_type().
+get_storage_path_type(#helper{storage_path_type = StoragePathType}) ->
+    StoragePathType.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Returns helper parameters.
 %% @end
 %%--------------------------------------------------------------------
@@ -404,6 +424,7 @@ translate_arg_name(<<"xlator_options">>) -> <<"xlatorOptions">>;
 translate_arg_name(<<"latency_min">>) -> <<"latencyMin">>;
 translate_arg_name(<<"latency_max">>) -> <<"latencyMax">>;
 translate_arg_name(<<"timeout_probability">>) -> <<"timeoutProbability">>;
+translate_arg_name(<<"storage_path_type">>) -> <<"storagePathType">>;
 translate_arg_name(Name) -> Name.
 
 %%%===================================================================

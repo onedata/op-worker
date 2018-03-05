@@ -184,7 +184,7 @@ terminate(Reason, StateName, #state{stream_id = StmId, sequence_number = SeqNum,
     CommunicatorModule = communicator_module(IsProxy),
     case CommunicatorModule:send(Msg, SessId) of
         ok -> ok;
-        {error, Reason} -> SeqMan ! {send, Msg, SessId}
+        {error, _Reason2} -> SeqMan ! {send, Msg, SessId}
     end,
     unregister_stream(State).
 

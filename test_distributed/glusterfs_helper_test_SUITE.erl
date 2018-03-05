@@ -392,7 +392,9 @@ new_helper(Config) ->
             <<"xlatorOptions">> => <<"cluster.write-freq-threshold=100;">>
         },
         UserCtx,
-        true),
+        true,
+        ?CANONICAL_STORAGE_PATH
+      ),
     spawn_link(Node, fun() ->
         helper_loop(Helper, UserCtx)
     end).
