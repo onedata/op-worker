@@ -441,7 +441,9 @@ get_storage_file_id(FileCtx = #file_ctx{storage_file_id = undefined}) ->
     case StoragePathType of
       ?FLAT_STORAGE_PATH ->
         FileId = get_flat_path_const(FileCtx),
-        {FileId, FileCtx#file_ctx{storage_file_id = FileId}};
+        % TODO - do not get_canonical_path (fix acceptance tests before)
+        {_, FileCtx2} = get_canonical_path(FileCtx),
+        {FileId, FileCtx2#file_ctx{storage_file_id = FileId}};
       ?CANONICAL_STORAGE_PATH ->
         {FileId, FileCtx2} = get_canonical_path(FileCtx),
         {FileId, FileCtx2#file_ctx{storage_file_id = FileId}}
