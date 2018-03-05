@@ -95,7 +95,7 @@ get_posix_user_ctx(SessionId, UserId, SpaceId) ->
             generate_user_ctx(UserId, SpaceId, ?POSIX_HELPER_NAME)
     end,
     #{<<"uid">> := Uid, <<"gid">> := Gid} = UserCtx,
-    {binary_to_integer(Uid), binary_to_integer(Gid)}.
+    {ensure_integer(Uid), ensure_integer(Gid)}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -113,7 +113,7 @@ get_posix_user_ctx(SessionId, UserId, GroupId, SpaceId) ->
             generate_user_ctx(UserId, GroupId, SpaceId, ?POSIX_HELPER_NAME)
     end,
     #{<<"uid">> := Uid, <<"gid">> := Gid} = UserCtx,
-    {binary_to_integer(Uid), binary_to_integer(Gid)}.
+    {ensure_integer(Uid), ensure_integer(Gid)}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -396,3 +396,14 @@ luma_cache_group_key(undefined, SpaceId, StorageId) ->
     <<SpaceId/binary, ?KEY_SEPARATOR/binary, StorageId/binary>>;
 luma_cache_group_key(GroupId, _SpaceId, _StorageId) when is_binary(GroupId)->
     GroupId.
+
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Ensures that returned value is integer.
+%% @end
+%%-------------------------------------------------------------------
+-spec ensure_integer(integer() | binary()) -> integer().
+ensure_integer(V) when is_integer(V) -> V;
+ensure_integer(V) when is_binary(V) -> binary_to_integer(V).

@@ -170,9 +170,9 @@ all() ->
 
 -define(SPACE_STORAGE_DOC(StorageIds), #space_storage{storage_ids = [StorageIds]}).
 
--define(UID1, <<"1">>).
--define(GID1, <<"1">>).
--define(GID2, <<"2">>).
+-define(UID1, 1).
+-define(GID1, 1).
+-define(GID2, 2).
 -define(GID_NULL, <<"null">>).
 
 -define(SPACE_ID, <<"spaceId">>).
@@ -409,8 +409,8 @@ get_posix_user_ctx_should_fetch_user_ctx_twice(Config) ->
         ['_', '_', '_', '_', '_'], 2),
 
     {Uid, Gid} = ?assertMatch({_, _}, Result),
-    ?assertEqual(?UID1, integer_to_binary(Uid)),
-    ?assertEqual(?GID1, integer_to_binary(Gid)).
+    ?assertEqual(?UID1, Uid),
+    ?assertEqual(?GID1, Gid).
 
 get_posix_user_ctx_should_fetch_user_ctx_by_group_id(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -427,8 +427,8 @@ get_posix_user_ctx_should_fetch_user_ctx_by_group_id(Config) ->
     test_utils:mock_assert_num_calls(Worker, luma_proxy, get_user_ctx,
         ['_', '_', '_', '_', '_'], 1),
     {Uid, Gid} = ?assertMatch({_, _}, Result),
-    ?assertEqual(binary_to_integer(?UID1), Uid),
-    ?assertEqual(binary_to_integer(?GID2), Gid).
+    ?assertEqual(?UID1, Uid),
+    ?assertEqual(?GID2, Gid).
 
 
 get_posix_user_ctx_by_group_id_should_generate_gid_by_group_id_when_mapping_is_not_found(Config) ->
@@ -446,7 +446,7 @@ get_posix_user_ctx_by_group_id_should_generate_gid_by_group_id_when_mapping_is_n
     test_utils:mock_assert_num_calls(Worker, luma_proxy, get_user_ctx,
         ['_', '_', '_', '_', '_'], 1),
     {Uid, Gid} = ?assertMatch({_, _}, Result),
-    ?assertEqual(?UID1, integer_to_binary(Uid)),
+    ?assertEqual(?UID1, Uid),
     ?assertEqual(generate_posix_identifier(?GROUP_ID, ?GID_RANGE), Gid).
 
 get_posix_user_ctx_by_group_id_should_generate_gid_by_space_id_when_luma_returns_null_and_group_is_undefined(Config) ->
@@ -464,7 +464,8 @@ get_posix_user_ctx_by_group_id_should_generate_gid_by_space_id_when_luma_returns
     test_utils:mock_assert_num_calls(Worker, luma_proxy, get_user_ctx,
         ['_', '_', '_', '_', '_'], 1),
     {Uid, Gid} = ?assertMatch({_, _}, Result),
-    ?assertEqual(?UID1, integer_to_binary(Uid)),
+    ?assertEqual(?UID1, Uid),
+    ?assertEqual(?UID1, Uid),
     ?assertEqual(generate_posix_identifier(?SPACE_ID, ?GID_RANGE), Gid).
 
 get_posix_user_ctx_by_group_id_should_return_0_for_root(Config) ->
@@ -478,7 +479,6 @@ get_posix_user_ctx_by_group_id_should_return_0_for_root(Config) ->
         undefined,
         ?SPACE_ID
     ]),
-    ct:pal("Result: ~p", [Result]),
     {Uid, Gid} = ?assertMatch({_, _}, Result),
     ?assertEqual(0, Uid),
     ?assertEqual(0, Gid).
