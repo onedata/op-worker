@@ -274,7 +274,7 @@ def ps(all=False, quiet=False):
 
 def list_volumes(quiet=True):
     """
-    List containers
+    List volumes
     """
     cmd = ["docker", "volume", "ls"]
     if quiet:
@@ -283,6 +283,9 @@ def list_volumes(quiet=True):
 
 
 def remove_volumes(volumes):
+    """
+    Remove volumes
+    """
     cmd = ["docker", "volume", "rm"]
     cmd.extend(volumes)
     return subprocess.check_call(cmd)
