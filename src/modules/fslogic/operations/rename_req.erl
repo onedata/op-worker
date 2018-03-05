@@ -177,8 +177,10 @@ rename_into_itself(FileGuid) ->
     no_return() | #fuse_response{}.
 rename_into_different_place_within_space(UserCtx, SourceFileCtx, TargetParentFileCtx,
     TargetName, SourceFileType, TargetFileType, TargetFileCtx) ->
-    {StorageDoc, SourceFileCtx2} = file_ctx:get_storage_doc(SourceFileCtx),
-    #document{value = #storage{helpers = [#helper{name = HelperName} | _]}} = StorageDoc,
+    {StorageDoc, SourceFileCtx2} =
+        file_ctx:get_storage_doc(SourceFileCtx), #document{
+        value = #storage{helpers = [#helper{name = HelperName} | _]}
+    } = StorageDoc,
     case lists:member(HelperName,
         [?POSIX_HELPER_NAME, ?NULL_DEVICE_HELPER_NAME, ?GLUSTERFS_HELPER_NAME]) of
         true ->
@@ -239,13 +241,32 @@ rename_into_different_place_within_posix_space(_, _, _, _,
 %% Renames file on storage with flat paths, i.e. only modifies
 %% file_meta and optionally removes the target file, if TargetGuid
 %% is not undefined, i.e. target file already exists, it will be removed
-%% first
+%% first.
 %% @end
 %%--------------------------------------------------------------------
 -spec rename_file_on_flat_storage(UserCtx :: user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
     TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name(),
     TargetGuid :: undefined | file_ctx:ctx()) -> #fuse_response{}.
 rename_file_on_flat_storage(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName, TargetGuid) ->
+    check_permissions:execute(
+        [traverse_ancestors, ?delete, {?delete_subcontainer, parent},
+            {traverse_ancestors, 3}, {?traverse_container, 3}, {?add_subcontainer, 3}],
+        [UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName, TargetGuid],
+        fun rename_file_on_flat_storage_insecure/5).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Renames file on storage with flat paths, i.e. only modifies
+%% file_meta and optionally removes the target file, if TargetGuid
+%% is not undefined, i.e. target file already exists, it will be removed
+%% first. Does not check permissions.
+%% @end
+%%--------------------------------------------------------------------
+-spec rename_file_on_flat_storage_insecure(UserCtx :: user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
+    TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name(),
+    TargetGuid :: undefined | file_ctx:ctx()) -> #fuse_response{}.
+rename_file_on_flat_storage_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName, TargetGuid) ->
     SourceGuid = file_ctx:get_guid_const(SourceFileCtx),
     {ParentDoc, _TargetParentFileCtx2} = file_ctx:get_file_doc(TargetParentFileCtx),
     {SourceDoc, SourceFileCtx2} = file_ctx:get_file_doc(SourceFileCtx),
@@ -290,11 +311,8 @@ rename_into_different_place_within_non_posix_space(UserCtx, SourceFileCtx,
 
     case StoragePathType of
       ?FLAT_STORAGE_PATH ->
-          check_permissions:execute(
-              [traverse_ancestors, ?delete, {?delete_subcontainer, parent},
-                  {traverse_ancestors, 3}, {?traverse_container, 3}, {?add_subcontainer, 3}],
-              [UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName, undefined],
-              fun rename_file_on_flat_storage/5);
+          rename_file_on_flat_storage(UserCtx, SourceFileCtx,
+              TargetParentFileCtx, TargetName, undefined);
       _ ->
         copy_and_remove(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName)
     end;
@@ -310,11 +328,8 @@ rename_into_different_place_within_non_posix_space(UserCtx, SourceFileCtx,
 
     case StoragePathType of
       ?FLAT_STORAGE_PATH ->
-        check_permissions:execute(
-              [traverse_ancestors, ?delete, {?delete_subcontainer, parent},
-                  {traverse_ancestors, 3}, {?traverse_container, 3}, {?add_subcontainer, 3}],
-              [UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName, TargetGuid],
-              fun rename_file_on_flat_storage/5);
+          rename_file_on_flat_storage(UserCtx, SourceFileCtx,
+              TargetParentFileCtx, TargetName, TargetGuid);
       _ ->
         ok = logical_file_manager:unlink(SessId, {guid, TargetGuid}, false),
         copy_and_remove(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName)

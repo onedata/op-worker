@@ -67,7 +67,7 @@
 -export([equals/2]).
 
 %% Functions modifying context
--export([get_canonical_path/1, get_flat_path/1, get_file_doc/1,
+-export([get_canonical_path/1, get_file_doc/1,
     get_file_doc_including_deleted/1, get_parent/2, get_storage_file_id/1,
     get_aliased_name/2, get_posix_storage_user_context/2, get_times/1,
     get_parent_guid/2, get_child/3, get_file_children/4, get_logical_path/2,
@@ -290,23 +290,13 @@ get_canonical_path(FileCtx = #file_ctx{canonical_path = Path}) ->
 %% will be flat.
 %% @end
 %%--------------------------------------------------------------------
--spec get_flat_path(ctx()) -> {file_meta:path(), ctx()}.
-get_flat_path(FileCtx = #file_ctx{canonical_path = undefined}) ->
+-spec get_flat_path_const(ctx()) -> file_meta:path().
+get_flat_path_const(FileCtx) ->
     case is_root_dir_const(FileCtx) of
         true ->
-            {<<"/">>, FileCtx#file_ctx{canonical_path = <<"/">>}};
+            <<"/">>;
         false ->
-            FlatPath = filename:join(generate_flat_path(FileCtx)),
-            CanonicalPath = filename:join(generate_canonical_path(FileCtx)),
-            {FlatPath, FileCtx#file_ctx{canonical_path = CanonicalPath}}
-    end;
-get_flat_path(FileCtx = #file_ctx{canonical_path = _}) ->
-    case is_root_dir_const(FileCtx) of
-        true ->
-            {<<"/">>, FileCtx};
-        false ->
-            FlatPath = filename:join(generate_flat_path(FileCtx)),
-            {FlatPath, FileCtx}
+            filename:join(generate_flat_path(FileCtx))
     end.
 
 %%--------------------------------------------------------------------
@@ -450,7 +440,9 @@ get_storage_file_id(FileCtx = #file_ctx{storage_file_id = undefined}) ->
       = [#helper{storage_path_type = StoragePathType} | _]}} = StorageDoc,
     case StoragePathType of
       ?FLAT_STORAGE_PATH ->
-        {FileId, FileCtx2} = get_flat_path(FileCtx),
+        FileId = get_flat_path_const(FileCtx),
+        % TODO - do not get_canonical_path (fix acceptance tests before)
+        {_, FileCtx2} = get_canonical_path(FileCtx),
         {FileId, FileCtx2#file_ctx{storage_file_id = FileId}};
       ?CANONICAL_STORAGE_PATH ->
         {FileId, FileCtx2} = get_canonical_path(FileCtx),
