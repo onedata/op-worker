@@ -47,7 +47,8 @@
     acl :: undefined | acl:acl(),
     is_dir :: undefined | boolean(),
     is_import_on :: undefined | boolean(),
-    extended_direct_io = false :: boolean()
+    extended_direct_io = false :: boolean(),
+    storage_path_type :: helpers:storage_path_type()
 }).
 
 -type ctx() :: #file_ctx{}.
@@ -59,14 +60,15 @@
 
 %% Functions that do not modify context
 -export([get_share_id_const/1, get_space_id_const/1, get_space_dir_uuid_const/1,
-    get_guid_const/1, get_uuid_const/1, get_extended_direct_io_const/1]).
+    get_guid_const/1, get_uuid_const/1, get_extended_direct_io_const/1,
+    set_storage_path_type/2, get_storage_path_type_const/1]).
 -export([is_file_ctx_const/1, is_space_dir_const/1, is_user_root_dir_const/2,
     is_root_dir_const/1, has_acl_const/1, file_exists_const/1, is_in_user_space_const/2]).
 -export([equals/2]).
 
 %% Functions modifying context
--export([get_canonical_path/1, get_file_doc/1, get_file_doc_including_deleted/1,
-    get_parent/2, get_storage_file_id/1,
+-export([get_canonical_path/1, get_file_doc/1,
+    get_file_doc_including_deleted/1, get_parent/2, get_storage_file_id/1,
     get_aliased_name/2, get_posix_storage_user_context/2, get_times/1,
     get_parent_guid/2, get_child/3, get_file_children/4, get_logical_path/2,
     get_storage_id/1, get_storage_doc/1, get_file_location_with_filled_gaps/2,
@@ -198,6 +200,24 @@ get_extended_direct_io_const(#file_ctx{extended_direct_io = Ans}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Sets storage_path_type field in context record
+%% @end
+%%--------------------------------------------------------------------
+-spec set_storage_path_type(ctx(), helpers:storage_path_type()) -> ctx().
+set_storage_path_type(FileCtx, StoragePathType) ->
+    FileCtx#file_ctx{storage_path_type = StoragePathType}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns value of storage_path_type field.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_storage_path_type_const(ctx()) -> helpers:storage_path_type().
+get_storage_path_type_const(#file_ctx{storage_path_type = StoragePathType}) ->
+    StoragePathType.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Returns file's share ID.
 %% @end
 %%--------------------------------------------------------------------
@@ -261,6 +281,23 @@ get_canonical_path(FileCtx = #file_ctx{canonical_path = undefined}) ->
     end;
 get_canonical_path(FileCtx = #file_ctx{canonical_path = Path}) ->
     {Path, FileCtx}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file's uuid path (i.e "/SpaceId/A/B/C/FileUuid").
+%% If canonical_path entry is undefined, it will be set to canonical
+%% path for compatibility with other modules, but the returned path
+%% will be flat.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_flat_path_const(ctx()) -> file_meta:path().
+get_flat_path_const(FileCtx) ->
+    case is_root_dir_const(FileCtx) of
+        true ->
+            <<"/">>;
+        false ->
+            filename:join(generate_flat_path(FileCtx))
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -386,14 +423,31 @@ get_parent_guid(FileCtx, UserCtx) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns storage file ID (the ID of file on storage. In case of posix it is
-%% its path on storage).
+%% Returns storage file ID (the ID of file on storage.
+%% Storage file Id depends on the storage file mapping setting, currently
+%% 2 options are supported:
+%%   - canonical - which is POSIX-style file mapping including complete
+%%                 directory path
+%%   - flat - which provides a 3 level tree based on the FileUuid, enabling
+%%            efficient rename operations without copying objects on the
+%%            storage
 %% @end
 %%--------------------------------------------------------------------
 -spec get_storage_file_id(ctx()) -> {StorageFileId :: helpers:file_id(), ctx()}.
 get_storage_file_id(FileCtx = #file_ctx{storage_file_id = undefined}) ->
-    {FileId, FileCtx2} = get_canonical_path(FileCtx),
-    {FileId, FileCtx2#file_ctx{storage_file_id = FileId}};
+    {StorageDoc, _} = file_ctx:get_storage_doc(FileCtx),
+    #document{value = #storage{helpers
+      = [#helper{storage_path_type = StoragePathType} | _]}} = StorageDoc,
+    case StoragePathType of
+      ?FLAT_STORAGE_PATH ->
+        FileId = get_flat_path_const(FileCtx),
+        % TODO - do not get_canonical_path (fix acceptance tests before)
+        {_, FileCtx2} = get_canonical_path(FileCtx),
+        {FileId, FileCtx2#file_ctx{storage_file_id = FileId}};
+      ?CANONICAL_STORAGE_PATH ->
+        {FileId, FileCtx2} = get_canonical_path(FileCtx),
+        {FileId, FileCtx2#file_ctx{storage_file_id = FileId}}
+    end;
 get_storage_file_id(FileCtx = #file_ctx{storage_file_id = StorageFileId}) ->
     {StorageFileId, FileCtx}.
 
@@ -976,6 +1030,44 @@ generate_canonical_path(FileCtx) ->
                 false ->
                     {Name, _FileCtx3} = get_name_of_nonspace_file(FileCtx2),
                     generate_canonical_path(ParentCtx) ++ [Name]
+            end
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Generates Uuid based flat path. Uuid based path is for storages, which
+%% do not have POSIX style file paths (e.g. object stores) and
+%% do not provide rename on files on the storage without necessity
+%% to copy and delete.
+%% The paths have a flat 3-level tree namespace based on the first characters,
+%% e.g. "/SpaceId/A/B/C/ABCyasd7321r5ssasdd7asdsafdfvsd"
+%% @end
+%%--------------------------------------------------------------------
+-spec generate_flat_path(ctx()) -> [file_meta:name()].
+generate_flat_path(FileCtx) ->
+    case is_root_dir_const(FileCtx) of
+        true ->
+            [<<"/">>];
+        false ->
+            {_, FileCtx2} = get_parent(FileCtx, undefined),
+            SpaceId = get_space_id_const(FileCtx2),
+            case is_space_dir_const(FileCtx2) of
+                true ->
+                    [<<"/">>, SpaceId];
+                false ->
+                    FileUuid = get_uuid_const(FileCtx2),
+                    FileUuidStr = binary_to_list(FileUuid),
+                    case length(FileUuidStr) > 3 of
+                        true ->
+                            [<<"/">>, SpaceId,
+                              list_to_binary(string:substr(FileUuidStr, 1, 1)),
+                              list_to_binary(string:substr(FileUuidStr, 2, 1)),
+                              list_to_binary(string:substr(FileUuidStr, 3, 1)),
+                              FileUuid];
+                        false ->
+                            [<<"/">>, SpaceId, <<"other">>, FileUuid]
+                    end
             end
     end.
 

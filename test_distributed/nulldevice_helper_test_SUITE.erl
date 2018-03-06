@@ -383,7 +383,10 @@ new_helper(Config) ->
             <<"timeoutProbability">> => <<"0.0">>,
             <<"filter">> => <<"*">>
         },
-        UserCtx, true),
+        UserCtx,
+        true,
+        ?CANONICAL_STORAGE_PATH
+      ),
     spawn_link(Node, fun() ->
         helper_loop(Helper, UserCtx)
     end).

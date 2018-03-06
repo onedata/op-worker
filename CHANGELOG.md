@@ -4,6 +4,27 @@
 CHANGELOG
 ---------
 
+### 18.02.0-beta2
+
+* Update app.config
+* fallback to admin_ctx when luma is disabled
+* handle luma returning integer values
+* fix handling uid and gid from luma as integers
+* VFS-4036 Added flat storage path support
+* VFS-4040 Improve speed and reliability of datastore, improve permission cache and times update
+* disable http2
+* VFS-4128 Fix tp internal call on space_storage
+* VFS-4035 Allow non-blocking provider messages handling
+* VFS-4130 Update ctool, adjust to new time_utils API, fallback to REST when get_zone_time via GS fails
+* VFS-4035 Prevent blocking event stream by connection
+* VFS-4035 Handle processing status during provider communication
+* VFS-4035 Fix deadlock in storage file creation function
+* VFS-4124 Added posix rename handling for nulldevice and glusterfs
+* VFS-4117 Implement new read_dir_plus protocol
+* VFS-3704 update cowboy to version 2.2.2
+* VFS-4117 Control read_dir_plus threads number
+
+
 ### 18.02.0-beta1
 
 * VFS-4080 Verify other providers' domains while connecting via IP addresses
