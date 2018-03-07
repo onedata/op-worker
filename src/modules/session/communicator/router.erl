@@ -28,11 +28,14 @@
 -include("proto/oneprovider/rtransfer_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/exometer_utils.hrl").
+-include_lib("cluster_worker/include/elements/worker_host/worker_protocol.hrl").
 
 %% API
--export([preroute_message/4, route_message/1, route_message/4,
-    route_proxy_message/2]).
+-export([preroute_message/2, route_message/1, route_proxy_message/2]).
 -export([effective_session_id/1]).
+-export([save_delegation/3, process_ans/3,
+    check_processes/4, get_processes_check_interval/0,
+    get_heartbeat_msg/1, get_error_msg/1]).
 
 -export([init_counters/0, init_report/0]).
 
@@ -42,6 +45,9 @@
 -define(EXOMETER_DEFAULT_TIME_SPAN, 600000).
 
 -define(TIMEOUT, 30000).
+
+-type delegation() :: {message_id:id(), pid(), reference()}.
+-type delegate_ans() :: {wait, delegation()}.
 
 %%%===================================================================
 %%% API
@@ -72,38 +78,34 @@ route_proxy_message(#client_message{message_body = #event{} = Evt} = Msg, Target
 %% @end
 %%--------------------------------------------------------------------
 -spec preroute_message(Msg :: #client_message{} | #server_message{},
-    SessId :: session:id(), Sock :: ssl:socket(), Transport :: module()) ->
-    ok | {ok, #server_message{}} | {error, term()}.
-preroute_message(#client_message{message_body = #message_request{}} = Msg,
-    SessId, _Sock, _Transport) ->
+    SessId :: session:id()) -> ok | {ok, #server_message{}} | delegate_ans() |
+    {error, term()}.
+preroute_message(#client_message{message_body = #message_request{}} = Msg, SessId) ->
     sequencer:route_message(Msg, SessId);
 preroute_message(#client_message{message_body = #message_acknowledgement{}} = Msg,
-    SessId, _Sock, _Transport) ->
+    SessId) ->
     sequencer:route_message(Msg, SessId);
 preroute_message(#client_message{message_body = #end_of_message_stream{}} = Msg,
-    SessId, _Sock, _Transport) ->
+    SessId) ->
     sequencer:route_message(Msg, SessId);
 preroute_message(#client_message{message_body = #message_stream_reset{}} = Msg,
-    SessId, _Sock, _Transport) ->
+    SessId) ->
     sequencer:route_message(Msg, SessId);
 preroute_message(#server_message{message_body = #message_request{}} = Msg,
-    SessId, _Sock, _Transport) ->
+    SessId) ->
     sequencer:route_message(Msg, SessId);
 preroute_message(#server_message{message_body = #message_acknowledgement{}} = Msg,
-    SessId, _Sock, _Transport) ->
+    SessId) ->
     sequencer:route_message(Msg, SessId);
 preroute_message(#server_message{message_body = #end_of_message_stream{}} = Msg,
-    SessId, _Sock, _Transport) ->
+    SessId) ->
     sequencer:route_message(Msg, SessId);
 preroute_message(#server_message{message_body = #message_stream_reset{}} = Msg,
-    SessId, _Sock, _Transport) ->
+    SessId) ->
     sequencer:route_message(Msg, SessId);
-preroute_message(#client_message{message_stream = undefined} = Msg,
-    SessId, Sock, Transport) ->
-    IsProviderSession = session_manager:is_provider_session_id(SessId),
-    router:route_message(Msg, Sock, Transport, IsProviderSession);
-preroute_message(#client_message{message_body = #subscription{}} = Msg,
-    SessId, _Sock, _Transport) ->
+preroute_message(#client_message{message_stream = undefined} = Msg, _SessId) ->
+    router:route_message(Msg);
+preroute_message(#client_message{message_body = #subscription{}} = Msg, SessId) ->
     case session_manager:is_provider_session_id(SessId) of
         true ->
             ok;
@@ -111,18 +113,16 @@ preroute_message(#client_message{message_body = #subscription{}} = Msg,
             sequencer:route_message(Msg, SessId)
     end;
 preroute_message(#client_message{message_body = #subscription_cancellation{}} = Msg,
-    SessId, _Sock, _Transport) ->
+    SessId) ->
     case session_manager:is_provider_session_id(SessId) of
         true ->
             ok;
         false ->
             sequencer:route_message(Msg, SessId)
     end;
-preroute_message(#server_message{message_stream = undefined} = Msg,
-    SessId, Sock, Transport) ->
-    IsProviderSession = session_manager:is_provider_session_id(SessId),
-    router:route_message(Msg, Sock, Transport, IsProviderSession);
-preroute_message(Msg, SessId, _Sock, _Transport) ->
+preroute_message(#server_message{message_stream = undefined} = Msg, _SessId) ->
+    router:route_message(Msg);
+preroute_message(Msg, SessId) ->
     case session_manager:is_provider_session_id(SessId) of
         true ->
             ok;
@@ -136,26 +136,13 @@ preroute_message(Msg, SessId, _Sock, _Transport) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec route_message(Msg :: #client_message{} | #server_message{}) ->
-    ok | {ok, #server_message{}} | {error, term()}.
-route_message(Msg) ->
-    route_message(Msg, undefined, undefined, false).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Route message to adequate handler, this function should never throw
-%% @end
-%%--------------------------------------------------------------------
--spec route_message(Msg :: #client_message{} | #server_message{},
-    Sock :: ssl:socket() | undefined, Transport :: module() | undefined,
-    IsProviderSession :: boolean()) ->
-    ok | {ok, #server_message{}} | {error, term()}.
-route_message(Msg = #client_message{message_id = undefined}, _Sock, _Transport,
-    _IsProviderSession) ->
+    ok | {ok, #server_message{}} | delegate_ans() | {error, term()}.
+route_message(Msg = #client_message{message_id = undefined}) ->
     route_and_ignore_answer(Msg);
 route_message(Msg = #client_message{message_id = #message_id{
     issuer = Issuer,
     recipient = Recipient
-}}, Sock, Transport, IsProviderSession) ->
+}}) ->
     case oneprovider:is_self(Issuer) of
         true when Recipient =:= undefined ->
             route_and_ignore_answer(Msg);
@@ -164,12 +151,12 @@ route_message(Msg = #client_message{message_id = #message_id{
             Pid ! Msg,
             ok;
         false ->
-            route_check_session_and_send_answer(Msg, Sock, Transport, IsProviderSession)
+            route_and_send_answer(Msg)
     end;
 route_message(Msg = #server_message{message_id = #message_id{
     issuer = Issuer,
     recipient = Recipient
-}}, _Sock, _Transport, _IsProviderSession) ->
+}}) ->
     case oneprovider:is_self(Issuer) of
         true when Recipient =:= undefined ->
             ok;
@@ -192,6 +179,91 @@ effective_session_id(#client_message{session_id = SessionId, proxy_session_id = 
   SessionId;
 effective_session_id(#client_message{proxy_session_id = ProxySessionId}) ->
   ProxySessionId.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Provides heartbeat message.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_heartbeat_msg(message_id:id()) -> #server_message{}.
+get_heartbeat_msg(MsgId) ->
+    #server_message{message_id = MsgId,
+        message_body = #processing_status{code = 'IN_PROGRESS'}
+    }.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Provides error message.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_error_msg(message_id:id()) -> #server_message{}.
+get_error_msg(MsgId) ->
+    #server_message{message_id = MsgId,
+        message_body = #processing_status{code = 'ERROR'}
+    }.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Saves informantion about asynchronous waiting for answer.
+%% @end
+%%--------------------------------------------------------------------
+-spec save_delegation(delegation(), map(), map()) -> {map(), map()}.
+save_delegation(Delegation, WaitMap, Pids) ->
+    {Id, Pid, Ref} = Delegation,
+    WaitMap2 = maps:put(Ref, Id, WaitMap),
+    Pids2 = maps:put(Ref, Pid, Pids),
+    {WaitMap2, Pids2}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Processes answer and returns message to be sent.
+%% @end
+%%--------------------------------------------------------------------
+-spec process_ans(term(), map(), map()) ->
+    {#server_message{}, map(), map()} | wrong_message.
+process_ans(ReceivedAns, WaitMap, Pids) ->
+    case ReceivedAns of
+        {slave_ans, Ref, Ans} ->
+            process_ans(Ref, Ans, WaitMap, Pids);
+        #worker_answer{id = Ref, response = {ok, Ans}} ->
+            process_ans(Ref, Ans, WaitMap, Pids);
+        #worker_answer{id = Ref, response = ErrorAns} ->
+            process_ans(Ref, {process_error, ErrorAns}, WaitMap, Pids);
+        _ ->
+            wrong_message
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks processes that handle requests and sends heartbeats.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_processes(map(), map(), fun((message_id:id()) -> ok),
+    fun((message_id:id()) -> ok)) -> {map(), map()}.
+check_processes(Pids, WaitMap, TimeoutFun, ErrorFun) ->
+    {Pids2, Errors} = maps:fold(fun(Ref, Pid, {Acc1, Acc2}) ->
+        case erlang:is_process_alive(Pid) of
+            true ->
+                TimeoutFun(map:get(Ref, WaitMap)),
+                {maps:put(Ref, Pid, Acc1), Acc2};
+            _ ->
+                ErrorFun(map:get(Ref, WaitMap)),
+                {Acc1, [Ref | Acc2]}
+        end
+    end, {#{}, []}, Pids),
+    WaitMap2 = lists:foldl(fun(Ref, Acc) ->
+        maps:remove(Ref, Acc)
+    end, WaitMap, Errors),
+    {Pids2, WaitMap2}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns interval between checking of processes that handle requests.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_processes_check_interval() -> non_neg_integer().
+get_processes_check_interval() ->
+    application:get_env(?APP_NAME, router_processes_check_interval, ?TIMEOUT).
 
 %%%===================================================================
 %%% Exometer API
@@ -285,86 +357,58 @@ route_and_ignore_answer(ClientMsg = #client_message{
 %% @private
 %% @doc
 %% Route message to adequate worker, asynchronously wait for answer
-%% repack it into server_message and send to the client.
-%% If client is other provider, message handling is non-blocking.
+%% repack it into server_message and send to the client
 %% @end
 %%--------------------------------------------------------------------
--spec route_check_session_and_send_answer(#client_message{}, Sock :: ssl:socket() | undefined,
-    Transport :: module() | undefined, IsProviderSession :: boolean()) ->
-    {ok, #server_message{}} | {error, term()}.
-route_check_session_and_send_answer(Msg = #client_message{
+-spec route_and_send_answer(#client_message{}) ->
+    ok | {ok, #server_message{}} | delegate_ans() | {error, term()}.
+route_and_send_answer(Msg = #client_message{
     session_id = OriginSessId,
     message_id = MsgId,
     message_body = FlushMsg = #flush_events{}
-}, _Sock, _Transport, _IsProviderSession) ->
+}) ->
     event:flush(FlushMsg#flush_events{notify =
     fun(Result) ->
         % Spawn because send can wait and block event_stream
+        % Probably not needed after migration to asynchronous connections
         spawn(fun() ->
             communicator:send(Result#server_message{message_id = MsgId}, OriginSessId)
         end)
     end
     }, effective_session_id(Msg)),
     ok;
-route_check_session_and_send_answer(#client_message{
+route_and_send_answer(#client_message{
     message_id = Id,
     message_body = #ping{data = Data}
-}, _Sock, _Transport, _IsProviderSession) ->
+}) ->
     {ok, #server_message{message_id = Id, message_body = #pong{data = Data}}};
-route_check_session_and_send_answer(#client_message{
+route_and_send_answer(#client_message{
     message_id = Id,
     message_body = #get_protocol_version{}
-}, _Sock, _Transport, _IsProviderSession) ->
+}) ->
     {ok, #server_message{message_id = Id, message_body = #protocol_version{}}};
-route_check_session_and_send_answer(Msg = #client_message{
+route_and_send_answer(Msg = #client_message{
     message_body = FuseRequest = #fuse_request{
         fuse_request = #file_request{
             file_request = #storage_file_created{}
         }}
-}, _Sock, _Transport, _IsProviderSession) ->
+}) ->
     ok = worker_proxy:cast(fslogic_worker,
         {fuse_request, effective_session_id(Msg), FuseRequest}),
     ok;
-route_check_session_and_send_answer(Msg = #client_message{
-    message_id = MsgId
-},  Sock, Transport, IsProviderSession) ->
-    case IsProviderSession andalso (Transport =/= undefined) of
-        true ->
-            spawn(fun() ->
-                try
-                    {ok, Ans} = route_and_send_answer(Msg,  Sock, Transport),
-                    outgoing_connection:send_server_message(Sock, Transport, Ans)
-                catch
-                    _:_ ->
-                        outgoing_connection:send_server_message(Sock, Transport,
-                            #server_message{message_id = MsgId,
-                                message_body = #processing_status{code = 'ERROR'}
-                            })
-                end
-            end),
-            ok;
-        _ ->
-            route_and_send_answer(Msg,  Sock, Transport)
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Route message to adequate worker, asynchronously wait for answer
-%% repack it into server_message and send to the client
-%% @end
-%%--------------------------------------------------------------------
--spec route_and_send_answer(#client_message{}, Sock :: ssl:socket() | undefined,
-    Transport :: module() | undefined) ->
-    {ok, #server_message{}} | {error, term()}.
+route_and_send_answer(#client_message{
+    message_id = Id = #message_id{issuer = ProviderId},
+    message_body = #generate_rtransfer_conn_secret{}
+}) ->
+    Response = #rtransfer_conn_secret{secret = <<ProviderId/binary, "-secret">>},
+    {ok, #server_message{message_id = Id, message_body = Response}};
 route_and_send_answer(Msg = #client_message{
     message_id = Id,
     message_body = #get_configuration{}
-}, Sock, Transport) ->
+}) ->
     route_and_supervise(fun() ->
-        Configuration = storage_req:get_configuration(effective_session_id(Msg)),
-        {ok, #server_message{message_id = Id, message_body = Configuration}}
-    end, get_heartbeat_fun(Id, Sock, Transport), Id);
+        storage_req:get_configuration(effective_session_id(Msg))
+    end, Id);
 route_and_send_answer(Msg = #client_message{
     message_id = Id,
     message_body = FuseRequest = #fuse_request{
@@ -372,61 +416,64 @@ route_and_send_answer(Msg = #client_message{
             context_guid = FileGuid,
             file_request = Req
         }}
-}, Sock, Transport) when is_record(Req, open_file) orelse is_record(Req, release) ->
-    Node = consistent_hasing:get_node(FileGuid),
-    {ok, FuseResponse} = worker_proxy:call({fslogic_worker, Node},
-        {fuse_request, effective_session_id(Msg), FuseRequest},
-        {?TIMEOUT, get_heartbeat_fun(Id, Sock, Transport)}),
-    {ok, #server_message{message_id = Id, message_body = FuseResponse}};
+}) when is_record(Req, open_file) orelse is_record(Req, release) ->
+    delegate(fun() ->
+        Node = consistent_hasing:get_node(FileGuid),
+        Ref = make_ref(),
+        Pid = worker_proxy:cast_and_monitor({fslogic_worker, Node},
+            {fuse_request, effective_session_id(Msg), FuseRequest}, Ref),
+        {Pid, Ref}
+    end, Id);
 route_and_send_answer(Msg = #client_message{
     message_id = Id,
     message_body = FuseRequest = #fuse_request{}
-}, Sock, Transport) ->
-    {ok, FuseResponse} = worker_proxy:call(fslogic_worker,
-        {fuse_request, effective_session_id(Msg), FuseRequest},
-        {?TIMEOUT, get_heartbeat_fun(Id, Sock, Transport)}),
-    {ok, #server_message{message_id = Id, message_body = FuseResponse}};
+}) ->
+    delegate(fun() ->
+        Ref = make_ref(),
+        Pid = worker_proxy:cast_and_monitor(fslogic_worker,
+            {fuse_request, effective_session_id(Msg), FuseRequest}, Ref),
+        {Pid, Ref}
+    end, Id);
 route_and_send_answer(Msg = #client_message{
     message_id = Id,
     message_body = ProviderRequest = #provider_request{}
-}, Sock, Transport) ->
-    {ok, ProviderResponse} = worker_proxy:call(fslogic_worker,
-        {provider_request, effective_session_id(Msg), ProviderRequest},
-        {?TIMEOUT, get_heartbeat_fun(Id, Sock, Transport)}),
-    {ok, #server_message{message_id = Id, message_body = ProviderResponse}};
+}) ->
+    delegate(fun() ->
+        Ref = make_ref(),
+        Pid = worker_proxy:cast_and_monitor(fslogic_worker,
+            {provider_request, effective_session_id(Msg), ProviderRequest}, Ref),
+        {Pid, Ref}
+    end, Id);
 route_and_send_answer(#client_message{
     message_id = Id,
     message_body = Request = #get_remote_document{}
-}, Sock, Transport) ->
+}) ->
     route_and_supervise(fun() ->
-        Response = datastore_remote_driver:handle(Request),
-        {ok, #server_message{message_id = Id, message_body = Response}}
-    end, get_heartbeat_fun(Id, Sock, Transport), Id);
+        datastore_remote_driver:handle(Request)
+    end, Id);
 route_and_send_answer(Msg = #client_message{
     message_id = Id,
     message_body = ProxyIORequest = #proxyio_request{
         parameters = #{?PROXYIO_PARAMETER_FILE_GUID := FileGuid}
     }
-}, Sock, Transport) ->
-    Node = consistent_hasing:get_node(FileGuid),
-    {ok, ProxyIOResponse} = worker_proxy:call({fslogic_worker, Node},
-        {proxyio_request, effective_session_id(Msg), ProxyIORequest},
-        {?TIMEOUT,  get_heartbeat_fun(Id, Sock, Transport)}),
-    {ok, #server_message{message_id = Id, message_body = ProxyIOResponse}};
-route_and_send_answer(#client_message{
-    message_id = Id = #message_id{issuer = ProviderId},
-    message_body = #generate_rtransfer_conn_secret{}
-}, _Sock, _Transport) ->
-    Response = #rtransfer_conn_secret{secret = <<ProviderId/binary, "-secret">>},
-    {ok, #server_message{message_id = Id, message_body = Response}};
+}) ->
+    delegate(fun() ->
+        Node = consistent_hasing:get_node(FileGuid),
+        Ref = make_ref(),
+        Pid = worker_proxy:cast_and_monitor({fslogic_worker, Node},
+            {proxyio_request, effective_session_id(Msg), ProxyIORequest}, Ref),
+        {Pid, Ref}
+    end, Id);
 route_and_send_answer(Msg = #client_message{
     message_id = Id,
     message_body = #dbsync_request{} = DBSyncRequest
-}, Sock, Transport) ->
-    {ok, DBSyncResponse} = worker_proxy:call(dbsync_worker,
-        {dbsync_request, effective_session_id(Msg), DBSyncRequest},
-        {?TIMEOUT, get_heartbeat_fun(Id, Sock, Transport)}),
-    {ok, #server_message{message_id = Id, message_body = DBSyncResponse}}.
+}) ->
+    delegate(fun() ->
+        Ref = make_ref(),
+        Pid = worker_proxy:cast_and_monitor(dbsync_worker,
+            {dbsync_request, effective_session_id(Msg), DBSyncRequest}, Ref),
+        {Pid, Ref}
+    end, Id).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -434,59 +481,77 @@ route_and_send_answer(Msg = #client_message{
 %% Executes function that handles message and asynchronously wait for answer.
 %% @end
 %%--------------------------------------------------------------------
--spec route_and_supervise(fun(() -> term()), fun(() -> ok), message_id:id()) ->
-    ok | {ok, #server_message{}} | {error, term()}.
-route_and_supervise(Fun, TimeoutFun, Id) ->
-    Master = self(),
-    Ref = make_ref(),
-    Pid = spawn(fun() ->
-        Ans = Fun(),
-        Master ! {slave_ans, Ref, Ans}
-    end),
-    receive_loop(Ref, Pid, TimeoutFun, Id).
+-spec route_and_supervise(fun(() -> {pid(), reference()}), message_id:id()) ->
+    delegate_ans() | {ok, #server_message{}}.
+route_and_supervise(Fun, Id) ->
+    Fun2 = fun() ->
+        Master = self(),
+        Ref = make_ref(),
+        Pid = spawn(fun() ->
+            try
+                Ans = Fun(),
+                Master ! {slave_ans, Ref, Ans}
+            catch
+                _:E ->
+                    ?error_stacktrace("Route_and_supervise error: ~p for "
+                    "message id ~p", [E, Id]),
+                    Master ! {slave_ans, Ref, #processing_status{code = 'ERROR'}}
+            end
+        end),
+        {Pid, Ref}
+    end,
+    delegate(Fun2, Id).
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Waits for worker asynchronous process answer.
+%% Executes function that handles message returns information needed for
+%% asynchronous waiting for answer.
 %% @end
 %%--------------------------------------------------------------------
--spec receive_loop(reference(), pid(), fun(() -> ok), message_id:id()) ->
-    ok | {ok, #server_message{}} | {error, term()}.
-receive_loop(Ref, Pid, TimeoutFun, Id) ->
-    receive
-        {slave_ans, Ref, Ans} ->
-            Ans
-    after
-        ?TIMEOUT ->
-            case erlang:is_process_alive(Pid) of
-                true ->
-                    TimeoutFun(),
-                    receive_loop(Ref, Pid, TimeoutFun, Id);
-                _ ->
-                    {ok, #server_message{message_id = Id,
-                        message_body = #processing_status{code = 'ERROR'}}}
-            end
+-spec delegate(fun(() -> {pid(), reference()}), message_id:id()) ->
+    delegate_ans() | {ok, #server_message{}}.
+delegate(Fun, Id) ->
+    try
+        {Pid, Ref} = Fun(),
+        case is_pid(Pid) of
+            true ->
+                {wait, {Id, Pid, Ref}};
+            ErrorPid ->
+                ?error("Router error: ~p for message id ~p", [ErrorPid, Id]),
+                {ok, get_error_msg(Id)}
+        end
+    catch
+        _:E ->
+            ?error_stacktrace("Router error: ~p for message id ~p", [E, Id]),
+            {ok, get_error_msg(Id)}
     end.
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Provides function that sends heartbeat.
+%% Processes answer and returns message to be sent.
 %% @end
 %%--------------------------------------------------------------------
--spec get_heartbeat_fun(message_id:id(), Sock :: ssl:socket() | undefined,
-    Transport :: module() | undefined) -> fun(() -> ok).
-get_heartbeat_fun(MsgId, Sock, Transport) ->
-    case Sock of
+-spec process_ans(reference(), term(), map(), map()) ->
+    {#server_message{}, map(), map()} | wrong_message.
+process_ans(Ref, {process_error, ErrorAns}, WaitMap, Pids) ->
+    case maps:get(Ref, WaitMap, undefined) of
         undefined ->
-            fun() -> ok end;
-        _ ->
-            fun() ->
-                outgoing_connection:send_server_message(Sock, Transport,
-                    #server_message{message_id = MsgId,
-                        message_body = #processing_status{code = 'IN_PROGRESS'}
-                    }),
-                ok
-            end
+            wrong_message;
+        Id ->
+            ?error("Router wrong answer: ~p for message id ~p", [ErrorAns, Id]),
+            WaitMap2 = maps:remove(Ref, WaitMap),
+            Pids2 = maps:remove(Ref, Pids),
+            {get_error_msg(Id), WaitMap2, Pids2}
+    end;
+process_ans(Ref, Ans, WaitMap, Pids) ->
+    case maps:get(Ref, WaitMap, undefined) of
+        undefined ->
+            wrong_message;
+        Id ->
+            Return = #server_message{message_id = Id, message_body = Ans},
+            WaitMap2 = maps:remove(Ref, WaitMap),
+            Pids2 = maps:remove(Ref, Pids),
+            {Return, WaitMap2, Pids2}
     end.

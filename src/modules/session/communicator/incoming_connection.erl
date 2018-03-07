@@ -32,7 +32,10 @@
     session_id :: undefined | session:id(),
     peer_type = unknown :: unknown | fuse_client | provider,
     peer_id = undefined :: undefined | od_user:id() | od_provider:id(),
-    continue = true
+    continue = true,
+    wait_map = #{} :: map(),
+    wait_pids = #{} :: map(),
+    last_message_timestamp :: erlang:timestamp()
 }).
 -type state() :: #state{}.
 
@@ -109,15 +112,21 @@ takeover(_Parent, Ref, Socket, Transport, _Opts, _Buffer, _HandlerState) ->
         ok = Ok,
         closed = Closed,
         error = Error,
-        peer_type = unknown
+        peer_type = unknown,
+        last_message_timestamp = os:timestamp()
     },
     ok = Transport:setopts(Socket, [binary, {packet, ?PACKET_VALUE}]),
     activate_socket_once(State),
+
+    Interval = router:get_processes_check_interval(),
+    erlang:send_after(Interval, self(), heartbeat),
+
     NewState = handler_loop(State),
     case NewState#state.session_id of
         undefined -> ok;
         SessId -> session:remove_connection(SessId, self())
     end,
+    %Transport:close(Socket), % ????
     exit(normal).
 
 
@@ -160,14 +169,15 @@ handler_loop(State) ->
                 handle_info(Msg, State)
         after
             ?PROTO_CONNECTION_TIMEOUT ->
-                ?warning("Connection ~p timeout", [State#state.socket]),
+                % Should not appear (heartbeats)
+                ?error("Connection ~p timeout", [State#state.socket]),
                 State#state{continue = false}
         end
     catch Type:Reason ->
         ?error_stacktrace("Unxpected error in protocol server - ~p:~p", [
             Type, Reason
         ]),
-        State
+        State#state{continue = false}
     end,
     case NewState#state.continue of
         true -> handler_loop(NewState);
@@ -185,13 +195,14 @@ handler_loop(State) ->
 handle_info({send_sync, From, #server_message{} = ServerMsg}, State) ->
     send_server_message(State, ServerMsg),
     From ! {result, ok},
-    State;
+    State#state{last_message_timestamp = os:timestamp()};
 handle_info({send_async, #server_message{} = ServerMsg}, State) ->
     send_server_message(State, ServerMsg),
-    State;
+    State#state{last_message_timestamp = os:timestamp()};
 handle_info({Ok, Socket, Data}, State = #state{socket = Socket, ok = Ok}) ->
     activate_socket_once(State),
-    handle_client_message(State, Data);
+    State2 = handle_client_message(State, Data),
+    State2#state{last_message_timestamp = os:timestamp()};
 
 handle_info({Closed, _}, State = #state{closed = Closed}) ->
     State#state{continue = false};
@@ -203,9 +214,45 @@ handle_info({Error, Socket, Reason}, State = #state{error = Error}) ->
 handle_info(disconnect, State) ->
     State#state{continue = false};
 
-handle_info(_Info, State) ->
-    ?log_bad_request(_Info),
-    State#state{continue = false}.
+handle_info(heartbeat, #state{wait_map = WaitMap, wait_pids = Pids,
+    last_message_timestamp = LMT} = State) ->
+    TimeoutFun = fun(Id) ->
+        send_server_message(State, router:get_heartbeat_msg(Id))
+    end,
+    ErrorFun = fun(Id) ->
+        send_server_message(State, router:get_error_msg(Id))
+    end,
+    {Pids2, WaitMap2} = router:check_processes(Pids, WaitMap, TimeoutFun, ErrorFun),
+
+    Interval = router:get_processes_check_interval(),
+    erlang:send_after(Interval, self(), heartbeat),
+
+    Continue = case maps:size(WaitMap2) of
+        0 ->
+            Diff = timer:now_diff(os:timestamp(), LMT),
+            case Diff > timer:seconds(?PROTO_CONNECTION_TIMEOUT) * 1000 of
+                true ->
+                    % Should not appear (heartbeats)
+                    ?error("Connection ~p timeout", [State#state.socket]),
+                    false;
+                _ ->
+                    true
+            end;
+        _ ->
+            true
+    end,
+    State#state{continue = Continue, wait_map = WaitMap2, wait_pids = Pids2};
+
+handle_info(Info, #state{wait_map = WaitMap, wait_pids = Pids} = State) ->
+    case router:process_ans(Info, WaitMap, Pids) of
+        wrong_message ->
+            ?log_bad_request(Info),
+            State#state{continue = false};
+        {Return, WaitMap2, Pids2} ->
+            send_server_message(State, Return),
+            State#state{last_message_timestamp = os:timestamp(),
+                wait_map = WaitMap2, wait_pids = Pids2}
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -339,7 +386,7 @@ report_handshake_error(State, _) ->
 %%--------------------------------------------------------------------
 -spec handle_normal_message(state(), #client_message{} | #server_message{}) -> state().
 handle_normal_message(State = #state{session_id = SessId, peer_type = PeerType,
-    peer_id = ProviderId, socket = Socket, transport = Transport}, Msg0) ->
+    peer_id = ProviderId, wait_map = WaitMap, wait_pids = Pids}, Msg0) ->
     {Msg, EffectiveSessionId} = case {PeerType, Msg0} of
         %% If message comes from provider and proxy session is requested - proceed
         %% with authorization and switch context to the proxy session.
@@ -357,12 +404,15 @@ handle_normal_message(State = #state{session_id = SessId, peer_type = PeerType,
             router:route_proxy_message(Msg, TargetSessionId),
             State;
         _ -> %% Non-proxy case
-            case router:preroute_message(Msg, EffectiveSessionId, Socket, Transport) of
+            case router:preroute_message(Msg, EffectiveSessionId) of
                 ok ->
                     State;
                 {ok, ServerMsg} ->
                     send_server_message(State, ServerMsg),
                     State;
+                {wait, Delegation} ->
+                    {WaitMap2, Pids2} = router:save_delegation(Delegation, WaitMap, Pids),
+                    State#state{wait_map = WaitMap2, wait_pids = Pids2};
                 {error, Reason} ->
                     ?warning("Message ~p handling error: ~p", [Msg, Reason]),
                     State#state{continue = false}
