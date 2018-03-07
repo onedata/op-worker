@@ -244,10 +244,12 @@ check_processes(Pids, WaitMap, TimeoutFun, ErrorFun) ->
     {Pids2, Errors} = maps:fold(fun(Ref, Pid, {Acc1, Acc2}) ->
         case erlang:is_process_alive(Pid) of
             true ->
-                TimeoutFun(map:get(Ref, WaitMap)),
+                TimeoutFun(maps:get(Ref, WaitMap)),
                 {maps:put(Ref, Pid, Acc1), Acc2};
             _ ->
-                ErrorFun(map:get(Ref, WaitMap)),
+                ?error("Router: process ~p connected with ref ~p is not alive",
+                    [Pid, Ref]),
+                ErrorFun(maps:get(Ref, WaitMap)),
                 {Acc1, [Ref | Acc2]}
         end
     end, {#{}, []}, Pids),
