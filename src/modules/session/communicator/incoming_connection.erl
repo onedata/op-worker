@@ -126,7 +126,6 @@ takeover(_Parent, Ref, Socket, Transport, _Opts, _Buffer, _HandlerState) ->
         undefined -> ok;
         SessId -> session:remove_connection(SessId, self())
     end,
-    %Transport:close(Socket), % ????
     exit(normal).
 
 
@@ -174,10 +173,10 @@ handler_loop(State) ->
                 State#state{continue = false}
         end
     catch Type:Reason ->
-        ?error_stacktrace("Unxpected error in protocol server - ~p:~p", [
+        ?error_stacktrace("Unexpected error in protocol server - ~p:~p", [
             Type, Reason
         ]),
-        State#state{continue = false}
+        State
     end,
     case NewState#state.continue of
         true -> handler_loop(NewState);
@@ -232,8 +231,7 @@ handle_info(heartbeat, #state{wait_map = WaitMap, wait_pids = Pids,
             Diff = timer:now_diff(os:timestamp(), LMT),
             case Diff > timer:seconds(?PROTO_CONNECTION_TIMEOUT) * 1000 of
                 true ->
-                    % Should not appear (heartbeats)
-                    ?error("Connection ~p timeout", [State#state.socket]),
+                    ?info("Connection ~p timeout", [State#state.socket]),
                     false;
                 _ ->
                     true

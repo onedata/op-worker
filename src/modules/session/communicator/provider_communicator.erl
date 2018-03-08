@@ -20,8 +20,8 @@
 -include("timeouts.hrl").
 
 %% API
--export([send/2, send/3, stream/3, stream/4, send_async/2, communicate/2, communicate_async/2,
-    communicate_async/3, ensure_connected/1]).
+-export([send/2, send/3, stream/3, stream/4, send_async/2, communicate/2,
+    communicate/3, communicate_async/2, communicate_async/3, ensure_connected/1]).
 
 %%%===================================================================
 %%% API
@@ -35,7 +35,7 @@
 -spec send(Msg :: #client_message{} | term(), Ref :: connection:ref()) ->
     ok | {error, Reason :: term()}.
 send(Msg, Ref) ->
-    provider_communicator:send(Msg, Ref, 1).
+    provider_communicator:send(Msg, Ref, 2).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -119,15 +119,38 @@ send_async(Msg, Ref) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Sends a message to the provider and waits for a reply.
+%% @equiv communicate(Msg, Ref, 2)
 %% @end
 %%--------------------------------------------------------------------
 -spec communicate(Msg :: #client_message{} | term(), Ref :: connection:ref()) ->
     {ok, #server_message{}} | {error, timeout} | {error, Reason :: term()}.
-communicate(#client_message{} = ClientMsg, Ref) ->
-    {ok, MsgId} = communicate_async(ClientMsg, Ref, self()),
-    receive_server_message(MsgId);
 communicate(Msg, Ref) ->
-    communicate(#client_message{message_body = Msg}, Ref).
+    communicate(Msg, Ref, 2).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends a message to the provider and waits for a reply. Retries if needed.
+%% @end
+%%--------------------------------------------------------------------
+-spec communicate(Msg :: #client_message{} | term(), Ref :: connection:ref(),
+    non_neg_integer()) ->
+    {ok, #server_message{}} | {error, timeout} | {error, Reason :: term()}.
+communicate(#client_message{} = ClientMsg, Ref, Retires) ->
+    case {communicate_async(ClientMsg, Ref, self()), Retires} of
+        {{ok, MsgId}, 1} ->
+            receive_server_message(MsgId);
+        {{ok, MsgId}, _} ->
+            case receive_server_message(MsgId) of
+                {ok, _} = Ans -> Ans;
+                _ -> communicate(ClientMsg, Ref, Retires - 1)
+            end;
+        {Error, 1} ->
+            Error;
+        _ ->
+            communicate(ClientMsg, Ref, Retires - 1)
+    end;
+communicate(Msg, Ref, Retires) ->
+    communicate(#client_message{message_body = Msg}, Ref, Retires).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -210,7 +233,7 @@ ensure_connected(SessId) ->
                 fun(IPBinary) ->
                     {ok, Port} = application:get_env(?APP_NAME, gui_https_port),
                     critical_section:run([?MODULE, ProviderId, SessId], fun() ->
-                        outgoing_connection:start_link(ProviderId, SessId, Domain, IPBinary, Port, ranch_ssl, timer:seconds(5))
+                        outgoing_connection:start(ProviderId, SessId, Domain, IPBinary, Port, ranch_ssl, timer:seconds(5))
                     end)
                 end, IPBinaries),
             ok;
@@ -233,6 +256,7 @@ ensure_connected(SessId) ->
 -spec receive_server_message(MsgId :: #message_id{}) ->
     {ok, #server_message{}} | {error, timeout} | {error, Reason :: term()}.
 receive_server_message(MsgId) ->
+    Timeout = 3 * router:get_processes_check_interval(),
     receive
         #server_message{message_id = MsgId,
             message_body = #processing_status{code = 'IN_PROGRESS'}} ->
@@ -240,6 +264,6 @@ receive_server_message(MsgId) ->
         #server_message{message_id = MsgId} = ServerMsg ->
             {ok, ServerMsg}
     after
-        ?DEFAULT_REQUEST_TIMEOUT ->
+        Timeout ->
             {error, timeout}
     end.

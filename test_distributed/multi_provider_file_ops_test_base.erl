@@ -1014,7 +1014,7 @@ verify_helper([W | Workers], TestFun) ->
         {'EXIT', Pid , Error} when Error /= normal ->
             [{W, error, Error} | TmpAns]
     after
-        timer:minutes(5) ->
+        timer:minutes(2) ->
             [{W, error, timeout} | TmpAns]
     end.
 

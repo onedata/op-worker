@@ -44,7 +44,7 @@
 -define(EXOMETER_HISTOGRAM_COUNTERS, [events_length]).
 -define(EXOMETER_DEFAULT_TIME_SPAN, 600000).
 
--define(TIMEOUT, 15000).
+-define(TIMEOUT, timer:seconds(10)).
 
 -type delegation() :: {message_id:id(), pid(), reference()}.
 -type delegate_ans() :: {wait, delegation()}.

@@ -49,7 +49,7 @@
 -define(MAX_RECONNECT_INTERVAL, timer:minutes(15)).
 
 %% API
--export([start_link/7, init/7]).
+-export([start/7, init/7]).
 -export([send_server_message/3]).
 
 %% gen_server callbacks
@@ -65,11 +65,11 @@
 %% Starts an outgoing connection.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(od_provider:id(), session:id(), Domain :: binary(), IP :: binary(),
+-spec start(od_provider:id(), session:id(), Domain :: binary(), IP :: binary(),
     Port :: non_neg_integer(), Transport :: atom(), Timeout :: non_neg_integer()) ->
     {ok, Pid :: pid()}.
-start_link(ProviderId, SessionId, Domain, IP, Port, Transport, Timeout) ->
-    proc_lib:start_link(?MODULE, init, [ProviderId, SessionId, Domain, IP, Port, Transport, Timeout]).
+start(ProviderId, SessionId, Domain, IP, Port, Transport, Timeout) ->
+    proc_lib:start(?MODULE, init, [ProviderId, SessionId, Domain, IP, Port, Transport, Timeout]).
 
 
 %%--------------------------------------------------------------------
@@ -106,8 +106,13 @@ init(ProviderId, SessionId, Domain, IP, Port, Transport, Timeout) ->
                 throw:incompatible_peer_op_version ->
                     postpone_next_reconnect(Intervals, ProviderId, Interval),
                     exit(normal);
+                exit:normal ->
+                    ?info("Connection to peer provider(~p) closed", [
+                        ProviderId
+                    ]),
+                    exit(normal);
                 Type:Reason ->
-                    ?warning("Failed to connect to peer provider(~p) - ~p:~p. "
+                    ?warning_stacktrace("Failed to connect to peer provider(~p) - ~p:~p. "
                     "Next retry not sooner than ~p seconds.", [
                         ProviderId, Type, Reason, Interval
                     ]),
@@ -397,8 +402,7 @@ handle_server_message_unsafe(State = #state{session_id = SessId,
             {noreply, State, ?PROTO_CONNECTION_TIMEOUT};
         {wait, Delegation} ->
             {WaitMap2, Pids2} = router:save_delegation(Delegation, WaitMap, Pids),
-            {noreply, State#state{wait_map = WaitMap2, wait_pids = Pids2},
-                ?PROTO_CONNECTION_TIMEOUT};
+            {noreply, State#state{wait_map = WaitMap2, wait_pids = Pids2}, ?PROTO_CONNECTION_TIMEOUT};
         {error, Reason} ->
             ?warning("Message ~p handling error: ~p", [Msg, Reason]),
             {stop, {error, Reason}, State}
