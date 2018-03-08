@@ -233,7 +233,14 @@ ensure_connected(SessId) ->
                 fun(IPBinary) ->
                     {ok, Port} = application:get_env(?APP_NAME, gui_https_port),
                     critical_section:run([?MODULE, ProviderId, SessId], fun() ->
-                        outgoing_connection:start(ProviderId, SessId, Domain, IPBinary, Port, ranch_ssl, timer:seconds(5))
+                        % check once more to prevent races
+                        case session:get_random_connection(SessId, true) of
+                            {error, _} ->
+                                outgoing_connection:start(ProviderId, SessId,
+                                    Domain, IPBinary, Port, ranch_ssl, timer:seconds(5));
+                            _ ->
+                                ensure_connected(SessId)
+                        end
                     end)
                 end, IPBinaries),
             ok;
