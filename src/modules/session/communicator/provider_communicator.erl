@@ -209,7 +209,9 @@ ensure_connected(SessId) ->
             lists:foreach(
                 fun(IPBinary) ->
                     {ok, Port} = application:get_env(?APP_NAME, gui_https_port),
-                    outgoing_connection:start_link(ProviderId, SessId, Domain, IPBinary, Port, ranch_ssl, timer:seconds(5))
+                    critical_section:run([?MODULE, ProviderId, SessId], fun() ->
+                        outgoing_connection:start_link(ProviderId, SessId, Domain, IPBinary, Port, ranch_ssl, timer:seconds(5))
+                    end)
                 end, IPBinaries),
             ok;
         {ok, Pid} ->

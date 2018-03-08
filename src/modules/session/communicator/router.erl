@@ -44,7 +44,7 @@
 -define(EXOMETER_HISTOGRAM_COUNTERS, [events_length]).
 -define(EXOMETER_DEFAULT_TIME_SPAN, 600000).
 
--define(TIMEOUT, 30000).
+-define(TIMEOUT, 15000).
 
 -type delegation() :: {message_id:id(), pid(), reference()}.
 -type delegate_ans() :: {wait, delegation()}.
@@ -241,17 +241,23 @@ process_ans(ReceivedAns, WaitMap, Pids) ->
 -spec check_processes(map(), map(), fun((message_id:id()) -> ok),
     fun((message_id:id()) -> ok)) -> {map(), map()}.
 check_processes(Pids, WaitMap, TimeoutFun, ErrorFun) ->
-    {Pids2, Errors} = maps:fold(fun(Ref, Pid, {Acc1, Acc2}) ->
-        case erlang:is_process_alive(Pid) of
-            true ->
-                TimeoutFun(maps:get(Ref, WaitMap)),
-                {maps:put(Ref, Pid, Acc1), Acc2};
-            _ ->
-                ?error("Router: process ~p connected with ref ~p is not alive",
-                    [Pid, Ref]),
-                ErrorFun(maps:get(Ref, WaitMap)),
-                {Acc1, [Ref | Acc2]}
-        end
+    {Pids2, Errors} = maps:fold(fun
+        (Ref, {Pid, not_alive}, {Acc1, Acc2}) ->
+            ?error("Router: process ~p connected with ref ~p is not alive",
+                [Pid, Ref]),
+            ErrorFun(maps:get(Ref, WaitMap)),
+            {Acc1, [Ref | Acc2]};
+        (Ref, Pid, {Acc1, Acc2}) ->
+            case rpc:call(node(Pid), erlang, is_process_alive, [Pid]) of
+                true ->
+                    TimeoutFun(maps:get(Ref, WaitMap)),
+                    {maps:put(Ref, Pid, Acc1), Acc2};
+                _ ->
+                    % Wait with error for another heartbeat
+                    % (possible race heartbeat/answer)
+                    TimeoutFun(maps:get(Ref, WaitMap)),
+                    {maps:put(Ref, {Pid, not_alive}, Acc1), Acc2}
+            end
     end, {#{}, []}, Pids),
     WaitMap2 = lists:foldl(fun(Ref, Acc) ->
         maps:remove(Ref, Acc)
