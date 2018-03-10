@@ -17,7 +17,7 @@
 -define(CONNECTION_TIMEOUT, timer:minutes(1)).
 -define(REQUEST_COMPLETION_TIMEOUT, timer:minutes(5)).
 
--define(SEND_RETRY_DELAY, timer:seconds(10)).
+-define(SEND_RETRY_DELAY, timer:seconds(1)).
 -define(DEFAULT_REQUEST_TIMEOUT, timer:minutes(5)).
 
 -define(PROTO_CONNECTION_TIMEOUT, timer:minutes(10)).
