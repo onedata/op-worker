@@ -151,7 +151,7 @@ start_streams() ->
             Pid = global:whereis_name(Name),
             Node = consistent_hasing:get_node(Name),
 
-            ?info("start_stream: ~p", [{Name, Pid, Node =:= node(), Module}]),
+%%            ?info("start_stream: ~p", [{Name, Pid, Node =:= node(), Module}]),
 
             case {Pid, Node =:= node(), Module} of
                 {undefined, true, dbsync_in_stream} ->
