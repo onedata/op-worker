@@ -61,8 +61,11 @@ db_sync_test_base(Config) ->
     Dirs = ?config(dirs_num, Config),
     Files = ?config(files_num, Config),
     Attempts = ?config(attempts, Config),
+    ct:print("db_sync_test many_ops_test"),
     multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {2,0,0}, Attempts, Dirs, Files),
+    ct:print("db_sync_test distributed_modification_test"),
     multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user1">>, {2,0,0}, Attempts),
+    ct:print("db_sync_test distributed_delete_test"),
     multi_provider_file_ops_test_base:distributed_delete_test_base(Config, <<"user1">>, {2,0,0}, Attempts).
 
 %%%===================================================================
@@ -78,7 +81,9 @@ proxy_test1(Config) ->
 proxy_test1_base(Config) ->
     Dirs = ?config(dirs_num, Config),
     Files = ?config(files_num, Config),
+    ct:print("proxy_test1 many_ops_test"),
     multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user2">>, {0,2,1}, 0, Dirs, Files),
+    ct:print("proxy_test1 distributed_modification_test"),
     multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user2">>, {0,2,1}, 0).
 
 %%%===================================================================
@@ -94,7 +99,9 @@ proxy_test2(Config) ->
 proxy_test2_base(Config) ->
     Dirs = ?config(dirs_num, Config),
     Files = ?config(files_num, Config),
+    ct:print("proxy_test2 many_ops_test"),
     multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user3">>, {0,2,1}, 0, Dirs, Files),
+    ct:print("proxy_test2 distributed_modification_test"),
     multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user3">>, {0,2,1}, 0).
 
 %%%===================================================================

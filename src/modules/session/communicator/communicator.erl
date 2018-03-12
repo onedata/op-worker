@@ -34,7 +34,7 @@
 -spec send(Msg :: #server_message{} | term(), Ref :: connection:ref()) ->
     ok | {error, Reason :: term()}.
 send(Msg, Ref) ->
-    communicator:send(Msg, Ref, 1).
+    communicator:send(Msg, Ref, 2).
 
 %%--------------------------------------------------------------------
 %% @doc

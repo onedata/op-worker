@@ -36,7 +36,9 @@
     % connection state
     status = upgrading_protocol :: upgrading_protocol | performing_handshake | ready,
     session_id :: undefined | session:id(),
-    provider_id = undefined :: undefined | od_provider:id()
+    provider_id = undefined :: undefined | od_provider:id(),
+    wait_map = #{} :: map(),
+    wait_pids = #{} :: map()
 }).
 
 -define(PACKET_VALUE, 4).
@@ -47,7 +49,7 @@
 -define(MAX_RECONNECT_INTERVAL, timer:minutes(15)).
 
 %% API
--export([start_link/7, init/7]).
+-export([start/7, init/7]).
 -export([send_server_message/3]).
 
 %% gen_server callbacks
@@ -63,11 +65,11 @@
 %% Starts an outgoing connection.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(od_provider:id(), session:id(), Domain :: binary(), IP :: binary(),
+-spec start(od_provider:id(), session:id(), Domain :: binary(), IP :: binary(),
     Port :: non_neg_integer(), Transport :: atom(), Timeout :: non_neg_integer()) ->
     {ok, Pid :: pid()}.
-start_link(ProviderId, SessionId, Domain, IP, Port, Transport, Timeout) ->
-    proc_lib:start_link(?MODULE, init, [ProviderId, SessionId, Domain, IP, Port, Transport, Timeout]).
+start(ProviderId, SessionId, Domain, IP, Port, Transport, Timeout) ->
+    proc_lib:start(?MODULE, init, [ProviderId, SessionId, Domain, IP, Port, Transport, Timeout]).
 
 
 %%--------------------------------------------------------------------
@@ -104,8 +106,13 @@ init(ProviderId, SessionId, Domain, IP, Port, Transport, Timeout) ->
                 throw:incompatible_peer_op_version ->
                     postpone_next_reconnect(Intervals, ProviderId, Interval),
                     exit(normal);
+                exit:normal ->
+                    ?info("Connection to peer provider(~p) closed", [
+                        ProviderId
+                    ]),
+                    exit(normal);
                 Type:Reason ->
-                    ?warning("Failed to connect to peer provider(~p) - ~p:~p. "
+                    ?warning_stacktrace("Failed to connect to peer provider(~p) - ~p:~p. "
                     "Next retry not sooner than ~p seconds.", [
                         ProviderId, Type, Reason, Interval
                     ]),
@@ -263,9 +270,30 @@ handle_info({send_async, ClientMsg = #client_message{}}, State) ->
     send_client_message(State, ClientMsg),
     {noreply, State, ?PROTO_CONNECTION_TIMEOUT};
 
-handle_info(_Info, State) ->
-    ?log_bad_request(_Info),
-    {stop, normal, State}.
+handle_info(heartbeat, #state{wait_map = WaitMap, wait_pids = Pids} = State) ->
+    TimeoutFun = fun(Id) ->
+        send_server_message(State, router:get_heartbeat_msg(Id))
+    end,
+    ErrorFun = fun(Id) ->
+        send_server_message(State, router:get_error_msg(Id))
+    end,
+    {Pids2, WaitMap2} = router:check_processes(Pids, WaitMap, TimeoutFun, ErrorFun),
+
+    Interval = router:get_processes_check_interval(),
+    erlang:send_after(Interval, self(), heartbeat),
+    {noreply, State#state{wait_map = WaitMap2, wait_pids = Pids2},
+        ?PROTO_CONNECTION_TIMEOUT};
+
+handle_info(Info, #state{wait_map = WaitMap, wait_pids = Pids} = State) ->
+    case router:process_ans(Info, WaitMap, Pids) of
+        wrong_message ->
+            ?log_bad_request(Info),
+            {stop, normal, State};
+        {Return, WaitMap2, Pids2} ->
+            send_server_message(State, Return),
+            {noreply, State#state{wait_map = WaitMap2, wait_pids = Pids2},
+                ?PROTO_CONNECTION_TIMEOUT}
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -365,13 +393,16 @@ handle_server_message(State = #state{session_id = SessId}, Data) ->
     {noreply, NewState :: #state{}, timeout()} |
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_server_message_unsafe(State = #state{session_id = SessId,
-    socket = Socket, transport = Transport}, Msg) ->
-    case router:preroute_message(Msg, SessId, Socket, Transport) of
+    wait_map = WaitMap, wait_pids = Pids}, Msg) ->
+    case router:preroute_message(Msg, SessId) of
         ok ->
             {noreply, State, ?PROTO_CONNECTION_TIMEOUT};
         {ok, ServerMsg} ->
             send_server_message(State, ServerMsg),
             {noreply, State, ?PROTO_CONNECTION_TIMEOUT};
+        {wait, Delegation} ->
+            {WaitMap2, Pids2} = router:save_delegation(Delegation, WaitMap, Pids),
+            {noreply, State#state{wait_map = WaitMap2, wait_pids = Pids2}, ?PROTO_CONNECTION_TIMEOUT};
         {error, Reason} ->
             ?warning("Message ~p handling error: ~p", [Msg, Reason]),
             {stop, {error, Reason}, State}
