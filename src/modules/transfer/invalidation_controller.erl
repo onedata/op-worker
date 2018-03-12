@@ -178,10 +178,9 @@ handle_cast(start_invalidation, State = #state{
     end;
 handle_cast(finish_invalidation, State = #state{
     transfer_id = TransferId,
-    space_id = SpaceId,
     callback = Callback
 }) ->
-    transfer:mark_completed_invalidation(TransferId, SpaceId),
+    transfer:mark_completed_invalidation(TransferId),
     notify_callback(Callback),
     {stop, normal, State};
 handle_cast({failed_invalidation, Error}, State = #state{

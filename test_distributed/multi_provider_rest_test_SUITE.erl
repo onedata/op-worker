@@ -35,10 +35,11 @@
 -export([
     get_simple_file_distribution/1,
     replicate_file/1,
-    replicate_dir/1,
+    transfers_should_be_ordered_by_timestamps/1,
     restart_file_replication/1,
-    restart_dir_replication/1,
     cancel_file_replication/1,
+    replicate_dir/1,
+    restart_dir_replication/1,
     replicate_file_by_id/1,
     replicate_to_missing_provider/1,
     replicate_to_nonsupporting_provider/1,
@@ -69,8 +70,8 @@
     set_get_json_metadata_id/1,
     set_get_rdf_metadata/1,
     set_get_rdf_metadata_id/1,
-    create_list_index/1,
     remove_index/1,
+    create_list_index/1,
     create_geospatial_index/1,
     query_geospatial_index/1,
     query_file_popularity_index/1,
@@ -81,11 +82,11 @@
     empty_metadata_invalid_json_test/1,
     spatial_flag_test/1,
     quota_exceeded_during_file_replication/1,
-    replicate_big_dir/1,
     quota_decreased_after_invalidation/1,
+    file_replication_failures_should_fail_whole_transfer/1,
+    replicate_big_dir/1,
     replicate_big_file/1,
     invalidate_big_dir/1,
-    file_replication_failures_should_fail_whole_transfer/1,
     many_simultaneous_transfers/1]).
 
 %utils
@@ -96,6 +97,7 @@ all() ->
     ?ALL([
         get_simple_file_distribution,
         replicate_file,
+        transfers_should_be_ordered_by_timestamps,
         restart_file_replication,
         cancel_file_replication,
         replicate_dir,
@@ -104,6 +106,7 @@ all() ->
         replicate_to_missing_provider,
         replicate_to_nonsupporting_provider,
         invalidate_file_replica,
+        invalidate_file_replica_with_migration,
         restart_invalidation_of_file_replica_with_migration,
         invalidate_dir_replica,
         automatic_cleanup_should_invalidate_unpopular_files,
@@ -175,8 +178,14 @@ all() ->
         lists:sort(json_utils:decode_map(__Body))
     end, ?ATTEMPTS)).
 
--define(assertEqualList(L1, L2, Attempts), 
-    ?assertEqual(lists:sort(L1), lists:sort(L2), Attempts)).
+-define(assertTransferStatus(ExpectedStatus, Worker, Tid, Config),
+    ?assertMatch(ExpectedStatus,
+        case do_request(Worker, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []) of
+            {ok, 200, _, __TransferStatus} ->
+                json_utils:decode_map(__TransferStatus);
+            Error -> Error
+        end, ?ATTEMPTS)
+).
 
 -define(absPath(SpaceId, Path), <<"/", SpaceId/binary, "/", Path/binary>>).
 
@@ -280,10 +289,88 @@ replicate_file(Config) ->
     ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File),
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
 
-    ?assertEqualList([Tid], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([Tid], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS).
+    ?assertEqual([Tid], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqual([Tid], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS).
+
+transfers_should_be_ordered_by_timestamps(Config) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
+    SpaceId = ?config(space_id, Config),
+    DomainP1 = domain(WorkerP1),
+    DomainP2 = domain(WorkerP2),
+
+    File = ?absPath(SpaceId, <<"file_sorted">>),
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
+    {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
+    Size = 100 * 1024 * 1024,
+    {ok, Size} = lfm_proxy:write(WorkerP1, Handle, 0, crypto:strong_rand_bytes(Size)),
+    lfm_proxy:fsync(WorkerP1, Handle),
+    {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
+
+    File2 = ?absPath(SpaceId, <<"file_sorted2">>),
+    {ok, FileGuid2} = lfm_proxy:create(WorkerP1, SessionId, File2, 8#700),
+    {ok, Handle2} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid2}, write),
+    Size2 = 1024 * 1024 * 1024,
+    {ok, Size2} = lfm_proxy:write(WorkerP1, Handle2, 0, crypto:strong_rand_bytes(Size2)),
+    lfm_proxy:fsync(WorkerP1, Handle2),
+    {ok, FileObjectId2} = cdmi_id:guid_to_objectid(FileGuid2),
+
+    ?assertMatch({ok, #file_attr{size = Size}}, lfm_proxy:stat(WorkerP1, SessionId, {path, File}), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{size = Size}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{size = Size2}}, lfm_proxy:stat(WorkerP1, SessionId, {path, File2}), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{size = Size2}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File2}), ?ATTEMPTS),
+
+    % when
+    Tid2 = schedule_file_replication(WorkerP1, DomainP2, File2, Config),
+    timer:sleep(timer:seconds(1)),
+    Tid = schedule_file_replication(WorkerP1, DomainP2, File, Config),
+
+    % then
+    ?assertEqual([Tid, Tid2], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assert(get_start_time(WorkerP1, Tid2, Config) < get_start_time(WorkerP1, Tid, Config)),
+
+    ?assertTransferStatus(#{
+        <<"transferStatus">> := <<"completed">>,
+        <<"targetProviderId">> := DomainP2,
+        <<"path">> := File,
+        <<"invalidationStatus">> := <<"skipped">>,
+        <<"fileId">> := FileObjectId,
+        <<"callback">> := null,
+        <<"filesToTransfer">> := 1,
+        <<"filesTransferred">> := 1,
+        <<"bytesToTransfer">> := Size,
+        <<"bytesTransferred">> := Size,
+        <<"hrHist">> := #{DomainP1 := [Size | _]},
+        <<"dyHist">> := #{DomainP1 := [Size | _]},
+        <<"mthHist">> := #{DomainP1 := [Size | _]}
+    }, WorkerP1, Tid, Config),
+
+    % and
+    ?assertTransferStatus(#{
+        <<"transferStatus">> := <<"completed">>,
+        <<"targetProviderId">> := DomainP2,
+        <<"path">> := File2,
+        <<"invalidationStatus">> := <<"skipped">>,
+        <<"fileId">> := FileObjectId2,
+        <<"callback">> := null,
+        <<"filesToTransfer">> := 1,
+        <<"filesTransferred">> := 1,
+        <<"bytesToTransfer">> := Size2,
+        <<"bytesTransferred">> := Size2,
+        <<"hrHist">> := #{DomainP1 := [Size2 | _]},
+        <<"dyHist">> := #{DomainP1 := [Size2 | _]},
+        <<"mthHist">> := #{DomainP1 := [Size2 | _]}
+    }, WorkerP1, Tid2, Config),
+
+    ?assertEqual([Tid2, Tid], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqual([Tid2, Tid], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assert(get_finish_time(WorkerP2, Tid, Config) < get_finish_time(WorkerP2, Tid2, Config)).
+
 
 restart_file_replication(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -298,7 +385,7 @@ restart_file_replication(Config) ->
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
 
     % when
-    fail_file_replication(WorkerP2),
+    mock_file_replication_failure(WorkerP2),
     {ok, 200, _, Body0} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1,
         <<"replicas", File/binary, "?provider_id=", (domain(WorkerP2))/binary>>,
         post, [user_1_token_header(Config)], []),
@@ -325,14 +412,13 @@ restart_file_replication(Config) ->
             Error -> Error
         end, ?ATTEMPTS),
 
-    ?assertEqualList([Tid], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([Tid], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqual([Tid], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqual([Tid], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
 
-    resume_file_replication(WorkerP2),
-    ?assertMatch({ok, 204, _, _},
-        do_request(WorkerP2, <<"transfers/", Tid/binary>>, patch, [user_1_token_header(Config)], [])),
+    unmock_file_replication(WorkerP2),
+    restart_file_replication(WorkerP2, Tid, Config),
 
     ?assertMatch(#{
         <<"transferStatus">> := <<"completed">>,
@@ -362,15 +448,16 @@ restart_file_replication(Config) ->
     ],
     ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File),
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
-    ?assertEqualList([Tid], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([Tid], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS).
+    ?assertEqual([Tid], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqual([Tid], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS).
 
 cancel_file_replication(Config) ->
     ct:timetrap({minutes, 10}),
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
     SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
 
     File = <<"/space3/file_cancel_replication">>,
@@ -421,7 +508,7 @@ cancel_file_replication(Config) ->
                 json_utils:decode_map(TransferStatus);
             Error -> Error
         end, ?ATTEMPTS),
-    resume_file_replication(WorkerP2).
+    unmock_file_replication(WorkerP2).
 
 replicate_dir(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -493,10 +580,10 @@ replicate_dir(Config) ->
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File2),
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File3),
 
-    ?assertEqualList([Tid], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([Tid], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS).
+    ?assertEqual([Tid], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqual([Tid], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS).
 
 restart_dir_replication(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -526,7 +613,7 @@ restart_dir_replication(Config) ->
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File2}), ?ATTEMPTS),
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File3}), ?ATTEMPTS),
 
-    fail_file_replication(WorkerP2),
+    mock_file_replication_failure(WorkerP2),
 
     % when
     {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1, <<"replicas", Dir1/binary,
@@ -552,12 +639,12 @@ restart_dir_replication(Config) ->
             Error -> Error
         end, ?ATTEMPTS),
 
-    ?assertEqualList([Tid], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([Tid], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqual([Tid], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqual([Tid], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
 
-    resume_file_replication(WorkerP2),
+    unmock_file_replication(WorkerP2),
     %% restart transfer
 
     ?assertMatch({ok, 204, _, _},
@@ -592,10 +679,10 @@ restart_dir_replication(Config) ->
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File2),
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File3),
 
-    ?assertEqualList([Tid], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([Tid], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS).
+    ?assertEqual([Tid], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqual([Tid], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS).
 
 replicate_file_by_id(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -646,10 +733,10 @@ replicate_file_by_id(Config) ->
     ?assertDistributionById(WorkerP1, ExpectedDistribution, Config, FileObjectId),
     ?assertDistributionById(WorkerP2, ExpectedDistribution, Config, FileObjectId),
 
-    ?assertEqualList([Tid], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([Tid], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS).
+    ?assertEqual([Tid], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqual([Tid], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS).
 
 replicate_to_missing_provider(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -765,10 +852,10 @@ invalidate_file_replica(Config) ->
     ?assertDistribution(WorkerP1, ExpectedDistribution2, Config, File),
     ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, File),
 
-    ?assertEqualList([Tid, Tid1], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([Tid, Tid1], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS).
+    ?assertEqual([Tid1, Tid], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqual([Tid1, Tid], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS).
 
 invalidate_file_replica_with_migration(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -822,16 +909,15 @@ invalidate_file_replica_with_migration(Config) ->
         end, ?ATTEMPTS),
 
     ExpectedDistribution2 = [
-        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => []},
         #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
     ],
     ?assertDistribution(WorkerP1, ExpectedDistribution2, Config, File),
     ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, File),
 
-    ?assertEqualList([Tid, Tid], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([Tid, Tid], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS).
+    ?assertEqual([Tid], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqual([Tid], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS).
 
 restart_invalidation_of_file_replica_with_migration(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -852,7 +938,7 @@ restart_invalidation_of_file_replica_with_migration(Config) ->
     ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File),
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
 
-    fail_file_replication(WorkerP2),
+    mock_file_replication_failure(WorkerP2),
     % then
     {ok, 200, _, Body1} = do_request(WorkerP1, <<"replicas", File/binary, "?provider_id=",
         (domain(WorkerP1))/binary, "&migration_provider_id=", (domain(WorkerP2))/binary>>,
@@ -871,7 +957,7 @@ restart_invalidation_of_file_replica_with_migration(Config) ->
             Error -> Error
         end, ?ATTEMPTS),
 
-    resume_file_replication(WorkerP2),
+    unmock_file_replication(WorkerP2),
     ?assertMatch({ok, 204, _, _},
         do_request(WorkerP2, <<"transfers/", Tid1/binary>>, patch, [user_1_token_header(Config)], [])),
 
@@ -885,10 +971,10 @@ restart_invalidation_of_file_replica_with_migration(Config) ->
             Error -> Error
         end, ?ATTEMPTS),
 
-    ?assertEqualList([Tid1], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([Tid1], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqual([Tid1], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqual([Tid1], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
 
     ExpectedDistribution2 = [
         #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
@@ -929,7 +1015,7 @@ invalidate_dir_replica(Config) ->
     {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1,
         <<"replicas", Dir1/binary, "?provider_id=", (domain(WorkerP2))/binary>>,
         post, [user_1_token_header(Config)], []),
-    ?ATTEMPTS),
+        ?ATTEMPTS),
     DecodedBody = json_utils:decode_map(Body),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
 
@@ -963,10 +1049,10 @@ invalidate_dir_replica(Config) ->
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File1),
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File2),
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File3),
-    ?assertEqualList([Tid], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([Tid], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqual([Tid], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqual([Tid], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
 
     {ok, 200, _, Body2} = do_request(WorkerP2,
         <<"replicas", Dir1/binary, "?provider_id=", (domain(WorkerP2))/binary>>,
@@ -1024,9 +1110,9 @@ invalidate_dir_replica(Config) ->
     ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, File1),
     ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, File2),
     ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, File3),
-    ?assertEqualList([Tid, Tid2], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([Tid, Tid2], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS).
+    ?assertEqual([Tid2, Tid], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqual([Tid2, Tid], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS).
 
 automatic_cleanup_should_invalidate_unpopular_files(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -1036,8 +1122,8 @@ automatic_cleanup_should_invalidate_unpopular_files(Config) ->
     BigSize = ?UPPER_SIZE_LIMIT + 1,
     NormalSize = byte_size(?TEST_DATA2),
     BigData = crypto:strong_rand_bytes(BigSize),
-    
-    
+
+
     File1 = <<"/space5/file1_too_small">>,
     File2 = <<"/space5/file2_popular">>,
     File3 = <<"/space5/file3_unpopular">>,
@@ -1061,7 +1147,7 @@ automatic_cleanup_should_invalidate_unpopular_files(Config) ->
     {ok, Handle3} = lfm_proxy:open(WorkerP1, SessionIdP1, {guid, File3Guid}, write),
     lfm_proxy:write(WorkerP1, Handle3, 0, ?TEST_DATA2),
     lfm_proxy:close(WorkerP1, Handle3),
-    
+
     {ok, File4Guid} = lfm_proxy:create(WorkerP1, SessionIdP1, File4, 8#777),
     {ok, Handle4} = lfm_proxy:open(WorkerP1, SessionIdP1, {guid, File4Guid}, write),
     lfm_proxy:write(WorkerP1, Handle4, 0, BigData),
@@ -1141,7 +1227,6 @@ automatic_cleanup_should_invalidate_unpopular_files(Config) ->
         startedAt := _,
         stoppedAt := _
     }, maps:from_list(Report)).
-
 
 posix_mode_get(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -1664,7 +1749,6 @@ set_get_json_metadata_id(Config) ->
         do_request(WorkerP1, <<"metadata-id/", ObjectId/binary, "?filter_type=keypath&filter=key">>, get,
             [user_1_token_header(Config), {<<"accept">>, <<"application/json">>}], [])).
 
-
 set_get_rdf_metadata(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
 
@@ -1934,7 +2018,6 @@ set_get_json_metadata_using_filter(Config) ->
         },
         json_utils:decode_map(ReponseBody)).
 
-
 primitive_json_metadata_test(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
 
@@ -1988,7 +2071,7 @@ quota_exceeded_during_file_replication(Config) ->
 
     % when
     {ok, 200, _, Body0} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1,
-            <<"replicas", File/binary, "?provider_id=", (domain(WorkerP2))/binary>>,
+        <<"replicas", File/binary, "?provider_id=", (domain(WorkerP2))/binary>>,
         post, [user_1_token_header(Config)], []), ?ATTEMPTS),
 
     DecodedBody0 = json_utils:decode_map(Body0),
@@ -2014,9 +2097,7 @@ quota_exceeded_during_file_replication(Config) ->
             Error -> Error
         end, ?ATTEMPTS),
 
-    {ok, FailedTransfers} = rpc:call(WorkerP2, transfer, for_each_past_transfer, [
-        fun(Id, Acc) -> [Id | Acc] end, [], <<"space4">>
-    ]),
+    FailedTransfers = list_finished_transfers(WorkerP2, <<"space4">>),
     ?assert(lists:member(Tid, FailedTransfers)),
     ExpectedDistribution = [
         #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 10]]},
@@ -2055,7 +2136,7 @@ many_simultaneous_transfers(Config) ->
         {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1,
             <<"replicas-id/", FileObjectId/binary, "?provider_id=", (domain(WorkerP2))/binary>>,
             post, [user_1_token_header(Config)], []),
-        ?ATTEMPTS),
+            ?ATTEMPTS),
         DecodedBody = json_utils:decode_map(Body),
         #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
         {Tid, FileGuid}
@@ -2140,10 +2221,10 @@ quota_decreased_after_invalidation(Config) ->
 
     ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File),
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
-    ?assertEqualList([Tid], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([Tid], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqual([Tid], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqual([Tid], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
 
     % when
     {ok, 200, _, Body2} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1,
@@ -2173,10 +2254,10 @@ quota_decreased_after_invalidation(Config) ->
             Error -> Error
         end, ?ATTEMPTS),
 
-    ?assertEqualList([Tid, Tid2], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([Tid, Tid2], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqual([Tid2, Tid], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqual([Tid2, Tid], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
 
     ExpectedDistribution2 = [
         #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 10]]},
@@ -2245,10 +2326,10 @@ quota_decreased_after_invalidation(Config) ->
     ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File2),
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File2),
 
-    ?assertEqualList([Tid, Tid2, Tid3, Tid4], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([Tid, Tid2, Tid3, Tid4], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqualList([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS).
+    ?assertEqual([Tid4, Tid3, Tid2, Tid], list_finished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], list_unfinished_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqual([Tid4, Tid3, Tid2, Tid], list_finished_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], list_unfinished_transfers(WorkerP2, SpaceId), ?ATTEMPTS).
 
 file_replication_failures_should_fail_whole_transfer(Config) ->
     %soft quota on WorkerP2 is set to 0, so every write on WorkerP2 will fail
@@ -2312,7 +2393,7 @@ replicate_big_dir(Config) ->
     SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
     Space = <<"/space3">>,
     RootDir = filename:join(Space, <<"big_dir_replication">>),
-    Structure = [10, 10],   % last level are files
+    Structure = [10, 10], % last level are files
     FilesToCreate = lists:foldl(fun(N, AccIn) ->
         1 + AccIn * N end, 1, Structure),
     BytesSum = byte_size(?TEST_DATA) * lists:foldl(fun(N, AccIn) ->
@@ -2405,8 +2486,9 @@ invalidate_big_dir(Config) ->
     SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
     Space = <<"/space3">>,
     RootDir = filename:join(Space, <<"big_dir_invalidation">>),
-    Structure = [10, 10],   % last level are files
-    FilesToCreate = lists:foldl(fun(N, AccIn) -> 1 + AccIn * N end, 1, Structure),
+    Structure = [10, 10], % last level are files
+    FilesToCreate = lists:foldl(fun(N, AccIn) ->
+        1 + AccIn * N end, 1, Structure),
 
     true = register(?CREATE_FILE_COUNTER, spawn_link(?MODULE, create_file_counter, [0, FilesToCreate, self(), []])),
     true = register(?SYNC_FILE_COUNTER, spawn_link(?MODULE, sync_file_counter, [0, FilesToCreate, self()])),
@@ -2487,16 +2569,17 @@ end_per_suite(Config) ->
     initializer:teardown_storage(Config).
 
 init_per_testcase(Case, Config) when
-    Case =:=  replicate_file;
-    Case =:=  restart_file_replication;
-    Case =:=  replicate_dir;
-    Case =:=  cancel_file_replication;
-    Case =:=  restart_dir_replication;
-    Case =:=  replicate_to_missing_provider;
-    Case =:=  replicate_file_by_id;
-    Case =:=  invalidate_file_replica;
-    Case =:=  invalidate_file_replica_with_migration;
-    Case =:=  restart_invalidation_of_file_replica_with_migration;
+    Case =:= replicate_file;
+    Case =:= transfers_should_be_ordered_by_timestamps;
+    Case =:= restart_file_replication;
+    Case =:= replicate_dir;
+    Case =:= cancel_file_replication;
+    Case =:= restart_dir_replication;
+    Case =:= replicate_to_missing_provider;
+    Case =:= replicate_file_by_id;
+    Case =:= invalidate_file_replica;
+    Case =:= invalidate_file_replica_with_migration;
+    Case =:= restart_invalidation_of_file_replica_with_migration;
     Case =:= invalidate_dir_replica
     ->
     init_per_testcase(all, [{space_id, <<"space3">>} | Config]);
@@ -2513,7 +2596,7 @@ init_per_testcase(metric_get, Config) ->
 init_per_testcase(Case, Config) when
     Case =:= query_file_popularity_index;
     Case =:= spatial_flag_test
-->
+    ->
     [_, WorkerP1] = ?config(op_worker_nodes, Config),
     {ok, _} = rpc:call(WorkerP1, space_storage, enable_file_popularity, [<<"space1">>]),
     init_per_testcase(all, Config);
@@ -2522,7 +2605,7 @@ init_per_testcase(Case, Config) when
     Case =:= quota_exceeded_during_file_replication;
     Case =:= file_replication_failures_should_fail_whole_transfer;
     Case =:= many_simultaneous_transfers
-->
+    ->
     [WorkerP2, _WorkerP1] = ?config(op_worker_nodes, Config),
     OldSoftQuota = rpc:call(WorkerP2, application, get_env, [op_worker, soft_quota_limit_size]),
     rpc:call(WorkerP2, application, set_env, [op_worker, soft_quota_limit_size, ?ZERO_SOFT_QUOTA]),
@@ -2588,6 +2671,7 @@ end_per_testcase(Case, Config) when
 
 end_per_testcase(Case, Config) when
     Case =:= replicate_file;
+    Case =:= transfers_should_be_ordered_by_timestamps;
     Case =:= restart_file_replication;
     Case =:= replicate_dir;
     Case =:= cancel_file_replication;
@@ -2649,7 +2733,7 @@ user_1_token_header(Config) ->
 domain(Node) ->
     atom_to_binary(?GET_DOMAIN(Node), utf8).
 
-fail_file_replication(Node) ->
+mock_file_replication_failure(Node) ->
     test_utils:mock_new(Node, replica_synchronizer),
     test_utils:mock_expect(Node, replica_synchronizer, synchronize,
         fun(_, _, _, _, _) ->
@@ -2658,15 +2742,15 @@ fail_file_replication(Node) ->
     ).
 
 lengthen_file_replication_time(Node, SleepTimeInSeconds) ->
-    test_utils:mock_new(Node, replica_synchronizer),
-    test_utils:mock_expect(Node, replica_synchronizer, synchronize,
+    ok = test_utils:mock_new(Node, replica_synchronizer),
+    ok = test_utils:mock_expect(Node, replica_synchronizer, synchronize,
         fun(UserCtx, FileCtx, Block, Prefetch, TransferId) ->
-            timer:sleep(timer:seconds(SleepTimeInSeconds)),    %lengthen replication time
+            timer:sleep(timer:seconds(SleepTimeInSeconds)), %lengthen replication time
             meck:passthrough([UserCtx, FileCtx, Block, Prefetch, TransferId])
         end
     ).
 
-resume_file_replication(Node) ->
+unmock_file_replication(Node) ->
     ok = test_utils:mock_unload(Node, replica_synchronizer).
 
 create_nested_directory_tree(Node, SessionId, [SubFilesNum], Root) ->
@@ -2729,11 +2813,11 @@ clean_monitoring_dir(Worker, SpaceId) ->
     end.
 
 list_finished_transfers(Worker, SpaceId) ->
-    {ok, Transfers} = rpc:call(Worker, transfer, for_each_past_transfer, [?LIST_TRANSFER, [], SpaceId]),
+    {ok, Transfers} = rpc:call(Worker, transfer, list_transfers, [SpaceId, false]),
     Transfers.
 
 list_unfinished_transfers(Worker, SpaceId) ->
-    {ok, Transfers} = rpc:call(Worker, transfer, for_each_current_transfer, [?LIST_TRANSFER, [], SpaceId]),
+    {ok, Transfers} = rpc:call(Worker, transfer, list_transfers, [SpaceId, true]),
     Transfers.
 
 start_monitoring_worker(Node) ->
@@ -2765,3 +2849,29 @@ ensure_transfers_removed(Config) ->
             ?assertMatch([], list_unfinished_transfers(Worker, SpaceId), ?ATTEMPTS)
         end, SpaceIds)
     end, Workers).
+
+get_start_time(Worker, Tid, Config) ->
+    Status = get_status(Worker, Tid, Config),
+    maps:get(<<"startTime">>, Status).
+
+get_finish_time(Worker, Tid, Config) ->
+    Status = get_status(Worker, Tid, Config),
+    maps:get(<<"finishTime">>, Status).
+
+get_status(Worker, Tid, Config) ->
+    {ok, 200, _, TransferStatus} = do_request(Worker, <<"transfers/", Tid/binary>>,
+        get, [user_1_token_header(Config)], []),
+    json_utils:decode_map(TransferStatus).
+
+schedule_file_replication(Worker, ProviderId, File, Config) ->
+    {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, do_request(Worker,
+        <<"replicas", File/binary, "?provider_id=", ProviderId/binary>>,
+        post, [user_1_token_header(Config)], []
+    ), ?ATTEMPTS),
+    DecodedBody = json_utils:decode_map(Body),
+    #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
+    Tid.
+
+restart_file_replication(Worker, Tid, Config) ->
+    {ok, 204, _, _} =
+        do_request(Worker, <<"transfers/", Tid/binary>>, patch, [user_1_token_header(Config)], []).
