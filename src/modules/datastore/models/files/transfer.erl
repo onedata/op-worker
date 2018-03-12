@@ -446,7 +446,10 @@ mark_active_invalidation(TransferId) ->
 -spec mark_completed_invalidation(id()) -> {ok, id()} | {error, term()}.
 mark_completed_invalidation(TransferId) ->
     case update(TransferId, fun(T) ->
-        {ok, T#transfer{invalidation_status = completed}}
+        {ok, T#transfer{
+            invalidation_status = completed,
+            finish_time = provider_logic:zone_time_seconds()
+        }}
     end) of
         {ok, #document{
             value = #transfer{
@@ -939,7 +942,7 @@ list_transfers_internal(SpaceId, ListDocId, Offset, Length) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Executes callback for each transfer.
+%% @equiv for_each_transfer(ListDocId, Callback,  Acc0, SpaceId, #{}).
 %% @end
 %%--------------------------------------------------------------------
 -spec for_each_transfer(
@@ -951,16 +954,16 @@ for_each_transfer(ListDocId, Callback, Acc0, SpaceId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Executes callback for each successfully completed transfer.
+%% Executes callback for each transfer.
 %% @end
 %%--------------------------------------------------------------------
 -spec for_each_transfer(
     virtual_list_id(), Callback :: fun((id(), Acc0 :: term()) -> Acc :: term()),
-    Acc0 :: term(), od_space:id(), datastore_model:fold_opts()) -> {ok, Acc :: term()} | {error, term()}.
+    Acc0 :: term(), od_space:id(), datastore_model:fold_opts()) ->
+    {ok, Acc :: term()} | {error, term()}.
 for_each_transfer(ListDocId, Callback, Acc0, SpaceId, Options) ->
     datastore_model:fold_links(?CTX, link_root(ListDocId, SpaceId), all, fun
-        (#link{target = Name}, Acc) -> {ok, Callback(Name, Acc)}
-    %%        (#link{target = Target}, Acc) -> {ok, Callback(Target, Acc)}
+        (#link{target = Target}, Acc) -> {ok, Callback(Target, Acc)}
     end, Acc0, Options).
 
 %%-------------------------------------------------------------------

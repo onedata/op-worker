@@ -153,7 +153,7 @@ all() ->
     ]).
 
 -define(LIST_TRANSFER, fun(Id, Acc) -> [Id | Acc] end).
--define(ATTEMPTS, 30).
+-define(ATTEMPTS, 300).
 
 -define(assertDistribution(Worker, ExpectedDistribution, Config, File),
     ?assertEqual(lists:sort(ExpectedDistribution), begin

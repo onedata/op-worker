@@ -15,6 +15,7 @@
 -author("Lukasz Opiola").
 -author("Jakub Liput").
 
+-include("global_definitions.hrl").
 -include("proto/common/credentials.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -24,7 +25,8 @@
 
 -define(CURRENT_TRANSFERS_PREFIX, <<"current">>).
 -define(COMPLETED_TRANSFERS_PREFIX, <<"completed">>).
--define(MAX_TRANSFERS_TO_LIST, 50).
+-define(MAX_TRANSFERS_TO_LIST, application:get_env(?APP_NAME, max_transfers_to_list, 50)).
+-define(TRANSFERS_LIST_OFFSET, application:get_env(?APP_NAME, transfers_list_offset, 0)).
 
 %% API
 -export([init/0, terminate/0]).
@@ -445,7 +447,8 @@ space_provider_list_record(SpaceId) ->
 space_transfer_list_record(RecordId) ->
     {Prefix, SpaceId} = op_gui_utils:association_to_ids(RecordId),
     Ongoing = Prefix =:= ?CURRENT_TRANSFERS_PREFIX,
-    {ok, Transfers} = transfer:list_transfers(SpaceId, Ongoing, 0, ?MAX_TRANSFERS_TO_LIST),
+    {ok, Transfers} = transfer:list_transfers(SpaceId, Ongoing,
+        ?TRANSFERS_LIST_OFFSET, ?MAX_TRANSFERS_TO_LIST),
     [
         {<<"id">>, RecordId},
         {<<"list">>, Transfers}
