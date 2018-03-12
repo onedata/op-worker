@@ -17,7 +17,7 @@
 
 % API
 -export([local_id/1, id/2, critical_section/2, save_and_bump_version/1]).
--export([create/1, save/1, get/1, update/2, delete/1, delete/2]).
+-export([create/1, create/2, save/1, get/1, update/2, delete/1, delete/2]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -86,10 +86,19 @@ save_and_bump_version(FileLocationDoc) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create(doc()) -> {ok, doc()} | {error, term()}.
+create(Doc) ->
+    create(Doc, false).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates file location.
+%% @end
+%%--------------------------------------------------------------------
+-spec create(doc(), boolean()) -> {ok, doc()} | {error, term()}.
 create(Doc = #document{value = #file_location{
     uuid = FileUuid,
     space_id = SpaceId
-}}) ->
+}}, GeneratedKey) ->
     NewSize = count_bytes(Doc),
     space_quota:apply_size_change_and_maybe_emit(SpaceId, NewSize),
     case get_owner_id(FileUuid) of
@@ -98,7 +107,14 @@ create(Doc = #document{value = #file_location{
         {error, not_found} ->
             ok
     end,
-    ?extract_key(datastore_model:create(?CTX, Doc#document{scope = SpaceId})).
+    case GeneratedKey of
+        true ->
+            ?extract_key(datastore_model:save(?CTX#{generated_key => GeneratedKey},
+                Doc#document{scope = SpaceId}));
+        _ ->
+            ?extract_key(datastore_model:create(?CTX,
+                Doc#document{scope = SpaceId}))
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -25,7 +25,8 @@
 %% API
 -export([chmod_storage_file/3, rename_storage_file/6,
     create_storage_file_if_not_exists/1, create_storage_file_location/2,
-    create_delayed_storage_file/1, create_storage_file/2, delete_storage_file/2,
+    create_storage_file_location/3, create_delayed_storage_file/1,
+    create_storage_file/2, delete_storage_file/2,
     delete_storage_file_without_location/2, delete_storage_dir/2,
     create_parent_dirs/1]).
 
@@ -149,6 +150,16 @@ create_delayed_storage_file(FileCtx) ->
 -spec create_storage_file_location(file_ctx:ctx(), StorageFileCreated :: boolean()) ->
     {#file_location{}, file_ctx:ctx()}.
 create_storage_file_location(FileCtx, StorageFileCreated) ->
+    create_storage_file_location(FileCtx, StorageFileCreated, false).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates file location of storage file
+%% @end
+%%--------------------------------------------------------------------
+-spec create_storage_file_location(file_ctx:ctx(), StorageFileCreated :: boolean(),
+    GeneratedKey :: boolean()) -> {#file_location{}, file_ctx:ctx()}.
+create_storage_file_location(FileCtx, StorageFileCreated, GeneratedKey) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
@@ -165,7 +176,7 @@ create_storage_file_location(FileCtx, StorageFileCreated) ->
     case file_location:create(#document{
         key = LocId,
         value = Location
-    }) of
+    }, GeneratedKey) of
         {ok, _LocId} ->
             FileCtx4 = file_ctx:add_file_location(FileCtx3, LocId),
             {Location, FileCtx4};

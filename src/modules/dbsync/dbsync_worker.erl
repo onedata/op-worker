@@ -150,6 +150,9 @@ start_streams() ->
             Name = {Module, SpaceId},
             Pid = global:whereis_name(Name),
             Node = consistent_hasing:get_node(Name),
+
+            ?info("start_stream: ~p", [{Name, Pid, Node =:= node(), Module}]),
+
             case {Pid, Node =:= node(), Module} of
                 {undefined, true, dbsync_in_stream} ->
                     start_in_stream(SpaceId);
@@ -170,6 +173,7 @@ start_streams() ->
 -spec start_in_stream(od_space:id()) -> supervisor:startchild_ret().
 start_in_stream(SpaceId) ->
     Spec = dbsync_in_stream_spec(SpaceId),
+    ?info("started_stream: ~p", [SpaceId]),
     supervisor:start_child(?DBSYNC_WORKER_SUP, Spec).
 
 %%--------------------------------------------------------------------
@@ -188,8 +192,10 @@ start_out_stream(SpaceId) ->
     end,
     Handler = fun
         (Since, Until, Docs) when Since =:= Until ->
+            ?info("broadcast ~p", [{SpaceId, Since, Until, Docs}]),
             dbsync_communicator:broadcast_changes(SpaceId, Since, Until, Docs);
         (Since, Until, Docs) ->
+            ?info("broadcast ~p", [{SpaceId, Since, Until, Docs}]),
             ProviderId = oneprovider:get_id(),
             dbsync_communicator:broadcast_changes(SpaceId, Since, Until, Docs),
             dbsync_state:set_seq(SpaceId, ProviderId, Until)
