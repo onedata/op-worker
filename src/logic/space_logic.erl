@@ -78,7 +78,7 @@ get_protected_data(SessionId, SpaceId) ->
 get_name(SessionId, SpaceId) ->
     case get_protected_data(SessionId, SpaceId) of
         {ok, #document{value = #od_space{name = Name}}} ->
-            ?info("space name ~p", [{SpaceId, Name}]),
+%%            ?info("space name ~p", [{SpaceId, Name}]),
             {ok, Name};
         {error, _} = Error ->
             Error
