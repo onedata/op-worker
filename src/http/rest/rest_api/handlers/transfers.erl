@@ -133,7 +133,7 @@ list_transfers(Req, State = #{list_all := true}) ->
                 LimitedTransfers;
             _ ->
                 lists:filter(fun(TransferId) ->
-                    TransferStatus = transfer:get_status(TransferId),
+                    TransferStatus = transfer_utils:get_status(TransferId),
                     atom_to_binary(TransferStatus, utf8) =:= Status
                 end, LimitedTransfers)
         end,
@@ -163,9 +163,11 @@ restart_transfer(Req, State) ->
     case transfer:restart(Id) of
         {ok, _} ->
             ok;
+        {error, active_transfer} ->
+            throw(?ERROR_NOT_TARGET_PROVIDER);
         {error, not_target_provider} ->
             throw(?ERROR_NOT_TARGET_PROVIDER);
-        {error, not_source_provdier} ->
+        {error, not_source_provider} ->
             throw(?ERROR_NOT_SOURCE_PROVIDER);
         {error, {not_found, transfer}} ->
             throw(?ERROR_TRANSFER_NOT_FOUND)

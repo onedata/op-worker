@@ -447,8 +447,14 @@ space_provider_list_record(SpaceId) ->
 space_transfer_list_record(RecordId) ->
     {Prefix, SpaceId} = op_gui_utils:association_to_ids(RecordId),
     Ongoing = Prefix =:= ?CURRENT_TRANSFERS_PREFIX,
-    {ok, Transfers} = transfer:list_transfers(SpaceId, Ongoing,
-        ?TRANSFERS_LIST_OFFSET, ?MAX_TRANSFERS_TO_LIST),
+    {ok, Transfers} = case Ongoing of
+        false ->
+            transfer:list_past_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET, ?MAX_TRANSFERS_TO_LIST);
+        true ->
+            {ok, ScheduledTransfers} = transfer:list_scheduled_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET, ?MAX_TRANSFERS_TO_LIST),
+            {ok, CurrentTransfers} = transfer:list_current_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET, ?MAX_TRANSFERS_TO_LIST),
+            {ok, lists:umerge(ScheduledTransfers, CurrentTransfers)}
+    end,
     [
         {<<"id">>, RecordId},
         {<<"list">>, Transfers}

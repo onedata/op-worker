@@ -22,7 +22,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([on_new_transfer_doc/1, on_transfer_doc_change/1, mark_finished/1, mark_failed/2
+-export([mark_finished/1, mark_failed/2
 ]).
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -35,35 +35,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Callback called when new transfer doc is created locally.
-%% (Because dbsync doesn't detect local changes).
-%% @end
-%%--------------------------------------------------------------------
--spec on_new_transfer_doc(transfer:doc()) -> ok.
-on_new_transfer_doc(Transfer) ->
-    on_transfer_doc_change(Transfer).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Callback called when transfer doc is synced from some other provider.
-%% @end
-%%--------------------------------------------------------------------
--spec on_transfer_doc_change(transfer:doc()) -> ok.
-on_transfer_doc_change(Transfer = #document{value = #transfer{
-    status = scheduled,
-    target_provider_id = TargetProviderId
-}}) ->
-    case oneprovider:is_self(TargetProviderId) of
-        true ->
-            new_transfer(Transfer);
-        false ->
-            ok
-    end;
-on_transfer_doc_change(_ExistingTransfer) ->
-    ok.
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -130,13 +101,13 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
 handle_cast({start_transfer, SessionId, TransferId, FileGuid, Callback, InvalidateSourceReplica}, State) ->
-    sync_req:start_transfer(user_ctx:new(SessionId), file_ctx:new_by_guid(FileGuid), undefined, TransferId, self()),
+    sync_req:start_transfer(user_ctx:new(SessionId), file_ctx:new_by_guid(FileGuid), undefined, TransferId),
     receive
         transfer_finished ->
             {ok, _}  = transfer:mark_completed(TransferId),
             notify_callback(Callback, InvalidateSourceReplica);
         {transfer_failed, Reason} ->
-            ?error_stacktrace("Transfer ~p failed due to ~p", [TransferId, Reason]),
+            ?error("Transfer ~p failed due to ~p", [TransferId, Reason]),
             {ok, _} = transfer:mark_failed(TransferId)
     end,
     {noreply, State, hibernate};
@@ -187,31 +158,6 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================\
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Starts new transfer based on existing doc synchronized from other provider
-%% @end
-%%--------------------------------------------------------------------
--spec new_transfer(transfer:doc()) -> ok.
-new_transfer(#document{
-    key = TransferId,
-    value = #transfer{
-        file_uuid = FileUuid,
-        space_id = SpaceId,
-        callback = Callback,
-        invalidate_source_replica = InvalidateSourceReplica
-    }
-}) ->
-    FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
-    worker_pool:cast(?TRANSFER_CONTROLLERS_POOL, {
-        start_transfer,
-        session:root_session_id(),
-        TransferId,
-        FileGuid,
-        Callback,
-        InvalidateSourceReplica
-    }).
 
 %%--------------------------------------------------------------------
 %% @private

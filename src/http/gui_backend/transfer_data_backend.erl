@@ -189,15 +189,15 @@ transfer_record(TransferId) ->
         {error, ?ENOENT} -> <<"deleted">>;
         {error, _} -> <<"unknown">>
     end,
-    IsOngoing = transfer:is_ongoing(Transfer),
+    IsOngoing = transfer_utils:is_ongoing(Transfer),
     FinishTime = case IsOngoing of
         true -> null;
         false -> Transfer#transfer.finish_time
     end,
-    IsMigration = transfer:is_migrating(Transfer),
+    IsInvalidation = transfer_utils:is_invalidation(Transfer),
     {ok, [
         {<<"id">>, TransferId},
-        {<<"migration">>, IsMigration},
+        {<<"migration">>, IsInvalidation},
         {<<"migrationSource">>, SourceProviderId},
         {<<"destination">>, utils:ensure_defined(DestinationProviderId, undefined, null)},
         {<<"isOngoing">>, IsOngoing},
@@ -317,6 +317,12 @@ get_status(T = #transfer{invalidate_source_replica = true, status = skipped}) ->
         scheduled -> invalidating;
         active -> invalidating
     end;
+get_status(#transfer{
+    status = active,
+    files_processed = 0
+}) ->
+    % transfer will be visible in GUI as active when files_processed counter > 0
+    scheduled;
 get_status(#transfer{status = Status}) ->
     Status.
 

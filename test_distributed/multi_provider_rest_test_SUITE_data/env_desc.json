@@ -257,6 +257,24 @@
                         "supported_size": 1
                     }
                 }
+            },
+            "space10": {
+                "displayed_name": "space10",
+                "users": [
+                    "user1"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st1",
+                        "supported_size": 10737418240
+                    },
+                    "p2": {
+                        "storage": "/mnt/st2",
+                        "supported_size": 10737418240
+                    }
+                }
             }
         }
     }

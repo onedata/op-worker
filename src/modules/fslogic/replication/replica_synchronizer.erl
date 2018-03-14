@@ -56,16 +56,23 @@ synchronize(UserCtx, FileCtx, Block = #file_block{size = RequestedSize}, Prefetc
     {_LocalDoc, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
     {LocationDocs, FileCtx3} = file_ctx:get_file_location_docs(FileCtx2),
     ProvidersAndBlocks = replica_finder:get_blocks_for_sync(LocationDocs, [EnlargedBlock]),
+    %todo VFS-4216 verify whether all blocks are synchronized, basing on file's size in file_meta
     FileGuid = file_ctx:get_guid_const(FileCtx3),
     UserId = user_ctx:get_user_id(UserCtx),
-    lists:foreach(
-        fun({ProviderId, Blocks}) ->
-            lists:foreach(fun(FileBlock) ->
-                foreach_chunk(FileBlock, ?REQUEST_CHUNK_SIZE, fun(Chunk) ->
-                    maybe_transfer_chunk(Chunk, ProviderId, FileGuid, UserId, FileCtx, TransferId)
-                end)
-            end, Blocks)
-        end, ProvidersAndBlocks),
+    case ProvidersAndBlocks of
+        [] -> ok;
+        _ ->
+            lists:foreach(
+                fun({ProviderId, Blocks}) ->
+                    lists:foreach(fun(FileBlock) ->
+                        foreach_chunk(FileBlock, ?REQUEST_CHUNK_SIZE, fun(Chunk) ->
+                            maybe_transfer_chunk(Chunk, ProviderId, FileGuid, UserId, FileCtx, TransferId)
+                        end)
+                    end, Blocks)
+                end, ProvidersAndBlocks),
+            transfer:increase_files_transferred_counter(TransferId)
+    end,
+
     SessId = user_ctx:get_session_id(UserCtx),
     fslogic_event_emitter:emit_file_location_changed(FileCtx3, [SessId], Block).
 
@@ -101,19 +108,12 @@ foreach_chunk(#file_block{offset = O, size = S}, ChunkSize ,  Fun) ->
 %%-------------------------------------------------------------------
 -spec maybe_transfer_chunk(fslogic_blocks:block(), oneprovider:id(), file_meta:uuid(),
     od_user:id(), file_ctx:ctx(), transfer:id() | undefined) -> ok.
-maybe_transfer_chunk(Chunk = #file_block{size = BlockSize}, ProviderId, FileGuid,
+maybe_transfer_chunk(Chunk, ProviderId, FileGuid,
     UserId, FileCtx, TransferId
 ) ->
-    case transfer:is_ongoing(TransferId) of
+    case transfer_utils:is_ongoing(TransferId) of
         true ->
-            try
-                {ok, _} = transfer:mark_data_transfer_scheduled(TransferId, BlockSize),
-                transfer_chunk(Chunk, ProviderId, FileGuid, UserId, FileCtx, TransferId)
-            catch
-                Error:Reason ->
-                    transfer:mark_data_transfer_scheduled(TransferId, -BlockSize),
-                    erlang:Error(Reason)
-            end;
+            transfer_chunk(Chunk, ProviderId, FileGuid, UserId, FileCtx, TransferId);
         false ->
             throw({transfer_cancelled, TransferId})
     end.
@@ -207,7 +207,7 @@ receive_rtransfer_notification(Ref, TransferId) ->
             Status
     after
          ?CHECK_STATUS_INTERVAL ->
-            case transfer:is_ongoing(TransferId) of
+            case transfer_utils:is_ongoing(TransferId) of
                 true ->
                     receive_rtransfer_notification(Ref, TransferId);
                 false ->
