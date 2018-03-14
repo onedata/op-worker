@@ -182,6 +182,24 @@ handle_cast(update_subdomain_delegation_ips, State) ->
                 {terminate, normal})
     end,
     {noreply, State};
+
+handle_cast(restart_listeners, State) ->
+    Modules = [
+        gui_listener,
+        nagios_listener,
+        hackney,
+        ssl
+    ],
+    lists:foreach(fun(Module) ->
+        Module:stop()
+    end, Modules),
+    lists:foreach(fun(Module) ->
+        ok = Module:start()
+    end, lists:reverse(Modules)),
+    % As ssl was restarted, connection to Onezone must be restarted too.
+    gs_worker:restart_connection(),
+    {noreply, State};
+
 handle_cast(Request, State) ->
     ?log_bad_request(Request),
     {noreply, State}.

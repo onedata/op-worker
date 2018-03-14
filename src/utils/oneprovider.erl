@@ -226,20 +226,9 @@ on_connection_to_oz() ->
 %%--------------------------------------------------------------------
 -spec restart_listeners() -> ok.
 restart_listeners() ->
-    Modules = [
-        gui_listener,
-        nagios_listener,
-        hackney,
-        ssl
-    ],
-    lists:foreach(fun(Module) ->
-        Module:stop()
-    end, Modules),
-    lists:foreach(fun(Module) ->
-        ok = Module:start()
-    end, lists:reverse(Modules)),
-    % As ssl was restarted, connection to Onezone must be restarted too.
-    gs_worker:restart_connection().
+    % Must be done in node_manager process because some ETS tables are started
+    % alongside listeners.
+    gen_server2:cast(?NODE_MANAGER_NAME, restart_listeners).
 
 
 %%--------------------------------------------------------------------
