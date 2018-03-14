@@ -104,12 +104,13 @@ update_times_and_emit(FileCtx, TimesDiff) ->
     Times = prepare_times(TimesDiff),
     case times:create_or_update(#document{key = FileUuid,
         value = Times, scope = file_ctx:get_space_id_const(FileCtx)}, TimesDiff) of
-        {ok, FileUuid} -> ok;
+        {ok, FileUuid} ->
+            spawn(fun() ->
+                fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx)
+            end),
+            ok;
         {error, not_changed} -> ok
     end,
-    spawn(fun() ->
-        fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx)
-    end),
     ok.
 
 %%%===================================================================
