@@ -233,7 +233,7 @@ restart_listeners() ->
         ssl
     ],
     lists:foreach(fun(Module) ->
-        ok = Module:stop()
+        Module:stop()
     end, Modules),
     lists:foreach(fun(Module) ->
         ok = Module:start()
