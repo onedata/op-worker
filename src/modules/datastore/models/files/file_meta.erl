@@ -120,7 +120,7 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{
             }
         },
         TreeId = oneprovider:get_id(),
-        Ctx = ?CTX#{scope => SpaceId},
+        Ctx = ?CTX#{scope => ParentDoc#document.scope},
         Link = {FileName, FileUuid},
         case datastore_model:add_links(Ctx, ParentUuid, TreeId, Link) of
             {ok, #link{}} ->
