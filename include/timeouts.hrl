@@ -22,5 +22,7 @@
 -define(SEND_RETRY_DELAY, timer:seconds(1)).
 -define(DEFAULT_REQUEST_TIMEOUT, timer:minutes(5)).
 
--define(PROTO_CONNECTION_TIMEOUT, application:get_env(?APP_NAME,
-  proto_connection_timeout, timer:minutes(10))).
+-define(PROTO_CONNECTION_TIMEOUT, timer:seconds(10)).
+% Uncomment to use connection_test_SUITE:socket_timeout_test
+%%-define(PROTO_CONNECTION_TIMEOUT, application:get_env(?APP_NAME,
+%%  proto_connection_timeout, timer:minutes(10))).

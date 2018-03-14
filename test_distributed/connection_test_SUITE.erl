@@ -64,7 +64,7 @@
 ]).
 
 -define(NORMAL_CASES_NAMES, [
-    socket_timeout_test,
+%%    socket_timeout_test,
     timeouts_test,
     provider_connection_test,
     rtransfer_connection_secret_test,
@@ -941,7 +941,7 @@ init_per_testcase(socket_timeout_test, Config) ->
         test_utils:set_env(Worker, ?APP_NAME,
             proto_connection_timeout, timer:seconds(10))
     end, Workers),
-    init_per_testcase(default, Config);
+    init_per_testcase(timeouts_test, Config);
 
 init_per_testcase(default, Config) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -993,7 +993,7 @@ end_per_testcase(socket_timeout_test, Config) ->
         test_utils:set_env(Worker, ?APP_NAME,
             proto_connection_timeout, timer:minutes(10))
     end, Workers),
-    end_per_testcase(default, Config);
+    end_per_testcase(timeouts_test, Config);
 
 end_per_testcase(default, Config) ->
     Workers = ?config(op_worker_nodes, Config),
