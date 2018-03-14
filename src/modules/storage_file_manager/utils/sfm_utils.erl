@@ -145,6 +145,7 @@ create_delayed_storage_file(FileCtx) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates file location of storage file
+%% @equiv create_storage_file_location(FileCtx, StorageFileCreated, false)
 %% @end
 %%--------------------------------------------------------------------
 -spec create_storage_file_location(file_ctx:ctx(), StorageFileCreated :: boolean()) ->

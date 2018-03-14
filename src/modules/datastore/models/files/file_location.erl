@@ -83,6 +83,7 @@ save_and_bump_version(FileLocationDoc) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates file location.
+%% @equiv create(Doc, false)
 %% @end
 %%--------------------------------------------------------------------
 -spec create(doc()) -> {ok, doc()} | {error, term()}.
