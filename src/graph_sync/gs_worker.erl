@@ -21,7 +21,8 @@
 -export([init/1, handle/1, cleanup/0]).
 
 %% API
--export([is_connected/0]).
+-export([ensure_connected/0]).
+-export([restart_connection/0]).
 -export([supervisor_flags/0]).
 
 -define(GS_WORKER_SUP, gs_worker_sup).
@@ -42,12 +43,31 @@ supervisor_flags() ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Predicate saying if the provider is actively connected to Onezone via
-%% GraphSync channel.
+%% GraphSync channel. If not, tries to reconnect before returning false.
 %% @end
 %%--------------------------------------------------------------------
--spec is_connected() -> boolean().
-is_connected() ->
-    worker_proxy:call(?MODULE, is_connected).
+-spec ensure_connected() -> boolean().
+ensure_connected() ->
+    worker_proxy:call(?MODULE, ensure_connected).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Kills existing Onezone connection (if any) and starts a new one if run on
+%% dedicated graph_sync node.
+%% If run on all cluster nodes, the connection will be restarted immediately.
+%% @end
+%%--------------------------------------------------------------------
+-spec restart_connection() -> ok.
+restart_connection() ->
+    case global:whereis_name(?GS_CLIENT_WORKER_GLOBAL_NAME) of
+        Pid when is_pid(Pid) -> exit(Pid, kill);
+        _ -> ok
+    end,
+    % Force a reconnection attempt:
+    %   * if this is the dedicated node, the connection will be started immediately
+    %   * if not, next periodic healthcheck will start the connection
+    ensure_connected(),
+    ok.
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -76,7 +96,7 @@ handle(ping) ->
     pong;
 handle(healthcheck) ->
     ok;
-handle(is_connected) ->
+handle(ensure_connected) ->
     case connection_healthcheck() of
         alive -> true;
         _ -> false
@@ -128,8 +148,8 @@ cleanup() ->
 %% @private
 %% @doc
 %% Checks if gs_client_worker instance is up and running on one of cluster nodes
-%% and in case it's not, starts the worker on one of the nodes (this code is
-%% run on all cluster nodes).
+%% and in case it's not, starts the worker if this is the dedicated node. Must
+%% be run on all nodes to ensure that the connection is restarted.
 %% @end
 %%--------------------------------------------------------------------
 -spec connection_healthcheck() -> unregistered | skipped | alive | connection_error.

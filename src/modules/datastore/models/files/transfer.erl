@@ -21,21 +21,22 @@
 
 %% API
 -export([start/7, cancel/1, get_status/1, get_info/1, get/1, init/0, cleanup/0,
-    decode_pid/1, encode_pid/1, get_controller/1, delete_links/3, restart/1, delete/1]).
+    decode_pid/1, encode_pid/1, get_controller/1, restart/1, delete/1]).
 -export([mark_active/2, mark_completed/1, mark_failed/1,
-    mark_active_invalidation/1, mark_completed_invalidation/2, mark_failed_invalidation/1,
+    mark_active_invalidation/1, mark_completed_invalidation/1, mark_failed_invalidation/1,
     mark_file_transfer_scheduled/2, mark_file_transfer_finished/2,
-    mark_data_transfer_scheduled/2, mark_data_transfer_finished/3,
-    for_each_past_transfer/3, for_each_current_transfer/3, restart_unfinished_transfers/1,
+    mark_data_transfer_scheduled/2, mark_data_transfer_finished/3, restart_unfinished_transfers/1,
     mark_file_invalidation_finished/2, mark_file_invalidation_scheduled/2,
-    mark_cancelled/1, should_continue/1, increase_failed_file_transfers/1, mark_cancelled_invalidation/1]).
--export([list_transfers/2, is_ongoing/1, is_migrating/1, update/2]).
+    mark_cancelled/1, should_continue/1, increase_failed_file_transfers/1,
+    mark_cancelled_invalidation/1]).
+-export([list_transfers/2, list_transfers/4, is_ongoing/1, is_migrating/1, update/2]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_posthooks/0, get_record_version/0,
     upgrade_record/2]).
 
 -type id() :: binary().
+-type link_id() :: binary().
 -type diff() :: datastore:diff(transfer()).
 -type status() :: scheduled | skipped | active | completed | cancelled | failed.
 -type callback() :: undefined | binary().
@@ -55,6 +56,9 @@
     mutator => oneprovider:get_id_or_undefined(),
     local_links_tree_id => oneprovider:get_id_or_undefined()
 }).
+
+-define(ID_PART_LENGTH, 6).
+-define(EPOCH_INFINITY, 9999999999). % GMT: Saturday, 20 November 2286 17:46:39
 
 %%%===================================================================
 %%% API
@@ -99,7 +103,7 @@ start(SessionId, FileGuid, FilePath, SourceProviderId, TargetProviderId, Callbac
         false ->
             skipped
     end,
-    TimeSeconds = provider_logic:zone_time_seconds(),
+    StartTime = provider_logic:zone_time_seconds(),
     SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
     {ok, UserId} = session:get_user_id(SessionId),
     ToCreate = #document{
@@ -115,7 +119,7 @@ start(SessionId, FileGuid, FilePath, SourceProviderId, TargetProviderId, Callbac
             source_provider_id = SourceProviderId,
             target_provider_id = TargetProviderId,
             invalidate_source_replica = InvalidateSourceReplica,
-            start_time = TimeSeconds,
+            start_time = StartTime,
             finish_time = 0,
             last_update = #{},
             min_hist = #{},
@@ -126,7 +130,7 @@ start(SessionId, FileGuid, FilePath, SourceProviderId, TargetProviderId, Callbac
         }},
     {ok, #document{key = TransferId}} = create(ToCreate),
     session:add_transfer(SessionId, TransferId),
-    ok = add_link(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId),
+    ok = add_active_transfer_link(TransferId, SpaceId, StartTime),
     transfer_controller:on_new_transfer_doc(ToCreate#document{key = TransferId}),
     invalidation_controller:on_new_transfer_doc(ToCreate#document{key = TransferId}),
     {ok, TransferId}.
@@ -166,9 +170,13 @@ restart_unfinished_transfers(SpaceId) ->
 %%-------------------------------------------------------------------
 -spec restart(id()) -> {ok, id()} | {error, term()}.
 restart(TransferId) ->
+    FinishTime = get_finish_time(TransferId),
     case update(TransferId, fun maybe_restart/1) of
-        {ok, TransferDoc = #document{value = #transfer{space_id = SpaceId}}} ->
-            move_from_past_to_current_links_tree(TransferId, SpaceId),
+        {ok, TransferDoc = #document{value = #transfer{
+            space_id = SpaceId,
+            start_time = NewStartTime
+        }}} ->
+            move_from_past_to_current_links_tree(TransferId, SpaceId, FinishTime, NewStartTime),
             transfer_controller:on_new_transfer_doc(TransferDoc),
             invalidation_controller:on_new_transfer_doc(TransferDoc),
             {ok, TransferId};
@@ -269,9 +277,13 @@ get(TransferId) ->
 %%-------------------------------------------------------------------
 -spec delete(id()) -> ok.
 delete(TransferId) ->
-    {ok, #document{value = #transfer{space_id = SpaceId}}} = ?MODULE:get(TransferId),
-    ok = delete_links(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId),
-    ok = delete_links(?PAST_TRANSFERS_KEY, TransferId, SpaceId),
+    {ok, #document{value = #transfer{
+        space_id = SpaceId,
+        start_time = StartTime,
+        finish_time = FinishTime
+    }}} = ?MODULE:get(TransferId),
+    ok = delete_active_transfer_link(TransferId, SpaceId, StartTime),
+    ok = delete_past_transfer_link(TransferId, SpaceId, FinishTime),
     ok = datastore_model:delete(?CTX, TransferId).
 
 %%--------------------------------------------------------------------
@@ -310,17 +322,22 @@ mark_completed(TransferId) ->
     UpdateFun = fun(Transfer) ->
         {ok, Transfer#transfer{
             status = completed,
-            finish_time = provider_logic:zone_time_seconds()
+            finish_time = case is_migrating(Transfer) of
+                true -> 0;
+                false -> provider_logic:zone_time_seconds()
+            end
         }}
     end,
     case update(TransferId, UpdateFun) of
-        {ok, #document{value = #transfer{
-            space_id = SpaceId,
-            invalidate_source_replica = InvalidateSourceReplica
+        {ok, #document{
+            value = T = #transfer{
+                space_id = SpaceId,
+                start_time = StartTime,
+                finish_time = FinishTime
         }}} ->
-            case InvalidateSourceReplica of
+            case is_migrating(T) of
                 false ->
-                    move_from_current_to_past_links_tree(TransferId, SpaceId),
+                    move_from_current_to_past_links_tree(TransferId, SpaceId, StartTime, FinishTime),
                     {ok, TransferId};
                 true ->
                     {ok, TransferId}
@@ -351,8 +368,13 @@ mark_failed(TransferId) ->
             end}}
     end,
     case update(TransferId, UpdateFun) of
-        {ok, #document{value = #transfer{space_id = SpaceId}}}  ->
-            move_from_current_to_past_links_tree(TransferId, SpaceId),
+        {ok, #document{
+            value = #transfer{
+                space_id = SpaceId,
+                start_time = StartTime,
+                finish_time = FinishTime
+        }}}  ->
+            move_from_current_to_past_links_tree(TransferId, SpaceId, StartTime, FinishTime),
             {ok, TransferId};
         Error ->
             Error
@@ -388,8 +410,13 @@ mark_cancelled(TransferId) ->
         }
     end,
     case transfer:update(TransferId, UpdateFun) of
-        {ok, #document{value = #transfer{space_id = SpaceId}}} ->
-            move_from_current_to_past_links_tree(TransferId, SpaceId),
+        {ok, #document{
+            value = #transfer{
+                space_id = SpaceId,
+                start_time = StartTime,
+                finish_time = FinishTime
+        }}} ->
+            move_from_current_to_past_links_tree(TransferId, SpaceId, StartTime, FinishTime),
             {ok, TransferId};
         Error ->
             Error
@@ -416,13 +443,21 @@ mark_active_invalidation(TransferId) ->
 %% Marks replica invalidation as completed
 %% @end
 %%--------------------------------------------------------------------
--spec mark_completed_invalidation(id(), od_space:id()) -> {ok, id()} | {error, term()}.
-mark_completed_invalidation(TransferId, SpaceId) ->
+-spec mark_completed_invalidation(id()) -> {ok, id()} | {error, term()}.
+mark_completed_invalidation(TransferId) ->
     case update(TransferId, fun(T) ->
-        {ok, T#transfer{invalidation_status = completed}}
+        {ok, T#transfer{
+            invalidation_status = completed,
+            finish_time = provider_logic:zone_time_seconds()
+        }}
     end) of
-        {ok, _} ->
-            move_from_current_to_past_links_tree(TransferId, SpaceId),
+        {ok, #document{
+            value = #transfer{
+                space_id = SpaceId,
+                start_time = StartTime,
+                finish_time = FinishTime
+        }}} ->
+            move_from_current_to_past_links_tree(TransferId, SpaceId, StartTime, FinishTime),
             {ok, TransferId};
         Error ->
             Error
@@ -438,8 +473,13 @@ mark_failed_invalidation(TransferId) ->
     case transfer:update(TransferId, fun(T) ->
         {ok, T#transfer{invalidation_status = failed}}
     end) of
-        {ok, #document{value = #transfer{space_id = SpaceId}}} ->
-            move_from_current_to_past_links_tree(TransferId, SpaceId),
+        {ok, #document{
+            value = #transfer{
+                space_id = SpaceId,
+                start_time = StartTime,
+                finish_time = FinishTime
+        }}} ->
+            move_from_current_to_past_links_tree(TransferId, SpaceId, StartTime, FinishTime),
             {ok, TransferId};
         Error ->
             Error
@@ -455,9 +495,14 @@ mark_cancelled_invalidation(TransferId) ->
     case transfer:update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{invalidation_status = cancelled}}
     end) of
-        {ok, #document{value = #transfer{space_id = SpaceId}}} ->
-            ok = add_link(?PAST_TRANSFERS_KEY, TransferId, SpaceId),
-            ok = delete_links(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId);
+        {ok, #document{
+            value = #transfer{
+                space_id = SpaceId,
+                start_time = StartTime,
+                finish_time = FinishTime
+        }}} ->
+            move_from_current_to_past_links_tree(TransferId, SpaceId, StartTime, FinishTime),
+            {ok, TransferId};
         Error ->
             Error
     end.
@@ -590,17 +635,6 @@ mark_data_transfer_finished(TransferId, ProviderId, Bytes) ->
         }}
     end).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Executes callback for each transfer that has been finished.
-%% Its status can be one of: completed, cancelled,failed.
-%% @end
-%%--------------------------------------------------------------------
--spec for_each_past_transfer(
-    Callback :: fun((id(), Acc0 :: term()) -> Acc :: term()),
-    Acc0 :: term(), od_space:id()) -> {ok, Acc :: term()} | {error, term()}.
-for_each_past_transfer(Callback, Acc0, SpaceId) ->
-    for_each_transfer(?PAST_TRANSFERS_KEY, Callback, Acc0, SpaceId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -663,11 +697,21 @@ get_controller(TransferId) ->
 %%-------------------------------------------------------------------
 -spec list_transfers(od_space:id(), Ongoing :: boolean()) -> {ok, [id()]}.
 list_transfers(SpaceId, Ongoing) ->
+    list_transfers(SpaceId, Ongoing, 0, all).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns all transfers for given space that are ongoing or finished.
+%% @end
+%%-------------------------------------------------------------------
+-spec list_transfers(od_space:id(), Ongoing :: boolean(), non_neg_integer(),
+    non_neg_integer() | all) -> {ok, [id()]}.
+list_transfers(SpaceId, Ongoing, Offset, Size) ->
     Transfers = case Ongoing of
         true ->
-            list_transfers_internal(SpaceId, ?CURRENT_TRANSFERS_KEY);
+            list_transfers_internal(SpaceId, ?CURRENT_TRANSFERS_KEY, Offset, Size);
         false ->
-            list_transfers_internal(SpaceId, ?PAST_TRANSFERS_KEY)
+            list_transfers_internal(SpaceId, ?PAST_TRANSFERS_KEY, Offset, Size)
     end,
     {ok, Transfers}.
 
@@ -769,17 +813,39 @@ update(TransferId, Diff) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
+%% @equiv add_link(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId, StartTime).
+%% @end
+%%--------------------------------------------------------------------
+-spec add_active_transfer_link(TransferId :: id(), od_space:id(), non_neg_integer()) -> ok.
+add_active_transfer_link(TransferId, SpaceId, StartTime) ->
+    add_link(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId, StartTime).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% @equiv add_link(?PAST_TRANSFERS_KEY, TransferId, SpaceId, FinishTime).
+%% @end
+%%--------------------------------------------------------------------
+-spec add_past_transfer_link(TransferId :: id(), od_space:id(), non_neg_integer()) -> ok.
+add_past_transfer_link(TransferId, SpaceId, FinishTime) ->
+    add_link(?PAST_TRANSFERS_KEY, TransferId, SpaceId, FinishTime).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
 %% Adds link to transfer. Links are added to link tree associated with
 %% given space.
 %% Real link source_id will be obtained from link_root/2 function.
 %% @end
 %%--------------------------------------------------------------------
--spec add_link(SourceId :: virtual_list_id(), TransferId :: id(), od_space:id()) -> ok.
-add_link(SourceId, TransferId, SpaceId) ->
+-spec add_link(SourceId :: virtual_list_id(), TransferId :: id(), od_space:id(),
+    non_neg_integer()) -> ok.
+add_link(SourceId, TransferId, SpaceId, Timestamp) ->
     TreeId = oneprovider:get_id(),
     Ctx = ?CTX#{scope => SpaceId},
+    Key = link_key(TransferId, Timestamp),
     case datastore_model:add_links(Ctx, link_root(SourceId, SpaceId), TreeId,
-        {TransferId, <<>>})
+        {Key, TransferId})
     of
         {ok, _} ->
             ok;
@@ -788,32 +854,63 @@ add_link(SourceId, TransferId, SpaceId) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Removes link/links to transfer/transfers
+%% @equiv delete_active_transfer_link(TransferId, SpaceId, get_start_time(TransferId)).
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_active_transfer_link(TransferId :: id(), od_space:id()) -> ok.
+delete_active_transfer_link(TransferId, SpaceId) ->
+    delete_active_transfer_link(TransferId, SpaceId, get_start_time(TransferId)).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% @equiv delete_links(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId, StartTime).
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_active_transfer_link(TransferId :: id(), od_space:id(), non_neg_integer()) -> ok.
+delete_active_transfer_link(TransferId, SpaceId, StartTime) ->
+    delete_links(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId, StartTime).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% @equiv delete_links(?PAST_TRANSFERS_KEY, TransferId, SpaceId, FinishTime).
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_past_transfer_link(TransferId :: id(), od_space:id(), non_neg_integer()) -> ok.
+delete_past_transfer_link(TransferId, SpaceId, FinishTime) ->
+    delete_links(?PAST_TRANSFERS_KEY, TransferId, SpaceId, FinishTime).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Removes link/links to transfer.
 %% Real link source_id will be obtained from link_root/2 function.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_links(SourceId :: virtual_list_id(), TransferId :: id() | [id()], od_space:id()) -> ok.
-delete_links(SourceId, TransferId, SpaceId) ->
+-spec delete_links(SourceId :: virtual_list_id(), TransferId :: id(),
+    od_space:id(), non_neg_integer()) -> ok.
+delete_links(SourceId, TransferId, SpaceId, PrevStartTime) ->
     LinkRoot = link_root(SourceId, SpaceId),
-    case datastore_model:get_links(?CTX, LinkRoot, all, TransferId) of
-        {ok, []} ->
-            ok;
-        [] ->
-            ok;
+    Key = link_key(TransferId, PrevStartTime),
+    case datastore_model:get_links(?CTX, LinkRoot, all, Key) of
         {error, not_found} ->
             ok;
-        {ok, [#link{tree_id = ProviderId, name = TransferId}]} ->
-            case oneprovider:is_self(ProviderId) of
-                true ->
-                    ok = datastore_model:delete_links(
-                        ?CTX#{scope => SpaceId}, LinkRoot, ProviderId, TransferId
-                    );
-                false ->
-                    ok = datastore_model:mark_links_deleted(
-                        ?CTX#{scope => SpaceId}, LinkRoot, ProviderId, TransferId
-                    )
-            end
+        {ok, Links} ->
+            lists:foreach(fun(#link{tree_id = ProviderId, name = LinkName}) ->
+                case oneprovider:is_self(ProviderId) of
+                    true ->
+                        ok = datastore_model:delete_links(
+                            ?CTX#{scope => SpaceId}, LinkRoot, ProviderId, LinkName
+                        );
+                    false ->
+                        ok = datastore_model:mark_links_deleted(
+                            ?CTX#{scope => SpaceId}, LinkRoot, ProviderId, LinkName
+                        )
+                end
+            end, Links)
     end.
 
 %%--------------------------------------------------------------------
@@ -822,28 +919,52 @@ delete_links(SourceId, TransferId, SpaceId) ->
 %% Executes callback for each successfully completed transfer
 %% @end
 %%--------------------------------------------------------------------
--spec list_transfers_internal(SpaceId :: od_space:id(), virtual_list_id()) ->
-    [transfer:id()].
-list_transfers_internal(SpaceId, ListDocId) ->
+-spec list_transfers_internal(SpaceId :: od_space:id(), virtual_list_id(), non_neg_integer(),
+    non_neg_integer() | all) -> [transfer:id()].
+list_transfers_internal(SpaceId, ListDocId, Offset, all) ->
     Callback = fun(TransferId, Acc) ->
         [TransferId | Acc]
     end,
-    {ok, Transfers} = for_each_transfer(ListDocId, Callback, [], SpaceId),
-    Transfers.
+    {ok, Transfers} = for_each_transfer(ListDocId, Callback, [], SpaceId, #{
+        offset => Offset
+    }),
+    lists:reverse(Transfers);
+list_transfers_internal(SpaceId, ListDocId, Offset, Length) ->
+    Callback = fun(TransferId, Acc) ->
+        [TransferId | Acc]
+    end,
+    {ok, Transfers} = for_each_transfer(ListDocId, Callback, [], SpaceId, #{
+        offset => Offset,
+        size => Length
+    }),
+    lists:reverse(Transfers).
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Executes callback for each successfully completed transfer.
+%% @equiv for_each_transfer(ListDocId, Callback,  Acc0, SpaceId, #{}).
 %% @end
 %%--------------------------------------------------------------------
 -spec for_each_transfer(
     virtual_list_id(), Callback :: fun((id(), Acc0 :: term()) -> Acc :: term()),
     Acc0 :: term(), od_space:id()) -> {ok, Acc :: term()} | {error, term()}.
 for_each_transfer(ListDocId, Callback, Acc0, SpaceId) ->
+    for_each_transfer(ListDocId, Callback,  Acc0, SpaceId, #{}).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Executes callback for each transfer.
+%% @end
+%%--------------------------------------------------------------------
+-spec for_each_transfer(
+    virtual_list_id(), Callback :: fun((id(), Acc0 :: term()) -> Acc :: term()),
+    Acc0 :: term(), od_space:id(), datastore_model:fold_opts()) ->
+    {ok, Acc :: term()} | {error, term()}.
+for_each_transfer(ListDocId, Callback, Acc0, SpaceId, Options) ->
     datastore_model:fold_links(?CTX, link_root(ListDocId, SpaceId), all, fun
-        (#link{name = Name}, Acc) -> {ok, Callback(Name, Acc)}
-    end, Acc0, #{}).
+        (#link{target = Target}, Acc) -> {ok, Callback(Target, Acc)}
+    end, Acc0, Options).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -1062,7 +1183,9 @@ handle_updated(_) ->
 %%-------------------------------------------------------------------
 -spec remove_unfinished_transfers_links([id()], od_space:id()) -> ok.
 remove_unfinished_transfers_links(TransferIds, SpaceId) ->
-    ok = delete_links(?CURRENT_TRANSFERS_KEY, TransferIds, SpaceId).
+    lists:foreach(fun(TransferId) ->
+        ok = delete_active_transfer_link(TransferId, SpaceId)
+    end, TransferIds).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -1361,10 +1484,12 @@ get_posthooks() ->
 %% Moves given TransferId from past to current transfers links tree.
 %% @end
 %%-------------------------------------------------------------------
--spec move_from_past_to_current_links_tree(id(), od_space:id()) -> ok.
-move_from_past_to_current_links_tree(TransferId, SpaceId) ->
-    ok = add_link(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId),
-    ok = delete_links(?PAST_TRANSFERS_KEY, TransferId, SpaceId).
+-spec move_from_past_to_current_links_tree(id(), od_space:id(),
+    non_neg_integer(), non_neg_integer()) -> ok.
+move_from_past_to_current_links_tree(TransferId, SpaceId, FinishTime, NewStartTime) ->
+    ok = add_active_transfer_link(TransferId, SpaceId, NewStartTime),
+    ok = delete_past_transfer_link(TransferId, SpaceId, FinishTime).
+
 
 %%-------------------------------------------------------------------
 %% @private
@@ -1372,10 +1497,10 @@ move_from_past_to_current_links_tree(TransferId, SpaceId) ->
 %% Moves given TransferId from current to past transfers links tree.
 %% @end
 %%-------------------------------------------------------------------
--spec move_from_current_to_past_links_tree(id(), od_space:id()) -> ok.
-move_from_current_to_past_links_tree(TransferId, SpaceId) ->
-    ok = add_link(?PAST_TRANSFERS_KEY, TransferId, SpaceId),
-    ok = delete_links(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId).
+-spec move_from_current_to_past_links_tree(id(), od_space:id(), non_neg_integer(), non_neg_integer()) -> ok.
+move_from_current_to_past_links_tree(TransferId, SpaceId, StartTime, FinishTime) ->
+    ok = add_past_transfer_link(TransferId, SpaceId, FinishTime),
+    ok = delete_active_transfer_link(TransferId, SpaceId, StartTime).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -1386,3 +1511,37 @@ move_from_current_to_past_links_tree(TransferId, SpaceId) ->
 -spec reset_status(status()) -> status().
 reset_status(skipped) -> skipped;
 reset_status(_) -> scheduled.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns transfer link key based on transfer's Id and Timestamp.
+%% @end
+%%-------------------------------------------------------------------
+-spec link_key(id(), non_neg_integer()) -> link_id().
+link_key(TransferId, Timestamp) ->
+    TimestampPart = (integer_to_binary(?EPOCH_INFINITY - Timestamp)),
+    IdPart = binary:part(TransferId, 0, ?ID_PART_LENGTH),
+    <<TimestampPart/binary, IdPart/binary>>.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Getter for start_time field of transfer record.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_start_time(id()) -> non_neg_integer().
+get_start_time(TransferId) ->
+    {ok,  #document{value = #transfer{start_time = StartTime}}} = ?MODULE:get(TransferId),
+    StartTime.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Getter for finish_time field of transfer record.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_finish_time(id()) -> non_neg_integer().
+get_finish_time(TransferId) ->
+    {ok,  #document{value = #transfer{finish_time = FinishTime}}} = ?MODULE:get(TransferId),
+    FinishTime.
