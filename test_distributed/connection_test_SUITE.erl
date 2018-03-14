@@ -49,7 +49,8 @@
     bandwidth_test/1,
     python_client_test/1,
     proto_version_test/1,
-    timeouts_test/1
+    timeouts_test/1,
+    socket_timeout_test/1
 ]).
 
 %%test_bases
@@ -63,6 +64,7 @@
 ]).
 
 -define(NORMAL_CASES_NAMES, [
+    socket_timeout_test,
     timeouts_test,
     provider_connection_test,
     rtransfer_connection_secret_test,
@@ -129,6 +131,56 @@ all() -> ?ALL(?NORMAL_CASES_NAMES, ?PERFORMANCE_CASES_NAMES).
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
+
+socket_timeout_test(Config) ->
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    SID = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+
+    RootGuid = get_guid(Worker1, SID, <<"/space_name1">>),
+    initializer:remove_pending_messages(),
+    {ok, {Sock, _}} = connect_via_macaroon(Worker1, [{active, true}], SID),
+
+    % send
+    ok = ssl:send(Sock, generate_create_message(RootGuid, <<"1">>, <<"f1">>)),
+    % receive & validate
+    ?assertMatch(#'ServerMessage'{message_body = {
+        fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
+    }, message_id = <<"1">>}, receive_server_message()),
+
+    lists:foreach(fun(MainNum) ->
+        timer:sleep(timer:seconds(20)),
+        {ok, {Sock2, _}} = connect_via_macaroon(Worker1, [{active, true}], SID),
+
+        lists:foreach(fun(Num) ->
+            NumBin = integer_to_binary(Num),
+            % send
+            ok = ssl:send(Sock2, generate_create_message(RootGuid, NumBin, NumBin))
+        end, lists:seq(MainNum * 100 + 1, MainNum * 100 + 100)),
+
+        AnsNums = lists:foldl(fun(_Num, Acc) ->
+            % receive & validate
+            M = receive_server_message(),
+            ?assertMatch(#'ServerMessage'{message_body = {
+                fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
+            }}, M),
+            #'ServerMessage'{message_id = NumBin} = M,
+            [NumBin | Acc]
+        end, [], lists:seq(MainNum * 100 + 1, MainNum * 100 + 100)),
+
+        lists:foreach(fun(Num) ->
+            NumBin = integer_to_binary(Num),
+            ?assert(lists:member(NumBin, AnsNums))
+        end, lists:seq(MainNum * 100 + 1, MainNum * 100 + 100)),
+
+        lists:foreach(fun(Num) ->
+            LSBin = list_to_binary(integer_to_list(Num) ++ "ls"),
+            ok = ssl:send(Sock2, generate_get_children_message(RootGuid, LSBin)),
+            % receive & validate
+            ?assertMatch(#'ServerMessage'{message_body = {
+                fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
+            }, message_id = LSBin}, receive_server_message())
+        end, lists:seq(MainNum * 100 + 1, MainNum * 100 + 100))
+    end, lists:seq(1,10)).
 
 timeouts_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
@@ -882,6 +934,15 @@ init_per_testcase(timeouts_test, Config) ->
     [{control_proc, CP_Pid} |
         initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config)];
 
+
+init_per_testcase(socket_timeout_test, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    lists:foreach(fun(Worker) ->
+        test_utils:set_env(Worker, ?APP_NAME,
+            proto_connection_timeout, timer:seconds(10))
+    end, Workers),
+    init_per_testcase(default, Config);
+
 init_per_testcase(default, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     ssl:start(),
@@ -925,6 +986,14 @@ end_per_testcase(timeouts_test, Config) ->
     test_utils:mock_validate_and_unload(Workers, [user_identity, helpers,
         attr_req, fslogic_event_handler]),
     initializer:clean_test_users_and_spaces_no_validate(Config);
+
+end_per_testcase(socket_timeout_test, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    lists:foreach(fun(Worker) ->
+        test_utils:set_env(Worker, ?APP_NAME,
+            proto_connection_timeout, timer:minutes(10))
+    end, Workers),
+    end_per_testcase(default, Config);
 
 end_per_testcase(default, Config) ->
     Workers = ?config(op_worker_nodes, Config),
