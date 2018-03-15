@@ -10,6 +10,8 @@
 %%% @end
 -author("Jakub Kudzia").
 
+-include("global_definitions.hrl").
+
 %%lfm_files.erl
 -define(FSYNC_TIMEOUT, timer:minutes(1)).
 
@@ -21,3 +23,6 @@
 -define(DEFAULT_REQUEST_TIMEOUT, timer:minutes(5)).
 
 -define(PROTO_CONNECTION_TIMEOUT, timer:minutes(10)).
+% Uncomment to use connection_test_SUITE:socket_timeout_test
+%%-define(PROTO_CONNECTION_TIMEOUT, application:get_env(?APP_NAME,
+%%  proto_connection_timeout, timer:minutes(10))).
