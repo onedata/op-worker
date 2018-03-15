@@ -58,7 +58,11 @@
     update_nfs_acl_test/1,
     import_nfs_acl_with_disabled_luma_should_fail_test/1,
     create_directory_import_error_test/1,
-    delete_and_update_files_simultaneously_update_test/1, update_syncs_files_after_import_failed_test/1, update_syncs_files_after_previous_update_failed_test/1]).
+    delete_and_update_files_simultaneously_update_test/1,
+    update_syncs_files_after_import_failed_test/1,
+    update_syncs_files_after_previous_update_failed_test/1,
+    sync_works_properly_after_delete_test/1
+]).
 
 -define(TEST_CASES, [
     create_directory_import_test,
@@ -80,6 +84,7 @@
     create_file_in_dir_exceed_batch_update_test,
     delete_empty_directory_update_test,
     delete_non_empty_directory_update_test,
+    sync_works_properly_after_delete_test,
     delete_and_update_files_simultaneously_update_test,
     delete_file_update_test,
     append_file_update_test,
@@ -160,6 +165,9 @@ delete_empty_directory_update_test(Config) ->
 
 delete_non_empty_directory_update_test(Config) ->
     storage_sync_test_base:delete_non_empty_directory_update_test(Config, true).
+
+sync_works_properly_after_delete_test(Config) ->
+    storage_sync_test_base:sync_works_properly_after_delete_test(Config, true).
 
 delete_and_update_files_simultaneously_update_test(Config) ->
     storage_sync_test_base:delete_and_update_files_simultaneously_update_test(Config, true).
@@ -290,7 +298,8 @@ init_per_testcase(Case, Config) when
     init_per_testcase(default, Config2);
 
 init_per_testcase(Case, Config) when
-    Case =:= delete_and_update_files_simultaneously_update_test ->
+    Case =:= delete_and_update_files_simultaneously_update_test;
+    Case =:= sync_works_properly_after_delete_test ->
     Config2 = [
         {update_config, #{
             delete_enable => true,
