@@ -226,8 +226,7 @@
 -define(ERROR_ACTIVE_TRANSFER, ?ERROR_REPLY(
     ?BAD_REQUEST,
     <<"error_active_transfer">>,
-    <<"Active transfer cannot be restarted."
-    "Cancel transfer and then restart it.">>)
+    <<"Active transfer cannot be restarted. Cancel transfer and then restart it.">>)
 ).
 -define(ERROR_TRANSFER_NOT_FOUND, ?ERROR_REPLY(
     ?BAD_REQUEST,

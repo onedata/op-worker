@@ -109,11 +109,13 @@ handle_scheduled_transfer(TransferDoc = #document{
     case oneprovider:get_id() of
         TargetProviderId ->
             % ensure that there is no duplicate in past transfers tree
-            transfer_links:delete_past_transfer_link(TransferId, SpaceId, FinishTime),
+            transfer_links:delete_past_transfer_link(TransferId, SpaceId,
+                FinishTime),
             new_transfer(TransferDoc);
         SourceProviderId ->
             % ensure that there is no duplicate in past transfers tree
-            transfer_links:delete_past_transfer_link(TransferId, SpaceId, FinishTime);
+            transfer_links:delete_past_transfer_link(TransferId, SpaceId,
+                FinishTime);
         _ ->
             ok
     end;
@@ -172,7 +174,8 @@ handle_active_transfer(#document{
         pid = ControllerPid
 }}) ->
     ?run_if_is_self(TargetProviderId, fun() ->
-        transfer_controller:mark_failed(transfer_utils:decode_pid(ControllerPid), exceeded_number_of_failed_files)
+        DecodedPid = transfer_utils:decode_pid(ControllerPid),
+        transfer_controller:mark_failed(DecodedPid, exceeded_number_of_failed_files)
     end);
 handle_active_transfer(#document{
     value = #transfer{
@@ -183,7 +186,9 @@ handle_active_transfer(#document{
     case FailedFiles > ?MAX_FILE_TRANSFER_FAILURES_PER_TRANSFER of
         true ->
             ?run_if_is_self(TargetProviderId, fun() ->
-                transfer_controller:mark_failed(transfer_utils:decode_pid(ControllerPid), exceeded_number_of_failed_files)
+                DecodedPid = transfer_utils:decode_pid(ControllerPid),
+                transfer_controller:mark_failed(DecodedPid,
+                    exceeded_number_of_failed_files)
             end);
         false ->
         ok
@@ -215,7 +220,9 @@ handle_active_invalidation(#document{
         pid = ControllerPid
     }}) ->
     ?run_if_is_self(SourceProviderId, fun() ->
-        invalidation_controller:mark_failed(transfer_utils:decode_pid(ControllerPid), exceeded_number_of_failed_files)
+        DecodedPid = transfer_utils:decode_pid(ControllerPid),
+        invalidation_controller:mark_failed(DecodedPid,
+            exceeded_number_of_failed_files)
     end);
 handle_active_invalidation(#document{
     value = #transfer{
@@ -226,7 +233,9 @@ handle_active_invalidation(#document{
     case FailedFiles > ?MAX_FILE_TRANSFER_FAILURES_PER_TRANSFER of
         true ->
             ?run_if_is_self(SourceProviderId, fun() ->
-                transfer_controller:mark_failed(transfer_utils:decode_pid(ControllerPid), exceeded_number_of_failed_files)
+                DecodedPid = transfer_utils:decode_pid(ControllerPid),
+                transfer_controller:mark_failed(DecodedPid,
+                    exceeded_number_of_failed_files)
             end);
         false ->
             ok
@@ -243,13 +252,14 @@ handle_finished_transfer(#document{
     key = TransferId,
     value = #transfer{
         space_id = SpaceId,
-        schedule_provider_id = ScheduleProviderId,
+        scheduling_provider_id = SchedulingProviderId,
         invalidate_source_replica = false,
         start_time = StartTime
 }}) ->
     % deleting finished replication from scheduled transfers tree
-    ?run_if_is_self(ScheduleProviderId, fun() ->
-        ok = transfer_links:delete_scheduled_transfer_link(TransferId, SpaceId, StartTime)
+    ?run_if_is_self(SchedulingProviderId, fun() ->
+        ok = transfer_links:delete_scheduled_transfer_link(TransferId,
+            SpaceId, StartTime)
     end).
 
 %%--------------------------------------------------------------------
@@ -263,19 +273,22 @@ handle_finished_invalidation(#document{
     key = TransferId,
     value = #transfer{
         space_id = SpaceId,
-        schedule_provider_id = ScheduleProviderId,
+        scheduling_provider_id = SchedulingProviderId,
         target_provider_id = TargetProviderId,
         invalidate_source_replica = true,
         start_time = StartTime
 }}) ->
     case oneprovider:get_id() of
-        ScheduleProviderId ->
-            % deleting finished invalidation or migration from scheduled transfers tree
-            ok = transfer_links:delete_scheduled_transfer_link(TransferId, SpaceId, StartTime);
+        SchedulingProviderId ->
+            % deleting finished invalidation or migration from scheduled
+            % transfers tree
+            ok = transfer_links:delete_scheduled_transfer_link(TransferId,
+                SpaceId, StartTime);
         TargetProviderId ->
             % deleting finished migration from active transfers tree
             % ensure that there is no duplicate in active transfers tree
-            ok = transfer_links:delete_active_transfer_link(TransferId, SpaceId, StartTime);
+            ok = transfer_links:delete_active_transfer_link(TransferId,
+                SpaceId, StartTime);
         _ -> ok
     end.
 

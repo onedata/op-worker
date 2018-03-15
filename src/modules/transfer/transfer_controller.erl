@@ -6,7 +6,8 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Manages data transfers, which include starting the transfer and tracking transfer's status.
+%%% Manages data transfers, which include starting the transfer and
+%%% tracking transfer's status.
 %%% Such gen_server is created for each data transfer process.
 %%% @end
 %%%--------------------------------------------------------------------
@@ -100,8 +101,11 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_cast({start_transfer, SessionId, TransferId, FileGuid, Callback, InvalidateSourceReplica}, State) ->
-    sync_req:start_transfer(user_ctx:new(SessionId), file_ctx:new_by_guid(FileGuid), undefined, TransferId),
+handle_cast({start_transfer, SessionId, TransferId, FileGuid, Callback,
+    InvalidateSourceReplica}, State
+) ->
+    sync_req:start_transfer(user_ctx:new(SessionId),
+        file_ctx:new_by_guid(FileGuid), undefined, TransferId),
     receive
         transfer_finished ->
             {ok, _}  = transfer:mark_completed(TransferId),
@@ -165,7 +169,8 @@ code_change(_OldVsn, State, _Extra) ->
 %% Notifies callback about successful transfer
 %% @end
 %%--------------------------------------------------------------------
--spec notify_callback(transfer:callback(), InvalidationSourceReplica :: boolean()) -> ok.
+-spec notify_callback(transfer:callback(),
+    InvalidationSourceReplica :: boolean()) -> ok.
 notify_callback(_Callback, true) -> ok;
 notify_callback(undefined, false) -> ok;
 notify_callback(<<>>, false) -> ok;

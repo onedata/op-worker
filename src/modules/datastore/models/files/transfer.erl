@@ -24,7 +24,8 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start/7, cancel/1, get_info/1, get/1, init/0, cleanup/0, restart/1, delete/1, update/2]).
+-export([start/7, cancel/1, get_info/1, get/1, init/0, cleanup/0, restart/1,
+    delete/1, update/2]).
 
 -export([mark_active/1, mark_completed/1, mark_failed/1, mark_cancelled/1,
     mark_active_invalidation/1, mark_completed_invalidation/1,
@@ -38,8 +39,8 @@
 -export([
     list_scheduled_transfers/1, list_scheduled_transfers/3,
     list_past_transfers/1, list_past_transfers/3,
-    list_current_transfers/1, list_current_transfers/3
-]).
+    list_current_transfers/1, list_current_transfers/3,
+    list_scheduled_and_current_transfers/1, list_scheduled_and_current_transfers/3]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_posthooks/0, get_record_version/0,
@@ -52,8 +53,10 @@
 -type transfer() :: #transfer{}.
 -type doc() :: datastore_doc:doc(transfer()).
 -type timestamp() :: non_neg_integer().
+-type list_limit() :: non_neg_integer() | all.
 
--export_type([id/0, transfer/0, status/0, callback/0, doc/0, timestamp/0]).
+-export_type([id/0, transfer/0, status/0, callback/0, doc/0, timestamp/0,
+    list_limit/0]).
 
 -define(MAX_FILE_TRANSFER_FAILURES_PER_TRANSFER,
     application:get_env(?APP_NAME, max_file_transfer_failures_per_transfer, 10)).
@@ -94,8 +97,8 @@ cleanup() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec start(session:id(), fslogic_worker:file_guid(), file_meta:path(),
-    undefined | od_provider:id(), undefined | od_provider:id(), binary(), boolean()) ->
-    {ok, id()} | ignore | {error, Reason :: term()}.
+    undefined | od_provider:id(), undefined | od_provider:id(), binary(),
+    boolean()) -> {ok, id()} | ignore | {error, Reason :: term()}.
 start(SessionId, FileGuid, FilePath, SourceProviderId, TargetProviderId,
     Callback, InvalidateSourceReplica
 ) ->
@@ -124,7 +127,7 @@ start(SessionId, FileGuid, FilePath, SourceProviderId, TargetProviderId,
             callback = Callback,
             status = TransferStatus,
             invalidation_status = InvalidationStatus,
-            schedule_provider_id = oneprovider:get_id(),
+            scheduling_provider_id = oneprovider:get_id(),
             source_provider_id = SourceProviderId,
             target_provider_id = TargetProviderId,
             invalidate_source_replica = InvalidateSourceReplica,
@@ -151,7 +154,7 @@ start(SessionId, FileGuid, FilePath, SourceProviderId, TargetProviderId,
 -spec restart_unfinished_transfers(od_space:id()) -> [id()].
 restart_unfinished_transfers(SpaceId) ->
     {ok, {Restarted, Failed}} = transfer_links:for_each_current_transfer(
-        fun(TransferId, {Restarted0, Failed0}) ->
+        fun(_LinkName, TransferId, {Restarted0, Failed0}) ->
             case restart(TransferId) of
                 {ok, TransferId} ->
                     {[TransferId | Restarted0], Failed0};
@@ -187,7 +190,8 @@ restart(TransferId) ->
             space_id = SpaceId,
             start_time = NewStartTime
         }}} ->
-            move_from_past_to_current_links_tree(TransferId, SpaceId, FinishTime, NewStartTime),
+            move_from_past_to_current_links_tree(TransferId, SpaceId,
+                FinishTime, NewStartTime),
             {ok, TransferId};
         {error, active_transfer} ->
             {error, active_transfer};
@@ -196,7 +200,8 @@ restart(TransferId) ->
         {error, not_source_provider} ->
             {error, not_source_provider};
         Error ->
-            ?error_stacktrace("Restarting transfer ~p failed due to ~p", [TransferId, Error]),
+            ?error_stacktrace("Restarting transfer ~p failed due to ~p",
+                [TransferId, Error]),
             Error
     end.
 
@@ -366,7 +371,8 @@ mark_cancelled(TransferId) ->
                 start_time = StartTime,
                 finish_time = FinishTime
             }}} ->
-            move_from_current_to_past_links_tree(TransferId, SpaceId, StartTime, FinishTime),
+            move_from_current_to_past_links_tree(TransferId, SpaceId, StartTime,
+                FinishTime),
             {ok, TransferId};
         Error ->
             Error
@@ -594,10 +600,11 @@ list_scheduled_transfers(SpaceId) ->
 %% Returns all transfers for given space that are scheduled.
 %% @end
 %%-------------------------------------------------------------------
--spec list_scheduled_transfers(od_space:id(), non_neg_integer(),
-    non_neg_integer() | all) -> {ok, [id()]}.
-list_scheduled_transfers(SpaceId, Offset, Size) ->
-    {ok, transfer_links:list_transfers(SpaceId, ?SCHEDULED_TRANSFERS_KEY,  Offset, Size)}.
+-spec list_scheduled_transfers(od_space:id(), non_neg_integer(), list_limit()) ->
+    {ok, [id()]}.
+list_scheduled_transfers(SpaceId, Offset, Limit) ->
+    {ok, transfer_links:list_transfers(SpaceId, ?SCHEDULED_TRANSFERS_KEY,
+        Offset, Limit)}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -613,10 +620,10 @@ list_current_transfers(SpaceId) ->
 %% Returns all transfers for given space that are active.
 %% @end
 %%-------------------------------------------------------------------
--spec list_current_transfers(od_space:id(), non_neg_integer(),
-    non_neg_integer() | all) -> {ok, [id()]}.
-list_current_transfers(SpaceId, Offset, Size) ->
-    {ok, transfer_links:list_transfers(SpaceId, ?CURRENT_TRANSFERS_KEY,  Offset, Size)}.
+-spec list_current_transfers(od_space:id(), non_neg_integer(), list_limit()) ->
+    {ok, [id()]}.
+list_current_transfers(SpaceId, Offset, Limit) ->
+    {ok, transfer_links:list_transfers(SpaceId, ?CURRENT_TRANSFERS_KEY, Offset, Limit)}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -632,11 +639,31 @@ list_past_transfers(SpaceId) ->
 %% Returns all transfers for given space that are past.
 %% @end
 %%-------------------------------------------------------------------
--spec list_past_transfers(od_space:id(), non_neg_integer(),
-    non_neg_integer() | all) -> {ok, [id()]}.
-list_past_transfers(SpaceId, Offset, Size) ->
-    {ok, transfer_links:list_transfers(SpaceId, ?PAST_TRANSFERS_KEY,  Offset, Size)}.
+-spec list_past_transfers(od_space:id(), non_neg_integer(), list_limit()) ->
+    {ok, [id()]}.
+list_past_transfers(SpaceId, Offset, Limit) ->
+    {ok, transfer_links:list_transfers(SpaceId, ?PAST_TRANSFERS_KEY,  Offset, Limit)}.
 
+%%-------------------------------------------------------------------
+%% @doc
+%% @equiv list_scheduled_and_current_transfers(SpaceId,  0, all).
+%% @end
+%%-------------------------------------------------------------------
+-spec list_scheduled_and_current_transfers(od_space:id()) -> {ok, [id()]}.
+list_scheduled_and_current_transfers(SpaceId) ->
+    list_scheduled_and_current_transfers(SpaceId, 0, all).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns transfers from merged and sorted scheduled and current
+%% transfer list in given range.
+%% @end
+%%-------------------------------------------------------------------
+-spec list_scheduled_and_current_transfers(od_space:id(), non_neg_integer(),
+    list_limit()) -> {ok, [id()]}.
+list_scheduled_and_current_transfers(SpaceId, Offset, Limit) ->
+    {ok, transfer_links:list_aggregated_transfers(SpaceId,
+        ?SCHEDULED_TRANSFERS_KEY, ?CURRENT_TRANSFERS_KEY,  Offset, Limit)}.
 
 %%%===================================================================
 %%% Internal functions
@@ -886,13 +913,17 @@ update_histogram(ProviderId, Bytes, Histograms, Window, LastUpdate, CurrentTime)
 -spec new_time_slot_histogram(LastUpdate :: non_neg_integer(),
     Window :: non_neg_integer()) -> time_slot_histogram:histogram().
 new_time_slot_histogram(LastUpdate, ?FIVE_SEC_TIME_WINDOW) ->
-    new_time_slot_histogram(LastUpdate, ?FIVE_SEC_TIME_WINDOW, histogram:new(?MIN_HIST_LENGTH));
+    new_time_slot_histogram(LastUpdate, ?FIVE_SEC_TIME_WINDOW,
+        histogram:new(?MIN_HIST_LENGTH));
 new_time_slot_histogram(LastUpdate, ?MIN_TIME_WINDOW) ->
-    new_time_slot_histogram(LastUpdate, ?MIN_TIME_WINDOW, histogram:new(?HOUR_HIST_LENGTH));
+    new_time_slot_histogram(LastUpdate, ?MIN_TIME_WINDOW,
+        histogram:new(?HOUR_HIST_LENGTH));
 new_time_slot_histogram(LastUpdate, ?HOUR_TIME_WINDOW) ->
-    new_time_slot_histogram(LastUpdate, ?HOUR_TIME_WINDOW, histogram:new(?DAY_HIST_LENGTH));
+    new_time_slot_histogram(LastUpdate, ?HOUR_TIME_WINDOW,
+        histogram:new(?DAY_HIST_LENGTH));
 new_time_slot_histogram(LastUpdate, ?DAY_TIME_WINDOW) ->
-    new_time_slot_histogram(LastUpdate, ?DAY_TIME_WINDOW, histogram:new(?MONTH_HIST_LENGTH)).
+    new_time_slot_histogram(LastUpdate, ?DAY_TIME_WINDOW,
+        histogram:new(?MONTH_HIST_LENGTH)).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -924,7 +955,8 @@ move_from_past_to_current_links_tree(TransferId, SpaceId, FinishTime, NewStartTi
 %% Moves given TransferId from current to past transfers links tree.
 %% @end
 %%-------------------------------------------------------------------
--spec move_from_current_to_past_links_tree(id(), od_space:id(), non_neg_integer(), non_neg_integer()) -> ok.
+-spec move_from_current_to_past_links_tree(id(), od_space:id(),
+    non_neg_integer(), non_neg_integer()) -> ok.
 move_from_current_to_past_links_tree(TransferId, SpaceId, StartTime, FinishTime) ->
     ok = transfer_links:add_past_transfer_link(TransferId, SpaceId, FinishTime),
     ok = transfer_links:delete_active_transfer_link(TransferId, SpaceId, StartTime).
@@ -1182,31 +1214,10 @@ upgrade_record(4, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, Status,
     _BytesToTransfer, BytesTransferred, _FilesToInvalidate, FilesInvalidated,
     StartTime, FinishTime, LastUpdate, MinHist, HrHist, DyHist, MthHist
 }) ->
-    {5, #transfer{
-        file_uuid = FileUuid,
-        space_id = SpaceId,
-        user_id = UserId,
-        path = Path,
-        callback = CallBack,
-        status = Status,
-        invalidation_status = InvalidationStatus,
-        schedule_provider_id = SourceProviderId,
-        source_provider_id = SourceProviderId,
-        target_provider_id = TargetProviderId,
-        invalidate_source_replica = InvalidateSourceReplica,
-        pid = Pid,
-        files_to_process = FilesToTransfer,
-        files_processed = FilesTransferred,
-        failed_files = FailedFiles,
-        files_transferred = FilesTransferred,
-        bytes_transferred = BytesTransferred,
-        files_invalidated = FilesInvalidated,
-        start_time = StartTime,
-        finish_time = FinishTime,
-        last_update = LastUpdate,
-        min_hist = MinHist,
-        hr_hist = HrHist,
-        dy_hist = DyHist,
-        mth_hist = MthHist
+    {5, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, Status,
+        InvalidationStatus, SourceProviderId, SourceProviderId, TargetProviderId,
+        InvalidateSourceReplica, Pid, FilesToTransfer, FilesTransferred,
+        FailedFiles, FilesTransferred, BytesTransferred, FilesInvalidated,
+        StartTime, FinishTime, LastUpdate, MinHist, HrHist, DyHist, MthHist
     }}.
 

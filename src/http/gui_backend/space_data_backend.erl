@@ -449,11 +449,11 @@ space_transfer_list_record(RecordId) ->
     Ongoing = Prefix =:= ?CURRENT_TRANSFERS_PREFIX,
     {ok, Transfers} = case Ongoing of
         false ->
-            transfer:list_past_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET, ?MAX_TRANSFERS_TO_LIST);
+            transfer:list_past_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET,
+                ?MAX_TRANSFERS_TO_LIST);
         true ->
-            {ok, ScheduledTransfers} = transfer:list_scheduled_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET, ?MAX_TRANSFERS_TO_LIST),
-            {ok, CurrentTransfers} = transfer:list_current_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET, ?MAX_TRANSFERS_TO_LIST),
-            {ok, lists:umerge(ScheduledTransfers, CurrentTransfers)}
+            transfer:list_scheduled_and_current_transfers(SpaceId,
+                ?TRANSFERS_LIST_OFFSET, ?MAX_TRANSFERS_TO_LIST)
     end,
     [
         {<<"id">>, RecordId},

@@ -59,26 +59,36 @@ synchronize(UserCtx, FileCtx, Block = #file_block{size = RequestedSize}, Prefetc
     %todo VFS-4216 verify whether all blocks are synchronized, basing on file's size in file_meta
     FileGuid = file_ctx:get_guid_const(FileCtx3),
     UserId = user_ctx:get_user_id(UserCtx),
-    case ProvidersAndBlocks of
-        [] -> ok;
-        _ ->
-            lists:foreach(
-                fun({ProviderId, Blocks}) ->
-                    lists:foreach(fun(FileBlock) ->
-                        foreach_chunk(FileBlock, ?REQUEST_CHUNK_SIZE, fun(Chunk) ->
-                            maybe_transfer_chunk(Chunk, ProviderId, FileGuid, UserId, FileCtx, TransferId)
-                        end)
-                    end, Blocks)
-                end, ProvidersAndBlocks),
-            transfer:increase_files_transferred_counter(TransferId)
-    end,
-
+    maybe_transfer(FileGuid, UserId, FileCtx, TransferId, ProvidersAndBlocks),
     SessId = user_ctx:get_session_id(UserCtx),
     fslogic_event_emitter:emit_file_location_changed(FileCtx3, [SessId], Block).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% This functions is responsible for starting transfers if there are
+%% any blocks to download for given file.
+%% @end
+%%-------------------------------------------------------------------
+-spec maybe_transfer(file_meta:uuid(), od_user:id(), file_ctx:ctx(),
+    transfer:id() | undefined, [{oneprovider:id(), fslogic_blocks:blocks()}]) -> ok.
+maybe_transfer(_FileGuid, _UserId, _FileCtx, _TransferId, []) ->
+    ok;
+maybe_transfer(FileGuid, UserId, FileCtx, TransferId, ProvidersAndBlocks) ->
+    lists:foreach(
+        fun({ProviderId, Blocks}) ->
+            lists:foreach(fun(FileBlock) ->
+                foreach_chunk(FileBlock, ?REQUEST_CHUNK_SIZE, fun(Chunk) ->
+                    maybe_transfer_chunk(Chunk, ProviderId, FileGuid,
+                        UserId, FileCtx, TransferId)
+                end)
+            end, Blocks)
+        end, ProvidersAndBlocks),
+    transfer:increase_files_transferred_counter(TransferId).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -169,11 +179,13 @@ trigger_prefetching(_, _, _, _) ->
 %% Returns function that prefetches data starting at given block.
 %% @end
 %%--------------------------------------------------------------------
--spec prefetch_data_fun(user_ctx:ctx(), file_ctx:ctx(), fslogic_blocks:block()) -> function().
+-spec prefetch_data_fun(user_ctx:ctx(), file_ctx:ctx(),
+    fslogic_blocks:block()) -> function().
 prefetch_data_fun(UserCtx, FileCtx, #file_block{offset = O, size = _S}) ->
     fun() ->
         try
-            replica_synchronizer:synchronize(UserCtx, FileCtx, #file_block{offset = O, size = ?PREFETCH_SIZE}, false, undefined)
+            replica_synchronizer:synchronize(UserCtx, FileCtx,
+                #file_block{offset = O, size = ?PREFETCH_SIZE}, false, undefined)
         catch
             _:Error ->
                 ?error_stacktrace("Prefetching of ~p at offset ~p with size ~p failed due to: ~p",

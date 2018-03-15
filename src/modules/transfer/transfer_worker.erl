@@ -96,8 +96,11 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}).
-handle_cast({start_file_replication, UserCtx, FileCtx, Block, TransferId, RetriesLeft, NextRetryTimestamp}, State) ->
-    RetriesLeft2 = utils:ensure_defined(RetriesLeft, undefined, ?MAX_FILE_TRANSFER_RETRIES),
+handle_cast({start_file_replication, UserCtx, FileCtx, Block, TransferId,
+    RetriesLeft, NextRetryTimestamp}, State
+) ->
+    RetriesLeft2 = utils:ensure_defined(RetriesLeft, undefined,
+        ?MAX_FILE_TRANSFER_RETRIES),
     case should_start_replication(NextRetryTimestamp) of
         true ->
             case replicate_file(UserCtx, FileCtx, Block, TransferId, RetriesLeft2) of
@@ -112,11 +115,12 @@ handle_cast({start_file_replication, UserCtx, FileCtx, Block, TransferId, Retrie
                     {ok, _} = transfer:mark_failed_file_processing(TransferId)
             end;
         _ ->
-            sync_req:enqueue_file_replication(UserCtx, FileCtx, Block, TransferId, RetriesLeft2, NextRetryTimestamp)
+            sync_req:enqueue_file_replication(UserCtx, FileCtx, Block,
+                TransferId, RetriesLeft2, NextRetryTimestamp)
     end,
     {noreply, State, hibernate}.
 
-    %%--------------------------------------------------------------------
+%%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% Handling all non call/cast messages
@@ -177,7 +181,8 @@ replicate_file(UserCtx, FileCtx, Block, TransferId, RetriesLeft) ->
         throw:{transfer_cancelled, TransferId} ->
             {error, transfer_cancelled};
         Error:Reason ->
-            maybe_retry(UserCtx, FileCtx, Block, TransferId, RetriesLeft, {Error, Reason})
+            maybe_retry(UserCtx, FileCtx, Block, TransferId, RetriesLeft,
+                {Error, Reason})
     end.
 
 %%-------------------------------------------------------------------
@@ -190,15 +195,19 @@ replicate_file(UserCtx, FileCtx, Block, TransferId, RetriesLeft) ->
 -spec maybe_retry(user:ctx(), file_ctx:ctx(), fslogic_blocks:block(),
     transfer:id(), non_neg_integer(), term()) -> ok | {error, term()}.
 maybe_retry(_UserCtx, _FileCtx, _Block, TransferId, 0, Error = {error, not_found}) ->
-    ?warning(
+    ?error(
         "Replication in scope of transfer ~p failed due to ~p~n"
         "No retries left", [TransferId, Error]),
     Error;
-maybe_retry(UserCtx, FileCtx, Block, TransferId, RetriesLeft, Error = {error, not_found}) ->
+maybe_retry(UserCtx, FileCtx, Block, TransferId, RetriesLeft,
+    Error = {error, not_found}
+) ->
     ?warning(
         "Replication in scope of transfer ~p failed due to ~p~n"
-        "File transfer will be retried (attempts left: ~p)", [TransferId, Error, RetriesLeft - 1]),
-    sync_req:enqueue_file_replication(UserCtx, FileCtx, Block, TransferId, RetriesLeft - 1, next_retry(RetriesLeft));
+        "File transfer will be retried (attempts left: ~p)",
+        [TransferId, Error, RetriesLeft - 1]),
+    sync_req:enqueue_file_replication(UserCtx, FileCtx, Block, TransferId,
+        RetriesLeft - 1, next_retry(RetriesLeft));
 maybe_retry(_UserCtx, FileCtx, _Block, TransferId, 0, Error) ->
     {Path, _FileCtx2} = file_ctx:get_canonical_path(FileCtx),
     ?error(
@@ -209,8 +218,10 @@ maybe_retry(UserCtx, FileCtx, Block, TransferId, Retries, Error) ->
     {Path, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
     ?warning(
         "Replication of file ~p in scope of transfer ~p failed due to ~p~n"
-        "File transfer will be retried (attempts left: ~p)", [Path, TransferId, Error, Retries - 1]),
-    sync_req:enqueue_file_replication(UserCtx, FileCtx2, Block, TransferId, Retries - 1, next_retry(Retries)).
+        "File transfer will be retried (attempts left: ~p)",
+        [Path, TransferId, Error, Retries - 1]),
+    sync_req:enqueue_file_replication(UserCtx, FileCtx2, Block, TransferId,
+        Retries - 1, next_retry(Retries)).
 
 
 %%-------------------------------------------------------------------

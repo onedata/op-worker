@@ -472,7 +472,7 @@
     callback :: undefined | transfer:callback(),
     status :: undefined | transfer:status(),
     invalidation_status :: undefined | transfer:status(),
-    schedule_provider_id :: od_provider:id(),
+    scheduling_provider_id :: od_provider:id(),
     source_provider_id :: undefined | od_provider:id(),
     target_provider_id :: undefined | od_provider:id(),
     invalidate_source_replica :: undefined | boolean(),
@@ -481,8 +481,8 @@
     pid :: undefined | binary(), %todo VFS-3657
 
     % counters used for transfer management
-    % if file will be migrated (replicated and invalidated) i
-    % t will be included twice in both counters
+    % if file is migrated (replicated and invalidated)
+    % it will be included twice in both counters
     files_to_process = 0 :: non_neg_integer(),
     files_processed = 0 :: non_neg_integer(), % sum of successfully and unsuccessfully processed files
     failed_files = 0 :: non_neg_integer(),
