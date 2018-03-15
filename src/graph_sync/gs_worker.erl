@@ -21,7 +21,7 @@
 -export([init/1, handle/1, cleanup/0]).
 
 %% API
--export([is_connected/0, ensure_connected/0]).
+-export([is_connected/0, force_connection_start/0]).
 -export([restart_connection/0]).
 -export([supervisor_flags/0]).
 
@@ -44,22 +44,26 @@ supervisor_flags() ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Predicate saying if the provider is actively connected to Onezone via
-%% GraphSync channel. If not, tries to reconnect before returning false.
-%% @end
-%%--------------------------------------------------------------------
--spec ensure_connected() -> boolean().
-ensure_connected() ->
-    worker_proxy:call(?MODULE, ensure_connected).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Predicate saying if the provider is actively connected to Onezone via
 %% GraphSync channel.
 %% @end
 %%--------------------------------------------------------------------
 is_connected()->
     worker_proxy:call(?MODULE, is_connected).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Immediately triggers onezone connection attempt.
+%% Returns boolean indicating success.
+%% @end
+%%--------------------------------------------------------------------
+-spec force_connection_start() -> boolean() | no_return().
+force_connection_start() ->
+    Node = get_gs_client_node(),
+    case rpc:call(Node, worker_proxy, call, [?MODULE, ensure_connected]) of
+        % throw on rpc error
+        Result when is_boolean(Result) -> Result
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -76,9 +80,7 @@ restart_connection() ->
         _ -> ok
     end,
     % Force a reconnection attempt:
-    %   * if this is the dedicated node, the connection will be started immediately
-    %   * if not, next periodic healthcheck will start the connection
-    ensure_connected(),
+    force_connection_start(),
     ok.
 
 %%%===================================================================
@@ -199,13 +201,23 @@ connection_healthcheck() ->
 get_connection_status() ->
     IsRegistered = provider_auth:is_registered(),
     Pid = global:whereis_name(?GS_CLIENT_WORKER_GLOBAL_NAME),
-    LocalNode = node() == consistent_hasing:get_node(?GS_CLIENT_WORKER_GLOBAL_NAME),
+    LocalNode = node() == get_gs_client_node(),
     case {IsRegistered, Pid, LocalNode} of
         {false, _, _} -> unregistered;
         {true, undefined, false} -> skipped;
         {true, undefined, true} -> not_started;
         {true, Pid, _} when is_pid(Pid) -> alive
     end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns node on which gs_client_worker should be running.
+%% @end
+%%--------------------------------------------------------------------
+get_gs_client_node() ->
+    consistent_hasing:get_node(?GS_CLIENT_WORKER_GLOBAL_NAME).
 
 
 -spec start_gs_client_worker() -> alive | connection_error.

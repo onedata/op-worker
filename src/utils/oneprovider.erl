@@ -30,7 +30,7 @@
 -export([trusted_ca_certs/0]).
 -export([get_oz_domain/0, get_oz_url/0]).
 -export([get_oz_login_page/0, get_oz_logout_page/0, get_oz_providers_page/0]).
--export([start_connection_to_oz/0, is_connected_to_oz/0, on_connection_to_oz/0]).
+-export([force_oz_connection_start/0, is_connected_to_oz/0, on_connection_to_oz/0]).
 -export([restart_listeners/0]).
 
 % Developer functions
@@ -202,16 +202,16 @@ get_oz_providers_page() ->
 is_connected_to_oz() ->
     gs_worker:is_connected().
 
+
 %%--------------------------------------------------------------------
 %% @doc
-%% Triggers all cluster nodes to start monitoring onezone connection.
+%% Immediately triggers onezone connection attempt.
+%% Returns boolean indicating success.
 %% @end
 %%--------------------------------------------------------------------
--spec start_connection_to_oz() -> ok.
-start_connection_to_oz() ->
-    {ok, Nodes} = node_manager:get_cluster_nodes(),
-    {_, []} = rpc:multicall(Nodes, gs_worker, ensure_connected, []),
-    ok.
+-spec force_oz_connection_start() -> boolean().
+force_oz_connection_start() ->
+    gs_worker:force_connection_start().
 
 
 %%--------------------------------------------------------------------
