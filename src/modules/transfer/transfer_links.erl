@@ -23,14 +23,15 @@
 -export([delete_scheduled_transfer_link/3, delete_active_transfer_link/2,
     delete_active_transfer_link/3, delete_past_transfer_link/3,
     add_scheduled_transfer_link/3, add_active_transfer_link/3,
-    add_past_transfer_link/3, list_transfers/4, for_each_current_transfer/3, list_aggregated_transfers/5]).
+    add_past_transfer_link/3, list_transfers/4, for_each_current_transfer/3,
+    list_aggregated_transfers/5]).
 
 -ifdef(TEST).
--export([umerge/4, umerge_tail/4]).
+-export([umerge/4]).
 -endif.
 
 -type link_name() :: binary().
--type list_elem() :: transfer:id() | {transfer:id() | link_name()}.
+-type list_elem() :: transfer:id() | {transfer:id(), link_name()}.
 -type virtual_list_id() :: binary(). % ?(SCHEDULED|CURRENT|PAST)_TRANSFERS_KEY
 -type offset() :: non_neg_integer().
 -type list_limit() :: transfer:list_limit().
@@ -212,14 +213,16 @@ for_each_current_transfer(Callback, Acc0, SpaceId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec list_transfers(SpaceId :: od_space:id(), virtual_list_id(),
-    offset(), list_limit(), boolean()) -> [transfer:id() | {transfer:id() | link_name()}].
+    offset(), list_limit(), boolean()) -> [list_elem()].
 list_transfers(SpaceId, ListDocId, Offset, all, ListTransferIdsOnly) ->
-    {ok, Transfers} = for_each_transfer(ListDocId, list_transfers_callback(ListTransferIdsOnly), [], SpaceId, #{
+    {ok, Transfers} = for_each_transfer(ListDocId,
+        list_transfers_callback(ListTransferIdsOnly), [], SpaceId, #{
         offset => Offset
     }),
     lists:reverse(Transfers);
 list_transfers(SpaceId, ListDocId, Offset, Length, ListTransferIdsOnly) ->
-    {ok, Transfers} = for_each_transfer(ListDocId, list_transfers_callback(ListTransferIdsOnly), [], SpaceId, #{
+    {ok, Transfers} = for_each_transfer(ListDocId,
+        list_transfers_callback(ListTransferIdsOnly), [], SpaceId, #{
         offset => Offset,
         size => Length
     }),
@@ -308,7 +311,8 @@ for_each_transfer(ListDocId, Callback, Acc0, SpaceId, Options) ->
 %%     * elements from given range will be chosen after merging both lists
 %% @end
 %%-------------------------------------------------------------------
--spec umerge([list_elem()], [list_elem()], non_neg_integer(), non_neg_integer()) -> [transfer:id()].
+-spec umerge([list_elem()], [list_elem()], non_neg_integer(), list_limit()) ->
+    [transfer:id()].
 umerge(TransfersList1, TransfersList2, Offset, all) ->
     Merged = umerge_tail(TransfersList1, TransfersList2, [], all),
     lists:sublist(Merged, Offset + 1, length(Merged));
@@ -323,7 +327,8 @@ umerge(TransfersList1, TransfersList2, Offset, Limit) ->
 %% Merged list will reach length of MaxSize.
 %% @end
 %%-------------------------------------------------------------------
--spec umerge_tail([list_elem()], [list_elem()], [transfer:id()], non_neg_integer()) -> [transfer:id()].
+-spec umerge_tail([list_elem()], [list_elem()], [transfer:id()], list_limit()) ->
+    [transfer:id()].
 umerge_tail([], [], Merged, _Limit) ->
     lists:reverse(Merged);
 umerge_tail(_, _ , Merged, _Limit) when length(Merged) =:= _Limit ->
