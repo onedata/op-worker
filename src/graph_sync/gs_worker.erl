@@ -21,7 +21,7 @@
 -export([init/1, handle/1, cleanup/0]).
 
 %% API
--export([ensure_connected/0]).
+-export([is_connected/0, ensure_connected/0]).
 -export([restart_connection/0]).
 -export([supervisor_flags/0]).
 
@@ -40,6 +40,7 @@
 supervisor_flags() ->
     #{strategy => one_for_one, intensity => 0, period => 1}.
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Predicate saying if the provider is actively connected to Onezone via
@@ -49,6 +50,17 @@ supervisor_flags() ->
 -spec ensure_connected() -> boolean().
 ensure_connected() ->
     worker_proxy:call(?MODULE, ensure_connected).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Predicate saying if the provider is actively connected to Onezone via
+%% GraphSync channel.
+%% @end
+%%--------------------------------------------------------------------
+is_connected()->
+    worker_proxy:call(?MODULE, is_connected).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -101,6 +113,11 @@ handle(ensure_connected) ->
         alive -> true;
         _ -> false
     end;
+handle(is_connected) ->
+    case get_connection_status() of
+        alive -> true;
+        _ -> false
+    end;
 handle({connection_healthcheck, FailedRetries}) ->
     {Interval, NewFailedRetries} = case connection_healthcheck() of
         unregistered ->
@@ -131,6 +148,7 @@ handle({connection_healthcheck, FailedRetries}) ->
 handle(Request) ->
     ?log_bad_request(Request).
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link worker_plugin_behaviour} callback cleanup/0
@@ -155,14 +173,9 @@ cleanup() ->
 -spec connection_healthcheck() -> unregistered | skipped | alive | connection_error.
 connection_healthcheck() ->
     try
-        IsRegistered = provider_auth:is_registered(),
-        Pid = global:whereis_name(?GS_CLIENT_WORKER_GLOBAL_NAME),
-        LocalNode = node() == consistent_hasing:get_node(?GS_CLIENT_WORKER_GLOBAL_NAME),
-        case {IsRegistered, Pid, LocalNode} of
-            {false, _, _} -> unregistered;
-            {true, undefined, false} -> skipped;
-            {true, undefined, true} -> start_gs_client_worker();
-            {true, Pid, _} when is_pid(Pid) -> alive
+        case get_connection_status() of
+            not_started -> start_gs_client_worker();
+            Status -> Status
         end
     catch
         _:Reason ->
@@ -171,6 +184,27 @@ connection_healthcheck() ->
                 [Reason]
             ),
             error
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks connection status on the current node.
+%% Status skipped indicates that another node is responsible for
+%% the graph sync connection.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_connection_status() -> unregistered | skipped | not_started | alive.
+get_connection_status() ->
+    IsRegistered = provider_auth:is_registered(),
+    Pid = global:whereis_name(?GS_CLIENT_WORKER_GLOBAL_NAME),
+    LocalNode = node() == consistent_hasing:get_node(?GS_CLIENT_WORKER_GLOBAL_NAME),
+    case {IsRegistered, Pid, LocalNode} of
+        {false, _, _} -> unregistered;
+        {true, undefined, false} -> skipped;
+        {true, undefined, true} -> not_started;
+        {true, Pid, _} when is_pid(Pid) -> alive
     end.
 
 
