@@ -229,7 +229,7 @@ handle_info(heartbeat, #state{wait_map = WaitMap, wait_pids = Pids,
     Continue = case maps:size(WaitMap2) of
         0 ->
             Diff = timer:now_diff(os:timestamp(), LMT),
-            case Diff > timer:seconds(?PROTO_CONNECTION_TIMEOUT) * 1000 of
+            case Diff > ?PROTO_CONNECTION_TIMEOUT * 1000 of
                 true ->
                     ?info("Connection ~p timeout", [State#state.socket]),
                     false;
@@ -281,6 +281,8 @@ send_server_message(#state{transport = Transport, socket = Socket}, ServerMsg) -
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_client_message(state(), binary()) -> state().
+handle_client_message(State, ?CLIENT_KEEPALIVE_MSG) ->
+    State;
 handle_client_message(State = #state{session_id = SessId}, Data) ->
     try serializator:deserialize_client_message(Data, SessId) of
         {ok, Msg} when SessId == undefined ->

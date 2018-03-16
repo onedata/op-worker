@@ -25,4 +25,6 @@
     message_body :: tuple()
 }).
 
+-define(CLIENT_KEEPALIVE_MSG, <<"KA">>).
+
 -endif.
