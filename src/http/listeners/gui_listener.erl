@@ -122,7 +122,9 @@ start() ->
             env => #{dispatch => Dispatch},
             max_keepalive => MaxKeepAlive,
             request_timeout => timer:seconds(Timeout),
-            connection_type => supervisor
+            connection_type => supervisor,
+            idle_timeout => infinity,
+            inactivity_timeout => timer:hours(24)
         }),
     case Result of
         {ok, _} -> ok;

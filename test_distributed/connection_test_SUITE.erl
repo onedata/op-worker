@@ -50,6 +50,7 @@
     python_client_test/1,
     proto_version_test/1,
     timeouts_test/1,
+    client_keepalive_test/1,
     socket_timeout_test/1
 ]).
 
@@ -66,6 +67,7 @@
 -define(NORMAL_CASES_NAMES, [
 %%    socket_timeout_test,
     timeouts_test,
+    client_keepalive_test,
     provider_connection_test,
     rtransfer_connection_secret_test,
     macaroon_connection_test,
@@ -193,6 +195,18 @@ timeouts_test(Config) ->
     create_timeouts_test(Config, Sock, RootGuid),
     ls_timeouts_test(Config, Sock, RootGuid),
     fsync_timeouts_test(Config, Sock, RootGuid).
+
+client_keepalive_test(Config) ->
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    SID = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+
+    RootGuid = get_guid(Worker1, SID, <<"/space_name1">>),
+    initializer:remove_pending_messages(),
+    {ok, {Sock, _}} = connect_via_macaroon(Worker1, [{active, true}], SID),
+    % send keepalive msg and assert it will not end in decoding error
+    % on provider side (following communication should succeed)
+    ok = ssl:send(Sock, ?CLIENT_KEEPALIVE_MSG),
+    create_timeouts_test(Config, Sock, RootGuid).
 
 create_timeouts_test(Config, Sock, RootGuid) ->
     % send
@@ -934,6 +948,8 @@ init_per_testcase(timeouts_test, Config) ->
     [{control_proc, CP_Pid} |
         initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config)];
 
+init_per_testcase(client_keepalive_test, Config) ->
+    init_per_testcase(timeouts_test, Config);
 
 init_per_testcase(socket_timeout_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -986,6 +1002,9 @@ end_per_testcase(timeouts_test, Config) ->
     test_utils:mock_validate_and_unload(Workers, [user_identity, helpers,
         attr_req, fslogic_event_handler]),
     initializer:clean_test_users_and_spaces_no_validate(Config);
+
+end_per_testcase(client_keepalive_test, Config) ->
+    end_per_testcase(timeouts_test, Config);
 
 end_per_testcase(socket_timeout_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
