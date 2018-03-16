@@ -99,6 +99,7 @@
 
 all() ->
     ?ALL([
+        changes_stream_on_multi_provider_test, %todo fix VFS-2864
         get_simple_file_distribution,
         replicate_file,
         replicate_already_replicated_file,
@@ -132,7 +133,6 @@ all() ->
         changes_stream_json_metadata_test,
         changes_stream_times_test,
         changes_stream_file_location_test,
-        changes_stream_on_multi_provider_test, %todo fix VFS-2864
         list_spaces,
         get_space,
         set_get_json_metadata,
@@ -634,8 +634,6 @@ cancel_file_replication(Config) ->
     % when
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
     Tid = schedule_file_replication(WorkerP1, DomainP2, File, Config),
-    tracer:start([WorkerP1, WorkerP2]),
-    tracer:trace_calls(transfer_links, umerge),
 
     ?assertEqual([Tid], list_active_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqual([Tid], list_active_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
