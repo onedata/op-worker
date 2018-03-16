@@ -81,8 +81,8 @@ handle_call({synchronize, Block, Prefetch, TransferId}, From, State) ->
         RelevantRefs ->
             State1 = associate_from_with_refs(From, RelevantRefs, TransferId, State),
             InProgress = ordsets:union(State1#state.in_progress, ordsets:from_list(NewTransfers)),
-            State2 = adjust_sequence_hits(Block, State1),
-            State3 = State2#state{last_transfer = Block, in_progress = InProgress},
+            State2 = adjust_sequence_hits(Block, NewRefs, State1),
+            State3 = State2#state{in_progress = InProgress},
             State4 = prefetch(NewTransfers, TransferId, Prefetch, State3),
             {noreply, State4, ?DIE_AFTER}
     end.
@@ -216,17 +216,21 @@ associate_from_with_refs(From, Refs, TransferId, State) ->
                 from_to_transfer_id = FromToTransferId,
                 transfer_id_to_from = TransferIdToFrom}.
 
-adjust_sequence_hits(Block, #state{in_sequence_hits = Hits} = State) ->
-    case is_sequential(Block, State) of
-        true -> State#state{in_sequence_hits = Hits + 1};
-        false -> State#state{in_sequence_hits = 0}
-    end.
+adjust_sequence_hits(_Block, [], State) ->
+    State;
+adjust_sequence_hits(Block, _NewRefs, #state{in_sequence_hits = Hits} = State) ->
+    NewState =
+        case is_sequential(Block, State) of
+            true -> State#state{in_sequence_hits = Hits + 1};
+            false -> State#state{in_sequence_hits = 0}
+        end,
+    NewState#state{last_transfer = Block}.
 
-is_sequential(#file_block{offset = NextOffset},
+is_sequential(#file_block{offset = NextOffset, size = NewSize},
               #state{last_transfer = #file_block{offset = O, size = S}})
-  when NextOffset == O + S ->
+  when NextOffset =< O + S andalso NextOffset + NewSize > O + S ->
     true;
-is_sequential(_Block, _State) ->
+is_sequential(_, _State) ->
     false.
 
 get_process(UserCtx, FileCtx) ->
@@ -298,10 +302,10 @@ prefetch(_, TransferId, _, #state{in_sequence_hits = Hits, last_transfer = Block
     #file_block{offset = O, size = S} = Block,
     Offset = O + S,
     Size = min(?MINIMAL_SYNC_REQUEST * round(math:pow(2, Hits)), ?PREFETCH_SIZE),
-    NewTransfers = start_transfers([#file_block{offset = Offset, size = Size}],
-                                   TransferId, true, State),
+    PrefetchBlock = #file_block{offset = Offset, size = Size},
+    NewTransfers = start_transfers([PrefetchBlock], TransferId, true, State),
     InProgress = ordsets:union(State#state.in_progress, ordsets:from_list(NewTransfers)),
-    State#state{in_progress = InProgress}.
+    State#state{last_transfer = PrefetchBlock, in_progress = InProgress}.
 
 enlarge_block(Block = #file_block{size = RequestedSize}, _Prefetch = true) ->
     Block#file_block{size = max(RequestedSize, ?MINIMAL_SYNC_REQUEST)};
