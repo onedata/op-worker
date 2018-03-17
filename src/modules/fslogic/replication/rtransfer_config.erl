@@ -42,6 +42,7 @@
 %%--------------------------------------------------------------------
 -spec start_rtransfer() -> {ok, pid()}.
 start_rtransfer() ->
+    prepare_ssl_opts(),
     {ok, RtransferPid} = rtransfer_link_sup:start_link(no_cluster),
     rtransfer_link:set_provider_nodes([node()], ?MODULE),
     {ok, StorageDocs} = storage:list(),
@@ -87,7 +88,7 @@ close(Handle) ->
                    FileId :: binary(), ProviderId :: binary()) -> boolean().
 auth_request(TransferData, StorageId, FileId, ProviderId) ->
     try
-        {TransferId, SpaceId, FileGuid} = erlang:binary_to_term(TransferData, [safe]),
+        {_TransferId, SpaceId, FileGuid} = erlang:binary_to_term(TransferData, [safe]),
         %% Transfer = case transfer:get(TransferId) of
         %%                {ok, #document{value = T}} -> T;
         %%                _ -> throw({error, invalid_transfer_id})
@@ -161,12 +162,37 @@ generate_secret(ProviderId, PeerSecret) ->
     rtransfer_link:allow_connection(ProviderId, MySecret, PeerSecret, 60000),
     MySecret.
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
 -spec do_generate_secret() -> binary().
 do_generate_secret() ->
     RealSecret = crypto:strong_rand_bytes(32),
     PaddingSize = (64 - byte_size(RealSecret)) * 8,
     <<RealSecret/binary, 0:PaddingSize>>.
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
+prepare_ssl_opts() ->
+    {ok, KeyFile} = application:get_env(?APP_NAME, web_key_file),
+    Opts = [{use_ssl, true}, {cert_path, make_cert_bundle()},
+            {key_path, KeyFile}, {ca_path, make_ca_bundle()}],
+    application:set_env(rtransfer_link, ssl, Opts, [{persistent, true}]).
+
+make_ca_bundle() ->
+    CADir = oz_plugin:get_cacerts_dir(),
+    {ok, CertPems} = file_utils:read_files({dir, CADir}),
+    write_to_temp(CertPems).
+
+make_cert_bundle() ->
+    {ok, CertFile} = application:get_env(?APP_NAME, web_cert_file),
+    {ok, ChainFile} = application:get_env(?APP_NAME, web_cert_chain_file),
+    {ok, Cert} = file:read_file(CertFile),
+    {ok, Chain} = file:read_file(ChainFile),
+    write_to_temp([Cert, Chain]).
+
+write_to_temp(Contents) ->
+    TempPath = lib:nonl(os:cmd("mktemp")),
+    {ok, TempFile} = file:open(TempPath, [write, binary]),
+    lists:foreach(fun(Pem) -> ok = file:write(TempFile, Pem) end, Contents),
+    ok = file:close(TempFile),
+    TempPath.
