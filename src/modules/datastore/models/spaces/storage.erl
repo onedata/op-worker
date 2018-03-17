@@ -251,7 +251,7 @@ select(Name) ->
             end, Docs),
             case Docs2 of
                 [] -> {error, not_found};
-                [Doc] -> {ok, Doc}
+                [Doc | _] -> {ok, Doc}
             end
     end.
 
