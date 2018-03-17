@@ -41,9 +41,11 @@ synchronize(UserCtx, FileCtx, Block, Prefetch, TransferId) ->
     EnlargedBlock = enlarge_block(Block, Prefetch),
     try
         {ok, Process} = get_process(UserCtx, FileCtx),
-        gen_server2:call(Process, {synchronize, EnlargedBlock, Prefetch, TransferId}, infinity)
+        gen_server2:call(Process, {synchronize, FileCtx, EnlargedBlock,
+                                   Prefetch, TransferId}, infinity)
     catch
-        exit:{{shutdown, timeout}, _} -> synchronize(UserCtx, FileCtx, Block, Prefetch, TransferId)
+        exit:{{shutdown, timeout}, _} ->
+            synchronize(UserCtx, FileCtx, Block, Prefetch, TransferId)
     end.
 
 cancel(TransferId) ->
@@ -69,7 +71,8 @@ init({UserCtx, FileCtx}) ->
                 dest_file_id = DestFileId,
                 in_progress = ordsets:new()}, ?DIE_AFTER}.
 
-handle_call({synchronize, Block, Prefetch, TransferId}, From, State) ->
+handle_call({synchronize, FileCtx, Block, Prefetch, TransferId}, From, State0) ->
+    State = State0#state{file_ctx = FileCtx},
     TransferId =/= undefined andalso (catch gproc:add_local_counter(TransferId, 1)),
     OverlappingInProgress = find_overlapping(Block, State),
     {OverlappingBlocks, ExistingRefs} = lists:unzip(OverlappingInProgress),

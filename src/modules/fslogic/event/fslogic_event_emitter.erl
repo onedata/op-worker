@@ -156,5 +156,6 @@ emit_file_renamed_to_client(FileCtx, NewName, UserCtx) ->
 -spec emit_quota_exeeded() -> ok | {error, Reason :: term()}.
 emit_quota_exeeded() ->
     BlockedSpaces = space_quota:get_disabled_spaces(),
+    rpc:multicall(rtransfer_link_quota_manager, update_disabled_spaces, [BlockedSpaces]),
     ?debug("Sending disabled spaces ~p", [BlockedSpaces]),
     event:emit(#quota_exceeded_event{spaces = BlockedSpaces}).

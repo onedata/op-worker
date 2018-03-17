@@ -48,19 +48,6 @@ start_rtransfer() ->
     rtransfer_link:set_provider_nodes([node()], ?MODULE),
     {ok, StorageDocs} = storage:list(),
     lists:foreach(fun add_storage/1, StorageDocs),
-
-    SubId = uuid:uuid_to_string(uuid:get_v4(), binary_standard),
-    EventHandler =
-        fun(Events, _) ->
-                #quota_exceeded_event{spaces = Spaces} = lists:last(Events),
-                rtransfer_link_quota_manager:update_disabled_spaces(Spaces)
-        end,
-    event:subscribe(#subscription{
-                       id = SubId,
-                       type = #quota_exceeded_subscription{},
-                       stream = #event_stream{event_handler = EventHandler}
-                      }, ?ROOT_SESS_ID),
-
     {ok, RtransferPid}.
 
 fetch(Request, NotifyFun, CompleteFun, TransferId, SpaceId, FileGuid) ->
@@ -155,12 +142,12 @@ add_storage(#document{key = StorageId, value = #storage{}} = Storage) ->
     HelperParams = helper:get_params(Helper, helper:get_admin_ctx(Helper)),
     HelperName = helper:get_name(HelperParams),
     HelperArgs = maps:to_list(helper:get_args(HelperParams)),
-    rtransfer_link:add_storage(StorageId, HelperName, HelperArgs).
+    rpc:multicall(rtransfer_link, add_storage, [StorageId, HelperName, HelperArgs]).
 
 -spec generate_secret(ProviderId :: binary(), PeerSecret :: binary()) -> binary().
 generate_secret(ProviderId, PeerSecret) ->
     MySecret = do_generate_secret(),
-    rtransfer_link:allow_connection(ProviderId, MySecret, PeerSecret, 60000),
+    rpc:multicall(rtransfer_link, allow_connection, [ProviderId, MySecret, PeerSecret, 60000]),
     MySecret.
 
 %%%===================================================================
@@ -204,7 +191,7 @@ prepare_graphite_opts() ->
         true ->
             case application:get_env(?APP_NAME, graphite_api_key) of
                 {ok, Bin} when byte_size(Bin) > 0 ->
-                    lager:error("rtransfer_link doesn't support graphite access with API key", []);
+                    ?error("rtransfer_link doesn't support graphite access with API key", []);
                 _ ->
                     {ok, Host} = application:get_env(?APP_NAME, graphite_host),
                     {ok, Port} = application:get_env(?APP_NAME, graphite_port),

@@ -18,7 +18,6 @@
 -include("proto/oneclient/proxyio_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include("modules/events/definitions.hrl").
--include("modules/rtransfer/registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/exometer_utils.hrl").
 

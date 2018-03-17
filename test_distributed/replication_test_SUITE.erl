@@ -44,7 +44,6 @@
     remote_change_of_blocks_should_notify_clients/1,
     remote_irrelevant_change_should_not_notify_clients/1,
     conflicting_remote_changes_should_be_reconciled/1,
-    rtransfer_config_should_work/1,
     replica_invalidate_should_migrate_unique_data/1,
     replica_invalidate_should_truncate_storage_file_to_zero_size/1,
     dir_replica_invalidate_should_invalidate_all_children/1
@@ -67,8 +66,7 @@ all() ->
         remote_change_of_size_should_notify_clients,
         remote_change_of_blocks_should_notify_clients,
         remote_irrelevant_change_should_not_notify_clients,
-        conflicting_remote_changes_should_be_reconciled,
-        rtransfer_config_should_work
+        conflicting_remote_changes_should_be_reconciled
         %% @TODO VFS-3728
         %% replica_invalidate_should_migrate_unique_data,
         %% replica_invalidate_should_truncate_storage_file_to_zero_size,
@@ -493,16 +491,13 @@ read_should_synchronize_file(Config) ->
 
     % mock rtransfer_link
     test_utils:mock_new(Workers, rtransfer_link, [passthrough]),
-    test_utils:mock_expect(Workers, rtransfer_link, prepare_request,
-        fun(_ProvId, _Uuid, _, _, _, _, _, 1, Size, _) when Size >= 3 ->
-            ref
-        end
-    ),
     test_utils:mock_expect(Workers, rtransfer_link, fetch,
-        fun(ref, NotifyFun, OnCompleteFun) ->
+        fun(#{offset := 1, size := S, provider_id := PID, file_guid := FG},
+            _TransferData, NotifyFun, OnCompleteFun)
+              when PID == ExternalProviderId, FG == FileGuid, S >= 3 ->
             NotifyFun(ref, 1, 3),
             OnCompleteFun(ref, {ok, 3}),
-            ref
+            {ok, ref}
         end
     ),
 
@@ -514,11 +509,8 @@ read_should_synchronize_file(Config) ->
 
     % then
     ?assertEqual({ok, <<>>}, Ans),
-    ?assertEqual(1, rpc:call(W1, meck, num_calls, [rtransfer_link, prepare_request, '_'])),
-    ?assert(rpc:call(W1, meck, called,
-        [rtransfer_link, prepare_request, [ExternalProviderId, FileGuid, '_', '_', '_', '_', '_', 1, '_', '_']])),
     ?assertEqual(1, rpc:call(W1, meck, num_calls, [rtransfer_link, fetch, '_'])),
-    ?assert(rpc:call(W1, meck, called, [rtransfer_link, fetch, [ref, '_', '_']])),
+    ?assert(rpc:call(W1, meck, validate, [rtransfer_link])),
     test_utils:mock_validate_and_unload(Workers, [rtransfer_link]),
     ?assertMatch({
         #document{
@@ -1076,34 +1068,6 @@ conflicting_remote_changes_should_be_reconciled(Config) ->
         }, _},
         rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileUuid)])
     ).
-
-rtransfer_config_should_work(Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    {ok, FileGuid} =
-        lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>, 8#777),
-    {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, write),
-    {ok, 15} = lfm_proxy:write(W1, Handle, 0, <<"initial_content">>),
-    ok = lfm_proxy:close(W1, Handle),
-
-    ?assertEqual(ok, rpc:call(W1, erlang, apply, [
-        fun() ->
-            Opts = rtransfer_config:options(),
-            Open = proplists:get_value(open_fun, Opts),
-            Close = proplists:get_value(close_fun, Opts),
-            Read = proplists:get_value(read_fun, Opts),
-            Write = proplists:get_value(write_fun, Opts),
-
-            {ok, WriteHandle} = Open(FileGuid, write),
-            {ok, WriteHandle2, 4} = Write(WriteHandle, 0, <<"data">>),
-            ok = Close(WriteHandle2),
-
-            {ok, ReadHandle} = Open(FileGuid, read),
-            {ok, ReadHandle2, <<"data">>} = Read(ReadHandle, 0, 4),
-            ok = Close(ReadHandle2)
-        end, []
-    ])).
 
 replica_invalidate_should_migrate_unique_data(Config) ->
     [W1 | _] = Workers = ?config(op_worker_nodes, Config),

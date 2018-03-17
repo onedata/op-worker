@@ -15,9 +15,9 @@
 -behaviour(worker_plugin_behaviour).
 
 -include("global_definitions.hrl").
--include("modules/rtransfer/registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+-define(QUOTA_REFRESH_INTERVAL, timer:seconds(1)).
 
 %% worker_plugin_behaviour callbacks
 -export([init/1, handle/1, cleanup/0]).
@@ -37,6 +37,7 @@
 -spec init(Args :: term()) ->
     {ok, worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
+    schedule_quota_refresh(),
     {ok, #{}}.
 
 %%--------------------------------------------------------------------
@@ -49,6 +50,10 @@ handle(ping) ->
     pong;
 handle(healthcheck) ->
     ok;
+handle(quota_refresh) ->
+    BlockedSpaces = space_quota:get_disabled_spaces(),
+    rtransfer_link_quota_manager:update_disabled_spaces(BlockedSpaces),
+    schedule_quota_refresh();
 handle(Request) ->
     ?log_bad_request(Request).
 
@@ -82,7 +87,7 @@ supervisor_flags() ->
 -spec supervisor_children_spec() -> [supervisor:child_spec()].
 supervisor_children_spec() ->
     [#{
-        id => ?RTRANSFER,
+        id => rtransfer,
         start => {rtransfer_config, start_rtransfer, []},
         restart => permanent,
         shutdown => infinity,
@@ -94,3 +99,6 @@ supervisor_children_spec() ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+schedule_quota_refresh() ->
+    erlang:send_after(?QUOTA_REFRESH_INTERVAL, self(), {sync_timer, quota_refresh}).
