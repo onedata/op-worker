@@ -43,6 +43,7 @@
 -spec start_rtransfer() -> {ok, pid()}.
 start_rtransfer() ->
     prepare_ssl_opts(),
+    prepare_graphite_opts(),
     {ok, RtransferPid} = rtransfer_link_sup:start_link(no_cluster),
     rtransfer_link:set_provider_nodes([node()], ?MODULE),
     {ok, StorageDocs} = storage:list(),
@@ -196,3 +197,22 @@ write_to_temp(Contents) ->
     lists:foreach(fun(Pem) -> ok = file:write(TempFile, Pem) end, Contents),
     ok = file:close(TempFile),
     TempPath.
+
+prepare_graphite_opts() ->
+    case application:get_env(?APP_NAME, integrate_with_graphite, false) of
+        false -> ok;
+        true ->
+            case application:get_env(?APP_NAME, graphite_api_key) of
+                {ok, Bin} when byte_size(Bin) > 0 ->
+                    lager:error("rtransfer_link doesn't support graphite access with API key", []);
+                _ ->
+                    {ok, Host} = application:get_env(?APP_NAME, graphite_host),
+                    {ok, Port} = application:get_env(?APP_NAME, graphite_port),
+                    {ok, Prefix} = application:get_env(?APP_NAME, graphite_prefix),
+                    NewPrefix = unicode:characters_to_list(Prefix) ++ "-rtransfer.link",
+                    Url = "http://" ++ unicode:characters_to_list(Host) ++ ":" ++
+                        integer_to_list(Port),
+                    Opts = [{graphite_url, Url}, {graphite_namespace_prefix, NewPrefix}],
+                    application:set_env(rtransfer_link, monitoring, Opts)
+            end
+    end.
