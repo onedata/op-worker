@@ -189,7 +189,7 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
                 sfm_utils:create_storage_file(UserCtx, FileCtx)
         end,
         {FileLocation, FileCtx3} =
-            sfm_utils:create_storage_file_location(FileCtx2, not ExtDIO),
+            sfm_utils:create_storage_file_location(FileCtx2, not ExtDIO, true),
         fslogic_times:update_mtime_ctime(ParentFileCtx),
 
         HandleId = case user_ctx:is_direct_io(UserCtx) of
@@ -285,7 +285,7 @@ storage_file_created_insecure(_UserCtx, FileCtx) ->
 make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     FileCtx = create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
     try
-        {_, FileCtx2} = sfm_utils:create_storage_file_location(FileCtx, false),
+        {_, FileCtx2} = sfm_utils:create_storage_file_location(FileCtx, false, true),
         fslogic_times:update_mtime_ctime(ParentFileCtx),
         attr_req:get_file_attr_insecure(UserCtx, FileCtx2)
     catch

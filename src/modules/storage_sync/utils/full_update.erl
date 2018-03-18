@@ -281,6 +281,4 @@ save_storage_children_names(TableName, StorageFileCtx, Offset, BatchSize) ->
 -spec cast_deletion_of_imported_file(file_meta:name(), file_ctx:ctx(), od_space:id()) -> ok.
 cast_deletion_of_imported_file(ChildName, FileCtx, SpaceId) ->
     storage_sync_monitoring:update_queue_length_spirals(SpaceId, 1),
-    worker_pool:cast(?STORAGE_SYNC_FILE_POOL_NAME, {?MODULE,
-        delete_imported_file_and_update_counters, [ChildName, FileCtx, SpaceId]},
-        worker_pool:default_strategy()).
+    delete_imported_file_and_update_counters(ChildName, FileCtx, SpaceId).

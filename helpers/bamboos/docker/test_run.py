@@ -12,8 +12,9 @@ import argparse
 import os
 import platform
 import sys
+import time
 
-from environment.common import HOST_STORAGE_PATH
+from environment.common import HOST_STORAGE_PATH, remove_dockers_and_volumes
 from environment import docker
 import glob
 import xml.etree.ElementTree as ElementTree
@@ -100,7 +101,7 @@ parser.add_argument(
     action='store',
     help="Name of docker container where tests will be running",
     dest='docker_name',
-    default='test_run_docker'
+    default='test_run_docker_{}'.format(int(time.time()))
 )    
 
 [args, pass_args] = parser.parse_known_args()
@@ -154,6 +155,8 @@ command = command.format(
 
 # 128MB or more required for chrome tests to run with xvfb
 run_params = ['--shm-size=128m']
+
+remove_dockers_and_volumes()
 
 ret = docker.run(tty=True,
                  rm=True,

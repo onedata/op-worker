@@ -100,6 +100,7 @@ get_space_changes(Req, State) ->
         ?HTTP_OK, #{<<"content-type">> => <<"application/json">>}, Req4
     ),
     ok = stream_loop(Req5, State5),
+    cowboy_req:stream_body(<<"">>, fin, Req),
     {stop, Req5, State5}.
 
 
@@ -136,7 +137,7 @@ init_stream(State = #{last_seq := Since, space_id := SpaceId}) ->
 stream_loop(Req, State = #{timeout := Timeout, ref := Ref, space_id := SpaceId}) ->
     receive
         {Ref, stream_ended} ->
-            cowboy_req:stream_body(<<"">>, fin, Req);
+            ok;
         {Ref, Change} ->
             try
                 send_change(Req, Change, SpaceId)

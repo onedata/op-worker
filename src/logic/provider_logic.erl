@@ -329,7 +329,7 @@ is_subdomain_delegated() ->
 -spec set_delegated_subdomain(binary()) ->
     ok | {error, subdomain_exists} | gs_protocol:error().
 set_delegated_subdomain(Subdomain) ->
-    IPs = node_manager_plugin:get_cluster_ips(),
+    IPs = node_manager:get_cluster_ips(),
     case set_subdomain_delegation(Subdomain, IPs) of
         ok ->
             gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id_or_undefined()),
@@ -351,7 +351,7 @@ update_subdomain_delegation_ips() ->
     try
         case is_subdomain_delegated() of
             {true, Subdomain} ->
-                IPs = node_manager_plugin:get_cluster_ips(),
+                IPs = node_manager:get_cluster_ips(),
                 ok = set_subdomain_delegation(Subdomain, IPs);
             false ->
                 ok

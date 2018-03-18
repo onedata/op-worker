@@ -369,10 +369,9 @@ handle_already_imported_directory_changed_mtime(Job = #space_strategy_job{
 }, FileAttr, FileCtx) ->
     case maps:get(dir_offset, Data, 0) of
         0 ->
-            %todo usuwanie i update nie zadzialaja na tym samym skanie naisac test i sprawdzic
             full_update:run(Job, FileCtx);
         _ ->
-            simple_scan:handle_already_imported_file(Job, FileAttr, FileCtx)    %todo to obsluzymy i zliczymy ten deletowany
+            simple_scan:handle_already_imported_file(Job, FileAttr, FileCtx)
     end;
 handle_already_imported_directory_changed_mtime(Job = #space_strategy_job{
     strategy_args = #{delete_enable := false}

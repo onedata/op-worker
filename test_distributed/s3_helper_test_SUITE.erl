@@ -236,7 +236,8 @@ new_helper(Config) ->
         false,
         #{},
         UserCtx,
-        false
+        false,
+        ?FLAT_STORAGE_PATH
     ),
 
     spawn(Node, fun() ->

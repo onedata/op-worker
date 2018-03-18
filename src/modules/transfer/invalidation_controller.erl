@@ -21,7 +21,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([on_new_transfer_doc/1, on_transfer_doc_change/1, finish_invalidation/1, failed_invalidation/2]).
+-export([mark_finished/1, mark_failed/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -39,57 +39,13 @@
 %%% API
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Callback called when new transfer doc is created locally.
-%% (Because dbsync doesn't detect local changes).
-%% @end
-%%--------------------------------------------------------------------
--spec on_new_transfer_doc(transfer:doc()) -> ok.
-on_new_transfer_doc(Transfer = #document{value = #transfer{
-    status = skipped,
-    invalidation_status = scheduled,
-    source_provider_id = SourceProviderId,
-    target_provider_id = undefined,
-    invalidate_source_replica = true
-}}) ->
-    case oneprovider:is_self(SourceProviderId)  of
-        true ->
-            new_invalidation(Transfer);
-        false ->
-            ok
-    end;
-on_new_transfer_doc(_ExistingTransfer) ->
-    ok.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Callback called when transfer doc is synced from some other provider.
-%% @end
-%%--------------------------------------------------------------------
--spec on_transfer_doc_change(transfer:doc()) -> ok.
-on_transfer_doc_change(Transfer = #document{value = #transfer{
-    status = TransferStatus,
-    source_provider_id = SourceProviderId,
-    invalidate_source_replica = true,
-    invalidation_status = scheduled
-}}) when TransferStatus == completed orelse TransferStatus == skipped ->
-    case oneprovider:is_self(SourceProviderId) of
-        true ->
-            new_invalidation(Transfer);
-        false ->
-            ok
-    end;
-on_transfer_doc_change(_ExistingTransfer) ->
-    ok.
-
 %%-------------------------------------------------------------------
 %% @doc
 %% Stops invalidation_controller process and marks invalidation as completed.
 %% @end
 %%-------------------------------------------------------------------
--spec finish_invalidation(pid()) -> ok.
-finish_invalidation(Pid) ->
+-spec mark_finished(pid()) -> ok.
+mark_finished(Pid) ->
     gen_server2:cast(Pid, finish_invalidation),
     ok.
 
@@ -98,8 +54,8 @@ finish_invalidation(Pid) ->
 %% Stops transfer_controller process and marks transfer as failed.
 %% @end
 %%-------------------------------------------------------------------
--spec failed_invalidation(pid(), term()) -> ok.
-failed_invalidation(Pid, Error) ->
+-spec mark_failed(pid(), term()) -> ok.
+mark_failed(Pid, Error) ->
     gen_server2:cast(Pid, {failed_invalidation, Error}).
 
 
@@ -117,9 +73,6 @@ failed_invalidation(Pid, Error) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
 init([SessionId, TransferId, FileGuid, Callback]) ->
-    {ok, _} = transfer:update(TransferId,fun(T) ->
-        {ok, T#transfer{pid = list_to_binary(pid_to_list(self()))}}
-    end),
     ok = gen_server2:cast(self(), start_invalidation),
     {ok, #state{
         transfer_id = TransferId,
@@ -178,10 +131,9 @@ handle_cast(start_invalidation, State = #state{
     end;
 handle_cast(finish_invalidation, State = #state{
     transfer_id = TransferId,
-    space_id = SpaceId,
     callback = Callback
 }) ->
-    transfer:mark_completed_invalidation(TransferId, SpaceId),
+    transfer:mark_completed_invalidation(TransferId),
     notify_callback(Callback),
     {stop, normal, State};
 handle_cast({failed_invalidation, Error}, State = #state{
@@ -241,25 +193,6 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================\
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Starts new transfer based on existing doc synchronized from other provider
-%% @end
-%%--------------------------------------------------------------------
--spec new_invalidation(transfer:doc()) -> ok.
-new_invalidation(#document{
-    key = TransferId,
-    value = #transfer{
-        file_uuid = FileUuid,
-        space_id = SpaceId,
-        callback = Callback
-    }
-}) ->
-    FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
-    {ok, _Pid} = gen_server2:start(invalidation_controller,
-        [session:root_session_id(), TransferId, FileGuid, Callback], []),
-    ok.
 
 %%--------------------------------------------------------------------
 %% @doc

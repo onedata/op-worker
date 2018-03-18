@@ -237,7 +237,8 @@ new_helper(Config) ->
         atom_to_binary(?config(tenant_name, SwiftConfig), utf8),
         #{},
         UserCtx,
-        false
+        false,
+        ?FLAT_STORAGE_PATH
     ),
 
     spawn_link(Node, fun() ->

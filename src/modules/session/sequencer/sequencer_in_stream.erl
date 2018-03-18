@@ -119,7 +119,7 @@ init([SeqMan, StmId, SessId]) ->
         timeout() | hibernate} |
     {stop, Reason :: term(), NewStateData :: #state{}}).
 handle_event(Event, StateName, State) ->
-    ?log_bad_request({Event, StateName}),
+    ?log_bad_request({Event, StateName, State}),
     {next_state, StateName, State}.
 
 %%--------------------------------------------------------------------
@@ -141,7 +141,7 @@ handle_event(Event, StateName, State) ->
     {stop, Reason :: term(), Reply :: term(), NewStateData :: term()} |
     {stop, Reason :: term(), NewStateData :: term()}).
 handle_sync_event(Event, From, StateName, State) ->
-    ?log_bad_request({Event, From, StateName}),
+    ?log_bad_request({Event, From, StateName, State}),
     {next_state, StateName, State}.
 
 %%--------------------------------------------------------------------
@@ -162,7 +162,7 @@ handle_info({'EXIT', _, shutdown}, _, State) ->
     {stop, normal, State};
 
 handle_info(Info, StateName, State) ->
-    ?log_bad_request({Info, StateName}),
+    ?log_bad_request({Info, StateName, State}),
     {next_state, StateName, State}.
 
 %%--------------------------------------------------------------------
@@ -184,7 +184,7 @@ terminate(Reason, StateName, #state{stream_id = StmId, sequence_number = SeqNum,
     CommunicatorModule = communicator_module(IsProxy),
     case CommunicatorModule:send(Msg, SessId) of
         ok -> ok;
-        {error, Reason} -> SeqMan ! {send, Msg, SessId}
+        {error, _Reason2} -> SeqMan ! {send, Msg, SessId}
     end,
     unregister_stream(State).
 

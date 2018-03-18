@@ -21,7 +21,8 @@
 -export([init/1, handle/1, cleanup/0]).
 
 %% API
--export([is_connected/0]).
+-export([is_connected/0, force_connection_start/0]).
+-export([restart_connection/0]).
 -export([supervisor_flags/0]).
 
 -define(GS_WORKER_SUP, gs_worker_sup).
@@ -39,15 +40,48 @@
 supervisor_flags() ->
     #{strategy => one_for_one, intensity => 0, period => 1}.
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Predicate saying if the provider is actively connected to Onezone via
 %% GraphSync channel.
 %% @end
 %%--------------------------------------------------------------------
--spec is_connected() -> boolean().
-is_connected() ->
+is_connected()->
     worker_proxy:call(?MODULE, is_connected).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Immediately triggers onezone connection attempt.
+%% Returns boolean indicating success.
+%% @end
+%%--------------------------------------------------------------------
+-spec force_connection_start() -> boolean() | no_return().
+force_connection_start() ->
+    Node = get_gs_client_node(),
+    case rpc:call(Node, worker_proxy, call, [?MODULE, ensure_connected]) of
+        % throw on rpc error
+        Result when is_boolean(Result) -> Result
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Kills existing Onezone connection (if any) and starts a new one if run on
+%% dedicated graph_sync node.
+%% If run on all cluster nodes, the connection will be restarted immediately.
+%% @end
+%%--------------------------------------------------------------------
+-spec restart_connection() -> ok.
+restart_connection() ->
+    case global:whereis_name(?GS_CLIENT_WORKER_GLOBAL_NAME) of
+        Pid when is_pid(Pid) -> exit(Pid, kill);
+        _ -> ok
+    end,
+    % Force a reconnection attempt:
+    force_connection_start(),
+    ok.
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -76,8 +110,13 @@ handle(ping) ->
     pong;
 handle(healthcheck) ->
     ok;
-handle(is_connected) ->
+handle(ensure_connected) ->
     case connection_healthcheck() of
+        alive -> true;
+        _ -> false
+    end;
+handle(is_connected) ->
+    case get_connection_status() of
         alive -> true;
         _ -> false
     end;
@@ -111,6 +150,7 @@ handle({connection_healthcheck, FailedRetries}) ->
 handle(Request) ->
     ?log_bad_request(Request).
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link worker_plugin_behaviour} callback cleanup/0
@@ -128,21 +168,16 @@ cleanup() ->
 %% @private
 %% @doc
 %% Checks if gs_client_worker instance is up and running on one of cluster nodes
-%% and in case it's not, starts the worker on one of the nodes (this code is
-%% run on all cluster nodes).
+%% and in case it's not, starts the worker if this is the dedicated node. Must
+%% be run on all nodes to ensure that the connection is restarted.
 %% @end
 %%--------------------------------------------------------------------
 -spec connection_healthcheck() -> unregistered | skipped | alive | connection_error.
 connection_healthcheck() ->
     try
-        IsRegistered = provider_auth:is_registered(),
-        Pid = global:whereis_name(?GS_CLIENT_WORKER_GLOBAL_NAME),
-        LocalNode = node() == consistent_hasing:get_node(?GS_CLIENT_WORKER_GLOBAL_NAME),
-        case {IsRegistered, Pid, LocalNode} of
-            {false, _, _} -> unregistered;
-            {true, undefined, false} -> skipped;
-            {true, undefined, true} -> start_gs_client_worker();
-            {true, Pid, _} when is_pid(Pid) -> alive
+        case get_connection_status() of
+            not_started -> start_gs_client_worker();
+            Status -> Status
         end
     catch
         _:Reason ->
@@ -152,6 +187,37 @@ connection_healthcheck() ->
             ),
             error
     end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks connection status on the current node.
+%% Status skipped indicates that another node is responsible for
+%% the graph sync connection.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_connection_status() -> unregistered | skipped | not_started | alive.
+get_connection_status() ->
+    IsRegistered = provider_auth:is_registered(),
+    Pid = global:whereis_name(?GS_CLIENT_WORKER_GLOBAL_NAME),
+    LocalNode = node() == get_gs_client_node(),
+    case {IsRegistered, Pid, LocalNode} of
+        {false, _, _} -> unregistered;
+        {true, undefined, false} -> skipped;
+        {true, undefined, true} -> not_started;
+        {true, Pid, _} when is_pid(Pid) -> alive
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns node on which gs_client_worker should be running.
+%% @end
+%%--------------------------------------------------------------------
+get_gs_client_node() ->
+    consistent_hasing:get_node(?GS_CLIENT_WORKER_GLOBAL_NAME).
 
 
 -spec start_gs_client_worker() -> alive | connection_error.

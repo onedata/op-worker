@@ -84,7 +84,7 @@ add(Metric, NewValue) ->
 %%-------------------------------------------------------------------
 -spec get_histogram(key()) -> {values(), timestamp()} | undefined.
 get_histogram(Metric) ->
-    case  get(to_key(Metric)) of
+    case  datastore_model:get(?CTX, to_key(Metric)) of
         {ok, #document{value = #storage_sync_histogram{
             values = Values,
             timestamp = Timestamp

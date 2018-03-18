@@ -31,7 +31,7 @@
 
 -define(SERVER, ?MODULE).
 
--define(FILE_TRANSFER_RETRIES,
+-define(MAX_FILE_TRANSFER_RETRIES,
     application:get_env(?APP_NAME, max_file_transfer_retries_per_file, 5)).
 
 -record(state, {}).
@@ -96,16 +96,29 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}).
-handle_cast({start_file_replication, UserCtx, FileCtx, Block, TransferId}, State) ->
-    case replicate_file(UserCtx, FileCtx, Block, TransferId, ?FILE_TRANSFER_RETRIES) of
-        ok ->
-            {noreply, State, hibernate};
-        {error, transfer_cancelled} ->
-            {noreply, State, hibernate};
-        {error, _Reason} ->
-            {ok, _} = transfer:increase_failed_file_transfers(TransferId),
-            {noreply, State, hibernate}
-    end.
+handle_cast({start_file_replication, UserCtx, FileCtx, Block, TransferId,
+    RetriesLeft, NextRetryTimestamp}, State
+) ->
+    RetriesLeft2 = utils:ensure_defined(RetriesLeft, undefined,
+        ?MAX_FILE_TRANSFER_RETRIES),
+    case should_start_replication(NextRetryTimestamp) of
+        true ->
+            case replicate_file(UserCtx, FileCtx, Block, TransferId, RetriesLeft2) of
+                ok ->
+                    ok;
+                {error, transfer_cancelled} ->
+                    ok;
+                {error, not_found} ->
+                    % todo VFS-4218 currently we ignore this case
+                    {ok, _} = transfer:increase_files_processed_counter(TransferId);
+                {error, _Reason} ->
+                    {ok, _} = transfer:mark_failed_file_processing(TransferId)
+            end;
+        _ ->
+            sync_req:enqueue_file_replication(UserCtx, FileCtx, Block,
+                TransferId, RetriesLeft2, NextRetryTimestamp)
+    end,
+    {noreply, State, hibernate}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -158,16 +171,18 @@ code_change(_OldVsn, State, _Extra) ->
 %%-------------------------------------------------------------------
 -spec replicate_file(user:ctx(), file_ctx:ctx(), fslogic_blocks:block(),
     transfer:id(), non_neg_integer()) -> ok | {error, term()}.
-replicate_file(UserCtx, FileCtx, Block, TransferId, Retries) ->
-    try
-        #provider_response{status = #status{code = ?OK}} =
-            sync_req:replicate_file(UserCtx, FileCtx, Block, TransferId),
-        ok
+replicate_file(UserCtx, FileCtx, Block, TransferId, RetriesLeft) ->
+    try sync_req:replicate_file(UserCtx, FileCtx, Block, TransferId) of
+        #provider_response{status = #status{code = ?OK}}  ->
+            ok;
+        Error = {error, not_found} ->
+            maybe_retry(UserCtx, FileCtx, Block, TransferId, RetriesLeft, Error)
     catch
         throw:{transfer_cancelled, TransferId} ->
             {error, transfer_cancelled};
-        _:Reason ->
-            maybe_retry(UserCtx, FileCtx, Block, TransferId, Retries, Reason)
+        Error:Reason ->
+            maybe_retry(UserCtx, FileCtx, Block, TransferId, RetriesLeft,
+                {Error, Reason})
     end.
 
 %%-------------------------------------------------------------------
@@ -179,15 +194,74 @@ replicate_file(UserCtx, FileCtx, Block, TransferId, Retries) ->
 %%-------------------------------------------------------------------
 -spec maybe_retry(user:ctx(), file_ctx:ctx(), fslogic_blocks:block(),
     transfer:id(), non_neg_integer(), term()) -> ok | {error, term()}.
-maybe_retry(_UserCtx, FileCtx, _Block, TransferId, 0, Reason) ->
+maybe_retry(_UserCtx, _FileCtx, _Block, TransferId, 0, Error = {error, not_found}) ->
+    ?error(
+        "Replication in scope of transfer ~p failed due to ~p~n"
+        "No retries left", [TransferId, Error]),
+    Error;
+maybe_retry(UserCtx, FileCtx, Block, TransferId, RetriesLeft,
+    Error = {error, not_found}
+) ->
+    ?warning(
+        "Replication in scope of transfer ~p failed due to ~p~n"
+        "File transfer will be retried (attempts left: ~p)",
+        [TransferId, Error, RetriesLeft - 1]),
+    sync_req:enqueue_file_replication(UserCtx, FileCtx, Block, TransferId,
+        RetriesLeft - 1, next_retry(RetriesLeft));
+maybe_retry(_UserCtx, FileCtx, _Block, TransferId, 0, Error) ->
     {Path, _FileCtx2} = file_ctx:get_canonical_path(FileCtx),
     ?error(
         "Replication of file ~p in scope of transfer ~p failed due to ~p~n"
-        "No retries left", [Path, TransferId, Reason]),
+        "No retries left", [Path, TransferId, Error]),
     {error, retries_per_file_transfer_exceeded};
-maybe_retry(UserCtx, FileCtx, Block, TransferId, Retries, Reason) ->
+maybe_retry(UserCtx, FileCtx, Block, TransferId, Retries, Error) ->
     {Path, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
     ?warning(
         "Replication of file ~p in scope of transfer ~p failed due to ~p~n"
-        "File transfer will be retried (attempts left: ~p)", [Path, TransferId, Reason, Retries - 1]),
-    replicate_file(UserCtx, FileCtx2, Block, TransferId, Retries - 1).
+        "File transfer will be retried (attempts left: ~p)",
+        [Path, TransferId, Error, Retries - 1]),
+    sync_req:enqueue_file_replication(UserCtx, FileCtx2, Block, TransferId,
+        Retries - 1, next_retry(Retries)).
+
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% This functions check whether replication can be started.
+%% if NextRetryTimestamp is:
+%%  * undefined - replication can be started
+%%  * greater than current timestamp - replication cannot be started
+%%  * otherwise replication can be started
+%% @end
+%%-------------------------------------------------------------------
+-spec should_start_replication(undefined | non_neg_integer()) -> boolean().
+should_start_replication(undefined) ->
+    true;
+should_start_replication(NextRetryTimestamp) ->
+    time_utils:system_time_seconds() >= NextRetryTimestamp.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function returns minimal timestamp for next retry.
+%% Interval is generated basing on exponential backoff algorithm.
+%% @end
+%%-------------------------------------------------------------------
+-spec next_retry(non_neg_integer()) -> non_neg_integer().
+next_retry(RetriesLeft) ->
+    RetryNum = ?MAX_FILE_TRANSFER_RETRIES - RetriesLeft,
+    MinSecsToWait = backoff(RetryNum, ?MAX_FILE_TRANSFER_RETRIES),
+    time_utils:system_time_seconds() + MinSecsToWait.
+
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Exponential backoff for transfer retries.
+%% Returns random number from range [1, 2^(min(RetryNum, MaxRetries)]
+%% where RetryNum is number of retry
+%% @end
+%%-------------------------------------------------------------------
+-spec backoff(non_neg_integer(), non_neg_integer()) -> non_neg_integer().
+backoff(RetryNum, MaxRetries) ->
+    rand:uniform(round(math:pow(2, min(RetryNum, MaxRetries)))).

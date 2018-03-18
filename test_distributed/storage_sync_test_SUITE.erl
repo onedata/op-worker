@@ -29,6 +29,7 @@
     create_file_import_test/1, create_file_export_test/1,
     delete_empty_directory_update_test/1,
     delete_non_empty_directory_update_test/1,
+    sync_works_properly_after_delete_test/1,
     delete_and_update_files_simultaneously_update_test/1,
     delete_directory_export_test/1,
     delete_file_update_test/1,
@@ -81,6 +82,7 @@
     create_file_in_dir_exceed_batch_update_test,
     delete_empty_directory_update_test,
     delete_non_empty_directory_update_test,
+    sync_works_properly_after_delete_test,
     delete_and_update_files_simultaneously_update_test,
     delete_directory_export_test,
     append_file_update_test,
@@ -170,6 +172,9 @@ delete_empty_directory_update_test(Config) ->
 
 delete_non_empty_directory_update_test(Config) ->
     storage_sync_test_base:delete_non_empty_directory_update_test(Config, false).
+
+sync_works_properly_after_delete_test(Config) ->
+    storage_sync_test_base:sync_works_properly_after_delete_test(Config, false).
 
 delete_and_update_files_simultaneously_update_test(Config) ->
     storage_sync_test_base:delete_and_update_files_simultaneously_update_test(Config, false).
@@ -310,7 +315,8 @@ init_per_testcase(Case, Config) when
     init_per_testcase(default, Config2);
 
 init_per_testcase(Case, Config) when
-    Case =:= delete_and_update_files_simultaneously_update_test ->
+    Case =:= delete_and_update_files_simultaneously_update_test;
+    Case =:= sync_works_properly_after_delete_test ->
     Config2 = [
         {update_config, #{
             delete_enable => true,

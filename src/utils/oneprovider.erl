@@ -30,7 +30,8 @@
 -export([trusted_ca_certs/0]).
 -export([get_oz_domain/0, get_oz_url/0]).
 -export([get_oz_login_page/0, get_oz_logout_page/0, get_oz_providers_page/0]).
--export([is_connected_to_oz/0, on_connection_to_oz/0]).
+-export([force_oz_connection_start/0, is_connected_to_oz/0, on_connection_to_oz/0]).
+-export([restart_listeners/0]).
 
 % Developer functions
 -export([register_in_oz_dev/2]).
@@ -204,6 +205,17 @@ is_connected_to_oz() ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Immediately triggers onezone connection attempt.
+%% Returns boolean indicating success.
+%% @end
+%%--------------------------------------------------------------------
+-spec force_oz_connection_start() -> boolean().
+force_oz_connection_start() ->
+    gs_worker:force_connection_start().
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Callback called when connection to Onezone is established.
 %% @end
 %%--------------------------------------------------------------------
@@ -215,6 +227,19 @@ on_connection_to_oz() ->
     % in gs_client init and a call would cause a deadlock - updating
     % ips uses the graph sync connection.
     gen_server2:cast(?NODE_MANAGER_NAME, update_subdomain_delegation_ips).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Restarts all listeners as well as hackney and ssl applications.
+%% Connection to Onezone is restarted too as ssl restart breaks it.
+%% @end
+%%--------------------------------------------------------------------
+-spec restart_listeners() -> ok.
+restart_listeners() ->
+    % Must be done in node_manager process because some ETS tables are started
+    % alongside listeners.
+    gen_server2:cast(?NODE_MANAGER_NAME, restart_listeners).
 
 
 %%--------------------------------------------------------------------

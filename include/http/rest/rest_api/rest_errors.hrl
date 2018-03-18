@@ -223,6 +223,11 @@
     <<"Local provider is not source provider for given migration/invalidation transfer.
     Replication and invalidation transfers can only be restarted by source providers">>)
 ).
+-define(ERROR_ACTIVE_TRANSFER, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"error_active_transfer">>,
+    <<"Active transfer cannot be restarted. Cancel transfer and then restart it.">>)
+).
 -define(ERROR_TRANSFER_NOT_FOUND, ?ERROR_REPLY(
     ?BAD_REQUEST,
     <<"error_transfer_not_found">>,
