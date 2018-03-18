@@ -29,6 +29,7 @@
 -export([get_nodes/1, open/2, fsync/1, close/1, auth_request/4, get_connection_secret/2]).
 -export([add_storage/1, generate_secret/2]).
 
+%% Dialyzer doesn't find the behaviour
 %-behaviour(rtransfer_link_callback).
 
 %%%===================================================================
@@ -50,42 +51,72 @@ start_rtransfer() ->
     lists:foreach(fun add_storage/1, StorageDocs),
     {ok, RtransferPid}.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Realizes a given fetch request.
+%% NotifyFun is called on every request update. CompleteFun is called
+%% with result of the fetch.
+%% @end
+%%--------------------------------------------------------------------
+-spec fetch(rtransfer_link_request:t(), rtransfer_link:notify_fun(),
+            rtransfer_link:on_complete_fun(), TransferId :: binary(),
+            SpaceId :: binary(), FileGuid :: binary()) ->
+                   {ok, reference()} | {error, Reason :: any()}.
 fetch(Request, NotifyFun, CompleteFun, TransferId, SpaceId, FileGuid) ->
     TransferData = erlang:term_to_binary({TransferId, SpaceId, FileGuid}),
     rtransfer_link:fetch(Request, TransferData, NotifyFun, CompleteFun).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns a list of node addresses for a given provider.
+%% @end
+%%--------------------------------------------------------------------
 -spec get_nodes(ProviderId :: binary()) -> rtransfer_link:address().
 get_nodes(ProviderId) ->
     {ok, IPs} = provider_logic:resolve_ips(ProviderId),
     [{IP, ?RTRANSFER_PORT} || IP <- IPs].
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Opens a file.
+%% @end
+%%--------------------------------------------------------------------
 -spec open(FileUUID :: binary(), read | write) ->
     {ok, Handle :: term()} | {error, Reason :: any()}.
 open(FileGUID, OpenFlag) ->
     lfm_files:open(?ROOT_SESS_ID, {guid, FileGUID}, OpenFlag).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Calls fsync on a file handle opened with {@link open/2}.
+%% @end
+%%--------------------------------------------------------------------
 -spec fsync(Handle :: term()) -> any().
 fsync(Handle) ->
     lfm_files:fsync(Handle).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Releases a file handle opened with {@link open/2}.
+%% @end
+%%--------------------------------------------------------------------
 -spec close(Handle :: term()) -> any().
 close(Handle) ->
     lfm_files:release(Handle).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Authorize a transfer of a specific file.
+%% @end
+%%--------------------------------------------------------------------
 -spec auth_request(TransferData :: binary(), StorageId :: binary(),
                    FileId :: binary(), ProviderId :: binary()) -> boolean().
 auth_request(TransferData, StorageId, FileId, ProviderId) ->
     try
+        %% TransferId is not verified because provider could've created the transfer
+        %% if it wanted to. Plus, the transfer will most often start before the
+        %% transfer document is created.
         {_TransferId, SpaceId, FileGuid} = erlang:binary_to_term(TransferData, [safe]),
-        %% Transfer = case transfer:get(TransferId) of
-        %%                {ok, #document{value = T}} -> T;
-        %%                _ -> throw({error, invalid_transfer_id})
-        %%            end,
-
-        %% case Transfer of
-        %%     #transfer{space_id = SpaceId} -> ok;
-        %%     _ -> throw({error, invalid_space_id})
-        %% end,
 
         SpaceDoc =
             case space_logic:get(?ROOT_SESS_ID, SpaceId) of
@@ -125,6 +156,13 @@ auth_request(TransferData, StorageId, FileId, ProviderId) ->
             false
     end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Asks a remote provider for its connection secret needed to
+%% authenticate. Provides the remote with our own secret so that the
+%% authentication can be mutual.
+%% @end
+%%--------------------------------------------------------------------
 -spec get_connection_secret(ProviderId :: binary(),
                             rtransfer_link:address()) ->
                                    {MySecret :: binary(), PeerSecret :: binary()}.
@@ -136,41 +174,89 @@ get_connection_secret(ProviderId, {_Host, _Port}) ->
         provider_communicator:communicate(Request, SessId),
     {MySecret, PeerSecret}.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Adds storage to rtransfer.
+%% @end
+%%--------------------------------------------------------------------
 -spec add_storage(storage:doc()) -> any().
 add_storage(#document{key = StorageId, value = #storage{}} = Storage) ->
     Helper = hd(storage:get_helpers(Storage)),
     HelperParams = helper:get_params(Helper, helper:get_admin_ctx(Helper)),
     HelperName = helper:get_name(HelperParams),
     HelperArgs = maps:to_list(helper:get_args(HelperParams)),
-    rpc:multicall(rtransfer_link, add_storage, [StorageId, HelperName, HelperArgs]).
+    {_, BadNodes} = rpc:multicall(consistent_hasing:get_all_nodes(),
+                                  rtransfer_link, add_storage,
+                                  [StorageId, HelperName, HelperArgs]),
+    BadNodes =/= [] andalso
+        ?error("Failed to add storage ~p on nodes ~p", [StorageId, BadNodes]).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Generates this provider's connection secret needed for a client
+%% rtransfer to establish new connections to this rtransfer.
+%% @end
+%%--------------------------------------------------------------------
 -spec generate_secret(ProviderId :: binary(), PeerSecret :: binary()) -> binary().
 generate_secret(ProviderId, PeerSecret) ->
     MySecret = do_generate_secret(),
-    rpc:multicall(rtransfer_link, allow_connection, [ProviderId, MySecret, PeerSecret, 60000]),
+    {_, BadNodes} = rpc:multicall(consistent_hasing:get_all_nodes(),
+                                  rtransfer_link, allow_connection,
+                                  [ProviderId, MySecret, PeerSecret, 60000]),
+    BadNodes =/= [] andalso
+        ?error("Failed to allow rtransfer connection from ~p on nodes ~p",
+               [ProviderId, BadNodes]),
     MySecret.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Generates a 64-byte random secret.
+%% @end
+%%--------------------------------------------------------------------
 -spec do_generate_secret() -> binary().
 do_generate_secret() ->
     RealSecret = crypto:strong_rand_bytes(32),
     PaddingSize = (64 - byte_size(RealSecret)) * 8,
     <<RealSecret/binary, 0:PaddingSize>>.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Sets application environment for rtransfer_link to use SSL with
+%% provider's certs.
+%% @end
+%%--------------------------------------------------------------------
+-spec prepare_ssl_opts() -> any().
 prepare_ssl_opts() ->
     {ok, KeyFile} = application:get_env(?APP_NAME, web_key_file),
     Opts = [{use_ssl, true}, {cert_path, make_cert_bundle()},
             {key_path, KeyFile}, {ca_path, make_ca_bundle()}],
     application:set_env(rtransfer_link, ssl, Opts, [{persistent, true}]).
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates a bundle file from all CA certificates in the cacerts dir.
+%% @end
+%%--------------------------------------------------------------------
+-spec make_ca_bundle() -> file:filename().
 make_ca_bundle() ->
     CADir = oz_plugin:get_cacerts_dir(),
     {ok, CertPems} = file_utils:read_files({dir, CADir}),
     write_to_temp(CertPems).
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates a bundle file from this providers' certificate and chain.
+%% @end
+%%--------------------------------------------------------------------
+-spec make_cert_bundle() -> file:filename().
 make_cert_bundle() ->
     {ok, CertFile} = application:get_env(?APP_NAME, web_cert_file),
     {ok, ChainFile} = application:get_env(?APP_NAME, web_cert_chain_file),
@@ -178,6 +264,13 @@ make_cert_bundle() ->
     {ok, Chain} = file:read_file(ChainFile),
     write_to_temp([Cert, Chain]).
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates a temporary file populated with given contents.
+%% @end
+%%--------------------------------------------------------------------
+-spec write_to_temp(Contents :: [binary()]) -> file:filename().
 write_to_temp(Contents) ->
     TempPath = lib:nonl(os:cmd("mktemp")),
     {ok, TempFile} = file:open(TempPath, [write, binary]),
@@ -185,6 +278,14 @@ write_to_temp(Contents) ->
     ok = file:close(TempFile),
     TempPath.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Sets application environment for rtransfer_link to use graphite
+%% connection with provider's settings.
+%% @end
+%%--------------------------------------------------------------------
+-spec prepare_graphite_opts() -> any().
 prepare_graphite_opts() ->
     case application:get_env(?APP_NAME, integrate_with_graphite, false) of
         false -> ok;

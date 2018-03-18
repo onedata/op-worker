@@ -15,6 +15,8 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/oneclient/common_messages.hrl").
 
+-type storage_details() :: {StorageId :: binary(), FileId :: binary()}.
+
 %% API
 -export([get_blocks_for_sync/2, get_unique_blocks/1]).
 
@@ -29,7 +31,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get_blocks_for_sync([file_location:doc()], fslogic_blocks:blocks()) ->
-    [{oneprovider:id(), fslogic_blocks:blocks(), StorageDetails :: {binary(), binary()}}].
+    [{oneprovider:id(), fslogic_blocks:blocks(), storage_details()}].
 get_blocks_for_sync(_, []) ->
     [];
 get_blocks_for_sync(Locations, Blocks) ->
@@ -105,8 +107,9 @@ get_all_blocks(LocationList) ->
 %% available blocks are disjoint.
 %% @end
 %%--------------------------------------------------------------------
--spec minimize_present_blocks([{oneprovider:id(), fslogic_blocks:blocks(), {binary(), binary()}}], fslogic_blocks:blocks()) ->
-    [{oneprovider:id(), fslogic_blocks:blocks(), {binary(), binary()}}].
+-spec minimize_present_blocks([{oneprovider:id(), fslogic_blocks:blocks(), storage_details()}],
+                              fslogic_blocks:blocks()) ->
+    [{oneprovider:id(), fslogic_blocks:blocks(), storage_details()}].
 minimize_present_blocks([], _) ->
     [];
 minimize_present_blocks([{ProviderId, Blocks, StorageDetails} | Rest], AlreadyPresent) ->

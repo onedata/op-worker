@@ -17,7 +17,7 @@
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--define(QUOTA_REFRESH_INTERVAL, timer:seconds(1)).
+-define(REFRESH_DISABLED_SPACES_INTERVAL, timer:seconds(1)).
 
 %% worker_plugin_behaviour callbacks
 -export([init/1, handle/1, cleanup/0]).
@@ -37,7 +37,7 @@
 -spec init(Args :: term()) ->
     {ok, worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    schedule_quota_refresh(),
+    schedule_refresh_disabled_spaces(),
     {ok, #{}}.
 
 %%--------------------------------------------------------------------
@@ -50,10 +50,15 @@ handle(ping) ->
     pong;
 handle(healthcheck) ->
     ok;
-handle(quota_refresh) ->
+handle(refresh_disabled_spaces) ->
     BlockedSpaces = space_quota:get_disabled_spaces(),
-    rtransfer_link_quota_manager:update_disabled_spaces(BlockedSpaces),
-    schedule_quota_refresh();
+    {_, BadNodes} = rpc:multicall(consistent_hasing:get_all_nodes(),
+                                  rtransfer_link_quota_manager,
+                                  update_disabled_spaces,
+                                  [BlockedSpaces]),
+    BadNodes =/= [] andalso
+        ?error("Failed to update disabled spaces on nodes ~p", [BadNodes]),
+    schedule_refresh_disabled_spaces();
 handle(Request) ->
     ?log_bad_request(Request).
 
@@ -94,11 +99,10 @@ supervisor_children_spec() ->
         type => supervisor
     }].
 
-
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-schedule_quota_refresh() ->
-    erlang:send_after(?QUOTA_REFRESH_INTERVAL, self(), {sync_timer, quota_refresh}).
+schedule_refresh_disabled_spaces() ->
+    erlang:send_after(?REFRESH_DISABLED_SPACES_INTERVAL, self(),
+                      {sync_timer, refresh_disabled_spaces}).
