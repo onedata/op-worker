@@ -10,7 +10,7 @@
 %%% creation of large dir by single process and tree of dirs by many processes.
 %%% @end
 %%%--------------------------------------------------------------------
--module(files_stress_test_SUITE).
+-module(files_path_stress_test_SUITE).
 -author("Michal Wrzeszcz").
 
 -include("global_definitions.hrl").
@@ -64,7 +64,7 @@ many_files_creation_tree_test(Config) ->
         {description, "Creates directories' and files' tree using multiple process"}
     ]).
 many_files_creation_tree_test_base(Config) ->
-    files_stress_test_base:many_files_creation_tree_test_base(Config, true, true).
+    files_stress_test_base:many_files_creation_tree_test_base(Config, true).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
