@@ -170,7 +170,7 @@ start_strategies() ->
         ProviderId = oneprovider:get_id(),
         case provider_logic:get_spaces(ProviderId) of
             {ok, Spaces} ->
-                start_strategies(Spaces);
+                check_strategies(Spaces, true);
             Error = {error, _} ->
                 Error
         end
@@ -195,7 +195,7 @@ check_strategies() ->
     try
         ProviderId = oneprovider:get_id(),
         {ok, Spaces} = provider_logic:get_spaces(ProviderId),
-        check_strategies(Spaces)
+        check_strategies(Spaces, false)
     catch
         _:TReason ->
             ?error_stacktrace("Unable to check space strategies due to: ~p", [TReason])
@@ -207,33 +207,16 @@ check_strategies() ->
 %% This function is responsible for checking and optionally starting
 %% storage_import and storage_update strategies for each space supported
 %% by provider.
+%% Flag FirstRunAfterRestart will be passed down to check_strategies/3
+%% function for special handling of first run after restart.
 %% @end
 %%--------------------------------------------------------------------
--spec start_strategies([od_space:id()]) -> ok.
-start_strategies(SpaceIds) ->
+-spec check_strategies([od_space:id()], boolean()) -> ok.
+check_strategies(SpaceIds, FirstRunAfterRestart) ->
     lists:foreach(fun(SpaceId) ->
         case space_storage:get(SpaceId) of
             {ok, #document{value = #space_storage{storage_ids = StorageIds}}} ->
-                check_strategies(SpaceId, StorageIds, true);
-            _ ->
-                ok
-        end
-    end, SpaceIds).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function is responsible for checking and optionally starting
-%% storage_import and storage_update strategies for each space supported
-%% by provider.
-%% @end
-%%--------------------------------------------------------------------
--spec check_strategies([od_space:id()]) -> ok.
-check_strategies(SpaceIds) ->
-    lists:foreach(fun(SpaceId) ->
-        case space_storage:get(SpaceId) of
-            {ok, #document{value = #space_storage{storage_ids = StorageIds}}} ->
-                check_strategies(SpaceId, StorageIds, false);
+                check_strategies(SpaceId, StorageIds, FirstRunAfterRestart);
             _ ->
                 ok
         end
