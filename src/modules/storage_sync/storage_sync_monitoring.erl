@@ -43,12 +43,22 @@
 
 -export([init_report/0, init_report/1, init_reporter/1, init_counters/0]).
 
+% this function is exported only to please dialyzer
+% there is inconsistency between exometer_report:list_subscriptions/1
+% spec and actual returned value
+% according to spec this function returns {_, exometer:datapoint(), _, _}
+% while actually it returns {_, [exometer:datapoint()], _, _}
+% because of this inconsistency, dialyzer claims that ?MODULE:is_subscribed/4
+% will always return false
+% exporting below function resolves that issue
+-export([start_and_subscribe_storage_sync_spiral/5]).
+
 -type window() :: day | hours | minute.
 -type counter_type() :: files_to_sync | imported_files | deleted_files | updated_files |
-failed_file_imports | failed_file_deletions | failed_file_updates.
+    failed_file_imports | failed_file_deletions | failed_file_updates.
 -type spiral_type() :: imported_files | updated_files | deleted_files | queue_length.
 -type error() :: {error, term()}.
--type datapoints() :: exometer:datapoint() | [exometer:datapoint()].
+-type datapoints() :: exometer:datapoints() | exometer:datapoint().
 
 -define(STORAGE_SYNC_METRIC_PREFIX, storage_sync).
 
@@ -453,12 +463,6 @@ init_reporter(exometer_report_rrd_ets) ->
 -spec init_counters() -> ok.
 init_counters() ->
     ok.
-%%    case provider_logic:get_spaces() of
-%%        {ok, SpaceIds} ->
-%%            init_counters(SpaceIds);
-%%        Error = {error, _} ->
-%%            ?error("Unable to start storage_sync counters due to: ~p", [Error])
-%%    end.
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -570,29 +574,28 @@ ensure_started_and_subscribed_storage_sync_spiral(SpaceId, Type, Window, Resolut
 %% Checks whether
 %% @end
 %%-------------------------------------------------------------------
--spec is_subscribed(atom(), spiral_type() | counter_type(), datapoints(),
-    non_neg_integer()) -> boolean().
+-spec is_subscribed(atom(), exometer:name(), datapoints(),
+    pos_integer()) -> boolean().
 is_subscribed(Reporter, Metric, Datapoints, Resolution) ->
-    false =/= lists:member({Metric, Datapoints, Resolution, []},
+    lists:member({Metric, Datapoints, Resolution, []},
         exometer_report:list_subscriptions(Reporter)).
 
 %%-------------------------------------------------------------------
-%% @private
 %% @doc
 %% Starts and subscribes to given type of spiral.
 %% @end
 %%-------------------------------------------------------------------
 -spec start_and_subscribe_storage_sync_spiral(od_space:id(), spiral_type(),
-    window(), non_neg_integer(),datapoints()) -> ok.
+    window(), non_neg_integer(), datapoints()) -> ok.
 start_and_subscribe_storage_sync_spiral(SpaceId, Type, Window, Resolution, Datapoints) ->
     SpiralName = ?SPIRAL_NAME(SpaceId, Type, Window),
     TimeSpan = resolution_to_time_span(Window, Resolution),
-    catch exometer:new(SpiralName, spiral, [{time_span, TimeSpan}]),
+    (catch exometer:new(SpiralName, spiral, [{time_span, TimeSpan}])),
     case is_subscribed(?ETS_REPORTER_NAME, SpiralName, Datapoints, TimeSpan) of
-        true ->
-            ok;
         false ->
-            ok = exometer_report:subscribe(?ETS_REPORTER_NAME, SpiralName, Datapoints, TimeSpan)
+            ok = exometer_report:subscribe(?ETS_REPORTER_NAME, SpiralName, Datapoints, TimeSpan);
+        _ ->
+            ok
     end.
 
 %%-------------------------------------------------------------------

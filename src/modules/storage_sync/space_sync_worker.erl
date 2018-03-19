@@ -164,7 +164,7 @@ run({return_none, Jobs}) ->
 %% check_strategies is called.
 %% @end
 %%--------------------------------------------------------------------
--spec start_strategies() -> ok.
+-spec start_strategies() -> ok | {error, term()}.
 start_strategies() ->
     try
         ProviderId = oneprovider:get_id(),
