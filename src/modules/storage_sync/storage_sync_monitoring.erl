@@ -571,7 +571,7 @@ ensure_started_and_subscribed_storage_sync_spiral(SpaceId, Type, Window, Resolut
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Checks whether
+%% Checks whether given Reporter is subscribed for given Metric.
 %% @end
 %%-------------------------------------------------------------------
 -spec is_subscribed(atom(), exometer:name(), datapoints(),
