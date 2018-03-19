@@ -19,14 +19,10 @@
 %% counters API
 
 % starting & stopping
--export([start_counters/1, stop_counters/1, reset_sync_counters/1,
-    start_imported_files_spirals/1, stop_imported_files_spirals/1,
-    start_updated_files_spirals/1, stop_updated_files_spirals/1,
-    start_deleted_files_spirals/1, stop_deleted_files_spirals/1,
-    start_queue_length_spirals/1, stop_queue_length_spirals/1,
-    ensure_all_metrics_stopped/1, get_update_state/1, get_import_state/1,
-    get_metric/3
-]).
+-export([start_counters/1, stop_counters/1,
+    start_spirals/1, stop_spirals/1,
+    ensure_all_metrics_stopped/1,
+    get_update_state/1, get_import_state/1, get_metric/3]).
 
 % getters
 -export([get_unhandled_files_value/1, get_files_to_sync_value/1,
@@ -52,6 +48,7 @@
 failed_file_imports | failed_file_deletions | failed_file_updates.
 -type spiral_type() :: imported_files | updated_files | deleted_files | queue_length.
 -type error() :: {error, term()}.
+-type datapoints() :: exometer:datapoint() | [exometer:datapoint()].
 
 -define(STORAGE_SYNC_METRIC_PREFIX, storage_sync).
 
@@ -89,7 +86,7 @@ failed_file_imports | failed_file_deletions | failed_file_updates.
     ?FILES_TO_SYNC
 ]).
 
--define(SPIRAL_TYPES, [
+-define(SYNC_SPIRALS, [
     ?IMPORTED_FILES, ?DELETED_FILES, ?UPDATED_FILES, ?QUEUE_LENGTH
 ]).
 
@@ -106,55 +103,25 @@ failed_file_imports | failed_file_deletions | failed_file_updates.
 -spec start_counters(od_space:id()) -> ok.
 start_counters(SpaceId) ->
     lists:foreach(fun(CounterType) ->
-        start_and_subscribe_storage_sync_counter(SpaceId, CounterType)
+        ensure_storage_sync_counter_started(SpaceId, CounterType),
+        ok = reset_counter(SpaceId, CounterType)
     end, ?SYNC_COUNTERS).
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Starts exometer_spiral to monitor number of imported files.
+%% Starts spirals required by storage_import and storage_update.
 %% @end
 %%-------------------------------------------------------------------
--spec start_queue_length_spirals(od_space:id()) -> ok.
-start_queue_length_spirals(SpaceId) ->
-    lists:foreach(fun(Window) ->
-        start_queue_length_spiral(SpaceId, Window, ?SPIRAL_RESOLUTION)
-    end, ?WINDOWS).
+-spec start_spirals(od_space:id()) -> ok.
+start_spirals(SpaceId) ->
+    lists:foreach(fun(SpiralType) ->
+        lists:foreach(fun(Window) ->
+            ensure_started_and_subscribed_storage_sync_spiral(SpaceId, SpiralType, Window, ?SPIRAL_RESOLUTION),
+            reset_spiral(SpaceId, SpiralType, Window)
+        end, ?WINDOWS)
+    end, ?SYNC_SPIRALS).
 
 %%-------------------------------------------------------------------
-%% @doc
-%% Starts exometer_spiral to monitor number of imported files.
-%% @end
-%%-------------------------------------------------------------------
--spec start_imported_files_spirals(od_space:id()) -> ok.
-start_imported_files_spirals(SpaceId) ->
-    lists:foreach(fun(Window) ->
-        start_imported_files_spiral(SpaceId, Window, ?SPIRAL_RESOLUTION)
-    end, ?WINDOWS).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Starts exometer_spiral to monitor number of imported files.
-%% @end
-%%-------------------------------------------------------------------
--spec start_deleted_files_spirals(od_space:id()) -> ok.
-start_deleted_files_spirals(SpaceId) ->
-    lists:foreach(fun(Window) ->
-        start_deleted_files_spiral(SpaceId, Window, ?SPIRAL_RESOLUTION)
-    end, ?WINDOWS).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Starts exometer_spiral to monitor number of imported files.
-%% @end
-%%-------------------------------------------------------------------
--spec start_updated_files_spirals(od_space:id()) -> ok.
-start_updated_files_spirals(SpaceId) ->
-    lists:foreach(fun(Window) ->
-        start_updated_files_spiral(SpaceId, Window, ?SPIRAL_RESOLUTION)
-    end, ?WINDOWS).
-
-%%-------------------------------------------------------------------
-%% @private
 %% @doc
 %% Stops and unsubscribes counters required by storage_import and storage_update
 %% @end
@@ -167,58 +134,17 @@ stop_counters(SpaceId) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Stops counter of files to be updated
+%% Stops and unsubscribes spirals required by storage_import and storage_update
 %% @end
 %%-------------------------------------------------------------------
--spec stop_imported_files_spirals(od_space:id()) -> ok.
-stop_imported_files_spirals(SpaceId) ->
-    lists:foreach(fun(Window) ->
-        stop_imported_files_spiral(SpaceId, Window)
-    end, ?WINDOWS).
+-spec stop_spirals(od_space:id()) -> ok.
+stop_spirals(SpaceId) ->
+    lists:foreach(fun(SpiralType) ->
+        lists:foreach(fun(Window) ->
+            stop_and_unsubscribe_storage_sync_spiral(SpaceId, SpiralType, Window)
+        end, ?WINDOWS)
+    end, ?SYNC_SPIRALS).
 
-%%-------------------------------------------------------------------
-%% @doc
-%% Stops counter of files to be updated
-%% @end
-%%-------------------------------------------------------------------
--spec stop_updated_files_spirals(od_space:id()) -> ok.
-stop_updated_files_spirals(SpaceId) ->
-    lists:foreach(fun(Window) ->
-        stop_updated_files_spiral(SpaceId, Window)
-    end, ?WINDOWS).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Stops counter of files to be deleted
-%% @end
-%%-------------------------------------------------------------------
--spec stop_deleted_files_spirals(od_space:id()) -> ok.
-stop_deleted_files_spirals(SpaceId) ->
-    lists:foreach(fun(Window) ->
-        stop_deleted_files_spiral(SpaceId, Window)
-    end, ?WINDOWS).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Stops counter of files to be deleted
-%% @end
-%%-------------------------------------------------------------------
--spec stop_queue_length_spirals(od_space:id()) -> ok.
-stop_queue_length_spirals(SpaceId) ->
-    lists:foreach(fun(Window) ->
-        stop_queue_length_spiral(SpaceId, Window)
-    end, ?WINDOWS).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Reset counters used by storage_import and storage_update
-%% @end
-%%-------------------------------------------------------------------
--spec reset_sync_counters(od_space:id()) -> ok.
-reset_sync_counters(SpaceId) ->
-    lists:foreach(fun(CounterType) ->
-        ok = reset_counter(SpaceId, CounterType)
-    end, ?SYNC_COUNTERS).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -492,10 +418,7 @@ get_metric(SpaceId, Type, Window) ->
 -spec ensure_all_metrics_stopped(od_space:id()) -> ok.
 ensure_all_metrics_stopped(SpaceId) ->
     stop_counters(SpaceId),
-    storage_sync_monitoring:stop_updated_files_spirals(SpaceId),
-    storage_sync_monitoring:stop_deleted_files_spirals(SpaceId),
-    storage_sync_monitoring:stop_imported_files_spirals(SpaceId),
-    storage_sync_monitoring:stop_queue_length_spirals(SpaceId).
+    stop_spirals(SpaceId).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -529,12 +452,13 @@ init_reporter(exometer_report_rrd_ets) ->
 %%--------------------------------------------------------------------
 -spec init_counters() -> ok.
 init_counters() ->
-    case provider_logic:get_spaces() of
-        {ok, SpaceIds} ->
-            init_counters(SpaceIds);
-        Error = {error, _} ->
-            ?error("Unable to start storage_sync counters due to: ~p", [Error])
-    end.
+    ok.
+%%    case provider_logic:get_spaces() of
+%%        {ok, SpaceIds} ->
+%%            init_counters(SpaceIds);
+%%        Error = {error, _} ->
+%%            ?error("Unable to start storage_sync counters due to: ~p", [Error])
+%%    end.
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -563,25 +487,6 @@ init_report([SpaceId | Rest]) ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% This function is responsible for starting counters required by
-%% storage_sync.
-%% @end
-%%-------------------------------------------------------------------
--spec init_counters([od_space:id()]) -> ok.
-init_counters([]) ->
-    ok;
-init_counters([SpaceId | Rest]) ->
-    case space_strategies:is_import_on(SpaceId) of
-        false ->
-            ok;
-        true ->
-            start_counters(SpaceId)
-    end,
-    init_counters(Rest).
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
 %% Resubscribes suitable metrics to given reporter.
 %% TODO improve handling failures of exometer VFS-3173
 %% @end
@@ -590,96 +495,7 @@ init_counters([SpaceId | Rest]) ->
 resubscribe(?LAGER_REPORTER_NAME, SpaceId) ->
     start_counters(SpaceId);
 resubscribe(?ETS_REPORTER_NAME, SpaceId) ->
-    start_imported_files_spirals(SpaceId),
-    start_deleted_files_spirals(SpaceId),
-    start_updated_files_spirals(SpaceId),
-    start_queue_length_spirals(SpaceId).
-
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Starts exometer_spiral to monitor length of queue jobs
-%% @end
-%%-------------------------------------------------------------------
--spec start_queue_length_spiral(od_space:id(), window(),
-    non_neg_integer()) -> ok.
-start_queue_length_spiral(SpaceId, Window, Resolution) ->
-    start_and_subscribe_storage_sync_spiral(SpaceId, ?QUEUE_LENGTH, Window, Resolution, count).
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Starts exometer_spiral to monitor number of imported files.
-%% @end
-%%-------------------------------------------------------------------
--spec start_imported_files_spiral(od_space:id(), window(),
-    non_neg_integer()) -> ok.
-start_imported_files_spiral(SpaceId, Window, Resolution) ->
-    start_and_subscribe_storage_sync_spiral(SpaceId, ?IMPORTED_FILES, Window, Resolution).
-
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Starts exometer_spiral to monitor number of deleted files.
-%% @end
-%%-------------------------------------------------------------------
--spec start_deleted_files_spiral(od_space:id(), window(),
-    non_neg_integer()) -> ok.
-start_deleted_files_spiral(SpaceId, Window, Resolution) ->
-    start_and_subscribe_storage_sync_spiral(SpaceId, ?DELETED_FILES, Window, Resolution).
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Starts exometer_spiral to monitor number of updated files.
-%% @end
-%%-------------------------------------------------------------------
--spec start_updated_files_spiral(od_space:id(), window(),
-    non_neg_integer()) -> ok.
-start_updated_files_spiral(SpaceId, Window, Resolution) ->
-    start_and_subscribe_storage_sync_spiral(SpaceId, ?UPDATED_FILES, Window, Resolution).
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Stops counter of files to be updated
-%% @end
-%%-------------------------------------------------------------------
--spec stop_imported_files_spiral(od_space:id(), window()) -> ok.
-stop_imported_files_spiral(SpaceId, Window) ->
-    stop_and_unsubscribe_storage_sync_spiral(SpaceId, ?IMPORTED_FILES, Window).
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Stops counter of files to be updated
-%% @end
-%%-------------------------------------------------------------------
--spec stop_updated_files_spiral(od_space:id(), window()) -> ok.
-stop_updated_files_spiral(SpaceId, Window) ->
-    stop_and_unsubscribe_storage_sync_spiral(SpaceId, ?UPDATED_FILES, Window).
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Stops counter of files to be deleted
-%% @end
-%%-------------------------------------------------------------------
--spec stop_deleted_files_spiral(od_space:id(), window()) -> ok.
-stop_deleted_files_spiral(SpaceId, Window) ->
-    stop_and_unsubscribe_storage_sync_spiral(SpaceId, ?DELETED_FILES, Window).
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Stops counter of files to be deleted
-%% @end
-%%-------------------------------------------------------------------
--spec stop_queue_length_spiral(od_space:id(), window()) -> ok.
-stop_queue_length_spiral(SpaceId, Window) ->
-    stop_and_unsubscribe_storage_sync_spiral(SpaceId, ?QUEUE_LENGTH, Window).
+    start_spirals(SpaceId).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -731,13 +547,11 @@ update_queue_length_spiral(SpaceId, Window, Value) ->
 %% Starts and subscribes to given type of counter.
 %% @end
 %%-------------------------------------------------------------------
--spec start_and_subscribe_storage_sync_counter(od_space:id(), counter_type()) ->
+-spec ensure_storage_sync_counter_started(od_space:id(), counter_type()) ->
     ok | error().
-start_and_subscribe_storage_sync_counter(SpaceId, CounterType) ->
+ensure_storage_sync_counter_started(SpaceId, CounterType) ->
     CounterName = ?COUNTER_NAME(SpaceId, CounterType),
-    catch exometer:new(CounterName, counter),
-    ok = exometer_report:subscribe(?LAGER_REPORTER_NAME, CounterName, [value],
-        ?COUNTER_LOGGING_INTERVAL).
+    catch exometer:new(CounterName, counter).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -745,10 +559,22 @@ start_and_subscribe_storage_sync_counter(SpaceId, CounterType) ->
 %% Starts and subscribes to given type of spiral.
 %% @end
 %%-------------------------------------------------------------------
--spec start_and_subscribe_storage_sync_spiral(od_space:id(), spiral_type(),
+-spec ensure_started_and_subscribed_storage_sync_spiral(od_space:id(), spiral_type(),
     window(), non_neg_integer()) -> ok | error().
-start_and_subscribe_storage_sync_spiral(SpaceId, Type, Window, Resolution) ->
-    start_and_subscribe_storage_sync_spiral(SpaceId, Type, Window, Resolution, one).
+ensure_started_and_subscribed_storage_sync_spiral(SpaceId, Type, Window, Resolution) ->
+    start_and_subscribe_storage_sync_spiral(SpaceId, Type, Window, Resolution, [one]).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks whether
+%% @end
+%%-------------------------------------------------------------------
+-spec is_subscribed(atom(), spiral_type() | counter_type(), datapoints(),
+    non_neg_integer()) -> boolean().
+is_subscribed(Reporter, Metric, Datapoints, Resolution) ->
+    false =/= lists:member({Metric, Datapoints, Resolution, []},
+        exometer_report:list_subscriptions(Reporter)).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -757,12 +583,17 @@ start_and_subscribe_storage_sync_spiral(SpaceId, Type, Window, Resolution) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec start_and_subscribe_storage_sync_spiral(od_space:id(), spiral_type(),
-    window(), non_neg_integer(), exometer:datapoint()) -> ok.
-start_and_subscribe_storage_sync_spiral(SpaceId, Type, Window, Resolution, Metric) ->
+    window(), non_neg_integer(),datapoints()) -> ok.
+start_and_subscribe_storage_sync_spiral(SpaceId, Type, Window, Resolution, Datapoints) ->
     SpiralName = ?SPIRAL_NAME(SpaceId, Type, Window),
     TimeSpan = resolution_to_time_span(Window, Resolution),
     catch exometer:new(SpiralName, spiral, [{time_span, TimeSpan}]),
-    ok = exometer_report:subscribe(?ETS_REPORTER_NAME, SpiralName, [Metric], TimeSpan).
+    case is_subscribed(?ETS_REPORTER_NAME, SpiralName, Datapoints, TimeSpan) of
+        true ->
+            ok;
+        false ->
+            ok = exometer_report:subscribe(?ETS_REPORTER_NAME, SpiralName, Datapoints, TimeSpan)
+    end.
 
 %%-------------------------------------------------------------------
 %% @private
@@ -793,7 +624,7 @@ stop_and_unsubscribe_storage_sync_spiral(SpaceId, Type, Window) ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Updates given counter with given Value.
+%% Resets given counter.
 %% @end
 %%-------------------------------------------------------------------
 -spec reset_counter(od_space:id(), counter_type()) -> ok | error().
@@ -813,11 +644,21 @@ update_counter(SpaceId, CounterType, Value) ->
     CounterName = ?COUNTER_NAME(SpaceId, CounterType),
     exometer:update(CounterName, Value).
 
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Resets given spiral.
+%% @end
+%%-------------------------------------------------------------------
+-spec reset_spiral(od_space:id(), spiral_type(), window()) -> ok | error().
+reset_spiral(SpaceId, SpiralType, Window) ->
+    SpiralName = ?SPIRAL_NAME(SpaceId, SpiralType, Window),
+    exometer:reset(SpiralName).
 
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Updates given counter with given Value.
+%% Updates given spiral with given Value.
 %% @end
 %%-------------------------------------------------------------------
 -spec update_spiral(od_space:id(), spiral_type(), window(), integer()) ->

@@ -21,6 +21,8 @@
 -include("modules/rtransfer/registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/exometer_utils.hrl").
+-include_lib("ctool/include/api_errors.hrl").
+
 
 -export([init/1, handle/1, cleanup/0]).
 -export([init_counters/0, init_report/0]).
@@ -93,9 +95,7 @@ init(_Args) ->
         {sync_timer, invalidate_permissions_cache}
     ),
 
-    erlang:send_after(?TRANSFERS_RESTART_DELAY, self(),
-        {sync_timer, restart_transfers}
-    ),
+    schedule_restart_transfers(),
 
     lists:foreach(fun({Fun, Args}) ->
         case apply(Fun, Args) of
@@ -151,6 +151,9 @@ handle(restart_transfers) ->
         Error = {error, _} ->
             ?error("Unable to restart transfers due to: ~p", [Error])
     catch
+        throw:?ERROR_UNREGISTERED_PROVIDER ->
+            schedule_restart_transfers(),
+            ok;
         _:Reason ->
             ?error_stacktrace("Unable to restart transfers due to: ~p", [Reason])
     end;
@@ -624,3 +627,15 @@ gateway_supervisor_spec(RtransferOpts) ->
         shutdown => infinity,
         type => worker
     }.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Maps space strategy name to worker pool name.
+%% @end
+%%--------------------------------------------------------------------
+-spec schedule_restart_transfers() -> reference().
+schedule_restart_transfers() ->
+    erlang:send_after(?TRANSFERS_RESTART_DELAY, self(),
+        {sync_timer, restart_transfers}
+    ).

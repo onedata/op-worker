@@ -177,9 +177,7 @@ switch_monitoring_status(SpaceId, storage_update, CurrentStrategyName,
 switch_import_monitoring_status(_SpaceId, no_import, no_import) ->
     ok;
 switch_import_monitoring_status(SpaceId, _, no_import) ->
-    turn_import_monitoring_off(SpaceId);
-switch_import_monitoring_status(SpaceId, no_import, _) ->
-    turn_import_monitoring_on(SpaceId);
+    turn_sync_monitoring_off(SpaceId);
 switch_import_monitoring_status(_SpaceId, _, _) ->
     ok.
 
@@ -187,30 +185,16 @@ switch_import_monitoring_status(_SpaceId, _, _) ->
 %% @private
 %% @doc
 %% Turns update metrics on or off, according to current and new strategy.
-%% @end
+%% @end./
 %%-------------------------------------------------------------------
 -spec switch_update_monitoring_status(od_space:id(), space_strategy:name(),
     space_strategy:name()) -> ok.
 switch_update_monitoring_status(_SpaceId, no_update, no_update) ->
     ok;
 switch_update_monitoring_status(SpaceId, _, no_update) ->
-    turn_update_monitoring_off(SpaceId);
-switch_update_monitoring_status(SpaceId, no_update, _) ->
-    turn_update_monitoring_on(SpaceId);
+    turn_sync_monitoring_off(SpaceId);
 switch_update_monitoring_status(_SpaceId, _, _) ->
     ok.
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Turns import monitoring on.
-%% @end
-%%-------------------------------------------------------------------
--spec turn_import_monitoring_on(od_space:id()) -> ok.
-turn_import_monitoring_on(SpaceId) ->
-    storage_sync_monitoring:start_counters(SpaceId),
-    storage_sync_monitoring:start_imported_files_spirals(SpaceId),
-    storage_sync_monitoring:start_queue_length_spirals(SpaceId).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -218,30 +202,6 @@ turn_import_monitoring_on(SpaceId) ->
 %% Turns import monitoring off.
 %% @end
 %%-------------------------------------------------------------------
--spec turn_import_monitoring_off(od_space:id()) -> ok.
-turn_import_monitoring_off(SpaceId) ->
-    storage_sync_monitoring:stop_counters(SpaceId),
-    storage_sync_monitoring:stop_imported_files_spirals(SpaceId),
-    storage_sync_monitoring:stop_queue_length_spirals(SpaceId).
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Turns update monitoring on.
-%% @end
-%%-------------------------------------------------------------------
--spec turn_update_monitoring_on(od_space:id()) -> ok.
-turn_update_monitoring_on(SpaceId) ->
-    storage_sync_monitoring:start_updated_files_spirals(SpaceId),
-    storage_sync_monitoring:start_deleted_files_spirals(SpaceId).
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Turns update monitoring off.
-%% @end
-%%-------------------------------------------------------------------
--spec turn_update_monitoring_off(od_space:id()) -> ok.
-turn_update_monitoring_off(SpaceId) ->
-    storage_sync_monitoring:stop_updated_files_spirals(SpaceId),
-    storage_sync_monitoring:stop_deleted_files_spirals(SpaceId).
+-spec turn_sync_monitoring_off(od_space:id()) -> ok.
+turn_sync_monitoring_off(SpaceId) ->
+    storage_sync_monitoring:stop_counters(SpaceId).
