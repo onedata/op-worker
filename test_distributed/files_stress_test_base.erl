@@ -225,7 +225,12 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS) ->
                             % Fill file if needed (depends on test config)
                             case WriteToFile of
                                 true ->
-                                    {ok, Handle} = lfm_proxy:open(Worker, SessId, {path, F}, rdwr),
+                                    {ok, Handle} = case CacheGUIDS of
+                                        false ->
+                                            lfm_proxy:open(Worker, SessId, {path, F}, rdwr);
+                                        _ ->
+                                            lfm_proxy:open(Worker, SessId, {guid, GUID}, rdwr)
+                                    end,
                                     WriteBuf = generator:gen_name(),
                                     WriteSize = size(WriteBuf),
                                     {ok, WriteSize} = lfm_proxy:write(Worker, Handle, 0, WriteBuf),
