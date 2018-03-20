@@ -406,9 +406,10 @@ route_and_send_answer(Msg = #client_message{
     ok;
 route_and_send_answer(#client_message{
     message_id = Id = #message_id{issuer = ProviderId},
-    message_body = #generate_rtransfer_conn_secret{}
+    message_body = #generate_rtransfer_conn_secret{secret = PeerSecret}
 }) ->
-    Response = #rtransfer_conn_secret{secret = <<ProviderId/binary, "-secret">>},
+    MySecret = rtransfer_config:generate_secret(ProviderId, PeerSecret),
+    Response = #rtransfer_conn_secret{secret = MySecret},
     {ok, #server_message{message_id = Id, message_body = Response}};
 route_and_send_answer(Msg = #client_message{
     message_id = Id,

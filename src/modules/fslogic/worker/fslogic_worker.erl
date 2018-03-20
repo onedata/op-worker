@@ -18,14 +18,12 @@
 -include("proto/oneclient/proxyio_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include("modules/events/definitions.hrl").
--include("modules/rtransfer/registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/exometer_utils.hrl").
 
 -export([init/1, handle/1, cleanup/0]).
 -export([init_counters/0, init_report/0]).
 % for tests
--export([restart_gateway/1]).
 
 %%%===================================================================
 %%% Types
@@ -85,8 +83,6 @@
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    maybe_start_gateway_supervisor(),
-
     transfer:init(),
 
     erlang:send_after(?INVALIDATE_PERMISSIONS_CACHE_INTERVAL, self(),
@@ -225,19 +221,6 @@ init_report() ->
 %%%===================================================================
 %%% functions exported for tests
 %%%===================================================================
-
-%%-------------------------------------------------------------------
-%% @doc
-%% This function is responsible for restarting whole gateway supervision
-%% tree with new rtransfer options.
-%% NOTE: This function is intended to be used only in tests!!!
-%% @end
-%%-------------------------------------------------------------------
--spec restart_gateway([rtransfer:opt()]) -> {ok, pid()}.
-restart_gateway(RtransferOpts) ->
-    supervisor:terminate_child(?FSLOGIC_WORKER_SUP, ?GATEWAY_SUPERVISOR),
-    supervisor:delete_child(?FSLOGIC_WORKER_SUP, ?GATEWAY_SUPERVISOR),
-    {ok, _} = start_gateway(RtransferOpts).
 
 %%%===================================================================
 %%% Internal functions
@@ -582,45 +565,3 @@ process_response(UserCtx,
     end;
 process_response(_, _, Response, _) ->
     Response.
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Starts gateway if start_rtransfer_on_init is set to true in app.config.
-%% @end
-%%-------------------------------------------------------------------
--spec maybe_start_gateway_supervisor() -> term().
-maybe_start_gateway_supervisor() ->
-    DisabledWorkers = application:get_env(?APP_NAME, disabled_workers, []),
-    case lists:member(rtransfer_worker, DisabledWorkers) of
-        false ->
-            start_gateway(rtransfer_config:options());
-        true ->
-            ok
-    end.
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Starts gateway gen_server as fslogic_worker_sup child.
-%% @end
-%%-------------------------------------------------------------------
--spec start_gateway([rtransfer:opt()]) -> {ok, pid()}.
-start_gateway(RtransferOpts) ->
-    supervisor:start_child(?FSLOGIC_WORKER_SUP, gateway_supervisor_spec(RtransferOpts)).
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns supervisor child_spec for gateway gen_server.
-%% @end
-%%-------------------------------------------------------------------
--spec gateway_supervisor_spec([rtransfer:opt()]) -> supervisor:child_spec().
-gateway_supervisor_spec(RtransferOpts) ->
-    #{
-        id => ?GATEWAY_SUPERVISOR,
-        start => {gateway_supervisor, start_link, [RtransferOpts]},
-        restart => permanent,
-        shutdown => infinity,
-        type => worker
-    }.

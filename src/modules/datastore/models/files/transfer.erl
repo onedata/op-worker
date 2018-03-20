@@ -219,7 +219,7 @@ get_info(TransferId) ->
 %% Returns transfer document.
 %% @end
 %%-------------------------------------------------------------------
--spec get(id()) -> {ok, doc()}.
+-spec get(id()) -> {ok, doc()} | {error, term()}.
 get(TransferId) ->
     datastore_model:get(?CTX, TransferId).
 

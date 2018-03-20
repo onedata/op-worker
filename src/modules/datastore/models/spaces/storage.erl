@@ -21,7 +21,7 @@
 -export([get_id/1, get_name/1, is_readonly/1, get_helpers/1, is_luma_enabled/1,
     get_luma_config/1, get_luma_config_map/1]).
 -export([select_helper/2, update_helper/3, select/1]).
--export([save/1, get/1, exists/1, delete/1, update/2, create/1, list/0]).
+-export([get/1, exists/1, delete/1, update/2, create/1, list/0]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -47,15 +47,6 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Saves storage.
-%% @end
-%%--------------------------------------------------------------------
--spec save(doc()) -> {ok, id()} | {error, term()}.
-save(Doc) ->
-    ?extract_key(datastore_model:save(?CTX, Doc)).
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Updates storage.
 %% @end
 %%--------------------------------------------------------------------
@@ -70,7 +61,13 @@ update(Key, Diff) ->
 %%--------------------------------------------------------------------
 -spec create(doc()) -> {ok, id()} | {error, term()}.
 create(#document{value = #storage{}} = Doc) ->
-    ?extract_key(datastore_model:create(?CTX, Doc)).
+    case ?extract_key(datastore_model:create(?CTX, Doc)) of
+        {ok, StorageId} ->
+            rtransfer_config:add_storage(Doc#document{key = StorageId}),
+            {ok, StorageId};
+        Other ->
+            Other
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

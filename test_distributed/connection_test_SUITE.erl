@@ -324,7 +324,7 @@ rtransfer_connection_secret_test(Config) ->
     {ok, EncodedId} = message_id:encode(MsgId),
     ClientMsg = #'ClientMessage'{
         message_id = EncodedId,
-        message_body = {generate_rtransfer_conn_secret, #'GenerateRTransferConnSecret'{}}
+        message_body = {generate_rtransfer_conn_secret, #'GenerateRTransferConnSecret'{secret = <<>>}}
     },
     RawMsg = messages:encode_msg(ClientMsg),
     ssl:send(Sock, RawMsg),
