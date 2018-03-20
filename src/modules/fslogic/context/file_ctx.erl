@@ -288,7 +288,7 @@ get_canonical_path(FileCtx = #file_ctx{canonical_path = Path}) ->
 %% Returns file's canonical path tokens (starting with "/", "SpaceId/", ...).
 %% @end
 %%--------------------------------------------------------------------
--spec get_canonical_path_tokens(ctx()) -> {file_meta:path(), ctx()}.
+-spec get_canonical_path_tokens(ctx()) -> {[file_meta:name()], ctx()}.
 get_canonical_path_tokens(FileCtx = #file_ctx{canonical_path = undefined}) ->
     case is_root_dir_const(FileCtx) of
         true ->
@@ -300,7 +300,7 @@ get_canonical_path_tokens(FileCtx = #file_ctx{canonical_path = undefined}) ->
                 FileCtx#file_ctx{canonical_path = CanonicalPath}}
     end;
 get_canonical_path_tokens(FileCtx = #file_ctx{canonical_path = Path}) ->
-    {Path, FileCtx}.
+    {fslogic_path:split(Path), FileCtx}.
 
 %%--------------------------------------------------------------------
 %% @doc
