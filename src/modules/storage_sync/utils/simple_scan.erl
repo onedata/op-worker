@@ -474,7 +474,6 @@ handle_already_imported_file(Job = #space_strategy_job{
     try
         {#statbuf{st_mode = Mode}, StorageFileCtx2} = storage_file_ctx:get_stat_buf(StorageFileCtx),
         maybe_update_attrs(FileAttr, FileCtx, StorageFileCtx2, Mode, SpaceId, SyncAcl),
-        storage_sync_monitoring:increase_updated_files_spirals(SpaceId),
         storage_sync_monitoring:increase_updated_files_counter(SpaceId)
     catch
         _:_ ->
