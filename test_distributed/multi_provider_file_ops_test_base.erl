@@ -25,6 +25,7 @@
 %% export for tests
 -export([
     basic_opts_test_base/4,
+    rtransfer_test_base/9,
     many_ops_test_base/6,
     distributed_modification_test_base/4,
     multi_space_test_base/3,
@@ -64,6 +65,91 @@
 %%% Test skeletons
 %%%===================================================================
 
+
+rtransfer_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten},
+    Attempts, Timeout, SmallFilesNum, MediumFilesNum, BigFilesNum, BigFilesChunks) ->
+    rtransfer_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1},
+        Attempts, Timeout, SmallFilesNum, MediumFilesNum, BigFilesNum, BigFilesChunks);
+rtransfer_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider},
+    Attempts, Timeout, SmallFilesNum, MediumFilesNum, BigFilesNum, BigFileParts) ->
+    Config = extend_config(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts),
+    SessId = ?config(session, Config),
+    SpaceName = ?config(space_name, Config),
+    Worker1 = ?config(worker1, Config),
+    Workers1 = ?config(workers1, Config),
+    Workers2 = ?config(workers2, Config),
+    Workers = ?config(op_worker_nodes, Config),
+    Workers3 = Workers -- Workers1 -- Workers2,
+
+    Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir, 8#755)),
+
+    verify_stats(Config, Dir, true),
+    ct:print("Dir created"),
+
+    ChunkSize = 10240,
+    SmallFiles = lists:map(fun(_) ->
+        {1, 1}
+    end, lists:seq(1, SmallFilesNum)),
+    MediumFiles = lists:map(fun(_) ->
+        {1024, 1}
+    end, lists:seq(1, MediumFilesNum)),
+    BigFiles = lists:map(fun(_) ->
+        {1024, BigFileParts}
+    end, lists:seq(1, BigFilesNum)),
+    Files = SmallFiles ++ MediumFiles ++ BigFiles,
+
+    Master = self(),
+    lists:foreach(fun({ChunksNum, PartNum}) ->
+        spawn(fun() ->
+            try
+                PartSize = ChunkSize * ChunksNum,
+                Level2File = <<Dir/binary, "/", (generator:gen_name())/binary>>,
+                Level2File2 = <<Dir/binary, "/", (generator:gen_name())/binary>>,
+                create_big_file(Config, ChunkSize, ChunksNum, PartNum, Level2File, Worker1),
+
+                T1 = lists:max(verify_workers(Workers2, fun(W) ->
+                    read_big_file(Config, PartSize, PartNum, Level2File, W)
+                end)),
+                T2 = lists:max(verify_workers(Workers3, fun(W) ->
+                    read_big_file(Config, PartSize, PartNum, Level2File, W)
+                end)),
+
+                create_big_file(Config, ChunkSize, ChunksNum, PartNum, Level2File2, Worker1),
+                T3 = lists:max(verify(Config, fun(W) ->
+                    read_big_file(Config, PartSize, PartNum, Level2File2, W)
+                end)),
+
+                Master ! {slave_ans, ChunksNum, PartNum, {ok, lists:max([T1, T2, T3])}}
+            catch
+                E1:E2 ->
+                    Master ! {slave_ans, ChunksNum, PartNum, {error, E1, E2}}
+            end
+        end)
+    end, Files),
+
+    Answers = lists:foldl(fun({ChunksNum, PartNum}, Acc) ->
+        SlaveAns = receive
+            {slave_ans, ChunksNum, PartNum, Ans} ->
+                Ans
+        after
+            Timeout ->
+                timeout
+        end,
+        ?assertMatch({ok, _}, SlaveAns),
+        {ok, Time} = SlaveAns,
+        [{ChunksNum, PartNum, Time} | Acc]
+    end, [], Files),
+
+    AnswersMap = lists:foldl(fun({ChunksNum, PartNum, Time}, Acc) ->
+        Key = {ChunksNum, PartNum},
+        V = maps:get(Key, Acc, 0),
+        maps:put(Key, max(V, Time), Acc)
+    end, #{}, Answers),
+
+    ct:print("Read max times ~p", [AnswersMap]),
+
+    ok.
 
 basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts) ->
     basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts);
@@ -356,10 +442,10 @@ distributed_delete_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWr
     ],
 
     DelNodes = [
-        Workers1 ++ Workers1,
-        WorkersNot1 ++ WorkersNot1,
+            Workers1 ++ Workers1,
+            WorkersNot1 ++ WorkersNot1,
         Workers,
-        Workers1 ++ Workers1,
+            Workers1 ++ Workers1,
         all,
         all
     ],
@@ -463,7 +549,7 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
                 owner = User,
                 scope = SpaceKey
             },
-            scope = SpaceId
+                scope = SpaceId
             },
 %%            ct:print("Doc ~p ~p", [Uuid, Name]),
             {Doc, Name}
@@ -960,31 +1046,39 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
 extend_config(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts) ->
     ProxyNodesWritten = ProxyNodesWritten0 * NodesOfProvider,
     Workers = ?config(op_worker_nodes, Config),
-    {Worker1, Workers1, WorkersNot1} = lists:foldl(fun(W, {Acc1, Acc2, Acc3}) ->
+    {Worker1, Workers1, WorkersNot1, Workers2} = lists:foldl(fun(W, {Acc1, Acc2, Acc3, Acc4}) ->
         {NAcc2, NAcc3} = case string:str(atom_to_list(W), "p1") of
             0 -> {Acc2, [W | Acc3]};
             _ -> {[W | Acc2], Acc3}
         end,
+
+        NAcc4 = case string:str(atom_to_list(W), "p2") of
+            0 -> Acc4;
+            _ -> [W | Acc4]
+        end,
+
         case is_atom(Acc1) of
             true ->
-                {Acc1, NAcc2, NAcc3};
+                {Acc1, NAcc2, NAcc3, NAcc4};
             _ ->
                 case string:str(atom_to_list(W), "p1") of
-                    0 -> {Acc1, NAcc2, NAcc3};
-                    _ -> {W, NAcc2, NAcc3}
+                    0 -> {Acc1, NAcc2, NAcc3, NAcc4};
+                    _ -> {W, NAcc2, NAcc3, NAcc4}
                 end
         end
-    end, {[], [], []}, Workers),
+    end, {[], [], [], []}, Workers),
 
     SessId = fun(W) -> ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config) end,
     [{_SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
-    [{worker1, Worker1}, {workers1, Workers1}, {workers_not1, WorkersNot1},
+    [{worker1, Worker1}, {workers1, Workers1}, {workers_not1, WorkersNot1}, {workers2, Workers2},
         {session, SessId}, {space_name, SpaceName}, {attempts, Attempts},
         {nodes_number, {SyncNodes, ProxyNodes, ProxyNodesWritten, ProxyNodesWritten0, NodesOfProvider}} | Config].
 
 verify(Config, TestFun) ->
     Workers = ?config(op_worker_nodes, Config),
+    verify_workers(Workers, TestFun).
 
+verify_workers(Workers, TestFun) ->
     process_flag(trap_exit, true),
     TestAns = verify_helper(Workers, TestFun),
 
@@ -1061,6 +1155,53 @@ create_file_on_worker(Config, FileBeg, Offset, File, WriteWorker) ->
     ?assertMatch({ok, Size}, lfm_proxy:write(WriteWorker, Handle, Offset2, File)),
     ?assertMatch(ok, lfm_proxy:truncate(WriteWorker, SessId(WriteWorker), {path, File}, 2*Offset2)),
     ?assertEqual(ok, lfm_proxy:close(WriteWorker, Handle)).
+
+create_big_file(Config, ChunkSize, ChunksNum, PartNum, File, Worker) ->
+    SessId = ?config(session, Config),
+
+    ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId(Worker), File, 8#755)),
+    OpenAns = lfm_proxy:open(Worker, SessId(Worker), {path, File}, rdwr),
+    ?assertMatch({ok, _}, OpenAns),
+    {ok, Handle} = OpenAns,
+
+    BytesChunk = crypto:strong_rand_bytes(ChunkSize),
+    Bytes = lists:foldl(fun(_, Acc) ->
+        <<Acc/binary, BytesChunk/binary>>
+    end, <<>>, lists:seq(1, ChunksNum)),
+
+    PartSize = ChunksNum * ChunkSize,
+    lists:foreach(fun(Num) ->
+        ?assertEqual({ok, PartSize}, lfm_proxy:write(Worker, Handle, Num * PartSize, Bytes))
+    end, lists:seq(0, PartNum - 1)),
+
+    ?assertEqual(ok, lfm_proxy:close(Worker, Handle)).
+
+read_big_file(Config, PartSize, PartNum, File, Worker) ->
+    SessId = ?config(session, Config),
+    Attempts = ?config(attempts, Config),
+
+    TestFun = fun() ->
+        case lfm_proxy:open(Worker, SessId(Worker), {path, File}, rdwr) of
+            {ok, Handle} ->
+                ReadAns = try
+                    Start = os:timestamp(),
+                    lists:foreach(fun(Num) ->
+                        {ok, Bytes} = lfm_proxy:read(Worker, Handle, Num * PartSize, PartSize),
+                        PartSize = size(Bytes)
+                    end, lists:seq(0, PartNum - 1)),
+                    {ok, timer:now_diff(os:timestamp(), Start)}
+                catch
+                    E1:E2 ->
+                        {read, E1, E2}
+                end,
+
+                {ReadAns, lfm_proxy:close(Worker, Handle)};
+            OpenError ->
+                {open_error, OpenError}
+        end
+    end,
+    {{ok, Time}, ok} = ?assertMatch({{ok, _}, ok}, TestFun(), Attempts),
+    Time.
 
 create_file(Config, FileBeg, {Offset, File}) ->
     Worker1 = ?config(worker1, Config),
