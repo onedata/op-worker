@@ -81,7 +81,7 @@ finder_should_return_shorter_list_for_request_exceeding_file(_) ->
     Ans = replica_finder:get_blocks_for_sync(Locations, BlocksToSync),
 
     %then
-    ?_assertEqual([{?PID1, [?BLOCK(1,1)]}], Ans).
+    ?_assertMatch([{?PID1, [?BLOCK(1,1)], _}], Ans).
 
 finder_should_find_data_in_one_location(_) ->
     Locations = [?LOCATION(?PID1, [?BLOCK(1,5), ?BLOCK(7,9)])],
@@ -91,7 +91,7 @@ finder_should_find_data_in_one_location(_) ->
     Ans = replica_finder:get_blocks_for_sync(Locations, BlocksToSync),
 
     %then
-    ?_assertEqual([{?PID1, [?BLOCK(2,4), ?BLOCK(7,3)]}], Ans).
+    ?_assertMatch([{?PID1, [?BLOCK(2,4), ?BLOCK(7,3)], _}], Ans).
 
 
 finder_should_find_data_in_many_locations(_) ->
@@ -106,7 +106,7 @@ finder_should_find_data_in_many_locations(_) ->
     Ans = replica_finder:get_blocks_for_sync(Locations, BlocksToSync),
 
     %then
-    ?_assertEqual([{?PID1, [?BLOCK(1, 8)]}], Ans).
+    ?_assertMatch([{?PID1, [?BLOCK(1, 8)], _}], Ans).
 
 
 finder_should_find_data_in_many_providers(_) ->
@@ -131,10 +131,10 @@ finder_should_find_data_in_many_providers(_) ->
     Ans = replica_finder:get_blocks_for_sync(Locations, BlocksToSync),
 
     %then
-    ?_assertEqual([
-        {?PID3, [?BLOCK(6, 3)]},
-        {?PID2, [?BLOCK(3, 3)]},
-        {?PID1, [?BLOCK(1, 2)]}
+    ?_assertMatch([
+        {?PID3, [?BLOCK(6, 3)], _},
+        {?PID2, [?BLOCK(3, 3)], _},
+        {?PID1, [?BLOCK(1, 2)], _}
     ], Ans).
 
 
@@ -150,10 +150,10 @@ finder_should_minimize_returned_blocks(_) ->
     Ans = replica_finder:get_blocks_for_sync(Locations, BlocksToSync),
 
     %then
-    ?_assertEqual([
-        {?PID3, [?BLOCK(1, 2)]},
-        {?PID2, [?BLOCK(3, 3)]},
-        {?PID1, [?BLOCK(6, 3)]}
+    ?_assertMatch([
+        {?PID3, [?BLOCK(1, 2)], _},
+        {?PID2, [?BLOCK(3, 3)], _},
+        {?PID1, [?BLOCK(6, 3)], _}
     ], Ans).
 
 

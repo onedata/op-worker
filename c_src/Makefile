@@ -18,27 +18,10 @@ CXXFLAGS += -fPIC -std=c++14 -O3 -Wall -D_FILE_OFFSET_BITS=64 -DASIO_STANDALONE 
     -isystem $(HELPERS_DIR)/priv/include -isystem $(HELPERS_DIR)/deps/cppmetrics \
     -isystem $(ERTS_INCLUDE_DIR)
 
-all: \
-		../priv/helpers_nif.so \
-		../priv/rt_priority_queue_drv.so \
-		../priv/rt_map_drv.so
+all: ../priv/helpers_nif.so
+
+../priv/helpers_nif.so: helpers/helpers_nif.o
+	$(CXX) $? -o $@ $(LDFLAGS)
 
 %.o: %.cc
 	$(CXX) $(CXXFLAGS) $(CFLAGS) -c $< -o $@
-
-../priv/helpers_nif.so: \
-		helpers/helpers_nif.o
-	$(CXX) $? -o $@ $(LDFLAGS)
-
-../priv/rt_priority_queue_drv.so: \
-		rtransfer/rt_priority_queue_nif.o \
-		rtransfer/rt_interval.o \
-		rtransfer/rt_block.o \
-		rtransfer/rt_priority_queue.o
-	$(CXX) $? -o $@ $(LDFLAGS)
-
-../priv/rt_map_drv.so: \
-		rtransfer/rt_map_nif.o \
-		rtransfer/rt_block.o \
-		rtransfer/rt_map.o
-	$(CXX) $? -o $@ $(LDFLAGS)

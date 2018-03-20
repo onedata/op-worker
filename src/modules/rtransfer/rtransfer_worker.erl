@@ -15,9 +15,9 @@
 -behaviour(worker_plugin_behaviour).
 
 -include("global_definitions.hrl").
--include("modules/rtransfer/registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+-define(REFRESH_DISABLED_SPACES_INTERVAL, timer:seconds(1)).
 
 %% worker_plugin_behaviour callbacks
 -export([init/1, handle/1, cleanup/0]).
@@ -37,6 +37,7 @@
 -spec init(Args :: term()) ->
     {ok, worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
+    schedule_refresh_disabled_spaces(),
     {ok, #{}}.
 
 %%--------------------------------------------------------------------
@@ -49,6 +50,15 @@ handle(ping) ->
     pong;
 handle(healthcheck) ->
     ok;
+handle(refresh_disabled_spaces) ->
+    BlockedSpaces = space_quota:get_disabled_spaces(),
+    {_, BadNodes} = rpc:multicall(consistent_hasing:get_all_nodes(),
+                                  rtransfer_link_quota_manager,
+                                  update_disabled_spaces,
+                                  [BlockedSpaces]),
+    BadNodes =/= [] andalso
+        ?error("Failed to update disabled spaces on nodes ~p", [BadNodes]),
+    schedule_refresh_disabled_spaces();
 handle(Request) ->
     ?log_bad_request(Request).
 
@@ -82,16 +92,17 @@ supervisor_flags() ->
 -spec supervisor_children_spec() -> [supervisor:child_spec()].
 supervisor_children_spec() ->
     [#{
-        id => ?RTRANSFER,
-        start => {rtransfer_server, start_link, [rtransfer_config:options()]},
+        id => rtransfer,
+        start => {rtransfer_config, start_rtransfer, []},
         restart => permanent,
         shutdown => infinity,
         type => supervisor
     }].
 
-
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
+schedule_refresh_disabled_spaces() ->
+    erlang:send_after(?REFRESH_DISABLED_SPACES_INTERVAL, self(),
+                      {sync_timer, refresh_disabled_spaces}).
