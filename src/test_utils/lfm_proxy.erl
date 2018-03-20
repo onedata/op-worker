@@ -25,7 +25,7 @@
     set_mimetype/4, fsync/2, fsync/4, rm_recursive/3, get_metadata/6, set_metadata/6,
     has_custom_metadata/3, remove_metadata/4, check_perms/4, create_share/4,
     remove_share/3, remove_share_by_guid/3, resolve_guid/3, invalidate_file_replica/5,
-    get_file_distribution/3]).
+    schedule_file_replication/4, get_file_distribution/3]).
 
 -define(EXEC(Worker, Function),
     exec(Worker,
@@ -378,6 +378,11 @@ resolve_guid(Worker, SessId, Path) ->
     ProviderId :: oneprovider:id(), MigrationProviderId :: undefined | oneprovider:id()) -> ok.
 invalidate_file_replica(Worker, SessId, FileKey, ProviderId, MigrationProviderId) ->
     ?EXEC(Worker, logical_file_manager:schedule_replica_invalidation(SessId, FileKey, ProviderId, MigrationProviderId)).
+
+-spec schedule_file_replication(node(), session:id(), logical_file_manager:file_key(),
+    ProviderId :: oneprovider:id()) -> ok.
+schedule_file_replication(Worker, SessId, FileKey, ProviderId) ->
+    ?EXEC(Worker, logical_file_manager:schedule_file_replication(SessId, FileKey, ProviderId)).
 
 -spec get_file_distribution(node(), session:id(), logical_file_manager:file_key()) -> {ok, list()}.
 get_file_distribution(Worker, SessId, FileKey) ->

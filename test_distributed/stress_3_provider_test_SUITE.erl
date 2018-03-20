@@ -50,14 +50,18 @@ stress_test_base(Config) ->
 rtransfer_test(Config) ->
     ?PERFORMANCE(Config, [
         {parameters, [
-            [{name, small_files_num}, {value, 2},
+            [{name, small_files_num}, {value, 5},
                 {description, "Numbers of small files used during test."}],
-            [{name, medium_files_num}, {value, 2},
+            [{name, medium_files_num}, {value, 5},
                 {description, "Numbers of medium files used during test."}],
-            [{name, big_files_num}, {value, 2},
+            [{name, big_files_num}, {value, 5},
                 {description, "Numbers of big files used during test."}],
             [{name, big_file_parts}, {value, 10},
-                {description, "Numbers of parts of big file."}]
+                {description, "Numbers of parts of big file."}],
+            [{name, transfers_num}, {value, 5},
+                {description, "Numbers of transfers used during test."}],
+            [{name, transfer_file_parts}, {value, 20},
+                {description, "Numbers of parts of transfered file."}]
         ]},
         {description, "Performs multiple file operations on space 1."}
     ]).
@@ -66,8 +70,10 @@ rtransfer_test_base(Config) ->
     MFN = ?config(medium_files_num, Config),
     BFN = ?config(big_files_num, Config),
     BFP = ?config(big_file_parts, Config),
+    TN = ?config(transfers_num, Config),
+    TFP = ?config(transfer_file_parts, Config),
     multi_provider_file_ops_test_base:rtransfer_test_base(Config, <<"user1">>,
-        {6,0,0,2}, 180, timer:minutes(5), SMN, MFN, BFN, BFP).
+        {6,0,0,2}, 180, timer:minutes(5), SMN, MFN, BFN, BFP, TN, TFP).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

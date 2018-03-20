@@ -25,7 +25,7 @@
 %% export for tests
 -export([
     basic_opts_test_base/4,
-    rtransfer_test_base/9,
+    rtransfer_test_base/11,
     many_ops_test_base/6,
     distributed_modification_test_base/4,
     multi_space_test_base/3,
@@ -67,11 +67,14 @@
 
 
 rtransfer_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten},
-    Attempts, Timeout, SmallFilesNum, MediumFilesNum, BigFilesNum, BigFilesChunks) ->
+    Attempts, Timeout, SmallFilesNum, MediumFilesNum, BigFilesNum,
+    BigFilesChunks, TransfersNum, TransferFileParts) ->
     rtransfer_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1},
-        Attempts, Timeout, SmallFilesNum, MediumFilesNum, BigFilesNum, BigFilesChunks);
+        Attempts, Timeout, SmallFilesNum, MediumFilesNum, BigFilesNum,
+        BigFilesChunks, TransfersNum, TransferFileParts);
 rtransfer_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider},
-    Attempts, Timeout, SmallFilesNum, MediumFilesNum, BigFilesNum, BigFileParts) ->
+    Attempts, Timeout, SmallFilesNum, MediumFilesNum, BigFilesNum, BigFileParts,
+    TransfersNum, TransferFileParts) ->
     Config = extend_config(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts),
     SessId = ?config(session, Config),
     SpaceName = ?config(space_name, Config),
@@ -89,48 +92,52 @@ rtransfer_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, N
 
     ChunkSize = 10240,
     SmallFiles = lists:map(fun(_) ->
-        {1, 1}
+        {1, 1, false}
     end, lists:seq(1, SmallFilesNum)),
     MediumFiles = lists:map(fun(_) ->
-        {1024, 1}
+        {1024, 1, false}
     end, lists:seq(1, MediumFilesNum)),
     BigFiles = lists:map(fun(_) ->
-        {1024, BigFileParts}
+        {1024, BigFileParts, false}
     end, lists:seq(1, BigFilesNum)),
-    Files = SmallFiles ++ MediumFiles ++ BigFiles,
+    Transfers = lists:map(fun(_) ->
+        {1024, TransferFileParts, true}
+    end, lists:seq(1, TransfersNum)),
+    Files = SmallFiles ++ MediumFiles ++ BigFiles ++ Transfers,
 
     Master = self(),
-    lists:foreach(fun({ChunksNum, PartNum}) ->
+    lists:foreach(fun({ChunksNum, PartNum, Transfer}) ->
         spawn(fun() ->
             try
                 PartSize = ChunkSize * ChunksNum,
+                FileSize = PartSize * PartNum,
                 Level2File = <<Dir/binary, "/", (generator:gen_name())/binary>>,
                 Level2File2 = <<Dir/binary, "/", (generator:gen_name())/binary>>,
                 create_big_file(Config, ChunkSize, ChunksNum, PartNum, Level2File, Worker1),
 
                 T1 = lists:max(verify_workers(Workers2, fun(W) ->
-                    read_big_file(Config, PartSize, PartNum, Level2File, W)
+                    read_big_file(Config, FileSize, Level2File, W, Transfer)
                 end)),
                 T2 = lists:max(verify_workers(Workers3, fun(W) ->
-                    read_big_file(Config, PartSize, PartNum, Level2File, W)
+                    read_big_file(Config, FileSize, Level2File, W, Transfer)
                 end)),
 
                 create_big_file(Config, ChunkSize, ChunksNum, PartNum, Level2File2, Worker1),
                 T3 = lists:max(verify(Config, fun(W) ->
-                    read_big_file(Config, PartSize, PartNum, Level2File2, W)
+                    read_big_file(Config, FileSize, Level2File2, W, Transfer)
                 end)),
 
-                Master ! {slave_ans, ChunksNum, PartNum, {ok, lists:max([T1, T2, T3])}}
+                Master ! {slave_ans, ChunksNum, PartNum, Transfer, {ok, lists:max([T1, T2, T3])}}
             catch
                 E1:E2 ->
-                    Master ! {slave_ans, ChunksNum, PartNum, {error, E1, E2}}
+                    Master ! {slave_ans, ChunksNum, PartNum, Transfer, {error, E1, E2}}
             end
         end)
     end, Files),
 
-    Answers = lists:foldl(fun({ChunksNum, PartNum}, Acc) ->
+    Answers = lists:foldl(fun({ChunksNum, PartNum, Transfer}, Acc) ->
         SlaveAns = receive
-            {slave_ans, ChunksNum, PartNum, Ans} ->
+            {slave_ans, ChunksNum, PartNum, Transfer, Ans} ->
                 Ans
         after
             Timeout ->
@@ -138,11 +145,11 @@ rtransfer_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, N
         end,
         ?assertMatch({ok, _}, SlaveAns),
         {ok, Time} = SlaveAns,
-        [{ChunksNum, PartNum, Time} | Acc]
+        [{ChunksNum, PartNum, Transfer, Time} | Acc]
     end, [], Files),
 
-    AnswersMap = lists:foldl(fun({ChunksNum, PartNum, Time}, Acc) ->
-        Key = {ChunksNum, PartNum},
+    AnswersMap = lists:foldl(fun({ChunksNum, PartNum, Transfer, Time}, Acc) ->
+        Key = {ChunksNum, PartNum, Transfer},
         V = maps:get(Key, Acc, 0),
         maps:put(Key, max(V, Time), Acc)
     end, #{}, Answers),
@@ -1176,32 +1183,53 @@ create_big_file(Config, ChunkSize, ChunksNum, PartNum, File, Worker) ->
 
     ?assertEqual(ok, lfm_proxy:close(Worker, Handle)).
 
-read_big_file(Config, PartSize, PartNum, File, Worker) ->
+read_big_file(Config, _FileSize, File, Worker, true) ->
     SessId = ?config(session, Config),
     Attempts = ?config(attempts, Config),
+    Worker1 = ?config(worker1, Config),
 
-    TestFun = fun() ->
-        case lfm_proxy:open(Worker, SessId(Worker), {path, File}, rdwr) of
-            {ok, Handle} ->
-                ReadAns = try
-                    Start = os:timestamp(),
-                    lists:foreach(fun(Num) ->
-                        {ok, Bytes} = lfm_proxy:read(Worker, Handle, Num * PartSize, PartSize),
-                        PartSize = size(Bytes)
-                    end, lists:seq(0, PartNum - 1)),
-                    {ok, timer:now_diff(os:timestamp(), Start)}
-                catch
-                    E1:E2 ->
-                        {read, E1, E2}
-                end,
+    ProviderId = rpc:call(Worker, oneprovider, get_id_or_undefined, []),
+    Start = os:timestamp(),
+    {ok, TransferID} = ?assertMatch({ok, _},
+        lfm_proxy:schedule_file_replication(Worker1, SessId(Worker1),
+            {path, File}, ProviderId)),
+    ?assertMatch({ok, #document{value = #transfer{status = completed}}},
+        rpc:call(Worker1, transfer, get, [TransferID]), Attempts),
+    timer:now_diff(os:timestamp(), Start);
+read_big_file(Config, FileSize, File, Worker, _) ->
+    SessId = ?config(session, Config),
+    Attempts = ?config(attempts, Config),
+    read_big_file_loop(FileSize, File, Worker, SessId, Attempts, undefined, 0).
 
-                {ReadAns, lfm_proxy:close(Worker, Handle)};
-            OpenError ->
-                {open_error, OpenError}
-        end
+read_big_file_loop(_FileSize, _File, _Worker, _SessId, _, {{ok, _Time, true}, ok}, TimeSum) ->
+    TimeSum;
+read_big_file_loop(_FileSize, _File, _Worker, _SessId, 0, LastAns, _TimeSum) ->
+    LastAns;
+read_big_file_loop(FileSize, File, Worker, SessId, Attempts, _LastAns, TimeSum) ->
+    Ans = case lfm_proxy:open(Worker, SessId(Worker), {path, File}, rdwr) of
+        {ok, Handle} ->
+            ReadAns = try
+                Start = os:timestamp(),
+                {ok, Bytes} = lfm_proxy:read(Worker, Handle, 0, FileSize),
+                {ok, timer:now_diff(os:timestamp(), Start), FileSize == size(Bytes)}
+            catch
+                E1:E2 ->
+                    {read, E1, E2}
+            end,
+
+            {ReadAns, lfm_proxy:close(Worker, Handle)};
+        OpenError ->
+            {open_error, OpenError}
     end,
-    {{ok, Time}, ok} = ?assertMatch({{ok, _}, ok}, TestFun(), Attempts),
-    Time.
+    case Ans of
+        {{ok, Time, true}, _} ->
+            read_big_file_loop(FileSize, File, Worker, SessId, Attempts - 1,
+                Ans, TimeSum + Time);
+        _ ->
+            timer:sleep(timer:seconds(1)),
+            read_big_file_loop(FileSize, File, Worker, SessId, Attempts - 1,
+                Ans, TimeSum)
+    end.
 
 create_file(Config, FileBeg, {Offset, File}) ->
     Worker1 = ?config(worker1, Config),

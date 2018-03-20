@@ -74,15 +74,21 @@ all() ->
             [{name, big_files_num}, {value, 1},
                 {description, "Numbers of big files used during test."}],
             [{name, big_file_parts}, {value, 5},
-                {description, "Numbers of parts of big file."}]
+                {description, "Numbers of parts of big file."}],
+            [{name, transfers_num}, {value, 1},
+                {description, "Numbers of transfers used during test."}],
+            [{name, transfer_file_parts}, {value, 20},
+                {description, "Numbers of parts of transfered file."}]
         ]},
         {description, Desc},
         {config, [{name, large_config},
             {parameters, [
-                [{name, small_files_num}, {value, 10}],
-                [{name, medium_files_num}, {value, 10}],
-                [{name, big_files_num}, {value, 10}],
-                [{name, big_file_parts}, {value, 10}]
+                [{name, small_files_num}, {value, 5}],
+                [{name, medium_files_num}, {value, 5}],
+                [{name, big_files_num}, {value, 5}],
+                [{name, big_file_parts}, {value, 10}],
+                [{name, transfers_num}, {value, 5}],
+                [{name, transfer_file_parts}, {value, 20}]
             ]},
             {description, ""}
         ]}
@@ -98,8 +104,10 @@ rtransfer_test_base(Config) ->
     MFN = ?config(medium_files_num, Config),
     BFN = ?config(big_files_num, Config),
     BFP = ?config(big_file_parts, Config),
+    TN = ?config(transfers_num, Config),
+    TFP = ?config(transfer_file_parts, Config),
     multi_provider_file_ops_test_base:rtransfer_test_base(Config, <<"user1">>,
-        {3,0,0}, 180, timer:minutes(5), SMN, MFN, BFN, BFP).
+        {3,0,0}, 180, timer:minutes(5), SMN, MFN, BFN, BFP, TN, TFP).
 
 db_sync_many_ops_test(Config) ->
     ?PERFORMANCE(Config, ?db_sync_performance_description("Tests working on dirs and files with db_sync")).
