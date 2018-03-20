@@ -48,7 +48,8 @@
     is_dir :: undefined | boolean(),
     is_import_on :: undefined | boolean(),
     extended_direct_io = false :: boolean(),
-    storage_path_type :: helpers:storage_path_type()
+    storage_path_type :: helpers:storage_path_type(),
+    mounted_in_root :: undefined | boolean()
 }).
 
 -type ctx() :: #file_ctx{}.
@@ -284,6 +285,25 @@ get_canonical_path(FileCtx = #file_ctx{canonical_path = Path}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns file's canonical path tokens (starting with "/", "SpaceId/", ...).
+%% @end
+%%--------------------------------------------------------------------
+-spec get_canonical_path_tokens(ctx()) -> {file_meta:path(), ctx()}.
+get_canonical_path_tokens(FileCtx = #file_ctx{canonical_path = undefined}) ->
+    case is_root_dir_const(FileCtx) of
+        true ->
+            {[<<"/">>], FileCtx#file_ctx{canonical_path = <<"/">>}};
+        false ->
+            CanonicalPathTokens = generate_canonical_path(FileCtx),
+            CanonicalPath = filename:join(CanonicalPathTokens),
+            {CanonicalPathTokens,
+                FileCtx#file_ctx{canonical_path = CanonicalPath}}
+    end;
+get_canonical_path_tokens(FileCtx = #file_ctx{canonical_path = Path}) ->
+    {Path, FileCtx}.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Returns file's uuid path (i.e "/SpaceId/A/B/C/FileUuid").
 %% If canonical_path entry is undefined, it will be set to canonical
 %% path for compatibility with other modules, but the returned path
@@ -329,6 +349,22 @@ get_file_doc(FileCtx = #file_ctx{file_doc = undefined}) ->
     {FileDoc, FileCtx#file_ctx{file_doc = FileDoc}};
 get_file_doc(FileCtx = #file_ctx{file_doc = FileDoc}) ->
     {FileDoc, FileCtx}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns if space is mounted in root.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_mounted_in_root(ctx()) -> {boolean(), ctx()}.
+get_mounted_in_root(FileCtx = #file_ctx{mounted_in_root = undefined}) ->
+    SpaceId = get_space_id_const(FileCtx),
+    {ok, SS} = space_storage:get(SpaceId),
+    InRootIDs = space_storage:get_mounted_in_root(SS),
+    {StorageDoc, FileCtx2} = get_storage_doc(FileCtx),
+    MiR = lists:member(StorageDoc#document.key, InRootIDs),
+    {MiR, FileCtx2#file_ctx{mounted_in_root = MiR}};
+get_mounted_in_root(FileCtx = #file_ctx{mounted_in_root = MiR}) ->
+    {MiR, FileCtx}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -445,8 +481,16 @@ get_storage_file_id(FileCtx = #file_ctx{storage_file_id = undefined}) ->
         {_, FileCtx2} = get_canonical_path(FileCtx),
         {FileId, FileCtx2#file_ctx{storage_file_id = FileId}};
       ?CANONICAL_STORAGE_PATH ->
-        {FileId, FileCtx2} = get_canonical_path(FileCtx),
-        {FileId, FileCtx2#file_ctx{storage_file_id = FileId}}
+        {FileIdTokens, FileCtx2} = get_canonical_path_tokens(FileCtx),
+        {MiR, FileCtx3} = get_mounted_in_root(FileCtx2),
+        FileId = case {MiR, FileIdTokens} of
+            {true, [Root, _SpaceID | Path]} ->
+                filename:join([Root | Path]);
+            _ ->
+                filename:join(FileIdTokens)
+        end,
+
+        {FileId, FileCtx3#file_ctx{storage_file_id = FileId}}
     end;
 get_storage_file_id(FileCtx = #file_ctx{storage_file_id = StorageFileId}) ->
     {StorageFileId, FileCtx}.

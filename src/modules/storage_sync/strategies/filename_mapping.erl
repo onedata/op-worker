@@ -204,9 +204,10 @@ to_storage_logical_path(SpaceId, StorageId, FilePath) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec filter_space_id(od_space:id(), file_meta:path()) -> file_meta:path().
-filter_space_id(SpaceId, FilePath) ->
-    [Sep, SpaceId | Path] = fslogic_path:split(FilePath),
-    fslogic_path:join([Sep | Path]).
+filter_space_id(_SpaceId, FilePath) ->
+    FilePath.
+%%    [Sep, SpaceId | Path] = fslogic_path:split(FilePath),
+%%    fslogic_path:join([Sep | Path]).
 
 %%--------------------------------------------------------------------
 %% @private
