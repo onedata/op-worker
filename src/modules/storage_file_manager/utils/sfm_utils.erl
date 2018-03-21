@@ -267,9 +267,8 @@ create_parent_dirs(FileCtx) ->
             mode = Mode}}, ParentCtx2} = file_ctx:get_file_doc(ParentCtx),
         case file_ctx:is_space_dir_const(ParentCtx2) of
             true ->
-                case storage_file_manager:mkdir(SFMHandle0, Mode, true) of
+                case storage_file_manager:mkdir(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
                     ok ->
-                        files_to_chown:chown_or_schedule_chowning(ParentCtx2),
                         FileCtx4;
                     {error, eexist} ->
                         FileCtx4
