@@ -50,17 +50,17 @@ stress_test_base(Config) ->
 rtransfer_test(Config) ->
     ?PERFORMANCE(Config, [
         {parameters, [
-            [{name, small_files_num}, {value, 10},
+            [{name, small_files_num}, {value, 30},
                 {description, "Numbers of small files used during test."}],
-            [{name, medium_files_num}, {value, 10},
+            [{name, medium_files_num}, {value, 20},
                 {description, "Numbers of medium files used during test."}],
-            [{name, big_files_num}, {value, 10},
+            [{name, big_files_num}, {value, 3},
                 {description, "Numbers of big files used during test."}],
-            [{name, big_file_parts}, {value, 20},
+            [{name, big_file_parts}, {value, 10},
                 {description, "Numbers of parts of big file."}],
-            [{name, transfers_num}, {value, 10},
+            [{name, transfers_num}, {value, 2},
                 {description, "Numbers of transfers used during test."}],
-            [{name, transfer_file_parts}, {value, 100},
+            [{name, transfer_file_parts}, {value, 20},
                 {description, "Numbers of parts of transfered file."}]
         ]},
         {description, "Performs multiple file operations on space 1."}

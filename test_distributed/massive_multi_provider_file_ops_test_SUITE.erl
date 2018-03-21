@@ -83,12 +83,35 @@ all() ->
         {description, Desc},
         {config, [{name, large_config},
             {parameters, [
-                [{name, small_files_num}, {value, 10}],
-                [{name, medium_files_num}, {value, 10}],
+                [{name, small_files_num}, {value, 30}],
+                [{name, medium_files_num}, {value, 20}],
                 [{name, big_files_num}, {value, 10}],
                 [{name, big_file_parts}, {value, 10}],
-                [{name, transfers_num}, {value, 10}],
-                [{name, transfer_file_parts}, {value, 40}]
+                [{name, transfers_num}, {value, 5}],
+                [{name, transfer_file_parts}, {value, 50}]
+            ]},
+            {description, ""}
+        ]},
+        {config, [{name, small_config},
+            {parameters, [
+                [{name, small_files_num}, {value, 50}],
+                [{name, medium_files_num}, {value, 0}],
+                [{name, big_files_num}, {value, 0}],
+                [{name, transfers_num}, {value, 0}]
+            ]},
+            {description, ""}
+        ]},
+        {config, [{name, very_small_config},
+            {parameters, [
+                [{name, small_files_num}, {value, 3}],
+                [{name, medium_files_num}, {value, 0}],
+                [{name, big_files_num}, {value, 0}],
+                [{name, transfers_num}, {value, 0}]
+            ]},
+            {description, ""}
+        ]},
+        {config, [{name, default_config},
+            {parameters, [
             ]},
             {description, ""}
         ]}
