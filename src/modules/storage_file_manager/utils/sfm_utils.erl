@@ -261,11 +261,40 @@ create_parent_dirs(FileCtx) ->
     LeafLess = filename:dirname(StorageFileId),
     SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceId,
         undefined, Storage, LeafLess, undefined),
-    case storage_file_manager:mkdir(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
-        ok ->
-            FileCtx3;
-        {error, eexist} ->
-            FileCtx3
+    try
+        {ParentCtx, FileCtx4} = file_ctx:get_parent(FileCtx3, undefined),
+        {#document{value = #file_meta{
+            mode = Mode}}, ParentCtx2} = file_ctx:get_file_doc(ParentCtx),
+        case file_ctx:is_space_dir_const(ParentCtx2) of
+            true ->
+                case storage_file_manager:mkdir(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
+                    ok ->
+                        FileCtx4;
+                    {error, eexist} ->
+                        FileCtx4
+                end;
+            false ->
+                create_parent_dirs(ParentCtx2),
+                case storage_file_manager:mkdir(SFMHandle0, Mode, true) of
+                    ok ->
+                        files_to_chown:chown_or_schedule_chowning(ParentCtx2),
+                        FileCtx4;
+                    {error, eexist} ->
+                        FileCtx4
+                end
+        end
+    catch
+        Error:Reason ->
+            ?error_stacktrace("Creating parent dir ~p failed due to ~p.
+            Parent dir will be create with default mode.", [LeafLess, {Error, Reason}]),
+            case storage_file_manager:mkdir(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
+                ok ->
+                    FileCtx3,
+                    files_to_chown:chown_or_schedule_chowning(FileCtx3),
+                    FileCtx3;
+                {error, eexist} ->
+                    FileCtx3
+            end
     end.
 
 %%%===================================================================
