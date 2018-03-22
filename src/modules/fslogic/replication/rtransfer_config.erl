@@ -230,8 +230,9 @@ do_generate_secret() ->
 -spec prepare_ssl_opts() -> any().
 prepare_ssl_opts() ->
     {ok, KeyFile} = application:get_env(?APP_NAME, web_key_file),
-    Opts = [{use_ssl, true}, {cert_path, make_cert_bundle()},
-            {key_path, KeyFile}, {ca_path, make_ca_bundle()}],
+    CABundle = make_ca_bundle(),
+    Opts = [{use_ssl, true}, {cert_path, make_cert_bundle()}, {key_path, KeyFile} |
+        [{ca_path, CABundle} || CABundle /= false]],
     application:set_env(rtransfer_link, ssl, Opts, [{persistent, true}]).
 
 %%--------------------------------------------------------------------
@@ -240,11 +241,14 @@ prepare_ssl_opts() ->
 %% Creates a bundle file from all CA certificates in the cacerts dir.
 %% @end
 %%--------------------------------------------------------------------
--spec make_ca_bundle() -> file:filename().
+-spec make_ca_bundle() -> file:filename() | false.
 make_ca_bundle() ->
     CADir = oz_plugin:get_cacerts_dir(),
     {ok, CertPems} = file_utils:read_files({dir, CADir}),
-    write_to_temp(CertPems).
+    case lists:flatmap(fun public_key:pem_decode/1, CertPems) of
+        [] -> false;
+        PemEntries -> write_to_temp([public_key:pem_encode(PemEntries)])
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -257,8 +261,13 @@ make_cert_bundle() ->
     {ok, CertFile} = application:get_env(?APP_NAME, web_cert_file),
     {ok, ChainFile} = application:get_env(?APP_NAME, web_cert_chain_file),
     {ok, Cert} = file:read_file(CertFile),
-    {ok, Chain} = file:read_file(ChainFile),
-    write_to_temp([Cert, Chain]).
+    case file:read_file(ChainFile) of
+        {ok, Chain} -> write_to_temp([Cert, Chain]);
+        Error ->
+            ?warning("Error reading certificate chain in path ~p: ~p. "
+            "rtransfer will use cert only", [ChainFile, Error]),
+            write_to_temp([Cert])
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
