@@ -4,6 +4,14 @@
 CHANGELOG
 ---------
 
+### 18.02.0-beta4
+
+* VFS-4274 Fixed helpers ref in rebar.config
+* refactor sfm_utils:create_parent_dirs function
+* VFS-4262 Updated rtransfer link
+* VFS-4262 Updated helpers with new asio version
+
+
 ### 18.02.0-beta3
 
 * VFS-4249 storage_sync counters bugfixes and improvements
