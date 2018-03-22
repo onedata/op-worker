@@ -25,16 +25,16 @@
 
 -export([
     db_sync_basic_opts_test/1, db_sync_many_ops_test/1, db_sync_distributed_modification_test/1,
-    db_sync_many_ops_test_base/1, multi_space_test/1
+    db_sync_many_ops_test_base/1, multi_space_test/1, rtransfer_test/1, rtransfer_test_base/1
 ]).
 
 -define(TEST_CASES, [
     db_sync_basic_opts_test, db_sync_many_ops_test, db_sync_distributed_modification_test,
-    multi_space_test
+    multi_space_test, rtransfer_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
-    db_sync_many_ops_test
+    db_sync_many_ops_test, rtransfer_test
 ]).
 
 all() ->
@@ -44,7 +44,7 @@ all() ->
 %%% Test functions
 %%%===================================================================
 
--define(performance_description(Desc),
+-define(db_sync_performance_description(Desc),
     [
         {repeats, 1},
         {success_rate, 100},
@@ -62,11 +62,78 @@ all() ->
         ]}
     ]).
 
+-define(rtransfer_performance_description(Desc),
+    [
+        {repeats, 1},
+        {success_rate, 100},
+        {parameters, [
+            [{name, small_files_num}, {value, 3},
+                {description, "Numbers of small files used during test."}],
+            [{name, medium_files_num}, {value, 3},
+                {description, "Numbers of medium files used during test."}],
+            [{name, big_files_num}, {value, 1},
+                {description, "Numbers of big files used during test."}],
+            [{name, big_file_parts}, {value, 5},
+                {description, "Numbers of parts of big file."}],
+            [{name, transfers_num}, {value, 1},
+                {description, "Numbers of transfers used during test."}],
+            [{name, transfer_file_parts}, {value, 20},
+                {description, "Numbers of parts of transfered file."}]
+        ]},
+        {description, Desc},
+        {config, [{name, large_config},
+            {parameters, [
+                [{name, small_files_num}, {value, 30}],
+                [{name, medium_files_num}, {value, 20}],
+                [{name, big_files_num}, {value, 10}],
+                [{name, big_file_parts}, {value, 10}],
+                [{name, transfers_num}, {value, 5}],
+                [{name, transfer_file_parts}, {value, 50}]
+            ]},
+            {description, ""}
+        ]},
+        {config, [{name, small_config},
+            {parameters, [
+                [{name, small_files_num}, {value, 50}],
+                [{name, medium_files_num}, {value, 0}],
+                [{name, big_files_num}, {value, 0}],
+                [{name, transfers_num}, {value, 0}]
+            ]},
+            {description, ""}
+        ]},
+        {config, [{name, very_small_config},
+            {parameters, [
+                [{name, small_files_num}, {value, 3}],
+                [{name, medium_files_num}, {value, 0}],
+                [{name, big_files_num}, {value, 0}],
+                [{name, transfers_num}, {value, 0}]
+            ]},
+            {description, ""}
+        ]},
+        {config, [{name, default_config},
+            {parameters, [
+            ]},
+            {description, ""}
+        ]}
+    ]).
+
 db_sync_basic_opts_test(Config) ->
     multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {3,0,0}, 60).
 
+rtransfer_test(Config) ->
+    ?PERFORMANCE(Config, ?rtransfer_performance_description("Tests rtransfer")).
+rtransfer_test_base(Config) ->
+    SMN = ?config(small_files_num, Config),
+    MFN = ?config(medium_files_num, Config),
+    BFN = ?config(big_files_num, Config),
+    BFP = ?config(big_file_parts, Config),
+    TN = ?config(transfers_num, Config),
+    TFP = ?config(transfer_file_parts, Config),
+    multi_provider_file_ops_test_base:rtransfer_test_base(Config, <<"user1">>,
+        {3,0,0}, 180, timer:minutes(5), SMN, MFN, BFN, BFP, TN, TFP).
+
 db_sync_many_ops_test(Config) ->
-    ?PERFORMANCE(Config, ?performance_description("Tests working on dirs and files with db_sync")).
+    ?PERFORMANCE(Config, ?db_sync_performance_description("Tests working on dirs and files with db_sync")).
 db_sync_many_ops_test_base(Config) ->
     DirsNum = ?config(dirs_num, Config),
     FilesNum = ?config(files_num, Config),
