@@ -508,6 +508,22 @@
     mth_hist = #{} :: maps:map(od_provider:id(), histogram:histogram())
 }).
 
+%% Model that holds stats information about all transfers to given provider for given space.
+-record(space_transfers, {
+    % Histograms of transferred bytes per provider, last_update per provider is
+    % required to keep track in histograms.
+    last_update = #{} :: maps:map(od_provider:id(), non_neg_integer()),
+    % Histogram types (head of list is most recent):
+    % list of 12 integers counting bytes transferred during each 5 seconds of last minute
+    min_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
+    % list of 60 integers counting bytes transferred during each minute of last hour
+    hr_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
+    % list of 24 integers counting bytes transferred during each hour of last day
+    dy_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
+    % list of 30 integers counting bytes transferred during each day of last month
+    mth_hist = #{} :: maps:map(od_provider:id(), histogram:histogram())
+}).
+
 %% Model for storing storage_sync monitoring data.
 -record(storage_sync_histogram, {
     values = [] :: storage_sync_histogram:values(),

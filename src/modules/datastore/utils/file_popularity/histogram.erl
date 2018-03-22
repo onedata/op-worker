@@ -25,7 +25,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Retuns new histogram of given size
+%% Returns new histogram of given size
 %% @end
 %%--------------------------------------------------------------------
 -spec new(size()) -> histogram().
