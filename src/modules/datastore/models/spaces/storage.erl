@@ -186,15 +186,10 @@ get_helpers(#document{value = #storage{} = Value}) ->
 -spec get_luma_config_map(record() | doc()) -> maps:map().
 get_luma_config_map(#storage{luma_config = undefined}) ->
     #{enabled => false};
-get_luma_config_map(#storage{
-    luma_config = #luma_config{
-        url = URL,
-        cache_timeout = CacheTimeout
-}}) ->
+get_luma_config_map(#storage{luma_config = #luma_config{url = URL}}) ->
     #{
         enabled => true,
-        url => URL,
-        cache_timeout => CacheTimeout div 60000
+        url => URL
     };
 get_luma_config_map(#document{value = Storage}) ->
     get_luma_config_map(Storage).

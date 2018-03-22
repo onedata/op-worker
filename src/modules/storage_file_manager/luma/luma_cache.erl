@@ -20,179 +20,288 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get/4, invalidate/0]).
--export([save/1, update/2, create/1, get/1, delete/1, exists/1, list/0]).
+-export([invalidate/1, get_user_ctx/4, get_user_id/3, get_group_ctx/4, get_group_id/3]).
 
 %% datastore_model callbacks
--export([get_ctx/0]).
+-export([get_ctx/0, get_record_struct/1]).
 
 -type key() :: datastore:key().
--type record() :: #luma_cache{}.
--type doc() :: datastore_doc:doc(record()).
--type diff() :: datastore_doc:diff(record()).
+
 -type value() :: od_user:id() | od_group:id()| luma:user_ctx().
 -type timestamp() :: non_neg_integer().
+
+%%% TODO new types below
+-type tree_root_id_prefix() :: binary(). % ?LUMA_USER_ROOT | ?REV_LUMA_USER_ROOT | REV_LUMA_GROUP_ROOT
+-type tree_root_id() :: binary().   % tree_root_id_prefix() concatenated with storage:id()
+-type link_id() :: binary().
+-type link_target() :: od_user:id() | od_group:id()| luma:user_ctx().
+
 
 -export_type([value/0, timestamp/0]).
 
 -define(CTX, #{
     model => ?MODULE,
-    routing => local,
-    disc_driver => undefined,
-    fold_enabled => true
+    routing => global
 }).
+
+-define(LUMA_USER_ROOT, <<"luma_user_">>).
+-define(REV_LUMA_USER_ROOT, <<"rev_luma_user_">>).
+-define(LUMA_GROUP_ROOT, <<"luma_group_">>).
+-define(REV_LUMA_GROUP_ROOT, <<"rev_luma_group_">>).
+-define(ROOTS, [
+    ?LUMA_USER_ROOT, ?REV_LUMA_USER_ROOT,
+    ?LUMA_GROUP_ROOT, ?REV_LUMA_GROUP_ROOT
+]).
+
+-define(SEP, <<"##">>).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
-%%-------------------------------------------------------------------
-%% @doc
-%% Returns value saved in given model. If entry was saved longer ago
-%% than LumaCacheTimeout then QueryFun will be called and new value
-%% will be saved.
-%% @end
-%%-------------------------------------------------------------------
--spec get(key(), function(), [term()], luma_config:cache_timeout()) ->
-    {ok, Value :: value()} | {error, Reason :: term()}.
-get(Key, QueryFun, QueryArgs, LumaCacheTimeout) ->
-    CurrentTimestamp = time_utils:system_time_millis(),
-    case datastore_model:get(?CTX, Key) of
+%todo specify types for queryfun and query args
+get_user_ctx(UserId, StorageId, QueryFun, HelperName) ->
+    case get_links(?LUMA_USER_ROOT, StorageId, UserId) of
+        {ok, EncodedUserCtx} ->
+            {ok, decode_user_ctx(EncodedUserCtx, HelperName)};
         {error, not_found} ->
-            query_and_cache_value(Key, QueryFun, QueryArgs,
-                CurrentTimestamp);
-        {ok, #document{
-            value = #luma_cache{
-                timestamp = LastTimestamp,
-                value = Value
-            }}} ->
-            case cache_should_be_renewed(CurrentTimestamp, LastTimestamp,
-                LumaCacheTimeout)
-            of
-                false ->
-                    {ok, Value};
-                true ->
-                    query_and_cache_value(Key, QueryFun, QueryArgs,
-                        CurrentTimestamp)
+            try QueryFun() of
+                {ok, UserCtx} ->
+                    EncodedUserCtx = encode_user_ctx(UserCtx, HelperName),
+                    add_link(?LUMA_USER_ROOT, StorageId, UserId, EncodedUserCtx),
+                    {ok, UserCtx};
+                Error ->
+                    ?error_stacktrace("Fetching user_ctx from LUMA failed due to ~p", [Error]),
+                    Error
+            catch
+                Error:Reason ->
+                    ?error_stacktrace("Fetching user_ctx from LUMA failed due to ~p", [{Error, Reason}]),
+                    {error, Reason}
             end
     end.
+
+%%TODO note GroupId can be SpaceId
+get_group_ctx(GroupOrSpaceId, StorageId, QueryFun, HelperName) ->
+    case get_links(?LUMA_GROUP_ROOT, StorageId, GroupOrSpaceId) of
+        {ok, EncodedGroupCtx} ->
+            {ok, decode_group_ctx(EncodedGroupCtx, HelperName)};
+        {error, not_found} ->
+            try QueryFun() of
+                {ok, GroupCtx} ->
+                    EncodedGroupCtx = encode_group_ctx(GroupCtx, HelperName),
+                    add_link(?LUMA_GROUP_ROOT, StorageId, GroupOrSpaceId, EncodedGroupCtx),
+                    {ok, GroupCtx};
+                Error ->
+                    ?error_stacktrace("Fetching group_ctx from LUMA failed due to ~p", [Error]),
+                    Error
+            catch
+                Error:Reason ->
+                    ?error_stacktrace("Fetching group_ctx from LUMA failed due to ~p", [{Error, Reason}]),
+                    {error, Reason}
+            end
+    end.
+
+get_user_id(UidOrName, StorageId, QueryFun) ->
+    UidOrNameBin = str_utils:to_binary(UidOrName),
+    case get_links(?REV_LUMA_USER_ROOT, StorageId, UidOrNameBin) of
+        {ok, UserId} ->
+            {ok, UserId};
+        {error, not_found} ->
+            try QueryFun() of
+                {ok, UserId} ->
+                    add_link(?REV_LUMA_USER_ROOT, StorageId, UidOrNameBin, UserId),
+                    {ok, UserId};
+                Error ->
+                    ?error_stacktrace("Fetching user_id from LUMA failed due to ~p", [Error]),
+                    Error
+            catch
+                Error:Reason ->
+                    ?error_stacktrace("Fetching user_id from LUMA failed due to ~p", [{Error, Reason}]),
+                    {error, Reason}
+            end
+    end.
+
+get_group_id(GidOrName, StorageId, QueryFun) ->
+    GidOrNameBin = str_utils:to_binary(GidOrName),
+    case get_links(?REV_LUMA_GROUP_ROOT, StorageId, GidOrNameBin) of
+        {ok, GroupId} ->
+            {ok, GroupId};
+        {error, not_found} ->
+            try QueryFun() of
+                {ok, GroupId} ->
+                    add_link(?REV_LUMA_GROUP_ROOT, StorageId, GidOrNameBin, GroupId),
+                    {ok, GroupId};
+                Error ->
+                    ?error_stacktrace("Fetching get_group_id from LUMA failed due to ~p", [Error]),
+                    Error
+            catch
+                Error:Reason ->
+                    ?error_stacktrace("Fetching get_group_id from LUMA failed due to ~p", [{Error, Reason}]),
+                    {error, Reason}
+            end
+    end.
+
 
 %%-------------------------------------------------------------------
 %% @doc
 %% Deletes all cached entries.
 %% @end
 %%-------------------------------------------------------------------
--spec invalidate() -> ok.
-invalidate() ->
-    {ok, Docs} = list(),
-    lists:foreach(fun(#document{key = Key}) ->
-        delete(Key)
-    end, Docs).
+-spec invalidate(storage:id()) -> ok.
+invalidate(StorageId) ->
+    lists:foreach(fun(RootId) ->
+        {ok, LinkIds} = for_each(RootId, StorageId, fun(LinkId, Acc) ->
+            [LinkId, Acc]
+        end, []),
+        lists:foreach(fun(LinkId) ->
+            ok = delete_link(RootId, StorageId, LinkId)
+        end, LinkIds)
+    end, ?ROOTS).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Saves luma cache.
-%% @end
-%%--------------------------------------------------------------------
--spec save(doc()) -> {ok, key()} | {error, term()}.
-save(Doc) ->
-    ?extract_key(datastore_model:save(?CTX, Doc)).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates luma cache.
-%% @end
-%%--------------------------------------------------------------------
--spec update(key(), diff()) -> {ok, key()} | {error, term()}.
-update(Key, Diff) ->
-    ?extract_key(datastore_model:update(?CTX, Key, Diff)).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates luma cache.
-%% @end
-%%--------------------------------------------------------------------
--spec create(doc()) -> {ok, key()} | {error, term()}.
-create(Doc) ->
-    ?extract_key(datastore_model:create(?CTX, Doc)).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns luma cache.
-%% @end
-%%--------------------------------------------------------------------
--spec get(key()) -> {ok, doc()} | {error, term()}.
-get(Key) ->
-    datastore_model:get(?CTX, Key).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Deletes luma cache.
-%% @end
-%%--------------------------------------------------------------------
--spec delete(key()) -> ok | {error, term()}.
-delete(Key) ->
-    datastore_model:delete(?CTX, Key).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks whether luma cache exists.
-%% @end
-%%--------------------------------------------------------------------
--spec exists(key()) -> boolean().
-exists(Key) ->
-    {ok, Exists} = datastore_model:exists(?CTX, Key),
-    Exists.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of all records.
-%% @end
-%%--------------------------------------------------------------------
--spec list() -> {ok, [key()]} | {error, term()}.
-list() ->
-    datastore_model:fold(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Calls QueryFun and saves acquired value with CurrentTimestamp.
-%% @end
-%%-------------------------------------------------------------------
--spec query_and_cache_value(key(), function(), [term()], timestamp()) ->
-    {ok, Value :: value()} | {error, Reason :: term()}.
-query_and_cache_value(Key, QueryFun, QueryArgs, CurrentTimestamp) ->
-    try erlang:apply(QueryFun, QueryArgs) of
-        {ok, Value} ->
-            Doc = #document{
-                key = Key,
-                value = #luma_cache{
-                    value = Value,
-                    timestamp = CurrentTimestamp
-                }
-            },
-            {ok, Key} = save(Doc),
-            {ok, Value};
-        {error, Reason} ->
-            {error, Reason}
-    catch
-        error:{badmatch, Reason} ->
-            {error, Reason}
-    end.
+decode_user_ctx(Encoded, ?CEPH_HELPER_NAME) ->
+    [UserName, Key] = binary:split(Encoded, ?SEP, [global]),
+    #{<<"username">> => UserName, <<"key">> => Key};
+decode_user_ctx(Encoded, ?S3_HELPER_NAME) ->
+    [AccessKey, SecretKey] = binary:split(Encoded, ?SEP, [global]),
+    #{<<"accessKey">> => AccessKey, <<"secretKey">> => SecretKey};
+decode_user_ctx(Encoded, ?SWIFT_HELPER_NAME) ->
+    [UserName, Password] = binary:split(Encoded, ?SEP, [global]),
+    #{<<"username">> => UserName, <<"password">> => Password};
+decode_user_ctx(Encoded, HelperName) when
+    HelperName =:= ?POSIX_HELPER_NAME orelse
+        HelperName =:= ?GLUSTERFS_HELPER_NAME orelse
+        HelperName =:= ?NULL_DEVICE_HELPER_NAME
+    ->
+    [Uid, Gid] = binary:split(Encoded, ?SEP, [global]),
+    #{<<"uid">> => Uid, <<"gid">> => Gid}.
+
+encode_user_ctx(#{<<"username">> := UserName, <<"key">> := Key}, ?CEPH_HELPER_NAME) ->
+    encode(UserName, Key);
+encode_user_ctx(#{<<"accessKey">> := AccessKey, <<"secretKey">> := SecretKey}, ?S3_HELPER_NAME) ->
+    encode(AccessKey, SecretKey);
+encode_user_ctx(#{<<"username">> := UserName, <<"password">> := Password}, ?SWIFT_HELPER_NAME) ->
+    encode(UserName, Password);
+encode_user_ctx(#{<<"uid">> := Uid, <<"gid">> := Gid}, HelperName) when
+    HelperName =:= ?POSIX_HELPER_NAME orelse
+        HelperName =:= ?GLUSTERFS_HELPER_NAME orelse
+        HelperName =:= ?NULL_DEVICE_HELPER_NAME
+    ->
+    encode(Uid, Gid).
+
+
+decode_group_ctx(Gid, HelperName) when
+    HelperName =:= ?POSIX_HELPER_NAME orelse
+        HelperName =:= ?GLUSTERFS_HELPER_NAME orelse
+        HelperName =:= ?NULL_DEVICE_HELPER_NAME
+    ->
+    #{<<"gid">> => Gid};
+decode_group_ctx(_Gid, HelperName) ->
+    {error, {group_ctx_not_supported, HelperName}}.
+
+
+encode_group_ctx(#{<<"gid">> := Gid}, HelperName) when
+    HelperName =:= ?POSIX_HELPER_NAME orelse
+        HelperName =:= ?GLUSTERFS_HELPER_NAME orelse
+        HelperName =:= ?NULL_DEVICE_HELPER_NAME
+    ->
+    Gid;
+encode_group_ctx(_Gid, HelperName) ->
+    {error, {group_ctx_not_supported, HelperName}}.
+
+
+
+
+
+
+encode(Value1, Value2) ->
+    <<Value1/binary, ?SEP/binary, Value2/binary>>.
+
+
+
+
+
+
 
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Checks whether cache should be renewed.
+%% Fetches link.
 %% @end
 %%-------------------------------------------------------------------
--spec cache_should_be_renewed(timestamp(), timestamp(), luma_config:cache_timeout()) -> boolean().
-cache_should_be_renewed(CurrentTimestamp, LastTimestamp, CacheTimeout) ->
-    (CurrentTimestamp - LastTimestamp) > CacheTimeout.
+-spec get_links(tree_root_id_prefix(), storage:id(), link_id()) ->
+    {ok, link_target()} | {error, term()}.
+get_links(RootId, StorageId, LinkId) ->
+    TreeRoot = tree_root(RootId, StorageId),
+    case datastore_model:get_links(?CTX, TreeRoot, all, LinkId) of
+        {ok, [#link{target = Target}]} ->
+            {ok, Target};
+        Error ->
+            Error
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% WRITEME
+%% @end
+%%--------------------------------------------------------------------
+-spec add_link(tree_root_id_prefix(), storage:id(), link_id(), link_target()) -> ok.
+add_link(RootId, StorageId, LinkId, LinkTarget) ->
+    TreeId = oneprovider:get_id(),
+    TreeRoot = tree_root(RootId, StorageId),
+    {ok, _} = datastore_model:add_links(?CTX, TreeRoot, TreeId, {LinkId, LinkTarget}),
+    ok.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% WRITEME
+%% @end
+%%-------------------------------------------------------------------
+-spec delete_link(tree_root_id_prefix(), storage:id(), link_id()) -> ok.
+delete_link(RootId, StorageId, LinkId) ->
+    TreeId = oneprovider:get_id(),
+    TreeRoot = tree_root(RootId, StorageId),
+    case datastore_model:delete_links(?CTX, TreeRoot, TreeId, LinkId) of
+        [] ->
+            ok;
+        ok ->
+            ok
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Executes callback for each link.
+%% @end
+%%--------------------------------------------------------------------
+-spec for_each(
+    tree_root_id_prefix(), storage:id(),
+    Callback :: fun((link_id(), Acc0 :: term()) -> Acc :: term()),
+    Acc0 :: term()) -> {ok, Acc :: term()} | {error, term()}.
+for_each(RootId, StorageId, Callback, Acc0) ->
+    TreeRoot = tree_root(RootId, StorageId),
+    datastore_model:fold_links(?CTX, TreeRoot, all, fun
+        (#link{name = Name}, Acc) ->
+            {ok, Callback(Name, Acc)}
+    end, Acc0, #{}).
+
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns link's tree root id based on given RootPrefix and StorageId.
+%% @end
+%%-------------------------------------------------------------------
+-spec tree_root(binary(), storage:id()) -> tree_root_id().
+tree_root(RootPrefix, StorageId) ->
+    <<RootPrefix/binary, StorageId/binary>>.
+
 
 %%%===================================================================
 %%% datastore_model callbacks
@@ -206,3 +315,13 @@ cache_should_be_renewed(CurrentTimestamp, LastTimestamp, CacheTimeout) ->
 -spec get_ctx() -> datastore:ctx().
 get_ctx() ->
     ?CTX.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's record structure in provided version.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_record_struct(datastore_model:record_version()) ->
+    datastore_model:record_struct().
+get_record_struct(1) ->
+    {record, []}.

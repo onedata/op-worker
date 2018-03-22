@@ -220,14 +220,12 @@ fetch_user_ctx(SessionId, UserId, SpaceId, StorageDoc, Helper) ->
         false ->
             undefined;
         true ->
-            LumaConfig = storage:get_luma_config(StorageDoc),
-            LumaCacheTimeout = luma_config:get_timeout(LumaConfig),
-            Result = luma_cache:get(UserId,
-                fun luma_proxy:get_user_ctx/5,
-                [SessionId, UserId, SpaceId, StorageDoc, Helper],
-                LumaCacheTimeout
-            ),
-
+            StorageId = storage:get_id(StorageDoc),
+            HelperName = helper:get_name(Helper),
+            Result = luma_cache:get_user_ctx(UserId, StorageId, fun() ->
+                luma_proxy:get_user_ctx(SessionId, UserId, SpaceId, StorageDoc,
+                    Helper)
+            end, HelperName),
             case Result of
                 {error, Reason} ->
                     {error, {luma_server, Reason}};
@@ -248,14 +246,11 @@ fetch_user_ctx(SessionId, UserId, SpaceId, StorageDoc, Helper) ->
 fetch_user_ctx(SessionId, UserId, GroupId, SpaceId, StorageDoc, Helper) ->
     case fetch_user_ctx(SessionId, UserId, SpaceId, StorageDoc, Helper) of
         {ok, UserCtx} ->
-            LumaConfig = storage:get_luma_config(StorageDoc),
-            LumaCacheTimeout = luma_config:get_timeout(LumaConfig),
             StorageId = storage:get_id(StorageDoc),
-            Result = luma_cache:get(luma_cache_group_key(GroupId, SpaceId, StorageId),
-                fun luma_proxy:get_group_ctx/4,
-                [GroupId, SpaceId, StorageDoc, Helper],
-                LumaCacheTimeout
-            ),
+            HelperName = helper:get_name(Helper),
+            QueryFun = query_luma_for_group_ctx_fun(GroupId, SpaceId, StorageDoc, Helper),
+            Result = luma_cache:get_group_ctx(luma_cache_group_key(GroupId, SpaceId),
+                StorageId, QueryFun, HelperName),
             case Result of
                 {ok, GroupCtx} ->
                     {ok, maps:merge(UserCtx, GroupCtx)};
@@ -266,6 +261,11 @@ fetch_user_ctx(SessionId, UserId, GroupId, SpaceId, StorageDoc, Helper) ->
             end;
         Other ->
             Other
+    end.
+
+query_luma_for_group_ctx_fun(GroupId, SpaceId, StorageDoc, Helper) ->
+    fun() ->
+        luma_proxy:get_group_ctx(GroupId, SpaceId, StorageDoc, Helper)
     end.
 
 %%--------------------------------------------------------------------
@@ -388,13 +388,13 @@ select_posix_storage(SpaceId) ->
 %% @private
 %% @doc
 %% Returns gid for given GroupId fetched from luma_cache or 3rd
-%% party LUMA service.
+%% party LUMA service.  %todo
 %% @end
 %%-------------------------------------------------------------------
--spec luma_cache_group_key(undefined | od_group:id(), od_space:id(), storage:id()) -> binary().
-luma_cache_group_key(undefined, SpaceId, StorageId) ->
-    <<SpaceId/binary, ?KEY_SEPARATOR/binary, StorageId/binary>>;
-luma_cache_group_key(GroupId, _SpaceId, _StorageId) when is_binary(GroupId)->
+-spec luma_cache_group_key(undefined | od_group:id(), od_space:id()) -> binary().
+luma_cache_group_key(undefined, SpaceId) ->
+    SpaceId;
+luma_cache_group_key(GroupId, _SpaceId) ->
     GroupId.
 
 

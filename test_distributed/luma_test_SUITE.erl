@@ -19,7 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% export for ct
--export([all/0, init_per_testcase/2, end_per_testcase/2]).
+-export([all/0, init_per_testcase/2, end_per_testcase/2, init_per_suite/1, end_per_suite/1]).
 
 -export([
     get_server_user_ctx_should_fail_with_missing_helper_error/1,
@@ -65,23 +65,23 @@ all() ->
     ]).
 
 -define(TEST_URL, <<"http://127.0.0.1:5000">>).
--define(DEFAULT_TIMEOUT, timer:minutes(5)).
 
 
 -define(MOCK_SESS_ID, <<"sessionId">>).
 -define(MOCK_USER_ID, <<"userId">>).
 
 
--define(LUMA_CONFIG, ?LUMA_CONFIG(?DEFAULT_TIMEOUT)).
--define(LUMA_CONFIG(CacheTimeout), #luma_config{
+-define(LUMA_CONFIG, #luma_config{
     url = ?TEST_URL,
-    cache_timeout = CacheTimeout,
     api_key = <<"test_api_key">>
 }).
 
+-define(STORAGE_ID, <<"storage_id">>).
+
+-define(POSIX_STORAGE_ID, <<"posixStorageId">>).
 
 -define(POSIX_STORAGE_DOC_DISABLED_LUMA, #document{
-    key = <<"posixStorageId">>,
+    key = ?POSIX_STORAGE_ID,
     value = #storage{
         name = <<"POSIX">>,
         helpers = [helper:new_posix_helper(
@@ -95,7 +95,7 @@ all() ->
 }).
 
 -define(POSIX_STORAGE_DOC, #document{
-    key = <<"posixStorageId">>,
+    key = ?POSIX_STORAGE_ID,
     value = #storage{
         name = <<"POSIX">>,
         helpers = [helper:new_posix_helper(
@@ -109,7 +109,7 @@ all() ->
 }).
 
 -define(POSIX_STORAGE_DOC(LumaConfig), #document{
-    key = <<"posixStorageId">>,
+    key = ?POSIX_STORAGE_ID,
     value = #storage{
         name = <<"POSIX">>,
         helpers = [helper:new_posix_helper(
@@ -139,9 +139,10 @@ all() ->
     }
 }).
 
+-define(CEPH_STORAGE_ID, <<"cephStorageId">>).
 
 -define(CEPH_STORAGE_DOC(Insecure, LumaConfig), #document{
-    key = <<"cephStorageId">>,
+    key = ?CEPH_STORAGE_ID,
     value = #storage{
         name = <<"CEPH">>,
         helpers = [helper:new_ceph_helper(
@@ -158,7 +159,7 @@ all() ->
 }).
 
 -define(CEPH_STORAGE_DOC_LUMA_DISABLED(Insecure), #document{
-    key = <<"cephStorageId">>,
+    key = ?CEPH_STORAGE_ID,
     value = #storage{
         name = <<"CEPH">>,
         helpers = [helper:new_ceph_helper(
@@ -237,6 +238,9 @@ get_server_user_ctx_should_fetch_user_ctx_from_luma_server(Config) ->
         ?POSIX_STORAGE_DOC,
         ?POSIX_HELPER_NAME
     ]),
+%%    tracer:start(Worker),
+%%    tracer:trace_calls(luma_cache),
+%%    tracer:trace_calls(datastore_model, delete_links),
     ?assertMatch({ok, #{<<"uid">> := <<"1">>}}, Result),
     ?assertMatch({ok, #{<<"gid">> := <<"2">>}}, Result).
 
@@ -393,10 +397,8 @@ get_posix_user_ctx_should_fetch_user_ctx(Config) ->
 get_posix_user_ctx_should_fetch_user_ctx_twice(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, luma_proxy, [passthrough]),
-    CacheTimeout = 5,
-    LumaConfig = ?LUMA_CONFIG(CacheTimeout),
     test_utils:mock_expect(Worker, storage, get, fun(_) ->
-        {ok, ?POSIX_STORAGE_DOC(LumaConfig)}
+        {ok, ?POSIX_STORAGE_DOC(?LUMA_CONFIG)}
     end),
 
     Result = rpc:call(Worker, luma, get_posix_user_ctx, [
@@ -404,7 +406,7 @@ get_posix_user_ctx_should_fetch_user_ctx_twice(Config) ->
         ?MOCK_USER_ID,
         <<"spaceId">>
     ]),
-    timer:sleep(CacheTimeout + 1),
+    rpc:call(Worker, luma_cache, invalidate, [?POSIX_STORAGE_ID]),
     Result = rpc:call(Worker, luma, get_posix_user_ctx, [
         ?MOCK_SESS_ID,
         ?MOCK_USER_ID,
@@ -493,6 +495,19 @@ get_posix_user_ctx_by_group_id_should_return_0_for_root(Config) ->
 %%% SetUp and TearDown functions
 %%%===================================================================
 
+init_per_suite(Config) ->
+    Posthook = fun(NewConfig) ->
+        initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig, "env_desc.json"), NewConfig)
+    end,
+    [
+        {?ENV_UP_POSTHOOK, Posthook},
+        {?LOAD_MODULES, [initializer]}
+        | Config
+    ].
+
+end_per_suite(Config) ->
+    initializer:clean_test_users_and_spaces_no_validate(Config).
+
 init_per_testcase(Case, Config) when
     Case =:= get_posix_user_ctx_should_return_server_user_ctx;
     Case =:= get_posix_user_ctx_should_generate_user_ctx ->
@@ -518,7 +533,7 @@ init_per_testcase(Case, Config) when
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, [space_storage, storage, http_client]),
     test_utils:mock_expect(Worker, space_storage, get, fun(_) ->
-        {ok, ?SPACE_STORAGE_DOC([<<"storage_id">>])}
+        {ok, ?SPACE_STORAGE_DOC([?STORAGE_ID])}
     end),
     Expected = json_utils:encode_map(#{<<"uid">> => ?UID1, <<"gid">> => ?GID1}),
     test_utils:mock_expect(Worker, http_client, post, fun
@@ -541,7 +556,7 @@ init_per_testcase(Case, Config) when
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, [space_storage, storage, http_client]),
     test_utils:mock_expect(Worker, space_storage, get, fun(_) ->
-        {ok, ?SPACE_STORAGE_DOC([<<"storage_id">>])}
+        {ok, ?SPACE_STORAGE_DOC([?STORAGE_ID])}
     end),
     Expected = json_utils:encode_map(#{<<"uid">> => ?UID1, <<"gid">> => ?GID1}),
     Expected2 = json_utils:encode_map(#{<<"gid">> => ?GID2}),
@@ -568,7 +583,7 @@ init_per_testcase(Case, Config) when
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, [space_storage, storage, http_client]),
     test_utils:mock_expect(Worker, space_storage, get, fun(_) ->
-        {ok, ?SPACE_STORAGE_DOC([<<"storage_id">>])}
+        {ok, ?SPACE_STORAGE_DOC([?STORAGE_ID])}
     end),
     Expected = json_utils:encode_map(#{<<"uid">> => ?UID1, <<"gid">> => ?GID1}),
     Expected2 = json_utils:encode_map(#{<<"error">> => <<"mapping not found">>}),
@@ -601,7 +616,9 @@ end_per_testcase(Case, Config) when
 
 end_per_testcase(_Case, Config) ->
     Workers = [Worker | _] = ?config(op_worker_nodes, Config),
-    rpc:call(Worker, luma_cache, invalidate, []),
+    ok = rpc:call(Worker, luma_cache, invalidate, [?POSIX_STORAGE_ID]),
+    ok = rpc:call(Worker, luma_cache, invalidate, [?CEPH_STORAGE_ID]),
+    ok = rpc:call(Worker, luma_cache, invalidate, [?STORAGE_ID]),
     test_utils:mock_unload(Workers, [http_client, luma_proxy]).
 
 generate_posix_identifier(Id, {Low, High}) ->
