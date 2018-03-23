@@ -27,7 +27,7 @@
 
 -export_type([space_transfer_cache/0, doc/0]).
 
--define(INACTIVITY_TIMEOUT, 30).
+-define(INACTIVITY_TIMEOUT, 20).
 -define(CACHE_EXPIRATION_TIMEOUT, 5).
 
 -define(CTX, #{

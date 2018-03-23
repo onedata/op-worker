@@ -553,6 +553,10 @@ increase_files_invalidated_counter(TransferId) ->
 mark_data_transfer_finished(undefined, _ProviderId, _Bytes) ->
     {ok, undefined};
 mark_data_transfer_finished(TransferId, ProviderId, Bytes) ->
+    {ok, TransferDoc} = ?MODULE:get(TransferId),
+    #transfer{space_id = SpaceId} = TransferDoc#document.value,
+    space_transfer:update(SpaceId, ProviderId, Bytes),
+
     update(TransferId, fun(Transfer = #transfer{
         space_id = SpaceId,
         bytes_transferred = OldBytes,

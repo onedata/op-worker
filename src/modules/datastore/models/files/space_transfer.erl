@@ -31,8 +31,8 @@
     model => ?MODULE,
     sync_enabled => true,
     remote_driver => datastore_remote_driver,
-    mutator => oneprovider:get_id_or_undefined()
-%%    local_links_tree_id => oneprovider:get_id_or_undefined()
+    mutator => oneprovider:get_id_or_undefined(),
+    local_links_tree_id => oneprovider:get_id_or_undefined()
 }).
 
 %%%===================================================================
@@ -74,6 +74,7 @@ get(ProviderId, SpaceId) ->
 update(SpaceId, SourceProviderId, Bytes) ->
     ProviderId = oneprovider:get_id_or_undefined(),
     Key = datastore_utils:gen_key(ProviderId, SpaceId),
+    CurrentTime = provider_logic:zone_time_seconds(),
     Diff = fun(SpaceTransfers = #space_transfer{
         last_update = LastUpdateMap,
         min_hist = MinHistograms,
@@ -82,8 +83,7 @@ update(SpaceId, SourceProviderId, Bytes) ->
         mth_hist = MthHistograms
     }) ->
         LastUpdate = maps:get(SourceProviderId, LastUpdateMap, 0),
-        CurrentTime = provider_logic:zone_time_seconds(),
-        {ok, SpaceTransfers#transfer{
+        {ok, SpaceTransfers#space_transfer{
             last_update = maps:put(SourceProviderId, CurrentTime, LastUpdateMap),
             min_hist = transfer_histogram:update(
                 SourceProviderId, Bytes, MinHistograms,
@@ -103,15 +103,20 @@ update(SpaceId, SourceProviderId, Bytes) ->
             )
         }}
     end,
-    Default = #document{
-        key = datastore_utils:gen_key(ProviderId, SpaceId),
-        value = #space_transfer{
-            last_update = #{},
-            min_hist = #{},
-            hr_hist = #{},
-            dy_hist = #{},
-            mth_hist = #{}
-        }
+    Default = #space_transfer{
+        last_update = #{SourceProviderId => CurrentTime},
+        min_hist = transfer_histogram:update(
+            SourceProviderId, Bytes, #{}, ?FIVE_SEC_TIME_WINDOW, 0, CurrentTime
+        ),
+        hr_hist = transfer_histogram:update(
+            SourceProviderId, Bytes, #{}, ?MIN_TIME_WINDOW, 0, CurrentTime
+        ),
+        dy_hist = transfer_histogram:update(
+            SourceProviderId, Bytes, #{}, ?HOUR_TIME_WINDOW, 0, CurrentTime
+        ),
+        mth_hist = transfer_histogram:update(
+            SourceProviderId, Bytes, #{}, ?DAY_TIME_WINDOW, 0, CurrentTime
+        )
     },
     case datastore_model:update(?CTX, Key, Diff, Default) of
         {ok, _} -> ok;

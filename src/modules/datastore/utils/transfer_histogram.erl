@@ -18,7 +18,7 @@
 -type histogram() :: [non_neg_integer()].
 
 %% API
--export([new_time_slot_histogram/2, update/6]).
+-export([new_time_slot_histogram/2, new_time_slot_histogram/3, update/6]).
 
 %%%===================================================================
 %%% API
@@ -67,11 +67,6 @@ new_time_slot_histogram(LastUpdate, ?HOUR_TIME_WINDOW) ->
 new_time_slot_histogram(LastUpdate, ?DAY_TIME_WINDOW) ->
     new_time_slot_histogram(LastUpdate, ?DAY_TIME_WINDOW,
         histogram:new(?MONTH_HIST_LENGTH)).
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
 
 
 %%-------------------------------------------------------------------

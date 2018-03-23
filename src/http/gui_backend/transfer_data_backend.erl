@@ -347,6 +347,7 @@ space_transfer_provider_map_record(SpaceId) ->
     } = space_transfer_cache:get(?MINUTE_STAT_TYPE, SpaceId),
 
     {ok, [
+        {<<"id">>, SpaceId},
         {<<"mapping">>, maps:to_list(Mapping)}
     ]}.
 
