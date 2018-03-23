@@ -563,7 +563,7 @@ mark_data_transfer_finished(TransferId, ProviderId, Bytes) ->
         dy_hist = DyHistograms,
         mth_hist = MthHistograms
     }) ->
-        space_transfers:update(SpaceId, ProviderId, Bytes),
+        space_transfer:update(SpaceId, ProviderId, Bytes),
         LastUpdate = maps:get(ProviderId, LastUpdateMap, StartTime),
         CurrentTime = provider_logic:zone_time_seconds(),
         {ok, Transfer#transfer{

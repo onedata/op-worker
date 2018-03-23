@@ -75,10 +75,10 @@ find_record(<<"transfer-current-stat">>, TransferId) ->
     transfer_current_stat_record(TransferId);
 
 find_record(<<"space-transfer-time-stat">>, StatId) ->
-    space_transfers_time_stat_record(StatId);
+    space_transfer_time_stat_record(StatId);
 
 find_record(<<"space-transfer-provider-map">>, StatId) ->
-    space_transfers_provider_map_record(StatId).
+    space_transfer_provider_map_record(StatId).
 
 
 %%--------------------------------------------------------------------
@@ -296,19 +296,19 @@ transfer_current_stat_record(TransferId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns a client-compliant space-transfers-time-stat record based on stat id
+%% Returns a client-compliant space-transfer-time-stat record based on stat id
 %% (combined space id and prefix defining time span of histograms).
 %% @end
 %%--------------------------------------------------------------------
--spec space_transfers_time_stat_record(StatId :: binary()) ->
+-spec space_transfer_time_stat_record(StatId :: binary()) ->
     {ok, proplists:proplist()}.
-space_transfers_time_stat_record(StatId) ->
+space_transfer_time_stat_record(StatId) ->
     {TypePrefix, SpaceId} = op_gui_utils:association_to_ids(StatId),
-    #space_transfers_cache{
+    #space_transfer_cache{
         timestamp = Timestamp,
         stats_in = StatsIn,
         stats_out = StatsOut
-    } = space_transfers_cache:get(TypePrefix, SpaceId),
+    } = space_transfer_cache:get(TypePrefix, SpaceId),
 
     TimeWindow = case TypePrefix of
         ?MINUTE_STAT_TYPE -> ?FIVE_SEC_TIME_WINDOW;
@@ -336,17 +336,15 @@ space_transfers_time_stat_record(StatId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns a client-compliant space-transfers-time-stat record based on stat id
-%% (combined space id and prefix defining time span of histograms).
+%% Returns a client-compliant space-transfer-provider-map record based on space id
 %% @end
 %%--------------------------------------------------------------------
--spec space_transfers_provider_map_record(StatId :: binary()) ->
+-spec space_transfer_provider_map_record(StatId :: binary()) ->
     {ok, proplists:proplist()}.
-space_transfers_provider_map_record(StatId) ->
-    {?TRANSFER_PROVIDER_MAP, SpaceId} = op_gui_utils:association_to_ids(StatId),
-    #space_transfers_cache{
+space_transfer_provider_map_record(SpaceId) ->
+    #space_transfer_cache{
         mapping = Mapping
-    } = space_transfers_cache:get(?MINUTE_STAT_TYPE, SpaceId),
+    } = space_transfer_cache:get(?MINUTE_STAT_TYPE, SpaceId),
 
     {ok, [
         {<<"mapping">>, maps:to_list(Mapping)}

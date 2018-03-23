@@ -9,7 +9,7 @@
 %%% Model storing information about space transfers stats.
 %%% @end
 %%%-------------------------------------------------------------------
--module(space_transfers).
+-module(space_transfer).
 -author("Bartosz Walkowicz").
 
 -include("modules/datastore/datastore_models.hrl").
@@ -22,10 +22,10 @@
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
 
--type space_transfers() :: #space_transfers{}.
--type doc() :: datastore_doc:doc(space_transfers()).
+-type space_transfer() :: #space_transfer{}.
+-type doc() :: datastore_doc:doc(space_transfer()).
 
--export_type([space_transfers/0, doc/0]).
+-export_type([space_transfer/0, doc/0]).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -45,7 +45,7 @@
 %% Returns space transfers for given space.
 %% @end
 %%-------------------------------------------------------------------
--spec get(SpaceId :: od_space:id()) -> space_transfers() | {error, term()}.
+-spec get(SpaceId :: od_space:id()) -> space_transfer() | {error, term()}.
 get(SpaceId) ->
     ?MODULE:get(oneprovider:get_id_or_undefined(), SpaceId).
 
@@ -56,7 +56,7 @@ get(SpaceId) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec get(ProviderId :: od_provider:id(), SpaceId :: od_space:id()) ->
-    space_transfers() | {error, term()}.
+    space_transfer() | {error, term()}.
 get(ProviderId, SpaceId) ->
     case datastore_model:get(?CTX, datastore_utils:gen_key(ProviderId, SpaceId)) of
         {ok, Doc} -> {ok, Doc#document.value};
@@ -74,7 +74,7 @@ get(ProviderId, SpaceId) ->
 update(SpaceId, SourceProviderId, Bytes) ->
     ProviderId = oneprovider:get_id_or_undefined(),
     Key = datastore_utils:gen_key(ProviderId, SpaceId),
-    Diff = fun(SpaceTransfers = #space_transfers{
+    Diff = fun(SpaceTransfers = #space_transfer{
         last_update = LastUpdateMap,
         min_hist = MinHistograms,
         hr_hist = HrHistograms,
@@ -105,7 +105,7 @@ update(SpaceId, SourceProviderId, Bytes) ->
     end,
     Default = #document{
         key = datastore_utils:gen_key(ProviderId, SpaceId),
-        value = #space_transfers{
+        value = #space_transfer{
             last_update = #{},
             min_hist = #{},
             hr_hist = #{},

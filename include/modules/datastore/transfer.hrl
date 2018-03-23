@@ -34,7 +34,6 @@
 -define(HOUR_STAT_TYPE, <<"hour">>).
 -define(DAY_STAT_TYPE, <<"day">>).
 -define(MONTH_STAT_TYPE, <<"month">>).
--define(TRANSFER_PROVIDER_MAP, <<"transfer_prov_map">>).
 
 -define(TRANSFER_WORKERS_POOL, transfer_workers_pool).
 -define(TRANSFER_WORKERS_NUM, application:get_env(?APP_NAME, transfer_workers_num, 50)).

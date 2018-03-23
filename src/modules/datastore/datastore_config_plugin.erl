@@ -56,8 +56,8 @@ get_models() -> [
     file_force_proxy,
     luma_cache,
     file_popularity,
-    space_transfers,
-    space_transfers_cache,
+    space_transfer,
+    space_transfer_cache,
     transfer,
     storage_sync_histogram,
     autocleaning

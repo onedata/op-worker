@@ -367,7 +367,7 @@ space_record(SpaceId, HasViewPrivileges) ->
             op_gui_utils:ids_to_association(?HOUR_STAT_TYPE, SpaceId),
             op_gui_utils:ids_to_association(?DAY_STAT_TYPE, SpaceId),
             op_gui_utils:ids_to_association(?MONTH_STAT_TYPE, SpaceId),
-            op_gui_utils:ids_to_association(?TRANSFER_PROVIDER_MAP, SpaceId)
+            SpaceId
         };
         false -> {
             null, null, null, null, null, null, null

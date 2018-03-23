@@ -9,7 +9,7 @@
 %%% Model storing information about space transfers stats cache.
 %%% @end
 %%%-------------------------------------------------------------------
--module(space_transfers_cache).
+-module(space_transfer_cache).
 -author("Bartosz Walkowicz").
 
 -include("modules/datastore/datastore_models.hrl").
@@ -22,10 +22,10 @@
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
 
--type space_transfers_cache() :: #space_transfers_cache{}.
--type doc() :: datastore_doc:doc(space_transfers_cache()).
+-type space_transfer_cache() :: #space_transfer_cache{}.
+-type doc() :: datastore_doc:doc(space_transfer_cache()).
 
--export_type([space_transfers_cache/0, doc/0]).
+-export_type([space_transfer_cache/0, doc/0]).
 
 -define(INACTIVITY_TIMEOUT, 30).
 -define(CACHE_EXPIRATION_TIMEOUT, 5).
@@ -47,78 +47,86 @@
 %% @end
 %%-------------------------------------------------------------------
 -spec get(ResourceType :: binary(), SpaceId :: od_space:id()) ->
-    space_transfers_cache() | {error, term()}.
+    space_transfer_cache() | {error, term()}.
 get(ResourceType, SpaceId) ->
     {ok, SpaceDoc} = od_space:get(SpaceId),
     Providers = maps:keys(SpaceDoc#document.value#od_space.providers),
-    CurrentTime = provider_logic:zone_time_seconds(),
+
     TimeWindow = case ResourceType of
         ?MINUTE_STAT_TYPE -> ?FIVE_SEC_TIME_WINDOW;
         ?HOUR_STAT_TYPE -> ?MIN_TIME_WINDOW;
         ?DAY_STAT_TYPE -> ?HOUR_TIME_WINDOW;
         ?MONTH_STAT_TYPE -> ?DAY_TIME_WINDOW
     end,
+    CurrentTime = provider_logic:zone_time_seconds(),
+    ZeroedHist = transfer_histogram:new_time_slot_histogram(CurrentTime, TimeWindow),
 
-    SpaceTransfersCacheRecord = lists:foldl(fun(ProviderId, Acc) ->
-        case space_transfers:get(ProviderId, SpaceId) of
+    SpaceTransferCache = lists:foldl(fun(ProviderId, Cache) ->
+        case space_transfer:get(ProviderId, SpaceId) of
             {ok, SpaceTransfer} ->
-                LastUpdates = SpaceTransfer#space_transfers.last_update,
-                Histograms = case ResourceType of
-                    ?MINUTE_STAT_TYPE -> SpaceTransfer#space_transfers.min_hist;
-                    ?HOUR_STAT_TYPE -> SpaceTransfer#space_transfers.hr_hist;
-                    ?DAY_STAT_TYPE -> SpaceTransfer#space_transfers.dy_hist;
-                    ?MONTH_STAT_TYPE -> SpaceTransfer#space_transfers.mth_hist
-                end,
-
-                {ProvIn, TransOut, Conn} = maps:fold(fun(Provider, Histogram, Acc) ->
-                    {Hist, Out, Connections} = Acc,
-                    LastUpdate = maps:get(Provider, LastUpdates),
-                    ProviderHist = transfer_histogram:new_time_slot_histogram(LastUpdate, TimeWindow, Histogram),
-                    NewHist = time_slot_histogram:merge(Hist, ProviderHist),
-                    NewMapping = case abs(CurrentTime - LastUpdate) =< ?INACTIVITY_TIMEOUT of
-                        false ->
-                            Connections;
-                        true ->
-                            [{Provider, ProviderId} | Connections]
-                    end,
-                    {NewHist, Out#{Provider => Histogram}, NewMapping}
-                end, {
-                    transfer_histogram:new_time_slot_histogram(CurrentTime, TimeWindow), #{}, []
-                }, Histograms),
-
-                #space_transfers_cache{
+                #space_transfer_cache{
                     stats_in = StatsIn,
                     stats_out = StatsOut,
                     mapping = Mapping
-                } = Acc,
+                } = Cache,
+                Histograms = case ResourceType of
+                    ?MINUTE_STAT_TYPE -> SpaceTransfer#space_transfer.min_hist;
+                    ?HOUR_STAT_TYPE -> SpaceTransfer#space_transfer.hr_hist;
+                    ?DAY_STAT_TYPE -> SpaceTransfer#space_transfer.dy_hist;
+                    ?MONTH_STAT_TYPE -> SpaceTransfer#space_transfer.mth_hist
+                end,
+                LastUpdates = SpaceTransfer#space_transfer.last_update,
+
+                {HistIn, HistsOut, Connections} = maps:fold(fun(Provider, Histogram, Acc) ->
+                    {OldHist, OldHistsOut, OldConnections} = Acc,
+                    LastUpdate = maps:get(Provider, LastUpdates),
+                    Hist = transfer_histogram:new_time_slot_histogram(
+                        LastUpdate, TimeWindow, Histogram
+                    ),
+                    NewHist = time_slot_histogram:merge(OldHist, Hist),
+                    NewMapping = case abs(CurrentTime - LastUpdate) =< ?INACTIVITY_TIMEOUT of
+                        false -> OldConnections;
+                        true -> [{Provider, ProviderId} | OldConnections]
+                    end,
+                    {NewHist, OldHistsOut#{Provider => Histogram}, NewMapping}
+                end, {ZeroedHist, #{}, []}, Histograms),
+
+                NewStatsIn = StatsIn#{
+                    ProviderId => time_slot_histogram:get_histogram_values(HistIn)
+                },
 
                 NewStatsOut = maps:fold(fun(Provider, Histogram, Acc) ->
                     LastUpdate = maps:get(Provider, LastUpdates),
                     OldHist = case maps:get(Provider, Acc, none) of
-                        none -> transfer_histogram:new_time_slot_histogram(CurrentTime, TimeWindow);
-                        Hist -> transfer_histogram:new_time_slot_histogram(LastUpdate, TimeWindow, Hist)
+                        none ->
+                            ZeroedHist;
+                        Hist ->
+                            transfer_histogram:new_time_slot_histogram(
+                                LastUpdate, TimeWindow, Hist)
                     end,
-                    ProviderHist = transfer_histogram:new_time_slot_histogram(LastUpdate, TimeWindow, Histogram),
+                    ProviderHist = transfer_histogram:new_time_slot_histogram(
+                        LastUpdate, TimeWindow, Histogram
+                    ),
                     NewHist = time_slot_histogram:merge(OldHist, ProviderHist),
                     Acc#{Provider => time_slot_histogram:get_histogram_values(NewHist)}
-                end, StatsOut, TransOut),
+                end, StatsOut, HistsOut),
 
                 NewMapping = lists:foldl(fun({FromProvider, ToProvider}, Acc) ->
                     ToProviders = maps:get(FromProvider, Acc, []),
                     Acc#{FromProvider => [ToProvider | ToProviders]}
-                end, Mapping, Conn),
+                end, Mapping, Connections),
 
-                Acc#space_transfers_cache{
-                    stats_in = StatsIn#{ProviderId => time_slot_histogram:get_histogram_values(ProvIn)},
+                Cache#space_transfer_cache{
+                    stats_in = NewStatsIn,
                     stats_out = NewStatsOut,
                     mapping = NewMapping
                 };
             _Error ->
-                Acc
+                Cache
         end
-    end, #space_transfers_cache{}, Providers),
+    end, #space_transfer_cache{timestamp = CurrentTime}, Providers),
 
-    SpaceTransfersCacheRecord#space_transfers_cache{timestamp = CurrentTime}.
+    SpaceTransferCache.
 
 
 %%%===================================================================
@@ -156,9 +164,14 @@ get_record_version() ->
     datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
-        {last_update, #{string => integer}},
-        {min_hist, #{string => [integer]}},
-        {hr_hist, #{string => [integer]}},
-        {dy_hist, #{string => [integer]}},
-        {mth_hist, #{string => [integer]}}
+        {expires, integer},
+        {timestamp, integer},
+        {stats_in, #{string => [integer]}},
+        {stats_out, #{string => [integer]}},
+        {mapping, #{string => [string]}}
     ]}.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================

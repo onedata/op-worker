@@ -123,7 +123,9 @@ data_backend(true, <<"file-property-shared">>) -> metadata_data_backend;
 
 data_backend(true, <<"transfer">>) -> transfer_data_backend;
 data_backend(true, <<"transfer-time-stat">>) -> transfer_data_backend;
-data_backend(true, <<"transfer-current-stat">>) -> transfer_data_backend.
+data_backend(true, <<"transfer-current-stat">>) -> transfer_data_backend;
+data_backend(true, <<"space-transfer-time-stat">>) -> transfer_data_backend;
+data_backend(true, <<"space-transfer-provider-map">>) -> transfer_data_backend.
 
 
 %%--------------------------------------------------------------------

@@ -509,7 +509,7 @@
 }).
 
 %% Model that holds stats information about all transfers to given provider for given space.
--record(space_transfers, {
+-record(space_transfer, {
     % Histograms of transferred bytes per provider, last_update per provider is
     % required to keep track in histograms.
     last_update = #{} :: maps:map(od_provider:id(), non_neg_integer()),
@@ -525,13 +525,11 @@
 }).
 
 %% Model that holds cached stats information about all transfers for given space.
--record(space_transfers_cache, {
+-record(space_transfer_cache, {
     % time at which the cache record will expire.
     expires = 0 :: non_neg_integer(),
     % time of last update for stats.
     timestamp = 0 :: non_neg_integer(),
-    % type of stats cached, e.g. minute | hour | day | month
-    type = <<"">> :: binary(),
     % mapping of providers to their data input
     stats_in = #{} :: maps:map(od_provider:id(), histogram:histogram()),
     % mapping of providers to their data output
