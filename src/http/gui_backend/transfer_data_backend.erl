@@ -11,6 +11,8 @@
 %%%     - transfer
 %%%     - transfer-time-stat
 %%%     - transfer-current-stat
+%%%     - space-transfers-time-stat
+%%%     - space-transfers-provider-map
 %%% @end
 %%%-------------------------------------------------------------------
 -module(transfer_data_backend).
@@ -21,11 +23,6 @@
 -include("modules/datastore/transfer.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
-
--define(MINUTE_STAT_TYPE, <<"minute">>).
--define(HOUR_STAT_TYPE, <<"hour">>).
--define(DAY_STAT_TYPE, <<"day">>).
--define(MONTH_STAT_TYPE, <<"month">>).
 
 %% API
 -export([init/0, terminate/0]).
@@ -75,7 +72,13 @@ find_record(<<"transfer-time-stat">>, StatId) ->
     transfer_time_stat_record(StatId);
 
 find_record(<<"transfer-current-stat">>, TransferId) ->
-    transfer_current_stat_record(TransferId).
+    transfer_current_stat_record(TransferId);
+
+find_record(<<"space-transfer-time-stat">>, StatId) ->
+    space_transfers_time_stat_record(StatId);
+
+find_record(<<"space-transfer-provider-map">>, StatId) ->
+    space_transfers_provider_map_record(StatId).
 
 
 %%--------------------------------------------------------------------
@@ -220,7 +223,7 @@ transfer_record(TransferId) ->
 %% @private
 %% @doc
 %% Returns a client-compliant transfer-time-stat record based on stat id
-%% (combined transfer id and prefix defining time span of histograms.
+%% (combined transfer id and prefix defining time span of histograms).
 %% @end
 %%--------------------------------------------------------------------
 -spec transfer_time_stat_record(StatId :: binary()) -> {ok, proplists:proplist()}.
@@ -287,6 +290,66 @@ transfer_current_stat_record(TransferId) ->
         {<<"transferredBytes">>, BytesTransferred},
         {<<"transferredFiles">>, FilesTransferred},
         {<<"bytesPerSec">>, BytesPerSec}
+    ]}.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns a client-compliant space-transfers-time-stat record based on stat id
+%% (combined space id and prefix defining time span of histograms).
+%% @end
+%%--------------------------------------------------------------------
+-spec space_transfers_time_stat_record(StatId :: binary()) ->
+    {ok, proplists:proplist()}.
+space_transfers_time_stat_record(StatId) ->
+    {TypePrefix, SpaceId} = op_gui_utils:association_to_ids(StatId),
+    #space_transfers_cache{
+        timestamp = Timestamp,
+        stats_in = StatsIn,
+        stats_out = StatsOut
+    } = space_transfers_cache:get(TypePrefix, SpaceId),
+
+    TimeWindow = case TypePrefix of
+        ?MINUTE_STAT_TYPE -> ?FIVE_SEC_TIME_WINDOW;
+        ?HOUR_STAT_TYPE -> ?MIN_TIME_WINDOW;
+        ?DAY_STAT_TYPE -> ?HOUR_TIME_WINDOW;
+        ?MONTH_STAT_TYPE -> ?DAY_TIME_WINDOW
+    end,
+
+    NewStatsIn = maps:map(fun(_ProviderId, HistogramValues) ->
+        histogram_to_speed_chart(HistogramValues, 0, Timestamp, TimeWindow)
+    end, StatsIn),
+    NewStatsOut = maps:map(fun(_ProviderId, HistogramValues) ->
+        histogram_to_speed_chart(HistogramValues, 0, Timestamp, TimeWindow)
+    end, StatsOut),
+
+    {ok, [
+        {<<"id">>, StatId},
+        {<<"timestamp">>, Timestamp},
+        {<<"type">>, TypePrefix},
+        {<<"statsIn">>, maps:to_list(NewStatsIn)},
+        {<<"statsOut">>, maps:to_list(NewStatsOut)}
+    ]}.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns a client-compliant space-transfers-time-stat record based on stat id
+%% (combined space id and prefix defining time span of histograms).
+%% @end
+%%--------------------------------------------------------------------
+-spec space_transfers_provider_map_record(StatId :: binary()) ->
+    {ok, proplists:proplist()}.
+space_transfers_provider_map_record(StatId) ->
+    {?TRANSFER_PROVIDER_MAP, SpaceId} = op_gui_utils:association_to_ids(StatId),
+    #space_transfers_cache{
+        mapping = Mapping
+    } = space_transfers_cache:get(?MINUTE_STAT_TYPE, SpaceId),
+
+    {ok, [
+        {<<"mapping">>, maps:to_list(Mapping)}
     ]}.
 
 

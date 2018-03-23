@@ -17,7 +17,7 @@
 -type histogram() :: [non_neg_integer()].
 
 %% API
--export([new/1, shift/2, increment/2]).
+-export([new/1, shift/2, increment/2, merge/2]).
 
 %%%===================================================================
 %%% API
@@ -38,6 +38,8 @@ new(Size) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec shift(histogram(), ShiftSize :: non_neg_integer()) -> histogram().
+shift(Histogram, 0) ->
+    Histogram;
 shift(Histogram, ShiftSize) when ShiftSize >= length(Histogram) ->
     new(length(Histogram));
 shift(Histogram, ShiftSize) ->
@@ -52,3 +54,12 @@ shift(Histogram, ShiftSize) ->
 -spec increment(histogram(), non_neg_integer()) -> histogram().
 increment([Head | Rest], N) ->
     [Head + N | Rest].
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Merges 2 histograms of equal size
+%% @end
+%%--------------------------------------------------------------------
+-spec merge(histogram(), histogram()) -> histogram().
+merge(Histogram1, Histogram2) ->
+    lists:zipwith(fun(X, Y) -> X + Y end, Histogram1, Histogram2).

@@ -554,6 +554,7 @@ mark_data_transfer_finished(undefined, _ProviderId, _Bytes) ->
     {ok, undefined};
 mark_data_transfer_finished(TransferId, ProviderId, Bytes) ->
     update(TransferId, fun(Transfer = #transfer{
+        space_id = SpaceId,
         bytes_transferred = OldBytes,
         start_time = StartTime,
         last_update = LastUpdateMap,
@@ -562,24 +563,25 @@ mark_data_transfer_finished(TransferId, ProviderId, Bytes) ->
         dy_hist = DyHistograms,
         mth_hist = MthHistograms
     }) ->
+        space_transfers:update(SpaceId, ProviderId, Bytes),
         LastUpdate = maps:get(ProviderId, LastUpdateMap, StartTime),
         CurrentTime = provider_logic:zone_time_seconds(),
         {ok, Transfer#transfer{
             bytes_transferred = OldBytes + Bytes,
             last_update = maps:put(ProviderId, CurrentTime, LastUpdateMap),
-            min_hist = update_histogram(
+            min_hist = transfer_histogram:update(
                 ProviderId, Bytes, MinHistograms,
                 ?FIVE_SEC_TIME_WINDOW, LastUpdate, CurrentTime
             ),
-            hr_hist = update_histogram(
+            hr_hist = transfer_histogram:update(
                 ProviderId, Bytes, HrHistograms,
                 ?MIN_TIME_WINDOW, LastUpdate, CurrentTime
             ),
-            dy_hist = update_histogram(
+            dy_hist = transfer_histogram:update(
                 ProviderId, Bytes, DyHistograms,
                 ?HOUR_TIME_WINDOW, LastUpdate, CurrentTime
             ),
-            mth_hist = update_histogram(
+            mth_hist = transfer_histogram:update(
                 ProviderId, Bytes, MthHistograms,
                 ?DAY_TIME_WINDOW, LastUpdate, CurrentTime
             )
@@ -880,62 +882,6 @@ remove_unfinished_transfers_links(TransferIds, SpaceId) ->
     lists:foreach(fun(TransferId) ->
         ok = transfer_links:delete_active_transfer_link(TransferId, SpaceId)
     end, TransferIds).
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Creates a new time_slot_histogram based on LastUpdate time and Window.
-%% The length of created histogram is based on the Window.
-%% @end
-%%-------------------------------------------------------------------
--spec update_histogram(oneprovider:id(), Bytes :: non_neg_integer(),
-    Histograms, Window :: non_neg_integer(), LastUpdate :: non_neg_integer(),
-    CurrentTime :: non_neg_integer()) -> Histograms
-    when Histograms :: maps:map(od_provider:id(), histogram:histogram()).
-update_histogram(ProviderId, Bytes, Histograms, Window, LastUpdate, CurrentTime) ->
-    Histogram = case maps:find(ProviderId, Histograms) of
-        error ->
-            new_time_slot_histogram(LastUpdate, Window);
-        {ok, Values} ->
-            new_time_slot_histogram(LastUpdate, Window, Values)
-    end,
-    UpdatedHistogram = time_slot_histogram:increment(Histogram, CurrentTime, Bytes),
-    UpdatedValues = time_slot_histogram:get_histogram_values(UpdatedHistogram),
-    maps:put(ProviderId, UpdatedValues, Histograms).
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Creates a new time_slot_histogram based on LastUpdate time and Window.
-%% The length of created histogram is based on the Window.
-%% @end
-%%-------------------------------------------------------------------
--spec new_time_slot_histogram(LastUpdate :: non_neg_integer(),
-    Window :: non_neg_integer()) -> time_slot_histogram:histogram().
-new_time_slot_histogram(LastUpdate, ?FIVE_SEC_TIME_WINDOW) ->
-    new_time_slot_histogram(LastUpdate, ?FIVE_SEC_TIME_WINDOW,
-        histogram:new(?MIN_HIST_LENGTH));
-new_time_slot_histogram(LastUpdate, ?MIN_TIME_WINDOW) ->
-    new_time_slot_histogram(LastUpdate, ?MIN_TIME_WINDOW,
-        histogram:new(?HOUR_HIST_LENGTH));
-new_time_slot_histogram(LastUpdate, ?HOUR_TIME_WINDOW) ->
-    new_time_slot_histogram(LastUpdate, ?HOUR_TIME_WINDOW,
-        histogram:new(?DAY_HIST_LENGTH));
-new_time_slot_histogram(LastUpdate, ?DAY_TIME_WINDOW) ->
-    new_time_slot_histogram(LastUpdate, ?DAY_TIME_WINDOW,
-        histogram:new(?MONTH_HIST_LENGTH)).
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Creates a new time_slot_histogram based on LastUpdate time, Window and values.
-%% @end
-%%-------------------------------------------------------------------
--spec new_time_slot_histogram(LastUpdate :: non_neg_integer(),
-    Window :: non_neg_integer(), histogram:histogram()) ->
-    time_slot_histogram:histogram().
-new_time_slot_histogram(LastUpdate, Window, Values) ->
-    time_slot_histogram:new(LastUpdate, Window, Values).
 
 %%-------------------------------------------------------------------
 %% @private

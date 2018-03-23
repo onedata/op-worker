@@ -524,6 +524,22 @@
     mth_hist = #{} :: maps:map(od_provider:id(), histogram:histogram())
 }).
 
+%% Model that holds cached stats information about all transfers for given space.
+-record(space_transfers_cache, {
+    % time at which the cache record will expire.
+    expires = 0 :: non_neg_integer(),
+    % time of last update for stats.
+    timestamp = 0 :: non_neg_integer(),
+    % type of stats cached, e.g. minute | hour | day | month
+    type = <<"">> :: binary(),
+    % mapping of providers to their data input
+    stats_in = #{} :: maps:map(od_provider:id(), histogram:histogram()),
+    % mapping of providers to their data output
+    stats_out = #{} :: maps:map(od_provider:id(), histogram:histogram()),
+    % mapping of providers to other providers they sent data to in the recent past
+    mapping = #{} :: maps:map(od_provider:id(), [od_provider:id()])
+}).
+
 %% Model for storing storage_sync monitoring data.
 -record(storage_sync_histogram, {
     values = [] :: storage_sync_histogram:values(),

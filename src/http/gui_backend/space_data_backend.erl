@@ -17,6 +17,7 @@
 
 -include("global_definitions.hrl").
 -include("proto/common/credentials.hrl").
+-include("modules/datastore/transfer.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
@@ -355,14 +356,21 @@ space_record(SpaceId, HasViewPrivileges) ->
         true -> SpaceId;
         false -> null
     end,
-    {CurrentTransferListId, CompletedTransferListId} = case HasViewPrivileges of
+    {
+        CurrentTransferListId, CompletedTransferListId, TransferMinStat,
+        TransferHourStat, TransferDayStat, TransferMonthStat, TransferProviderMap
+    } = case HasViewPrivileges of
         true -> {
             op_gui_utils:ids_to_association(?CURRENT_TRANSFERS_PREFIX, SpaceId),
-            op_gui_utils:ids_to_association(?COMPLETED_TRANSFERS_PREFIX, SpaceId)
+            op_gui_utils:ids_to_association(?COMPLETED_TRANSFERS_PREFIX, SpaceId),
+            op_gui_utils:ids_to_association(?MINUTE_STAT_TYPE, SpaceId),
+            op_gui_utils:ids_to_association(?HOUR_STAT_TYPE, SpaceId),
+            op_gui_utils:ids_to_association(?DAY_STAT_TYPE, SpaceId),
+            op_gui_utils:ids_to_association(?MONTH_STAT_TYPE, SpaceId),
+            op_gui_utils:ids_to_association(?TRANSFER_PROVIDER_MAP, SpaceId)
         };
         false -> {
-            null,
-            null
+            null, null, null, null, null, null, null
         }
     end,
     [
@@ -375,6 +383,11 @@ space_record(SpaceId, HasViewPrivileges) ->
         {<<"providerList">>, RelationWithViewPrivileges},
         {<<"currentTransferList">>, CurrentTransferListId},
         {<<"completedTransferList">>, CompletedTransferListId},
+        {<<"transferMinuteStat">>, TransferMinStat},
+        {<<"transferHourStat">>, TransferHourStat},
+        {<<"transferDayStat">>, TransferDayStat},
+        {<<"transferMonthStat">>, TransferMonthStat},
+        {<<"transferProviderMap">>, TransferProviderMap},
         {<<"user">>, UserId}
     ].
 

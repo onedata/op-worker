@@ -57,6 +57,7 @@ get_models() -> [
     luma_cache,
     file_popularity,
     space_transfers,
+    space_transfers_cache,
     transfer,
     storage_sync_histogram,
     autocleaning

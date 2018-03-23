@@ -22,19 +22,17 @@
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
 
--type diff() :: datastore:diff(transfer()).
 -type space_transfers() :: #space_transfers{}.
--type doc() :: datastore_doc:doc(transfer()).
--type timestamp() :: non_neg_integer().
+-type doc() :: datastore_doc:doc(space_transfers()).
 
--export_type([id/0, space_transfers/0, doc/0, timestamp/0]).
+-export_type([space_transfers/0, doc/0]).
 
 -define(CTX, #{
     model => ?MODULE,
     sync_enabled => true,
     remote_driver => datastore_remote_driver,
-    mutator => oneprovider:get_id_or_undefined(),
-    local_links_tree_id => oneprovider:get_id_or_undefined()
+    mutator => oneprovider:get_id_or_undefined()
+%%    local_links_tree_id => oneprovider:get_id_or_undefined()
 }).
 
 %%%===================================================================
@@ -61,7 +59,7 @@ get(SpaceId) ->
     space_transfers() | {error, term()}.
 get(ProviderId, SpaceId) ->
     case datastore_model:get(?CTX, datastore_utils:gen_key(ProviderId, SpaceId)) of
-        {ok, Doc} -> Doc#document.value;
+        {ok, Doc} -> {ok, Doc#document.value};
         Error -> Error
     end.
 
@@ -87,19 +85,19 @@ update(SpaceId, SourceProviderId, Bytes) ->
         CurrentTime = provider_logic:zone_time_seconds(),
         {ok, SpaceTransfers#transfer{
             last_update = maps:put(SourceProviderId, CurrentTime, LastUpdateMap),
-            min_hist = update_histogram(
+            min_hist = transfer_histogram:update(
                 SourceProviderId, Bytes, MinHistograms,
                 ?FIVE_SEC_TIME_WINDOW, LastUpdate, CurrentTime
             ),
-            hr_hist = update_histogram(
+            hr_hist = transfer_histogram:update(
                 SourceProviderId, Bytes, HrHistograms,
                 ?MIN_TIME_WINDOW, LastUpdate, CurrentTime
             ),
-            dy_hist = update_histogram(
+            dy_hist = transfer_histogram:update(
                 SourceProviderId, Bytes, DyHistograms,
                 ?HOUR_TIME_WINDOW, LastUpdate, CurrentTime
             ),
-            mth_hist = update_histogram(
+            mth_hist = transfer_histogram:update(
                 SourceProviderId, Bytes, MthHistograms,
                 ?DAY_TIME_WINDOW, LastUpdate, CurrentTime
             )
@@ -132,68 +130,10 @@ delete(SpaceId) ->
     datastore_model:delete(?CTX, Key).
 
 
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Creates a new time_slot_histogram based on LastUpdate time and Window.
-%% The length of created histogram is based on the Window.
-%% @end
-%%-------------------------------------------------------------------
--spec update_histogram(oneprovider:id(), Bytes :: non_neg_integer(),
-    Histograms, Window :: non_neg_integer(), LastUpdate :: non_neg_integer(),
-    CurrentTime :: non_neg_integer()) -> Histograms
-    when Histograms :: maps:map(od_provider:id(), histogram:histogram()).
-update_histogram(ProviderId, Bytes, Histograms, Window, LastUpdate, CurrentTime) ->
-    Histogram = case maps:find(ProviderId, Histograms) of
-        error ->
-            new_time_slot_histogram(LastUpdate, Window);
-        {ok, Values} ->
-            new_time_slot_histogram(LastUpdate, Window, Values)
-    end,
-    UpdatedHistogram = time_slot_histogram:increment(Histogram, CurrentTime, Bytes),
-    UpdatedValues = time_slot_histogram:get_histogram_values(UpdatedHistogram),
-    maps:put(ProviderId, UpdatedValues, Histograms).
-
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Creates a new time_slot_histogram based on LastUpdate time and Window.
-%% The length of created histogram is based on the Window.
-%% @end
-%%-------------------------------------------------------------------
--spec new_time_slot_histogram(LastUpdate :: non_neg_integer(),
-    Window :: non_neg_integer()) -> time_slot_histogram:histogram().
-new_time_slot_histogram(LastUpdate, ?FIVE_SEC_TIME_WINDOW) ->
-    new_time_slot_histogram(LastUpdate, ?FIVE_SEC_TIME_WINDOW,
-        histogram:new(?MIN_HIST_LENGTH));
-new_time_slot_histogram(LastUpdate, ?MIN_TIME_WINDOW) ->
-    new_time_slot_histogram(LastUpdate, ?MIN_TIME_WINDOW,
-        histogram:new(?HOUR_HIST_LENGTH));
-new_time_slot_histogram(LastUpdate, ?HOUR_TIME_WINDOW) ->
-    new_time_slot_histogram(LastUpdate, ?HOUR_TIME_WINDOW,
-        histogram:new(?DAY_HIST_LENGTH));
-new_time_slot_histogram(LastUpdate, ?DAY_TIME_WINDOW) ->
-    new_time_slot_histogram(LastUpdate, ?DAY_TIME_WINDOW,
-        histogram:new(?MONTH_HIST_LENGTH)).
-
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Creates a new time_slot_histogram based on LastUpdate time, Window and values.
-%% @end
-%%-------------------------------------------------------------------
--spec new_time_slot_histogram(LastUpdate :: non_neg_integer(),
-    Window :: non_neg_integer(), histogram:histogram()) ->
-    time_slot_histogram:histogram().
-new_time_slot_histogram(LastUpdate, Window, Values) ->
-    time_slot_histogram:new(LastUpdate, Window, Values).
-
-
 %%%===================================================================
 %%% datastore_model callbacks
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -205,6 +145,7 @@ new_time_slot_histogram(LastUpdate, Window, Values) ->
 get_ctx() ->
     ?CTX.
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns model's record version.
@@ -213,6 +154,7 @@ get_ctx() ->
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
     1.
+
 
 %%--------------------------------------------------------------------
 %% @doc
