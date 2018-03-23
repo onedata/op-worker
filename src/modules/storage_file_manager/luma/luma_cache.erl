@@ -20,7 +20,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([invalidate/1, get_user_ctx/4, get_user_id/3, get_group_ctx/4, get_group_id/3]).
+-export([invalidate/1, get_user_ctx/4, get_user_id/3, get_group_id/3]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -46,12 +46,8 @@
 
 -define(LUMA_USER_ROOT, <<"luma_user_">>).
 -define(REV_LUMA_USER_ROOT, <<"rev_luma_user_">>).
--define(LUMA_GROUP_ROOT, <<"luma_group_">>).
 -define(REV_LUMA_GROUP_ROOT, <<"rev_luma_group_">>).
--define(ROOTS, [
-    ?LUMA_USER_ROOT, ?REV_LUMA_USER_ROOT,
-    ?LUMA_GROUP_ROOT, ?REV_LUMA_GROUP_ROOT
-]).
+-define(ROOTS, [?LUMA_USER_ROOT, ?REV_LUMA_USER_ROOT, ?REV_LUMA_GROUP_ROOT]).
 
 -define(SEP, <<"##">>).
 
@@ -81,26 +77,6 @@ get_user_ctx(UserId, StorageId, QueryFun, HelperName) ->
     end.
 
 %%TODO note GroupId can be SpaceId
-get_group_ctx(GroupOrSpaceId, StorageId, QueryFun, HelperName) ->
-    case get_links(?LUMA_GROUP_ROOT, StorageId, GroupOrSpaceId) of
-        {ok, EncodedGroupCtx} ->
-            {ok, decode_group_ctx(EncodedGroupCtx, HelperName)};
-        {error, not_found} ->
-            try QueryFun() of
-                {ok, GroupCtx} ->
-                    EncodedGroupCtx = encode_group_ctx(GroupCtx, HelperName),
-                    add_link(?LUMA_GROUP_ROOT, StorageId, GroupOrSpaceId, EncodedGroupCtx),
-                    {ok, GroupCtx};
-                Error ->
-                    ?error_stacktrace("Fetching group_ctx from LUMA failed due to ~p", [Error]),
-                    Error
-            catch
-                Error:Reason ->
-                    ?error_stacktrace("Fetching group_ctx from LUMA failed due to ~p", [{Error, Reason}]),
-                    {error, Reason}
-            end
-    end.
-
 get_user_id(UidOrName, StorageId, QueryFun) ->
     UidOrNameBin = str_utils:to_binary(UidOrName),
     case get_links(?REV_LUMA_USER_ROOT, StorageId, UidOrNameBin) of
