@@ -4,6 +4,46 @@
 CHANGELOG
 ---------
 
+### 18.02.0-beta3
+
+* VFS-4249 storage_sync counters bugfixes and improvements
+* Enable graphite support for rtransfer_link.
+* Enable SSL for rtransfer_link.
+* Update storage select
+* Improve rtransfer prefetching counting.
+* Integrate rtransfer_link.
+* Switch to rebar-dependency helpers.
+* VFS-4114 - bugfix in storage_sync histogram
+* VFS-4155 add client keepalive msg handling
+* VFS-4155 increase cowboy and clproto timeouts.
+* VFS-4171 Added folly dependency
+* VFS-4171 Updated cberl ref to LibEvent based version
+* Updating GUI, including: VFS-4157 * VFS-4157 Requesting completed transfers list with delay to be compatible with backend fixes
+* VFS-4222 Force gs connection start only on the dedicated node
+* VFS-4217 - fix race on increasing deleted_files_counter and checking whether sync has been finished
+* Updating GUI, including: VFS-4223 * VFS-4223 Fixed long time of loading data distribution modal
+* VFS-4222 Separate graph sync status check from triggering reconnect
+* Updating GUI, including: VFS-4027 * VFS-4027 Added support for peta-, exa-, zetta- and yottabytes
+* VFS-4158 Add socket timeout test
+* VFS-4114 - transfer management fixes and refactor: this commit includes: * fix for race condition on adding transfer to active transfers link * major refactor of transfer module and model * fix for handling error when replication of not yet synced file has been scheduled * added backoff algorithm for retrying transfers * added files_to_process and files_processed counters in transfer model * refactor of multi_provider_rest_test_SUITE
+* VFS-4211 Restarting listeners is now done by node_manager because some ets tables need to be created in the process
+* Updating GUI, including: VFS-4206 * VFS-4206 Changed speed units on transfers view to bps
+* VFS-4209 Fix synchronization blocking with many spaces
+* VFS-4207 Do not match listener's stopping to ok to avoid crashes when it is not running
+* VFS-4207 Move listener restarting logic from onepanel to oneprovider, restart GS connection after ssl restart
+* VFS-4158 Fix root links scopes
+* VFS-4163 - use transfer timestamps as link keys
+* VFS-4158 Fix race in ensure connected
+* VFS-4158 Improve provider connection management
+* Updating GUI, including: VFS-4012, VFS-4154 * VFS-4012 Info about remote statistics on transfers view; fixed transfer row sort issues * VFS-4154 Dynamically adjust polling interval of transfers data; fixed transfer chart loading
+* VFS-4158 Fix minor bug in router
+* VFS-4158 Make connections asynchronous
+* VFS-4054 Make default IP undefined
+* VFS-4054 Delete check_node_ip_address from node_manager.
+* VFs-4054 Remove getting cluster ips from node_manager_plugin
+* VFS-4158 Fix batmatch in sequencer
+
+
 ### 18.02.0-beta2
 
 * Update app.config

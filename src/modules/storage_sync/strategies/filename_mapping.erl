@@ -205,8 +205,12 @@ to_storage_logical_path(SpaceId, StorageId, FilePath) ->
 %%--------------------------------------------------------------------
 -spec filter_space_id(od_space:id(), file_meta:path()) -> file_meta:path().
 filter_space_id(SpaceId, FilePath) ->
-    [Sep, SpaceId | Path] = fslogic_path:split(FilePath),
-    fslogic_path:join([Sep | Path]).
+    case fslogic_path:split(FilePath) of
+        [Sep, SpaceId | Path] ->
+            fslogic_path:join([Sep | Path]);
+        _ ->
+            FilePath
+    end.
 
 %%--------------------------------------------------------------------
 %% @private

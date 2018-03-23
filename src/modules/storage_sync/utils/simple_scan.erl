@@ -211,7 +211,7 @@ maybe_import_file_with_existing_metadata(Job = #space_strategy_job{
     CallbackModule = storage_sync_utils:module(Job),
     FileType = file_meta:type(Mode),
     LogicalAttrsResponse = #fuse_response{fuse_response = FileAttr} = get_attr(FileCtx),
-    {CanonicalPath, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
+    {CanonicalPath, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
 
     case is_imported(StorageId, CanonicalPath, FileType, LogicalAttrsResponse) of
         true ->
@@ -278,7 +278,7 @@ import_file(#space_strategy_job{
     ParentUuid = file_ctx:get_uuid_const(ParentCtx),
     FileMetaDoc = file_meta:new_doc(FileName, file_meta:type(Mode),
         Mode band 8#1777, OwnerId, GroupId, FSize, ParentUuid),
-    {ParentPath, _} = file_ctx:get_canonical_path(ParentCtx),
+    {ParentPath, _} = file_ctx:get_storage_file_id(ParentCtx),
     {ok, FileUuid} = create_file_meta(FileMetaDoc, ParentUuid),
     {ok, _} = create_times(FileUuid, MTime, ATime, CTime, SpaceId),
     CanonicalPath = filename:join([ParentPath, FileName]),

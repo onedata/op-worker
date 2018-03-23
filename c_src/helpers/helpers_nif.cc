@@ -4,7 +4,7 @@
 #include "monitoring/monitoring.h"
 
 #include <asio.hpp>
-#include <asio/executor_work.hpp>
+#include <asio/executor_work_guard.hpp>
 
 #include <chrono>
 #include <map>
@@ -42,8 +42,8 @@ using helper_args_t = std::unordered_map<folly::fbstring, folly::fbstring>;
 struct HelpersNIF {
     struct HelperIOService {
         asio::io_service service;
-        asio::executor_work<asio::io_service::executor_type> work =
-            asio::make_work(service);
+        asio::executor_work_guard<asio::io_service::executor_type> work =
+            asio::make_work_guard(service);
         folly::fbvector<std::thread> workers;
     };
 

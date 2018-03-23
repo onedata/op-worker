@@ -254,21 +254,81 @@ delete_storage_dir(FileCtx, UserCtx) ->
 %%--------------------------------------------------------------------
 -spec create_parent_dirs(file_ctx:ctx()) -> file_ctx:ctx().
 create_parent_dirs(FileCtx) ->
-    {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
-    SpaceId = file_ctx:get_space_id_const(FileCtx2),
-    {Storage, FileCtx3} = file_ctx:get_storage_doc(FileCtx2),
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    {Storage, FileCtx3} = file_ctx:get_storage_doc(FileCtx),
+    {ParentCtx, FileCtx4} = file_ctx:get_parent(FileCtx3, undefined),
+    create_parent_dirs(ParentCtx, [], SpaceId, Storage),
+    FileCtx4.
 
-    LeafLess = filename:dirname(StorageFileId),
-    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceId,
-        undefined, Storage, LeafLess, undefined),
-    case storage_file_manager:mkdir(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
-        ok ->
-            FileCtx3;
-        {error, eexist} ->
-            FileCtx3
-    end.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Tail recursive helper function of ?MODULE:create_parent_dirs/1
+%% @end
+%%-------------------------------------------------------------------
+-spec create_parent_dirs(file_ctx:ctx(), [file_ctx:ctx()], od_space:id(), storage:doc()) -> ok.
+create_parent_dirs(FileCtx, ChildrenDirCtxs, SpaceId, Storage) ->
+    case file_ctx:is_space_dir_const(FileCtx) of
+        true ->
+            lists:foreach(fun(Ctx) ->
+                create_dir(Ctx, SpaceId, Storage)
+            end, [FileCtx | ChildrenDirCtxs]);
+        false ->
+            {ParentCtx, FileCtx2} = file_ctx:get_parent(FileCtx, undefined),
+            create_parent_dirs(ParentCtx, [FileCtx2 | ChildrenDirCtxs], SpaceId, Storage)
+    end.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates directory on storage with suitable mode and owner.
+%% @end
+%%-------------------------------------------------------------------
+-spec create_dir(file_ctx:ctx(), od_space:id(), storage:doc()) -> file_ctx:ctx().
+create_dir(FileCtx, SpaceId, Storage) ->
+    {FileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
+    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceId,
+        undefined, Storage, FileId, undefined),
+    try
+        {#document{value = #file_meta{
+            mode = Mode}}, FileCtx3} = file_ctx:get_file_doc(FileCtx2),
+        case file_ctx:is_space_dir_const(FileCtx3) of
+            true ->
+                mkdir_and_maybe_chown(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, FileCtx3, false);
+            false ->
+                mkdir_and_maybe_chown(SFMHandle0, Mode, FileCtx3, true)
+        end
+    catch
+        Error:Reason ->
+            ?error_stacktrace("Creating parent dir ~p failed due to ~p.
+            Parent dir will be create with default mode.", [FileId, {Error, Reason}]),
+            mkdir_and_maybe_chown(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, FileCtx, true)
+    end.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates directory on storage and chowns it if ShouldChown flag is set to
+%% true.
+%% @end
+%%-------------------------------------------------------------------
+-spec mkdir_and_maybe_chown(storage_file_manager:handle(), non_neg_integer(),
+    file_ctx:ctx(), boolean()) -> any().
+mkdir_and_maybe_chown(SFMHandle, Mode, FileCtx, ShouldChown) ->
+    case storage_file_manager:mkdir(SFMHandle, Mode, false) of
+        ok ->
+            case ShouldChown of
+                true ->
+                    files_to_chown:chown_or_schedule_chowning(FileCtx);
+                false ->
+                    ok
+            end,
+            FileCtx;
+        {error, eexist} ->
+            FileCtx
+    end.
