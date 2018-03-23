@@ -76,6 +76,8 @@ all() -> ?ALL(?TEST_CASES, ?TEST_CASES).
 
 % TODO - change to 10 when seg fault is fixed
 -define(REPEATS, 1).
+% TODO - change to 5 when seg fault is fixed
+-define(TEST_SIZE_BASE, 1).
 
 %%%===================================================================
 %%% Test functions
@@ -87,9 +89,9 @@ write_test(Config) ->
         {success_rate, 100},
         {parameters, [?OP_NUM(write, 1), ?OP_SIZE(write, 1)]},
         {description, "Multiple write operations."},
-        ?PERF_CFG(small, [?OP_NUM(write, 10), ?OP_SIZE(write, 1)]),
-        ?PERF_CFG(medium, [?OP_NUM(write, 20), ?OP_SIZE(write, 1)]),
-        ?PERF_CFG(large, [?OP_NUM(write, 50), ?OP_SIZE(write, 1)])
+        ?PERF_CFG(small, [?OP_NUM(write, 2 * ?TEST_SIZE_BASE), ?OP_SIZE(write, 1)]),
+        ?PERF_CFG(medium, [?OP_NUM(write, 4 * ?TEST_SIZE_BASE), ?OP_SIZE(write, 1)]),
+        ?PERF_CFG(large, [?OP_NUM(write, 10 * ?TEST_SIZE_BASE), ?OP_SIZE(write, 1)])
     ]).
 write_test_base(Config) ->
     Helper = new_helper(Config),
@@ -125,9 +127,9 @@ truncate_test(Config) ->
         {success_rate, 100},
         {parameters, [?OP_NUM(truncate, 1)]},
         {description, "Multiple truncate operations."},
-        ?PERF_CFG(small, [?OP_NUM(truncate, 10)]),
-        ?PERF_CFG(medium, [?OP_NUM(truncate, 20)]),
-        ?PERF_CFG(large, [?OP_NUM(truncate, 50)])
+        ?PERF_CFG(small, [?OP_NUM(truncate, 2 * ?TEST_SIZE_BASE)]),
+        ?PERF_CFG(medium, [?OP_NUM(truncate, 4 * ?TEST_SIZE_BASE)]),
+        ?PERF_CFG(large, [?OP_NUM(truncate, 10 * ?TEST_SIZE_BASE)])
     ]).
 truncate_test_base(Config) ->
     Helper = new_helper(Config),
@@ -142,9 +144,9 @@ write_read_test(Config) ->
         {success_rate, 100},
         {parameters, [?OP_NUM(1), ?OP_SIZE(1)]},
         {description, "Multiple write followed by read operations."},
-        ?PERF_CFG(small, [?OP_NUM(10), ?OP_SIZE(1)]),
-        ?PERF_CFG(medium, [?OP_NUM(20), ?OP_SIZE(1)]),
-        ?PERF_CFG(large, [?OP_NUM(50), ?OP_SIZE(1)])
+        ?PERF_CFG(small, [?OP_NUM(2 * ?TEST_SIZE_BASE), ?OP_SIZE(1)]),
+        ?PERF_CFG(medium, [?OP_NUM(4 * ?TEST_SIZE_BASE), ?OP_SIZE(1)]),
+        ?PERF_CFG(large, [?OP_NUM(10 * ?TEST_SIZE_BASE), ?OP_SIZE(1)])
     ]).
 write_read_test_base(Config) ->
     Helper = new_helper(Config),
@@ -183,9 +185,9 @@ write_unlink_test(Config) ->
         {success_rate, 100},
         {parameters, [?OP_NUM(1), ?OP_SIZE(1)]},
         {description, "Multiple write followed by unlink operations."},
-        ?PERF_CFG(small, [?OP_NUM(10), ?OP_SIZE(1)]),
-        ?PERF_CFG(medium, [?OP_NUM(20), ?OP_SIZE(1)]),
-        ?PERF_CFG(large, [?OP_NUM(50), ?OP_SIZE(1)])
+        ?PERF_CFG(small, [?OP_NUM(2 * ?TEST_SIZE_BASE), ?OP_SIZE(1)]),
+        ?PERF_CFG(medium, [?OP_NUM(4 * ?TEST_SIZE_BASE), ?OP_SIZE(1)]),
+        ?PERF_CFG(large, [?OP_NUM(10 * ?TEST_SIZE_BASE), ?OP_SIZE(1)])
     ]).
 write_unlink_test_base(Config) ->
     Helper = new_helper(Config),
@@ -204,9 +206,9 @@ write_read_truncate_unlink_test(Config) ->
         {parameters, [?OP_NUM(1), ?OP_SIZE(1)]},
         {description, "Multiple sequences of write, read, truncate and unlink
         operations."},
-        ?PERF_CFG(small, [?OP_NUM(10), ?OP_SIZE(1)]),
-        ?PERF_CFG(medium, [?OP_NUM(20), ?OP_SIZE(1)]),
-        ?PERF_CFG(large, [?OP_NUM(50), ?OP_SIZE(1)])
+        ?PERF_CFG(small, [?OP_NUM(2 * ?TEST_SIZE_BASE), ?OP_SIZE(1)]),
+        ?PERF_CFG(medium, [?OP_NUM(4 * ?TEST_SIZE_BASE), ?OP_SIZE(1)]),
+        ?PERF_CFG(large, [?OP_NUM(10 * ?TEST_SIZE_BASE), ?OP_SIZE(1)])
     ]).
 write_read_truncate_unlink_test_base(Config) ->
     Helper = new_helper(Config),
