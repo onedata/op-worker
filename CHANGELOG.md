@@ -4,6 +4,11 @@
 CHANGELOG
 ---------
 
+### 18.02.0-beta5
+
+* Releasing new version 18.02.0-beta5
+
+
 ### 18.02.0-beta4
 
 * VFS-4274 Fixed helpers ref in rebar.config
