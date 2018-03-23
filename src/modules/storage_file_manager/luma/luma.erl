@@ -151,7 +151,7 @@ get_server_user_ctx(SessionId, UserId, GroupId, SpaceId, StorageDoc, HelperName)
     case storage:select_helper(StorageDoc, HelperName) of
         {ok, Helper} ->
             StorageId = storage:get_id(StorageDoc),
-            luma_cache:get_user_ctx(UserId, StorageId,
+            luma_cache:get_user_ctx(UserId, StorageId, utils:ensure_defined(GroupId, undefined, SpaceId),
                 fun() ->
                     get_user_ctx([
                         {fun luma:get_admin_ctx/2, [UserId, Helper]},

@@ -31,6 +31,7 @@
     get_server_user_ctx_should_fail_with_invalid_fetch_user_ctx/1,
     get_server_user_ctx_should_fail_when_luma_server_enabled_and_ctx_not_fetched/1,
     get_server_user_ctx_should_generate_user_ctx/1,
+    get_server_user_ctx_should_generate_user_ctx_and_cache_reverse_mapping/1,
     get_server_user_ctx_should_call_generate_user_ctx_once/1,
     get_server_user_ctx_should_call_generate_user_ctx_twice/1,
     get_server_user_ctx_should_fallback_to_admin_ctx/1,
@@ -47,6 +48,7 @@
     get_posix_user_ctx_should_fetch_user_ctx_twice/1,
     get_posix_user_ctx_should_fetch_user_ctx_by_group_id_once/1,
     get_posix_user_ctx_should_fetch_user_ctx_by_group_id_twice/1,
+    get_posix_user_ctx_by_group_id_should_generate_gid_by_group_id_when_mapping_is_not_found_and_save_reverse_mapping_in_cache/1,
     get_posix_user_ctx_by_group_id_should_generate_gid_by_group_id_when_mapping_is_not_found_once/1,
     get_posix_user_ctx_by_group_id_should_generate_gid_by_group_id_when_mapping_is_not_found_twice/1,
     get_posix_user_ctx_by_group_id_should_generate_gid_by_space_id_once_when_luma_returns_null_and_group_is_undefined/1,
@@ -64,6 +66,7 @@ all() ->
         get_server_user_ctx_should_fail_with_invalid_fetch_user_ctx,
         get_server_user_ctx_should_fail_when_luma_server_enabled_and_ctx_not_fetched,
         get_server_user_ctx_should_generate_user_ctx,
+        get_server_user_ctx_should_generate_user_ctx_and_cache_reverse_mapping,
         get_server_user_ctx_should_call_generate_user_ctx_once,
         get_server_user_ctx_should_call_generate_user_ctx_twice,
         get_server_user_ctx_should_fallback_to_admin_ctx,
@@ -80,6 +83,7 @@ all() ->
         get_posix_user_ctx_should_fetch_user_ctx_twice,
         get_posix_user_ctx_should_fetch_user_ctx_by_group_id_once,
         get_posix_user_ctx_should_fetch_user_ctx_by_group_id_twice,
+        get_posix_user_ctx_by_group_id_should_generate_gid_by_group_id_when_mapping_is_not_found_and_save_reverse_mapping_in_cache,
         get_posix_user_ctx_by_group_id_should_generate_gid_by_group_id_when_mapping_is_not_found_once,
         get_posix_user_ctx_by_group_id_should_generate_gid_by_group_id_when_mapping_is_not_found_twice,
         get_posix_user_ctx_by_group_id_should_generate_gid_by_space_id_once_when_luma_returns_null_and_group_is_undefined,
@@ -207,7 +211,7 @@ all() ->
 
 -define(SPACE_ID, <<"spaceId">>).
 -define(GROUP_ID, <<"groupId">>).
--define(GID_RANGE, {100000, 2000000}).
+-define(POSIX_ID_RANGE, {100000, 2000000}).
 
 %%%===================================================================
 %%% Test functions
@@ -218,7 +222,7 @@ get_server_user_ctx_should_fail_with_missing_helper_error(Config) ->
     Result = rpc:call(Worker, luma, get_server_user_ctx, [
         ?ROOT_SESS_ID,
         ?ROOT_USER_ID,
-        <<"spaceId">>,
+        ?SPACE_ID,
         ?POSIX_STORAGE_DOC,
         <<"helperName">>
     ]),
@@ -229,7 +233,7 @@ get_server_user_ctx_should_return_admin_ctx(Config) ->
     Result = rpc:call(Worker, luma, get_server_user_ctx, [
         ?ROOT_SESS_ID,
         ?ROOT_USER_ID,
-        <<"spaceId">>,
+        ?SPACE_ID,
         ?POSIX_STORAGE_DOC,
         ?POSIX_HELPER_NAME
     ]),
@@ -243,7 +247,7 @@ get_server_user_ctx_should_call_get_admin_ctx_once(Config) ->
     Result = rpc:call(Worker, luma, get_server_user_ctx, [
         ?ROOT_SESS_ID,
         ?ROOT_USER_ID,
-        <<"spaceId">>,
+        ?SPACE_ID,
         ?POSIX_STORAGE_DOC,
         ?POSIX_HELPER_NAME
     ]),
@@ -251,7 +255,7 @@ get_server_user_ctx_should_call_get_admin_ctx_once(Config) ->
     Result = rpc:call(Worker, luma, get_server_user_ctx, [
         ?ROOT_SESS_ID,
         ?ROOT_USER_ID,
-        <<"spaceId">>,
+        ?SPACE_ID,
         ?POSIX_STORAGE_DOC,
         ?POSIX_HELPER_NAME
     ]),
@@ -269,7 +273,7 @@ get_server_user_ctx_should_call_get_admin_ctx_twice(Config) ->
     Result = rpc:call(Worker, luma, get_server_user_ctx, [
         ?ROOT_SESS_ID,
         ?ROOT_USER_ID,
-        <<"spaceId">>,
+        ?SPACE_ID,
         ?POSIX_STORAGE_DOC,
         ?POSIX_HELPER_NAME
     ]),
@@ -279,7 +283,7 @@ get_server_user_ctx_should_call_get_admin_ctx_twice(Config) ->
     Result = rpc:call(Worker, luma, get_server_user_ctx, [
         ?ROOT_SESS_ID,
         ?ROOT_USER_ID,
-        <<"spaceId">>,
+        ?SPACE_ID,
         ?POSIX_STORAGE_DOC,
         ?POSIX_HELPER_NAME
     ]),
@@ -296,7 +300,7 @@ get_server_user_ctx_should_skip_fetch_when_luma_server_disabled(Config) ->
     rpc:call(Worker, luma, get_server_user_ctx, [
         ?MOCK_SESS_ID,
         ?MOCK_USER_ID,
-        <<"spaceId">>,
+        ?SPACE_ID,
         ?POSIX_STORAGE_DOC_DISABLED_LUMA,
         ?POSIX_HELPER_NAME
     ]),
@@ -311,7 +315,7 @@ get_server_user_ctx_should_fetch_user_ctx_from_luma_server(Config) ->
     Result = rpc:call(Worker, luma, get_server_user_ctx, [
         ?MOCK_SESS_ID,
         ?MOCK_USER_ID,
-        <<"spaceId">>,
+        ?SPACE_ID,
         ?POSIX_STORAGE_DOC,
         ?POSIX_HELPER_NAME
     ]),
@@ -329,7 +333,7 @@ get_server_user_ctx_should_fail_with_invalid_fetch_user_ctx(Config) ->
         Result = rpc:call(Worker, luma, get_server_user_ctx, [
             ?MOCK_SESS_ID,
             ?MOCK_USER_ID,
-            <<"spaceId">>,
+            ?SPACE_ID,
             ?POSIX_STORAGE_DOC,
             ?POSIX_HELPER_NAME
         ]),
@@ -348,7 +352,7 @@ get_server_user_ctx_should_fail_when_luma_server_enabled_and_ctx_not_fetched(Con
     Result = rpc:call(Worker, luma, get_server_user_ctx, [
         ?MOCK_SESS_ID,
         ?MOCK_USER_ID,
-        <<"spaceId">>,
+        ?SPACE_ID,
         ?POSIX_STORAGE_DOC,
         ?POSIX_HELPER_NAME
     ]),
@@ -359,11 +363,36 @@ get_server_user_ctx_should_generate_user_ctx(Config) ->
     Result = rpc:call(Worker, luma, get_server_user_ctx, [
         ?MOCK_SESS_ID,
         ?MOCK_USER_ID,
-        <<"spaceId">>,
+        ?SPACE_ID,
         ?POSIX_STORAGE_DOC_DISABLED_LUMA,
         ?POSIX_HELPER_NAME
     ]),
-    ?assertMatch({ok, #{<<"uid">> := _, <<"gid">> := _}}, Result).
+
+    ExpectedUid = integer_to_binary(generate_posix_identifier(?MOCK_USER_ID, ?POSIX_ID_RANGE)),
+    ExpectedGid = integer_to_binary(generate_posix_identifier(?SPACE_ID, ?POSIX_ID_RANGE)),
+    ?assertMatch({ok, #{<<"uid">> := ExpectedUid, <<"gid">> := ExpectedGid}}, Result).
+
+get_server_user_ctx_should_generate_user_ctx_and_cache_reverse_mapping(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Worker, [reverse_luma_proxy, luma], [passthrough]),
+    Result = rpc:call(Worker, luma, get_server_user_ctx, [
+        ?MOCK_SESS_ID,
+        ?MOCK_USER_ID,
+        ?SPACE_ID,
+        ?POSIX_STORAGE_DOC_DISABLED_LUMA,
+        ?POSIX_HELPER_NAME
+    ]),
+    ExpectedUid = integer_to_binary(generate_posix_identifier(?MOCK_USER_ID, ?POSIX_ID_RANGE)),
+    ExpectedGid = integer_to_binary(generate_posix_identifier(?SPACE_ID, ?POSIX_ID_RANGE)),
+
+    Result2 = rpc:call(Worker, reverse_luma, get_user_id, [ExpectedUid, ?POSIX_STORAGE_DOC_DISABLED_LUMA]),
+
+    test_utils:mock_assert_num_calls(Worker, luma, generate_user_ctx,
+        ['_', '_', '_'], 1),
+    test_utils:mock_assert_num_calls(Worker, reverse_luma_proxy, get_user_id,
+        ['_', '_', '_', '_', '_'], 0),
+    ?assertEqual(Result2, {ok, ?MOCK_USER_ID}),
+    ?assertMatch({ok, #{<<"uid">> := ExpectedUid, <<"gid">> := ExpectedGid}}, Result).
 
 get_server_user_ctx_should_call_generate_user_ctx_once(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -371,7 +400,7 @@ get_server_user_ctx_should_call_generate_user_ctx_once(Config) ->
     Result = rpc:call(Worker, luma, get_server_user_ctx, [
         ?MOCK_SESS_ID,
         ?MOCK_USER_ID,
-        <<"spaceId">>,
+        ?SPACE_ID,
         ?POSIX_STORAGE_DOC_DISABLED_LUMA,
         ?POSIX_HELPER_NAME
     ]),
@@ -379,7 +408,7 @@ get_server_user_ctx_should_call_generate_user_ctx_once(Config) ->
     Result = rpc:call(Worker, luma, get_server_user_ctx, [
         ?MOCK_SESS_ID,
         ?MOCK_USER_ID,
-        <<"spaceId">>,
+        ?SPACE_ID,
         ?POSIX_STORAGE_DOC_DISABLED_LUMA,
         ?POSIX_HELPER_NAME
     ]),
@@ -395,7 +424,7 @@ get_server_user_ctx_should_call_generate_user_ctx_twice(Config) ->
     Result = rpc:call(Worker, luma, get_server_user_ctx, [
         ?MOCK_SESS_ID,
         ?MOCK_USER_ID,
-        <<"spaceId">>,
+        ?SPACE_ID,
         ?POSIX_STORAGE_DOC_DISABLED_LUMA,
         ?POSIX_HELPER_NAME
     ]),
@@ -405,7 +434,7 @@ get_server_user_ctx_should_call_generate_user_ctx_twice(Config) ->
     Result = rpc:call(Worker, luma, get_server_user_ctx, [
         ?MOCK_SESS_ID,
         ?MOCK_USER_ID,
-        <<"spaceId">>,
+        ?SPACE_ID,
         ?POSIX_STORAGE_DOC_DISABLED_LUMA,
         ?POSIX_HELPER_NAME
     ]),
@@ -420,7 +449,7 @@ get_server_user_ctx_should_fallback_to_admin_ctx(Config) ->
     Result = rpc:call(Worker, luma, get_server_user_ctx, [
         ?MOCK_SESS_ID,
         ?MOCK_USER_ID,
-        <<"spaceId">>,
+        ?SPACE_ID,
         ?CEPH_STORAGE_DOC_LUMA_DISABLED(true),
         ?CEPH_HELPER_NAME
     ]),
@@ -433,7 +462,7 @@ get_server_user_ctx_should_fallback_to_admin_ctx_once(Config) ->
     Result = rpc:call(Worker, luma, get_server_user_ctx, [
         ?MOCK_SESS_ID,
         ?MOCK_USER_ID,
-        <<"spaceId">>,
+        ?SPACE_ID,
         ?CEPH_STORAGE_DOC_LUMA_DISABLED(true),
         ?CEPH_HELPER_NAME
     ]),
@@ -441,7 +470,7 @@ get_server_user_ctx_should_fallback_to_admin_ctx_once(Config) ->
     Result = rpc:call(Worker, luma, get_server_user_ctx, [
         ?MOCK_SESS_ID,
         ?MOCK_USER_ID,
-        <<"spaceId">>,
+        ?SPACE_ID,
         ?CEPH_STORAGE_DOC_LUMA_DISABLED(true),
         ?CEPH_HELPER_NAME
     ]),
@@ -458,7 +487,7 @@ get_server_user_ctx_should_fallback_to_admin_ctx_twice(Config) ->
     Result = rpc:call(Worker, luma, get_server_user_ctx, [
         ?MOCK_SESS_ID,
         ?MOCK_USER_ID,
-        <<"spaceId">>,
+        ?SPACE_ID,
         ?CEPH_STORAGE_DOC_LUMA_DISABLED(true),
         ?CEPH_HELPER_NAME
     ]),
@@ -466,7 +495,7 @@ get_server_user_ctx_should_fallback_to_admin_ctx_twice(Config) ->
     Result = rpc:call(Worker, luma, get_server_user_ctx, [
         ?MOCK_SESS_ID,
         ?MOCK_USER_ID,
-        <<"spaceId">>,
+        ?SPACE_ID,
         ?CEPH_STORAGE_DOC_LUMA_DISABLED(true),
         ?CEPH_HELPER_NAME
     ]),
@@ -486,14 +515,14 @@ get_client_user_ctx_should_fetch_user_ctx_from_luma_server_once(Config) ->
     Result = rpc:call(Worker, luma, get_client_user_ctx, [
         ?MOCK_SESS_ID,
         ?MOCK_USER_ID,
-        <<"spaceId">>,
+        ?SPACE_ID,
         ?CEPH_STORAGE_DOC(true),
         ?CEPH_HELPER_NAME
     ]),
     Result = rpc:call(Worker, luma, get_client_user_ctx, [
         ?MOCK_SESS_ID,
         ?MOCK_USER_ID,
-        <<"spaceId">>,
+        ?SPACE_ID,
         ?CEPH_STORAGE_DOC(true),
         ?CEPH_HELPER_NAME
     ]),
@@ -511,7 +540,7 @@ get_client_user_ctx_should_fetch_user_ctx_from_luma_server_twice(Config) ->
     Result = rpc:call(Worker, luma, get_client_user_ctx, [
         ?MOCK_SESS_ID,
         ?MOCK_USER_ID,
-        <<"spaceId">>,
+        ?SPACE_ID,
         ?CEPH_STORAGE_DOC(true),
         ?CEPH_HELPER_NAME
     ]),
@@ -519,7 +548,7 @@ get_client_user_ctx_should_fetch_user_ctx_from_luma_server_twice(Config) ->
     Result = rpc:call(Worker, luma, get_client_user_ctx, [
         ?MOCK_SESS_ID,
         ?MOCK_USER_ID,
-        <<"spaceId">>,
+        ?SPACE_ID,
         ?CEPH_STORAGE_DOC(true),
         ?CEPH_HELPER_NAME
     ]),
@@ -534,7 +563,7 @@ get_client_user_ctx_should_return_insecure_user_ctx_once(Config) ->
     Result = rpc:call(Worker, luma, get_client_user_ctx, [
         ?MOCK_SESS_ID,
         ?MOCK_USER_ID,
-        <<"spaceId">>,
+        ?SPACE_ID,
         ?CEPH_STORAGE_DOC_LUMA_DISABLED(true),
         ?CEPH_HELPER_NAME
     ]),
@@ -542,7 +571,7 @@ get_client_user_ctx_should_return_insecure_user_ctx_once(Config) ->
     Result = rpc:call(Worker, luma, get_client_user_ctx, [
         ?MOCK_SESS_ID,
         ?MOCK_USER_ID,
-        <<"spaceId">>,
+        ?SPACE_ID,
         ?CEPH_STORAGE_DOC_LUMA_DISABLED(true),
         ?CEPH_HELPER_NAME
     ]),
@@ -558,7 +587,7 @@ get_client_user_ctx_should_return_insecure_user_ctx_twice(Config) ->
     Result = rpc:call(Worker, luma, get_client_user_ctx, [
         ?MOCK_SESS_ID,
         ?MOCK_USER_ID,
-        <<"spaceId">>,
+        ?SPACE_ID,
         ?CEPH_STORAGE_DOC_LUMA_DISABLED(true),
         ?CEPH_HELPER_NAME
     ]),
@@ -566,7 +595,7 @@ get_client_user_ctx_should_return_insecure_user_ctx_twice(Config) ->
     Result = rpc:call(Worker, luma, get_client_user_ctx, [
         ?MOCK_SESS_ID,
         ?MOCK_USER_ID,
-        <<"spaceId">>,
+        ?SPACE_ID,
         ?CEPH_STORAGE_DOC_LUMA_DISABLED(true),
         ?CEPH_HELPER_NAME
     ]),
@@ -581,14 +610,14 @@ get_client_user_ctx_should_fail_with_undefined_user_ctx(Config) ->
     Result = rpc:call(Worker, luma, get_client_user_ctx, [
         ?MOCK_SESS_ID,
         ?MOCK_USER_ID,
-        <<"spaceId">>,
+        ?SPACE_ID,
         ?CEPH_STORAGE_DOC_LUMA_DISABLED(false),
         ?CEPH_HELPER_NAME
     ]),
     Result = rpc:call(Worker, luma, get_client_user_ctx, [
         ?MOCK_SESS_ID,
         ?MOCK_USER_ID,
-        <<"spaceId">>,
+        ?SPACE_ID,
         ?CEPH_STORAGE_DOC_LUMA_DISABLED(false),
         ?CEPH_HELPER_NAME
     ]),
@@ -605,7 +634,7 @@ get_posix_user_ctx_should_return_server_user_ctx(Config) ->
     Result = rpc:call(Worker, luma, get_posix_user_ctx, [
         ?MOCK_SESS_ID,
         ?MOCK_USER_ID,
-        <<"spaceId">>
+        ?SPACE_ID
     ]),
     test_utils:mock_assert_num_calls(Worker, luma, get_server_user_ctx,
         ['_', '_', '_', '_', '_'], 1),
@@ -621,7 +650,7 @@ get_posix_user_ctx_should_generate_user_ctx(Config) ->
     Result = rpc:call(Worker, luma, get_posix_user_ctx, [
         ?MOCK_SESS_ID,
         ?MOCK_USER_ID,
-        <<"spaceId">>
+        ?SPACE_ID
     ]),
     {Uid, Gid} = ?assertMatch({_, _}, Result),
     ?assert(is_integer(Uid)),
@@ -636,12 +665,12 @@ get_posix_user_ctx_should_fetch_user_ctx(Config) ->
     Result = rpc:call(Worker, luma, get_posix_user_ctx, [
         ?MOCK_SESS_ID,
         ?MOCK_USER_ID,
-        <<"spaceId">>
+        ?SPACE_ID
     ]),
     Result = rpc:call(Worker, luma, get_posix_user_ctx, [
         ?MOCK_SESS_ID,
         ?MOCK_USER_ID,
-        <<"spaceId">>
+        ?SPACE_ID
     ]),
     test_utils:mock_assert_num_calls(Worker, luma_proxy, get_user_ctx,
         ['_', '_', '_', '_', '_'], 1),
@@ -659,13 +688,13 @@ get_posix_user_ctx_should_fetch_user_ctx_twice(Config) ->
     Result = rpc:call(Worker, luma, get_posix_user_ctx, [
         ?MOCK_SESS_ID,
         ?MOCK_USER_ID,
-        <<"spaceId">>
+        ?SPACE_ID
     ]),
     invalidate_luma_cache(Worker, ?POSIX_STORAGE_ID),
     Result = rpc:call(Worker, luma, get_posix_user_ctx, [
         ?MOCK_SESS_ID,
         ?MOCK_USER_ID,
-        <<"spaceId">>
+        ?SPACE_ID
     ]),
 
     test_utils:mock_assert_num_calls(Worker, luma_proxy, get_user_ctx,
@@ -686,13 +715,13 @@ get_posix_user_ctx_should_fetch_user_ctx_by_group_id_once(Config) ->
         ?MOCK_SESS_ID,
         ?MOCK_USER_ID,
         ?GROUP_ID,
-        <<"spaceId">>
+        ?SPACE_ID
     ]),
     Result = rpc:call(Worker, luma, get_posix_user_ctx, [
         ?MOCK_SESS_ID,
         ?MOCK_USER_ID,
         ?GROUP_ID,
-        <<"spaceId">>
+        ?SPACE_ID
     ]),
 
     test_utils:mock_assert_num_calls(Worker, luma_proxy, get_user_ctx,
@@ -714,13 +743,13 @@ get_posix_user_ctx_should_fetch_user_ctx_by_group_id_twice(Config) ->
         ?MOCK_SESS_ID,
         ?MOCK_USER_ID,
         ?GROUP_ID,
-        <<"spaceId">>
+        ?SPACE_ID
     ]),
     Result = rpc:call(Worker, luma, get_posix_user_ctx, [
         ?MOCK_SESS_ID,
         ?MOCK_USER_ID,
         ?GROUP_ID,
-        <<"spaceId">>
+        ?SPACE_ID
     ]),
 
     test_utils:mock_assert_num_calls(Worker, luma_proxy, get_user_ctx,
@@ -731,16 +760,43 @@ get_posix_user_ctx_should_fetch_user_ctx_by_group_id_twice(Config) ->
     ?assertEqual(?UID1, Uid),
     ?assertEqual(?GID2, Gid).
 
+get_posix_user_ctx_by_group_id_should_generate_gid_by_group_id_when_mapping_is_not_found_and_save_reverse_mapping_in_cache(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Worker, [luma_proxy, luma, reverse_luma_proxy], [passthrough]),
+    test_utils:mock_expect(Worker, storage, get, fun(_) ->
+        {ok, ?POSIX_STORAGE_DOC}
+    end),
+
+    Result = rpc:call(Worker, luma, get_posix_user_ctx, [
+        ?MOCK_SESS_ID,
+        ?MOCK_USER_ID,
+        ?GROUP_ID,
+        ?SPACE_ID
+    ]),
+    ExpectedGid = generate_posix_identifier(?GROUP_ID, ?POSIX_ID_RANGE),
+    Result2 = rpc:call(Worker, reverse_luma, get_group_id, [
+        ExpectedGid, ?SPACE_ID, ?POSIX_STORAGE_DOC
+    ]),
+
+    test_utils:mock_assert_num_calls(Worker, luma_proxy, get_user_ctx,
+        ['_', '_', '_', '_', '_'], 1),
+    test_utils:mock_assert_num_calls(Worker, luma_proxy, get_group_ctx,
+        ['_', '_', '_', '_'], 1),
+    test_utils:mock_assert_num_calls(Worker, luma, generate_group_ctx,
+        ['_', '_', '_', '_'], 1),
+    test_utils:mock_assert_num_calls(Worker, reverse_luma_proxy, get_group_id,
+        ['_', '_', '_', '_', '_'], 0),
+    {Uid, Gid} = ?assertMatch({_, _}, Result),
+    ?assertEqual(?UID1, Uid),
+    ?assertEqual(ExpectedGid, Gid),
+    ?assertEqual(Result2, {ok, ?GROUP_ID}).
+
 get_posix_user_ctx_by_group_id_should_generate_gid_by_group_id_when_mapping_is_not_found_once(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, [luma_proxy, luma], [passthrough]),
     test_utils:mock_expect(Worker, storage, get, fun(_) ->
         {ok, ?POSIX_STORAGE_DOC}
     end),
-    tracer:start(Worker),
-    tracer:trace_calls(luma, fetch_user_ctx),
-    tracer:trace_calls(luma_proxy, get_group_ctx),
-    tracer:trace_calls(luma, generate_group_ctx),
 
     Result = rpc:call(Worker, luma, get_posix_user_ctx, [
         ?MOCK_SESS_ID,
@@ -763,7 +819,7 @@ get_posix_user_ctx_by_group_id_should_generate_gid_by_group_id_when_mapping_is_n
         ['_', '_', '_', '_'], 1),
     {Uid, Gid} = ?assertMatch({_, _}, Result),
     ?assertEqual(?UID1, Uid),
-    ?assertEqual(generate_posix_identifier(?GROUP_ID, ?GID_RANGE), Gid).
+    ?assertEqual(generate_posix_identifier(?GROUP_ID, ?POSIX_ID_RANGE), Gid).
 
 get_posix_user_ctx_by_group_id_should_generate_gid_by_group_id_when_mapping_is_not_found_twice(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -793,7 +849,7 @@ get_posix_user_ctx_by_group_id_should_generate_gid_by_group_id_when_mapping_is_n
         ['_', '_', '_', '_'], 2),
     {Uid, Gid} = ?assertMatch({_, _}, Result),
     ?assertEqual(?UID1, Uid),
-    ?assertEqual(generate_posix_identifier(?GROUP_ID, ?GID_RANGE), Gid).
+    ?assertEqual(generate_posix_identifier(?GROUP_ID, ?POSIX_ID_RANGE), Gid).
 
 get_posix_user_ctx_by_group_id_should_generate_gid_by_space_id_once_when_luma_returns_null_and_group_is_undefined(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -822,7 +878,7 @@ get_posix_user_ctx_by_group_id_should_generate_gid_by_space_id_once_when_luma_re
     {Uid, Gid} = ?assertMatch({_, _}, Result),
     ?assertEqual(?UID1, Uid),
     ?assertEqual(?UID1, Uid),
-    ?assertEqual(generate_posix_identifier(?SPACE_ID, ?GID_RANGE), Gid).
+    ?assertEqual(generate_posix_identifier(?SPACE_ID, ?POSIX_ID_RANGE), Gid).
 
 get_posix_user_ctx_by_group_id_should_generate_gid_by_space_id_twice_when_luma_returns_null_and_group_is_undefined(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -852,7 +908,7 @@ get_posix_user_ctx_by_group_id_should_generate_gid_by_space_id_twice_when_luma_r
     {Uid, Gid} = ?assertMatch({_, _}, Result),
     ?assertEqual(?UID1, Uid),
     ?assertEqual(?UID1, Uid),
-    ?assertEqual(generate_posix_identifier(?SPACE_ID, ?GID_RANGE), Gid).
+    ?assertEqual(generate_posix_identifier(?SPACE_ID, ?POSIX_ID_RANGE), Gid).
 
 get_posix_user_ctx_by_group_id_should_return_0_for_root(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -960,6 +1016,7 @@ init_per_testcase(Case, Config) when
     Case =:= get_posix_user_ctx_by_group_id_should_generate_gid_by_space_id_once_when_luma_returns_null_and_group_is_undefined;
     Case =:= get_posix_user_ctx_by_group_id_should_generate_gid_by_space_id_twice_when_luma_returns_null_and_group_is_undefined;
     Case =:= get_posix_user_ctx_by_group_id_should_generate_gid_by_group_id_when_mapping_is_not_found_once;
+    Case =:= get_posix_user_ctx_by_group_id_should_generate_gid_by_group_id_when_mapping_is_not_found_and_save_reverse_mapping_in_cache;
     Case =:= get_posix_user_ctx_by_group_id_should_generate_gid_by_group_id_when_mapping_is_not_found_twice ->
 
     [Worker | _] = ?config(op_worker_nodes, Config),

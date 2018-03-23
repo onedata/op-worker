@@ -20,24 +20,17 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([invalidate/1, get_user_ctx/4, get_user_id/3, get_group_id/3]).
+-export([invalidate/1, get_user_ctx/4, get_user_id/3, get_group_id/3, get_user_ctx/5]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
 
--type key() :: datastore:key().
-
--type value() :: od_user:id() | od_group:id()| luma:user_ctx().
--type timestamp() :: non_neg_integer().
-
-%%% TODO new types below
 -type tree_root_id_prefix() :: binary(). % ?LUMA_USER_ROOT | ?REV_LUMA_USER_ROOT | REV_LUMA_GROUP_ROOT
 -type tree_root_id() :: binary().   % tree_root_id_prefix() concatenated with storage:id()
 -type link_id() :: binary().
 -type link_target() :: od_user:id() | od_group:id()| luma:user_ctx().
-
-
--export_type([value/0, timestamp/0]).
+-type query_fun() :: fun(() -> {ok, luma:user_ctx() |od_user:od() | od_group:id()}
+                                | {error, term()}).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -55,7 +48,14 @@
 %%% API functions
 %%%===================================================================
 
-%todo specify types for queryfun and query args
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% WRITEME
+%% @end
+%%-------------------------------------------------------------------
+-spec get_user_ctx(od_user:id(), storage:id(), query_fun(), helper:name()) ->
+    {ok, luma:user_ctx()} | {error, term()}.
 get_user_ctx(UserId, StorageId, QueryFun, HelperName) ->
     case get_links(?LUMA_USER_ROOT, StorageId, UserId) of
         {ok, EncodedUserCtx} ->
@@ -65,6 +65,7 @@ get_user_ctx(UserId, StorageId, QueryFun, HelperName) ->
                 {ok, UserCtx} ->
                     EncodedUserCtx = encode_user_ctx(UserCtx, HelperName),
                     add_link(?LUMA_USER_ROOT, StorageId, UserId, EncodedUserCtx),
+                    maybe_add_reverse_mapping(StorageId, UserCtx, UserId),
                     {ok, UserCtx};
                 Error ->
                     ?error_stacktrace("Fetching user_ctx from LUMA failed due to ~p", [Error]),
@@ -76,7 +77,43 @@ get_user_ctx(UserId, StorageId, QueryFun, HelperName) ->
             end
     end.
 
-%%TODO note GroupId can be SpaceId
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% WRITEME
+%% @end
+%%-------------------------------------------------------------------
+-spec get_user_ctx(od_user:id(), storage:id(), od_group:id() | od_space:id(),
+    query_fun(), helper:name()) -> {ok, luma:user_ctx()} | {error, term()}.
+get_user_ctx(UserId, StorageId, GroupOrSpaceId, QueryFun, HelperName) ->
+    case get_links(?LUMA_USER_ROOT, StorageId, UserId) of
+        {ok, EncodedUserCtx} ->
+            {ok, decode_user_ctx(EncodedUserCtx, HelperName)};
+        {error, not_found} ->
+            try QueryFun() of
+                {ok, UserCtx} ->
+                    EncodedUserCtx = encode_user_ctx(UserCtx, HelperName),
+                    add_link(?LUMA_USER_ROOT, StorageId, UserId, EncodedUserCtx),
+                    maybe_add_reverse_mapping(StorageId, UserCtx, UserId, GroupOrSpaceId),
+                    {ok, UserCtx};
+                Error ->
+                    ?error_stacktrace("Fetching user_ctx from LUMA failed due to ~p", [Error]),
+                    Error
+            catch
+                Error:Reason ->
+                    ?error_stacktrace("Fetching user_ctx from LUMA failed due to ~p", [{Error, Reason}]),
+                    {error, Reason}
+            end
+    end.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% WRITEME
+%% @end
+%%-------------------------------------------------------------------
+-spec get_user_id(non_neg_integer() | binary(), storage:id(), query_fun()) ->
+    {ok, od_user:id()} | {error, term()}.
 get_user_id(UidOrName, StorageId, QueryFun) ->
     UidOrNameBin = str_utils:to_binary(UidOrName),
     case get_links(?REV_LUMA_USER_ROOT, StorageId, UidOrNameBin) of
@@ -97,6 +134,8 @@ get_user_id(UidOrName, StorageId, QueryFun) ->
             end
     end.
 
+-spec get_group_id(non_neg_integer() | binary(), storage:id(), query_fun()) ->
+    {ok, od_group:id()} | {error, term()}.
 get_group_id(GidOrName, StorageId, QueryFun) ->
     GidOrNameBin = str_utils:to_binary(GidOrName),
     case get_links(?REV_LUMA_GROUP_ROOT, StorageId, GidOrNameBin) of
@@ -104,7 +143,10 @@ get_group_id(GidOrName, StorageId, QueryFun) ->
             {ok, GroupId};
         {error, not_found} ->
             try QueryFun() of
-                {ok, GroupId} ->
+                {ok, undefined} ->
+                    ?warning("Fetching get_group_id from LUMA returned undefined"),
+                    {ok, undefined};
+                {ok, GroupId} when is_binary(GroupId) ->
                     add_link(?REV_LUMA_GROUP_ROOT, StorageId, GidOrNameBin, GroupId),
                     {ok, GroupId};
                 Error ->
@@ -127,7 +169,7 @@ get_group_id(GidOrName, StorageId, QueryFun) ->
 invalidate(StorageId) ->
     lists:foreach(fun(RootId) ->
         {ok, LinkIds} = for_each(RootId, StorageId, fun(LinkId, Acc) ->
-            [LinkId, Acc]
+            [LinkId |Acc]
         end, []),
         lists:foreach(fun(LinkId) ->
             ok = delete_link(RootId, StorageId, LinkId)
@@ -139,6 +181,39 @@ invalidate(StorageId) ->
 %%% Internal functions
 %%%===================================================================
 
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% WRITEME
+%% @end
+%%-------------------------------------------------------------------
+-spec maybe_add_reverse_mapping(od_storage:id(), luma:user_ctx(), od_user:id()) -> ok.
+maybe_add_reverse_mapping(StorageId, #{<<"uid">> := Uid}, UserId) ->
+    add_link(?REV_LUMA_USER_ROOT, StorageId, Uid, UserId);
+maybe_add_reverse_mapping(_StorageId, _UserCtx, _UserId) ->
+    ok.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% WRITEME
+%% @end
+%%-------------------------------------------------------------------
+-spec maybe_add_reverse_mapping(od_storage:id(), luma:user_ctx(), od_user:id(),
+    od_group:id() | od_space:id()) -> ok.
+maybe_add_reverse_mapping(StorageId, #{<<"uid">> := Uid, <<"gid">> := Gid}, UserId, GroupOrSpaceId) ->
+    add_link(?REV_LUMA_USER_ROOT, StorageId, Uid, UserId),
+    add_link(?REV_LUMA_GROUP_ROOT, StorageId, Gid, GroupOrSpaceId);
+maybe_add_reverse_mapping(_StorageId, _UserCtx, _UserId, _GroupOrSpaceId) ->
+    ok.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% WRITEME
+%% @end
+%%-------------------------------------------------------------------
+-spec decode_user_ctx(binary(), helper:name()) -> luma:user_ctx().
 decode_user_ctx(Encoded, ?CEPH_HELPER_NAME) ->
     [UserName, Key] = binary:split(Encoded, ?SEP, [global]),
     #{<<"username">> => UserName, <<"key">> => Key};
@@ -156,6 +231,13 @@ decode_user_ctx(Encoded, HelperName) when
     [Uid, Gid] = binary:split(Encoded, ?SEP, [global]),
     #{<<"uid">> => Uid, <<"gid">> => Gid}.
 
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% WRITEME
+%% @end
+%%-------------------------------------------------------------------
+-spec encode_user_ctx(luma:user_ctx(), helper:name()) -> binary().
 encode_user_ctx(#{<<"username">> := UserName, <<"key">> := Key}, ?CEPH_HELPER_NAME) ->
     encode(UserName, Key);
 encode_user_ctx(#{<<"accessKey">> := AccessKey, <<"secretKey">> := SecretKey}, ?S3_HELPER_NAME) ->
@@ -169,39 +251,15 @@ encode_user_ctx(#{<<"uid">> := Uid, <<"gid">> := Gid}, HelperName) when
     ->
     encode(Uid, Gid).
 
-
-decode_group_ctx(Gid, HelperName) when
-    HelperName =:= ?POSIX_HELPER_NAME orelse
-        HelperName =:= ?GLUSTERFS_HELPER_NAME orelse
-        HelperName =:= ?NULL_DEVICE_HELPER_NAME
-    ->
-    #{<<"gid">> => Gid};
-decode_group_ctx(_Gid, HelperName) ->
-    {error, {group_ctx_not_supported, HelperName}}.
-
-
-encode_group_ctx(#{<<"gid">> := Gid}, HelperName) when
-    HelperName =:= ?POSIX_HELPER_NAME orelse
-        HelperName =:= ?GLUSTERFS_HELPER_NAME orelse
-        HelperName =:= ?NULL_DEVICE_HELPER_NAME
-    ->
-    Gid;
-encode_group_ctx(_Gid, HelperName) ->
-    {error, {group_ctx_not_supported, HelperName}}.
-
-
-
-
-
-
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% WRITEME
+%% @end
+%%-------------------------------------------------------------------
+-spec encode(binary(), binary()) -> binary().
 encode(Value1, Value2) ->
     <<Value1/binary, ?SEP/binary, Value2/binary>>.
-
-
-
-
-
-
 
 %%-------------------------------------------------------------------
 %% @private
@@ -230,8 +288,10 @@ get_links(RootId, StorageId, LinkId) ->
 add_link(RootId, StorageId, LinkId, LinkTarget) ->
     TreeId = oneprovider:get_id(),
     TreeRoot = tree_root(RootId, StorageId),
-    {ok, _} = datastore_model:add_links(?CTX, TreeRoot, TreeId, {LinkId, LinkTarget}),
-    ok.
+    case datastore_model:add_links(?CTX, TreeRoot, TreeId, {LinkId, LinkTarget}) of
+        {ok, _} -> ok;
+        {error, already_exists} -> ok
+    end.
 
 %%-------------------------------------------------------------------
 %% @private
