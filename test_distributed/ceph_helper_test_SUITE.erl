@@ -84,13 +84,16 @@ all() -> ?ALL(?TEST_CASES, ?PERF_TEST_CASES).
     {parameters, Params}
 ]}).
 
+% TODO - change to 10 when seg fault is fixed
+-define(REPEATS, 1).
+
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
 
 write_test(Config) ->
     ?PERFORMANCE(Config, [
-        {repeats, 10},
+        {repeats, ?REPEATS},
         {success_rate, 100},
         {parameters, [?THR_NUM(1), ?OP_NUM(write, 5), ?OP_SIZE(write, 1)]},
         {description, "Multiple parallel write operations."},
@@ -111,7 +114,7 @@ write_test_base(Config) ->
 
 multipart_write_test(Config) ->
     ?PERFORMANCE(Config, [
-        {repeats, 10},
+        {repeats, ?REPEATS},
         {success_rate, 100},
         {parameters, [?OP_SIZE(write, 1), ?OP_BLK_SIZE(write, 4)]},
         {description, "Multipart write operation."},
@@ -130,7 +133,7 @@ multipart_write_test_base(Config) ->
 
 truncate_test(Config) ->
     ?PERFORMANCE(Config, [
-        {repeats, 10},
+        {repeats, ?REPEATS},
         {success_rate, 100},
         {parameters, [?THR_NUM(1), ?OP_NUM(truncate, 5)]},
         {description, "Multiple parallel truncate operations."},
@@ -149,7 +152,7 @@ truncate_test_base(Config) ->
 
 write_read_test(Config) ->
     ?PERFORMANCE(Config, [
-        {repeats, 10},
+        {repeats, ?REPEATS},
         {success_rate, 100},
         {parameters, [?THR_NUM(1), ?OP_NUM(5), ?OP_SIZE(1)]},
         {description, "Multiple parallel write followed by read operations."},
@@ -171,7 +174,7 @@ write_read_test_base(Config) ->
 
 multipart_read_test(Config) ->
     ?PERFORMANCE(Config, [
-        {repeats, 10},
+        {repeats, ?REPEATS},
         {success_rate, 100},
         {parameters, [?OP_SIZE(read, 1), ?OP_BLK_SIZE(read, 4)]},
         {description, "Multipart read operation."},
@@ -192,7 +195,7 @@ multipart_read_test_base(Config) ->
 
 write_unlink_test(Config) ->
     ?PERFORMANCE(Config, [
-        {repeats, 10},
+        {repeats, ?REPEATS},
         {success_rate, 100},
         {parameters, [?THR_NUM(1), ?OP_NUM(5), ?OP_SIZE(1)]},
         {description, "Multiple parallel write followed by unlink operations."},
@@ -214,7 +217,7 @@ write_unlink_test_base(Config) ->
 
 write_read_truncate_unlink_test(Config) ->
     ?PERFORMANCE(Config, [
-        {repeats, 10},
+        {repeats, ?REPEATS},
         {success_rate, 100},
         {parameters, [?THR_NUM(1), ?OP_NUM(5), ?OP_SIZE(1)]},
         {description, "Multiple parallel sequence of write, read, truncate

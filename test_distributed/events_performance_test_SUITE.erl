@@ -82,7 +82,7 @@ all() ->
 emit_should_aggregate_events_with_the_same_key(Config) ->
     ?PERFORMANCE(Config, [
         {repeats, 10},
-        {success_rate, 90},
+        {success_rate, 100},
         {parameters, [?CTR_THR(5), ?EVT_NUM(20), ?EVT_SIZE(10)]},
         {description, "Check whether events for the same file are properly aggregated."},
         {config, [{name, small_counter_threshold},
@@ -147,7 +147,7 @@ emit_should_aggregate_events_with_the_same_key_base(Config) ->
 emit_should_not_aggregate_events_with_different_key(Config) ->
     ?PERFORMANCE(Config, [
         {repeats, 10},
-        {success_rate, 90},
+        {success_rate, 100},
         {parameters, [?CTR_THR(10), ?EVT_NUM(1000), ?EVT_SIZE(10), ?FILE_NUM(2)]},
         {description, "Check whether events for different files are properly aggregated."},
         {config, [{name, small_files_number},
@@ -220,7 +220,7 @@ emit_should_not_aggregate_events_with_different_key_base(Config) ->
 emit_should_execute_event_handler_when_counter_threshold_exceeded(Config) ->
     ?PERFORMANCE(Config, [
         {repeats, 10},
-        {success_rate, 90},
+        {success_rate, 100},
         {parameters, [?EVT_NUM(20)]},
         {description, "Check whether event stream executes handlers when events number "
         "exceeds counter threshold which is equal to the number of events."},
@@ -273,7 +273,7 @@ emit_should_execute_event_handler_when_counter_threshold_exceeded_base(Config) -
 subscribe_should_work_for_multiple_sessions(Config) ->
     ?PERFORMANCE(Config, [
         {repeats, 10},
-        {success_rate, 90},
+        {success_rate, 100},
         {parameters, [?CLI_NUM(3), ?CTR_THR(5), ?EVT_NUM(1000), ?EVT_SIZE(1)]},
         {description, "Check whether event stream executes handlers for multiple clients."},
         {config, [{name, small_client_number},

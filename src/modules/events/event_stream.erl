@@ -205,9 +205,9 @@ init([Mgr, #subscription{id = SubId} = Sub, SessId]) ->
 -spec handle_call(Request :: term(), From :: {pid(), Tag :: term()},
     State :: #state{}) ->
     {reply, Reply :: term(), NewState :: #state{}}.
-handle_call(_Request, _From, State) ->
-    ?log_bad_request(_Request),
-    {reply, ok, State}.
+handle_call(Request, From, State) ->
+    gen_server:reply(From, ok),
+    handle_cast(Request, State).
 
 %%--------------------------------------------------------------------
 %% @private
