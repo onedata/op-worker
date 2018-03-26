@@ -229,11 +229,17 @@ do_generate_secret() ->
 %%--------------------------------------------------------------------
 -spec prepare_ssl_opts() -> any().
 prepare_ssl_opts() ->
-    {ok, KeyFile} = application:get_env(?APP_NAME, web_key_file),
-    CABundle = make_ca_bundle(),
-    Opts = [{use_ssl, true}, {cert_path, make_cert_bundle()}, {key_path, KeyFile} |
-        [{ca_path, CABundle} || CABundle /= false]],
-    application:set_env(rtransfer_link, ssl, Opts, [{persistent, true}]).
+    OriginalSSLOpts = application:get_env(rtransfer_link, ssl, []),
+    case proplists:get_value(use_ssl, OriginalSSLOpts, true) of
+        true ->
+            {ok, KeyFile} = application:get_env(?APP_NAME, web_key_file),
+            CABundle = make_ca_bundle(),
+            Opts = [{use_ssl, true}, {cert_path, make_cert_bundle()}, {key_path, KeyFile} |
+                    [{ca_path, CABundle} || CABundle /= false]],
+            application:set_env(rtransfer_link, ssl, Opts, [{persistent, true}]);
+        false ->
+            ok
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
