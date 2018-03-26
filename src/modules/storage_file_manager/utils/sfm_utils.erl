@@ -25,7 +25,7 @@
 %% API
 -export([chmod_storage_file/3, rename_storage_file/6,
     create_storage_file_if_not_exists/1, create_storage_file_location/2,
-    create_storage_file_location/3, create_delayed_storage_file/1,
+    create_storage_file_location/3, create_delayed_storage_file/2,
     create_storage_file/2, delete_storage_file/2,
     delete_storage_file_without_location/2, delete_storage_dir/2,
     create_parent_dirs/1]).
@@ -110,8 +110,8 @@ create_storage_file_if_not_exists(FileCtx) ->
 %% Create storage file if it hasn't been created yet (it has been delayed)
 %% @end
 %%--------------------------------------------------------------------
--spec create_delayed_storage_file(file_ctx:ctx()) -> file_ctx:ctx().
-create_delayed_storage_file(FileCtx) ->
+-spec create_delayed_storage_file(user_ctx:ctx(), file_ctx:ctx()) -> file_ctx:ctx().
+create_delayed_storage_file(UserCtx, FileCtx) ->
     {#document{
         key = FileLocationId,
         value = #file_location{storage_file_created = StorageFileCreated}
@@ -128,7 +128,7 @@ create_delayed_storage_file(FileCtx) ->
                         FileCtx2;
                     {ok, _} ->
                         FileCtx3 = create_storage_file(
-                            user_ctx:new(?ROOT_SESS_ID), FileCtx2),
+                            UserCtx, FileCtx2),
                         files_to_chown:chown_or_schedule_chowning(FileCtx3),
 
                         {ok, #document{} = Doc} = file_location:update(FileLocationId, fun
