@@ -171,46 +171,88 @@ basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     Workers = ?config(op_worker_nodes, Config),
 
     Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
-    Level2Dir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
-    Level2File = <<Dir/binary, "/", (generator:gen_name())/binary>>,
+%%    Level2Dir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
+%%    Level2File = <<Dir/binary, "/", (generator:gen_name())/binary>>,
+%%
+%%    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir, 8#755)),
+%%    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Level2Dir, 8#755)),
+%%
+%%    verify_stats(Config, Dir, true),
+%%    verify_stats(Config, Level2Dir, true),
+%%    ct:print("Dirs created"),
+%%
+%%    FileBeg = <<"1234567890abcd">>,
+%%    create_file(Config, FileBeg, {2, Level2File}),
+%%    verify_file(Config, FileBeg, {2, Level2File}),
+%%    ct:print("File verified"),
 
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir, 8#755)),
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Level2Dir, 8#755)),
+%%    lists:foreach(fun(I) ->
+%%        ct:print("Del test1 ~p", [I]),
+%%        DelFile = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
+%%        lists:foldl(fun
+%%            (W, undefined) ->
+%%                ct:print("Before del ~p", [{DelFile, W}]),
+%%                Beg = crypto:strong_rand_bytes(8),
+%%                BegSize = size(Beg),
+%%                create_file(Config, Beg, {BegSize, DelFile}),
+%%                verify_file(Config, Beg, {BegSize, DelFile});
+%%            (W, DelInfo) ->
+%%                ct:print("Del ~p", [{DelFile, W}]),
+%%                ?assertMatch(ok, lfm_proxy:unlink(W, SessId(W), {path, DelFile})),
+%%                verify_del(Config, DelInfo),
+%%                Beg = crypto:strong_rand_bytes(8),
+%%                BegSize = size(Beg),
+%%                create_file(Config, Beg, {BegSize, DelFile}),
+%%                verify_file(Config, Beg, {BegSize, DelFile})
+%%        end, undefined, Workers ++ Workers)
+%%    end, lists:seq(1,20)),
 
-    verify_stats(Config, Dir, true),
-    verify_stats(Config, Level2Dir, true),
-    ct:print("Dirs created"),
+    lists:foreach(fun(I) ->
+        ct:print("Del test2 ~p", [I]),
+        DelFile = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
+        lists:foldl(fun
+            (W, undefined) ->
+                ct:print("Before del ~p", [{DelFile, W}]),
+                Beg = crypto:strong_rand_bytes(8),
+                BegSize = size(Beg),
+                create_file_on_worker(Config, Beg, BegSize, DelFile, W),
+                verify_file(Config, Beg, {BegSize, DelFile});
+            (W, DelInfo) ->
+                ct:print("Del ~p", [{DelFile, W}]),
+                ?assertMatch(ok, lfm_proxy:unlink(W, SessId(W), {path, DelFile})),
+                verify_del(Config, DelInfo),
+                Beg = crypto:strong_rand_bytes(8),
+                BegSize = size(Beg),
+                create_file_on_worker(Config, Beg, BegSize, DelFile, W),
+                verify_file(Config, Beg, {BegSize, DelFile})
+        end, undefined, Workers ++ Workers)
+    end, lists:seq(1,20)),
 
-    FileBeg = <<"1234567890abcd">>,
-    create_file(Config, FileBeg, {2, Level2File}),
-    verify_file(Config, FileBeg, {2, Level2File}),
-    ct:print("File verified"),
-
-    lists:foreach(fun(W) ->
-        Level2TmpDir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
-%%        ct:print("Verify dir ~p", [{Level2TmpDir, W}]),
-        ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId(W), Level2TmpDir, 8#755)),
-        verify_stats(Config, Level2TmpDir, true),
-
-        lists:foreach(fun(W2) ->
-            Level3TmpDir = <<Level2TmpDir/binary, "/", (generator:gen_name())/binary>>,
-%%            ct:print("Verify dir2 ~p", [{Level3TmpDir, W}]),
-            ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, SessId(W2), Level3TmpDir, 8#755)),
-            verify_stats(Config, Level3TmpDir, true)
-        end, Workers),
-        ct:print("Tree verification from node ~p done", [W])
-    end, Workers),
-
-    lists:foreach(fun(W) ->
-        Level2TmpFile = <<Dir/binary, "/", (generator:gen_name())/binary>>,
-        create_file_on_worker(Config, FileBeg, 4, Level2TmpFile, W),
-        verify_file(Config, FileBeg, {4, Level2TmpFile}),
-        ct:print("File from node ~p verified", [W])
-    end, Workers),
-
-    verify(Config, fun(W) ->
-        ?assertEqual(ok, lfm_proxy:close_all(W))
-    end),
+%%    lists:foreach(fun(W) ->
+%%        Level2TmpDir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
+%%%%        ct:print("Verify dir ~p", [{Level2TmpDir, W}]),
+%%        ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId(W), Level2TmpDir, 8#755)),
+%%        verify_stats(Config, Level2TmpDir, true),
+%%
+%%        lists:foreach(fun(W2) ->
+%%            Level3TmpDir = <<Level2TmpDir/binary, "/", (generator:gen_name())/binary>>,
+%%%%            ct:print("Verify dir2 ~p", [{Level3TmpDir, W}]),
+%%            ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, SessId(W2), Level3TmpDir, 8#755)),
+%%            verify_stats(Config, Level3TmpDir, true)
+%%        end, Workers),
+%%        ct:print("Tree verification from node ~p done", [W])
+%%    end, Workers),
+%%
+%%    lists:foreach(fun(W) ->
+%%        Level2TmpFile = <<Dir/binary, "/", (generator:gen_name())/binary>>,
+%%        create_file_on_worker(Config, FileBeg, 4, Level2TmpFile, W),
+%%        verify_file(Config, FileBeg, {4, Level2TmpFile}),
+%%        ct:print("File from node ~p verified", [W])
+%%    end, Workers),
+%%
+%%    verify(Config, fun(W) ->
+%%        ?assertEqual(ok, lfm_proxy:close_all(W))
+%%    end),
 
     ok.
 

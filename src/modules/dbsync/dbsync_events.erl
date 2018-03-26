@@ -49,9 +49,10 @@ change_replicated(SpaceId, Change) ->
 change_replicated_internal(SpaceId, #document{
     key = FileUuid,
     value = #file_meta{type = ?REGULAR_FILE_TYPE, owner = UserId},
+    % TODO - obsluzyc tez pole deleted wewnatrz rekordu file_meta
     deleted = true
 } = FileDoc) ->
-    ?debug("change_replicated_internal: deleted file_meta ~p", [FileUuid]),
+    ?info("change_replicated_internal: deleted file_meta ~p", [FileUuid]),
     Ctx = datastore_model_default:get_ctx(file_meta),
     case datastore_model:exists(Ctx, FileUuid) of
         {ok, false} ->
@@ -59,14 +60,18 @@ change_replicated_internal(SpaceId, #document{
                 FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
                 fslogic_event_emitter:emit_file_removed(FileCtx, []),
                 % TODO - if links delete comes before, it fails!
-                sfm_utils:delete_storage_file_without_location(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
-                file_location:delete(file_location:local_id(FileUuid), UserId)
+                ok = sfm_utils:delete_storage_file_without_location(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
+                ok = file_location:delete(file_location:local_id(FileUuid), UserId),
+                ?info_stacktrace("aaaaaa ~p", [FileDoc]),
+                ok
             catch
                 _:{badmatch, {error, not_found}} ->
                     % TODO - if links delete comes before, this function fails!
+                    ?info_stacktrace("aaaaaa2 ~p", [FileDoc]),
                     ok
             end;
         _ ->
+            ?info_stacktrace("aaaaaa3 ~p", [FileDoc]),
             ok
     end;
 change_replicated_internal(SpaceId, #document{
@@ -104,7 +109,7 @@ change_replicated_internal(SpaceId, #document{
     deleted = false,
     value = #file_location{uuid = FileUuid}
 } = Doc) ->
-    ?debug("change_replicated_internal: changed file_location ~p", [FileUuid]),
+    ?info("change_replicated_internal: changed file_location ~p", [Doc]),
     FileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId)),
     ok = replica_dbsync_hook:on_file_location_change(FileCtx, Doc);
 change_replicated_internal(SpaceId, #document{

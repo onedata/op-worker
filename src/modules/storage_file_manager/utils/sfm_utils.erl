@@ -115,10 +115,11 @@ create_delayed_storage_file(FileCtx) ->
     {#document{
         key = FileLocationId,
         value = #file_location{storage_file_created = StorageFileCreated}
-    }, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
+    } = FL, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
 
     case StorageFileCreated of
         false ->
+            ?info("cccc 1 ~p", [{FL, FileCtx2}]),
             FileUuid = file_ctx:get_uuid_const(FileCtx),
             file_location:critical_section(FileUuid, fun() ->
                 case file_location:get(FileLocationId) of
@@ -139,6 +140,7 @@ create_delayed_storage_file(FileCtx) ->
                 end
             end);
         true ->
+            ?info("cccc 2 ~p", [{FL, FileCtx2}]),
             FileCtx2
     end.
 
@@ -201,12 +203,15 @@ create_storage_file(UserCtx, FileCtx) ->
     {SFMHandle, FileCtx3} = storage_file_manager:new_handle(SessId, FileCtx2),
     {ok, FinalCtx} = case storage_file_manager:create(SFMHandle, Mode) of
         {error, ?ENOENT} ->
+            ?info("cccc 3 ~p", [FileCtx]),
             FileCtx4 = create_parent_dirs(FileCtx3),
             {storage_file_manager:create(SFMHandle, Mode), FileCtx4};
         {error, ?EEXIST} ->
+            ?info("cccc 4 ~p", [FileCtx]),
             storage_file_manager:unlink(SFMHandle),
             {storage_file_manager:create(SFMHandle, Mode), FileCtx3};
         Other ->
+            ?info("cccc 5 ~p", [{Other, FileCtx}]),
             {Other, FileCtx3}
     end,
     FinalCtx.

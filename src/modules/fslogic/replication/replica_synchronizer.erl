@@ -67,6 +67,7 @@
                   Prefetch :: boolean(), transfer:id() | undefined) ->
                          ok | {error, Reason :: any()}.
 synchronize(UserCtx, FileCtx, Block, Prefetch, TransferId) ->
+  ?info("sssss ~p", [{FileCtx, Block}]),
     EnlargedBlock = enlarge_block(Block, Prefetch),
     try
         {ok, Process} = get_process(UserCtx, FileCtx),
@@ -134,8 +135,11 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId}, From, State0) -
     NewTransfers = start_transfers(Holes, TransferId, Prefetch, State),
     {_, NewRefs} = lists:unzip(NewTransfers),
     case ExistingRefs ++ NewRefs of
-        [] -> {reply, ok, State, ?DIE_AFTER};
+        [] ->
+          ?info("sssss2 ~p", [{FileCtx, Block, ExistingRefs, NewRefs, Holes}]),
+          {reply, ok, State, ?DIE_AFTER};
         RelevantRefs ->
+          ?info("sssss3 ~p", [{FileCtx, Block, ExistingRefs, NewRefs, Holes}]),
             State1 = associate_from_with_refs(From, RelevantRefs, TransferId, State),
             InProgress = ordsets:union(State1#state.in_progress, ordsets:from_list(NewTransfers)),
             State2 = adjust_sequence_hits(Block, NewRefs, State1),

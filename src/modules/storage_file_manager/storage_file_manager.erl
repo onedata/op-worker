@@ -333,9 +333,10 @@ write(#sfm_handle{
     space_id = SpaceId,
     file_handle = FileHandle,
     file_size = CSize
-}, Offset, Buffer) ->
+} = SH, Offset, Buffer) ->
     %% @todo: VFS-2086 handle sparse files
     space_quota:soft_assert_write(SpaceId, max(0, Offset + size(Buffer) - CSize)),
+    ?info("wwwww2 ~p", [{Offset, Buffer, SH}]),
     helpers:write(FileHandle, Offset, Buffer).
 
 %%--------------------------------------------------------------------
@@ -350,8 +351,10 @@ read(#sfm_handle{open_flag = undefined}, _, _) ->
     throw(?EPERM);
 read(#sfm_handle{open_flag = write}, _, _) ->
     throw(?EPERM);
-read(#sfm_handle{file_handle = FileHandle}, Offset, MaxSize) ->
-    helpers:read(FileHandle, Offset, MaxSize).
+read(#sfm_handle{file_handle = FileHandle} = SH, Offset, MaxSize) ->
+    A = helpers:read(FileHandle, Offset, MaxSize),
+    ?info("rrrrr ~p", [{Offset, MaxSize, SH, A}]),
+    A.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -481,6 +484,7 @@ unlink(#sfm_handle{
     space_id = SpaceId,
     session_id = SessionId
 }) ->
+    ?info("uuuuuu ~p", [FileId]),
     {ok, HelperHandle} = session:get_helper(SessionId, SpaceId, Storage),
     helpers:unlink(HelperHandle, FileId).
 
