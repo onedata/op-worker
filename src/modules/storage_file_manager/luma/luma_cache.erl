@@ -36,10 +36,14 @@
     routing => global
 }).
 
--define(LUMA_USER_ROOT, <<"luma_user_">>).
--define(REV_LUMA_USER_ROOT, <<"rev_luma_user_">>).
--define(REV_LUMA_GROUP_ROOT, <<"rev_luma_group_">>).
--define(ROOTS, [?LUMA_USER_ROOT, ?REV_LUMA_USER_ROOT, ?REV_LUMA_GROUP_ROOT]).
+-define(LUMA_USER_ROOT_PREFIX, <<"luma_user_">>).
+-define(REV_LUMA_USER_ROOT_PREFIX, <<"rev_luma_user_">>).
+-define(REV_LUMA_GROUP_ROOT_PREFIX, <<"rev_luma_group_">>).
+-define(ROOTS, [
+    ?LUMA_USER_ROOT_PREFIX,
+    ?REV_LUMA_USER_ROOT_PREFIX,
+    ?REV_LUMA_GROUP_ROOT_PREFIX
+]).
 
 -define(SEP, <<"##">>).
 
@@ -58,14 +62,14 @@
 -spec get_user_ctx(od_user:id(), storage:id(), query_fun(), helper:name()) ->
     {ok, luma:user_ctx()} | {error, term()}.
 get_user_ctx(UserId, StorageId, QueryFun, HelperName) ->
-    case get_links(?LUMA_USER_ROOT, StorageId, UserId) of
+    case get_links(?LUMA_USER_ROOT_PREFIX, StorageId, UserId) of
         {ok, EncodedUserCtx} ->
             {ok, decode_user_ctx(EncodedUserCtx, HelperName)};
         {error, not_found} ->
             try QueryFun() of
                 {ok, UserCtx} ->
                     EncodedUserCtx = encode_user_ctx(UserCtx, HelperName),
-                    add_link(?LUMA_USER_ROOT, StorageId, UserId, EncodedUserCtx),
+                    add_link(?LUMA_USER_ROOT_PREFIX, StorageId, UserId, EncodedUserCtx),
                     maybe_add_reverse_mapping(StorageId, UserCtx, UserId),
                     {ok, UserCtx};
                 Error ->
@@ -92,14 +96,14 @@ get_user_ctx(UserId, StorageId, QueryFun, HelperName) ->
 -spec get_user_ctx(od_user:id(), storage:id(), od_group:id() | od_space:id(),
     query_fun(), helper:name()) -> {ok, luma:user_ctx()} | {error, term()}.
 get_user_ctx(UserId, StorageId, GroupOrSpaceId, QueryFun, HelperName) ->
-    case get_links(?LUMA_USER_ROOT, StorageId, UserId) of
+    case get_links(?LUMA_USER_ROOT_PREFIX, StorageId, UserId) of
         {ok, EncodedUserCtx} ->
             {ok, decode_user_ctx(EncodedUserCtx, HelperName)};
         {error, not_found} ->
             try QueryFun() of
                 {ok, UserCtx} ->
                     EncodedUserCtx = encode_user_ctx(UserCtx, HelperName),
-                    add_link(?LUMA_USER_ROOT, StorageId, UserId, EncodedUserCtx),
+                    add_link(?LUMA_USER_ROOT_PREFIX, StorageId, UserId, EncodedUserCtx),
                     maybe_add_reverse_mapping(StorageId, UserCtx, UserId,
                         GroupOrSpaceId),
                     {ok, UserCtx};
@@ -127,13 +131,13 @@ get_user_ctx(UserId, StorageId, GroupOrSpaceId, QueryFun, HelperName) ->
     {ok, od_user:id()} | {error, term()}.
 get_user_id(UidOrName, StorageId, QueryFun) ->
     UidOrNameBin = str_utils:to_binary(UidOrName),
-    case get_links(?REV_LUMA_USER_ROOT, StorageId, UidOrNameBin) of
+    case get_links(?REV_LUMA_USER_ROOT_PREFIX, StorageId, UidOrNameBin) of
         {ok, UserId} ->
             {ok, UserId};
         {error, not_found} ->
             try QueryFun() of
                 {ok, UserId} ->
-                    add_link(?REV_LUMA_USER_ROOT, StorageId, UidOrNameBin, UserId),
+                    add_link(?REV_LUMA_USER_ROOT_PREFIX, StorageId, UidOrNameBin, UserId),
                     {ok, UserId};
                 Error ->
                     ?error_stacktrace("Fetching user id from LUMA failed due to ~p",
@@ -159,7 +163,7 @@ get_user_id(UidOrName, StorageId, QueryFun) ->
     {ok, od_group:id()} | {error, term()}.
 get_group_id(GidOrName, StorageId, QueryFun) ->
     GidOrNameBin = str_utils:to_binary(GidOrName),
-    case get_links(?REV_LUMA_GROUP_ROOT, StorageId, GidOrNameBin) of
+    case get_links(?REV_LUMA_GROUP_ROOT_PREFIX, StorageId, GidOrNameBin) of
         {ok, GroupId} ->
             {ok, GroupId};
         {error, not_found} ->
@@ -167,7 +171,7 @@ get_group_id(GidOrName, StorageId, QueryFun) ->
                 {ok, undefined} ->
                     {ok, undefined};
                 {ok, GroupId} when is_binary(GroupId) ->
-                    add_link(?REV_LUMA_GROUP_ROOT, StorageId, GidOrNameBin,
+                    add_link(?REV_LUMA_GROUP_ROOT_PREFIX, StorageId, GidOrNameBin,
                         GroupId),
                     {ok, GroupId};
                 Error ->
@@ -213,7 +217,7 @@ invalidate(StorageId) ->
 -spec maybe_add_reverse_mapping(od_storage:id(), luma:user_ctx(),
     od_user:id()) -> ok.
 maybe_add_reverse_mapping(StorageId, #{<<"uid">> := Uid}, UserId) ->
-    add_link(?REV_LUMA_USER_ROOT, StorageId, Uid, UserId);
+    add_link(?REV_LUMA_USER_ROOT_PREFIX, StorageId, Uid, UserId);
 maybe_add_reverse_mapping(_StorageId, _UserCtx, _UserId) ->
     ok.
 
@@ -228,8 +232,8 @@ maybe_add_reverse_mapping(_StorageId, _UserCtx, _UserId) ->
     od_group:id() | od_space:id()) -> ok.
 maybe_add_reverse_mapping(StorageId, #{<<"uid">> := Uid, <<"gid">> := Gid},
     UserId, GroupOrSpaceId) ->
-    add_link(?REV_LUMA_USER_ROOT, StorageId, Uid, UserId),
-    add_link(?REV_LUMA_GROUP_ROOT, StorageId, Gid, GroupOrSpaceId);
+    add_link(?REV_LUMA_USER_ROOT_PREFIX, StorageId, Uid, UserId),
+    add_link(?REV_LUMA_GROUP_ROOT_PREFIX, StorageId, Gid, GroupOrSpaceId);
 maybe_add_reverse_mapping(_StorageId, _UserCtx, _UserId, _GroupOrSpaceId) ->
     ok.
 

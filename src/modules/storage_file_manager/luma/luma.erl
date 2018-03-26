@@ -149,7 +149,8 @@ get_server_user_ctx(SessionId, UserId, GroupId, SpaceId, StorageDoc, HelperName)
     case storage:select_helper(StorageDoc, HelperName) of
         {ok, Helper} ->
             StorageId = storage:get_id(StorageDoc),
-            luma_cache:get_user_ctx(UserId, StorageId, utils:ensure_defined(GroupId, undefined, SpaceId),
+            luma_cache:get_user_ctx(UserId, StorageId, utils:ensure_defined(GroupId,
+                undefined, SpaceId),
                 fun() ->
                     get_user_ctx([
                         {fun luma:get_admin_ctx/2, [UserId, Helper]},
@@ -247,7 +248,8 @@ fetch_user_ctx(SessionId, UserId, GroupId, SpaceId, StorageDoc, Helper) ->
                 {ok, GroupCtx} ->
                     {ok, maps:merge(UserCtx, GroupCtx)};
                 Error ->
-                    ?warning_stacktrace("Fetching user_ctx from LUMA failed with ~p", [Error]),
+                    ?warning_stacktrace("Fetching user_ctx from LUMA failed with ~p",
+                        [Error]),
                     {ok, GroupCtx} = luma:generate_group_ctx(UserId, GroupId,
                         SpaceId, Helper#helper.name),
                     {ok, maps:merge(UserCtx, GroupCtx)}
@@ -383,7 +385,8 @@ select_posix_compatible_storage(SpaceId) ->
         case storage:get(StorageId) of
             {ok, StorageDoc} ->
                 case storage:select_helper(StorageDoc, [
-                    ?POSIX_HELPER_NAME, ?GLUSTERFS_HELPER_NAME, ?NULL_DEVICE_HELPER_NAME])
+                    ?POSIX_HELPER_NAME, ?GLUSTERFS_HELPER_NAME,
+                    ?NULL_DEVICE_HELPER_NAME])
                 of
                     {ok, Helpers} -> {true, [{StorageDoc, Helper} || Helper <- Helpers]};
                     {error, not_found} -> false
