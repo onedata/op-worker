@@ -20,7 +20,7 @@
 -export([get_server_user_ctx/5, get_server_user_ctx/6, get_client_user_ctx/5,
     get_posix_user_ctx/3, get_posix_user_ctx/4]).
 
-% exported for CT test
+% exported for CT tests
 -export([get_admin_ctx/2, fetch_user_ctx/5, generate_user_ctx/3,
     get_insecure_user_ctx/1, get_nobody_ctx/1, fetch_user_ctx/6,
     generate_user_ctx/4, generate_group_ctx/4]).
@@ -33,8 +33,6 @@
 -export_type([user_ctx/0, posix_user_ctx/0, gid/0, group_ctx/0]).
 
 -define(KEY_SEPARATOR, <<"::">>).
-
-%%TODO add tests for simultaneous addition of reverse mapping
 
 %%%===================================================================
 %%% API functions
@@ -167,32 +165,10 @@ get_server_user_ctx(SessionId, UserId, GroupId, SpaceId, StorageDoc, HelperName)
     end.
 
 %%%===================================================================
-%%% Internal functions
+%%% Exported for CT tests
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns storage user context by evaluating provided strategies.
-%% Evaluation is stopped when the first strategy yield concrete result,
-%% i.e. different than 'undefined'.
-%% @end
-%%--------------------------------------------------------------------
--spec get_user_ctx([{function(), Args :: [term()]}]) ->
-    {ok, user_ctx()} | {error, Reason :: term()}.
-get_user_ctx(Strategies) ->
-    Result = lists:foldl(fun
-        ({Function, Args}, undefined) -> apply(Function, Args);
-        (_Strategy, PrevResult) -> PrevResult
-    end, undefined, Strategies),
-
-    case Result of
-        undefined -> {error, undefined_user_context};
-        _ -> Result
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% For the root user returns storage admin context, otherwise 'undefined'.
 %% @end
@@ -206,7 +182,6 @@ get_admin_ctx(_UserId, _Helper) ->
     undefined.
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% For the insecure storage helper returns storage admin context, otherwise
 %% 'undefined'.
@@ -221,7 +196,6 @@ get_insecure_user_ctx(_Helper) ->
     undefined.
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% For the POSIX storage helper returns nobody user context, otherwise 'undefined'.
 %% @end
@@ -233,7 +207,6 @@ get_nobody_ctx(_Helper) ->
     undefined.
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% Queries external, third party LUMA service for the user context if enabled.
 %% Fails with an error if the response is erroneous.
@@ -258,7 +231,6 @@ fetch_user_ctx(SessionId, UserId, SpaceId, StorageDoc, Helper) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% Queries external, third party LUMA service for the user context if enabled.
 %% Fails with an error if the response is erroneous.
@@ -285,7 +257,6 @@ fetch_user_ctx(SessionId, UserId, GroupId, SpaceId, StorageDoc, Helper) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% For the POSIX storage generates user context (UID and GID) as a hash of
 %% respectively user ID and space ID. For the other storage returns 'undefined'.
@@ -308,7 +279,6 @@ generate_user_ctx(_UserId, _SpaceId, _HelperName) ->
     undefined.
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% For the POSIX storage generates user context (UID and GID) as a hash of
 %% respectively user ID and space ID. For the other storage returns 'undefined'.
@@ -326,7 +296,6 @@ generate_user_ctx(_UserId, _GroupId, _SpaceId, _HelperName) ->
     undefined.
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% For the POSIX storage generates group context (GID) as a hash of
 %% group ID or space ID (if group ID is undefined).
@@ -343,6 +312,31 @@ generate_group_ctx(_UserId, GroupId, _SpaceId, ?POSIX_HELPER_NAME) ->
     generate_posix_group_ctx(GroupId);
 generate_group_ctx(_UserId, _GroupId, _SpaceId, _HelperName) ->
     undefined.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns storage user context by evaluating provided strategies.
+%% Evaluation is stopped when the first strategy yield concrete result,
+%% i.e. different than 'undefined'.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_user_ctx([{function(), Args :: [term()]}]) ->
+    {ok, user_ctx()} | {error, Reason :: term()}.
+get_user_ctx(Strategies) ->
+    Result = lists:foldl(fun
+        ({Function, Args}, undefined) -> apply(Function, Args);
+        (_Strategy, PrevResult) -> PrevResult
+    end, undefined, Strategies),
+
+    case Result of
+        undefined -> {error, undefined_user_context};
+        _ -> Result
+    end.
 
 %%-------------------------------------------------------------------
 %% @private

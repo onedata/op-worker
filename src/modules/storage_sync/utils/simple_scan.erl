@@ -44,6 +44,7 @@ run(Job = #space_strategy_job{
     storage_sync_monitoring:update_queue_length_spirals(SpaceId, -1),
     maybe_import_storage_file_and_children(Job);
 run(Job = #space_strategy_job{
+    strategy_type = StrategyType,
     data = Data = #{
         parent_ctx := ParentCtx,
         file_name := FileName,
@@ -63,13 +64,19 @@ run(Job = #space_strategy_job{
     case StatResult of
         Error = {error, _} ->
             storage_sync_monitoring:update_queue_length_spirals(SpaceId, -1),
+            case StrategyType of
+                storage_import ->
+                    storage_sync_monitoring:increase_failed_file_imports_counter(SpaceId);
+                storage_update ->
+                    storage_sync_monitoring:increase_failed_file_updates_counter(SpaceId)
+            end,
             {Error, []};
         {_StatBuf, StorageFileCtx2}  ->
-        Data2 = Data#{
-            parent_ctx => ParentCtx2,
-            storage_file_ctx => StorageFileCtx2
-        },
-        run(Job#space_strategy_job{data = Data2})
+            Data2 = Data#{
+                parent_ctx => ParentCtx2,
+                storage_file_ctx => StorageFileCtx2
+            },
+            run(Job#space_strategy_job{data = Data2})
     end.
 
 %%--------------------------------------------------------------------
@@ -273,34 +280,22 @@ import_file(#space_strategy_job{
         st_size = FSize
     } = StatBuf,
     {SFMHandle, StorageFileCtx3} = storage_file_ctx:get_handle(StorageFileCtx2),
-    ?critical("DUPA1"),
     OwnerId = get_owner_id(StorageFileCtx3),
-    ?critical("DUPA2"),
     GroupId = get_group_owner_id(StorageFileCtx3),
-    ?critical("DUPA3"),
     ParentUuid = file_ctx:get_uuid_const(ParentCtx),
-    ?critical("DUPA4"),
     FileMetaDoc = file_meta:new_doc(FileName, file_meta:type(Mode),
         Mode band 8#1777, OwnerId, GroupId, FSize, ParentUuid),
-    ?critical("DUPA5"),
     {ParentPath, _} = file_ctx:get_storage_file_id(ParentCtx),
-    ?critical("DUPA6"),
     {ok, FileUuid} = create_file_meta(FileMetaDoc, ParentUuid),
-    ?critical("DUPA7"),
     {ok, _} = create_times(FileUuid, MTime, ATime, CTime, SpaceId),
-    ?critical("DUPA8"),
     CanonicalPath = filename:join([ParentPath, FileName]),
-    ?critical("DUPA9"),
     case file_meta:type(Mode) of
         ?REGULAR_FILE_TYPE ->
-            ?critical("DUPA10"),
             ok = create_file_location(SpaceId, StorageId, FileUuid, CanonicalPath, FSize);
         _ ->
             ok
     end,
-    ?critical("DUPA11"),
     FileCtx = file_ctx:new_by_doc(FileMetaDoc#document{key = FileUuid}, SpaceId, undefined),
-    ?critical("DUPA12"),
     SyncAcl = maps:get(sync_acl, Args, false),
     case SyncAcl of
         true ->
@@ -309,7 +304,7 @@ import_file(#space_strategy_job{
             ok
     end,
     StorageFileId = SFMHandle#sfm_handle.file,
-    ?critical("Import storage file ~p", [{StorageFileId, CanonicalPath}]),
+    ?debug("Import storage file ~p", [{StorageFileId, CanonicalPath}]),
     {ok, FileCtx}.
 
 %%--------------------------------------------------------------------

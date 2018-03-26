@@ -144,12 +144,11 @@ handle(restart_transfers) ->
                 Restarted = transfer:restart_unfinished_transfers(SpaceId),
                 ?debug("Restarted following transfers: ~p", [Restarted])
             end, SpaceIds);
+        {error, ?ERROR_UNREGISTERED_PROVIDER} ->
+            schedule_restart_transfers();
         Error = {error, _} ->
             ?error("Unable to restart transfers due to: ~p", [Error])
     catch
-        throw:?ERROR_UNREGISTERED_PROVIDER ->
-            schedule_restart_transfers(),
-            ok;
         _:Reason ->
             ?error_stacktrace("Unable to restart transfers due to: ~p", [Reason])
     end;

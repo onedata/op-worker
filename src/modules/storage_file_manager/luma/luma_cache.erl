@@ -5,9 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module implements generic, temporary cache behaviour for luma
-%%% and reverse_luma models. Entries are valid only for specific period.
-%%% After that period, callback is called to acquire current value.
+%%% Model caching local user mappings (LUMA).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(luma_cache).
@@ -20,7 +18,8 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([invalidate/1, get_user_ctx/4, get_user_id/3, get_group_id/3, get_user_ctx/5]).
+-export([invalidate/1, get_user_ctx/4, get_user_id/3, get_group_id/3,
+    get_user_ctx/5]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -51,7 +50,9 @@
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% WRITEME
+%% This function returns cached user_ctx.
+%% If no entry is found it will call QueryFun to obtain user_ctx.
+%% On success, value returned from QueryFun will be cached.
 %% @end
 %%-------------------------------------------------------------------
 -spec get_user_ctx(od_user:id(), storage:id(), query_fun(), helper:name()) ->
@@ -68,11 +69,13 @@ get_user_ctx(UserId, StorageId, QueryFun, HelperName) ->
                     maybe_add_reverse_mapping(StorageId, UserCtx, UserId),
                     {ok, UserCtx};
                 Error ->
-                    ?error_stacktrace("Fetching user_ctx from LUMA failed due to ~p", [Error]),
+                    ?error_stacktrace("Fetching user_ctx from LUMA failed due to ~p",
+                        [Error]),
                     Error
             catch
                 Error:Reason ->
-                    ?error_stacktrace("Fetching user_ctx from LUMA failed due to ~p", [{Error, Reason}]),
+                    ?error_stacktrace("Fetching user_ctx from LUMA failed due to ~p",
+                        [{Error, Reason}]),
                     {error, Reason}
             end
     end.
@@ -80,7 +83,10 @@ get_user_ctx(UserId, StorageId, QueryFun, HelperName) ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% WRITEME
+%% This function returns cached user_ctx, basing on UserId and
+%% GroupId or SpaceId (similarly to luma:get_server_user_ctx/6)
+%% If no entry is found it will call QueryFun to obtain user_ctx.
+%% On success, value returned from QueryFun will be cached.
 %% @end
 %%-------------------------------------------------------------------
 -spec get_user_ctx(od_user:id(), storage:id(), od_group:id() | od_space:id(),
@@ -94,14 +100,17 @@ get_user_ctx(UserId, StorageId, GroupOrSpaceId, QueryFun, HelperName) ->
                 {ok, UserCtx} ->
                     EncodedUserCtx = encode_user_ctx(UserCtx, HelperName),
                     add_link(?LUMA_USER_ROOT, StorageId, UserId, EncodedUserCtx),
-                    maybe_add_reverse_mapping(StorageId, UserCtx, UserId, GroupOrSpaceId),
+                    maybe_add_reverse_mapping(StorageId, UserCtx, UserId,
+                        GroupOrSpaceId),
                     {ok, UserCtx};
                 Error ->
-                    ?error_stacktrace("Fetching user_ctx from LUMA failed due to ~p", [Error]),
+                    ?error_stacktrace("Fetching user_ctx from LUMA failed due to ~p",
+                        [Error]),
                     Error
             catch
                 Error:Reason ->
-                    ?error_stacktrace("Fetching user_ctx from LUMA failed due to ~p", [{Error, Reason}]),
+                    ?error_stacktrace("Fetching user_ctx from LUMA failed due to ~p",
+                        [{Error, Reason}]),
                     {error, Reason}
             end
     end.
@@ -109,7 +118,9 @@ get_user_ctx(UserId, StorageId, GroupOrSpaceId, QueryFun, HelperName) ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% WRITEME
+%% Returns UserId of user associated with given Uid or ACL Name.
+%% If no entry if found in cache, QueryFun will be called to obtain UserId.
+%% On success, value returned from QueryFun will be cached.
 %% @end
 %%-------------------------------------------------------------------
 -spec get_user_id(non_neg_integer() | binary(), storage:id(), query_fun()) ->
@@ -125,15 +136,25 @@ get_user_id(UidOrName, StorageId, QueryFun) ->
                     add_link(?REV_LUMA_USER_ROOT, StorageId, UidOrNameBin, UserId),
                     {ok, UserId};
                 Error ->
-                    ?error_stacktrace("Fetching user_id from LUMA failed due to ~p", [Error]),
+                    ?error_stacktrace("Fetching user id from LUMA failed due to ~p",
+                        [Error]),
                     Error
             catch
                 Error:Reason ->
-                    ?error_stacktrace("Fetching user_id from LUMA failed due to ~p", [{Error, Reason}]),
+                    ?error_stacktrace("Fetching user id from LUMA failed due to ~p",
+                        [{Error, Reason}]),
                     {error, Reason}
             end
     end.
 
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns GroupId of group associated with given Gid or ACL Name.
+%% If no entry if found in cache, QueryFun will be called to obtain GroupId.
+%% On success, value returned from QueryFun will be cached.
+%% @end
+%%-------------------------------------------------------------------
 -spec get_group_id(non_neg_integer() | binary(), storage:id(), query_fun()) ->
     {ok, od_group:id()} | {error, term()}.
 get_group_id(GidOrName, StorageId, QueryFun) ->
@@ -144,17 +165,19 @@ get_group_id(GidOrName, StorageId, QueryFun) ->
         {error, not_found} ->
             try QueryFun() of
                 {ok, undefined} ->
-                    ?warning("Fetching get_group_id from LUMA returned undefined"),
                     {ok, undefined};
                 {ok, GroupId} when is_binary(GroupId) ->
-                    add_link(?REV_LUMA_GROUP_ROOT, StorageId, GidOrNameBin, GroupId),
+                    add_link(?REV_LUMA_GROUP_ROOT, StorageId, GidOrNameBin,
+                        GroupId),
                     {ok, GroupId};
                 Error ->
-                    ?error_stacktrace("Fetching get_group_id from LUMA failed due to ~p", [Error]),
+                    ?error_stacktrace("Fetching group id from LUMA failed due to ~p",
+                        [Error]),
                     Error
             catch
                 Error:Reason ->
-                    ?error_stacktrace("Fetching get_group_id from LUMA failed due to ~p", [{Error, Reason}]),
+                    ?error_stacktrace("Fetching get group id from LUMA failed due to ~p",
+                        [{Error, Reason}]),
                     {error, Reason}
             end
     end.
@@ -162,7 +185,7 @@ get_group_id(GidOrName, StorageId, QueryFun) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Deletes all cached entries.
+%% Deletes all cached mappings for given StorageId.
 %% @end
 %%-------------------------------------------------------------------
 -spec invalidate(storage:id()) -> ok.
@@ -184,10 +207,11 @@ invalidate(StorageId) ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% WRITEME
+%% Adds reverse user mapping to cache if user_ctx is a POSIX user_ctx.
 %% @end
 %%-------------------------------------------------------------------
--spec maybe_add_reverse_mapping(od_storage:id(), luma:user_ctx(), od_user:id()) -> ok.
+-spec maybe_add_reverse_mapping(od_storage:id(), luma:user_ctx(),
+    od_user:id()) -> ok.
 maybe_add_reverse_mapping(StorageId, #{<<"uid">> := Uid}, UserId) ->
     add_link(?REV_LUMA_USER_ROOT, StorageId, Uid, UserId);
 maybe_add_reverse_mapping(_StorageId, _UserCtx, _UserId) ->
@@ -196,12 +220,14 @@ maybe_add_reverse_mapping(_StorageId, _UserCtx, _UserId) ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% WRITEME
+%% Adds reverse user and group mapping to cache if user_ctx is a
+%% POSIX user_ctx.
 %% @end
 %%-------------------------------------------------------------------
 -spec maybe_add_reverse_mapping(od_storage:id(), luma:user_ctx(), od_user:id(),
     od_group:id() | od_space:id()) -> ok.
-maybe_add_reverse_mapping(StorageId, #{<<"uid">> := Uid, <<"gid">> := Gid}, UserId, GroupOrSpaceId) ->
+maybe_add_reverse_mapping(StorageId, #{<<"uid">> := Uid, <<"gid">> := Gid},
+    UserId, GroupOrSpaceId) ->
     add_link(?REV_LUMA_USER_ROOT, StorageId, Uid, UserId),
     add_link(?REV_LUMA_GROUP_ROOT, StorageId, Gid, GroupOrSpaceId);
 maybe_add_reverse_mapping(_StorageId, _UserCtx, _UserId, _GroupOrSpaceId) ->
@@ -210,7 +236,7 @@ maybe_add_reverse_mapping(_StorageId, _UserCtx, _UserId, _GroupOrSpaceId) ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% WRITEME
+%% Decodes user_ctx.
 %% @end
 %%-------------------------------------------------------------------
 -spec decode_user_ctx(binary(), helper:name()) -> luma:user_ctx().
@@ -234,15 +260,21 @@ decode_user_ctx(Encoded, HelperName) when
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% WRITEME
+%% Encodes user_ctx.
 %% @end
 %%-------------------------------------------------------------------
 -spec encode_user_ctx(luma:user_ctx(), helper:name()) -> binary().
-encode_user_ctx(#{<<"username">> := UserName, <<"key">> := Key}, ?CEPH_HELPER_NAME) ->
+encode_user_ctx(#{<<"username">> := UserName, <<"key">> := Key},
+    ?CEPH_HELPER_NAME
+) ->
     encode(UserName, Key);
-encode_user_ctx(#{<<"accessKey">> := AccessKey, <<"secretKey">> := SecretKey}, ?S3_HELPER_NAME) ->
+encode_user_ctx(#{<<"accessKey">> := AccessKey, <<"secretKey">> := SecretKey},
+    ?S3_HELPER_NAME
+) ->
     encode(AccessKey, SecretKey);
-encode_user_ctx(#{<<"username">> := UserName, <<"password">> := Password}, ?SWIFT_HELPER_NAME) ->
+encode_user_ctx(#{<<"username">> := UserName, <<"password">> := Password},
+    ?SWIFT_HELPER_NAME
+) ->
     encode(UserName, Password);
 encode_user_ctx(#{<<"uid">> := Uid, <<"gid">> := Gid}, HelperName) when
     HelperName =:= ?POSIX_HELPER_NAME orelse
@@ -254,7 +286,7 @@ encode_user_ctx(#{<<"uid">> := Uid, <<"gid">> := Gid}, HelperName) when
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% WRITEME
+%% Encodes two binary values to save in cache.
 %% @end
 %%-------------------------------------------------------------------
 -spec encode(binary(), binary()) -> binary().
@@ -264,7 +296,7 @@ encode(Value1, Value2) ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Fetches link.
+%% Wrapper for datastore_model:get_links/4.
 %% @end
 %%-------------------------------------------------------------------
 -spec get_links(tree_root_id_prefix(), storage:id(), link_id()) ->
@@ -281,7 +313,7 @@ get_links(RootId, StorageId, LinkId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% WRITEME
+%% Wrapper for datastore_model:add_links/4.
 %% @end
 %%--------------------------------------------------------------------
 -spec add_link(tree_root_id_prefix(), storage:id(), link_id(), link_target()) -> ok.
@@ -296,7 +328,7 @@ add_link(RootId, StorageId, LinkId, LinkTarget) ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% WRITEME
+%% Wrapper for datastore_model:delete_links/4.
 %% @end
 %%-------------------------------------------------------------------
 -spec delete_link(tree_root_id_prefix(), storage:id(), link_id()) -> ok.
