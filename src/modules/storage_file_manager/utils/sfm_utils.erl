@@ -271,7 +271,8 @@ create_parent_dirs(FileCtx) ->
 %% Tail recursive helper function of ?MODULE:create_parent_dirs/1
 %% @end
 %%-------------------------------------------------------------------
--spec create_parent_dirs(file_ctx:ctx(), [file_ctx:ctx()], od_space:id(), storage:doc()) -> ok.
+-spec create_parent_dirs(file_ctx:ctx(), [file_ctx:ctx()], od_space:id(),
+    storage:doc()) -> ok.
 create_parent_dirs(FileCtx, ChildrenDirCtxs, SpaceId, Storage) ->
     case file_ctx:is_space_dir_const(FileCtx) of
         true ->
@@ -299,7 +300,8 @@ create_dir(FileCtx, SpaceId, Storage) ->
             mode = Mode}}, FileCtx3} = file_ctx:get_file_doc(FileCtx2),
         case file_ctx:is_space_dir_const(FileCtx3) of
             true ->
-                mkdir_and_maybe_chown(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, FileCtx3, false);
+                mkdir_and_maybe_chown(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE,
+                    FileCtx3, false);
             false ->
                 mkdir_and_maybe_chown(SFMHandle0, Mode, FileCtx3, true)
         end

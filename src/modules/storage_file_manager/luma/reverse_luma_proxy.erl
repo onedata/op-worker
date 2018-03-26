@@ -32,17 +32,23 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get_user_id(integer(), storage:id(), storage:name(), luma_config:config()) ->
-    {ok, od_user:id()}.
+    {ok, od_user:id()} | {error, term()}.
 get_user_id(Uid, StorageId, StorageName, LumaConfig = #luma_config{url = LumaUrl}) ->
     Url = str_utils:format_bin("~s/resolve_user", [LumaUrl]),
     ReqHeaders = luma_proxy:get_request_headers(LumaConfig),
     ReqBody = get_user_request_body(Uid, StorageId, StorageName),
-    {ok, 200, _RespHeaders, RespBody} = http_client:post(Url, ReqHeaders, ReqBody),
-    Response = json_utils:decode_map(RespBody),
-    Idp = maps:get(<<"idp">>, Response),
-    SubjectId = maps:get(<<"subjectId">>, Response),
-    UserId = idp_to_onedata_user_id(Idp, SubjectId),
-    {ok, UserId}.
+    case http_client:post(Url, ReqHeaders, ReqBody) of
+        {ok, 200, _RespHeaders, RespBody} ->
+            Response = json_utils:decode_map(RespBody),
+            Idp = maps:get(<<"idp">>, Response),
+            SubjectId = maps:get(<<"subjectId">>, Response),
+            UserId = idp_to_onedata_user_id(Idp, SubjectId),
+            {ok, UserId};
+        {ok, Code, _RespHeaders, RespBody} ->
+            {error, {Code, json_utils:decode(RespBody)}};
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -51,17 +57,23 @@ get_user_id(Uid, StorageId, StorageName, LumaConfig = #luma_config{url = LumaUrl
 %% @end
 %%--------------------------------------------------------------------
 -spec get_user_id_by_name(binary(), storage:id(), storage:name(),
-    luma_config:config()) -> {ok, od_user:id()}.
+    luma_config:config()) -> {ok, od_user:id()} | {error, term()}.
 get_user_id_by_name(Name, StorageId, StorageName, LumaConfig = #luma_config{url = LumaUrl}) ->
     Url = str_utils:format_bin("~s/resolve_acl_user", [LumaUrl]),
     ReqHeaders = luma_proxy:get_request_headers(LumaConfig),
     ReqBody = get_user_request_body_by_name(Name, StorageId, StorageName),
-    {ok, 200, _RespHeaders, RespBody} = http_client:post(Url, ReqHeaders, ReqBody),
-    Response = json_utils:decode_map(RespBody),
-    Idp = maps:get(<<"idp">>, Response),
-    SubjectId = maps:get(<<"subjectId">>, Response),
-    UserId = idp_to_onedata_user_id(Idp, SubjectId),
-    {ok, UserId}.
+    case http_client:post(Url, ReqHeaders, ReqBody) of
+        {ok, 200, _RespHeaders, RespBody} ->
+            Response = json_utils:decode_map(RespBody),
+            Idp = maps:get(<<"idp">>, Response),
+            SubjectId = maps:get(<<"subjectId">>, Response),
+            UserId = idp_to_onedata_user_id(Idp, SubjectId),
+            {ok, UserId};
+        {ok, Code, _RespHeaders, RespBody} ->
+            {error, {Code, json_utils:decode(RespBody)}};
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -70,20 +82,26 @@ get_user_id_by_name(Name, StorageId, StorageName, LumaConfig = #luma_config{url 
 %% @end
 %%--------------------------------------------------------------------
 -spec get_group_id(integer(), od_space:id(), storage:id(), storage:name(),
-    luma_config:config()) -> {ok, od_user:id()}.
+    luma_config:config()) -> {ok, od_user:id()} |  {error, term()}.
 get_group_id(Gid, SpaceId, StorageId, StorageName, LumaConfig = #luma_config{url = LumaUrl}) ->
     Url = str_utils:format_bin("~s/resolve_group", [LumaUrl]),
     ReqHeaders = luma_proxy:get_request_headers(LumaConfig),
     ReqBody = get_group_request_body(Gid, SpaceId, StorageId, StorageName),
-    {ok, 200, _RespHeaders, RespBody} = http_client:post(Url, ReqHeaders, ReqBody),
-    Response = json_utils:decode_map(RespBody),
-    Idp = maps:get(<<"idp">>, Response),
-    IdpGroupId = maps:get(<<"groupId">>, Response),
-    case Idp of
-        <<"onedata">> ->
-            {ok, IdpGroupId};
-        _ ->
-            provider_logic:map_idp_group_to_onedata(Idp, IdpGroupId)
+    case http_client:post(Url, ReqHeaders, ReqBody) of
+        {ok, 200, _RespHeaders, RespBody} ->
+            Response = json_utils:decode_map(RespBody),
+            Idp = maps:get(<<"idp">>, Response),
+            IdpGroupId = maps:get(<<"groupId">>, Response),
+            case Idp of
+                <<"onedata">> ->
+                    {ok, IdpGroupId};
+                _ ->
+                    provider_logic:map_idp_group_to_onedata(Idp, IdpGroupId)
+            end;
+        {ok, Code, _RespHeaders, RespBody} ->
+            {error, {Code, json_utils:decode(RespBody)}};
+        {error, Reason} ->
+            {error, Reason}
     end.
 
 %%--------------------------------------------------------------------
@@ -93,22 +111,28 @@ get_group_id(Gid, SpaceId, StorageId, StorageName, LumaConfig = #luma_config{url
 %% @end
 %%--------------------------------------------------------------------
 -spec get_group_id_by_name(binary(), od_space:id(), storage:id(), storage:name(),
-    luma_config:config()) -> {ok, od_user:id()}.
+    luma_config:config()) -> {ok, od_user:id()} |  {error, term()}.
 get_group_id_by_name(Name, SpaceId, StorageId, StorageName,
     LumaConfig = #luma_config{url = LumaUrl}
 ) ->
     Url = str_utils:format_bin("~s/resolve_acl_group", [LumaUrl]),
     ReqHeaders = luma_proxy:get_request_headers(LumaConfig),
     ReqBody = get_group_request_body_by_name(Name, SpaceId, StorageId, StorageName),
-    {ok, 200, _RespHeaders, RespBody} = http_client:post(Url, ReqHeaders, ReqBody),
-    Response = json_utils:decode_map(RespBody),
-    Idp = maps:get(<<"idp">>, Response),
-    IdpGroupId = maps:get(<<"groupId">>, Response),
-    case Idp of
-        <<"onedata">> ->
-            {ok, IdpGroupId};
-        _ ->
-            provider_logic:map_idp_group_to_onedata(Idp, IdpGroupId)
+    case http_client:post(Url, ReqHeaders, ReqBody) of
+        {ok, 200, _RespHeaders, RespBody} ->
+            Response = json_utils:decode_map(RespBody),
+            Idp = maps:get(<<"idp">>, Response),
+            IdpGroupId = maps:get(<<"groupId">>, Response),
+            case Idp of
+                <<"onedata">> ->
+                    {ok, IdpGroupId};
+                _ ->
+                    provider_logic:map_idp_group_to_onedata(Idp, IdpGroupId)
+            end;
+        {ok, Code, _RespHeaders, RespBody} ->
+            {error, {Code, json_utils:decode(RespBody)}};
+        {error, Reason} ->
+            {error, Reason}
     end.
 
 %%%===================================================================

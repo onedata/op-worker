@@ -44,6 +44,7 @@ run(Job = #space_strategy_job{
     storage_sync_monitoring:update_queue_length_spirals(SpaceId, -1),
     maybe_import_storage_file_and_children(Job);
 run(Job = #space_strategy_job{
+    strategy_type = StrategyType,
     data = Data = #{
         parent_ctx := ParentCtx,
         file_name := FileName,
@@ -63,13 +64,19 @@ run(Job = #space_strategy_job{
     case StatResult of
         Error = {error, _} ->
             storage_sync_monitoring:update_queue_length_spirals(SpaceId, -1),
+            case StrategyType of
+                storage_import ->
+                    storage_sync_monitoring:increase_failed_file_imports_counter(SpaceId);
+                storage_update ->
+                    storage_sync_monitoring:increase_failed_file_updates_counter(SpaceId)
+            end,
             {Error, []};
         {_StatBuf, StorageFileCtx2}  ->
-        Data2 = Data#{
-            parent_ctx => ParentCtx2,
-            storage_file_ctx => StorageFileCtx2
-        },
-        run(Job#space_strategy_job{data = Data2})
+            Data2 = Data#{
+                parent_ctx => ParentCtx2,
+                storage_file_ctx => StorageFileCtx2
+            },
+            run(Job#space_strategy_job{data = Data2})
     end.
 
 %%--------------------------------------------------------------------

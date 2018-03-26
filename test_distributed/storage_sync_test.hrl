@@ -66,7 +66,6 @@
 -define(LUMA_CONFIG, ?LUMA_CONFIG(?DEFAULT_TIMEOUT)).
 -define(LUMA_CONFIG(CacheTimeout), #luma_config{
     url = ?TEST_URL,
-    cache_timeout = CacheTimeout,
     api_key = <<"test_api_key">>
 }).
 

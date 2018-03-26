@@ -56,7 +56,7 @@ get_user_ctx(SessionId, UserId, SpaceId, StorageDoc = #document{
 %% Queries third party LUMA service for the storage GID for given GroupId.
 %% @end
 %%-------------------------------------------------------------------
--spec get_group_ctx(od_group:id() | undefined, od_space:id(), storage:doc(), helper:name()) ->
+-spec get_group_ctx(od_group:id() | undefined, od_space:id(), storage:doc(), storage:helper()) ->
     {ok, luma:group_ctx()} | {error, term()}.
 get_group_ctx(_GroupId, _SpaceId, _StorageDoc, #helper{name = ?CEPH_HELPER_NAME}) ->
     undefined;
