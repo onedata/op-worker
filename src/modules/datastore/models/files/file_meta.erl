@@ -318,6 +318,7 @@ exists({path, Path}) ->
     end;
 exists(Key) ->
     case ?MODULE:get(Key) of
+        {ok, _} -> true;
         {error, not_found} -> false;
         {error, Reason} -> {error, Reason}
     end.
