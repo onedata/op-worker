@@ -311,7 +311,7 @@ delete_test_skeleton(Config, Desc, WriteOn1, OpenBeforeDel, SleepAfterVerify,
                 create_file_on_worker(Config, Beg, BegSize, DelFile, WriteWorker, 5),
                 verify_file(Config, Beg, {BegSize, DelFile})
         end, undefined, Workers ++ Workers)
-    end, lists:seq(1,5)).
+    end, lists:seq(1,3)).
 
 many_ops_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts, DirsNum, FilesNum) ->
     many_ops_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts, DirsNum, FilesNum);
