@@ -206,6 +206,13 @@ create_storage_file(UserCtx, FileCtx) ->
         {error, ?EEXIST} ->
             storage_file_manager:unlink(SFMHandle),
             {storage_file_manager:create(SFMHandle, Mode), FileCtx3};
+        {error, ?EACCES} ->
+            % eacces is possible because there is race condition
+            % on creating and chowning parent dir
+            % for this reason it is acceptable to try chowning parent once
+            {ParentCtx, FileCtx4} = file_ctx:get_parent(FileCtx3, UserCtx),
+            files_to_chown:chown_or_schedule_chowning(ParentCtx),
+            {storage_file_manager:create(SFMHandle, Mode), FileCtx4};
         Other ->
             {Other, FileCtx3}
     end,
@@ -280,6 +287,8 @@ create_parent_dirs(FileCtx, ChildrenDirCtxs, SpaceId, Storage) ->
                 create_dir(Ctx, SpaceId, Storage)
             end, [FileCtx | ChildrenDirCtxs]);
         false ->
+            %TODO VFS-4297 stop recursion when parent file exists on storage,
+            %TODO currently recursion stops in space dir
             {ParentCtx, FileCtx2} = file_ctx:get_parent(FileCtx, undefined),
             create_parent_dirs(ParentCtx, [FileCtx2 | ChildrenDirCtxs], SpaceId, Storage)
     end.
@@ -323,14 +332,13 @@ create_dir(FileCtx, SpaceId, Storage) ->
     file_ctx:ctx(), boolean()) -> any().
 mkdir_and_maybe_chown(SFMHandle, Mode, FileCtx, ShouldChown) ->
     case storage_file_manager:mkdir(SFMHandle, Mode, false) of
-        ok ->
-            case ShouldChown of
-                true ->
-                    files_to_chown:chown_or_schedule_chowning(FileCtx);
-                false ->
-                    ok
-            end,
-            FileCtx;
-        {error, eexist} ->
-            FileCtx
-    end.
+        ok -> ok;
+        {error, ?EEXIST} -> ok
+    end,
+    case ShouldChown of
+        true ->
+            files_to_chown:chown_or_schedule_chowning(FileCtx);
+        false ->
+            ok
+    end,
+    FileCtx.
