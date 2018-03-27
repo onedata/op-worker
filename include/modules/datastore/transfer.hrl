@@ -18,17 +18,19 @@
 % Time windows and lengths of histograms. They offer one extra, historical value,
 % as the leading one is not yet measured - this way there are always full
 % measurements from the whole histogram span.
+% To avoid fluctuation of charts, they are generated with 30s delay. For this
+% it is required that minute histogram had additional 6 slots, and others one.
 -define(FIVE_SEC_TIME_WINDOW, 5).
--define(MIN_HIST_LENGTH, 13).
+-define(MIN_HIST_LENGTH, 13+6).
 
 -define(MIN_TIME_WINDOW, 60).
--define(HOUR_HIST_LENGTH, 61).
+-define(HOUR_HIST_LENGTH, 61+1).
 
 -define(HOUR_TIME_WINDOW, 3600).
--define(DAY_HIST_LENGTH, 25).
+-define(DAY_HIST_LENGTH, 25+1).
 
 -define(DAY_TIME_WINDOW, 86400).
--define(MONTH_HIST_LENGTH, 31).
+-define(MONTH_HIST_LENGTH, 31+1).
 
 -define(MINUTE_STAT_TYPE, <<"minute">>).
 -define(HOUR_STAT_TYPE, <<"hour">>).

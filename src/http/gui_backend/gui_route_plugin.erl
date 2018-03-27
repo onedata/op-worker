@@ -96,6 +96,8 @@ data_backend(true, <<"space-provider-list">>) -> space_data_backend;
 data_backend(true, <<"space-transfer-list">>) -> space_data_backend;
 data_backend(true, <<"space-user-permission">>) -> space_data_backend;
 data_backend(true, <<"space-group-permission">>) -> space_data_backend;
+data_backend(true, <<"space-transfer-time-stat">>) -> space_data_backend;
+data_backend(true, <<"space-transfer-provider-map">>) -> space_data_backend;
 
 data_backend(true, <<"share">>) -> share_data_backend;
 data_backend(_, <<"share-public">>) -> share_data_backend;
@@ -123,9 +125,7 @@ data_backend(true, <<"file-property-shared">>) -> metadata_data_backend;
 
 data_backend(true, <<"transfer">>) -> transfer_data_backend;
 data_backend(true, <<"transfer-time-stat">>) -> transfer_data_backend;
-data_backend(true, <<"transfer-current-stat">>) -> transfer_data_backend;
-data_backend(true, <<"space-transfer-time-stat">>) -> transfer_data_backend;
-data_backend(true, <<"space-transfer-provider-map">>) -> transfer_data_backend.
+data_backend(true, <<"transfer-current-stat">>) -> transfer_data_backend.
 
 
 %%--------------------------------------------------------------------

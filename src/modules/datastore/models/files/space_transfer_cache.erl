@@ -38,6 +38,9 @@
 -define(MONTH_STAT_EXPIRATION,
     application:get_env(?APP_NAME, gui_month_stat_expiration, timer:seconds(20))).
 
+-define(TRIMMED_TIMESTAMP(__Timestamp),
+    ((__Timestamp rem ?FIVE_SEC_TIME_WINDOW) + 5*?FIVE_SEC_TIME_WINDOW)).
+
 -define(CTX, #{
     model => ?MODULE,
     routing => local,
@@ -90,17 +93,14 @@ get(SpaceId, HistogramType) ->
                 _ -> [?MINUTE_STAT_TYPE, HistogramType]
             end,
             GatheredStats = get_stats(SpaceId, StatsTypes),
-
-        %%    TrimmedStats = trim_stats(CurrentStats, 0),
-        %%
-        %%    lists:map(fun({CurrentStat, HistogramType}) ->
-        %%        histograms_to_speed_charts(CurrentStat, HistogramType)
-        %%    end, lists:zip(TrimmedStats, HistogramTypes)).
-
+            TrimmedStats = trim_stats(lists:zip(GatheredStats, StatsTypes)),
+            ChartStats = lists:map(fun({Stats, StatsType}) ->
+                histograms_to_speed_charts(Stats, StatsType)
+            end, TrimmedStats),
             lists:foreach(fun({Stats, StatsType}) ->
                 save(SpaceId, StatsType, Stats)
-            end, lists:zip(GatheredStats, StatsTypes)),
-            lists:last(GatheredStats);
+            end, lists:zip(ChartStats, StatsTypes)),
+            lists:last(ChartStats);
         _ ->
             Result
     end.
@@ -264,122 +264,71 @@ update_stats(CurrentStat, HistogramType, SpaceTransfer, CurrentTime, Provider) -
     }.
 
 
-%%%%--------------------------------------------------------------------
-%%%% @doc
-%%%% Recalculate bytes histogram into speed charts.
-%%%% @end
-%%%%--------------------------------------------------------------------
-%%trim_min_histogram(MinHistogram) ->
-%%    {A, NewHistogram} = lists:split(6, MinHistogram),
-%%    {lists:sum(A), NewHistogram}.
+%%--------------------------------------------------------------------
+%% @doc
+%% Erase recent 30s of histograms to avoid fluctuations on charts.
+%% @end
+%%--------------------------------------------------------------------
+-spec trim_stats([{space_transfer_cache(), binary()}]) ->
+    [{space_transfer_cache(), binary()}].
+trim_stats([{Stats, ?MINUTE_STAT_TYPE}]) ->
+    TrimFun = fun(_Provider, Histogram) ->
+        {_, NewHistogram} = lists:split(6, Histogram),
+        NewHistogram
+    end,
+    NewStats = Stats#space_transfer_cache{
+        timestamp = ?TRIMMED_TIMESTAMP(Stats#space_transfer_cache.timestamp),
+        stats_in = maps:map(TrimFun, Stats#space_transfer_cache.stats_in),
+        stats_out = maps:map(TrimFun, Stats#space_transfer_cache.stats_out)
+    },
+    [{NewStats, ?MINUTE_STAT_TYPE}].
+
+%%trim_stats([{Stats1, ?MINUTE_STAT_TYPE}, {Stats2, StatsType}]) ->
+%%    #space_transfer_cache{stats_in = StatsIn1, stats_out = StatsOut1} = Stats1,
+%%    #space_transfer_cache{stats_in = StatsIn2, stats_out = StatsOut2} = Stats2,
 %%
+%%    NewTimestamp = ?TRIMMED_TIMESTAMP(Stats1#space_transfer_cache.timestamp),
+%%    TimeWindow = histogram_type_to_time_window(StatsType),
+%%    TrimFun = fun(Histogram1, Histogram2) ->
+%%        {ErasedSlots, NewHistogram1} = lists:split(6, Histogram1),
+%%        ErasedBytes = lists:sum(ErasedSlots),
 %%
-%%%%--------------------------------------------------------------------
-%%%% @doc
-%%%% Recalculate bytes histogram into speed charts.
-%%%% @end
-%%%%--------------------------------------------------------------------
-%%trim_histograms(MinHistogram, Other) ->
-%%    {A, NewMinHistogram} = trim_min_histogram(MinHistogram),
-%%
-%%
-%%    {} = lists:split(6, MinHistogram),
-%%
-%%    #space_transfer_cache{
-%%        stats_in = StatsIn,
-%%        stats_out = StatsOut,
-%%    } = MinuteStats,
-%%
-%%    TrimmedStatsIn = maps:map(fun(_SourceProvider, Histogram) ->
-%%        ok
-%%    end, StatsIn),
-%%    ok.
-%%
-%%
-%%%%--------------------------------------------------------------------
-%%%% @doc
-%%%% Recalculate bytes histogram into speed charts.
-%%%% @end
-%%%%--------------------------------------------------------------------
-%%trim_min_stats(MinuteStats) ->
-%%    #space_transfer_cache{timestamp = Timestamp, stats_in = StatsIn, stats_out = StatsOut
-%%    } = MinuteStats,
-%%
-%%    NewTimestamp = (Timestamp rem ?FIVE_SEC_TIME_WINDOW) + 5*?FIVE_SEC_TIME_WINDOW,
-%%
-%%    TrimFun = fun(_Provider, Histogram) -> trim_min_histogram(Histogram) end,
-%%
-%%    MinuteStats#space_transfer_cache{
-%%        timestamp = NewTimestamp,
-%%        stats_in = maps:map(TrimFun, StatsIn),
-%%        stats_out = maps:map(TrimFun, StatsOut)
-%%    }.
-%%
-%%
-%%%%--------------------------------------------------------------------
-%%%% @doc
-%%%% Recalculate bytes histogram into speed charts.
-%%%% @end
-%%%%--------------------------------------------------------------------
-%%trim_stats(MinuteStats, OtherStats) ->
-%%    #space_transfer_cache{
-%%        timestamp = Timestamp,
-%%        stats_in = MinStatsIn,
-%%        stats_out = MinStatsOut
-%%    } = MinuteStats,
-%%
-%%    #space_transfer_cache{
-%%        stats_in = OtherStatsIn,
-%%        stats_out = OtherStatsOut
-%%    } = OtherStats,
-%%
-%%    NewTimestamp = (Timestamp rem ?FIVE_SEC_TIME_WINDOW) + 5*?FIVE_SEC_TIME_WINDOW,
-%%
-%%    {NewMinStatsIn, NewOtherStatsIn} = maps:fold(fun(Provider, Histogram, {MinStatsIn, OtherStatsIn1}) ->
-%%        OtherHistIn = maps:get(Provider, OtherStatsIn),
-%%        {NewMinHistIn, NewOtherHistIn} = trim_histograms(Histogram, OtherHistIn),
-%%        {MinStatsIn#{Provider => NewMinHistIn}, OtherStatsIn1#{Provider => NewOtherHistIn}}
-%%    end, {#{}, #{}}, MinStatsIn),
-%%
-%%    NewMinStats = MinuteStats#space_transfer_cache{
-%%        timestamp = NewTimestamp,
-%%        stats_in = NewMinStatsIn,
-%%        stats_out = NewMinStatsOut
-%%    },
-%%    NewOtherStats = OtherStats#space_transfer_cache{
-%%        timestamp = NewTimestamp,
-%%        stats_in = NewOtherStatsIn,
-%%        stats_out = NewOtherStatsOut
-%%    },
-%%    {NewMinStats, NewOtherStats}.
-%%
-%%
-%%%%--------------------------------------------------------------------
-%%%% @doc
-%%%% Recalculate bytes histogram into speed charts.
-%%%% @end
-%%%%--------------------------------------------------------------------
-%%-spec histograms_to_speed_charts(CurrentStat :: space_transfer_cache(),
-%%    HistogramType :: binary()) -> space_transfer_cache().
-%%histograms_to_speed_charts(CurrentStat, HistogramType) ->
-%%    #space_transfer_cache{
-%%        stats_in = StatsIn,
-%%        stats_out = StatsOut
-%%    } = CurrentStat,
-%%
-%%    TimeWindow = case HistogramType of
-%%        ?MINUTE_STAT_TYPE -> ?FIVE_SEC_TIME_WINDOW;
-%%        ?HOUR_STAT_TYPE -> ?MIN_TIME_WINDOW;
-%%        ?DAY_STAT_TYPE -> ?HOUR_TIME_WINDOW;
-%%        ?MONTH_STAT_TYPE -> ?DAY_TIME_WINDOW
+%%        {NewHistogram1, 1}
 %%    end,
 %%
-%%    SpeedChart = fun(_, Histogram) -> [Bytes/TimeWindow || Bytes <- Histogram] end,
 %%
-%%    #space_transfer_cache{
-%%        stats_in = maps:map(SpeedChart, StatsIn),
-%%        stats_out = maps:map(SpeedChart, StatsOut)
-%%    }.
+%%    {NewStatsIn1, NewStatsIn2} = maps:fold(fun(Provider, Histogram, {MinStatsIn, OtherStatsIn1}) ->
+%%        OtherHistIn = maps:get(Provider, StatsIn2),
+%%        {NewMinHistIn, NewOtherHistIn} = trim_histograms(Histogram, OtherHistIn),
+%%        {MinStatsIn#{Provider => NewMinHistIn}, OtherStatsIn1#{Provider => NewOtherHistIn}}
+%%    end, {#{}, #{}}, StatsIn1),
+%%
+%%    NewStats1 = Stats1#space_transfer_cache{
+%%        timestamp = NewTimestamp,
+%%        stats_in = NewStatsIn1,
+%%        stats_out = NewMinStatsOut
+%%    },
+%%    NewStats2 = Stats2#space_transfer_cache{
+%%        timestamp = NewTimestamp,
+%%        stats_in = NewStatsIn2,
+%%        stats_out = NewOtherStatsOut
+%%    },
+%%    [{NewStats1, ?MINUTE_STAT_TYPE}, {NewStats2, StatsType}].
+
+
+-spec histograms_to_speed_charts(Stats :: space_transfer_cache(),
+    StatsType :: binary()) -> space_transfer_cache().
+histograms_to_speed_charts(Stats, StatsType) ->
+    Timestamp = Stats#space_transfer_cache.timestamp,
+    TimeWindow = histogram_type_to_time_window(StatsType),
+    FstSlotDuration = (Timestamp rem TimeWindow) + 1,
+    ToChartFun = fun(_, [FstSlot | Rest]) ->
+        [FstSlot/FstSlotDuration | [Bytes/TimeWindow || Bytes <- Rest]]
+    end,
+    #space_transfer_cache{
+        stats_in = maps:map(ToChartFun, Stats#space_transfer_cache.stats_in),
+        stats_out = maps:map(ToChartFun, Stats#space_transfer_cache.stats_out)
+    }.
 
 
 -spec histogram_type_to_expiration_timeout(binary()) -> non_neg_integer().
@@ -387,3 +336,10 @@ histogram_type_to_expiration_timeout(?MINUTE_STAT_TYPE) -> ?MINUTE_STAT_EXPIRATI
 histogram_type_to_expiration_timeout(?HOUR_STAT_TYPE) -> ?HOUR_STAT_EXPIRATION;
 histogram_type_to_expiration_timeout(?DAY_STAT_TYPE) -> ?DAY_STAT_EXPIRATION;
 histogram_type_to_expiration_timeout(?MONTH_STAT_TYPE) -> ?MONTH_STAT_EXPIRATION.
+
+
+-spec histogram_type_to_time_window(binary()) -> non_neg_integer().
+histogram_type_to_time_window(?MINUTE_STAT_TYPE) -> ?FIVE_SEC_TIME_WINDOW;
+histogram_type_to_time_window(?HOUR_STAT_TYPE) -> ?MIN_TIME_WINDOW;
+histogram_type_to_time_window(?DAY_STAT_TYPE) -> ?HOUR_TIME_WINDOW;
+histogram_type_to_time_window(?MONTH_STAT_TYPE) -> ?DAY_TIME_WINDOW.
