@@ -144,18 +144,18 @@ handle(restart_transfers) ->
                 Restarted = transfer:restart_unfinished_transfers(SpaceId),
                 ?debug("Restarted following transfers: ~p", [Restarted])
             end, SpaceIds);
-        {error, ?ERROR_UNREGISTERED_PROVIDER} ->
+        ?ERROR_UNREGISTERED_PROVIDER ->
+            schedule_restart_transfers();
+        ?ERROR_NO_CONNECTION_TO_OZ ->
             schedule_restart_transfers();
         Error = {error, _} ->
             ?error("Unable to restart transfers due to: ~p", [Error])
     catch
-        _:Reason ->
-            ?error_stacktrace("Unable to restart transfers due to: ~p", [Reason])
+        Error2:Reason ->
+            ?error_stacktrace("Dupa Unable to restart transfers due to: ~p", [{Error2, Reason}])
     end;
 handle({fuse_request, SessId, FuseRequest}) ->
-    ?debug("fuse_request(~p): ~p", [SessId, FuseRequest]),
     Response = handle_request_and_process_response(SessId, FuseRequest),
-    ?debug("fuse_response: ~p", [Response]),
     {ok, Response};
 handle({provider_request, SessId, ProviderRequest}) ->
     ?debug("provider_request(~p): ~p", [SessId, ProviderRequest]),
