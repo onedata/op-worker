@@ -206,10 +206,15 @@ create_storage_file(UserCtx, FileCtx) ->
             ?info("cccc 3 ~p", [FileCtx]),
             FileCtx4 = create_parent_dirs(FileCtx3),
             {storage_file_manager:create(SFMHandle, Mode), FileCtx4};
-        {error, ?EEXIST} ->
+        {error, ?EEXIST} = Eexists ->
             ?info("cccc 4 ~p", [FileCtx]),
-            storage_file_manager:unlink(SFMHandle),
-            {storage_file_manager:create(SFMHandle, Mode), FileCtx3};
+            case application:get_env(?APP_NAME, unlink_on_create, true) of
+                true ->
+                    storage_file_manager:unlink(SFMHandle),
+                    {storage_file_manager:create(SFMHandle, Mode), FileCtx3};
+                _ ->
+                    Eexists
+            end;
         Other ->
             ?info("cccc 5 ~p", [{Other, FileCtx}]),
             {Other, FileCtx3}

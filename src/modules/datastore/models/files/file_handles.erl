@@ -147,6 +147,7 @@ register_release(FileCtx, SessId, Count) ->
     end,
     case datastore_model:update(?CTX, FileUuid, Diff) of
         {ok, #document{value = #file_handles{descriptors = Fds}}} ->
+            ?info("mmmmm1 ~p", [{FileCtx, Fds}]),
             case maps:is_key(SessId, Fds) of
                 true -> ok;
                 false -> session:remove_open_file(SessId, FileGuid)
@@ -160,12 +161,15 @@ register_release(FileCtx, SessId, Count) ->
                 {error, Reason} -> {error, Reason}
             end;
         {error, removed} ->
+            ?info("mmmmm2 ~p", [{FileCtx}]),
             session:remove_open_file(SessId, FileGuid),
             fslogic_deletion_worker:request_open_file_deletion(FileCtx),
             datastore_model:delete(?CTX, FileUuid);
         {error, not_found} ->
+            ?info("mmmmm3 ~p", [{FileCtx}]),
             ok;
         {error, Reason} ->
+            ?info("mmmmm4 ~p", [{FileCtx, Reason}]),
             {error, Reason}
     end.
 

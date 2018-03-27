@@ -18,11 +18,13 @@
 -include("modules/events/definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([init/1, handle/1, cleanup/0]).
--export([request_deletion/3, request_open_file_deletion/1]).
+-export([request_deletion/3, request_open_file_deletion/1,
+    request_remote_deletion/1]).
 
 %%%===================================================================
 %%% API
@@ -36,7 +38,7 @@
 -spec request_deletion(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean()) ->
     ok.
 request_deletion(UserCtx, FileCtx, Silent) ->
-    ok = worker_proxy:call(fslogic_deletion_worker,
+    ok = worker_proxy:cast(fslogic_deletion_worker,
         {fslogic_deletion_request, UserCtx, FileCtx, Silent}).
 
 %%--------------------------------------------------------------------
@@ -48,6 +50,16 @@ request_deletion(UserCtx, FileCtx, Silent) ->
 request_open_file_deletion(FileCtx) ->
     ok = worker_proxy:cast(fslogic_deletion_worker,
         {open_file_deletion_request, FileCtx}).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Request deletion of given file (delete triggered by dbsync_
+%% @end
+%%--------------------------------------------------------------------
+-spec request_remote_deletion(file_ctx:ctx()) -> ok.
+request_remote_deletion(FileCtx) ->
+    ok = worker_proxy:call(fslogic_deletion_worker,
+        {dbsync_deletion_request, FileCtx}).
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -116,11 +128,43 @@ handle({fslogic_deletion_request, UserCtx, FileCtx, Silent}) ->
 handle({open_file_deletion_request, FileCtx}) ->
     try
         UserCtx = user_ctx:new(?ROOT_SESS_ID),
-        fslogic_delete:remove_file_and_file_meta(FileCtx, UserCtx, false)
+
+        {ParentCtx, FileCtx2} = file_ctx:get_parent(FileCtx, UserCtx),
+        {ParentDoc, _} = file_ctx:get_file_doc(ParentCtx),
+        {#document{key = Uuid, value = #file_meta{name = Name}} = FileDoc,
+            FileCtx3} = file_ctx:get_file_doc_including_deleted(FileCtx2),
+        ok = case fslogic_path:resolve(ParentDoc, <<"/", Name/binary>>) of
+            {ok, #document{key = Uuid2}} when Uuid2 =/= Uuid ->
+                ok;
+            _ ->
+                sfm_utils:delete_storage_file_without_location(FileCtx3, UserCtx)
+        end,
+        file_meta:delete_without_link(FileDoc)
+    catch
+        _:{badmatch, {error, not_found}} ->
+            ?error_stacktrace("Cannot delete file at storage ~p", [FileCtx]),
+            ok;
+        _:{badmatch, {error, enoent}} ->
+            ?debug_stacktrace("Cannot delete file at storage ~p", [FileCtx]),
+            ok
+    end;
+handle({dbsync_deletion_request, FileCtx}) ->
+    try
+        FileUuid = file_ctx:get_uuid_const(FileCtx),
+        fslogic_event_emitter:emit_file_removed(FileCtx, []),
+        case file_handles:exists(FileUuid) of
+            true ->
+                ?info("zzzzz ~p", [FileCtx]),
+                ok = file_handles:mark_to_remove(FileCtx);
+            false ->
+                ?info("zzzzz2 ~p", [FileCtx]),
+                handle({open_file_deletion_request, FileCtx})
+        end
     catch
         _:{badmatch, {error, not_found}} ->
             ok
-    end;
+    end,
+    ok;
 handle(_Request) ->
     ?log_bad_request(_Request),
     {error, wrong_request}.

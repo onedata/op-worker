@@ -128,6 +128,29 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{
                     {ok, FileUuid} -> {ok, FileUuid};
                     Error -> Error
                 end;
+            {error, already_exists} = Eexists ->
+                case datastore_model:get_links(Ctx, ParentUuid, TreeId, FileName) of
+                    {ok, [#link{target = OldUuid}]} ->
+                        Deleted = case datastore_model:get(
+                            Ctx#{include_deleted := true}, OldUuid) of
+                            {ok, #document{deleted = true}} ->
+                                true;
+                            {ok, #document{value = #file_meta{deleted = true}}} ->
+                                true;
+                            _ ->
+                                false
+                        end,
+                        case Deleted of
+                            true ->
+                                datastore_model:delete_links(Ctx, ParentUuid,
+                                    TreeId, FileName),
+                                create({uuid, ParentUuid}, FileDoc);
+                            _ ->
+                                Eexists
+                        end;
+                    _ ->
+                        Eexists
+                end;
             {error, Reason} ->
                 {error, Reason}
         end

@@ -46,30 +46,39 @@ change_replicated(SpaceId, Change) ->
 %%--------------------------------------------------------------------
 -spec change_replicated_internal(od_space:id(), datastore:doc()) ->
     any() | no_return().
+
+% Plik sie nie listuje bo przyszlo skasowanie file_meta, ale nie przyszlo skasowanie linkow i wtedy sie nie listuje,
+% ale nie mozna tez stworzyc przec chwile
+% Druga opcja - kasuje plik otwarty - wtedy puki go nie zamknie to plik na storage sie nie skasuje
+% wszystkie inne problemy sa zwiazane z race'ami (a wiec nie wystepuja zawsze wiec raczej to nie bylo to)
+% lub z rtransfer co zostalo fixniete przez Kondzia i tez dawalo inne obiawy
+% dodatkowy problem - jesli u providera A kasujemy plik to po sync jest on kasowany u B niezaleznie od tego czy ma otwarte pliki
 change_replicated_internal(SpaceId, #document{
     key = FileUuid,
-    value = #file_meta{type = ?REGULAR_FILE_TYPE, owner = UserId},
-    % TODO - obsluzyc tez pole deleted wewnatrz rekordu file_meta
-    deleted = true
-} = FileDoc) ->
+    value = #file_meta{
+        type = ?REGULAR_FILE_TYPE,
+        owner = UserId, deleted = Del1},
+    deleted = Del2
+} = FileDoc) when Del1 or Del2 ->
     ?info("change_replicated_internal: deleted file_meta ~p", [FileUuid]),
     Ctx = datastore_model_default:get_ctx(file_meta),
-    case datastore_model:exists(Ctx, FileUuid) of
-        {ok, false} ->
-            try
-                FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
-                fslogic_event_emitter:emit_file_removed(FileCtx, []),
-                % TODO - if links delete comes before, it fails!
-                ok = sfm_utils:delete_storage_file_without_location(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
-                ok = file_location:delete(file_location:local_id(FileUuid), UserId),
-                ?info_stacktrace("aaaaaa ~p", [FileDoc]),
-                ok
-            catch
-                _:{badmatch, {error, not_found}} ->
-                    % TODO - if links delete comes before, this function fails!
-                    ?info_stacktrace("aaaaaa2 ~p", [FileDoc]),
-                    ok
-            end;
+
+    Proceed = case datastore_model:get(Ctx, FileUuid) of
+        {error, not_found} ->
+            ?info_stacktrace("aaaaaa01 ~p", [FileDoc]),
+            true;
+        {ok, #document{value = #file_meta{deleted = Del}} = X} ->
+            ?info_stacktrace("aaaaaa02 ~p", [{FileDoc, X}]),
+            Del
+    end,
+
+    case Proceed of
+        true ->
+            % powinnismy schedulowac kasowanie (a co jak cos jest otwarte)
+            FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
+            fslogic_deletion_worker:request_remote_deletion(FileCtx),
+            ?info_stacktrace("aaaaaa ~p", [FileDoc]),
+            ok;
         _ ->
             ?info_stacktrace("aaaaaa3 ~p", [FileDoc]),
             ok
