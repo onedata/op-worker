@@ -230,13 +230,13 @@ transfer_record(TransferId) ->
 transfer_time_stat_record(StatId) ->
     {TypePrefix, TransferId} = op_gui_utils:association_to_ids(StatId),
     {ok, #document{value = T}} = transfer:get(TransferId),
+    StartTime = T#transfer.start_time,
     {Histograms, TimeWindow} = case TypePrefix of
         ?MINUTE_STAT_TYPE -> {T#transfer.min_hist, ?FIVE_SEC_TIME_WINDOW};
         ?HOUR_STAT_TYPE -> {T#transfer.hr_hist, ?MIN_TIME_WINDOW};
         ?DAY_STAT_TYPE -> {T#transfer.dy_hist, ?HOUR_TIME_WINDOW};
         ?MONTH_STAT_TYPE -> {T#transfer.mth_hist, ?DAY_TIME_WINDOW}
     end,
-    StartTime = T#transfer.start_time,
     LastUpdate = get_last_update(T),
     % Calculate bytes per sec histograms
     StatsMap = maps:map(fun(_ProviderId, HistogramValues) ->
@@ -259,37 +259,16 @@ transfer_time_stat_record(StatId) ->
 -spec transfer_current_stat_record(transfer:id()) -> {ok, proplists:proplist()}.
 transfer_current_stat_record(TransferId) ->
     {ok, #document{value = Transfer = #transfer{
-        last_update = LastUpdateMap,
         bytes_transferred = BytesTransferred,
-        files_transferred = FilesTransferred,
-        min_hist = MinHistograms
+        files_transferred = FilesTransferred
     }}} = transfer:get(TransferId),
     LastUpdate = get_last_update(Transfer),
-    % No need to use actual start time, because only the newest measurements
-    % are needed to calculate current speed.
-    StartTime = LastUpdate - 2 * ?FIVE_SEC_TIME_WINDOW,
-    BytesPerSec = maps:to_list(maps:map(fun(ProviderId, HistogramValues) ->
-        % Shift all histograms to the time of latest update (in any provider),
-        % extrapolating with zeros
-        LastUpdateInThisProvider = maps:get(ProviderId, LastUpdateMap),
-        ShiftedHistogram = shift_histogram(
-            HistogramValues, LastUpdateInThisProvider, LastUpdate, ?FIVE_SEC_TIME_WINDOW
-        ),
-        % Take the second value as current speed (the first one changes very
-        % dynamically and does not show current trend from past couple of
-        % seconds).
-        [_, CurrentSpeed | _] = histogram_to_speed_chart(
-            ShiftedHistogram, StartTime, LastUpdate, ?FIVE_SEC_TIME_WINDOW
-        ),
-        CurrentSpeed
-    end, MinHistograms)),
     {ok, [
         {<<"id">>, TransferId},
         {<<"status">>, get_status(Transfer)},
         {<<"timestamp">>, LastUpdate},
         {<<"transferredBytes">>, BytesTransferred},
-        {<<"transferredFiles">>, FilesTransferred},
-        {<<"bytesPerSec">>, BytesPerSec}
+        {<<"transferredFiles">>, FilesTransferred}
     ]}.
 
 
@@ -308,28 +287,14 @@ space_transfer_time_stat_record(StatId) ->
         timestamp = Timestamp,
         stats_in = StatsIn,
         stats_out = StatsOut
-    } = space_transfer_cache:get(TypePrefix, SpaceId),
-
-    TimeWindow = case TypePrefix of
-        ?MINUTE_STAT_TYPE -> ?FIVE_SEC_TIME_WINDOW;
-        ?HOUR_STAT_TYPE -> ?MIN_TIME_WINDOW;
-        ?DAY_STAT_TYPE -> ?HOUR_TIME_WINDOW;
-        ?MONTH_STAT_TYPE -> ?DAY_TIME_WINDOW
-    end,
-
-    NewStatsIn = maps:map(fun(_ProviderId, HistogramValues) ->
-        histogram_to_speed_chart(HistogramValues, 0, Timestamp, TimeWindow)
-    end, StatsIn),
-    NewStatsOut = maps:map(fun(_ProviderId, HistogramValues) ->
-        histogram_to_speed_chart(HistogramValues, 0, Timestamp, TimeWindow)
-    end, StatsOut),
+    } = space_transfer_cache:get(SpaceId, TypePrefix),
 
     {ok, [
         {<<"id">>, StatId},
         {<<"timestamp">>, Timestamp},
         {<<"type">>, TypePrefix},
-        {<<"statsIn">>, maps:to_list(NewStatsIn)},
-        {<<"statsOut">>, maps:to_list(NewStatsOut)}
+        {<<"statsIn">>, maps:to_list(StatsIn)},
+        {<<"statsOut">>, maps:to_list(StatsOut)}
     ]}.
 
 
@@ -342,9 +307,9 @@ space_transfer_time_stat_record(StatId) ->
 -spec space_transfer_provider_map_record(StatId :: binary()) ->
     {ok, proplists:proplist()}.
 space_transfer_provider_map_record(SpaceId) ->
-    #space_transfer_cache{
-        mapping = Mapping
-    } = space_transfer_cache:get(?MINUTE_STAT_TYPE, SpaceId),
+    #space_transfer_cache{mapping = Mapping} = space_transfer_cache:get(
+        SpaceId, ?MINUTE_STAT_TYPE
+    ),
 
     {ok, [
         {<<"id">>, SpaceId},
@@ -387,21 +352,6 @@ get_status(#transfer{
     scheduled;
 get_status(#transfer{status = Status}) ->
     Status.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Shifts given histogram based on its last update and current time.
-%% @end
-%%--------------------------------------------------------------------
--spec shift_histogram(histogram:histogram(), LastUpdate :: non_neg_integer(),
-    CurrentTime :: non_neg_integer(), TimeWindow :: non_neg_integer()) ->
-    histogram:histogram().
-shift_histogram(HistogramValues, LastUpdate, CurrentTime, TimeWindow) ->
-    Histogram = time_slot_histogram:new(LastUpdate, TimeWindow, HistogramValues),
-    ShiftedHistogram = time_slot_histogram:increment(Histogram, CurrentTime, 0),
-    time_slot_histogram:get_histogram_values(ShiftedHistogram).
 
 
 %%--------------------------------------------------------------------
