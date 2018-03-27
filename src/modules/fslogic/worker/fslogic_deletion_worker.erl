@@ -38,7 +38,7 @@
 -spec request_deletion(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean()) ->
     ok.
 request_deletion(UserCtx, FileCtx, Silent) ->
-    ok = worker_proxy:cast(fslogic_deletion_worker,
+    ok = worker_proxy:call(fslogic_deletion_worker,
         {fslogic_deletion_request, UserCtx, FileCtx, Silent}).
 
 %%--------------------------------------------------------------------
@@ -154,10 +154,8 @@ handle({dbsync_deletion_request, FileCtx}) ->
         fslogic_event_emitter:emit_file_removed(FileCtx, []),
         case file_handles:exists(FileUuid) of
             true ->
-                ?info("zzzzz ~p", [FileCtx]),
                 ok = file_handles:mark_to_remove(FileCtx);
             false ->
-                ?info("zzzzz2 ~p", [FileCtx]),
                 handle({open_file_deletion_request, FileCtx})
         end
     catch

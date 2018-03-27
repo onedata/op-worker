@@ -488,8 +488,6 @@ write_internal(LfmCtx, Offset, Buffer, GenerateEvents) ->
         }
     },
 
-    ?info("wwwww1 ~p", [ProxyIORequest]),
-
     remote_utils:call_fslogic(SessId, proxyio_request, ProxyIORequest,
         fun(#remote_write_result{wrote = Wrote}) ->
             WrittenBlocks = [#file_block{offset = Offset, size = Wrote}],

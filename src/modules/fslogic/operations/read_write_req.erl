@@ -55,7 +55,6 @@ read(UserCtx, FileCtx, HandleId, Offset, Size) ->
     ByteSequences :: [#byte_sequence{}]) -> fslogic_worker:proxyio_response().
 write(UserCtx, FileCtx, HandleId, ByteSequences) ->
     {ok, Handle0} = get_handle(UserCtx, FileCtx, HandleId),
-    ?info("wwwww3 ~p", [{FileCtx, HandleId, ByteSequences}]),
     {Written, _} =
         lists:foldl(fun(#byte_sequence{offset = Offset, data = Data}, {Acc, Handle}) ->
             {WrittenNow, NewHandle} = write_all(Handle, Offset, Data, 0),

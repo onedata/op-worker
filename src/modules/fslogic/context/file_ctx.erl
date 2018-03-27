@@ -655,7 +655,6 @@ get_child(FileCtx, Name, UserCtx) ->
             end
     end.
 
-
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Returns CanonicalPath for child of ParentCtx with given FileName.

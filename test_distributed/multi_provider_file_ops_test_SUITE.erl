@@ -49,10 +49,12 @@
     echo_and_delete_file_loop_test_base/1,
     distributed_delete_test/1,
     remote_driver_test/1,
-    db_sync_with_delays_test/1
+    db_sync_with_delays_test/1,
+    db_sync_create_after_del_test/1
 ]).
 
 -define(TEST_CASES, [
+    db_sync_create_after_del_test,
     db_sync_basic_opts_test,
     db_sync_many_ops_test,
     db_sync_distributed_modification_test,
@@ -109,7 +111,10 @@ all() ->
     ]).
 
 db_sync_basic_opts_test(Config) ->
-    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {2,0,0,1}, 60).
+    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
+
+db_sync_create_after_del_test(Config) ->
+    multi_provider_file_ops_test_base:create_after_del_test_base(Config, <<"user1">>, {2,0,0,1}, 60).
 
 distributed_delete_test(Config) ->
     multi_provider_file_ops_test_base:distributed_delete_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
