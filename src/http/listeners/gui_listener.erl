@@ -84,6 +84,7 @@ start() ->
         {'_', lists:flatten([
             {?provider_id_path, get_provider_id_handler, []},
             {?provider_version_path, get_provider_version_handler, []},
+            {?provider_configuration_path, configuration_handler, []},
             {?identity_macaroon_path, get_identity_macaroon_handler, []},
             {?nonce_verify_path, nonce_verify_handler, []},
             {?client_protocol_path, incoming_connection, []},

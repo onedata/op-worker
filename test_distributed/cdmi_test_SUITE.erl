@@ -26,7 +26,7 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([all/0, init_per_suite/1, init_per_testcase/2,
+-export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
 
 -export([
@@ -196,6 +196,9 @@ create_cdmi_dir_without_cdmi_version_header_should_fail_test(Config) ->
 
 init_per_suite(Config) ->
     [{?LOAD_MODULES, [initializer]} | Config].
+
+end_per_suite(_) ->
+    ok.
 
 init_per_testcase(choose_adequate_handler_test = Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),

@@ -36,4 +36,8 @@
 -define(provider_version_path, "/version").
 -define(zone_version_path, "/version").
 
+%% Endpoints used to get current configuration of services
+-define(provider_configuration_path, "/configuration").
+-define(zone_configuration_path, "/configuration").
+
 -endif.
