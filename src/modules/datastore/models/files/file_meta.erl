@@ -132,7 +132,7 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{
                 case datastore_model:get_links(Ctx, ParentUuid, TreeId, FileName) of
                     {ok, [#link{target = OldUuid}]} ->
                         Deleted = case datastore_model:get(
-                            Ctx#{include_deleted := true}, OldUuid) of
+                            Ctx#{include_deleted => true}, OldUuid) of
                             {ok, #document{deleted = true}} ->
                                 true;
                             {ok, #document{value = #file_meta{deleted = true}}} ->

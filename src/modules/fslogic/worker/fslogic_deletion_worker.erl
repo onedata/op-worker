@@ -127,18 +127,27 @@ handle({fslogic_deletion_request, UserCtx, FileCtx, Silent}) ->
     ok;
 handle({open_file_deletion_request, FileCtx}) ->
     try
+        {#document{key = Uuid, value = #file_meta{name = Name}} = FileDoc,
+            FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
         UserCtx = user_ctx:new(?ROOT_SESS_ID),
 
-        {ParentCtx, FileCtx2} = file_ctx:get_parent(FileCtx, UserCtx),
-        {ParentDoc, _} = file_ctx:get_file_doc(ParentCtx),
-        {#document{key = Uuid, value = #file_meta{name = Name}} = FileDoc,
-            FileCtx3} = file_ctx:get_file_doc_including_deleted(FileCtx2),
-        ok = case fslogic_path:resolve(ParentDoc, <<"/", Name/binary>>) of
-            {ok, #document{key = Uuid2}} when Uuid2 =/= Uuid ->
-                ok;
-            _ ->
-                sfm_utils:delete_storage_file_without_location(FileCtx3, UserCtx)
+        try
+            {ParentCtx, FileCtx3} = file_ctx:get_parent(FileCtx2, UserCtx),
+            {ParentDoc, _} = file_ctx:get_file_doc(ParentCtx),
+            ok = case fslogic_path:resolve(ParentDoc, <<"/", Name/binary>>) of
+                {ok, #document{key = Uuid2}} when Uuid2 =/= Uuid ->
+                    ok;
+                _ ->
+                    sfm_utils:delete_storage_file_without_location(FileCtx3, UserCtx)
+            end
+        catch
+            E2:E2 ->
+                % Debug - parent could be deleted before
+                ?debug_stacktrace("Cannot check parrent during delete ~p: ~p:~p",
+                    [FileCtx, E2, E2]),
+                sfm_utils:delete_storage_file_without_location(FileCtx2, UserCtx)
         end,
+
         file_meta:delete_without_link(FileDoc)
     catch
         _:{badmatch, {error, not_found}} ->

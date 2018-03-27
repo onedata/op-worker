@@ -228,17 +228,17 @@ create_after_del_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWrit
         test_utils:set_env(Worker, ?APP_NAME, unlink_on_create, false)
     end, Workers),
 
-    delete_test_skeleton(Config, "Standard", true, false, false, false),
-    delete_test_skeleton(Config, "Standard, write 1", false, false, false, false),
+    delete_test_skeleton(Config, "Standard, write 1", true, false, false, false),
+    delete_test_skeleton(Config, "Standard", false, false, false, false),
 
-    delete_test_skeleton(Config, "Open and sleep", true, true, {true, 10}, false),
-    delete_test_skeleton(Config, "Open and sleep, write 1", false, true, {true, 10}, false),
+    delete_test_skeleton(Config, "Open and sleep, write 1", true, true, {true, 10}, false),
+    delete_test_skeleton(Config, "Open and sleep", false, true, {true, 10}, false),
 
-    delete_test_skeleton(Config, "Open and no sleep", true, true, false, false),
-    delete_test_skeleton(Config, "Open and no sleep, write 1", false, true, false, false),
+    delete_test_skeleton(Config, "Open no sleep, write 1", true, true, false, false),
+    delete_test_skeleton(Config, "Open no sleep", false, true, false, false),
 
-    delete_test_skeleton(Config, "Close after del", true, true, {true, 1}, true),
-    delete_test_skeleton(Config, "Close after del, write 1", false, true, {true, 1}, true),
+    delete_test_skeleton(Config, "Close after del, write 1", true, true, {true, 1}, true),
+    delete_test_skeleton(Config, "Close after del", false, true, {true, 1}, true),
 
     lists:foreach(fun(Worker) ->
         test_utils:set_env(Worker, ?APP_NAME, unlink_on_create, true)
@@ -311,7 +311,7 @@ delete_test_skeleton(Config, Desc, WriteOn1, OpenBeforeDel, SleepAfterVerify,
                 create_file_on_worker(Config, Beg, BegSize, DelFile, WriteWorker, 5),
                 verify_file(Config, Beg, {BegSize, DelFile})
         end, undefined, Workers ++ Workers)
-    end, lists:seq(1,3)).
+    end, lists:seq(1,2)).
 
 many_ops_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts, DirsNum, FilesNum) ->
     many_ops_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts, DirsNum, FilesNum);
