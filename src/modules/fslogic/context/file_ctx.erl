@@ -375,11 +375,11 @@ get_mounted_in_root(FileCtx = #file_ctx{mounted_in_root = MiR}) ->
 get_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = undefined}) ->
     FileUuid = get_uuid_const(FileCtx),
     {ok, Doc} = file_meta:get_including_deleted(FileUuid),
-    case Doc#document.value#file_meta.deleted of
-        true ->
-            {Doc, FileCtx};
-        false ->
-            {Doc, FileCtx#file_ctx{file_doc = Doc}}
+    case {Doc#document.value#file_meta.deleted, Doc#document.deleted} of
+        {false, false} ->
+            {Doc, FileCtx#file_ctx{file_doc = Doc}};
+        _ ->
+            {Doc, FileCtx}
     end;
 get_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = FileDoc}) ->
     {FileDoc, FileCtx}.

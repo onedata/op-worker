@@ -203,7 +203,7 @@ get(FileUuid) ->
 %%--------------------------------------------------------------------
 -spec get_including_deleted(uuid()) -> {ok, doc()} | {error, term()}.
 get_including_deleted(FileUuid) ->
-    datastore_model:get(?CTX, FileUuid).
+    datastore_model:get(?CTX#{include_deleted => true}, FileUuid).
 
 %%--------------------------------------------------------------------
 %% @doc
