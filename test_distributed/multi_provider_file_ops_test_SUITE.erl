@@ -54,7 +54,6 @@
 ]).
 
 -define(TEST_CASES, [
-    db_sync_create_after_del_test,
     db_sync_basic_opts_test,
     db_sync_many_ops_test,
     db_sync_distributed_modification_test,
@@ -71,7 +70,8 @@
     create_and_delete_file_loop_test,
     echo_and_delete_file_loop_test,
     distributed_delete_test,
-    remote_driver_test
+    remote_driver_test,
+    db_sync_create_after_del_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [

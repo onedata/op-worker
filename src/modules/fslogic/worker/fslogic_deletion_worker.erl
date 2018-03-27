@@ -126,9 +126,9 @@ handle({fslogic_deletion_request, UserCtx, FileCtx, Silent}) ->
     end,
     ok;
 handle({open_file_deletion_request, FileCtx}) ->
+    {#document{key = Uuid, value = #file_meta{name = Name}} = FileDoc,
+        FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
     try
-        {#document{key = Uuid, value = #file_meta{name = Name}} = FileDoc,
-            FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
         UserCtx = user_ctx:new(?ROOT_SESS_ID),
 
         try
@@ -146,9 +146,7 @@ handle({open_file_deletion_request, FileCtx}) ->
                 ?debug_stacktrace("Cannot check parrent during delete ~p: ~p:~p",
                     [FileCtx, E2, E2]),
                 sfm_utils:delete_storage_file_without_location(FileCtx2, UserCtx)
-        end,
-
-        file_meta:delete_without_link(FileDoc)
+        end
     catch
         _:{badmatch, {error, not_found}} ->
             ?error_stacktrace("Cannot delete file at storage ~p", [FileCtx]),
@@ -156,7 +154,9 @@ handle({open_file_deletion_request, FileCtx}) ->
         _:{badmatch, {error, enoent}} ->
             ?debug_stacktrace("Cannot delete file at storage ~p", [FileCtx]),
             ok
-    end;
+    end,
+
+    file_meta:delete_without_link(FileDoc);
 handle({dbsync_deletion_request, FileCtx}) ->
     try
         FileUuid = file_ctx:get_uuid_const(FileCtx),

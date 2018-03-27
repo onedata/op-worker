@@ -192,6 +192,8 @@ get(FileUuid) ->
     case get_including_deleted(FileUuid) of
         {ok, #document{value = #file_meta{deleted = true}}} ->
             {error, not_found};
+        {ok, #document{deleted = true}} ->
+            {error, not_found};
         Other ->
             Other
     end.
@@ -315,8 +317,7 @@ exists({path, Path}) ->
         {error, not_found} -> false
     end;
 exists(Key) ->
-    case get_including_deleted(Key) of
-        {ok, #document{value = #file_meta{deleted = Deleted}}} -> not Deleted;
+    case ?MODULE:get(Key) of
         {error, not_found} -> false;
         {error, Reason} -> {error, Reason}
     end.
