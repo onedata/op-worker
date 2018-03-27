@@ -152,10 +152,12 @@ handle(restart_transfers) ->
             ?error("Unable to restart transfers due to: ~p", [Error])
     catch
         Error2:Reason ->
-            ?error_stacktrace("Dupa Unable to restart transfers due to: ~p", [{Error2, Reason}])
+            ?error_stacktrace("Unable to restart transfers due to: ~p", [{Error2, Reason}])
     end;
 handle({fuse_request, SessId, FuseRequest}) ->
+    ?debug("fuse_request(~p): ~p", [SessId, FuseRequest]),
     Response = handle_request_and_process_response(SessId, FuseRequest),
+    ?debug("fuse_response: ~p", [Response]),
     {ok, Response};
 handle({provider_request, SessId, ProviderRequest}) ->
     ?debug("provider_request(~p): ~p", [SessId, ProviderRequest]),
