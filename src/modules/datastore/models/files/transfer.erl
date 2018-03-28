@@ -558,7 +558,6 @@ mark_data_transfer_finished(TransferId, ProviderId, Bytes) ->
     space_transfer:update(SpaceId, ProviderId, Bytes),
 
     update(TransferId, fun(Transfer = #transfer{
-        space_id = SpaceId,
         bytes_transferred = OldBytes,
         start_time = StartTime,
         last_update = LastUpdateMap,
@@ -567,7 +566,6 @@ mark_data_transfer_finished(TransferId, ProviderId, Bytes) ->
         dy_hist = DyHistograms,
         mth_hist = MthHistograms
     }) ->
-        space_transfer:update(SpaceId, ProviderId, Bytes),
         LastUpdate = maps:get(ProviderId, LastUpdateMap, StartTime),
         CurrentTime = provider_logic:zone_time_seconds(),
         {ok, Transfer#transfer{
@@ -1170,4 +1168,3 @@ upgrade_record(4, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, Status,
         FailedFiles, FilesTransferred, BytesTransferred, FilesInvalidated,
         StartTime, FinishTime, LastUpdate, MinHist, HrHist, DyHist, MthHist
     }}.
-

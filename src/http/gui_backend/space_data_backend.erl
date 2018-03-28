@@ -78,12 +78,6 @@ find_record(<<"space">>, SpaceId) ->
             gui_error:unauthorized()
     end;
 
-find_record(<<"space-transfer-time-stat">>, StatId) ->
-    space_transfer_time_stat_record(StatId);
-
-find_record(<<"space-transfer-provider-map">>, StatId) ->
-    space_transfer_provider_map_record(StatId);
-
 % PermissionsRecord matches <<"space-(user|group)-(list|permission)">>
 find_record(PermissionsRecord, RecordId) ->
     SessionId = gui_session:get_session_id(),
@@ -117,6 +111,10 @@ find_record(PermissionsRecord, RecordId) ->
                     {ok, space_provider_list_record(RecordId)};
                 <<"space-transfer-list">> ->
                     {ok, space_transfer_list_record(RecordId)};
+                <<"space-transfer-time-stat">> ->
+                    {ok, space_transfer_time_stat_record(RecordId)};
+                <<"space-transfer-provider-map">> ->
+                    {ok, space_transfer_provider_map_record(RecordId)};
                 <<"space-user-permission">> ->
                     {ok, space_user_permission_record(RecordId)};
                 <<"space-group-permission">> ->
@@ -535,7 +533,7 @@ space_group_permission_record(AssocId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec space_transfer_time_stat_record(StatId :: binary()) ->
-    {ok, proplists:proplist()}.
+    proplists:proplist().
 space_transfer_time_stat_record(StatId) ->
     {TypePrefix, SpaceId} = op_gui_utils:association_to_ids(StatId),
     #space_transfer_cache{
@@ -544,13 +542,13 @@ space_transfer_time_stat_record(StatId) ->
         stats_out = StatsOut
     } = space_transfer_cache:get(SpaceId, TypePrefix),
 
-    {ok, [
+    [
         {<<"id">>, StatId},
         {<<"timestamp">>, Timestamp},
         {<<"type">>, TypePrefix},
         {<<"statsIn">>, maps:to_list(StatsIn)},
         {<<"statsOut">>, maps:to_list(StatsOut)}
-    ]}.
+    ].
 
 
 %%--------------------------------------------------------------------
@@ -560,16 +558,16 @@ space_transfer_time_stat_record(StatId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec space_transfer_provider_map_record(StatId :: binary()) ->
-    {ok, proplists:proplist()}.
+    proplists:proplist().
 space_transfer_provider_map_record(SpaceId) ->
     #space_transfer_cache{mapping = Mapping} = space_transfer_cache:get(
         SpaceId, ?MINUTE_STAT_TYPE
     ),
 
-    {ok, [
+    [
         {<<"id">>, SpaceId},
         {<<"mapping">>, maps:to_list(Mapping)}
-    ]}.
+    ].
 
 
 %%--------------------------------------------------------------------

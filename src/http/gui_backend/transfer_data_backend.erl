@@ -24,6 +24,9 @@
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+-define(TRIMMED_TIMESTAMP(__Timestamp),
+    (__Timestamp - ((__Timestamp rem ?FIVE_SEC_TIME_WINDOW) + 5*?FIVE_SEC_TIME_WINDOW))).
+
 %% API
 -export([init/0, terminate/0]).
 -export([find_record/2, find_all/1, query/2, query_record/2]).
@@ -225,22 +228,55 @@ transfer_time_stat_record(StatId) ->
     {TypePrefix, TransferId} = op_gui_utils:association_to_ids(StatId),
     {ok, #document{value = T}} = transfer:get(TransferId),
     StartTime = T#transfer.start_time,
-    {Histograms, TimeWindow} = case TypePrefix of
-        ?MINUTE_STAT_TYPE -> {T#transfer.min_hist, ?FIVE_SEC_TIME_WINDOW};
-        ?HOUR_STAT_TYPE -> {T#transfer.hr_hist, ?MIN_TIME_WINDOW};
-        ?DAY_STAT_TYPE -> {T#transfer.dy_hist, ?HOUR_TIME_WINDOW};
-        ?MONTH_STAT_TYPE -> {T#transfer.mth_hist, ?DAY_TIME_WINDOW}
+
+    % Return historical statistics of finished transfers intact. As for active ones,
+    % pad them with zeroes to current time and erase recent 30s to avoid
+    % fluctuations on charts due to synchronization of docs between providers
+    {CurrentStats, LastUpdate, TimeWindow} = case transfer_utils:is_ongoing(T) of
+        false ->
+            SlotsToStrip = case TypePrefix of
+                ?MINUTE_STAT_TYPE -> 6;
+                _ -> 1
+            end,
+            StripFun = fun(_Provider, Hist) -> lists:sublist(Hist, length(Hist)-SlotsToStrip) end,
+            {Histograms, HistTimeWindow} = case TypePrefix of
+                ?MINUTE_STAT_TYPE -> {T#transfer.min_hist, ?FIVE_SEC_TIME_WINDOW};
+                ?HOUR_STAT_TYPE -> {T#transfer.hr_hist, ?MIN_TIME_WINDOW};
+                ?DAY_STAT_TYPE -> {T#transfer.dy_hist, ?HOUR_TIME_WINDOW};
+                ?MONTH_STAT_TYPE -> {T#transfer.mth_hist, ?DAY_TIME_WINDOW}
+            end,
+            {maps:map(StripFun, Histograms), get_last_update(T), HistTimeWindow};
+        true ->
+            MinStats = {T#transfer.min_hist, ?FIVE_SEC_TIME_WINDOW},
+            case map_size(T#transfer.min_hist) of
+                0 ->
+                    {#{}, get_last_update(T), ?FIVE_SEC_TIME_WINDOW};
+                _ ->
+                    Stats = case TypePrefix of
+                        ?MINUTE_STAT_TYPE -> [MinStats];
+                        ?HOUR_STAT_TYPE -> [MinStats, {T#transfer.hr_hist, ?MIN_TIME_WINDOW}];
+                        ?DAY_STAT_TYPE -> [MinStats, {T#transfer.dy_hist, ?HOUR_TIME_WINDOW}];
+                        ?MONTH_STAT_TYPE -> [MinStats, {T#transfer.mth_hist, ?DAY_TIME_WINDOW}]
+                    end,
+                    CurrentTime = provider_logic:zone_time_seconds(),
+                    LastUpdates = T#transfer.last_update,
+                    PaddedStats = pad_stats(Stats, StartTime, CurrentTime, LastUpdates),
+                    {TrimmedStats, TrimmedTime} = trim_stats(PaddedStats, CurrentTime),
+                    {Histograms, HistTimeWindow} = lists:last(TrimmedStats),
+                    {Histograms, TrimmedTime, HistTimeWindow}
+            end
     end,
-    LastUpdate = get_last_update(T),
+
     % Calculate bytes per sec histograms
-    StatsMap = maps:map(fun(_ProviderId, HistogramValues) ->
+    VelocityStats = maps:map(fun(_ProviderId, HistogramValues) ->
         histogram_to_speed_chart(HistogramValues, StartTime, LastUpdate, TimeWindow)
-    end, Histograms),
+    end, CurrentStats),
+
     {ok, [
         {<<"id">>, StatId},
         {<<"timestamp">>, LastUpdate},
         {<<"type">>, TypePrefix},
-        {<<"stats">>, maps:to_list(StatsMap)}
+        {<<"stats">>, maps:to_list(VelocityStats)}
     ]}.
 
 
@@ -301,6 +337,76 @@ get_status(#transfer{
     scheduled;
 get_status(#transfer{status = Status}) ->
     Status.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Pad given stats with zeroes to current time.
+%% @end
+%%--------------------------------------------------------------------
+-spec pad_stats(Stats :: [{Histograms :: maps:map(), TimeWindow :: pos_integer()}],
+    StartTime :: non_neg_integer(), CurrentTime :: non_neg_integer(),
+    LastUpdates :: #{od_provider:id() => non_neg_integer()}
+) ->
+    [{maps:map(), pos_integer()}].
+pad_stats(Stats, StartTime, CurrentTime, LastUpdates) ->
+    lists:map(fun({Histograms, TimeWindow}) ->
+        ZeroedHist = transfer_histogram:new_time_slot_histogram(CurrentTime, TimeWindow),
+        PaddedHistograms = maps:map(fun(Provider, Hist) ->
+            LastUpdate = maps:get(Provider, LastUpdates, StartTime),
+            TimeSlotHist = time_slot_histogram:new(LastUpdate, TimeWindow, Hist),
+            NewHist = time_slot_histogram:merge(ZeroedHist, TimeSlotHist),
+            time_slot_histogram:get_histogram_values(NewHist)
+        end, Histograms),
+        {PaddedHistograms, TimeWindow}
+    end, Stats).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Erase recent 30s of histograms to avoid fluctuations on charts.
+%% @end
+%%--------------------------------------------------------------------
+-spec trim_stats(Stats :: [{Histograms :: maps:map(), TimeWindow :: pos_integer()}],
+    CurrentTime :: non_neg_integer()
+) ->
+    {[{maps:map(), binary()}], non_neg_integer()}.
+trim_stats([{MinStats, ?FIVE_SEC_TIME_WINDOW}], CurrentTime) ->
+    TrimFun = fun(_Provider, Histogram) ->
+        {_, NewHistogram} = lists:split(6, Histogram),
+        NewHistogram
+    end,
+    NewMinStats = maps:map(TrimFun, MinStats),
+    {[{NewMinStats, ?FIVE_SEC_TIME_WINDOW}], ?TRIMMED_TIMESTAMP(CurrentTime)};
+
+trim_stats([{MinStats, ?FIVE_SEC_TIME_WINDOW}, {Stats, TimeWindow}], CurrentTime) ->
+    NewTimestamp = ?TRIMMED_TIMESTAMP(CurrentTime),
+
+    TrimFun = fun(Histogram1, [FstSlot, SndSlot | Rest]) ->
+        {ErasedSlots, NewHistogram1} = lists:split(6, Histogram1),
+        ErasedBytes = lists:sum(ErasedSlots),
+        Histogram2 = case ErasedBytes > FstSlot of
+            true ->
+                [0, SndSlot - (ErasedBytes - FstSlot) | Rest];
+            false ->
+                [FstSlot - ErasedBytes, SndSlot | Rest]
+        end,
+        NewHistogram2 = case (CurrentTime div TimeWindow) =:= (NewTimestamp div TimeWindow) of
+            true ->
+                lists:droplast(Histogram2);
+            false ->
+                tl(Histogram2)
+        end,
+        {NewHistogram1, NewHistogram2}
+    end,
+
+    {NewMinStats, NewStats} = maps:fold(fun(Provider, Hist1, {OldMinStats, OldStats}) ->
+        Hist2 = maps:get(Provider, Stats),
+        {NewHist1, NewHist2} = TrimFun(Hist1, Hist2),
+        {OldMinStats#{Provider => NewHist1}, OldStats#{Provider => NewHist2}}
+    end, {#{}, #{}}, MinStats),
+
+    {[{NewMinStats, ?FIVE_SEC_TIME_WINDOW}, {NewStats, TimeWindow}], NewTimestamp}.
 
 
 %%--------------------------------------------------------------------

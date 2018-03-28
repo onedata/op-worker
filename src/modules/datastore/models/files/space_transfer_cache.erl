@@ -102,7 +102,7 @@ get(SpaceId, HistogramType) ->
                 NewStats = Stats#space_transfer_cache{
                     stats_in = maps:filter(Pred, Stats#space_transfer_cache.stats_in),
                     stats_out = maps:filter(Pred, Stats#space_transfer_cache.stats_out),
-                    mapping = case StatsTypes of
+                    mapping = case StatsType of
                         ?MINUTE_STAT_TYPE -> Stats#space_transfer_cache.mapping;
                         _ -> undefined
                     end
@@ -111,13 +111,13 @@ get(SpaceId, HistogramType) ->
             end, TrimmedStats),
 
             VelocityStats = lists:map(fun({Stats, StatsType}) ->
-                histograms_to_speed_charts(Stats, StatsType)
+                {histograms_to_speed_charts(Stats, StatsType), StatsType}
             end, FilteredStats),
 
             % cache computed velocity stats
             lists:foreach(fun({Stats, StatsType}) ->
                 save(SpaceId, Stats, StatsType)
-            end, lists:zip(VelocityStats, StatsTypes)),
+            end, VelocityStats),
 
             % return stats of requested type
             lists:last(VelocityStats);
@@ -220,7 +220,10 @@ get_stats(SpaceId, HistogramTypes) ->
 
     maps:fold(fun(Provider, SpaceTransfer, CurrentStats) ->
         lists:map(fun({Stats, StatsType}) ->
-            update_stats(Stats, StatsType, SpaceTransfer, CurrentTime, Provider)
+            NewStats = update_stats(
+                Stats, StatsType, SpaceTransfer, CurrentTime, Provider
+            ),
+            {NewStats, StatsType}
         end, CurrentStats)
     end, EmptyStats, SpaceTransfers).
 
@@ -357,7 +360,10 @@ trim_stats([{MinStats, ?MINUTE_STAT_TYPE}, {Stats, StatsType}]) ->
 histograms_to_speed_charts(Stats, StatsType) ->
     Timestamp = Stats#space_transfer_cache.timestamp,
     TimeWindow = histogram_type_to_time_window(StatsType),
-    FstSlotDuration = (Timestamp rem TimeWindow) + 1,
+    FstSlotDuration = case Timestamp rem TimeWindow of
+        0 -> TimeWindow;
+        Rem -> Rem + 1
+    end,
     ToChartFun = fun(_, [FstSlot | Rest]) ->
         [FstSlot/FstSlotDuration | [Bytes/TimeWindow || Bytes <- Rest]]
     end,
