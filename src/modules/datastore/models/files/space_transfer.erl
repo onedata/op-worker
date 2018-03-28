@@ -6,7 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Model storing information about space transfers stats.
+%%% Model storing aggregated statistics about transfers
+%%% featuring given space and target provider.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(space_transfer).
@@ -17,11 +18,13 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get/1, get/2, update/3, delete/1]).
+-export([get/1, get/2, update/4, delete/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
 
+-type timestamp() :: non_neg_integer().
+-type size() :: pos_integer().
 -type space_transfer() :: #space_transfer{}.
 -type doc() :: datastore_doc:doc(space_transfer()).
 
@@ -68,11 +71,9 @@ get(ProviderId, SpaceId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec update(SpaceId :: od_space:id(), SourceProviderId :: od_provider:id(),
-    Bytes :: non_neg_integer()) -> ok | {error, term()}.
-update(SpaceId, SourceProviderId, Bytes) ->
-    ProviderId = oneprovider:get_id_or_undefined(),
-    Key = datastore_utils:gen_key(ProviderId, SpaceId),
-    CurrentTime = provider_logic:zone_time_seconds(),
+    Bytes :: size(), CurrentTime :: timestamp()) -> ok | {error, term()}.
+update(SpaceId, SourceProviderId, Bytes, CurrentTime) ->
+    Key = datastore_utils:gen_key(oneprovider:get_id_or_undefined(), SpaceId),
     Diff = fun(SpaceTransfers = #space_transfer{
         last_update = LastUpdateMap,
         min_hist = MinHistograms,

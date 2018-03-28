@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Model storing information about space transfers stats cache.
+%%% Model storing statistics about all transfers in given space.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(space_transfer_cache).
@@ -22,6 +22,7 @@
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
 
+-type timestamp() :: non_neg_integer().
 -type space_transfer_cache() :: #space_transfer_cache{}.
 -type doc() :: datastore_doc:doc(space_transfer_cache()).
 
@@ -38,9 +39,6 @@
 -define(MONTH_STAT_EXPIRATION,
     application:get_env(?APP_NAME, gui_month_stat_expiration, timer:seconds(20))).
 
--define(TRIMMED_TIMESTAMP(__Timestamp),
-    (__Timestamp - ((__Timestamp rem ?FIVE_SEC_TIME_WINDOW) + 5*?FIVE_SEC_TIME_WINDOW))).
-
 -define(CTX, #{
     model => ?MODULE,
     routing => local,
@@ -55,7 +53,7 @@
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Saves statistics of given type for given space.
+%% Saves transfer statistics of given type for given space.
 %% @end
 %%-------------------------------------------------------------------
 -spec save(SpaceId :: od_space:id(), Stats :: space_transfer_cache(),
@@ -70,32 +68,35 @@ save(SpaceId, Stats, StatsType) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Returns space transfers for given space.
+%% Returns space transfer statistics of requested type for given space.
 %% @end
 %%-------------------------------------------------------------------
--spec get(HistogramType :: binary(), SpaceId :: od_space:id()) ->
+-spec get(SpaceId :: od_space:id(), StatsType :: binary()) ->
     space_transfer_cache() | {error, term()}.
-get(SpaceId, HistogramType) ->
+get(SpaceId, RequestedStatsType) ->
     Now = time_utils:system_time_millis(),
-    Key = datastore_utils:gen_key(HistogramType, SpaceId),
-    Result = case datastore_model:get(?CTX, Key) of
-        {ok, #document{value = #space_transfer_cache{expires = Expires} = Stats}} when Now < Expires ->
-            Stats;
-        {ok, #document{}} ->
-            {error, not_found};
-        {error, Reason} ->
-            {error, Reason}
+    Key = datastore_utils:gen_key(RequestedStatsType, SpaceId),
+    Fetched = case datastore_model:get(?CTX, Key) of
+        {ok, #document{value = Stats}} ->
+            case Now < Stats#space_transfer_cache.expires of
+                true -> Stats;
+                false -> {error, not_found}
+            end;
+        Error ->
+            Error
     end,
-    case Result of
+    case Fetched of
         {error, not_found} ->
-            StatsTypes = case HistogramType of
+            % In case of stats other than minute one, we need to calculate also
+            % minutes to be able to trim recent n-seconds
+            StatsTypesToCalc = case RequestedStatsType of
                 ?MINUTE_STAT_TYPE -> [?MINUTE_STAT_TYPE];
-                _ -> [?MINUTE_STAT_TYPE, HistogramType]
+                _ -> [?MINUTE_STAT_TYPE, RequestedStatsType]
             end,
-            CurrentStats = get_stats(SpaceId, StatsTypes),
-            TrimmedStats = trim_stats(CurrentStats),
+            CalculatedStats = get_stats(SpaceId, StatsTypesToCalc),
+            TrimmedStats = trim_stats(CalculatedStats),
 
-            % Filter out histograms with only zeroes and
+            % Filter out from stats histograms with only zeroes, also
             % do not store mapping for stats other than minute one
             Pred = fun(_Provider, Histogram) -> lists:sum(Histogram) > 0 end,
             FilteredStats = lists:map(fun({Stats, StatsType}) ->
@@ -110,30 +111,31 @@ get(SpaceId, HistogramType) ->
                 {NewStats, StatsType}
             end, TrimmedStats),
 
-            VelocityStats = lists:map(fun({Stats, StatsType}) ->
+            SpeedStats = lists:map(fun({Stats, StatsType}) ->
                 {histograms_to_speed_charts(Stats, StatsType), StatsType}
             end, FilteredStats),
 
             % cache computed velocity stats
             lists:foreach(fun({Stats, StatsType}) ->
                 save(SpaceId, Stats, StatsType)
-            end, VelocityStats),
+            end, SpeedStats),
 
-            % return stats of requested type
-            lists:last(VelocityStats);
+            {RequestedStats, RequestedStatsType} = lists:last(SpeedStats),
+            RequestedStats;
         _ ->
-            Result
+            Fetched
     end.
 
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Deletes space transfer cache document.
+%% Deletes space transfer statistics of given type for given space.
 %% @end
 %%-------------------------------------------------------------------
--spec delete(SpaceId :: od_space:id(), HistogramType :: binary()) -> ok | {error, term()}.
-delete(SpaceId, HistogramType) ->
-    Key = datastore_utils:gen_key(HistogramType, SpaceId),
+-spec delete(SpaceId :: od_space:id(), StatsType :: binary()) ->
+    ok | {error, term()}.
+delete(SpaceId, StatsType) ->
+    Key = datastore_utils:gen_key(StatsType, SpaceId),
     datastore_model:delete(?CTX, Key).
 
 
@@ -186,13 +188,14 @@ get_record_struct(1) ->
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Gather summarized transfer statistics for given space and histogram types.
+%% Gather transfer statistics of requested types for given space.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_stats(SpaceId :: od_space:id(), HistogramTypes :: [binary()]) ->
     [{space_transfer_cache(), binary()}].
-get_stats(SpaceId, HistogramTypes) ->
+get_stats(SpaceId, RequestedStatsTypes) ->
     {ok, #document{value = Space}} = od_space:get(SpaceId),
     SpaceTransfers = lists:foldl(fun(Provider, STs) ->
         case space_transfer:get(Provider, SpaceId) of
@@ -202,20 +205,20 @@ get_stats(SpaceId, HistogramTypes) ->
                 STs;
             Error ->
                 ?error("Failed to retrieve Space Transfer Document
-                       for space ~p and provider ~p because of: ~p", [
+                       for space ~p and provider ~p due to: ~p", [
                     SpaceId, Provider, Error
                 ]),
                 STs
         end
     end, #{}, maps:keys(Space#od_space.providers)),
 
-    CurrentTime = provider_logic:zone_time_seconds(),
     LocalTime = time_utils:system_time_millis(),
+    CurrentTime = provider_logic:zone_time_seconds(),
     EmptyStats = [
         {#space_transfer_cache{
-            expires = LocalTime + histogram_type_to_expiration_timeout(HistogramType),
+            expires = LocalTime + stats_type_to_expiration_timeout(StatsType),
             timestamp = CurrentTime
-        }, HistogramType} || HistogramType <- HistogramTypes
+        }, StatsType} || StatsType <- RequestedStatsTypes
     ],
 
     maps:fold(fun(Provider, SpaceTransfer, CurrentStats) ->
@@ -229,59 +232,63 @@ get_stats(SpaceId, HistogramTypes) ->
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Update statistics for provider based on given space transfer record.
+%% Update given statistics for provider based on given space transfer record.
 %% @end
 %%--------------------------------------------------------------------
--spec update_stats(CurrentStat :: space_transfer_cache(), HistogramType :: binary(),
-    SpaceTransfer :: space_transfer:space_transfer(), CurrentTime :: non_neg_integer(),
+-spec update_stats(OldStats :: space_transfer_cache(), StatsType :: binary(),
+    ST :: space_transfer:space_transfer(), CurrentTime :: timestamp(),
     Provider :: od_provider:id()) -> space_transfer_cache().
-update_stats(CurrentStat, HistogramType, SpaceTransfer, CurrentTime, Provider) ->
+update_stats(OldStats, StatsType, ST, CurrentTime, Provider) ->
     #space_transfer_cache{
         stats_in = StatsIn,
         stats_out = StatsOut,
         mapping = Mapping
-    } = CurrentStat,
+    } = OldStats,
 
-    LastUpdates = SpaceTransfer#space_transfer.last_update,
-    {Histograms, TimeWindow} = case HistogramType of
-        ?MINUTE_STAT_TYPE -> {SpaceTransfer#space_transfer.min_hist, ?FIVE_SEC_TIME_WINDOW};
-        ?HOUR_STAT_TYPE -> {SpaceTransfer#space_transfer.hr_hist, ?MIN_TIME_WINDOW};
-        ?DAY_STAT_TYPE -> {SpaceTransfer#space_transfer.dy_hist, ?HOUR_TIME_WINDOW};
-        ?MONTH_STAT_TYPE -> {SpaceTransfer#space_transfer.mth_hist, ?DAY_TIME_WINDOW}
+    LastUpdates = ST#space_transfer.last_update,
+    {Histograms, TimeWindow} = case StatsType of
+        ?MINUTE_STAT_TYPE -> {ST#space_transfer.min_hist, ?FIVE_SEC_TIME_WINDOW};
+        ?HOUR_STAT_TYPE -> {ST#space_transfer.hr_hist, ?MIN_TIME_WINDOW};
+        ?DAY_STAT_TYPE -> {ST#space_transfer.dy_hist, ?HOUR_TIME_WINDOW};
+        ?MONTH_STAT_TYPE -> {ST#space_transfer.mth_hist, ?DAY_TIME_WINDOW}
     end,
-    ZeroedHistogram = transfer_histogram:new_time_slot_histogram(CurrentTime, TimeWindow),
+    ZeroedHist = transfer_histogram:new_time_slot_histogram(CurrentTime, TimeWindow),
 
-    {HistogramIn, HistogramsOut, SourceProviders} = maps:fold(fun(SourceProvider, Histogram, Acc) ->
-        {OldHistogramIn, OldHistogramsOut, OldSources} = Acc,
-        LastUpdate = maps:get(SourceProvider, LastUpdates),
-        TimeSlotHist = time_slot_histogram:new(LastUpdate, TimeWindow, Histogram),
-        NewHistogramIn = time_slot_histogram:merge(OldHistogramIn, TimeSlotHist),
-        NewHistogramsOut = OldHistogramsOut#{SourceProvider => TimeSlotHist},
-        NewSources = case CurrentTime - LastUpdate =< ?TRANSFER_INACTIVITY of
-            false -> OldSources;
-            true -> [SourceProvider | OldSources]
+    {HistIn, HistsOut, SrcProviders} = maps:fold(fun(SrcProvider, Hist, Acc) ->
+        {OldHistIn, OldHistsOut, OldSrcProviders} = Acc,
+        LastUpdate = maps:get(SrcProvider, LastUpdates),
+        TimeSlotHist = time_slot_histogram:new(LastUpdate, TimeWindow, Hist),
+        NewHistIn = time_slot_histogram:merge(OldHistIn, TimeSlotHist),
+        NewHistsOut = OldHistsOut#{SrcProvider => TimeSlotHist},
+        NewSrcProviders = case CurrentTime - LastUpdate =< ?TRANSFER_INACTIVITY of
+            false -> OldSrcProviders;
+            true -> [SrcProvider | OldSrcProviders]
         end,
-        {NewHistogramIn, NewHistogramsOut, NewSources}
-    end, {ZeroedHistogram, #{}, []}, Histograms),
+        {NewHistIn, NewHistsOut, NewSrcProviders}
+    end, {ZeroedHist, #{}, []}, Histograms),
 
-    NewStatsIn = StatsIn#{Provider => time_slot_histogram:get_histogram_values(HistogramIn)},
-
-    NewStatsOut = maps:fold(fun(SourceProvider, Histogram, OldStatsOut) ->
-        OldHistogramOut = case maps:get(SourceProvider, OldStatsOut, none) of
-            none -> ZeroedHistogram;
-            Hist -> time_slot_histogram:new(CurrentTime, TimeWindow, Hist)
+    NewStatsIn = StatsIn#{
+        Provider => time_slot_histogram:get_histogram_values(HistIn)
+    },
+    NewStatsOut = maps:fold(fun(SrcProvider, Hist, OldStatsOut) ->
+        OldHistOut = case maps:get(SrcProvider, OldStatsOut, none) of
+            none -> ZeroedHist;
+            HistOut -> time_slot_histogram:new(CurrentTime, TimeWindow, HistOut)
         end,
-        NewHistogramOut = time_slot_histogram:merge(OldHistogramOut, Histogram),
-        OldStatsOut#{SourceProvider => time_slot_histogram:get_histogram_values(NewHistogramOut)}
-    end, StatsOut, HistogramsOut),
+        NewHistOut = time_slot_histogram:merge(OldHistOut, Hist),
+        OldStatsOut#{
+            SrcProvider => time_slot_histogram:get_histogram_values(NewHistOut)
+        }
+    end, StatsOut, HistsOut),
 
-    NewMapping = lists:foldl(fun(SourceProvider, OldMapping) ->
-        DestinationProviders = maps:get(SourceProvider, OldMapping, []),
-        OldMapping#{SourceProvider => [Provider | DestinationProviders]}
-    end, Mapping, SourceProviders),
+    NewMapping = lists:foldl(fun(SrcProvider, OldMapping) ->
+        DestinationProviders = maps:get(SrcProvider, OldMapping, []),
+        OldMapping#{SrcProvider => [Provider | DestinationProviders]}
+    end, Mapping, SrcProviders),
 
-    CurrentStat#space_transfer_cache{
+    OldStats#space_transfer_cache{
         stats_in = NewStatsIn,
         stats_out = NewStatsOut,
         mapping = NewMapping
@@ -289,44 +296,48 @@ update_stats(CurrentStat, HistogramType, SpaceTransfer, CurrentTime, Provider) -
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Erase recent 30s of histograms to avoid fluctuations on charts.
+%% Erase recent n-seconds of histograms based on difference between expected
+%% slots in speed histograms and bytes histograms.
+%% It helps to avoid fluctuations on charts due to synchronization
+%% between providers.
 %% @end
 %%--------------------------------------------------------------------
 -spec trim_stats([{space_transfer_cache(), binary()}]) ->
     [{space_transfer_cache(), binary()}].
 trim_stats([{Stats, ?MINUTE_STAT_TYPE}]) ->
+    SlotsToRemove = ?MIN_HIST_LENGTH - ?MIN_SPEED_HIST_LENGTH,
     TrimFun = fun(_Provider, Histogram) ->
-        {_, NewHistogram} = lists:split(6, Histogram),
+        {_, NewHistogram} = lists:split(SlotsToRemove, Histogram),
         NewHistogram
     end,
     NewStats = Stats#space_transfer_cache{
-        timestamp = ?TRIMMED_TIMESTAMP(Stats#space_transfer_cache.timestamp),
+        timestamp = transfer_histogram:trim_timestamp(Stats#space_transfer_cache.timestamp),
         stats_in = maps:map(TrimFun, Stats#space_transfer_cache.stats_in),
         stats_out = maps:map(TrimFun, Stats#space_transfer_cache.stats_out)
     },
     [{NewStats, ?MINUTE_STAT_TYPE}];
 
-trim_stats([{MinStats, ?MINUTE_STAT_TYPE}, {Stats, StatsType}]) ->
+trim_stats([{MinStats, ?MINUTE_STAT_TYPE}, {RequestedStats, RequestedStatsType}]) ->
     OldTimestamp = MinStats#space_transfer_cache.timestamp,
-    NewTimestamp = ?TRIMMED_TIMESTAMP(OldTimestamp),
-    TimeWindow = histogram_type_to_time_window(StatsType),
-    TrimFun = fun(Histogram1, [FstSlot, SndSlot | Rest]) ->
-        {ErasedSlots, NewHistogram1} = lists:split(6, Histogram1),
-        ErasedBytes = lists:sum(ErasedSlots),
-        Histogram2 = case ErasedBytes > FstSlot of
-             true ->
-                 [0, SndSlot - (ErasedBytes - FstSlot) | Rest];
-             false ->
-                 [FstSlot - ErasedBytes, SndSlot | Rest]
-         end,
-        NewHistogram2 = case (OldTimestamp div TimeWindow) =:= (NewTimestamp div TimeWindow) of
-            true ->
-                lists:droplast(Histogram2);
-            false ->
-                tl(Histogram2)
+    NewTimestamp = transfer_histogram:trim_timestamp(OldTimestamp),
+    TimeWindow = stats_type_to_time_window(RequestedStatsType),
+    TrimFun = fun(OldHist1, [FstSlot, SndSlot | Rest]) ->
+        MinSlotsToRemove = ?MIN_HIST_LENGTH - ?MIN_SPEED_HIST_LENGTH,
+        {RemovedSlots, NewHist1} = lists:split(MinSlotsToRemove, OldHist1),
+        RemovedBytes = lists:sum(RemovedSlots),
+        OldHist2 = case RemovedBytes > FstSlot of
+            true -> [0, SndSlot - (RemovedBytes - FstSlot) | Rest];
+            false -> [FstSlot - RemovedBytes, SndSlot | Rest]
         end,
-        {NewHistogram1, NewHistogram2}
+        Hist2 = case (OldTimestamp div TimeWindow) == (NewTimestamp div TimeWindow) of
+            true -> lists:droplast(OldHist2);
+            false -> OldHist2
+        end,
+        Len = transfer_histogram:stats_type_to_speed_chart_len(RequestedStatsType),
+        NewHist2 = lists:sublist(Hist2, Len),
+        {NewHist1, NewHist2}
     end,
 
     [StatsIn, StatsOut] = lists:map(fun({CurrentStats1, CurrentStats2}) ->
@@ -336,52 +347,54 @@ trim_stats([{MinStats, ?MINUTE_STAT_TYPE}, {Stats, StatsType}]) ->
             {OldStats1#{Provider => NewHist1}, OldStats2#{Provider => NewHist2}}
         end, {#{}, #{}}, CurrentStats1)
     end, [
-        {MinStats#space_transfer_cache.stats_in, Stats#space_transfer_cache.stats_in},
-        {MinStats#space_transfer_cache.stats_out, Stats#space_transfer_cache.stats_out}
+        {MinStats#space_transfer_cache.stats_in,
+            RequestedStats#space_transfer_cache.stats_in},
+        {MinStats#space_transfer_cache.stats_out,
+            RequestedStats#space_transfer_cache.stats_out}
     ]),
+    {NewMinStatsIn, NewRequestedStatsIn} = StatsIn,
+    {NewMinStatsOut, NewRequestedStatsOut} = StatsOut,
 
-    {NewMinStatsIn, NewStatsIn} = StatsIn,
-    {NewMinStatsOut, NewStatsOut} = StatsOut,
     NewMinStats = MinStats#space_transfer_cache{
         timestamp = NewTimestamp,
         stats_in = NewMinStatsIn,
         stats_out = NewMinStatsOut
     },
-    NewStats2 = Stats#space_transfer_cache{
+    NewRequestedStats = RequestedStats#space_transfer_cache{
         timestamp = NewTimestamp,
-        stats_in = NewStatsIn,
-        stats_out = NewStatsOut
+        stats_in = NewRequestedStatsIn,
+        stats_out = NewRequestedStatsOut
     },
-    [{NewMinStats, ?MINUTE_STAT_TYPE}, {NewStats2, StatsType}].
+    [{NewMinStats, ?MINUTE_STAT_TYPE}, {NewRequestedStats, RequestedStatsType}].
 
 
 -spec histograms_to_speed_charts(Stats :: space_transfer_cache(),
     StatsType :: binary()) -> space_transfer_cache().
 histograms_to_speed_charts(Stats, StatsType) ->
     Timestamp = Stats#space_transfer_cache.timestamp,
-    TimeWindow = histogram_type_to_time_window(StatsType),
+    TimeWindow = stats_type_to_time_window(StatsType),
     FstSlotDuration = case Timestamp rem TimeWindow of
         0 -> TimeWindow;
         Rem -> Rem + 1
     end,
-    ToChartFun = fun(_, [FstSlot | Rest]) ->
+    ToSpeedChart = fun(_, [FstSlot | Rest]) ->
         [FstSlot/FstSlotDuration | [Bytes/TimeWindow || Bytes <- Rest]]
     end,
     Stats#space_transfer_cache{
-        stats_in = maps:map(ToChartFun, Stats#space_transfer_cache.stats_in),
-        stats_out = maps:map(ToChartFun, Stats#space_transfer_cache.stats_out)
+        stats_in = maps:map(ToSpeedChart, Stats#space_transfer_cache.stats_in),
+        stats_out = maps:map(ToSpeedChart, Stats#space_transfer_cache.stats_out)
     }.
 
 
--spec histogram_type_to_expiration_timeout(binary()) -> non_neg_integer().
-histogram_type_to_expiration_timeout(?MINUTE_STAT_TYPE) -> ?MINUTE_STAT_EXPIRATION;
-histogram_type_to_expiration_timeout(?HOUR_STAT_TYPE) -> ?HOUR_STAT_EXPIRATION;
-histogram_type_to_expiration_timeout(?DAY_STAT_TYPE) -> ?DAY_STAT_EXPIRATION;
-histogram_type_to_expiration_timeout(?MONTH_STAT_TYPE) -> ?MONTH_STAT_EXPIRATION.
+-spec stats_type_to_expiration_timeout(binary()) -> non_neg_integer().
+stats_type_to_expiration_timeout(?MINUTE_STAT_TYPE) -> ?MINUTE_STAT_EXPIRATION;
+stats_type_to_expiration_timeout(?HOUR_STAT_TYPE) -> ?HOUR_STAT_EXPIRATION;
+stats_type_to_expiration_timeout(?DAY_STAT_TYPE) -> ?DAY_STAT_EXPIRATION;
+stats_type_to_expiration_timeout(?MONTH_STAT_TYPE) -> ?MONTH_STAT_EXPIRATION.
 
 
--spec histogram_type_to_time_window(binary()) -> non_neg_integer().
-histogram_type_to_time_window(?MINUTE_STAT_TYPE) -> ?FIVE_SEC_TIME_WINDOW;
-histogram_type_to_time_window(?HOUR_STAT_TYPE) -> ?MIN_TIME_WINDOW;
-histogram_type_to_time_window(?DAY_STAT_TYPE) -> ?HOUR_TIME_WINDOW;
-histogram_type_to_time_window(?MONTH_STAT_TYPE) -> ?DAY_TIME_WINDOW.
+-spec stats_type_to_time_window(binary()) -> non_neg_integer().
+stats_type_to_time_window(?MINUTE_STAT_TYPE) -> ?FIVE_SEC_TIME_WINDOW;
+stats_type_to_time_window(?HOUR_STAT_TYPE) -> ?MIN_TIME_WINDOW;
+stats_type_to_time_window(?DAY_STAT_TYPE) -> ?HOUR_TIME_WINDOW;
+stats_type_to_time_window(?MONTH_STAT_TYPE) -> ?DAY_TIME_WINDOW.

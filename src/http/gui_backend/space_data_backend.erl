@@ -88,6 +88,8 @@ find_record(PermissionsRecord, RecordId) ->
             RecordId;
         <<"space-provider-list">> ->
             RecordId;
+        <<"space-transfer-provider-map">> ->
+            RecordId;
         _ -> % covers space-(user|group)-permission and space-transfer-list
             {_, Id} = op_gui_utils:association_to_ids(RecordId),
             Id

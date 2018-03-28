@@ -508,7 +508,8 @@
     mth_hist = #{} :: maps:map(od_provider:id(), histogram:histogram())
 }).
 
-%% Model that holds stats information about all transfers to given provider for given space.
+%% Model that holds aggregated statistics about transfers featuring
+%% given space target provider.
 -record(space_transfer, {
     % Histograms of transferred bytes per provider, last_update per provider is
     % required to keep track in histograms.
@@ -524,17 +525,17 @@
     mth_hist = #{} :: maps:map(od_provider:id(), histogram:histogram())
 }).
 
-%% Model that holds cached stats information about all transfers for given space.
+%% Model that holds statistics about all transfers for given space.
 -record(space_transfer_cache, {
-    % time at which the cache record will expire.
+    % Time at which the cache record will expire.
     expires = 0 :: non_neg_integer(),
-    % time of last update for stats.
+    % Time of last update for stats.
     timestamp = 0 :: non_neg_integer(),
-    % mapping of providers to their data input
+    % Mapping of providers to their data input and sources
     stats_in = #{} :: maps:map(od_provider:id(), histogram:histogram()),
-    % mapping of providers to their data output
+    % Mapping of providers to their data output and destinations
     stats_out = #{} :: maps:map(od_provider:id(), histogram:histogram()),
-    % mapping of providers to other providers they sent data to in the recent past
+    % Providers mapping to providers they are sending data to
     mapping = #{} :: undefined | maps:map(od_provider:id(), [od_provider:id()])
 }).
 

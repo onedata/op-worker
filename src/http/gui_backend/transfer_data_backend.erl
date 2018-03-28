@@ -24,8 +24,6 @@
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--define(TRIMMED_TIMESTAMP(__Timestamp),
-    (__Timestamp - ((__Timestamp rem ?FIVE_SEC_TIME_WINDOW) + 5*?FIVE_SEC_TIME_WINDOW))).
 
 %% API
 -export([init/0, terminate/0]).
@@ -230,15 +228,12 @@ transfer_time_stat_record(StatId) ->
     StartTime = T#transfer.start_time,
 
     % Return historical statistics of finished transfers intact. As for active ones,
-    % pad them with zeroes to current time and erase recent 30s to avoid
+    % pad them with zeroes to current time and erase recent n-seconds to avoid
     % fluctuations on charts due to synchronization of docs between providers
     {CurrentStats, LastUpdate, TimeWindow} = case transfer_utils:is_ongoing(T) of
         false ->
-            SlotsToStrip = case TypePrefix of
-                ?MINUTE_STAT_TYPE -> 6;
-                _ -> 1
-            end,
-            StripFun = fun(_Provider, Hist) -> lists:sublist(Hist, length(Hist)-SlotsToStrip) end,
+            ChartLen = transfer_histogram:stats_type_to_speed_chart_len(TypePrefix),
+            StripFun = fun(_Provider, Hist) -> lists:sublist(Hist, ChartLen) end,
             {Histograms, HistTimeWindow} = case TypePrefix of
                 ?MINUTE_STAT_TYPE -> {T#transfer.min_hist, ?FIVE_SEC_TIME_WINDOW};
                 ?HOUR_STAT_TYPE -> {T#transfer.hr_hist, ?MIN_TIME_WINDOW};
@@ -377,10 +372,11 @@ trim_stats([{MinStats, ?FIVE_SEC_TIME_WINDOW}], CurrentTime) ->
         NewHistogram
     end,
     NewMinStats = maps:map(TrimFun, MinStats),
-    {[{NewMinStats, ?FIVE_SEC_TIME_WINDOW}], ?TRIMMED_TIMESTAMP(CurrentTime)};
+    NewTimestamp = transfer_histogram:trim_timestamp(CurrentTime),
+    {[{NewMinStats, ?FIVE_SEC_TIME_WINDOW}], NewTimestamp};
 
 trim_stats([{MinStats, ?FIVE_SEC_TIME_WINDOW}, {Stats, TimeWindow}], CurrentTime) ->
-    NewTimestamp = ?TRIMMED_TIMESTAMP(CurrentTime),
+    NewTimestamp = transfer_histogram:trim_timestamp(CurrentTime),
 
     TrimFun = fun(Histogram1, [FstSlot, SndSlot | Rest]) ->
         {ErasedSlots, NewHistogram1} = lists:split(6, Histogram1),

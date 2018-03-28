@@ -81,10 +81,10 @@ increment({LastUpdate, TimeWindow, Histogram}, CurrentTimestamp, N) ->
 merge({LastUpdate1, TimeWindow, Values1}, {LastUpdate2, TimeWindow, Values2}) ->
     {LastUpdate, Histogram1, Histogram2} = case LastUpdate1 > LastUpdate2 of
         true ->
-            ShiftSize = LastUpdate1 div TimeWindow - LastUpdate2 div TimeWindow,
+            ShiftSize = (LastUpdate1 div TimeWindow) - (LastUpdate2 div TimeWindow),
             {LastUpdate1, Values1, histogram:shift(Values2, ShiftSize)};
         false ->
-            ShiftSize = LastUpdate2 div TimeWindow - LastUpdate1 div TimeWindow,
+            ShiftSize = (LastUpdate2 div TimeWindow) - (LastUpdate1 div TimeWindow),
             {LastUpdate2, histogram:shift(Values1, ShiftSize), Values2}
     end,
     {LastUpdate, TimeWindow, histogram:merge(Histogram1, Histogram2)}.

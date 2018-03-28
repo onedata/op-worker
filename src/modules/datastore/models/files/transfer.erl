@@ -553,9 +553,9 @@ increase_files_invalidated_counter(TransferId) ->
 mark_data_transfer_finished(undefined, _ProviderId, _Bytes) ->
     {ok, undefined};
 mark_data_transfer_finished(TransferId, ProviderId, Bytes) ->
-    {ok, TransferDoc} = ?MODULE:get(TransferId),
-    #transfer{space_id = SpaceId} = TransferDoc#document.value,
-    space_transfer:update(SpaceId, ProviderId, Bytes),
+    CurrentTime = provider_logic:zone_time_seconds(),
+    {ok, #document{value = #transfer{space_id = SpaceId}}} = ?MODULE:get(TransferId),
+    ok = space_transfer:update(SpaceId, ProviderId, Bytes, CurrentTime),
 
     update(TransferId, fun(Transfer = #transfer{
         bytes_transferred = OldBytes,
@@ -567,7 +567,6 @@ mark_data_transfer_finished(TransferId, ProviderId, Bytes) ->
         mth_hist = MthHistograms
     }) ->
         LastUpdate = maps:get(ProviderId, LastUpdateMap, StartTime),
-        CurrentTime = provider_logic:zone_time_seconds(),
         {ok, Transfer#transfer{
             bytes_transferred = OldBytes + Bytes,
             last_update = maps:put(ProviderId, CurrentTime, LastUpdateMap),

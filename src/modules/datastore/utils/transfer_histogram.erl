@@ -14,26 +14,31 @@
 
 -include("modules/datastore/transfer.hrl").
 
-
--type histogram() :: [non_neg_integer()].
+-type timestamp() :: non_neg_integer().
 
 %% API
--export([new_time_slot_histogram/2, new_time_slot_histogram/3, update/6]).
+-export([
+    new_time_slot_histogram/2, new_time_slot_histogram/3,
+    update/6,
+    trim_timestamp/1,
+    stats_type_to_speed_chart_len/1
+]).
+
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
+
 %%-------------------------------------------------------------------
-%% @private
 %% @doc
 %% Creates a new time_slot_histogram based on LastUpdate time and Window.
 %% The length of created histogram is based on the Window.
 %% @end
 %%-------------------------------------------------------------------
 -spec update(oneprovider:id(), Bytes :: non_neg_integer(),
-    Histograms, Window :: non_neg_integer(), LastUpdate :: non_neg_integer(),
-    CurrentTime :: non_neg_integer()) -> Histograms
+    Histograms, Window :: non_neg_integer(), LastUpdate :: timestamp(),
+    CurrentTime :: timestamp()) -> Histograms
     when Histograms :: maps:map(od_provider:id(), histogram:histogram()).
 update(ProviderId, Bytes, Histograms, Window, LastUpdate, CurrentTime) ->
     Histogram = case maps:find(ProviderId, Histograms) of
@@ -53,7 +58,7 @@ update(ProviderId, Bytes, Histograms, Window, LastUpdate, CurrentTime) ->
 %% The length of created histogram is based on the Window.
 %% @end
 %%-------------------------------------------------------------------
--spec new_time_slot_histogram(LastUpdate :: non_neg_integer(),
+-spec new_time_slot_histogram(LastUpdate :: timestamp(),
     Window :: non_neg_integer()) -> time_slot_histogram:histogram().
 new_time_slot_histogram(LastUpdate, ?FIVE_SEC_TIME_WINDOW) ->
     new_time_slot_histogram(LastUpdate, ?FIVE_SEC_TIME_WINDOW,
@@ -70,13 +75,36 @@ new_time_slot_histogram(LastUpdate, ?DAY_TIME_WINDOW) ->
 
 
 %%-------------------------------------------------------------------
-%% @private
 %% @doc
 %% Creates a new time_slot_histogram based on LastUpdate time, Window and values.
 %% @end
 %%-------------------------------------------------------------------
--spec new_time_slot_histogram(LastUpdate :: non_neg_integer(),
+-spec new_time_slot_histogram(LastUpdate :: timestamp(),
     Window :: non_neg_integer(), histogram:histogram()) ->
     time_slot_histogram:histogram().
 new_time_slot_histogram(LastUpdate, Window, Values) ->
     time_slot_histogram:new(LastUpdate, Window, Values).
+
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Trim timestamp removing recent n-seconds based on difference between expected
+%% slots in speed histograms and bytes send histograms.
+%% @end
+%%-------------------------------------------------------------------
+-spec trim_timestamp(Timestamp :: timestamp()) -> timestamp().
+trim_timestamp(Timestamp) ->
+    FullSecSlotsToRemove = ?MIN_HIST_LENGTH - ?MIN_SPEED_HIST_LENGTH - 1,
+    (Timestamp rem ?FIVE_SEC_TIME_WINDOW) + FullSecSlotsToRemove * ?FIVE_SEC_TIME_WINDOW.
+
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Return speed chart length based on given stats type.
+%% @end
+%%-------------------------------------------------------------------
+-spec stats_type_to_speed_chart_len(binary()) -> non_neg_integer().
+stats_type_to_speed_chart_len(?MINUTE_STAT_TYPE) -> ?MIN_SPEED_HIST_LENGTH;
+stats_type_to_speed_chart_len(?HOUR_STAT_TYPE) -> ?HOUR_SPEED_HIST_LENGTH;
+stats_type_to_speed_chart_len(?DAY_STAT_TYPE) -> ?DAY_SPEED_HIST_LENGTH;
+stats_type_to_speed_chart_len(?MONTH_STAT_TYPE) -> ?MONTH_SPEED_HIST_LENGTH.
