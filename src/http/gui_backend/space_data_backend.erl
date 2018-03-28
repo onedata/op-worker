@@ -24,6 +24,7 @@
 -include_lib("ctool/include/privileges.hrl").
 
 -define(CURRENT_TRANSFERS_PREFIX, <<"current">>).
+-define(SCHEDULED_TRANSFERS_PREFIX, <<"scheduled">>).
 -define(COMPLETED_TRANSFERS_PREFIX, <<"completed">>).
 -define(MAX_TRANSFERS_TO_LIST, application:get_env(?APP_NAME, max_transfers_to_list, all)).
 -define(TRANSFERS_LIST_OFFSET, application:get_env(?APP_NAME, transfers_list_offset, 0)).
@@ -355,16 +356,19 @@ space_record(SpaceId, HasViewPrivileges) ->
         true -> SpaceId;
         false -> null
     end,
-    {CurrentTransferListId, CompletedTransferListId} = case HasViewPrivileges of
-        true -> {
-            op_gui_utils:ids_to_association(?CURRENT_TRANSFERS_PREFIX, SpaceId),
-            op_gui_utils:ids_to_association(?COMPLETED_TRANSFERS_PREFIX, SpaceId)
-        };
-        false -> {
-            null,
-            null
-        }
-    end,
+    {CurrentTransferListId, ScheduledTransferListId, CompletedTransferListId} =
+        case HasViewPrivileges of
+            true -> {
+                op_gui_utils:ids_to_association(?CURRENT_TRANSFERS_PREFIX, SpaceId),
+                op_gui_utils:ids_to_association(?SCHEDULED_TRANSFERS_PREFIX, SpaceId),
+                op_gui_utils:ids_to_association(?COMPLETED_TRANSFERS_PREFIX, SpaceId)
+            };
+            false -> {
+                null,
+                null,
+                null
+            }
+        end,
     [
         {<<"id">>, SpaceId},
         {<<"name">>, Name},
@@ -374,6 +378,7 @@ space_record(SpaceId, HasViewPrivileges) ->
         {<<"groupList">>, RelationWithViewPrivileges},
         {<<"providerList">>, RelationWithViewPrivileges},
         {<<"currentTransferList">>, CurrentTransferListId},
+        {<<"scheduledTransferList">>, ScheduledTransferListId},
         {<<"completedTransferList">>, CompletedTransferListId},
         {<<"user">>, UserId}
     ].
@@ -446,14 +451,16 @@ space_provider_list_record(SpaceId) ->
 -spec space_transfer_list_record(RecordId :: binary()) -> proplists:proplist().
 space_transfer_list_record(RecordId) ->
     {Prefix, SpaceId} = op_gui_utils:association_to_ids(RecordId),
-    Ongoing = Prefix =:= ?CURRENT_TRANSFERS_PREFIX,
-    {ok, Transfers} = case Ongoing of
-        false ->
-            transfer:list_past_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET,
+    {ok, Transfers} = case Prefix of
+        ?CURRENT_TRANSFERS_PREFIX ->
+            transfer:list_current_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET,
                 ?MAX_TRANSFERS_TO_LIST);
-        true ->
-            transfer:list_scheduled_and_current_transfers(SpaceId,
-                ?TRANSFERS_LIST_OFFSET, ?MAX_TRANSFERS_TO_LIST)
+        ?SCHEDULED_TRANSFERS_PREFIX ->
+            transfer:list_scheduled_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET,
+                ?MAX_TRANSFERS_TO_LIST);
+        ?COMPLETED_TRANSFERS_PREFIX ->
+            transfer:list_past_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET,
+                ?MAX_TRANSFERS_TO_LIST)
     end,
     [
         {<<"id">>, RecordId},
