@@ -499,7 +499,7 @@ init_provider_conn(SessionId, ProviderId, Domain, IP, Port, Transport, Timeout) 
     SecureFlag = application:get_env(?APP_NAME, interprovider_connections_security, true),
     SslOpts = [{cacerts, CaCerts}, {secure, SecureFlag}, {hostname, Domain}],
 
-    assert_compatibility(IP, ProviderId, SslOpts),
+    provider_logic:assert_provider_compatibility(IP, ProviderId, SslOpts),
 
     DomainAndIpInfo = case Domain of
         IP -> str_utils:format("@ ~s:~b", [IP, Port]);
@@ -528,36 +528,6 @@ init_provider_conn(SessionId, ProviderId, Domain, IP, Port, Transport, Timeout) 
     },
     activate_socket_once(State),
     State.
-
-
-%%--------------------------------------------------------------------
-%% @doc @private
-%% Assert that peer provider is of compatible version.
-%% @end
-%%--------------------------------------------------------------------
--spec assert_compatibility(binary(), od_provider:id(), [http_client:ssl_opt()]) ->
-    ok | no_return().
-assert_compatibility(Hostname, ProviderId, SslOpts) ->
-    URL = str_utils:format_bin("https://~s~s", [Hostname, ?provider_version_path]),
-    {ok, CompatibleVersions} = application:get_env(?APP_NAME, compatible_op_versions),
-    case http_client:get(URL, #{}, <<>>, [{ssl_options, SslOpts}]) of
-        {ok, 200, _RespHeaders, ResponseBody} ->
-            PeerProviderVersion = binary_to_list(ResponseBody),
-            case lists:member(PeerProviderVersion, CompatibleVersions) of
-                true ->
-                    ok;
-                false ->
-                    ?error("Discarding connection to provider ~p because of "
-                    "incompatible version (~s). Version must be one of: ~p",
-                        [ProviderId, PeerProviderVersion, CompatibleVersions]
-                    ),
-                    throw(incompatible_peer_op_version)
-            end;
-        {ok, _Code, _RespHeaders, _ResponseBody} ->
-            throw(cannot_check_peer_op_version);
-        {error, Error} ->
-            error(Error)
-    end.
 
 
 %%--------------------------------------------------------------------

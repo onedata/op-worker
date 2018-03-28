@@ -186,15 +186,10 @@ get_helpers(#document{value = #storage{} = Value}) ->
 -spec get_luma_config_map(record() | doc()) -> maps:map().
 get_luma_config_map(#storage{luma_config = undefined}) ->
     #{enabled => false};
-get_luma_config_map(#storage{
-    luma_config = #luma_config{
-        url = URL,
-        cache_timeout = CacheTimeout
-}}) ->
+get_luma_config_map(#storage{luma_config = #luma_config{url = URL}}) ->
     #{
         enabled => true,
-        url => URL,
-        cache_timeout => CacheTimeout div 60000
+        url => URL
     };
 get_luma_config_map(#document{value = Storage}) ->
     get_luma_config_map(Storage).
@@ -204,15 +199,20 @@ get_luma_config_map(#document{value = Storage}) ->
 %% Selects storage helper by its name form the list of configured storage helpers.
 %% @end
 %%--------------------------------------------------------------------
--spec select_helper(record() | doc(), helpers:name()) ->
-    {ok, helper()} | {error, Reason :: term()}.
-select_helper(Storage, HelperName) ->
+-spec select_helper(record() | doc(), helpers:name() | [helpers:name()]) ->
+    {ok, helper() | [helper()]} | {error, Reason :: term()}.
+select_helper(Storage, HelperNames) when is_list(HelperNames) ->
     Helpers = lists:filter(fun(Helper) ->
-        helper:get_name(Helper) =:= HelperName
+        lists:member(helper:get_name(Helper), HelperNames)
     end, get_helpers(Storage)),
     case Helpers of
         [] -> {error, not_found};
-        [Helper] -> {ok, Helper}
+        _ -> {ok, Helpers}
+    end;
+select_helper(Storage, HelperName) ->
+    case select_helper(Storage, [HelperName]) of
+        {ok, [Helper]} -> {ok, Helper};
+        Error -> Error
     end.
 
 %%--------------------------------------------------------------------
