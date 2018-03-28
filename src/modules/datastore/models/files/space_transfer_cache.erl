@@ -180,7 +180,7 @@ get_stats(SpaceId, HistogramTypes) ->
             {error, not_found} ->
                 STs;
             Error ->
-                ?error("Failef to retrieve Space Transfer Document
+                ?error("Failed to retrieve Space Transfer Document
                        for space ~p and provider ~p because of: ~p", [
                     SpaceId, Provider, Error
                 ]),
@@ -197,11 +197,20 @@ get_stats(SpaceId, HistogramTypes) ->
         } || HistogramType <- HistogramTypes
     ],
 
-    maps:fold(fun(Provider, SpaceTransfer, Stats) ->
+    CurrentStats = maps:fold(fun(Provider, SpaceTransfer, Stats) ->
         lists:map(fun({Stat, HistType}) ->
             update_stats(Stat, HistType, SpaceTransfer, CurrentTime, Provider)
         end, lists:zip(Stats, HistogramTypes))
-    end, EmptyStats, SpaceTransfers).
+    end, EmptyStats, SpaceTransfers),
+
+    % Filter out histograms with only zeroes
+    Pred = fun(_Provider, Histogram) -> lists:sum(Histogram) > 0 end,
+    lists:map(fun(Stats) ->
+        Stats#space_transfer_cache{
+            stats_in = maps:filter(Pred, Stats#space_transfer_cache.stats_in),
+            stats_out = maps:filter(Pred, Stats#space_transfer_cache.stats_out)
+        }
+    end, CurrentStats).
 
 
 %%--------------------------------------------------------------------
@@ -281,39 +290,56 @@ trim_stats([{Stats, ?MINUTE_STAT_TYPE}]) ->
         stats_in = maps:map(TrimFun, Stats#space_transfer_cache.stats_in),
         stats_out = maps:map(TrimFun, Stats#space_transfer_cache.stats_out)
     },
-    [{NewStats, ?MINUTE_STAT_TYPE}].
+    [{NewStats, ?MINUTE_STAT_TYPE}];
 
-%%trim_stats([{Stats1, ?MINUTE_STAT_TYPE}, {Stats2, StatsType}]) ->
-%%    #space_transfer_cache{stats_in = StatsIn1, stats_out = StatsOut1} = Stats1,
-%%    #space_transfer_cache{stats_in = StatsIn2, stats_out = StatsOut2} = Stats2,
-%%
-%%    NewTimestamp = ?TRIMMED_TIMESTAMP(Stats1#space_transfer_cache.timestamp),
-%%    TimeWindow = histogram_type_to_time_window(StatsType),
-%%    TrimFun = fun(Histogram1, Histogram2) ->
-%%        {ErasedSlots, NewHistogram1} = lists:split(6, Histogram1),
-%%        ErasedBytes = lists:sum(ErasedSlots),
-%%
-%%        {NewHistogram1, 1}
-%%    end,
-%%
-%%
-%%    {NewStatsIn1, NewStatsIn2} = maps:fold(fun(Provider, Histogram, {MinStatsIn, OtherStatsIn1}) ->
-%%        OtherHistIn = maps:get(Provider, StatsIn2),
-%%        {NewMinHistIn, NewOtherHistIn} = trim_histograms(Histogram, OtherHistIn),
-%%        {MinStatsIn#{Provider => NewMinHistIn}, OtherStatsIn1#{Provider => NewOtherHistIn}}
-%%    end, {#{}, #{}}, StatsIn1),
-%%
-%%    NewStats1 = Stats1#space_transfer_cache{
-%%        timestamp = NewTimestamp,
-%%        stats_in = NewStatsIn1,
-%%        stats_out = NewMinStatsOut
-%%    },
-%%    NewStats2 = Stats2#space_transfer_cache{
-%%        timestamp = NewTimestamp,
-%%        stats_in = NewStatsIn2,
-%%        stats_out = NewOtherStatsOut
-%%    },
-%%    [{NewStats1, ?MINUTE_STAT_TYPE}, {NewStats2, StatsType}].
+trim_stats([{Stats1, ?MINUTE_STAT_TYPE}, {Stats2, StatsType}]) ->
+    #space_transfer_cache{stats_in = StatsIn1, stats_out = StatsOut1} = Stats1,
+    #space_transfer_cache{stats_in = StatsIn2, stats_out = StatsOut2} = Stats2,
+
+    OldTimestamp = Stats1#space_transfer_cache.timestamp,
+    NewTimestamp = ?TRIMMED_TIMESTAMP(OldTimestamp),
+    TimeWindow = histogram_type_to_time_window(StatsType),
+    TrimFun = fun(Histogram1, [FstSlot, SndSlot | Rest]) ->
+        {ErasedSlots, NewHistogram1} = lists:split(6, Histogram1),
+        ErasedBytes = lists:sum(ErasedSlots),
+        Histogram2 = case ErasedBytes > FstSlot of
+             true ->
+                 [0, SndSlot - (ErasedBytes - FstSlot) | Rest];
+             false ->
+                 [FstSlot - ErasedBytes, SndSlot | Rest]
+         end,
+        NewHistogram2 = case (OldTimestamp div TimeWindow) =:= (NewTimestamp div TimeWindow) of
+            true ->
+                lists:droplast(Histogram2);
+            false ->
+                tl(Histogram2)
+        end,
+        {NewHistogram1, NewHistogram2}
+    end,
+
+    {NewStatsIn1, NewStatsIn2} = maps:fold(fun(Provider, Hist1, {OldStatsIn1, OldStatsIn2}) ->
+        Hist2 = maps:get(Provider, StatsIn2),
+        {NewHist1, NewHist2} = TrimFun(Hist1, Hist2),
+        {OldStatsIn1#{Provider => NewHist1}, OldStatsIn2#{Provider => NewHist2}}
+    end, {#{}, #{}}, StatsIn1),
+
+    {NewStatsOut1, NewStatsOut2} = maps:fold(fun(Provider, Hist1, {OldStatsOut1, OldStatsOut2}) ->
+        Hist2 = maps:get(Provider, StatsOut2),
+        {NewHist1, NewHist2} = TrimFun(Hist1, Hist2),
+        {OldStatsOut1#{Provider => NewHist1}, OldStatsOut2#{Provider => NewHist2}}
+    end, {#{}, #{}}, StatsOut1),
+
+    NewStats1 = Stats1#space_transfer_cache{
+        timestamp = NewTimestamp,
+        stats_in = NewStatsIn1,
+        stats_out = NewStatsOut1
+    },
+    NewStats2 = Stats2#space_transfer_cache{
+        timestamp = NewTimestamp,
+        stats_in = NewStatsIn2,
+        stats_out = NewStatsOut2
+    },
+    [{NewStats1, ?MINUTE_STAT_TYPE}, {NewStats2, StatsType}].
 
 
 -spec histograms_to_speed_charts(Stats :: space_transfer_cache(),
