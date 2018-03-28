@@ -158,6 +158,7 @@ rtransfer_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, N
 
     ok.
 
+% TODO - add reading with chunks to test prefetching
 basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts) ->
     basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts);
 basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts) ->

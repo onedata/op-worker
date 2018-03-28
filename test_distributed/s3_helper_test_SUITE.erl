@@ -108,9 +108,9 @@ multipart_write_test(Config) ->
         {success_rate, 100},
         {parameters, [?OP_SIZE(write, 1), ?OP_BLK_SIZE(write, 4)]},
         {description, "Multipart write operation."},
-        ?PERF_CFG(small, [?OP_SIZE(write, 1), ?OP_BLK_SIZE(write, 4)]),
-        ?PERF_CFG(medium, [?OP_SIZE(write, 2), ?OP_BLK_SIZE(write, 4)]),
-        ?PERF_CFG(large, [?OP_SIZE(write, 4), ?OP_BLK_SIZE(write, 4)])
+        ?PERF_CFG(small, [?OP_SIZE(write, 1), ?OP_BLK_SIZE(write, ?TEST_SIZE_BASE)]),
+        ?PERF_CFG(medium, [?OP_SIZE(write, 2), ?OP_BLK_SIZE(write, ?TEST_SIZE_BASE)]),
+        ?PERF_CFG(large, [?OP_SIZE(write, 4), ?OP_BLK_SIZE(write, ?TEST_SIZE_BASE)])
     ]).
 multipart_write_test_base(Config) ->
     Helper = new_helper(Config),
@@ -164,9 +164,9 @@ multipart_read_test(Config) ->
         {success_rate, 100},
         {parameters, [?OP_SIZE(read, 1), ?OP_BLK_SIZE(read, 4)]},
         {description, "Multipart read operation."},
-        ?PERF_CFG(small, [?OP_SIZE(read, 1), ?OP_BLK_SIZE(read, 4)]),
-        ?PERF_CFG(medium, [?OP_SIZE(read, 2), ?OP_BLK_SIZE(read, 4)]),
-        ?PERF_CFG(large, [?OP_SIZE(read, 4), ?OP_BLK_SIZE(read, 4)])
+        ?PERF_CFG(small, [?OP_SIZE(read, 1), ?OP_BLK_SIZE(read, ?TEST_SIZE_BASE)]),
+        ?PERF_CFG(medium, [?OP_SIZE(read, 2), ?OP_BLK_SIZE(read, ?TEST_SIZE_BASE)]),
+        ?PERF_CFG(large, [?OP_SIZE(read, 4), ?OP_BLK_SIZE(read, ?TEST_SIZE_BASE)])
     ]).
 multipart_read_test_base(Config) ->
     Helper = new_helper(Config),
