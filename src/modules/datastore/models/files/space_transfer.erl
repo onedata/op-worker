@@ -30,9 +30,7 @@
 -define(CTX, #{
     model => ?MODULE,
     sync_enabled => true,
-    remote_driver => datastore_remote_driver,
-    mutator => oneprovider:get_id_or_undefined(),
-    local_links_tree_id => oneprovider:get_id_or_undefined()
+    mutator => oneprovider:get_id_or_undefined()
 }).
 
 %%%===================================================================
@@ -103,20 +101,24 @@ update(SpaceId, SourceProviderId, Bytes) ->
             )
         }}
     end,
-    Default = #space_transfer{
-        last_update = #{SourceProviderId => CurrentTime},
-        min_hist = transfer_histogram:update(
-            SourceProviderId, Bytes, #{}, ?FIVE_SEC_TIME_WINDOW, 0, CurrentTime
-        ),
-        hr_hist = transfer_histogram:update(
-            SourceProviderId, Bytes, #{}, ?MIN_TIME_WINDOW, 0, CurrentTime
-        ),
-        dy_hist = transfer_histogram:update(
-            SourceProviderId, Bytes, #{}, ?HOUR_TIME_WINDOW, 0, CurrentTime
-        ),
-        mth_hist = transfer_histogram:update(
-            SourceProviderId, Bytes, #{}, ?DAY_TIME_WINDOW, 0, CurrentTime
-        )
+    Default = #document{
+        scope = SpaceId,
+        key = Key,
+        value = #space_transfer{
+            last_update = #{SourceProviderId => CurrentTime},
+            min_hist = transfer_histogram:update(
+                SourceProviderId, Bytes, #{}, ?FIVE_SEC_TIME_WINDOW, 0, CurrentTime
+            ),
+            hr_hist = transfer_histogram:update(
+                SourceProviderId, Bytes, #{}, ?MIN_TIME_WINDOW, 0, CurrentTime
+            ),
+            dy_hist = transfer_histogram:update(
+                SourceProviderId, Bytes, #{}, ?HOUR_TIME_WINDOW, 0, CurrentTime
+            ),
+            mth_hist = transfer_histogram:update(
+                SourceProviderId, Bytes, #{}, ?DAY_TIME_WINDOW, 0, CurrentTime
+            )
+        }
     },
     case datastore_model:update(?CTX, Key, Diff, Default) of
         {ok, _} -> ok;
