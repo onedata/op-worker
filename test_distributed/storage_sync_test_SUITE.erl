@@ -26,7 +26,8 @@
 %% tests
 -export([
     create_directory_import_test/1, create_directory_export_test/1,
-    create_file_import_test/1, create_file_export_test/1,
+    create_file_import_test/1, create_delete_import_test/1,
+    create_file_export_test/1,
     delete_empty_directory_update_test/1,
     delete_non_empty_directory_update_test/1,
     sync_works_properly_after_delete_test/1,
@@ -71,6 +72,7 @@
     create_directory_import_many_test,
     create_directory_export_test,
     create_file_import_test,
+    create_delete_import_test,
     create_file_import_check_user_id_test,
     create_file_import_check_user_id_error_test,
     create_file_export_test,
@@ -139,6 +141,9 @@ create_directory_export_test(Config) ->
 
 create_file_import_test(Config) ->
     storage_sync_test_base:create_file_import_test(Config, false).
+
+create_delete_import_test(Config) ->
+    storage_sync_test_base:create_delete_import_test(Config, false).
 
 create_file_import_check_user_id_test(Config) ->
     storage_sync_test_base:create_file_import_check_user_id_test(Config, false).

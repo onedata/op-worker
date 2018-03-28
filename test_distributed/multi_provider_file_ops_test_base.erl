@@ -43,6 +43,7 @@
 -export([create_doc/4, set_parent_link/4, create_location/4]).
 
 -export([extend_config/4]).
+-export([verify/2, verify_workers/2]).
 
 -define(match(Expect, Expr, Attempts),
     case Attempts of
