@@ -192,9 +192,7 @@ timeouts_test(Config) ->
     initializer:remove_pending_messages(),
     {ok, {Sock, _}} = connect_via_macaroon(Worker1, [{active, true}], SID),
 
-    create_timeouts_test(Config, Sock, RootGuid),
-    ls_timeouts_test(Config, Sock, RootGuid),
-    fsync_timeouts_test(Config, Sock, RootGuid).
+    create_timeouts_test(Config, Sock, RootGuid).
 
 client_keepalive_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
@@ -216,34 +214,17 @@ create_timeouts_test(Config, Sock, RootGuid) ->
         fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
     }, message_id = <<"1">>}, receive_server_message()),
 
-    configure_cp(Config, helper_timeout),
-    % send
-    ok = ssl:send(Sock, generate_create_message(RootGuid, <<"2">>, <<"f2">>)),
-    % receive & validate
-    check_answer(fun() -> ?assertMatchTwo(
-        #'ServerMessage'{message_body = {
-            fuse_response, #'FuseResponse'{status = #'Status'{code = eagain}
-            }
-        }, message_id = <<"2">>},
-        #'ServerMessage'{message_body = {
-            processing_status, #'ProcessingStatus'{code = 'IN_PROGRESS'}
-        }, message_id = <<"2">>},
-        receive_server_message()) end
-        ),
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    SID = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
 
-    configure_cp(Config, helper_delay),
-    ok = ssl:send(Sock, generate_create_message(RootGuid, <<"3">>, <<"f3">>)),
+    FGuid = get_guid(Worker1, SID, <<"/space_name1/f1">>),
+
+    % send
+    ok = ssl:send(Sock, generate_sync_message(FGuid, <<"2">>)),
     % receive & validate
-    check_answer(fun() -> ?assertMatchTwo(
-        #'ServerMessage'{message_body = {
-            fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
-        }, message_id = <<"3">>},
-        #'ServerMessage'{message_body = {
-            processing_status, #'ProcessingStatus'{code = 'IN_PROGRESS'}
-        }, message_id = <<"3">>},
-        receive_server_message()) end,
-        3
-    ).
+    ?assertMatch(#'ServerMessage'{message_body = {
+        fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
+    }, message_id = <<"2">>}, receive_server_message()).
 
 ls_timeouts_test(Config, Sock, RootGuid) ->
     % send
@@ -1301,6 +1282,16 @@ generate_create_message(RootGuid, MsgId, File) ->
         #'FileRequest'{context_guid = RootGuid,
             file_request = {create_file, #'CreateFile'{name = File,
                 mode = 8#644, flag = 'READ_WRITE'}}}
+    }}}
+    },
+    messages:encode_msg(Message).
+
+generate_sync_message(RootGuid, MsgId) ->
+    Message = #'ClientMessage'{message_id = MsgId, message_body =
+    {fuse_request, #'FuseRequest'{fuse_request = {file_request,
+        #'FileRequest'{context_guid = RootGuid,
+            file_request = {synchronize_block_and_compute_checksum, #'SynchronizeBlockAndComputeChecksum'{
+                block = #'FileBlock'{offset = 0, size = 0}}}}
     }}}
     },
     messages:encode_msg(Message).

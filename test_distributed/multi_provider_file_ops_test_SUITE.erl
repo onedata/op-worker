@@ -410,7 +410,7 @@ remote_driver_test(Config) ->
     ])).
 
 db_sync_with_delays_test(Config) ->
-    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {4,0,0,2}, 180, 100, 100).
+    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {4,0,0,2}, 300, 50, 50).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -449,7 +449,7 @@ init_per_testcase(db_sync_with_delays_test, Config) ->
     ),
     test_utils:mock_expect(WorkersNot1, datastore_throttling, throttle_model, fun
         (file_meta) ->
-            timer:sleep(100),
+            timer:sleep(50),
             ok;
         (_) ->
             ok
