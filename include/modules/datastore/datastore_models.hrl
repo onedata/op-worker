@@ -535,7 +535,7 @@
     % mapping of providers to their data output
     stats_out = #{} :: maps:map(od_provider:id(), histogram:histogram()),
     % mapping of providers to other providers they sent data to in the recent past
-    mapping = #{} :: maps:map(od_provider:id(), [od_provider:id()])
+    mapping = #{} :: undefined | maps:map(od_provider:id(), [od_provider:id()])
 }).
 
 %% Model for storing storage_sync monitoring data.
