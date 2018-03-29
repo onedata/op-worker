@@ -649,8 +649,8 @@ fetch_lock_fetch_helper(SessId, SpaceId, StorageDoc, InCriticalSection) ->
             datastore_model:delete_links(Ctx, SessId, ?HELPER_HANDLES_TREE_ID, Name),
             add_missing_helper(SessId, SpaceId, StorageDoc);
 
-        {{error, Reason2}, _} ->
-            {error, Reason2}
+        {Error2, _} ->
+            {error, Error2}
     end.
 
 %%--------------------------------------------------------------------
