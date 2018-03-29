@@ -57,7 +57,8 @@
     update_syncs_files_after_import_failed_test/2,
     update_syncs_files_after_previous_update_failed_test/2,
     sync_works_properly_after_delete_test/2,
-    create_delete_import_test/2
+    create_delete_import_test/2,
+    create_delete_import2_test/3
 ]).
 
 
@@ -147,6 +148,71 @@ create_delete_import_test(Config, MountSpaceInRoot, ReadBoth) ->
     ?assertEqual({error, enoent}, file:read_file(StorageTestFilePath2), Attempts),
 
     ok.
+
+create_delete_import2_test(Config, MountSpaceInRoot, ReadBoth) ->
+    [W1, W2 | _] = Workers = ?config(op_worker_nodes, Config),
+    W1MountPoint = get_host_mount_point(W1, Config),
+    W2MountPoint = get_host_mount_point(W2, Config),
+    Attempts = 60,
+
+    StorageTestFilePath =
+        storage_test_file_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+    StorageTestFilePath2 =
+        storage_test_file_path(W2MountPoint, ?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+    %% Create file on storage
+    ?assertEqual(ok, file:write_file(StorageTestFilePath, ?TEST_DATA)),
+    Size = byte_size(?TEST_DATA),
+    storage_sync_test_base:enable_storage_import(Config),
+    storage_sync_test_base:enable_storage_update(Config),
+
+    ReadWorkers = case ReadBoth of
+        true -> Workers;
+        _ -> [W2]
+    end,
+
+    multi_provider_file_ops_test_base:verify_workers(ReadWorkers, fun(W) ->
+        ?assertMatch({ok, ?TEST_DATA},
+            begin
+                SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W)}}, Config),
+                case lfm_proxy:open(W, SessId, {path, ?SPACE_TEST_FILE_PATH}, read) of
+                    {ok, Handle} ->
+                        try
+                            lfm_proxy:read(W, Handle, 0, Size)
+                        after
+                            lfm_proxy:close(W, Handle)
+                        end;
+                    OpenError ->
+                        OpenError
+                end
+            end, Attempts)
+    end),
+
+    ?assertEqual({ok, ?TEST_DATA}, file:read_file(StorageTestFilePath)),
+    ?assertEqual({ok, ?TEST_DATA}, file:read_file(StorageTestFilePath2)),
+
+    SessIdW1 = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
+    SessIdW2 = ?config({session_id, {?USER, ?GET_DOMAIN(W2)}}, Config),
+
+    {ok, #file_attr{guid = GUID}} = ?assertMatch({ok, #file_attr{}},
+        lfm_proxy:stat(W2, SessIdW2, {path, ?SPACE_TEST_FILE_PATH})),
+    ?assertMatch(ok, lfm_proxy:unlink(W2, <<"0">>, {guid, GUID})),
+
+    ?assertEqual({error, enoent}, file:read_file(StorageTestFilePath), Attempts),
+    ?assertEqual({error, enoent}, file:read_file(StorageTestFilePath2), Attempts),
+
+    {ok, FileGuid} =
+        ?assertMatch({ok, _}, lfm_proxy:create(W2, SessIdW2, ?SPACE_TEST_FILE_PATH, 8#777)),
+    {ok, FileHandle} =
+        ?assertMatch({ok, _}, lfm_proxy:open(W2, SessIdW2, {guid, FileGuid}, write)),
+    ?assertEqual({ok, byte_size(?TEST_DATA)}, lfm_proxy:write(W2, FileHandle, 0, ?TEST_DATA)),
+
+    {ok, FileHandle2} =
+        ?assertMatch({ok, _}, lfm_proxy:open(W1, SessIdW1, {guid, FileGuid}, read), ?ATTEMPTS),
+
+    ?assertEqual({ok, ?TEST_DATA}, lfm_proxy:read(W1, FileHandle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
+    ?assertEqual({ok, ?TEST_DATA}, file:read_file(StorageTestFilePath), Attempts),
+    ok = file:delete(StorageTestFilePath),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:open(W2, SessIdW2, {guid, FileGuid}, read), ?ATTEMPTS).
 
 create_directory_import_test(Config, MountSpaceInRoot) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),

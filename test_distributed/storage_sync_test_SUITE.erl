@@ -21,7 +21,7 @@
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
-    end_per_testcase/2, create_file_in_dir_import_test/1]).
+    end_per_testcase/2]).
 
 %% tests
 -export([
@@ -42,6 +42,7 @@
     truncate_file_update_test/1,
     chmod_file_update_test/1,
     update_timestamps_file_import_test/1,
+    create_file_in_dir_import_test/1,
     create_file_in_dir_update_test/1,
     create_file_in_dir_exceed_batch_update_test/1,
     chmod_file_update2_test/1,
@@ -59,7 +60,9 @@
     update_nfs_acl_test/1,
     import_nfs_acl_with_disabled_luma_should_fail_test/1,
     create_directory_import_error_test/1,
-    update_syncs_files_after_import_failed_test/1, update_syncs_files_after_previous_update_failed_test/1]).
+    update_syncs_files_after_import_failed_test/1,
+    update_syncs_files_after_previous_update_failed_test/1
+    , create_delete_import2_test/1]).
 
 -define(TEST_CASES, [
     create_directory_import_test,
@@ -144,6 +147,9 @@ create_file_import_test(Config) ->
 
 create_delete_import_test(Config) ->
     storage_sync_test_base:create_delete_import_test(Config, false).
+
+create_delete_import2_test(Config) ->
+    storage_sync_test_base:create_delete_import2_test(Config, false, true).
 
 create_file_import_check_user_id_test(Config) ->
     storage_sync_test_base:create_file_import_check_user_id_test(Config, false).
@@ -321,6 +327,7 @@ init_per_testcase(Case, Config) when
 
 init_per_testcase(Case, Config) when
     Case =:= delete_and_update_files_simultaneously_update_test;
+    Case =:= create_delete_import2_test;
     Case =:= sync_works_properly_after_delete_test ->
     Config2 = [
         {update_config, #{
