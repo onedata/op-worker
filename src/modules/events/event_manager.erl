@@ -145,7 +145,7 @@ handle_cast({internal, RetryCounter, Request},
             erlang:send_after(1000, self(), {retry_request, RetryCounter, Request}),
             {noreply, State};
         Reason1:Reason2 ->
-            ?error_stacktrace("Cannot process request ~p due to: ~p", [Request, {Reason1, Reason2}]),
+            ?debug_stacktrace("Cannot process request ~p due to: ~p", [Request, {Reason1, Reason2}]),
             {noreply, State}
     end;
 handle_cast(Request, State) ->
