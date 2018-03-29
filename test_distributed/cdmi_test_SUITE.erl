@@ -26,8 +26,8 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([all/0, init_per_suite/1, init_per_testcase/2,
-    end_per_testcase/2, end_per_suite/1]).
+-export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
+    end_per_testcase/2]).
 
 -export([
     list_dir_test/1,
@@ -197,6 +197,9 @@ create_cdmi_dir_without_cdmi_version_header_should_fail_test(Config) ->
 init_per_suite(Config) ->
     [{?LOAD_MODULES, [initializer]} | Config].
 
+end_per_suite(_) ->
+    ok.
+
 init_per_testcase(choose_adequate_handler_test = Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, [cdmi_object_handler, cdmi_container_handler], [passthrough]),
@@ -220,9 +223,6 @@ end_per_testcase(_Case, Config) ->
     initializer:clean_test_users_and_spaces_no_validate(Config),
     hackney:stop(),
     ssl:stop().
-
-end_per_suite(_Config) ->
-    ok.
 
 %%%===================================================================
 %%% Internal functions
