@@ -1843,7 +1843,7 @@ do_request([_ | _] = Nodes, RestSubpath, get, Headers, Body) ->
             RResponseJSON = remove_times_metadata(json_utils:decode(RResponse)),
             lists:foreach(fun({ok, LCode, _, LResponse}) ->
                 LResponseJSON = remove_times_metadata(json_utils:decode(LResponse)),
-%%                ct:print("~p ~p ~p ~p", [RCode, RResponseJSON, LCode, LResponseJSON]), %% Usefull log for debugging
+%%                ct:print("~p ~p ~p ~p", [RCode, RResponseJSON, LCode, LResponseJSON]), %% Useful log for debugging
                 ?assertMatch({RCode, RResponseJSON}, {LCode, LResponseJSON})
             end, Responses)
     end,
@@ -1867,13 +1867,14 @@ remove_times_metadata(ResponseJSON) ->
 % Performs a single request using http_client
 do_request_impl(Node, RestSubpath, Method, Headers, Body) ->
     CaCerts = rpc:call(Node, gui_listener, get_cert_chain, []),
+    {ok, Domain} = test_utils:get_env(Node, ?APP_NAME, test_web_cert_domain),
     Result = http_client:request(
         Method,
         cdmi_endpoint(Node) ++ RestSubpath,
         maps:from_list(Headers),
         Body,
         [
-            {ssl_options, [{cacerts, CaCerts}]},
+            {ssl_options, [{cacerts, CaCerts}, {hostname, str_utils:to_binary(Domain)}]},
             {connect_timeout, timer:minutes(1)},
             {recv_timeout, timer:minutes(1)}
         ]
@@ -1897,8 +1898,8 @@ cdmi_endpoint(Node) ->
             PStr;
         P -> P
     end,
-    {ok, Domain} = test_utils:get_env(Node, ?APP_NAME, test_web_cert_domain),
-    string:join(["https://", str_utils:to_list(Domain), Port, "/cdmi/"], "").
+    Ip = test_utils:get_docker_ip(Node),
+    string:join(["https://", str_utils:to_list(Ip), Port, "/cdmi/"], "").
 
 create_test_dir_and_file(Config) ->
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),

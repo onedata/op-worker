@@ -176,8 +176,10 @@ switch_monitoring_status(SpaceId, storage_update, CurrentStrategyName,
     space_strategy:name()) -> ok.
 switch_import_monitoring_status(_SpaceId, no_import, no_import) ->
     ok;
+switch_import_monitoring_status(SpaceId, no_import, _ ) ->
+    storage_sync_monitoring:start_spirals(SpaceId);
 switch_import_monitoring_status(SpaceId, _, no_import) ->
-    turn_sync_monitoring_off(SpaceId);
+    storage_sync_monitoring:stop_counters(SpaceId);
 switch_import_monitoring_status(_SpaceId, _, _) ->
     ok.
 
@@ -191,17 +193,9 @@ switch_import_monitoring_status(_SpaceId, _, _) ->
     space_strategy:name()) -> ok.
 switch_update_monitoring_status(_SpaceId, no_update, no_update) ->
     ok;
+switch_update_monitoring_status(SpaceId, no_update, _ ) ->
+    storage_sync_monitoring:start_spirals(SpaceId);
 switch_update_monitoring_status(SpaceId, _, no_update) ->
-    turn_sync_monitoring_off(SpaceId);
+    storage_sync_monitoring:stop_counters(SpaceId);
 switch_update_monitoring_status(_SpaceId, _, _) ->
     ok.
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Turns import monitoring off.
-%% @end
-%%-------------------------------------------------------------------
--spec turn_sync_monitoring_off(od_space:id()) -> ok.
-turn_sync_monitoring_off(SpaceId) ->
-    storage_sync_monitoring:stop_counters(SpaceId).

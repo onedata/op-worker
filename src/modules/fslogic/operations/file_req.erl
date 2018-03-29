@@ -111,7 +111,7 @@ open_file_insecure(UserCtx, FileCtx, Flag) ->
     no_return() | #fuse_response{}.
 open_file_insecure(UserCtx, FileCtx, Flag, HandleId0) ->
     SessId = user_ctx:get_session_id(UserCtx),
-    FileCtx2 = sfm_utils:create_delayed_storage_file(FileCtx),
+    FileCtx2 = sfm_utils:create_delayed_storage_file(UserCtx, FileCtx),
     {SFMHandle, FileCtx3} = storage_file_manager:new_handle(SessId, FileCtx2),
     SFMHandle2 = storage_file_manager:set_size(SFMHandle),
     {ok, Handle} = storage_file_manager:open(SFMHandle2, Flag),

@@ -46,26 +46,29 @@ change_replicated(SpaceId, Change) ->
 %%--------------------------------------------------------------------
 -spec change_replicated_internal(od_space:id(), datastore:doc()) ->
     any() | no_return().
+
 change_replicated_internal(SpaceId, #document{
     key = FileUuid,
-    value = #file_meta{type = ?REGULAR_FILE_TYPE, owner = UserId},
-    deleted = true
-} = FileDoc) ->
+    value = #file_meta{
+        type = ?REGULAR_FILE_TYPE,
+        deleted = Del1},
+    deleted = Del2
+} = FileDoc) when Del1 or Del2 ->
     ?debug("change_replicated_internal: deleted file_meta ~p", [FileUuid]),
     Ctx = datastore_model_default:get_ctx(file_meta),
-    case datastore_model:exists(Ctx, FileUuid) of
-        {ok, false} ->
-            try
-                FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
-                fslogic_event_emitter:emit_file_removed(FileCtx, []),
-                % TODO - if links delete comes before, it fails!
-                sfm_utils:delete_storage_file_without_location(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
-                file_location:delete(file_location:local_id(FileUuid), UserId)
-            catch
-                _:{badmatch, {error, not_found}} ->
-                    % TODO - if links delete comes before, this function fails!
-                    ok
-            end;
+
+    Proceed = case datastore_model:get(Ctx, FileUuid) of
+        {error, not_found} ->
+            true;
+        {ok, #document{value = #file_meta{deleted = Del}} = X} ->
+            Del
+    end,
+
+    case Proceed of
+        true ->
+            FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
+            fslogic_deletion_worker:request_remote_deletion(FileCtx),
+            ok;
         _ ->
             ok
     end;

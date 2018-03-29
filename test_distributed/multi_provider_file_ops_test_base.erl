@@ -25,6 +25,7 @@
 %% export for tests
 -export([
     basic_opts_test_base/4,
+    rtransfer_test_base/11,
     many_ops_test_base/6,
     distributed_modification_test_base/4,
     multi_space_test_base/3,
@@ -33,7 +34,8 @@
     mkdir_and_rmdir_loop_test_base/3,
     echo_and_delete_file_loop_test_base/3,
     create_and_delete_file_loop_test_base/3,
-    distributed_delete_test_base/4
+    distributed_delete_test_base/4,
+    create_after_del_test_base/4
 ]).
 -export([init_env/1, teardown_env/1]).
 
@@ -41,6 +43,7 @@
 -export([create_doc/4, set_parent_link/4, create_location/4]).
 
 -export([extend_config/4]).
+-export([verify/2, verify_workers/2]).
 
 -define(match(Expect, Expr, Attempts),
     case Attempts of
@@ -65,6 +68,99 @@
 %%%===================================================================
 
 
+rtransfer_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten},
+    Attempts, Timeout, SmallFilesNum, MediumFilesNum, BigFilesNum,
+    BigFilesChunks, TransfersNum, TransferFileParts) ->
+    rtransfer_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1},
+        Attempts, Timeout, SmallFilesNum, MediumFilesNum, BigFilesNum,
+        BigFilesChunks, TransfersNum, TransferFileParts);
+rtransfer_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider},
+    Attempts, Timeout, SmallFilesNum, MediumFilesNum, BigFilesNum, BigFileParts,
+    TransfersNum, TransferFileParts) ->
+    Config = extend_config(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts),
+    SessId = ?config(session, Config),
+    SpaceName = ?config(space_name, Config),
+    Worker1 = ?config(worker1, Config),
+    Workers1 = ?config(workers1, Config),
+    Workers2 = ?config(workers2, Config),
+    Workers = ?config(op_worker_nodes, Config),
+    Workers3 = Workers -- Workers1 -- Workers2,
+
+    Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir, 8#755)),
+
+    verify_stats(Config, Dir, true),
+    ct:print("Dir created"),
+
+    ChunkSize = 10240,
+    SmallFiles = lists:map(fun(_) ->
+        {1, 1, false}
+    end, lists:seq(1, SmallFilesNum)),
+    MediumFiles = lists:map(fun(_) ->
+        {1024, 1, false}
+    end, lists:seq(1, MediumFilesNum)),
+    BigFiles = lists:map(fun(_) ->
+        {1024, BigFileParts, false}
+    end, lists:seq(1, BigFilesNum)),
+    Transfers = lists:map(fun(_) ->
+        {1024, TransferFileParts, true}
+    end, lists:seq(1, TransfersNum)),
+    Files = SmallFiles ++ MediumFiles ++ BigFiles ++ Transfers,
+
+    Master = self(),
+    lists:foreach(fun({ChunksNum, PartNum, Transfer}) ->
+        spawn(fun() ->
+            try
+                PartSize = ChunkSize * ChunksNum,
+                FileSize = PartSize * PartNum,
+                Level2File = <<Dir/binary, "/", (generator:gen_name())/binary>>,
+                Level2File2 = <<Dir/binary, "/", (generator:gen_name())/binary>>,
+                create_big_file(Config, ChunkSize, ChunksNum, PartNum, Level2File, Worker1),
+
+                T1 = lists:max(verify_workers(Workers2, fun(W) ->
+                    read_big_file(Config, FileSize, Level2File, W, Transfer)
+                end)),
+                T2 = lists:max(verify_workers(Workers3, fun(W) ->
+                    read_big_file(Config, FileSize, Level2File, W, Transfer)
+                end)),
+
+                create_big_file(Config, ChunkSize, ChunksNum, PartNum, Level2File2, Worker1),
+                T3 = lists:max(verify(Config, fun(W) ->
+                    read_big_file(Config, FileSize, Level2File2, W, Transfer)
+                end)),
+
+                Master ! {slave_ans, ChunksNum, PartNum, Transfer, {ok, lists:max([T1, T2, T3])}}
+            catch
+                E1:E2 ->
+                    Master ! {slave_ans, ChunksNum, PartNum, Transfer, {error, E1, E2}}
+            end
+        end)
+    end, Files),
+
+    Answers = lists:foldl(fun({ChunksNum, PartNum, Transfer}, Acc) ->
+        SlaveAns = receive
+            {slave_ans, ChunksNum, PartNum, Transfer, Ans} ->
+                Ans
+        after
+            Timeout ->
+                timeout
+        end,
+        ?assertMatch({ok, _}, SlaveAns),
+        {ok, Time} = SlaveAns,
+        [{ChunksNum, PartNum, Transfer, Time} | Acc]
+    end, [], Files),
+
+    AnswersMap = lists:foldl(fun({ChunksNum, PartNum, Transfer, Time}, Acc) ->
+        Key = {ChunksNum, PartNum, Transfer},
+        V = maps:get(Key, Acc, 0),
+        maps:put(Key, max(V, Time), Acc)
+    end, #{}, Answers),
+
+    ct:print("Read max times ~p", [AnswersMap]),
+
+    ok.
+
+% TODO - add reading with chunks to test prefetching
 basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts) ->
     basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts);
 basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts) ->
@@ -120,6 +216,104 @@ basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     end),
 
     ok.
+
+create_after_del_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts) ->
+    create_after_del_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts);
+create_after_del_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts) ->
+
+%%    ct:print("Test ~p", [{User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts, DirsNum, FilesNum}]),
+
+    Config = extend_config(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts),
+    Workers = ?config(op_worker_nodes, Config),
+
+    lists:foreach(fun(Worker) ->
+        test_utils:set_env(Worker, ?APP_NAME, unlink_on_create, false)
+    end, Workers),
+
+    delete_test_skeleton(Config, "Standard, write 1", true, false, false, false),
+    delete_test_skeleton(Config, "Standard", false, false, false, false),
+
+    delete_test_skeleton(Config, "Open and sleep, write 1", true, true, {true, 10}, false),
+    delete_test_skeleton(Config, "Open and sleep", false, true, {true, 10}, false),
+
+    delete_test_skeleton(Config, "Open no sleep, write 1", true, true, false, false),
+    delete_test_skeleton(Config, "Open no sleep", false, true, false, false),
+
+    delete_test_skeleton(Config, "Close after del, write 1", true, true, {true, 1}, true),
+    delete_test_skeleton(Config, "Close after del", false, true, {true, 1}, true),
+
+    lists:foreach(fun(Worker) ->
+        test_utils:set_env(Worker, ?APP_NAME, unlink_on_create, true)
+    end, Workers),
+
+    ok.
+
+delete_test_skeleton(Config, Desc, WriteOn1, OpenBeforeDel, SleepAfterVerify,
+    CloseAfterVerify) ->
+    SessId = ?config(session, Config),
+    SpaceName = ?config(space_name, Config),
+    Worker1 = ?config(worker1, Config),
+    Workers = ?config(op_worker_nodes, Config),
+
+    lists:foreach(fun(I) ->
+        ct:print("~p ~p", [Desc, I]),
+        DelFile = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
+        lists:foldl(fun
+            (W, undefined) ->
+                ct:print("Before del ~p", [{DelFile, W}]),
+                WriteWorker = case WriteOn1 of
+                    true -> Worker1;
+                    _ -> W
+                end,
+                Beg = crypto:strong_rand_bytes(8),
+                BegSize = size(Beg),
+                create_file_on_worker(Config, Beg, BegSize, DelFile, WriteWorker, 5),
+                verify_file(Config, Beg, {BegSize, DelFile});
+            (W, DelInfo) ->
+                ct:print("Del ~p", [{DelFile, W}]),
+                WriteWorker = case WriteOn1 of
+                    true -> Worker1;
+                    _ -> W
+                end,
+
+                case OpenBeforeDel of
+                    true ->
+                        {ok, Handle} = lfm_proxy:open(W, SessId(W), {path, DelFile}, rdwr),
+                        ?assertMatch(ok, lfm_proxy:unlink(W, SessId(W), {path, DelFile})),
+
+                        case CloseAfterVerify of
+                            false ->
+                                ok = timer:sleep(timer:seconds(1)),
+                                lfm_proxy:close(W, Handle);
+                            _ ->
+                                ok
+                        end,
+
+                        verify_del(Config, DelInfo),
+
+                        case SleepAfterVerify of
+                            {true, Seconds} -> timer:sleep(timer:seconds(Seconds));
+                            _ -> ok
+                        end,
+
+                        case CloseAfterVerify of
+                            true ->
+                                ok = timer:sleep(timer:seconds(1)),
+                                lfm_proxy:close(W, Handle);
+                            _ ->
+                                ok
+                        end;
+                    _ ->
+                        ?assertMatch(ok, lfm_proxy:unlink(W, SessId(W), {path, DelFile})),
+                        verify_del(Config, DelInfo)
+                end,
+
+                Beg = crypto:strong_rand_bytes(8),
+                BegSize = size(Beg),
+                create_file_on_worker(Config, Beg, BegSize, DelFile, WriteWorker, 5),
+                verify_file(Config, Beg, {BegSize, DelFile})
+        end, undefined, Workers ++ Workers)
+    end, lists:seq(1,2)).
 
 many_ops_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts, DirsNum, FilesNum) ->
     many_ops_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts, DirsNum, FilesNum);
@@ -356,10 +550,10 @@ distributed_delete_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWr
     ],
 
     DelNodes = [
-        Workers1 ++ Workers1,
-        WorkersNot1 ++ WorkersNot1,
+            Workers1 ++ Workers1,
+            WorkersNot1 ++ WorkersNot1,
         Workers,
-        Workers1 ++ Workers1,
+            Workers1 ++ Workers1,
         all,
         all
     ],
@@ -463,7 +657,7 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
                 owner = User,
                 scope = SpaceKey
             },
-            scope = SpaceId
+                scope = SpaceId
             },
 %%            ct:print("Doc ~p ~p", [Uuid, Name]),
             {Doc, Name}
@@ -960,31 +1154,39 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
 extend_config(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts) ->
     ProxyNodesWritten = ProxyNodesWritten0 * NodesOfProvider,
     Workers = ?config(op_worker_nodes, Config),
-    {Worker1, Workers1, WorkersNot1} = lists:foldl(fun(W, {Acc1, Acc2, Acc3}) ->
+    {Worker1, Workers1, WorkersNot1, Workers2} = lists:foldl(fun(W, {Acc1, Acc2, Acc3, Acc4}) ->
         {NAcc2, NAcc3} = case string:str(atom_to_list(W), "p1") of
             0 -> {Acc2, [W | Acc3]};
             _ -> {[W | Acc2], Acc3}
         end,
+
+        NAcc4 = case string:str(atom_to_list(W), "p2") of
+            0 -> Acc4;
+            _ -> [W | Acc4]
+        end,
+
         case is_atom(Acc1) of
             true ->
-                {Acc1, NAcc2, NAcc3};
+                {Acc1, NAcc2, NAcc3, NAcc4};
             _ ->
                 case string:str(atom_to_list(W), "p1") of
-                    0 -> {Acc1, NAcc2, NAcc3};
-                    _ -> {W, NAcc2, NAcc3}
+                    0 -> {Acc1, NAcc2, NAcc3, NAcc4};
+                    _ -> {W, NAcc2, NAcc3, NAcc4}
                 end
         end
-    end, {[], [], []}, Workers),
+    end, {[], [], [], []}, Workers),
 
     SessId = fun(W) -> ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config) end,
     [{_SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
-    [{worker1, Worker1}, {workers1, Workers1}, {workers_not1, WorkersNot1},
+    [{worker1, Worker1}, {workers1, Workers1}, {workers_not1, WorkersNot1}, {workers2, Workers2},
         {session, SessId}, {space_name, SpaceName}, {attempts, Attempts},
         {nodes_number, {SyncNodes, ProxyNodes, ProxyNodesWritten, ProxyNodesWritten0, NodesOfProvider}} | Config].
 
 verify(Config, TestFun) ->
     Workers = ?config(op_worker_nodes, Config),
+    verify_workers(Workers, TestFun).
 
+verify_workers(Workers, TestFun) ->
     process_flag(trap_exit, true),
     TestAns = verify_helper(Workers, TestFun),
 
@@ -1048,9 +1250,19 @@ verify_stats(Config, File, IsDir) ->
     FileUuidAns.
 
 create_file_on_worker(Config, FileBeg, Offset, File, WriteWorker) ->
+    create_file_on_worker(Config, FileBeg, Offset, File, WriteWorker, 0).
+
+create_file_on_worker(Config, FileBeg, Offset, File, WriteWorker, CreateAttempts) ->
     SessId = ?config(session, Config),
 
-    ?assertMatch({ok, _}, lfm_proxy:create(WriteWorker, SessId(WriteWorker), File, 8#755)),
+    case CreateAttempts of
+        0 ->
+            ?assertMatch({ok, _}, lfm_proxy:create(WriteWorker,
+                SessId(WriteWorker), File, 8#755));
+        _ ->
+            ?assertMatch({ok, _}, lfm_proxy:create(WriteWorker,
+                SessId(WriteWorker), File, 8#755), CreateAttempts)
+    end,
     OpenAns = lfm_proxy:open(WriteWorker, SessId(WriteWorker), {path, File}, rdwr),
     ?assertMatch({ok, _}, OpenAns),
     {ok, Handle} = OpenAns,
@@ -1061,6 +1273,74 @@ create_file_on_worker(Config, FileBeg, Offset, File, WriteWorker) ->
     ?assertMatch({ok, Size}, lfm_proxy:write(WriteWorker, Handle, Offset2, File)),
     ?assertMatch(ok, lfm_proxy:truncate(WriteWorker, SessId(WriteWorker), {path, File}, 2*Offset2)),
     ?assertEqual(ok, lfm_proxy:close(WriteWorker, Handle)).
+
+create_big_file(Config, ChunkSize, ChunksNum, PartNum, File, Worker) ->
+    SessId = ?config(session, Config),
+
+    ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId(Worker), File, 8#755)),
+    OpenAns = lfm_proxy:open(Worker, SessId(Worker), {path, File}, rdwr),
+    ?assertMatch({ok, _}, OpenAns),
+    {ok, Handle} = OpenAns,
+
+    BytesChunk = crypto:strong_rand_bytes(ChunkSize),
+    Bytes = lists:foldl(fun(_, Acc) ->
+        <<Acc/binary, BytesChunk/binary>>
+    end, <<>>, lists:seq(1, ChunksNum)),
+
+    PartSize = ChunksNum * ChunkSize,
+    lists:foreach(fun(Num) ->
+        ?assertEqual({ok, PartSize}, lfm_proxy:write(Worker, Handle, Num * PartSize, Bytes))
+    end, lists:seq(0, PartNum - 1)),
+
+    ?assertEqual(ok, lfm_proxy:close(Worker, Handle)).
+
+read_big_file(Config, _FileSize, File, Worker, true) ->
+    SessId = ?config(session, Config),
+    Attempts = ?config(attempts, Config),
+    Worker1 = ?config(worker1, Config),
+
+    ProviderId = rpc:call(Worker, oneprovider, get_id_or_undefined, []),
+    Start = os:timestamp(),
+    {ok, TransferID} = ?assertMatch({ok, _},
+        lfm_proxy:schedule_file_replication(Worker1, SessId(Worker1),
+            {path, File}, ProviderId)),
+    ?assertMatch({ok, #document{value = #transfer{status = completed}}},
+        rpc:call(Worker1, transfer, get, [TransferID]), Attempts),
+    timer:now_diff(os:timestamp(), Start);
+read_big_file(Config, FileSize, File, Worker, _) ->
+    SessId = ?config(session, Config),
+    Attempts = ?config(attempts, Config),
+    read_big_file_loop(FileSize, File, Worker, SessId, Attempts, undefined, 0).
+
+read_big_file_loop(_FileSize, _File, _Worker, _SessId, _, {{ok, _Time, true}, ok}, TimeSum) ->
+    TimeSum;
+read_big_file_loop(_FileSize, _File, _Worker, _SessId, 0, LastAns, _TimeSum) ->
+    LastAns;
+read_big_file_loop(FileSize, File, Worker, SessId, Attempts, _LastAns, TimeSum) ->
+    Ans = case lfm_proxy:open(Worker, SessId(Worker), {path, File}, rdwr) of
+        {ok, Handle} ->
+            ReadAns = try
+                Start = os:timestamp(),
+                {ok, Bytes} = lfm_proxy:read(Worker, Handle, 0, FileSize),
+                {ok, timer:now_diff(os:timestamp(), Start), FileSize == size(Bytes)}
+            catch
+                E1:E2 ->
+                    {read, E1, E2}
+            end,
+
+            {ReadAns, lfm_proxy:close(Worker, Handle)};
+        OpenError ->
+            {open_error, OpenError}
+    end,
+    case Ans of
+        {{ok, Time, true}, _} ->
+            read_big_file_loop(FileSize, File, Worker, SessId, Attempts - 1,
+                Ans, TimeSum + Time);
+        _ ->
+            timer:sleep(timer:seconds(1)),
+            read_big_file_loop(FileSize, File, Worker, SessId, Attempts - 1,
+                Ans, TimeSum)
+    end.
 
 create_file(Config, FileBeg, {Offset, File}) ->
     Worker1 = ?config(worker1, Config),

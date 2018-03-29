@@ -26,7 +26,8 @@
 %% tests
 -export([
     create_directory_import_test/1, create_directory_export_test/1,
-    create_file_import_test/1, create_file_export_test/1,
+    create_file_import_test/1, create_delete_import_test/1,
+    create_file_export_test/1,
     delete_empty_directory_update_test/1,
     delete_non_empty_directory_update_test/1,
     sync_works_properly_after_delete_test/1,
@@ -71,6 +72,7 @@
     create_directory_import_many_test,
     create_directory_export_test,
     create_file_import_test,
+    create_delete_import_test,
     create_file_import_check_user_id_test,
     create_file_import_check_user_id_error_test,
     create_file_export_test,
@@ -139,6 +141,9 @@ create_directory_export_test(Config) ->
 
 create_file_import_test(Config) ->
     storage_sync_test_base:create_file_import_test(Config, false).
+
+create_delete_import_test(Config) ->
+    storage_sync_test_base:create_delete_import_test(Config, false).
 
 create_file_import_check_user_id_test(Config) ->
     storage_sync_test_base:create_file_import_check_user_id_test(Config, false).
@@ -431,8 +436,7 @@ end_per_testcase(Case, Config) when
     Case =:= create_file_import_check_user_id_test;
     Case =:= create_file_import_check_user_id_error_test ->
 
-    Workers = [W1 | _] = ?config(op_worker_nodes, Config),
-    storage_sync_test_base:clean_reverse_luma_cache(W1),
+    Workers = ?config(op_worker_nodes, Config),
     ok = test_utils:mock_unload(Workers, [reverse_luma_proxy, storage_file_ctx]),
     end_per_testcase(default, Config);
 
@@ -440,12 +444,13 @@ end_per_testcase(Case, Config) when
     Case =:= import_nfs_acl_test;
     Case =:= update_nfs_acl_test
     ->
-    Workers = [W1 | _] = ?config(op_worker_nodes, Config),
-    ok = storage_sync_test_base:clean_reverse_luma_cache(W1),
+    Workers = ?config(op_worker_nodes, Config),
     ok = test_utils:mock_unload(Workers, [reverse_luma_proxy, storage_file_ctx, storage_file_manager]),
     end_per_testcase(default, Config);
 
 end_per_testcase(_Case, Config) ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    storage_sync_test_base:clean_reverse_luma_cache(W1),
     storage_sync_test_base:disable_storage_sync(Config),
     storage_sync_test_base:clean_storage(Config, false),
     lfm_proxy:teardown(Config),

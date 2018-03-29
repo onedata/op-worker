@@ -25,7 +25,7 @@
 %% API
 -export([chmod_storage_file/3, rename_storage_file/6,
     create_storage_file_if_not_exists/1, create_storage_file_location/2,
-    create_storage_file_location/3, create_delayed_storage_file/1,
+    create_storage_file_location/3, create_delayed_storage_file/2,
     create_storage_file/2, delete_storage_file/2,
     delete_storage_file_without_location/2, delete_storage_dir/2,
     create_parent_dirs/1]).
@@ -110,8 +110,8 @@ create_storage_file_if_not_exists(FileCtx) ->
 %% Create storage file if it hasn't been created yet (it has been delayed)
 %% @end
 %%--------------------------------------------------------------------
--spec create_delayed_storage_file(file_ctx:ctx()) -> file_ctx:ctx().
-create_delayed_storage_file(FileCtx) ->
+-spec create_delayed_storage_file(user_ctx:ctx(), file_ctx:ctx()) -> file_ctx:ctx().
+create_delayed_storage_file(UserCtx, FileCtx) ->
     {#document{
         key = FileLocationId,
         value = #file_location{storage_file_created = StorageFileCreated}
@@ -128,7 +128,7 @@ create_delayed_storage_file(FileCtx) ->
                         FileCtx2;
                     {ok, _} ->
                         FileCtx3 = create_storage_file(
-                            user_ctx:new(?ROOT_SESS_ID), FileCtx2),
+                            UserCtx, FileCtx2),
                         files_to_chown:chown_or_schedule_chowning(FileCtx3),
 
                         {ok, #document{} = Doc} = file_location:update(FileLocationId, fun
@@ -203,9 +203,21 @@ create_storage_file(UserCtx, FileCtx) ->
         {error, ?ENOENT} ->
             FileCtx4 = create_parent_dirs(FileCtx3),
             {storage_file_manager:create(SFMHandle, Mode), FileCtx4};
-        {error, ?EEXIST} ->
-            storage_file_manager:unlink(SFMHandle),
-            {storage_file_manager:create(SFMHandle, Mode), FileCtx3};
+        {error, ?EEXIST} = Eexists ->
+            case application:get_env(?APP_NAME, unlink_on_create, true) of
+              true ->
+                storage_file_manager:unlink(SFMHandle),
+                {storage_file_manager:create(SFMHandle, Mode), FileCtx3};
+              _ ->
+                Eexists
+            end;
+        {error, ?EACCES} ->
+            % eacces is possible because there is race condition
+            % on creating and chowning parent dir
+            % for this reason it is acceptable to try chowning parent once
+            {ParentCtx, FileCtx4} = file_ctx:get_parent(FileCtx3, UserCtx),
+            files_to_chown:chown_or_schedule_chowning(ParentCtx),
+            {storage_file_manager:create(SFMHandle, Mode), FileCtx4};
         Other ->
             {Other, FileCtx3}
     end,
@@ -271,7 +283,8 @@ create_parent_dirs(FileCtx) ->
 %% Tail recursive helper function of ?MODULE:create_parent_dirs/1
 %% @end
 %%-------------------------------------------------------------------
--spec create_parent_dirs(file_ctx:ctx(), [file_ctx:ctx()], od_space:id(), storage:doc()) -> ok.
+-spec create_parent_dirs(file_ctx:ctx(), [file_ctx:ctx()], od_space:id(),
+    storage:doc()) -> ok.
 create_parent_dirs(FileCtx, ChildrenDirCtxs, SpaceId, Storage) ->
     case file_ctx:is_space_dir_const(FileCtx) of
         true ->
@@ -279,6 +292,8 @@ create_parent_dirs(FileCtx, ChildrenDirCtxs, SpaceId, Storage) ->
                 create_dir(Ctx, SpaceId, Storage)
             end, [FileCtx | ChildrenDirCtxs]);
         false ->
+            %TODO VFS-4297 stop recursion when parent file exists on storage,
+            %TODO currently recursion stops in space dir
             {ParentCtx, FileCtx2} = file_ctx:get_parent(FileCtx, undefined),
             create_parent_dirs(ParentCtx, [FileCtx2 | ChildrenDirCtxs], SpaceId, Storage)
     end.
@@ -299,7 +314,8 @@ create_dir(FileCtx, SpaceId, Storage) ->
             mode = Mode}}, FileCtx3} = file_ctx:get_file_doc(FileCtx2),
         case file_ctx:is_space_dir_const(FileCtx3) of
             true ->
-                mkdir_and_maybe_chown(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, FileCtx3, false);
+                mkdir_and_maybe_chown(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE,
+                    FileCtx3, false);
             false ->
                 mkdir_and_maybe_chown(SFMHandle0, Mode, FileCtx3, true)
         end
@@ -321,14 +337,13 @@ create_dir(FileCtx, SpaceId, Storage) ->
     file_ctx:ctx(), boolean()) -> any().
 mkdir_and_maybe_chown(SFMHandle, Mode, FileCtx, ShouldChown) ->
     case storage_file_manager:mkdir(SFMHandle, Mode, false) of
-        ok ->
-            case ShouldChown of
-                true ->
-                    files_to_chown:chown_or_schedule_chowning(FileCtx);
-                false ->
-                    ok
-            end,
-            FileCtx;
-        {error, eexist} ->
-            FileCtx
-    end.
+        ok -> ok;
+        {error, ?EEXIST} -> ok
+    end,
+    case ShouldChown of
+        true ->
+            files_to_chown:chown_or_schedule_chowning(FileCtx);
+        false ->
+            ok
+    end,
+    FileCtx.

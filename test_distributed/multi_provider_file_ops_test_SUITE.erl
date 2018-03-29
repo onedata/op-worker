@@ -49,7 +49,8 @@
     echo_and_delete_file_loop_test_base/1,
     distributed_delete_test/1,
     remote_driver_test/1,
-    db_sync_with_delays_test/1
+    db_sync_with_delays_test/1,
+    db_sync_create_after_del_test/1
 ]).
 
 -define(TEST_CASES, [
@@ -69,7 +70,8 @@
     create_and_delete_file_loop_test,
     echo_and_delete_file_loop_test,
     distributed_delete_test,
-    remote_driver_test
+    remote_driver_test,
+    db_sync_create_after_del_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -110,6 +112,9 @@ all() ->
 
 db_sync_basic_opts_test(Config) ->
     multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
+
+db_sync_create_after_del_test(Config) ->
+    multi_provider_file_ops_test_base:create_after_del_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
 
 distributed_delete_test(Config) ->
     multi_provider_file_ops_test_base:distributed_delete_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
@@ -390,7 +395,6 @@ echo_and_delete_file_loop_test_base(Config) ->
 
 remote_driver_test(Config) ->
     Config2 = multi_provider_file_ops_test_base:extend_config(Config, <<"user1">>, {0, 0, 0, 0}, 0),
-    Workers = ?config(op_worker_nodes, Config),
     [Worker1 | _] = ?config(workers1, Config2),
     [Worker2 | _] = ?config(workers_not1, Config2),
     Key = <<"someKey">>,
@@ -411,7 +415,7 @@ remote_driver_test(Config) ->
     ])).
 
 db_sync_with_delays_test(Config) ->
-    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {4,0,0,2}, 180, 200, 200).
+    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {4,0,0,2}, 300, 50, 50).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -429,6 +433,7 @@ init_per_testcase(file_consistency_test, Config) ->
     test_utils:mock_new(Workers, file_meta, [passthrough]),
     init_per_testcase(?DEFAULT_CASE(file_consistency_test), Config);
 init_per_testcase(db_sync_with_delays_test, Config) ->
+    ct:timetrap({hours, 3}),
     Config2 = init_per_testcase(?DEFAULT_CASE(db_sync_with_delays_test), Config),
 
     Workers = ?config(op_worker_nodes, Config),
@@ -449,7 +454,7 @@ init_per_testcase(db_sync_with_delays_test, Config) ->
     ),
     test_utils:mock_expect(WorkersNot1, datastore_throttling, throttle_model, fun
         (file_meta) ->
-            timer:sleep(100),
+            timer:sleep(50),
             ok;
         (_) ->
             ok
