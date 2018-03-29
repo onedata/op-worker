@@ -73,22 +73,25 @@ event_manager_should_register_event_stream(Config) ->
     Mgr = ?config(event_manager, Config),
     gen_server:cast(Mgr, {register_stream, stream_1, self()}),
     gen_server:cast(Mgr, #event{type = stream_1}),
-    ?assertReceivedMatch({'$gen_cast', #event{}}, ?TIMEOUT).
+    {_, From, _} = ?assertReceivedMatch({'$gen_call', _, #event{}}, ?TIMEOUT),
+    gen_server:reply(From, ok).
 
 event_manager_should_unregister_event_stream(Config) ->
     Mgr = ?config(event_manager, Config),
     gen_server:cast(Mgr, {unregister_stream, stream_1}),
     gen_server:cast(Mgr, {unregister_stream, stream_2}),
     gen_server:cast(Mgr, #event{type = stream_1}),
-    ?assertNotReceivedMatch({'$gen_cast', #event{}}, ?TIMEOUT).
+    ?assertNotReceivedMatch({'$gen_call', _, #event{}}, ?TIMEOUT).
 
 event_manager_should_forward_events_to_event_streams(Config) ->
     Mgr = ?config(event_manager, Config),
     gen_server:cast(Mgr, #event{type = stream_1}),
     gen_server:cast(Mgr, #event{type = stream_2}),
-    ?assertReceivedMatch({'$gen_cast', #event{}}, ?TIMEOUT),
-    ?assertReceivedMatch({'$gen_cast', #event{}}, ?TIMEOUT),
-    ?assertNotReceivedMatch({'$gen_cast', #event{}}, ?TIMEOUT).
+    {_, From, _} = ?assertReceivedMatch({'$gen_call', _, #event{}}, ?TIMEOUT),
+    gen_server:reply(From, ok),
+    {_, From2, _} = ?assertReceivedMatch({'$gen_call', _, #event{}}, ?TIMEOUT),
+    gen_server:reply(From2, ok),
+    ?assertNotReceivedMatch({'$gen_call', _, #event{}}, ?TIMEOUT).
 
 event_manager_should_start_stream_on_subscription(Config) ->
     Mgr = ?config(event_manager, Config),
@@ -237,8 +240,11 @@ mock_event_stream_sup(Worker) ->
     Self = self(),
     Loop = fun Fun() ->
         receive
-            {'$gen_cast', {remove_subscription, _}} -> ok;
-            Msg -> Self ! Msg, Fun()
+            {'$gen_call', From, {remove_subscription, _}} ->
+                gen_server:reply(From, ok),
+                ok;
+            Msg ->
+                Self ! Msg, Fun()
         end
     end,
     {Stm, _} = spawn_monitor(Loop),
