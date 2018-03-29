@@ -21,7 +21,7 @@
     new_time_slot_histogram/2, new_time_slot_histogram/3,
     update/6,
     trim_timestamp/1,
-    stats_type_to_speed_chart_len/1
+    stats_type_to_speed_chart_len/1, stats_type_to_time_window/1
 ]).
 
 
@@ -94,17 +94,20 @@ new_time_slot_histogram(LastUpdate, Window, Values) ->
 %%-------------------------------------------------------------------
 -spec trim_timestamp(Timestamp :: timestamp()) -> timestamp().
 trim_timestamp(Timestamp) ->
-    FullSecSlotsToRemove = ?MIN_HIST_LENGTH - ?MIN_SPEED_HIST_LENGTH - 1,
-    (Timestamp rem ?FIVE_SEC_TIME_WINDOW) + FullSecSlotsToRemove * ?FIVE_SEC_TIME_WINDOW.
+    FullSlotsToSub = ?MIN_HIST_LENGTH - ?MIN_SPEED_HIST_LENGTH - 1,
+    FullSlotsToSubTime = FullSlotsToSub * ?FIVE_SEC_TIME_WINDOW,
+    Timestamp - (Timestamp rem ?FIVE_SEC_TIME_WINDOW) - FullSlotsToSubTime.
 
 
-%%-------------------------------------------------------------------
-%% @doc
-%% Return speed chart length based on given stats type.
-%% @end
-%%-------------------------------------------------------------------
 -spec stats_type_to_speed_chart_len(binary()) -> non_neg_integer().
 stats_type_to_speed_chart_len(?MINUTE_STAT_TYPE) -> ?MIN_SPEED_HIST_LENGTH;
 stats_type_to_speed_chart_len(?HOUR_STAT_TYPE) -> ?HOUR_SPEED_HIST_LENGTH;
 stats_type_to_speed_chart_len(?DAY_STAT_TYPE) -> ?DAY_SPEED_HIST_LENGTH;
 stats_type_to_speed_chart_len(?MONTH_STAT_TYPE) -> ?MONTH_SPEED_HIST_LENGTH.
+
+
+-spec stats_type_to_time_window(binary()) -> non_neg_integer().
+stats_type_to_time_window(?MINUTE_STAT_TYPE) -> ?FIVE_SEC_TIME_WINDOW;
+stats_type_to_time_window(?HOUR_STAT_TYPE) -> ?MIN_TIME_WINDOW;
+stats_type_to_time_window(?DAY_STAT_TYPE) -> ?HOUR_TIME_WINDOW;
+stats_type_to_time_window(?MONTH_STAT_TYPE) -> ?DAY_TIME_WINDOW.

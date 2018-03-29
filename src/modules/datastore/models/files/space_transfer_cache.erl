@@ -322,7 +322,7 @@ trim_stats([{Stats, ?MINUTE_STAT_TYPE}]) ->
 trim_stats([{MinStats, ?MINUTE_STAT_TYPE}, {RequestedStats, RequestedStatsType}]) ->
     OldTimestamp = MinStats#space_transfer_cache.timestamp,
     NewTimestamp = transfer_histogram:trim_timestamp(OldTimestamp),
-    TimeWindow = stats_type_to_time_window(RequestedStatsType),
+    TimeWindow = transfer_histogram:stats_type_to_time_window(RequestedStatsType),
     TrimFun = fun(OldHist1, [FstSlot, SndSlot | Rest]) ->
         MinSlotsToRemove = ?MIN_HIST_LENGTH - ?MIN_SPEED_HIST_LENGTH,
         {RemovedSlots, NewHist1} = lists:split(MinSlotsToRemove, OldHist1),
@@ -333,7 +333,7 @@ trim_stats([{MinStats, ?MINUTE_STAT_TYPE}, {RequestedStats, RequestedStatsType}]
         end,
         Hist2 = case (OldTimestamp div TimeWindow) == (NewTimestamp div TimeWindow) of
             true -> lists:droplast(OldHist2);
-            false -> OldHist2
+            false -> tl(OldHist2)
         end,
         Len = transfer_histogram:stats_type_to_speed_chart_len(RequestedStatsType),
         NewHist2 = lists:sublist(Hist2, Len),
@@ -372,7 +372,7 @@ trim_stats([{MinStats, ?MINUTE_STAT_TYPE}, {RequestedStats, RequestedStatsType}]
     StatsType :: binary()) -> space_transfer_cache().
 histograms_to_speed_charts(Stats, StatsType) ->
     Timestamp = Stats#space_transfer_cache.timestamp,
-    TimeWindow = stats_type_to_time_window(StatsType),
+    TimeWindow = transfer_histogram:stats_type_to_time_window(StatsType),
     FstSlotDuration = case Timestamp rem TimeWindow of
         0 -> TimeWindow;
         Rem -> Rem + 1
@@ -391,10 +391,3 @@ stats_type_to_expiration_timeout(?MINUTE_STAT_TYPE) -> ?MINUTE_STAT_EXPIRATION;
 stats_type_to_expiration_timeout(?HOUR_STAT_TYPE) -> ?HOUR_STAT_EXPIRATION;
 stats_type_to_expiration_timeout(?DAY_STAT_TYPE) -> ?DAY_STAT_EXPIRATION;
 stats_type_to_expiration_timeout(?MONTH_STAT_TYPE) -> ?MONTH_STAT_EXPIRATION.
-
-
--spec stats_type_to_time_window(binary()) -> non_neg_integer().
-stats_type_to_time_window(?MINUTE_STAT_TYPE) -> ?FIVE_SEC_TIME_WINDOW;
-stats_type_to_time_window(?HOUR_STAT_TYPE) -> ?MIN_TIME_WINDOW;
-stats_type_to_time_window(?DAY_STAT_TYPE) -> ?HOUR_TIME_WINDOW;
-stats_type_to_time_window(?MONTH_STAT_TYPE) -> ?DAY_TIME_WINDOW.
