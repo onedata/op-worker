@@ -89,11 +89,27 @@ get_protected_data(_, ?ROOT_USER_ID) ->
     {ok, #document{key = ?ROOT_USER_ID, value = #od_user{name = <<"root">>}}};
 get_protected_data(_, ?GUEST_USER_ID) ->
     {ok, #document{key = ?GUEST_USER_ID, value = #od_user{name = <<"nobody">>}}};
+get_protected_data(?ROOT_SESS_ID, UserId) ->
+    get_protected_data(?ROOT_SESS_ID, UserId, ?THROUGH_PROVIDER(oneprovider:get_id()));
 get_protected_data(Client, UserId) ->
+    get_protected_data(Client, UserId, undefined).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Retrieves user doc restricted to protected data by given UserId. Allows
+%% to provide AuthHint.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_protected_data(gs_client_worker:client(), od_user:id(), gs_protocol:auth_hint()) ->
+    {ok, od_user:doc()} | gs_protocol:error().
+get_protected_data(Client, UserId, AuthHint) ->
     gs_client_worker:request(Client, #gs_req_graph{
         operation = get,
         gri = #gri{type = od_user, id = UserId, aspect = instance, scope = protected},
-        subscribe = true
+        subscribe = true,
+        auth_hint = AuthHint
     }).
 
 
@@ -126,7 +142,7 @@ get_shared_data(Client, UserId, AuthHint) ->
 exists(Client, UserId) ->
     % Shared scope is enough to determine existence, provider has access to
     % shared scope of all supported users.
-    case get_shared_data(Client, UserId, undefined) of
+    case get_protected_data(Client, UserId, ?THROUGH_PROVIDER(oneprovider:get_id())) of
         {ok, _} -> true;
         _ -> false
     end.
