@@ -6,7 +6,30 @@ CHANGELOG
 
 ### 18.02.0-beta5
 
-* Releasing new version 18.02.0-beta5
+* fix user_logic:exists
+* improve error handling in fetch_lock_fetch_helper
+* fix displaying transfer status in GUI
+* VFS-4285 Fix restart of deletion_worker
+* VFS-4285 Add create/delete test with sync
+* VFS-4285 Update getting deleted files
+* VFS-4272 Check forward compatiblity during OP connections to OZ
+* VFS-4285 Update files deletion
+* bugfix in create_parent_dirs
+* VFS-4296 Fixed meck entry
+* VFS-4267 Adjust code to erl 20, update deps
+* Enable disabling rtransfer ssl in app.config
+* VFS-4281 pass UserCtx to create_delayed_storage_file function
+* VFS-4273 - reverse_luma cache refactored, tests fixed, added specs
+* VFS-4273 - handled direct luma cache
+* VFS-4273 - refactor of luma_cache, cache is now implemented using links
+* VFS-4274 Fixed helpers ref in rebar.config
+* VFS-4262 Updated rtransfer link
+* VFS-4262 Updated helpers with new asio version
+* refactor sfm_utils:create_parent_dirs function
+* VFS-4244 Scale helpers tests
+* VFS-4152 Fix missing event messages and performance test
+* VFS-4152 Extend rtransfer stress tests
+* Add rtransfer tests
 
 
 ### 18.02.0-beta4
