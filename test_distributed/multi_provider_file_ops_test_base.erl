@@ -34,7 +34,8 @@
     mkdir_and_rmdir_loop_test_base/3,
     echo_and_delete_file_loop_test_base/3,
     create_and_delete_file_loop_test_base/3,
-    distributed_delete_test_base/4
+    distributed_delete_test_base/4,
+    create_after_del_test_base/4
 ]).
 -export([init_env/1, teardown_env/1]).
 
@@ -42,6 +43,7 @@
 -export([create_doc/4, set_parent_link/4, create_location/4]).
 
 -export([extend_config/4]).
+-export([verify/2, verify_workers/2]).
 
 -define(match(Expect, Expr, Attempts),
     case Attempts of
@@ -213,6 +215,104 @@ basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     end),
 
     ok.
+
+create_after_del_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts) ->
+    create_after_del_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts);
+create_after_del_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts) ->
+
+%%    ct:print("Test ~p", [{User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts, DirsNum, FilesNum}]),
+
+    Config = extend_config(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts),
+    Workers = ?config(op_worker_nodes, Config),
+
+    lists:foreach(fun(Worker) ->
+        test_utils:set_env(Worker, ?APP_NAME, unlink_on_create, false)
+    end, Workers),
+
+    delete_test_skeleton(Config, "Standard, write 1", true, false, false, false),
+    delete_test_skeleton(Config, "Standard", false, false, false, false),
+
+    delete_test_skeleton(Config, "Open and sleep, write 1", true, true, {true, 10}, false),
+    delete_test_skeleton(Config, "Open and sleep", false, true, {true, 10}, false),
+
+    delete_test_skeleton(Config, "Open no sleep, write 1", true, true, false, false),
+    delete_test_skeleton(Config, "Open no sleep", false, true, false, false),
+
+    delete_test_skeleton(Config, "Close after del, write 1", true, true, {true, 1}, true),
+    delete_test_skeleton(Config, "Close after del", false, true, {true, 1}, true),
+
+    lists:foreach(fun(Worker) ->
+        test_utils:set_env(Worker, ?APP_NAME, unlink_on_create, true)
+    end, Workers),
+
+    ok.
+
+delete_test_skeleton(Config, Desc, WriteOn1, OpenBeforeDel, SleepAfterVerify,
+    CloseAfterVerify) ->
+    SessId = ?config(session, Config),
+    SpaceName = ?config(space_name, Config),
+    Worker1 = ?config(worker1, Config),
+    Workers = ?config(op_worker_nodes, Config),
+
+    lists:foreach(fun(I) ->
+        ct:print("~p ~p", [Desc, I]),
+        DelFile = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
+        lists:foldl(fun
+            (W, undefined) ->
+                ct:print("Before del ~p", [{DelFile, W}]),
+                WriteWorker = case WriteOn1 of
+                    true -> Worker1;
+                    _ -> W
+                end,
+                Beg = crypto:strong_rand_bytes(8),
+                BegSize = size(Beg),
+                create_file_on_worker(Config, Beg, BegSize, DelFile, WriteWorker, 5),
+                verify_file(Config, Beg, {BegSize, DelFile});
+            (W, DelInfo) ->
+                ct:print("Del ~p", [{DelFile, W}]),
+                WriteWorker = case WriteOn1 of
+                    true -> Worker1;
+                    _ -> W
+                end,
+
+                case OpenBeforeDel of
+                    true ->
+                        {ok, Handle} = lfm_proxy:open(W, SessId(W), {path, DelFile}, rdwr),
+                        ?assertMatch(ok, lfm_proxy:unlink(W, SessId(W), {path, DelFile})),
+
+                        case CloseAfterVerify of
+                            false ->
+                                ok = timer:sleep(timer:seconds(1)),
+                                lfm_proxy:close(W, Handle);
+                            _ ->
+                                ok
+                        end,
+
+                        verify_del(Config, DelInfo),
+
+                        case SleepAfterVerify of
+                            {true, Seconds} -> timer:sleep(timer:seconds(Seconds));
+                            _ -> ok
+                        end,
+
+                        case CloseAfterVerify of
+                            true ->
+                                ok = timer:sleep(timer:seconds(1)),
+                                lfm_proxy:close(W, Handle);
+                            _ ->
+                                ok
+                        end;
+                    _ ->
+                        ?assertMatch(ok, lfm_proxy:unlink(W, SessId(W), {path, DelFile})),
+                        verify_del(Config, DelInfo)
+                end,
+
+                Beg = crypto:strong_rand_bytes(8),
+                BegSize = size(Beg),
+                create_file_on_worker(Config, Beg, BegSize, DelFile, WriteWorker, 5),
+                verify_file(Config, Beg, {BegSize, DelFile})
+        end, undefined, Workers ++ Workers)
+    end, lists:seq(1,2)).
 
 many_ops_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts, DirsNum, FilesNum) ->
     many_ops_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts, DirsNum, FilesNum);
@@ -1149,9 +1249,19 @@ verify_stats(Config, File, IsDir) ->
     FileUuidAns.
 
 create_file_on_worker(Config, FileBeg, Offset, File, WriteWorker) ->
+    create_file_on_worker(Config, FileBeg, Offset, File, WriteWorker, 0).
+
+create_file_on_worker(Config, FileBeg, Offset, File, WriteWorker, CreateAttempts) ->
     SessId = ?config(session, Config),
 
-    ?assertMatch({ok, _}, lfm_proxy:create(WriteWorker, SessId(WriteWorker), File, 8#755)),
+    case CreateAttempts of
+        0 ->
+            ?assertMatch({ok, _}, lfm_proxy:create(WriteWorker,
+                SessId(WriteWorker), File, 8#755));
+        _ ->
+            ?assertMatch({ok, _}, lfm_proxy:create(WriteWorker,
+                SessId(WriteWorker), File, 8#755), CreateAttempts)
+    end,
     OpenAns = lfm_proxy:open(WriteWorker, SessId(WriteWorker), {path, File}, rdwr),
     ?assertMatch({ok, _}, OpenAns),
     {ok, Handle} = OpenAns,

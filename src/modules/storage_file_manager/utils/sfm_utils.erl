@@ -203,9 +203,14 @@ create_storage_file(UserCtx, FileCtx) ->
         {error, ?ENOENT} ->
             FileCtx4 = create_parent_dirs(FileCtx3),
             {storage_file_manager:create(SFMHandle, Mode), FileCtx4};
-        {error, ?EEXIST} ->
-            storage_file_manager:unlink(SFMHandle),
-            {storage_file_manager:create(SFMHandle, Mode), FileCtx3};
+        {error, ?EEXIST} = Eexists ->
+            case application:get_env(?APP_NAME, unlink_on_create, true) of
+              true ->
+                storage_file_manager:unlink(SFMHandle),
+                {storage_file_manager:create(SFMHandle, Mode), FileCtx3};
+              _ ->
+                Eexists
+            end;
         {error, ?EACCES} ->
             % eacces is possible because there is race condition
             % on creating and chowning parent dir
