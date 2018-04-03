@@ -156,9 +156,6 @@ public_rpc_backend() -> public_rpc_backend.
 session_details() ->
     ProviderId = oneprovider:get_id(),
     {ok, ProviderName} = provider_logic:get_name(ProviderId),
-    {_AppId, _AppName, AppVersion} = lists:keyfind(
-        ?APP_NAME, 1, application:loaded_applications()
-    ),
     Res = [
         {<<"userId">>, gui_session:get_user_id()},
         {<<"providerId">>, ProviderId},
@@ -169,7 +166,7 @@ session_details() ->
         {<<"manageProvidersURL">>,
             str_utils:to_binary(oneprovider:get_oz_providers_page())
         },
-        {<<"serviceVersion">>, str_utils:to_binary(AppVersion)}
+        {<<"serviceVersion">>, oneprovider:get_version()}
     ],
     {ok, Res}.
 

@@ -326,7 +326,8 @@ get_status(T = #transfer{invalidate_source_replica = true, status = skipped}) ->
     end;
 get_status(#transfer{
     status = active,
-    files_processed = 0
+    files_processed = 0,
+    bytes_transferred = 0
 }) ->
     % transfer will be visible in GUI as active when files_processed counter > 0
     scheduled;

@@ -273,7 +273,6 @@
 
 -record(luma_config, {
     url :: luma_config:url(),
-    cache_timeout :: luma_config:cache_timeout(),
     api_key :: luma_config:api_key()
 }).
 
@@ -443,10 +442,7 @@
     mtime = 0 :: times:time()
 }).
 
--record(luma_cache, {
-    timestamp = 0 :: luma_cache:timestamp(),
-    value :: undefined | luma_cache:value()
-}).
+-record(luma_cache, {}).
 
 %% Model that tracks popularity of file
 -record(file_popularity, {

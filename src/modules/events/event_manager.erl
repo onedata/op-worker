@@ -120,7 +120,8 @@ handle_call(Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_cast(Request, State = #state{session_id = SessId}) ->
+handle_cast({internal, RetryCounter, Request},
+    State = #state{session_id = SessId}) ->
     try
         ProviderId = oneprovider:get_id_or_undefined(),
         {ok, #document{value = #session{proxy_via = ProxyVia}}} = session:get(SessId),
@@ -131,10 +132,24 @@ handle_cast(Request, State = #state{session_id = SessId}) ->
                 handle_remotely(Request, RemoteProviderId, NewState)
         end
     catch
-        _:Reason2 ->
-            ?error_stacktrace("Cannot process request ~p due to: ~p", [Request, Reason2]),
+        exit:{noproc, _} ->
+            ?debug("No proc to handle request ~p, retry", [Request]),
+            erlang:send_after(1000, self(), {retry_request, RetryCounter, Request}),
+            {noreply, State};
+        exit:{normal, _} ->
+            ?debug("Exit of stream process for request ~p, retry", [Request]),
+            erlang:send_after(1000, self(), {retry_request, RetryCounter, Request}),
+            {noreply, State};
+        exit:{timeout, _} ->
+            ?debug("Exit of stream process for request ~p, retry", [Request]),
+            erlang:send_after(1000, self(), {retry_request, RetryCounter, Request}),
+            {noreply, State};
+        Reason1:Reason2 ->
+            ?error_stacktrace("Cannot process request ~p due to: ~p", [Request, {Reason1, Reason2}]),
             {noreply, State}
-    end.
+    end;
+handle_cast(Request, State) ->
+    handle_cast({internal, 10, Request}, State).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -157,6 +172,14 @@ handle_info(timeout, #state{manager_sup = MgrSup, session_id = SessId} = State) 
         streams = Stms,
         subscriptions = Subs
     }};
+
+handle_info({retry_request, 0, Request}, State) ->
+    ?debug("Max retries for request: ~p", [Request]),
+    {noreply, State};
+
+handle_info({retry_request, RetryCounter, Request}, State) ->
+    gen_server2:cast(self(), {internal, RetryCounter - 1, Request}),
+    {noreply, State};
 
 handle_info(Info, State) ->
     ?log_bad_request(Info),
@@ -290,7 +313,7 @@ handle_locally({unregister_stream, StmKey}, #state{streams = Stms} = State) ->
 handle_locally(#event{} = Evt, #state{streams = Stms} = State) ->
     StmKey = event_type:get_stream_key(Evt),
     Stm = maps:get(StmKey, Stms, undefined),
-    gen_server2:cast(Stm, Evt),
+    gen_server2:call(Stm, Evt),
     {noreply, State};
 
 handle_locally(#flush_events{} = Request, #state{} = State) ->
@@ -298,7 +321,7 @@ handle_locally(#flush_events{} = Request, #state{} = State) ->
     #state{streams = Stms, subscriptions = Subs} = State,
     {_, StmKey} = maps:get(SubId, Subs, {local, undefined}),
     Stm = maps:get(StmKey, Stms, undefined),
-    gen_server2:cast(Stm, {flush, NotifyFun}),
+    gen_server2:call(Stm, {flush, NotifyFun}),
     {noreply, State};
 
 handle_locally(#subscription{id = Id} = Sub, #state{} = State) ->
@@ -311,7 +334,7 @@ handle_locally(#subscription{id = Id} = Sub, #state{} = State) ->
     StmKey = subscription_type:get_stream_key(Sub),
     NewStms = case maps:find(StmKey, Stms) of
         {ok, Stm} ->
-            gen_server2:cast(Stm, {add_subscription, Sub}),
+            gen_server2:call(Stm, {add_subscription, Sub}),
             Stms;
         error ->
             {ok, Stm} = event_stream_sup:start_stream(StmsSup, self(), Sub, SessId),
@@ -327,7 +350,7 @@ handle_locally(#subscription_cancellation{id = SubId} = Can, #state{} = State) -
     case maps:get(SubId, Subs, {local, undefined}) of
         {local, StmKey} ->
             Stm = maps:get(StmKey, Stms, undefiend),
-            gen_server2:cast(Stm, {remove_subscription, SubId});
+            gen_server2:call(Stm, {remove_subscription, SubId});
         {remote, ProviderId} ->
             handle_remotely(Can, ProviderId, State)
     end,

@@ -19,7 +19,7 @@
 -include_lib("ctool/include/api_errors.hrl").
 
 %% export for ct
--export([all/0, init_per_testcase/2, end_per_testcase/2]).
+-export([all/0, init_per_testcase/2, end_per_testcase/2, init_per_suite/1, end_per_suite/1]).
 
 -export([
     get_user_id_on_posix_storage/1,
@@ -85,10 +85,8 @@ all() ->
 -define(TEST_GROUP_ID, <<"test_group_id">>).
 -define(TEST_MAPPED_GROUP_ID, <<"test_mapped_group_id">>).
 
--define(LUMA_CONFIG, ?LUMA_CONFIG(?DEFAULT_TIMEOUT)).
--define(LUMA_CONFIG(CacheTimeout), #luma_config{
+-define(LUMA_CONFIG, #luma_config{
     url = ?TEST_URL,
-    cache_timeout = CacheTimeout,
     api_key = <<"test_api_key">>
 }).
 
@@ -145,26 +143,24 @@ get_user_id_on_posix_storage_should_fail_with_404_error(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Result = rpc:call(Worker, reverse_luma, get_user_id,
         [<<"0">>, ?STORAGE_DOC(?STORAGE_ID, ?STORAGE)]),
-    ?assertMatch({error, {ok, 404, _, _}}, Result).
+    ?assertMatch({error, {luma_server, {404, _}}}, Result).
 
 get_user_id_on_posix_storage_by_acl_username_should_fail_with_404_error(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Result = rpc:call(Worker, reverse_luma, get_user_id_by_name,
         [<<"user@nfsdomain.org">>, ?STORAGE_DOC(?STORAGE_ID, ?STORAGE)]),
-    ?assertMatch({error,{ok, 404, _, _}}, Result).
+    ?assertMatch({error,{luma_server, {404, _}}}, Result).
 
 get_user_id_should_fail_with_not_supported_storage_error(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    LumaConfig = ?LUMA_CONFIG,
     Result = rpc:call(Worker, reverse_luma, get_user_id,
-        [<<"0">>, ?STORAGE_ID, ?STORAGE(<<"NOT SUPPORTED HELPER NAME">>, LumaConfig)]),
+        [<<"0">>, ?STORAGE_ID, ?STORAGE(<<"NOT SUPPORTED HELPER NAME">>, ?LUMA_CONFIG)]),
     ?assertEqual({error, not_supported_storage_type}, Result).
 
 get_user_id_by_acl_username_should_fail_with_not_supported_storage_error(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    LumaConfig = ?LUMA_CONFIG,
     Result = rpc:call(Worker, reverse_luma, get_user_id_by_name,
-        [<<"user@nfsdomain.org">>, ?STORAGE_ID, ?STORAGE(<<"NOT SUPPORTED HELPER NAME">>, LumaConfig)]),
+        [<<"user@nfsdomain.org">>, ?STORAGE_ID, ?STORAGE(<<"NOT SUPPORTED HELPER NAME">>, ?LUMA_CONFIG)]),
     ?assertEqual({error, not_supported_storage_type}, Result).
 
 get_user_id_on_posix_storage_should_query_reverse_luma_once(Config) ->
@@ -203,20 +199,18 @@ get_user_id_on_posix_storage_by_acl_username_should_query_reverse_luma_once(Conf
 
 get_user_id_on_posix_storage_should_query_reverse_luma_twice(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    CacheTimeout = 5,
-    LumaConfig = ?LUMA_CONFIG(CacheTimeout),
     test_utils:mock_new(Worker, reverse_luma_proxy, [passthrough]),
     ExpectedSubjectId = datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
         [?TEST_PROVIDER_ID, ?TEST_USER_ID])),
 
     Result = rpc:call(Worker, reverse_luma, get_user_id,
-        [<<"0">>, ?STORAGE_ID, ?STORAGE(LumaConfig)]),
+        [<<"0">>, ?STORAGE_ID, ?STORAGE(?LUMA_CONFIG)]),
     ?assertEqual({ok, ExpectedSubjectId}, Result),
 
-    timer:sleep(timer:seconds(CacheTimeout + 1)),
+    rpc:call(Worker, luma_cache, invalidate, [?STORAGE_ID]),
 
     Result2 = rpc:call(Worker, reverse_luma, get_user_id,
-        [<<"0">>, ?STORAGE_ID, ?STORAGE(LumaConfig)]),
+        [<<"0">>, ?STORAGE_ID, ?STORAGE(?LUMA_CONFIG)]),
 
     ?assertEqual({ok, ExpectedSubjectId}, Result2),
 
@@ -225,20 +219,18 @@ get_user_id_on_posix_storage_should_query_reverse_luma_twice(Config) ->
 
 get_user_id_on_posix_storage_by_acl_username_should_query_reverse_luma_twice(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    CacheTimeout = 5,
-    LumaConfig = ?LUMA_CONFIG(CacheTimeout),
     test_utils:mock_new(Worker, reverse_luma_proxy, [passthrough]),
     ExpectedSubjectId = datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
         [?TEST_PROVIDER_ID, ?TEST_USER_ID])),
 
     Result = rpc:call(Worker, reverse_luma, get_user_id_by_name,
-        [<<"user@nfsdomain.org">>, ?STORAGE_ID, ?STORAGE(LumaConfig)]),
+        [<<"user@nfsdomain.org">>, ?STORAGE_ID, ?STORAGE(?LUMA_CONFIG)]),
     ?assertEqual({ok, ExpectedSubjectId}, Result),
 
-    timer:sleep(timer:seconds(CacheTimeout + 1)),
+    rpc:call(Worker, luma_cache, invalidate, [?STORAGE_ID]),
 
     Result2 = rpc:call(Worker, reverse_luma, get_user_id_by_name,
-        [<<"user@nfsdomain.org">>, ?STORAGE_ID, ?STORAGE(LumaConfig)]),
+        [<<"user@nfsdomain.org">>, ?STORAGE_ID, ?STORAGE(?LUMA_CONFIG)]),
 
     ?assertEqual({ok, ExpectedSubjectId}, Result2),
 
@@ -273,26 +265,24 @@ get_group_id_on_posix_storage_should_fail_with_404_error(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Result = rpc:call(Worker, reverse_luma, get_group_id,
         [<<"0">>, ?STORAGE_ID, ?SPACE_ID, ?STORAGE]),
-    ?assertMatch({error, {ok, 404, _, _}}, Result).
+    ?assertMatch({error, {luma_server, {404, _}}}, Result).
 
 get_group_id_on_posix_storage_by_acl_groupname_should_fail_with_404_error(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Result = rpc:call(Worker, reverse_luma, get_group_id_by_name,
         [<<"group@nfsdomain.org">>, ?SPACE_ID, ?STORAGE_DOC(?STORAGE_ID, ?STORAGE)]),
-    ?assertMatch({error, {ok, 404, _, _}}, Result).
+    ?assertMatch({error, {luma_server, {404, _}}}, Result).
 
 get_group_id_should_fail_with_not_supported_storage_error(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    LumaConfig = ?LUMA_CONFIG,
     Result = rpc:call(Worker, reverse_luma, get_group_id,
-        [<<"0">>, ?STORAGE_ID, ?SPACE_ID, ?STORAGE(<<"NOT SUPPORTED HELPER NAME">>, LumaConfig)]),
+        [<<"0">>, ?STORAGE_ID, ?SPACE_ID, ?STORAGE(<<"NOT SUPPORTED HELPER NAME">>, ?LUMA_CONFIG)]),
     ?assertEqual({error, not_supported_storage_type}, Result).
 
 get_group_id_by_acl_groupname_should_fail_with_not_supported_storage_error(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    LumaConfig = ?LUMA_CONFIG,
     Result = rpc:call(Worker, reverse_luma, get_group_id_by_name,
-        [<<"group@nfsdomain.org">>, ?SPACE_ID, ?STORAGE_ID, ?STORAGE(<<"NOT SUPPORTED HELPER NAME">>, LumaConfig)]),
+        [<<"group@nfsdomain.org">>, ?SPACE_ID, ?STORAGE_ID, ?STORAGE(<<"NOT SUPPORTED HELPER NAME">>, ?LUMA_CONFIG)]),
     ?assertEqual({error, not_supported_storage_type}, Result).
 
 get_group_id_on_posix_storage_should_query_reverse_luma_once(Config) ->
@@ -327,19 +317,15 @@ get_group_id_on_posix_storage_by_acl_groupname_should_query_reverse_luma_once(Co
 
 get_group_id_on_posix_storage_should_query_reverse_luma_twice(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    CacheTimeout = 5,
-    LumaConfig = ?LUMA_CONFIG(CacheTimeout),
     test_utils:mock_new(Worker, reverse_luma_proxy, [passthrough]),
 
     Result = rpc:call(Worker, reverse_luma, get_group_id,
-        [<<"0">>, ?STORAGE_ID, ?SPACE_ID, ?STORAGE(LumaConfig)]),
+        [<<"0">>, ?SPACE_ID, ?STORAGE_ID, ?STORAGE(?LUMA_CONFIG)]),
     ?assertEqual({ok, ?TEST_MAPPED_GROUP_ID}, Result),
-
-    timer:sleep(timer:seconds(CacheTimeout + 1)),
+    ok = rpc:call(Worker, luma_cache, invalidate, [?STORAGE_ID]),
 
     Result2 = rpc:call(Worker, reverse_luma, get_group_id,
-        [<<"0">>, ?STORAGE_ID, ?SPACE_ID, ?STORAGE(LumaConfig)]),
-
+        [<<"0">>, ?SPACE_ID, ?STORAGE_ID, ?STORAGE(?LUMA_CONFIG)]),
     ?assertEqual({ok, ?TEST_MAPPED_GROUP_ID}, Result2),
 
     test_utils:mock_assert_num_calls(Worker, reverse_luma_proxy, get_group_id,
@@ -347,18 +333,16 @@ get_group_id_on_posix_storage_should_query_reverse_luma_twice(Config) ->
 
 get_group_id_on_posix_storage_by_acl_groupname_should_query_reverse_luma_twice(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    CacheTimeout = 5,
-    LumaConfig = ?LUMA_CONFIG(CacheTimeout),
     test_utils:mock_new(Worker, reverse_luma_proxy, [passthrough]),
 
     Result = rpc:call(Worker, reverse_luma, get_group_id_by_name,
-        [<<"group@nfsdomain.org">>, ?SPACE_ID, ?STORAGE_ID, ?STORAGE(LumaConfig)]),
+        [<<"group@nfsdomain.org">>, ?SPACE_ID, ?STORAGE_ID, ?STORAGE(?LUMA_CONFIG)]),
     ?assertEqual({ok, ?TEST_MAPPED_GROUP_ID}, Result),
 
-    timer:sleep(timer:seconds(CacheTimeout + 1)),
+    rpc:call(Worker, luma_cache, invalidate, [?STORAGE_ID]),
 
     Result2 = rpc:call(Worker, reverse_luma, get_group_id_by_name,
-        [<<"group@nfsdomain.org">>, ?SPACE_ID, ?STORAGE_ID, ?STORAGE(LumaConfig)]),
+        [<<"group@nfsdomain.org">>, ?SPACE_ID, ?STORAGE_ID, ?STORAGE(?LUMA_CONFIG)]),
 
     ?assertEqual({ok, ?TEST_MAPPED_GROUP_ID}, Result2),
 
@@ -369,6 +353,19 @@ get_group_id_on_posix_storage_by_acl_groupname_should_query_reverse_luma_twice(C
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
+
+init_per_suite(Config) ->
+    Posthook = fun(NewConfig) ->
+        initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig, "env_desc.json"), NewConfig)
+    end,
+    [
+        {?ENV_UP_POSTHOOK, Posthook},
+        {?LOAD_MODULES, [initializer]}
+        | Config
+    ].
+
+end_per_suite(Config) ->
+    initializer:clean_test_users_and_spaces_no_validate(Config).
 
 init_per_testcase(Case, Config) when
     Case =:= get_user_id_on_posix_storage;
@@ -486,7 +483,7 @@ init_per_testcase(_Case, Config) ->
 
 end_per_testcase(_Case, Config) ->
     Workers = [Worker | _] = ?config(op_worker_nodes, Config),
-    ok = rpc:call(Worker, luma_cache, invalidate, []),
+    ok = rpc:call(Worker, luma_cache, invalidate, [?STORAGE_ID]),
     test_utils:mock_unload(Workers, [http_client, reverse_luma_proxy, provider_logic]).
 
 mock_resolve_acl_user_post(Worker, Expected) ->

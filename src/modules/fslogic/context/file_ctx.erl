@@ -375,11 +375,11 @@ get_mounted_in_root(FileCtx = #file_ctx{mounted_in_root = MiR}) ->
 get_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = undefined}) ->
     FileUuid = get_uuid_const(FileCtx),
     {ok, Doc} = file_meta:get_including_deleted(FileUuid),
-    case Doc#document.value#file_meta.deleted of
-        true ->
-            {Doc, FileCtx};
-        false ->
-            {Doc, FileCtx#file_ctx{file_doc = Doc}}
+    case {Doc#document.value#file_meta.deleted, Doc#document.deleted} of
+        {false, false} ->
+            {Doc, FileCtx#file_ctx{file_doc = Doc}};
+        _ ->
+            {Doc, FileCtx}
     end;
 get_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = FileDoc}) ->
     {FileDoc, FileCtx}.
@@ -470,27 +470,33 @@ get_parent_guid(FileCtx, UserCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_storage_file_id(ctx()) -> {StorageFileId :: helpers:file_id(), ctx()}.
-get_storage_file_id(FileCtx = #file_ctx{storage_file_id = undefined}) ->
-    {StorageDoc, _} = file_ctx:get_storage_doc(FileCtx),
-    #document{value = #storage{helpers
-      = [#helper{storage_path_type = StoragePathType} | _]}} = StorageDoc,
-    case StoragePathType of
-      ?FLAT_STORAGE_PATH ->
-        FileId = get_flat_path_const(FileCtx),
-        % TODO - do not get_canonical_path (fix acceptance tests before)
-        {_, FileCtx2} = get_canonical_path(FileCtx),
-        {FileId, FileCtx2#file_ctx{storage_file_id = FileId}};
-      ?CANONICAL_STORAGE_PATH ->
-        {FileIdTokens, FileCtx2} = get_canonical_path_tokens(FileCtx),
-        {MiR, FileCtx3} = get_mounted_in_root(FileCtx2),
-        FileId = case {MiR, FileIdTokens} of
-            {true, [Root, _SpaceID | Path]} ->
-                filename:join([Root | Path]);
-            _ ->
-                filename:join(FileIdTokens)
-        end,
+get_storage_file_id(FileCtx0 = #file_ctx{storage_file_id = undefined}) ->
+    case get_local_file_location_doc(FileCtx0) of
+        {#document{value = #file_location{file_id = ID}}, FileCtx}
+            when ID =/= undefined ->
+            {ID, FileCtx};
+        {_, FileCtx} ->
+            {StorageDoc, _} = file_ctx:get_storage_doc(FileCtx),
+            #document{value = #storage{helpers
+            = [#helper{storage_path_type = StoragePathType} | _]}} = StorageDoc,
+            case StoragePathType of
+                ?FLAT_STORAGE_PATH ->
+                    FileId = get_flat_path_const(FileCtx),
+                    % TODO - do not get_canonical_path (fix acceptance tests before)
+                    {_, FileCtx2} = get_canonical_path(FileCtx),
+                    {FileId, FileCtx2#file_ctx{storage_file_id = FileId}};
+                ?CANONICAL_STORAGE_PATH ->
+                    {FileIdTokens, FileCtx2} = get_canonical_path_tokens(FileCtx),
+                    {MiR, FileCtx3} = get_mounted_in_root(FileCtx2),
+                    FileId = case {MiR, FileIdTokens} of
+                        {true, [Root, _SpaceID | Path]} ->
+                            filename:join([Root | Path]);
+                        _ ->
+                            filename:join(FileIdTokens)
+                    end,
 
-        {FileId, FileCtx3#file_ctx{storage_file_id = FileId}}
+                    {FileId, FileCtx3#file_ctx{storage_file_id = FileId}}
+            end
     end;
 get_storage_file_id(FileCtx = #file_ctx{storage_file_id = StorageFileId}) ->
     {StorageFileId, FileCtx}.
