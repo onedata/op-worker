@@ -24,18 +24,10 @@
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--type timestamp() :: non_neg_integer().
--type histograms() :: maps:map(od_provider:id(), [non_neg_integer()]).
-
 %% API
 -export([init/0, terminate/0]).
 -export([find_record/2, find_all/1, query/2, query_record/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
-
--ifdef(TEST).
-%% Export for unit testing
--export([histogram_to_speed_chart/4]).
--endif.
 
 %%%===================================================================
 %%% data_backend_behaviour callbacks
@@ -232,44 +224,54 @@ transfer_time_stat_record(StatId) ->
     % Return historical statistics of finished transfers intact. As for active ones,
     % pad them with zeroes to current time and erase recent n-seconds to avoid
     % fluctuations on charts due to synchronization of docs between providers
-    {CurrentStats, LastUpdate, TimeWindow} = case transfer_utils:is_ongoing(T) of
+    {CurrentHistograms, LastUpdate, TimeWindow} = case transfer_utils:is_ongoing(T) of
         false ->
-            ChartLen = transfer_histogram:stats_type_to_speed_chart_len(TypePrefix),
-            StripFun = fun(_Provider, Hist) -> lists:sublist(Hist, ChartLen) end,
             {Histograms, Window} = case TypePrefix of
                 ?MINUTE_STAT_TYPE -> {T#transfer.min_hist, ?FIVE_SEC_TIME_WINDOW};
                 ?HOUR_STAT_TYPE -> {T#transfer.hr_hist, ?MIN_TIME_WINDOW};
                 ?DAY_STAT_TYPE -> {T#transfer.dy_hist, ?HOUR_TIME_WINDOW};
                 ?MONTH_STAT_TYPE -> {T#transfer.mth_hist, ?DAY_TIME_WINDOW}
             end,
-            {maps:map(StripFun, Histograms), get_last_update(T), Window};
+            SpeedChartLen = transfer_histograms:window_to_speed_chart_len(Window),
+            RequestedHistograms = maps:map(fun(_Provider, Histogram) ->
+                lists:sublist(Histogram, SpeedChartLen)
+            end, Histograms),
+            {RequestedHistograms, get_last_update(T), Window};
         true ->
             LastUpdates = T#transfer.last_update,
             CurrentTime = provider_logic:zone_time_seconds(),
-            MinStats = {T#transfer.min_hist, ?MINUTE_STAT_TYPE},
+            MinStats = {T#transfer.min_hist, ?FIVE_SEC_TIME_WINDOW},
             Stats = [MinStats | case TypePrefix of
                 ?MINUTE_STAT_TYPE -> [];
-                ?HOUR_STAT_TYPE -> [{T#transfer.hr_hist, ?HOUR_STAT_TYPE}];
-                ?DAY_STAT_TYPE -> [{T#transfer.dy_hist, ?DAY_STAT_TYPE}];
-                ?MONTH_STAT_TYPE -> [{T#transfer.mth_hist, ?MONTH_STAT_TYPE}]
+                ?HOUR_STAT_TYPE -> [{T#transfer.hr_hist, ?MIN_TIME_WINDOW}];
+                ?DAY_STAT_TYPE -> [{T#transfer.dy_hist, ?HOUR_TIME_WINDOW}];
+                ?MONTH_STAT_TYPE -> [{T#transfer.mth_hist, ?DAY_TIME_WINDOW}]
             end],
-            PaddedStats = pad_stats(Stats, CurrentTime, LastUpdates),
-            {TrimmedStats, TrimmedTime} = trim_stats(PaddedStats, CurrentTime),
-            {RequestedHistograms, _} = lists:last(TrimmedStats),
-            Window = transfer_histogram:stats_type_to_time_window(TypePrefix),
+            PaddedStats = lists:map(fun({Histograms, Window}) ->
+                PaddedHistograms = transfer_histograms:pad(
+                    Histograms, Window, CurrentTime, LastUpdates
+                ),
+                {PaddedHistograms, Window}
+            end, Stats),
+            {TrimmedStats, TrimmedTime} = transfer_histograms:trim(
+                PaddedStats, CurrentTime
+            ),
+            {RequestedHistograms, Window} = lists:last(TrimmedStats),
             {RequestedHistograms, TrimmedTime, Window}
     end,
 
     % Calculate bytes per sec histograms
-    VelocityStats = maps:map(fun(_ProviderId, Histogram) ->
-        histogram_to_speed_chart(Histogram, StartTime, LastUpdate, TimeWindow)
-    end, CurrentStats),
+    SpeedCharts = maps:map(fun(_ProviderId, Histogram) ->
+        transfer_histograms:histogram_to_speed_chart(
+            Histogram, StartTime, LastUpdate, TimeWindow
+        )
+    end, CurrentHistograms),
 
     {ok, [
         {<<"id">>, StatId},
         {<<"timestamp">>, LastUpdate},
         {<<"type">>, TypePrefix},
-        {<<"stats">>, maps:to_list(VelocityStats)}
+        {<<"stats">>, maps:to_list(SpeedCharts)}
     ]}.
 
 
@@ -330,183 +332,6 @@ get_status(#transfer{
     scheduled;
 get_status(#transfer{status = Status}) ->
     Status.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Pad ongoing transfer histograms with zeroes if no bytes were send recently.
-%% @end
-%%--------------------------------------------------------------------
--spec pad_stats(Stats :: [{Histograms :: histograms(), StatsType :: binary()}],
-    CurrentTime :: timestamp(), LastUpdates :: #{od_provider:id() => timestamp()}
-) ->
-    [{histograms(), binary()}].
-pad_stats(Stats, CurrentTime, LastUpdates) ->
-    lists:map(fun({Histograms, StatsType}) ->
-        TimeWindow = transfer_histogram:stats_type_to_time_window(StatsType),
-        ZeroedHist = transfer_histogram:new_time_slot_histogram(
-            CurrentTime, TimeWindow
-        ),
-        PaddedHistograms = maps:map(fun(Provider, Hist) ->
-            LastUpdate = maps:get(Provider, LastUpdates),
-            TimeSlotHist = time_slot_histogram:new(LastUpdate, TimeWindow, Hist),
-            NewHist = time_slot_histogram:merge(ZeroedHist, TimeSlotHist),
-            time_slot_histogram:get_histogram_values(NewHist)
-        end, Histograms),
-        {PaddedHistograms, StatsType}
-    end, Stats).
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Erase recent 30s of histograms to avoid fluctuations on charts.
-%% @end
-%%--------------------------------------------------------------------
--spec trim_stats(Stats :: [{Histograms :: histograms(), StatsType :: binary()}],
-    CurrentTime :: timestamp()
-) ->
-    {[{histograms(), binary()}], timestamp()}.
-trim_stats([{MinStats, _} | _] = Stats, CurrentTime) when map_size(MinStats) == 0 ->
-    NewTimestamp = transfer_histogram:trim_timestamp(CurrentTime),
-    {Stats, NewTimestamp};
-
-trim_stats([{MinStats, ?MINUTE_STAT_TYPE}], CurrentTime) ->
-    NewTimestamp = transfer_histogram:trim_timestamp(CurrentTime),
-    MinSlotsToRemove = ?MIN_HIST_LENGTH - ?MIN_SPEED_HIST_LENGTH,
-    TrimFun = fun(_Provider, Histogram) ->
-        {_, NewHistogram} = lists:split(MinSlotsToRemove, Histogram),
-        NewHistogram
-    end,
-    {[{maps:map(TrimFun, MinStats), ?MINUTE_STAT_TYPE}], NewTimestamp};
-
-trim_stats([{MinStats, _}, {RequestedStats, StatsType}], CurrentTime) ->
-    NewTimestamp = transfer_histogram:trim_timestamp(CurrentTime),
-    TimeWindow = transfer_histogram:stats_type_to_time_window(StatsType),
-    TrimFun = fun(OldHist1, [FstSlot, SndSlot | Rest]) ->
-        MinSlotsToRemove = ?MIN_HIST_LENGTH - ?MIN_SPEED_HIST_LENGTH,
-        {RemovedSlots, NewHist1} = lists:split(MinSlotsToRemove, OldHist1),
-        RemovedBytes = lists:sum(RemovedSlots),
-        OldHist2 = case RemovedBytes > FstSlot of
-            true -> [0, SndSlot - (RemovedBytes - FstSlot) | Rest];
-            false -> [FstSlot - RemovedBytes, SndSlot | Rest]
-        end,
-        Hist2 = case (CurrentTime div TimeWindow) == (NewTimestamp div TimeWindow) of
-            true -> lists:droplast(OldHist2);
-            false -> OldHist2
-        end,
-        Len = transfer_histogram:stats_type_to_speed_chart_len(StatsType),
-        NewHist2 = lists:sublist(Hist2, Len),
-        {NewHist1, NewHist2}
-    end,
-
-    {NewMinStats, NewRequestedStats} = maps:fold(
-        fun(Provider, Hist1, {OldMinStats, OldRequestedStats}) ->
-            Hist2 = maps:get(Provider, RequestedStats),
-            {NewHist1, NewHist2} = TrimFun(Hist1, Hist2),
-            {
-                OldMinStats#{Provider => NewHist1},
-                OldRequestedStats#{Provider => NewHist2}
-            }
-        end, {#{}, #{}}, MinStats
-    ),
-    NewStats = [
-        {NewMinStats, ?MINUTE_STAT_TYPE},
-        {NewRequestedStats, StatsType}
-    ],
-    {NewStats, NewTimestamp}.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Calculates average speed chart based on bytes histogram.
-%% The produced array contains integers indicating speed (B/s) and 'null' atoms
-%% whenever measurement from given time slot does not exist.
-%% The values have the following meaning:
-%%  [0] - anticipated current speed if current trend wouldn't change, at the
-%%      moment of End timestamp
-%%  [1..length-2] - calculated average speeds at the moments in the beginning of
-%%      every time slot, i.e. timestamps which satisfy:
-%%      Timestamp % TimeWindow = 0
-%%  [length-1] - calculated average speed for the starting point of the transfer,
-%%      at the moment of Start timestamp
-%% NOTE: time slots are created for absolute time rather than actual duration
-%% of the transfer. For example, for hour time window, time slots would be:
-%%  8:00:00 - 8:59:59
-%%  9:00:00 - 9:59:59
-%%  etc.
-%% A transfer that started at 8:55 and ended at 9:05 would have measurements
-%% for both above time slots (when hour window is considered).
-%% @end
-%%--------------------------------------------------------------------
--spec histogram_to_speed_chart(histogram:histogram(), Start :: non_neg_integer(),
-    End :: non_neg_integer(), Window :: non_neg_integer()) ->
-    [non_neg_integer() | null].
-histogram_to_speed_chart([First | Rest], Start, End, Window) when (End div Window) == (Start div Window) ->
-    % First value must be handled in a special way, because the newest time slot
-    % might have not passed yet.
-    % In this case, we only have measurements from one time window. We take the
-    % average speed and create a simple chart with two, same measurements.
-    FirstSlotDuration = End - Start + 1,
-    Speed = round(First / FirstSlotDuration),
-    [Speed, Speed | lists:duplicate(length(Rest), null)];
-histogram_to_speed_chart([First | Rest = [Previous | _]], Start, End, Window) ->
-    % First value must be handled in a special way, because the newest time slot
-    % might have not passed yet.
-    % In this case, we have at least two measurements. Current speed is
-    % calculated based on anticipated measurements in the future if current
-    % trend was kept.
-    Duration = End - Start + 1,
-    FirstSlotDuration = min(Duration, (End rem Window) + 1),
-    PreviousSlotDuration = min(Window, Duration - FirstSlotDuration),
-    FirstSpeed = First / FirstSlotDuration,
-    Average = (First + Previous) / (FirstSlotDuration + PreviousSlotDuration),
-    % Calculate the current speed as would be if current trend did not change,
-    % scale by the duration of the window.
-    AnticipatedCurrentSpeed = Average + (FirstSpeed - Average) * FirstSlotDuration / Window,
-    % The above might yield a negative value
-    CurrentSpeed = max(0, round(AnticipatedCurrentSpeed)),
-    % Calculate where the chart span starts
-    ChartStart = max(Start, End - speed_chart_span(Window) + 1),
-    [CurrentSpeed | histogram_to_speed_chart(First, Rest, Start, End, Window, ChartStart)].
-
--spec histogram_to_speed_chart(CurrentValue :: non_neg_integer(),
-    histogram:histogram(), Start :: non_neg_integer(), End :: non_neg_integer(),
-    Window :: non_neg_integer(), ChartStart :: non_neg_integer()) ->
-    [non_neg_integer() | null].
-histogram_to_speed_chart(Current, [Previous | Rest], Start, End, Window, ChartStart) ->
-    Duration = End - ChartStart + 1,
-    CurrentSlotDuration = min(Duration, (End rem Window) + 1),
-    DurationWithoutCurrent = Duration - CurrentSlotDuration,
-    PreviousSlotDuration = min(Window, DurationWithoutCurrent),
-    % Check if we are considering the last two slots
-    case DurationWithoutCurrent =< Window of
-        true ->
-            % Calculate the time that passed when collecting data for the
-            % previous slot. It might be shorter than the window if the transfer
-            % started anywhere in the middle of the window. It might also be different
-            % than PreviousSlotDuration, if some of the measurement duration does not
-            % fit the chart.
-            PreviousSlotMeasurementTime = min(End - Start + 1 - CurrentSlotDuration, Window),
-            Speed = (Current + Previous) / (CurrentSlotDuration + PreviousSlotMeasurementTime),
-            % Scale the previous speed depending how much time of the window
-            % will not fit the chart.
-            PreviousSpeed = Previous / PreviousSlotMeasurementTime,
-            PreviousScaled = Speed + PreviousSlotDuration / PreviousSlotMeasurementTime * (PreviousSpeed - Speed),
-            [round(Speed), round(PreviousScaled) | lists:duplicate(length(Rest), null)];
-        false ->
-            Speed = round((Current + Previous) / (CurrentSlotDuration + PreviousSlotDuration)),
-            [Speed | histogram_to_speed_chart(Previous, Rest, Start, End - CurrentSlotDuration, Window, ChartStart)]
-    end.
-
-
--spec speed_chart_span(TimeWindow :: non_neg_integer()) -> non_neg_integer().
-speed_chart_span(?FIVE_SEC_TIME_WINDOW) -> 60;
-speed_chart_span(?MIN_TIME_WINDOW) -> 3600;
-speed_chart_span(?HOUR_TIME_WINDOW) -> 86400; % 24 hours
-speed_chart_span(?DAY_TIME_WINDOW) -> 2592000. % 30 days
 
 
 -spec get_last_update(#transfer{}) -> non_neg_integer().

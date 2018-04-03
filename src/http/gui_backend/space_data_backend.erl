@@ -358,26 +358,22 @@ space_record(SpaceId, HasViewPrivileges) ->
 
     % Depending on view privileges, show or hide info about members, privileges,
     % providers and transfers.
-    RelationWithViewPrivileges = case HasViewPrivileges of
-        true -> SpaceId;
-        false -> null
-    end,
     {
-        CurrentTransferListId, CompletedTransferListId, TransferMinStat,
-        TransferHourStat, TransferDayStat, TransferMonthStat, TransferProviderMap
+        RelationWithViewPrivileges, CurrentTransferListId,
+        CompletedTransferListId, TransferMinStat, TransferHourStat,
+        TransferDayStat, TransferMonthStat
     } = case HasViewPrivileges of
         true -> {
+            SpaceId,
             op_gui_utils:ids_to_association(?CURRENT_TRANSFERS_PREFIX, SpaceId),
             op_gui_utils:ids_to_association(?COMPLETED_TRANSFERS_PREFIX, SpaceId),
             op_gui_utils:ids_to_association(?MINUTE_STAT_TYPE, SpaceId),
             op_gui_utils:ids_to_association(?HOUR_STAT_TYPE, SpaceId),
             op_gui_utils:ids_to_association(?DAY_STAT_TYPE, SpaceId),
-            op_gui_utils:ids_to_association(?MONTH_STAT_TYPE, SpaceId),
-            SpaceId
+            op_gui_utils:ids_to_association(?MONTH_STAT_TYPE, SpaceId)
         };
-        false -> {
-            null, null, null, null, null, null, null
-        }
+        false ->
+            {null, null, null, null, null, null, null}
     end,
     [
         {<<"id">>, SpaceId},
@@ -393,7 +389,7 @@ space_record(SpaceId, HasViewPrivileges) ->
         {<<"transferHourStat">>, TransferHourStat},
         {<<"transferDayStat">>, TransferDayStat},
         {<<"transferMonthStat">>, TransferMonthStat},
-        {<<"transferProviderMap">>, TransferProviderMap},
+        {<<"transferProviderMap">>, RelationWithViewPrivileges},
         {<<"user">>, UserId}
     ].
 

@@ -18,7 +18,7 @@
 % Time windows and lengths of histograms. They offer one extra, historical value,
 % as the leading one is not yet measured - this way there are always full
 % measurements from the whole histogram span.
-% Speed charts avoid fluctuation of charts, they are generated with 30s delay.
+% To avoid fluctuation of speed charts, they are generated with 30s delay.
 % For this it is required that minute bytes histogram had additional 6 slots.
 % The same goes for other stats types albeit required additional slots are smaller.
 -define(FIVE_SEC_TIME_WINDOW, 5).
@@ -26,16 +26,16 @@
 -define(MIN_SPEED_HIST_LENGTH, 13).
 
 -define(MIN_TIME_WINDOW, 60).
--define(HOUR_HIST_LENGTH, 63).
--define(HOUR_SPEED_HIST_LENGTH, 62).
+-define(HOUR_HIST_LENGTH, 62).
+-define(HOUR_SPEED_HIST_LENGTH, 61).
 
 -define(HOUR_TIME_WINDOW, 3600).
--define(DAY_HIST_LENGTH, 27).
--define(DAY_SPEED_HIST_LENGTH, 26).
+-define(DAY_HIST_LENGTH, 26).
+-define(DAY_SPEED_HIST_LENGTH, 25).
 
 -define(DAY_TIME_WINDOW, 86400).
--define(MONTH_HIST_LENGTH, 33).
--define(MONTH_SPEED_HIST_LENGTH, 32).
+-define(MONTH_HIST_LENGTH, 32).
+-define(MONTH_SPEED_HIST_LENGTH, 31).
 
 -define(MINUTE_STAT_TYPE, <<"minute">>).
 -define(HOUR_STAT_TYPE, <<"hour">>).

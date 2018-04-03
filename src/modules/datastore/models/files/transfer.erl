@@ -570,21 +570,21 @@ mark_data_transfer_finished(TransferId, ProviderId, Bytes) ->
         {ok, Transfer#transfer{
             bytes_transferred = OldBytes + Bytes,
             last_update = maps:put(ProviderId, CurrentTime, LastUpdateMap),
-            min_hist = transfer_histogram:update(
+            min_hist = transfer_histograms:update(
                 ProviderId, Bytes, MinHistograms,
-                ?FIVE_SEC_TIME_WINDOW, LastUpdate, CurrentTime
+                ?MINUTE_STAT_TYPE, LastUpdate, CurrentTime
             ),
-            hr_hist = transfer_histogram:update(
+            hr_hist = transfer_histograms:update(
                 ProviderId, Bytes, HrHistograms,
-                ?MIN_TIME_WINDOW, LastUpdate, CurrentTime
+                ?HOUR_STAT_TYPE, LastUpdate, CurrentTime
             ),
-            dy_hist = transfer_histogram:update(
+            dy_hist = transfer_histograms:update(
                 ProviderId, Bytes, DyHistograms,
-                ?HOUR_TIME_WINDOW, LastUpdate, CurrentTime
+                ?DAY_STAT_TYPE, LastUpdate, CurrentTime
             ),
-            mth_hist = transfer_histogram:update(
+            mth_hist = transfer_histograms:update(
                 ProviderId, Bytes, MthHistograms,
-                ?DAY_TIME_WINDOW, LastUpdate, CurrentTime
+                ?MONTH_STAT_TYPE, LastUpdate, CurrentTime
             )
         }}
     end).

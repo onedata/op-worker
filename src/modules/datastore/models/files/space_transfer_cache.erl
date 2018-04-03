@@ -35,9 +35,9 @@
 -define(HOUR_STAT_EXPIRATION,
     application:get_env(?APP_NAME, gui_hour_stat_expiration, timer:seconds(10))).
 -define(DAY_STAT_EXPIRATION,
-    application:get_env(?APP_NAME, gui_day_stat_expiration, timer:seconds(15))).
+    application:get_env(?APP_NAME, gui_day_stat_expiration, timer:minutes(1))).
 -define(MONTH_STAT_EXPIRATION,
-    application:get_env(?APP_NAME, gui_month_stat_expiration, timer:seconds(20))).
+    application:get_env(?APP_NAME, gui_month_stat_expiration, timer:minutes(5))).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -120,7 +120,7 @@ get(SpaceId, RequestedStatsType) ->
                 save(SpaceId, Stats, StatsType)
             end, SpeedStats),
 
-            {RequestedStats, RequestedStatsType} = lists:last(SpeedStats),
+            {RequestedStats, _RequestedStatsType} = lists:last(SpeedStats),
             RequestedStats;
         _ ->
             Fetched
@@ -254,7 +254,10 @@ update_stats(OldStats, StatsType, ST, CurrentTime, Provider) ->
         ?DAY_STAT_TYPE -> {ST#space_transfer.dy_hist, ?HOUR_TIME_WINDOW};
         ?MONTH_STAT_TYPE -> {ST#space_transfer.mth_hist, ?DAY_TIME_WINDOW}
     end,
-    ZeroedHist = transfer_histogram:new_time_slot_histogram(CurrentTime, TimeWindow),
+    HistLen = transfer_histograms:type_to_hist_length(StatsType),
+    ZeroedHist = time_slot_histogram:new(
+        CurrentTime, TimeWindow, histogram:new(HistLen)
+    ),
 
     {HistIn, HistsOut, SrcProviders} = maps:fold(fun(SrcProvider, Hist, Acc) ->
         {OldHistIn, OldHistsOut, OldSrcProviders} = Acc,
@@ -307,53 +310,36 @@ update_stats(OldStats, StatsType, ST, CurrentTime, Provider) ->
 -spec trim_stats([{space_transfer_cache(), binary()}]) ->
     [{space_transfer_cache(), binary()}].
 trim_stats([{Stats, ?MINUTE_STAT_TYPE}]) ->
-    SlotsToRemove = ?MIN_HIST_LENGTH - ?MIN_SPEED_HIST_LENGTH,
-    TrimFun = fun(_Provider, Histogram) ->
-        {_, NewHistogram} = lists:split(SlotsToRemove, Histogram),
-        NewHistogram
-    end,
+    OldTimestamp = Stats#space_transfer_cache.timestamp,
+    OldStatsIn = [{Stats#space_transfer_cache.stats_in, ?FIVE_SEC_TIME_WINDOW}],
+    OldStatsOut = [{Stats#space_transfer_cache.stats_out, ?FIVE_SEC_TIME_WINDOW}],
+    {[{NewStatsIn, _}], NewTimestamp} =
+        transfer_histograms:trim(OldStatsIn, OldTimestamp),
+    {[{NewStatsOut, _}], NewTimestamp} =
+        transfer_histograms:trim(OldStatsOut, OldTimestamp),
+
     NewStats = Stats#space_transfer_cache{
-        timestamp = transfer_histogram:trim_timestamp(Stats#space_transfer_cache.timestamp),
-        stats_in = maps:map(TrimFun, Stats#space_transfer_cache.stats_in),
-        stats_out = maps:map(TrimFun, Stats#space_transfer_cache.stats_out)
+        timestamp = NewTimestamp,
+        stats_in = NewStatsIn,
+        stats_out = NewStatsOut
     },
     [{NewStats, ?MINUTE_STAT_TYPE}];
 
 trim_stats([{MinStats, ?MINUTE_STAT_TYPE}, {RequestedStats, RequestedStatsType}]) ->
     OldTimestamp = MinStats#space_transfer_cache.timestamp,
-    NewTimestamp = transfer_histogram:trim_timestamp(OldTimestamp),
-    TimeWindow = transfer_histogram:stats_type_to_time_window(RequestedStatsType),
-    TrimFun = fun(OldHist1, [FstSlot, SndSlot | Rest]) ->
-        MinSlotsToRemove = ?MIN_HIST_LENGTH - ?MIN_SPEED_HIST_LENGTH,
-        {RemovedSlots, NewHist1} = lists:split(MinSlotsToRemove, OldHist1),
-        RemovedBytes = lists:sum(RemovedSlots),
-        OldHist2 = case RemovedBytes > FstSlot of
-            true -> [0, SndSlot - (RemovedBytes - FstSlot) | Rest];
-            false -> [FstSlot - RemovedBytes, SndSlot | Rest]
-        end,
-        Hist2 = case (OldTimestamp div TimeWindow) == (NewTimestamp div TimeWindow) of
-            true -> lists:droplast(OldHist2);
-            false -> tl(OldHist2)
-        end,
-        Len = transfer_histogram:stats_type_to_speed_chart_len(RequestedStatsType),
-        NewHist2 = lists:sublist(Hist2, Len),
-        {NewHist1, NewHist2}
-    end,
-
-    [StatsIn, StatsOut] = lists:map(fun({CurrentStats1, CurrentStats2}) ->
-        maps:fold(fun(Provider, Hist1, {OldStats1, OldStats2}) ->
-            Hist2 = maps:get(Provider, CurrentStats2),
-            {NewHist1, NewHist2} = TrimFun(Hist1, Hist2),
-            {OldStats1#{Provider => NewHist1}, OldStats2#{Provider => NewHist2}}
-        end, {#{}, #{}}, CurrentStats1)
-    end, [
-        {MinStats#space_transfer_cache.stats_in,
-            RequestedStats#space_transfer_cache.stats_in},
-        {MinStats#space_transfer_cache.stats_out,
-            RequestedStats#space_transfer_cache.stats_out}
-    ]),
-    {NewMinStatsIn, NewRequestedStatsIn} = StatsIn,
-    {NewMinStatsOut, NewRequestedStatsOut} = StatsOut,
+    TimeWindow = transfer_histograms:type_to_time_window(RequestedStatsType),
+    OldStatsIn = [
+        {MinStats#space_transfer_cache.stats_in, ?FIVE_SEC_TIME_WINDOW},
+        {RequestedStats#space_transfer_cache.stats_in, TimeWindow}
+    ],
+    OldStatsOut = [
+        {MinStats#space_transfer_cache.stats_out, ?FIVE_SEC_TIME_WINDOW},
+        {RequestedStats#space_transfer_cache.stats_out, TimeWindow}
+    ],
+    {[{NewMinStatsIn, _}, {NewRequestedStatsIn, _}], NewTimestamp} =
+        transfer_histograms:trim(OldStatsIn, OldTimestamp),
+    {[{NewMinStatsOut, _}, {NewRequestedStatsOut, _}], NewTimestamp} =
+        transfer_histograms:trim(OldStatsOut, OldTimestamp),
 
     NewMinStats = MinStats#space_transfer_cache{
         timestamp = NewTimestamp,
@@ -372,13 +358,10 @@ trim_stats([{MinStats, ?MINUTE_STAT_TYPE}, {RequestedStats, RequestedStatsType}]
     StatsType :: binary()) -> space_transfer_cache().
 histograms_to_speed_charts(Stats, StatsType) ->
     Timestamp = Stats#space_transfer_cache.timestamp,
-    TimeWindow = transfer_histogram:stats_type_to_time_window(StatsType),
-    FstSlotDuration = case Timestamp rem TimeWindow of
-        0 -> TimeWindow;
-        Rem -> Rem + 1
-    end,
-    ToSpeedChart = fun(_, [FstSlot | Rest]) ->
-        [FstSlot/FstSlotDuration | [Bytes/TimeWindow || Bytes <- Rest]]
+    TimeWindow = transfer_histograms:type_to_time_window(StatsType),
+    ToSpeedChart = fun(_ProviderId, Histogram) ->
+        transfer_histograms:histogram_to_speed_chart(
+            Histogram, 0, Timestamp, TimeWindow)
     end,
     Stats#space_transfer_cache{
         stats_in = maps:map(ToSpeedChart, Stats#space_transfer_cache.stats_in),

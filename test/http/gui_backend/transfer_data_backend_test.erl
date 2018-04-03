@@ -7,7 +7,7 @@
 %%%--------------------------------------------------------------------
 %%% @doc
 %%% Tests of function calculating speed charts for transfers view in GUI
-%%% (see transfer_data_backend:histogram_to_speed_chart/4 for clarification
+%%% (see transfer_histograms:to_speed_chart/4 for clarification
 %%% how the function works).
 %%% @end
 %%%--------------------------------------------------------------------
@@ -28,8 +28,8 @@ histogram_with_zero_duration_time_test() ->
     Start = 0,
     End = 0,
     Histogram = histogram_starting_with([0], Window),
-    SpeedChart = transfer_data_backend:histogram_to_speed_chart(Histogram, Start, End, Window),
-    ?assertEqual(?MIN_HIST_LENGTH + 1, length(SpeedChart)),
+    SpeedChart = transfer_histograms:histogram_to_speed_chart(Histogram, Start, End, Window),
+    ?assertEqual(?MIN_SPEED_HIST_LENGTH + 1, length(SpeedChart)),
     ?assertMatch([0, 0, null | _], SpeedChart).
 
 histogram_with_zeroes_and_single_slot_test() ->
@@ -39,8 +39,8 @@ histogram_with_zeroes_and_single_slot_test() ->
     Start = 0,
     End = 4,
     Histogram = histogram_starting_with([0], Window),
-    SpeedChart = transfer_data_backend:histogram_to_speed_chart(Histogram, Start, End, Window),
-    ?assertEqual(?MIN_HIST_LENGTH + 1, length(SpeedChart)),
+    SpeedChart = transfer_histograms:histogram_to_speed_chart(Histogram, Start, End, Window),
+    ?assertEqual(?MIN_SPEED_HIST_LENGTH + 1, length(SpeedChart)),
     ?assertMatch([0, 0, null | _], SpeedChart).
 
 histogram_with_zeroes_and_two_slots_test() ->
@@ -50,8 +50,8 @@ histogram_with_zeroes_and_two_slots_test() ->
     Start = 0,
     End = 7,
     Histogram = histogram_starting_with([0], Window),
-    SpeedChart = transfer_data_backend:histogram_to_speed_chart(Histogram, Start, End, Window),
-    ?assertEqual(?MIN_HIST_LENGTH + 1, length(SpeedChart)),
+    SpeedChart = transfer_histograms:histogram_to_speed_chart(Histogram, Start, End, Window),
+    ?assertEqual(?MIN_SPEED_HIST_LENGTH + 1, length(SpeedChart)),
     ?assertMatch([0, 0, 0, null | _], SpeedChart).
 
 histogram_with_single_slot_test() ->
@@ -62,8 +62,8 @@ histogram_with_single_slot_test() ->
     Start = 30,
     End = 39,
     Histogram = histogram_starting_with([10], Window),
-    SpeedChart = transfer_data_backend:histogram_to_speed_chart(Histogram, Start, End, Window),
-    ?assertEqual(?HOUR_HIST_LENGTH + 1, length(SpeedChart)),
+    SpeedChart = transfer_histograms:histogram_to_speed_chart(Histogram, Start, End, Window),
+    ?assertEqual(?HOUR_SPEED_HIST_LENGTH + 1, length(SpeedChart)),
     ?assertMatch([1, 1, null | _], SpeedChart).
 
 histogram_with_two_slots_test() ->
@@ -74,8 +74,8 @@ histogram_with_two_slots_test() ->
     End = 3800,
     Histogram = histogram_starting_with([402, 25], Window),
     % First slot should last 1 second, second 201 seconds
-    SpeedChart = transfer_data_backend:histogram_to_speed_chart(Histogram, Start, End, Window),
-    ?assertEqual(?DAY_HIST_LENGTH + 1, length(SpeedChart)),
+    SpeedChart = transfer_histograms:histogram_to_speed_chart(Histogram, Start, End, Window),
+    ?assertEqual(?DAY_SPEED_HIST_LENGTH + 1, length(SpeedChart)),
     % The speed in the first window should be 25B/s
     ?assertMatch([_, _, 25, null | _], SpeedChart),
     [Current, Previous | _] = SpeedChart,
@@ -97,8 +97,8 @@ histogram_with_three_slots_test() ->
     Histogram = histogram_starting_with([50, Day, 500], Window),
     % First slot should last 100 seconds, second 86400 seconds (a day), third
     % 10 seconds
-    SpeedChart = transfer_data_backend:histogram_to_speed_chart(Histogram, Start, End, Window),
-    ?assertEqual(?MONTH_HIST_LENGTH + 1, length(SpeedChart)),
+    SpeedChart = transfer_histograms:histogram_to_speed_chart(Histogram, Start, End, Window),
+    ?assertEqual(?MONTH_SPEED_HIST_LENGTH + 1, length(SpeedChart)),
     % The speed in the first window should be 5B/s
     ?assertMatch([_, _, _, 5, null | _], SpeedChart),
     % The speed in the second window should be 1B/s - as this window was very
@@ -126,7 +126,7 @@ histogram_with_all_slots_test() ->
     Start = 17,
     End = Start + ?FIVE_SEC_TIME_WINDOW * 15,
     Histogram = histogram_starting_with([50, 50, 100, 160, 80, 200, 400, 0, 150, 300, 200, 100, 200], Window),
-    SpeedChart = transfer_data_backend:histogram_to_speed_chart(Histogram, Start, End, Window),
+    SpeedChart = transfer_histograms:histogram_to_speed_chart(Histogram, Start, End, Window),
     % Average of neighbouring values divided by time window (?FIVE_SEC_TIME_WINDOW), eg.
     % ((50 + 100) / 2) / 5 = 15
     %                 50  100 160 80  200 400  0  150 300 200 100
@@ -142,29 +142,29 @@ increasing_trend_at_the_start_of_histogram_test() ->
     Histogram = histogram_starting_with([200, 100, 0], Window),
     % The newest window has lasted only one second, the first value jump should
     % be very apparent
-    [First1, Second1 | _] = transfer_data_backend:histogram_to_speed_chart(Histogram, Start, End, Window),
+    [First1, Second1 | _] = transfer_histograms:histogram_to_speed_chart(Histogram, Start, End, Window),
     ?assert(First1 > Second1),
 
     % Use the same histogram, but increase end time (which widens the first slot and
     % lowers the avg speed). Speed increase trend should be visible in all cases
     % (First > Second), and the leading average speed should get lower and lower
     % (as the chart is getting smoother).
-    [First2, Second2 | _] = transfer_data_backend:histogram_to_speed_chart(Histogram, Start, End + 1, Window),
+    [First2, Second2 | _] = transfer_histograms:histogram_to_speed_chart(Histogram, Start, End + 1, Window),
     ?assert(First2 > Second2),
     ?assert(First1 >= First2),
     ?assert(Second1 >= Second2),
 
-    [First3, Second3 | _] = transfer_data_backend:histogram_to_speed_chart(Histogram, Start, End + 2, Window),
+    [First3, Second3 | _] = transfer_histograms:histogram_to_speed_chart(Histogram, Start, End + 2, Window),
     ?assert(First3 > Second3),
     ?assert(First2 >= First3),
     ?assert(Second2 >= Second3),
 
-    [First4, Second4 | _] = transfer_data_backend:histogram_to_speed_chart(Histogram, Start, End + 3, Window),
+    [First4, Second4 | _] = transfer_histograms:histogram_to_speed_chart(Histogram, Start, End + 3, Window),
     ?assert(First4 > Second4),
     ?assert(First3 >= First4),
     ?assert(Second3 >= Second4),
 
-    [First5, Second5 | _] = transfer_data_backend:histogram_to_speed_chart(Histogram, Start, End + 4, Window),
+    [First5, Second5 | _] = transfer_histograms:histogram_to_speed_chart(Histogram, Start, End + 4, Window),
     ?assert(First5 > Second5),
     ?assert(First4 >= First5),
     ?assert(Second4 >= Second5).
@@ -179,29 +179,29 @@ decreasing_trend_at_the_start_of_histogram_test() ->
     Histogram = histogram_starting_with([0, 1000000, 2000000], Window),
     % The newest window has lasted only 10 seconds, the first value drop should
     % be very apparent
-    [First1, Second1 | _] = transfer_data_backend:histogram_to_speed_chart(Histogram, Start, End, Window),
+    [First1, Second1 | _] = transfer_histograms:histogram_to_speed_chart(Histogram, Start, End, Window),
     ?assert(First1 < Second1),
 
     % Use the same histogram, but increase end time (which widens the first slot and
     % lowers the avg speed). Speed decrease trend should be visible in all cases
     % (First < Second), and the leading average speed should get lower and lower
     % (as the chart is getting smoother).
-    [First2, Second2 | _] = transfer_data_backend:histogram_to_speed_chart(Histogram, Start, End + 1, Window),
+    [First2, Second2 | _] = transfer_histograms:histogram_to_speed_chart(Histogram, Start, End + 1, Window),
     ?assert(First2 < Second2),
     ?assert(First1 >= First2),
     ?assert(Second1 >= Second2),
 
-    [First3, Second3 | _] = transfer_data_backend:histogram_to_speed_chart(Histogram, Start, End + 2, Window),
+    [First3, Second3 | _] = transfer_histograms:histogram_to_speed_chart(Histogram, Start, End + 2, Window),
     ?assert(First3 < Second3),
     ?assert(First2 >= First3),
     ?assert(Second2 >= Second3),
 
-    [First4, Second4 | _] = transfer_data_backend:histogram_to_speed_chart(Histogram, Start, End + 3, Window),
+    [First4, Second4 | _] = transfer_histograms:histogram_to_speed_chart(Histogram, Start, End + 3, Window),
     ?assert(First4 < Second4),
     ?assert(First3 >= First4),
     ?assert(Second3 >= Second4),
 
-    [First5, Second5 | _] = transfer_data_backend:histogram_to_speed_chart(Histogram, Start, End + 4, Window),
+    [First5, Second5 | _] = transfer_histograms:histogram_to_speed_chart(Histogram, Start, End + 4, Window),
     ?assert(First5 < Second5),
     ?assert(First4 >= First5),
     ?assert(Second4 >= Second5).
@@ -218,7 +218,7 @@ increasing_trend_at_the_end_of_histogram_test() ->
     Histogram = histogram_ending_with([600, 1200, 1800], Window),
     % The newest window has lasted only one second, the first value jump should
     % be very apparent
-    SpeedChart1 = transfer_data_backend:histogram_to_speed_chart(Histogram, Start, End, Window),
+    SpeedChart1 = transfer_histograms:histogram_to_speed_chart(Histogram, Start, End, Window),
     [OneButLast1, Last1] = lists:nthtail(length(SpeedChart1) - 2, SpeedChart1),
     ?assert(Last1 > OneButLast1),
 
@@ -226,25 +226,25 @@ increasing_trend_at_the_end_of_histogram_test() ->
     % lowers the avg speed). Speed increase trend should be visible in all cases
     % (Last > OneButLast), and the trailing average speed should get lower and lower
     % (as the chart is getting smoother).
-    SpeedChart2 = transfer_data_backend:histogram_to_speed_chart(Histogram, Start, End + 12, Window),
+    SpeedChart2 = transfer_histograms:histogram_to_speed_chart(Histogram, Start, End + 12, Window),
     [OneButLast2, Last2] = lists:nthtail(length(SpeedChart2) - 2, SpeedChart2),
     ?assert(Last2 > OneButLast2),
     ?assert(Last1 >= Last2),
     ?assert(OneButLast1 >= OneButLast2),
 
-    SpeedChart3 = transfer_data_backend:histogram_to_speed_chart(Histogram, Start, End + 24, Window),
+    SpeedChart3 = transfer_histograms:histogram_to_speed_chart(Histogram, Start, End + 24, Window),
     [OneButLast3, Last3] = lists:nthtail(length(SpeedChart3) - 2, SpeedChart3),
     ?assert(Last3 > OneButLast3),
     ?assert(Last2 >= Last3),
     ?assert(OneButLast2 >= OneButLast3),
 
-    SpeedChart4 = transfer_data_backend:histogram_to_speed_chart(Histogram, Start, End + 36, Window),
+    SpeedChart4 = transfer_histograms:histogram_to_speed_chart(Histogram, Start, End + 36, Window),
     [OneButLast4, Last4] = lists:nthtail(length(SpeedChart4) - 2, SpeedChart4),
     ?assert(Last4 > OneButLast4),
     ?assert(Last3 >= Last4),
     ?assert(OneButLast3 >= OneButLast4),
 
-    SpeedChart5 = transfer_data_backend:histogram_to_speed_chart(Histogram, Start, End + 48, Window),
+    SpeedChart5 = transfer_histograms:histogram_to_speed_chart(Histogram, Start, End + 48, Window),
     [OneButLast5, Last5] = lists:nthtail(length(SpeedChart5) - 2, SpeedChart5),
     ?assert(Last5 > OneButLast5),
     ?assert(Last4 >= Last5),
@@ -263,7 +263,7 @@ decreasing_trend_at_the_end_of_histogram_test() ->
     Histogram = histogram_ending_with([1800 * Day, 1200 * Day, 600 * Day], Window),
     % The newest window has lasted only one second, the first value jump should
     % be very apparent
-    SpeedChart1 = transfer_data_backend:histogram_to_speed_chart(Histogram, Start, End, Window),
+    SpeedChart1 = transfer_histograms:histogram_to_speed_chart(Histogram, Start, End, Window),
     [OneButLast1, Last1] = lists:nthtail(length(SpeedChart1) - 2, SpeedChart1),
     ?assert(Last1 < OneButLast1),
 
@@ -271,25 +271,25 @@ decreasing_trend_at_the_end_of_histogram_test() ->
     % lowers the avg speed). Speed decrease trend should be visible in all cases
     % (Last < OneButLast), and the trailing average speed should get higher and higher
     % (as the chart is getting smoother).
-    SpeedChart2 = transfer_data_backend:histogram_to_speed_chart(Histogram, Start, End + Day div 5, Window),
+    SpeedChart2 = transfer_histograms:histogram_to_speed_chart(Histogram, Start, End + Day div 5, Window),
     [OneButLast2, Last2] = lists:nthtail(length(SpeedChart2) - 2, SpeedChart2),
     ?assert(Last2 < OneButLast2),
     ?assert(Last1 =< Last2),
     ?assert(OneButLast1 =< OneButLast2),
 
-    SpeedChart3 = transfer_data_backend:histogram_to_speed_chart(Histogram, Start, End + Day div 4, Window),
+    SpeedChart3 = transfer_histograms:histogram_to_speed_chart(Histogram, Start, End + Day div 4, Window),
     [OneButLast3, Last3] = lists:nthtail(length(SpeedChart3) - 2, SpeedChart3),
     ?assert(Last3 < OneButLast3),
     ?assert(Last2 =< Last3),
     ?assert(OneButLast2 =< OneButLast3),
 
-    SpeedChart4 = transfer_data_backend:histogram_to_speed_chart(Histogram, Start, End + Day div 3, Window),
+    SpeedChart4 = transfer_histograms:histogram_to_speed_chart(Histogram, Start, End + Day div 3, Window),
     [OneButLast4, Last4] = lists:nthtail(length(SpeedChart4) - 2, SpeedChart4),
     ?assert(Last4 < OneButLast4),
     ?assert(Last3 =< Last4),
     ?assert(OneButLast3 =< OneButLast4),
 
-    SpeedChart5 = transfer_data_backend:histogram_to_speed_chart(Histogram, Start, End + Day div 2, Window),
+    SpeedChart5 = transfer_histograms:histogram_to_speed_chart(Histogram, Start, End + Day div 2, Window),
     [OneButLast5, Last5] = lists:nthtail(length(SpeedChart5) - 2, SpeedChart5),
     ?assert(Last5 < OneButLast5),
     ?assert(Last4 =< Last5),
@@ -298,10 +298,10 @@ decreasing_trend_at_the_end_of_histogram_test() ->
 
 histogram_starting_with(Beginning, Window) ->
     Length = case Window of
-        ?FIVE_SEC_TIME_WINDOW -> ?MIN_HIST_LENGTH;
-        ?MIN_TIME_WINDOW -> ?HOUR_HIST_LENGTH;
-        ?HOUR_TIME_WINDOW -> ?DAY_HIST_LENGTH;
-        ?DAY_TIME_WINDOW -> ?MONTH_HIST_LENGTH
+        ?FIVE_SEC_TIME_WINDOW -> ?MIN_SPEED_HIST_LENGTH;
+        ?MIN_TIME_WINDOW -> ?HOUR_SPEED_HIST_LENGTH;
+        ?HOUR_TIME_WINDOW -> ?DAY_SPEED_HIST_LENGTH;
+        ?DAY_TIME_WINDOW -> ?MONTH_SPEED_HIST_LENGTH
     end,
     Beginning ++ lists:duplicate(Length - length(Beginning), 0).
 
