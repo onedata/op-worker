@@ -145,7 +145,7 @@ handle_cast({internal, RetryCounter, Request},
             erlang:send_after(1000, self(), {retry_request, RetryCounter, Request}),
             {noreply, State};
         Reason1:Reason2 ->
-            ?debug_stacktrace("Cannot process request ~p due to: ~p", [Request, {Reason1, Reason2}]),
+            ?error_stacktrace("Cannot process request ~p due to: ~p", [Request, {Reason1, Reason2}]),
             {noreply, State}
     end;
 handle_cast(Request, State) ->
@@ -174,7 +174,7 @@ handle_info(timeout, #state{manager_sup = MgrSup, session_id = SessId} = State) 
     }};
 
 handle_info({retry_request, 0, Request}, State) ->
-    ?error("Max retries for request: ~p", [Request]),
+    ?debug("Max retries for request: ~p", [Request]),
     {noreply, State};
 
 handle_info({retry_request, RetryCounter, Request}, State) ->
