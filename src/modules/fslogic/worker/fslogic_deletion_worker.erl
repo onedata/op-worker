@@ -139,19 +139,25 @@ handle({open_file_deletion_request, FileCtx}) ->
 
         try
             {ParentCtx, FileCtx3} = file_ctx:get_parent(FileCtx2, UserCtx),
-            {ParentDoc, _} = file_ctx:get_file_doc(ParentCtx),
+            {ParentDoc, _} = file_ctx:get_file_doc_including_deleted(ParentCtx),
             ok = case fslogic_path:resolve(ParentDoc, <<"/", Name/binary>>) of
                 {ok, #document{key = Uuid2}} when Uuid2 =/= Uuid ->
                     ok;
                 _ ->
-                    sfm_utils:delete_storage_file_without_location(FileCtx3, UserCtx)
+                    %todo refactor
+                    case file_ctx:is_dir(FileCtx3) of
+                        {true, FileCtx4} ->
+                            sfm_utils:delete_storage_dir(FileCtx4, UserCtx);
+                        {false, FileCtx4} ->
+                            sfm_utils:delete_storage_file_without_location(FileCtx4, UserCtx)
+                    end
             end
         catch
             E2:E2 ->
                 % Debug - parent could be deleted before
-                ?debug_stacktrace("Cannot check parrent during delete ~p: ~p:~p",
+                ?debug_stacktrace("Cannot check parent during delete ~p: ~p:~p",
                     [FileCtx, E2, E2]),
-                sfm_utils:delete_storage_file_without_location(FileCtx2, UserCtx)
+                sfm_utils:delete_storage_file_without_location(FileCtx2, UserCtx)   %todo po co jest ten catch i dlaczego jeszcze raz proboujemy usuwac?
         end
     catch
         _:{badmatch, {error, not_found}} ->
@@ -171,7 +177,7 @@ handle({dbsync_deletion_request, FileCtx}) ->
             true ->
                 ok = file_handles:mark_to_remove(FileCtx);
             false ->
-                handle({open_file_deletion_request, FileCtx})
+                handle({open_file_deletion_request, FileCtx})   %todo dlaczego open_file_deletion_request ???
         end
     catch
         _:{badmatch, {error, not_found}} ->
