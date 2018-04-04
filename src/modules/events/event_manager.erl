@@ -150,7 +150,7 @@ handle_cast({internal, RetryCounter, Request},
             {noreply, State}
     end;
 handle_cast(Request, State) ->
-    Retries = application:get_env(?APP_NAME, event_manager_retries, 0),
+    Retries = application:get_env(?APP_NAME, event_manager_retries, 1),
     handle_cast({internal, Retries, Request}, State).
 
 %%--------------------------------------------------------------------

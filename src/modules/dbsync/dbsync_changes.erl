@@ -11,6 +11,7 @@
 -module(dbsync_changes).
 -author("Krzysztof Trzepla").
 
+-include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -41,9 +42,27 @@ apply_batch(Docs, BatchRange) ->
     Master = self(),
     spawn_link(fun() ->
         DocsGroups = group_changes(Docs),
-        DocsList = maps:to_list(DocsGroups),
+        DocsList = maps:values(DocsGroups),
+
+        MinSize = application:get_env(?APP_NAME,
+            dbsync_changes_apply_min_group_size, 5),
+
+        {LastGroup, DocsList2} = lists:foldl(fun(Group, {CurrentGroup, Acc}) ->
+            Group2 = Group ++ CurrentGroup,
+            case length(Group2) >= MinSize of
+                true ->
+                    {[], [Group2 | Acc]};
+                _ ->
+                    {Group2, Acc}
+            end
+        end, {[], []}, DocsList),
+        DocsList3 = case LastGroup of
+            [] -> DocsList2;
+            _ -> [LastGroup | DocsList2]
+        end,
+
         Ref = make_ref(),
-        Pids = parallel_apply(DocsList, Ref),
+        Pids = parallel_apply(DocsList3, Ref),
         Ans = gather_answers(Pids, Ref),
         Master ! {batch_applied, BatchRange, Ans}
     end),
@@ -235,11 +254,10 @@ group_changes(Docs) ->
 %% Starts one worker for each documents' group.
 %% @end
 %%--------------------------------------------------------------------
--spec parallel_apply([{datastore:key(),
-    [datastore:doc()]}], reference()) -> [pid()].
+-spec parallel_apply([[datastore:doc()]], reference()) -> [pid()].
 parallel_apply(DocsList, Ref) ->
     Master = self(),
-    lists:map(fun({_, DocList}) ->
+    lists:map(fun(DocList) ->
         spawn(fun() ->
             SlaveAns = lists:foldl(fun
                 (Doc, ok) ->

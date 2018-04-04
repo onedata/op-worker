@@ -208,7 +208,7 @@ init([Mgr, #subscription{id = SubId} = Sub, SessId]) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_call(Request, From, State) ->
-    gen_server:reply(From, ok),
+    gen_server2:reply(From, ok),
     handle_cast(Request, State).
 
 %%--------------------------------------------------------------------
