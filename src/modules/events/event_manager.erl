@@ -17,6 +17,7 @@
 
 -behaviour(gen_server).
 
+-include("global_definitions.hrl").
 -include("modules/events/definitions.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/common/handshake_messages.hrl").
@@ -134,22 +135,23 @@ handle_cast({internal, RetryCounter, Request},
     catch
         exit:{noproc, _} ->
             ?debug("No proc to handle request ~p, retry", [Request]),
-            erlang:send_after(1000, self(), {retry_request, RetryCounter, Request}),
+            send_retry_message(Request, RetryCounter),
             {noreply, State};
         exit:{normal, _} ->
             ?debug("Exit of stream process for request ~p, retry", [Request]),
-            erlang:send_after(1000, self(), {retry_request, RetryCounter, Request}),
+            send_retry_message(Request, RetryCounter),
             {noreply, State};
         exit:{timeout, _} ->
             ?debug("Exit of stream process for request ~p, retry", [Request]),
-            erlang:send_after(1000, self(), {retry_request, RetryCounter, Request}),
+            send_retry_message(Request, RetryCounter),
             {noreply, State};
         Reason1:Reason2 ->
             ?error_stacktrace("Cannot process request ~p due to: ~p", [Request, {Reason1, Reason2}]),
             {noreply, State}
     end;
 handle_cast(Request, State) ->
-    handle_cast({internal, 10, Request}, State).
+    Retries = application:get_env(?APP_NAME, event_manager_retries, 0),
+    handle_cast({internal, Retries, Request}, State).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -172,10 +174,6 @@ handle_info(timeout, #state{manager_sup = MgrSup, session_id = SessId} = State) 
         streams = Stms,
         subscriptions = Subs
     }};
-
-handle_info({retry_request, 0, Request}, State) ->
-    ?debug("Max retries for request: ~p", [Request]),
-    {noreply, State};
 
 handle_info({retry_request, RetryCounter, Request}, State) ->
     gen_server2:cast(self(), {internal, RetryCounter - 1, Request}),
@@ -442,3 +440,21 @@ start_event_streams(StmsSup, SessId) ->
         {ok, Stm} = event_stream_sup:start_stream(StmsSup, self(), Sub, SessId),
         {maps:put(StmKey, Stm, Stms), maps:put(Id, {local, StmKey}, Subs)}
     end, {#{}, #{}}, Docs).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Sends retry request.
+%% @end
+%%--------------------------------------------------------------------
+-spec send_retry_message(Request :: term(), RetryCounter :: non_neg_integer()) ->
+    reference() | max_retries.
+send_retry_message(Request, 0) ->
+    case application:get_env(?APP_NAME, log_event_manager_errors, false) of
+        true -> ?error("Max retries for request: ~p", [Request]);
+        false -> ?debug("Max retries for request: ~p", [Request])
+    end,
+    max_retries;
+send_retry_message(Request, RetryCounter) ->
+    RetryAfter = application:get_env(?APP_NAME, event_manager_retry_after, 1000),
+    erlang:send_after(RetryAfter, self(), {retry_request, RetryCounter, Request}).
