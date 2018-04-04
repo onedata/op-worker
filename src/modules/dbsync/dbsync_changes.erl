@@ -45,7 +45,7 @@ apply_batch(Docs, BatchRange) ->
         DocsList = maps:values(DocsGroups),
 
         MinSize = application:get_env(?APP_NAME,
-            dbsync_changes_apply_min_group_size, 5),
+            dbsync_changes_apply_min_group_size, 10),
 
         {LastGroup, DocsList2} = lists:foldl(fun(Group, {CurrentGroup, Acc}) ->
             Group2 = Group ++ CurrentGroup,
