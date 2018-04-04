@@ -505,7 +505,7 @@
 }).
 
 %% Model that holds aggregated statistics about transfers featuring
-%% given space target provider.
+%% given space and target provider.
 -record(space_transfer, {
     % Histograms of transferred bytes per provider, last_update per provider is
     % required to keep track in histograms.

@@ -11,8 +11,6 @@
 %%%     - transfer
 %%%     - transfer-time-stat
 %%%     - transfer-current-stat
-%%%     - space-transfers-time-stat
-%%%     - space-transfers-provider-map
 %%% @end
 %%%-------------------------------------------------------------------
 -module(transfer_data_backend).

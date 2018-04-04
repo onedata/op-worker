@@ -112,7 +112,7 @@ get(SpaceId, RequestedStatsType) ->
             end, TrimmedStats),
 
             SpeedStats = lists:map(fun({Stats, StatsType}) ->
-                {histograms_to_speed_charts(Stats, StatsType), StatsType}
+                {stats_to_speed_charts(Stats, StatsType), StatsType}
             end, FilteredStats),
 
             % cache computed velocity stats
@@ -120,7 +120,7 @@ get(SpaceId, RequestedStatsType) ->
                 save(SpaceId, Stats, StatsType)
             end, SpeedStats),
 
-            {RequestedStats, _RequestedStatsType} = lists:last(SpeedStats),
+            {RequestedStats, RequestedStatsType} = lists:last(SpeedStats),
             RequestedStats;
         _ ->
             Fetched
@@ -354,9 +354,9 @@ trim_stats([{MinStats, ?MINUTE_STAT_TYPE}, {RequestedStats, RequestedStatsType}]
     [{NewMinStats, ?MINUTE_STAT_TYPE}, {NewRequestedStats, RequestedStatsType}].
 
 
--spec histograms_to_speed_charts(Stats :: space_transfer_cache(),
+-spec stats_to_speed_charts(Stats :: space_transfer_cache(),
     StatsType :: binary()) -> space_transfer_cache().
-histograms_to_speed_charts(Stats, StatsType) ->
+stats_to_speed_charts(Stats, StatsType) ->
     Timestamp = Stats#space_transfer_cache.timestamp,
     TimeWindow = transfer_histograms:type_to_time_window(StatsType),
     ToSpeedChart = fun(_ProviderId, Histogram) ->
