@@ -55,7 +55,8 @@
 -define(CTX, #{
     model => ?MODULE,
     disc_driver => undefined,
-    fold_enabled => true
+    fold_enabled => true,
+    local_links_tree_id => ?FILE_HANDLES_TREE_ID
 }).
 
 -define(FILE_HANDLES_TREE_ID, <<"storage_file_handles">>).
