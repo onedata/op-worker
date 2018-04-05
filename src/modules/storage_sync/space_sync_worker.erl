@@ -511,10 +511,6 @@ strategy_config(StrategyType, StorageId, SpaceStrategies =
 ) ->
 
     case StrategyType of
-        filename_mapping ->
-            #storage_strategies{filename_mapping = {Strategy, Args}} =
-                maps:get(StorageId, StorageStrategies),
-            {Strategy, Args};
         storage_import ->
             #storage_strategies{storage_import = {Strategy, Args}} =
                 maps:get(StorageId, StorageStrategies),

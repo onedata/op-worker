@@ -144,7 +144,6 @@ handle({open_file_deletion_request, FileCtx}) ->
                 {ok, #document{key = Uuid2}} when Uuid2 =/= Uuid ->
                     ok;
                 _ ->
-                    %todo refactor
                     case file_ctx:is_dir(FileCtx3) of
                         {true, FileCtx4} ->
                             sfm_utils:delete_storage_dir(FileCtx4, UserCtx);
@@ -157,7 +156,7 @@ handle({open_file_deletion_request, FileCtx}) ->
                 % Debug - parent could be deleted before
                 ?debug_stacktrace("Cannot check parent during delete ~p: ~p:~p",
                     [FileCtx, E2, E2]),
-                sfm_utils:delete_storage_file_without_location(FileCtx2, UserCtx)   %todo po co jest ten catch i dlaczego jeszcze raz proboujemy usuwac?
+                sfm_utils:delete_storage_file_without_location(FileCtx2, UserCtx)
         end
     catch
         _:{badmatch, {error, not_found}} ->
@@ -177,7 +176,7 @@ handle({dbsync_deletion_request, FileCtx}) ->
             true ->
                 ok = file_handles:mark_to_remove(FileCtx);
             false ->
-                handle({open_file_deletion_request, FileCtx})   %todo dlaczego open_file_deletion_request ???
+                handle({open_file_deletion_request, FileCtx})
         end
     catch
         _:{badmatch, {error, not_found}} ->

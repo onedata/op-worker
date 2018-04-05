@@ -49,9 +49,7 @@ change_replicated(SpaceId, Change) ->
 
 change_replicated_internal(SpaceId, #document{
     key = FileUuid,
-    value = #file_meta{
-%%        type = ?REGULAR_FILE_TYPE,
-        deleted = Del1},
+    value = #file_meta{deleted = Del1},
     deleted = Del2
 } = FileDoc) when Del1 or Del2 ->
     ?debug("change_replicated_internal: deleted file_meta ~p", [FileUuid]),
@@ -60,7 +58,7 @@ change_replicated_internal(SpaceId, #document{
     Proceed = case datastore_model:get(Ctx, FileUuid) of
         {error, not_found} ->
             true;
-        {ok, #document{value = #file_meta{deleted = Del}} = X} ->
+        {ok, #document{value = #file_meta{deleted = Del}}} ->
             Del
     end,
 
@@ -72,14 +70,6 @@ change_replicated_internal(SpaceId, #document{
         _ ->
             ok
     end;
-%%change_replicated_internal(SpaceId, #document{
-%%    key = FileUuid,
-%%    value = #file_meta{},
-%%    deleted = true
-%%} = FileDoc) ->
-%%    ?debug("change_replicated_internal: deleted file_meta (directory) ~p", [FileUuid]),
-%%    FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
-%%    fslogic_event_emitter:emit_file_removed(FileCtx, []);
 change_replicated_internal(SpaceId, #document{
     key = FileUuid,
     value = #file_meta{deleted = true}

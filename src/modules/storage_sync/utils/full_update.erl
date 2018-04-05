@@ -91,7 +91,7 @@ delete_imported_file(ChildName, FileCtx) ->
     try
         {ChildCtx, _} = file_ctx:get_child(FileCtx, ChildName, RootUserCtx),
         ok = fslogic_delete:remove_file_and_file_meta(ChildCtx, RootUserCtx,
-            true, false, true),
+            false, false, true),
         ok = fslogic_delete:remove_file_handles(ChildCtx)
     catch
         throw:?ENOENT  ->
