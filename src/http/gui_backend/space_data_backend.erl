@@ -538,7 +538,7 @@ space_transfer_time_stat_record(StatId) ->
         timestamp = Timestamp,
         stats_in = StatsIn,
         stats_out = StatsOut
-    } = space_transfer_cache:get(SpaceId, TypePrefix),
+    } = space_transfer_stats_cache:get(SpaceId, TypePrefix),
 
     [
         {<<"id">>, StatId},
@@ -558,7 +558,7 @@ space_transfer_time_stat_record(StatId) ->
 -spec space_transfer_active_links_record(StatId :: binary()) ->
     proplists:proplist().
 space_transfer_active_links_record(SpaceId) ->
-    ActiveLinks = space_transfer_cache:get_active_links(SpaceId),
+    {ok, ActiveLinks} = space_transfer_stats_cache:get_active_links(SpaceId),
 
     [
         {<<"id">>, SpaceId},

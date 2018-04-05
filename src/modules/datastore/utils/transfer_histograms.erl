@@ -14,6 +14,7 @@
 
 -include("modules/datastore/transfer.hrl").
 
+% possible types are: <<"minute">>, <<"hour">>, <<"day">> and <<"month">>.
 -type type() :: binary().
 -type histograms() :: #{od_provider:id() => histogram:histogram()}.
 -type timestamp() :: non_neg_integer().

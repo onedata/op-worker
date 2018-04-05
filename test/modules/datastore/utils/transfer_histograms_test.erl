@@ -11,7 +11,7 @@
 %%% how the function works).
 %%% @end
 %%%--------------------------------------------------------------------
--module(transfer_data_backend_test).
+-module(transfer_histograms_test).
 -author("Lukasz Opiola").
 
 -include_lib("eunit/include/eunit.hrl").

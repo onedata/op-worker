@@ -9,7 +9,7 @@
 %%% Model storing statistics about all transfers in given space.
 %%% @end
 %%%-------------------------------------------------------------------
--module(space_transfer_cache).
+-module(space_transfer_stats_cache).
 -author("Bartosz Walkowicz").
 
 -include("modules/datastore/datastore_models.hrl").
@@ -138,11 +138,11 @@ get(SpaceId, RequestedStatsType) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec get_active_links(SpaceId :: od_space:id()) ->
-    #{od_provider:id() => [od_provider:id()]} | {error, term()}.
+    {ok, #{od_provider:id() => [od_provider:id()]}} | {error, term()}.
 get_active_links(SpaceId) ->
     case get(SpaceId, ?MINUTE_STAT_TYPE) of
         #space_transfer_stats_cache{active_links = ActiveLinks} ->
-            ActiveLinks;
+            {ok, ActiveLinks};
         Error ->
             Error
     end.

@@ -10,7 +10,7 @@
 %%% featuring given space and target provider.
 %%% @end
 %%%-------------------------------------------------------------------
--module(space_transfer).
+-module(space_transfer_stats).
 -author("Bartosz Walkowicz").
 
 -include("modules/datastore/datastore_models.hrl").
