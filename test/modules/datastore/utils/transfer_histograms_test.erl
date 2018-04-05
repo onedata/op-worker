@@ -89,6 +89,19 @@ pad_with_zeroes_test() ->
     },
     assertEqualMaps(ExpPaddedHistograms, PaddedHistograms).
 
+trim_timestamp_test() ->
+    % trim_timestamp remove always 6 recent slots from minute histogram
+    % (from 26 to 30 seconds depending on slots boundaries).
+    Timestamp1 = 60,
+    TrimmedTimestamp1 = transfer_histograms:trim_timestamp(Timestamp1),
+    ExpTrimmedTimestamp1 = 60 - 26,
+    ?assertEqual(ExpTrimmedTimestamp1, TrimmedTimestamp1),
+
+    Timestamp2 = 64,
+    TrimmedTimestamp2 = transfer_histograms:trim_timestamp(Timestamp2),
+    ExpTrimmedTimestamp2 = 64-30,
+    ?assertEqual(ExpTrimmedTimestamp2, TrimmedTimestamp2).
+
 trim_min_histograms_test() ->
     Bytes = 50,
     Histogram1 = histogram:increment(histogram:new(?MIN_HIST_LENGTH), Bytes),

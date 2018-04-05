@@ -234,10 +234,12 @@ prepare_stats(SpaceId, RequestedStatsType) ->
     % Filter out zeroed histograms
     Pred = fun(_Provider, Histogram) -> lists:sum(Histogram) > 0 end,
     NewMinStats = MinStats#space_transfer_stats_cache{
+        timestamp = NewTimestamp,
         stats_in = maps:filter(Pred, NewMinStatsIn),
         stats_out = maps:filter(Pred, NewMinStatsOut)
     },
     NewRequestedStats = RequestedStats#space_transfer_stats_cache{
+        timestamp = NewTimestamp,
         stats_in = maps:filter(Pred, NewStatsIn),
         stats_out = maps:filter(Pred, NewStatsOut),
         active_links = undefined

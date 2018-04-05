@@ -28,6 +28,10 @@
     histogram_to_speed_chart/4
 ]).
 
+-ifdef(TEST).
+%% Export for unit testing
+-export([trim_timestamp/1]).
+-endif.
 
 %%%===================================================================
 %%% API
