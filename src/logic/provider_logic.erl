@@ -36,7 +36,7 @@
 -export([is_subdomain_delegated/0, get_subdomain_delegation_ips/0]).
 -export([update_subdomain_delegation_ips/0]).
 -export([resolve_ips/1, resolve_ips/2]).
--export([set_txt_record/2, remove_txt_record/1]).
+-export([set_txt_record/3, remove_txt_record/1]).
 -export([zone_time_seconds/0]).
 -export([assert_zone_compatibility/0]).
 -export([assert_provider_compatibility/3]).
@@ -417,11 +417,16 @@ set_domain(Domain) ->
 %% Sets TXT type dns record in onezone DNS.
 %% @end
 %%--------------------------------------------------------------------
--spec set_txt_record(Name :: binary(), Content :: binary()) -> ok | no_return().
-set_txt_record(Name, Content) ->
+-spec set_txt_record(Name :: binary(), Content :: binary(),
+    TTL :: non_neg_integer() | undefined) -> ok | no_return().
+set_txt_record(Name, Content, TTL) ->
     Data = #{<<"content">> => Content},
+    Data2 = case TTL of
+        Number when is_integer(Number) -> Data#{<<"ttl">> => TTL};
+        _ -> Data
+    end,
     ok = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
-        operation = create, data = Data,
+        operation = create, data = Data2,
         gri = #gri{type = od_provider, id = oneprovider:get_id_or_undefined(),
             aspect = {dns_txt_record, Name}}
     }).
