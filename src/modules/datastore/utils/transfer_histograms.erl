@@ -11,6 +11,7 @@
 %%%--------------------------------------------------------------------
 -module(transfer_histograms).
 -author("Bartosz Walkowicz").
+-author("Lukasz Opiola").
 
 -include("modules/datastore/transfer.hrl").
 
@@ -22,7 +23,7 @@
 %% API
 -export([
     new/3, update/6,
-    pad_with_zeroes/4, trim/2,
+    pad_with_zeroes/4, trim_min_histograms/2, trim/4,
     type_to_time_window/1, type_to_hist_length/1, window_to_speed_chart_len/1,
     histogram_to_speed_chart/4
 ]).
@@ -86,42 +87,59 @@ pad_with_zeroes(Histograms, Window, CurrentTime, LastUpdates) ->
 %%-------------------------------------------------------------------
 %% @doc
 %% Erase recent n-seconds of histograms based on difference between expected
-%% slots in speed histograms and bytes_sent histograms (it helps to avoid
+%% slots in minute speed histograms and bytes_sent histograms (it helps to avoid
 %% fluctuations on charts due to synchronization between providers).
+%% @end
+%%-------------------------------------------------------------------
+-spec trim_min_histograms(Histograms, LastUpdate :: timestamp()) ->
+    {Histograms, NewTimestamp :: timestamp()} when
+    Histograms :: transfer_histograms:histograms().
+trim_min_histograms(Histograms, LastUpdate) ->
+    SlotsToRemove = ?MIN_HIST_LENGTH - ?MIN_SPEED_HIST_LENGTH,
+    TrimmedHistograms = maps:map(fun(_Provider, Histogram) ->
+        {_, NewHistogram} = lists:split(SlotsToRemove, Histogram),
+        NewHistogram
+    end, Histograms),
+    {TrimmedHistograms, trim_timestamp(LastUpdate)}.
+
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Erase recent n-seconds of histograms. To that minute histograms are required
+%% as reference (to calculate bytes to remove based on difference between expected
+%% slots in minute speed histograms and bytes_sent histograms.
 %% Also shorten histograms length to that of equivalent speed histogram
 %% (necessary before converting bytes_sent histograms to speed histograms).
 %% @end
 %%-------------------------------------------------------------------
--spec trim(Stats, CurrentTime :: timestamp()) -> {Stats, Timestamp :: timestamp()}
-    when Stats :: [{
-        Histograms :: transfer_histograms:histograms(),
-        Window :: non_neg_integer()
-    }].
-trim([{MinHistograms, ?FIVE_SEC_TIME_WINDOW}], CurrentTime) ->
-    NewTimestamp = trim_timestamp(CurrentTime),
-    SlotsToRemove = ?MIN_HIST_LENGTH - ?MIN_SPEED_HIST_LENGTH,
-    TrimFun = fun(_Provider, Histogram) ->
-        {_, NewHistogram} = lists:split(SlotsToRemove, Histogram),
-        NewHistogram
-    end,
-    {[{maps:map(TrimFun, MinHistograms), ?FIVE_SEC_TIME_WINDOW}], NewTimestamp};
-
-trim([{MinHistograms, _}, {RequestedHistograms, TimeWindow}], CurrentTime) ->
-    NewTimestamp = trim_timestamp(CurrentTime),
-    TrimFun = fun(OldHist1, [FstSlot, SndSlot | Rest]) ->
+-spec trim(MinHistograms, RequestedHistograms,
+    TimeWindow :: non_neg_integer(), LastUpdate :: timestamp()
+) -> {MinHistograms, RequestedHistograms, Timestamp :: timestamp()}
+    when MinHistograms :: histograms(), RequestedHistograms :: histograms().
+trim(MinHistograms, RequestedHistograms, TimeWindow, LastUpdate) ->
+    NewTimestamp = trim_timestamp(LastUpdate),
+    TrimFun = fun(OldMinHist, [FstSlot, SndSlot | Rest] = _OldRequestedHist) ->
+        % Remove recent slots from minute histogram and calculate bytes to remove
+        % from other histogram (using removed slots)
         MinSlotsToRemove = ?MIN_HIST_LENGTH - ?MIN_SPEED_HIST_LENGTH,
-        {RemovedSlots, NewHist1} = lists:split(MinSlotsToRemove, OldHist1),
+        {RemovedSlots, NewMinHist} = lists:split(MinSlotsToRemove, OldMinHist),
         RemovedBytes = lists:sum(RemovedSlots),
-        OldHist2 = case RemovedBytes > FstSlot of
-            true -> [0, SndSlot - (RemovedBytes - FstSlot) | Rest];
-            false -> [FstSlot - RemovedBytes, SndSlot | Rest]
-        end,
-        NewHist2 = case (CurrentTime div TimeWindow) == (NewTimestamp div TimeWindow) of
-            true -> OldHist2;
-            false -> tl(OldHist2)
+        % If bytes to remove exceed or equal number stored in first slot,
+        % check whether new timestamp is still in current slot or moved back
+        % and if so remove it (recent slot that is).
+        NewRequestedHist = case RemovedBytes >= FstSlot of
+            true ->
+                case (LastUpdate div TimeWindow) == (NewTimestamp div TimeWindow) of
+                    true ->
+                        [0, SndSlot - (RemovedBytes - FstSlot) | Rest];
+                    false ->
+                        [SndSlot - (RemovedBytes - FstSlot) | Rest]
+                end;
+            false ->
+                [FstSlot - RemovedBytes, SndSlot | Rest]
         end,
         SpeedChartLen = window_to_speed_chart_len(TimeWindow),
-        {NewHist1, lists:sublist(NewHist2, SpeedChartLen)}
+        {NewMinHist, lists:sublist(NewRequestedHist, SpeedChartLen)}
     end,
 
     {TrimmedMinHistograms, TrimmedRequestedHistograms} = maps:fold(
@@ -134,11 +152,7 @@ trim([{MinHistograms, _}, {RequestedHistograms, TimeWindow}], CurrentTime) ->
             }
         end, {#{}, #{}}, MinHistograms
     ),
-    TrimmedStats = [
-        {TrimmedMinHistograms, ?FIVE_SEC_TIME_WINDOW},
-        {TrimmedRequestedHistograms, TimeWindow}
-    ],
-    {TrimmedStats, NewTimestamp}.
+    {TrimmedMinHistograms, TrimmedRequestedHistograms, NewTimestamp}.
 
 
 -spec type_to_time_window(type()) -> non_neg_integer().

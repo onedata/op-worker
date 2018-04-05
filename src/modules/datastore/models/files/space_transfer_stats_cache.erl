@@ -92,41 +92,7 @@ get(SpaceId, RequestedStatsType) ->
     end,
     case Fetched of
         {error, not_found} ->
-            % In case of stats other than minute one, we need to calculate also
-            % minutes to be able to trim recent n-seconds
-            StatsTypesToCalc = case RequestedStatsType of
-                ?MINUTE_STAT_TYPE -> [?MINUTE_STAT_TYPE];
-                _ -> [?MINUTE_STAT_TYPE, RequestedStatsType]
-            end,
-            CalculatedStats = get_stats(SpaceId, StatsTypesToCalc),
-            TrimmedStats = trim_stats(CalculatedStats),
-
-            % Filter out from stats histograms with only zeroes, also
-            % do not store active_links for stats other than minute one
-            Pred = fun(_Provider, Histogram) -> lists:sum(Histogram) > 0 end,
-            FilteredStats = lists:map(fun({Stats, StatsType}) ->
-                NewStats = Stats#space_transfer_stats_cache{
-                    stats_in = maps:filter(Pred, Stats#space_transfer_stats_cache.stats_in),
-                    stats_out = maps:filter(Pred, Stats#space_transfer_stats_cache.stats_out),
-                    active_links = case StatsType of
-                        ?MINUTE_STAT_TYPE -> Stats#space_transfer_stats_cache.active_links;
-                        _ -> undefined
-                    end
-                },
-                {NewStats, StatsType}
-            end, TrimmedStats),
-
-            SpeedStats = lists:map(fun({Stats, StatsType}) ->
-                {stats_to_speed_charts(Stats, StatsType), StatsType}
-            end, FilteredStats),
-
-            % cache computed velocity stats
-            lists:foreach(fun({Stats, StatsType}) ->
-                save(SpaceId, Stats, StatsType)
-            end, SpeedStats),
-
-            {RequestedStats, RequestedStatsType} = lists:last(SpeedStats),
-            RequestedStats;
+            prepare_stats(SpaceId, RequestedStatsType);
         _ ->
             Fetched
     end.
@@ -134,7 +100,8 @@ get(SpaceId, RequestedStatsType) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Returns space transfer statistics of requested type for given space.
+%% Returns active links for given space (providers mapping to providers
+%% they recently sent data to).
 %% @end
 %%-------------------------------------------------------------------
 -spec get_active_links(SpaceId :: od_space:id()) ->
@@ -211,11 +178,86 @@ get_record_struct(1) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
+%% Gather transfer statistics of requested types for given space, pad them
+%% with zeroes to current time and erase recent n-seconds to avoid fluctuations
+%% on charts (due to synchronization between providers). To do that for type
+%% other than minute one, it is required to calculate also mentioned minute stats
+%% (otherwise it is not possible to trim histograms of other types).
+%% Convert prepared histograms to speed charts and cache them for future requests.
+%% @end
+%%--------------------------------------------------------------------
+-spec prepare_stats(SpaceId :: od_space:id(), StatsType :: binary()) ->
+    space_transfer_stats_cache().
+prepare_stats(SpaceId, ?MINUTE_STAT_TYPE) ->
+    [MinStats] = get_stats(SpaceId, [?MINUTE_STAT_TYPE]),
+    #space_transfer_stats_cache{
+        timestamp = Timestamp, stats_in = StatsIn, stats_out = StatsOut
+    } = MinStats,
+
+    {TrimmedStatsIn, TrimmedTimestamp} = transfer_histograms:trim_min_histograms(
+        StatsIn, Timestamp
+    ),
+    {TrimmedStatsOut, TrimmedTimestamp} = transfer_histograms:trim_min_histograms(
+        StatsOut, Timestamp
+    ),
+
+    % Filter out zeroed histograms
+    Pred = fun(_Provider, Histogram) -> lists:sum(Histogram) > 0 end,
+    NewMinStats = MinStats#space_transfer_stats_cache{
+        timestamp = TrimmedTimestamp,
+        stats_in = maps:filter(Pred, TrimmedStatsIn),
+        stats_out = maps:filter(Pred, TrimmedStatsOut)
+    },
+    SpeedMinStats = stats_to_speed_charts(NewMinStats, ?MINUTE_STAT_TYPE),
+    save(SpaceId, SpeedMinStats, ?MINUTE_STAT_TYPE),
+    SpeedMinStats;
+
+prepare_stats(SpaceId, RequestedStatsType) ->
+    [MinStats, RequestedStats] = get_stats(SpaceId, [
+        ?MINUTE_STAT_TYPE, RequestedStatsType
+    ]),
+    #space_transfer_stats_cache{
+        timestamp = Timestamp, stats_in = MinStatsIn, stats_out = MinStatsOut
+    } = MinStats,
+    #space_transfer_stats_cache{
+        timestamp = Timestamp, stats_in = StatsIn, stats_out = StatsOut
+    } = RequestedStats,
+
+    Window = transfer_histograms:type_to_time_window(RequestedStatsType),
+    {NewMinStatsIn, NewStatsIn, NewTimestamp} = transfer_histograms:trim(
+        MinStatsIn, StatsIn, Window, Timestamp
+    ),
+    {NewMinStatsOut, NewStatsOut, NewTimestamp} = transfer_histograms:trim(
+        MinStatsOut, StatsOut, Window, Timestamp
+    ),
+
+    % Filter out zeroed histograms
+    Pred = fun(_Provider, Histogram) -> lists:sum(Histogram) > 0 end,
+    NewMinStats = MinStats#space_transfer_stats_cache{
+        stats_in = maps:filter(Pred, NewMinStatsIn),
+        stats_out = maps:filter(Pred, NewMinStatsOut)
+    },
+    NewRequestedStats = RequestedStats#space_transfer_stats_cache{
+        stats_in = maps:filter(Pred, NewStatsIn),
+        stats_out = maps:filter(Pred, NewStatsOut),
+        active_links = undefined
+    },
+
+    SpeedMinStats = stats_to_speed_charts(NewMinStats, ?MINUTE_STAT_TYPE),
+    save(SpaceId, SpeedMinStats, ?MINUTE_STAT_TYPE),
+    SpeedRequestedStats = stats_to_speed_charts(NewRequestedStats, RequestedStatsType),
+    save(SpaceId, SpeedRequestedStats, RequestedStatsType),
+    SpeedRequestedStats.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
 %% Gather transfer statistics of requested types for given space.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_stats(SpaceId :: od_space:id(), HistogramTypes :: [binary()]) ->
-    [{space_transfer_stats_cache(), binary()}].
+    [space_transfer_stats_cache()].
 get_stats(SpaceId, RequestedStatsTypes) ->
     {ok, #document{value = Space}} = od_space:get(SpaceId),
     SpaceTransfers = lists:foldl(fun(Provider, STs) ->
@@ -242,14 +284,15 @@ get_stats(SpaceId, RequestedStatsTypes) ->
         }, StatsType} || StatsType <- RequestedStatsTypes
     ],
 
-    maps:fold(fun(Provider, SpaceTransfer, CurrentStats) ->
+    GatheredStats = maps:fold(fun(Provider, SpaceTransfer, CurrentStats) ->
         lists:map(fun({Stats, StatsType}) ->
             NewStats = update_stats(
                 Stats, StatsType, SpaceTransfer, CurrentTime, Provider
             ),
             {NewStats, StatsType}
         end, CurrentStats)
-    end, EmptyStats, SpaceTransfers).
+    end, EmptyStats, SpaceTransfers),
+    lists:map(fun({Stats, _StatsType}) -> Stats end, GatheredStats).
 
 
 %%--------------------------------------------------------------------
@@ -317,62 +360,6 @@ update_stats(OldStats, StatsType, ST, CurrentTime, Provider) ->
         stats_out = NewStatsOut,
         active_links = NewActiveLinks
     }.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Erase recent n-seconds of histograms based on difference between expected
-%% slots in speed histograms and bytes histograms.
-%% It helps to avoid fluctuations on charts due to synchronization
-%% between providers.
-%% @end
-%%--------------------------------------------------------------------
--spec trim_stats([{space_transfer_stats_cache(), binary()}]) ->
-    [{space_transfer_stats_cache(), binary()}].
-trim_stats([{Stats, ?MINUTE_STAT_TYPE}]) ->
-    OldTimestamp = Stats#space_transfer_stats_cache.timestamp,
-    OldStatsIn = [{Stats#space_transfer_stats_cache.stats_in, ?FIVE_SEC_TIME_WINDOW}],
-    OldStatsOut = [{Stats#space_transfer_stats_cache.stats_out, ?FIVE_SEC_TIME_WINDOW}],
-    {[{NewStatsIn, _}], NewTimestamp} =
-        transfer_histograms:trim(OldStatsIn, OldTimestamp),
-    {[{NewStatsOut, _}], NewTimestamp} =
-        transfer_histograms:trim(OldStatsOut, OldTimestamp),
-
-    NewStats = Stats#space_transfer_stats_cache{
-        timestamp = NewTimestamp,
-        stats_in = NewStatsIn,
-        stats_out = NewStatsOut
-    },
-    [{NewStats, ?MINUTE_STAT_TYPE}];
-
-trim_stats([{MinStats, ?MINUTE_STAT_TYPE}, {RequestedStats, RequestedStatsType}]) ->
-    OldTimestamp = MinStats#space_transfer_stats_cache.timestamp,
-    TimeWindow = transfer_histograms:type_to_time_window(RequestedStatsType),
-    OldStatsIn = [
-        {MinStats#space_transfer_stats_cache.stats_in, ?FIVE_SEC_TIME_WINDOW},
-        {RequestedStats#space_transfer_stats_cache.stats_in, TimeWindow}
-    ],
-    OldStatsOut = [
-        {MinStats#space_transfer_stats_cache.stats_out, ?FIVE_SEC_TIME_WINDOW},
-        {RequestedStats#space_transfer_stats_cache.stats_out, TimeWindow}
-    ],
-    {[{NewMinStatsIn, _}, {NewRequestedStatsIn, _}], NewTimestamp} =
-        transfer_histograms:trim(OldStatsIn, OldTimestamp),
-    {[{NewMinStatsOut, _}, {NewRequestedStatsOut, _}], NewTimestamp} =
-        transfer_histograms:trim(OldStatsOut, OldTimestamp),
-
-    NewMinStats = MinStats#space_transfer_stats_cache{
-        timestamp = NewTimestamp,
-        stats_in = NewMinStatsIn,
-        stats_out = NewMinStatsOut
-    },
-    NewRequestedStats = RequestedStats#space_transfer_stats_cache{
-        timestamp = NewTimestamp,
-        stats_in = NewRequestedStatsIn,
-        stats_out = NewRequestedStatsOut
-    },
-    [{NewMinStats, ?MINUTE_STAT_TYPE}, {NewRequestedStats, RequestedStatsType}].
 
 
 -spec stats_to_speed_charts(Stats :: space_transfer_stats_cache(),

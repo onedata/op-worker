@@ -498,9 +498,9 @@
     min_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
     % list of 62 integers counting bytes transferred during each minute of recent 62 minutes
     hr_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
-    % list of 26 integers counting bytes transferred during each hour of last day
+    % list of 26 integers counting bytes transferred during each hour of recent 26h
     dy_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
-    % list of 32 integers counting bytes transferred during each day of last month
+    % list of 32 integers counting bytes transferred during each day of recent 32 days
     mth_hist = #{} :: maps:map(od_provider:id(), histogram:histogram())
 }).
 
@@ -515,9 +515,9 @@
     min_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
     % list of 62 integers counting bytes transferred during each minute of 62 minutes
     hr_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
-    % list of 26 integers counting bytes transferred during each hour of last day
+    % list of 26 integers counting bytes transferred during each hour of recent 26h
     dy_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
-    % list of 32 integers counting bytes transferred during each day of last month
+    % list of 32 integers counting bytes transferred during each day of recent 32 days
     mth_hist = #{} :: maps:map(od_provider:id(), histogram:histogram())
 }).
 
