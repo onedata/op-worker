@@ -80,11 +80,17 @@ init(_Args) ->
                 Handle#file_handles.is_removed
             end, Docs),
 
-            lists:foreach(fun(#document{key = FileUuid}) ->
-                FileGuid = fslogic_uuid:uuid_to_guid(FileUuid),
-                FileCtx = file_ctx:new_by_guid(FileGuid),
-                UserCtx = user_ctx:new(?ROOT_SESS_ID),
-                ok = fslogic_delete:remove_file_and_file_meta(FileCtx, UserCtx, false)
+            lists:foreach(fun(#document{key = FileUuid} = Doc) ->
+                try
+                    FileGuid = fslogic_uuid:uuid_to_guid(FileUuid),
+                    FileCtx = file_ctx:new_by_guid(FileGuid),
+                    UserCtx = user_ctx:new(?ROOT_SESS_ID),
+                    ok = fslogic_delete:remove_file_and_file_meta(FileCtx, UserCtx, false)
+                catch
+                    E1:E2 ->
+                        ?warning_stacktrace("Cannot remove old opened file ~p: ~p:~p",
+                            [Doc, E1, E2])
+                end
             end, RemovedFiles),
 
             lists:foreach(fun(#document{key = FileUuid}) ->
