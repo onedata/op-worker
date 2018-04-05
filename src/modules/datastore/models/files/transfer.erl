@@ -555,7 +555,7 @@ mark_data_transfer_finished(undefined, _ProviderId, _Bytes) ->
 mark_data_transfer_finished(TransferId, ProviderId, Bytes) ->
     CurrentTime = provider_logic:zone_time_seconds(),
     {ok, #document{value = #transfer{space_id = SpaceId}}} = ?MODULE:get(TransferId),
-    ok = space_transfer:update(SpaceId, ProviderId, Bytes, CurrentTime),
+    ok = space_transfer_stats:update(SpaceId, ProviderId, Bytes, CurrentTime),
 
     update(TransferId, fun(Transfer = #transfer{
         bytes_transferred = OldBytes,

@@ -261,7 +261,7 @@ prepare_stats(SpaceId, RequestedStatsType) ->
 get_stats(SpaceId, RequestedStatsTypes) ->
     {ok, #document{value = Space}} = od_space:get(SpaceId),
     SpaceTransfers = lists:foldl(fun(Provider, STs) ->
-        case space_transfer:get(Provider, SpaceId) of
+        case space_transfer_stats:get(Provider, SpaceId) of
             {ok, SpaceTransfer} ->
                 STs#{Provider => SpaceTransfer};
             {error, not_found} ->

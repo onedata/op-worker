@@ -49,12 +49,15 @@ new(ProviderId, Bytes, HistogramsType) ->
 %%-------------------------------------------------------------------
 %% @doc
 %% Updates transfer_histograms for specified provider.
+%% Specified CurrentTime must be greater or equal than LastUpdate.
 %% @end
 %%-------------------------------------------------------------------
 -spec update(ProviderId :: od_provider:id(), Bytes :: non_neg_integer(),
     Histograms, HistogramsType :: type(), LastUpdate :: timestamp(),
     CurrentTime :: timestamp()) -> Histograms when Histograms :: histograms().
-update(ProviderId, Bytes, Histograms, HistogramsType, LastUpdate, CurrentTime) ->
+update(
+    ProviderId, Bytes, Histograms, HistogramsType, LastUpdate, CurrentTime
+) when CurrentTime >= LastUpdate ->
     Histogram = case maps:find(ProviderId, Histograms) of
         {ok, OldHistogram} ->
             Window = type_to_time_window(HistogramsType),

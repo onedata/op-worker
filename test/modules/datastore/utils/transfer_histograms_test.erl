@@ -17,6 +17,94 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("modules/datastore/transfer.hrl").
 
+-define(PROVIDER1, <<"ProviderId1">>).
+-define(PROVIDER2, <<"ProviderId2">>).
+
+new_transfer_histograms_test() ->
+    Bytes = 50,
+    Histogram = histogram:increment(histogram:new(?MIN_HIST_LENGTH), Bytes),
+    ExpTransferHist = #{?PROVIDER1 => Histogram},
+    TransferHist = transfer_histograms:new(?PROVIDER1, Bytes, ?MINUTE_STAT_TYPE),
+    ?assertEqual(ExpTransferHist, TransferHist).
+
+update_with_nonexistent_test() ->
+    Bytes = 50,
+    Histogram = histogram:increment(histogram:new(?MIN_HIST_LENGTH), Bytes),
+    ExpTransferHist = #{?PROVIDER1 => Histogram, ?PROVIDER2 => Histogram},
+    TransferHist1 = transfer_histograms:new(?PROVIDER1, Bytes, ?MINUTE_STAT_TYPE),
+    TransferHist2 = transfer_histograms:update(
+        ?PROVIDER2, Bytes, TransferHist1, ?MINUTE_STAT_TYPE, 0, 0
+    ),
+    assertEqualMaps(ExpTransferHist, TransferHist2).
+
+update_with_existent_test() ->
+    Bytes = 50,
+    Histogram1 = histogram:increment(histogram:new(?MIN_HIST_LENGTH), Bytes),
+    TransferHist1 = transfer_histograms:new(?PROVIDER1, Bytes, ?MINUTE_STAT_TYPE),
+
+    % Update within the same slot time as last_update and current_time
+    % should increment only head slot.
+    TransferHist2 = transfer_histograms:update(
+        ?PROVIDER1, Bytes, TransferHist1, ?MINUTE_STAT_TYPE, 0, 0
+    ),
+    Histogram2 = histogram:increment(Histogram1, Bytes),
+    ExpTransferHist2 = #{?PROVIDER1 => Histogram2},
+    assertEqualMaps(ExpTransferHist2, TransferHist2),
+
+    % Update not within the same slot time as last_update and current_time
+    % should shift histogram and then increment only head slot.
+    LastUpdate = 0,
+    CurrentTime = 10,
+    Window = ?FIVE_SEC_TIME_WINDOW,
+    TransferHist3 = transfer_histograms:update(?PROVIDER1, Bytes,
+        TransferHist1, ?MINUTE_STAT_TYPE, LastUpdate, CurrentTime
+    ),
+    ShiftSize = (CurrentTime div Window) - (LastUpdate div Window),
+    Histogram3 = histogram:increment(histogram:shift(Histogram1, ShiftSize), Bytes),
+    ExpTransferHist3 = #{?PROVIDER1 => Histogram3},
+    assertEqualMaps(ExpTransferHist3, TransferHist3).
+
+pad_with_zeroes_test() ->
+    Bytes = 50,
+    Histogram = histogram:increment(histogram:new(?MIN_HIST_LENGTH), Bytes),
+    TransferHist1 = transfer_histograms:new(?PROVIDER1, Bytes, ?MINUTE_STAT_TYPE),
+    TransferHist2 = transfer_histograms:update(
+        ?PROVIDER2, Bytes, TransferHist1, ?MINUTE_STAT_TYPE, 0, 0
+    ),
+    % Histograms which last update is greater or equal to current time should
+    % be left intact, otherwise they should be shifted and padded with zeroes
+    Provider1LastUpdate = 80,
+    Provider2LastUpdate = 110,
+    CurrentTime = 100,
+    Window = ?FIVE_SEC_TIME_WINDOW,
+    ShiftSize = (CurrentTime div Window) - (Provider1LastUpdate div Window),
+    LastUpdates = #{
+        ?PROVIDER1 => Provider1LastUpdate, ?PROVIDER2 => Provider2LastUpdate
+    },
+    PaddedHistograms = transfer_histograms:pad_with_zeroes(
+        TransferHist2, ?FIVE_SEC_TIME_WINDOW, 100, LastUpdates
+    ),
+    ExpPaddedHistograms = #{
+        ?PROVIDER1 => histogram:shift(Histogram, ShiftSize), ?PROVIDER2 => Histogram
+    },
+    assertEqualMaps(ExpPaddedHistograms, PaddedHistograms).
+
+trim_min_histograms_test() ->
+    Bytes = 50,
+    Histogram1 = histogram:increment(histogram:new(?MIN_HIST_LENGTH), Bytes),
+    Histogram2 = histogram:shift(Histogram1, ?MIN_HIST_LENGTH - 1),
+    Histogram3 = histogram:increment(Histogram2, Bytes),
+
+    LastUpdate = 100,
+    {TrimmedTransferHist, _} = transfer_histograms:trim_min_histograms(
+        #{?PROVIDER1 => Histogram3}, LastUpdate
+    ),
+    {_, ExpHistogram} = lists:split(
+        ?MIN_HIST_LENGTH - ?MIN_SPEED_HIST_LENGTH, Histogram3
+    ),
+    ExpTransferHist = #{?PROVIDER1 => ExpHistogram},
+    assertEqualMaps(ExpTransferHist, TrimmedTransferHist).
+
 histogram_with_zero_duration_time_test() ->
     % Histogram starting in 0 and ending in 0 is considered to have one second
     % duration, because we treat each second as a slot that lasts to the
@@ -309,3 +397,17 @@ histogram_starting_with(Beginning, Window) ->
 % histogram_ending_with([1,2,3], W) -> [..., 1,2,3]
 histogram_ending_with(Beginning, Window) ->
     lists:reverse(histogram_starting_with(lists:reverse(Beginning), Window)).
+
+
+assertEqualMaps(Map1, Map2) when map_size(Map1) == map_size(Map2) ->
+    maps:fold(fun(Provider, Val1, Acc) ->
+        case maps:find(Provider, Map2) of
+            {ok, Val2} ->
+                ?assertEqual(Val1, Val2),
+                Acc or true;
+            error ->
+                false
+        end
+              end, true, Map1);
+assertEqualMaps(_, _) ->
+    false.
