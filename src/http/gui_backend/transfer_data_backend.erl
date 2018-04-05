@@ -246,7 +246,7 @@ transfer_time_stat_record(StatId) ->
                 ?MONTH_STAT_TYPE -> [{T#transfer.mth_hist, ?DAY_TIME_WINDOW}]
             end],
             PaddedStats = lists:map(fun({Histograms, Window}) ->
-                PaddedHistograms = transfer_histograms:pad(
+                PaddedHistograms = transfer_histograms:pad_with_zeroes(
                     Histograms, Window, CurrentTime, LastUpdates
                 ),
                 {PaddedHistograms, Window}

@@ -25,10 +25,10 @@
 
 -type timestamp() :: non_neg_integer().
 -type size() :: pos_integer().
--type space_transfer() :: #space_transfer{}.
--type doc() :: datastore_doc:doc(space_transfer()).
+-type space_transfer_stats() :: #space_transfer_stats{}.
+-type doc() :: datastore_doc:doc(space_transfer_stats()).
 
--export_type([space_transfer/0, doc/0]).
+-export_type([space_transfer_stats/0, doc/0]).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -46,7 +46,7 @@
 %% Returns space transfers for given space.
 %% @end
 %%-------------------------------------------------------------------
--spec get(SpaceId :: od_space:id()) -> space_transfer() | {error, term()}.
+-spec get(SpaceId :: od_space:id()) -> space_transfer_stats() | {error, term()}.
 get(SpaceId) ->
     ?MODULE:get(oneprovider:get_id_or_undefined(), SpaceId).
 
@@ -57,7 +57,7 @@ get(SpaceId) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec get(ProviderId :: od_provider:id(), SpaceId :: od_space:id()) ->
-    space_transfer() | {error, term()}.
+    space_transfer_stats() | {error, term()}.
 get(ProviderId, SpaceId) ->
     Key = datastore_utils:gen_key(ProviderId, SpaceId),
     case datastore_model:get(?CTX, Key) of
@@ -75,7 +75,7 @@ get(ProviderId, SpaceId) ->
     Bytes :: size(), CurrentTime :: timestamp()) -> ok | {error, term()}.
 update(SpaceId, SrcProvider, Bytes, CurrentTime) ->
     Key = datastore_utils:gen_key(oneprovider:get_id_or_undefined(), SpaceId),
-    Diff = fun(SpaceTransfers = #space_transfer{
+    Diff = fun(SpaceTransfers = #space_transfer_stats{
         last_update = LastUpdateMap,
         min_hist = MinHistograms,
         hr_hist = HrHistograms,
@@ -83,7 +83,7 @@ update(SpaceId, SrcProvider, Bytes, CurrentTime) ->
         mth_hist = MthHistograms
     }) ->
         LastUpdate = maps:get(SrcProvider, LastUpdateMap, 0),
-        {ok, SpaceTransfers#space_transfer{
+        {ok, SpaceTransfers#space_transfer_stats{
             last_update = LastUpdateMap#{SrcProvider => CurrentTime},
             min_hist = transfer_histograms:update(
                 SrcProvider, Bytes, MinHistograms,
@@ -106,7 +106,7 @@ update(SpaceId, SrcProvider, Bytes, CurrentTime) ->
     Default = #document{
         scope = SpaceId,
         key = Key,
-        value = #space_transfer{
+        value = #space_transfer_stats{
             last_update = #{SrcProvider => CurrentTime},
             min_hist = transfer_histograms:new(SrcProvider, Bytes, ?MINUTE_STAT_TYPE),
             hr_hist = transfer_histograms:new(SrcProvider, Bytes, ?HOUR_STAT_TYPE),

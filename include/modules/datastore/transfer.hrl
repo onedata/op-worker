@@ -19,8 +19,8 @@
 % as the leading one is not yet measured - this way there are always full
 % measurements from the whole histogram span.
 % To avoid fluctuation of speed charts, they are generated with 30s delay.
-% For this it is required that minute bytes histogram had additional 6 slots.
-% The same goes for other stats types albeit required additional slots are smaller.
+% For this it is required that minute bytes histogram has additional 6 slots.
+% As for other stats types 1 additional slot is enough.
 -define(FIVE_SEC_TIME_WINDOW, 5).
 -define(MIN_HIST_LENGTH, 19).
 -define(MIN_SPEED_HIST_LENGTH, 13).

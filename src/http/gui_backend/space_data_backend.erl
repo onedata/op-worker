@@ -115,8 +115,8 @@ find_record(PermissionsRecord, RecordId) ->
                     {ok, space_transfer_list_record(RecordId)};
                 <<"space-transfer-time-stat">> ->
                     {ok, space_transfer_time_stat_record(RecordId)};
-                <<"space-transfer-provider-map">> ->
-                    {ok, space_transfer_provider_map_record(RecordId)};
+                <<"space_transfer_active_links_record">> ->
+                    {ok, space_transfer_active_links_record(RecordId)};
                 <<"space-user-permission">> ->
                     {ok, space_user_permission_record(RecordId)};
                 <<"space-group-permission">> ->
@@ -389,7 +389,7 @@ space_record(SpaceId, HasViewPrivileges) ->
         {<<"transferHourStat">>, TransferHourStat},
         {<<"transferDayStat">>, TransferDayStat},
         {<<"transferMonthStat">>, TransferMonthStat},
-        {<<"transferProviderMap">>, RelationWithViewPrivileges},
+        {<<"transferActiveLinks">>, RelationWithViewPrivileges},
         {<<"user">>, UserId}
     ].
 
@@ -534,7 +534,7 @@ space_group_permission_record(AssocId) ->
     proplists:proplist().
 space_transfer_time_stat_record(StatId) ->
     {TypePrefix, SpaceId} = op_gui_utils:association_to_ids(StatId),
-    #space_transfer_cache{
+    #space_transfer_stats_cache{
         timestamp = Timestamp,
         stats_in = StatsIn,
         stats_out = StatsOut
@@ -555,16 +555,14 @@ space_transfer_time_stat_record(StatId) ->
 %% Returns a client-compliant space-transfer-provider-map record based on space id
 %% @end
 %%--------------------------------------------------------------------
--spec space_transfer_provider_map_record(StatId :: binary()) ->
+-spec space_transfer_active_links_record(StatId :: binary()) ->
     proplists:proplist().
-space_transfer_provider_map_record(SpaceId) ->
-    #space_transfer_cache{mapping = Mapping} = space_transfer_cache:get(
-        SpaceId, ?MINUTE_STAT_TYPE
-    ),
+space_transfer_active_links_record(SpaceId) ->
+    ActiveLinks = space_transfer_cache:get_active_links(SpaceId),
 
     [
         {<<"id">>, SpaceId},
-        {<<"mapping">>, maps:to_list(Mapping)}
+        {<<"activeLinks">>, maps:to_list(ActiveLinks)}
     ].
 
 

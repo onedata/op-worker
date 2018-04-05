@@ -21,7 +21,7 @@
 %% API
 -export([
     new/3, update/6,
-    pad/4, trim/2,
+    pad_with_zeroes/4, trim/2,
     type_to_time_window/1, type_to_hist_length/1, window_to_speed_chart_len/1,
     histogram_to_speed_chart/4
 ]).
@@ -66,17 +66,18 @@ update(ProviderId, Bytes, Histograms, HistogramsType, LastUpdate, CurrentTime) -
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Pad histograms with zeros since last update to current time.
+%% Pad histograms with zeros since last update to specified current time.
+%% If current time is smaller than last update, then left given histogram intact.
 %% @end
 %%-------------------------------------------------------------------
--spec pad(Histograms, Window :: non_neg_integer(), CurrentTime :: timestamp(),
+-spec pad_with_zeroes(Histograms, Window :: non_neg_integer(), CurrentTime :: timestamp(),
     LastUpdates :: #{od_provider:id() => timestamp()}
 ) ->
     Histograms when Histograms :: histograms().
-pad(Histograms, Window, CurrentTime, LastUpdates) ->
+pad_with_zeroes(Histograms, Window, CurrentTime, LastUpdates) ->
     maps:map(fun(Provider, Histogram) ->
         LastUpdate = maps:get(Provider, LastUpdates),
-        ShiftSize = (CurrentTime div Window) - (LastUpdate div Window),
+        ShiftSize = max(0, (CurrentTime div Window) - (LastUpdate div Window)),
         histogram:shift(Histogram, ShiftSize)
     end, Histograms).
 
@@ -139,14 +140,14 @@ trim([{MinHistograms, _}, {RequestedHistograms, TimeWindow}], CurrentTime) ->
     {TrimmedStats, NewTimestamp}.
 
 
--spec type_to_time_window(binary()) -> non_neg_integer().
+-spec type_to_time_window(type()) -> non_neg_integer().
 type_to_time_window(?MINUTE_STAT_TYPE) -> ?FIVE_SEC_TIME_WINDOW;
 type_to_time_window(?HOUR_STAT_TYPE) -> ?MIN_TIME_WINDOW;
 type_to_time_window(?DAY_STAT_TYPE) -> ?HOUR_TIME_WINDOW;
 type_to_time_window(?MONTH_STAT_TYPE) -> ?DAY_TIME_WINDOW.
 
 
--spec type_to_hist_length(binary()) -> non_neg_integer().
+-spec type_to_hist_length(type()) -> non_neg_integer().
 type_to_hist_length(?MINUTE_STAT_TYPE) -> ?MIN_HIST_LENGTH;
 type_to_hist_length(?HOUR_STAT_TYPE) -> ?HOUR_HIST_LENGTH;
 type_to_hist_length(?DAY_STAT_TYPE) -> ?DAY_HIST_LENGTH;
