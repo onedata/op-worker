@@ -155,13 +155,8 @@ delete(SessId) ->
             ok
     end,
 
-    case delete_all_links(SessId) of
-        true ->
-            ?update_counter(?EXOMETER_NAME(active_sessions), -1),
-            datastore_model:delete(?CTX, SessId);
-        LinkError ->
-            LinkError
-    end.
+    ?update_counter(?EXOMETER_NAME(active_sessions), -1),
+    datastore_model:delete(?CTX, SessId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -717,41 +712,6 @@ delete_helpers_on_this_node(SessId) ->
     binary().
 link_key(StorageId, SpaceUuid) ->
     <<StorageId/binary, ":", SpaceUuid/binary>>.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Deletes all links for session
-%% @end
-%%--------------------------------------------------------------------
--spec delete_all_links(SessId :: id()) ->
-    ok | {error, term()}.
-delete_all_links(SessId) ->
-    Result = datastore_model:fold_links(?CTX, SessId, all, fun
-        (#link{tree_id = TreeId, name = Name, rev = Rev}, Acc) ->
-            Links = maps:get(TreeId, Acc, []),
-            {ok, maps:put(TreeId, [{Name, Rev} | Links], Acc)}
-    end, #{}, #{}),
-    case Result of
-        {ok, Trees} ->
-            maps:fold(fun
-                (TreeId, Links, ok) ->
-                    Deleted = datastore_model:delete_links(
-                        ?CTX, SessId, TreeId, Links),
-                    Deleted2 = lists:filter(fun
-                        ({error, _}) -> true;
-                        (ok) -> false
-                    end, Deleted),
-                    case Deleted2 of
-                        [] -> ok;
-                        _ -> {error, Deleted2}
-                    end;
-                (_, _, {error, Reason}) ->
-                    {error, Reason}
-            end, ok, Trees);
-        {error, Reason} ->
-            {error, Reason}
-    end.
 
 %%%===================================================================
 %%% datastore_model callbacks
