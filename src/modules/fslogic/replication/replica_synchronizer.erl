@@ -167,14 +167,15 @@ handle_info(timeout, State) ->
 
 handle_info({Ref, active, ProviderId, Block}, State) ->
     #state{session_id = SessId, file_ctx = FileCtx, ref_to_froms = RefToFroms,
-           from_to_transfer_id = FromToTransferId} = State,
+           from_to_transfer_id = FromToTransferId, space_id = SpaceId} = State,
     fslogic_event_emitter:emit_file_location_changed(FileCtx, [SessId], Block),
     AffectedFroms = maps:get(Ref, RefToFroms, []),
     TransferIds = maps:with(AffectedFroms, FromToTransferId),
     lists:foreach(
       fun(TransferId) ->
               {ok, _} = transfer:mark_data_transfer_finished(TransferId, ProviderId,
-                                                             Block#file_block.size)
+                                                             Block#file_block.size,
+                                                             SpaceId)
       end,
       maps:values(TransferIds)),
     {noreply, State, ?DIE_AFTER};
