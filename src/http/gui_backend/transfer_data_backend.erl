@@ -241,12 +241,19 @@ transfer_time_stat_record(StatId) ->
             prepare_histograms(T, TypePrefix, CurrentTime, LastUpdates)
     end,
 
-    % Calculate bytes per sec histograms
-    SpeedCharts = maps:map(fun(_ProviderId, Histogram) ->
-        transfer_histograms:histogram_to_speed_chart(
-            Histogram, StartTime, LastUpdate, TimeWindow
-        )
-    end, Histograms),
+    % Calculate bytes per sec histograms. In case of situation when LastUpdate
+    % is smaller than StartTime (e.g. due to trimming, when transfer started
+    % less than 30s ago) return empty map.
+    SpeedCharts = case LastUpdate > StartTime of
+        true ->
+            maps:map(fun(_ProviderId, Histogram) ->
+                transfer_histograms:histogram_to_speed_chart(
+                    Histogram, StartTime, LastUpdate, TimeWindow
+                )
+            end, Histograms);
+        false ->
+            #{}
+    end,
 
     {ok, [
         {<<"id">>, StatId},
