@@ -100,13 +100,7 @@ get_space_changes(Req, State) ->
         ?HTTP_OK, #{<<"content-type">> => <<"application/json">>}, Req4
     ),
     ok = stream_loop(Req5, State5),
-    try
-        cowboy_req:stream_body(<<"">>, fin, Req)
-    catch
-        E1:E2 ->
-            ?error_stacktrace("get_space_changes fin error for req ~p: ~p:~p",
-                [Req, E1, E2])
-    end,
+    cowboy_req:stream_body(<<"">>, fin, Req5),
     {stop, Req5, State5}.
 
 
