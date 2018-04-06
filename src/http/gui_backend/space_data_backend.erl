@@ -88,7 +88,7 @@ find_record(PermissionsRecord, RecordId) ->
             RecordId;
         <<"space-provider-list">> ->
             RecordId;
-        <<"space-transfer-active-links">> ->
+        <<"space-transfer-link-state">> ->
             RecordId;
         _ -> % covers space-(user|group)-permission and space-transfer-list
             {_, Id} = op_gui_utils:association_to_ids(RecordId),
@@ -115,7 +115,7 @@ find_record(PermissionsRecord, RecordId) ->
                     {ok, space_transfer_list_record(RecordId)};
                 <<"space-transfer-time-stat">> ->
                     {ok, space_transfer_time_stat_record(RecordId)};
-                <<"space-transfer-active-links">> ->
+                <<"space-transfer-link-state">> ->
                     {ok, space_transfer_active_links_record(RecordId)};
                 <<"space-user-permission">> ->
                     {ok, space_user_permission_record(RecordId)};
@@ -389,7 +389,7 @@ space_record(SpaceId, HasViewPrivileges) ->
         {<<"transferHourStat">>, TransferHourStat},
         {<<"transferDayStat">>, TransferDayStat},
         {<<"transferMonthStat">>, TransferMonthStat},
-        {<<"transferActiveLinks">>, RelationWithViewPrivileges},
+        {<<"transferLinkState">>, RelationWithViewPrivileges},
         {<<"user">>, UserId}
     ].
 

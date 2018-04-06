@@ -97,7 +97,7 @@ data_backend(true, <<"space-transfer-list">>) -> space_data_backend;
 data_backend(true, <<"space-user-permission">>) -> space_data_backend;
 data_backend(true, <<"space-group-permission">>) -> space_data_backend;
 data_backend(true, <<"space-transfer-time-stat">>) -> space_data_backend;
-data_backend(true, <<"space-transfer-active-links">>) -> space_data_backend;
+data_backend(true, <<"space-transfer-link-state">>) -> space_data_backend;
 
 data_backend(true, <<"share">>) -> share_data_backend;
 data_backend(_, <<"share-public">>) -> share_data_backend;
