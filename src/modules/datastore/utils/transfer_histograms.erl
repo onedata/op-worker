@@ -24,13 +24,13 @@
 -export([
     new/3, update/6,
     pad_with_zeroes/4, trim_min_histograms/2, trim/4,
-    type_to_time_window/1, type_to_hist_length/1, window_to_speed_chart_len/1,
-    histogram_to_speed_chart/4
+    type_to_time_window/1, type_to_hist_length/1,
+    to_speed_charts/4
 ]).
 
 -ifdef(TEST).
 %% Export for unit testing
--export([trim_timestamp/1]).
+-export([trim_timestamp/1, histogram_to_speed_chart/4]).
 -endif.
 
 %%%===================================================================
@@ -133,20 +133,21 @@ trim(MinHistograms, RequestedHistograms, TimeWindow, LastUpdate) ->
         RemovedBytes = lists:sum(RemovedSlots),
         % If bytes to remove exceed or equal number stored in first slot,
         % check whether new timestamp is still in current slot or moved back
-        % and if so remove it (recent slot that is).
+        % and if so remove head slot.
         NewRequestedHist = case RemovedBytes >= FstSlot of
             true ->
                 case (LastUpdate div TimeWindow) == (NewTimestamp div TimeWindow) of
                     true ->
-                        [0, SndSlot - (RemovedBytes - FstSlot) | Rest];
+                        % If LastUpdate is in the same time slot as NewTimestamp
+                        % then RemovedBytes == FstSlot
+                        [0, SndSlot | Rest];
                     false ->
                         [SndSlot - (RemovedBytes - FstSlot) | Rest]
                 end;
             false ->
                 [FstSlot - RemovedBytes, SndSlot | Rest]
         end,
-        SpeedChartLen = window_to_speed_chart_len(TimeWindow),
-        {NewMinHist, lists:sublist(NewRequestedHist, SpeedChartLen)}
+        {NewMinHist, NewRequestedHist}
     end,
 
     {TrimmedMinHistograms, TrimmedRequestedHistograms} = maps:fold(
@@ -160,6 +161,33 @@ trim(MinHistograms, RequestedHistograms, TimeWindow, LastUpdate) ->
         end, {#{}, #{}}, MinHistograms
     ),
     {TrimmedMinHistograms, TrimmedRequestedHistograms, NewTimestamp}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Converts transfer histograms to speed charts. For that number of required
+%% time slots is deduced, took and convert to speed chart for each histogram.
+%% If StartTime is greater then EndTime return empty charts.
+%% @end
+%%--------------------------------------------------------------------
+-spec to_speed_charts(histograms(), StartTime :: timestamp(),
+    EndTime :: timestamp(), TimeWindow :: non_neg_integer()) -> histograms().
+to_speed_charts(_, StartTime, EndTime, _) when StartTime > EndTime ->
+    #{};
+to_speed_charts(Histograms, StartTime, EndTime, TimeWindow) ->
+    MaxRequiredSlotsNum = window_to_speed_chart_len(TimeWindow),
+    % If last time slot is fully filled (all n slots are fully filled ->
+    % there are n+1 points on chart), the number of required slots is one less
+    % than if it were only partially filled (n-1 slots are fully filled
+    % and 2 only partially - on start and on end -> n+2 points on charts)
+    RequiredSlotsNum = case (EndTime div TimeWindow) + 1 of
+        TimeWindow -> MaxRequiredSlotsNum - 1;
+        _ -> MaxRequiredSlotsNum
+    end,
+    maps:map(fun(_ProviderId, Histogram) ->
+        RequiredSlots = lists:sublist(Histogram, RequiredSlotsNum),
+        histogram_to_speed_chart(RequiredSlots, StartTime, EndTime, TimeWindow)
+    end, Histograms).
 
 
 -spec type_to_time_window(type()) -> non_neg_integer().
@@ -176,11 +204,9 @@ type_to_hist_length(?DAY_STAT_TYPE) -> ?DAY_HIST_LENGTH;
 type_to_hist_length(?MONTH_STAT_TYPE) -> ?MONTH_HIST_LENGTH.
 
 
--spec window_to_speed_chart_len(non_neg_integer()) -> non_neg_integer().
-window_to_speed_chart_len(?FIVE_SEC_TIME_WINDOW) -> ?MIN_SPEED_HIST_LENGTH;
-window_to_speed_chart_len(?MIN_TIME_WINDOW) -> ?HOUR_SPEED_HIST_LENGTH;
-window_to_speed_chart_len(?HOUR_TIME_WINDOW) -> ?DAY_SPEED_HIST_LENGTH;
-window_to_speed_chart_len(?DAY_TIME_WINDOW) -> ?MONTH_SPEED_HIST_LENGTH.
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 
 %%--------------------------------------------------------------------
@@ -236,11 +262,6 @@ histogram_to_speed_chart([First | Rest = [Previous | _]], Start, End, Window) ->
     [CurrentSpeed | histogram_to_speed_chart(First, Rest, Start, End, Window, ChartStart)].
 
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-
 -spec histogram_to_speed_chart(CurrentValue :: non_neg_integer(),
     histogram:histogram(), Start :: timestamp(), End :: timestamp(),
     Window :: non_neg_integer(), ChartStart :: timestamp()) ->
@@ -276,6 +297,13 @@ speed_chart_span(?FIVE_SEC_TIME_WINDOW) -> 60;
 speed_chart_span(?MIN_TIME_WINDOW) -> 3600;
 speed_chart_span(?HOUR_TIME_WINDOW) -> 86400; % 24 hours
 speed_chart_span(?DAY_TIME_WINDOW) -> 2592000. % 30 days
+
+
+-spec window_to_speed_chart_len(non_neg_integer()) -> non_neg_integer().
+window_to_speed_chart_len(?FIVE_SEC_TIME_WINDOW) -> ?MIN_SPEED_HIST_LENGTH;
+window_to_speed_chart_len(?MIN_TIME_WINDOW) -> ?HOUR_SPEED_HIST_LENGTH;
+window_to_speed_chart_len(?HOUR_TIME_WINDOW) -> ?DAY_SPEED_HIST_LENGTH;
+window_to_speed_chart_len(?DAY_TIME_WINDOW) -> ?MONTH_SPEED_HIST_LENGTH.
 
 
 -spec trim_timestamp(Timestamp :: timestamp()) -> timestamp().

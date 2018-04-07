@@ -40,7 +40,7 @@ update_with_nonexistent_test() ->
 update_with_existent_test() ->
     Bytes = 50,
     Histogram1 = histogram:increment(histogram:new(?MIN_HIST_LENGTH), Bytes),
-    TransferHist1 = transfer_histograms:new(?PROVIDER1, Bytes, ?MINUTE_STAT_TYPE),
+    TransferHist1 = #{?PROVIDER1 => Histogram1},
 
     % Update within the same slot time as last_update and current_time
     % should increment only head slot.
@@ -67,10 +67,8 @@ update_with_existent_test() ->
 pad_with_zeroes_test() ->
     Bytes = 50,
     Histogram = histogram:increment(histogram:new(?MIN_HIST_LENGTH), Bytes),
-    TransferHist1 = transfer_histograms:new(?PROVIDER1, Bytes, ?MINUTE_STAT_TYPE),
-    TransferHist2 = transfer_histograms:update(
-        ?PROVIDER2, Bytes, TransferHist1, ?MINUTE_STAT_TYPE, 0, 0
-    ),
+    TransferHist = #{?PROVIDER1 => Histogram, ?PROVIDER2 => Histogram},
+
     % Histograms which last update is greater or equal to current time should
     % be left intact, otherwise they should be shifted and padded with zeroes
     Provider1LastUpdate = 80,
@@ -82,7 +80,7 @@ pad_with_zeroes_test() ->
         ?PROVIDER1 => Provider1LastUpdate, ?PROVIDER2 => Provider2LastUpdate
     },
     PaddedHistograms = transfer_histograms:pad_with_zeroes(
-        TransferHist2, ?FIVE_SEC_TIME_WINDOW, 100, LastUpdates
+        TransferHist, Window, CurrentTime, LastUpdates
     ),
     ExpPaddedHistograms = #{
         ?PROVIDER1 => histogram:shift(Histogram, ShiftSize), ?PROVIDER2 => Histogram
@@ -117,6 +115,44 @@ trim_min_histograms_test() ->
     ),
     ExpTransferHist = #{?PROVIDER1 => ExpHistogram},
     assertEqualMaps(ExpTransferHist, TrimmedTransferHist).
+
+trim_test() ->
+    Bytes = 50,
+    MinHistogram1 = histogram:increment(histogram:new(?MIN_HIST_LENGTH), Bytes),
+    ShiftSize = ?MIN_HIST_LENGTH - ?MIN_SPEED_HIST_LENGTH,
+    MinHistogram2 = histogram:shift(MinHistogram1, ShiftSize),
+    MinHistogram3 = histogram:increment(MinHistogram2, Bytes),
+    {_, ExpMinHistogram} = lists:split(ShiftSize, MinHistogram3),
+    MinHistograms = #{?PROVIDER1 => MinHistogram3},
+    ExpMinHistograms = #{?PROVIDER1 => ExpMinHistogram},
+
+    HourHistTail = lists:duplicate(?HOUR_HIST_LENGTH - 3, 0),
+    HourHist1 = [2 * Bytes, 0, Bytes | HourHistTail],
+    ExpHourHist1 = [Bytes, 0, Bytes | HourHistTail],
+    HourHist2 = [Bytes, 0, Bytes | HourHistTail],
+    ExpHourHist2 = [0, Bytes | HourHistTail],
+
+    % In case when trimmed seconds are contained in 1 slot of hour histogram
+    % removed bytes should be subbed from head slot
+    HourHistograms1 = #{?PROVIDER1 => HourHist1},
+    ExpHourHistograms1 = #{?PROVIDER1 => ExpHourHist1},
+    LastUpdate1 = 100,
+    {TrimmedMinHists1, TrimmedHourHists1, _} = transfer_histograms:trim(
+        MinHistograms, HourHistograms1, ?MIN_TIME_WINDOW, LastUpdate1
+    ),
+    assertEqualMaps(ExpMinHistograms, TrimmedMinHists1),
+    assertEqualMaps(ExpHourHistograms1, TrimmedHourHists1),
+
+    % In case when trimmed seconds spans across 2 slots of hour histogram,
+    % head slot should be removed and remaining bytes subbed from second slot.
+    HourHistograms2 = #{?PROVIDER1 => HourHist2},
+    ExpHourHistograms2 = #{?PROVIDER1 => ExpHourHist2},
+    LastUpdate2 = 70,
+    {TrimmedMinHist2, TrimmedHourHist2, _} = transfer_histograms:trim(
+        MinHistograms, HourHistograms2, ?MIN_TIME_WINDOW, LastUpdate2
+    ),
+    assertEqualMaps(ExpMinHistogram, TrimmedMinHist2),
+    assertEqualMaps(ExpHourHistograms2, TrimmedHourHist2).
 
 histogram_with_zero_duration_time_test() ->
     % Histogram starting in 0 and ending in 0 is considered to have one second

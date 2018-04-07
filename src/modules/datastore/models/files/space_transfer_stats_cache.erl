@@ -17,7 +17,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([save/3, get/2, get_active_links/1, delete/2]).
+-export([save/3, get/2, get_active_links/1, update/3, delete/2]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
@@ -101,7 +101,8 @@ get(SpaceId, RequestedStatsType) ->
 %%-------------------------------------------------------------------
 %% @doc
 %% Returns active links for given space (providers mapping to providers
-%% they recently sent data to).
+%% they recently sent data to). For efficiency reasons they are stored only
+%% with minute stats.
 %% @end
 %%-------------------------------------------------------------------
 -spec get_active_links(SpaceId :: od_space:id()) ->
@@ -112,6 +113,34 @@ get_active_links(SpaceId) ->
             {ok, ActiveLinks};
         Error ->
             Error
+    end.
+
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Update transfer statistics of given type for given space. If previously
+%% cached stats has not expired yet do not overwrite it. It helps prevent
+%% situation when the same stats are cached 2 times longer than they should
+%% (e.g. when counting minute stats, entire time slots making up to recent
+%% n-seconds are trimmed meaning that stats counted for timestamps:
+%% 61 and 64 are the same).
+%% @end
+%%-------------------------------------------------------------------
+-spec update(SpaceId :: od_space:id(), Stats :: space_transfer_stats_cache(),
+    StatsType :: binary()) -> ok | {error, term()}.
+update(SpaceId, Stats, StatsType) ->
+    Key = datastore_utils:gen_key(StatsType, SpaceId),
+    Diff = fun(OldStats) ->
+        Now = time_utils:system_time_millis(),
+        NewStats = case Now < OldStats#space_transfer_stats_cache.expires of
+            true -> OldStats;
+            false -> Stats
+        end,
+        {ok, NewStats}
+    end,
+    case datastore_model:update(?CTX, Key, Diff, Stats) of
+        {ok, _} -> ok;
+        Error -> Error
     end.
 
 
@@ -209,7 +238,7 @@ prepare_stats(SpaceId, ?MINUTE_STAT_TYPE) ->
         stats_out = maps:filter(Pred, TrimmedStatsOut)
     },
     SpeedMinStats = stats_to_speed_charts(NewMinStats, ?MINUTE_STAT_TYPE),
-    save(SpaceId, SpeedMinStats, ?MINUTE_STAT_TYPE),
+    update(SpaceId, SpeedMinStats, ?MINUTE_STAT_TYPE),
     SpeedMinStats;
 
 prepare_stats(SpaceId, RequestedStatsType) ->
@@ -246,7 +275,7 @@ prepare_stats(SpaceId, RequestedStatsType) ->
     },
 
     SpeedMinStats = stats_to_speed_charts(NewMinStats, ?MINUTE_STAT_TYPE),
-    save(SpaceId, SpeedMinStats, ?MINUTE_STAT_TYPE),
+    update(SpaceId, SpeedMinStats, ?MINUTE_STAT_TYPE),
     SpeedRequestedStats = stats_to_speed_charts(NewRequestedStats, RequestedStatsType),
     save(SpaceId, SpeedRequestedStats, RequestedStatsType),
     SpeedRequestedStats.
@@ -367,15 +396,16 @@ update_stats(OldStats, StatsType, ST, CurrentTime, Provider) ->
 -spec stats_to_speed_charts(Stats :: space_transfer_stats_cache(),
     StatsType :: binary()) -> space_transfer_stats_cache().
 stats_to_speed_charts(Stats, StatsType) ->
-    Timestamp = Stats#space_transfer_stats_cache.timestamp,
-    TimeWindow = transfer_histograms:type_to_time_window(StatsType),
-    ToSpeedChart = fun(_ProviderId, Histogram) ->
-        transfer_histograms:histogram_to_speed_chart(
-            Histogram, 0, Timestamp, TimeWindow)
-    end,
+    Window = transfer_histograms:type_to_time_window(StatsType),
+    #space_transfer_stats_cache{
+        timestamp = End,
+        stats_in = StatsIn,
+        stats_out = StatsOut
+    } = Stats,
+
     Stats#space_transfer_stats_cache{
-        stats_in = maps:map(ToSpeedChart, Stats#space_transfer_stats_cache.stats_in),
-        stats_out = maps:map(ToSpeedChart, Stats#space_transfer_stats_cache.stats_out)
+        stats_in = transfer_histograms:to_speed_charts(StatsIn, 0, End, Window),
+        stats_out = transfer_histograms:to_speed_charts(StatsOut, 0, End, Window)
     }.
 
 

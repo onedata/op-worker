@@ -224,16 +224,12 @@ transfer_time_stat_record(StatId) ->
     % fluctuations on charts due to synchronization of docs between providers
     {Histograms, LastUpdate, TimeWindow} = case transfer_utils:is_ongoing(T) of
         false ->
-            {OldRequestedHistograms, Window} = case TypePrefix of
+            {RequestedHistograms, Window} = case TypePrefix of
                 ?MINUTE_STAT_TYPE -> {T#transfer.min_hist, ?FIVE_SEC_TIME_WINDOW};
                 ?HOUR_STAT_TYPE -> {T#transfer.hr_hist, ?MIN_TIME_WINDOW};
                 ?DAY_STAT_TYPE -> {T#transfer.dy_hist, ?HOUR_TIME_WINDOW};
                 ?MONTH_STAT_TYPE -> {T#transfer.mth_hist, ?DAY_TIME_WINDOW}
             end,
-            SpeedChartLen = transfer_histograms:window_to_speed_chart_len(Window),
-            RequestedHistograms = maps:map(fun(_Provider, Histogram) ->
-                lists:sublist(Histogram, SpeedChartLen)
-            end, OldRequestedHistograms),
             {RequestedHistograms, get_last_update(T), Window};
         true ->
             LastUpdates = T#transfer.last_update,
@@ -241,19 +237,9 @@ transfer_time_stat_record(StatId) ->
             prepare_histograms(T, TypePrefix, CurrentTime, LastUpdates)
     end,
 
-    % Calculate bytes per sec histograms. In case of situation when LastUpdate
-    % is smaller than StartTime (e.g. due to trimming, when transfer started
-    % less than 30s ago) return empty map.
-    SpeedCharts = case LastUpdate > StartTime of
-        true ->
-            maps:map(fun(_ProviderId, Histogram) ->
-                transfer_histograms:histogram_to_speed_chart(
-                    Histogram, StartTime, LastUpdate, TimeWindow
-                )
-            end, Histograms);
-        false ->
-            #{}
-    end,
+    SpeedCharts = transfer_histograms:to_speed_charts(
+        Histograms, StartTime, LastUpdate, TimeWindow
+    ),
 
     {ok, [
         {<<"id">>, StatId},
@@ -279,10 +265,10 @@ prepare_histograms(Transfer, ?MINUTE_STAT_TYPE, CurrentTime, LastUpdates) ->
     PaddedHistograms = transfer_histograms:pad_with_zeroes(
         Histograms, Window, CurrentTime, LastUpdates
     ),
-    {TrimmedHistograms, TrimmedTimestamp} = transfer_histograms:trim_min_histograms(
+    {TrimmedHistograms, NewTimestamp} = transfer_histograms:trim_min_histograms(
         PaddedHistograms, CurrentTime
     ),
-    {TrimmedHistograms, TrimmedTimestamp, Window};
+    {TrimmedHistograms, NewTimestamp, Window};
 
 prepare_histograms(Transfer, HistogramsType, CurrentTime, LastUpdates) ->
     MinHistograms = Transfer#transfer.min_hist,
@@ -297,10 +283,10 @@ prepare_histograms(Transfer, HistogramsType, CurrentTime, LastUpdates) ->
     PaddedRequestedHistograms = transfer_histograms:pad_with_zeroes(
         RequestedHistograms, Window, CurrentTime, LastUpdates
     ),
-    {_, TrimmedRequestedHistograms, TrimmedTimestamp} = transfer_histograms:trim(
+    {_, TrimmedRequestedHistograms, NewTimestamp} = transfer_histograms:trim(
         PaddedMinHistograms, PaddedRequestedHistograms, Window, CurrentTime
     ),
-    {TrimmedRequestedHistograms, TrimmedTimestamp, Window}.
+    {TrimmedRequestedHistograms, NewTimestamp, Window}.
 
 
 %%--------------------------------------------------------------------
