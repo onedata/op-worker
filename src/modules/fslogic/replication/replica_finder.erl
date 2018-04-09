@@ -154,7 +154,7 @@ exclude_old_blocks(RemoteLocations) ->
             end
     end, [], lists:sort(RemoteList2)),
 
-    [{ProviderId, RemoteBlock, StorageDetails} ||
+    [{ProviderId, [RemoteBlock], StorageDetails} ||
         {RemoteBlock, {ProviderId, _VV, StorageDetails}} <- SortedRemoteList].
 
 %%--------------------------------------------------------------------
