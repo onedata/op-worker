@@ -26,7 +26,7 @@
 %%--------------------------------------------------------------------
 -spec encode_value(indexes:index(), index) -> binary().
 encode_value(Value, index) ->
-    json_utils:encode_map(Value).
+    json_utils:encode(Value).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -35,7 +35,7 @@ encode_value(Value, index) ->
 %%--------------------------------------------------------------------
 -spec decode_value(binary(), index) -> indexes:index().
 decode_value(Value, index) ->
-    Map = json_utils:decode_map(Value),
+    Map = json_utils:decode(Value),
     maps:fold(fun
         (K, V, AccMap) when is_binary(K) ->
             AtomKey = binary_to_atom(K, utf8),

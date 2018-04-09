@@ -89,7 +89,7 @@ query_index(Req, State) ->
         ObjectId
     end, Guids),
 
-    {json_utils:encode_map(ObjectIds), ReqWithSpatial, StateWithSpatial}.
+    {json_utils:encode(ObjectIds), ReqWithSpatial, StateWithSpatial}.
 
 %%--------------------------------------------------------------------
 %% @doc

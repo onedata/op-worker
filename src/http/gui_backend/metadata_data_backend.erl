@@ -168,7 +168,7 @@ update_record(ModelType, ResourceId, Data) ->
             lists:foreach(
                 fun({K, V}) ->
                     EncodedValue = try
-                        json_utils:decode_map(V)
+                        json_utils:decode(V)
                     catch _:_ ->
                         V
                     end,
@@ -187,7 +187,7 @@ update_record(ModelType, ResourceId, Data) ->
         JSON ->
             JSONMap = case JSON of
                 [] -> #{};
-                _ -> json_utils:decode_map(json_utils:encode(JSON))
+                _ -> json_utils:list_to_map(JSON)
             end,
             ok = logical_file_manager:set_metadata(
                 SessionId, {guid, FileId}, json, JSONMap, []
@@ -287,7 +287,7 @@ metadata_record(ModelType, SessionId, ResId) ->
                 SessionId, {guid, FileId}, Key, false
             ),
             EncodedValue = case Value of
-                Map when is_map(Map) -> json_utils:encode_map(Map);
+                Map when is_map(Map) -> json_utils:encode(Map);
                 _ -> Value
             end,
             {Key, EncodedValue}
@@ -302,7 +302,7 @@ metadata_record(ModelType, SessionId, ResId) ->
     JSONVal = case GetJSONResult of
         {error, ?ENOATTR} -> null;
         {ok, Map} when map_size(Map) =:= 0 -> <<"{}">>;
-        {ok, JSON} -> json_utils:decode(json_utils:encode_map(JSON))
+        {ok, JSON} -> json_utils:map_to_list(JSON)
     end,
     GetRDFResult = logical_file_manager:get_metadata(
         SessionId, {guid, FileId}, rdf, [], false

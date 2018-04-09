@@ -149,7 +149,7 @@ parse_attribute(Req, State) ->
 parse_attribute_body(Req, State = #{extended := Extended}) ->
     {ok, Body, Req2} = cowboy_req:read_body(Req),
 
-    Json = json_utils:decode_map(Body),
+    Json = json_utils:decode(Body),
     case {
         maps:to_list(Json),
         Extended
@@ -209,7 +209,7 @@ parse_callback(Req, State) ->
             <<"">> ->
                 undefined;
             _ ->
-                Json = json_utils:decode_map(Body),
+                Json = json_utils:decode(Body),
                 maps:get(<<"url">>, Json, undefined)
         end,
     {State#{callback => Callback}, NewReq}.

@@ -101,12 +101,12 @@ get_file_attributes(Req, State) ->
         {undefined, false} ->
             {ok, Attrs} = onedata_file_api:stat(Auth, {path, Path}),
             ResponseMap = add_attr(#{}, ?ALL_BASIC_ATTRIBUTES, Attrs),
-            Response = json_utils:encode_map(ResponseMap),
+            Response = json_utils:encode(ResponseMap),
             {Response, ReqWithAttribute, StateWithAttribute};
         {Attribute, false} ->
             {ok, Attrs} = onedata_file_api:stat(Auth, {path, Path}),
             ResponseMap = add_attr(#{}, [Attribute], Attrs),
-            Response = json_utils:encode_map(ResponseMap),
+            Response = json_utils:encode(ResponseMap),
             {Response, ReqWithAttribute, StateWithAttribute};
         {undefined, true} ->
             {ok, Xattrs} = onedata_file_api:list_xattr(Auth, {path, Path}, Inherited, true),
@@ -114,11 +114,11 @@ get_file_attributes(Req, State) ->
                 {ok, #xattr{value = Value}} = onedata_file_api:get_xattr(Auth, {path, Path}, XattrName, Inherited),
                 {XattrName, Value}
             end, Xattrs),
-            Response = json_utils:encode_map(maps:from_list(RawResponse)),
+            Response = json_utils:encode(maps:from_list(RawResponse)),
             {Response, ReqWithAttribute, StateWithAttribute};
         {XattrName, true} ->
             {ok, #xattr{value = Value}} = onedata_file_api:get_xattr(Auth, {path, Path}, XattrName, Inherited),
-            Response = json_utils:encode_map(#{XattrName => Value}),
+            Response = json_utils:encode(#{XattrName => Value}),
             {Response, ReqWithAttribute, StateWithAttribute}
     end.
 

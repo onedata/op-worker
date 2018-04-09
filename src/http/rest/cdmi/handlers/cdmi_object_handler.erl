@@ -178,7 +178,7 @@ get_cdmi(Req, State = #{options := Opts, auth := Auth, attributes := #file_attr{
             % prepare response
             BodyWithoutValue = maps:remove(<<"value">>, Answer),
             ValueTransferEncoding = cdmi_metadata:get_encoding(Auth, {guid, FileGuid}),
-            JsonBodyWithoutValue = json_utils:encode_map(BodyWithoutValue),
+            JsonBodyWithoutValue = json_utils:encode(BodyWithoutValue),
             JsonBodyPrefix =
                 case BodyWithoutValue of
                     #{} = Map when map_size(Map) =:= 0 -> <<"{\"value\":\"">>;
@@ -192,7 +192,7 @@ get_cdmi(Req, State = #{options := Opts, auth := Auth, attributes := #file_attr{
             ),
             {stop, Req2, State};
         undefined ->
-            Response = json_utils:encode_map(Answer),
+            Response = json_utils:encode(Answer),
             {Response, Req, State}
     end.
 
@@ -315,7 +315,7 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
             cdmi_metadata:update_user_metadata(Auth, {guid, Guid}, RequestedUserMetadata),
             cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(Auth, {guid, Guid}, CdmiPartialFlag),
             Answer = cdmi_object_answer:prepare(?DEFAULT_PUT_FILE_OPTS, State#{guid => Guid}),
-            Response = json_utils:encode_map(Answer),
+            Response = json_utils:encode(Answer),
             Req2 = cowboy_req:set_resp_body(Response, Req0),
             {true, Req2, State};
         CopiedOrMoved when CopiedOrMoved =:= copied orelse CopiedOrMoved =:= moved ->
@@ -323,7 +323,7 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
             cdmi_metadata:update_mimetype(Auth, {guid, Guid}, RequestedMimetype),
             cdmi_metadata:update_user_metadata(Auth, {guid, Guid}, RequestedUserMetadata, URIMetadataNames),
             Answer = cdmi_object_answer:prepare(?DEFAULT_PUT_FILE_OPTS, State#{guid => Guid}),
-            Response = json_utils:encode_map(Answer),
+            Response = json_utils:encode(Answer),
             Req2 = cowboy_req:set_resp_body(Response, Req0),
             {true, Req2, State};
         none ->

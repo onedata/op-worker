@@ -39,7 +39,7 @@ get_user_id(Uid, StorageId, StorageName, LumaConfig = #luma_config{url = LumaUrl
     ReqBody = get_user_request_body(Uid, StorageId, StorageName),
     case http_client:post(Url, ReqHeaders, ReqBody) of
         {ok, 200, _RespHeaders, RespBody} ->
-            Response = json_utils:decode_map(RespBody),
+            Response = json_utils:decode(RespBody),
             Idp = maps:get(<<"idp">>, Response),
             SubjectId = maps:get(<<"subjectId">>, Response),
             UserId = idp_to_onedata_user_id(Idp, SubjectId),
@@ -64,7 +64,7 @@ get_user_id_by_name(Name, StorageId, StorageName, LumaConfig = #luma_config{url 
     ReqBody = get_user_request_body_by_name(Name, StorageId, StorageName),
     case http_client:post(Url, ReqHeaders, ReqBody) of
         {ok, 200, _RespHeaders, RespBody} ->
-            Response = json_utils:decode_map(RespBody),
+            Response = json_utils:decode(RespBody),
             Idp = maps:get(<<"idp">>, Response),
             SubjectId = maps:get(<<"subjectId">>, Response),
             UserId = idp_to_onedata_user_id(Idp, SubjectId),
@@ -89,7 +89,7 @@ get_group_id(Gid, SpaceId, StorageId, StorageName, LumaConfig = #luma_config{url
     ReqBody = get_group_request_body(Gid, SpaceId, StorageId, StorageName),
     case http_client:post(Url, ReqHeaders, ReqBody) of
         {ok, 200, _RespHeaders, RespBody} ->
-            Response = json_utils:decode_map(RespBody),
+            Response = json_utils:decode(RespBody),
             Idp = maps:get(<<"idp">>, Response),
             IdpGroupId = maps:get(<<"groupId">>, Response),
             case Idp of
@@ -120,7 +120,7 @@ get_group_id_by_name(Name, SpaceId, StorageId, StorageName,
     ReqBody = get_group_request_body_by_name(Name, SpaceId, StorageId, StorageName),
     case http_client:post(Url, ReqHeaders, ReqBody) of
         {ok, 200, _RespHeaders, RespBody} ->
-            Response = json_utils:decode_map(RespBody),
+            Response = json_utils:decode(RespBody),
             Idp = maps:get(<<"idp">>, Response),
             IdpGroupId = maps:get(<<"groupId">>, Response),
             case Idp of
@@ -165,7 +165,7 @@ idp_to_onedata_user_id(Idp, IdpUserId) ->
     storage:name()) -> binary().
 get_group_request_body(Gid, SpaceId, StorageId, StorageName) ->
     Body = get_posix_generic_request_body_part(StorageId, StorageName),
-    json_utils:encode_map(Body#{
+    json_utils:encode(Body#{
         <<"spaceId">> => SpaceId,
         <<"gid">> => Gid
     }).
@@ -181,7 +181,7 @@ get_group_request_body(Gid, SpaceId, StorageId, StorageName) ->
     storage:name()) -> binary().
 get_group_request_body_by_name(Name, SpaceId, StorageId, StorageName) ->
     Body = get_posix_generic_request_body_part(StorageId, StorageName),
-    json_utils:encode_map(Body#{
+    json_utils:encode(Body#{
         <<"spaceId">> => SpaceId,
         <<"name">> => Name
     }).
@@ -195,7 +195,7 @@ get_group_request_body_by_name(Name, SpaceId, StorageId, StorageName) ->
 -spec get_user_request_body(integer(), storage:id(), helper:name()) -> binary().
 get_user_request_body(Uid, StorageId, StorageName) ->
     Body = get_posix_generic_request_body_part(StorageId, StorageName),
-    json_utils:encode_map(Body#{<<"uid">> => Uid}).
+    json_utils:encode(Body#{<<"uid">> => Uid}).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -206,7 +206,7 @@ get_user_request_body(Uid, StorageId, StorageName) ->
 -spec get_user_request_body_by_name(binary(), storage:id(), storage:name()) -> binary().
 get_user_request_body_by_name(Name, StorageId, StorageName) ->
     Body = get_posix_generic_request_body_part(StorageId, StorageName),
-    json_utils:encode_map(Body#{<<"name">> => Name}).
+    json_utils:encode(Body#{<<"name">> => Name}).
 
 %%-------------------------------------------------------------------
 %% @private

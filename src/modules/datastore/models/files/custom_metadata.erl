@@ -267,13 +267,13 @@ get_record_version() ->
 get_record_struct(1) ->
     {record, [
         {space_id, string},
-        {value, {custom, {json_utils, encode_map, decode_map}}}
+        {value, {custom, {json_utils, encode, decode}}}
     ]};
 get_record_struct(2) ->
     {record, [
         {space_id, string},
         {file_objectid, string},
-        {value, {custom, {json_utils, encode_map, decode_map}}}
+        {value, {custom, {json_utils, encode, decode}}}
     ]}.
 
 %%--------------------------------------------------------------------
