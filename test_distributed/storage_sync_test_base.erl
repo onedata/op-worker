@@ -461,7 +461,7 @@ create_directory_import_without_read_permission_test(Config, MountSpaceInRoot) -
     assertImportFinishTimeDefined(W1, ?SPACE_ID),
     assertImportTimes(W1, ?SPACE_ID),
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_DIR_PATH2}), ?ATTEMPTS).
+        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_DIR_PATH2}), 2 * ?ATTEMPTS).
 
 create_directory_import_many_test(Config, MountSpaceInRoot) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
