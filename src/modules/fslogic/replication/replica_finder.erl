@@ -165,7 +165,7 @@ compere_blocks({Block1, {_, VV1, _} = BlockInfo1} = B1,
             Block1_2 = fslogic_blocks:invalidate(Block1, Block2),
             [B2, {Block1_2, BlockInfo1}];
         greater ->
-            Block2_2 = fslogic_blocks:invalidate(Block2, B1),
+            Block2_2 = fslogic_blocks:invalidate(Block2, Block1),
             [{Block2_2, BlockInfo2}, B1];
         _ ->
             [B2, B1]
