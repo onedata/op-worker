@@ -265,9 +265,7 @@ open(#helper_handle{timeout = Timeout} = Handle, FileId, Flag) ->
 -spec read(file_handle(), Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
     {ok, Data :: binary()} | {error, Reason :: term()}.
 read(Handle, Offset, Size) ->
-    A = ?MODULE:apply_helper_nif(Handle, read, [Offset, Size]),
-    ?info("hhhhh2 ~p", [{Offset, Size, A, erlang:get_stacktrace()}]),
-    A.
+    ?MODULE:apply_helper_nif(Handle, read, [Offset, Size]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -277,7 +275,6 @@ read(Handle, Offset, Size) ->
 -spec write(file_handle(), Offset :: non_neg_integer(), Data :: binary()) ->
     {ok, Size :: non_neg_integer()} | {error, Reason :: term()}.
 write(Handle, Offset, Data) ->
-    ?info("hhhhh ~p", [{Offset, Data, erlang:get_stacktrace()}]),
     ?MODULE:apply_helper_nif(Handle, write, [Offset, Data]).
 
 %%--------------------------------------------------------------------

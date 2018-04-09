@@ -445,7 +445,7 @@ distributed_modification_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyN
         NewAcc = <<Acc/binary, WriteBuf/binary>>,
 
         verify(Config, fun(W2) ->
-            ct:print("Verify write ~p", [{Level2File, W2, NewAcc}]),
+            ct:print("Verify write ~p", [{Level2File, W2}]),
             ?match({ok, NewAcc},
                 begin
                     {ok, Handle2} = lfm_proxy:open(W2, SessId(W2), {path, Level2File}, rdwr),

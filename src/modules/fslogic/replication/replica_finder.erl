@@ -19,7 +19,6 @@
 
 %% API
 -export([get_blocks_for_sync/2, get_unique_blocks/1]).
--include_lib("ctool/include/logging.hrl").
 
 %%%===================================================================
 %%% API
@@ -64,8 +63,6 @@ get_blocks_for_sync(Locations, Blocks) ->
         {ProviderId, ConsolidatedPresentBlocks, StorageDetails}
     end, AggregatedRemoteList),
 
-    ?info("wwwww ~p",[{Locations, BlocksToSync, RemoteList, AggregatedRemoteList, PresentBlocks}]),
-
     minimize_present_blocks(PresentBlocks, []).
 
 exclude_old_blocks(RemoteLocations) ->
@@ -93,7 +90,6 @@ exclude_old_blocks(RemoteLocations) ->
                     compere_blocks(Last, Remote) ++ AccTail
             end
     end, [], SortedRemoteList),
-    ?info("wwwww2 ~p",[{RemoteList, RemoteList2, SortedRemoteList2}]),
 
     [{ProviderId, [RemoteBlock], StorageDetails} ||
         {RemoteBlock, {ProviderId, _VV, StorageDetails}} <- SortedRemoteList2].
