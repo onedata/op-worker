@@ -71,7 +71,7 @@ template:
 
 rel: generate
 
-test_rel: generate cm_rel appmock_rel
+test_rel: generate cm_rel 
 
 cm_rel:
 	mkdir -p cluster_manager/bamboos/gen_dev
@@ -80,13 +80,9 @@ cm_rel:
 	make -C $(LIB_DIR)/cluster_manager/ rel
 	sed -i "s@{base_dir, \"$(PWD)/cluster_manager/_build\"}\.@@" $(LIB_DIR)/cluster_manager/rebar.config
 
-appmock_rel:
-	make -C appmock/ rel
-
 relclean:
 	rm -rf $(REL_DIR)/test_cluster
 	rm -rf $(REL_DIR)/op_worker
-	rm -rf appmock/$(REL_DIR)/appmock
 	rm -rf cluster_manager/$(REL_DIR)/cluster_manager
 
 ##
