@@ -445,7 +445,7 @@ distributed_modification_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyN
         NewAcc = <<Acc/binary, WriteBuf/binary>>,
 
         verify(Config, fun(W2) ->
-            ct:print("Verify write ~p", [{Level2File, W2}]),
+            ct:print("Verify write ~p", [{Level2File, W2, NewAcc}]),
             ?match({ok, NewAcc},
                 begin
                     {ok, Handle2} = lfm_proxy:open(W2, SessId(W2), {path, Level2File}, rdwr),
@@ -1207,11 +1207,11 @@ verify_helper([W | Workers], TestFun) ->
     Master = self(),
     Pid = spawn_link(fun() ->
         Ans = TestFun(W),
-        Master ! {verify_ans, Ans}
+        Master ! {verify_ans, W, Ans}
     end),
     TmpAns = verify_helper(Workers, TestFun),
     receive
-        {verify_ans, TestAns} ->
+        {verify_ans, W, TestAns} ->
             [{W, TestAns} | TmpAns];
         {'EXIT', Pid , Error} when Error /= normal ->
             [{W, error, Error} | TmpAns]

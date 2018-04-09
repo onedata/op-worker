@@ -67,6 +67,7 @@
                   Prefetch :: boolean(), transfer:id() | undefined) ->
                          ok | {error, Reason :: any()}.
 synchronize(UserCtx, FileCtx, Block, Prefetch, TransferId) ->
+  ?info("zzzzz ~p", [{FileCtx, Block}]),
     EnlargedBlock = enlarge_block(Block, Prefetch),
     try
         {ok, Process} = get_process(UserCtx, FileCtx),
@@ -133,6 +134,7 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId}, From, State0) -
     Holes = get_holes(Block, OverlappingBlocks),
     NewTransfers = start_transfers(Holes, TransferId, Prefetch, State),
     {_, NewRefs} = lists:unzip(NewTransfers),
+  ?info("zzzz2 ~p", [{FileCtx, Block, Holes}]),
     case ExistingRefs ++ NewRefs of
         [] -> {reply, ok, State, ?DIE_AFTER};
         RelevantRefs ->
@@ -183,6 +185,7 @@ handle_info({Ref, complete, {ok, _} = _Status}, State) ->
     #state{session_id = SessId, file_ctx = FileCtx,
            from_to_transfer_id = FromToTransferId} = State,
     {Block, __AffectedFroms, FinishedFroms, State1} = disassociate_ref(Ref, State),
+  ?info("ggggg ~p", [Block]),
     fslogic_event_emitter:emit_file_location_changed(FileCtx, [SessId], Block),
     TransferIds = maps:with(FinishedFroms, FromToTransferId),
     [transfer:increase_files_transferred_counter(TID) || TID <- maps:values(TransferIds)],
@@ -429,6 +432,8 @@ start_transfers(InitialBlocks, TransferId, Prefetch, State) ->
     DestStorageId = State#state.dest_storage_id,
     DestFileId = State#state.dest_file_id,
     Priority = case Prefetch of true -> high_priority; false -> medium_priority end,
+
+  ?info("qqqqq ~p", [{FileCtx2, LocationDocs, ProvidersAndBlocks}]),
     lists:flatmap(
         fun({ProviderId, Blocks, {SrcStorageId, SrcFileId}}) ->
             lists:map(

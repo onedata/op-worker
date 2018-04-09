@@ -35,7 +35,7 @@
 -spec compare(VV1 :: version_vector(), VV2 :: version_vector()) -> comparsion_result().
 compare(VV1, VV2) ->
     Comparison = [get_version(ReplicaId, VV1) - get_version(ReplicaId, VV2) || ReplicaId <- identificators([VV1, VV2])],
-    case lists:all(fun(X) -> X =:= 0 end, Comparison) of
+    A = case lists:all(fun(X) -> X =:= 0 end, Comparison) of
         true -> identical;
         false ->
             case lists:all(fun(X) -> X >= 0 end, Comparison) of
@@ -47,7 +47,9 @@ compare(VV1, VV2) ->
                     end
                     
             end
-    end.
+    end,
+%%    ?info("aaaa ~p", [{VV1, VV2, A}]),
+    A.
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -19,6 +19,7 @@
 
 %% API
 -export([get_blocks_for_sync/2, get_unique_blocks/1]).
+-include_lib("ctool/include/logging.hrl").
 
 %%%===================================================================
 %%% API
@@ -45,11 +46,7 @@ get_blocks_for_sync(Locations, Blocks) ->
             fslogic_blocks:invalidate(Acc, LocalBlocks)
         end, Blocks, LocalBlocksList),
 
-    RemoteList =
-        [{ProviderId, RemoteBlocks, {StorageId, FileId}} ||
-            #document{value = #file_location{storage_id = StorageId, file_id = FileId,
-                                             blocks = RemoteBlocks, provider_id = ProviderId}}
-                <- RemoteLocations],
+    RemoteList = exclude_old_blocks(RemoteLocations),
     SortedRemoteList = lists:sort(RemoteList),
     AggregatedRemoteList = lists:foldl(fun
         ({ProviderId, ProviderBlocks, StorageDetails},
@@ -67,7 +64,53 @@ get_blocks_for_sync(Locations, Blocks) ->
         {ProviderId, ConsolidatedPresentBlocks, StorageDetails}
     end, AggregatedRemoteList),
 
+    ?info("wwwww ~p",[{Locations, BlocksToSync, RemoteList, AggregatedRemoteList, PresentBlocks}]),
+
     minimize_present_blocks(PresentBlocks, []).
+
+exclude_old_blocks(RemoteLocations) ->
+    RemoteList =
+        [{RemoteBlocks, {ProviderId, VV, {StorageId, FileId}}} ||
+            #document{value = #file_location{storage_id = StorageId, file_id = FileId,
+                blocks = RemoteBlocks, provider_id = ProviderId, version_vector = VV}}
+                <- RemoteLocations],
+
+    RemoteList2 = lists:foldl(fun({RemoteBlocks, BlockInfo}, Acc) ->
+        Acc ++ lists:map(fun(RB) -> {RB, BlockInfo} end, RemoteBlocks)
+    end, [], RemoteList),
+
+    SortedRemoteList = lists:sort(RemoteList2),
+    SortedRemoteList2 = lists:foldl(fun
+        (Remote, []) ->
+            [Remote];
+        ({RemoteBlock, _} = Remote, [{LastBlock, _} = Last | AccTail] = Acc) ->
+            U1 = fslogic_blocks:upper(LastBlock),
+            L2 = fslogic_blocks:lower(RemoteBlock),
+            case L2 >=  U1 of
+                true ->
+                    [Remote | Acc];
+                _ ->
+                    compere_blocks(Last, Remote) ++ AccTail
+            end
+    end, [], SortedRemoteList),
+    ?info("wwwww2 ~p",[{RemoteList, RemoteList2, SortedRemoteList2}]),
+
+    [{ProviderId, [RemoteBlock], StorageDetails} ||
+        {RemoteBlock, {ProviderId, _VV, StorageDetails}} <- SortedRemoteList2].
+
+compere_blocks({Block1, {_, VV1, _} = BlockInfo1} = B1,
+    {Block2, {_, VV2, _} = BlockInfo2} = B2) ->
+    case version_vector:compare(VV1, VV2) of
+        lesser ->
+            Block1_2 = fslogic_blocks:invalidate(Block1, Block2),
+            [B2, {Block1_2, BlockInfo1}];
+        greater ->
+            Block2_2 = fslogic_blocks:invalidate(Block2, B1),
+            [{Block2_2, BlockInfo2}, B1];
+        _ ->
+            [B2, B1]
+    end.
+
 
 %%--------------------------------------------------------------------
 %% @doc

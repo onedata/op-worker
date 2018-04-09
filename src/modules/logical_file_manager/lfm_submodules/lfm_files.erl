@@ -564,6 +564,7 @@ read_internal(LfmCtx, Offset, MaxSize, GenerateEvents, PrefetchData) ->
 
     remote_utils:call_fslogic(SessId, proxyio_request, ProxyIORequest,
         fun(#remote_data{data = Data}) ->
+            ?info("uuuu ~p", [{Offset, Data}]),
             ReadBlocks = [#file_block{offset = Offset, size = size(Data)}],
             ok = lfm_event_utils:maybe_emit_file_read(FileGuid, ReadBlocks, SessId, GenerateEvents),
             {ok, Data}
