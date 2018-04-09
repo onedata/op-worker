@@ -173,9 +173,9 @@ handle_info({Ref, active, ProviderId, Block}, State) ->
     TransferIds = maps:with(AffectedFroms, FromToTransferId),
     lists:foreach(
       fun(TransferId) ->
-              {ok, _} = transfer:mark_data_transfer_finished(TransferId, ProviderId,
-                                                             Block#file_block.size,
-                                                             SpaceId)
+          {ok, _} = transfer:mark_data_transfer_finished(TransferId, ProviderId,
+                                                         Block#file_block.size,
+                                                         SpaceId)
       end,
       maps:values(TransferIds)),
     {noreply, State, ?DIE_AFTER};

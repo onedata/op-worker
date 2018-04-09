@@ -79,8 +79,8 @@ update(
 %% If current time is smaller than last update, then left given histogram intact.
 %% @end
 %%-------------------------------------------------------------------
--spec pad_with_zeroes(Histograms, Window :: non_neg_integer(), CurrentTime :: timestamp(),
-    LastUpdates :: #{od_provider:id() => timestamp()}
+-spec pad_with_zeroes(Histograms, Window :: non_neg_integer(),
+    CurrentTime :: timestamp(), LastUpdates :: #{od_provider:id() => timestamp()}
 ) ->
     Histograms when Histograms :: histograms().
 pad_with_zeroes(Histograms, Window, CurrentTime, LastUpdates) ->
@@ -98,9 +98,8 @@ pad_with_zeroes(Histograms, Window, CurrentTime, LastUpdates) ->
 %% fluctuations on charts due to synchronization between providers).
 %% @end
 %%-------------------------------------------------------------------
--spec trim_min_histograms(Histograms, LastUpdate :: timestamp()) ->
-    {Histograms, NewTimestamp :: timestamp()} when
-    Histograms :: transfer_histograms:histograms().
+-spec trim_min_histograms(Histograms :: histograms(), LastUpdate :: timestamp()) ->
+    {Histograms :: histograms(), NewTimestamp :: timestamp()}.
 trim_min_histograms(Histograms, LastUpdate) ->
     SlotsToRemove = ?MIN_HIST_LENGTH - ?MIN_SPEED_HIST_LENGTH,
     TrimmedHistograms = maps:map(fun(_Provider, Histogram) ->

@@ -552,10 +552,14 @@ increase_files_invalidated_counter(TransferId) ->
     non_neg_integer(), od_space:id()) -> {ok, undefined | id()} | {error, term()}.
 mark_data_transfer_finished(undefined, ProviderId, Bytes, SpaceId) ->
     CurrentTime = provider_logic:zone_time_seconds(),
-    ok = space_transfer_stats:update(SpaceId, ProviderId, Bytes, CurrentTime);
+    ok = space_transfer_stats:update(
+        ?ON_THE_FLY_TRANSFERS_TYPE, SpaceId, ProviderId, Bytes, CurrentTime
+    );
 mark_data_transfer_finished(TransferId, ProviderId, Bytes, SpaceId) ->
     CurrentTime = provider_logic:zone_time_seconds(),
-    ok = space_transfer_stats:update(SpaceId, ProviderId, Bytes, CurrentTime),
+    ok = space_transfer_stats:update(
+        ?JOB_TRANSFERS_TYPE, SpaceId, ProviderId, Bytes, CurrentTime
+    ),
 
     update(TransferId, fun(Transfer = #transfer{
         bytes_transferred = OldBytes,

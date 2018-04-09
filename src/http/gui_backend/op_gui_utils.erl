@@ -17,7 +17,10 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([ids_to_association/2, association_to_ids/1]).
+-export([
+    ids_to_association/2, ids_to_association/3,
+    association_to_ids/1
+]).
 
 %%%===================================================================
 %%% API functions
@@ -35,10 +38,24 @@ ids_to_association(FirstId, SecondId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Creates an associative ID from three IDs which can be easily decoupled later.
+%% @end
+%%--------------------------------------------------------------------
+-spec ids_to_association(FirstId :: binary(), SecondId :: binary(),
+    ThirdId :: binary()) -> binary().
+ids_to_association(FirstId, SecondId, ThirdId) ->
+    <<FirstId/binary, "|", SecondId/binary, "|", ThirdId/binary>>.
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Decouples an associative ID into two separate IDs.
 %% @end
 %%--------------------------------------------------------------------
--spec association_to_ids(AssocId :: binary()) -> {binary(), binary()}.
+-spec association_to_ids(AssocId :: binary()) ->
+    {binary(), binary()} | {binary(), binary(), binary()}.
 association_to_ids(AssocId) ->
-    [FirstId, SecondId] = binary:split(AssocId, <<"|">>, [global]),
-    {FirstId, SecondId}.
+    case binary:split(AssocId, <<"|">>, [global]) of
+        [FirstId, SecondId] -> {FirstId, SecondId};
+        [FirstId, SecondId, ThirdId] -> {FirstId, SecondId, ThirdId}
+    end.

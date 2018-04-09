@@ -17,7 +17,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([save/3, get/2, get_active_links/1, update/3, delete/2]).
+-export([save/3, get/3, get_active_links/1, update/3, delete/2]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
@@ -76,11 +76,11 @@ save(SpaceId, Stats, StatsType) ->
 %% Returns space transfer statistics of requested type for given space.
 %% @end
 %%-------------------------------------------------------------------
--spec get(SpaceId :: od_space:id(), StatsType :: binary()) ->
-    space_transfer_stats_cache() | {error, term()}.
-get(SpaceId, RequestedStatsType) ->
+-spec get(TransferType :: binary(), StatsType :: binary(),
+    SpaceId :: od_space:id()) -> space_transfer_stats_cache() | {error, term()}.
+get(_TransferType, StatsType, SpaceId) ->
     Now = time_utils:system_time_millis(),
-    Key = datastore_utils:gen_key(RequestedStatsType, SpaceId),
+    Key = datastore_utils:gen_key(StatsType, SpaceId),
     Fetched = case datastore_model:get(?CTX, Key) of
         {ok, #document{value = Stats}} ->
             case Now < Stats#space_transfer_stats_cache.expires of
@@ -92,7 +92,7 @@ get(SpaceId, RequestedStatsType) ->
     end,
     case Fetched of
         {error, not_found} ->
-            prepare_stats(SpaceId, RequestedStatsType);
+            prepare_stats(SpaceId, StatsType);
         _ ->
             Fetched
     end.
@@ -108,7 +108,7 @@ get(SpaceId, RequestedStatsType) ->
 -spec get_active_links(SpaceId :: od_space:id()) ->
     {ok, #{od_provider:id() => [od_provider:id()]}} | {error, term()}.
 get_active_links(SpaceId) ->
-    case get(SpaceId, ?MINUTE_STAT_TYPE) of
+    case get(?JOB_TRANSFERS_TYPE, ?MINUTE_STAT_TYPE, SpaceId) of
         #space_transfer_stats_cache{active_links = ActiveLinks} ->
             {ok, ActiveLinks};
         Error ->

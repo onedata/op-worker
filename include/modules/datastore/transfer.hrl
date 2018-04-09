@@ -15,6 +15,10 @@
 -define(CURRENT_TRANSFERS_KEY, <<"CURRENT_TRANSFERS_KEY">>).
 -define(PAST_TRANSFERS_KEY, <<"PAST_TRANSFERS_KEY">>).
 
+-define(JOB_TRANSFERS_TYPE, <<"job">>).
+-define(ON_THE_FLY_TRANSFERS_TYPE, <<"onTheFly">>).
+-define(ALL_TRANSFERS_TYPE, <<"all">>).
+
 % Time windows and lengths of histograms. They offer one extra, historical value,
 % as the leading one is not yet measured - this way there are always full
 % measurements from the whole histogram span.
