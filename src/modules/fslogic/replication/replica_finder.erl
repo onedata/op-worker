@@ -65,49 +65,6 @@ get_blocks_for_sync(Locations, Blocks) ->
 
     minimize_present_blocks(PresentBlocks, []).
 
-exclude_old_blocks(RemoteLocations) ->
-    RemoteList =
-        [{RemoteBlocks, {ProviderId, VV, {StorageId, FileId}}} ||
-            #document{value = #file_location{storage_id = StorageId, file_id = FileId,
-                blocks = RemoteBlocks, provider_id = ProviderId, version_vector = VV}}
-                <- RemoteLocations],
-
-    RemoteList2 = lists:foldl(fun({RemoteBlocks, BlockInfo}, Acc) ->
-        Acc ++ lists:map(fun(RB) -> {RB, BlockInfo} end, RemoteBlocks)
-    end, [], RemoteList),
-
-    SortedRemoteList = lists:sort(RemoteList2),
-    SortedRemoteList2 = lists:foldl(fun
-        (Remote, []) ->
-            [Remote];
-        ({RemoteBlock, _} = Remote, [{LastBlock, _} = Last | AccTail] = Acc) ->
-            U1 = fslogic_blocks:upper(LastBlock),
-            L2 = fslogic_blocks:lower(RemoteBlock),
-            case L2 >=  U1 of
-                true ->
-                    [Remote | Acc];
-                _ ->
-                    compere_blocks(Last, Remote) ++ AccTail
-            end
-    end, [], SortedRemoteList),
-
-    [{ProviderId, [RemoteBlock], StorageDetails} ||
-        {RemoteBlock, {ProviderId, _VV, StorageDetails}} <- SortedRemoteList2].
-
-compere_blocks({Block1, {_, VV1, _} = BlockInfo1} = B1,
-    {Block2, {_, VV2, _} = BlockInfo2} = B2) ->
-    case version_vector:compare(VV1, VV2) of
-        lesser ->
-            Block1_2 = fslogic_blocks:invalidate(Block1, Block2),
-            [B2, {Block1_2, BlockInfo1}];
-        greater ->
-            Block2_2 = fslogic_blocks:invalidate(Block2, B1),
-            [{Block2_2, BlockInfo2}, B1];
-        _ ->
-            [B2, B1]
-    end.
-
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns lists of blocks that are unique in local locations (no other provider has them)
@@ -128,6 +85,7 @@ get_unique_blocks(FileCtx) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Returns all blocks from given location list
 %% @end
@@ -140,6 +98,7 @@ get_all_blocks(LocationList) ->
     ])).
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% For given list of mappings between provider_id -> available_blocks,
 %% returns minimized version suitable for data transfer, in which providers'
@@ -160,4 +119,54 @@ minimize_present_blocks([{ProviderId, Blocks, StorageDetails} | Rest], AlreadyPr
         _ ->
             [{ProviderId, MinimizedBlocks, StorageDetails}
              | minimize_present_blocks(Rest, UpdatedAlreadyPresent)]
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Excludes not up_to_date blocks.
+%% @end
+%%--------------------------------------------------------------------
+-spec exclude_old_blocks([file_location:doc()]) ->
+    [{oneprovider:id(), fslogic_blocks:blocks(), storage_details()}].
+exclude_old_blocks(RemoteLocations) ->
+    RemoteList =
+        [{RemoteBlocks, {ProviderId, VV, {StorageId, FileId}}} ||
+            #document{value = #file_location{storage_id = StorageId, file_id = FileId,
+                blocks = RemoteBlocks, provider_id = ProviderId, version_vector = VV}}
+                <- RemoteLocations],
+
+    SortedRemoteList = lists:foldl(fun
+        (Remote, []) ->
+            [Remote];
+        (Remote, [Last | AccTail]) ->
+            compere_blocks(Last, Remote) ++ AccTail
+    end, [], lists:sort(RemoteList)),
+
+    [{ProviderId, RemoteBlocks, StorageDetails} ||
+        {RemoteBlocks, {ProviderId, _VV, StorageDetails}} <- SortedRemoteList].
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Compares two blocks and excluded old parts of blocks.
+%% @end
+%%--------------------------------------------------------------------
+-spec compere_blocks({fslogic_blocks:blocks(), {oneprovider:id(),
+    version_vector:version_vector(), storage_details()}},
+    {fslogic_blocks:blocks(), {oneprovider:id(),
+        version_vector:version_vector(), storage_details()}}) ->
+    [{fslogic_blocks:blocks(), {oneprovider:id(),
+        version_vector:version_vector(), storage_details()}}].
+compere_blocks({Block1, {_, VV1, _} = BlockInfo1} = B1,
+    {Block2, {_, VV2, _} = BlockInfo2} = B2) ->
+    case version_vector:compare(VV1, VV2) of
+        lesser ->
+            Block1_2 = fslogic_blocks:invalidate(Block1, Block2),
+            [B2, {Block1_2, BlockInfo1}];
+        greater ->
+            Block2_2 = fslogic_blocks:invalidate(Block2, B1),
+            [{Block2_2, BlockInfo2}, B1];
+        _ ->
+            [B2, B1]
     end.
