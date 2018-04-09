@@ -204,7 +204,17 @@ apply_links_mask(Ctx, #links_mask{key = Key, tree_id = TreeId, links = Links},
     Results = datastore_router:route(Ctx, Key, delete_links, [
         Ctx, Key, TreeId, Links2
     ]),
-    true = lists:all(fun(Result) -> Result == ok end, Results),
+
+    Check = lists:all(fun(Result) -> Result == ok end, Results),
+    case Check of
+        true ->
+            ok;
+        _ ->
+            ?error("apply_links_mask error: ~p for args: ~p",
+                [Results, {Ctx, Key, TreeId, Links2}])
+    end,
+
+    true = Check,
     Size = application:get_env(cluster_worker, datastore_links_mask_size, 1000),
     erlang:length(Links) == Size.
 
