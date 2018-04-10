@@ -60,9 +60,8 @@ db_sync_test_base(Config) ->
     Dirs = ?config(dirs_num, Config),
     Files = ?config(files_num, Config),
     Attempts = ?config(attempts, Config),
-    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {4,2,0}, Attempts, Dirs, Files).
-    % TODO - fix distributed_modification_test_base
-%%    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user1">>, {4,2,0}, Attempts).
+    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {4,2,0}, Attempts, Dirs, Files),
+    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user1">>, {4,2,0}, Attempts).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
