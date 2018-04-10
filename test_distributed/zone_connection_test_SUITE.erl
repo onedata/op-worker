@@ -73,15 +73,22 @@ init_per_suite(Config) ->
             ?APP_NAME, 1, rpc:call(hd(Workers), application, loaded_applications, [])
         ),
         ZoneDomain = rpc:call(hd(Workers), oneprovider, get_oz_domain, []),
-        ZoneVersionURL = str_utils:format("https://~s~s", [
-            ZoneDomain, ?zone_version_path
+        ZoneConfigurationURL = str_utils:format("https://~s~s", [
+            ZoneDomain, ?zone_configuration_path
         ]),
         ok = test_utils:mock_new(Workers, http_client, [passthrough]),
         ok = test_utils:mock_expect(Workers, http_client, get,
             fun(Url, Headers, Body, Options) ->
                 case Url of
-                    ZoneVersionURL ->
-                        {ok, 200, [], list_to_binary(AppVersion)};
+                    ZoneConfigurationURL ->
+                        {ok, 200, #{}, json_utils:encode_map(#{
+                            <<"version">> => list_to_binary(AppVersion),
+                            <<"compatibleOneproviderVersions">> => [
+                                % Return some random versions that will surely
+                                % not match provider's version.
+                                <<"13.04-rc2">>, <<"13.04-rc7">>
+                            ]
+                        })};
                     _ ->
                         meck:passthrough([Url, Headers, Body, Options])
                 end

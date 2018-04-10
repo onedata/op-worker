@@ -96,6 +96,8 @@ data_backend(true, <<"space-provider-list">>) -> space_data_backend;
 data_backend(true, <<"space-transfer-list">>) -> space_data_backend;
 data_backend(true, <<"space-user-permission">>) -> space_data_backend;
 data_backend(true, <<"space-group-permission">>) -> space_data_backend;
+data_backend(true, <<"space-transfer-time-stat">>) -> space_data_backend;
+data_backend(true, <<"space-transfer-link-state">>) -> space_data_backend;
 
 data_backend(true, <<"share">>) -> share_data_backend;
 data_backend(_, <<"share-public">>) -> share_data_backend;
@@ -154,9 +156,6 @@ public_rpc_backend() -> public_rpc_backend.
 session_details() ->
     ProviderId = oneprovider:get_id(),
     {ok, ProviderName} = provider_logic:get_name(ProviderId),
-    {_AppId, _AppName, AppVersion} = lists:keyfind(
-        ?APP_NAME, 1, application:loaded_applications()
-    ),
     Res = [
         {<<"userId">>, gui_session:get_user_id()},
         {<<"providerId">>, ProviderId},
@@ -167,7 +166,7 @@ session_details() ->
         {<<"manageProvidersURL">>,
             str_utils:to_binary(oneprovider:get_oz_providers_page())
         },
-        {<<"serviceVersion">>, str_utils:to_binary(AppVersion)}
+        {<<"serviceVersion">>, oneprovider:get_version()}
     ],
     {ok, Res}.
 

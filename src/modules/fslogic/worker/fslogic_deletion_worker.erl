@@ -18,11 +18,13 @@
 -include("modules/events/definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([init/1, handle/1, cleanup/0]).
--export([request_deletion/3, request_open_file_deletion/1]).
+-export([request_deletion/3, request_open_file_deletion/1,
+    request_remote_deletion/1]).
 
 %%%===================================================================
 %%% API
@@ -49,6 +51,16 @@ request_open_file_deletion(FileCtx) ->
     ok = worker_proxy:cast(fslogic_deletion_worker,
         {open_file_deletion_request, FileCtx}).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Request deletion of given file (delete triggered by dbsync_
+%% @end
+%%--------------------------------------------------------------------
+-spec request_remote_deletion(file_ctx:ctx()) -> ok.
+request_remote_deletion(FileCtx) ->
+    ok = worker_proxy:call(fslogic_deletion_worker,
+        {dbsync_deletion_request, FileCtx}).
+
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
 %%%===================================================================
@@ -68,11 +80,17 @@ init(_Args) ->
                 Handle#file_handles.is_removed
             end, Docs),
 
-            lists:foreach(fun(#document{key = FileUuid}) ->
-                FileGuid = fslogic_uuid:uuid_to_guid(FileUuid),
-                FileCtx = file_ctx:new_by_guid(FileGuid),
-                UserCtx = user_ctx:new(?ROOT_SESS_ID),
-                ok = fslogic_delete:remove_file_and_file_meta(FileCtx, UserCtx, false)
+            lists:foreach(fun(#document{key = FileUuid} = Doc) ->
+                try
+                    FileGuid = fslogic_uuid:uuid_to_guid(FileUuid),
+                    FileCtx = file_ctx:new_by_guid(FileGuid),
+                    UserCtx = user_ctx:new(?ROOT_SESS_ID),
+                    ok = fslogic_delete:remove_file_and_file_meta(FileCtx, UserCtx, false)
+                catch
+                    E1:E2 ->
+                        ?warning_stacktrace("Cannot remove old opened file ~p: ~p:~p",
+                            [Doc, E1, E2])
+                end
             end, RemovedFiles),
 
             lists:foreach(fun(#document{key = FileUuid}) ->
@@ -114,13 +132,52 @@ handle({fslogic_deletion_request, UserCtx, FileCtx, Silent}) ->
     end,
     ok;
 handle({open_file_deletion_request, FileCtx}) ->
+    {#document{key = Uuid, value = #file_meta{name = Name}} = FileDoc,
+        FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
     try
         UserCtx = user_ctx:new(?ROOT_SESS_ID),
-        fslogic_delete:remove_file_and_file_meta(FileCtx, UserCtx, false)
+
+        try
+            {ParentCtx, FileCtx3} = file_ctx:get_parent(FileCtx2, UserCtx),
+            {ParentDoc, _} = file_ctx:get_file_doc(ParentCtx),
+            ok = case fslogic_path:resolve(ParentDoc, <<"/", Name/binary>>) of
+                {ok, #document{key = Uuid2}} when Uuid2 =/= Uuid ->
+                    ok;
+                _ ->
+                    sfm_utils:delete_storage_file_without_location(FileCtx3, UserCtx)
+            end
+        catch
+            E2:E2 ->
+                % Debug - parent could be deleted before
+                ?debug_stacktrace("Cannot check parrent during delete ~p: ~p:~p",
+                    [FileCtx, E2, E2]),
+                sfm_utils:delete_storage_file_without_location(FileCtx2, UserCtx)
+        end
+    catch
+        _:{badmatch, {error, not_found}} ->
+            ?error_stacktrace("Cannot delete file at storage ~p", [FileCtx]),
+            ok;
+        _:{badmatch, {error, enoent}} ->
+            ?debug_stacktrace("Cannot delete file at storage ~p", [FileCtx]),
+            ok
+    end,
+
+    file_meta:delete_without_link(FileDoc);
+handle({dbsync_deletion_request, FileCtx}) ->
+    try
+        FileUuid = file_ctx:get_uuid_const(FileCtx),
+        fslogic_event_emitter:emit_file_removed(FileCtx, []),
+        case file_handles:exists(FileUuid) of
+            true ->
+                ok = file_handles:mark_to_remove(FileCtx);
+            false ->
+                handle({open_file_deletion_request, FileCtx})
+        end
     catch
         _:{badmatch, {error, not_found}} ->
             ok
-    end;
+    end,
+    ok;
 handle(_Request) ->
     ?log_bad_request(_Request),
     {error, wrong_request}.

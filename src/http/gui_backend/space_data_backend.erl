@@ -17,6 +17,7 @@
 
 -include("global_definitions.hrl").
 -include("proto/common/credentials.hrl").
+-include("modules/datastore/transfer.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
@@ -88,6 +89,8 @@ find_record(PermissionsRecord, RecordId) ->
             RecordId;
         <<"space-provider-list">> ->
             RecordId;
+        <<"space-transfer-link-state">> ->
+            RecordId;
         _ -> % covers space-(user|group)-permission and space-transfer-list
             {_, Id} = op_gui_utils:association_to_ids(RecordId),
             Id
@@ -111,6 +114,10 @@ find_record(PermissionsRecord, RecordId) ->
                     {ok, space_provider_list_record(RecordId)};
                 <<"space-transfer-list">> ->
                     {ok, space_transfer_list_record(RecordId)};
+                <<"space-transfer-time-stat">> ->
+                    {ok, space_transfer_time_stat_record(RecordId)};
+                <<"space-transfer-link-state">> ->
+                    {ok, space_transfer_active_links_record(RecordId)};
                 <<"space-user-permission">> ->
                     {ok, space_user_permission_record(RecordId)};
                 <<"space-group-permission">> ->
@@ -352,23 +359,24 @@ space_record(SpaceId, HasViewPrivileges) ->
 
     % Depending on view privileges, show or hide info about members, privileges,
     % providers and transfers.
-    RelationWithViewPrivileges = case HasViewPrivileges of
-        true -> SpaceId;
-        false -> null
+    {
+        RelationWithViewPrivileges, CurrentTransferListId, 
+        ScheduledTransferListId, CompletedTransferListId, TransferMinStat, 
+        TransferHourStat, TransferDayStat, TransferMonthStat
+    } = case HasViewPrivileges of
+        true -> {
+            SpaceId,
+            op_gui_utils:ids_to_association(?CURRENT_TRANSFERS_PREFIX, SpaceId),
+            op_gui_utils:ids_to_association(?SCHEDULED_TRANSFERS_PREFIX, SpaceId),
+            op_gui_utils:ids_to_association(?COMPLETED_TRANSFERS_PREFIX, SpaceId),
+            op_gui_utils:ids_to_association(?MINUTE_STAT_TYPE, SpaceId),
+            op_gui_utils:ids_to_association(?HOUR_STAT_TYPE, SpaceId),
+            op_gui_utils:ids_to_association(?DAY_STAT_TYPE, SpaceId),
+            op_gui_utils:ids_to_association(?MONTH_STAT_TYPE, SpaceId)
+        };
+        false ->
+            {null, null, null, null, null, null, null, null}
     end,
-    {CurrentTransferListId, ScheduledTransferListId, CompletedTransferListId} =
-        case HasViewPrivileges of
-            true -> {
-                op_gui_utils:ids_to_association(?CURRENT_TRANSFERS_PREFIX, SpaceId),
-                op_gui_utils:ids_to_association(?SCHEDULED_TRANSFERS_PREFIX, SpaceId),
-                op_gui_utils:ids_to_association(?COMPLETED_TRANSFERS_PREFIX, SpaceId)
-            };
-            false -> {
-                null,
-                null,
-                null
-            }
-        end,
     [
         {<<"id">>, SpaceId},
         {<<"name">>, Name},
@@ -380,6 +388,11 @@ space_record(SpaceId, HasViewPrivileges) ->
         {<<"currentTransferList">>, CurrentTransferListId},
         {<<"scheduledTransferList">>, ScheduledTransferListId},
         {<<"completedTransferList">>, CompletedTransferListId},
+        {<<"transferMinuteStat">>, TransferMinStat},
+        {<<"transferHourStat">>, TransferHourStat},
+        {<<"transferDayStat">>, TransferDayStat},
+        {<<"transferMonthStat">>, TransferMonthStat},
+        {<<"transferLinkState">>, RelationWithViewPrivileges},
         {<<"user">>, UserId}
     ].
 
@@ -512,6 +525,49 @@ space_group_permission_record(AssocId) ->
         {<<"id">>, AssocId},
         {<<"space">>, SpaceId},
         {<<"systemGroupId">>, GroupId}
+    ].
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns a client-compliant space-transfer-time-stat record based on stat id
+%% (combined space id and prefix defining time span of histograms).
+%% @end
+%%--------------------------------------------------------------------
+-spec space_transfer_time_stat_record(StatId :: binary()) ->
+    proplists:proplist().
+space_transfer_time_stat_record(StatId) ->
+    {TypePrefix, SpaceId} = op_gui_utils:association_to_ids(StatId),
+    #space_transfer_stats_cache{
+        timestamp = Timestamp,
+        stats_in = StatsIn,
+        stats_out = StatsOut
+    } = space_transfer_stats_cache:get(SpaceId, TypePrefix),
+
+    [
+        {<<"id">>, StatId},
+        {<<"timestamp">>, Timestamp},
+        {<<"type">>, TypePrefix},
+        {<<"statsIn">>, maps:to_list(StatsIn)},
+        {<<"statsOut">>, maps:to_list(StatsOut)}
+    ].
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns a client-compliant space-transfer-provider-map record based on space id
+%% @end
+%%--------------------------------------------------------------------
+-spec space_transfer_active_links_record(StatId :: binary()) ->
+    proplists:proplist().
+space_transfer_active_links_record(SpaceId) ->
+    {ok, ActiveLinks} = space_transfer_stats_cache:get_active_links(SpaceId),
+
+    [
+        {<<"id">>, SpaceId},
+        {<<"activeLinks">>, maps:to_list(ActiveLinks)}
     ].
 
 

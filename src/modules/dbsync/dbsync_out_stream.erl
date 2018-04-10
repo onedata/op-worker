@@ -243,9 +243,22 @@ handle_changes(State = #state{
     changes = Docs,
     handler = Handler
 }) ->
-    spawn(fun() ->
-        Handler(Since, Until, lists:reverse(Docs))
-    end),
+    MinSize = application:get_env(?APP_NAME, dbsync_handler_spawn_size, 10),
+    case length(Docs) >= MinSize of
+        true ->
+            spawn(fun() ->
+                Handler(Since, Until, lists:reverse(Docs))
+            end);
+        _ ->
+            try
+                Handler(Since, Until, lists:reverse(Docs))
+            catch
+                _:_ ->
+                    % Handle should catch own errors
+                    % try/catch only to protect stream
+                    ok
+            end
+    end,
     schedule_docs_handling(State#state{since = Until, changes = []}).
 
 %%--------------------------------------------------------------------

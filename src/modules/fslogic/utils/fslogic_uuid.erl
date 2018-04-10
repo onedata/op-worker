@@ -297,6 +297,7 @@ uuid_to_space_id(FileUuid) ->
         ?ROOT_DIR_UUID ->
             undefined;
         _ ->
-            {ok, SpaceUuid} = file_meta:get_scope_id({uuid, FileUuid}),
+            {ok, Doc} = file_meta:get_including_deleted(FileUuid),
+            {ok, SpaceUuid} = file_meta:get_scope_id(Doc),
             fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUuid)
     end.

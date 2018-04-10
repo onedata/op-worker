@@ -26,7 +26,7 @@
 
 %% API
 -export([start_rtransfer/0, fetch/6]).
--export([get_nodes/1, open/2, fsync/1, close/1, auth_request/4, get_connection_secret/2]).
+-export([get_nodes/1, open/2, fsync/1, close/1, auth_request/2, get_connection_secret/2]).
 -export([add_storage/1, generate_secret/2]).
 
 %% Dialyzer doesn't find the behaviour
@@ -109,9 +109,9 @@ close(Handle) ->
 %% Authorize a transfer of a specific file.
 %% @end
 %%--------------------------------------------------------------------
--spec auth_request(TransferData :: binary(), StorageId :: binary(),
-                   FileId :: binary(), ProviderId :: binary()) -> boolean().
-auth_request(TransferData, StorageId, FileId, ProviderId) ->
+-spec auth_request(TransferData :: binary(), ProviderId :: binary()) ->
+                          false | {storage:id(), helpers:file_id(), fslogic_worker:file_guid()}.
+auth_request(TransferData, ProviderId) ->
     try
         %% TransferId is not verified because provider could've created the transfer
         %% if it wanted to. Plus, the transfer will most often start before the
@@ -121,38 +121,34 @@ auth_request(TransferData, StorageId, FileId, ProviderId) ->
         SpaceDoc =
             case space_logic:get(?ROOT_SESS_ID, SpaceId) of
                 {ok, SD} -> SD;
-                {error, Reason} -> throw({error, {cannot_get_space_document, Reason}})
+                {error, Reason} -> throw({error, {cannot_get_space_document, SpaceId, Reason}})
             end,
 
         case space_logic:is_supported(SpaceDoc, ProviderId) of
             true -> ok;
-            false -> throw({error, space_not_supported_by_remote_provider})
+            false -> throw({error, space_not_supported_by_remote_provider, SpaceId})
         end,
 
         case space_logic:is_supported(SpaceDoc, oneprovider:get_id_or_undefined()) of
             true -> ok;
-            false -> throw({error, space_not_supported_by_local_provider})
+            false -> throw({error, space_not_supported_by_local_provider, SpaceId})
         end,
 
         case fslogic_uuid:guid_to_space_id(FileGuid) of
             SpaceId -> ok;
-            _ -> throw({error, invalid_file_guid})
+            _ -> throw({error, {invalid_file_guid, FileGuid}})
         end,
 
         FileCtx = file_ctx:new_by_guid(FileGuid),
         {Loc, _} = file_ctx:get_local_file_location_doc(FileCtx),
-        case Loc of
-            #document{value = #file_location{
-                                 storage_id = StorageId,
-                                 file_id = FileId}} -> ok;
-            _ -> throw({error, invalid_file_id_or_storage_id})
-        end,
+        #document{value =
+                      #file_location{storage_id = StorageId,
+                                     file_id = FileId}} = Loc,
 
-        true
+        {StorageId, FileId, FileGuid}
     catch
         _:Err ->
-            ?error_stacktrace("Auth of storageid=~p, fileid=~p, providerid=~p failed due to ~p",
-                              [StorageId, FileId, ProviderId, Err]),
+            ?error_stacktrace("Auth providerid=~p failed due to ~p", [ProviderId, Err]),
             false
     end.
 
@@ -233,10 +229,18 @@ do_generate_secret() ->
 %%--------------------------------------------------------------------
 -spec prepare_ssl_opts() -> any().
 prepare_ssl_opts() ->
-    {ok, KeyFile} = application:get_env(?APP_NAME, web_key_file),
-    Opts = [{use_ssl, true}, {cert_path, make_cert_bundle()},
-            {key_path, KeyFile}, {ca_path, make_ca_bundle()}],
-    application:set_env(rtransfer_link, ssl, Opts, [{persistent, true}]).
+    OriginalSSLOpts = application:get_env(rtransfer_link, ssl, []),
+    case proplists:get_value(use_ssl, OriginalSSLOpts, true) of
+        true ->
+            {ok, KeyFile} = application:get_env(?APP_NAME, web_key_file),
+            CABundle = make_ca_bundle(),
+            CertBundle = make_cert_bundle(),
+            Opts = [{use_ssl, true}, {cert_path, CertBundle}, {key_path, KeyFile} |
+                    [{ca_path, CABundle} || CABundle /= false]],
+            application:set_env(rtransfer_link, ssl, Opts, [{persistent, true}]);
+        false ->
+            ok
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -244,11 +248,11 @@ prepare_ssl_opts() ->
 %% Creates a bundle file from all CA certificates in the cacerts dir.
 %% @end
 %%--------------------------------------------------------------------
--spec make_ca_bundle() -> file:filename().
+-spec make_ca_bundle() -> file:filename() | false.
 make_ca_bundle() ->
     CADir = oz_plugin:get_cacerts_dir(),
     {ok, CertPems} = file_utils:read_files({dir, CADir}),
-    write_to_temp(CertPems).
+    write_certs_to_temp(CertPems).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -261,8 +265,17 @@ make_cert_bundle() ->
     {ok, CertFile} = application:get_env(?APP_NAME, web_cert_file),
     {ok, ChainFile} = application:get_env(?APP_NAME, web_cert_chain_file),
     {ok, Cert} = file:read_file(CertFile),
-    {ok, Chain} = file:read_file(ChainFile),
-    write_to_temp([Cert, Chain]).
+    Contents =
+        case file:read_file(ChainFile) of
+            {ok, Chain} -> [Cert, Chain];
+            Error ->
+                ?warning("Error reading certificate chain in path ~p: ~p. "
+                         "rtransfer will use cert only", [ChainFile, Error]),
+                [Cert]
+        end,
+    Filename = write_certs_to_temp(Contents),
+    true = is_list(Filename),
+    Filename.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -270,13 +283,16 @@ make_cert_bundle() ->
 %% Creates a temporary file populated with given contents.
 %% @end
 %%--------------------------------------------------------------------
--spec write_to_temp(Contents :: [binary()]) -> file:filename().
-write_to_temp(Contents) ->
-    TempPath = lib:nonl(os:cmd("mktemp")),
-    {ok, TempFile} = file:open(TempPath, [write, binary]),
-    lists:foreach(fun(Pem) -> ok = file:write(TempFile, Pem) end, Contents),
-    ok = file:close(TempFile),
-    TempPath.
+-spec write_certs_to_temp(Contents :: [binary()]) -> file:filename() | false.
+write_certs_to_temp(Contents) ->
+    case lists:flatmap(fun public_key:pem_decode/1, Contents) of
+        [] -> false;
+        Ders ->
+            TempPath = lib:nonl(os:cmd("mktemp")),
+            OutData = public_key:pem_encode(Ders),
+            ok = file:write_file(TempPath, OutData),
+            TempPath
+    end.
 
 %%--------------------------------------------------------------------
 %% @private

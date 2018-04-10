@@ -128,6 +128,29 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{
                     {ok, FileUuid} -> {ok, FileUuid};
                     Error -> Error
                 end;
+            {error, already_exists} = Eexists ->
+                case datastore_model:get_links(Ctx, ParentUuid, TreeId, FileName) of
+                    {ok, [#link{target = OldUuid}]} ->
+                        Deleted = case datastore_model:get(
+                            Ctx#{include_deleted => true}, OldUuid) of
+                            {ok, #document{deleted = true}} ->
+                                true;
+                            {ok, #document{value = #file_meta{deleted = true}}} ->
+                                true;
+                            _ ->
+                                false
+                        end,
+                        case Deleted of
+                            true ->
+                                datastore_model:delete_links(Ctx, ParentUuid,
+                                    TreeId, FileName),
+                                create({uuid, ParentUuid}, FileDoc);
+                            _ ->
+                                Eexists
+                        end;
+                    _ ->
+                        Eexists
+                end;
             {error, Reason} ->
                 {error, Reason}
         end
@@ -169,6 +192,8 @@ get(FileUuid) ->
     case get_including_deleted(FileUuid) of
         {ok, #document{value = #file_meta{deleted = true}}} ->
             {error, not_found};
+        {ok, #document{deleted = true}} ->
+            {error, not_found};
         Other ->
             Other
     end.
@@ -180,7 +205,7 @@ get(FileUuid) ->
 %%--------------------------------------------------------------------
 -spec get_including_deleted(uuid()) -> {ok, doc()} | {error, term()}.
 get_including_deleted(FileUuid) ->
-    datastore_model:get(?CTX, FileUuid).
+    datastore_model:get(?CTX#{include_deleted => true}, FileUuid).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -292,8 +317,8 @@ exists({path, Path}) ->
         {error, not_found} -> false
     end;
 exists(Key) ->
-    case get_including_deleted(Key) of
-        {ok, #document{value = #file_meta{deleted = Deleted}}} -> not Deleted;
+    case ?MODULE:get(Key) of
+        {ok, _} -> true;
         {error, not_found} -> false;
         {error, Reason} -> {error, Reason}
     end.
