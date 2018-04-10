@@ -150,7 +150,7 @@ exclude_old_blocks(RemoteLocations) ->
                 true ->
                     [Remote | Acc];
                 _ ->
-                    compere_blocks(Last, Remote) ++ AccTail
+                    compare_blocks(Last, Remote) ++ AccTail
             end
     end, [], lists:sort(RemoteList2)),
 
@@ -163,13 +163,13 @@ exclude_old_blocks(RemoteLocations) ->
 %% Compares two blocks and excluded old parts of blocks.
 %% @end
 %%--------------------------------------------------------------------
--spec compere_blocks({fslogic_blocks:blocks(), {oneprovider:id(),
+-spec compare_blocks({fslogic_blocks:blocks(), {oneprovider:id(),
     version_vector:version_vector(), storage_details()}},
     {fslogic_blocks:blocks(), {oneprovider:id(),
         version_vector:version_vector(), storage_details()}}) ->
     [{fslogic_blocks:blocks(), {oneprovider:id(),
         version_vector:version_vector(), storage_details()}}].
-compere_blocks({Block1, {_, VV1, _} = BlockInfo1} = B1,
+compare_blocks({Block1, {_, VV1, _} = BlockInfo1} = B1,
     {Block2, {_, VV2, _} = BlockInfo2} = B2) ->
     case version_vector:compare(VV1, VV2) of
         lesser ->
