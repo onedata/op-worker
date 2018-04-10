@@ -115,7 +115,7 @@ add(SpaceId, StorageId, MountInRoot) ->
 
     case datastore_model:update(?CTX, SpaceId, Diff, Default) of
         {ok, _} ->
-            ok = space_strategies:add_storage(SpaceId, StorageId, MountInRoot),
+            ok = space_strategies:add_storage(SpaceId, StorageId),
             {ok, SpaceId};
         {error, Reason} ->
             {error, Reason}
@@ -138,11 +138,14 @@ get_storage_ids(#document{value = #space_storage{} = Value}) ->
 %% storage root.
 %% @end
 %%--------------------------------------------------------------------
--spec get_mounted_in_root(record() | doc()) -> [storage:id()].
+-spec get_mounted_in_root(record() | doc() | id()) -> [storage:id()].
 get_mounted_in_root(#space_storage{mounted_in_root = StorageIds}) ->
     StorageIds;
 get_mounted_in_root(#document{value = #space_storage{} = Value}) ->
-    get_mounted_in_root(Value).
+    get_mounted_in_root(Value);
+get_mounted_in_root(SpaceId) ->
+    {ok, Doc} = ?MODULE:get(SpaceId),
+    get_mounted_in_root(Doc).
 
 %%--------------------------------------------------------------------
 %% @doc

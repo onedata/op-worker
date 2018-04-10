@@ -511,10 +511,6 @@ strategy_config(StrategyType, StorageId, SpaceStrategies =
 ) ->
 
     case StrategyType of
-        filename_mapping ->
-            #storage_strategies{filename_mapping = {Strategy, Args}} =
-                maps:get(StorageId, StorageStrategies),
-            {Strategy, Args};
         storage_import ->
             #storage_strategies{storage_import = {Strategy, Args}} =
                 maps:get(StorageId, StorageStrategies),
@@ -577,7 +573,7 @@ stop_pools() ->
     end, space_strategy:types()),
     Pools = [PoolName || {PoolName, _} <- PoolsConfigs],
     lists:foreach(fun(PoolName) ->
-        true = worker_pool:stop_pool(PoolName)
+        ok = wpool:stop_sup_pool(PoolName)
     end, sets:to_list(sets:from_list(Pools))).
 
 %%--------------------------------------------------------------------

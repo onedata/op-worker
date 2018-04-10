@@ -138,15 +138,6 @@
 domain_to_provider_id(Domain) ->
     atom_to_binary(Domain, utf8).
 
-%%-------------------------------------------------------------------
-%% @doc
-%% Returns domain based on worker's provider id
-%% @end
-%%--------------------------------------------------------------------
--spec provider_id_to_domain(ProviderId :: binary()) -> atom().
-provider_id_to_domain(ProviderId) ->
-    binary_to_atom(ProviderId, utf8).
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Setup and mocking related with users and spaces, done on each provider
@@ -771,18 +762,18 @@ user_logic_mock_setup(Workers, Users) ->
         end, Users),
 
     GetUserFun = fun
-        F(_, _, ?ROOT_USER_ID) ->
+        (_, _, ?ROOT_USER_ID) ->
             {ok, #document{key = ?ROOT_USER_ID, value = #od_user{name = <<"root">>}}};
-        F(_, _, ?GUEST_USER_ID) ->
+        (_, _, ?GUEST_USER_ID) ->
             {ok, #document{key = ?GUEST_USER_ID, value = #od_user{name = <<"nobody">>}}};
-        F(Scope, ?ROOT_SESS_ID, UserId) when Scope =:= shared orelse Scope =:= protected ->
+        (Scope, ?ROOT_SESS_ID, UserId) when Scope =:= shared orelse Scope =:= protected ->
             case proplists:get_value(UserId, Users) of
                 undefined ->
                     {error, not_found};
                 UserConfig2 ->
                     UserConfigToUserDoc(UserConfig2)
             end;
-        F(_, SessionId, UserId) ->
+        (_, SessionId, UserId) ->
             {ok, #document{value = #session{
                 identity = #user_identity{user_id = SessionUserId}
             }}} = session:get(SessionId),
@@ -980,8 +971,6 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
     % Different arity of below functions must be mocked separately, because
     % they contain calls to the same module, which overrides the mock.
     GetProviderFun = fun(?ROOT_SESS_ID, PID) ->
-        Domain = provider_id_to_domain(PID),
-
         case maps:get(PID, ProvMap, undefined) of
             undefined ->
                 {error, not_found};
