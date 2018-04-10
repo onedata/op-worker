@@ -177,7 +177,7 @@ switch_monitoring_status(SpaceId, storage_update, CurrentStrategyName,
 switch_import_monitoring_status(_SpaceId, no_import, no_import) ->
     ok;
 switch_import_monitoring_status(SpaceId, no_import, _ ) ->
-    storage_sync_monitoring:start_spirals(SpaceId);
+    storage_sync_monitoring:start_plot_counters(SpaceId);
 switch_import_monitoring_status(SpaceId, _, no_import) ->
     storage_sync_monitoring:stop_counters(SpaceId);
 switch_import_monitoring_status(_SpaceId, _, _) ->
@@ -194,7 +194,7 @@ switch_import_monitoring_status(_SpaceId, _, _) ->
 switch_update_monitoring_status(_SpaceId, no_update, no_update) ->
     ok;
 switch_update_monitoring_status(SpaceId, no_update, _ ) ->
-    storage_sync_monitoring:start_spirals(SpaceId);
+    storage_sync_monitoring:start_plot_counters(SpaceId);
 switch_update_monitoring_status(SpaceId, _, no_update) ->
     storage_sync_monitoring:stop_counters(SpaceId);
 switch_update_monitoring_status(_SpaceId, _, _) ->
