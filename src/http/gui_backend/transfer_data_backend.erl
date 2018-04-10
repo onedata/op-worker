@@ -294,14 +294,24 @@ prepare_histograms(?JOB_TRANSFERS_TYPE, HistogramsType, TransferId) ->
     end,
     {Histograms, StartTime, LastUpdate, TimeWindow};
 prepare_histograms(?ON_THE_FLY_TRANSFERS_TYPE, HistogramsType, TransferStatsId) ->
-    {ok, TransferStats} = space_transfer_stats:get(TransferStatsId),
-    LastUpdates = TransferStats#space_transfer_stats.last_update,
     CurrentTime = provider_logic:zone_time_seconds(),
     StartTime = 0,
-    {Histograms, LastUpdate, TimeWindow} = prepare_histograms(
-        TransferStats, HistogramsType, CurrentTime, LastUpdates
-    ),
-    {Histograms, StartTime, LastUpdate, TimeWindow}.
+    {Histograms, LastUpdate, Window} = case space_transfer_stats:get(TransferStatsId) of
+        {ok, TransferStats} ->
+            LastUpdates = TransferStats#space_transfer_stats.last_update,
+            prepare_histograms(
+                TransferStats, HistogramsType, CurrentTime, LastUpdates
+            );
+        {error, not_found} ->
+            TimeWindow = transfer_histograms:type_to_time_window(HistogramsType),
+            Timestamp = transfer_histograms:trim_timestamp(CurrentTime),
+            {#{}, Timestamp, TimeWindow};
+        {error, Error} ->
+            ?error("Failed to retrieve Space Transfer Stats Document
+                   of ID ~p due to: ~p", [TransferStatsId, Error]),
+            error(Error)
+    end,
+    {Histograms, StartTime, LastUpdate, Window}.
 
 
 %%--------------------------------------------------------------------

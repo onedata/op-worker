@@ -23,14 +23,14 @@
 %% API
 -export([
     new/3, update/6,
-    pad_with_zeroes/4, trim_min_histograms/2, trim/4,
+    pad_with_zeroes/4, trim_min_histograms/2, trim/4, trim_timestamp/1,
     type_to_time_window/1, type_to_hist_length/1,
     to_speed_charts/4
 ]).
 
 -ifdef(TEST).
 %% Export for unit testing
--export([trim_timestamp/1, histogram_to_speed_chart/4]).
+-export([histogram_to_speed_chart/4]).
 -endif.
 
 %%%===================================================================
@@ -203,6 +203,14 @@ type_to_hist_length(?DAY_STAT_TYPE) -> ?DAY_HIST_LENGTH;
 type_to_hist_length(?MONTH_STAT_TYPE) -> ?MONTH_HIST_LENGTH.
 
 
+-spec trim_timestamp(Timestamp :: timestamp()) -> timestamp().
+trim_timestamp(Timestamp) ->
+    FullSlotsToSub = ?MIN_HIST_LENGTH - ?MIN_SPEED_HIST_LENGTH - 1,
+    FullSlotsToSubTime = FullSlotsToSub * ?FIVE_SEC_TIME_WINDOW,
+    RecentSlotDuration = (Timestamp rem ?FIVE_SEC_TIME_WINDOW) + 1,
+    Timestamp - RecentSlotDuration - FullSlotsToSubTime.
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -303,11 +311,3 @@ window_to_speed_chart_len(?FIVE_SEC_TIME_WINDOW) -> ?MIN_SPEED_HIST_LENGTH;
 window_to_speed_chart_len(?MIN_TIME_WINDOW) -> ?HOUR_SPEED_HIST_LENGTH;
 window_to_speed_chart_len(?HOUR_TIME_WINDOW) -> ?DAY_SPEED_HIST_LENGTH;
 window_to_speed_chart_len(?DAY_TIME_WINDOW) -> ?MONTH_SPEED_HIST_LENGTH.
-
-
--spec trim_timestamp(Timestamp :: timestamp()) -> timestamp().
-trim_timestamp(Timestamp) ->
-    FullSlotsToSub = ?MIN_HIST_LENGTH - ?MIN_SPEED_HIST_LENGTH - 1,
-    FullSlotsToSubTime = FullSlotsToSub * ?FIVE_SEC_TIME_WINDOW,
-    RecentSlotDuration = (Timestamp rem ?FIVE_SEC_TIME_WINDOW) + 1,
-    Timestamp - RecentSlotDuration - FullSlotsToSubTime.

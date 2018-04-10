@@ -92,6 +92,9 @@ find_record(PermissionsRecord, RecordId) ->
             RecordId;
         <<"space-on-the-fly-transfer-list">> ->
             RecordId;
+        <<"space-transfer-time-stat">> ->
+            {_, _, Id} = op_gui_utils:association_to_ids(RecordId),
+            Id;
         _ -> % covers space-(user|group)-permission and space-transfer-list
             {_, Id} = op_gui_utils:association_to_ids(RecordId),
             Id
@@ -535,18 +538,26 @@ space_transfer_stat_record(RecordId) ->
     proplists:proplist().
 space_transfer_time_stat_record(StatId) ->
     {TransferType, StatsType, SpaceId} = op_gui_utils:association_to_ids(StatId),
+    TimeWindow = transfer_histograms:type_to_time_window(StatsType),
     #space_transfer_stats_cache{
         timestamp = Timestamp,
         stats_in = StatsIn,
         stats_out = StatsOut
     } = space_transfer_stats_cache:get(TransferType, StatsType, SpaceId),
 
+    SpeedStatsIn = transfer_histograms:to_speed_charts(
+        StatsIn, 0, Timestamp, TimeWindow
+    ),
+    SpeedStatsOut = transfer_histograms:to_speed_charts(
+        StatsOut, 0, Timestamp, TimeWindow
+    ),
+
     [
         {<<"id">>, StatId},
         {<<"timestamp">>, Timestamp},
         {<<"type">>, StatsType},
-        {<<"statsIn">>, maps:to_list(StatsIn)},
-        {<<"statsOut">>, maps:to_list(StatsOut)}
+        {<<"statsIn">>, maps:to_list(SpeedStatsIn)},
+        {<<"statsOut">>, maps:to_list(SpeedStatsOut)}
     ].
 
 
