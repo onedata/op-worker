@@ -81,7 +81,7 @@ init_per_suite(Config) ->
             fun(Url, Headers, Body, Options) ->
                 case Url of
                     ZoneConfigurationURL ->
-                        {ok, 200, #{}, json_utils:encode_map(#{
+                        {ok, 200, #{}, json_utils:encode(#{
                             <<"version">> => list_to_binary(AppVersion),
                             <<"compatibleOneproviderVersions">> => [
                                 % Return some random versions that will surely

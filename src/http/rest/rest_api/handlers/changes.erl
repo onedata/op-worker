@@ -100,7 +100,7 @@ get_space_changes(Req, State) ->
         ?HTTP_OK, #{<<"content-type">> => <<"application/json">>}, Req4
     ),
     ok = stream_loop(Req5, State5),
-    cowboy_req:stream_body(<<"">>, fin, Req),
+    cowboy_req:stream_body(<<"">>, fin, Req5),
     {stop, Req5, State5}.
 
 
@@ -274,7 +274,7 @@ prepare_response(#change{seq = Seq, doc = FileDoc = #document{
             <<"name">> => Name,
             <<"seq">> => Seq
         },
-    json_utils:encode_map(Response).
+    json_utils:encode(Response).
 
 
 %%--------------------------------------------------------------------

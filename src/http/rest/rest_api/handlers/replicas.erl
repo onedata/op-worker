@@ -176,7 +176,7 @@ invalidate_file_replica_internal(Req, State = #{
         Auth, {guid, FileGuid}, SourceProviderId, MigrationProviderId
     ),
 
-    Response = json_utils:encode_map(#{<<"transferId">> => TransferId}),
+    Response = json_utils:encode(#{<<"transferId">> => TransferId}),
     Req2 = cowboy_req:reply(?HTTP_OK, #{}, Response, Req),
     {stop, Req2, State}.
 
@@ -197,7 +197,7 @@ replicate_file_internal(Req, #{auth := Auth, provider_id := ProviderId, callback
         Auth, {guid, FileGuid}, ProviderId, Callback
     ),
 
-    Response = json_utils:encode_map(#{<<"transferId">> => TransferId}),
+    Response = json_utils:encode(#{<<"transferId">> => TransferId}),
     Req2 = cowboy_req:reply(?HTTP_OK, #{}, Response, Req),
     {stop, Req2, State}.
 
@@ -211,7 +211,7 @@ get_file_replicas_internal(Req, #{auth := Auth} = State) ->
     FileGuid = get_file_guid(State),
 
     {ok, Distribution} = onedata_file_api:get_file_distribution(Auth, {guid, FileGuid}),
-    Response = json_utils:encode_map(Distribution),
+    Response = json_utils:encode(Distribution),
     {Response, Req, State}.
 
 %%--------------------------------------------------------------------

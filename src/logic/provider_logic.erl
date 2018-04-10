@@ -597,7 +597,7 @@ verify_provider_nonce(ProviderId, Nonce) ->
 
         case http_client:get(URL, #{}, <<>>, SslOpts) of
             {ok, 200, _, JSON} ->
-                case json_utils:decode_map(JSON) of
+                case json_utils:decode(JSON) of
                     #{<<"status">> := <<"ok">>} -> ok;
                     _ -> {error, invalid_nonce}
                 end;
@@ -709,7 +709,7 @@ fetch_oz_compatibility_config(OzUrl, SslOpts) ->
     URL = OzUrl ++ ?zone_configuration_path,
     case http_client:get(URL, #{}, <<>>, [{ssl_options, SslOpts}]) of
         {ok, 200, _, JsonBody} ->
-            JsonMap = json_utils:decode_map(JsonBody),
+            JsonMap = json_utils:decode(JsonBody),
             case maps:is_key(<<"version">>, JsonMap) of
                 true ->
                     OzVersion = maps:get(<<"version">>, JsonMap),
@@ -739,7 +739,7 @@ fetch_op_compatibility_config(Hostname, SslOpts) ->
     ]),
     case http_client:get(URL, #{}, <<>>, [{ssl_options, SslOpts}]) of
         {ok, 200, _, JsonBody} ->
-            JsonMap = json_utils:decode_map(JsonBody),
+            JsonMap = json_utils:decode(JsonBody),
             OpVersion = maps:get(<<"version">>, JsonMap, <<"unknown">>),
             CompatibleOpVersions = maps:get(
                 <<"compatibleOneproviderVersions">>, JsonMap, []

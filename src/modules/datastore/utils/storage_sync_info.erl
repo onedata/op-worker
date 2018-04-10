@@ -24,7 +24,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec update(file_meta:uuid(), undefined | non_neg_integer(), undefined | non_neg_integer(),
-    binary()) -> {ok, file_meta:uuid()} | {error, term()}.
+    binary() | undefined) -> {ok, file_meta:uuid()} | {error, term()}.
 update(Uuid, NewMTime, NewHashKey, NewHashValue) ->
     file_meta:update({uuid, Uuid},
         fun

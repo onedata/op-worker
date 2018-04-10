@@ -18,11 +18,12 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([new/1, add_storage/2, add_storage/3]).
--export([set_strategy/4, set_strategy/5, update_import_finish_time/3,
+-export([new/1, add_storage/2]).
+-export([set_strategy/4, set_strategy/5,
     get_storage_import_details/2, get_storage_update_details/2,
-    update_import_start_time/3, get_import_finish_time/2,
-    get_import_start_time/2, update_last_update_start_time/3, update_last_update_finish_time/3,
+    update_import_start_time/3, update_import_finish_time/3,
+    get_import_finish_time/2, get_import_start_time/2,
+    update_last_update_start_time/3, update_last_update_finish_time/3,
     get_last_update_finish_time/2, get_last_update_start_time/2, is_import_on/1]).
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1]).
 
@@ -130,20 +131,11 @@ new(SpaceId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv add_storage(SpaceId, StorageId, false).
+%% Adds default strategies for new storage in this space.
 %% @end
 %%--------------------------------------------------------------------
 -spec add_storage(od_space:id(), storage:id()) -> ok | no_return().
 add_storage(SpaceId, StorageId) ->
-    add_storage(SpaceId, StorageId, false).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Adds default strategies for new storage in this space.
-%% @end
-%%--------------------------------------------------------------------
--spec add_storage(od_space:id(), storage:id(), boolean()) -> ok | no_return().
-add_storage(SpaceId, StorageId, MountInRoot) ->
     #document{value = Value = #space_strategies{
         storage_strategies = StorageStrategies
     }} = Doc = case space_strategies:get(SpaceId) of
@@ -152,16 +144,11 @@ add_storage(SpaceId, StorageId, MountInRoot) ->
         {ok, Doc0} ->
             Doc0
     end,
-    StorageStrategy = case MountInRoot of
-        true -> #storage_strategies{filename_mapping = {root, #{}}};
-        _ -> #storage_strategies{}
-    end,
     {ok, _} = save(Doc#document{
         value = Value#space_strategies{
-            storage_strategies = maps:put(StorageId, StorageStrategy, StorageStrategies)
-        }}),
+            storage_strategies = StorageStrategies#{StorageId => #storage_strategies{}}
+    }}),
     ok.
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -190,8 +177,6 @@ set_strategy(SpaceId, StorageId, StrategyType, StrategyName, StrategyArgs) ->
         OldSS = #storage_strategies{} = maps:get(StorageId, Strategies, #storage_strategies{}),
 
         NewSS = case StrategyType of
-            filename_mapping ->
-                OldSS#storage_strategies{filename_mapping = {StrategyName, StrategyArgs}};
             storage_import ->
                 OldSS#storage_strategies{storage_import = {StrategyName, StrategyArgs}};
             storage_update ->
@@ -200,7 +185,6 @@ set_strategy(SpaceId, StorageId, StrategyType, StrategyName, StrategyArgs) ->
 
         {ok, OldValue#space_strategies{storage_strategies = maps:put(StorageId, NewSS, Strategies)}}
     end).
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -386,7 +370,7 @@ get_storage_strategy_config(#document{value = Value}, StrategyType, StorageId) -
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    3.
+    4.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -433,6 +417,20 @@ get_record_struct(3) ->
         {file_conflict_resolution, {atom, #{atom => term}}},
         {file_caching, {atom, #{atom => term}}},
         {enoent_handling, {atom, #{atom => term}}}
+    ]};
+get_record_struct(4) ->
+    {record, [
+        {storage_strategies, #{string => {record, [
+            {storage_import, {atom, #{atom => term}}},
+            {storage_update, {atom, #{atom => term}}},
+            {import_start_time, integer},
+            {import_finish_time, integer},
+            {last_update_start_time, integer},
+            {last_update_finish_time, integer}
+        ]}}},
+        {file_conflict_resolution, {atom, #{atom => term}}},
+        {file_caching, {atom, #{atom => term}}},
+        {enoent_handling, {atom, #{atom => term}}}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -464,14 +462,34 @@ upgrade_record(2, R = {?MODULE, StorageStrategies, _, _, _}) ->
         {storage_update, StorageUpdateStrategy},
         {last_import_time, LastImportTime}
     }) ->
-        #storage_strategies{
-            filename_mapping = FilenameMappingStrategy,
-            storage_import = StorageImportStrategy,
-            storage_update = StorageUpdateStrategy,
-            import_start_time = undefined,
-            import_finish_time = LastImportTime,
-            last_update_start_time = undefined,
-            last_update_finish_time = undefined
+        {storage_strategies,
+            FilenameMappingStrategy,
+            StorageImportStrategy,
+            StorageUpdateStrategy,
+            undefined,
+            LastImportTime,
+            undefined,
+            undefined
         }
     end, StorageStrategies),
-    {3, R#space_strategies{storage_strategies = NewStorageStrategies}}.
+    {3, R#space_strategies{storage_strategies = NewStorageStrategies}};
+upgrade_record(3, R = {?MODULE, StorageStrategies, _, _, _}) ->
+    NewStorageStrategies = maps:map(fun(_, {storage_strategies,
+        {filename_mapping, _FilenameMappingStrategy},
+        {storage_import, StorageImportStrategy},
+        {storage_update, StorageUpdateStrategy},
+        {import_start_time, ImportStartTime},
+        {import_finish_time, ImportFinishTime},
+        {last_update_start_time, LastUpdateStartTime},
+        {last_update_finish_time, LastImportFinishTime}
+    }) ->
+        {storage_strategies,
+            StorageImportStrategy,
+            StorageUpdateStrategy,
+            ImportStartTime,
+            ImportFinishTime,
+            LastUpdateStartTime,
+            LastImportFinishTime
+        }
+    end, StorageStrategies),
+    {4, R#space_strategies{storage_strategies = NewStorageStrategies}}.

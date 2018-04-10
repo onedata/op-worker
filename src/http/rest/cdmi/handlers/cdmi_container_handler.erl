@@ -131,7 +131,7 @@ delete_resource(Req, State = #{auth := Auth, path := Path}) ->
 get_cdmi(Req, #{options := Options} = State) ->
     NonEmptyOpts = utils:ensure_defined(Options, [], ?DEFAULT_GET_DIR_OPTS),
     Answer = cdmi_container_answer:prepare(NonEmptyOpts, State#{options := NonEmptyOpts}),
-    Response = json_utils:encode_map(Answer),
+    Response = json_utils:encode(Answer),
     {Response, Req, State}.
 
 
@@ -175,7 +175,7 @@ put_cdmi(Req, State = #{auth := Auth, path := Path, options := Opts}) ->
         _ ->
             ok = cdmi_metadata:update_user_metadata(Auth, {guid, Guid}, RequestedUserMetadata),
             Answer = cdmi_container_answer:prepare(?DEFAULT_GET_DIR_OPTS, State#{guid => Guid, options => ?DEFAULT_GET_DIR_OPTS}),
-            Response = json_utils:encode_map(Answer),
+            Response = json_utils:encode(Answer),
             Req2 = cowboy_req:set_resp_body(Response, Req1),
             {true, Req2, State}
     end.

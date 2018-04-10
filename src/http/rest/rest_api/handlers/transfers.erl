@@ -137,7 +137,7 @@ list_transfers(Req, State = #{list_all := true}) ->
                     atom_to_binary(TransferStatus, utf8) =:= Status
                 end, LimitedTransfers)
         end,
-    Response = json_utils:encode_map(FilteredTransfers),
+    Response = json_utils:encode(FilteredTransfers),
     {Response, Req3, State3};
 list_transfers(Req, State) ->
     {State2, Req2} = validator:parse_id(Req, State),
@@ -145,7 +145,7 @@ list_transfers(Req, State) ->
     #{id := Id} = State2,
 
     Transfer = transfer:get_info(Id),
-    Response = json_utils:encode_map(Transfer),
+    Response = json_utils:encode(Transfer),
     {Response, Req2, State2}.
 
 %%-------------------------------------------------------------------

@@ -28,7 +28,7 @@
 %%--------------------------------------------------------------------
 -spec init(cowboy_req:req(), term()) -> {ok, cowboy_req:req(), term()}.
 init(#{method := <<"GET">>} = Req, State) ->
-    Configuration = json_utils:encode_map(get_config()),
+    Configuration = json_utils:encode(get_config()),
     NewReq = cowboy_req:reply(200,
         #{<<"content-type">> => <<"application/json">>}, Configuration, Req
     ),
