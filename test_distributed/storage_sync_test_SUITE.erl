@@ -61,8 +61,8 @@
     import_nfs_acl_with_disabled_luma_should_fail_test/1,
     create_directory_import_error_test/1,
     update_syncs_files_after_import_failed_test/1,
-    update_syncs_files_after_previous_update_failed_test/1
-    , create_delete_import2_test/1]).
+    update_syncs_files_after_previous_update_failed_test/1,
+    create_delete_import2_test/1]).
 
 -define(TEST_CASES, [
     create_directory_import_test,
@@ -92,7 +92,6 @@
     delete_directory_export_test,
     append_file_update_test,
     delete_file_export_test,
-    append_file_update_test,
     append_file_export_test,
     copy_file_update_test,
     move_file_update_test,
