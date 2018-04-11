@@ -137,7 +137,7 @@ trim_test() ->
     HourHistograms1 = #{?PROVIDER1 => HourHist1},
     ExpHourHistograms1 = #{?PROVIDER1 => ExpHourHist1},
     LastUpdate1 = 100,
-    {TrimmedMinHists1, TrimmedHourHists1, _} = transfer_histograms:trim(
+    {TrimmedMinHists1, TrimmedHourHists1, _} = transfer_histograms:trim_histograms(
         MinHistograms, HourHistograms1, ?MIN_TIME_WINDOW, LastUpdate1
     ),
     assertEqualMaps(ExpMinHistograms, TrimmedMinHists1),
@@ -148,7 +148,7 @@ trim_test() ->
     HourHistograms2 = #{?PROVIDER1 => HourHist2},
     ExpHourHistograms2 = #{?PROVIDER1 => ExpHourHist2},
     LastUpdate2 = 70,
-    {TrimmedMinHist2, TrimmedHourHist2, _} = transfer_histograms:trim(
+    {TrimmedMinHist2, TrimmedHourHist2, _} = transfer_histograms:trim_histograms(
         MinHistograms, HourHistograms2, ?MIN_TIME_WINDOW, LastUpdate2
     ),
     assertEqualMaps(ExpMinHistogram, TrimmedMinHist2),

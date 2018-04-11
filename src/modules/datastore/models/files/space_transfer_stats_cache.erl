@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Model storing statistics about all transfers in given space.
+%%% Model storing aggregated statistics about all transfers in given space.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(space_transfer_stats_cache).
@@ -17,12 +17,18 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([save/3, get/3, get_active_links/1, update/3, delete/2]).
+-export([
+    save/4,
+    get/3, get_active_links/1,
+    update/4,
+    delete/3
+]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
 
 -type timestamp() :: non_neg_integer().
+-type transfer_stats() :: #{od_provider:id() => #space_transfer_stats{}}.
 -type space_transfer_stats_cache() :: #space_transfer_stats_cache{}.
 -type doc() :: datastore_doc:doc(space_transfer_stats_cache()).
 
@@ -58,13 +64,15 @@
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Saves transfer statistics of given type for given space.
+%% Saves transfer statistics of given type for given space and transfer type.
 %% @end
 %%-------------------------------------------------------------------
--spec save(SpaceId :: od_space:id(), Stats :: space_transfer_stats_cache(),
-    StatsType :: binary()) -> ok | {error, term()}.
-save(SpaceId, Stats, StatsType) ->
-    Key = datastore_utils:gen_key(StatsType, SpaceId),
+-spec save(TransferType :: binary(), StatsType :: binary(),
+    SpaceId :: od_space:id(), Stats :: space_transfer_stats_cache()
+) ->
+    ok | {error, term()}.
+save(TransferType, StatsType, SpaceId, Stats) ->
+    Key = key(TransferType, StatsType, SpaceId),
     case datastore_model:save(?CTX, #document{key = Key, value = Stats}) of
         {ok, _} -> ok;
         Error -> Error
@@ -78,9 +86,9 @@ save(SpaceId, Stats, StatsType) ->
 %%-------------------------------------------------------------------
 -spec get(TransferType :: binary(), StatsType :: binary(),
     SpaceId :: od_space:id()) -> space_transfer_stats_cache() | {error, term()}.
-get(_TransferType, StatsType, SpaceId) ->
+get(TransferType, StatsType, SpaceId) ->
     Now = time_utils:system_time_millis(),
-    Key = datastore_utils:gen_key(StatsType, SpaceId),
+    Key = key(TransferType, StatsType, SpaceId),
     Fetched = case datastore_model:get(?CTX, Key) of
         {ok, #document{value = Stats}} ->
             case Now < Stats#space_transfer_stats_cache.expires of
@@ -92,7 +100,11 @@ get(_TransferType, StatsType, SpaceId) ->
     end,
     case Fetched of
         {error, not_found} ->
-            prepare_stats(SpaceId, StatsType);
+            TransferStatsMap = get_transfer_stats(TransferType, SpaceId),
+            CurrentTime = provider_logic:zone_time_seconds(),
+            prepare_aggregated_stats(
+                TransferType, StatsType, SpaceId, TransferStatsMap, CurrentTime
+            );
         _ ->
             Fetched
     end.
@@ -126,10 +138,12 @@ get_active_links(SpaceId) ->
 %% 61 and 64 are the same).
 %% @end
 %%-------------------------------------------------------------------
--spec update(SpaceId :: od_space:id(), Stats :: space_transfer_stats_cache(),
-    StatsType :: binary()) -> ok | {error, term()}.
-update(SpaceId, Stats, StatsType) ->
-    Key = datastore_utils:gen_key(StatsType, SpaceId),
+-spec update(TransferType :: binary(), StatsType :: binary(),
+    SpaceId :: od_space:id(), Stats :: space_transfer_stats_cache()
+) ->
+    ok | {error, term()}.
+update(TransferType, StatsType, SpaceId, Stats) ->
+    Key = key(TransferType, StatsType, SpaceId),
     Diff = fun(OldStats) ->
         Now = time_utils:system_time_millis(),
         NewStats = case Now < OldStats#space_transfer_stats_cache.expires of
@@ -146,13 +160,14 @@ update(SpaceId, Stats, StatsType) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Deletes space transfer statistics of given type for given space.
+%% Deletes space transfer statistics of given type for given space and
+%% transfer type.
 %% @end
 %%-------------------------------------------------------------------
--spec delete(SpaceId :: od_space:id(), StatsType :: binary()) ->
-    ok | {error, term()}.
-delete(SpaceId, StatsType) ->
-    Key = datastore_utils:gen_key(StatsType, SpaceId),
+-spec delete(TransferType :: binary(), StatsType :: binary(),
+    SpaceId :: od_space:id()) -> ok | {error, term()}.
+delete(TransferType, StatsType, SpaceId) ->
+    Key = key(TransferType, StatsType, SpaceId),
     datastore_model:delete(?CTX, Key).
 
 
@@ -207,28 +222,49 @@ get_record_struct(1) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Gather transfer statistics of requested types for given space, pad them
-%% with zeroes to current time and erase recent n-seconds to avoid fluctuations
-%% on charts (due to synchronization between providers). To do that for type
-%% other than minute one, it is required to calculate also mentioned minute stats
+%% Gather statistics of requested types from given transfer statistics
+%% for given space. Pad them with zeroes to current time and erase recent
+%% n-seconds to avoid fluctuations on charts. To do that for type
+%% other than minute one, it is required to calculate also minute stats
 %% (otherwise it is not possible to trim histograms of other types).
-%% Convert prepared histograms to speed charts and cache them for future requests.
 %% @end
 %%--------------------------------------------------------------------
--spec prepare_stats(SpaceId :: od_space:id(), StatsType :: binary()) ->
+-spec prepare_aggregated_stats(TransferType :: binary(), StatsType :: binary(),
+    SpaceId :: od_space:id(), TransferStatsMap :: #{binary() => transfer_stats()},
+    CurrentTime :: timestamp()
+) ->
     space_transfer_stats_cache().
-prepare_stats(SpaceId, ?MINUTE_STAT_TYPE) ->
-    [MinStats] = get_stats(SpaceId, [?MINUTE_STAT_TYPE]),
+prepare_aggregated_stats(?ALL_TRANSFERS_TYPE, StatsType, SpaceId,
+    TransferStatsMap, CurrentTime
+) ->
+    JobStats = prepare_aggregated_stats(?JOB_TRANSFERS_TYPE,
+        StatsType, SpaceId, TransferStatsMap, CurrentTime
+    ),
+    OnTheFlyStats = prepare_aggregated_stats(?ON_THE_FLY_TRANSFERS_TYPE,
+        StatsType, SpaceId, TransferStatsMap, CurrentTime
+    ),
+    AllStats = merge_stats(JobStats, OnTheFlyStats),
+    update(?ALL_TRANSFERS_TYPE, StatsType, SpaceId, AllStats),
+    AllStats;
+
+prepare_aggregated_stats(TransferType, ?MINUTE_STAT_TYPE, SpaceId,
+    TransferStatsMap, CurrentTime
+) ->
+    TransferStats = maps:get(TransferType, TransferStatsMap),
+    [MinStats] = aggregate_stats(
+        TransferStats, [?MINUTE_STAT_TYPE], CurrentTime
+    ),
+
     #space_transfer_stats_cache{
-        timestamp = Timestamp, stats_in = StatsIn, stats_out = StatsOut
+        timestamp = Timestamp,
+        stats_in = StatsIn,
+        stats_out = StatsOut
     } = MinStats,
 
-    {TrimmedStatsIn, TrimmedTimestamp} = transfer_histograms:trim_min_histograms(
-        StatsIn, Timestamp
-    ),
-    {TrimmedStatsOut, TrimmedTimestamp} = transfer_histograms:trim_min_histograms(
-        StatsOut, Timestamp
-    ),
+    {TrimmedStatsIn, TrimmedTimestamp} =
+        transfer_histograms:trim_min_histograms(StatsIn, Timestamp),
+    {TrimmedStatsOut, TrimmedTimestamp} =
+        transfer_histograms:trim_min_histograms(StatsOut, Timestamp),
 
     % Filter out zeroed histograms
     Pred = fun(_Provider, Histogram) -> lists:sum(Histogram) > 0 end,
@@ -237,28 +273,35 @@ prepare_stats(SpaceId, ?MINUTE_STAT_TYPE) ->
         stats_in = maps:filter(Pred, TrimmedStatsIn),
         stats_out = maps:filter(Pred, TrimmedStatsOut)
     },
-    SpeedMinStats = stats_to_speed_charts(NewMinStats, ?MINUTE_STAT_TYPE),
-    update(SpaceId, SpeedMinStats, ?MINUTE_STAT_TYPE),
-    SpeedMinStats;
+    update(TransferType, ?MINUTE_STAT_TYPE, SpaceId, NewMinStats),
+    NewMinStats;
 
-prepare_stats(SpaceId, RequestedStatsType) ->
-    [MinStats, RequestedStats] = get_stats(SpaceId, [
-        ?MINUTE_STAT_TYPE, RequestedStatsType
-    ]),
+prepare_aggregated_stats(TransferType, RequestedStatsType, SpaceId,
+    TransferStatsMap, CurrentTime
+) ->
+    TransferStats = maps:get(TransferType, TransferStatsMap),
+    [MinStats, RequestedStats] = aggregate_stats(
+        TransferStats, [?MINUTE_STAT_TYPE, RequestedStatsType], CurrentTime
+    ),
+
     #space_transfer_stats_cache{
-        timestamp = Timestamp, stats_in = MinStatsIn, stats_out = MinStatsOut
+        timestamp = Timestamp,
+        stats_in = MinStatsIn,
+        stats_out = MinStatsOut
     } = MinStats,
     #space_transfer_stats_cache{
-        timestamp = Timestamp, stats_in = StatsIn, stats_out = StatsOut
+        timestamp = Timestamp,
+        stats_in = StatsIn,
+        stats_out = StatsOut
     } = RequestedStats,
 
-    Window = transfer_histograms:type_to_time_window(RequestedStatsType),
-    {NewMinStatsIn, NewStatsIn, NewTimestamp} = transfer_histograms:trim(
-        MinStatsIn, StatsIn, Window, Timestamp
-    ),
-    {NewMinStatsOut, NewStatsOut, NewTimestamp} = transfer_histograms:trim(
-        MinStatsOut, StatsOut, Window, Timestamp
-    ),
+    TimeWindow = transfer_histograms:type_to_time_window(RequestedStatsType),
+    {NewMinStatsIn, NewStatsIn, NewTimestamp} =
+        transfer_histograms:trim_histograms(
+            MinStatsIn, StatsIn, TimeWindow, Timestamp),
+    {NewMinStatsOut, NewStatsOut, NewTimestamp} =
+        transfer_histograms:trim_histograms(
+            MinStatsOut, StatsOut, TimeWindow, Timestamp),
 
     % Filter out zeroed histograms
     Pred = fun(_Provider, Histogram) -> lists:sum(Histogram) > 0 end,
@@ -274,56 +317,33 @@ prepare_stats(SpaceId, RequestedStatsType) ->
         active_links = undefined
     },
 
-    SpeedMinStats = stats_to_speed_charts(NewMinStats, ?MINUTE_STAT_TYPE),
-    update(SpaceId, SpeedMinStats, ?MINUTE_STAT_TYPE),
-    SpeedRequestedStats = stats_to_speed_charts(NewRequestedStats, RequestedStatsType),
-    save(SpaceId, SpeedRequestedStats, RequestedStatsType),
-    SpeedRequestedStats.
+    update(TransferType, ?MINUTE_STAT_TYPE, SpaceId, NewMinStats),
+    update(TransferType, RequestedStatsType, SpaceId, NewRequestedStats),
+    NewRequestedStats.
 
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Gather transfer statistics of requested types for given space.
+%% Aggregate statistics of specified type from given transfer statistics.
 %% @end
 %%--------------------------------------------------------------------
--spec get_stats(SpaceId :: od_space:id(), HistogramTypes :: [binary()]) ->
-    [space_transfer_stats_cache()].
-get_stats(SpaceId, RequestedStatsTypes) ->
-    {ok, #document{value = Space}} = od_space:get(SpaceId),
-    SpaceTransfers = lists:foldl(fun(Provider, STs) ->
-        case space_transfer_stats:get(Provider, SpaceId) of
-            {ok, SpaceTransfer} ->
-                STs#{Provider => SpaceTransfer};
-            {error, not_found} ->
-                STs;
-            Error ->
-                ?error("Failed to retrieve Space Transfer Document
-                       for space ~p and provider ~p due to: ~p", [
-                    SpaceId, Provider, Error
-                ]),
-                STs
-        end
-    end, #{}, maps:keys(Space#od_space.providers)),
-
+-spec aggregate_stats(transfer_stats(), HistogramTypes :: [binary()],
+    CurrentTime :: timestamp()) -> [space_transfer_stats_cache()].
+aggregate_stats(TransferStats, RequestedStatsTypes, CurrentTime) ->
     LocalTime = time_utils:system_time_millis(),
-    CurrentTime = provider_logic:zone_time_seconds(),
     EmptyStats = [
-        {#space_transfer_stats_cache{
+        #space_transfer_stats_cache{
             expires = LocalTime + stats_type_to_expiration_timeout(StatsType),
             timestamp = CurrentTime
-        }, StatsType} || StatsType <- RequestedStatsTypes
+        } || StatsType <- RequestedStatsTypes
     ],
 
-    GatheredStats = maps:fold(fun(Provider, SpaceTransfer, CurrentStats) ->
+    maps:fold(fun(Provider, TransferStat, AggregatedStats) ->
         lists:map(fun({Stats, StatsType}) ->
-            NewStats = update_stats(
-                Stats, StatsType, SpaceTransfer, CurrentTime, Provider
-            ),
-            {NewStats, StatsType}
-        end, CurrentStats)
-    end, EmptyStats, SpaceTransfers),
-    lists:map(fun({Stats, _StatsType}) -> Stats end, GatheredStats).
+            update_stats(Stats, StatsType, TransferStat, CurrentTime, Provider)
+        end, lists:zip(AggregatedStats, RequestedStatsTypes))
+    end, EmptyStats, TransferStats).
 
 
 %%--------------------------------------------------------------------
@@ -333,8 +353,10 @@ get_stats(SpaceId, RequestedStatsTypes) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec update_stats(OldStats :: space_transfer_stats_cache(), StatsType :: binary(),
-    ST :: space_transfer:space_transfer(), CurrentTime :: timestamp(),
-    Provider :: od_provider:id()) -> space_transfer_stats_cache().
+    ST :: #space_transfer_stats{}, CurrentTime :: timestamp(),
+    Provider :: od_provider:id()
+) ->
+    space_transfer_stats_cache().
 update_stats(OldStats, StatsType, ST, CurrentTime, Provider) ->
     #space_transfer_stats_cache{
         stats_in = StatsIn,
@@ -393,19 +415,36 @@ update_stats(OldStats, StatsType, ST, CurrentTime, Provider) ->
     }.
 
 
--spec stats_to_speed_charts(Stats :: space_transfer_stats_cache(),
-    StatsType :: binary()) -> space_transfer_stats_cache().
-stats_to_speed_charts(Stats, StatsType) ->
-    Window = transfer_histograms:type_to_time_window(StatsType),
+-spec merge_stats(space_transfer_stats_cache(), space_transfer_stats_cache()) ->
+    space_transfer_stats_cache().
+merge_stats(Stats1, Stats2) ->
     #space_transfer_stats_cache{
-        timestamp = End,
-        stats_in = StatsIn,
-        stats_out = StatsOut
-    } = Stats,
+        timestamp = Timestamp,
+        stats_in = StatsIn1,
+        stats_out = StatsOut1
+    } = Stats1,
+    #space_transfer_stats_cache{
+        expires = Expires,
+        timestamp = Timestamp,
+        stats_in = StatsIn2,
+        stats_out = StatsOut2
+    } = Stats2,
 
-    Stats#space_transfer_stats_cache{
-        stats_in = transfer_histograms:to_speed_charts(StatsIn, 0, End, Window),
-        stats_out = transfer_histograms:to_speed_charts(StatsOut, 0, End, Window)
+    MergeFun = fun(ProviderId, Hist1, Stats) ->
+        case maps:find(ProviderId, Stats) of
+            {ok, Hist2} ->
+                Stats#{ProviderId => histogram:merge(Hist1, Hist2)};
+            error ->
+                Stats#{ProviderId => Hist1}
+        end
+    end,
+
+    #space_transfer_stats_cache{
+        expires = Expires,
+        timestamp = Timestamp,
+        stats_in = maps:fold(MergeFun, StatsIn1, StatsIn2),
+        stats_out = maps:fold(MergeFun, StatsOut1, StatsOut2),
+        active_links = undefined
     }.
 
 
@@ -414,3 +453,48 @@ stats_type_to_expiration_timeout(?MINUTE_STAT_TYPE) -> ?MINUTE_STAT_EXPIRATION;
 stats_type_to_expiration_timeout(?HOUR_STAT_TYPE) -> ?HOUR_STAT_EXPIRATION;
 stats_type_to_expiration_timeout(?DAY_STAT_TYPE) -> ?DAY_STAT_EXPIRATION;
 stats_type_to_expiration_timeout(?MONTH_STAT_TYPE) -> ?MONTH_STAT_EXPIRATION.
+
+
+-spec key(TransferType :: binary(), StatsType :: binary(),
+    SpaceId :: od_space:id()) -> binary().
+key(TransferType, StatsType, SpaceId) ->
+    RecordId = op_gui_utils:ids_to_association(TransferType, SpaceId),
+    datastore_utils:gen_key(StatsType, RecordId).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Gather transfer statistics of requested transfer type for given space.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_transfer_stats(RequestedTransferType :: binary(),
+    SpaceId :: od_space:id()) -> #{binary() => transfer_stats()}.
+get_transfer_stats(RequestedTransferType, SpaceId) ->
+    TransferTypesToGet = case RequestedTransferType of
+        ?ALL_TRANSFERS_TYPE ->
+            [?JOB_TRANSFERS_TYPE, ?ON_THE_FLY_TRANSFERS_TYPE];
+        _ ->
+            [RequestedTransferType]
+    end,
+    {ok, #document{value = Space}} = od_space:get(SpaceId),
+    SupportingProviders = maps:keys(Space#od_space.providers),
+
+    lists:foldl(fun(TransferType, TransferStatsMap) ->
+        TransferStats = lists:foldl(fun(Provider, OldTransferStats) ->
+            case space_transfer_stats:get(Provider, TransferType, SpaceId) of
+                {ok, TransferStat} ->
+                    OldTransferStats#{Provider => TransferStat};
+                {error, not_found} ->
+                    OldTransferStats;
+                {error, Error} ->
+                    ?error("Failed to retrieve Space Transfer Stats Document
+                            for space ~p, provider ~p and transfer type ~p
+                            due to: ~p", [
+                        SpaceId, Provider, TransferType, Error
+                    ]),
+                    OldTransferStats
+            end
+        end, #{}, SupportingProviders),
+        TransferStatsMap#{TransferType => TransferStats}
+    end, #{}, TransferTypesToGet).

@@ -202,10 +202,14 @@ transfer_record(TransferId) ->
         {<<"startTime">>, StartTime},
         {<<"finishTime">>, FinishTime},
         {<<"currentStat">>, TransferId},
-        {<<"minuteStat">>, op_gui_utils:ids_to_association(?MINUTE_STAT_TYPE, TransferId)},
-        {<<"hourStat">>, op_gui_utils:ids_to_association(?HOUR_STAT_TYPE, TransferId)},
-        {<<"dayStat">>, op_gui_utils:ids_to_association(?DAY_STAT_TYPE, TransferId)},
-        {<<"monthStat">>, op_gui_utils:ids_to_association(?MONTH_STAT_TYPE, TransferId)}
+        {<<"minuteStat">>, op_gui_utils:ids_to_association(
+            ?JOB_TRANSFERS_TYPE, ?MINUTE_STAT_TYPE, TransferId)},
+        {<<"hourStat">>, op_gui_utils:ids_to_association(
+            ?JOB_TRANSFERS_TYPE, ?HOUR_STAT_TYPE, TransferId)},
+        {<<"dayStat">>, op_gui_utils:ids_to_association(
+            ?JOB_TRANSFERS_TYPE, ?DAY_STAT_TYPE, TransferId)},
+        {<<"monthStat">>, op_gui_utils:ids_to_association(
+            ?JOB_TRANSFERS_TYPE, ?MONTH_STAT_TYPE, TransferId)}
     ]}.
 
 
@@ -267,7 +271,7 @@ transfer_time_stat_record(RecordId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Get and prepare for further processing histograms of specified type
+%% Get and prepare for further processing histograms of requested type
 %% for transfer of given type and id.
 %% @end
 %%--------------------------------------------------------------------
@@ -279,9 +283,9 @@ prepare_histograms(?JOB_TRANSFERS_TYPE, HistogramsType, TransferId) ->
     {ok, #document{value = T}} = transfer:get(TransferId),
     StartTime = T#transfer.start_time,
 
-    % Return historical statistics of finished transfers intact. As for active ones,
-    % pad them with zeroes to current time and erase recent n-seconds to avoid
-    % fluctuations on charts due to synchronization of docs between providers
+    % Return historical statistics of finished transfers intact. As for active
+    % ones, pad them with zeroes to current time and erase recent n-seconds to
+    % avoid fluctuations on charts
     {Histograms, LastUpdate, TimeWindow} = case transfer_utils:is_ongoing(T) of
         false ->
             RequestedHistograms = get_histograms(T, HistogramsType),
@@ -294,24 +298,27 @@ prepare_histograms(?JOB_TRANSFERS_TYPE, HistogramsType, TransferId) ->
     end,
     {Histograms, StartTime, LastUpdate, TimeWindow};
 prepare_histograms(?ON_THE_FLY_TRANSFERS_TYPE, HistogramsType, TransferStatsId) ->
-    CurrentTime = provider_logic:zone_time_seconds(),
+    % On the fly transfers do not have neither start nor end.
     StartTime = 0,
-    {Histograms, LastUpdate, Window} = case space_transfer_stats:get(TransferStatsId) of
+    CurrentTime = provider_logic:zone_time_seconds(),
+    Fetched = space_transfer_stats:get(TransferStatsId),
+    {Histograms, LastUpdate, TimeWindow} = case Fetched of
         {ok, TransferStats} ->
             LastUpdates = TransferStats#space_transfer_stats.last_update,
             prepare_histograms(
                 TransferStats, HistogramsType, CurrentTime, LastUpdates
             );
         {error, not_found} ->
-            TimeWindow = transfer_histograms:type_to_time_window(HistogramsType),
+            % Return empty stats in case transfer stats document does not exist
+            Window = transfer_histograms:type_to_time_window(HistogramsType),
             Timestamp = transfer_histograms:trim_timestamp(CurrentTime),
-            {#{}, Timestamp, TimeWindow};
+            {#{}, Timestamp, Window};
         {error, Error} ->
             ?error("Failed to retrieve Space Transfer Stats Document
                    of ID ~p due to: ~p", [TransferStatsId, Error]),
             error(Error)
     end,
-    {Histograms, StartTime, LastUpdate, Window}.
+    {Histograms, StartTime, LastUpdate, TimeWindow}.
 
 
 %%--------------------------------------------------------------------
@@ -324,26 +331,26 @@ prepare_histograms(?ON_THE_FLY_TRANSFERS_TYPE, HistogramsType, TransferStatsId) 
 %% (otherwise it is not possible to trim histograms of other types).
 %% @end
 %%--------------------------------------------------------------------
--spec prepare_histograms(TransferStats :: #transfer{} | #space_transfer_stats{},
+-spec prepare_histograms(Stats :: #transfer{} | #space_transfer_stats{},
     HistogramsType :: binary(), CurrentTime :: non_neg_integer(),
     LastUpdates :: #{od_provider:id() => non_neg_integer()}
 ) ->
-    {Histograms :: transfer_histograms:histograms(),
-        Timestamp :: non_neg_integer(), TimeWindow :: non_neg_integer()}.
-prepare_histograms(TransferStats, ?MINUTE_STAT_TYPE, CurrentTime, LastUpdates) ->
-    Histograms = get_histograms(TransferStats, ?MINUTE_STAT_TYPE),
+    {transfer_histograms:histograms(), Timestamp :: non_neg_integer(),
+        TimeWindow :: non_neg_integer()}.
+prepare_histograms(Stats, ?MINUTE_STAT_TYPE, CurrentTime, LastUpdates) ->
+    Histograms = get_histograms(Stats, ?MINUTE_STAT_TYPE),
     Window = ?FIVE_SEC_TIME_WINDOW,
     PaddedHistograms = transfer_histograms:pad_with_zeroes(
         Histograms, Window, CurrentTime, LastUpdates
     ),
-    {TrimmedHistograms, NewTimestamp} = transfer_histograms:trim_min_histograms(
+    {NewHistograms, NewTimestamp} = transfer_histograms:trim_min_histograms(
         PaddedHistograms, CurrentTime
     ),
-    {TrimmedHistograms, NewTimestamp, Window};
+    {NewHistograms, NewTimestamp, Window};
 
-prepare_histograms(TransferStats, HistogramsType, CurrentTime, LastUpdates) ->
-    MinHistograms = get_histograms(TransferStats, ?MINUTE_STAT_TYPE),
-    RequestedHistograms = get_histograms(TransferStats, HistogramsType),
+prepare_histograms(Stats, HistogramsType, CurrentTime, LastUpdates) ->
+    MinHistograms = get_histograms(Stats, ?MINUTE_STAT_TYPE),
+    RequestedHistograms = get_histograms(Stats, HistogramsType),
     TimeWindow = transfer_histograms:type_to_time_window(HistogramsType),
 
     PaddedMinHistograms = transfer_histograms:pad_with_zeroes(
@@ -352,11 +359,11 @@ prepare_histograms(TransferStats, HistogramsType, CurrentTime, LastUpdates) ->
     PaddedRequestedHistograms = transfer_histograms:pad_with_zeroes(
         RequestedHistograms, TimeWindow, CurrentTime, LastUpdates
     ),
-    {_, TrimmedRequestedHistograms, NewTimestamp} = transfer_histograms:trim(
-        PaddedMinHistograms, PaddedRequestedHistograms, TimeWindow, CurrentTime
-    ),
+    {_, NewRequestedHistograms, NewTimestamp} =
+        transfer_histograms:trim_histograms(PaddedMinHistograms,
+            PaddedRequestedHistograms, TimeWindow, CurrentTime),
 
-    {TrimmedRequestedHistograms, NewTimestamp, TimeWindow}.
+    {NewRequestedHistograms, NewTimestamp, TimeWindow}.
 
 
 %%--------------------------------------------------------------------

@@ -537,6 +537,8 @@ space_transfer_stat_record(RecordId) ->
 -spec space_transfer_time_stat_record(StatId :: binary()) ->
     proplists:proplist().
 space_transfer_time_stat_record(StatId) ->
+    % There is no start nor end for aggregated transfer stats
+    StartTime = 0,
     {TransferType, StatsType, SpaceId} = op_gui_utils:association_to_ids(StatId),
     TimeWindow = transfer_histograms:type_to_time_window(StatsType),
     #space_transfer_stats_cache{
@@ -546,10 +548,10 @@ space_transfer_time_stat_record(StatId) ->
     } = space_transfer_stats_cache:get(TransferType, StatsType, SpaceId),
 
     SpeedStatsIn = transfer_histograms:to_speed_charts(
-        StatsIn, 0, Timestamp, TimeWindow
+        StatsIn, StartTime, Timestamp, TimeWindow
     ),
     SpeedStatsOut = transfer_histograms:to_speed_charts(
-        StatsOut, 0, Timestamp, TimeWindow
+        StatsOut, StartTime, Timestamp, TimeWindow
     ),
 
     [
