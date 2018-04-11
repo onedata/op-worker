@@ -302,7 +302,7 @@ import_children(Job = #space_strategy_job{
     {FilesJobs, DirsJobs} = simple_scan:generate_jobs_for_importing_children(
         Job#space_strategy_job{data = Data1}, Offset, FileCtx, ChildrenStorageCtxsBatch1),
     FilesToHandleNum = length(FilesJobs) + length(DirsJobs),
-    storage_sync_monitoring:update_queue_length_spirals(SpaceId, FilesToHandleNum),
+    storage_sync_monitoring:update_queue_length_counter(SpaceId, FilesToHandleNum),
     storage_sync_monitoring:update_files_to_sync_counter(SpaceId, FilesToHandleNum),
 
     FilesResults = simple_scan:import_regular_subfiles(FilesJobs),
@@ -346,7 +346,7 @@ import_children(Job = #space_strategy_job{
     {FilesJobs, DirsJobs} = simple_scan:generate_jobs_for_importing_children(
         Job#space_strategy_job{data = Data}, Offset, FileCtx, ChildrenStorageCtxsBatch),
     FilesToHandleNum = length(FilesJobs) + length(DirsJobs),
-    storage_sync_monitoring:update_queue_length_spirals(SpaceId, FilesToHandleNum),
+    storage_sync_monitoring:update_queue_length_counter(SpaceId, FilesToHandleNum),
     storage_sync_monitoring:update_files_to_sync_counter(SpaceId, FilesToHandleNum),
 
     FilesResults = simple_scan:import_regular_subfiles(FilesJobs),
@@ -567,9 +567,9 @@ init_update_job(CurrentTimestamp, Args = #{max_depth := MaxDepth}, Data = #{
     storage_id := StorageId
 }) ->
     storage_sync_monitoring:start_counters(SpaceId),
-    storage_sync_monitoring:start_spirals(SpaceId),
+    storage_sync_monitoring:start_plot_counters(SpaceId),
     space_strategies:update_last_update_start_time(SpaceId, StorageId, CurrentTimestamp),
-    storage_sync_monitoring:update_queue_length_spirals(SpaceId, 1),
+    storage_sync_monitoring:update_queue_length_counter(SpaceId, 1),
     storage_sync_monitoring:update_files_to_sync_counter(SpaceId, 1),
     [#space_strategy_job{
         strategy_name = simple_scan,

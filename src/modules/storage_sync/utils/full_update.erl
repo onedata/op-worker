@@ -70,7 +70,7 @@ run(Job = #space_strategy_job{
 -spec delete_imported_file_and_update_counters(file_meta:name(),
     file_ctx:ctx(), od_space:id()) -> ok.
 delete_imported_file_and_update_counters(ChildName, FileCtx, SpaceId) ->
-    storage_sync_monitoring:update_queue_length_spirals(SpaceId, -1),
+    storage_sync_monitoring:update_queue_length_counter(SpaceId, -1),
     try
         delete_imported_file(ChildName, FileCtx),
         storage_sync_monitoring:increase_deleted_files_spirals(SpaceId),
@@ -280,5 +280,5 @@ save_storage_children_names(TableName, StorageFileCtx, Offset, BatchSize) ->
 %%-------------------------------------------------------------------
 -spec cast_deletion_of_imported_file(file_meta:name(), file_ctx:ctx(), od_space:id()) -> ok.
 cast_deletion_of_imported_file(ChildName, FileCtx, SpaceId) ->
-    storage_sync_monitoring:update_queue_length_spirals(SpaceId, 1),
+    storage_sync_monitoring:update_queue_length_counter(SpaceId, 1),
     delete_imported_file_and_update_counters(ChildName, FileCtx, SpaceId).

@@ -61,8 +61,8 @@
     import_nfs_acl_with_disabled_luma_should_fail_test/1,
     create_directory_import_error_test/1,
     update_syncs_files_after_import_failed_test/1,
-    update_syncs_files_after_previous_update_failed_test/1
-    , create_delete_import2_test/1]).
+    update_syncs_files_after_previous_update_failed_test/1,
+    create_delete_import2_test/1]).
 
 -define(TEST_CASES, [
     create_directory_import_test,
@@ -92,7 +92,6 @@
     delete_directory_export_test,
     append_file_update_test,
     delete_file_export_test,
-    append_file_update_test,
     append_file_export_test,
     copy_file_update_test,
     move_file_update_test,
@@ -125,7 +124,7 @@ update_syncs_files_after_import_failed_test(Config) ->
     storage_sync_test_base:update_syncs_files_after_import_failed_test(Config, false).
 
 update_syncs_files_after_previous_update_failed_test(Config) ->
-    storage_sync_test_base:update_syncs_files_after_import_failed_test(Config, false).
+    storage_sync_test_base:update_syncs_files_after_previous_update_failed_test(Config, false).
 
 create_directory_import_check_user_id_test(Config) ->
     storage_sync_test_base:create_directory_import_check_user_id_test(Config, false).
@@ -254,11 +253,15 @@ init_per_suite(Config) ->
         hackney:start(),
         initializer:disable_quota_limit(NewConfig),
         initializer:mock_provider_ids(NewConfig),
-        NewConfig
+        multi_provider_file_ops_test_base:init_env(NewConfig)
     end,
+    {ok, _} = application:ensure_all_started(worker_pool),
+    {ok, _} = worker_pool:start_sup_pool(?VERIFY_POOL, [{workers, 8}]),
     [{?LOAD_MODULES, [initializer, storage_sync_test_base]}, {?ENV_UP_POSTHOOK, Posthook} | Config].
 
 end_per_suite(Config) ->
+    ok = wpool:stop_sup_pool(?VERIFY_POOL),
+    initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:unload_quota_mocks(Config),
     initializer:unmock_provider_ids(Config),
     ssl:stop().
@@ -413,9 +416,8 @@ init_per_testcase(Case, Config) when
     init_per_testcase(default, Config);
 
 init_per_testcase(_Case, Config) ->
-    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(
-        ?TEST_FILE(Config, "env_desc.json"), Config),
-    ConfigWithProxy = lfm_proxy:init(ConfigWithSessionInfo),
+    ct:timetrap({minutes, 5}),
+    ConfigWithProxy = lfm_proxy:init(Config),
     Config2 = storage_sync_test_base:add_workers_storage_mount_points(ConfigWithProxy),
     storage_sync_test_base:create_init_file(Config2),
     Config2.
@@ -456,13 +458,13 @@ end_per_testcase(Case, Config) when
     end_per_testcase(default, Config);
 
 end_per_testcase(_Case, Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    Workers = [W1 | _] = ?config(op_worker_nodes, Config),
     storage_sync_test_base:clean_reverse_luma_cache(W1),
     storage_sync_test_base:disable_storage_sync(Config),
     storage_sync_test_base:clean_storage(Config, false),
-    lfm_proxy:teardown(Config),
-    %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
-    initializer:clean_test_users_and_spaces_no_validate(Config).
+    storage_sync_test_base:clean_space(Config),
+    test_utils:mock_unload(Workers, [simple_scan, storage_sync_changes]),
+    lfm_proxy:teardown(Config).
 
 %%%===================================================================
 %%% Internal functions
