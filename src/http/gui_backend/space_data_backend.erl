@@ -469,8 +469,13 @@ space_transfer_list_record(RecordId) ->
             transfer:list_current_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET,
                 ?MAX_TRANSFERS_TO_LIST);
         ?SCHEDULED_TRANSFERS_PREFIX ->
-            transfer:list_scheduled_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET,
-                ?MAX_TRANSFERS_TO_LIST);
+            {ok, Scheduled} = transfer:list_scheduled_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET,
+               ?MAX_TRANSFERS_TO_LIST),
+            {ok, Current} = transfer:list_current_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET,
+               ?MAX_TRANSFERS_TO_LIST),
+            {ok, Completed} = transfer:list_past_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET,
+               ?MAX_TRANSFERS_TO_LIST),
+            {ok, (Scheduled -- Current) -- Completed};
         ?COMPLETED_TRANSFERS_PREFIX ->
             transfer:list_past_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET,
                 ?MAX_TRANSFERS_TO_LIST)
