@@ -61,7 +61,7 @@ content_types_provided(Req, State) ->
 get_cdmi_capability(Req, #{options := Opts} = State) ->
     NonEmptyOpts = utils:ensure_defined(Opts, [], ?default_get_capability_opts),
     RawCapabilities = prepare_capability_ans(NonEmptyOpts),
-    Capabilities = json_utils:encode_map(RawCapabilities),
+    Capabilities = json_utils:encode(RawCapabilities),
     {Capabilities, Req, State}.
 
 %% ====================================================================

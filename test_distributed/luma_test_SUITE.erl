@@ -970,7 +970,7 @@ init_per_testcase(Case, Config) when
     test_utils:mock_expect(Worker, space_storage, get, fun(_) ->
         {ok, ?SPACE_STORAGE_DOC([?STORAGE_ID])}
     end),
-    Expected = json_utils:encode_map(#{<<"uid">> => ?UID1, <<"gid">> => ?GID1}),
+    Expected = json_utils:encode(#{<<"uid">> => ?UID1, <<"gid">> => ?GID1}),
     test_utils:mock_expect(Worker, http_client, post, fun
         (Url, Headers, Body) when is_binary(Url) ->
             case lists:last(binary:split(Url, <<"/">>, [global])) of
@@ -994,8 +994,8 @@ init_per_testcase(Case, Config) when
     test_utils:mock_expect(Worker, space_storage, get, fun(_) ->
         {ok, ?SPACE_STORAGE_DOC([?STORAGE_ID])}
     end),
-    Expected = json_utils:encode_map(#{<<"uid">> => ?UID1, <<"gid">> => ?GID1}),
-    Expected2 = json_utils:encode_map(#{<<"gid">> => ?GID2}),
+    Expected = json_utils:encode(#{<<"uid">> => ?UID1, <<"gid">> => ?GID1}),
+    Expected2 = json_utils:encode(#{<<"gid">> => ?GID2}),
     test_utils:mock_expect(Worker, http_client, post, fun
         (Url, Headers, Body) when is_binary(Url) ->
             case lists:last(binary:split(Url, <<"/">>, [global])) of
@@ -1024,8 +1024,8 @@ init_per_testcase(Case, Config) when
     test_utils:mock_expect(Worker, space_storage, get, fun(_) ->
         {ok, ?SPACE_STORAGE_DOC([?STORAGE_ID])}
     end),
-    Expected = json_utils:encode_map(#{<<"uid">> => ?UID1, <<"gid">> => ?GID1}),
-    Expected2 = json_utils:encode_map(#{<<"error">> => <<"mapping not found">>}),
+    Expected = json_utils:encode(#{<<"uid">> => ?UID1, <<"gid">> => ?GID1}),
+    Expected2 = json_utils:encode(#{<<"error">> => <<"mapping not found">>}),
     test_utils:mock_expect(Worker, http_client, post, fun
         (Url, Headers, Body) when is_binary(Url) ->
             case lists:last(binary:split(Url, <<"/">>, [global])) of

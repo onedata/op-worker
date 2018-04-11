@@ -96,7 +96,7 @@ list_files(Req, State) ->
                 {ok, _ChildNum} ->
                     DefinedLimit = utils:ensure_defined(Limit, undefined, ?MAX_ENTRIES),
                     {ok, Children} = onedata_file_api:ls(Auth, {path, Path}, Offset, DefinedLimit),
-                    json_utils:encode_map(
+                    json_utils:encode(
                         lists:map(fun({ChildGuid, ChildPath}) ->
                             {ok, ObjectId} = cdmi_id:guid_to_objectid(ChildGuid),
                             #{<<"id">> => ObjectId, <<"path">> => filename:join(Path, ChildPath)}
@@ -104,6 +104,6 @@ list_files(Req, State) ->
             end;
         {ok, #file_attr{guid = Guid}} ->
             {ok, ObjectId} = cdmi_id:guid_to_objectid(Guid),
-            json_utils:encode_map([#{<<"id">> => ObjectId, <<"path">> => Path}])
+            json_utils:encode([#{<<"id">> => ObjectId, <<"path">> => Path}])
     end,
     {Response, Req4, State4}.

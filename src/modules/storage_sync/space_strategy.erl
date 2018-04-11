@@ -20,8 +20,8 @@
 %%% Types
 %%%===================================================================
 
--type type()            :: storage_update | storage_import | filename_mapping |
-                           file_caching | enoent_handling | file_conflict_resolution.
+-type type()            :: storage_update | storage_import | file_caching |
+                           enoent_handling | file_conflict_resolution.
 -type definition()      :: #space_strategy{}.
 -type name()            :: atom().
 -type arguments()       :: maps:map(). %todo dialyzer crashes on: #{argument_name() => argument_type()}.
@@ -65,8 +65,8 @@
 %%-------------------------------------------------------------------
 -spec types() -> [type()].
 types() -> [
-    storage_update, storage_import, filename_mapping,
-    file_caching, enoent_handling, file_conflict_resolution
+    storage_update, storage_import, file_caching, enoent_handling,
+    file_conflict_resolution
 ].
 
 %%-------------------------------------------------------------------

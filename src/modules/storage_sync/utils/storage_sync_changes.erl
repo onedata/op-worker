@@ -75,12 +75,14 @@ count_files_attrs_hash([]) ->
     {undefined, []};
 count_files_attrs_hash(StorageFileCtxs) ->
     try
-        lists:foldr(fun(StorageFileCtx, {Hash0, StorageFileCtxs0}) ->
+        {H, Ctxs} = lists:foldr(fun(StorageFileCtx, {Hash0, StorageFileCtxs0}) ->
             {FileHash, StorageFileCtx2} = count_file_attrs_hash_safe(StorageFileCtx),
-            {hash([Hash0, FileHash]), [StorageFileCtx2 | StorageFileCtxs0]}
-        end, {<<"">>, []}, StorageFileCtxs)
+            {[FileHash | Hash0], [StorageFileCtx2 | StorageFileCtxs0]}
+        end, {[], []}, StorageFileCtxs),
+        {hash(H), Ctxs}
     catch
-        error:_ ->
+        Error:Reason ->
+            ?error_stacktrace("count_files_attrs_hash failed due to: ~p:~p", [Error, Reason]),
             {undefined, StorageFileCtxs}
     end.
 
