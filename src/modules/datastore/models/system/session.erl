@@ -620,15 +620,15 @@ fetch_lock_fetch_helper(SessId, SpaceId, StorageDoc, InCriticalSection) ->
     StorageId = storage:get_id(StorageDoc),
     FetchResult = case datastore_model:get_links(Ctx, SessId,
         ?HELPER_HANDLES_TREE_ID, link_key(StorageId, SpaceId)) of
-        {ok, [Link = #link{target = Key}]} ->
-            {helper_handle:get(Key), Link};
+        {ok, [#link{target = Key}]} ->
+            helper_handle:get(Key);
         {error, not_found} ->
             {error, link_not_found};
         {error, Reason} ->
             {error, Reason}
     end,
     case {FetchResult, InCriticalSection} of
-        {{{ok, #document{value = Handle}}, _Link}, _} ->
+        {{ok, #document{value = Handle}}, _} ->
             {ok, Handle};
 
         {{error, link_not_found}, false} ->
@@ -639,14 +639,15 @@ fetch_lock_fetch_helper(SessId, SpaceId, StorageDoc, InCriticalSection) ->
         {{error, link_not_found}, true} ->
             add_missing_helper(SessId, SpaceId, StorageDoc);
 
-        {{{error, not_found}, _Link}, false} ->
+        {{error, not_found}, false} ->
             critical_section:run({SessId, SpaceId, StorageId}, fun() ->
                 fetch_lock_fetch_helper(SessId, SpaceId, StorageDoc, true)
             end);
 
-        {{{error, not_found}, #link{name = Name}}, true} ->
+        {{error, not_found}, true} ->
             %todo this is just temporary fix, VFS-4301
-            datastore_model:delete_links(Ctx, SessId, ?HELPER_HANDLES_TREE_ID, Name),
+            LinkKey = link_key(StorageId, SpaceId),
+            datastore_model:delete_links(Ctx, SessId, ?HELPER_HANDLES_TREE_ID, LinkKey),
             add_missing_helper(SessId, SpaceId, StorageDoc);
 
         {Error2, _} ->

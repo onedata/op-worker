@@ -278,10 +278,47 @@ handle_already_imported_file(Job = #space_strategy_job{
     Offset :: non_neg_integer(), file_ctx:ctx(), non_neg_integer()) ->
     [space_strategy:job()].
 import_children(Job = #space_strategy_job{
-    strategy_args = #{write_once := true}
-}, Type = ?DIRECTORY_TYPE, Offset, FileCtx, BatchSize
-) ->
-    simple_scan:import_children(Job, Type, Offset, FileCtx, BatchSize);
+    strategy_type = StrategyType,
+    strategy_args = #{write_once := true},
+    data = Data0 = #{
+        max_depth := MaxDepth,
+        storage_file_ctx := StorageFileCtx,
+        mtime := Mtime,
+        space_id := SpaceId
+    }},
+    ?DIRECTORY_TYPE, Offset, FileCtx, BatchSize
+) when MaxDepth > 0 ->
+
+    BatchKey = Offset div BatchSize,
+    % don't count hash for this case
+    {ChildrenStorageCtxsBatch1, Data1} =
+        case storage_sync_utils:take_children_storage_ctxs_for_batch(BatchKey, Data0) of
+            {undefined, _} ->
+                get_children_ctxs_batch(Offset, BatchSize, Data0, StorageFileCtx);
+            {ChildrenStorageCtxsBatch0, Data2} ->
+                {ChildrenStorageCtxsBatch0, Data2}
+        end,
+
+    {FilesJobs, DirsJobs} = simple_scan:generate_jobs_for_importing_children(
+        Job#space_strategy_job{data = Data1}, Offset, FileCtx, ChildrenStorageCtxsBatch1),
+    FilesToHandleNum = length(FilesJobs) + length(DirsJobs),
+    storage_sync_monitoring:update_queue_length_counter(SpaceId, FilesToHandleNum),
+    storage_sync_monitoring:update_files_to_sync_counter(SpaceId, FilesToHandleNum),
+
+    FilesResults = simple_scan:import_regular_subfiles(FilesJobs),
+
+    case StrategyType:strategy_merge_result(FilesJobs, FilesResults) of
+        ok ->
+            FileUuid = file_ctx:get_uuid_const(FileCtx),
+            case storage_sync_utils:all_children_imported(DirsJobs, FileUuid) of
+                true ->
+                    storage_sync_info:update(FileUuid, Mtime, undefined, undefined);
+                _ ->
+                    ok
+            end;
+        _ -> ok
+    end,
+    DirsJobs;
 import_children(Job = #space_strategy_job{
     strategy_type = StrategyType,
     strategy_args = #{
@@ -309,7 +346,7 @@ import_children(Job = #space_strategy_job{
     {FilesJobs, DirsJobs} = simple_scan:generate_jobs_for_importing_children(
         Job#space_strategy_job{data = Data}, Offset, FileCtx, ChildrenStorageCtxsBatch),
     FilesToHandleNum = length(FilesJobs) + length(DirsJobs),
-    storage_sync_monitoring:update_queue_length_spirals(SpaceId, FilesToHandleNum),
+    storage_sync_monitoring:update_queue_length_counter(SpaceId, FilesToHandleNum),
     storage_sync_monitoring:update_files_to_sync_counter(SpaceId, FilesToHandleNum),
 
     FilesResults = simple_scan:import_regular_subfiles(FilesJobs),
@@ -530,9 +567,9 @@ init_update_job(CurrentTimestamp, Args = #{max_depth := MaxDepth}, Data = #{
     storage_id := StorageId
 }) ->
     storage_sync_monitoring:start_counters(SpaceId),
-    storage_sync_monitoring:start_spirals(SpaceId),
+    storage_sync_monitoring:start_plot_counters(SpaceId),
     space_strategies:update_last_update_start_time(SpaceId, StorageId, CurrentTimestamp),
-    storage_sync_monitoring:update_queue_length_spirals(SpaceId, 1),
+    storage_sync_monitoring:update_queue_length_counter(SpaceId, 1),
     storage_sync_monitoring:update_files_to_sync_counter(SpaceId, 1),
     [#space_strategy_job{
         strategy_name = simple_scan,

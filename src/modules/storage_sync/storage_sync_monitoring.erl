@@ -20,7 +20,7 @@
 
 % starting & stopping
 -export([start_counters/1, stop_counters/1,
-    start_spirals/1, stop_spirals/1,
+    start_plot_counters/1, stop_plot_counters/1,
     ensure_all_metrics_stopped/1,
     get_update_state/1, get_import_state/1, get_metric/3]).
 
@@ -38,7 +38,7 @@
     increase_deleted_files_counter/1, increase_failed_file_deletions_counter/1,
     update_files_to_sync_counter/2, increase_imported_files_spirals/1,
     increase_updated_files_spirals/1, increase_deleted_files_spirals/1,
-    update_queue_length_spirals/2
+    update_queue_length_counter/2
 ]).
 
 -export([init_report/0, init_report/1, init_reporter/1, init_counters/0]).
@@ -51,12 +51,12 @@
 % because of this inconsistency, dialyzer claims that ?MODULE:is_subscribed/4
 % will always return false
 % exporting below function resolves that issue
--export([start_and_subscribe_storage_sync_spiral/5]).
+-export([start_and_subscribe_storage_sync_plot_counter/5]).
 
 -type window() :: day | hours | minute.
 -type counter_type() :: files_to_sync | imported_files | deleted_files | updated_files |
     failed_file_imports | failed_file_deletions | failed_file_updates.
--type spiral_type() :: imported_files | updated_files | deleted_files | queue_length.
+-type plot_counter_type() :: imported_files | updated_files | deleted_files | queue_length.
 -type error() :: {error, term()}.
 -type datapoints() :: exometer:datapoints() | exometer:datapoint().
 
@@ -66,12 +66,13 @@
     ?STORAGE_SYNC_METRIC_PREFIX, counter, SpaceId, Type
 ]).
 
--define(SPIRAL_NAME(SpaceId, Type, Window), [
-    ?STORAGE_SYNC_METRIC_PREFIX, spiral, SpaceId, Type, Window
+-define(PLOT_COUNTERS_NAME(SpaceId, Type, Window), [
+    ?STORAGE_SYNC_METRIC_PREFIX, plot_counters_name, SpaceId, Type, Window
 ]).
 
 -define(COUNTER_LOGGING_INTERVAL, timer:seconds(30)).
--define(SPIRAL_RESOLUTION, application:get_env(?APP_NAME, storage_sync_histogram_length, 12)).
+-define(SPIRAL_RESOLUTION,
+    application:get_env(?APP_NAME, storage_sync_histogram_length, 12)).
 
 
 -define(LAGER_REPORTER_NAME, exometer_report_lager).
@@ -96,7 +97,7 @@
     ?FILES_TO_SYNC
 ]).
 
--define(SYNC_SPIRALS, [
+-define(SYNC_PLOT_COUNTERS, [
     ?IMPORTED_FILES, ?DELETED_FILES, ?UPDATED_FILES, ?QUEUE_LENGTH
 ]).
 
@@ -119,21 +120,24 @@ start_counters(SpaceId) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Starts spirals required by storage_import and storage_update.
+%% Starts counters and spirals required by storage_import and
+%% storage_update plotting service in onepanel.
 %% @end
 %%-------------------------------------------------------------------
--spec start_spirals(od_space:id()) -> ok.
-start_spirals(SpaceId) ->
+-spec start_plot_counters(od_space:id()) -> ok.
+start_plot_counters(SpaceId) ->
     lists:foreach(fun(SpiralType) ->
         lists:foreach(fun(Window) ->
-            ensure_started_and_subscribed_storage_sync_spiral(SpaceId, SpiralType, Window, ?SPIRAL_RESOLUTION),
-            reset_spiral(SpaceId, SpiralType, Window)
+            ensure_started_and_subscribed_storage_sync_plot_counter(SpaceId,
+                SpiralType, Window, ?SPIRAL_RESOLUTION),
+            reset_plot_counters(SpaceId, SpiralType, Window)
         end, ?WINDOWS)
-    end, ?SYNC_SPIRALS).
+    end, ?SYNC_PLOT_COUNTERS).
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Stops and unsubscribes counters required by storage_import and storage_update
+%% Stops and unsubscribes counters required by storage_import and
+%% storage_update
 %% @end
 %%-------------------------------------------------------------------
 -spec stop_counters(od_space:id()) -> ok.
@@ -144,16 +148,18 @@ stop_counters(SpaceId) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Stops and unsubscribes spirals required by storage_import and storage_update
+%% Stops and unsubscribes counters and spirals required by
+%% storage_import and storage_update plotting service in onepanel.
 %% @end
 %%-------------------------------------------------------------------
--spec stop_spirals(od_space:id()) -> ok.
-stop_spirals(SpaceId) ->
+-spec stop_plot_counters(od_space:id()) -> ok.
+stop_plot_counters(SpaceId) ->
     lists:foreach(fun(SpiralType) ->
         lists:foreach(fun(Window) ->
-            stop_and_unsubscribe_storage_sync_spiral(SpaceId, SpiralType, Window)
+            stop_and_unsubscribe_storage_sync_plot_counter(SpaceId, SpiralType,
+                Window)
         end, ?WINDOWS)
-    end, ?SYNC_SPIRALS).
+    end, ?SYNC_PLOT_COUNTERS).
 
 
 %%-------------------------------------------------------------------
@@ -254,14 +260,14 @@ increase_updated_files_spirals(SpaceId) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Updates jobs queue length spiral for each Window.
+%% Updates jobs queue length counter for each Window.
 %% @end
 %%-------------------------------------------------------------------
--spec update_queue_length_spirals(od_space:id(),
+-spec update_queue_length_counter(od_space:id(),
     non_neg_integer()) -> ok | {error, term()}.
-update_queue_length_spirals(SpaceId, Value) ->
+update_queue_length_counter(SpaceId, Value) ->
     lists:foreach(fun(Window) ->
-        update_queue_length_spiral(SpaceId, Window, Value)
+        update_queue_length_counter(SpaceId, Window, Value)
     end, ?WINDOWS).
 
 %%-------------------------------------------------------------------
@@ -407,9 +413,9 @@ get_update_state(SpaceId) ->
 %% Returns values and last measurement timestamp for given metric.
 %% @end
 %%-------------------------------------------------------------------
--spec get_metric(od_space:id(), spiral_type(), window()) -> proplists:proplist() | undefined.
+-spec get_metric(od_space:id(), plot_counter_type(), window()) -> proplists:proplist() | undefined.
 get_metric(SpaceId, Type, Window) ->
-    SpiralName = ?SPIRAL_NAME(SpaceId, Type, Window),
+    SpiralName = ?PLOT_COUNTERS_NAME(SpaceId, Type, Window),
     case storage_sync_histogram:get_histogram(SpiralName) of
         undefined ->
             undefined;
@@ -428,7 +434,7 @@ get_metric(SpaceId, Type, Window) ->
 -spec ensure_all_metrics_stopped(od_space:id()) -> ok.
 ensure_all_metrics_stopped(SpaceId) ->
     stop_counters(SpaceId),
-    stop_spirals(SpaceId).
+    stop_plot_counters(SpaceId).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -499,7 +505,7 @@ init_report([SpaceId | Rest]) ->
 resubscribe(?LAGER_REPORTER_NAME, SpaceId) ->
     start_counters(SpaceId);
 resubscribe(?ETS_REPORTER_NAME, SpaceId) ->
-    start_spirals(SpaceId).
+    start_plot_counters(SpaceId).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -510,7 +516,7 @@ resubscribe(?ETS_REPORTER_NAME, SpaceId) ->
 -spec increase_imported_files_spiral(od_space:id(), window()) ->
     ok | {error, term()}.
 increase_imported_files_spiral(SpaceId, Window) ->
-    update_spiral(SpaceId, ?IMPORTED_FILES, Window, 1).
+    update_plot_counter(SpaceId, ?IMPORTED_FILES, Window, 1).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -521,7 +527,7 @@ increase_imported_files_spiral(SpaceId, Window) ->
 -spec increase_deleted_files_spiral(od_space:id(), window()) ->
     ok | {error, term()}.
 increase_deleted_files_spiral(SpaceId, Window) ->
-    update_spiral(SpaceId, ?DELETED_FILES, Window, 1).
+    update_plot_counter(SpaceId, ?DELETED_FILES, Window, 1).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -532,7 +538,7 @@ increase_deleted_files_spiral(SpaceId, Window) ->
 -spec increase_updated_files_spiral(od_space:id(), window()) ->
     ok | {error, term()}.
 increase_updated_files_spiral(SpaceId, Window) ->
-    update_spiral(SpaceId, ?UPDATED_FILES, Window, 1).
+    update_plot_counter(SpaceId, ?UPDATED_FILES, Window, 1).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -540,10 +546,10 @@ increase_updated_files_spiral(SpaceId, Window) ->
 %% Updates jobs queue length spiral.
 %% @end
 %%-------------------------------------------------------------------
--spec update_queue_length_spiral(od_space:id(), window(),
+-spec update_queue_length_counter(od_space:id(), window(),
     non_neg_integer()) -> ok | {error, term()}.
-update_queue_length_spiral(SpaceId, Window, Value) ->
-    update_spiral(SpaceId, ?QUEUE_LENGTH, Window, Value).
+update_queue_length_counter(SpaceId, Window, Value) ->
+    update_plot_counter(SpaceId, ?QUEUE_LENGTH, Window, Value).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -560,13 +566,19 @@ ensure_storage_sync_counter_started(SpaceId, CounterType) ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Starts and subscribes to given type of spiral.
+%% Starts and subscribes to given type of plot counter.
 %% @end
 %%-------------------------------------------------------------------
--spec ensure_started_and_subscribed_storage_sync_spiral(od_space:id(), spiral_type(),
-    window(), non_neg_integer()) -> ok | error().
-ensure_started_and_subscribed_storage_sync_spiral(SpaceId, Type, Window, Resolution) ->
-    start_and_subscribe_storage_sync_spiral(SpaceId, Type, Window, Resolution, [one]).
+-spec ensure_started_and_subscribed_storage_sync_plot_counter(
+    od_space:id(), plot_counter_type(), window(), non_neg_integer()) -> ok | error().
+ensure_started_and_subscribed_storage_sync_plot_counter(SpaceId,
+    Type = ?QUEUE_LENGTH, Window, Resolution) ->
+    start_and_subscribe_storage_sync_plot_counter(SpaceId, Type, Window,
+        Resolution, [value]);
+ensure_started_and_subscribed_storage_sync_plot_counter(SpaceId, Type,
+    Window, Resolution) ->
+    start_and_subscribe_storage_sync_plot_counter(SpaceId, Type, Window,
+        Resolution, [one]).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -582,18 +594,25 @@ is_subscribed(Reporter, Metric, Datapoints, Resolution) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Starts and subscribes to given type of spiral.
+%% Starts and subscribes to given type of plot counter.
 %% @end
 %%-------------------------------------------------------------------
--spec start_and_subscribe_storage_sync_spiral(od_space:id(), spiral_type(),
+-spec start_and_subscribe_storage_sync_plot_counter(od_space:id(), plot_counter_type(),
     window(), non_neg_integer(), datapoints()) -> ok.
-start_and_subscribe_storage_sync_spiral(SpaceId, Type, Window, Resolution, Datapoints) ->
-    SpiralName = ?SPIRAL_NAME(SpaceId, Type, Window),
+start_and_subscribe_storage_sync_plot_counter(SpaceId, Type, Window,
+    Resolution, Datapoints) ->
+    SpiralName = ?PLOT_COUNTERS_NAME(SpaceId, Type, Window),
     TimeSpan = resolution_to_time_span(Window, Resolution),
-    (catch exometer:new(SpiralName, spiral, [{time_span, TimeSpan}])),
+    case Type of
+        ?QUEUE_LENGTH ->
+            (catch exometer:new(SpiralName, counter));
+        _ ->
+            (catch exometer:new(SpiralName, spiral, [{time_span, TimeSpan}]))
+    end,
     case is_subscribed(?ETS_REPORTER_NAME, SpiralName, Datapoints, TimeSpan) of
         false ->
-            ok = exometer_report:subscribe(?ETS_REPORTER_NAME, SpiralName, Datapoints, TimeSpan);
+            ok = exometer_report:subscribe(?ETS_REPORTER_NAME, SpiralName,
+                Datapoints, TimeSpan);
         _ ->
             ok
     end.
@@ -617,10 +636,10 @@ stop_and_unsubscribe_storage_sync_counter(SpaceId, CounterType) ->
 %% Stops and unsubscribes counter of given type.
 %% @end
 %%-------------------------------------------------------------------
--spec stop_and_unsubscribe_storage_sync_spiral(od_space:id(),
-    spiral_type(), window()) -> ok | {error, term()}.
-stop_and_unsubscribe_storage_sync_spiral(SpaceId, Type, Window) ->
-    SpiralName = ?SPIRAL_NAME(SpaceId, Type, Window),
+-spec stop_and_unsubscribe_storage_sync_plot_counter(od_space:id(),
+    plot_counter_type(), window()) -> ok | {error, term()}.
+stop_and_unsubscribe_storage_sync_plot_counter(SpaceId, Type, Window) ->
+    SpiralName = ?PLOT_COUNTERS_NAME(SpaceId, Type, Window),
     exometer_report:unsubscribe_all(?ETS_REPORTER_NAME, SpiralName),
     exometer:delete(SpiralName).
 
@@ -650,12 +669,13 @@ update_counter(SpaceId, CounterType, Value) ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Resets given spiral.
+%% Resets given plot counters.
 %% @end
 %%-------------------------------------------------------------------
--spec reset_spiral(od_space:id(), spiral_type(), window()) -> ok | error().
-reset_spiral(SpaceId, SpiralType, Window) ->
-    SpiralName = ?SPIRAL_NAME(SpaceId, SpiralType, Window),
+-spec reset_plot_counters(od_space:id(), plot_counter_type(), window())
+        -> ok | error().
+reset_plot_counters(SpaceId, SpiralType, Window) ->
+    SpiralName = ?PLOT_COUNTERS_NAME(SpaceId, SpiralType, Window),
     exometer:reset(SpiralName).
 
 %%-------------------------------------------------------------------
@@ -664,11 +684,11 @@ reset_spiral(SpaceId, SpiralType, Window) ->
 %% Updates given spiral with given Value.
 %% @end
 %%-------------------------------------------------------------------
--spec update_spiral(od_space:id(), spiral_type(), window(), integer()) ->
-    ok | error().
-update_spiral(SpaceId, Type, Window, Value) ->
-    SpiralName = ?SPIRAL_NAME(SpaceId, Type, Window),
-    exometer:update(SpiralName, Value).
+-spec update_plot_counter(od_space:id(), plot_counter_type(), window(),
+    integer()) -> ok | error().
+update_plot_counter(SpaceId, Type, Window, Value) ->
+    PlotCounter = ?PLOT_COUNTERS_NAME(SpaceId, Type, Window),
+    exometer:update(PlotCounter, Value).
 
 %%-------------------------------------------------------------------
 %% @private

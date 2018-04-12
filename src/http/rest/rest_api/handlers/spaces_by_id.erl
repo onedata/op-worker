@@ -94,5 +94,5 @@ get_space(Req, State) ->
         <<"providers">> => ProvidersRawResponse,
         <<"spaceId">> => SpaceId
     },
-    Response = json_utils:encode_map(RawResponse),
+    Response = json_utils:encode(RawResponse),
     {Response, Req2, State2}.

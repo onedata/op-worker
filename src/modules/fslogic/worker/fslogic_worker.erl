@@ -63,13 +63,13 @@
 -define(EXOMETER_NAME(Param), ?exometer_name(?MODULE, count, Param)).
 -define(EXOMETER_TIME_NAME(Param), ?exometer_name(?MODULE, time,
     list_to_atom(atom_to_list(Param) ++ "_time"))).
--define(EXOMETER_DEFAULT_TIME_SPAN, 600000).
 -define(EXOMETER_COUNTERS, [get_file_attr, get_child_attr, change_mode,
     update_times, delete_file, create_dir, get_file_children,
     get_file_children_attrs, rename, create_file, make_file, open_file, release,
     get_file_location, truncate, synchronize_block,
     synchronize_block_and_compute_checksum, get_xattr, set_xattr, remove_xattr,
     list_xattr, fsync]).
+-define(EXOMETER_DEFAULT_DATA_POINTS_NUMBER, 10000).
 
 -define(FSLOGIC_WORKER_SUP, ?WORKER_HOST_SUPERVISOR_NAME(?MODULE)).
 
@@ -196,13 +196,13 @@ cleanup() ->
 %%--------------------------------------------------------------------
 -spec init_counters() -> ok.
 init_counters() ->
-    TimeSpan = application:get_env(?APP_NAME,
-        exometer_datastore_time_span, ?EXOMETER_DEFAULT_TIME_SPAN),
+    Size = application:get_env(?CLUSTER_WORKER_APP_NAME, 
+        exometer_data_points_number, ?EXOMETER_DEFAULT_DATA_POINTS_NUMBER),
     Counters = lists:map(fun(Name) ->
         {?EXOMETER_NAME(Name), counter}
     end, ?EXOMETER_COUNTERS),
     Counters2 = lists:map(fun(Name) ->
-        {?EXOMETER_TIME_NAME(Name), histogram, TimeSpan}
+        {?EXOMETER_TIME_NAME(Name), uniform, [{size, Size}]}
     end, ?EXOMETER_COUNTERS),
     ?init_counters(Counters ++ Counters2).
 

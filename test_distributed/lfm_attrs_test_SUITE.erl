@@ -255,15 +255,25 @@ create_and_get_view(Config) ->
     {ok, ViewId} = rpc:call(Worker, indexes, add_index, [<<"user1">>, <<"name">>, ViewFunction, <<"space_id1">>, false]),
     ?assertMatch({ok, #{name := <<"name">>, space_id := <<"space_id1">>, function := _}},
         rpc:call(Worker, indexes, get_index, [<<"user1">>, ViewId])),
-    {ok, GuidsBlue} = ?assertMatch({ok, [_ | _]}, rpc:call(Worker, indexes, query_view, [ViewId, [{key, <<"blue">>}, {stale, false}]]), 10, timer:seconds(3)),
-    {ok, GuidsRed} = rpc:call(Worker, indexes, query_view, [ViewId, [{key, <<"red">>}]]),
-    {ok, GuidsOrange} = rpc:call(Worker, indexes, query_view, [ViewId, [{key, <<"orange">>}]]),
 
-    ?assert(lists:member(Guid1, GuidsBlue)),
-    ?assertNot(lists:member(Guid2, GuidsBlue)),
-    ?assert(lists:member(Guid3, GuidsBlue)),
-    ?assertEqual([Guid2], GuidsRed),
-    ?assertEqual([], GuidsOrange).
+    FinalCheck = fun() ->
+        try
+            {ok, GuidsBlue} = {ok, [_ | _]} = rpc:call(Worker, indexes, query_view, [ViewId, [{key, <<"blue">>}, {stale, false}]]),
+            {ok, GuidsRed} = rpc:call(Worker, indexes, query_view, [ViewId, [{key, <<"red">>}]]),
+            {ok, GuidsOrange} = rpc:call(Worker, indexes, query_view, [ViewId, [{key, <<"orange">>}]]),
+
+            true = lists:member(Guid1, GuidsBlue),
+            false = lists:member(Guid2, GuidsBlue),
+            true = lists:member(Guid3, GuidsBlue),
+            [Guid2] = GuidsRed,
+            [] = GuidsOrange,
+            ok
+        catch
+            E1:E2 ->
+                {error, E1, E2}
+        end
+    end,
+    ?assertEqual(ok, FinalCheck(), 10, timer:seconds(3)).
 
 get_empty_json(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),

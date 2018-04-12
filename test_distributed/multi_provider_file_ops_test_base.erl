@@ -1207,11 +1207,11 @@ verify_helper([W | Workers], TestFun) ->
     Master = self(),
     Pid = spawn_link(fun() ->
         Ans = TestFun(W),
-        Master ! {verify_ans, Ans}
+        Master ! {verify_ans, W, Ans}
     end),
     TmpAns = verify_helper(Workers, TestFun),
     receive
-        {verify_ans, TestAns} ->
+        {verify_ans, W, TestAns} ->
             [{W, TestAns} | TmpAns];
         {'EXIT', Pid , Error} when Error /= normal ->
             [{W, error, Error} | TmpAns]

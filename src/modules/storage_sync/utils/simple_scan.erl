@@ -41,7 +41,7 @@ run(Job = #space_strategy_job{
         space_id := SpaceId,
         storage_file_ctx := StorageFileCtx
 }}) when StorageFileCtx =/= undefined ->
-    storage_sync_monitoring:update_queue_length_spirals(SpaceId, -1),
+    storage_sync_monitoring:update_queue_length_counter(SpaceId, -1),
     maybe_import_storage_file_and_children(Job);
 run(Job = #space_strategy_job{
     strategy_type = StrategyType,
@@ -63,7 +63,7 @@ run(Job = #space_strategy_job{
 
     case StatResult of
         Error = {error, _} ->
-            storage_sync_monitoring:update_queue_length_spirals(SpaceId, -1),
+            storage_sync_monitoring:update_queue_length_counter(SpaceId, -1),
             case StrategyType of
                 storage_import ->
                     storage_sync_monitoring:increase_failed_file_imports_counter(SpaceId);
@@ -161,7 +161,7 @@ import_children(Job = #space_strategy_job{
     {FilesJobs, DirsJobs} = generate_jobs_for_importing_children(Job, Offset,
         FileCtx, ChildrenStorageCtxsBatch2),
     FilesToHandleNum = length(FilesJobs) + length(DirsJobs),
-    storage_sync_monitoring:update_queue_length_spirals(SpaceId, FilesToHandleNum),
+    storage_sync_monitoring:update_queue_length_counter(SpaceId, FilesToHandleNum),
     storage_sync_monitoring:update_files_to_sync_counter(SpaceId, FilesToHandleNum),
 
     FilesResults = import_regular_subfiles(FilesJobs),
