@@ -258,9 +258,8 @@ transfer_time_stat_record(RecordId) ->
         TransferType, StatsType, Id
     ),
 
-    Pred = fun(_Provider, Histogram) -> lists:sum(Histogram) > 0 end,
     SpeedCharts = transfer_histograms:to_speed_charts(
-        maps:filter(Pred, Histograms), StartTime, LastUpdate, TimeWindow
+        Histograms, StartTime, LastUpdate, TimeWindow
     ),
 
     {ok, [
@@ -321,7 +320,8 @@ prepare_histograms(?ON_THE_FLY_TRANSFERS_TYPE, HistogramsType, TransferStatsId) 
                    of ID ~p due to: ~p", [TransferStatsId, Error]),
             error(Error)
     end,
-    {Histograms, StartTime, LastUpdate, TimeWindow}.
+    Pred = fun(_Provider, Histogram) -> lists:sum(Histogram) > 0 end,
+    {maps:filter(Pred, Histograms), StartTime, LastUpdate, TimeWindow}.
 
 
 %%--------------------------------------------------------------------
