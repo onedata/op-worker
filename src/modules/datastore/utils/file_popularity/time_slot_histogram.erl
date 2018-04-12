@@ -19,8 +19,13 @@
 -type histogram() :: {LastUpdateTime :: timestamp(), TimeWindow :: time(), histogram:histogram()}.
 
 %% API
--export([new/2, new/3, increment/2, increment/3, get_histogram_values/1,
-    get_last_update/1, get_sum/1, get_average/1]).
+-export([
+    new/2, new/3,
+    increment/2, increment/3,
+    merge/2,
+    get_histogram_values/1, get_last_update/1,
+    get_sum/1, get_average/1
+]).
 
 %%%===================================================================
 %%% API
@@ -69,6 +74,23 @@ increment({LastUpdate, TimeWindow, Histogram}, CurrentTimestamp, N) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Merges 2 time slot histograms of equal size and time window
+%% @end
+%%--------------------------------------------------------------------
+-spec merge(histogram(), histogram()) -> histogram().
+merge({LastUpdate1, TimeWindow, Values1}, {LastUpdate2, TimeWindow, Values2}) ->
+    {LastUpdate, Histogram1, Histogram2} = case LastUpdate1 > LastUpdate2 of
+        true ->
+            ShiftSize = (LastUpdate1 div TimeWindow) - (LastUpdate2 div TimeWindow),
+            {LastUpdate1, Values1, histogram:shift(Values2, ShiftSize)};
+        false ->
+            ShiftSize = (LastUpdate2 div TimeWindow) - (LastUpdate1 div TimeWindow),
+            {LastUpdate2, histogram:shift(Values1, ShiftSize), Values2}
+    end,
+    {LastUpdate, TimeWindow, histogram:merge(Histogram1, Histogram2)}.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Returns lists with histogram values, the newest values are first.
 %% @end
 %%--------------------------------------------------------------------
@@ -87,7 +109,7 @@ get_last_update({LastUpdate, _, _}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Retuns sum of all histogram values
+%% Returns sum of all histogram values
 %% @end
 %%--------------------------------------------------------------------
 -spec get_sum(histogram()) -> non_neg_integer().
@@ -96,7 +118,7 @@ get_sum({_, _, Histogram}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Retuns average of all histogram values
+%% Returns average of all histogram values
 %% @end
 %%--------------------------------------------------------------------
 -spec get_average(histogram()) -> non_neg_integer().

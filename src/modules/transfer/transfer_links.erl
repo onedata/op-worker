@@ -54,8 +54,8 @@
 %%--------------------------------------------------------------------
 -spec add_scheduled_transfer_link(TransferId :: transfer:id(), od_space:id(),
     transfer:timestamp()) -> ok.
-add_scheduled_transfer_link(TransferId, SpaceId, StartTime) ->
-    add_link(?SCHEDULED_TRANSFERS_KEY, TransferId, SpaceId, StartTime).
+add_scheduled_transfer_link(TransferId, SpaceId, ScheduleTime) ->
+    add_link(?SCHEDULED_TRANSFERS_KEY, TransferId, SpaceId, ScheduleTime).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -64,8 +64,8 @@ add_scheduled_transfer_link(TransferId, SpaceId, StartTime) ->
 %%--------------------------------------------------------------------
 -spec add_active_transfer_link(TransferId :: transfer:id(), od_space:id(),
     transfer:timestamp()) -> ok.
-add_active_transfer_link(TransferId, SpaceId, StartTime) ->
-    add_link(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId, StartTime).
+add_active_transfer_link(TransferId, SpaceId, ScheduleTime) ->
+    add_link(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId, ScheduleTime).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -106,8 +106,8 @@ add_link(SourceId, TransferId, SpaceId, Timestamp) ->
 %%--------------------------------------------------------------------
 -spec delete_scheduled_transfer_link(TransferId :: transfer:id(), od_space:id(),
     transfer:timestamp()) -> ok.
-delete_scheduled_transfer_link(TransferId, SpaceId, StartTime) ->
-    delete_links(?SCHEDULED_TRANSFERS_KEY, TransferId, SpaceId, StartTime).
+delete_scheduled_transfer_link(TransferId, SpaceId, ScheduleTime) ->
+    delete_links(?SCHEDULED_TRANSFERS_KEY, TransferId, SpaceId, ScheduleTime).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -117,7 +117,7 @@ delete_scheduled_transfer_link(TransferId, SpaceId, StartTime) ->
 -spec delete_active_transfer_link(TransferId :: transfer:id(), od_space:id()) -> ok.
 delete_active_transfer_link(TransferId, SpaceId) ->
     delete_active_transfer_link(TransferId, SpaceId,
-        transfer_utils:get_start_time(TransferId)).
+        transfer_utils:get_schedule_time(TransferId)).
 
 %%--------------------------------------------------------------------
 %% @doc
