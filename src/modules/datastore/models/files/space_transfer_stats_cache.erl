@@ -266,7 +266,6 @@ prepare_aggregated_stats(TransferType, ?MINUTE_STAT_TYPE, SpaceId,
     {TrimmedStatsOut, TrimmedTimestamp} =
         transfer_histograms:trim_min_histograms(StatsOut, Timestamp),
 
-    % Filter out zeroed histograms
     Pred = fun(_Provider, Histogram) -> lists:sum(Histogram) > 0 end,
     NewMinStats = MinStats#space_transfer_stats_cache{
         timestamp = TrimmedTimestamp,
@@ -303,7 +302,6 @@ prepare_aggregated_stats(TransferType, RequestedStatsType, SpaceId,
         transfer_histograms:trim_histograms(
             MinStatsOut, StatsOut, TimeWindow, Timestamp),
 
-    % Filter out zeroed histograms
     Pred = fun(_Provider, Histogram) -> lists:sum(Histogram) > 0 end,
     NewMinStats = MinStats#space_transfer_stats_cache{
         timestamp = NewTimestamp,
@@ -349,12 +347,13 @@ aggregate_stats(TransferStats, RequestedStatsTypes, CurrentTime) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Update given statistics for provider based on given space transfer record.
+%% Update given aggregated statistics for provider based on given
+%% space transfer record.
 %% @end
 %%--------------------------------------------------------------------
--spec update_stats(OldStats :: space_transfer_stats_cache(), StatsType :: binary(),
-    ST :: #space_transfer_stats{}, CurrentTime :: timestamp(),
-    Provider :: od_provider:id()
+-spec update_stats(OldStats :: space_transfer_stats_cache(),
+    StatsType :: binary(), ST :: #space_transfer_stats{},
+    CurrentTime :: timestamp(), Provider :: od_provider:id()
 ) ->
     space_transfer_stats_cache().
 update_stats(OldStats, StatsType, ST, CurrentTime, Provider) ->

@@ -9,6 +9,7 @@
 %%% This module implements data_backend_behaviour and is used to synchronize
 %%% a couple of models for ember app:
 %%%     - transfer
+%%%     - on-the-fly-transfer
 %%%     - transfer-time-stat
 %%%     - transfer-current-stat
 %%% @end
@@ -257,7 +258,6 @@ transfer_time_stat_record(RecordId) ->
         TransferType, StatsType, Id
     ),
 
-    % Filter out zeroed histograms
     Pred = fun(_Provider, Histogram) -> lists:sum(Histogram) > 0 end,
     SpeedCharts = transfer_histograms:to_speed_charts(
         maps:filter(Pred, Histograms), StartTime, LastUpdate, TimeWindow
@@ -274,8 +274,8 @@ transfer_time_stat_record(RecordId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Get and prepare for further processing histograms of requested type
-%% for transfer of given type and id.
+%% Get and prepare padded and trimmed histograms of requested type from
+%% transfer of given type and id.
 %% @end
 %%--------------------------------------------------------------------
 -spec prepare_histograms(TransferType :: binary(), HistogramsType :: binary(),
@@ -301,7 +301,7 @@ prepare_histograms(?JOB_TRANSFERS_TYPE, HistogramsType, TransferId) ->
     end,
     {Histograms, StartTime, LastUpdate, TimeWindow};
 prepare_histograms(?ON_THE_FLY_TRANSFERS_TYPE, HistogramsType, TransferStatsId) ->
-    % On the fly transfers do not have neither start nor end.
+    % On the fly transfers have neither start nor end.
     StartTime = 0,
     CurrentTime = provider_logic:zone_time_seconds(),
     Fetched = space_transfer_stats:get(TransferStatsId),

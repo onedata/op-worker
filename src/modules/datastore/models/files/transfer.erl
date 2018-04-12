@@ -554,7 +554,8 @@ mark_data_transfer_finished(undefined, ProviderId, Bytes, SpaceId) ->
     CurrentTime = provider_logic:zone_time_seconds(),
     ok = space_transfer_stats:update(
         ?ON_THE_FLY_TRANSFERS_TYPE, SpaceId, ProviderId, Bytes, CurrentTime
-    );
+    ),
+    {ok, undefined};
 mark_data_transfer_finished(TransferId, ProviderId, Bytes, SpaceId) ->
     CurrentTime = provider_logic:zone_time_seconds(),
     ok = space_transfer_stats:update(
