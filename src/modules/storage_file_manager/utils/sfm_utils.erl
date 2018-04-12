@@ -259,12 +259,8 @@ recursive_delete(FileCtx, UserCtx) ->
     {ok, ChunkSize} = application:get_env(?APP_NAME, ls_chunk_size),
     case IsDir of
         true ->
-            case delete_children(FileCtx2, UserCtx, 0, ChunkSize) of
-                {ok, FileCtx3} ->
-                    delete_storage_dir(FileCtx3, UserCtx);
-                Error ->
-                    Error
-            end;
+            {ok, FileCtx3} = delete_children(FileCtx2, UserCtx, 0, ChunkSize),
+            delete_storage_dir(FileCtx3, UserCtx);
         false ->
             delete_storage_file_without_location(FileCtx2, UserCtx)
     end.
