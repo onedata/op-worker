@@ -144,12 +144,7 @@ handle({open_file_deletion_request, FileCtx}) ->
                 {ok, #document{key = Uuid2}} when Uuid2 =/= Uuid ->
                     ok;
                 _ ->
-                    case file_ctx:is_dir(FileCtx3) of
-                        {true, FileCtx4} ->
-                            sfm_utils:delete_storage_dir(FileCtx4, UserCtx);
-                        {false, FileCtx4} ->
-                            sfm_utils:delete_storage_file_without_location(FileCtx4, UserCtx)
-                    end
+                    sfm_utils:recursive_delete(FileCtx3, UserCtx)
             end
         catch
             E2:E2 ->

@@ -28,7 +28,7 @@
     create_storage_file_location/3, create_delayed_storage_file/2,
     create_storage_file/2, delete_storage_file/2,
     delete_storage_file_without_location/2, delete_storage_dir/2,
-    create_parent_dirs/1]).
+    create_parent_dirs/1, recursive_delete/2]).
 
 %%%===================================================================
 %%% API
@@ -249,6 +249,28 @@ delete_storage_file_without_location(FileCtx, UserCtx) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Removes given file. If it's a directory all its children will be
+%% deleted to.
+%% @end
+%%--------------------------------------------------------------------
+-spec recursive_delete(file_ctx:ctx(), user_ctx:ctx()) -> ok | {error, term()}.
+recursive_delete(FileCtx, UserCtx) ->
+    {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
+    {ok, ChunkSize} = application:get_env(?APP_NAME, ls_chunk_size),
+    case IsDir of
+        true ->
+            case delete_children(FileCtx2, UserCtx, 0, ChunkSize) of
+                {ok, FileCtx3} ->
+                    delete_storage_dir(FileCtx3, UserCtx);
+                Error ->
+                    Error
+            end;
+        false ->
+            delete_storage_file_without_location(FileCtx2, UserCtx)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Removes directory from storage.
 %% @end
 %%--------------------------------------------------------------------
@@ -347,3 +369,24 @@ mkdir_and_maybe_chown(SFMHandle, Mode, FileCtx, ShouldChown) ->
             ok
     end,
     FileCtx.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function recursively deletes all children of given directory.
+%% @end
+%%-------------------------------------------------------------------
+-spec delete_children(file_ctx:ctx(), user_ctx:ctx(), non_neg_integer(),
+    non_neg_integer()) -> {ok, file_ctx:ctx()}.
+delete_children(FileCtx, UserCtx, Offset, ChunkSize) ->
+    {ChildrenCtxs, FileCtx2} = file_ctx:get_file_children(FileCtx,
+        UserCtx, Offset, ChunkSize),
+    lists:foreach(fun(ChildCtx) ->
+        ok = recursive_delete(ChildCtx, UserCtx)
+    end, ChildrenCtxs),
+    case length(ChildrenCtxs) < ChunkSize of
+        true ->
+            {ok, FileCtx2};
+        false ->
+            delete_children(FileCtx2, UserCtx, Offset + ChunkSize, ChunkSize)
+    end.
