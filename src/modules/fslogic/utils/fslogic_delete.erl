@@ -44,9 +44,7 @@ remove_file_and_file_meta(FileCtx, UserCtx, Silent) ->
     boolean(), boolean()) -> ok.
 remove_file_and_file_meta(FileCtx, UserCtx, Silent, RemoveStorageFile,
     DeleteParentLink) ->
-    {FileDoc = #document{
-        value = #file_meta{
-            type = Type,
+    {FileDoc = #document{value = #file_meta{
             shares = Shares
         }
     }, FileCtx2} = file_ctx:get_file_doc(FileCtx),
@@ -57,7 +55,7 @@ remove_file_and_file_meta(FileCtx, UserCtx, Silent, RemoveStorageFile,
 
     case RemoveStorageFile of
         true ->
-            maybe_remove_file_on_storage(FileCtx3, UserCtx, Type);
+            maybe_remove_file_on_storage(FileCtx3, UserCtx);
         _ -> ok
     end,
 
@@ -90,10 +88,10 @@ remove_file_handles(FileCtx) ->
 %% Returns ok if file doesn't exist or if it was successfully deleted.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_remove_file_on_storage(file_ctx:ctx(), user_ctx:ctx(),
-    file_meta:type()) -> ok | {error, term()}.
-maybe_remove_file_on_storage(FileCtx, UserCtx, FileType) ->
-    case remove_file_on_storage(FileCtx, UserCtx, FileType) of
+-spec maybe_remove_file_on_storage(file_ctx:ctx(), user_ctx:ctx())
+        -> ok | {error, term()}.
+maybe_remove_file_on_storage(FileCtx, UserCtx) ->
+    case remove_file_on_storage(FileCtx, UserCtx) of
         ok -> ok;
         {error, ?ENOENT} -> ok;
         OtherError -> OtherError
@@ -105,12 +103,10 @@ maybe_remove_file_on_storage(FileCtx, UserCtx, FileType) ->
 %% Removes given file on storage
 %% @end
 %%--------------------------------------------------------------------
--spec remove_file_on_storage(file_ctx:ctx(), user_ctx:ctx(), file_meta:type()) ->
+-spec remove_file_on_storage(file_ctx:ctx(), user_ctx:ctx()) ->
     ok | {error, term()}.
-remove_file_on_storage(FileCtx, UserCtx, ?REGULAR_FILE_TYPE) ->
-    sfm_utils:delete_storage_file(FileCtx, UserCtx);
-remove_file_on_storage(FileCtx, UserCtx, ?DIRECTORY_TYPE) ->
-    sfm_utils:delete_storage_dir(FileCtx, UserCtx).
+remove_file_on_storage(FileCtx, UserCtx) ->
+    sfm_utils:recursive_delete(FileCtx, UserCtx).
 
 %%--------------------------------------------------------------------
 %% @private
