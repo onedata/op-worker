@@ -72,15 +72,15 @@ run(Job = #space_strategy_job{
 delete_imported_file_and_update_counters(ChildName, ParentCtx, SpaceId) ->
     try
         {FileCtx, ParentCtx2} = file_ctx:get_child(ParentCtx, ChildName, user_ctx:new(?ROOT_SESS_ID)),
-        {FileLocation, FileCtx2} = file_ctx:get_local_file_location_doc(FileCtx),
-        case file_location:is_storage_file_created(FileLocation) of
+        {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
+        case IsDir of
             true ->
                 delete_imported_file(ChildName, ParentCtx2),
                 storage_sync_monitoring:increase_deleted_files_spirals(SpaceId),
                 storage_sync_monitoring:increase_deleted_files_counter(SpaceId);
             false ->
-                {IsDir, _} = file_ctx:is_dir(FileCtx2),
-                case IsDir of
+                {FileLocation, _} = file_ctx:get_local_file_location_doc(FileCtx2),
+                case file_location:is_storage_file_created(FileLocation) of
                     true ->
                         delete_imported_file(ChildName, ParentCtx2),
                         storage_sync_monitoring:increase_deleted_files_spirals(SpaceId),
