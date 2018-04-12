@@ -432,10 +432,8 @@ merge_stats(Stats1, Stats2) ->
 
     MergeFun = fun(ProviderId, Hist1, Stats) ->
         case maps:find(ProviderId, Stats) of
-            {ok, Hist2} ->
-                Stats#{ProviderId => histogram:merge(Hist1, Hist2)};
-            error ->
-                Stats#{ProviderId => Hist1}
+            {ok, Hist2} -> Stats#{ProviderId => histogram:merge(Hist1, Hist2)};
+            error -> Stats#{ProviderId => Hist1}
         end
     end,
 

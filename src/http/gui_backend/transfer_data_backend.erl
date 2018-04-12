@@ -256,8 +256,11 @@ transfer_time_stat_record(RecordId) ->
     {Histograms, StartTime, LastUpdate, TimeWindow} = prepare_histograms(
         TransferType, StatsType, Id
     ),
+
+    % Filter out zeroed histograms
+    Pred = fun(_Provider, Histogram) -> lists:sum(Histogram) > 0 end,
     SpeedCharts = transfer_histograms:to_speed_charts(
-        Histograms, StartTime, LastUpdate, TimeWindow
+        maps:filter(Pred, Histograms), StartTime, LastUpdate, TimeWindow
     ),
 
     {ok, [

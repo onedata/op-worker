@@ -170,14 +170,16 @@ handle_info({Ref, active, ProviderId, Block}, State) ->
            from_to_transfer_id = FromToTransferId, space_id = SpaceId} = State,
     fslogic_event_emitter:emit_file_location_changed(FileCtx, [SessId], Block),
     AffectedFroms = maps:get(Ref, RefToFroms, []),
-    TransferIds = maps:with(AffectedFroms, FromToTransferId),
+    TransferIds = case maps:values(maps:with(AffectedFroms, FromToTransferId)) of
+        [] -> [undefined];
+        Values -> Values
+    end,
     lists:foreach(
       fun(TransferId) ->
           {ok, _} = transfer:mark_data_transfer_finished(TransferId, ProviderId,
                                                          Block#file_block.size,
                                                          SpaceId)
-      end,
-      maps:values(TransferIds)),
+      end, TransferIds),
     {noreply, State, ?DIE_AFTER};
 
 handle_info({Ref, complete, {ok, _} = _Status}, State) ->
