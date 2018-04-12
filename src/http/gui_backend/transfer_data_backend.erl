@@ -170,6 +170,7 @@ transfer_record(TransferId) ->
         path = Path,
         user_id = UserId,
         space_id = SpaceId,
+        schedule_time = ScheduleTime,
         start_time = StartTime
     }}} = transfer:get(TransferId),
     FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
@@ -196,7 +197,8 @@ transfer_record(TransferId) ->
         {<<"path">>, Path},
         {<<"fileType">>, FileType},
         {<<"systemUserId">>, UserId},
-        {<<"startTime">>, StartTime},
+        {<<"startTime">>, ScheduleTime},    %todo change to StartTime when GUI is ready for handling scheduleTime
+        {<<"scheduleTime">>, ScheduleTime},
         {<<"finishTime">>, FinishTime},
         {<<"currentStat">>, TransferId},
         {<<"minuteStat">>, op_gui_utils:ids_to_association(?MINUTE_STAT_TYPE, TransferId)},

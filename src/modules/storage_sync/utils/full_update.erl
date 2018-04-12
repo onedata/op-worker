@@ -69,12 +69,27 @@ run(Job = #space_strategy_job{
 %%-------------------------------------------------------------------
 -spec delete_imported_file_and_update_counters(file_meta:name(),
     file_ctx:ctx(), od_space:id()) -> ok.
-delete_imported_file_and_update_counters(ChildName, FileCtx, SpaceId) ->
-    storage_sync_monitoring:update_queue_length_counter(SpaceId, -1),
+delete_imported_file_and_update_counters(ChildName, ParentCtx, SpaceId) ->
     try
-        delete_imported_file(ChildName, FileCtx),
-        storage_sync_monitoring:increase_deleted_files_spirals(SpaceId),
-        storage_sync_monitoring:increase_deleted_files_counter(SpaceId)
+        {FileCtx, ParentCtx2} = file_ctx:get_child(ParentCtx, ChildName, user_ctx:new(?ROOT_SESS_ID)),
+        {FileLocation, FileCtx2} = file_ctx:get_local_file_location_doc(FileCtx),
+        case file_location:is_storage_file_created(FileLocation) of
+            true ->
+                delete_imported_file(ChildName, ParentCtx2),
+                storage_sync_monitoring:increase_deleted_files_spirals(SpaceId),
+                storage_sync_monitoring:increase_deleted_files_counter(SpaceId);
+            false ->
+                {IsDir, _} = file_ctx:is_dir(FileCtx2),
+                case IsDir of
+                    true ->
+                        delete_imported_file(ChildName, ParentCtx2),
+                        storage_sync_monitoring:increase_deleted_files_spirals(SpaceId),
+                        storage_sync_monitoring:increase_deleted_files_counter(SpaceId);
+                    false ->
+                        %file has been created in remote provider and not yet replicated
+                        storage_sync_monitoring:increase_updated_files_counter(SpaceId)
+                end
+        end
     catch
         _:_ ->
             storage_sync_monitoring:increase_failed_file_deletions_counter(SpaceId)
@@ -185,7 +200,7 @@ iterate_and_remove(StKey = '$end_of_table', StTable, DBKey, DBTable, Offset,
 ) ->
     Next = ets:next(DBTable, DBKey),
     storage_sync_monitoring:update_files_to_sync_counter(SpaceId, 1),
-    cast_deletion_of_imported_file(DBKey, FileCtx, SpaceId),
+    delete_imported_file_and_update_counters(DBKey, FileCtx, SpaceId),
     iterate_and_remove(StKey, StTable, Next, DBTable, Offset,
         BatchSize, FileCtx, SpaceId);
 iterate_and_remove(Key, StorageTable, Key, DBTable, Offset, BatchSize, FileCtx,
@@ -200,7 +215,7 @@ iterate_and_remove(StKey, StorageTable, DBKey, DBTable, Offset, BatchSize,
 when StKey > DBKey ->
     Next = ets:next(DBTable, DBKey),
     storage_sync_monitoring:update_files_to_sync_counter(SpaceId, 1),
-    cast_deletion_of_imported_file(DBKey, FileCtx, SpaceId),
+    delete_imported_file_and_update_counters(DBKey, FileCtx, SpaceId),
     iterate_and_remove(StKey, StorageTable, Next, DBTable, Offset, BatchSize,
         FileCtx, SpaceId);
 iterate_and_remove(StKey, StorageTable, DBKey, DBTable, Offset, BatchSize,
@@ -271,14 +286,3 @@ save_storage_children_names(TableName, StorageFileCtx, Offset, BatchSize) ->
             save_storage_children_names(TableName, StorageFileCtx2,
                 Offset + ListedChildrenNumber, BatchSize)
     end.
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Remove files that had been earlier imported.
-%% @end
-%%-------------------------------------------------------------------
--spec cast_deletion_of_imported_file(file_meta:name(), file_ctx:ctx(), od_space:id()) -> ok.
-cast_deletion_of_imported_file(ChildName, FileCtx, SpaceId) ->
-    storage_sync_monitoring:update_queue_length_counter(SpaceId, 1),
-    delete_imported_file_and_update_counters(ChildName, FileCtx, SpaceId).

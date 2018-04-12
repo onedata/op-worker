@@ -16,7 +16,7 @@
 -include("proto/oneclient/common_messages.hrl").
 
 % API
--export([local_id/1, id/2, critical_section/2, save_and_bump_version/1]).
+-export([local_id/1, id/2, critical_section/2, save_and_bump_version/1, is_storage_file_created/1]).
 -export([create/1, create/2, save/1, get/1, update/2, delete/1, delete/2]).
 
 %% datastore_model callbacks
@@ -204,6 +204,19 @@ delete(Key, UserId) ->
             ok
     end,
     datastore_model:delete(?CTX, Key).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns value of storage_file_created field
+%% @end
+%%-------------------------------------------------------------------
+-spec is_storage_file_created(doc() | record() | undefined) -> boolean().
+is_storage_file_created(undefined) ->
+    false;
+is_storage_file_created(#file_location{storage_file_created = StorageFileCreated}) ->
+    StorageFileCreated;
+is_storage_file_created(#document{value=FileLocation}) ->
+    is_storage_file_created(FileLocation).
 
 %%%===================================================================
 %%% Internal functions
