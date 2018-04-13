@@ -274,8 +274,16 @@ recursive_delete(FileCtx, UserCtx) ->
     ok | {error, term()}.
 delete_storage_dir(FileCtx, UserCtx) ->
     SessId = user_ctx:get_session_id(UserCtx),
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
     {SFMHandle, _} = storage_file_manager:new_handle(SessId, FileCtx),
-    storage_file_manager:rmdir(SFMHandle).
+    case storage_file_manager:rmdir(SFMHandle) of
+        ok ->
+            dir_location:delete(FileUuid);
+        {error, ?ENOENT} ->
+            dir_location:delete(FileUuid);
+        Error ->
+            Error
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -354,8 +362,12 @@ create_dir(FileCtx, SpaceId, Storage) ->
 -spec mkdir_and_maybe_chown(storage_file_manager:handle(), non_neg_integer(),
     file_ctx:ctx(), boolean()) -> any().
 mkdir_and_maybe_chown(SFMHandle, Mode, FileCtx, ShouldChown) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
     case storage_file_manager:mkdir(SFMHandle, Mode, false) of
-        ok -> ok;
+        ok ->
+            {ok, _} = dir_location:mark_dir_created_on_storage(FileUuid, SpaceId),
+            ok;
         {error, ?EEXIST} -> ok
     end,
     case ShouldChown of

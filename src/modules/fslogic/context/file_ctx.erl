@@ -77,7 +77,7 @@
     get_file_location_ids/1, get_file_location_docs/1, get_acl/1,
     get_raw_storage_path/1, get_child_canonical_path/2, get_file_size/1,
     get_owner/1, get_group_owner/1, get_local_storage_file_size/1,
-    is_import_on/1, get_and_cache_file_doc_including_deleted/1]).
+    is_import_on/1, get_and_cache_file_doc_including_deleted/1, get_dir_location_doc/1]).
 -export([is_dir/1]).
 
 %%%===================================================================
@@ -792,6 +792,22 @@ get_local_file_location_doc(FileCtx) ->
     FileUuid = get_uuid_const(FileCtx),
     LocalLocationId = file_location:local_id(FileUuid),
     case file_location:get(LocalLocationId) of
+        {ok, Location} ->
+            {Location, FileCtx};
+        {error, not_found} ->
+            {undefined, FileCtx}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns local dir location doc.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_dir_location_doc(ctx()) ->
+    {dir_location:doc() | undefined, ctx()}.
+get_dir_location_doc(FileCtx) ->
+    FileUuid = get_uuid_const(FileCtx),
+    case dir_location:get(FileUuid) of
         {ok, Location} ->
             {Location, FileCtx};
         {error, not_found} ->
