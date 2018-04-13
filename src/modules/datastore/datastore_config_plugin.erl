@@ -60,7 +60,8 @@ get_models() -> [
     space_transfer_stats_cache,
     transfer,
     storage_sync_histogram,
-    autocleaning
+    autocleaning,
+    dir_location
 ].
 
 %%--------------------------------------------------------------------

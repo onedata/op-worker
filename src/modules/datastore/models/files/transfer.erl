@@ -1111,7 +1111,7 @@ get_record_struct(6) ->
         {failed_files, integer},
         {files_transferred, integer},
         {bytes_transferred, integer},
-        {files_to_invalidate, integer},
+        {files_invalidated, integer},
         {schedule_time, integer},
         {start_time, integer},
         {finish_time, integer},
@@ -1199,14 +1199,14 @@ upgrade_record(4, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, Status,
         StartTime, FinishTime, LastUpdate, MinHist, HrHist, DyHist, MthHist
     }};
 upgrade_record(5, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, Status,
-    InvalidationStatus, SourceProviderId, TargetProviderId,
-    InvalidateSourceReplica, Pid, FilesToTransfer, FilesTransferred, FailedFiles,
-    _BytesToTransfer, BytesTransferred, _FilesToInvalidate, FilesInvalidated,
+    InvalidationStatus, SchedulingProviderId, SourceProviderId, TargetProviderId,
+    InvalidateSourceReplica, Pid, FilesToProcess, FilesProcessed,
+    FailedFiles, FilesTransferred, BytesTransferred, FilesInvalidated,
     StartTime, FinishTime, LastUpdate, MinHist, HrHist, DyHist, MthHist
 }) ->
     {6, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, Status,
-        InvalidationStatus, SourceProviderId, SourceProviderId, TargetProviderId,
-        InvalidateSourceReplica, Pid, FilesToTransfer, FilesTransferred,
+        InvalidationStatus, SchedulingProviderId, SourceProviderId, TargetProviderId,
+        InvalidateSourceReplica, Pid, FilesToProcess, FilesProcessed,
         FailedFiles, FilesTransferred, BytesTransferred, FilesInvalidated,
         StartTime, StartTime, FinishTime, LastUpdate, MinHist, HrHist, DyHist,
         MthHist

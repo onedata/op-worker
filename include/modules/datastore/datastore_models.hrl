@@ -335,6 +335,11 @@
     storage_file_created = false :: boolean()
 }).
 
+%% Model for storing dir's location data
+-record(dir_location, {
+    storage_file_created = false :: boolean()
+}).
+
 -define(DEFAULT_STORAGE_IMPORT_STRATEGY, {no_import, #{}}).
 -define(DEFAULT_STORAGE_UPDATE_STRATEGY, {no_update, #{}}).
 
