@@ -366,8 +366,7 @@ mkdir_and_maybe_chown(SFMHandle, Mode, FileCtx, ShouldChown) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     case storage_file_manager:mkdir(SFMHandle, Mode, false) of
         ok ->
-            {ok, _} = dir_location:mark_dir_created_on_storage(FileUuid, SpaceId),
-            ok;
+            {ok, _} = dir_location:mark_dir_created_on_storage(FileUuid, SpaceId);
         {error, ?EEXIST} -> ok
     end,
     case ShouldChown of
