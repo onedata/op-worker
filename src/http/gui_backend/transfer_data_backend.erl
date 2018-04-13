@@ -197,7 +197,7 @@ transfer_record(TransferId) ->
         {<<"path">>, Path},
         {<<"fileType">>, FileType},
         {<<"systemUserId">>, UserId},
-        {<<"startTime">>, ScheduleTime},    %todo change to StartTime when GUI is ready for handling scheduleTime
+        {<<"startTime">>, StartTime},
         {<<"scheduleTime">>, ScheduleTime},
         {<<"finishTime">>, FinishTime},
         {<<"currentStat">>, TransferId},
