@@ -335,13 +335,16 @@
     storage_file_created = false :: boolean()
 }).
 
--define(DEFAULT_FILENAME_MAPPING_STRATEGY, {simple, #{}}).
+%% Model for storing dir's location data
+-record(dir_location, {
+    storage_file_created = false :: boolean()
+}).
+
 -define(DEFAULT_STORAGE_IMPORT_STRATEGY, {no_import, #{}}).
 -define(DEFAULT_STORAGE_UPDATE_STRATEGY, {no_update, #{}}).
 
 %% Model that maps space to storage strategies
 -record(storage_strategies, {
-    filename_mapping = ?DEFAULT_FILENAME_MAPPING_STRATEGY :: space_strategy:config(),
     storage_import = ?DEFAULT_STORAGE_IMPORT_STRATEGY :: space_strategy:config(),
     storage_update = ?DEFAULT_STORAGE_UPDATE_STRATEGY :: space_strategy:config(),
     import_start_time :: space_strategy:timestamp(),
@@ -487,37 +490,32 @@
     files_transferred = 0 :: non_neg_integer(),
     bytes_transferred = 0 :: non_neg_integer(),
     files_invalidated = 0 :: non_neg_integer(),
+    schedule_time = 0 :: non_neg_integer(),
     start_time = 0 :: non_neg_integer(),
     finish_time = 0 :: non_neg_integer(),
 
-    % Histograms of transferred bytes per provider, last_update per provider is
+    % Histograms with different time spans (last minute, hour, day and month)
+    % of transferred bytes per provider, last_update per provider is
     % required to keep track in histograms.
+    % Length of each histogram type is defined in transfer.hrl
     last_update = #{} :: maps:map(od_provider:id(), non_neg_integer()),
-    % Histogram types (head of list is most recent):
-    % list of 19 integers counting bytes transferred during each 5 seconds of recent 90 seconds
     min_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
-    % list of 62 integers counting bytes transferred during each minute of recent 62 minutes
     hr_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
-    % list of 26 integers counting bytes transferred during each hour of recent 26h
     dy_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
-    % list of 32 integers counting bytes transferred during each day of recent 32 days
     mth_hist = #{} :: maps:map(od_provider:id(), histogram:histogram())
 }).
 
 %% Model that holds aggregated statistics about transfers featuring
 %% given space and target provider.
 -record(space_transfer_stats, {
-    % Histograms of transferred bytes per provider, last_update per provider is
+    % Histograms with different time spans (last minute, hour, day and month)
+    % of transferred bytes per provider, last_update per provider is
     % required to keep track in histograms.
+    % Length of each histogram type is defined in transfer.hrl
     last_update = #{} :: maps:map(od_provider:id(), non_neg_integer()),
-    % Histogram types (head of list is most recent):
-    % list of 19 integers counting bytes transferred during each 5 seconds of 90 seconds
     min_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
-    % list of 62 integers counting bytes transferred during each minute of 62 minutes
     hr_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
-    % list of 26 integers counting bytes transferred during each hour of recent 26h
     dy_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
-    % list of 32 integers counting bytes transferred during each day of recent 32 days
     mth_hist = #{} :: maps:map(od_provider:id(), histogram:histogram())
 }).
 

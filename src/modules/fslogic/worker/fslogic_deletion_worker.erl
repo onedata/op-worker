@@ -139,17 +139,17 @@ handle({open_file_deletion_request, FileCtx}) ->
 
         try
             {ParentCtx, FileCtx3} = file_ctx:get_parent(FileCtx2, UserCtx),
-            {ParentDoc, _} = file_ctx:get_file_doc(ParentCtx),
+            {ParentDoc, _} = file_ctx:get_file_doc_including_deleted(ParentCtx),
             ok = case fslogic_path:resolve(ParentDoc, <<"/", Name/binary>>) of
                 {ok, #document{key = Uuid2}} when Uuid2 =/= Uuid ->
                     ok;
                 _ ->
-                    sfm_utils:delete_storage_file_without_location(FileCtx3, UserCtx)
+                    sfm_utils:recursive_delete(FileCtx3, UserCtx)
             end
         catch
             E2:E2 ->
                 % Debug - parent could be deleted before
-                ?debug_stacktrace("Cannot check parrent during delete ~p: ~p:~p",
+                ?debug_stacktrace("Cannot check parent during delete ~p: ~p:~p",
                     [FileCtx, E2, E2]),
                 sfm_utils:delete_storage_file_without_location(FileCtx2, UserCtx)
         end

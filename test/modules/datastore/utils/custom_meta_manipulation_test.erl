@@ -40,73 +40,73 @@
 
 
 get_level_0_simple_meta_test() ->
-    Json = json_utils:decode_map(?SAMPLE_METADATA_BINARY),
+    Json = json_utils:decode(?SAMPLE_METADATA_BINARY),
     Meta = custom_meta_manipulation:find(Json, [<<"author">>]),
     ?assertEqual(<<"Pat">>, Meta).
 
 get_level_0_integer_meta_test() ->
-    Json = json_utils:decode_map(?SAMPLE_METADATA_BINARY),
+    Json = json_utils:decode(?SAMPLE_METADATA_BINARY),
     Meta = custom_meta_manipulation:find(Json, [<<"version">>]),
     ?assertEqual(1, Meta).
 
 get_level_0_list_meta_test() ->
-    Json = json_utils:decode_map(?SAMPLE_METADATA_BINARY),
+    Json = json_utils:decode(?SAMPLE_METADATA_BINARY),
     Meta = custom_meta_manipulation:find(Json, [<<"tags">>]),
     ?assertEqual([<<"things">>, <<"stuff">>], Meta).
 
 get_level_0_json_meta_test() ->
-    Json = json_utils:decode_map(?SAMPLE_METADATA_BINARY),
+    Json = json_utils:decode(?SAMPLE_METADATA_BINARY),
     Meta = custom_meta_manipulation:find(Json, [<<"operatingsystem_support">>]),
     ?assertMatch(#{<<"operatingsystem">> := <<"RedHat">>, <<"operatingsystemrelease">> := [<<"5.0">>, <<"6.0">>]}, Meta).
 
 get_level_1_simple_meta_test() ->
-    Json = json_utils:decode_map(?SAMPLE_METADATA_BINARY),
+    Json = json_utils:decode(?SAMPLE_METADATA_BINARY),
     Meta = custom_meta_manipulation:find(Json, [<<"operatingsystem_support">>, <<"operatingsystem">>]),
     ?assertEqual(<<"RedHat">>, Meta).
 
 get_level_1_list_meta_test() ->
-    Json = json_utils:decode_map(?SAMPLE_METADATA_BINARY),
+    Json = json_utils:decode(?SAMPLE_METADATA_BINARY),
     Meta = custom_meta_manipulation:find(Json, [<<"operatingsystem_support">>, <<"operatingsystemrelease">>]),
     ?assertEqual([<<"5.0">>, <<"6.0">>], Meta).
 
 get_level_0_all_meta_test() ->
-    Json = json_utils:decode_map(?SAMPLE_METADATA_BINARY),
+    Json = json_utils:decode(?SAMPLE_METADATA_BINARY),
     ?assertEqual(Json, custom_meta_manipulation:find(Json, [])).
 
 error_get_level_0_missing_meta_test() ->
-    Json = json_utils:decode_map(?SAMPLE_METADATA_BINARY),
+    Json = json_utils:decode(?SAMPLE_METADATA_BINARY),
     ?assertException(throw, {error, ?ENOATTR}, custom_meta_manipulation:find(Json, [<<"missing">>])).
 
 error_get_level_1_missing_meta_test() ->
-    Json = json_utils:decode_map(?SAMPLE_METADATA_BINARY),
+    Json = json_utils:decode(?SAMPLE_METADATA_BINARY),
     ?assertException(throw, {error, ?ENOATTR}, custom_meta_manipulation:find(Json, [<<"operatingsystem_support">>, <<"missing">>])).
 
 error_get_level_1_meta_from_non_container_test() ->
-    Json = json_utils:decode_map(?SAMPLE_METADATA_BINARY),
+    Json = json_utils:decode(?SAMPLE_METADATA_BINARY),
     ?assertException(throw, {error, ?ENOATTR}, custom_meta_manipulation:find(Json, [<<"version">>, <<"missing">>])).
 
 add_level_0_simple_meta_test() ->
-    Json = json_utils:decode_map(?SAMPLE_METADATA_BINARY),
+    Json = json_utils:decode(?SAMPLE_METADATA_BINARY),
     NewJson = custom_meta_manipulation:insert(Json, <<"Tom">>, [<<"second_author">>]),
     ?assertEqual(Json#{<<"second_author">> => <<"Tom">>}, NewJson).
 
 add_level_0_json_meta_test() ->
-    Json = json_utils:decode_map(?SAMPLE_METADATA_BINARY),
+    Json = json_utils:decode(?SAMPLE_METADATA_BINARY),
     NewJson = custom_meta_manipulation:insert(Json, #{<<"first">> => <<"Tom">>, <<"second">> => <<"Pat">>}, [<<"new_author">>]),
     ?assertEqual(Json#{<<"new_author">> => #{<<"first">> => <<"Tom">>, <<"second">> => <<"Pat">>}}, NewJson).
 
 add_level_0_list_meta_test() ->
-    Json = json_utils:decode_map(?SAMPLE_METADATA_BINARY),
+    Json = json_utils:decode(?SAMPLE_METADATA_BINARY),
     NewJson = custom_meta_manipulation:insert(Json, [<<"Tom">>, <<"Pat">>], [<<"new_author">>]),
     ?assertEqual(Json#{<<"new_author">> => [<<"Tom">>, <<"Pat">>]}, NewJson).
 
 override_level_0_list_meta_test() ->
-    Json = json_utils:decode_map(?SAMPLE_METADATA_BINARY),
+    Json = json_utils:decode(?SAMPLE_METADATA_BINARY),
     NewJson = custom_meta_manipulation:insert(Json, [<<"Tom">>, <<"Pat">>], [<<"author">>]),
     ?assertEqual(Json#{<<"author">> => [<<"Tom">>, <<"Pat">>]}, NewJson).
 
 add_level_1_json_meta_test() ->
-    Json = json_utils:decode_map(?SAMPLE_METADATA_BINARY),
+    Json = json_utils:decode(?SAMPLE_METADATA_BINARY),
     NewJson = custom_meta_manipulation:insert(Json, <<"yum">>, [<<"operatingsystem_support">>, <<"repo_type">>]),
     ?assertEqual(Json#{<<"operatingsystem_support">> => #{
         <<"repo_type">> => <<"yum">>,
@@ -114,7 +114,7 @@ add_level_1_json_meta_test() ->
         <<"operatingsystemrelease">> => [<<"5.0">>, <<"6.0">>]}}, NewJson).
 
 override_level_1_json_meta_test() ->
-    Json = json_utils:decode_map(?SAMPLE_METADATA_BINARY),
+    Json = json_utils:decode(?SAMPLE_METADATA_BINARY),
     NewJson = custom_meta_manipulation:insert(Json, <<"Ubuntu">>, [<<"operatingsystem_support">>, <<"operatingsystem">>]),
     ?assertEqual(Json#{<<"operatingsystem_support">> => #{
         <<"operatingsystem">> => <<"Ubuntu">>,
@@ -201,7 +201,7 @@ merge_three_jsons_test() ->
     ?assertEqual(#{<<"a">> =>  #{<<"a1">> => <<"b1">>, <<"a2">> => <<"b2">>, <<"a3">> => <<"b3">>}, <<"b">> => <<"c">>, <<"d">> => <<"e">>}, NewJson).
 
 override_list_meta_begin_test() ->
-    Json = json_utils:decode_map(?SAMPLE_METADATA_BINARY),
+    Json = json_utils:decode(?SAMPLE_METADATA_BINARY),
     NewJson = custom_meta_manipulation:insert(Json, <<"4.0">>, [<<"operatingsystem_support">>, <<"operatingsystemrelease">>, <<"[0]">>]),
 
     ?assertEqual(Json#{<<"operatingsystem_support">> => #{
@@ -209,28 +209,28 @@ override_list_meta_begin_test() ->
         <<"operatingsystemrelease">> => [<<"4.0">>, <<"6.0">>]}}, NewJson).
 
 override_list_meta_end_test() ->
-    Json = json_utils:decode_map(?SAMPLE_METADATA_BINARY),
+    Json = json_utils:decode(?SAMPLE_METADATA_BINARY),
     NewJson = custom_meta_manipulation:insert(Json, <<"7.0">>, [<<"operatingsystem_support">>, <<"operatingsystemrelease">>, <<"[1]">>]),
     ?assertEqual(Json#{<<"operatingsystem_support">> => #{
         <<"operatingsystem">> => <<"RedHat">>,
         <<"operatingsystemrelease">> => [<<"5.0">>, <<"7.0">>]}}, NewJson).
 
 append_to_list_meta_end_test() ->
-    Json = json_utils:decode_map(?SAMPLE_METADATA_BINARY),
+    Json = json_utils:decode(?SAMPLE_METADATA_BINARY),
     NewJson = custom_meta_manipulation:insert(Json, <<"7.0">>, [<<"operatingsystem_support">>, <<"operatingsystemrelease">>, <<"[2]">>]),
     ?assertEqual(Json#{<<"operatingsystem_support">> => #{
         <<"operatingsystem">> => <<"RedHat">>,
         <<"operatingsystemrelease">> => [<<"5.0">>, <<"6.0">>, <<"7.0">>]}}, NewJson).
 
 create_gap_in_list_meta_test() ->
-    Json = json_utils:decode_map(?SAMPLE_METADATA_BINARY),
+    Json = json_utils:decode(?SAMPLE_METADATA_BINARY),
     NewJson = custom_meta_manipulation:insert(Json, <<"7.0">>, [<<"operatingsystem_support">>, <<"operatingsystemrelease">>, <<"[4]">>]),
     ?assertEqual(Json#{<<"operatingsystem_support">> => #{
         <<"operatingsystem">> => <<"RedHat">>,
         <<"operatingsystemrelease">> => [<<"5.0">>, <<"6.0">>, null, null, <<"7.0">>]}}, NewJson).
 
 create_list_in_list_meta_test() ->
-    Json = json_utils:decode_map(?SAMPLE_METADATA_BINARY),
+    Json = json_utils:decode(?SAMPLE_METADATA_BINARY),
     NewJson = custom_meta_manipulation:insert(Json, <<"7.1">>, [<<"operatingsystem_support">>, <<"operatingsystemrelease">>, <<"[2]">>, <<"[0]">>]),
 
     ?assertEqual(Json#{<<"operatingsystem_support">> => #{
@@ -238,13 +238,13 @@ create_list_in_list_meta_test() ->
         <<"operatingsystemrelease">> => [<<"5.0">>, <<"6.0">>, [<<"7.1">>]]}}, NewJson).
 
 get_list_meta_begin_test() ->
-    Json = json_utils:decode_map(?SAMPLE_METADATA_BINARY),
+    Json = json_utils:decode(?SAMPLE_METADATA_BINARY),
     ?assertEqual(<<"5.0">>, custom_meta_manipulation:find(Json, [<<"operatingsystem_support">>, <<"operatingsystemrelease">>, <<"[0]">>])).
 
 get_list_meta_end_test() ->
-    Json = json_utils:decode_map(?SAMPLE_METADATA_BINARY),
+    Json = json_utils:decode(?SAMPLE_METADATA_BINARY),
     ?assertEqual(<<"6.0">>, custom_meta_manipulation:find(Json, [<<"operatingsystem_support">>, <<"operatingsystemrelease">>, <<"[1]">>])).
 
 get_list_meta_missing_test() ->
-    Json = json_utils:decode_map(?SAMPLE_METADATA_BINARY),
+    Json = json_utils:decode(?SAMPLE_METADATA_BINARY),
     ?assertException(throw, {error, ?ENOATTR}, custom_meta_manipulation:find(Json, [<<"operatingsystem_support">>, <<"operatingsystemrelease">>, <<"[2]">>])).

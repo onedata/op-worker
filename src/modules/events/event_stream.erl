@@ -74,7 +74,7 @@
 -define(EXOMETER_COUNTERS, [events_handler_execution]).
 -define(EXOMETER_HISTOGRAM_COUNTERS, [events_handler_map_size,
     events_handler_execution_time_ms]).
--define(EXOMETER_DEFAULT_TIME_SPAN, 600000).
+-define(EXOMETER_DEFAULT_DATA_POINTS_NUMBER, 10000).
 
 %%%===================================================================
 %%% API
@@ -142,13 +142,13 @@ execute_event_handler(Force, #state{handler_ref = {Pid, _}} = State) ->
 %%--------------------------------------------------------------------
 -spec init_counters() -> ok.
 init_counters() ->
-    TimeSpan = application:get_env(?APP_NAME,
-        exometer_events_time_span, ?EXOMETER_DEFAULT_TIME_SPAN),
+    Size = application:get_env(?CLUSTER_WORKER_APP_NAME, 
+        exometer_data_points_number, ?EXOMETER_DEFAULT_DATA_POINTS_NUMBER),
     Counters = lists:map(fun(Name) ->
         {?EXOMETER_NAME(Name), counter}
     end, ?EXOMETER_COUNTERS),
     Counters2 = lists:map(fun(Name) ->
-        {?EXOMETER_NAME(Name), histogram, TimeSpan}
+        {?EXOMETER_NAME(Name), uniform, [{size, Size}]}
     end, ?EXOMETER_HISTOGRAM_COUNTERS),
     ?init_counters(Counters ++ Counters2).
 

@@ -108,7 +108,7 @@ get_json_internal(Req, State) ->
 
     {ok, Meta} = onedata_file_api:get_metadata(Auth, get_file(StateWithInherited),
         DefinedMetadataType, FilterList, Inherited),
-    Response = json_utils:encode_map(Meta),
+    Response = json_utils:encode(Meta),
     {Response, ReqWithInherited, StateWithInherited}.
 
 %%--------------------------------------------------------------------
@@ -159,7 +159,7 @@ set_json_internal(Req, State) ->
     {StateWithFilter, ReqWithFilter} = validator:parse_filter(ReqWithFilterType, StateWithFilterType),
     {ok, Body, FinalReq} = cowboy_req:read_body(ReqWithFilter),
 
-    Json = json_utils:decode_map(Body),
+    Json = json_utils:decode(Body),
     #{auth := Auth, metadata_type := MetadataType, filter_type := FilterType,
         filter := Filter} = StateWithFilter,
     DefinedMetadataType = validate_metadata_type(MetadataType, json),

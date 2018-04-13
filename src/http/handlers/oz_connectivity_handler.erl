@@ -36,7 +36,7 @@ init(#{method := <<"GET">>} = Req, State) ->
     end,
     NewReq = cowboy_req:reply(200,
         #{<<"content-type">> => <<"application/json">>},
-        json_utils:encode_map(#{<<"status">> => Status}),
+        json_utils:encode(#{<<"status">> => Status}),
         Req
     ),
     {ok, NewReq, State};

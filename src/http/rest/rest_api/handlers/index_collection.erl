@@ -117,7 +117,7 @@ list_indexes(Req, State) ->
                 false
         end, IndexList),
 
-    Response = json_utils:encode_map(RawResponse),
+    Response = json_utils:encode(RawResponse),
     {Response, Req1, State1}.
 
 %%--------------------------------------------------------------------

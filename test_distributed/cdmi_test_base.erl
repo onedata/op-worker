@@ -93,7 +93,7 @@ list_dir(Config) ->
     ?assertEqual(200, Code1),
     ?assertEqual(proplists:get_value(<<"content-type">>, Headers1),
         <<"application/cdmi-container">>),
-    CdmiResponse1 = json_utils:decode(Response1),
+    CdmiResponse1 = maps:to_list(json_utils:decode(Response1)),
     ?assertEqual(<<"application/cdmi-container">>,
         proplists:get_value(<<"objectType">>, CdmiResponse1)),
     ?assertEqual(TestDirNameCheck,
@@ -110,7 +110,7 @@ list_dir(Config) ->
         do_request(WorkerP2, SpaceName ++ "/", get,
             [user_1_token_header(Config), ?CDMI_VERSION_HEADER], []),
     ?assertEqual(200, Code2),
-    CdmiResponse2 = json_utils:decode(Response2),
+    CdmiResponse2 = maps:to_list(json_utils:decode(Response2)),
     ?assertEqual(list_to_binary(SpaceName ++ "/"), proplists:get_value(<<"objectName">>, CdmiResponse2)),
     ?assertEqual([TestDirNameCheck],
         proplists:get_value(<<"children">>, CdmiResponse2)),
@@ -128,7 +128,7 @@ list_dir(Config) ->
         do_request(Workers, TestDirName ++ "/?children;objectName",
             get, [user_1_token_header(Config), ?CDMI_VERSION_HEADER], []),
     ?assertEqual(200, Code4),
-    CdmiResponse4 = json_utils:decode(Response4),
+    CdmiResponse4 = maps:to_list(json_utils:decode(Response4)),
     ?assertEqual(TestDirNameCheck,
         proplists:get_value(<<"objectName">>, CdmiResponse4)),
     ?assertEqual([TestFileNameBin],
@@ -150,7 +150,7 @@ list_dir(Config) ->
         do_request(Workers, ChildrangeDir ++ "?children;childrenrange",
             get, [user_1_token_header(Config), ?CDMI_VERSION_HEADER], []),
     ?assertEqual(200, Code5),
-    CdmiResponse5 = json_utils:decode(Response5),
+    CdmiResponse5 = maps:to_list(json_utils:decode(Response5)),
     ChildrenResponse1 = proplists:get_value(<<"children">>, CdmiResponse5),
     ?assert(is_list(ChildrenResponse1)),
     lists:foreach(fun(Name) ->
@@ -171,9 +171,9 @@ list_dir(Config) ->
     ?assertEqual(200, Code6),
     ?assertEqual(200, Code7),
     ?assertEqual(200, Code8),
-    CdmiResponse6 = json_utils:decode(Response6),
-    CdmiResponse7 = json_utils:decode(Response7),
-    CdmiResponse8 = json_utils:decode(Response8),
+    CdmiResponse6 = maps:to_list(json_utils:decode(Response6)),
+    CdmiResponse7 = maps:to_list(json_utils:decode(Response7)),
+    CdmiResponse8 = maps:to_list(json_utils:decode(Response8)),
     ChildrenResponse6 = proplists:get_value(<<"children">>, CdmiResponse6),
     ChildrenResponse7 = proplists:get_value(<<"children">>, CdmiResponse7),
     ChildrenResponse8 = proplists:get_value(<<"children">>, CdmiResponse8),
@@ -218,7 +218,7 @@ get_file(Config) ->
     RequestHeaders1 = [?CDMI_VERSION_HEADER, user_1_token_header(Config)],
     {ok, Code1, _Headers1, Response1} = do_request(WorkerP2, FileName, get, RequestHeaders1, []),
     ?assertEqual(200, Code1),
-    CdmiResponse1 = json_utils:decode(Response1),
+    CdmiResponse1 = maps:to_list(json_utils:decode(Response1)),
 
     ?assertEqual(<<"application/cdmi-object">>, proplists:get_value(<<"objectType">>, CdmiResponse1)),
     ?assertEqual(<<"toRead.txt">>, proplists:get_value(<<"objectName">>, CdmiResponse1)),
@@ -235,7 +235,7 @@ get_file(Config) ->
     RequestHeaders2 = [?CDMI_VERSION_HEADER, user_1_token_header(Config)],
     {ok, Code2, _Headers2, Response2} = do_request(Workers, FileName ++ "?parentURI;completionStatus", get, RequestHeaders2, []),
     ?assertEqual(200, Code2),
-    CdmiResponse2 = json_utils:decode(Response2),
+    CdmiResponse2 = maps:to_list(json_utils:decode(Response2)),
 
     ?assertEqual(<<"/", SpaceName/binary, "/">>, proplists:get_value(<<"parentURI">>, CdmiResponse2)),
     ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>, CdmiResponse2)),
@@ -246,7 +246,7 @@ get_file(Config) ->
     RequestHeaders3 = [?CDMI_VERSION_HEADER, user_1_token_header(Config)],
     {ok, Code3, _Headers3, Response3} = do_request(Workers, FileName ++ "?value:1-3;valuerange", get, RequestHeaders3, []),
     ?assertEqual(200, Code3),
-    CdmiResponse3 = json_utils:decode(Response3),
+    CdmiResponse3 = maps:to_list(json_utils:decode(Response3)),
 
     ?assertEqual(<<"1-3">>, proplists:get_value(<<"valuerange">>, CdmiResponse3)),
     ?assertEqual(<<"ome">>, base64:decode(proplists:get_value(<<"value">>, CdmiResponse3))), % 1-3 from FileContent = <<"Some content...">>
@@ -266,7 +266,7 @@ get_file(Config) ->
     {ok, Code5, _Headers5, Response5} = do_request(Workers, FileName ++ "?objectID", get, RequestHeaders5, []),
     ?assertEqual(200, Code5),
 
-    CdmiResponse5 = json_utils:decode(Response5),
+    CdmiResponse5 = maps:to_list(json_utils:decode(Response5)),
     ObjectID = proplists:get_value(<<"objectID">>, CdmiResponse5),
     ?assert(is_binary(ObjectID)),
     %%------------------------------
@@ -276,7 +276,7 @@ get_file(Config) ->
     {ok, Code6, _Headers6, Response6} = do_request(Workers, "cdmi_objectid/" ++ binary_to_list(ObjectID), get, RequestHeaders6, []),
     ?assertEqual(200, Code6),
 
-    CdmiResponse6 = json_utils:decode(Response6),
+    CdmiResponse6 = maps:to_list(json_utils:decode(Response6)),
     ?assertEqual(FileContent, base64:decode(proplists:get_value(<<"value">>, CdmiResponse6))),
     %%------------------------------
 
@@ -308,17 +308,19 @@ metadata(Config) ->
     ?assert(not object_exists(Config, FileName)),
 
     RequestHeaders1 = [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, user_1_token_header(Config)],
-    RequestBody1 = [
+    RequestBody1 = maps:from_list([
         {<<"value">>, FileContent}, {<<"valuetransferencoding">>, <<"utf-8">>}, {<<"mimetype">>, <<"text/plain">>},
-        {<<"metadata">>, [{<<"my_metadata">>, <<"my_value">>}, {<<"cdmi_not_allowed">>, <<"my_value">>}]}],
+        {<<"metadata">>, maps:from_list([{<<"my_metadata">>, <<"my_value">>}, {<<"cdmi_not_allowed">>, <<"my_value">>}])}]),
+
     RawRequestBody1 = json_utils:encode(RequestBody1),
     Before = calendar:now_to_datetime(erlang:timestamp()),
     {ok, Code1, _Headers1, Response1} = do_request(Workers, FileName, put, RequestHeaders1, RawRequestBody1),
     After = calendar:now_to_datetime(erlang:timestamp()),
 
     ?assertEqual(201, Code1),
-    CdmiResponse1 = json_utils:decode(Response1),
-    Metadata1 = proplists:get_value(<<"metadata">>, CdmiResponse1),
+    CdmiResponse1 = maps:to_list(json_utils:decode(Response1)),
+    Metadata = proplists:get_value(<<"metadata">>, CdmiResponse1),
+    Metadata1 = maps:to_list(Metadata),
     ?assertEqual(<<"15">>, proplists:get_value(<<"cdmi_size">>, Metadata1)),
     CTime1 = iso8601:parse(proplists:get_value(<<"cdmi_ctime">>, Metadata1)),
     ATime1 = iso8601:parse(proplists:get_value(<<"cdmi_atime">>, Metadata1)),
@@ -335,94 +337,94 @@ metadata(Config) ->
 
     %%-- selective metadata read -----
     {ok, 200, _Headers2, Response2} = do_request(Workers, FileName ++ "?metadata", get, RequestHeaders1, []),
-    CdmiResponse2 = json_utils:decode(Response2),
+    CdmiResponse2 = maps:to_list(json_utils:decode(Response2)),
     ?assertEqual(1, length(CdmiResponse2)),
-    Metadata2 = proplists:get_value(<<"metadata">>, CdmiResponse2),
+    Metadata2 = maps:to_list(proplists:get_value(<<"metadata">>, CdmiResponse2)),
     ?assertEqual(6, length(Metadata2)),
 
     %%-- selective metadata read with prefix -----
     {ok, 200, _Headers3, Response3} = do_request(Workers, FileName ++ "?metadata:cdmi_", get, RequestHeaders1, []),
-    CdmiResponse3 = json_utils:decode(Response3),
+    CdmiResponse3 = maps:to_list(json_utils:decode(Response3)),
     ?assertEqual(1, length(CdmiResponse3)),
-    Metadata3 = proplists:get_value(<<"metadata">>, CdmiResponse3),
+    Metadata3 = maps:to_list(proplists:get_value(<<"metadata">>, CdmiResponse3)),
     ?assertEqual(5, length(Metadata3)),
 
     {ok, 200, _Headers4, Response4} = do_request(Workers, FileName ++ "?metadata:cdmi_o", get, RequestHeaders1, []),
-    CdmiResponse4 = json_utils:decode(Response4),
+    CdmiResponse4 = maps:to_list(json_utils:decode(Response4)),
     ?assertEqual(1, length(CdmiResponse4)),
-    Metadata4 = proplists:get_value(<<"metadata">>, CdmiResponse4),
+    Metadata4 = maps:to_list(proplists:get_value(<<"metadata">>, CdmiResponse4)),
     ?assertMatch(UserId1, proplists:get_value(<<"cdmi_owner">>, Metadata4)),
     ?assertEqual(1, length(Metadata4)),
 
     {ok, 200, _Headers5, Response5} = do_request(Workers, FileName ++ "?metadata:cdmi_size", get, RequestHeaders1, []),
-    CdmiResponse5 = json_utils:decode(Response5),
+    CdmiResponse5 = maps:to_list(json_utils:decode(Response5)),
     ?assertEqual(1, length(CdmiResponse5)),
-    Metadata5 = proplists:get_value(<<"metadata">>, CdmiResponse5),
+    Metadata5 = maps:to_list(proplists:get_value(<<"metadata">>, CdmiResponse5)),
     ?assertEqual(<<"15">>, proplists:get_value(<<"cdmi_size">>, Metadata5)),
     ?assertEqual(1, length(Metadata5)),
 
     {ok, 200, _Headers6, Response6} = do_request(Workers, FileName ++ "?metadata:cdmi_no_such_metadata", get, RequestHeaders1, []),
-    CdmiResponse6 = json_utils:decode(Response6),
+    CdmiResponse6 = maps:to_list(json_utils:decode(Response6)),
     ?assertEqual(1, length(CdmiResponse6)),
-    ?assertEqual([], proplists:get_value(<<"metadata">>, CdmiResponse6)),
+    ?assertEqual([], maps:to_list(proplists:get_value(<<"metadata">>, CdmiResponse6))),
 
     %%------ update user metadata of a file ----------
-    RequestBody7 = [{<<"metadata">>, [{<<"my_new_metadata">>, <<"my_new_value">>}]}],
+    RequestBody7 = maps:from_list([{<<"metadata">>, maps:from_list([{<<"my_new_metadata">>, <<"my_new_value">>}])}]),
     RawRequestBody7 = json_utils:encode(RequestBody7),
     {ok, 204, _, _} = do_request(Workers, FileName, put, RequestHeaders1, RawRequestBody7),
     {ok, 200, _Headers7, Response7} = do_request(Workers, FileName ++ "?metadata:my", get, RequestHeaders1, []),
-    CdmiResponse7 = json_utils:decode(Response7),
+    CdmiResponse7 = maps:to_list(json_utils:decode(Response7)),
     ?assertEqual(1, length(CdmiResponse7)),
-    Metadata7 = proplists:get_value(<<"metadata">>, CdmiResponse7),
+    Metadata7 = maps:to_list(proplists:get_value(<<"metadata">>, CdmiResponse7)),
     ?assertEqual(<<"my_new_value">>, proplists:get_value(<<"my_new_metadata">>, Metadata7)),
     ?assertEqual(1, length(Metadata7)),
 
-    RequestBody8 = [{<<"metadata">>, [{<<"my_new_metadata_add">>, <<"my_new_value_add">>},
-        {<<"my_new_metadata">>, <<"my_new_value_update">>}, {<<"cdmi_not_allowed">>, <<"my_value">>}]}],
+    RequestBody8 = maps:from_list([{<<"metadata">>, maps:from_list([{<<"my_new_metadata_add">>, <<"my_new_value_add">>},
+        {<<"my_new_metadata">>, <<"my_new_value_update">>}, {<<"cdmi_not_allowed">>, <<"my_value">>}])}]),
     RawRequestBody8 = json_utils:encode(RequestBody8),
     {ok, 204, _, _} = do_request(Workers, FileName ++ "?metadata:my_new_metadata_add;metadata:my_new_metadata;metadata:cdmi_not_allowed",
         put, RequestHeaders1, RawRequestBody8),
     {ok, 200, _Headers8, Response8} = do_request(Workers, FileName ++ "?metadata:my", get, RequestHeaders1, []),
-    CdmiResponse8 = json_utils:decode(Response8),
+    CdmiResponse8 = maps:to_list(json_utils:decode(Response8)),
     ?assertEqual(1, length(CdmiResponse8)),
-    Metadata8 = proplists:get_value(<<"metadata">>, CdmiResponse8),
+    Metadata8 = maps:to_list(proplists:get_value(<<"metadata">>, CdmiResponse8)),
     ?assertEqual(<<"my_new_value_add">>, proplists:get_value(<<"my_new_metadata_add">>, Metadata8)),
     ?assertEqual(<<"my_new_value_update">>, proplists:get_value(<<"my_new_metadata">>, Metadata8)),
     ?assertEqual(2, length(Metadata8)),
     {ok, 200, _Headers9, Response9} = do_request(Workers, FileName ++ "?metadata:cdmi_", get, RequestHeaders1, []),
-    CdmiResponse9 = json_utils:decode(Response9),
+    CdmiResponse9 = maps:to_list(json_utils:decode(Response9)),
     ?assertEqual(1, length(CdmiResponse9)),
-    Metadata9 = proplists:get_value(<<"metadata">>, CdmiResponse9),
+    Metadata9 = maps:to_list(proplists:get_value(<<"metadata">>, CdmiResponse9)),
     ?assertEqual(5, length(Metadata9)),
 
-    RequestBody10 = [{<<"metadata">>, [{<<"my_new_metadata">>, <<"my_new_value_ignore">>}]}],
+    RequestBody10 = maps:from_list([{<<"metadata">>, maps:from_list([{<<"my_new_metadata">>, <<"my_new_value_ignore">>}])}]),
     RawRequestBody10 = json_utils:encode(RequestBody10),
     {ok, 204, _, _} = do_request(Workers, FileName ++ "?metadata:my_new_metadata_add", put, RequestHeaders1,
         RawRequestBody10),
     {ok, 200, _Headers10, Response10} = do_request(Workers, FileName ++ "?metadata:my", get, RequestHeaders1, []),
-    CdmiResponse10 = json_utils:decode(Response10),
+    CdmiResponse10 = maps:to_list(json_utils:decode(Response10)),
     ?assertEqual(1, length(CdmiResponse10)),
-    Metadata10 = proplists:get_value(<<"metadata">>, CdmiResponse10),
+    Metadata10 = maps:to_list(proplists:get_value(<<"metadata">>, CdmiResponse10)),
     ?assertEqual(<<"my_new_value_update">>, proplists:get_value(<<"my_new_metadata">>, Metadata10)),
     ?assertEqual(1, length(Metadata10)),
 
     %%------ create directory with user metadata  ----------
     RequestHeaders2 = [?CONTAINER_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, user_1_token_header(Config)],
-    RequestBody11 = [{<<"metadata">>, [{<<"my_metadata">>, <<"my_dir_value">>}]}],
+    RequestBody11 = maps:from_list([{<<"metadata">>, maps:from_list([{<<"my_metadata">>, <<"my_dir_value">>}])}]),
     RawRequestBody11 = json_utils:encode(RequestBody11),
     {ok, 201, _Headers11, Response11} = do_request(Workers, DirName, put, RequestHeaders2, RawRequestBody11),
-    CdmiResponse11 = json_utils:decode(Response11),
-    Metadata11 = proplists:get_value(<<"metadata">>, CdmiResponse11),
+    CdmiResponse11 = maps:to_list(json_utils:decode(Response11)),
+    Metadata11 = maps:to_list(proplists:get_value(<<"metadata">>, CdmiResponse11)),
     ?assertEqual(<<"my_dir_value">>, proplists:get_value(<<"my_metadata">>, Metadata11)),
 
     %%------ update user metadata of a directory ----------
-    RequestBody12 = [{<<"metadata">>, [{<<"my_metadata">>, <<"my_dir_value_update">>}]}],
+    RequestBody12 = maps:from_list([{<<"metadata">>, maps:from_list([{<<"my_metadata">>, <<"my_dir_value_update">>}])}]),
     RawRequestBody12 = json_utils:encode(RequestBody12),
     {ok, 204, _, _} = do_request(Workers, DirName, put, RequestHeaders2, RawRequestBody12),
     {ok, 200, _Headers13, Response13} = do_request(Workers, DirName ++ "?metadata:my", get, RequestHeaders1, []),
-    CdmiResponse13 = json_utils:decode(Response13),
+    CdmiResponse13 = maps:to_list(json_utils:decode(Response13)),
     ?assertEqual(1, length(CdmiResponse13)),
-    Metadata13 = proplists:get_value(<<"metadata">>, CdmiResponse13),
+    Metadata13 = maps:to_list(proplists:get_value(<<"metadata">>, CdmiResponse13)),
     ?assertEqual(<<"my_dir_value_update">>, proplists:get_value(<<"my_metadata">>, Metadata13)),
     ?assertEqual(1, length(Metadata13)),
     %%------------------------------
@@ -458,7 +460,7 @@ metadata(Config) ->
 
     create_file(Config, FileName2),
     write_to_file(Config, FileName2, <<"data">>, 0),
-    RequestBody15 = [{<<"metadata">>, [{<<"cdmi_acl">>, [Ace1, Ace2, Ace3Full]}]}],
+    RequestBody15 = maps:from_list([{<<"metadata">>, maps:from_list([{<<"cdmi_acl">>, lists:map(fun maps:from_list/1, [Ace1, Ace2, Ace3Full])}])}]),
     RawRequestBody15 = json_utils:encode(RequestBody15),
     RequestHeaders15 = [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, user_1_token_header(Config)],
 
@@ -467,12 +469,13 @@ metadata(Config) ->
 
     {ok, Code16, _Headers16, Response16} = do_request(Workers, FileName2 ++ "?metadata", get, RequestHeaders1, []),
     ?assertEqual(200, Code16),
-    CdmiResponse16 = json_utils:decode(Response16),
+    CdmiResponse16 = maps:to_list(json_utils:decode(Response16)),
     ?assertEqual(1, length(CdmiResponse16)),
-    Metadata16 = proplists:get_value(<<"metadata">>, CdmiResponse16),
+    Metadata16 = maps:to_list(proplists:get_value(<<"metadata">>, CdmiResponse16)),
     ?assertEqual(6, length(Metadata16)),
     ?assertEqual([lists:sort(Ace1), lists:sort(Ace2), lists:sort(Ace3)],
-        lists:map(fun lists:sort/1, proplists:get_value(<<"cdmi_acl">>, Metadata16))),
+        lists:map(fun lists:sort/1, lists:map(fun maps:to_list/1, 
+                        proplists:get_value(<<"cdmi_acl">>, Metadata16)))),
 
     {ok, Code17, _Headers17, Response17} = do_request(WorkerP2, FileName2, get, [user_1_token_header(Config)], []),
     ?assertEqual(200, Code17),
@@ -491,7 +494,7 @@ metadata(Config) ->
         {<<"identifier">>, <<UserName1/binary, "#", UserId1/binary>>},
         {<<"aceflags">>, acl_logic:bitmask_to_binary(?no_flags_mask)},
         {<<"acemask">>, acl_logic:bitmask_to_binary(?write_mask)}],
-    RequestBody18 = [{<<"metadata">>, [{<<"cdmi_acl">>, [Ace4, Ace5]}]}],
+    RequestBody18 = maps:from_list([{<<"metadata">>, maps:from_list([{<<"cdmi_acl">>, lists:map(fun maps:from_list/1, [Ace4, Ace5])}])}]),
     RawRequestBody18 = json_utils:encode(RequestBody18),
     RequestHeaders18 = [user_1_token_header(Config), ?CONTAINER_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER],
 
@@ -604,11 +607,11 @@ create_file(Config) ->
 
     RequestHeaders1 = [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, user_1_token_header(Config)],
     RequestBody1 = [{<<"value">>, FileContent}],
-    RawRequestBody1 = json_utils:encode(RequestBody1),
+    RawRequestBody1 = json_utils:encode(maps:from_list(RequestBody1)),
     {ok, Code1, _Headers1, Response1} = do_request(Workers, ToCreate, put, RequestHeaders1, RawRequestBody1),
 
     ?assertEqual(201, Code1),
-    CdmiResponse1 = json_utils:decode(Response1),
+    CdmiResponse1 = maps:to_list(json_utils:decode(Response1)),
     ?assertEqual(<<"application/cdmi-object">>, proplists:get_value(<<"objectType">>, CdmiResponse1)),
     ?assertEqual(<<"file1.txt">>, proplists:get_value(<<"objectName">>, CdmiResponse1)),
     ?assertEqual(<<"/", SpaceName/binary, "/">>, proplists:get_value(<<"parentURI">>, CdmiResponse1)),
@@ -625,12 +628,12 @@ create_file(Config) ->
 
     RequestHeaders2 = [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, user_1_token_header(Config)],
     RequestBody2 = [{<<"valuetransferencoding">>, <<"base64">>}, {<<"value">>, base64:encode(FileContent)}],
-    RawRequestBody2 = json_utils:encode(RequestBody2),
+    RawRequestBody2 = json_utils:encode(maps:from_list(RequestBody2)),
     {ok, Code2, _Headers2, Response2} =
         do_request(Workers, ToCreate2, put, RequestHeaders2, RawRequestBody2),
 
     ?assertEqual(201, Code2),
-    CdmiResponse2 = json_utils:decode(Response2),
+    CdmiResponse2 = maps:to_list(json_utils:decode(Response2)),
     ?assertEqual(<<"application/cdmi-object">>, proplists:get_value(<<"objectType">>, CdmiResponse2)),
     ?assertEqual(<<"file2.txt">>, proplists:get_value(<<"objectName">>, CdmiResponse2)),
     ?assertEqual(<<"/", SpaceName/binary, "/">>, proplists:get_value(<<"parentURI">>, CdmiResponse2)),
@@ -680,7 +683,7 @@ update_file(Config) ->
 
     RequestHeaders1 = [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, user_1_token_header(Config)],
     RequestBody1 = [{<<"value">>, NewValue}],
-    RawRequestBody1 = json_utils:encode(RequestBody1),
+    RawRequestBody1 = json_utils:encode(maps:from_list(RequestBody1)),
 
     {ok, Code1, _Headers1, _Response1} = do_request(Workers, FullTestFileName, put, RequestHeaders1, RawRequestBody1),
     ?assertEqual(204, Code1),
@@ -693,7 +696,7 @@ update_file(Config) ->
     UpdateValue = <<"123">>,
     RequestHeaders2 = [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, user_1_token_header(Config)],
     RequestBody2 = [{<<"value">>, base64:encode(UpdateValue)}],
-    RawRequestBody2 = json_utils:encode(RequestBody2),
+    RawRequestBody2 = json_utils:encode(maps:from_list(RequestBody2)),
     {ok, Code2, _Headers2, _Response2} = do_request(Workers, FullTestFileName ++ "?value:0-2", put, RequestHeaders2, RawRequestBody2),
     ?assertEqual(204, Code2),
 
@@ -819,7 +822,7 @@ create_dir(Config) ->
     {ok, Code2, _Headers2, Response2} = do_request(Workers, DirName2, put, RequestHeaders2, []),
 
     ?assertEqual(201, Code2),
-    CdmiResponse2 = json_utils:decode(Response2),
+    CdmiResponse2 = maps:to_list(json_utils:decode(Response2)),
     ?assertEqual(<<"application/cdmi-container">>, proplists:get_value(<<"objectType">>, CdmiResponse2)),
     ?assertEqual(<<"toCreate2/">>, proplists:get_value(<<"objectName">>, CdmiResponse2)),
     ?assertEqual(<<"/", SpaceName/binary, "/">>, proplists:get_value(<<"parentURI">>, CdmiResponse2)),
@@ -873,11 +876,11 @@ objectid(Config) ->
     RequestHeaders0 = [?CDMI_VERSION_HEADER, user_1_token_header(Config)],
     {ok, Code0, _Headers0, Response0} = do_request(WorkerP2, SpaceName ++ "/", get, RequestHeaders0, []),
     ?assertEqual(200, Code0),
-    CdmiResponse0 = json_utils:decode(Response0),
+    CdmiResponse0 = maps:to_list(json_utils:decode(Response0)),
     SpaceRootId = proplists:get_value(<<"objectID">>, CdmiResponse0),
 
     ?assertEqual(<<"application/cdmi-container">>, proplists:get_value(<<"content-type">>, Headers1)),
-    CdmiResponse1 = json_utils:decode(Response1),
+    CdmiResponse1 = maps:to_list(json_utils:decode(Response1)),
     ?assertEqual(<<"/">>, proplists:get_value(<<"objectName">>, CdmiResponse1)),
     RootId = proplists:get_value(<<"objectID">>, CdmiResponse1),
     ?assertNotEqual(RootId, undefined),
@@ -892,7 +895,7 @@ objectid(Config) ->
     {ok, Code2, _Headers2, Response2} = do_request(WorkerP2, TestDirName ++ "/", get, RequestHeaders2, []),
     ?assertEqual(200, Code2),
 
-    CdmiResponse2 = json_utils:decode(Response2),
+    CdmiResponse2 = maps:to_list(json_utils:decode(Response2)),
     ?assertEqual(TestDirNameCheck, proplists:get_value(<<"objectName">>, CdmiResponse2)),
     DirId = proplists:get_value(<<"objectID">>, CdmiResponse2),
     ?assertNotEqual(DirId, undefined),
@@ -907,7 +910,7 @@ objectid(Config) ->
     {ok, Code3, _Headers3, Response3} = do_request(WorkerP2, filename:join(TestDirName, TestFileName), get, RequestHeaders3, []),
     ?assertEqual(200, Code3),
 
-    CdmiResponse3 = json_utils:decode(Response3),
+    CdmiResponse3 = maps:to_list(json_utils:decode(Response3)),
     ?assertEqual(TestFileNameBin, proplists:get_value(<<"objectName">>, CdmiResponse3)),
     FileId = proplists:get_value(<<"objectID">>, CdmiResponse3),
     ?assertNotEqual(FileId, undefined),
@@ -921,10 +924,10 @@ objectid(Config) ->
     RequestHeaders4 = [?CDMI_VERSION_HEADER, user_1_token_header(Config)],
     {ok, Code4, _Headers4, Response4} = do_request(WorkerP2, "cdmi_objectid/" ++ binary_to_list(RootId) ++ "/", get, RequestHeaders4, []),
     ?assertEqual(200, Code4),
-    CdmiResponse4 = json_utils:decode(Response4),
-    Meta1 = proplists:delete(<<"cdmi_atime">>, proplists:get_value(<<"metadata">>, CdmiResponse1)),
+    CdmiResponse4 = maps:to_list(json_utils:decode(Response4)),
+    Meta1 = proplists:delete(<<"cdmi_atime">>, maps:to_list(proplists:get_value(<<"metadata">>, CdmiResponse1))),
     CdmiResponse1WithoutAtime = [{<<"metadata">>, Meta1} | proplists:delete(<<"metadata">>, CdmiResponse1)],
-    Meta4 = proplists:delete(<<"cdmi_atime">>, proplists:get_value(<<"metadata">>, CdmiResponse4)),
+    Meta4 = proplists:delete(<<"cdmi_atime">>, maps:to_list(proplists:get_value(<<"metadata">>, CdmiResponse4))),
     CdmiResponse4WithoutAtime = [{<<"metadata">>, Meta4} | proplists:delete(<<"metadata">>, CdmiResponse4)],
     ?assertEqual(CdmiResponse1WithoutAtime, CdmiResponse4WithoutAtime), % should be the same as in 1 (except access time)
     %%------------------------------
@@ -933,10 +936,10 @@ objectid(Config) ->
     RequestHeaders5 = [?CDMI_VERSION_HEADER, user_1_token_header(Config)],
     {ok, Code5, _Headers5, Response5} = do_request(WorkerP2, "cdmi_objectid/" ++ binary_to_list(DirId) ++ "/", get, RequestHeaders5, []),
     ?assertEqual(200, Code5),
-    CdmiResponse5 = json_utils:decode(Response5),
-    Meta2 = proplists:delete(<<"cdmi_atime">>, proplists:get_value(<<"metadata">>, CdmiResponse2)),
+    CdmiResponse5 = maps:to_list(json_utils:decode(Response5)),
+    Meta2 = proplists:delete(<<"cdmi_atime">>, maps:to_list(proplists:get_value(<<"metadata">>, CdmiResponse2))),
     CdmiResponse2WithoutAtime = [{<<"metadata">>, Meta2} | proplists:delete(<<"metadata">>, CdmiResponse2)],
-    Meta5 = proplists:delete(<<"cdmi_atime">>, proplists:get_value(<<"metadata">>, CdmiResponse5)),
+    Meta5 = proplists:delete(<<"cdmi_atime">>, maps:to_list(proplists:get_value(<<"metadata">>, CdmiResponse5))),
     CdmiResponse5WithoutAtime = [{<<"metadata">>, Meta5} | proplists:delete(<<"metadata">>, CdmiResponse5)],
     ?assertEqual( % should be the same as in 2 (except parent and access time)
         proplists:delete(<<"parentURI">>, proplists:delete(<<"parentID">>, CdmiResponse2WithoutAtime)),
@@ -948,10 +951,10 @@ objectid(Config) ->
     RequestHeaders6 = [?CDMI_VERSION_HEADER, user_1_token_header(Config)],
     {ok, Code6, _Headers6, Response6} = do_request(WorkerP2, "cdmi_objectid/" ++ binary_to_list(DirId) ++ "/" ++ TestFileName, get, RequestHeaders6, []),
     ?assertEqual(200, Code6),
-    CdmiResponse6 = json_utils:decode(Response6),
-    Meta3 = proplists:delete(<<"cdmi_atime">>, proplists:get_value(<<"metadata">>, CdmiResponse3)),
+    CdmiResponse6 = maps:to_list(json_utils:decode(Response6)),
+    Meta3 = proplists:delete(<<"cdmi_atime">>, maps:to_list(proplists:get_value(<<"metadata">>, CdmiResponse3))),
     CdmiResponse3WithoutAtime = [{<<"metadata">>, Meta3} | proplists:delete(<<"metadata">>, CdmiResponse3)],
-    Meta6 = proplists:delete(<<"cdmi_atime">>, proplists:get_value(<<"metadata">>, CdmiResponse6)),
+    Meta6 = proplists:delete(<<"cdmi_atime">>, maps:to_list(proplists:get_value(<<"metadata">>, CdmiResponse6))),
     CdmiResponse6WithoutAtime = [{<<"metadata">>, Meta6} | proplists:delete(<<"metadata">>, CdmiResponse6)],
     ?assertEqual( % should be the same as in 3 (except access time)
         proplists:delete(<<"parentURI">>, proplists:delete(<<"parentID">>, CdmiResponse3WithoutAtime)),
@@ -960,8 +963,8 @@ objectid(Config) ->
 
     {ok, Code7, _Headers7, Response7} = do_request(WorkerP1, "cdmi_objectid/" ++ binary_to_list(FileId), get, RequestHeaders6, []),
     ?assertEqual(200, Code7),
-    CdmiResponse7 = json_utils:decode(Response7),
-    Meta7 = proplists:delete(<<"cdmi_atime">>, proplists:get_value(<<"metadata">>, CdmiResponse7)),
+    CdmiResponse7 = maps:to_list(json_utils:decode(Response7)),
+    Meta7 = proplists:delete(<<"cdmi_atime">>, maps:to_list(proplists:get_value(<<"metadata">>, CdmiResponse7))),
     CdmiResponse7WithoutAtime = [{<<"metadata">>, Meta7} | proplists:delete(<<"metadata">>, CdmiResponse7)],
     ?assertEqual( % should be the same as in 6 (except parent and access time)
         proplists:delete(<<"parentURI">>, proplists:delete(<<"parentID">>, CdmiResponse6WithoutAtime)),
@@ -987,7 +990,7 @@ capabilities(Config) ->
 
     ?assertEqual(<<"application/cdmi-capability">>,
         proplists:get_value(<<"content-type">>, Headers8)),
-    CdmiResponse8 = json_utils:decode(Response8),
+    CdmiResponse8 = maps:to_list(json_utils:decode(Response8)),
     ?assertEqual(?root_capability_id, proplists:get_value(<<"objectID">>, CdmiResponse8)),
     ?assertEqual(?root_capability_path,
         proplists:get_value(<<"objectName">>, CdmiResponse8)),
@@ -996,7 +999,7 @@ capabilities(Config) ->
     ?assertEqual([<<"container/">>, <<"dataobject/">>],
         proplists:get_value(<<"children">>, CdmiResponse8)),
     Capabilities = proplists:get_value(<<"capabilities">>, CdmiResponse8),
-    ?assertEqual(?root_capability_map, maps:from_list(Capabilities)),
+    ?assertEqual(?root_capability_map, Capabilities),
     %%------------------------------
 
     %%-- container capabilities ----
@@ -1006,7 +1009,7 @@ capabilities(Config) ->
     ?assertEqual(200, Code9),
     ?assertMatch({ok, Code9, _, Response9}, do_request(Workers, "cdmi_objectid/" ++ binary_to_list(?container_capability_id) ++ "/", get, RequestHeaders9, [])),
 
-    CdmiResponse9 = json_utils:decode(Response9),
+    CdmiResponse9 = maps:to_list(json_utils:decode(Response9)),
     ?assertEqual(?root_capability_path,
         proplists:get_value(<<"parentURI">>, CdmiResponse9)),
     ?assertEqual(?root_capability_id, proplists:get_value(<<"parentID">>, CdmiResponse9)),
@@ -1014,7 +1017,7 @@ capabilities(Config) ->
     ?assertEqual(<<"container/">>,
         proplists:get_value(<<"objectName">>, CdmiResponse9)),
     Capabilities2 = proplists:get_value(<<"capabilities">>, CdmiResponse9),
-    ?assertEqual(?container_capability_list, maps:from_list(Capabilities2)),
+    ?assertEqual(?container_capability_list, Capabilities2),
     %%------------------------------
 
     %%-- dataobject capabilities ---
@@ -1024,7 +1027,7 @@ capabilities(Config) ->
     ?assertEqual(200, Code10),
     ?assertMatch({ok, Code10, _, Response10}, do_request(Workers, "cdmi_objectid/" ++ binary_to_list(?dataobject_capability_id) ++ "/", get, RequestHeaders10, [])),
 
-    CdmiResponse10 = json_utils:decode(Response10),
+    CdmiResponse10 = maps:to_list(json_utils:decode(Response10)),
     ?assertEqual(?root_capability_path,
         proplists:get_value(<<"parentURI">>, CdmiResponse10)),
     ?assertEqual(?root_capability_id, proplists:get_value(<<"parentID">>, CdmiResponse10)),
@@ -1032,7 +1035,7 @@ capabilities(Config) ->
     ?assertEqual(<<"dataobject/">>,
         proplists:get_value(<<"objectName">>, CdmiResponse10)),
     Capabilities3 = proplists:get_value(<<"capabilities">>, CdmiResponse10),
-    ?assertEqual(?dataobject_capability_list, maps:from_list(Capabilities3)).
+    ?assertEqual(?dataobject_capability_list, Capabilities3).
 %%------------------------------
 
 % tests if cdmi returns 'moved permanently' code when we forget about '/' in path
@@ -1107,7 +1110,7 @@ request_format_check(Config) ->
     %%-- obj missing content-type --
     RequestHeaders1 = [?CDMI_VERSION_HEADER, user_1_token_header(Config)],
     RequestBody1 = [{<<"value">>, FileContent}],
-    RawRequestBody1 = json_utils:encode(RequestBody1),
+    RawRequestBody1 = json_utils:encode(maps:from_list(RequestBody1)),
     {ok, Code1, _Headers1, _Response1} = do_request(Workers, FileToCreate, put, RequestHeaders1, RawRequestBody1),
     ?assertEqual(201, Code1),
     %%------------------------------
@@ -1115,7 +1118,7 @@ request_format_check(Config) ->
     %%-- dir missing content-type --
     RequestHeaders3 = [?CDMI_VERSION_HEADER, user_1_token_header(Config)],
     RequestBody3 = [{<<"metadata">>, <<"">>}],
-    RawRequestBody3 = json_utils:encode(RequestBody3),
+    RawRequestBody3 = json_utils:encode(maps:from_list(RequestBody3)),
     {ok, Code3, _Headers3, _Response3} = do_request(Workers, DirToCreate, put, RequestHeaders3, RawRequestBody3),
     ?assertEqual(201, Code3).
 %%------------------------------
@@ -1133,20 +1136,20 @@ mimetype_and_encoding(Config) ->
     RequestHeaders1 = [?CDMI_VERSION_HEADER, user_1_token_header(Config)],
     {ok, Code1, _Headers1, Response1} = do_request(Workers, filename:join(TestDirName, TestFileName) ++ "?mimetype;valuetransferencoding", get, RequestHeaders1, []),
     ?assertEqual(200, Code1),
-    CdmiResponse1 = json_utils:decode(Response1),
+    CdmiResponse1 = maps:to_list(json_utils:decode(Response1)),
     ?assertEqual(<<"application/octet-stream">>, proplists:get_value(<<"mimetype">>, CdmiResponse1)),
     ?assertEqual(<<"base64">>, proplists:get_value(<<"valuetransferencoding">>, CdmiResponse1)),
     %%------------------------------
 
     %%-- update mime and encoding --
     RequestHeaders2 = [?CDMI_VERSION_HEADER, ?OBJECT_CONTENT_TYPE_HEADER, user_1_token_header(Config)],
-    RawBody2 = json_utils:encode([{<<"valuetransferencoding">>, <<"utf-8">>}, {<<"mimetype">>, <<"application/binary">>}]),
+    RawBody2 = json_utils:encode(maps:from_list([{<<"valuetransferencoding">>, <<"utf-8">>}, {<<"mimetype">>, <<"application/binary">>}])),
     {ok, Code2, _Headers2, _Response2} = do_request(Workers, filename:join(TestDirName, TestFileName), put, RequestHeaders2, RawBody2),
     ?assertEqual(204, Code2),
 
     {ok, Code3, _Headers3, Response3} = do_request(Workers, filename:join(TestDirName, TestFileName) ++ "?mimetype;valuetransferencoding", get, RequestHeaders2, []),
     ?assertEqual(200, Code3),
-    CdmiResponse3 = json_utils:decode(Response3),
+    CdmiResponse3 = maps:to_list(json_utils:decode(Response3)),
     ?assertEqual(<<"application/binary">>, proplists:get_value(<<"mimetype">>, CdmiResponse3)),
     ?assertEqual(<<"utf-8">>, proplists:get_value(<<"valuetransferencoding">>, CdmiResponse3)),
     %%------------------------------
@@ -1155,16 +1158,16 @@ mimetype_and_encoding(Config) ->
     FileName4 = filename:join([binary_to_list(SpaceName), "mime_file.txt"]),
     FileContent4 = <<"some content">>,
     RequestHeaders4 = [?CDMI_VERSION_HEADER, ?OBJECT_CONTENT_TYPE_HEADER, user_1_token_header(Config)],
-    RawBody4 = json_utils:encode([{<<"valuetransferencoding">>, <<"utf-8">>}, {<<"mimetype">>, <<"text/plain">>}, {<<"value">>, FileContent4}]),
+    RawBody4 = json_utils:encode(maps:from_list([{<<"valuetransferencoding">>, <<"utf-8">>}, {<<"mimetype">>, <<"text/plain">>}, {<<"value">>, FileContent4}])),
     {ok, Code4, _Headers4, Response4} = do_request(Workers, FileName4, put, RequestHeaders4, RawBody4),
     ?assertEqual(201, Code4),
-    CdmiResponse4 = json_utils:decode(Response4),
+    CdmiResponse4 = maps:to_list(json_utils:decode(Response4)),
     ?assertEqual(<<"text/plain">>, proplists:get_value(<<"mimetype">>, CdmiResponse4)),
 
     RequestHeaders5 = [?CDMI_VERSION_HEADER, user_1_token_header(Config)],
     {ok, Code5, _Headers5, Response5} = do_request(Workers, FileName4 ++ "?value;mimetype;valuetransferencoding", get, RequestHeaders5, []),
     ?assertEqual(200, Code5),
-    CdmiResponse5 = json_utils:decode(Response5),
+    CdmiResponse5 = maps:to_list(json_utils:decode(Response5)),
     ?assertEqual(<<"text/plain">>, proplists:get_value(<<"mimetype">>, CdmiResponse5)),
     ?assertEqual(<<"utf-8">>, proplists:get_value(<<"valuetransferencoding">>, CdmiResponse5)), %todo what do we return here if file contains valid utf-8 string and we read byte range?
     ?assertEqual(FileContent4, proplists:get_value(<<"value">>, CdmiResponse5)),
@@ -1180,7 +1183,7 @@ mimetype_and_encoding(Config) ->
     RequestHeaders7 = [?CDMI_VERSION_HEADER, user_1_token_header(Config)],
     {ok, Code7, _Headers7, Response7} = do_request(Workers, FileName6 ++ "?value;mimetype;valuetransferencoding", get, RequestHeaders7, []),
     ?assertEqual(200, Code7),
-    CdmiResponse7 = json_utils:decode(Response7),
+    CdmiResponse7 = maps:to_list(json_utils:decode(Response7)),
     ?assertEqual(<<"text/plain">>, proplists:get_value(<<"mimetype">>, CdmiResponse7)),
     ?assertEqual(<<"utf-8">>, proplists:get_value(<<"valuetransferencoding">>, CdmiResponse7)),
     ?assertEqual(FileContent6, proplists:get_value(<<"value">>, CdmiResponse7)).
@@ -1201,10 +1204,10 @@ out_of_range(Config) ->
     ?assertEqual(<<>>, get_file_content(Config, FileName)),
     RequestHeaders1 = [user_1_token_header(Config), ?CDMI_VERSION_HEADER],
 
-    RequestBody1 = json_utils:encode([{<<"value">>, <<"data">>}]),
+    RequestBody1 = json_utils:encode(maps:from_list([{<<"value">>, <<"data">>}])),
     {ok, Code1, _Headers1, Response1} = do_request(Workers, FileName ++ "?value:0-3", get, RequestHeaders1, RequestBody1),
     ?assertEqual(200, Code1),
-    CdmiResponse1 = json_utils:decode(Response1),
+    CdmiResponse1 = maps:to_list(json_utils:decode(Response1)),
     ?assertEqual(<<>>, proplists:get_value(<<"value">>, CdmiResponse1)),
     %%------------------------------
 
@@ -1212,7 +1215,7 @@ out_of_range(Config) ->
     ?assertEqual(<<>>, get_file_content(Config, FileName)),
 
     RequestHeaders2 = [user_1_token_header(Config), ?CDMI_VERSION_HEADER, ?OBJECT_CONTENT_TYPE_HEADER],
-    RequestBody2 = json_utils:encode([{<<"value">>, base64:encode(<<"data">>)}]),
+    RequestBody2 = json_utils:encode(maps:from_list([{<<"value">>, base64:encode(<<"data">>)}])),
     {ok, Code2, _Headers2, _Response2} = do_request(Workers, FileName ++ "?value:0-3", put, RequestHeaders2, RequestBody2),
     ?assertEqual(204, Code2),
 
@@ -1220,7 +1223,7 @@ out_of_range(Config) ->
     %%------------------------------
 
     %%------ writing at random -------- (should return zero bytes in any gaps)
-%%     RequestBody3 = json_utils:encode([{<<"value">>, base64:encode(<<"data">>)}]), todo fix https://jira.plgrid.pl/jira/browse/VFS-1443 and uncomment
+%%     RequestBody3 = json_utils:encode(maps:from_list([{<<"value">>, base64:encode(<<"data">>)}])), todo fix https://jira.plgrid.pl/jira/browse/VFS-1443 and uncomment
 %%     {ok, Code3, _Headers3, _Response3} = do_request(Workers, FileName ++ "?value:10-13", put, RequestHeaders2, RequestBody3),
 %%     ?assertEqual(204, Code3),
 %%
@@ -1233,7 +1236,7 @@ out_of_range(Config) ->
     CdmiResponse4 = json_utils:decode(Response4),
 
     {_, Error} = ?ERROR_INVALID_CHILDRENRANGE,
-    ?assertMatch(Error, maps:from_list(CdmiResponse4)).
+    ?assertMatch(Error, CdmiResponse4).
 %%------------------------------
 
 move_copy_conflict(Config) ->
@@ -1251,12 +1254,12 @@ move_copy_conflict(Config) ->
     ?assertEqual(FileData, get_file_content(Config, FileName)),
 
     RequestHeaders1 = [user_1_token_header(Config), ?CDMI_VERSION_HEADER, ?OBJECT_CONTENT_TYPE_HEADER],
-    RequestBody1 = json_utils:encode([{<<"move">>, FileUri}, {<<"copy">>, FileUri}]),
+    RequestBody1 = json_utils:encode(maps:from_list([{<<"move">>, FileUri}, {<<"copy">>, FileUri}])),
     {ok, Code1, _Headers1, Response1} = do_request(Workers, NewMoveFileName, put, RequestHeaders1, RequestBody1),
     ?assertEqual(400, Code1),
-    CdmiResponse1 = json_utils:decode(Response1),
-    ?assertMatch([{<<"error_description">>, _},
-        {<<"error">>, <<"conflicting_body_fields">>}], CdmiResponse1),
+    CdmiResponse1 = maps:to_list(json_utils:decode(Response1)),
+    ?assertMatch([{<<"error">>, <<"conflicting_body_fields">>},
+                  {<<"error_description">>, _ }], CdmiResponse1),
 
     ?assertEqual(FileData, get_file_content(Config, FileName)).
 %%------------------------------
@@ -1281,7 +1284,7 @@ move(Config) ->
     ?assert(not object_exists(Config, NewMoveDirName)),
 
     RequestHeaders2 = [user_1_token_header(Config), ?CDMI_VERSION_HEADER, ?CONTAINER_CONTENT_TYPE_HEADER],
-    RequestBody2 = json_utils:encode([{<<"move">>, list_to_binary(DirName)}]),
+    RequestBody2 = json_utils:encode(maps:from_list([{<<"move">>, list_to_binary(DirName)}])),
     ?assertMatch({ok, 201, _Headers2, _Response2}, do_request(Workers, NewMoveDirName, put, RequestHeaders2, RequestBody2)),
 
     ?assert(not object_exists(Config, DirName)),
@@ -1293,7 +1296,7 @@ move(Config) ->
     ?assert(not object_exists(Config, NewMoveFileName)),
     ?assertEqual(FileData, get_file_content(Config, FileName)),
     RequestHeaders3 = [user_1_token_header(Config), ?CDMI_VERSION_HEADER, ?OBJECT_CONTENT_TYPE_HEADER],
-    RequestBody3 = json_utils:encode([{<<"move">>, list_to_binary(FileName)}]),
+    RequestBody3 = json_utils:encode(maps:from_list([{<<"move">>, list_to_binary(FileName)}])),
     ?assertMatch({ok, _Code3, _Headers3, _Response3}, do_request(Workers, NewMoveFileName, put, RequestHeaders3, RequestBody3)),
 
     ?assert(not object_exists(Config, FileName)),
@@ -1334,7 +1337,7 @@ copy(Config) ->
 
     % copy file using cdmi
     RequestHeaders4 = [user_1_token_header(Config), ?CDMI_VERSION_HEADER, ?OBJECT_CONTENT_TYPE_HEADER],
-    RequestBody4 = json_utils:encode([{<<"copy">>, list_to_binary(FileName2)}]),
+    RequestBody4 = json_utils:encode(maps:from_list([{<<"copy">>, list_to_binary(FileName2)}])),
     {ok, Code4, _Headers4, _Response4} = do_request(Workers, NewFileName2, put, RequestHeaders4, RequestBody4),
     ?assertEqual(201, Code4),
 
@@ -1374,7 +1377,7 @@ copy(Config) ->
 
     % copy dir using cdmi
     RequestHeaders5 = [user_1_token_header(Config), ?CDMI_VERSION_HEADER, ?CONTAINER_CONTENT_TYPE_HEADER],
-    RequestBody5 = json_utils:encode([{<<"copy">>, list_to_binary(DirName2)}]),
+    RequestBody5 = json_utils:encode(maps:from_list([{<<"copy">>, list_to_binary(DirName2)}])),
     {ok, Code5, _Headers5, _Response5} = do_request(Workers, NewDirName2, put, RequestHeaders5, RequestBody5),
     ?assertEqual(201, Code5),
 
@@ -1413,20 +1416,20 @@ partial_upload(Config) ->
 
     % upload first chunk of file
     RequestHeaders1 = [user_1_token_header(Config), ?CDMI_VERSION_HEADER, ?OBJECT_CONTENT_TYPE_HEADER, {"X-CDMI-Partial", "true"}],
-    RequestBody1 = json_utils:encode([{<<"value">>, Chunk1}]),
+    RequestBody1 = json_utils:encode(maps:from_list([{<<"value">>, Chunk1}])),
     {ok, Code1, _Headers1, Response1} = do_request(Workers, FileName, put, RequestHeaders1, RequestBody1),
     ?assertEqual(201, Code1),
-    CdmiResponse1 = json_utils:decode(Response1),
+    CdmiResponse1 = maps:to_list(json_utils:decode(Response1)),
     ?assertEqual(<<"Processing">>, proplists:get_value(<<"completionStatus">>, CdmiResponse1)),
 
     % upload second chunk of file
-    RequestBody2 = json_utils:encode([{<<"value">>, base64:encode(Chunk2)}]),
+    RequestBody2 = json_utils:encode(maps:from_list([{<<"value">>, base64:encode(Chunk2)}])),
     {ok, Code2, _Headers2, _Response2} = do_request(Workers, FileName ++ "?value:4-4", put, RequestHeaders1, RequestBody2),
     ?assertEqual(204, Code2),
 
     % upload third chunk of file
     RequestHeaders3 = [user_1_token_header(Config), ?CDMI_VERSION_HEADER, ?OBJECT_CONTENT_TYPE_HEADER],
-    RequestBody3 = json_utils:encode([{<<"value">>, base64:encode(Chunk3)}]),
+    RequestBody3 = json_utils:encode(maps:from_list([{<<"value">>, base64:encode(Chunk3)}])),
     {ok, Code3, _Headers3, _Response3} = do_request(Workers, FileName ++ "?value:5-9", put, RequestHeaders3, RequestBody3),
     ?assertEqual(204, Code3),
 
@@ -1436,7 +1439,7 @@ partial_upload(Config) ->
     CheckAllChunks = fun() ->
         {ok, Code4, _Headers4, Response4} = do_request(WorkerP2, FileName, get, RequestHeaders4, []),
         ?assertEqual(200, Code4),
-        CdmiResponse4 = json_utils:decode(Response4),
+        CdmiResponse4 = maps:to_list(json_utils:decode(Response4)),
         ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>, CdmiResponse4)),
         ?assertEqual(<<"utf-8">>, proplists:get_value(<<"valuetransferencoding">>, CdmiResponse4)),
         proplists:get_value(<<"value">>, CdmiResponse4)
@@ -1457,7 +1460,7 @@ partial_upload(Config) ->
 
     % check "completionStatus", should be set to "Processing"
     {ok, Code5_1, _Headers5_1, Response5_1} = do_request(Workers, FileName2 ++ "?completionStatus", get, RequestHeaders4, Chunk1),
-    CdmiResponse5_1 = json_utils:decode(Response5_1),
+    CdmiResponse5_1 = maps:to_list(json_utils:decode(Response5_1)),
     ?assertEqual(200, Code5_1),
     ?assertEqual(<<"Processing">>, proplists:get_value(<<"completionStatus">>, CdmiResponse5_1)),
 
@@ -1477,7 +1480,7 @@ partial_upload(Config) ->
     CheckAllChunks2 = fun() ->
         {ok, Code8, _Headers8, Response8} = do_request(WorkerP2, FileName2, get, RequestHeaders8, []),
         ?assertEqual(200, Code8),
-        CdmiResponse8 = json_utils:decode(Response8),
+        CdmiResponse8 = maps:to_list(json_utils:decode(Response8)),
         ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>, CdmiResponse8)),
         base64:decode(proplists:get_value(<<"value">>, CdmiResponse8))
     end,
@@ -1496,56 +1499,56 @@ acl(Config) ->
     UserName1 = ?config({user_name, <<"user1">>}, Config),
     Identifier1 = <<UserName1/binary, "#", UserId1/binary>>,
 
-    Read = [
+    Read = maps:from_list([
         {<<"acetype">>, acl_logic:bitmask_to_binary(?allow_mask)},
         {<<"identifier">>, Identifier1},
         {<<"aceflags">>, acl_logic:bitmask_to_binary(?no_flags_mask)},
         {<<"acemask">>, acl_logic:bitmask_to_binary(?read_mask)}
-    ],
-    ReadFull = [
+    ]),
+    ReadFull = maps:from_list([
         {<<"acetype">>, ?allow},
         {<<"identifier">>, Identifier1},
         {<<"aceflags">>, ?no_flags},
         {<<"acemask">>, ?read}
-    ],
-    Write = [
+    ]),
+    Write = maps:from_list([
         {<<"acetype">>, acl_logic:bitmask_to_binary(?allow_mask)},
         {<<"identifier">>, Identifier1},
         {<<"aceflags">>, acl_logic:bitmask_to_binary(?no_flags_mask)},
         {<<"acemask">>, acl_logic:bitmask_to_binary(?write_mask)}
-    ],
-    ReadWriteVerbose = [
+    ]),
+    ReadWriteVerbose = maps:from_list([
         {<<"acetype">>, ?allow},
         {<<"identifier">>, Identifier1},
         {<<"aceflags">>, ?no_flags},
         {<<"acemask">>, <<(?read)/binary, ", ", (?write)/binary>>}
-    ],
-    Execute = [
+    ]),
+    Execute = maps:from_list([
         {<<"acetype">>, acl_logic:bitmask_to_binary(?allow_mask)},
         {<<"identifier">>, Identifier1},
         {<<"aceflags">>, acl_logic:bitmask_to_binary(?no_flags_mask)},
         {<<"acemask">>, acl_logic:bitmask_to_binary(?execute_mask)}
-    ],
-    WriteAcl = [
+    ]),
+    WriteAcl = maps:from_list([
         {<<"acetype">>, acl_logic:bitmask_to_binary(?allow_mask)},
         {<<"identifier">>, Identifier1},
         {<<"aceflags">>, acl_logic:bitmask_to_binary(?no_flags_mask)},
         {<<"acemask">>, acl_logic:bitmask_to_binary(?write_acl_mask)}
-    ],
-    Delete = [
+    ]),
+    Delete = maps:from_list([
         {<<"acetype">>, acl_logic:bitmask_to_binary(?allow_mask)},
         {<<"identifier">>, Identifier1},
         {<<"aceflags">>, acl_logic:bitmask_to_binary(?no_flags_mask)},
         {<<"acemask">>, acl_logic:bitmask_to_binary(?delete_mask)}
-    ],
+    ]),
 
-    MetadataAclReadFull = json_utils:encode([{<<"metadata">>, [{<<"cdmi_acl">>, [ReadFull, WriteAcl]}]}]),
-    MetadataAclReadExecute = json_utils:encode([{<<"metadata">>, [{<<"cdmi_acl">>, [Read, Execute, WriteAcl]}]}]),
-    MetadataAclDelete = json_utils:encode([{<<"metadata">>, [{<<"cdmi_acl">>, [Delete]}]}]),
-    MetadataAclWrite = json_utils:encode([{<<"metadata">>, [{<<"cdmi_acl">>, [Write]}]}]),
-    MetadataAclReadWrite = json_utils:encode([{<<"metadata">>, [{<<"cdmi_acl">>, [Write, Read]}]}]),
-    MetadataAclReadWriteFull = json_utils:encode([{<<"metadata">>, [{<<"cdmi_acl">>, [ReadWriteVerbose]}]}]),
-    MetadataAclReadWriteExecute = json_utils:encode([{<<"metadata">>, [{<<"cdmi_acl">>, [Write, Read, Execute]}]}]),
+    MetadataAclReadFull = json_utils:encode(maps:from_list([{<<"metadata">>, maps:from_list([{<<"cdmi_acl">>, [ReadFull, WriteAcl]}])}])),
+    MetadataAclReadExecute = json_utils:encode(maps:from_list([{<<"metadata">>, maps:from_list([{<<"cdmi_acl">>, [Read, Execute, WriteAcl]}])}])),
+    MetadataAclDelete = json_utils:encode(maps:from_list([{<<"metadata">>, maps:from_list([{<<"cdmi_acl">>, [Delete]}])}])),
+    MetadataAclWrite = json_utils:encode(maps:from_list([{<<"metadata">>, maps:from_list([{<<"cdmi_acl">>, [Write]}])}])),
+    MetadataAclReadWrite = json_utils:encode(maps:from_list([{<<"metadata">>, maps:from_list([{<<"cdmi_acl">>, [Write, Read]}])}])),
+    MetadataAclReadWriteFull = json_utils:encode(maps:from_list([{<<"metadata">>, maps:from_list([{<<"cdmi_acl">>, [ReadWriteVerbose]}])}])),
+    MetadataAclReadWriteExecute = json_utils:encode(maps:from_list([{<<"metadata">>, maps:from_list([{<<"cdmi_acl">>, [Write, Read, Execute]}])}])),
 
     %%----- read file test ---------
     % create test file with dummy data
@@ -1569,7 +1572,7 @@ acl(Config) ->
     %%------- write file test ------
     % set acl to 'read&write' and test cdmi/non-cdmi put request (should succeed)
     {ok, 204, _, _} = do_request(Workers, Filename1, put, RequestHeaders1, MetadataAclReadWrite),
-    RequestBody4 = json_utils:encode([{<<"value">>, <<"new_data">>}]),
+    RequestBody4 = json_utils:encode(maps:from_list([{<<"value">>, <<"new_data">>}])),
     {ok, 204, _, _} = do_request(Workers, Filename1, put, RequestHeaders1, RequestBody4),
     ?assertEqual(<<"new_data">>, get_file_content(Config, Filename1)),
     write_to_file(Config, Filename1, <<"1">>, 8),
@@ -1579,7 +1582,7 @@ acl(Config) ->
 
     % set acl to 'read' and test cdmi/non-cdmi put request (should return 403 forbidden)
     {ok, 204, _, _} = do_request(Workers, Filename1, put, RequestHeaders1, MetadataAclReadFull),
-    RequestBody6 = json_utils:encode([{<<"value">>, <<"new_data3">>}]),
+    RequestBody6 = json_utils:encode(maps:from_list([{<<"value">>, <<"new_data3">>}])),
     {ok, 403, _, _} = do_request(Workers, Filename1, put, RequestHeaders1, RequestBody6),
     {ok, 403, _, _} = do_request(Workers, Filename1, put, [user_1_token_header(Config)], <<"new_data4">>),
     ?assertEqual(<<"new_data2">>, get_file_content(Config, Filename1)),
@@ -1630,7 +1633,7 @@ acl(Config) ->
     % set acl to 'read' and test cdmi put request (should return 403 forbidden)
     {ok, 204, _, _} = do_request(Workers, Dirname1, put, RequestHeaders2, MetadataAclReadExecute),
     {ok, 200, _, _} = do_request(WorkerP2, Dirname1, get, RequestHeaders2, []),
-    {ok, 403, _, _} = do_request(Workers, Dirname1, put, RequestHeaders2, json_utils:encode([{<<"metadata">>, [{<<"my_meta">>, <<"value">>}]}])),
+    {ok, 403, _, _} = do_request(Workers, Dirname1, put, RequestHeaders2, json_utils:encode(maps:from_list([{<<"metadata">>, maps:from_list([{<<"my_meta">>, <<"value">>}])}]))),
 
     % create files (should return 403 forbidden)
     {ok, 403, _, _} = do_request(Workers, File1, put, [user_1_token_header(Config)], []),
@@ -1685,7 +1688,7 @@ errors(Config) ->
         ?CDMI_VERSION_HEADER,
         ?OBJECT_CONTENT_TYPE_HEADER
     ],
-    RequestBody4 = json_utils:encode([{<<"valuetransferencoding">>, <<"base64">>}, {<<"value">>, <<"#$%">>}]),
+    RequestBody4 = json_utils:encode(maps:from_list([{<<"valuetransferencoding">>, <<"base64">>}, {<<"value">>, <<"#$%">>}])),
     {ok, Code4, _Headers4, _Response4} =
         do_request(Workers, SpaceName ++ "/some_file_b64", put, RequestHeaders4, RequestBody4),
     ?assertEqual(400, Code4),
@@ -1840,9 +1843,9 @@ do_request([_ | _] = Nodes, RestSubpath, get, Headers, Body) ->
         {error, _} ->
             ok;
         {ok, RCode, _, RResponse} ->
-            RResponseJSON = remove_times_metadata(json_utils:decode(RResponse)),
+            RResponseJSON = remove_times_metadata(maps:to_list(json_utils:decode(RResponse))),
             lists:foreach(fun({ok, LCode, _, LResponse}) ->
-                LResponseJSON = remove_times_metadata(json_utils:decode(LResponse)),
+                LResponseJSON = remove_times_metadata(maps:to_list(json_utils:decode(LResponse))),
 %%                ct:print("~p ~p ~p ~p", [RCode, RResponseJSON, LCode, LResponseJSON]), %% Useful log for debugging
                 ?assertMatch({RCode, RResponseJSON}, {LCode, LResponseJSON})
             end, Responses)
@@ -1858,7 +1861,8 @@ remove_times_metadata(ResponseJSON) ->
     case Metadata0 of
         undefined -> ResponseJSON;
         _ ->
-            Metadata1 = proplists:delete(<<"cdmi_ctime">>, Metadata0),
+            Metadata = maps:to_list(Metadata0),
+            Metadata1 = proplists:delete(<<"cdmi_ctime">>, Metadata),
             Metadata2 = proplists:delete(<<"cdmi_atime">>, Metadata1),
             Metadata3 = proplists:delete(<<"cdmi_mtime">>, Metadata2),
             [{<<"metadata">>, Metadata3} | proplists:delete(<<"metadata">>, ResponseJSON)]

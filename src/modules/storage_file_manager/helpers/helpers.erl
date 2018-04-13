@@ -48,11 +48,11 @@
 -define(EXOMETER_NAME(Param), ?exometer_name(?MODULE, count, Param)).
 -define(EXOMETER_TIME_NAME(Param), ?exometer_name(?MODULE, time,
     list_to_atom(atom_to_list(Param) ++ "_time"))).
--define(EXOMETER_DEFAULT_TIME_SPAN, 600000).
 -define(EXOMETER_COUNTERS, [get_helper_handle, readdir, getattr, access, mknod,
     mkdir, unlink, rmdir, symlink, rename, link, chmod, chown, truncate,
     setxattr, getxattr, removexattr, listxattr, open, read, write, release,
     flush, fsync]).
+-define(EXOMETER_DEFAULT_DATA_POINTS_NUMBER, 10000).
 
 %%%===================================================================
 %%% API
@@ -316,13 +316,13 @@ fsync(Handle, IsDataSync) ->
 %%--------------------------------------------------------------------
 -spec init_counters() -> ok.
 init_counters() ->
-    TimeSpan = application:get_env(?APP_NAME,
-        exometer_datastore_time_span, ?EXOMETER_DEFAULT_TIME_SPAN),
+    Size = application:get_env(?CLUSTER_WORKER_APP_NAME, 
+        exometer_data_points_number, ?EXOMETER_DEFAULT_DATA_POINTS_NUMBER),
     Counters = lists:map(fun(Name) ->
         {?EXOMETER_NAME(Name), counter}
     end, ?EXOMETER_COUNTERS),
     Counters2 = lists:map(fun(Name) ->
-        {?EXOMETER_TIME_NAME(Name), histogram, TimeSpan}
+        {?EXOMETER_TIME_NAME(Name), uniform, [{size, Size}]}
     end, ?EXOMETER_COUNTERS),
     ?init_counters(Counters ++ Counters2).
 

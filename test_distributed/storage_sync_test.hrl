@@ -61,6 +61,8 @@
 
 -define(TEST_URL, <<"http://127.0.0.1:5000">>).
 
+-define(VERIFY_POOL, verify_pool).
+
 -define(DEFAULT_TIMEOUT, timer:minutes(5)).
 
 -define(LUMA_CONFIG, ?LUMA_CONFIG(?DEFAULT_TIMEOUT)).

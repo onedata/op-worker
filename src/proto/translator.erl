@@ -469,7 +469,7 @@ translate_from_protobuf(#'ProviderResponse'{status = Status}) ->
         status = translate_from_protobuf(Status)
     };
 translate_from_protobuf(#'Xattr'{name = Name, value = Value}) ->
-    #xattr{name = Name, value = json_utils:decode_map(Value)};
+    #xattr{name = Name, value = json_utils:decode(Value)};
 translate_from_protobuf(#'XattrList'{names = Names}) ->
     #xattr_list{names = Names};
 translate_from_protobuf(#'TransferEncoding'{value = Value}) ->
@@ -479,7 +479,7 @@ translate_from_protobuf(#'CdmiCompletionStatus'{value = Value}) ->
 translate_from_protobuf(#'Mimetype'{value = Value}) ->
     #mimetype{value = Value};
 translate_from_protobuf(#'Acl'{value = Value}) ->
-    #acl{value = acl_logic:from_json_format_to_acl(json_utils:decode_map(Value))};
+    #acl{value = acl_logic:from_json_format_to_acl(json_utils:decode(Value))};
 translate_from_protobuf(#'FilePath'{value = Value}) ->
     #file_path{value = Value};
 translate_from_protobuf(#'ProviderFileDistribution'{provider_id = ProviderId, blocks = Blocks}) ->
@@ -489,7 +489,7 @@ translate_from_protobuf(#'FileDistribution'{provider_file_distributions = Distri
     TranslatedDistributions = lists:map(fun translate_from_protobuf/1, Distributions),
     #file_distribution{provider_file_distributions = TranslatedDistributions};
 translate_from_protobuf(#'Metadata'{type = <<"json">>, value = Json}) ->
-    #metadata{type = json, value = json_utils:decode_map(Json)};
+    #metadata{type = json, value = json_utils:decode(Json)};
 translate_from_protobuf(#'Metadata'{type = <<"rdf">>, value = Rdf}) ->
     #metadata{type = rdf, value = Rdf};
 translate_from_protobuf(#'CheckPerms'{flag = Flag}) ->
@@ -977,7 +977,7 @@ translate_to_protobuf(#provider_response{status = Status, provider_response = Pr
         provider_response = translate_to_protobuf(ProviderResponse)
     }};
 translate_to_protobuf(#xattr{name = Name, value = Value}) ->
-    {xattr, #'Xattr'{name = Name, value = json_utils:encode_map(Value)}};
+    {xattr, #'Xattr'{name = Name, value = json_utils:encode(Value)}};
 translate_to_protobuf(#xattr_list{names = Names}) ->
     {xattr_list, #'XattrList'{names = Names}};
 translate_to_protobuf(#transfer_encoding{value = Value}) ->
@@ -987,7 +987,7 @@ translate_to_protobuf(#cdmi_completion_status{value = Value}) ->
 translate_to_protobuf(#mimetype{value = Value}) ->
     {mimetype, #'Mimetype'{value = Value}};
 translate_to_protobuf(#acl{value = Value}) ->
-    {acl, #'Acl'{value = json_utils:encode_map(acl_logic:from_acl_to_json_format(Value))}};
+    {acl, #'Acl'{value = json_utils:encode(acl_logic:from_acl_to_json_format(Value))}};
 translate_to_protobuf(#file_path{value = Value}) ->
     {file_path, #'FilePath'{value = Value}};
 translate_to_protobuf(#provider_file_distribution{provider_id = ProviderId, blocks = Blocks}) ->
@@ -997,7 +997,7 @@ translate_to_protobuf(#file_distribution{provider_file_distributions = Distribut
     TranslatedDistributions = lists:map(fun translate_to_protobuf/1, Distributions),
     {file_distribution, #'FileDistribution'{provider_file_distributions = TranslatedDistributions}};
 translate_to_protobuf(#metadata{type = json, value = Json}) ->
-    {metadata, #'Metadata'{type = <<"json">>, value = json_utils:encode_map(Json)}};
+    {metadata, #'Metadata'{type = <<"json">>, value = json_utils:encode(Json)}};
 translate_to_protobuf(#metadata{type = rdf, value = Rdf}) ->
     {metadata, #'Metadata'{type = <<"rdf">>, value = Rdf}};
 translate_to_protobuf(#check_perms{flag = Flag}) ->

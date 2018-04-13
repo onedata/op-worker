@@ -6,6 +6,16 @@ CHANGELOG
 
 ### 18.02.0-beta5
 
+* don't count files' attrs hash when update is set to write_once
+* Upgrade rtransfer_link.
+* VFS-4310 Update replica management
+* Updating GUI, including: VFS-4260 * VFS-4260 Added menu for managing space root dir data distribution
+* VFS-4310 Update getting blocks for sync
+* VFS-3703 Switched from mochiweb JSON parsing to jiffy
+* VFS-4310 Update bp_tree
+* VFS-4316 - remove filename_mapping strategy
+* Fix session deletion
+* VFS-4316 deleted dirs should be removed from storage
 * fix user_logic:exists
 * improve error handling in fetch_lock_fetch_helper
 * fix displaying transfer status in GUI

@@ -21,7 +21,7 @@
 -export([encode_pid/1, decode_pid/1,
     is_active/1, is_finished/1, is_invalidation/1, is_migration/1,
     get_status/1, is_ongoing/1, is_transfer_ongoing/1, is_invalidation_ongoing/1,
-    get_start_time/1, get_finish_time/1, get_info/1]).
+    get_start_time/1, get_finish_time/1, get_info/1, get_schedule_time/1]).
 
 %%%===================================================================
 %%% API
@@ -114,6 +114,16 @@ get_status(TransferId) ->
 
 %%------------------------------------------------------------------
 %% @doc
+%% Getter for schedule_time field of transfer record.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_schedule_time(transfer:id()) -> transfer:timestamp().
+get_schedule_time(TransferId) ->
+    {ok,  #document{value = #transfer{schedule_time = ScheduleTime}}} = transfer:get(TransferId),
+    ScheduleTime.
+
+%%------------------------------------------------------------------
+%% @doc
 %% Getter for start_time field of transfer record.
 %% @end
 %%-------------------------------------------------------------------
@@ -201,6 +211,7 @@ get_info(TransferId) ->
         files_transferred = FilesTransferred,
         bytes_transferred = BytesTransferred,
         files_invalidated = FilesInvalidated,
+        schedule_time = ScheduleTime,
         start_time = StartTime,
         finish_time = FinishTime,
         last_update = LastUpdate,
@@ -226,6 +237,7 @@ get_info(TransferId) ->
         <<"failedFiles">> => FailedFiles,
         <<"filesInvalidated">> => FilesInvalidated,
         <<"bytesTransferred">> => BytesTransferred,
+        <<"scheduleTime">> => ScheduleTime,
         <<"startTime">> => StartTime,
         <<"finishTime">> => FinishTime,
         % It is possible that there is no last update, if 0 bytes were

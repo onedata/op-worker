@@ -61,8 +61,10 @@
     delete_and_update_files_simultaneously_update_test/1,
     update_syncs_files_after_import_failed_test/1,
     update_syncs_files_after_previous_update_failed_test/1,
-    sync_works_properly_after_delete_test/1
-]).
+    sync_works_properly_after_delete_test/1,
+    sync_should_not_delete_not_replicated_file_created_in_remote_provider/1,
+    sync_should_not_delete_dir_created_in_remote_provider/1,
+    sync_should_not_delete_not_replicated_files_created_in_remote_provider2/1]).
 
 -define(TEST_CASES, [
     create_directory_import_test,
@@ -95,6 +97,9 @@
     chmod_file_update2_test,
     update_timestamps_file_import_test,
     should_not_detect_timestamp_update_test,
+    sync_should_not_delete_not_replicated_file_created_in_remote_provider,
+    sync_should_not_delete_dir_created_in_remote_provider,
+    sync_should_not_delete_not_replicated_files_created_in_remote_provider2,
     import_nfs_acl_test,
     update_nfs_acl_test,
     import_nfs_acl_with_disabled_luma_should_fail_test
@@ -205,6 +210,15 @@ import_nfs_acl_test(Config) ->
 update_nfs_acl_test(Config) ->
     storage_sync_test_base:update_nfs_acl_test(Config, true).
 
+sync_should_not_delete_not_replicated_file_created_in_remote_provider(Config) ->
+    storage_sync_test_base:sync_should_not_delete_not_replicated_file_created_in_remote_provider(Config, true).
+
+sync_should_not_delete_dir_created_in_remote_provider(Config) ->
+    storage_sync_test_base:sync_should_not_delete_dir_created_in_remote_provider(Config, true).
+
+sync_should_not_delete_not_replicated_files_created_in_remote_provider2(Config) ->
+    storage_sync_test_base:sync_should_not_delete_not_replicated_files_created_in_remote_provider2(Config, true).
+
 import_file_by_path_test(Config) ->
     storage_sync_test_base:import_file_by_path_test(Config, true).
 
@@ -227,11 +241,15 @@ init_per_suite(Config) ->
         hackney:start(),
         initializer:disable_quota_limit(NewConfig),
         initializer:mock_provider_ids(NewConfig),
-        NewConfig
+        multi_provider_file_ops_test_base:init_env(NewConfig)
     end,
+    {ok, _} = application:ensure_all_started(worker_pool),
+    {ok, _} = worker_pool:start_sup_pool(?VERIFY_POOL, [{workers, 8}]),
     [{?LOAD_MODULES, [initializer, storage_sync_test_base]}, {?ENV_UP_POSTHOOK, Posthook} | Config].
 
 end_per_suite(Config) ->
+    ok = wpool:stop_sup_pool(?VERIFY_POOL),
+    initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:unload_quota_mocks(Config),
     initializer:unmock_provider_ids(Config),
     ssl:stop().
@@ -299,6 +317,9 @@ init_per_testcase(Case, Config) when
 
 init_per_testcase(Case, Config) when
     Case =:= delete_and_update_files_simultaneously_update_test;
+    Case =:= sync_should_not_delete_not_replicated_file_created_in_remote_provider;
+    Case =:= sync_should_not_delete_dir_created_in_remote_provider;
+    Case =:= sync_should_not_delete_not_replicated_files_created_in_remote_provider2;
     Case =:= sync_works_properly_after_delete_test ->
     Config2 = [
         {update_config, #{
@@ -385,9 +406,8 @@ init_per_testcase(Case, Config) when
 
 
 init_per_testcase(_Case, Config) ->
-    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(
-        ?TEST_FILE(Config, "env_desc.json"), Config),
-    ConfigWithProxy = lfm_proxy:init(ConfigWithSessionInfo),
+    ct:timetrap({minutes, 5}),
+    ConfigWithProxy = lfm_proxy:init(Config),
     storage_sync_test_base:add_workers_storage_mount_points(ConfigWithProxy).
 
 end_per_testcase(Case, Config) when
@@ -426,13 +446,13 @@ end_per_testcase(Case, Config) when
     end_per_testcase(default, Config);
 
 end_per_testcase(_Case, Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    Workers = [W1 | _] = ?config(op_worker_nodes, Config),
     ok = storage_sync_test_base:clean_reverse_luma_cache(W1),
     storage_sync_test_base:disable_storage_sync(Config),
     storage_sync_test_base:clean_storage(Config, true),
-    lfm_proxy:teardown(Config),
-    %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
-    initializer:clean_test_users_and_spaces_no_validate(Config).
+    storage_sync_test_base:clean_space(Config),
+    test_utils:mock_unload(Workers, [simple_scan, storage_sync_changes]),
+    lfm_proxy:teardown(Config).
 
 %%%===================================================================
 %%% Internal functions

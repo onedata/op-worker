@@ -169,7 +169,7 @@ all() ->
             [user_1_token_header(Config)], []
         ) of
             {ok, 200, _, __Body} ->
-                lists:sort(json_utils:decode_map(__Body));
+                lists:sort(json_utils:decode(__Body));
             Error ->
                 Error
         end
@@ -188,7 +188,7 @@ all() ->
             [user_1_token_header(Config)], []
         ) of
             {ok, 200, _, __Body} ->
-                lists:sort(json_utils:decode_map(__Body));
+                lists:sort(json_utils:decode(__Body));
             Error ->
                 Error
         end
@@ -201,7 +201,7 @@ all() ->
     ?assertMatch(ExpectedStatus,
         case do_request(Worker, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []) of
             {ok, 200, _, __TransferStatus} ->
-                json_utils:decode_map(__TransferStatus);
+                json_utils:decode(__TransferStatus);
             Error -> Error
         end, Attempts)
 ).
@@ -1279,7 +1279,7 @@ posix_mode_get(Config) ->
     {ok, 200, _, Body} = do_request(WorkerP1, <<"attributes", File/binary, "?attribute=mode">>, get, [user_1_token_header(Config)], []),
 
     % then
-    DecodedBody = json_utils:decode_map(Body),
+    DecodedBody = json_utils:decode(Body),
     ?assertEqual(
         #{
             <<"mode">> => <<"0", (integer_to_binary(Mode, 8))/binary>>
@@ -1297,13 +1297,13 @@ posix_mode_put(Config) ->
 
     % when
     NewMode = 8#777,
-    Body = json_utils:encode_map(#{<<"mode">> => <<"0", (integer_to_binary(NewMode, 8))/binary>>}),
+    Body = json_utils:encode(#{<<"mode">> => <<"0", (integer_to_binary(NewMode, 8))/binary>>}),
     {ok, 204, _, _} = do_request(WorkerP1, <<"attributes", File/binary>>, put,
         [user_1_token_header(Config), {<<"Content-Type">>, <<"application/json">>}], Body),
 
     % then
     {ok, 200, _, RespBody} = do_request(WorkerP1, <<"attributes", File/binary, "?attribute=mode">>, get, [user_1_token_header(Config)], []),
-    DecodedBody = json_utils:decode_map(RespBody),
+    DecodedBody = json_utils:decode(RespBody),
     ?assertEqual(
         #{
             <<"mode">> => <<"0", (integer_to_binary(NewMode, 8))/binary>>
@@ -1331,7 +1331,7 @@ attributes_list(Config) ->
         uid = Uid
     }} = lfm_proxy:stat(WorkerP1, SessionId, {guid, FileGuid}),
     {ok, CdmiObjectId} = cdmi_id:guid_to_objectid(FileGuid),
-    DecodedBody = json_utils:decode_map(Body),
+    DecodedBody = json_utils:decode(Body),
     ?assertEqual(
         #{
             <<"mode">> => <<"0700">>,
@@ -1362,7 +1362,7 @@ xattr_get(Config) ->
     {ok, 200, _, Body} = do_request(WorkerP1, <<"attributes", File/binary, "?attribute=k1&extended=true">>, get, [user_1_token_header(Config)], []),
 
     % then
-    DecodedBody = json_utils:decode_map(Body),
+    DecodedBody = json_utils:decode(Body),
     ?assertEqual(
         #{
             <<"k1">> => <<"v1">>
@@ -1378,13 +1378,13 @@ xattr_put(Config) ->
     {ok, _FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
 
     % when
-    Body = json_utils:encode_map(#{<<"k1">> => <<"v1">>}),
+    Body = json_utils:encode(#{<<"k1">> => <<"v1">>}),
     {ok, 204, _, _} = do_request(WorkerP1, <<"attributes", File/binary, "?extended=true">>, put,
         [user_1_token_header(Config), {<<"Content-Type">>, <<"application/json">>}], Body),
 
     % then
     {ok, 200, _, RespBody} = do_request(WorkerP1, <<"attributes", File/binary, "?attribute=k1&extended=true">>, get, [user_1_token_header(Config)], []),
-    DecodedBody = json_utils:decode_map(RespBody),
+    DecodedBody = json_utils:decode(RespBody),
     ?assertEqual(
         #{
             <<"k1">> => <<"v1">>
@@ -1405,7 +1405,7 @@ xattr_list(Config) ->
     {ok, 200, _, Body} = do_request(WorkerP1, <<"attributes", File/binary, "?extended=true">>, get, [user_1_token_header(Config)], []),
 
     % then
-    DecodedBody = json_utils:decode_map(Body),
+    DecodedBody = json_utils:decode(Body),
     ?assertMatch(#{
         <<"k1">> := <<"v1">>,
         <<"k2">> := <<"v2">>
@@ -1437,7 +1437,7 @@ metric_get(Config) ->
 
     % when
     {ok, 200, _, Body} = do_request(WorkerP1, <<"metrics/space/space3?metric=storage_quota">>, get, [user_1_token_header(Config)], []),
-    DecodedBody = json_utils:decode_map(Body),
+    DecodedBody = json_utils:decode(Body),
 
     % then
     ?assertMatch([
@@ -1459,7 +1459,7 @@ list_file(Config) ->
         do_request(WorkerP1, <<"files/space3/file1_lf">>, get, [user_1_token_header(Config)], [])),
 
     % then
-    DecodedBody = json_utils:decode_map(Body),
+    DecodedBody = json_utils:decode(Body),
     {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
     ?assertEqual(
         [#{<<"id">> => FileObjectId, <<"path">> => File}],
@@ -1474,7 +1474,7 @@ list_dir(Config) ->
         do_request(WorkerP1, <<"files">>, get, [user_1_token_header(Config)], [])),
 
     % then
-    DecodedBody = json_utils:decode_map(Body),
+    DecodedBody = json_utils:decode(Body),
     ?assertMatch(
         [
             #{<<"id">> := _, <<"path">> := <<"/space1">>},
@@ -1501,7 +1501,7 @@ list_dir_range(Config) ->
         do_request(WorkerP1, <<"files?offset=0&limit=1">>, get, [user_1_token_header(Config)], [])),
 
     % then
-    DecodedBody = json_utils:decode_map(Body),
+    DecodedBody = json_utils:decode(Body),
     ?assertMatch(
         [
             #{<<"id">> := _, <<"path">> := <<"/space1">>}
@@ -1556,7 +1556,7 @@ changes_stream_xattr_test(Config) ->
 
     [_ | Changes2] = lists:reverse(Changes),
     [LastChange | _] = lists:filtermap(fun(Change) ->
-        DecodedChange = json_utils:decode_map(Change),
+        DecodedChange = json_utils:decode(Change),
         case maps:get(<<"name">>, DecodedChange) of
             <<"file4_csxt">> -> {true, DecodedChange};
             _ -> false
@@ -1588,7 +1588,7 @@ changes_stream_json_metadata_test(Config) ->
     [_ | AllChanges] = lists:reverse(Changes),
     DecodedChanges =
         lists:map(fun(Change) ->
-            json_utils:decode_map(Change)
+            json_utils:decode(Change)
         end, AllChanges),
 
     ?assert(lists:any(fun(Change) ->
@@ -1616,7 +1616,7 @@ changes_stream_times_test(Config) ->
     [_ | AllChanges] = lists:reverse(Changes),
     DecodedChanges =
         lists:map(fun(Change) ->
-            json_utils:decode_map(Change)
+            json_utils:decode(Change)
         end, AllChanges),
     ?assert(lists:any(fun(Change) ->
         1000 == maps:get(<<"atime">>, maps:get(<<"changes">>, Change)) andalso
@@ -1646,7 +1646,7 @@ changes_stream_file_location_test(Config) ->
     [_ | AllChanges] = lists:reverse(Changes),
     DecodedChanges =
         lists:map(fun(Change) ->
-            json_utils:decode_map(Change)
+            json_utils:decode(Change)
         end, AllChanges),
     ?assert(lists:any(fun(Change) ->
         5 == maps:get(<<"size">>, maps:get(<<"changes">>, Change))
@@ -1676,7 +1676,7 @@ changes_stream_on_multi_provider_test(Config) ->
     [_ | AllChanges] = lists:reverse(Changes),
     DecodedChanges =
         lists:map(fun(Change) ->
-            json_utils:decode_map(Change)
+            json_utils:decode(Change)
         end, AllChanges),
 
     ?assert(lists:any(fun(Change) ->
@@ -1695,7 +1695,7 @@ list_spaces(Config) ->
         do_request(WorkerP1, <<"spaces">>, get, [user_1_token_header(Config)], [])),
 
     % then
-    DecodedBody = json_utils:decode_map(Body),
+    DecodedBody = json_utils:decode(Body),
     ?assertMatch(
         [
             #{<<"name">> := <<"space1">>, <<"spaceId">> := <<"space1">>},
@@ -1720,7 +1720,7 @@ get_space(Config) ->
         do_request(WorkerP1, <<"spaces/space3">>, get, [user_1_token_header(Config)], [])),
 
     % then
-    DecodedBody = json_utils:decode_map(Body),
+    DecodedBody = json_utils:decode(Body),
     ?assertMatch(
         #{
             <<"name">> := <<"space3">>,
@@ -1751,7 +1751,7 @@ set_get_json_metadata(Config) ->
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
         do_request(WorkerP1, <<"metadata/space3?metadata_type=json">>, get,
             [user_1_token_header(Config), {<<"accept">>, <<"application/json">>}], [])),
-    DecodedBody = json_utils:decode_map(Body),
+    DecodedBody = json_utils:decode(Body),
     ?assertMatch(
         #{
             <<"key">> := <<"value">>
@@ -1779,7 +1779,7 @@ set_get_json_metadata_id(Config) ->
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
         do_request(WorkerP1, <<"metadata-id/", ObjectId/binary, "?metadata_type=json">>, get,
             [user_1_token_header(Config), {<<"accept">>, <<"application/json">>}], [])),
-    DecodedBody = json_utils:decode_map(Body),
+    DecodedBody = json_utils:decode(Body),
     ?assertMatch(
         #{
             <<"key">> := <<"value">>
@@ -1836,7 +1836,7 @@ remove_index(Config) ->
         do_request(WorkerP1, <<"index?space_id=space1&name=name">>, post, [user_1_token_header(Config), {<<"content-type">>, <<"application/javascript">>}], Function)),
     <<"/api/v3/oneprovider/index/", Id/binary>> = proplists:get_value(<<"location">>, Headers),
     {ok, _, _, ListBody} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1, <<"index">>, get, [user_1_token_header(Config)], [])),
-    IndexList = json_utils:decode_map(ListBody),
+    IndexList = json_utils:decode(ListBody),
     ?assertMatch([_], IndexList),
 
     %when
@@ -1863,7 +1863,7 @@ create_list_index(Config) ->
 
     % then
     {ok, _, _, ListBody} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1, <<"index">>, get, [user_1_token_header(Config)], [])),
-    IndexList = json_utils:decode_map(ListBody),
+    IndexList = json_utils:decode(ListBody),
     ?assertMatch([#{<<"spaceId">> := <<"space1">>, <<"name">> := <<"name">>, <<"indexId">> := Id, <<"spatial">> := false}], IndexList),
     ?assertMatch({ok, 200, _, _},
         do_request(WorkerP1, <<"index/", Id/binary>>, get, [user_1_token_header(Config), {<<"accept">>, <<"application/javascript">>}], [])),
@@ -1876,7 +1876,7 @@ create_list_index(Config) ->
     % then
     {ok, _, _, ListBody2} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1, <<"index">>, get,
         [user_1_token_header(Config)], [])),
-    IndexList2 = json_utils:decode_map(ListBody2),
+    IndexList2 = json_utils:decode(ListBody2),
     ?assertMatch([#{}, #{}], IndexList2).
 
 create_geospatial_index(Config) ->
@@ -1896,7 +1896,7 @@ create_geospatial_index(Config) ->
 
     % then
     {ok, _, _, ListBody} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1, <<"index">>, get, [user_1_token_header(Config)], [])),
-    IndexList = json_utils:decode_map(ListBody),
+    IndexList = json_utils:decode(ListBody),
     ?assert(lists:member(#{<<"spaceId">> => <<"space1">>, <<"name">> => <<"name">>, <<"indexId">> => Id, <<"spatial">> => true}, IndexList)),
     ?assertMatch({ok, 200, _, _},
         do_request(WorkerP1, <<"index/", Id/binary>>, get, [user_1_token_header(Config), {<<"accept">>, <<"application/javascript">>}], [])).
@@ -1934,7 +1934,7 @@ query_geospatial_index(Config) ->
     Guids = lists:map(fun(X) ->
         {ok, ObjId} = cdmi_id:objectid_to_guid(X),
         ObjId
-    end, json_utils:decode_map(Body)),
+    end, json_utils:decode(Body)),
     ?assertEqual(lists:sort([Guid1, Guid2, Guid3]), lists:sort(Guids)),
 
     % when
@@ -1942,7 +1942,7 @@ query_geospatial_index(Config) ->
 
     % then
     Guids2 = lists:map(fun(X) -> {ok, ObjId} = cdmi_id:objectid_to_guid(X),
-        ObjId end, json_utils:decode_map(Body2)),
+        ObjId end, json_utils:decode(Body2)),
     ?assertEqual(lists:sort([Guid1, Guid2]), lists:sort(Guids2)).
 
 query_file_popularity_index(Config) ->
@@ -1968,7 +1968,7 @@ set_get_json_metadata_inherited(Config) ->
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
         do_request(WorkerP1, <<"metadata/space3/dir?metadata_type=json&inherited=true">>, get,
             [user_1_token_header(Config), {<<"accept">>, <<"application/json">>}], [])),
-    DecodedBody = json_utils:decode_map(Body),
+    DecodedBody = json_utils:decode(Body),
     ?assertMatch(
         #{
             <<"a">> := #{<<"a1">> := <<"b1">>, <<"a2">> := <<"b2">>},
@@ -1985,10 +1985,10 @@ set_get_xattr_inherited(Config) ->
     {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, <<"/space3/dir_test/child">>),
 
     % when
-    XattrSpace = json_utils:encode_map(#{<<"k1">> => <<"v1">>}),
-    XattrDir = json_utils:encode_map(#{<<"k2">> => <<"v2">>}),
-    XattrChild = json_utils:encode_map(#{<<"k2">> => <<"v22">>}),
-    XattrChild2 = json_utils:encode_map(#{<<"k3">> => <<"v3">>}),
+    XattrSpace = json_utils:encode(#{<<"k1">> => <<"v1">>}),
+    XattrDir = json_utils:encode(#{<<"k2">> => <<"v2">>}),
+    XattrChild = json_utils:encode(#{<<"k2">> => <<"v22">>}),
+    XattrChild2 = json_utils:encode(#{<<"k3">> => <<"v3">>}),
 
     ?assertMatch({ok, 204, _, _},
         do_request(WorkerP1, <<"metadata/space3?metadata_type=json">>, put,
@@ -2010,7 +2010,7 @@ set_get_xattr_inherited(Config) ->
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
         do_request(WorkerP1, <<"attributes/space3/dir_test/child?inherited=true&extended=true">>, get,
             [user_1_token_header(Config), {<<"accept">>, <<"application/json">>}], [])),
-    DecodedBody = json_utils:decode_map(Body),
+    DecodedBody = json_utils:decode(Body),
     ?assertMatch(#{
         <<"k1">> := <<"v1">>,
         <<"k2">> := <<"v22">>,
@@ -2030,12 +2030,12 @@ set_get_json_metadata_using_filter(Config) ->
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
         do_request(WorkerP1, <<"metadata/space3?metadata_type=json&filter_type=keypath&filter=key1">>, get,
             [user_1_token_header(Config), {<<"accept">>, <<"application/json">>}], [])),
-    DecodedBody = json_utils:decode_map(Body),
+    DecodedBody = json_utils:decode(Body),
     ?assertMatch(<<"value1">>, DecodedBody),
     {_, _, _, Body2} = ?assertMatch({ok, 200, _, _},
         do_request(WorkerP1, <<"metadata/space3?metadata_type=json&filter_type=keypath&filter=key3.[1]">>, get,
             [user_1_token_header(Config), {<<"accept">>, <<"application/json">>}], [])),
-    DecodedBody2 = json_utils:decode_map(Body2),
+    DecodedBody2 = json_utils:decode(Body2),
     ?assertMatch(<<"v2">>, DecodedBody2),
 
     %when
@@ -2059,7 +2059,7 @@ set_get_json_metadata_using_filter(Config) ->
             <<"key2">> := #{<<"key22">> := <<"value22">>},
             <<"key3">> := [<<"v11">>, <<"v2">>]
         },
-        json_utils:decode_map(ReponseBody)).
+        json_utils:decode(ReponseBody)).
 
 primitive_json_metadata_test(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -2079,7 +2079,7 @@ primitive_json_metadata_test(Config) ->
 empty_metadata_invalid_json_test(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
 
-    InvalidJsons = [<<"">>, <<"aaa">>, <<"{">>, <<"{\"aaa\": aaa}">>],
+    InvalidJsons = [<<"aaa">>, <<"{">>, <<"{\"aaa\": aaa}">>],
 
     lists:foreach(fun(InvalidJson) ->
         ?assertMatch({ok, 400, _, _},
@@ -2873,14 +2873,14 @@ get_finish_time(Worker, Tid, Config) ->
 get_status(Worker, Tid, Config) ->
     {ok, 200, _, TransferStatus} = do_request(Worker, <<"transfers/", Tid/binary>>,
         get, [user_1_token_header(Config)], []),
-    json_utils:decode_map(TransferStatus).
+    json_utils:decode(TransferStatus).
 
 schedule_file_replication(Worker, ProviderId, File, Config) ->
     {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, do_request(Worker,
         <<"replicas/", File/binary, "?provider_id=", ProviderId/binary>>,
         post, [user_1_token_header(Config)], []
     ), ?ATTEMPTS),
-    DecodedBody = json_utils:decode_map(Body),
+    DecodedBody = json_utils:decode(Body),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
     Tid.
 
@@ -2889,7 +2889,7 @@ schedule_file_replication_by_id(Worker, ProviderId, FileId, Config) ->
         <<"replicas-id/", FileId/binary, "?provider_id=", ProviderId/binary>>,
         post, [user_1_token_header(Config)], []
     ), ?ATTEMPTS),
-    DecodedBody = json_utils:decode_map(Body),
+    DecodedBody = json_utils:decode(Body),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
     Tid.
 
@@ -2905,7 +2905,7 @@ schedule_replica_invalidation(Worker, ProviderId, undefined, File, Config) ->
         <<"replicas/", File/binary, "?provider_id=", ProviderId/binary>>,
         delete, [user_1_token_header(Config)], []),
         ?ATTEMPTS),
-    DecodedBody = json_utils:decode_map(Body),
+    DecodedBody = json_utils:decode(Body),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
     Tid;
 schedule_replica_invalidation(Worker, ProviderId, MigrationProviderId, File, Config) ->
@@ -2913,7 +2913,7 @@ schedule_replica_invalidation(Worker, ProviderId, MigrationProviderId, File, Con
         ProviderId/binary, "&migration_provider_id=", MigrationProviderId/binary>>,
         delete, [user_1_token_header(Config)], []),
         ?ATTEMPTS),
-    DecodedBody = json_utils:decode_map(Body),
+    DecodedBody = json_utils:decode(Body),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
     Tid.
 

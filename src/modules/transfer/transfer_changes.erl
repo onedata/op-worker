@@ -254,12 +254,12 @@ handle_finished_transfer(#document{
         space_id = SpaceId,
         scheduling_provider_id = SchedulingProviderId,
         invalidate_source_replica = false,
-        start_time = StartTime
+        schedule_time = ScheduleTime
 }}) ->
     % deleting finished replication from scheduled transfers tree
     ?run_if_is_self(SchedulingProviderId, fun() ->
         ok = transfer_links:delete_scheduled_transfer_link(TransferId,
-            SpaceId, StartTime)
+            SpaceId, ScheduleTime)
     end).
 
 %%--------------------------------------------------------------------
@@ -276,19 +276,19 @@ handle_finished_invalidation(#document{
         scheduling_provider_id = SchedulingProviderId,
         target_provider_id = TargetProviderId,
         invalidate_source_replica = true,
-        start_time = StartTime
-}}) ->
+        schedule_time = ScheduleTime
+    }}) ->
     case oneprovider:get_id() of
         SchedulingProviderId ->
             % deleting finished invalidation or migration from scheduled
             % transfers tree
             ok = transfer_links:delete_scheduled_transfer_link(TransferId,
-                SpaceId, StartTime);
+                SpaceId, ScheduleTime);
         TargetProviderId ->
             % deleting finished migration from active transfers tree
             % ensure that there is no duplicate in active transfers tree
             ok = transfer_links:delete_active_transfer_link(TransferId,
-                SpaceId, StartTime);
+                SpaceId, ScheduleTime);
         _ -> ok
     end.
 
