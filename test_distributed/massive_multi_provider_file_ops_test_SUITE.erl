@@ -82,35 +82,35 @@ all() ->
         ]},
         {description, Desc},
         % TODO - uncomment when rtransfer will be faster
-%%        {config, [{name, large_config},
-%%            {parameters, [
-%%                [{name, small_files_num}, {value, 30}],
-%%                [{name, medium_files_num}, {value, 20}],
-%%                [{name, big_files_num}, {value, 3}],
-%%                [{name, big_file_parts}, {value, 10}],
-%%                [{name, transfers_num}, {value, 2}],
-%%                [{name, transfer_file_parts}, {value, 20}]
-%%            ]},
-%%            {description, ""}
-%%        ]},
-%%        {config, [{name, small_config},
-%%            {parameters, [
-%%                [{name, small_files_num}, {value, 50}],
-%%                [{name, medium_files_num}, {value, 0}],
-%%                [{name, big_files_num}, {value, 0}],
-%%                [{name, transfers_num}, {value, 0}]
-%%            ]},
-%%            {description, ""}
-%%        ]},
-%%        {config, [{name, very_small_config},
-%%            {parameters, [
-%%                [{name, small_files_num}, {value, 3}],
-%%                [{name, medium_files_num}, {value, 0}],
-%%                [{name, big_files_num}, {value, 0}],
-%%                [{name, transfers_num}, {value, 0}]
-%%            ]},
-%%            {description, ""}
-%%        ]},
+        {config, [{name, large_config},
+            {parameters, [
+                [{name, small_files_num}, {value, 30}],
+                [{name, medium_files_num}, {value, 20}],
+                [{name, big_files_num}, {value, 3}],
+                [{name, big_file_parts}, {value, 10}],
+                [{name, transfers_num}, {value, 2}],
+                [{name, transfer_file_parts}, {value, 20}]
+            ]},
+            {description, ""}
+        ]},
+        {config, [{name, small_config},
+            {parameters, [
+                [{name, small_files_num}, {value, 50}],
+                [{name, medium_files_num}, {value, 0}],
+                [{name, big_files_num}, {value, 0}],
+                [{name, transfers_num}, {value, 0}]
+            ]},
+            {description, ""}
+        ]},
+        {config, [{name, very_small_config},
+            {parameters, [
+                [{name, small_files_num}, {value, 3}],
+                [{name, medium_files_num}, {value, 0}],
+                [{name, big_files_num}, {value, 0}],
+                [{name, transfers_num}, {value, 0}]
+            ]},
+            {description, ""}
+        ]},
         {config, [{name, default_config},
             {parameters, [
             ]},
