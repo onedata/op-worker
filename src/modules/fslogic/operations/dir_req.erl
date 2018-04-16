@@ -15,6 +15,7 @@
 -include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 
 %% API
 -export([mkdir/4, read_dir/4, read_dir_plus/5]).
@@ -130,8 +131,17 @@ read_dir_insecure(UserCtx, FileCtx, Offset, Limit) ->
 -spec read_dir_plus_insecure(user_ctx:ctx(), file_ctx:ctx(),
     Offset :: non_neg_integer(), Limit :: non_neg_integer(),
     Token :: undefined | binary()) -> fslogic_worker:fuse_response().
-read_dir_plus_insecure(UserCtx, FileCtx, Offset, Limit, _Token) ->
-    {Children, FileCtx2} = file_ctx:get_file_children(FileCtx, UserCtx, Offset, Limit),
+read_dir_plus_insecure(UserCtx, FileCtx, Offset, Limit, Token) ->
+    {Token2, CachePid} = get_cached_token(Token),
+
+    {Children, NewToken, IsLast, FileCtx2} = case
+        file_ctx:get_file_children(FileCtx, UserCtx, Offset, Limit, Token2) of
+        {C, FC}  -> {C, <<"">>, length(C) < Limit, FC};
+        {C, NT, FC} ->
+            IL = NT#link_token.is_last,
+            NT2 = cache_token(NT, CachePid),
+            {C, NT2, IL, FC}
+    end,
 
     MapFun = fun(ChildCtx) ->
         try
@@ -151,16 +161,57 @@ read_dir_plus_insecure(UserCtx, FileCtx, Offset, Limit, _Token) ->
         (_Attrs) -> true
     end,
     MaxProcs = application:get_env(?APP_NAME, max_read_dir_plus_procs, 200),
-    Length = length(Children),
-    ChildrenAttrs = filtermap(MapFun, FilterFun, Children, MaxProcs, Length),
+    ChildrenAttrs = filtermap(MapFun, FilterFun, Children, MaxProcs, length(Children)),
 
     fslogic_times:update_atime(FileCtx2),
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_children_attrs{
             child_attrs = ChildrenAttrs,
-            is_last = Length < Limit
+            index_token = NewToken,
+            is_last = IsLast
         }
     }.
+
+% TODO - uzywac procesu w zaleznosci od ustawionej zmiennej
+get_cached_token(<<"">>) ->
+    {#link_token{}, undefined};
+get_cached_token(undefined) ->
+    {#link_token{}, undefined};
+get_cached_token(Token) ->
+    CachePid = binary_to_term(Token),
+    CachePid ! {get_token, self()},
+    receive
+        {link_token, CachedToken} -> {CachedToken, CachePid}
+    after
+        1000 -> {#link_token{}, undefined}
+    end.
+
+cache_token(NT, undefined) ->
+    Pid = spawn(fun() ->
+        cache_proc(NT)
+    end),
+    term_to_binary(Pid);
+cache_token(NT, CachePid) ->
+    case rpc:call(node(CachePid), erlang, is_process_alive, [CachePid]) of
+        true ->
+            CachePid ! {cache_token, NT},
+            term_to_binary(CachePid);
+        _ ->
+            cache_token(NT, undefined)
+    end.
+
+cache_proc(Token) ->
+    Timeout = application:get_env(?APP_NAME, token_cache_timeout, timer:minutes(5)),
+    receive
+        {get_token, Pid} ->
+            Pid ! {link_token, Token},
+            cache_proc(Token);
+        {cache_token, NT} ->
+            cache_proc(NT)
+    after
+        Timeout ->
+            ok
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
