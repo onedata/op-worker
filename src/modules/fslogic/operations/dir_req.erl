@@ -172,25 +172,50 @@ read_dir_plus_insecure(UserCtx, FileCtx, Offset, Limit, Token) ->
         }
     }.
 
-% TODO - uzywac procesu w zaleznosci od ustawionej zmiennej
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Gets token value from cache or via decoding.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_cached_token(Token :: undefined | binary()) ->
+    {CachedToken :: datastore_links_iter:token(), CachePid :: pid() | undefined}.
 get_cached_token(<<"">>) ->
     {#link_token{}, undefined};
 get_cached_token(undefined) ->
     {#link_token{}, undefined};
 get_cached_token(Token) ->
-    CachePid = binary_to_term(Token),
-    CachePid ! {get_token, self()},
-    receive
-        {link_token, CachedToken} -> {CachedToken, CachePid}
-    after
-        1000 -> {#link_token{}, undefined}
+    case application:get_env(?APP_NAME, cache_list_dir_token, true) of
+        true ->
+            CachePid = binary_to_term(Token),
+            CachePid ! {get_token, self()},
+            receive
+                {link_token, CachedToken} -> {CachedToken, CachePid}
+            after
+                1000 -> {#link_token{}, undefined}
+            end;
+        _ ->
+            {binary_to_term(Token), undefined}
     end.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Encodes and caches token if needed.
+%% @end
+%%--------------------------------------------------------------------
+-spec cache_token(Token :: datastore_links_iter:token(),
+    CachePid :: pid() | undefined) -> binary().
 cache_token(NT, undefined) ->
-    Pid = spawn(fun() ->
-        cache_proc(NT)
-    end),
-    term_to_binary(Pid);
+    case application:get_env(?APP_NAME, cache_list_dir_token, true) of
+        true ->
+            Pid = spawn(fun() ->
+                cache_proc(NT)
+            end),
+            term_to_binary(Pid);
+        _ ->
+            term_to_binary(NT)
+    end;
 cache_token(NT, CachePid) ->
     case rpc:call(node(CachePid), erlang, is_process_alive, [CachePid]) of
         true ->
@@ -200,8 +225,16 @@ cache_token(NT, CachePid) ->
             cache_token(NT, undefined)
     end.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Token cache process.
+%% @end
+%%--------------------------------------------------------------------
+-spec cache_proc(Token :: datastore_links_iter:token()) -> ok.
 cache_proc(Token) ->
-    Timeout = application:get_env(?APP_NAME, token_cache_timeout, timer:minutes(5)),
+    Timeout = application:get_env(?APP_NAME,
+        list_dir_token_cache_timeout, timer:minutes(5)),
     receive
         {get_token, Pid} ->
             Pid ! {link_token, Token},

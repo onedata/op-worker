@@ -397,7 +397,7 @@ list_children(Entry, Offset, Size) ->
 %%--------------------------------------------------------------------
 -spec list_children(entry(), non_neg_integer(), non_neg_integer(),
     datastore_links_iter:token() | undefined) ->
-    {{ok, [#child_link_uuid{}]}, datastore_links_iter:token()} |
+    {ok, [#child_link_uuid{}], datastore_links_iter:token()} |
     {ok, [#child_link_uuid{}]} | {error, term()}.
 list_children(Entry, Offset, Size, Token) ->
     ?run(begin
@@ -415,10 +415,10 @@ list_children(Entry, Offset, Size, Token) ->
         end, [], Opts),
         case Result of
             {{ok, Links}, Token2} ->
-                {{ok, tag_children(lists:reverse(Links))}, Token2};
+                {ok, tag_children(lists:reverse(Links)), Token2};
             {ok, Links} ->
                 {ok, tag_children(lists:reverse(Links))};
-            {{error, Reason}, _} ->
+            {error, Reason} ->
                 {error, Reason}
         end
     end).

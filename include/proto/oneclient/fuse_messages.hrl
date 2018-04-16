@@ -187,7 +187,7 @@
 
 -record(file_children_attrs, {
     child_attrs :: [#file_attr{}],
-    index_token :: undefined | binary(),
+    index_token :: binary(),
     is_last :: boolean()
 }).
 

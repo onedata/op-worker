@@ -65,6 +65,7 @@ mkdir(SessId, ParentGuid, Name, Mode) ->
     Offset :: integer(), Limit :: integer()) ->
     {ok, [{fslogic_worker:file_guid(), file_meta:name()}]} | logical_file_manager:error_reply().
 ls(SessId, FileKey, Offset, Limit) ->
+    % TODO - dodac token
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #get_file_children{offset = Offset, size = Limit},
@@ -97,13 +98,14 @@ read_dir_plus(SessId, FileKey, Offset, Limit) ->
 %%--------------------------------------------------------------------
 -spec read_dir_plus(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     Offset :: integer(), Limit :: integer(), Token :: undefined | binary()) ->
-    {ok, [#file_attr{}], IsLast :: boolean()} | logical_file_manager:error_reply().
+    {ok, [#file_attr{}], Token :: binary(), IsLast :: boolean()} |
+    logical_file_manager:error_reply().
 read_dir_plus(SessId, FileKey, Offset, Limit, Token) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #get_file_children_attrs{offset = Offset, size = Limit, index_token = Token},
-        fun(#file_children_attrs{child_attrs = Attrs, is_last = IL}) ->
-            {ok, Attrs, IL}
+        fun(#file_children_attrs{child_attrs = Attrs, index_token = Token, is_last = IL}) ->
+            {ok, Attrs, Token, IL}
         end).
 
 %%--------------------------------------------------------------------
