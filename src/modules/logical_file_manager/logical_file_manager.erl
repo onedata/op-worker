@@ -131,7 +131,7 @@ read_dir_plus(SessId, FileKey, Offset, Limit) ->
 %%--------------------------------------------------------------------
 -spec read_dir_plus(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     Offset :: integer(), Limit :: integer(), Token :: undefined | binary()) ->
-    {ok, [#file_attr{}], IsLast :: boolean()} | logical_file_manager:error_reply().
+    {ok, [#file_attr{}], Token :: binary(), IsLast :: boolean()} | logical_file_manager:error_reply().
 read_dir_plus(SessId, FileKey, Offset, Limit, Token) ->
     ?run(fun() -> lfm_dirs:read_dir_plus(SessId, FileKey, Offset, Limit, Token) end).
 

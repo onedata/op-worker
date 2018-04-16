@@ -139,7 +139,10 @@ read_dir_plus_insecure(UserCtx, FileCtx, Offset, Limit, Token) ->
         {C, FC}  -> {C, <<"">>, length(C) < Limit, FC};
         {C, NT, FC} ->
             IL = NT#link_token.is_last,
-            NT2 = cache_token(NT, CachePid),
+            NT2 = case IL of
+                true -> <<"">>;
+                _ -> cache_token(NT, CachePid)
+            end,
             {C, NT2, IL, FC}
     end,
 
