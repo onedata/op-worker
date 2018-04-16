@@ -70,7 +70,9 @@
     readdir_plus_should_work_with_non_zero_offset/1,
     readdir_plus_should_work_with_size_greater_than_dir_size/1,
     readdir_plus_should_work_with_token/1,
-    readdir_plus_should_work_with_token2/1
+    readdir_plus_should_work_with_token2/1,
+    readdir_should_work_with_token/1,
+    readdir_should_work_with_token2/1
 ]).
 
 -define(TEST_CASES, [
@@ -115,7 +117,9 @@
     readdir_plus_should_work_with_non_zero_offset,
     readdir_plus_should_work_with_size_greater_than_dir_size,
     readdir_plus_should_work_with_token,
-    readdir_plus_should_work_with_token2
+    readdir_plus_should_work_with_token2,
+    readdir_should_work_with_token,
+    readdir_should_work_with_token2
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -175,6 +179,22 @@ readdir_plus_should_work_with_token2(Config) ->
     Token2 = verify_attrs_with_token(Config, MainDirPath, Files, 3, 3, 3, false, Token),
     Token3 = verify_attrs_with_token(Config, MainDirPath, Files, 3, 3, 6, false, Token2),
     Token4 = verify_attrs_with_token(Config, MainDirPath, Files, 3, 3, 9, true, Token3),
+    ?assertEqual(<<"">>, Token4).
+
+readdir_should_work_with_token(Config) ->
+    {MainDirPath, Files} = generate_dir(Config, 10),
+    Token = verify_with_token(Config, MainDirPath, Files, 3, 3, 0, false, <<"">>),
+    Token2 = verify_with_token(Config, MainDirPath, Files, 3, 3, 3, false, Token),
+    Token3 = verify_with_token(Config, MainDirPath, Files, 3, 3, 6, false, Token2),
+    Token4 = verify_with_token(Config, MainDirPath, Files, 1, 3, 9, true, Token3),
+    ?assertEqual(<<"">>, Token4).
+
+readdir_should_work_with_token2(Config) ->
+    {MainDirPath, Files} = generate_dir(Config, 12),
+    Token = verify_with_token(Config, MainDirPath, Files, 3, 3, 0, false, <<"">>),
+    Token2 = verify_with_token(Config, MainDirPath, Files, 3, 3, 3, false, Token),
+    Token3 = verify_with_token(Config, MainDirPath, Files, 3, 3, 6, false, Token2),
+    Token4 = verify_with_token(Config, MainDirPath, Files, 3, 3, 9, true, Token3),
     ?assertEqual(<<"">>, Token4).
 
 echo_loop_test(Config) ->
@@ -1377,6 +1397,23 @@ verify_attrs_with_token(Config, MainDirPath, Files, ExpectedSize, Limit, Offset,
 
     lists:foreach(fun({F1, F2}) ->
         ?assertEqual(F1#file_attr.name, F2)
+    end, lists:zip(List, lists:sublist(Files, Offset + 1, ExpectedSize))),
+    ?assertEqual(IsLast, IL),
+    Token2.
+
+verify_with_token(Config, MainDirPath, Files, ExpectedSize, Limit, Offset, IsLast, Token) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+
+    Ans = lfm_proxy:ls(Worker, SessId1, {path, MainDirPath}, 0, Limit, Token),
+    ?assertMatch({ok, _, _, _}, Ans),
+    {ok, List, Token2, IL} = Ans,
+    ?assertEqual(ExpectedSize, length(List)),
+
+    lists:foreach(fun({{_, F1}, F2}) ->
+        ?assertEqual(F1, F2)
     end, lists:zip(List, lists:sublist(Files, Offset + 1, ExpectedSize))),
     ?assertEqual(IsLast, IL),
     Token2.

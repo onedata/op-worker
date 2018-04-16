@@ -18,7 +18,7 @@
 
 %% API
 -export([init/1, teardown/1, stat/3, truncate/4, create/4, create/5, unlink/3, open/4, close/2, close_all/1,
-    read/4, write/4, mkdir/3, mkdir/4, mkdir/5, mv/4, ls/5, read_dir_plus/5, read_dir_plus/6, set_perms/4,
+    read/4, write/4, mkdir/3, mkdir/4, mkdir/5, mv/4, ls/5, ls/6, read_dir_plus/5, read_dir_plus/6, set_perms/4,
     update_times/6, get_xattr/4, get_xattr/5, set_xattr/4, set_xattr/6, remove_xattr/4, list_xattr/5,
     get_acl/3, set_acl/4, write_and_check/4, get_transfer_encoding/3, set_transfer_encoding/4,
     get_cdmi_completion_status/3, set_cdmi_completion_status/4, get_mimetype/3,
@@ -212,6 +212,12 @@ mkdir(Worker, SessId, ParentGuid, Name, Mode) ->
 ls(Worker, SessId, FileKey, Offset, Limit) ->
     ?EXEC(Worker, logical_file_manager:ls(SessId, uuid_to_guid(Worker, FileKey), Offset, Limit)).
 
+-spec ls(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(),
+    integer(), integer(), undefined | binary()) ->
+    {ok, [{fslogic_worker:file_guid(), file_meta:name()}], binary(), boolean()} | logical_file_manager:error_reply().
+ls(Worker, SessId, FileKey, Offset, Limit, Token) ->
+    ?EXEC(Worker, logical_file_manager:ls(SessId, uuid_to_guid(Worker, FileKey), Offset, Limit, Token)).
+
 -spec read_dir_plus(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), integer(), integer()) ->
     {ok, [#file_attr{}]} | logical_file_manager:error_reply().
 read_dir_plus(Worker, SessId, FileKey, Offset, Limit) ->
@@ -219,7 +225,7 @@ read_dir_plus(Worker, SessId, FileKey, Offset, Limit) ->
 
 -spec read_dir_plus(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(),
     integer(), integer(), undefined | binary()) ->
-    {ok, [#file_attr{}], Token :: binary(), IsLast :: boolean()} | logical_file_manager:error_reply().
+    {ok, [#file_attr{}],  binary(), boolean()} | logical_file_manager:error_reply().
 read_dir_plus(Worker, SessId, FileKey, Offset, Limit, Token) ->
     ?EXEC(Worker, logical_file_manager:read_dir_plus(SessId, uuid_to_guid(Worker, FileKey), Offset, Limit, Token)).
 

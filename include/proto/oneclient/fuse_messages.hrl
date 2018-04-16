@@ -40,7 +40,8 @@
 
 -record(get_file_children, {
     offset :: file_meta:offset(),
-    size :: file_meta:size()
+    size :: file_meta:size(),
+    index_token :: undefined | binary()
 }).
 
 -record(get_file_children_attrs, {
@@ -182,7 +183,9 @@
 }).
 
 -record(file_children, {
-    child_links :: [#child_link{}]
+    child_links :: [#child_link{}],
+    index_token :: binary(),
+    is_last :: boolean()
 }).
 
 -record(file_children_attrs, {
