@@ -107,10 +107,10 @@ fslogic_get_file_attr_test(Config) ->
     end, [
         {SessId1, UserId1, 8#1755, 0, <<"/">>, undefined},
         {SessId2, UserId2, 8#1755, 0, <<"/">>, undefined},
-        {SessId1, <<"space_name1">>, 8#1775, 0, <<"/space_name1">>, UserRootGuid1},
-        {SessId2, <<"space_name2">>, 8#1775, 0, <<"/space_name2">>, UserRootGuid2},
-        {SessId1, <<"space_name3">>, 8#1775, 0, <<"/space_name3">>, UserRootGuid1},
-        {SessId2, <<"space_name4">>, 8#1775, 0, <<"/space_name4">>, UserRootGuid2}
+        {SessId1, <<"space_name1">>, 8#775, 0, <<"/space_name1">>, UserRootGuid1},
+        {SessId2, <<"space_name2">>, 8#775, 0, <<"/space_name2">>, UserRootGuid2},
+        {SessId1, <<"space_name3">>, 8#775, 0, <<"/space_name3">>, UserRootGuid1},
+        {SessId2, <<"space_name4">>, 8#775, 0, <<"/space_name4">>, UserRootGuid2}
     ]),
     ?assertMatch(
         #fuse_response{status = #status{code = ?ENOENT}},
@@ -188,7 +188,7 @@ fslogic_get_file_children_attrs_test(Config) ->
 
     TestFun = fun({SessId, Path, NameList, UserRootGuid}) ->
         Files = lists:map(fun(Name) ->
-            {SessId, Name, 8#1775, 0, <<"/", Name/binary>>, UserRootGuid}
+            {SessId, Name, 8#775, 0, <<"/", Name/binary>>, UserRootGuid}
         end, NameList),
 
         FilesAttrs = lists:map(fun({SessId, Name, Mode, UID, Path, ParentGuid}) ->
@@ -240,10 +240,10 @@ fslogic_get_child_attr_test(Config) ->
             }
         }, ?file_req(Worker, SessId, ParentGuid, #get_child_attr{name = ChildName}))
     end, [
-        {SessId1, <<"space_name1">>, 8#1775, 0, UserRootGuid1, <<"space_name1">>},
-        {SessId2, <<"space_name2">>, 8#1775, 0, UserRootGuid2, <<"space_name2">>},
-        {SessId1, <<"space_name3">>, 8#1775, 0, UserRootGuid1, <<"space_name3">>},
-        {SessId2, <<"space_name4">>, 8#1775, 0, UserRootGuid2, <<"space_name4">>}
+        {SessId1, <<"space_name1">>, 8#775, 0, UserRootGuid1, <<"space_name1">>},
+        {SessId2, <<"space_name2">>, 8#775, 0, UserRootGuid2, <<"space_name2">>},
+        {SessId1, <<"space_name3">>, 8#775, 0, UserRootGuid1, <<"space_name3">>},
+        {SessId2, <<"space_name4">>, 8#775, 0, UserRootGuid2, <<"space_name4">>}
     ]),
     ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}},
         ?file_req(Worker, SessId1, UserRootGuid1, #get_child_attr{name = <<"no such child">>})).
@@ -539,8 +539,8 @@ default_permissions_test(Config) ->
             {delete, <<"/space_name4/test/test/test">>, [SessId4], ?OK},
             {delete, <<"/space_name4/test/test">>, [SessId1, SessId2, SessId3], ?EACCES},
             {delete, <<"/space_name4/test/test">>, [SessId4], ?OK},
-            {delete, <<"/space_name4/test">>, [SessId1, SessId2, SessId3], ?EACCES},
-            {delete, <<"/space_name4/test">>, [SessId4], ?OK},
+            {delete, <<"/space_name4/test">>, [SessId1], ?OK},
+            {get_attr, <<"/space_name4/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
             {chmod, <<"/">>, 8#123, [SessId1, SessId2, SessId3, SessId4], ?EACCES},
             {chmod, <<"/space_name1">>, 8#123, [SessId1], ?EACCES},
             {chmod, <<"/space_name2">>, 8#123, [SessId1, SessId2], ?EACCES},

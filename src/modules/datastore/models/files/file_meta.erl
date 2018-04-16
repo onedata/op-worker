@@ -655,7 +655,7 @@ make_space_exist(SpaceId) ->
         key = SpaceDirUuid,
         value = #file_meta{
             name = SpaceId, type = ?DIRECTORY_TYPE,
-            mode = 8#1775, owner = ?ROOT_USER_ID, is_scope = true,
+            mode = ?DEFAULT_SPACE_DIR_MODE, owner = ?ROOT_USER_ID, is_scope = true,
             parent_uuid = ?ROOT_DIR_UUID
         }
     },
