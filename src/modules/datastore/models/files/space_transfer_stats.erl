@@ -18,7 +18,12 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get/1, get/2, update/4, delete/1]).
+-export([
+    key/2, key/3,
+    get/1, get/2, get/3,
+    update/5,
+    delete/1, delete/2
+]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
@@ -43,38 +48,78 @@
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Returns space transfers for given space.
+%% Returns space transfers stats id based on specified transfer type and
+%% space (provider is assumed to be the calling one).
 %% @end
 %%-------------------------------------------------------------------
--spec get(SpaceId :: od_space:id()) -> space_transfer_stats() | {error, term()}.
-get(SpaceId) ->
-    ?MODULE:get(oneprovider:get_id_or_undefined(), SpaceId).
+-spec key(TransferType :: binary(), SpaceId :: od_space:id()) -> binary().
+key(TransferType, SpaceId) ->
+    key(oneprovider:get_id_or_undefined(), TransferType, SpaceId).
 
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Returns space transfers for given provider and space.
+%% Returns space transfers stats id based on specified provider id,
+%% transfer type and space id.
 %% @end
 %%-------------------------------------------------------------------
--spec get(ProviderId :: od_provider:id(), SpaceId :: od_space:id()) ->
+-spec key(ProviderId :: od_provider:id(), TransferType :: binary(),
+    SpaceId :: od_space:id()) -> binary().
+key(ProviderId, TransferType, SpaceId) ->
+    RecordId = op_gui_utils:ids_to_association(TransferType, SpaceId),
+    datastore_utils:gen_key(ProviderId, RecordId).
+
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns space transfers stats for specified transfer stats id.
+%% @end
+%%-------------------------------------------------------------------
+-spec get(TransferStatsId :: binary()) ->
     space_transfer_stats() | {error, term()}.
-get(ProviderId, SpaceId) ->
-    Key = datastore_utils:gen_key(ProviderId, SpaceId),
-    case datastore_model:get(?CTX, Key) of
+get(TransferStatsId) ->
+    case datastore_model:get(?CTX, TransferStatsId) of
         {ok, Doc} -> {ok, Doc#document.value};
         Error -> Error
     end.
 
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns space transfers stats for given transfer type, space and provider
+%% calling this fun.
+%% @end
+%%-------------------------------------------------------------------
+-spec get(TransferType :: binary(), SpaceId :: od_space:id()) ->
+    space_transfer_stats() | {error, term()}.
+get(TransferType, SpaceId) ->
+    ?MODULE:get(key(TransferType, SpaceId)).
+
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns space transfers stats for given transfer type, provider and space.
+%% @end
+%%-------------------------------------------------------------------
+-spec get(ProviderId :: od_provider:id(), TransferType :: binary(),
+    SpaceId :: od_space:id()) -> space_transfer_stats() | {error, term()}.
+get(ProviderId, TransferType, SpaceId) ->
+    ?MODULE:get(key(ProviderId, TransferType, SpaceId)).
+
+
 %%--------------------------------------------------------------------
 %% @doc
-%% Updates space transfers document or creates it if one doesn't exists already.
+%% Updates space transfers stats document for given transfer type, space id
+%% (provider is assumed to be the calling one) or creates it
+%% if one doesn't exists already.
 %% @end
 %%--------------------------------------------------------------------
--spec update(SpaceId :: od_space:id(), SrcProvider :: od_provider:id(),
-    Bytes :: size(), CurrentTime :: timestamp()) -> ok | {error, term()}.
-update(SpaceId, SrcProvider, Bytes, CurrentTime) ->
-    Key = datastore_utils:gen_key(oneprovider:get_id_or_undefined(), SpaceId),
+-spec update(TransferType :: binary(), SpaceId :: od_space:id(),
+    SrcProvider :: od_provider:id(), Bytes :: size(), CurrentTime :: timestamp()
+) ->
+    ok | {error, term()}.
+update(TransferType, SpaceId, SrcProvider, Bytes, CurrentTime) ->
+    Key = key(oneprovider:get_id_or_undefined(), TransferType, SpaceId),
     Diff = fun(SpaceTransfers = #space_transfer_stats{
         last_update = LastUpdateMap,
         min_hist = MinHistograms,
@@ -122,13 +167,23 @@ update(SpaceId, SrcProvider, Bytes, CurrentTime) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Deletes space transfer document.
+%% Deletes space transfer stats document for specified transfer stats id.
 %% @end
 %%-------------------------------------------------------------------
--spec delete(SpaceId :: od_space:id()) -> ok | {error, term()}.
-delete(SpaceId) ->
-    Key = datastore_utils:gen_key(oneprovider:get_id_or_undefined(), SpaceId),
-    datastore_model:delete(?CTX, Key).
+-spec delete(TransferStatsId :: binary()) -> ok | {error, term()}.
+delete(TransferStatsId) ->
+    datastore_model:delete(?CTX, TransferStatsId).
+
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Deletes space transfer stats document for given space and transfer type.
+%% @end
+%%-------------------------------------------------------------------
+-spec delete(TransferType :: binary(), SpaceId :: od_space:id()) ->
+    ok | {error, term()}.
+delete(TransferType, SpaceId) ->
+    delete(key(TransferType, SpaceId)).
 
 
 %%%===================================================================

@@ -37,6 +37,8 @@
 -define(GUEST_SESS_ID, <<"nobody">>).
 -define(GUEST_AUTH, guest_auth).
 
+-define(DEFAULT_SPACE_DIR_MODE, 8#775).
+
 %% Mode for automatically created parent directory while creating file/directory.
 -define(AUTO_CREATED_PARENT_DIR_MODE, 8#333).
 

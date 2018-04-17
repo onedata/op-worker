@@ -23,14 +23,15 @@
 %% API
 -export([
     new/3, update/6,
-    pad_with_zeroes/4, trim_min_histograms/2, trim/4,
+    pad_with_zeroes/4,
+    trim_min_histograms/2, trim_histograms/4, trim_timestamp/1,
     type_to_time_window/1, type_to_hist_length/1,
     to_speed_charts/4
 ]).
 
 -ifdef(TEST).
 %% Export for unit testing
--export([trim_timestamp/1, histogram_to_speed_chart/4]).
+-export([histogram_to_speed_chart/4]).
 -endif.
 
 %%%===================================================================
@@ -57,8 +58,8 @@ new(ProviderId, Bytes, HistogramsType) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec update(ProviderId :: od_provider:id(), Bytes :: non_neg_integer(),
-    Histograms, HistogramsType :: type(), LastUpdate :: timestamp(),
-    CurrentTime :: timestamp()) -> Histograms when Histograms :: histograms().
+    histograms(), HistogramsType :: type(), LastUpdate :: timestamp(),
+    CurrentTime :: timestamp()) -> histograms().
 update(
     ProviderId, Bytes, Histograms, HistogramsType, LastUpdate, CurrentTime
 ) when CurrentTime >= LastUpdate ->
@@ -76,13 +77,13 @@ update(
 %%-------------------------------------------------------------------
 %% @doc
 %% Pad histograms with zeros since last update to specified current time.
-%% If current time is smaller than last update, then left given histogram intact.
+%% If current time is smaller than last update, then left given histogram
+%% intact.
 %% @end
 %%-------------------------------------------------------------------
--spec pad_with_zeroes(Histograms, Window :: non_neg_integer(), CurrentTime :: timestamp(),
-    LastUpdates :: #{od_provider:id() => timestamp()}
-) ->
-    Histograms when Histograms :: histograms().
+-spec pad_with_zeroes(histograms(), Window :: non_neg_integer(),
+    CurrentTime :: timestamp(),
+    LastUpdates :: #{od_provider:id() => timestamp()}) -> histograms().
 pad_with_zeroes(Histograms, Window, CurrentTime, LastUpdates) ->
     maps:map(fun(Provider, Histogram) ->
         LastUpdate = maps:get(Provider, LastUpdates),
@@ -94,13 +95,12 @@ pad_with_zeroes(Histograms, Window, CurrentTime, LastUpdates) ->
 %%-------------------------------------------------------------------
 %% @doc
 %% Erase recent n-seconds of histograms based on difference between expected
-%% slots in minute speed histograms and bytes_sent histograms (it helps to avoid
-%% fluctuations on charts due to synchronization between providers).
+%% slots in minute speed histograms and bytes_sent histograms (it helps to
+%% avoid fluctuations on charts due to synchronization between providers).
 %% @end
 %%-------------------------------------------------------------------
--spec trim_min_histograms(Histograms, LastUpdate :: timestamp()) ->
-    {Histograms, NewTimestamp :: timestamp()} when
-    Histograms :: transfer_histograms:histograms().
+-spec trim_min_histograms(histograms(), LastUpdate :: timestamp()) ->
+    {histograms(), NewTimestamp :: timestamp()}.
 trim_min_histograms(Histograms, LastUpdate) ->
     SlotsToRemove = ?MIN_HIST_LENGTH - ?MIN_SPEED_HIST_LENGTH,
     TrimmedHistograms = maps:map(fun(_Provider, Histogram) ->
@@ -113,21 +113,21 @@ trim_min_histograms(Histograms, LastUpdate) ->
 %%-------------------------------------------------------------------
 %% @doc
 %% Erase recent n-seconds of histograms. To that minute histograms are required
-%% as reference (to calculate bytes to remove based on difference between expected
-%% slots in minute speed histograms and bytes_sent histograms.
+%% as reference (to calculate bytes to remove based on difference between
+%% expected slots in minute speed histograms and bytes_sent histograms.
 %% Also shorten histograms length to that of equivalent speed histogram
 %% (necessary before converting bytes_sent histograms to speed histograms).
 %% @end
 %%-------------------------------------------------------------------
--spec trim(MinHistograms, RequestedHistograms,
+-spec trim_histograms(MinHistograms, RequestedHistograms,
     TimeWindow :: non_neg_integer(), LastUpdate :: timestamp()
 ) -> {MinHistograms, RequestedHistograms, Timestamp :: timestamp()}
     when MinHistograms :: histograms(), RequestedHistograms :: histograms().
-trim(MinHistograms, RequestedHistograms, TimeWindow, LastUpdate) ->
+trim_histograms(MinHistograms, RequestedHistograms, TimeWindow, LastUpdate) ->
     NewTimestamp = trim_timestamp(LastUpdate),
     TrimFun = fun(OldMinHist, [FstSlot, SndSlot | Rest] = _OldRequestedHist) ->
-        % Remove recent slots from minute histogram and calculate bytes to remove
-        % from other histogram (using removed slots)
+        % Remove recent slots from minute histogram and calculate bytes
+        % to remove from other histogram (using removed slots)
         MinSlotsToRemove = ?MIN_HIST_LENGTH - ?MIN_SPEED_HIST_LENGTH,
         {RemovedSlots, NewMinHist} = lists:split(MinSlotsToRemove, OldMinHist),
         RemovedBytes = lists:sum(RemovedSlots),
@@ -136,9 +136,11 @@ trim(MinHistograms, RequestedHistograms, TimeWindow, LastUpdate) ->
         % and if so remove head slot.
         NewRequestedHist = case RemovedBytes >= FstSlot of
             true ->
-                case (LastUpdate div TimeWindow) == (NewTimestamp div TimeWindow) of
+                PreviousTimeSlot = LastUpdate div TimeWindow,
+                CurrentTimeSlot = NewTimestamp div TimeWindow,
+                case PreviousTimeSlot == CurrentTimeSlot of
                     true ->
-                        % If LastUpdate is in the same time slot as NewTimestamp
+                        % If we are still in the same time slot
                         % then RemovedBytes == FstSlot
                         [0, SndSlot | Rest];
                     false ->
@@ -161,6 +163,21 @@ trim(MinHistograms, RequestedHistograms, TimeWindow, LastUpdate) ->
         end, {#{}, #{}}, MinHistograms
     ),
     {TrimmedMinHistograms, TrimmedRequestedHistograms, NewTimestamp}.
+
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Erase recent n-seconds of timestamp based on difference between expected
+%% slots in minute speed histograms and bytes_sent histograms (it helps to
+%% avoid fluctuations on charts due to synchronization between providers).
+%% @end
+%%-------------------------------------------------------------------
+-spec trim_timestamp(Timestamp :: timestamp()) -> timestamp().
+trim_timestamp(Timestamp) ->
+    FullSlotsToSub = ?MIN_HIST_LENGTH - ?MIN_SPEED_HIST_LENGTH - 1,
+    FullSlotsToSubTime = FullSlotsToSub * ?FIVE_SEC_TIME_WINDOW,
+    RecentSlotDuration = (Timestamp rem ?FIVE_SEC_TIME_WINDOW) + 1,
+    Timestamp - RecentSlotDuration - FullSlotsToSubTime.
 
 
 %%--------------------------------------------------------------------
@@ -304,11 +321,3 @@ window_to_speed_chart_len(?FIVE_SEC_TIME_WINDOW) -> ?MIN_SPEED_HIST_LENGTH;
 window_to_speed_chart_len(?MIN_TIME_WINDOW) -> ?HOUR_SPEED_HIST_LENGTH;
 window_to_speed_chart_len(?HOUR_TIME_WINDOW) -> ?DAY_SPEED_HIST_LENGTH;
 window_to_speed_chart_len(?DAY_TIME_WINDOW) -> ?MONTH_SPEED_HIST_LENGTH.
-
-
--spec trim_timestamp(Timestamp :: timestamp()) -> timestamp().
-trim_timestamp(Timestamp) ->
-    FullSlotsToSub = ?MIN_HIST_LENGTH - ?MIN_SPEED_HIST_LENGTH - 1,
-    FullSlotsToSubTime = FullSlotsToSub * ?FIVE_SEC_TIME_WINDOW,
-    RecentSlotDuration = (Timestamp rem ?FIVE_SEC_TIME_WINDOW) + 1,
-    Timestamp - RecentSlotDuration - FullSlotsToSubTime.
