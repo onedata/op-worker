@@ -203,7 +203,7 @@ get_cached_token(<<"">>) ->
 get_cached_token(undefined) ->
     {#link_token{}, undefined};
 get_cached_token(Token) ->
-    case application:get_env(?APP_NAME, cache_list_dir_token, true) of
+    case application:get_env(?APP_NAME, cache_list_dir_token, false) of
         true ->
             CachePid = binary_to_term(Token),
             CachePid ! {get_token, self()},
