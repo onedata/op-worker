@@ -4,6 +4,15 @@
 CHANGELOG
 ---------
 
+### 18.02.0-beta6
+
+* VFS-3731 - fix sync removing remotely created files, fix transfer model upgrader
+* VFS-3731 - fix removing non-empty directory after remote deletion
+* VFS-4299 Add flush cooldown
+* VFS-4113 Updated exometer counters
+* VFS-4234 Updated rtransfer and helpers
+
+
 ### 18.02.0-beta5
 
 * don't count files' attrs hash when update is set to write_once

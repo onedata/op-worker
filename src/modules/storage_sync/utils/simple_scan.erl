@@ -293,7 +293,7 @@ import_file(#space_strategy_job{
         ?REGULAR_FILE_TYPE ->
             ok = create_file_location(SpaceId, StorageId, FileUuid, CanonicalPath, FSize);
         _ ->
-            ok
+            {ok, _} = dir_location:mark_dir_created_on_storage(FileUuid, SpaceId)
     end,
     FileCtx = file_ctx:new_by_doc(FileMetaDoc#document{key = FileUuid}, SpaceId, undefined),
     SyncAcl = maps:get(sync_acl, Args, false),
