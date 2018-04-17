@@ -225,7 +225,7 @@ get_cached_token(Token) ->
 -spec cache_token(Token :: datastore_links_iter:token(),
     CachePid :: pid() | undefined) -> binary().
 cache_token(NT, undefined) ->
-    case application:get_env(?APP_NAME, cache_list_dir_token, true) of
+    case application:get_env(?APP_NAME, cache_list_dir_token, false) of
         true ->
             Pid = spawn(fun() ->
                 cache_proc(NT)
@@ -252,7 +252,7 @@ cache_token(NT, CachePid) ->
 -spec cache_proc(Token :: datastore_links_iter:token()) -> ok.
 cache_proc(Token) ->
     Timeout = application:get_env(?APP_NAME,
-        list_dir_token_cache_timeout, timer:minutes(5)),
+        list_dir_token_cache_timeout, timer:seconds(30)),
     receive
         {get_token, Pid} ->
             Pid ! {link_token, Token},
