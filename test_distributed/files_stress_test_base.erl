@@ -109,7 +109,23 @@ single_dir_creation_test_base(Config, Clear) ->
                     NewSum = Sum + SaveOk,
                     put(ok_sum, NewSum),
 
-                    ct:print("Save num ~p, sum ~p", [SaveOk, NewSum])
+                    LastLS = case get(last_ls) of
+                        undefined ->
+                            0;
+                        LLS ->
+                            LLS
+                    end,
+
+                    case NewSum - LastLS >= 20000 of
+                        true ->
+                            put(last_ls, NewSum),
+                            T0 = os:timestamp(),
+                            ls(Worker, SessId, Dir, undefined, false),
+                            ct:print("Save num ~p, sum ~p, ls time ~p",
+                                [SaveOk, NewSum, timer:now_diff(os:timestamp(), T0)]);
+                        _ ->
+                            ct:print("Save num ~p, sum ~p", [SaveOk, NewSum])
+                    end
             end,
 
             get_final_ans(SaveOk, SaveAvgTime, SError, SErrorAvgTime, DelOk, DelAvgTime, DError, DErrorAvgTime, 0);
@@ -516,3 +532,9 @@ process_answer(Answers, Ans, ToAddV) ->
 %%            {other, {V1 + 1, V2 + ToAddV, [Ans | V3]}}
     end,
     [ToAdd | proplists:delete(K, Answers)].
+
+ls(_Worker, _SessId, _Dir, _Token, true) ->
+    ok;
+ls(Worker, SessId, Dir, Token, _) ->
+    {ok, _, Token2, IsLast} = lfm_proxy:ls(Worker, SessId, {path, Dir}, 0, 2000, Token),
+    ls(Worker, SessId, Dir, Token2, IsLast).
