@@ -32,7 +32,7 @@
     mark_failed_invalidation/1, mark_cancelled_invalidation/1,
     increase_files_to_process_counter/2, increase_files_processed_counter/1,
     mark_failed_file_processing/1, increase_files_transferred_counter/1,
-    mark_data_transfer_finished/3, increase_files_invalidated_counter/1,
+    mark_data_transfer_finished/4, increase_files_invalidated_counter/1,
     restart_unfinished_transfers/1]).
 
 % list functions
@@ -551,13 +551,18 @@ increase_files_invalidated_counter(TransferId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec mark_data_transfer_finished(undefined | id(), od_provider:id(),
-    non_neg_integer()) -> {ok, undefined | id()} | {error, term()}.
-mark_data_transfer_finished(undefined, _ProviderId, _Bytes) ->
-    {ok, undefined};
-mark_data_transfer_finished(TransferId, ProviderId, Bytes) ->
+    non_neg_integer(), od_space:id()) -> {ok, undefined | id()} | {error, term()}.
+mark_data_transfer_finished(undefined, ProviderId, Bytes, SpaceId) ->
     CurrentTime = provider_logic:zone_time_seconds(),
-    {ok, #document{value = #transfer{space_id = SpaceId}}} = ?MODULE:get(TransferId),
-    ok = space_transfer_stats:update(SpaceId, ProviderId, Bytes, CurrentTime),
+    ok = space_transfer_stats:update(
+        ?ON_THE_FLY_TRANSFERS_TYPE, SpaceId, ProviderId, Bytes, CurrentTime
+    ),
+    {ok, undefined};
+mark_data_transfer_finished(TransferId, ProviderId, Bytes, SpaceId) ->
+    CurrentTime = provider_logic:zone_time_seconds(),
+    ok = space_transfer_stats:update(
+        ?JOB_TRANSFERS_TYPE, SpaceId, ProviderId, Bytes, CurrentTime
+    ),
 
     update(TransferId, fun(Transfer = #transfer{
         bytes_transferred = OldBytes,
