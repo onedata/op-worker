@@ -15,7 +15,7 @@
 -include("proto/oneclient/fuse_messages.hrl").
 
 %% API
--export([mkdir/2, mkdir/3, mkdir/4, ls/4, read_dir_plus/4, read_dir_plus/5,
+-export([mkdir/2, mkdir/3, mkdir/4, ls/4, ls/5, read_dir_plus/4, read_dir_plus/5,
     get_child_attr/3, get_children_count/2]).
 
 %%%===================================================================
@@ -74,6 +74,25 @@ ls(SessId, FileKey, Offset, Limit) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Lists some contents of a directory.
+%% Returns up to Limit of entries. Uses token to choose starting entry.
+%% @end
+%%--------------------------------------------------------------------
+-spec ls(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
+    Offset :: integer(), Limit :: integer(), Token :: undefined | binary()) ->
+    {ok, [{fslogic_worker:file_guid(), file_meta:name()}], Token :: binary(),
+        IsLast :: boolean()} | logical_file_manager:error_reply().
+ls(SessId, FileKey, Offset, Limit, Token) ->
+    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
+    remote_utils:call_fslogic(SessId, file_request, FileGuid,
+        #get_file_children{offset = Offset, size = Limit, index_token = Token},
+        fun(#file_children{child_links = List, index_token = Token2, is_last = IL}) ->
+            {ok, [{Guid_, FileName}
+                || #child_link{guid = Guid_, name = FileName} <- List], Token2, IL}
+        end).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Lists some contents of a directory. Returns attributes of files.
 %% Returns up to Limit of entries, starting with Offset-th entry.
 %% @end
@@ -97,13 +116,14 @@ read_dir_plus(SessId, FileKey, Offset, Limit) ->
 %%--------------------------------------------------------------------
 -spec read_dir_plus(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     Offset :: integer(), Limit :: integer(), Token :: undefined | binary()) ->
-    {ok, [#file_attr{}], IsLast :: boolean()} | logical_file_manager:error_reply().
+    {ok, [#file_attr{}], Token :: binary(), IsLast :: boolean()} |
+    logical_file_manager:error_reply().
 read_dir_plus(SessId, FileKey, Offset, Limit, Token) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #get_file_children_attrs{offset = Offset, size = Limit, index_token = Token},
-        fun(#file_children_attrs{child_attrs = Attrs, is_last = IL}) ->
-            {ok, Attrs, IL}
+        fun(#file_children_attrs{child_attrs = Attrs, index_token = Token2, is_last = IL}) ->
+            {ok, Attrs, Token2, IL}
         end).
 
 %%--------------------------------------------------------------------
