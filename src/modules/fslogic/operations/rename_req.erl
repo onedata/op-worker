@@ -452,6 +452,8 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentFileCtx0, Targ
           {error, ?ENOENT} -> ok
         end
     end,
+    {NewChildCtx, _} = file_ctx:get_child(TargetParentFileCtx, TargetName, UserCtx),
+    fslogic_event_emitter:emit_file_renamed_to_client(NewChildCtx, TargetName, UserCtx),
     {SourceFileCtx2, TargetFileId}.
 
 %%--------------------------------------------------------------------
