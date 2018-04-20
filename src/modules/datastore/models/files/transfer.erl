@@ -32,7 +32,7 @@
     mark_failed_invalidation/1, mark_cancelled_invalidation/1,
     increase_files_to_process_counter/2, increase_files_processed_counter/1,
     mark_failed_file_processing/1, increase_files_transferred_counter/1,
-    mark_data_transfer_finished/4, increase_files_invalidated_counter/1,
+    mark_data_transfer_finished/3, increase_files_invalidated_counter/1,
     restart_unfinished_transfers/1]).
 
 % list functions
@@ -547,23 +547,29 @@ increase_files_invalidated_counter(TransferId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Marks in transfer doc successful transfer of 'Bytes' bytes.
+%% Marks in transfer doc successful transfer of 'Bytes' bytes per provider.
 %% @end
 %%--------------------------------------------------------------------
--spec mark_data_transfer_finished(undefined | id(), od_provider:id(),
-    non_neg_integer(), od_space:id()) -> {ok, undefined | id()} | {error, term()}.
-mark_data_transfer_finished(undefined, ProviderId, Bytes, SpaceId) ->
+-spec mark_data_transfer_finished(TransferId :: undefined | id(), od_space:id(),
+    BytesPerProvider :: #{od_provider:id() => non_neg_integer()}
+) ->
+    {ok, undefined | id()} | {error, term()}.
+mark_data_transfer_finished(undefined, SpaceId, BytesPerProvider) ->
     CurrentTime = provider_logic:zone_time_seconds(),
     ok = space_transfer_stats:update(
-        ?ON_THE_FLY_TRANSFERS_TYPE, SpaceId, ProviderId, Bytes, CurrentTime
+        ?ON_THE_FLY_TRANSFERS_TYPE, SpaceId, BytesPerProvider, CurrentTime
     ),
     {ok, undefined};
-mark_data_transfer_finished(TransferId, ProviderId, Bytes, SpaceId) ->
+mark_data_transfer_finished(TransferId, SpaceId, BytesPerProvider) ->
     CurrentTime = provider_logic:zone_time_seconds(),
     ok = space_transfer_stats:update(
-        ?JOB_TRANSFERS_TYPE, SpaceId, ProviderId, Bytes, CurrentTime
+        ?JOB_TRANSFERS_TYPE, SpaceId, BytesPerProvider, CurrentTime
     ),
 
+    NewTimestamps = maps:map(fun(_, _) -> CurrentTime end, BytesPerProvider),
+    BytesTransferred = maps:fold(
+        fun(_, Bytes, Acc) -> Acc + Bytes end, 0, BytesPerProvider
+    ),
     update(TransferId, fun(Transfer = #transfer{
         bytes_transferred = OldBytes,
         start_time = StartTime,
@@ -573,25 +579,24 @@ mark_data_transfer_finished(TransferId, ProviderId, Bytes, SpaceId) ->
         dy_hist = DyHistograms,
         mth_hist = MthHistograms
     }) ->
-        LastUpdate = maps:get(ProviderId, LastUpdateMap, StartTime),
         {ok, Transfer#transfer{
-            bytes_transferred = OldBytes + Bytes,
-            last_update = maps:put(ProviderId, CurrentTime, LastUpdateMap),
+            bytes_transferred = OldBytes + BytesTransferred,
+            last_update = maps:merge(LastUpdateMap, NewTimestamps),
             min_hist = transfer_histograms:update(
-                ProviderId, Bytes, MinHistograms,
-                ?MINUTE_STAT_TYPE, LastUpdate, CurrentTime
+                BytesPerProvider, MinHistograms, ?MINUTE_STAT_TYPE,
+                LastUpdateMap, StartTime, CurrentTime
             ),
             hr_hist = transfer_histograms:update(
-                ProviderId, Bytes, HrHistograms,
-                ?HOUR_STAT_TYPE, LastUpdate, CurrentTime
+                BytesPerProvider, HrHistograms, ?HOUR_STAT_TYPE,
+                LastUpdateMap, StartTime, CurrentTime
             ),
             dy_hist = transfer_histograms:update(
-                ProviderId, Bytes, DyHistograms,
-                ?DAY_STAT_TYPE, LastUpdate, CurrentTime
+                BytesPerProvider, DyHistograms, ?DAY_STAT_TYPE,
+                LastUpdateMap, StartTime, CurrentTime
             ),
             mth_hist = transfer_histograms:update(
-                ProviderId, Bytes, MthHistograms,
-                ?MONTH_STAT_TYPE, LastUpdate, CurrentTime
+                BytesPerProvider, MthHistograms, ?MONTH_STAT_TYPE,
+                LastUpdateMap, StartTime, CurrentTime
             )
         }}
     end).

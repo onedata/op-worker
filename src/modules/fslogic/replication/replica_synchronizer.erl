@@ -47,7 +47,8 @@
           from_to_refs = #{} :: #{from() => [fetch_ref()]},
           ref_to_froms = #{} :: #{fetch_ref() => [from()]},
           from_to_transfer_id = #{} :: #{from() => transfer:id() | undefined},
-          transfer_id_to_from = #{} :: #{transfer:id() | undefined => from()}
+          transfer_id_to_from = #{} :: #{transfer:id() | undefined => from()},
+          cached_stats = #{} :: #{transfer:id() => #{od_provider:id() => [block()]}}
          }).
 
 -export([synchronize/5, cancel/1, init/1, handle_call/3, handle_cast/2,
@@ -176,9 +177,8 @@ handle_info({Ref, active, ProviderId, Block}, State) ->
     end,
     lists:foreach(
       fun(TransferId) ->
-          {ok, _} = transfer:mark_data_transfer_finished(TransferId, ProviderId,
-                                                         Block#file_block.size,
-                                                         SpaceId)
+          Stats = #{ProviderId => Block#file_block.size},
+          {ok, _} = transfer:mark_data_transfer_finished(TransferId, SpaceId, Stats)
       end, TransferIds),
     {noreply, State, ?DIE_AFTER};
 
@@ -225,6 +225,80 @@ terminate(_Reason, _State) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Cache transferred block size in state as to not update transfer documents
+%% hundred of times per second.
+%% @end
+%%--------------------------------------------------------------------
+-spec cache_stats([transfer:id() | undefined], od_provider:id(), block(),
+    #state{}) -> #state{}.
+cache_stats(TransferIds, ProviderId, Block, State) ->
+    CachedStats = lists:foldl(fun(TransferId, Cache) ->
+        OldStats = maps:get(TransferId, Cache, #{}),
+        AlreadyTransferredBlocks = maps:get(ProviderId, OldStats, []),
+        NewStats = OldStats#{ProviderId => [Block | AlreadyTransferredBlocks]},
+        Cache#{TransferId => NewStats}
+    end, State#state.cached_stats, TransferIds),
+
+    State#state{cached_stats = CachedStats}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Flush cached transfer stats updating transfer documents.
+%% @end
+%%--------------------------------------------------------------------
+-spec flush_stats(#state{}) -> #state{}.
+flush_stats(#state{cached_stats = Cache} = State) when map_size(Cache) == 0 ->
+    State;
+flush_stats(State) ->
+    #state{
+        file_ctx = FileCtx,
+        space_id = SpaceId,
+        user_id = UserId,
+        session_id = SessId,
+        cached_stats = Cache
+    } = State,
+
+    {StatsPerTransfer, AllBlocks} =
+        maps:fold(fun(Tid, BlockStats, {OldStatsPerTransfer, OldAllBlocks}) ->
+            {ByteStats, TransferBlocks} = maps:fold(
+                fun(ProviderId, Blocks, {OldByteStats, OldTransferBlocks}) ->
+                    Bytes = get_blocks_summarized_size(Blocks),
+                    NewByteStats = OldByteStats#{ProviderId => Bytes},
+                    NewTransferBlocks = [Blocks | OldTransferBlocks],
+                    {NewByteStats, NewTransferBlocks}
+            end, {#{}, []}, BlockStats),
+            NewStatsPerTransfer = OldStatsPerTransfer#{Tid => ByteStats},
+            NewAllBlocks = [TransferBlocks | OldAllBlocks],
+            {NewStatsPerTransfer, NewAllBlocks}
+        end, {#{}, []}, Cache),
+
+    {ok, _} = replica_updater:update(FileCtx, AllBlocks, undefined, false),
+    ok = fslogic_event_emitter:emit_file_location_changed(
+        FileCtx, [SessId], AllBlocks
+    ),
+
+    lists:foreach(fun({TransferId, BytesPerProvider}) ->
+        case transfer:mark_data_transfer_finished(TransferId, SpaceId, BytesPerProvider) of
+            {ok, _} ->
+                ok;
+            {error, Error} ->
+                ?error("Failed to update trasnfer statistics for ~p transfer "
+                       "due to ~p", [TransferId, Error])
+        end
+    end, maps:to_list(StatsPerTransfer)),
+    monitoring_event:emit_rtransfer_statistics(
+        SpaceId, UserId, get_blocks_summarized_size(AllBlocks)
+    ),
+    State#state{cached_stats = #{}}.
+
+get_blocks_summarized_size(Blocks) ->
+    lists:foldl(fun(#file_block{size = Size}, Acc) -> Acc + Size end, 0, Blocks).
+
 
 %%--------------------------------------------------------------------
 %% @private

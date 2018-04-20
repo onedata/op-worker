@@ -19,10 +19,11 @@
 -type type() :: binary().
 -type histograms() :: #{od_provider:id() => histogram:histogram()}.
 -type timestamp() :: non_neg_integer().
+-type timestamps() :: #{od_provider:id() => non_neg_integer()}.
 
 %% API
 -export([
-    new/3, update/6,
+    new/2, update/6,
     pad_with_zeroes/4,
     trim_min_histograms/2, trim_histograms/4, trim_timestamp/1,
     type_to_time_window/1, type_to_hist_length/1,
@@ -41,37 +42,46 @@
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Creates a new transfer_histograms based on ProviderId, Bytes and Type.
+%% Creates a new transfer_histograms based on specified type and
+%% bytes per provider.
 %% @end
 %%-------------------------------------------------------------------
--spec new(ProviderId :: od_provider:id(), Bytes :: non_neg_integer(),
+-spec new(BytesPerProvider :: #{od_provider:id() => size()},
     HistogramsType :: type()) -> histograms().
-new(ProviderId, Bytes, HistogramsType) ->
-    Histogram = histogram:new(type_to_hist_length(HistogramsType)),
-    #{ProviderId => histogram:increment(Histogram, Bytes)}.
+new(BytesPerProvider, HistogramsType) ->
+    HistogramLength = type_to_hist_length(HistogramsType),
+    maps:map(fun(_ProviderId, Bytes) ->
+        histogram:increment(histogram:new(HistogramLength), Bytes)
+    end, BytesPerProvider).
 
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Updates transfer_histograms for specified provider.
-%% Specified CurrentTime must be greater or equal than LastUpdate.
+%% Updates transfer_histograms for specified providers.
+%% Specified CurrentTime is assumed to be greater than LastUpdate.
 %% @end
 %%-------------------------------------------------------------------
--spec update(ProviderId :: od_provider:id(), Bytes :: non_neg_integer(),
-    histograms(), HistogramsType :: type(), LastUpdate :: timestamp(),
-    CurrentTime :: timestamp()) -> histograms().
-update(
-    ProviderId, Bytes, Histograms, HistogramsType, LastUpdate, CurrentTime
-) when CurrentTime >= LastUpdate ->
-    Histogram = case maps:find(ProviderId, Histograms) of
-        {ok, OldHistogram} ->
-            Window = type_to_time_window(HistogramsType),
-            ShiftSize = (CurrentTime div Window) - (LastUpdate div Window),
-            histogram:shift(OldHistogram, ShiftSize);
-        error ->
-            histogram:new(type_to_hist_length(HistogramsType))
-    end,
-    Histograms#{ProviderId => histogram:increment(Histogram, Bytes)}.
+-spec update(BytesPerProvider :: #{od_provider:id() => size()}, histograms(),
+    HistogramsType :: type(), LastUpdates :: timestamps(),
+    StartTime :: timestamp(), CurrentTime :: timestamp()
+) ->
+    histograms().
+update(BytesPerProvider, Histograms, HistogramsType,
+    LastUpdates, StartTime, CurrentTime
+) ->
+    Window = type_to_time_window(HistogramsType),
+    HistogramLength = type_to_hist_length(HistogramsType),
+    maps:fold(fun(ProviderId, Bytes, OldHistograms) ->
+        Histogram = case maps:find(ProviderId, OldHistograms) of
+            {ok, OldHistogram} ->
+                LastUpdate = maps:get(ProviderId, LastUpdates, StartTime),
+                ShiftSize = (CurrentTime div Window) - (LastUpdate div Window),
+                histogram:shift(OldHistogram, ShiftSize);
+            error ->
+                histogram:new(HistogramLength)
+        end,
+        OldHistograms#{ProviderId => histogram:increment(Histogram, Bytes)}
+    end, Histograms, BytesPerProvider).
 
 
 %%-------------------------------------------------------------------
@@ -82,9 +92,8 @@ update(
 %% @end
 %%-------------------------------------------------------------------
 -spec pad_with_zeroes(histograms(), Window :: non_neg_integer(),
-    CurrentTime :: timestamp(),
-    LastUpdates :: #{od_provider:id() => timestamp()}) -> histograms().
-pad_with_zeroes(Histograms, Window, CurrentTime, LastUpdates) ->
+    LastUpdates :: timestamps(), CurrentTime :: timestamp()) -> histograms().
+pad_with_zeroes(Histograms, Window, LastUpdates, CurrentTime) ->
     maps:map(fun(Provider, Histogram) ->
         LastUpdate = maps:get(Provider, LastUpdates),
         ShiftSize = max(0, (CurrentTime div Window) - (LastUpdate div Window)),
