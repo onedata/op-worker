@@ -428,6 +428,10 @@ translate_arg_name(<<"xlator_options">>) -> <<"xlatorOptions">>;
 translate_arg_name(<<"latency_min">>) -> <<"latencyMin">>;
 translate_arg_name(<<"latency_max">>) -> <<"latencyMax">>;
 translate_arg_name(<<"timeout_probability">>) -> <<"timeoutProbability">>;
+translate_arg_name(<<"simulated_filesystem_parameters">>) ->
+    <<"simulatedFilesystemParameters">>;
+translate_arg_name(<<"simulated_filesystem_grow_speed">>) ->
+    <<"simulatedFilesystemGrowSpeed">>;
 translate_arg_name(<<"storage_path_type">>) -> <<"storagePathType">>;
 translate_arg_name(Name) -> Name.
 
