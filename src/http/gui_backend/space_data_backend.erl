@@ -25,8 +25,9 @@
 -include_lib("ctool/include/privileges.hrl").
 
 -define(CURRENT_TRANSFERS_PREFIX, <<"current">>).
+-define(SCHEDULED_TRANSFERS_PREFIX, <<"scheduled">>).
 -define(COMPLETED_TRANSFERS_PREFIX, <<"completed">>).
--define(MAX_TRANSFERS_TO_LIST, application:get_env(?APP_NAME, max_transfers_to_list, 50)).
+-define(MAX_TRANSFERS_TO_LIST, application:get_env(?APP_NAME, max_transfers_to_list, all)).
 -define(TRANSFERS_LIST_OFFSET, application:get_env(?APP_NAME, transfers_list_offset, 0)).
 
 %% API
@@ -369,19 +370,24 @@ space_record(SpaceId, HasViewPrivileges) ->
     % providers and transfers.
     {
         RelationWithViewPrivileges,
-        CurrentTransferListId, CompletedTransferListId,
-        TransferOnTheFlyStatId, TransferJobStatId, TransferAllStatId
+        CurrentTransferListId,
+        ScheduledTransferListId, 
+        CompletedTransferListId,
+        TransferOnTheFlyStatId,
+        TransferJobStatId,
+        TransferAllStatId
     } = case HasViewPrivileges of
         true -> {
             SpaceId,
             op_gui_utils:ids_to_association(?CURRENT_TRANSFERS_PREFIX, SpaceId),
+            op_gui_utils:ids_to_association(?SCHEDULED_TRANSFERS_PREFIX, SpaceId),
             op_gui_utils:ids_to_association(?COMPLETED_TRANSFERS_PREFIX, SpaceId),
             op_gui_utils:ids_to_association(?ON_THE_FLY_TRANSFERS_TYPE, SpaceId),
             op_gui_utils:ids_to_association(?JOB_TRANSFERS_TYPE, SpaceId),
             op_gui_utils:ids_to_association(?ALL_TRANSFERS_TYPE, SpaceId)
         };
         false -> {
-            null, null, null, null, null, null
+            null, null, null, null, null, null, null
         }
     end,
     [
@@ -393,6 +399,7 @@ space_record(SpaceId, HasViewPrivileges) ->
         {<<"groupList">>, RelationWithViewPrivileges},
         {<<"providerList">>, RelationWithViewPrivileges},
         {<<"currentTransferList">>, CurrentTransferListId},
+        {<<"scheduledTransferList">>, ScheduledTransferListId},
         {<<"completedTransferList">>, CompletedTransferListId},
         {<<"onTheFlyTransferList">>, RelationWithViewPrivileges},
         {<<"transferOnTheFlyStat">>, TransferOnTheFlyStatId},
@@ -472,9 +479,17 @@ space_transfer_list_record(RecordId) ->
     {Prefix, SpaceId} = op_gui_utils:association_to_ids(RecordId),
     {ok, Transfers} = case Prefix of
         ?CURRENT_TRANSFERS_PREFIX ->
-            transfer:list_scheduled_and_current_transfers(SpaceId,
-                ?TRANSFERS_LIST_OFFSET, ?MAX_TRANSFERS_TO_LIST);
-        ?COMPLETED_TRANSFERS_PREFIX->
+            transfer:list_current_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET,
+                ?MAX_TRANSFERS_TO_LIST);
+        ?SCHEDULED_TRANSFERS_PREFIX ->
+            {ok, Scheduled} = transfer:list_scheduled_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET,
+               ?MAX_TRANSFERS_TO_LIST),
+            {ok, Current} = transfer:list_current_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET,
+               ?MAX_TRANSFERS_TO_LIST),
+            {ok, Completed} = transfer:list_past_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET,
+               ?MAX_TRANSFERS_TO_LIST),
+            {ok, (Scheduled -- Current) -- Completed};
+        ?COMPLETED_TRANSFERS_PREFIX ->
             transfer:list_past_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET,
                 ?MAX_TRANSFERS_TO_LIST)
     end,
