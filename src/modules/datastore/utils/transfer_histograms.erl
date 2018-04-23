@@ -46,7 +46,7 @@
 %% bytes per provider.
 %% @end
 %%-------------------------------------------------------------------
--spec new(BytesPerProvider :: #{od_provider:id() => size()},
+-spec new(BytesPerProvider :: #{od_provider:id() => non_neg_integer()},
     HistogramsType :: type()) -> histograms().
 new(BytesPerProvider, HistogramsType) ->
     HistogramLength = type_to_hist_length(HistogramsType),
@@ -61,8 +61,8 @@ new(BytesPerProvider, HistogramsType) ->
 %% Specified CurrentTime is assumed to be greater than LastUpdate.
 %% @end
 %%-------------------------------------------------------------------
--spec update(BytesPerProvider :: #{od_provider:id() => size()}, histograms(),
-    HistogramsType :: type(), LastUpdates :: timestamps(),
+-spec update(BytesPerProvider :: #{od_provider:id() => non_neg_integer()},
+    histograms(), HistogramsType :: type(), LastUpdates :: timestamps(),
     StartTime :: timestamp(), CurrentTime :: timestamp()
 ) ->
     histograms().

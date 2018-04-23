@@ -88,7 +88,8 @@ emit_file_location_changed(FileCtx, ExcludedSessions) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec emit_file_location_changed(file_ctx:ctx(), [session:id()],
-    fslogic_blocks:block() | undefined) -> ok | {error, Reason :: term()}.
+    fslogic_blocks:blocks() | fslogic_blocks:block() | undefined) ->
+    ok | {error, Reason :: term()}.
 emit_file_location_changed(FileCtx, ExcludedSessions, Range) ->
     {Location, _FileCtx2} = file_ctx:get_file_location_with_filled_gaps(FileCtx, Range),
     event:emit(#file_location_changed_event{

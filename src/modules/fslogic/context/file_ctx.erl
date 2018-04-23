@@ -749,8 +749,11 @@ get_storage_doc(FileCtx = #file_ctx{storage_doc = StorageDoc}) ->
 %% stores guid instead of uuid.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_location_with_filled_gaps(ctx(), fslogic_blocks:block() | undefined) ->
+-spec get_file_location_with_filled_gaps(ctx(),
+    fslogic_blocks:blocks() | fslogic_blocks:block() | undefined) ->
     {#file_location{}, ctx()}.
+get_file_location_with_filled_gaps(FileCtx, ReqRange) when not is_list(ReqRange)->
+    get_file_location_with_filled_gaps(FileCtx, [ReqRange]);
 get_file_location_with_filled_gaps(FileCtx, ReqRange) ->
     % get locations
     {Locations, FileCtx2} = file_ctx:get_file_location_docs(FileCtx),
@@ -765,14 +768,15 @@ get_file_location_with_filled_gaps(FileCtx, ReqRange) ->
         fun(#document{value = #file_location{blocks = _Blocks}}, Acc) ->
             fslogic_blocks:merge(Acc, _Blocks)
         end, [], Locations),
-    RequestedRange = utils:ensure_defined(ReqRange, undefined, #file_block{offset = 0, size = Size}),
-    ExtendedRequestedRange = case RequestedRange of
-        #file_block{offset = O, size = S} when O + S < Size ->
-            RequestedRange#file_block{size = Size - O};
-        _ -> RequestedRange
-    end,
+    ExtendedRequestedRange = lists:map(fun(RequestedRange) ->
+        case RequestedRange of
+            #file_block{offset = O, size = S} when O + S < Size ->
+                RequestedRange#file_block{size = Size - O};
+            _ -> RequestedRange
+        end
+    end, utils:ensure_defined(ReqRange, [undefined], [#file_block{offset = 0, size = Size}])),
     Gaps = fslogic_blocks:consolidate(
-        fslogic_blocks:invalidate([ExtendedRequestedRange], AllRanges)
+        fslogic_blocks:invalidate(ExtendedRequestedRange, AllRanges)
     ),
     BlocksWithFilledGaps = fslogic_blocks:merge(Blocks, Gaps),
 
