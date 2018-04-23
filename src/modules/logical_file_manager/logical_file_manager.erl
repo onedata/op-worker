@@ -42,7 +42,7 @@
 -export_type([handle/0, file_key/0, error_reply/0]).
 
 %% Functions operating on directories
--export([mkdir/2, mkdir/3, mkdir/4, ls/4, read_dir_plus/4, read_dir_plus/5,
+-export([mkdir/2, mkdir/3, mkdir/4, ls/4, ls/5, read_dir_plus/4, read_dir_plus/5,
     get_child_attr/3, get_children_count/2, get_parent/2]).
 %% Functions operating on directories or files
 -export([mv/3, cp/3, get_file_path/2, get_file_guid/2, rm_recursive/2, unlink/3]).
@@ -113,6 +113,19 @@ ls(SessId, FileKey, Offset, Limit) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Lists some contents of a directory.
+%% Returns up to Limit of entries, starting with Offset-th entry.
+%% @end
+%%--------------------------------------------------------------------
+-spec ls(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
+    Offset :: integer(), Limit :: integer(), Token :: undefined | binary()) ->
+    {ok, [{fslogic_worker:file_guid(), file_meta:name()}], NewToken :: binary(),
+        IsLast :: boolean()} | error_reply().
+ls(SessId, FileKey, Offset, Limit, Token) ->
+    ?run(fun() -> lfm_dirs:ls(SessId, FileKey, Offset, Limit, Token) end).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Lists some contents of a directory. Returns attributes of files.
 %% Returns up to Limit of entries. Uses token to choose starting entry.
 %% @end
@@ -131,7 +144,8 @@ read_dir_plus(SessId, FileKey, Offset, Limit) ->
 %%--------------------------------------------------------------------
 -spec read_dir_plus(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     Offset :: integer(), Limit :: integer(), Token :: undefined | binary()) ->
-    {ok, [#file_attr{}], IsLast :: boolean()} | logical_file_manager:error_reply().
+    {ok, [#file_attr{}], NewToken :: binary(), IsLast :: boolean()} |
+    logical_file_manager:error_reply().
 read_dir_plus(SessId, FileKey, Offset, Limit, Token) ->
     ?run(fun() -> lfm_dirs:read_dir_plus(SessId, FileKey, Offset, Limit, Token) end).
 

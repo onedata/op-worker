@@ -32,7 +32,7 @@
 -export([hidden_file_name/1, is_hidden/1, is_child_of_hidden_dir/1]).
 -export([add_share/2, remove_share/2]).
 -export([get_parent/1, get_parent_uuid/1]).
--export([get_child/2, list_children/3]).
+-export([get_child/2, list_children/3, list_children/4]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
     make_space_exist/1, new_doc/7, type/1, get_ancestors/1,
     get_locations_by_uuid/1, rename/4]).
@@ -382,24 +382,44 @@ get_child(ParentUuid, TreeIds, Name) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Lists children of given #file_meta.
+%% @equiv list_children(Entry, Offset, Size, undefined)
 %% @end
 %%--------------------------------------------------------------------
 -spec list_children(entry(), non_neg_integer(), non_neg_integer()) ->
     {ok, [#child_link_uuid{}]} | {error, term()}.
 list_children(Entry, Offset, Size) ->
+    list_children(Entry, Offset, Size, undefined).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Lists children of given #file_meta.
+%% @end
+%%--------------------------------------------------------------------
+-spec list_children(entry(), non_neg_integer(), non_neg_integer(),
+    datastore_links_iter:token() | undefined) ->
+    {ok, [#child_link_uuid{}], datastore_links_iter:token()} |
+    {ok, [#child_link_uuid{}]} | {error, term()}.
+list_children(Entry, Offset, Size, Token) ->
     ?run(begin
         {ok, #document{key = FileUuid}} = file_meta:get(Entry),
+        Opts = case Token of
+            undefined -> #{offset => Offset, size => Size};
+            _ -> #{offset => Offset, size => Size, token => Token}
+        end,
         Result = datastore_model:fold_links(?CTX, FileUuid, all, fun
             (Link = #link{name = Name}, Acc) ->
                 case is_hidden(Name) of
                     true -> {ok, Acc};
                     false -> {ok, [Link | Acc]}
                 end
-        end, [], #{offset => Offset, size => Size}),
+        end, [], Opts),
         case Result of
-            {ok, Links} -> {ok, tag_children(lists:reverse(Links))};
-            {error, Reason} -> {error, Reason}
+            {{ok, Links}, Token2} ->
+                {ok, tag_children(lists:reverse(Links)), Token2};
+            {ok, Links} ->
+                {ok, tag_children(lists:reverse(Links))};
+            {error, Reason} ->
+                {error, Reason}
         end
     end).
 

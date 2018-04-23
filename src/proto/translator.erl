@@ -246,8 +246,9 @@ translate_from_protobuf(#'GetFileAttr'{}) ->
     #get_file_attr{};
 translate_from_protobuf(#'GetChildAttr'{name = Name}) ->
     #get_child_attr{name = Name};
-translate_from_protobuf(#'GetFileChildren'{offset = Offset, size = Size}) ->
-    #get_file_children{offset = Offset, size = Size};
+translate_from_protobuf(#'GetFileChildren'{offset = Offset, size = Size,
+    index_token = Token}) ->
+    #get_file_children{offset = Offset, size = Size, index_token = Token};
 translate_from_protobuf(#'GetFileChildrenAttrs'{offset = Offset, size = Size,
     index_token = Token}) ->
     #get_file_children_attrs{offset = Offset, size = Size, index_token = Token};
@@ -311,11 +312,12 @@ translate_from_protobuf(#'FileAttr'{} = FileAttr) ->
         shares = FileAttr#'FileAttr'.shares,
         owner_id = FileAttr#'FileAttr'.owner_id
     };
-translate_from_protobuf(#'FileChildren'{child_links = FileEntries}) ->
+translate_from_protobuf(#'FileChildren'{child_links = FileEntries,
+    index_token = Token, is_last = IsLast}) ->
     #file_children{child_links = lists:map(
         fun(ChildLink) ->
             translate_from_protobuf(ChildLink)
-        end, FileEntries)};
+        end, FileEntries), index_token = Token, is_last = IsLast};
 translate_from_protobuf(#'FileChildrenAttrs'{child_attrs = Children,
     index_token = Token, is_last = IsLast}) ->
     #file_children_attrs{child_attrs = lists:map(
@@ -749,8 +751,10 @@ translate_to_protobuf(#get_file_attr{}) ->
     {get_file_attr, #'GetFileAttr'{}};
 translate_to_protobuf(#get_child_attr{name = Name}) ->
     {get_child_attr, #'GetChildAttr'{name = Name}};
-translate_to_protobuf(#get_file_children{offset = Offset, size = Size}) ->
-    {get_file_children, #'GetFileChildren'{offset = Offset, size = Size}};
+translate_to_protobuf(#get_file_children{offset = Offset, size = Size,
+    index_token = Token}) ->
+    {get_file_children, #'GetFileChildren'{offset = Offset, size = Size,
+        index_token = Token}};
 translate_to_protobuf(#get_file_children_attrs{offset = Offset, size = Size,
     index_token = Token}) ->
     {get_file_children_attrs, #'GetFileChildrenAttrs'{offset = Offset,
@@ -812,10 +816,11 @@ translate_to_protobuf(#file_attr{} = FileAttr) ->
         shares = FileAttr#file_attr.shares,
         owner_id = FileAttr#file_attr.owner_id
     }};
-translate_to_protobuf(#file_children{child_links = FileEntries}) ->
+translate_to_protobuf(#file_children{child_links = FileEntries,
+    index_token = Token, is_last = IsLast}) ->
     {file_children, #'FileChildren'{child_links = lists:map(fun(ChildLink) ->
         translate_to_protobuf(ChildLink)
-    end, FileEntries)}};
+    end, FileEntries), index_token = Token, is_last = IsLast}};
 translate_to_protobuf(#file_children_attrs{child_attrs = Children,
     index_token = Token, is_last = IsLast}) ->
     {file_children_attrs, #'FileChildrenAttrs'{child_attrs = lists:map(fun(Child) ->

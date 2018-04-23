@@ -71,7 +71,7 @@
 -export([get_canonical_path/1, get_file_doc/1,
     get_file_doc_including_deleted/1, get_parent/2, get_storage_file_id/1,
     get_aliased_name/2, get_posix_storage_user_context/2, get_times/1,
-    get_parent_guid/2, get_child/3, get_file_children/4, get_logical_path/2,
+    get_parent_guid/2, get_child/3, get_file_children/4, get_file_children/5, get_logical_path/2,
     get_storage_id/1, get_storage_doc/1, get_file_location_with_filled_gaps/2,
     get_or_create_local_file_location_doc/1, get_local_file_location_doc/1,
     get_file_location_ids/1, get_file_location_docs/1, get_acl/1,
@@ -670,12 +670,24 @@ get_child_canonical_path(ParentCtx, FileName) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns list of file children.
+%% @equiv get_file_children(FileCtx, UserCtx, Offset, Limit, undefined).
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_children(ctx(), user_ctx:ctx(), Offset :: non_neg_integer(), Limit :: non_neg_integer()) ->
     {Children :: [ctx()], NewFileCtx :: ctx()}.
 get_file_children(FileCtx, UserCtx, Offset, Limit) ->
+    get_file_children(FileCtx, UserCtx, Offset, Limit, undefined).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of file children.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_children(ctx(), user_ctx:ctx(), Offset :: non_neg_integer(),
+    Limit :: non_neg_integer(), Token :: datastore_links_iter:token() | undefined) ->
+    {Children :: [ctx()], NewToken :: datastore_links_iter:token(), NewFileCtx :: ctx()} |
+    {Children :: [ctx()], NewFileCtx :: ctx()}.
+get_file_children(FileCtx, UserCtx, Offset, Limit, Token) ->
     case is_user_root_dir_const(FileCtx, UserCtx) of
         true ->
             SessionId = user_ctx:get_session_id(UserCtx),
@@ -694,14 +706,18 @@ get_file_children(FileCtx, UserCtx, Offset, Limit) ->
             end;
         false ->
             {FileDoc = #document{}, FileCtx2} = get_file_doc(FileCtx),
-            {ok, ChildrenLinks} = file_meta:list_children(FileDoc, Offset, Limit),
             SpaceId = get_space_id_const(FileCtx2),
             ShareId = get_share_id_const(FileCtx2),
-            Children =
-                lists:map(fun(#child_link_uuid{name = Name, uuid = Uuid}) ->
-                    new_child_by_uuid(Uuid, Name, SpaceId, ShareId)
-                end, ChildrenLinks),
-            {Children, FileCtx2}
+            MapFun = fun(#child_link_uuid{name = Name, uuid = Uuid}) ->
+                new_child_by_uuid(Uuid, Name, SpaceId, ShareId)
+            end,
+
+            case file_meta:list_children(FileDoc, Offset, Limit, Token) of
+                {ok, ChildrenLinks, Token2} ->
+                    {lists:map(MapFun, ChildrenLinks), Token2, FileCtx2};
+                {ok, ChildrenLinks} ->
+                    {lists:map(MapFun, ChildrenLinks), FileCtx2}
+            end
     end.
 
 %%--------------------------------------------------------------------
