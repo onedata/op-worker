@@ -18,7 +18,9 @@
               "latencyMin": "25",
               "latencyMax": "75",
               "timeoutProbability": "0.0",
-              "filter": "*"
+              "filter": "*",
+              "simulatedFilesystemParameters": "",
+              "simulatedFilesystemGrowSpeed": "0.0"
              }
             ],
             "users": [],
