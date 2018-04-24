@@ -33,6 +33,7 @@
 -define(STATS_AGGREGATION_TIME, application:get_env(
     ?APP_NAME, rtransfer_stats_aggregation_time, 1000)
 ).
+-define(FLUSH_STATS, flush_stats).
 
 -type fetch_ref() :: reference().
 -type block() :: fslogic_blocks:block().
@@ -53,8 +54,8 @@
           ref_to_froms = #{} :: #{fetch_ref() => [from()]},
           from_to_transfer_id = #{} :: #{from() => transfer:id() | undefined},
           transfer_id_to_from = #{} :: #{transfer:id() | undefined => from()},
-          aggregated_stats = #{} :: #{transfer:id() => #{od_provider:id() => [block()]}},
-          aggregation_timer :: undefined | reference()
+          cached_stats = #{} :: #{transfer:id() => #{od_provider:id() => [block()]}},
+          caching_timer :: undefined | reference()
          }).
 
 -export([synchronize/5, cancel/1, init/1, handle_call/3, handle_cast/2,
@@ -173,25 +174,15 @@ handle_info(timeout, State) ->
     {noreply, State, ?DIE_AFTER};
 
 handle_info({Ref, active, ProviderId, Block}, State) ->
-    #state{session_id = SessId, file_ctx = FileCtx, ref_to_froms = RefToFroms,
-           from_to_transfer_id = FromToTransferId, aggregation_timer = OldTimerRef
-    } = State,
-%%    fslogic_event_emitter:emit_file_location_changed(FileCtx, [SessId], Block),
+    #state{ref_to_froms = RefToFroms, from_to_transfer_id = FromToTransferId} = State,
     AffectedFroms = maps:get(Ref, RefToFroms, []),
     TransferIds = case maps:values(maps:with(AffectedFroms, FromToTransferId)) of
         [] -> [undefined];
         Values -> Values
     end,
-    TimerRef = case OldTimerRef of
-        undefined ->
-            erlang:start_timer(?STATS_AGGREGATION_TIME, self(), flush_stats);
-        _ ->
-            OldTimerRef
-    end,
-    NewState = cache_stats(TransferIds, ProviderId, Block, State),
-    {noreply, NewState#state{aggregation_timer = TimerRef}, ?DIE_AFTER};
+    {noreply, cache_stats(TransferIds, ProviderId, Block, State), ?DIE_AFTER};
 
-handle_info({timeout, TimerRef, flush_stats}, #state{aggregation_timer = TimerRef} = State) ->
+handle_info(?FLUSH_STATS, State) ->
     {noreply, flush_stats(State), ?DIE_AFTER};
 
 handle_info({Ref, complete, {ok, _} = _Status}, State) ->
@@ -239,84 +230,6 @@ terminate(_Reason, State) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Cache transferred block in state as to not update transfer documents
-%% hundred of times per second.
-%% @end
-%%--------------------------------------------------------------------
--spec cache_stats([transfer:id() | undefined], od_provider:id(), block(),
-    #state{}) -> #state{}.
-cache_stats(TransferIds, ProviderId, Block, State) ->
-    CachedStats = lists:foldl(fun(TransferId, Cache) ->
-        OldStats = maps:get(TransferId, Cache, #{}),
-        AlreadyTransferredBlocks = maps:get(ProviderId, OldStats, []),
-        NewStats = OldStats#{ProviderId => [Block | AlreadyTransferredBlocks]},
-        Cache#{TransferId => NewStats}
-    end, State#state.aggregated_stats, TransferIds),
-
-    State#state{aggregated_stats = CachedStats}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Aggregate cached transfer stats and update transfer documents.
-%% @end
-%%--------------------------------------------------------------------
--spec flush_stats(#state{}) -> #state{}.
-flush_stats(#state{aggregated_stats = Cache} = State) when map_size(Cache) == 0 ->
-    State;
-flush_stats(State) ->
-    #state{
-        file_ctx = FileCtx,
-        space_id = SpaceId,
-        user_id = UserId,
-        session_id = SessId,
-        aggregated_stats = Cache,
-        aggregation_timer = TimerRef
-    } = State,
-
-    {StatsPerTransfer, AllBlocks} =
-        maps:fold(fun(Tid, BlockStats, {OldStatsPerTransfer, OldAllBlocks}) ->
-            {ByteStats, TransferBlocks} = maps:fold(
-                fun(ProviderId, Blocks, {OldByteStats, OldTransferBlocks}) ->
-                    Bytes = get_blocks_summarized_size(Blocks),
-                    NewByteStats = OldByteStats#{ProviderId => Bytes},
-                    NewTransferBlocks = Blocks ++ OldTransferBlocks,
-                    {NewByteStats, NewTransferBlocks}
-            end, {#{}, []}, BlockStats),
-            NewStatsPerTransfer = OldStatsPerTransfer#{Tid => ByteStats},
-            NewAllBlocks = TransferBlocks ++ OldAllBlocks,
-            {NewStatsPerTransfer, NewAllBlocks}
-        end, {#{}, []}, Cache),
-
-    {ok, _} = replica_updater:update(FileCtx, AllBlocks, undefined, false),
-    ok = fslogic_event_emitter:emit_file_location_changed(FileCtx, [SessId], AllBlocks),
-
-    lists:foreach(fun({TransferId, BytesPerProvider}) ->
-        case transfer:mark_data_transfer_finished(TransferId, SpaceId, BytesPerProvider) of
-            {ok, _} ->
-                ok;
-            {error, Error} ->
-                ?error("Failed to update trasnfer statistics for ~p transfer "
-                       "due to ~p", [TransferId, Error])
-        end
-    end, maps:to_list(StatsPerTransfer)),
-    monitoring_event:emit_rtransfer_statistics(
-        SpaceId, UserId, get_blocks_summarized_size(AllBlocks)
-    ),
-
-    ok = case TimerRef of
-        undefined -> ok;
-        _ -> erlang:cancel_timer(TimerRef, [{async, true}, {info, false}])
-    end,
-    State#state{aggregated_stats = #{}, aggregation_timer = undefined}.
-
-get_blocks_summarized_size(Blocks) ->
-    lists:foldl(fun(#file_block{size = Size}, Acc) -> Acc + Size end, 0, Blocks).
-
 
 %%--------------------------------------------------------------------
 %% @private
@@ -652,3 +565,94 @@ get_holes(Offset, Size, [#file_block{offset = O} | Blocks], Acc) ->
     HoleSize = O - Offset,
     get_holes(Offset + HoleSize, Size - HoleSize, Blocks,
               [#file_block{offset = Offset, size = HoleSize} | Acc]).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Cache transferred block in state as to not update transfer documents
+%% hundred of times per second and set timeout after which cached stats will
+%% be flushed.
+%% @end
+%%--------------------------------------------------------------------
+-spec cache_stats([transfer:id() | undefined], od_provider:id(), block(),
+    #state{}) -> #state{}.
+cache_stats(TransferIds, ProviderId, Block, State) ->
+    UpdatedStats = lists:foldl(fun(TransferId, Stats) ->
+        TransferStats = maps:get(TransferId, Stats, #{}),
+        NewTransferStats = TransferStats#{
+            ProviderId => [Block | maps:get(ProviderId, TransferStats, [])]
+        },
+        Stats#{TransferId => NewTransferStats}
+    end, State#state.cached_stats, TransferIds),
+
+    NewState = State#state{cached_stats = UpdatedStats},
+    set_caching_timer(NewState).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Aggregate cached transfer stats and update transfer documents.
+%% @end
+%%--------------------------------------------------------------------
+-spec flush_stats(#state{}) -> #state{}.
+flush_stats(#state{cached_stats = Stats} = State) when map_size(Stats) == 0 ->
+    State;
+flush_stats(State) ->
+    #state{
+        file_ctx = FileCtx,
+        space_id = SpaceId,
+        user_id = UserId,
+        session_id = SessId,
+        cached_stats = Cache
+    } = State,
+
+    {Stats, AllBlocks} =
+        maps:fold(fun(TransferId, BlocksPerProvider, {Stats0, AllBlocks0}) ->
+            {BytesPerProvider, TransferredBlocks} = maps:fold(
+                fun(ProviderId, Blocks, {BytesPerProvider0, TransferredBlocks0}) ->
+                    Bytes = get_summarized_blocks_size(Blocks),
+                    BytesPerProvider1 = BytesPerProvider0#{ProviderId => Bytes},
+                    TransferredBlocks1 = Blocks ++ TransferredBlocks0,
+                    {BytesPerProvider1, TransferredBlocks1}
+                end, {#{}, []}, BlocksPerProvider),
+
+            Stats1 = Stats0#{TransferId => BytesPerProvider},
+            AllBlocks1 = TransferredBlocks ++ AllBlocks0,
+            {Stats1, AllBlocks1}
+        end, {#{}, []}, Cache),
+
+    {ok, _} = replica_updater:update(FileCtx, AllBlocks, undefined, false),
+    ok = fslogic_event_emitter:emit_file_location_changed(FileCtx, [SessId], AllBlocks),
+
+    lists:foreach(fun({TransferId, BytesPerProvider}) ->
+        case transfer:mark_data_transfer_finished(TransferId, SpaceId, BytesPerProvider) of
+            {ok, _} ->
+                ok;
+            {error, Error} ->
+                ?error("Failed to update trasnfer statistics for ~p transfer "
+                "due to ~p", [TransferId, Error])
+        end
+    end, maps:to_list(Stats)),
+    monitoring_event:emit_rtransfer_statistics(
+        SpaceId, UserId, get_summarized_blocks_size(AllBlocks)
+    ),
+
+    cancel_caching_timer(State#state{cached_stats = #{}}).
+
+-spec set_caching_timer(#state{}) -> #state{}.
+set_caching_timer(#state{caching_timer = undefined} = State) ->
+    TimerRef = erlang:send_after(?STATS_AGGREGATION_TIME, self(), ?FLUSH_STATS),
+    State#state{caching_timer = TimerRef};
+set_caching_timer(State) ->
+    State.
+
+-spec cancel_caching_timer(#state{}) -> #state{}.
+cancel_caching_timer(#state{caching_timer = undefined} = State) ->
+    State;
+cancel_caching_timer(#state{caching_timer = TimerRef} = State) ->
+    erlang:cancel_timer(TimerRef, [{async, true}, {info, false}]),
+    State#state{caching_timer = undefined}.
+
+-spec get_summarized_blocks_size([block()]) -> non_neg_integer().
+get_summarized_blocks_size(Blocks) ->
+    lists:foldl(fun(#file_block{size = Size}, Acc) -> Acc + Size end, 0, Blocks).
