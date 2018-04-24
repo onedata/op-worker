@@ -6,11 +6,10 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This SUITE contains tests checking transfer stats and file location updates
-%%% per second during large transfers.
+%%% This SUITE contains tests featuring statistics transfer statistics.
 %%% @end
 %%%--------------------------------------------------------------------
--module(stress_2_provider_1_node_test_SUITE).
+-module(transfer_stats_test_SUITE).
 -author("Bartosz Walkowicz").
 
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -24,17 +23,23 @@
 ]).
 
 -export([
-    rtransfer_test/1, rtransfer_test_base/1
+    rtransfer_stats_updates_test/1, rtransfer_stats_updates_test_base/1
 ]).
 
 all() ->
-    ?ALL([rtransfer_test]).
+    ?ALL([rtransfer_stats_updates_test]).
 
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
 
-rtransfer_test(Config) ->
+%%-------------------------------------------------------------------
+%% @doc
+%% Check transfer stats and file location updates per second during
+%% large transfers.
+%% @end
+%%-------------------------------------------------------------------
+rtransfer_stats_updates_test(Config) ->
     ?PERFORMANCE(Config, [
         {parameters, [
             [{name, transfer_file_parts}, {value, 20000},
@@ -43,7 +48,7 @@ rtransfer_test(Config) ->
         {description, "Check transfer stats updates and file location updates
                         per second rates."}
     ]).
-rtransfer_test_base(Config) ->
+rtransfer_stats_updates_test_base(Config) ->
     TFP = ?config(transfer_file_parts, Config),
     multi_provider_file_ops_test_base:rtransfer_test_base2(Config, <<"user1">>,
         {2,0,0,2}, 500, TFP).

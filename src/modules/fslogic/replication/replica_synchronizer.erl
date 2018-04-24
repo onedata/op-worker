@@ -186,11 +186,9 @@ handle_info(?FLUSH_STATS, State) ->
     {noreply, flush_stats(State), ?DIE_AFTER};
 
 handle_info({Ref, complete, {ok, _} = _Status}, State) ->
-    #state{session_id = SessId, file_ctx = FileCtx,
-           from_to_transfer_id = FromToTransferId} = State,
-    {Block, __AffectedFroms, FinishedFroms, State1} = disassociate_ref(Ref, State),
+    #state{from_to_transfer_id = FromToTransferId} = State,
+    {__Block, __AffectedFroms, FinishedFroms, State1} = disassociate_ref(Ref, State),
     State2 = flush_stats(State1),
-%%    fslogic_event_emitter:emit_file_location_changed(FileCtx, [SessId], Block),
     TransferIds = maps:with(FinishedFroms, FromToTransferId),
     [transfer:increase_files_transferred_counter(TID) || TID <- maps:values(TransferIds)],
     [gen_server2:reply(From, ok) || From <- FinishedFroms],
@@ -433,7 +431,6 @@ start_transfers(InitialBlocks, TransferId, Prefetch, State) ->
     ProvidersAndBlocks = replica_finder:get_blocks_for_sync(LocationDocs, InitialBlocks),
     FileGuid = State#state.file_guid,
     SpaceId = file_ctx:get_space_id_const(FileCtx2),
-    UserId = State#state.user_id,
     DestStorageId = State#state.dest_storage_id,
     DestFileId = State#state.dest_file_id,
     Priority = case Prefetch of true -> high_priority; false -> medium_priority end,
@@ -454,7 +451,7 @@ start_transfers(InitialBlocks, TransferId, Prefetch, State) ->
                       priority => Priority
                      },
                     Self = self(),
-                    NotifyFun = make_notify_fun(Self, ProviderId, SpaceId, UserId, FileCtx2),
+                    NotifyFun = make_notify_fun(Self, ProviderId),
                     CompleteFun = make_complete_fun(Self),
                     {ok, NewRef} = rtransfer_config:fetch(Request, NotifyFun, CompleteFun,
                                                           TransferId, SpaceId, FileGuid),
@@ -468,15 +465,10 @@ start_transfers(InitialBlocks, TransferId, Prefetch, State) ->
 %% Creates a new notification function called on transfer update.
 %% @end
 %%--------------------------------------------------------------------
--spec make_notify_fun(Self :: pid(), od_provider:id(), od_space:id(),
-                      od_user:id(), file_ctx:ctx()) -> rtransfer_link:notify_fun().
-make_notify_fun(Self, ProviderId, SpaceId, UserId, FileCtx) ->
+-spec make_notify_fun(Self :: pid(), od_provider:id()) -> rtransfer_link:notify_fun().
+make_notify_fun(Self, ProviderId) ->
     fun(Ref, Offset, Size) ->
-%%            monitoring_event:emit_rtransfer_statistics(SpaceId, UserId, Size),
-%%            replica_updater:update(FileCtx,
-%%                                   [#file_block{offset = Offset, size = Size}],
-%%                                   undefined, false),
-            Self ! {Ref, active, ProviderId, #file_block{offset = Offset, size = Size}}
+        Self ! {Ref, active, ProviderId, #file_block{offset = Offset, size = Size}}
     end.
 
 %%--------------------------------------------------------------------
