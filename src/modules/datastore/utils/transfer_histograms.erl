@@ -206,7 +206,7 @@ to_speed_charts(Histograms, StartTime, EndTime, TimeWindow) ->
     % there are n+1 points on chart), the number of required slots is one less
     % than if it were only partially filled (n-1 slots are fully filled
     % and 2 only partially - on start and on end -> n+2 points on charts)
-    RequiredSlotsNum = case (EndTime div TimeWindow) + 1 of
+    RequiredSlotsNum = case (EndTime rem TimeWindow) + 1 of
         TimeWindow -> MaxRequiredSlotsNum - 1;
         _ -> MaxRequiredSlotsNum
     end,
