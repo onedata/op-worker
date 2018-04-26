@@ -162,21 +162,20 @@ process_upgrade_request(Req) ->
 %%--------------------------------------------------------------------
 -spec handler_loop(state()) -> state().
 handler_loop(State) ->
-    NewState = try
-        receive
-            Msg ->
-                handle_info(Msg, State)
-        after
-            ?PROTO_CONNECTION_TIMEOUT ->
-                % Should not appear (heartbeats)
-                ?error("Connection ~p timeout", [State#state.socket]),
-                State#state{continue = false}
+    NewState = receive Msg ->
+        try
+            handle_info(Msg, State)
+        catch Type:Reason ->
+            ?error_stacktrace("Unexpected error in protocol server - ~p:~p", [
+                Type, Reason
+            ]),
+            State#state{continue = false}
         end
-    catch Type:Reason ->
-        ?error_stacktrace("Unexpected error in protocol server - ~p:~p", [
-            Type, Reason
-        ]),
-        State
+    after
+        ?PROTO_CONNECTION_TIMEOUT ->
+            % Should not appear (heartbeats)
+            ?error("Connection ~p timeout", [State#state.socket]),
+            State#state{continue = false}
     end,
     case NewState#state.continue of
         true -> handler_loop(NewState);
