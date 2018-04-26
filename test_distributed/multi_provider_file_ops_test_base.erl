@@ -211,8 +211,11 @@ rtransfer_test_base2(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     FLUPS = FileLocationUpdates / Duration,
     ok = test_utils:mock_unload(Workers2, transfer),
 
-    ct:pal("Transfer stats updates per second ~p~n"
-           "File location updates per second ~p", [TUPS, FLUPS]),
+    ct:pal("Transfer duration [s]: ~p~n"
+           "Transfer stats updates per second ~p~n"
+           "File location updates per second ~p", [
+        Duration, TUPS, FLUPS
+    ]),
     ok.
 
 % TODO - add reading with chunks to test prefetching

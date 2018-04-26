@@ -26,8 +26,16 @@
     rtransfer_stats_updates_test/1, rtransfer_stats_updates_test_base/1
 ]).
 
+-define(TEST_CASES, [
+    rtransfer_stats_updates_test
+]).
+
+-define(PERFORMANCE_TEST_CASES, [
+    rtransfer_stats_updates_test
+]).
+
 all() ->
-    ?ALL([rtransfer_stats_updates_test]).
+    ?ALL(?TEST_CASES, ?PERFORMANCE_TEST_CASES).
 
 %%%===================================================================
 %%% Test functions
@@ -46,7 +54,13 @@ rtransfer_stats_updates_test(Config) ->
                 {description, "Numbers of parts of transfered file."}]
         ]},
         {description, "Check transfer stats updates and file location updates
-                        per second rates."}
+                        per second rates."},
+        {config, [{name, large_config},
+            {parameters, [
+                [{name, transfer_file_parts}, {value, 100000}]
+            ]},
+            {description, ""}
+        ]}
     ]).
 rtransfer_stats_updates_test_base(Config) ->
     TFP = ?config(transfer_file_parts, Config),

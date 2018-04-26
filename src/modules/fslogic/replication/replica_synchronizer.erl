@@ -561,7 +561,7 @@ get_holes(Offset, Size, [#file_block{offset = O} | Blocks], Acc) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Cache transferred block in state as to not update transfer documents
+%% Cache transferred block in state to avoid updating transfer documents
 %% hundred of times per second and set timeout after which cached stats will
 %% be flushed.
 %% @end
