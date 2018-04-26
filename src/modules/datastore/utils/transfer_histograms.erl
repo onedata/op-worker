@@ -58,7 +58,7 @@ new(BytesPerProvider, HistogramsType) ->
 %%-------------------------------------------------------------------
 %% @doc
 %% Updates transfer_histograms for specified providers.
-%% Specified CurrentTime is assumed to be greater than LastUpdate.
+%% Specified CurrentTime is assumed to be greater than or equal to LastUpdate.
 %% @end
 %%-------------------------------------------------------------------
 -spec update(BytesPerProvider :: #{od_provider:id() => non_neg_integer()},

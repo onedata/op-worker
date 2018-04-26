@@ -35,7 +35,11 @@
 
 -export_type([space_transfer_stats/0, doc/0]).
 
-% Aggregated stats has no start nor end time
+% Space transfer stats docs store aggregated statistics of various transfers
+% for the last 1 min, 1 hr, 1 day and 1 month. As such there is no conception
+% of 'start_time' known from normal transfer docs. But for some
+% transfer_histograms functions to work it is necessary to provide it.
+% That's why a long past value like 0 (year 1970) is used.
 -define(START_TIME, 0).
 
 -define(CTX, #{
