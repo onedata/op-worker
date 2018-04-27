@@ -18,22 +18,25 @@
     start_time :: timestamp(),
     last_update_time :: timestamp(),
     time_window :: time(),
-    values :: histogram:histogram(),
-    size :: non_neg_integer()
+    values :: values(),
+    size :: non_neg_integer(),
+    type :: type()
 }).
 
+-type type() :: normal | cumulative.
 -type timestamp() :: non_neg_integer().
 -type time() :: pos_integer().
 -type histogram() :: #time_slot_histogram{}.
+-type values() :: histogram:histogram() | cumulative_histogram:histogram().
 
 %% API
 -export([
     new/2, new/3, new/4,
-    increment/2, increment/3, increment_monotonic/3,
-    decrement/2, decrement/3,  decrement_monotonic/3, decrement_monotonic/2,
+    increment/2, increment/3,
+    decrement/2, decrement/3,
     merge/2,
     get_histogram_values/1, get_last_update/1,
-    get_sum/1, get_average/1, get_size/1]).
+    get_sum/1, get_average/1, get_size/1, new_cumulative/3]).
 
 %%%===================================================================
 %%% API
@@ -47,7 +50,7 @@
 %%--------------------------------------------------------------------
 -spec new(TimeWindow :: time(), Size :: histogram:size()) -> histogram().
 new(TimeWindow, Size) ->
-    new(0, 0, TimeWindow, Size).
+    new(0, 0, TimeWindow, Size, normal).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -56,32 +59,62 @@ new(TimeWindow, Size) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec new(LastUpdate :: timestamp(), TimeWindow :: time(),
-    histogram:size() | histogram:histogram()) -> histogram().
+    histogram:size() | values()) -> histogram().
 new(LastUpdate, TimeWindow, HistogramValues) when is_list(HistogramValues) ->
-    new(LastUpdate, LastUpdate, TimeWindow, HistogramValues);
+    new(LastUpdate, LastUpdate, TimeWindow, HistogramValues, normal);
 new(LastUpdate, TimeWindow, Size) when is_integer(Size) ->
     new(LastUpdate, TimeWindow, histogram:new(Size)).
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns time_slot_histogram with given LastUpdateTime and
+%% provided values or empty histogram of given size
+%% @end
+%%--------------------------------------------------------------------
+-spec new(StartTime :: timestamp(), LastUpdate :: timestamp(), TimeWindow :: time(),
+    histogram:size() | values()) -> histogram().
+new(StartTime, LastUpdate, TimeWindow, HistogramValues) when is_list(HistogramValues) ->
+    new(StartTime, LastUpdate, TimeWindow, HistogramValues, normal);
+new(StartTime, LastUpdate, TimeWindow, Size) when is_integer(Size) ->
+    new(StartTime, LastUpdate, TimeWindow, histogram:new(Size)).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns time_slot_histogram with given LastUpdateTime and
+%% provided values or empty histogram of given size
+%% @end
+%%--------------------------------------------------------------------
+-spec new_cumulative(LastUpdate :: timestamp(), TimeWindow :: time(),
+    histogram:size() | values()) -> histogram().
+new_cumulative(LastUpdate, TimeWindow, HistogramValues) when is_list(HistogramValues) ->
+    new(LastUpdate, LastUpdate, TimeWindow, HistogramValues, cumulative);
+new_cumulative(LastUpdate, TimeWindow, Size) when is_integer(Size) ->
+    new_cumulative(LastUpdate, TimeWindow, cumulative_histogram:new(Size)).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
 %% Returns time_slot_histogram with provided values.
 %% @end
 %%--------------------------------------------------------------------
 -spec new(StartTime :: timestamp(), LastUpdate :: timestamp(),
-    TimeWindow :: time(), histogram:size() | histogram:histogram()) -> histogram().
-new(StartTime, LastUpdate, TimeWindow, HistogramValues) when is_list(HistogramValues) ->
+    TimeWindow :: time(), histogram:size() | values(), type()) -> histogram().
+new(StartTime, LastUpdate, TimeWindow, HistogramValues, Type) when is_list(HistogramValues) ->
     #time_slot_histogram{
         start_time = StartTime,
         last_update_time = LastUpdate,
         time_window = TimeWindow,
         values = HistogramValues,
-        size = length(HistogramValues)
+        size = length(HistogramValues),
+        type = Type
     };
-new(StartTime, LastUpdate, TimeWindow, Size) when is_integer(Size) ->
-    new(StartTime, LastUpdate, TimeWindow, histogram:new(Size)).
+new(StartTime, LastUpdate, TimeWindow, Size, Type = normal) when is_integer(Size) ->
+    new(StartTime, LastUpdate, TimeWindow, histogram:new(Size), Type);
+new(StartTime, LastUpdate, TimeWindow, Size, Type = cumulative) when is_integer(Size) ->
+    new(StartTime, LastUpdate, TimeWindow, cumulative_histogram:new(Size), Type).
 
 %%--------------------------------------------------------------------
-%% @equiv increment(Histogram, CurrentTimestamp, 1).
+%% @equiv update(Histogram, CurrentTimestamp, 1).
 %% @end
 %%--------------------------------------------------------------------
 -spec increment(histogram(), CurrentTimestamp :: timestamp()) -> histogram().
@@ -95,35 +128,14 @@ increment(Histogram, CurrentTimestamp) ->
 %% TimeWindow.
 %% @end
 %%--------------------------------------------------------------------
--spec increment(histogram(), CurrentTimestamp :: timestamp(), N :: integer()) ->
+-spec increment(histogram(), CurrentTimestamp :: timestamp(), N :: non_neg_integer()) ->
     histogram().
-increment(TSH = #time_slot_histogram{
-    start_time = StartTime,
-    last_update_time = LastUpdate,
-    time_window = TimeWindow,
-    values = Histogram
-}, CurrentTimestamp, N) ->
-    ShiftSize = (CurrentTimestamp - StartTime) div TimeWindow - (LastUpdate - StartTime) div TimeWindow,
-    ShiftedHistogram = histogram:shift(Histogram, ShiftSize),
+increment(TSH = #time_slot_histogram{type = Type}, CurrentTimestamp, N) ->
+    ShiftSize = shift_size(TSH, CurrentTimestamp),
+    ShiftedHistogram = shift_values(TSH, ShiftSize),
     TSH#time_slot_histogram{
         last_update_time = CurrentTimestamp,
-        values = histogram:increment(ShiftedHistogram, N)
-    }.
-
-
--spec increment_monotonic(histogram(),CurrentTimestamp :: timestamp(), N :: integer()) ->
-    histogram().
-increment_monotonic(TSH = #time_slot_histogram{
-    start_time = StartTime,
-    last_update_time = LastUpdate,
-    time_window = TimeWindow,
-    values = Histogram = [Head | _Rest]
-}, CurrentTimestamp, N) ->
-    ShiftSize = (CurrentTimestamp - StartTime) div TimeWindow - (LastUpdate - StartTime) div TimeWindow,
-    ShiftedHistogram = histogram:shift(Histogram, ShiftSize, Head),
-    TSH#time_slot_histogram{
-        last_update_time = CurrentTimestamp,
-        values = histogram:increment(ShiftedHistogram, N)
+        values = increment_int(ShiftedHistogram, Type, N)
     }.
 
 %%--------------------------------------------------------------------
@@ -141,20 +153,15 @@ decrement(Histogram, CurrentTimestamp) ->
 %% TimeWindow.
 %% @end
 %%--------------------------------------------------------------------
--spec decrement(histogram(), CurrentTimestamp :: timestamp(), N :: non_neg_integer()) ->
-    histogram().
-decrement(TimeSlotHistogram, CurrentTimestamp, N) ->
-    increment(TimeSlotHistogram, CurrentTimestamp, -N).
-
--spec decrement_monotonic(histogram(),CurrentTimestamp :: timestamp()) ->
-    histogram().
-decrement_monotonic(Histogram, CurrentTimestamp) ->
-    decrement_monotonic(Histogram, CurrentTimestamp, 1).
-
--spec decrement_monotonic(histogram(),CurrentTimestamp :: timestamp(), N :: integer()) ->
-    histogram().
-decrement_monotonic(TimeSlotHistogram, CurrentTimestamp, N) ->
-    increment_monotonic(TimeSlotHistogram, CurrentTimestamp, -N).
+-spec decrement(histogram(), CurrentTimestamp :: timestamp(),
+    N :: non_neg_integer()) -> histogram().
+decrement(TSH = #time_slot_histogram{type = Type}, CurrentTimestamp, N) ->
+    ShiftSize = shift_size(TSH, CurrentTimestamp),
+    ShiftedHistogram = shift_values(TSH, ShiftSize),
+    TSH#time_slot_histogram{
+        last_update_time = CurrentTimestamp,
+        values = decrement_int(ShiftedHistogram, Type, N)
+    }.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -230,3 +237,67 @@ get_sum(TimeSlotHistogram) ->
 -spec get_average(histogram()) -> non_neg_integer().
 get_average(TimeSlotHistogram) ->
     utils:ceil(get_sum(TimeSlotHistogram)/ get_size(TimeSlotHistogram)).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function counts the shift size (number of windows) between
+%% StartTime and LastUpdate.
+%% @end
+%%-------------------------------------------------------------------
+-spec shift_size(histogram(), timestamp()) -> non_neg_integer().
+shift_size(#time_slot_histogram{
+    start_time = StartTime,
+    last_update_time = LastUpdate,
+    time_window = TimeWindow
+}, CurrentTimestamp) ->
+    (CurrentTimestamp - StartTime) div TimeWindow - (LastUpdate - StartTime) div TimeWindow.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function shifts values in the histogram. Values are shifted
+%% accordingly to the defined type.
+%% @end
+%%-------------------------------------------------------------------
+-spec shift_values(histogram(), non_neg_integer()) -> values().
+shift_values(#time_slot_histogram{
+    values = Histogram,
+    type = normal
+}, ShiftSize) ->
+    histogram:shift(Histogram, ShiftSize);
+shift_values(#time_slot_histogram{
+    values = Histogram,
+    type = cumulative
+}, ShiftSize) ->
+    cumulative_histogram:shift(Histogram, ShiftSize).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Internal helper for increment/3 function. Calls increment/2 function
+%% from the suitable module according to the defined type.
+%% @end
+%%-------------------------------------------------------------------
+-spec increment_int(values(), type(), non_neg_integer()) -> values().
+increment_int(HistogramValues, normal, N) ->
+    histogram:increment(HistogramValues, N);
+increment_int(HistogramValues, cumulative, N) ->
+    cumulative_histogram:increment(HistogramValues, N).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Internal helper for decrement/3 function. Calls decrement/2 function
+%% from the suitable module according to the defined type.
+%% @end
+%%-------------------------------------------------------------------
+-spec decrement_int(values(), type(), non_neg_integer()) -> values().
+decrement_int(HistogramValues, normal, N) ->
+    histogram:decrement(HistogramValues, N);
+decrement_int(HistogramValues, cumulative, N) ->
+    cumulative_histogram:decrement(HistogramValues, N).

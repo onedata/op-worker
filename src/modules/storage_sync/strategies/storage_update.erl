@@ -269,8 +269,7 @@ import_children(Job = #space_strategy_job{
         storage_file_ctx := StorageFileCtx,
         mtime := Mtime,
         space_id := SpaceId,
-        storage_id := StorageId,
-        file_name := FileName
+        storage_id := StorageId
     }},
     ?DIRECTORY_TYPE, Offset, FileCtx, BatchSize
 ) when MaxDepth > 0 ->
@@ -314,8 +313,7 @@ import_children(Job = #space_strategy_job{
         storage_file_ctx := StorageFileCtx,
         mtime := Mtime,
         space_id := SpaceId,
-        storage_id := StorageId,
-        file_name := FileName
+        storage_id := StorageId
     }},
     ?DIRECTORY_TYPE, Offset, FileCtx, BatchSize
 ) when MaxDepth > 0 ->
@@ -354,7 +352,7 @@ import_children(#space_strategy_job{}, _Type, _Offset, _FileCtx, _) ->
 
 %%===================================================================
 %% Internal functions
-%%========================================================     ===========
+%%===================================================================
 
 %%-------------------------------------------------------------------
 %% @private

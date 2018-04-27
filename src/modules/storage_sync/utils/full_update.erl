@@ -144,6 +144,13 @@ delete_imported_file(FileCtx) ->
             ok
     end.
 
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Remove directory that had been earlier imported.
+%% @end
+%%-------------------------------------------------------------------
+-spec delete_imported_dir(file_ctx:ctx(), od_space:id(), storage:id()) -> ok.
 delete_imported_dir(FileCtx, SpaceId, StorageId) ->
     RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
     {ok, ChunkSize} = application:get_env(?APP_NAME, ls_chunk_size),
@@ -151,6 +158,14 @@ delete_imported_dir(FileCtx, SpaceId, StorageId) ->
         ChunkSize, SpaceId, StorageId),
     delete_imported_file(FileCtx2).
 
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Recursively deleted children of imported directory.
+%% @end
+%%-------------------------------------------------------------------
+-spec delete_imported_dir_children(file_ctx:ctx(), user_ctx:ctx(),
+    non_neg_integer(), non_neg_integer(), od_space:id(), storage:id()) -> ok.
 delete_imported_dir_children(FileCtx, UserCtx, Offset, ChunkSize, SpaceId, StorageId) ->
     try
         {ChildrenCtxs, FileCtx2} = file_ctx:get_file_children(FileCtx,
@@ -245,7 +260,6 @@ iterate_and_remove(StKey = '$end_of_table', StTable, DBKey, DBTable, FileCtx,
     SpaceId, StorageId
 ) ->
     Next = ets:next(DBTable, DBKey),
-    %%    storage_sync_monitoring:update_files_to_sync_counter(SpaceId, 1),
     storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, 1),
     maybe_delete_imported_file_and_update_counters(DBKey, FileCtx, SpaceId, StorageId),
     iterate_and_remove(StKey, StTable, Next, DBTable, FileCtx, SpaceId, StorageId);
@@ -257,7 +271,6 @@ iterate_and_remove(Key, StorageTable, Key, DBTable, FileCtx, SpaceId, StorageId)
 iterate_and_remove(StKey, StorageTable, DBKey, DBTable, FileCtx, SpaceId, StorageId
 ) when StKey > DBKey ->
     Next = ets:next(DBTable, DBKey),
-    %%    storage_sync_monitoring:update_files_to_sync_counter(SpaceId, 1),
     storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, 1),
     maybe_delete_imported_file_and_update_counters(DBKey, FileCtx, SpaceId, StorageId),
     iterate_and_remove(StKey, StorageTable, Next, DBTable, FileCtx, SpaceId, StorageId);

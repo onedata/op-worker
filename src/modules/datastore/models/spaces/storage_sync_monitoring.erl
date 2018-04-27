@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% WRITEME
+%%% Model responsible for saving information about storage_sync scans
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_sync_monitoring).
@@ -509,9 +509,12 @@ new_doc(SpaceId, StorageId) ->
             deleted_hour_hist = EmptyHourHist,
             deleted_day_hist = EmptyDayHist,
 
-            queue_length_min_hist = EmptyMinHist,
-            queue_length_hour_hist = EmptyHourHist,
-            queue_length_day_hist = EmptyDayHist
+            queue_length_min_hist = 
+                time_slot_histogram:new_cumulative(Timestamp, ?MIN_HIST_SLOT, ?HISTOGRAM_LENGTH),
+            queue_length_hour_hist = 
+                time_slot_histogram:new_cumulative(Timestamp, ?HOUR_HIST_SLOT, ?HISTOGRAM_LENGTH),
+            queue_length_day_hist = 
+                time_slot_histogram:new_cumulative(Timestamp, ?DAY_HIST_SLOT, ?HISTOGRAM_LENGTH)
         },
         scope = SpaceId
     }.
@@ -548,9 +551,9 @@ increment_queue_length_histograms(SSM = #storage_sync_monitoring{
     queue_length_day_hist = DayHist
 }, Timestamp, Value) ->
     SSM#storage_sync_monitoring{
-        queue_length_min_hist = time_slot_histogram:increment_monotonic(MinHist, Timestamp, Value),
-        queue_length_hour_hist = time_slot_histogram:increment_monotonic(HourHist, Timestamp, Value),
-        queue_length_day_hist = time_slot_histogram:increment_monotonic(DayHist, Timestamp, Value)
+        queue_length_min_hist = time_slot_histogram:increment(MinHist, Timestamp, Value),
+        queue_length_hour_hist = time_slot_histogram:increment(HourHist, Timestamp, Value),
+        queue_length_day_hist = time_slot_histogram:increment(DayHist, Timestamp, Value)
     }.
 
 %%-------------------------------------------------------------------
@@ -567,9 +570,9 @@ decrement_queue_length_histograms(SSM = #storage_sync_monitoring{
     queue_length_day_hist = DayHist
 }, Timestamp) ->
     SSM#storage_sync_monitoring{
-        queue_length_min_hist = time_slot_histogram:decrement_monotonic(MinHist, Timestamp),
-        queue_length_hour_hist = time_slot_histogram:decrement_monotonic(HourHist, Timestamp),
-        queue_length_day_hist = time_slot_histogram:decrement_monotonic(DayHist, Timestamp)
+        queue_length_min_hist = time_slot_histogram:decrement(MinHist, Timestamp),
+        queue_length_hour_hist = time_slot_histogram:decrement(HourHist, Timestamp),
+        queue_length_day_hist = time_slot_histogram:decrement(DayHist, Timestamp)
     }.
 
 %%-------------------------------------------------------------------
@@ -813,21 +816,24 @@ get_record_struct(1) ->
             {last_update_time, integer},
             {time_window, integer},
             {values, [integer]},
-            {size, integer}
+            {size, integer},
+            {type, atom}
         ]}},
         {imported_hour_hist, {record, [
             {start_time, integer},
             {last_update_time, integer},
             {time_window, integer},
             {values, [integer]},
-            {size, integer}
+            {size, integer},
+            {type, atom}
         ]}},
         {imported_day_hist, {record, [
             {start_time, integer},
             {last_update_time, integer},
             {time_window, integer},
             {values, [integer]},
-            {size, integer}
+            {size, integer},
+            {type, atom}
         ]}},
 
         {updated_min_hist, {record, [
@@ -835,21 +841,24 @@ get_record_struct(1) ->
             {last_update_time, integer},
             {time_window, integer},
             {values, [integer]},
-            {size, integer}
+            {size, integer},
+            {type, atom}
         ]}},
         {updated_hour_hist, {record, [
             {start_time, integer},
             {last_update_time, integer},
             {time_window, integer},
             {values, [integer]},
-            {size, integer}
+            {size, integer},
+            {type, atom}
         ]}},
         {updated_day_hist, {record, [
             {start_time, integer},
             {last_update_time, integer},
             {time_window, integer},
             {values, [integer]},
-            {size, integer}
+            {size, integer},
+            {type, atom}
         ]}},
 
         {deleted_min_hist, {record, [
@@ -857,21 +866,24 @@ get_record_struct(1) ->
             {last_update_time, integer},
             {time_window, integer},
             {values, [integer]},
-            {size, integer}
+            {size, integer},
+            {type, atom}
         ]}},
         {deleted_hour_hist, {record, [
             {start_time, integer},
             {last_update_time, integer},
             {time_window, integer},
             {values, [integer]},
-            {size, integer}
+            {size, integer},
+            {type, atom}
         ]}},
         {deleted_day_hist, {record, [
             {start_time, integer},
             {last_update_time, integer},
             {time_window, integer},
             {values, [integer]},
-            {size, integer}
+            {size, integer},
+            {type, atom}
         ]}},
 
         {queue_length_min_hist, {record, [
@@ -879,20 +891,23 @@ get_record_struct(1) ->
             {last_update_time, integer},
             {time_window, integer},
             {values, [integer]},
-            {size, integer}
+            {size, integer},
+            {type, atom}
         ]}},
         {queue_length_hour_hist, {record, [
             {start_time, integer},
             {last_update_time, integer},
             {time_window, integer},
             {values, [integer]},
-            {size, integer}
+            {size, integer},
+            {type, atom}
         ]}},
         {queue_length_day_hist, {record, [
             {start_time, integer},
             {last_update_time, integer},
             {time_window, integer},
             {values, [integer]},
-            {size, integer}
+            {size, integer},
+            {type, atom}
         ]}}
     ]}.
