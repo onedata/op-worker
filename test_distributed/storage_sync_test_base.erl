@@ -24,9 +24,15 @@
 -export([disable_storage_sync/1, set_check_locally_enoent_strategy/2,
     set_check_globally_enoent_strategy/2, reset_enoent_strategies/2,
     add_workers_storage_mount_points/1, get_mount_point/2, clean_storage/2,
-    get_host_mount_point/2, storage_test_file_path/4, create_init_file/1,
+    get_host_mount_point/2, storage_test_file_path/4, create_init_file/2,
     enable_storage_import/1, enable_storage_update/1, clean_reverse_luma_cache/1,
-    clean_space/1, verify_file_deleted/3]).
+    clean_space/1, verify_file_deleted/3, cleanup_storage_sync_monitoring_model/2,
+    assertImportTimes/2, assertImportTimes/3, assertUpdateTimes/2, assertUpdateTimes/3,
+    get_storage_id/1, storage_test_dir_path/4, disable_storage_update/1,
+    disable_storage_import/1, assertNoImportInProgress/3,
+    assertNoUpdateInProgress/3, append/2, recursive_rm/1, truncate/2,
+    change_time/3, assert_num_results_gte/3, assert_num_results/3,
+    to_storage_files/4, parallel_assert/5]).
 
 %% tests
 -export([
@@ -34,8 +40,7 @@
     create_file_import_test/2, create_file_export_test/2,
     delete_empty_directory_update_test/2, delete_directory_export_test/2,
     delete_file_update_test/2, delete_file_export_test/2,
-    copy_file_update_test/2, append_file_update_test/2,
-    move_file_update_test/2, truncate_file_update_test/2,
+    append_file_update_test/2, move_file_update_test/2, truncate_file_update_test/2,
     chmod_file_update_test/2, update_timestamps_file_import_test/2,
     append_file_export_test/2, import_remote_file_by_path_test/2,
     import_file_by_path_test/2, get_child_attr_by_path_test/2,
@@ -58,47 +63,21 @@
     update_syncs_files_after_import_failed_test/2,
     update_syncs_files_after_previous_update_failed_test/2,
     sync_works_properly_after_delete_test/2,
-    create_delete_import_test/2,
+    create_delete_import_test_read_both/2,
     create_delete_import2_test/3, recreate_file_deleted_by_sync_test/2,
     sync_should_not_delete_not_replicated_file_created_in_remote_provider/2,
     sync_should_not_delete_dir_created_in_remote_provider/2,
-    sync_should_not_delete_not_replicated_files_created_in_remote_provider2/2]).
-
-
--define(assertHashChangedFun(File, ExpectedResult0),
-    fun
-        ({_, {storage_sync_changes, children_attrs_hash_has_changed, Args}, ExpectedResult})
-            when ExpectedResult =:= ExpectedResult0
-            ->
-            case hd(Args) of
-                #file_meta{name = File} -> 1;
-                _ -> 0
-            end;
-        (_) ->
-            0
-    end
-).
-
--define(assertMtimeChangedFun(File, ExpectedResult0),
-    fun
-        ({_, {storage_sync_changes, mtime_has_changed, Args}, ExpectedResult})
-            when ExpectedResult =:= ExpectedResult0
-            ->
-            case hd(Args) of
-                #file_meta{name = File} -> 1;
-                _ -> 0
-            end;
-        (_) ->
-            0
-    end
-).
+    sync_should_not_delete_not_replicated_files_created_in_remote_provider2/2,
+    create_delete_import_test_read_remote_only/2, copy_file_update_test/2]).
 
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
 
-create_delete_import_test(Config, MountSpaceInRoot) ->
-    create_delete_import_test(Config, MountSpaceInRoot, true),
+create_delete_import_test_read_both(Config, MountSpaceInRoot) ->
+    create_delete_import_test(Config, MountSpaceInRoot, true).
+
+create_delete_import_test_read_remote_only(Config, MountSpaceInRoot) ->
     create_delete_import_test(Config, MountSpaceInRoot, false).
 
 create_delete_import_test(Config, MountSpaceInRoot, ReadBoth) ->
@@ -115,7 +94,29 @@ create_delete_import_test(Config, MountSpaceInRoot, ReadBoth) ->
     ?assertEqual(ok, file:write_file(StorageTestFilePath, ?TEST_DATA)),
     Size = byte_size(?TEST_DATA),
     storage_sync_test_base:enable_storage_import(Config),
-    storage_sync_test_base:enable_storage_update(Config),
+    assertImportTimes(W1, ?SPACE_ID),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 1,
+        <<"toProcess">> := 2,
+        <<"imported">> := 1,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 1,
+        <<"updatedSum">> := 1,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [1 | _],
+        <<"importedHourHist">> := [1 | _],
+        <<"importedDayHist">> := [1 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [1 | _],
+        <<"updatedDayHist">> := [1 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID),
 
     ReadWorkers = case ReadBoth of
         true -> Workers;
@@ -146,7 +147,6 @@ create_delete_import_test(Config, MountSpaceInRoot, ReadBoth) ->
     {ok, #file_attr{guid = GUID}} = ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W2, SessIdW2, {path, ?SPACE_TEST_FILE_PATH})),
     ?assertMatch(ok, lfm_proxy:unlink(W2, <<"0">>, {guid, GUID})),
-
     ?assertEqual({error, enoent}, file:read_file(StorageTestFilePath), Attempts),
     ?assertEqual({error, enoent}, file:read_file(StorageTestFilePath2), Attempts),
 
@@ -166,7 +166,6 @@ create_delete_import2_test(Config, MountSpaceInRoot, ReadBoth) ->
     ?assertEqual(ok, file:write_file(StorageTestFilePath, ?TEST_DATA)),
     Size = byte_size(?TEST_DATA),
     storage_sync_test_base:enable_storage_import(Config),
-    storage_sync_test_base:enable_storage_update(Config),
 
     ReadWorkers = case ReadBoth of
         true -> Workers;
@@ -203,6 +202,8 @@ create_delete_import2_test(Config, MountSpaceInRoot, ReadBoth) ->
     ?assertEqual({error, enoent}, file:read_file(StorageTestFilePath), Attempts),
     ?assertEqual({error, enoent}, file:read_file(StorageTestFilePath2), Attempts),
 
+    storage_sync_test_base:enable_storage_update(Config),
+
     {ok, FileGuid} =
         ?assertMatch({ok, _}, lfm_proxy:create(W2, SessIdW2, ?SPACE_TEST_FILE_PATH, 8#777)),
     {ok, FileHandle} =
@@ -211,7 +212,6 @@ create_delete_import2_test(Config, MountSpaceInRoot, ReadBoth) ->
 
     {ok, FileHandle2} =
         ?assertMatch({ok, _}, lfm_proxy:open(W1, SessIdW1, {guid, FileGuid}, read), ?ATTEMPTS),
-
     ?assertEqual({ok, ?TEST_DATA}, lfm_proxy:read(W1, FileHandle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
     ?assertEqual({ok, ?TEST_DATA}, file:read_file(StorageTestFilePath), Attempts),
     ok = file:delete(StorageTestFilePath),
@@ -224,25 +224,39 @@ create_directory_import_test(Config, MountSpaceInRoot) ->
     SessId2 = ?config({session_id, {?USER, ?GET_DOMAIN(W2)}}, Config),
     StorageTestDirPath =
         storage_test_dir_path(W1MountPoint, ?SPACE_ID, ?TEST_DIR, MountSpaceInRoot),
-    %% Create dir on storage
     ok = file:make_dir(StorageTestDirPath),
     storage_sync_test_base:enable_storage_import(Config),
+
+    % wait till scan is finished
+    assertImportTimes(W1, ?SPACE_ID),
+
     %% Check if dir was imported
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
 
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID])),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID])),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID])),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID])),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID])),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID])),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS),
-    assertImportFinishTimeDefined(W1, ?SPACE_ID),
-    assertImportTimes(W1, ?SPACE_ID).
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 1,
+        <<"toProcess">> := 2,
+        <<"imported">> := 1,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 1,
+        <<"updatedSum">> := 1,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [1 | _],
+        <<"importedHourHist">> := [1 | _],
+        <<"importedDayHist">> := [1 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [1 | _],
+        <<"updatedDayHist">> := [1 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID).
 
 create_directory_import_error_test(Config, MountSpaceInRoot) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
@@ -253,17 +267,22 @@ create_directory_import_error_test(Config, MountSpaceInRoot) ->
         storage_test_dir_path(W1MountPoint, ?SPACE_ID, ?TEST_DIR, MountSpaceInRoot),
     %% Create dir on storage
     ok = file:make_dir(StorageTestDirPath),
+
     test_utils:mock_new(W1, simple_scan),
-    test_utils:mock_expect(W1, simple_scan, import_file, fun(Job = #space_strategy_job{data = #{file_name := FileName}}) ->
-        case FileName of
-            ?TEST_DIR ->
-                throw(test_error);
-            _ ->
-                meck:passthrough([Job])
-        end
-    end),
+    test_utils:mock_expect(W1, simple_scan, import_file,
+        fun(Job = #space_strategy_job{
+            data = #{file_name := FileName}
+        }) ->
+            case FileName of
+                ?TEST_DIR ->
+                    throw(test_error);
+                _ ->
+                    meck:passthrough([Job])
+            end
+        end),
     storage_sync_test_base:enable_storage_import(Config),
-    assertImportFinishTimeDefined(W1, ?SPACE_ID),
+
+    % wait till scan is finished
     assertImportTimes(W1, ?SPACE_ID),
 
     %% Check if dir was not imported
@@ -272,14 +291,27 @@ create_directory_import_error_test(Config, MountSpaceInRoot) ->
     ?assertNotMatch({ok, #file_attr{}},
         lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_DIR_PATH})),
 
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS).
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 1,
+        <<"toProcess">> := 2,
+        <<"imported">> := 0,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 1,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 0,
+        <<"updatedSum">> := 1,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [0 | _],
+        <<"importedHourHist">> := [0 | _],
+        <<"importedDayHist">> := [0 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [1 | _],
+        <<"updatedDayHist">> := [1 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID).
 
 update_syncs_files_after_import_failed_test(Config, MountSpaceInRoot) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
@@ -288,18 +320,27 @@ update_syncs_files_after_import_failed_test(Config, MountSpaceInRoot) ->
     SessId2 = ?config({session_id, {?USER, ?GET_DOMAIN(W2)}}, Config),
     StorageTestDirPath =
         storage_test_dir_path(W1MountPoint, ?SPACE_ID, ?TEST_DIR, MountSpaceInRoot),
+
     %% Create dir on storage
     ok = file:make_dir(StorageTestDirPath),
+    %ensure that import will start with different timestamp than dir was created
+    timer:sleep(timer:seconds(1)),
+
     test_utils:mock_new(W1, simple_scan),
-    test_utils:mock_expect(W1, simple_scan, import_file, fun(Job = #space_strategy_job{data = #{file_name := FileName}}) ->
-        case FileName of
-            ?TEST_DIR ->
-                throw(test_error);
-            _ ->
-                meck:passthrough([Job])
-        end
-    end),
+    test_utils:mock_expect(W1, simple_scan, import_file,
+        fun(Job = #space_strategy_job{
+            data = #{file_name := FileName}
+        }) ->
+            case FileName of
+                ?TEST_DIR ->
+                    throw(test_error);
+                _ ->
+                    meck:passthrough([Job])
+            end
+        end),
     storage_sync_test_base:enable_storage_import(Config),
+
+    assertImportTimes(W1, ?SPACE_ID),
 
     %% Check if dir was not imported
     ?assertNotMatch({ok, #file_attr{}},
@@ -307,34 +348,56 @@ update_syncs_files_after_import_failed_test(Config, MountSpaceInRoot) ->
     ?assertNotMatch({ok, #file_attr{}},
         lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_DIR_PATH})),
 
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS),
-    test_utils:mock_unload(W1, simple_scan),
-    assertImportFinishTimeDefined(W1, ?SPACE_ID),
-    assertImportTimes(W1, ?SPACE_ID),
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 1,
+        <<"toProcess">> := 2,
+        <<"imported">> := 0,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 1,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 0,
+        <<"updatedSum">> := 1,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [0 | _],
+        <<"importedHourHist">> := [0 | _],
+        <<"importedDayHist">> := [0 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [1 | _],
+        <<"updatedDayHist">> := [1 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID),
 
+    test_utils:mock_unload(W1, simple_scan),
     enable_storage_update(Config),
     assertUpdateTimes(W1, ?SPACE_ID),
+    disable_storage_update(Config),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 2,
+        <<"toProcess">> := 2,
+        <<"imported">> := 1,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 1,
+        <<"updatedSum">> := 2,
+        <<"importedHourHist">> := [1 | _],
+        <<"importedDayHist">> := [1 | _],
+        <<"updatedHourHist">> := [2 | _],
+        <<"updatedDayHist">> := [2 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID),
 
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
-
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS, ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS).
+        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS).
 
 update_syncs_files_after_previous_update_failed_test(Config, MountSpaceInRoot) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
@@ -345,14 +408,38 @@ update_syncs_files_after_previous_update_failed_test(Config, MountSpaceInRoot) -
         storage_test_dir_path(W1MountPoint, ?SPACE_ID, ?TEST_DIR, MountSpaceInRoot),
 
     storage_sync_test_base:enable_storage_import(Config),
-    timer:sleep(timer:seconds(?SCAN_INTERVAL + 1)),
-    assertImportFinishTimeDefined(W1, ?SPACE_ID),
     assertImportTimes(W1, ?SPACE_ID),
 
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 1,
+        <<"toProcess">> := 1,
+        <<"imported">> := 0,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 0,
+        <<"updatedSum">> := 1,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [0 | _],
+        <<"importedHourHist">> := [0 | _],
+        <<"importedDayHist">> := [0 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [1 | _],
+        <<"updatedDayHist">> := [1 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID),
+
     %% Create dir on storage
+    timer:sleep(timer:seconds(1)),
     ok = file:make_dir(StorageTestDirPath),
+    timer:sleep(timer:seconds(1)),
     test_utils:mock_new(W1, simple_scan),
-    test_utils:mock_expect(W1, simple_scan, import_file, fun(Job = #space_strategy_job{data = #{file_name := FileName}}) ->
+    test_utils:mock_expect(W1, simple_scan, import_file, fun(Job = #space_strategy_job{
+        data = #{file_name := FileName}}
+    ) ->
         case FileName of
             ?TEST_DIR ->
                 throw(test_error);
@@ -364,14 +451,26 @@ update_syncs_files_after_previous_update_failed_test(Config, MountSpaceInRoot) -
     assertUpdateTimes(W1, ?SPACE_ID),
     test_utils:mock_unload(W1, simple_scan),
 
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS),
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 2,
+        <<"toProcess">> := 2,
+        <<"imported">> := 0,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 1,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 0,
+        <<"updatedSum">> := 2,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [0 | _],
+        <<"importedHourHist">> := [0 | _],
+        <<"importedDayHist">> := [0 | _],
+        <<"updatedHourHist">> := [2 | _],
+        <<"updatedDayHist">> := [2 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID),
 
     %% Check if dir was not imported
     ?assertNotMatch({ok, #file_attr{}},
@@ -379,20 +478,33 @@ update_syncs_files_after_previous_update_failed_test(Config, MountSpaceInRoot) -
     ?assertNotMatch({ok, #file_attr{}},
         lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_DIR_PATH})),
 
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID])),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS),
+    %next scan should import file
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 3,
+        <<"toProcess">> := 2,
+        <<"imported">> := 1,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 1,
+        <<"updatedSum">> := 3,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [1 | _],
+        <<"importedHourHist">> := [1 | _],
+        <<"importedDayHist">> := [1 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [3 | _],
+        <<"updatedDayHist">> := [3 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID, ?ATTEMPTS),
 
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS).
-
 
 create_directory_import_check_user_id_test(Config, MountSpaceInRoot) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -404,19 +516,32 @@ create_directory_import_check_user_id_test(Config, MountSpaceInRoot) ->
     ok = file:make_dir(StorageTestDirPath),
     ok = file:change_owner(StorageTestDirPath, ?TEST_UID, ?TEST_GID),
     storage_sync_test_base:enable_storage_import(Config),
-    assertImportFinishTimeDefined(W1, ?SPACE_ID),
     assertImportTimes(W1, ?SPACE_ID),
     %% Check if dir was imported
     ?assertMatch({ok, #file_attr{owner_id = ?USER}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS).
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 1,
+        <<"toProcess">> := 2,
+        <<"imported">> := 1,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 1,
+        <<"updatedSum">> := 1,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [1 | _],
+        <<"importedHourHist">> := [1 | _],
+        <<"importedDayHist">> := [1 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [1 | _],
+        <<"updatedDayHist">> := [1 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID).
 
 create_directory_import_check_user_id_error_test(Config, MountSpaceInRoot) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -428,19 +553,32 @@ create_directory_import_check_user_id_error_test(Config, MountSpaceInRoot) ->
     ok = file:make_dir(StorageTestDirPath),
     ok = file:change_owner(StorageTestDirPath, ?TEST_UID, ?TEST_GID),
     storage_sync_test_base:enable_storage_import(Config),
-    assertImportFinishTimeDefined(W1, ?SPACE_ID),
     assertImportTimes(W1, ?SPACE_ID),
     %% Check if dir was not imported
     ?assertMatch({error, ?ENOENT},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS).
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 1,
+        <<"toProcess">> := 2,
+        <<"imported">> := 0,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 1,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 0,
+        <<"updatedSum">> := 1,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [0 | _],
+        <<"importedHourHist">> := [0 | _],
+        <<"importedDayHist">> := [0 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [1 | _],
+        <<"updatedDayHist">> := [1 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID).
 
 create_directory_import_without_read_permission_test(Config, MountSpaceInRoot) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
@@ -453,19 +591,35 @@ create_directory_import_without_read_permission_test(Config, MountSpaceInRoot) -
     ok = file:make_dir(StorageTestDirPath),
     ok = file:change_mode(StorageTestDirPath, 8#000),
     storage_sync_test_base:enable_storage_import(Config),
+
+    assertImportTimes(W1, ?SPACE_ID),
+
     %% Check if dir was imported
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH2}), ?ATTEMPTS),
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS),
-    assertImportFinishTimeDefined(W1, ?SPACE_ID),
-    assertImportTimes(W1, ?SPACE_ID),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 1,
+        <<"toProcess">> := 2,
+        <<"imported">> := 1,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 1,
+        <<"updatedSum">> := 1,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [1 | _],
+        <<"importedHourHist">> := [1 | _],
+        <<"importedDayHist">> := [1 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [1 | _],
+        <<"updatedDayHist">> := [1 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID),
+
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_DIR_PATH2}), 2 * ?ATTEMPTS).
 
@@ -483,18 +637,30 @@ create_directory_import_many_test(Config, MountSpaceInRoot) ->
     end, lists:seq(1, DirsNumber)),
 
     storage_sync_test_base:enable_storage_import(Config),
+    assertImportTimes(W1, ?SPACE_ID),
 
     parallel_assert(?MODULE, verify_dir, [W1, SessId, ?ATTEMPTS], lists:seq(1, DirsNumber), ?ATTEMPTS),
-    ?assertEqual(203, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(200, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(3, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS),
-    assertImportFinishTimeDefined(W1, ?SPACE_ID),
-    assertImportTimes(W1, ?SPACE_ID).
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 1,
+        <<"toProcess">> := 203,
+        <<"imported">> := 200,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 2,
+        <<"importedSum">> := 200,
+        <<"updatedSum">> := 1,
+        <<"deletedSum">> := 0,
+        <<"importedHourHist">> := [200 | _],
+        <<"importedDayHist">> := [200 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [1 | _],
+        <<"updatedDayHist">> := [1 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID).
 
 create_file_import_test(Config, MountSpaceInRoot) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
@@ -505,8 +671,11 @@ create_file_import_test(Config, MountSpaceInRoot) ->
     StorageTestFilePath =
         storage_test_file_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
     %% Create file on storage
+    timer:sleep(timer:seconds(1)),  %ensure that space_dir mtime will change
     ok = file:write_file(StorageTestFilePath, ?TEST_DATA),
     storage_sync_test_base:enable_storage_import(Config),
+
+    assertImportTimes(W1, ?SPACE_ID),
 
     %% Check if file was imported on W1
     ?assertMatch({ok, #file_attr{}},
@@ -517,16 +686,27 @@ create_file_import_test(Config, MountSpaceInRoot) ->
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
     lfm_proxy:close(W1, Handle1),
 
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS),
-    assertImportFinishTimeDefined(W1, ?SPACE_ID),
-    assertImportTimes(W1, ?SPACE_ID),
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 1,
+        <<"toProcess">> := 2,
+        <<"imported">> := 1,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 1,
+        <<"updatedSum">> := 1,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [1 | _],
+        <<"importedHourHist">> := [1 | _],
+        <<"importedDayHist">> := [1 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [1 | _],
+        <<"updatedDayHist">> := [1 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID),
 
    %% Check if file was imported on W2
     ?assertMatch({ok, #file_attr{}},
@@ -549,6 +729,8 @@ create_file_import_check_user_id_test(Config, MountSpaceInRoot) ->
 
     storage_sync_test_base:enable_storage_import(Config),
 
+    assertImportTimes(W1, ?SPACE_ID),
+
     %% Check if file was imported on W1
     ?assertMatch({ok, #file_attr{owner_id = ?USER}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
@@ -558,16 +740,27 @@ create_file_import_check_user_id_test(Config, MountSpaceInRoot) ->
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
     lfm_proxy:close(W1, Handle1),
 
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS),
-    assertImportFinishTimeDefined(W1, ?SPACE_ID),
-    assertImportTimes(W1, ?SPACE_ID).
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 1,
+        <<"toProcess">> := 2,
+        <<"imported">> := 1,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 1,
+        <<"updatedSum">> := 1,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [1 | _],
+        <<"importedHourHist">> := [1 | _],
+        <<"importedDayHist">> := [1 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [1 | _],
+        <<"updatedDayHist">> := [1 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID).
 
 create_file_import_check_user_id_error_test(Config, MountSpaceInRoot) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -581,20 +774,33 @@ create_file_import_check_user_id_error_test(Config, MountSpaceInRoot) ->
     ok = file:change_owner(StorageTestFilePath, ?TEST_UID, ?TEST_GID),
     storage_sync_test_base:enable_storage_import(Config),
 
-    assertImportFinishTimeDefined(W1, ?SPACE_ID),
     assertImportTimes(W1, ?SPACE_ID),
 
     %% Check if file was imported on W1
     ?assertMatch({error, ?ENOENT},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS).
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 1,
+        <<"toProcess">> := 2,
+        <<"imported">> := 0,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 1,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 0,
+        <<"updatedSum">> := 1,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [0 | _],
+        <<"importedHourHist">> := [0 | _],
+        <<"importedDayHist">> := [0 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [1 | _],
+        <<"updatedDayHist">> := [1 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID).
 
 create_subfiles_import_many_test(Config, MountSpaceInRoot) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -610,17 +816,30 @@ create_subfiles_import_many_test(Config, MountSpaceInRoot) ->
         ok = file:write_file(FilePath, ?TEST_DATA)
     end, lists:seq(1, DirsNumber)),
     storage_sync_test_base:enable_storage_import(Config),
+    assertImportTimes(W1, ?SPACE_ID),
+
     parallel_assert(?MODULE, verify_file_in_dir, [W1, SessId, 60], lists:seq(1, DirsNumber), 60),
-    ?assertEqual(403, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(400, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(3, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS),
-    assertImportFinishTimeDefined(W1, ?SPACE_ID),
-    assertImportTimes(W1, ?SPACE_ID).
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 1,
+        <<"toProcess">> := 403,
+        <<"imported">> := 400,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 2,
+        <<"importedSum">> := 400,
+        <<"updatedSum">> := 1,
+        <<"deletedSum">> := 0,
+        <<"importedHourHist">> := [400 | _],
+        <<"importedDayHist">> := [400 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [1 | _],
+        <<"updatedDayHist">> := [1 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID).
 
 create_subfiles_import_many2_test(Config, MountSpaceInRoot) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -635,16 +854,27 @@ create_subfiles_import_many2_test(Config, MountSpaceInRoot) ->
 
     Timeout = 120,
     parallel_assert(?MODULE, verify_file, [W1, SessId, Timeout], Files, Timeout),
-    ?assertEqual(1111, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1110, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS),
-    assertImportFinishTimeDefined(W1, ?SPACE_ID),
-    assertImportTimes(W1, ?SPACE_ID).
+    assertImportTimes(W1, ?SPACE_ID, Timeout),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 1,
+        <<"toProcess">> := 1111,
+        <<"imported">> := 1110,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 1110,
+        <<"updatedSum">> := 1,
+        <<"deletedSum">> := 0,
+        <<"importedDayHist">> := [1110 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [1 | _],
+        <<"updatedDayHist">> := [1 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID).
 
 create_subfiles_and_delete_before_import_is_finished_test(Config, MountSpaceInRoot) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -655,27 +885,40 @@ create_subfiles_and_delete_before_import_is_finished_test(Config, MountSpaceInRo
     %% Create dir on storage
     ok = file:make_dir(StorageTestDirPath),
     storage_sync_test_base:enable_storage_import(Config),
+
+    assertImportTimes(W1, ?SPACE_ID),
     %% Check if dir was imported
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
 
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS),
-    assertImportFinishTimeDefined(W1, ?SPACE_ID),
-    assertImportTimes(W1, ?SPACE_ID),
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 1,
+        <<"toProcess">> := 2,
+        <<"imported">> := 1,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 1,
+        <<"updatedSum">> := 1,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [1 | _],
+        <<"importedHourHist">> := [1 | _],
+        <<"importedDayHist">> := [1 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [1 | _],
+        <<"updatedDayHist">> := [1 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID),
 
     %% Create nested tree structure
     DirStructure = [10, 10, 10],
     create_nested_directory_tree(DirStructure, StorageTestDirPath),
     storage_sync_test_base:enable_storage_update(Config),
 
-    ?assertEqual(true, 10 =< rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
+    ?assertEqual(true, 10 =< rpc:call(W1, storage_sync_monitoring, get_unhandled_jobs_value, [?SPACE_ID, get_storage_id(W1)]), ?ATTEMPTS),
 
     recursive_rm(StorageTestDirPath),
     ?assertMatch({error, ?ENOENT},
@@ -683,9 +926,7 @@ create_subfiles_and_delete_before_import_is_finished_test(Config, MountSpaceInRo
     ?assertMatch({ok, []},
         lfm_proxy:ls(W1, SessId, {path, ?SPACE_PATH}, 0, 100), 5 * ?ATTEMPTS),
     disable_storage_update(Config),
-
-    assertImportFinishTimeDefined(W1, ?SPACE_ID),
-    assertImportTimes(W1, ?SPACE_ID).
+    assertUpdateTimes(W1, ?SPACE_ID).
 
 create_directory_export_test(Config, MountSpaceInRoot) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -730,6 +971,7 @@ create_file_in_dir_import_test(Config, MountSpaceInRoot) ->
         storage_test_dir_path(W1MountPoint, ?SPACE_ID, ?TEST_DIR, MountSpaceInRoot),
     StorageTestFilePath =
         storage_test_file_path(W1MountPoint, ?SPACE_ID, filename:join(?TEST_DIR, ?TEST_FILE2), MountSpaceInRoot),
+    timer:sleep(timer:seconds(1)),
 
     %% Create dir on storage
     ok = file:make_dir(StorageTestDirPath),
@@ -755,16 +997,29 @@ create_file_in_dir_import_test(Config, MountSpaceInRoot) ->
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W2, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
 
-    ?assertEqual(3, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS),
-    assertImportFinishTimeDefined(W1, ?SPACE_ID),
-    assertImportTimes(W1, ?SPACE_ID).
+    assertImportTimes(W1, ?SPACE_ID),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 1,
+        <<"toProcess">> := 3,
+        <<"imported">> := 2,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 2,
+        <<"updatedSum">> := 1,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [2 | _],
+        <<"importedHourHist">> := [2 | _],
+        <<"importedDayHist">> := [2 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [1 | _],
+        <<"updatedDayHist">> := [1 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID).
 
 create_file_in_dir_update_test(Config, MountSpaceInRoot) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
@@ -787,36 +1042,65 @@ create_file_in_dir_update_test(Config, MountSpaceInRoot) ->
 
     storage_sync_test_base:enable_storage_import(Config),
 
+    assertImportTimes(W1, ?SPACE_ID),
+
     %% Check if dirs were imported on W1
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH2}), ?ATTEMPTS),
-    ?assertEqual(3, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS),
-    assertImportFinishTimeDefined(W1, ?SPACE_ID),
-    assertImportTimes(W1, ?SPACE_ID),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 1,
+        <<"toProcess">> := 3,
+        <<"imported">> := 2,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 2,
+        <<"updatedSum">> := 1,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [2 | _],
+        <<"importedHourHist">> := [2 | _],
+        <<"importedDayHist">> := [2 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [1 | _],
+        <<"updatedDayHist">> := [1 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID),
 
     test_utils:mock_new(W1, storage_sync_changes, [passthrough]),
 
     ok = file:write_file(StorageTestFileinDirPath1, ?TEST_DATA),
     storage_sync_test_base:enable_storage_update(Config),
     assertUpdateTimes(W1, ?SPACE_ID),
+    disable_storage_update(Config),
 
     %% Check if files were imported on W1
-    ?assertEqual(4, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(3, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    disable_storage_update(Config),
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 2,
+        <<"toProcess">> := 4,
+        <<"imported">> := 1,
+        <<"updated">> := 3,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 3,
+        <<"updatedSum">> := 4,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [1 | _],
+        <<"importedHourHist">> := [3 | _],
+        <<"importedDayHist">> := [3 | _],
+        <<"updatedMinHist">> := [3 | _],
+        <<"updatedHourHist">> := [4 | _],
+        <<"updatedDayHist">> := [4 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID),
 
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}), ?ATTEMPTS),
@@ -831,7 +1115,6 @@ create_file_in_dir_update_test(Config, MountSpaceInRoot) ->
     assert_num_results(History, ?assertHashChangedFun(?SPACE_ID, true), 0),
     assert_num_results(History, ?assertMtimeChangedFun(?TEST_DIR2, true), 0),
     assert_num_results_gte(History, ?assertMtimeChangedFun(?TEST_DIR, true), 1),
-    assertImportFinishTimeDefined(W1, ?SPACE_ID),
 
     %% Check if file was imported on W2
     ?assertMatch({ok, #file_attr{}},
@@ -876,6 +1159,8 @@ create_file_in_dir_exceed_batch_update_test(Config, MountSpaceInRoot) ->
 
     storage_sync_test_base:enable_storage_import(Config),
 
+    assertImportTimes(W1, ?SPACE_ID),
+
     %% Check if files were imported on W1
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
@@ -890,31 +1175,55 @@ create_file_in_dir_exceed_batch_update_test(Config, MountSpaceInRoot) ->
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH4})),
 
-    ?assertEqual(10, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(6, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(4, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS),
-    assertImportFinishTimeDefined(W1, ?SPACE_ID),
-    assertImportTimes(W1, ?SPACE_ID),
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 1,
+        <<"toProcess">> := 10,
+        <<"imported">> := 6,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 3,
+        <<"importedSum">> := 6,
+        <<"updatedSum">> := 1,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [6 | _],
+        <<"importedHourHist">> := [6 | _],
+        <<"importedDayHist">> := [6 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [1 | _],
+        <<"updatedDayHist">> := [1 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID),
 
     test_utils:mock_new(W1, storage_sync_changes, [passthrough]),
     ok = file:write_file(StorageTestFileinDirPath1, ?TEST_DATA),
     enable_storage_update(Config),
     assertUpdateTimes(W1, ?SPACE_ID),
-
-    ?assertEqual(7, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(6, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS),
     disable_storage_update(Config),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 2,
+        <<"toProcess">> := 7,
+        <<"imported">> := 1,
+        <<"updated">> := 3,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 3,
+        <<"importedSum">> := 7,
+        <<"updatedSum">> := 4,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [1 | _],
+        <<"importedHourHist">> := [7 | _],
+        <<"importedDayHist">> := [7 | _],
+        <<"updatedMinHist">> := [3 | _],
+        <<"updatedHourHist">> := [4 | _],
+        <<"updatedDayHist">> := [4 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID),
 
     %% Check if files were imported on W1
     ?assertMatch({ok, #file_attr{}},
@@ -931,7 +1240,6 @@ create_file_in_dir_exceed_batch_update_test(Config, MountSpaceInRoot) ->
     assert_num_results(History, ?assertMtimeChangedFun(?TEST_DIR2, true), 0),
     assert_num_results_gte(History, ?assertMtimeChangedFun(?TEST_DIR, true), 1),
 
-    assertImportFinishTimeDefined(W1, ?SPACE_ID),
 
     %% Check if file was imported on W2
     ?assertMatch({ok, #file_attr{}},
@@ -939,8 +1247,7 @@ create_file_in_dir_exceed_batch_update_test(Config, MountSpaceInRoot) ->
     {ok, Handle2} = ?assertMatch({ok, _},
         lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}, read)),
     ?assertMatch({ok, ?TEST_DATA},
-        lfm_proxy:read(W2, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
-    test_utils:mock_unload(W1, storage_sync_changes).
+        lfm_proxy:read(W2, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS).
 
 delete_empty_directory_update_test(Config, MountSpaceInRoot) ->
     [W1, _] = ?config(op_worker_nodes, Config),
@@ -957,21 +1264,33 @@ delete_empty_directory_update_test(Config, MountSpaceInRoot) ->
     enable_storage_update(Config),
     ok = file:del_dir(StorageTestDirPath),
     assertUpdateTimes(W1, ?SPACE_ID),
-
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS),
     disable_storage_update(Config),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 2,
+        <<"toProcess">> := 2,
+        <<"imported">> := 0,
+        <<"updated">> := 1,
+        <<"deleted">> := 1,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 1,
+        <<"updatedSum">> := 2,
+        <<"deletedSum">> := 1,
+        <<"importedMinHist">> := [1 | _],
+        <<"importedHourHist">> := [1 | _],
+        <<"importedDayHist">> := [1 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [2 | _],
+        <<"updatedDayHist">> := [2 | _],
+        <<"deletedMinHist">> := [1 | _],
+        <<"deletedHourHist">> := [1 | _],
+        <<"deletedDayHist">> := [1 | _]
+    }, ?SPACE_ID),
 
     %% Check if dir was deleted in space
     ?assertMatch({error, ?ENOENT},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
-    assertImportFinishTimeDefined(W1, ?SPACE_ID).
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS).
 
 delete_non_empty_directory_update_test(Config, MountSpaceInRoot) ->
     [W1, _] = ?config(op_worker_nodes, Config),
@@ -998,20 +1317,33 @@ delete_non_empty_directory_update_test(Config, MountSpaceInRoot) ->
     %% Delete dir on storage
     recursive_rm(StorageTestDirPath),
     assertUpdateTimes(W1, ?SPACE_ID),
-
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS),
     disable_storage_update(Config),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 2,
+        <<"toProcess">> := 3,
+        <<"imported">> := 0,
+        <<"updated">> := 1,
+        <<"deleted">> := 2,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 2,
+        <<"updatedSum">> := 2,
+        <<"deletedSum">> := 2,
+        <<"importedMinHist">> := [2 | _],
+        <<"importedHourHist">> := [2 | _],
+        <<"importedDayHist">> := [2 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [2 | _],
+        <<"updatedDayHist">> := [2 | _],
+        <<"deletedMinHist">> := [2 | _],
+        <<"deletedHourHist">> := [2 | _],
+        <<"deletedDayHist">> := [2 | _]
+    }, ?SPACE_ID),
+
     %% Check if dir was deleted in space
     ?assertMatch({error, ?ENOENT},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
-    assertImportFinishTimeDefined(W1, ?SPACE_ID).
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS).
 
 sync_works_properly_after_delete_test(Config, MountSpaceInRoot) ->
     [W1, _] = ?config(op_worker_nodes, Config),
@@ -1037,8 +1369,8 @@ sync_works_properly_after_delete_test(Config, MountSpaceInRoot) ->
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle5, 0, byte_size(?TEST_DATA))),
     lfm_proxy:close(W1, Handle5),
-    assertImportFinishTimeDefined(W1, ?SPACE_ID),
 
+    assertImportTimes(W1, ?SPACE_ID, ?ATTEMPTS),
     storage_sync_test_base:enable_storage_update(Config),
 
     %% Delete dir on storage
@@ -1048,19 +1380,54 @@ sync_works_properly_after_delete_test(Config, MountSpaceInRoot) ->
     ?assertMatch({error, ?ENOENT},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
 
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS),
     assertUpdateTimes(W1, ?SPACE_ID),
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 2,
+        <<"toProcess">> := 3,
+        <<"imported">> := 0,
+        <<"updated">> := 1,
+        <<"deleted">> := 2,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 2,
+        <<"updatedSum">> := 2,
+        <<"deletedSum">> := 2,
+        <<"importedMinHist">> := [2 | _],
+        <<"importedHourHist">> := [2 | _],
+        <<"importedDayHist">> := [2 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [2 | _],
+        <<"updatedDayHist">> := [2 | _],
+        <<"deletedMinHist">> := [2 | _],
+        <<"deletedHourHist">> := [2 | _],
+        <<"deletedDayHist">> := [2 | _]
+    }, ?SPACE_ID),
 
     ok = file:make_dir(StorageTestDirPath2),
     ok = file:write_file(StorageTestFileinDirPath2, ?TEST_DATA),
     SpaceTestFileInDirPath = ?SPACE_TEST_FILE_IN_DIR_PATH(?TEST_DIR2, ?TEST_FILE2),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 3,
+        <<"toProcess">> := 3,
+        <<"imported">> := 2,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 4,
+        <<"updatedSum">> := 3,
+        <<"deletedSum">> := 2,
+        <<"importedMinHist">> := [2 | _],
+        <<"importedHourHist">> := [4 | _],
+        <<"importedDayHist">> := [4 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [3 | _],
+        <<"updatedDayHist">> := [3 | _],
+        <<"deletedMinHist">> := [2 | _],
+        <<"deletedHourHist">> := [2 | _],
+        <<"deletedDayHist">> := [2 | _]
+    }, ?SPACE_ID, ?ATTEMPTS),
 
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH2}), ?ATTEMPTS),
@@ -1089,6 +1456,7 @@ delete_and_update_files_simultaneously_update_test(Config, MountSpaceInRoot) ->
     ok = file:write_file(StorageTestFileinDirPath1, ?TEST_DATA),
     ok = file:write_file(StorageTestFileinDirPath2, ?TEST_DATA),
     storage_sync_test_base:enable_storage_import(Config),
+    assertImportTimes(W1, ?SPACE_ID),
     %% Check if dir was imported
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
@@ -1105,31 +1473,58 @@ delete_and_update_files_simultaneously_update_test(Config, MountSpaceInRoot) ->
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle6, 0, byte_size(?TEST_DATA))),
 
-    ?assertEqual(4, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(3, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS),
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 1,
+        <<"toProcess">> := 4,
+        <<"imported">> := 3,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 3,
+        <<"updatedSum">> := 1,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [3 | _],
+        <<"importedHourHist">> := [3 | _],
+        <<"importedDayHist">> := [3 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [1 | _],
+        <<"updatedDayHist">> := [1 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID),
 
     %% Delete dir on storage
     recursive_rm(StorageTestFileinDirPath1),
     file:change_mode(StorageTestFileinDirPath2, NewMode),
 
     storage_sync_test_base:enable_storage_update(Config),
-
     assertUpdateTimes(W1, ?SPACE_ID),
-    ?assertEqual(4, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(3, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS),
     disable_storage_update(Config),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 2,
+        <<"toProcess">> := 4,
+        <<"imported">> := 0,
+        <<"updated">> := 3,
+        <<"deleted">> := 1,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 3,
+        <<"updatedSum">> := 4,
+        <<"deletedSum">> := 1,
+        <<"importedMinHist">> := [3 | _],
+        <<"importedHourHist">> := [3 | _],
+        <<"importedDayHist">> := [3 | _],
+        <<"updatedMinHist">> := [3 | _],
+        <<"updatedHourHist">> := [4 | _],
+        <<"updatedDayHist">> := [4 | _],
+        <<"deletedMinHist">> := [1 | _],
+        <<"deletedHourHist">> := [1 | _],
+        <<"deletedDayHist">> := [1 | _]
+    }, ?SPACE_ID),
+
     %% Check if File1 was deleted in and if File2 was updated
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
@@ -1137,9 +1532,7 @@ delete_and_update_files_simultaneously_update_test(Config, MountSpaceInRoot) ->
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}), ?ATTEMPTS),
 
     ?assertMatch({ok, #file_attr{mode = NewMode}},
-            lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH2}), ?ATTEMPTS),
-
-    assertImportFinishTimeDefined(W1, ?SPACE_ID).
+            lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH2}), ?ATTEMPTS).
 
 delete_directory_export_test(Config, MountSpaceInRoot) ->
     [W1, _] = ?config(op_worker_nodes, Config),
@@ -1184,19 +1577,33 @@ delete_file_update_test(Config, MountSpaceInRoot) ->
     ok = file:delete(StorageTestFilePath),
     enable_storage_update(Config),
     assertUpdateTimes(W1, ?SPACE_ID),
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS),
+    disable_storage_update(Config),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 2,
+        <<"toProcess">> := 2,
+        <<"imported">> := 0,
+        <<"updated">> := 1,
+        <<"deleted">> := 1,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 1,
+        <<"updatedSum">> := 2,
+        <<"deletedSum">> := 1,
+        <<"importedMinHist">> := [1 | _],
+        <<"importedHourHist">> := [1 | _],
+        <<"importedDayHist">> := [1 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [2 | _],
+        <<"updatedDayHist">> := [2 | _],
+        <<"deletedMinHist">> := [1 | _],
+        <<"deletedHourHist">> := [1 | _],
+        <<"deletedDayHist">> := [1 | _]
+    }, ?SPACE_ID),
+
     %% Check if file was deleted in space
     ?assertMatch({error, ?ENOENT},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
-    disable_storage_update(Config),
-    assertImportFinishTimeDefined(W1, ?SPACE_ID).
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS).
 
 delete_file_export_test(Config, MountSpaceInRoot) ->
     [W1, _] = ?config(op_worker_nodes, Config),
@@ -1238,18 +1645,32 @@ append_file_update_test(Config, MountSpaceInRoot) ->
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
     lfm_proxy:close(W1, Handle1),
 
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS),
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 1,
+        <<"toProcess">> := 2,
+        <<"imported">> := 1,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 1,
+        <<"updatedSum">> := 1,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [1 | _],
+        <<"importedHourHist">> := [1 | _],
+        <<"importedDayHist">> := [1 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [1 | _],
+        <<"updatedDayHist">> := [1 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID),
 
     %% Append to file
     append(StorageTestFilePath, ?TEST_DATA2),
     storage_sync_test_base:enable_storage_update(Config),
+    assertUpdateTimes(W1, ?SPACE_ID),
 
     %% Check if appended bytes were imported on worker1
     {ok, Handle2} = ?assertMatch({ok, _},
@@ -1259,14 +1680,27 @@ append_file_update_test(Config, MountSpaceInRoot) ->
         lfm_proxy:read(W1, Handle2, 0, byte_size(AppendedData))),
     lfm_proxy:close(W1, Handle2),
 
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS).
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 2,
+        <<"toProcess">> := 2,
+        <<"imported">> := 0,
+        <<"updated">> := 2,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 1,
+        <<"updatedSum">> := 3,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [1 | _],
+        <<"importedHourHist">> := [1 | _],
+        <<"importedDayHist">> := [1 | _],
+        <<"updatedMinHist">> := [2 | _],
+        <<"updatedHourHist">> := [3 | _],
+        <<"updatedDayHist">> := [3 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID).
 
 append_file_export_test(Config, MountSpaceInRoot) ->
     [W1, _] = ?config(op_worker_nodes, Config),
@@ -1303,6 +1737,34 @@ copy_file_update_test(Config, MountSpaceInRoot) ->
     %% Create file on storage
     ok = file:write_file(StorageTestFilePath, ?TEST_DATA),
     storage_sync_test_base:enable_storage_import(Config),
+    assertImportTimes(W1, ?SPACE_ID),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 1,
+        <<"toProcess">> := 2,
+        <<"imported">> := 1,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 1,
+        <<"updatedSum">> := 1,
+        <<"deletedSum">> := 0,
+        <<"importedHourHist">> := [1 | _],
+        <<"importedDayHist">> := [1 | _],
+        <<"updatedHourHist">> := [1 | _],
+        <<"updatedDayHist">> := [1 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID),
+
+%%    tracer:start(W1),
+%%    tracer:trace_calls(times, create_or_update),
+%%    tracer:trace_calls(fslogic_times, update_times_and_emit),
+%%    tracer:trace_calls(fslogic_times, update_atime),
+%%    tracer:trace_calls(fslogic_times, update_ctime),
+%%    tracer:trace_calls(fslogic_times, update_mtime),
+%%    tracer:trace_calls(fslogic_times, update_mtime_ctime),
     %% Check if file was imported
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
@@ -1312,20 +1774,37 @@ copy_file_update_test(Config, MountSpaceInRoot) ->
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
     lfm_proxy:close(W1, Handle1),
 
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS),
-
+    timer:sleep(timer:seconds(10)),  %ensure that copy time is different from read time
+%%    ct:pal("BEFORE: ~p ~p", [StorageTestFilePath, file:read_file_info(StorageTestFilePath, [{time, posix}])]),
     %% Copy file
     file:copy(StorageTestFilePath, StorageTestFilePath2),
-    storage_sync_test_base:enable_storage_update(Config),
+%%    ct:pal("AFTER: ~p ~p", [StorageTestFilePath, file:read_file_info(StorageTestFilePath, [{time, posix}])]),
+%%    ct:timetrap({hours, 1}),
+%%    ct:sleep({hours, 1}),
 
-    %% Check if appended bytes were imported
+    storage_sync_test_base:enable_storage_update(Config),
+    assertUpdateTimes(W1, ?SPACE_ID),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 2,
+        <<"toProcess">> := 3,
+        <<"imported">> := 1,
+        <<"updated">> := 2,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 2,
+        <<"updatedSum">> := 3,
+        <<"deletedSum">> := 0,
+        <<"importedHourHist">> := [2 | _],
+        <<"importedDayHist">> := [2 | _],
+        <<"updatedHourHist">> := [3 | _],
+        <<"updatedDayHist">> := [3 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID),
+
+    %% Check if copied file was imported
     {ok, Handle2} = ?assertMatch({ok, _},
         lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH2}, read), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA},
@@ -1335,16 +1814,7 @@ copy_file_update_test(Config, MountSpaceInRoot) ->
         lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle3, 0, byte_size(?TEST_DATA))),
-    lfm_proxy:close(W1, Handle3),
-
-    ?assertEqual(3, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS).
+    lfm_proxy:close(W1, Handle3).
 
 move_file_update_test(Config, MountSpaceInRoot) ->
     [W1, _] = ?config(op_worker_nodes, Config),
@@ -1357,6 +1827,30 @@ move_file_update_test(Config, MountSpaceInRoot) ->
     %% Create file on storage
     ok = file:write_file(StorageTestFilePath, ?TEST_DATA),
     storage_sync_test_base:enable_storage_import(Config),
+    assertImportTimes(W1, ?SPACE_ID),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 1,
+        <<"toProcess">> := 2,
+        <<"imported">> := 1,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 1,
+        <<"updatedSum">> := 1,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [1 | _],
+        <<"importedHourHist">> := [1 | _],
+        <<"importedDayHist">> := [1 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [1 | _],
+        <<"updatedDayHist">> := [1 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID),
+
     %% Check if file was imported
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
@@ -1366,18 +1860,33 @@ move_file_update_test(Config, MountSpaceInRoot) ->
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
     lfm_proxy:close(W1, Handle1),
 
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS),
-
+    timer:sleep(timer:seconds(2)),  %ensure that copy time is different from read time
     %% Move file
     ok = file:rename(StorageTestFilePath, StorageTestFilePath2),
     storage_sync_test_base:enable_storage_update(Config),
+    assertUpdateTimes(W1, ?SPACE_ID),
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 2,
+        <<"toProcess">> := 3,
+        <<"imported">> := 1,
+        <<"updated">> := 1,
+        <<"deleted">> := 1,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 2,
+        <<"updatedSum">> := 2,
+        <<"deletedSum">> := 1,
+        <<"importedMinHist">> := [1 | _],
+        <<"importedHourHist">> := [2 | _],
+        <<"importedDayHist">> := [2 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [2 | _],
+        <<"updatedDayHist">> := [2 | _],
+        <<"deletedMinHist">> := [1 | _],
+        <<"deletedHourHist">> := [1 | _],
+        <<"deletedDayHist">> := [1 | _]
+    }, ?SPACE_ID),
+
     %% Check if file was moved
     {ok, Handle2} = ?assertMatch({ok, _},
         lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH2}, read), ?ATTEMPTS),
@@ -1385,16 +1894,7 @@ move_file_update_test(Config, MountSpaceInRoot) ->
         lfm_proxy:read(W1, Handle2, 0, byte_size(?TEST_DATA))),
     ?assertMatch({error, ?ENOENT},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH})),
-    lfm_proxy:close(W1, Handle2),
-
-    ?assertEqual(3, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS).
+    lfm_proxy:close(W1, Handle2).
 
 truncate_file_update_test(Config, MountSpaceInRoot) ->
     [W1, _] = ?config(op_worker_nodes, Config),
@@ -1405,6 +1905,30 @@ truncate_file_update_test(Config, MountSpaceInRoot) ->
     %% Create file on storage
     ok = file:write_file(StorageTestFilePath, ?TEST_DATA),
     storage_sync_test_base:enable_storage_import(Config),
+    assertImportTimes(W1, ?SPACE_ID),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 1,
+        <<"toProcess">> := 2,
+        <<"imported">> := 1,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 1,
+        <<"updatedSum">> := 1,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [1 | _],
+        <<"importedHourHist">> := [1 | _],
+        <<"importedDayHist">> := [1 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [1 | _],
+        <<"updatedDayHist">> := [1 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID),
+
     %% Check if file was imported
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
@@ -1414,30 +1938,36 @@ truncate_file_update_test(Config, MountSpaceInRoot) ->
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
     lfm_proxy:close(W1, Handle1),
 
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS),
-
+    timer:sleep(timer:seconds(2)),  %ensure that modify time is different from read time
     %% Truncate file
     truncate(StorageTestFilePath, 1),
     storage_sync_test_base:enable_storage_update(Config),
+    assertUpdateTimes(W1, ?SPACE_ID),
     %% Check if file was truncated
     ?assertMatch({ok, #file_attr{size = 1}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
 
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS).
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 2,
+        <<"toProcess">> := 2,
+        <<"imported">> := 0,
+        <<"updated">> := 2,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 1,
+        <<"updatedSum">> := 3,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [1 | _],
+        <<"importedHourHist">> := [1 | _],
+        <<"importedDayHist">> := [1 | _],
+        <<"updatedMinHist">> := [2 | _],
+        <<"updatedHourHist">> := [3 | _],
+        <<"updatedDayHist">> := [3 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID).
 
 chmod_file_update_test(Config, MountSpaceInRoot) ->
     [W1, _] = ?config(op_worker_nodes, Config),
@@ -1456,6 +1986,7 @@ chmod_file_update_test(Config, MountSpaceInRoot) ->
     %% Create file on storage
     ok = file:write_file(StorageTestFileinDirPath1, ?TEST_DATA),
     storage_sync_test_base:enable_storage_import(Config),
+    storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID),
     %% Check if file was imported
     ?assertMatch({ok, #file_attr{mode = 8#644}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}), ?ATTEMPTS),
@@ -1465,20 +1996,36 @@ chmod_file_update_test(Config, MountSpaceInRoot) ->
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
     lfm_proxy:close(W1, Handle1),
 
-    ?assertEqual(3, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS),
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 1,
+        <<"toProcess">> := 3,
+        <<"imported">> := 2,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 2,
+        <<"updatedSum">> := 1,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [2 | _],
+        <<"importedHourHist">> := [2 | _],
+        <<"importedDayHist">> := [2 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [1 | _],
+        <<"updatedDayHist">> := [1 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID),
 
     test_utils:mock_new(W1, storage_sync_changes, [passthrough]),
 
+    timer:sleep(timer:seconds(2)),  %ensure that modify time is different from read time
     %% Change file permissions
     file:change_mode(StorageTestFileinDirPath1, NewMode),
     storage_sync_test_base:enable_storage_update(Config),
+    assertUpdateTimes(W1, ?SPACE_ID),
+
     %% Check if file permissions were changed
     ?assertMatch({ok, #file_attr{mode = NewMode}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}), ?ATTEMPTS),
@@ -1486,14 +2033,27 @@ chmod_file_update_test(Config, MountSpaceInRoot) ->
 
     assert_num_results_gte(History, ?assertHashChangedFun(?TEST_DIR, true), 1),
 
-    ?assertEqual(3, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(3, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS).
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 2,
+        <<"toProcess">> := 3,
+        <<"imported">> := 0,
+        <<"updated">> := 3,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 2,
+        <<"updatedSum">> := 4,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [2 | _],
+        <<"importedHourHist">> := [2 | _],
+        <<"importedDayHist">> := [2 | _],
+        <<"updatedMinHist">> := [3 | _],
+        <<"updatedHourHist">> := [4 | _],
+        <<"updatedDayHist">> := [4 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID).
 
 chmod_file_update2_test(Config, MountSpaceInRoot) ->
     [W1, _] = ?config(op_worker_nodes, Config),
@@ -1534,36 +2094,64 @@ chmod_file_update2_test(Config, MountSpaceInRoot) ->
 
     test_utils:mock_new(W1, storage_sync_changes, [passthrough]),
 
-    ?assertEqual(8, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(5, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(3, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS),
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 1,
+        <<"toProcess">> := 8,
+        <<"imported">> := 5,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 2,
+        <<"importedSum">> := 5,
+        <<"updatedSum">> := 1,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [5 | _],
+        <<"importedHourHist">> := [5 | _],
+        <<"importedDayHist">> := [5 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [1 | _],
+        <<"updatedDayHist">> := [1 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID),
 
     %% Change file permissions
     ok = file:change_mode(StTestFile1, NewMode),
     storage_sync_test_base:enable_storage_update(Config),
+    assertUpdateTimes(W1, ?SPACE_ID),
 
     %% Check if file permissions were changed
     ?assertMatch({ok, #file_attr{mode = NewMode}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}), ?ATTEMPTS),
     History = rpc:call(W1, meck, history, [storage_sync_changes]),
-%%    test_utils:mock_unload(W1, storage_sync_changes),
+    %%    test_utils:mock_unload(W1, storage_sync_changes),
 
     assert_num_results_gte(History, ?assertHashChangedFun(?TEST_DIR, true), 1),
     assert_num_results(History, ?assertMtimeChangedFun(?TEST_DIR, true), 0),
 
-    ?assertEqual(5, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(5, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS).
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 2,
+        <<"toProcess">> := 8,
+        <<"imported">> := 0,
+        <<"updated">> := 4,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 4,
+        <<"importedSum">> := 5,
+        <<"updatedSum">> := 5,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [5 | _],
+        <<"importedHourHist">> := [5 | _],
+        <<"importedDayHist">> := [5 | _],
+        <<"updatedMinHist">> := [4 | _],
+        <<"updatedHourHist">> := [5 | _],
+        <<"updatedDayHist">> := [5 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID).
+
 
 update_timestamps_file_import_test(Config, MountSpaceInRoot) ->
     [W1, _] = ?config(op_worker_nodes, Config),
@@ -1585,30 +2173,60 @@ update_timestamps_file_import_test(Config, MountSpaceInRoot) ->
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
 
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS),
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 1,
+        <<"toProcess">> := 2,
+        <<"imported">> := 1,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 1,
+        <<"updatedSum">> := 1,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [1 | _],
+        <<"importedHourHist">> := [1 | _],
+        <<"importedDayHist">> := [1 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [1 | _],
+        <<"updatedDayHist">> := [1 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID),
 
+    timer:sleep(timer:seconds(2)),
     %% Change file permissions
-    change_time(StorageTestFilePath, 1, 1),
+    NewTimestamp = 9999999999,
+    change_time(StorageTestFilePath, NewTimestamp, NewTimestamp),
     storage_sync_test_base:enable_storage_update(Config),
-    %% Check if timestamps were changed
-    ?assertMatch({ok, #file_attr{atime = 1, mtime = 1}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+    assertUpdateTimes(W1, ?SPACE_ID, ?ATTEMPTS),
 
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS).
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 2,
+        <<"toProcess">> := 2,
+        <<"imported">> := 0,
+        <<"updated">> := 2,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 1,
+        <<"updatedSum">> := 3,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [1 | _],
+        <<"importedHourHist">> := [1 | _],
+        <<"importedDayHist">> := [1 | _],
+        <<"updatedMinHist">> := [2 | _],
+        <<"updatedHourHist">> := [3 | _],
+        <<"updatedDayHist">> := [3 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID),
+
+    %% Check if timestamps were changed
+    ?assertMatch({ok, #file_attr{atime = NewTimestamp, mtime = NewTimestamp}},
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS).
 
 should_not_detect_timestamp_update_test(Config, MountSpaceInRoot) ->
     [W1, _] = ?config(op_worker_nodes, Config),
@@ -1619,34 +2237,64 @@ should_not_detect_timestamp_update_test(Config, MountSpaceInRoot) ->
     %% Create file on storage
     ok = file:write_file(StorageTestFilePath, ?TEST_DATA),
     storage_sync_test_base:enable_storage_import(Config),
+    assertImportTimes(W1, ?SPACE_ID, ?ATTEMPTS),
+
     %% Check if file was imported
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
 
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS),
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 1,
+        <<"toProcess">> := 2,
+        <<"imported">> := 1,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 1,
+        <<"updatedSum">> := 1,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [1 | _],
+        <<"importedHourHist">> := [1 | _],
+        <<"importedDayHist">> := [1 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [1 | _],
+        <<"updatedDayHist">> := [1 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID),
 
     %% Change file permissions
     change_time(StorageTestFilePath, 1, 1),
     storage_sync_test_base:enable_storage_update(Config),
+    assertUpdateTimes(W1, ?SPACE_ID, ?ATTEMPTS),
+
     %% Check if timestamps hasn't changed
     ?assertNotMatch({ok, #file_attr{atime = 1, mtime = 1}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH})),
 
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS).
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 2,
+        <<"toProcess">> := 1,
+        <<"imported">> := 0,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 1,
+        <<"updatedSum">> := 2,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [1 | _],
+        <<"importedHourHist">> := [1 | _],
+        <<"importedDayHist">> := [1 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [2 | _],
+        <<"updatedDayHist">> := [2 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID).
 
 import_nfs_acl_test(Config, MountSpaceInRoot) ->
     [W1, _] = ?config(op_worker_nodes, Config),
@@ -1680,14 +2328,28 @@ import_nfs_acl_test(Config, MountSpaceInRoot) ->
     {ok, #xattr{value = Value}} = ?assertMatch({ok, #xattr{}},
         lfm_proxy:get_xattr(W1, SessId2, {path, ?SPACE_TEST_FILE_PATH}, <<"cdmi_acl">>)),
 
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS).
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 1,
+        <<"toProcess">> := 2,
+        <<"imported">> := 1,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 1,
+        <<"updatedSum">> := 1,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [1 | _],
+        <<"importedHourHist">> := [1 | _],
+        <<"importedDayHist">> := [1 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [1 | _],
+        <<"updatedDayHist">> := [1 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID).
+
 
 update_nfs_acl_test(Config, MountSpaceInRoot) ->
     Workers = [W1, _] = ?config(op_worker_nodes, Config),
@@ -1700,6 +2362,7 @@ update_nfs_acl_test(Config, MountSpaceInRoot) ->
     %% Create file on storage
     ok = file:write_file(StorageTestFilePath, ?TEST_DATA),
     storage_sync_test_base:enable_storage_import(Config),
+    assertImportTimes(W1, ?SPACE_ID, ?ATTEMPTS),
 
     %% Check if file was imported
     ?assertMatch({ok, #file_attr{}},
@@ -1722,14 +2385,27 @@ update_nfs_acl_test(Config, MountSpaceInRoot) ->
     ?assertMatch({error, ?EACCES},
         lfm_proxy:set_xattr(W1, SessId2, {path, ?SPACE_TEST_FILE_PATH}, #xattr{})),
 
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS),
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 1,
+        <<"toProcess">> := 2,
+        <<"imported">> := 1,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 1,
+        <<"updatedSum">> := 1,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [1 | _],
+        <<"importedHourHist">> := [1 | _],
+        <<"importedDayHist">> := [1 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [1 | _],
+        <<"updatedDayHist">> := [1 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID),
 
     EncACL = nfs4_acl:encode(?ACL2),
     ok = test_utils:mock_expect(Workers, storage_file_manager, getxattr, fun
@@ -1741,6 +2417,7 @@ update_nfs_acl_test(Config, MountSpaceInRoot) ->
             {ok, EncACL}
     end),
     storage_sync_test_base:enable_storage_update(Config),
+    assertUpdateTimes(W1, ?SPACE_ID, ?ATTEMPTS),
 
     %% User1 should not be allowed to read acl
     ?assertMatch({error, ?EACCES},
@@ -1751,14 +2428,27 @@ update_nfs_acl_test(Config, MountSpaceInRoot) ->
         lfm_proxy:get_xattr(W1, SessId2, {path, ?SPACE_TEST_FILE_PATH}, <<"cdmi_acl">>)),
     ?assertMatch(Value2, ?ACL2_JSON),
 
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS).
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 2,
+        <<"toProcess">> := 2,
+        <<"imported">> := 0,
+        <<"updated">> := 2,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 1,
+        <<"updatedSum">> := 3,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [1 | _],
+        <<"importedHourHist">> := [1 | _],
+        <<"importedDayHist">> := [1 | _],
+        <<"updatedMinHist">> := [2 | _],
+        <<"updatedHourHist">> := [3 | _],
+        <<"updatedDayHist">> := [3 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID).
 
 import_nfs_acl_with_disabled_luma_should_fail_test(Config, MountSpaceInRoot) ->
     [W1, _] = ?config(op_worker_nodes, Config),
@@ -1770,19 +2460,33 @@ import_nfs_acl_with_disabled_luma_should_fail_test(Config, MountSpaceInRoot) ->
     %% Create file on storage
     ok = file:write_file(StorageTestFilePath, ?TEST_DATA),
     storage_sync_test_base:enable_storage_import(Config),
-    %% File shouldn't have been imported
-    timer:sleep(timer:seconds(?ATTEMPTS)),
+    assertImportTimes(W1, ?SPACE_ID, ?ATTEMPTS),
+
     ?assertMatch({error, ?ENOENT},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
 
-    ?assertEqual(2, rpc:call(W1, storage_sync_monitoring, get_files_to_sync_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_imported_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_updated_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(1, rpc:call(W1, storage_sync_monitoring, get_failed_file_imports_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_updates_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_unhandled_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_deleted_files_value, [?SPACE_ID]), ?ATTEMPTS),
-    ?assertEqual(0, rpc:call(W1, storage_sync_monitoring, get_failed_file_deletions_value, [?SPACE_ID]), ?ATTEMPTS).
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 1,
+        <<"toProcess">> := 2,
+        <<"imported">> := 0,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 1,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 0,
+        <<"updatedSum">> := 1,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [0 | _],
+        <<"importedHourHist">> := [0 | _],
+        <<"importedDayHist">> := [0 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [1 | _],
+        <<"updatedDayHist">> := [1 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID).
+
 
 recreate_file_deleted_by_sync_test(Config, MountSpaceInRoot) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
@@ -1809,7 +2513,6 @@ recreate_file_deleted_by_sync_test(Config, MountSpaceInRoot) ->
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
     lfm_proxy:close(W1, Handle1),
 
-    assertImportFinishTimeDefined(W1, ?SPACE_ID),
     assertImportTimes(W1, ?SPACE_ID),
 
     StorageTestFilePath =
@@ -1860,7 +2563,6 @@ sync_should_not_delete_not_replicated_file_created_in_remote_provider(Config, Mo
     ?assertEqual(ok, lfm_proxy:fsync(W2, FileHandle)),
     ok = lfm_proxy:close(W2, FileHandle),
 
-    assertImportFinishTimeDefined(W1, ?SPACE_ID),
     assertImportTimes(W1, ?SPACE_ID),
 
     %check if file_meta was synced
@@ -1909,7 +2611,6 @@ sync_should_not_delete_dir_created_in_remote_provider(Config, MountSpaceInRoot) 
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
 
-    assertImportFinishTimeDefined(W1, ?SPACE_ID),
     assertImportTimes(W1, ?SPACE_ID),
 
     %% Create file on storage to trigger update
@@ -1948,7 +2649,6 @@ sync_should_not_delete_not_replicated_files_created_in_remote_provider2(Config, 
     ?assertEqual(ok, lfm_proxy:fsync(W2, FileHandle)),
     ok = lfm_proxy:close(W2, FileHandle),
 
-    assertImportFinishTimeDefined(W1, ?SPACE_ID),
     assertImportTimes(W1, ?SPACE_ID),
 
     %check if file_meta was synced
@@ -2047,10 +2747,15 @@ import_remote_file_by_path_test(Config, MountSpaceInRoot) ->
 %%% Util functions
 %%%===================================================================
 
-create_init_file(Config) ->
+create_init_file(Config, Readonly) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     MountPoint = get_host_mount_point(W1, Config),
-    Name = filename:join([MountPoint, ?SPACE_ID]),
+    Name = case Readonly of
+        false ->
+           filename:join([MountPoint, ?SPACE_ID]);
+        true ->
+            filename:join([MountPoint])
+    end,
     case file:make_dir(Name) of
         ok ->
             file:change_mode(Name, 8#777);
@@ -2099,10 +2804,13 @@ disable_storage_import(Config) ->
     [W1, _] = ?config(op_worker_nodes, Config),
     StorageId = get_storage_id(W1),
     rpc:call(W1, storage_sync, stop_storage_import, [?SPACE_ID]),
-    rpc:call(W1, space_strategies, update_import_start_time, [?SPACE_ID, StorageId, undefined]),
-    rpc:call(W1, space_strategies, update_import_finish_time, [?SPACE_ID, StorageId, undefined]),
     ?assertMatch({no_import, _}, get_storage_import_details(W1, ?SPACE_ID, StorageId), ?ATTEMPTS),
+    assertNoImportInProgress(W1, ?SPACE_ID, ?ATTEMPTS),
     ok.
+
+cleanup_storage_sync_monitoring_model(Worker, SpaceId) ->
+    StorageId = get_storage_id(Worker),
+    rpc:call(Worker, storage_sync_monitoring, delete, [SpaceId, StorageId]).
 
 get_storage_import_details(Worker, SpaceId, StorageId) ->
     rpc:call(Worker, space_strategies, get_storage_import_details, [SpaceId, StorageId]).
@@ -2118,9 +2826,8 @@ disable_storage_update(Config) ->
     [W1, _] = ?config(op_worker_nodes, Config),
     StorageId = get_storage_id(W1),
     rpc:call(W1, storage_sync, stop_storage_update, [?SPACE_ID]),
-    rpc:call(W1, space_strategies, update_last_update_start_time, [?SPACE_ID, StorageId, undefined]),
-    rpc:call(W1, space_strategies, update_last_update_finish_time, [?SPACE_ID, StorageId, undefined]),
     ?assertMatch({no_update, _}, get_storage_update_details(W1, ?SPACE_ID, StorageId), ?ATTEMPTS),
+    assertNoUpdateInProgress(W1, ?SPACE_ID, ?ATTEMPTS),
     ok.
 
 disable_storage_sync(Config) ->
@@ -2359,37 +3066,57 @@ create_nested_directory_tree([SubDirsNum | Rest], Root) ->
         ok = create_nested_directory_tree(Rest, DirPath)
     end, lists:seq(1, SubDirsNum)).
 
-assertImportFinishTimeDefined(Worker, SpaceId) ->
-    {ok, #document{value=#space_strategies{storage_strategies = StorageStrategies}}}
-        = rpc:call(Worker, space_strategies, get, [SpaceId]),
-    {ok, #document{value=#space_storage{storage_ids = [StorageId]}}}
-        = rpc:call(Worker, space_storage, get, [SpaceId]),
-    ?assertNotEqual(#storage_strategies{import_finish_time = undefined}, maps:get(StorageId, StorageStrategies), ?ATTEMPTS).
 
 assertImportTimes(Worker, SpaceId) ->
+    assertImportTimes(Worker, SpaceId, ?ATTEMPTS).
+
+assertImportTimes(Worker, SpaceId, Attempts) ->
     {ok, #document{value=#space_storage{storage_ids = [StorageId]}}}
         = rpc:call(Worker, space_storage, get, [SpaceId]),
-
     ?assertEqual(true, begin
-        {ok, #document{value=#space_strategies{storage_strategies = StorageStrategies}}}
-            = rpc:call(Worker, space_strategies, get, [SpaceId]),
-        #storage_strategies{
-            import_start_time = StartTime,
-            import_finish_time = FinishTime
-        } = maps:get(StorageId, StorageStrategies),
+        {ok, #document{
+            value=#storage_sync_monitoring{
+                import_start_time = StartTime,
+                import_finish_time = FinishTime
+        }}} = rpc:call(Worker, storage_sync_monitoring, get, [SpaceId, StorageId]),
         (StartTime =/= undefined) and (FinishTime =/= undefined) and (StartTime =< FinishTime)
-    end, ?ATTEMPTS).
+    end, Attempts).
 
 assertUpdateTimes(Worker, SpaceId) ->
+    assertUpdateTimes(Worker, SpaceId, ?ATTEMPTS).
+
+assertUpdateTimes(Worker, SpaceId, Attempts) ->
     {ok, #document{value=#space_storage{storage_ids = [StorageId]}}}
         = rpc:call(Worker, space_storage, get, [SpaceId]),
-
     ?assertEqual(true, begin
-        {ok, #document{value=#space_strategies{storage_strategies = StorageStrategies}}}
-            = rpc:call(Worker, space_strategies, get, [SpaceId]),
-        #storage_strategies{
-            last_update_start_time = StartTime,
-            last_update_finish_time = FinishTime
-        } = maps:get(StorageId, StorageStrategies),
+        {ok, #document{
+            value=#storage_sync_monitoring{
+                last_update_start_time = StartTime,
+                last_update_finish_time = FinishTime
+        }}} = rpc:call(Worker, storage_sync_monitoring, get, [SpaceId, StorageId]),
         (StartTime =/= undefined) and (FinishTime =/= undefined) and (StartTime =< FinishTime)
-    end, ?ATTEMPTS).
+    end, Attempts).
+
+assertNoImportInProgress(Worker, SpaceId, Attempts) ->
+    {ok, #document{value=#space_storage{storage_ids = [StorageId]}}}
+        = rpc:call(Worker, space_storage, get, [SpaceId]),
+    ?assertEqual(true, begin
+        {ok, #document{
+            value=#storage_sync_monitoring{
+                import_start_time = StartTime,
+                import_finish_time = FinishTime
+            }}} = rpc:call(Worker, storage_sync_monitoring, get, [SpaceId, StorageId]),
+        ((StartTime =:= undefined) andalso (FinishTime =:= undefined)) orelse ((FinishTime =/= undefined) andalso (StartTime =< FinishTime))
+    end, Attempts).
+
+assertNoUpdateInProgress(Worker, SpaceId, Attempts) ->
+    {ok, #document{value=#space_storage{storage_ids = [StorageId]}}}
+        = rpc:call(Worker, space_storage, get, [SpaceId]),
+    ?assertEqual(true, begin
+        {ok, #document{
+            value=#storage_sync_monitoring{
+                last_update_start_time = StartTime,
+                last_update_finish_time = FinishTime
+            }}} = rpc:call(Worker, storage_sync_monitoring, get, [SpaceId, StorageId]),
+        ((StartTime =:= undefined) andalso (FinishTime =:= undefined)) orelse ((FinishTime =/= undefined) andalso (StartTime =< FinishTime))
+    end, Attempts).

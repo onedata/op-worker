@@ -105,10 +105,14 @@ strategy_init_jobs(no_update, _, _) ->
     [];
 strategy_init_jobs(_, _, #{import_finish_time := undefined}) ->
     []; % import hasn't been finished yet
-strategy_init_jobs(_, Args, Data = #{last_update_start_time := undefined, space_id := SpaceId}) ->
+strategy_init_jobs(_, Args, Data = #{
+    last_update_start_time := undefined,
+    space_id := SpaceId,
+    storage_id := StorageId
+}) ->
     % it will be first update
     CurrentTimestamp = time_utils:cluster_time_seconds(),
-    ?debug("Starting storage_update for space: ~p at time ~p", [SpaceId, CurrentTimestamp]),
+    ?critical("Starting storage_update for space: ~p and storage: ~p", [SpaceId, StorageId]),
     init_update_job(CurrentTimestamp, Args, Data);
 strategy_init_jobs(simple_scan, _, #{last_update_finish_time := undefined}) ->
     []; %update is in progress
@@ -117,14 +121,15 @@ strategy_init_jobs(simple_scan,
     Data = #{
         last_update_start_time := LastUpdateStartTime,
         last_update_finish_time := LastUpdateFinishTime,
-        space_id := SpaceId
+        space_id := SpaceId,
+        storage_id := StorageId
 }) ->
     CurrentTimestamp = time_utils:cluster_time_seconds(),
     case should_init_update_job(LastUpdateStartTime, LastUpdateFinishTime,
         ScanIntervalSeconds, CurrentTimestamp)
     of
         true ->
-            ?debug("Starting storage_update for space: ~p at time ~p", [SpaceId, CurrentTimestamp]),
+            ?critical("Starting storage_update for space: ~p and storage: ~p", [SpaceId, StorageId]),
             init_update_job(CurrentTimestamp, Args, Data);
         false ->
             []
@@ -165,34 +170,13 @@ strategy_merge_result(Jobs, Results) ->
     LocalResult :: space_strategy:job_result(),
     ChildrenResult :: space_strategy:job_result()) ->
     space_strategy:job_result().
-strategy_merge_result(#space_strategy_job{strategy_name = no_update}, ok, ok) ->
+strategy_merge_result(_Job, ok, ok) ->
     ok;
-strategy_merge_result(#space_strategy_job{
-    data = #{
-        space_id := SpaceId,
-        storage_id := StorageId
-}}, ok, ok) ->
-    update_last_update_finish_time_if_update_is_finished(SpaceId, StorageId);
-strategy_merge_result(#space_strategy_job{
-    data = #{
-        space_id := SpaceId,
-        storage_id := StorageId
-}}, Error, ok) ->
-    update_last_update_finish_time_if_update_is_finished(SpaceId, StorageId),
+strategy_merge_result(_Job, Error, ok) ->
     Error;
-strategy_merge_result(#space_strategy_job{
-    data = #{
-        space_id := SpaceId,
-        storage_id := StorageId
-}}, ok, Error) ->
-    update_last_update_finish_time_if_update_is_finished(SpaceId, StorageId),
+strategy_merge_result(_Job, ok, Error) ->
     Error;
-strategy_merge_result(#space_strategy_job{
-    data = #{
-        space_id := SpaceId,
-        storage_id := StorageId
-}}, {error, Reason1}, {error, Reason2}) ->
-    update_last_update_finish_time_if_update_is_finished(SpaceId, StorageId),
+strategy_merge_result(_Job, {error, Reason1}, {error, Reason2}) ->
     {error, [Reason1, Reason2]}.
 
 %%--------------------------------------------------------------------
@@ -284,7 +268,9 @@ import_children(Job = #space_strategy_job{
         max_depth := MaxDepth,
         storage_file_ctx := StorageFileCtx,
         mtime := Mtime,
-        space_id := SpaceId
+        space_id := SpaceId,
+        storage_id := StorageId,
+        file_name := FileName
     }},
     ?DIRECTORY_TYPE, Offset, FileCtx, BatchSize
 ) when MaxDepth > 0 ->
@@ -302,8 +288,8 @@ import_children(Job = #space_strategy_job{
     {FilesJobs, DirsJobs} = simple_scan:generate_jobs_for_importing_children(
         Job#space_strategy_job{data = Data1}, Offset, FileCtx, ChildrenStorageCtxsBatch1),
     FilesToHandleNum = length(FilesJobs) + length(DirsJobs),
-    storage_sync_monitoring:update_queue_length_counter(SpaceId, FilesToHandleNum),
-    storage_sync_monitoring:update_files_to_sync_counter(SpaceId, FilesToHandleNum),
+    ?critical("Will increase to_process by ~p for ~p", [FilesToHandleNum, FileName]),
+    storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, FilesToHandleNum),
 
     FilesResults = simple_scan:import_regular_subfiles(FilesJobs),
 
@@ -328,7 +314,9 @@ import_children(Job = #space_strategy_job{
         max_depth := MaxDepth,
         storage_file_ctx := StorageFileCtx,
         mtime := Mtime,
-        space_id := SpaceId
+        space_id := SpaceId,
+        storage_id := StorageId,
+        file_name := FileName
     }},
     ?DIRECTORY_TYPE, Offset, FileCtx, BatchSize
 ) when MaxDepth > 0 ->
@@ -346,8 +334,8 @@ import_children(Job = #space_strategy_job{
     {FilesJobs, DirsJobs} = simple_scan:generate_jobs_for_importing_children(
         Job#space_strategy_job{data = Data}, Offset, FileCtx, ChildrenStorageCtxsBatch),
     FilesToHandleNum = length(FilesJobs) + length(DirsJobs),
-    storage_sync_monitoring:update_queue_length_counter(SpaceId, FilesToHandleNum),
-    storage_sync_monitoring:update_files_to_sync_counter(SpaceId, FilesToHandleNum),
+    ?critical("Will increase2 to_process by ~p for ~p~n~p~n~p", [FilesToHandleNum, FileName, FilesJobs, DirsJobs]),
+    storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, FilesToHandleNum),
 
     FilesResults = simple_scan:import_regular_subfiles(FilesJobs),
 
@@ -423,7 +411,7 @@ handle_already_imported_directory_changed_mtime(Job = #space_strategy_job{
 %% @end
 %%-------------------------------------------------------------------
 -spec handle_already_imported_directory_unchanged_mtime(space_strategy:job(),
-    #file_attr{}, file_ctx:ctx()) -> {ok, space_strategy:job()}.
+    #file_attr{}, file_ctx:ctx()) -> {simple_scan:job_result(), space_strategy:job()}.
 handle_already_imported_directory_unchanged_mtime(Job = #space_strategy_job{
     strategy_args = #{write_once := false},
     data = Data0 = #{
@@ -478,7 +466,7 @@ handle_already_imported_directory_unchanged_mtime(Job = #space_strategy_job{
 %%-------------------------------------------------------------------
 -spec handle_already_imported_directory_changed_hash(space_strategy:job(),
     #file_attr{}, file_ctx:ctx(), storage_sync_changes:hash()) ->
-    {ok, space_strategy:job()}.
+    {simple_scan:job_result(), space_strategy:job()}.
 handle_already_imported_directory_changed_hash(Job = #space_strategy_job{
     data = #{dir_offset := Offset}
 }, FileAttr, FileCtx, CurrentHash
@@ -560,36 +548,16 @@ should_init_update_job(LastUpdateStartTime, LastUpdateFinishTime,
 %% Initiates first update job.
 %% @end
 %%-------------------------------------------------------------------
--spec init_update_job(space_strategy:timestamp(), space_strategy:arguments(),
+-spec init_update_job(non_neg_integer(), space_strategy:arguments(),
     space_strategy:job_data()) -> [space_strategy:job()].
 init_update_job(CurrentTimestamp, Args = #{max_depth := MaxDepth}, Data = #{
     space_id := SpaceId,
     storage_id := StorageId
 }) ->
-    storage_sync_monitoring:start_counters(SpaceId),
-    storage_sync_monitoring:start_plot_counters(SpaceId),
-    space_strategies:update_last_update_start_time(SpaceId, StorageId, CurrentTimestamp),
-    storage_sync_monitoring:update_queue_length_counter(SpaceId, 1),
-    storage_sync_monitoring:update_files_to_sync_counter(SpaceId, 1),
+    storage_sync_monitoring:prepare_new_update_scan(SpaceId, StorageId, CurrentTimestamp),
     [#space_strategy_job{
         strategy_name = simple_scan,
         strategy_args = Args,
         data = Data#{max_depth => MaxDepth}
     }].
 
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Checks if update has finished. If true, updates last_update_finish_time.
-%% @end
-%%-------------------------------------------------------------------
--spec update_last_update_finish_time_if_update_is_finished(od_space:id(), storage:id()) -> ok.
-update_last_update_finish_time_if_update_is_finished(SpaceId, StorageId) ->
-    case storage_sync_monitoring:get_unhandled_files_value(SpaceId) of
-        0 ->
-            {ok, _} = space_strategies:update_last_update_finish_time(SpaceId,
-                StorageId, time_utils:cluster_time_seconds()),
-            ok;
-        _ ->
-            ok
-    end.

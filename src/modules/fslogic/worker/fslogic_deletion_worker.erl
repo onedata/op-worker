@@ -53,7 +53,7 @@ request_open_file_deletion(FileCtx) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Request deletion of given file (delete triggered by dbsync_
+%% Request deletion of given file (delete triggered by dbsync).
 %% @end
 %%--------------------------------------------------------------------
 -spec request_remote_deletion(file_ctx:ctx()) -> ok.

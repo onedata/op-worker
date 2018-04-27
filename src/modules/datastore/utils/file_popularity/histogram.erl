@@ -14,10 +14,10 @@
 -author("Tomasz Lichon").
 
 -type size() :: pos_integer().
--type histogram() :: [non_neg_integer()].
+-type histogram() :: [integer()].
 
 %% API
--export([new/1, shift/2, increment/2, merge/2]).
+-export([new/1, shift/2, increment/2, merge/2, shift/3]).
 
 %%%===================================================================
 %%% API
@@ -34,6 +34,15 @@ new(Size) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns new histogram of given size with default values.
+%% @end
+%%--------------------------------------------------------------------
+-spec new(size(), integer()) -> histogram().
+new(Size, DefaultValue) ->
+    lists:duplicate(Size, DefaultValue).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Shifts right all values in the histogram by given offset
 %% @end
 %%--------------------------------------------------------------------
@@ -46,12 +55,20 @@ shift(Histogram, ShiftSize) ->
     NewSlots = new(ShiftSize),
     lists:sublist(NewSlots ++ Histogram, length(Histogram)).
 
+shift(Histogram, 0, _DefaultValue) ->
+    Histogram;
+shift(Histogram, ShiftSize, DefaultValue) when ShiftSize >= length(Histogram) ->
+    new(length(Histogram), DefaultValue);
+shift(Histogram, ShiftSize, DefaultValue) ->
+    NewSlots = new(ShiftSize, DefaultValue),
+    lists:sublist(NewSlots ++ Histogram, length(Histogram)).
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Increments first value in given histogram by N
 %% @end
 %%--------------------------------------------------------------------
--spec increment(histogram(), non_neg_integer()) -> histogram().
+-spec increment(histogram(), integer()) -> histogram().
 increment([Head | Rest], N) ->
     [Head + N | Rest].
 

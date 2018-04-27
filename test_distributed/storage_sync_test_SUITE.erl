@@ -26,7 +26,7 @@
 %% tests
 -export([
     create_directory_import_test/1, create_directory_export_test/1,
-    create_file_import_test/1, create_delete_import_test/1,
+    create_file_import_test/1, create_delete_import_test_read_remote_only/1,
     create_file_export_test/1,
     delete_empty_directory_update_test/1,
     delete_non_empty_directory_update_test/1,
@@ -65,7 +65,8 @@
     create_delete_import2_test/1, recreate_file_deleted_by_sync_test/1,
     sync_should_not_delete_not_replicated_file_created_in_remote_provider/1,
     sync_should_not_delete_dir_created_in_remote_provider/1,
-    sync_should_not_delete_not_replicated_files_created_in_remote_provider2/1]).
+    sync_should_not_delete_not_replicated_files_created_in_remote_provider2/1,
+    create_delete_import_test_read_both/1]).
 
 -define(TEST_CASES, [
     create_directory_import_test,
@@ -78,7 +79,9 @@
     create_directory_import_many_test,
     create_directory_export_test,
     create_file_import_test,
-    create_delete_import_test,
+    create_delete_import_test_read_both,
+    create_delete_import_test_read_remote_only,
+    create_delete_import2_test,
     create_file_import_check_user_id_test,
     create_file_import_check_user_id_error_test,
     create_file_export_test,
@@ -93,8 +96,9 @@
     sync_works_properly_after_delete_test,
     delete_and_update_files_simultaneously_update_test,
     delete_directory_export_test,
-    append_file_update_test,
+    delete_file_update_test,
     delete_file_export_test,
+    append_file_update_test,
     append_file_export_test,
     copy_file_update_test,
     move_file_update_test,
@@ -151,8 +155,11 @@ create_directory_export_test(Config) ->
 create_file_import_test(Config) ->
     storage_sync_test_base:create_file_import_test(Config, false).
 
-create_delete_import_test(Config) ->
-    storage_sync_test_base:create_delete_import_test(Config, false).
+create_delete_import_test_read_both(Config) ->
+    storage_sync_test_base:create_delete_import_test_read_both(Config, false).
+
+create_delete_import_test_read_remote_only(Config) ->
+    storage_sync_test_base:create_delete_import_test_read_remote_only(Config, false).
 
 create_delete_import2_test(Config) ->
     storage_sync_test_base:create_delete_import2_test(Config, false, true).
@@ -212,7 +219,96 @@ append_file_export_test(Config) ->
     storage_sync_test_base:append_file_export_test(Config, false).
 
 copy_file_update_test(Config) ->
-    storage_sync_test_base:copy_file_update_test(Config, false).
+    %% WARNING in this test we check whether copy of a file was detected
+    %% and whether copied file's timestamps were updated
+    %% for some reason when volume is mount as read_write to docker
+    %% timestamp of a copied file is not updated
+    %% because of that, this test was adapted to this bug
+
+    MountSpaceInRoot = false,
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    W1MountPoint = storage_sync_test_base:get_host_mount_point(W1, Config),
+    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
+    StorageTestFilePath =
+        storage_sync_test_base:storage_test_file_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+    StorageTestFilePath2 =
+        storage_sync_test_base:storage_test_file_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE2, MountSpaceInRoot),
+    %% Create file on storage
+    ok = file:write_file(StorageTestFilePath, ?TEST_DATA),
+    storage_sync_test_base:enable_storage_import(Config),
+    storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 1,
+        <<"toProcess">> := 2,
+        <<"imported">> := 1,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 1,
+        <<"updatedSum">> := 1,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [1 | _],
+        <<"importedHourHist">> := [1 | _],
+        <<"importedDayHist">> := [1 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [1 | _],
+        <<"updatedDayHist">> := [1 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID),
+
+    %% Check if file was imported
+    ?assertMatch({ok, #file_attr{}},
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+    {ok, Handle1} = ?assertMatch({ok, _},
+        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
+    ?assertMatch({ok, ?TEST_DATA},
+        lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
+    lfm_proxy:close(W1, Handle1),
+
+    timer:sleep(timer:seconds(2)),  %ensure that copy time is different from read time
+    %% Copy file
+    file:copy(StorageTestFilePath, StorageTestFilePath2),
+
+    storage_sync_test_base:enable_storage_update(Config),
+    storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 2,
+        <<"toProcess">> := 3,
+        <<"imported">> := 1,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 1,
+        <<"importedSum">> := 2,
+        <<"updatedSum">> := 2,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [1 | _],
+        <<"importedHourHist">> := [2 | _],
+        <<"importedDayHist">> := [2 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [2 | _],
+        <<"updatedDayHist">> := [2 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID),
+
+    %% Check if copied file was imported
+    {ok, Handle2} = ?assertMatch({ok, _},
+        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH2}, read), ?ATTEMPTS),
+    ?assertMatch({ok, ?TEST_DATA},
+        lfm_proxy:read(W1, Handle2, 0, byte_size(?TEST_DATA))),
+    lfm_proxy:close(W1, Handle2),
+    {ok, Handle3} = ?assertMatch({ok, _},
+        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
+    ?assertMatch({ok, ?TEST_DATA},
+        lfm_proxy:read(W1, Handle3, 0, byte_size(?TEST_DATA))),
+    lfm_proxy:close(W1, Handle3).
 
 move_file_update_test(Config) ->
     storage_sync_test_base:move_file_update_test(Config, false).
@@ -442,7 +538,7 @@ init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 5}),
     ConfigWithProxy = lfm_proxy:init(Config),
     Config2 = storage_sync_test_base:add_workers_storage_mount_points(ConfigWithProxy),
-    storage_sync_test_base:create_init_file(Config2),
+    storage_sync_test_base:create_init_file(Config2, false),
     Config2.
 
 end_per_testcase(Case, Config) when
@@ -486,7 +582,9 @@ end_per_testcase(_Case, Config) ->
     storage_sync_test_base:disable_storage_sync(Config),
     storage_sync_test_base:clean_storage(Config, false),
     storage_sync_test_base:clean_space(Config),
+    storage_sync_test_base:cleanup_storage_sync_monitoring_model(W1, ?SPACE_ID),
     test_utils:mock_unload(Workers, [simple_scan, storage_sync_changes]),
+    timer:sleep(timer:seconds(1)),
     lfm_proxy:teardown(Config).
 
 %%%===================================================================

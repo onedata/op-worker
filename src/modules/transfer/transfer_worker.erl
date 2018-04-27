@@ -238,7 +238,7 @@ maybe_retry(UserCtx, FileCtx, Block, TransferId, Retries, Error) ->
 should_start_replication(undefined) ->
     true;
 should_start_replication(NextRetryTimestamp) ->
-    time_utils:system_time_seconds() >= NextRetryTimestamp.
+    time_utils:cluster_time_seconds() >= NextRetryTimestamp.
 
 %%-------------------------------------------------------------------
 %% @private
@@ -251,7 +251,7 @@ should_start_replication(NextRetryTimestamp) ->
 next_retry(RetriesLeft) ->
     RetryNum = ?MAX_FILE_TRANSFER_RETRIES - RetriesLeft,
     MinSecsToWait = backoff(RetryNum, ?MAX_FILE_TRANSFER_RETRIES),
-    time_utils:system_time_seconds() + MinSecsToWait.
+    time_utils:cluster_time_seconds() + MinSecsToWait.
 
 
 %%-------------------------------------------------------------------

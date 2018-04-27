@@ -14,18 +14,26 @@
 -module(time_slot_histogram).
 -author("Tomasz Lichon").
 
+-record(time_slot_histogram, {
+    start_time :: timestamp(),
+    last_update_time :: timestamp(),
+    time_window :: time(),
+    values :: histogram:histogram(),
+    size :: non_neg_integer()
+}).
+
 -type timestamp() :: non_neg_integer().
 -type time() :: pos_integer().
--type histogram() :: {LastUpdateTime :: timestamp(), TimeWindow :: time(), histogram:histogram()}.
+-type histogram() :: #time_slot_histogram{}.
 
 %% API
 -export([
-    new/2, new/3,
-    increment/2, increment/3,
+    new/2, new/3, new/4,
+    increment/2, increment/3, increment_monotonic/3,
+    decrement/2, decrement/3,  decrement_monotonic/3, decrement_monotonic/2,
     merge/2,
     get_histogram_values/1, get_last_update/1,
-    get_sum/1, get_average/1
-]).
+    get_sum/1, get_average/1, get_size/1]).
 
 %%%===================================================================
 %%% API
@@ -34,21 +42,43 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns new empty time_slot_histogram with given Size, TimeWindow.
-%% LastUpdate is set to 0.
+%% LastUpdate and StartTime are set to 0.
 %% @end
 %%--------------------------------------------------------------------
 -spec new(TimeWindow :: time(), Size :: histogram:size()) -> histogram().
 new(TimeWindow, Size) ->
-    {0, TimeWindow, histogram:new(Size)}.
+    new(0, 0, TimeWindow, Size).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns time_slot_histogram with given LastUpdateTime and
+%% provided values or empty histogram of given size
+%% @end
+%%--------------------------------------------------------------------
+-spec new(LastUpdate :: timestamp(), TimeWindow :: time(),
+    histogram:size() | histogram:histogram()) -> histogram().
+new(LastUpdate, TimeWindow, HistogramValues) when is_list(HistogramValues) ->
+    new(LastUpdate, LastUpdate, TimeWindow, HistogramValues);
+new(LastUpdate, TimeWindow, Size) when is_integer(Size) ->
+    new(LastUpdate, TimeWindow, histogram:new(Size)).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns time_slot_histogram with provided values.
 %% @end
 %%--------------------------------------------------------------------
--spec new(LastUpdate :: timestamp(), TimeWindow :: time(), histogram:histogram()) -> term().
-new(LastUpdate, TimeWindow, HistogramValues) ->
-    {LastUpdate, TimeWindow, HistogramValues}.
+-spec new(StartTime :: timestamp(), LastUpdate :: timestamp(),
+    TimeWindow :: time(), histogram:size() | histogram:histogram()) -> histogram().
+new(StartTime, LastUpdate, TimeWindow, HistogramValues) when is_list(HistogramValues) ->
+    #time_slot_histogram{
+        start_time = StartTime,
+        last_update_time = LastUpdate,
+        time_window = TimeWindow,
+        values = HistogramValues,
+        size = length(HistogramValues)
+    };
+new(StartTime, LastUpdate, TimeWindow, Size) when is_integer(Size) ->
+    new(StartTime, LastUpdate, TimeWindow, histogram:new(Size)).
 
 %%--------------------------------------------------------------------
 %% @equiv increment(Histogram, CurrentTimestamp, 1).
@@ -65,12 +95,66 @@ increment(Histogram, CurrentTimestamp) ->
 %% TimeWindow.
 %% @end
 %%--------------------------------------------------------------------
--spec increment(histogram(), CurrentTimestamp :: timestamp(), N :: non_neg_integer()) ->
+-spec increment(histogram(), CurrentTimestamp :: timestamp(), N :: integer()) ->
     histogram().
-increment({LastUpdate, TimeWindow, Histogram}, CurrentTimestamp, N) ->
-    ShiftSize = CurrentTimestamp div TimeWindow - LastUpdate div TimeWindow,
+increment(TSH = #time_slot_histogram{
+    start_time = StartTime,
+    last_update_time = LastUpdate,
+    time_window = TimeWindow,
+    values = Histogram
+}, CurrentTimestamp, N) ->
+    ShiftSize = (CurrentTimestamp - StartTime) div TimeWindow - (LastUpdate - StartTime) div TimeWindow,
     ShiftedHistogram = histogram:shift(Histogram, ShiftSize),
-    {CurrentTimestamp, TimeWindow, histogram:increment(ShiftedHistogram, N)}.
+    TSH#time_slot_histogram{
+        last_update_time = CurrentTimestamp,
+        values = histogram:increment(ShiftedHistogram, N)
+    }.
+
+
+-spec increment_monotonic(histogram(),CurrentTimestamp :: timestamp(), N :: integer()) ->
+    histogram().
+increment_monotonic(TSH = #time_slot_histogram{
+    start_time = StartTime,
+    last_update_time = LastUpdate,
+    time_window = TimeWindow,
+    values = Histogram = [Head | _Rest]
+}, CurrentTimestamp, N) ->
+    ShiftSize = (CurrentTimestamp - StartTime) div TimeWindow - (LastUpdate - StartTime) div TimeWindow,
+    ShiftedHistogram = histogram:shift(Histogram, ShiftSize, Head),
+    TSH#time_slot_histogram{
+        last_update_time = CurrentTimestamp,
+        values = histogram:increment(ShiftedHistogram, N)
+    }.
+
+%%--------------------------------------------------------------------
+%% @equiv decrement(Histogram, CurrentTimestamp, 1).
+%% @end
+%%--------------------------------------------------------------------
+-spec decrement(histogram(), CurrentTimestamp :: timestamp()) -> histogram().
+decrement(Histogram, CurrentTimestamp) ->
+    decrement(Histogram, CurrentTimestamp, 1).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Decrements newest time window by N. The function shifts time slots if
+%% the difference between provided CurrentTime and LastUpdate is greater than
+%% TimeWindow.
+%% @end
+%%--------------------------------------------------------------------
+-spec decrement(histogram(), CurrentTimestamp :: timestamp(), N :: non_neg_integer()) ->
+    histogram().
+decrement(TimeSlotHistogram, CurrentTimestamp, N) ->
+    increment(TimeSlotHistogram, CurrentTimestamp, -N).
+
+-spec decrement_monotonic(histogram(),CurrentTimestamp :: timestamp()) ->
+    histogram().
+decrement_monotonic(Histogram, CurrentTimestamp) ->
+    decrement_monotonic(Histogram, CurrentTimestamp, 1).
+
+-spec decrement_monotonic(histogram(),CurrentTimestamp :: timestamp(), N :: integer()) ->
+    histogram().
+decrement_monotonic(TimeSlotHistogram, CurrentTimestamp, N) ->
+    increment_monotonic(TimeSlotHistogram, CurrentTimestamp, -N).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -78,7 +162,17 @@ increment({LastUpdate, TimeWindow, Histogram}, CurrentTimestamp, N) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec merge(histogram(), histogram()) -> histogram().
-merge({LastUpdate1, TimeWindow, Values1}, {LastUpdate2, TimeWindow, Values2}) ->
+merge(TSH = #time_slot_histogram{
+    last_update_time = LastUpdate1,
+    time_window = TimeWindow,
+    values = Values1,
+    size = Size
+}, #time_slot_histogram{
+    last_update_time = LastUpdate2,
+    time_window = TimeWindow,
+    values = Values2,
+    size = Size
+}) ->
     {LastUpdate, Histogram1, Histogram2} = case LastUpdate1 > LastUpdate2 of
         true ->
             ShiftSize = (LastUpdate1 div TimeWindow) - (LastUpdate2 div TimeWindow),
@@ -87,7 +181,10 @@ merge({LastUpdate1, TimeWindow, Values1}, {LastUpdate2, TimeWindow, Values2}) ->
             ShiftSize = (LastUpdate2 div TimeWindow) - (LastUpdate1 div TimeWindow),
             {LastUpdate2, histogram:shift(Values1, ShiftSize), Values2}
     end,
-    {LastUpdate, TimeWindow, histogram:merge(Histogram1, Histogram2)}.
+    TSH#time_slot_histogram{
+        last_update_time = LastUpdate,
+        values = histogram:merge(Histogram1, Histogram2)
+    }.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -95,7 +192,7 @@ merge({LastUpdate1, TimeWindow, Values1}, {LastUpdate2, TimeWindow, Values2}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_histogram_values(histogram()) -> histogram:histogram().
-get_histogram_values({_, _, Histogram}) ->
+get_histogram_values(#time_slot_histogram{values = Histogram}) ->
     Histogram.
 
 %%--------------------------------------------------------------------
@@ -104,8 +201,17 @@ get_histogram_values({_, _, Histogram}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_last_update(histogram()) -> timestamp().
-get_last_update({LastUpdate, _, _}) ->
+get_last_update(#time_slot_histogram{last_update_time = LastUpdate}) ->
     LastUpdate.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns size of histogram.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_size(histogram()) -> timestamp().
+get_size(#time_slot_histogram{size = Size}) ->
+    Size.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -113,8 +219,8 @@ get_last_update({LastUpdate, _, _}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_sum(histogram()) -> non_neg_integer().
-get_sum({_, _, Histogram}) ->
-    lists:sum(Histogram).
+get_sum(TimeSlotHistogram) ->
+    lists:sum(get_histogram_values(TimeSlotHistogram)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -122,5 +228,5 @@ get_sum({_, _, Histogram}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_average(histogram()) -> non_neg_integer().
-get_average({_, _, Histogram}) ->
-    utils:ceil(lists:sum(Histogram) / length(Histogram)).
+get_average(TimeSlotHistogram) ->
+    utils:ceil(get_sum(TimeSlotHistogram)/ get_size(TimeSlotHistogram)).
