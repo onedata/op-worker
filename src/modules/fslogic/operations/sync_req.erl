@@ -57,7 +57,9 @@ synchronize_block(UserCtx, FileCtx, undefined, Prefetch, TransferId) ->
 synchronize_block(UserCtx, FileCtx, Block, Prefetch, TransferId) ->
     ok = replica_synchronizer:synchronize(UserCtx, FileCtx, Block, Prefetch,
         TransferId),
-    #fuse_response{status = #status{code = ?OK}}.
+    {LocationToSend, _FileCtx2} = file_ctx:get_file_location_with_filled_gaps(FileCtx, Block),
+    #fuse_response{status = #status{code = ?OK},
+                   fuse_response = LocationToSend}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -461,4 +463,3 @@ invalidate_children_replicas(UserCtx, Children, MigrationProviderId,
             {?MODULE, invalidate_file_replica, [UserCtx, ChildCtx,
                 MigrationProviderId, TransferId, AutoCleaningId]})
     end, Children).
-

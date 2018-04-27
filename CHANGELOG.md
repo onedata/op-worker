@@ -4,6 +4,49 @@
 CHANGELOG
 ---------
 
+### 18.02.0-rc1
+
+* VFS-2021 Added dockers.config
+* VFS-4238 Updated helpers and rtransfer rebar refs
+* VFS-4280 Added simulated filesystem options to null device helper
+* Updating GUI, including: VFS-4239 * VFS-4239 Infinite scroll for transfers lists
+* VFS-4369 - emit file_renamed event
+* VFS-4299 Update config
+* VFS-4369 create delayed storage file with root session id
+* Updating GUI, including: VFS-4305 * VFS-4305 Added charts for on-the-fly transfers
+* VFS-4299 Extend ls with tokens
+* VFS-4299 Use links during files listing
+* VFS-4239 Using real start time for transfers in GUI backend
+* VFS-4304 erase zeroed histograms for on the fly transfers
+* VFS-4304 fix old comments and dialyzer specs
+* VFS-4238 fix not working updating stats for on the fly transfers
+* VFS-4239 Do not present active transfers on scheduled list
+* VFS-4304 add aggregated transfer stats for on the fly transfers
+* VFS-4239 Setting development version of GUI
+* VFS-4304 handle case when space transfer stats document do not exist
+* VFS-4304 update models to store and compute on the fly transfer stats
+* VFS-4304 store on the fly transfer data
+* VFS-4239 add listing of scheduled transfers
+* VFS-4239 Disabling transfer fetch limit
+
+
+### 18.02.0-beta6
+
+* VFS-3732 - improve storage_sync tests
+* VFS-3732 - fix tests after removing sticky bit on space directory
+* VFS-3732 - remove sticky_bit on space_dir in file_meta
+* Update compatible versions
+* Releasing new version 18.02.0-beta6
+* Update vsn in app.src file
+* VFS-3731 - code style improvement
+* VFS-3731 - fix sync removing remotely created files, fix transfer model upgrader
+* VFS-3731 - fix dialysis
+* VFS-3731 - fix removing non-empty directory after remote deletion
+* VFS-4299 Add flush cooldown
+* VFS-4113 Updated exometer counters
+* VFS-4234 Updated rtransfer and helpers ref
+
+
 ### 18.02.0-beta6
 
 * VFS-3731 - fix sync removing remotely created files, fix transfer model upgrader

@@ -381,7 +381,9 @@ new_helper(Config) ->
             <<"latencyMin">> => <<"0">>,
             <<"latencyMax">> => <<"0">>,
             <<"timeoutProbability">> => <<"0.0">>,
-            <<"filter">> => <<"*">>
+            <<"filter">> => <<"*">>,
+            <<"simulatedFilesystemParameters">> => <<"">>,
+            <<"simulatedFilesystemGrowSpeed">> => <<"0.0">>
         },
         UserCtx,
         true,

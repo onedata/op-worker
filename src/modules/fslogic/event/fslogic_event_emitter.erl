@@ -20,7 +20,7 @@
 %% API
 -export([emit_file_attr_changed/2, emit_sizeless_file_attrs_changed/1,
     emit_file_location_changed/2, emit_file_location_changed/3,
-    emit_file_perm_changed/1, emit_file_removed/2, emit_file_renamed/3,
+    emit_file_perm_changed/1, emit_file_removed/2,
     emit_file_renamed_to_client/3, emit_quota_exeeded/0]).
 
 %%%===================================================================
@@ -119,19 +119,6 @@ emit_file_removed(FileCtx, ExcludedSessions) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sends an event informing subscribed client about file rename and guid change.
-%% @end
-%%--------------------------------------------------------------------
--spec emit_file_renamed(TopEntry :: #file_renamed_entry{},
-    ChildEntries :: [#file_renamed_entry{}], ExcludedSessions :: [session:id()]) ->
-    ok | {error, Reason :: term()}.
-emit_file_renamed(TopEntry, ChildEntries, ExcludedSessions) ->
-    event:emit(#file_renamed_event{
-        top_entry = TopEntry, child_entries = ChildEntries
-    }, {exclude, ExcludedSessions}).
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Sends an event informing given client about file rename.
 %% @end
 %%--------------------------------------------------------------------
@@ -146,7 +133,7 @@ emit_file_renamed_to_client(FileCtx, NewName, UserCtx) ->
         new_guid = Guid,
         new_parent_guid = ParentGuid,
         new_name = NewName
-    }}, SessionId).
+    }}, {exclude, [SessionId]}).
 
 %%--------------------------------------------------------------------
 %% @doc
