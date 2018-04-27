@@ -165,7 +165,7 @@ delete_imported_dir(FileCtx, SpaceId, StorageId) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec delete_imported_dir_children(file_ctx:ctx(), user_ctx:ctx(),
-    non_neg_integer(), non_neg_integer(), od_space:id(), storage:id()) -> ok.
+    non_neg_integer(), non_neg_integer(), od_space:id(), storage:id()) -> {ok, file_ctx:ctx()}.
 delete_imported_dir_children(FileCtx, UserCtx, Offset, ChunkSize, SpaceId, StorageId) ->
     try
         {ChildrenCtxs, FileCtx2} = file_ctx:get_file_children(FileCtx,

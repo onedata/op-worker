@@ -391,21 +391,21 @@
     updated_sum = 0 :: non_neg_integer(),
     deleted_sum = 0 :: non_neg_integer(),
 
-    imported_min_hist :: undefined | histogram:histogram(),
-    imported_hour_hist :: undefined | histogram:histogram(),
-    imported_day_hist :: undefined | histogram:histogram(),
+    imported_min_hist :: time_slot_histogram:histogram(),
+    imported_hour_hist :: time_slot_histogram:histogram(),
+    imported_day_hist :: time_slot_histogram:histogram(),
 
-    updated_min_hist :: undefined | histogram:histogram(),
-    updated_hour_hist :: undefined | histogram:histogram(),
-    updated_day_hist :: undefined | histogram:histogram(),
+    updated_min_hist :: time_slot_histogram:histogram(),
+    updated_hour_hist :: time_slot_histogram:histogram(),
+    updated_day_hist :: time_slot_histogram:histogram(),
 
-    deleted_min_hist :: undefined | histogram:histogram(),
-    deleted_hour_hist :: undefined | histogram:histogram(),
-    deleted_day_hist :: undefined | histogram:histogram(),
+    deleted_min_hist :: time_slot_histogram:histogram(),
+    deleted_hour_hist :: time_slot_histogram:histogram(),
+    deleted_day_hist :: time_slot_histogram:histogram(),
 
-    queue_length_min_hist :: undefined | histogram:histogram(),
-    queue_length_hour_hist :: undefined | histogram:histogram(),
-    queue_length_day_hist :: undefined | histogram:histogram()
+    queue_length_min_hist :: time_slot_histogram:histogram(),
+    queue_length_hour_hist :: time_slot_histogram:histogram(),
+    queue_length_day_hist :: time_slot_histogram:histogram()
 }).
 
 %% Model that holds synchronization state for a space
