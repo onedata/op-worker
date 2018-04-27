@@ -320,7 +320,7 @@ import_file(#space_strategy_job{
             ok
     end,
     StorageFileId = SFMHandle#sfm_handle.file,
-    ?critical("Import storage file ~p", [{StorageFileId, CanonicalPath}]),
+    ?debug("Import storage file ~p", [{StorageFileId, CanonicalPath}]),
     {imported, FileCtx}.
 
 %%--------------------------------------------------------------------

@@ -84,16 +84,12 @@ get_file_id_const(#storage_file_ctx{id = FileId}) ->
     non_neg_integer()) -> {ChildrenCtxs :: [ctx()], NewParentCtx :: ctx()}.
 get_children_ctxs_batch(StorageFileCtx, Offset, BatchSize) ->
     {SFMHandle, StorageFileCtx2} = storage_file_ctx:get_handle(StorageFileCtx),
-%%    ?critical("BEFORE READDIR: ~p", [storage_file_manager:stat(SFMHandle)]),
     case storage_file_manager:readdir(SFMHandle, Offset, BatchSize) of
         {error, ?ENOENT} ->
-%%            ?critical("AFTER READDIR1: ~p", [storage_file_manager:stat(SFMHandle)]),
             {[], StorageFileCtx2};
         {error, ?EACCES} ->
-%%            ?critical("AFTER READDIR2: ~p", [storage_file_manager:stat(SFMHandle)]),
             {[], StorageFileCtx2};
         {ok, ChildrenIds} ->
-%%            ?critical("AFTER READDIR3: ~p", [storage_file_manager:stat(SFMHandle)]),
             lists:foldr(fun(ChildId, {ChildrenCtxs, ParentCtx0}) ->
                 BaseName = filename:basename(ChildId),
                 {ChildCtx, ParentCtx} = storage_file_ctx:get_child_ctx(ParentCtx0, BaseName),

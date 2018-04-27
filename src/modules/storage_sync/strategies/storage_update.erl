@@ -112,7 +112,7 @@ strategy_init_jobs(_, Args, Data = #{
 }) ->
     % it will be first update
     CurrentTimestamp = time_utils:cluster_time_seconds(),
-    ?critical("Starting storage_update for space: ~p and storage: ~p", [SpaceId, StorageId]),
+    ?debug("Starting storage_update for space: ~p and storage: ~p", [SpaceId, StorageId]),
     init_update_job(CurrentTimestamp, Args, Data);
 strategy_init_jobs(simple_scan, _, #{last_update_finish_time := undefined}) ->
     []; %update is in progress
@@ -129,7 +129,7 @@ strategy_init_jobs(simple_scan,
         ScanIntervalSeconds, CurrentTimestamp)
     of
         true ->
-            ?critical("Starting storage_update for space: ~p and storage: ~p", [SpaceId, StorageId]),
+            ?debug("Starting storage_update for space: ~p and storage: ~p", [SpaceId, StorageId]),
             init_update_job(CurrentTimestamp, Args, Data);
         false ->
             []
@@ -288,7 +288,6 @@ import_children(Job = #space_strategy_job{
     {FilesJobs, DirsJobs} = simple_scan:generate_jobs_for_importing_children(
         Job#space_strategy_job{data = Data1}, Offset, FileCtx, ChildrenStorageCtxsBatch1),
     FilesToHandleNum = length(FilesJobs) + length(DirsJobs),
-    ?critical("Will increase to_process by ~p for ~p", [FilesToHandleNum, FileName]),
     storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, FilesToHandleNum),
 
     FilesResults = simple_scan:import_regular_subfiles(FilesJobs),
@@ -334,7 +333,6 @@ import_children(Job = #space_strategy_job{
     {FilesJobs, DirsJobs} = simple_scan:generate_jobs_for_importing_children(
         Job#space_strategy_job{data = Data}, Offset, FileCtx, ChildrenStorageCtxsBatch),
     FilesToHandleNum = length(FilesJobs) + length(DirsJobs),
-    ?critical("Will increase2 to_process by ~p for ~p~n~p~n~p", [FilesToHandleNum, FileName, FilesJobs, DirsJobs]),
     storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, FilesToHandleNum),
 
     FilesResults = simple_scan:import_regular_subfiles(FilesJobs),
