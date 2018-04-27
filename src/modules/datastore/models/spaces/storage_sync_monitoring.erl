@@ -77,9 +77,16 @@
 %%-------------------------------------------------------------------
 -spec ensure_created(od_space:id(), storage:id()) -> {ok, doc()} | {error, term()}.
 ensure_created(SpaceId, StorageId) ->
-    datastore_model:update(?CTX, id(SpaceId, StorageId), fun(SSM) ->
-        {ok, SSM}
-    end, new_doc(SpaceId, StorageId)).
+    case datastore_model:exists(?CTX, id(SpaceId, StorageId)) of
+        {ok, true} ->
+            ok;
+        {ok, false} ->
+            {ok, _} = datastore_model:create(?CTX, new_doc(SpaceId, StorageId)),
+            ok;
+        Error  ->
+            ?error("Failed to check if storage_sync_monitoring document for space ~p and storage ~p exists due to ~p",
+                [SpaceId, StorageId, Error])
+    end.
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -356,7 +363,6 @@ get_info(SpaceId, StorageId) ->
 %% This function returns timestamps of previous import and update scans.
 %% It takes into consideration whether it is a FirstRun (first after
 %% start/restart of provider).
-%%
 %% @end
 %%-------------------------------------------------------------------
 -spec get_previous_sync_timestamps(storage_sync_monitoring(),
@@ -721,27 +727,27 @@ return_empty_histogram_and_timestamp() ->
 return_histogram_and_timestamp(SSM, imported_files, minute) ->
     prepare(SSM#storage_sync_monitoring.imported_min_hist);
 return_histogram_and_timestamp(SSM, imported_files, hour) ->
-    prepare(SSM#storage_sync_monitoring.imported_min_hist);
+    prepare(SSM#storage_sync_monitoring.imported_hour_hist);
 return_histogram_and_timestamp(SSM, imported_files, day) ->
-    prepare(SSM#storage_sync_monitoring.imported_min_hist);
+    prepare(SSM#storage_sync_monitoring.imported_day_hist);
 return_histogram_and_timestamp(SSM, updated_files, minute) ->
-    prepare(SSM#storage_sync_monitoring.imported_min_hist);
+    prepare(SSM#storage_sync_monitoring.updated_min_hist);
 return_histogram_and_timestamp(SSM, updated_files, hour) ->
-    prepare(SSM#storage_sync_monitoring.imported_min_hist);
+    prepare(SSM#storage_sync_monitoring.updated_hour_hist);
 return_histogram_and_timestamp(SSM, updated_files, day) ->
-    prepare(SSM#storage_sync_monitoring.imported_min_hist);
+    prepare(SSM#storage_sync_monitoring.updated_day_hist);
 return_histogram_and_timestamp(SSM, deleted_files, minute) ->
-    prepare(SSM#storage_sync_monitoring.imported_min_hist);
+    prepare(SSM#storage_sync_monitoring.deleted_min_hist);
 return_histogram_and_timestamp(SSM, deleted_files, hour) ->
-    prepare(SSM#storage_sync_monitoring.imported_min_hist);
+    prepare(SSM#storage_sync_monitoring.deleted_hour_hist);
 return_histogram_and_timestamp(SSM, deleted_files, day) ->
-    prepare(SSM#storage_sync_monitoring.imported_min_hist);
+    prepare(SSM#storage_sync_monitoring.deleted_day_hist);
 return_histogram_and_timestamp(SSM, queue_length, minute) ->
-    prepare(SSM#storage_sync_monitoring.imported_min_hist);
+    prepare(SSM#storage_sync_monitoring.queue_length_min_hist);
 return_histogram_and_timestamp(SSM, queue_length, hour) ->
-    prepare(SSM#storage_sync_monitoring.imported_min_hist);
+    prepare(SSM#storage_sync_monitoring.queue_length_hour_hist);
 return_histogram_and_timestamp(SSM, queue_length, day) ->
-    prepare(SSM#storage_sync_monitoring.imported_min_hist).
+    prepare(SSM#storage_sync_monitoring.queue_length_day_hist).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -768,7 +774,7 @@ prepare(TimeSlotHistogram) ->
 prepare(Timestamp, Values) ->
     [
         {timestamp, Timestamp},
-        {values, Values}
+        {values, lists:reverse(Values)}
     ].
 
 %%%===================================================================
