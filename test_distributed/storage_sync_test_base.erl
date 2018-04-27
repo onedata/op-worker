@@ -1758,13 +1758,6 @@ copy_file_update_test(Config, MountSpaceInRoot) ->
         <<"deletedDayHist">> := [0 | _]
     }, ?SPACE_ID),
 
-%%    tracer:start(W1),
-%%    tracer:trace_calls(times, create_or_update),
-%%    tracer:trace_calls(fslogic_times, update_times_and_emit),
-%%    tracer:trace_calls(fslogic_times, update_atime),
-%%    tracer:trace_calls(fslogic_times, update_ctime),
-%%    tracer:trace_calls(fslogic_times, update_mtime),
-%%    tracer:trace_calls(fslogic_times, update_mtime_ctime),
     %% Check if file was imported
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
@@ -1775,12 +1768,8 @@ copy_file_update_test(Config, MountSpaceInRoot) ->
     lfm_proxy:close(W1, Handle1),
 
     timer:sleep(timer:seconds(10)),  %ensure that copy time is different from read time
-%%    ct:pal("BEFORE: ~p ~p", [StorageTestFilePath, file:read_file_info(StorageTestFilePath, [{time, posix}])]),
     %% Copy file
     file:copy(StorageTestFilePath, StorageTestFilePath2),
-%%    ct:pal("AFTER: ~p ~p", [StorageTestFilePath, file:read_file_info(StorageTestFilePath, [{time, posix}])]),
-%%    ct:timetrap({hours, 1}),
-%%    ct:sleep({hours, 1}),
 
     storage_sync_test_base:enable_storage_update(Config),
     assertUpdateTimes(W1, ?SPACE_ID),
@@ -2117,6 +2106,7 @@ chmod_file_update2_test(Config, MountSpaceInRoot) ->
     }, ?SPACE_ID),
 
     %% Change file permissions
+    timer:sleep(timer:seconds(2)),
     ok = file:change_mode(StTestFile1, NewMode),
     storage_sync_test_base:enable_storage_update(Config),
     assertUpdateTimes(W1, ?SPACE_ID),
