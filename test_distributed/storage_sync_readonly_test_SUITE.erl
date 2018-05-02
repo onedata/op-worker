@@ -1472,7 +1472,7 @@ init_per_testcase(Case, Config) when
 
 
 init_per_testcase(_Case, Config) ->
-    ct:timetrap({minutes, 5}),
+    ct:timetrap({minutes, 10}),
     ConfigWithProxy = lfm_proxy:init(Config),
     Config2 = storage_sync_test_base:add_workers_storage_mount_points(ConfigWithProxy),
     storage_sync_test_base:create_init_file(Config2, true),
