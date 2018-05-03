@@ -296,7 +296,7 @@ import_children(Job = #space_strategy_job{
             FileUuid = file_ctx:get_uuid_const(FileCtx),
             case storage_sync_utils:all_children_imported(DirsJobs, FileUuid) of
                 true ->
-                    storage_sync_info:update(FileUuid, Mtime, undefined, undefined);
+                    storage_sync_info:create_or_update(FileUuid, Mtime, undefined, undefined, SpaceId);
                 _ ->
                     ok
             end;
@@ -340,9 +340,9 @@ import_children(Job = #space_strategy_job{
             FileUuid = file_ctx:get_uuid_const(FileCtx),
             case storage_sync_utils:all_children_imported(DirsJobs, FileUuid) of
                 true ->
-                    storage_sync_info:update(FileUuid, Mtime, BatchKey, BatchHash);
+                    storage_sync_info:create_or_update(FileUuid, Mtime, BatchKey, BatchHash, SpaceId);
                 _ ->
-                    storage_sync_info:update(FileUuid, undefined, BatchKey, BatchHash)
+                    storage_sync_info:create_or_update(FileUuid, undefined, BatchKey, BatchHash, SpaceId)
             end;
         _ -> ok
     end,
@@ -366,8 +366,8 @@ handle_already_imported_directory(Job = #space_strategy_job{
     data = #{storage_file_ctx := StorageFileCtx}
 }, FileAttr, FileCtx
 ) ->
-    {#document{value = FileMeta}, FileCtx2} = file_ctx:get_file_doc(FileCtx),
-    case storage_sync_changes:mtime_has_changed(FileMeta, StorageFileCtx) of
+    {StorageSyncInfo, FileCtx2} = file_ctx:get_storage_sync_info(FileCtx),
+    case storage_sync_changes:mtime_has_changed(StorageSyncInfo, StorageFileCtx) of
         true ->
             handle_already_imported_directory_changed_mtime(Job, FileAttr, FileCtx2);
         false ->
@@ -411,12 +411,12 @@ handle_already_imported_directory_changed_mtime(Job = #space_strategy_job{
 handle_already_imported_directory_unchanged_mtime(Job = #space_strategy_job{
     strategy_args = #{write_once := false},
     data = Data0 = #{
-        storage_file_ctx := StorageFileCtx
+        storage_file_ctx := StorageFileCtx,
+        file_name := FileName
     }
 }, FileAttr, FileCtx
 ) ->
     Offset = maps:get(dir_offset, Data0, 0),
-    {#document{value = FileMeta}, FileCtx2} = file_ctx:get_file_doc(FileCtx),
     {ChildrenStorageCtxsBatch, _} = storage_file_ctx:get_children_ctxs_batch(
         StorageFileCtx, Offset, ?DIR_BATCH),
     {BatchHash, ChildrenStorageCtxsBatch2} =
@@ -437,7 +437,8 @@ handle_already_imported_directory_unchanged_mtime(Job = #space_strategy_job{
             dir_offset => Offset
         }},
 
-    case storage_sync_changes:children_attrs_hash_has_changed(FileMeta,
+    {StorageSyncInfo, FileCtx2} = file_ctx:get_storage_sync_info(FileCtx),
+    case storage_sync_changes:children_attrs_hash_has_changed(StorageSyncInfo,
         BatchHash, BatchKey)
     of
         true ->

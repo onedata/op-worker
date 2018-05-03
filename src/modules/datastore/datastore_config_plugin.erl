@@ -61,7 +61,8 @@ get_models() -> [
     transfer,
     autocleaning,
     dir_location,
-    storage_sync_monitoring
+    storage_sync_monitoring,
+    storage_sync_info
 ].
 
 %%--------------------------------------------------------------------

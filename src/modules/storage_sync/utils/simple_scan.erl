@@ -190,9 +190,9 @@ import_children(Job = #space_strategy_job{
             FileUuid = file_ctx:get_uuid_const(FileCtx),
             case storage_sync_utils:all_children_imported(DirsJobs, FileUuid) of
                 true ->
-                    storage_sync_info:update(FileUuid, Mtime, BatchKey, BatchHash);
+                    storage_sync_info:create_or_update(FileUuid, Mtime, BatchKey, BatchHash, SpaceId);
                 _ ->
-                    storage_sync_info:update(FileUuid, undefined, BatchKey, BatchHash)
+                    storage_sync_info:create_or_update(FileUuid, undefined, BatchKey, BatchHash, SpaceId)
             end;
         _ -> ok
     end,
@@ -517,6 +517,7 @@ maybe_update_attrs(FileAttr, FileCtx, StorageFileCtx, Mode, SyncAcl) ->
         maybe_update_owner(FileAttr, StorageFileCtx2, FileCtx),
         maybe_update_nfs4_acl(StorageFileCtx2, FileCtx, SyncAcl)
     ],
+    {P, _} = file_ctx:get_canonical_path(FileCtx),
     case lists:member(updated, Results) of
         true ->
             updated;

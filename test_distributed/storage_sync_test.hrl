@@ -81,13 +81,13 @@
 -define(assertMonitoring(Worker, Expected, SpaceId),
     ?assertMonitoring(Worker, Expected, SpaceId, 1)).
 
--define(assertHashChangedFun(File, ExpectedResult0),
+-define(assertHashChangedFun(Uuid, ExpectedResult0),
     fun
-        ({_, {storage_sync_changes, children_attrs_hash_has_changed, Args}, ExpectedResult})
-            when ExpectedResult =:= ExpectedResult0
+        ({_, {storage_sync_changes, children_attrs_hash_has_changed, Args}, Result})
+            when Result =:= ExpectedResult0
             ->
             case hd(Args) of
-                #file_meta{name = File} -> 1;
+                #document{key = Uuid} -> 1;
                 _ -> 0
             end;
         (_) ->
@@ -95,13 +95,13 @@
     end
 ).
 
--define(assertMtimeChangedFun(File, ExpectedResult0),
+-define(assertMtimeChangedFun(Uuid, ExpectedResult0),
     fun
-        ({_, {storage_sync_changes, mtime_has_changed, Args}, ExpectedResult})
-            when ExpectedResult =:= ExpectedResult0
+        ({_, {storage_sync_changes, mtime_has_changed, Args}, Result})
+            when Result =:= ExpectedResult0
             ->
             case hd(Args) of
-                #file_meta{name = File} -> 1;
+                #document{key = Uuid} -> 1;
                 _ -> 0
             end;
         (_) ->
