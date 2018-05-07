@@ -81,8 +81,10 @@ ensure_created(SpaceId, StorageId) ->
         {ok, true} ->
             ok;
         {ok, false} ->
-            {ok, _} = datastore_model:create(?CTX, new_doc(SpaceId, StorageId)),
-            ok;
+            case datastore_model:create(?CTX, new_doc(SpaceId, StorageId)) of
+                {ok, _} -> ok;
+                {error, already_exists} -> ok
+            end;
         Error  ->
             ?error("Failed to check if storage_sync_monitoring document for space ~p and storage ~p exists due to ~p",
                 [SpaceId, StorageId, Error])
@@ -90,7 +92,9 @@ ensure_created(SpaceId, StorageId) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Prepares document for new import scan.
+%% Prepares existing document for new import scan.
+%% This function assumes that document has already been created by
+%% ?MODULE:ensure_created/2 function.
 %% It resets control counters, and increases to_process counter and
 %% queue_length histograms by 1.
 %% This function also sets scan start_time.
@@ -111,6 +115,8 @@ prepare_new_import_scan(SpaceId, StorageId, Timestamp) ->
 %%-------------------------------------------------------------------
 %% @doc
 %% Prepares document for new update scan.
+%% This function assumes that document has already been created by
+%% ?MODULE:ensure_created/2 function.
 %% It resets control counters, and increases to_process counter and
 %% queue_length histograms by 1.
 %% This function also sets scan start_time.
