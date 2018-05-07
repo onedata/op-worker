@@ -57,11 +57,10 @@
 -type symlink_value() :: binary().
 -type file_meta() :: #file_meta{}.
 -type posix_permissions() :: non_neg_integer().
--type storage_sync_info() :: #storage_sync_info{}.
 
 -export_type([doc/0, uuid/0, path/0, name/0, uuid_or_path/0, entry/0, type/0,
     offset/0, size/0, mode/0, time/0, symlink_value/0, posix_permissions/0,
-    file_meta/0, storage_sync_info/0]).
+    file_meta/0]).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -806,7 +805,8 @@ is_valid_filename(FileName) when is_binary(FileName) ->
 cleanup(delete, [_, FileUuid], ok) ->
     ok = custom_metadata:delete(FileUuid),
     ok = file_force_proxy:delete(FileUuid),
-    ok = times:delete(FileUuid);
+    ok = times:delete(FileUuid),
+    ok = storage_sync_info:delete(FileUuid);
 cleanup(_, _, Result) ->
     Result.
 
@@ -840,7 +840,7 @@ get_posthooks() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    5.
+    6.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -936,6 +936,23 @@ get_record_struct(5) ->
             {last_synchronized_mtime, integer}
         ]}},
         {parent_uuid, string}
+    ]};
+get_record_struct(6) ->
+    {record, [
+        {name, string},
+        {type, atom},
+        {mode, integer},
+        {owner, string},
+        {group_owner, string},
+        {size, integer},
+        {version, integer},
+        {is_scope, boolean},
+        {scope, string},
+        {provider_id, string},
+        {link_value, string},
+        {shares, [string]},
+        {deleted, boolean},
+        {parent_uuid, string}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -948,32 +965,28 @@ get_record_struct(5) ->
 upgrade_record(1, {?MODULE, Name, Type, Mode, Uid, Size, Version, IsScope,
     Scope, ProviderId, LinkValue, Shares}
 ) ->
-    {2, #file_meta{name = Name, type = Type, mode = Mode, owner = Uid, size = Size,
-        version = Version, is_scope = IsScope, scope = Scope,
-        provider_id = ProviderId, link_value = LinkValue, shares = Shares}};
+    {2, {?MODULE, Name, Type, Mode, Uid, Size, Version, IsScope, Scope,
+        ProviderId, LinkValue, Shares}};
 upgrade_record(2, {?MODULE, Name, Type, Mode, Owner, Size, Version, IsScope,
     Scope, ProviderId, LinkValue, Shares}
 ) ->
-    {3, #file_meta{name = Name, type = Type, mode = Mode, owner = Owner, size = Size,
-        version = Version, is_scope = IsScope, scope = Scope,
-        provider_id = ProviderId, link_value = LinkValue, shares = Shares,
-        deleted = false, storage_sync_info = #storage_sync_info{}
-    }};
+    {3, {?MODULE, Name, Type, Mode, Owner, Size, Version, IsScope,
+        Scope, ProviderId, LinkValue, Shares, false, #storage_sync_info{}}};
 upgrade_record(3, {?MODULE, Name, Type, Mode, Owner, Size, Version, IsScope,
-    Scope, ProviderId, LinkValue, Shares, StorageSyncInfo}
+    Scope, ProviderId, LinkValue, Shares, Deleted, StorageSyncInfo}
 ) ->
-    {4, #file_meta{name = Name, type = Type, mode = Mode, owner = Owner, size = Size,
-        version = Version, is_scope = IsScope, scope = Scope,
-        provider_id = ProviderId, link_value = LinkValue, shares = Shares,
-        deleted = false, storage_sync_info = StorageSyncInfo,
-        parent_uuid = undefined
-    }};
+    {4, {?MODULE, Name, Type, Mode, Owner, Size, Version, IsScope,
+        Scope, ProviderId, LinkValue, Shares, Deleted, StorageSyncInfo, undefined}
+    };
 upgrade_record(4, {?MODULE, Name, Type, Mode, Owner, Size, Version, IsScope,
-    Scope, ProviderId, LinkValue, Shares, StorageSyncInfo, ParentUuid}
+    Scope, ProviderId, LinkValue, Shares, Deleted, StorageSyncInfo, ParentUuid}
 ) ->
-    {5, #file_meta{name = Name, type = Type, mode = Mode, owner = Owner, size = Size,
-        version = Version, is_scope = IsScope, scope = Scope,
-        provider_id = ProviderId, link_value = LinkValue, shares = Shares,
-        deleted = false, storage_sync_info = StorageSyncInfo,
-        parent_uuid = ParentUuid, group_owner = undefined
-    }}.
+    {5, {?MODULE, Name, Type, Mode, Owner, undefined, Size, Version, IsScope,
+        Scope, ProviderId, LinkValue, Shares, Deleted, StorageSyncInfo, ParentUuid}
+    };
+upgrade_record(5, {?MODULE, Name, Type, Mode, Owner, GroupOwner, Size, Version, IsScope,
+    Scope, ProviderId, LinkValue, Shares, Deleted, _StorageSyncInfo, ParentUuid}
+) ->
+    {6, {?MODULE, Name, Type, Mode, Owner, GroupOwner, Size, Version, IsScope,
+        Scope, ProviderId, LinkValue, Shares, Deleted, ParentUuid}
+    }.

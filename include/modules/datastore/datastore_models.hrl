@@ -260,7 +260,6 @@
     link_value :: undefined | file_meta:symlink_value() | fslogic_worker:file_guid(),
     shares = [] :: [od_share:id()],
     deleted = false :: boolean(),
-    storage_sync_info = #storage_sync_info{} :: file_meta:storage_sync_info(),
     parent_uuid :: undefined | file_meta:uuid()
 }).
 
@@ -359,10 +358,53 @@
 
 %% Model that maps space to storage strategies
 -record(space_strategies, {
-    storage_strategies = #{} :: maps:map(), %todo dializer crashes on: #{storage:id() => #storage_strategies{}},
+    storage_strategies = #{} :: maps:map(), %todo dialyzer crashes on: #{storage:id() => #storage_strategies{}},
     file_conflict_resolution = ?DEFAULT_FILE_CONFLICT_RESOLUTION_STRATEGY :: space_strategy:config(),
     file_caching = ?DEFAULT_FILE_CACHING_STRATEGY :: space_strategy:config(),
     enoent_handling = ?DEFAULT_ENOENT_HANDLING_STRATEGY :: space_strategy:config()
+}).
+
+-record(storage_sync_monitoring, {
+    scans = 0 :: non_neg_integer(), % overall number of finished scans,
+    import_start_time :: undefined | non_neg_integer(),
+    import_finish_time :: undefined | non_neg_integer(),
+    last_update_start_time :: undefined | non_neg_integer(),
+    last_update_finish_time :: undefined | non_neg_integer(),
+
+    % counters used for scan management, they're reset on the beginning of each scan
+    to_process = 0 :: non_neg_integer(),
+    imported = 0 :: non_neg_integer(),
+    updated = 0 :: non_neg_integer(),
+    deleted = 0 :: non_neg_integer(),
+    failed = 0 :: non_neg_integer(),
+    % counter for tasks which don't match to any one of the above categories
+    % i.e.
+    %   * remote files that were processed by sync algorithm but not deleted
+    %   * directories are processed many times (for each batch) but we increase
+    %     `updated` counter only for 1 batch, for other batches we increase
+    %     `other_processed_tasks` to keep track of algorithm and check whether
+    %     it performs as intended
+    other_processed = 0 :: non_neg_integer(),
+
+    imported_sum = 0 :: non_neg_integer(),
+    updated_sum = 0 :: non_neg_integer(),
+    deleted_sum = 0 :: non_neg_integer(),
+
+    imported_min_hist :: time_slot_histogram:histogram(),
+    imported_hour_hist :: time_slot_histogram:histogram(),
+    imported_day_hist :: time_slot_histogram:histogram(),
+
+    updated_min_hist :: time_slot_histogram:histogram(),
+    updated_hour_hist :: time_slot_histogram:histogram(),
+    updated_day_hist :: time_slot_histogram:histogram(),
+
+    deleted_min_hist :: time_slot_histogram:histogram(),
+    deleted_hour_hist :: time_slot_histogram:histogram(),
+    deleted_day_hist :: time_slot_histogram:histogram(),
+
+    queue_length_min_hist :: time_slot_histogram:histogram(),
+    queue_length_hour_hist :: time_slot_histogram:histogram(),
+    queue_length_day_hist :: time_slot_histogram:histogram()
 }).
 
 %% Model that holds synchronization state for a space
@@ -533,10 +575,5 @@
     active_links = #{} :: undefined | #{od_provider:id() => [od_provider:id()]}
 }).
 
-%% Model for storing storage_sync monitoring data.
--record(storage_sync_histogram, {
-    values = [] :: storage_sync_histogram:values(),
-    timestamp :: undefined | storage_sync_histogram:timestamp()
-}).
 
 -endif.

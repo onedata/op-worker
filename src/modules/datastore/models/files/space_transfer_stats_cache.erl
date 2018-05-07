@@ -12,6 +12,7 @@
 -module(space_transfer_stats_cache).
 -author("Bartosz Walkowicz").
 
+-include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/transfer.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -371,14 +372,14 @@ update_stats(OldStats, StatsType, ST, CurrentTime, Provider) ->
         ?MONTH_STAT_TYPE -> {ST#space_transfer_stats.mth_hist, ?DAY_TIME_WINDOW}
     end,
     HistLen = transfer_histograms:type_to_hist_length(StatsType),
-    ZeroedHist = time_slot_histogram:new(
+    ZeroedHist = time_slot_histogram:new(0,
         CurrentTime, TimeWindow, histogram:new(HistLen)
     ),
 
     {HistIn, HistsOut, SrcProviders} = maps:fold(fun(SrcProvider, Hist, Acc) ->
         {OldHistIn, OldHistsOut, OldSrcProviders} = Acc,
         LastUpdate = maps:get(SrcProvider, LastUpdates),
-        TimeSlotHist = time_slot_histogram:new(LastUpdate, TimeWindow, Hist),
+        TimeSlotHist = time_slot_histogram:new(0, LastUpdate, TimeWindow, Hist),
         NewHistIn = time_slot_histogram:merge(OldHistIn, TimeSlotHist),
         NewHistsOut = OldHistsOut#{SrcProvider => TimeSlotHist},
         NewSrcProviders = case CurrentTime - LastUpdate =< ?TRANSFER_INACTIVITY of
@@ -394,7 +395,7 @@ update_stats(OldStats, StatsType, ST, CurrentTime, Provider) ->
     NewStatsOut = maps:fold(fun(SrcProvider, Hist, OldStatsOut) ->
         OldHistOut = case maps:get(SrcProvider, OldStatsOut, none) of
             none -> ZeroedHist;
-            HistOut -> time_slot_histogram:new(CurrentTime, TimeWindow, HistOut)
+            HistOut -> time_slot_histogram:new(0, CurrentTime, TimeWindow, HistOut)
         end,
         NewHistOut = time_slot_histogram:merge(OldHistOut, Hist),
         OldStatsOut#{

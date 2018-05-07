@@ -35,7 +35,7 @@
   1},
  {<<"ctool">>,
   {git,"ssh://git@git.plgrid.pl:7999/vfs/ctool.git",
-       {ref,"580d0c3de6879167b6fc6e2d837e9aa968a375db"}},
+       {ref,"f8e8a2e62818a92a5ec47cdf63295e76abce91e1"}},
   0},
  {<<"edown">>,
   {git,"git://github.com/uwiger/edown.git",

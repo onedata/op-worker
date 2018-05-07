@@ -194,8 +194,7 @@ handle_cast(Request, State) ->
 %%--------------------------------------------------------------------
 -spec modules_with_exometer() -> list().
 modules_with_exometer() ->
-    [storage_sync_monitoring, fslogic_worker, helpers, session, router,
-        event_stream, event].
+    [fslogic_worker, helpers, session, router, event_stream, event].
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -203,5 +202,4 @@ modules_with_exometer() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec exometer_reporters() -> list().
-exometer_reporters() ->
-    [{exometer_report_rrd_ets, storage_sync_monitoring}].
+exometer_reporters() -> [].

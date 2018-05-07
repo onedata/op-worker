@@ -82,7 +82,6 @@ delete(Key) ->
 add(SpaceId, StorageId) ->
     add(SpaceId, StorageId, false).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Adds storage to the space.
@@ -126,11 +125,14 @@ add(SpaceId, StorageId, MountInRoot) ->
 %% Returns list of storage IDs attached to the space.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storage_ids(record() | doc()) -> [storage:id()].
+-spec get_storage_ids(record() | doc() | id()) -> [storage:id()].
 get_storage_ids(#space_storage{storage_ids = StorageIds}) ->
     StorageIds;
 get_storage_ids(#document{value = #space_storage{} = Value}) ->
-    get_storage_ids(Value).
+    get_storage_ids(Value);
+get_storage_ids(SpaceId) ->
+    {ok, Doc} = ?MODULE:get(SpaceId),
+    get_storage_ids(Doc).
 
 %%--------------------------------------------------------------------
 %% @doc

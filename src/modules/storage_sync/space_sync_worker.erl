@@ -178,7 +178,8 @@ start_strategies() ->
         throw:?ERROR_UNREGISTERED_PROVIDER ->
             {error, ?ERROR_UNREGISTERED_PROVIDER};
         Error2:Reason ->
-            ?error_stacktrace("Unable to start space strategies due to: ~p", [{Error2, Reason}]),
+            ?error_stacktrace("Unable to start space strategies due to: ~p",
+                [{Error2, Reason}]),
             {Error2, Reason}
     end.
 
@@ -207,16 +208,16 @@ check_strategies() ->
 %% This function is responsible for checking and optionally starting
 %% storage_import and storage_update strategies for each space supported
 %% by provider.
-%% Flag FirstRunAfterRestart will be passed down to check_strategies/3
+%% Flag FirstRun will be passed down to check_strategies/3
 %% function for special handling of first run after restart.
 %% @end
 %%--------------------------------------------------------------------
 -spec check_strategies([od_space:id()], boolean()) -> ok.
-check_strategies(SpaceIds, FirstRunAfterRestart) ->
+check_strategies(SpaceIds, FirstRun) ->
     lists:foreach(fun(SpaceId) ->
         case space_storage:get(SpaceId) of
             {ok, #document{value = #space_storage{storage_ids = StorageIds}}} ->
-                check_strategies(SpaceId, StorageIds, FirstRunAfterRestart);
+                check_strategies(SpaceId, StorageIds, FirstRun);
             _ ->
                 ok
         end
@@ -232,17 +233,9 @@ check_strategies(SpaceIds, FirstRunAfterRestart) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec check_strategies(od_space:id(), [storage:id()], boolean()) -> ok.
-check_strategies(SpaceId, StorageIds, FirstRunAfterRestart) ->
+check_strategies(SpaceId, StorageIds, FirstRun) ->
     lists:foreach(fun(StorageId) ->
-        case space_strategies:get(SpaceId) of
-            {ok, #document{value = #space_strategies{
-                storage_strategies = StorageStrategies
-            }}} ->
-                maybe_start_storage_import_and_update(SpaceId, StorageId,
-                    StorageStrategies, FirstRunAfterRestart);
-            _ ->
-                ok
-        end
+        maybe_start_storage_import_and_update(SpaceId, StorageId, FirstRun)
     end, StorageIds).
 
 %%--------------------------------------------------------------------
@@ -253,47 +246,14 @@ check_strategies(SpaceId, StorageIds, FirstRunAfterRestart) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec maybe_start_storage_import_and_update(od_space:id(), storage:id(),
-    maps:map(), boolean()) -> ok.
-maybe_start_storage_import_and_update(SpaceId, StorageId, StorageStrategies, true) ->
-    case maps:find(StorageId, StorageStrategies) of
-        {ok, #storage_strategies{
-            import_start_time = _ImportStartTime,
-            import_finish_time = undefined
-        }} ->
-            start_storage_import_and_update(SpaceId, StorageId, undefined,
-                undefined, undefined, undefined);
-        {ok, #storage_strategies{
-            import_start_time = ImportStartTime,
-            import_finish_time = ImportFinishTime,
-            last_update_start_time = _LastUpdateStartTime,
-            last_update_finish_time = undefined
-        }} ->
-            start_storage_import_and_update(SpaceId, StorageId, ImportStartTime,
-                ImportFinishTime, undefined, undefined);
-        {ok, #storage_strategies{
-            import_start_time = ImportStartTime,
-            import_finish_time = ImportFinishTime,
-            last_update_start_time = LastUpdateStartTime,
-            last_update_finish_time = LastUpdateFinishTime
-        }} when LastUpdateFinishTime < LastUpdateStartTime ->
-            start_storage_import_and_update(SpaceId, StorageId, ImportStartTime,
-                ImportFinishTime, undefined, undefined);
-        {ok, #storage_strategies{}} ->
-            maybe_start_storage_import_and_update(SpaceId, StorageId, StorageStrategies, false);
-        error ->
-            ok
-    end;
-maybe_start_storage_import_and_update(SpaceId, StorageId, StorageStrategies, false) ->
-    case maps:find(StorageId, StorageStrategies) of
-        {ok, #storage_strategies{
-            import_start_time = ImportStartTime,
-            import_finish_time = ImportFinishTime,
-            last_update_start_time = LastUpdateStartTime,
-            last_update_finish_time = LastUpdateFinishTime
-        }} ->
-            start_storage_import_and_update(SpaceId, StorageId, ImportStartTime,
-                ImportFinishTime, LastUpdateStartTime, LastUpdateFinishTime);
-        error ->
+    boolean()) -> ok.
+maybe_start_storage_import_and_update(SpaceId, StorageId, FirstRun) ->
+    case storage_sync_monitoring:get(SpaceId, StorageId) of
+        {ok, #document{value = SSM}} ->
+            SyncTimestamps =
+                storage_sync_monitoring:get_previous_sync_timestamps(SSM, FirstRun),
+            start_storage_import_and_update(SpaceId, StorageId, SyncTimestamps);
+        _Error ->
             ok
     end.
 
@@ -305,11 +265,10 @@ maybe_start_storage_import_and_update(SpaceId, StorageId, StorageStrategies, fal
 %% @end
 %%--------------------------------------------------------------------
 -spec start_storage_import_and_update(od_space:id(), storage:id(),
-    space_strategy:timestamp(), space_strategy:timestamp(),
-    space_strategy:timestamp(), space_strategy:timestamp()) -> ok.
-start_storage_import_and_update(SpaceId, StorageId, ImportStartTime, ImportFinishTime,
+    {non_neg_integer(), non_neg_integer(), non_neg_integer(), non_neg_integer()}) -> ok.
+start_storage_import_and_update(SpaceId, StorageId, {ImportStartTime, ImportFinishTime,
     LastUpdateStartTime, LastUpdateFinishTime
-) ->
+}) ->
     RootDirCtx = file_ctx:new_root_ctx(),
     ImportAns = storage_import:start(SpaceId, StorageId, ImportStartTime, ImportFinishTime,
         RootDirCtx, SpaceId),

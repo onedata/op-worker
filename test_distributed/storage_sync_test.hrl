@@ -71,6 +71,44 @@
     api_key = <<"test_api_key">>
 }).
 
+
+-define(assertMonitoring(Worker, Expected, SpaceId, Attempts),
+    ?assertMatch(Expected, begin
+        StorageId = storage_sync_test_base:get_storage_id(Worker),
+        rpc:call(Worker, storage_sync_monitoring, get_info, [SpaceId, StorageId])
+    end, Attempts)).
+
+-define(assertMonitoring(Worker, Expected, SpaceId),
+    ?assertMonitoring(Worker, Expected, SpaceId, 1)).
+
+-define(assertHashChangedFun(Uuid, ExpectedResult0),
+    fun
+        ({_, {storage_sync_changes, children_attrs_hash_has_changed, Args}, Result})
+            when Result =:= ExpectedResult0
+            ->
+            case hd(Args) of
+                #document{key = Uuid} -> 1;
+                _ -> 0
+            end;
+        (_) ->
+            0
+    end
+).
+
+-define(assertMtimeChangedFun(Uuid, ExpectedResult0),
+    fun
+        ({_, {storage_sync_changes, mtime_has_changed, Args}, Result})
+            when Result =:= ExpectedResult0
+            ->
+            case hd(Args) of
+                #document{key = Uuid} -> 1;
+                _ -> 0
+            end;
+        (_) ->
+            0
+    end
+).
+
 -define(ACL, #acl{
     value = [
         #access_control_entity{
