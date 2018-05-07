@@ -21,8 +21,9 @@ The main objective of *op-worker*, and *oneprovider* as a whole, is to unify acc
 Comprehensive [documentation](https://beta.onedata.org/docs/index.html) explains basic concepts of onedata, provides "Getting started" and introduces to advanced topics.
 
 ## Building
-To build *oz-worker* use the provided build script:
+To build *op-worker* make sure submodules are initialized and use the provided build script:
 ```
+make submodules
 ./make.py
 ```
 

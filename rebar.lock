@@ -86,7 +86,7 @@
   1},
  {<<"helpers">>,
   {git,"ssh://git@git.plgrid.pl:7999/vfs/helpers.git",
-       {ref,"bca3d757c8c0c295f82e6e7f083ba9fcb13beefd"}},
+       {ref,"4b4bd680fa3d15de750df7033b00c3134051e400"}},
   0},
  {<<"hut">>,
   {git,"git://github.com/tolbrino/hut.git",

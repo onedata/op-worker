@@ -66,6 +66,15 @@ template:
 	$(TEMPLATE_SCRIPT) rel/vars.config ./rel/files/vm.args.template
 
 ##
+## Submodules
+##
+
+submodules:
+	git submodule sync --recursive ${submodule}
+	git submodule update --init --recursive ${submodule}
+
+
+##
 ## Release targets
 ##
 
