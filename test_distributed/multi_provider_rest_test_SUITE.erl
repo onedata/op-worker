@@ -89,13 +89,13 @@
     file_replication_failures_should_fail_whole_transfer/1,
     replicate_big_dir/1,
     replicate_big_file/1,
-    invalidate_big_dir/1,
+    migrate_big_dir/1,
     many_simultaneous_transfers/1,
-    many_simultaneous_failed_transfers/1]).
+    many_simultaneous_failed_transfers/1, invalidate_big_dir/1]).
 
 %utils
 -export([verify_file/3, create_file/3, create_dir/3,
-    create_nested_directory_tree/4, sync_file_counter/3, create_file_counter/4]).
+    create_nested_directory_tree/4, sync_file_counter/3, create_file_counter/4, verify_distribution/6]).
 
 all() ->
     ?ALL([
@@ -114,7 +114,7 @@ all() ->
         replicate_to_missing_provider,
         replicate_to_nonsupporting_provider,
         invalidate_file_replica,
-        invalidate_file_replica_with_migration,
+%%        invalidate_file_replica_with_migration, TODO uncomment after resolving VFS-4410
         restart_invalidation_of_file_replica_with_migration,
         invalidate_dir_replica,
         automatic_cleanup_should_invalidate_unpopular_files,
@@ -152,12 +152,13 @@ all() ->
         spatial_flag_test,
         many_simultaneous_failed_transfers,
         many_simultaneous_transfers,
-        quota_exceeded_during_file_replication,
-        quota_decreased_after_invalidation,
+%%        quota_exceeded_during_file_replication,
+%%        quota_decreased_after_invalidation,
         file_replication_failures_should_fail_whole_transfer,
         replicate_big_dir,
         replicate_big_file,
         invalidate_big_dir
+%%        migrate_big_dir   TODO uncomment after resolving VFS-4410
     ]).
 
 -define(LIST_TRANSFER, fun(Id, Acc) -> [Id | Acc] end).
@@ -417,6 +418,11 @@ transfers_should_be_ordered_by_timestamps(Config) ->
     % when
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File2}), ?ATTEMPTS),
+    ExpectedDistribution = [#{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, Size]]}],
+    ExpectedDistribution2 = [#{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, Size2]]}],
+    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
+    ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, File2),
+
     Tid2 = schedule_file_replication(WorkerP1, DomainP2, File2, Config),
     timer:sleep(timer:seconds(1)),
     Tid = schedule_file_replication(WorkerP1, DomainP2, File, Config),
@@ -559,6 +565,8 @@ restart_file_replication(Config) ->
     % when
     mock_file_replication_failure(WorkerP2),
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
+    ExpectedDistribution = [#{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, ?TEST_DATA_SIZE]]}],
+    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
     Tid = schedule_file_replication(WorkerP1, DomainP2, File, Config),
 
     % then
@@ -633,6 +641,8 @@ cancel_file_replication(Config) ->
 
     % when
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
+    ExpectedDistribution = [#{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, Size]]}],
+    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
     Tid = schedule_file_replication(WorkerP1, DomainP2, File, Config),
 
     ?assertEqual([Tid], list_active_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
@@ -688,6 +698,10 @@ replicate_dir(Config) ->
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File1}), ?ATTEMPTS),
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File2}), ?ATTEMPTS),
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File3}), ?ATTEMPTS),
+    ExpectedDistribution = [#{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, ?TEST_DATA_SIZE]]}],
+    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File1),
+    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File2),
+    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File3),
     Tid = schedule_file_replication(WorkerP1, DomainP2, Dir1, Config),
 
     % then
@@ -2161,6 +2175,7 @@ many_simultaneous_failed_transfers(Config) ->
         ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {guid, FileGuid}), ?ATTEMPTS)
     end, FileGuids),
 
+    mock_file_replication_failure(WorkerP2),
     TidsAndGuids = lists:map(fun(FileGuid) ->
         {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
         Tid = schedule_file_replication_by_id(WorkerP1, DomainP2, FileObjectId, Config),
@@ -2369,7 +2384,7 @@ quota_decreased_after_invalidation(Config) ->
     ?assertEqual([Tid4, Tid3, Tid2, Tid], list_past_transfers(WorkerP2, SpaceId), ?ATTEMPTS).
 
 file_replication_failures_should_fail_whole_transfer(Config) ->
-    %soft quota on WorkerP2 is set to 0, so every write on WorkerP2 will fail
+
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
@@ -2390,6 +2405,7 @@ file_replication_failures_should_fail_whole_transfer(Config) ->
     lists:foreach(fun(FileGuid) ->
         ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {guid, FileGuid}), ?ATTEMPTS)
     end, FileGuids),
+    mock_file_replication_failure(WorkerP2),
     Tid = schedule_file_replication(WorkerP1, DomainP2, Dir, Config),
 
     % then
@@ -2427,14 +2443,20 @@ replicate_big_dir(Config) ->
 
     create_nested_directory_tree(WorkerP1, SessionId, Structure, RootDir),
 
-    FileGuids = receive {create, FileGuids0} -> FileGuids0 end,
+    FileGuidsAndPaths = receive {create, FileGuidsAndPaths0} -> FileGuidsAndPaths0 end,
 
-    lists:foreach(fun(FileGuid) ->
+    lists:foreach(fun({FileGuid, _FilePath}) ->
         worker_pool:cast(?VERIFY_POOL, {?MODULE, verify_file, [WorkerP2, SessionId2, FileGuid]})
-    end, FileGuids),
+    end, FileGuidsAndPaths),
 
     receive files_synchronized -> ok end,
     DomainP2 = domain(WorkerP2),
+    DomainP1 = domain(WorkerP1),
+
+    ExpectedDistribution = [
+        #{<<"providerId">> => DomainP1, <<"blocks">> => [[0, 4]]}
+    ],
+    verify_files_distribution(WorkerP2, FilesToCreate, ExpectedDistribution, FileGuidsAndPaths, SessionId2, Config),
 
     Tid = schedule_file_replication(WorkerP1, DomainP2, RootDir, Config),
 
@@ -2449,7 +2471,15 @@ replicate_big_dir(Config) ->
         <<"filesProcessed">> := FilesToCreate,
         <<"filesTransferred">> := RegularFilesNum,
         <<"bytesTransferred">> := BytesSum
-    }, WorkerP1, Tid, Config, 600).
+    }, WorkerP1, Tid, Config, 600),
+
+    ExpectedDistribution2 = [
+        #{<<"providerId">> => DomainP1, <<"blocks">> => [[0, 4]]},
+        #{<<"providerId">> => DomainP2, <<"blocks">> => [[0, 4]]}
+    ],
+    verify_files_distribution(WorkerP2, FilesToCreate, ExpectedDistribution2, FileGuidsAndPaths, SessionId2, Config),
+    verify_files_distribution(WorkerP2, FilesToCreate, ExpectedDistribution2, FileGuidsAndPaths, SessionId2, Config).
+
 
 replicate_big_file(Config) ->
     ct:timetrap({hours, 1}),
@@ -2468,7 +2498,8 @@ replicate_big_file(Config) ->
     lfm_proxy:fsync(WorkerP1, Handle),
     lfm_proxy:close(WorkerP1, Handle),
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
-
+    ExpectedDistribution = [#{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, Size]]}],
+    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
     Tid = schedule_file_replication(WorkerP1, DomainP2, File, Config),
 
     % then
@@ -2502,12 +2533,83 @@ invalidate_big_dir(Config) ->
     true = register(?SYNC_FILE_COUNTER, spawn_link(?MODULE, sync_file_counter, [0, FilesToCreate, self()])),
 
     create_nested_directory_tree(WorkerP1, SessionId, Structure, RootDir),
+    FileGuidsAndPaths = receive {create, FileGuidsAndPaths0} -> FileGuidsAndPaths0 end,
 
-    FileGuids = receive {create, FileGuids0} -> FileGuids0 end,
-
-    lists:foreach(fun(FileGuid) ->
+    lists:foreach(fun({FileGuid, _FilePath}) ->
         worker_pool:cast(?VERIFY_POOL, {?MODULE, verify_file, [WorkerP2, SessionId2, FileGuid]})
-    end, FileGuids),
+    end, FileGuidsAndPaths),
+    receive files_synchronized -> ok end,
+
+    ExpectedDistribution0 = [#{<<"providerId">> => DomainP1, <<"blocks">> => [[0, 4]]}],
+    verify_files_distribution(WorkerP2, FilesToCreate, ExpectedDistribution0, FileGuidsAndPaths, SessionId2, Config),
+
+    Tid = schedule_file_replication(WorkerP2, DomainP2, RootDir, Config),
+
+    % then
+    ?assertTransferStatus(#{
+        <<"transferStatus">> := <<"completed">>,
+        <<"targetProviderId">> := DomainP2,
+        <<"path">> := RootDir,
+        <<"invalidationStatus">> := <<"skipped">>,
+        <<"callback">> := null,
+        <<"filesToProcess">> := FilesToCreate,
+        <<"filesProcessed">> := FilesToCreate,
+        <<"filesTransferred">> := RegularFilesNum,
+        <<"filesInvalidated">> := 0,
+        <<"failedFiles">> := 0
+    }, WorkerP1, Tid, Config, 600),
+
+    ExpectedDistribution = [
+        #{<<"providerId">> => DomainP1, <<"blocks">> => [[0, 4]]},
+        #{<<"providerId">> => DomainP2, <<"blocks">> => [[0, 4]]}
+    ],
+
+    verify_files_distribution(WorkerP1, FilesToCreate, ExpectedDistribution, FileGuidsAndPaths, SessionId, Config),
+    Tid2 = schedule_replica_invalidation(WorkerP1, DomainP1, RootDir, Config),
+
+    % then
+    ?assertTransferStatus(#{
+        <<"transferStatus">> := <<"skipped">>,
+        <<"targetProviderId">> := null,
+        <<"path">> := RootDir,
+        <<"invalidationStatus">> := <<"completed">>,
+        <<"callback">> := null,
+        <<"filesToProcess">> := FilesToCreate,
+        <<"filesProcessed">> := FilesToCreate,
+        <<"filesTransferred">> := 0,
+        <<"filesInvalidated">> := RegularFilesNum,
+        <<"failedFiles">> := 0
+    }, WorkerP1, Tid2, Config, 600),
+
+    ExpectedDistribution2 = [
+        #{<<"providerId">> => DomainP2, <<"blocks">> => [[0, 4]]}
+    ],
+    verify_files_distribution(WorkerP2, FilesToCreate, ExpectedDistribution2, FileGuidsAndPaths, SessionId2, Config),
+    verify_files_distribution(WorkerP1, FilesToCreate, ExpectedDistribution2, FileGuidsAndPaths, SessionId, Config).
+
+migrate_big_dir(Config) ->
+    ct:timetrap({hours, 1}),
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
+    Space = <<"/space3">>,
+    RootDir = filename:join(Space, <<"big_dir_migration">>),
+    Structure = [10, 10], % last level are files
+    FilesToCreate = lists:foldl(fun(N, AccIn) -> 1 + AccIn * N end, 1, Structure),
+    RegularFilesNum = lists:foldl(fun(N, AccIn) -> N * AccIn end, 1, Structure),
+    DomainP2 = domain(WorkerP2),
+    DomainP1 = domain(WorkerP1),
+
+    true = register(?CREATE_FILE_COUNTER, spawn_link(?MODULE, create_file_counter, [0, FilesToCreate, self(), []])),
+    true = register(?SYNC_FILE_COUNTER, spawn_link(?MODULE, sync_file_counter, [0, FilesToCreate, self()])),
+
+    create_nested_directory_tree(WorkerP1, SessionId, Structure, RootDir),
+
+    FileGuidsAndPaths = receive {create, FileGuidsAndPaths0} -> FileGuidsAndPaths0 end,
+
+    lists:foreach(fun({FileGuid, _FilePath}) ->
+        worker_pool:cast(?VERIFY_POOL, {?MODULE, verify_file, [WorkerP2, SessionId2, FileGuid]})
+    end, FileGuidsAndPaths),
 
     receive files_synchronized -> ok end,
 
@@ -2704,8 +2806,10 @@ end_per_testcase(Case, Config) when Case =:= replicate_not_synced_file ->
     end_per_testcase(all, Config);
 
 end_per_testcase(_Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
     remove_transfers(Config),
     ensure_transfers_removed(Config),
+    unmock_file_replication(Workers),
     lfm_proxy:teardown(Config).
 
 %%%===================================================================
@@ -2780,11 +2884,11 @@ create_nested_directory_tree(Node, SessionId, [SubDirsNum | Rest], Root) ->
 
 create_file(Node, SessionId, FilePath) ->
     FileGuid = create_test_file(Node, SessionId, FilePath, ?TEST_DATA),
-    ?CREATE_FILE_COUNTER ! {created, FileGuid}.
+    ?CREATE_FILE_COUNTER ! {created, {FileGuid, FilePath}}.
 
 create_dir(Node, SessionId, DirPath) ->
     {ok, DirGuid} = lfm_proxy:mkdir(Node, SessionId, DirPath),
-    ?CREATE_FILE_COUNTER ! {created, DirGuid}.
+    ?CREATE_FILE_COUNTER ! {created, {DirGuid, DirPath}}.
 
 sync_file_counter(FilesToVerify, FilesToVerify, ParentPid) ->
     ParentPid ! files_synchronized;
@@ -2798,13 +2902,22 @@ create_file_counter(FilesToCreate, FilesToCreate, ParentPid, Files) ->
     ParentPid ! {create, Files};
 create_file_counter(N, FilesToCreate, ParentPid, Files) ->
     receive
-        {created, FileGuid} ->
-            create_file_counter(N + 1, FilesToCreate, ParentPid, [FileGuid | Files])
+        {created, FileGuidAndPath} ->
+            create_file_counter(N + 1, FilesToCreate, ParentPid, [FileGuidAndPath | Files])
     end.
 
 verify_file(Worker, SessionId, FileGuid) ->
-    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Worker, SessionId, {guid, FileGuid}), 3600),
+    {ok, Attr} = ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Worker, SessionId, {guid, FileGuid}), 10 * ?ATTEMPTS),
     ?SYNC_FILE_COUNTER ! verified.
+
+verify_distribution(Worker, ExpectedDistribution, Config, FileGuid, FilePath, SessionId) ->
+    case lfm_proxy:stat(Worker, SessionId, {guid, FileGuid}) of
+        {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
+            ?SYNC_FILE_COUNTER ! verified;
+        {ok, #file_attr{type = ?REGULAR_FILE_TYPE}} ->
+            ?assertDistribution(Worker, ExpectedDistribution, Config, FilePath),
+            ?SYNC_FILE_COUNTER ! verified
+    end.
 
 clean_monitoring_dir(Worker, SpaceId) ->
     RootSessionId = <<"0">>,
@@ -2928,3 +3041,10 @@ create_test_file(Worker, SessionId, File, TestData) ->
     lfm_proxy:fsync(Worker, Handle),
     lfm_proxy:close(Worker, Handle),
     FileGuid.
+
+verify_files_distribution(Worker, FilesNum, ExpectedDistribution, FileGuidsAndPaths, SessionId, Config) ->
+    true = register(?SYNC_FILE_COUNTER, spawn_link(?MODULE, sync_file_counter, [0, FilesNum, self()])),
+    lists:foreach(fun({FileGuid, FilePath}) ->
+        worker_pool:cast(?VERIFY_POOL, {?MODULE, verify_distribution, [Worker, ExpectedDistribution, Config, FileGuid, FilePath, SessionId]})
+    end, FileGuidsAndPaths),
+    receive files_synchronized -> ok end.

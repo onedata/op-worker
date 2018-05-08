@@ -236,7 +236,7 @@
                     },
                     "p2": {
                         "storage": "/mnt/st2",
-                        "supported_size": 1
+                        "supported_size": 10737418240
                     }
                 }
             },
