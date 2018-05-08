@@ -65,7 +65,7 @@ rtransfer_stats_updates_test(Config) ->
 rtransfer_stats_updates_test_base(Config) ->
     TFP = ?config(transfer_file_parts, Config),
     multi_provider_file_ops_test_base:rtransfer_test_base2(Config, <<"user1">>,
-        {2,0,0,2}, 500, TFP).
+        {2,0,0,2}, 1800, TFP).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -78,6 +78,7 @@ end_per_suite(_Config) ->
     ok.
 
 init_per_testcase(_Case, Config) ->
+    ct:timetrap({minutes, 90}),
     ssl:start(),
     hackney:start(),
     initializer:disable_quota_limit(Config),
