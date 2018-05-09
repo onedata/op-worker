@@ -612,12 +612,12 @@ restart_file_replication(Config) ->
         <<"mthHist">> := #{DomainP1 := [4 | _]}
     }, WorkerP1, Tid, Config),
 
-    ExpectedDistribution = [
+    ExpectedDistribution2 = [
         #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
         #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
     ],
-    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File),
-    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
+    ?assertDistribution(WorkerP1, ExpectedDistribution2, Config, File),
+    ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, File),
 
     ?assertEqual([], list_scheduled_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqual([], list_current_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
@@ -720,16 +720,16 @@ replicate_dir(Config) ->
         <<"bytesTransferred">> := 12
     }, WorkerP1, Tid, Config),
 
-    ExpectedDistribution = [
+    ExpectedDistribution2 = [
         #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
         #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
     ],
-    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File1),
-    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File2),
-    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File3),
-    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File1),
-    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File2),
-    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File3),
+    ?assertDistribution(WorkerP1, ExpectedDistribution2, Config, File1),
+    ?assertDistribution(WorkerP1, ExpectedDistribution2, Config, File2),
+    ?assertDistribution(WorkerP1, ExpectedDistribution2, Config, File3),
+    ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, File1),
+    ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, File2),
+    ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, File3),
 
 
     ?assertEqual([], list_scheduled_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
@@ -1692,6 +1692,8 @@ changes_stream_on_multi_provider_test(Config) ->
         lists:map(fun(Change) ->
             json_utils:decode(Change)
         end, AllChanges),
+
+%%    ct:pal("DecodedChanges: ~p",  [DecodedChanges]),
 
     ?assert(lists:any(fun(Change) ->
         <<"file4_csompt">> == maps:get(<<"name">>, Change) andalso
