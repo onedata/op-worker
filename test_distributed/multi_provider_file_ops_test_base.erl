@@ -195,7 +195,7 @@ rtransfer_test_base2(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     Result = try
         verify_workers(Workers2, fun(W) ->
             read_big_file(Config, FileSize, Level2File, W, true)
-        end),
+        end, timer:seconds(Attempts)),
         ok
     catch
         T:R -> {error, T, R}
@@ -1250,8 +1250,11 @@ verify(Config, TestFun) ->
     verify_workers(Workers, TestFun).
 
 verify_workers(Workers, TestFun) ->
+    verify_workers(Workers, TestFun, timer:minutes(5)).
+
+verify_workers(Workers, TestFun, Timeout) ->
     process_flag(trap_exit, true),
-    TestAns = verify_helper(Workers, TestFun),
+    TestAns = verify_helper(Workers, TestFun, Timeout),
 
     Error = lists:any(fun
         ({_W, error, _Reason}) -> true;
@@ -1264,22 +1267,22 @@ verify_workers(Workers, TestFun) ->
 
     lists:map(fun({_W, Ans}) -> Ans end, TestAns).
 
-verify_helper([], _TestFun) ->
+verify_helper([], _TestFun, _) ->
     [];
-verify_helper([W | Workers], TestFun) ->
+verify_helper([W | Workers], TestFun, Timeout) ->
     Master = self(),
     Pid = spawn_link(fun() ->
         Ans = TestFun(W),
         Master ! {verify_ans, W, Ans}
     end),
-    TmpAns = verify_helper(Workers, TestFun),
+    TmpAns = verify_helper(Workers, TestFun, Timeout),
     receive
         {verify_ans, W, TestAns} ->
             [{W, TestAns} | TmpAns];
         {'EXIT', Pid , Error} when Error /= normal ->
             [{W, error, Error} | TmpAns]
     after
-        timer:minutes(5) ->
+        Timeout ->
             [{W, error, timeout} | TmpAns]
     end.
 
