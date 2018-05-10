@@ -2159,32 +2159,40 @@ many_simultaneous_failed_transfers(Config) ->
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
     Space = <<"/space4">>,
+    RootDir = filename:join(Space, <<"simultaneous_transfers">>),
+    FilesNum = 100,
+    Structure = [FilesNum],
+    FilesToCreate = lists:foldl(fun(N, AccIn) -> 1 + AccIn * N end, 1, Structure),
+    DomainP1 = domain(WorkerP1),
     DomainP2 = domain(WorkerP2),
 
-    RootDir = filename:join(Space, <<"simultaneous_transfers_failed">>),
-    FilesNum = 100,
-    {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, RootDir),
+    true = register(?CREATE_FILE_COUNTER, spawn_link(?MODULE, create_file_counter, [0, FilesToCreate, self(), []])),
+    true = register(?SYNC_FILE_COUNTER, spawn_link(?MODULE, sync_file_counter, [0, FilesToCreate, self()])),
 
-    FileGuids = lists:map(fun(N) ->
-        File = filename:join(RootDir, integer_to_binary(N)),
-        create_test_file(WorkerP1, SessionId, File, ?TEST_DATA)
-    end, lists:seq(1, FilesNum)),
+    create_nested_directory_tree(WorkerP1, SessionId, Structure, RootDir),
+    FileGuidsAndPaths = receive {create, FileGuidsAndPaths0} -> FileGuidsAndPaths0 end,
 
-    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, RootDir}), ?ATTEMPTS),
-    lists:foreach(fun(FileGuid) ->
-        ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {guid, FileGuid}), ?ATTEMPTS)
-    end, FileGuids),
+    lists:foreach(fun({FileGuid, _FilePath}) ->
+        worker_pool:cast(?VERIFY_POOL, {?MODULE, verify_file, [WorkerP2, SessionId2, FileGuid]})
+    end, FileGuidsAndPaths),
+    receive files_synchronized -> ok end,
+
+    ExpectedDistribution0 = [#{<<"providerId">> => DomainP1, <<"blocks">> => [[0, 4]]}],
+    verify_files_distribution(WorkerP2, FilesToCreate, ExpectedDistribution0, FileGuidsAndPaths, SessionId2, Config),
+
+    {ok, #file_attr{guid = DirGuid}} = ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, RootDir})),
+
+    FileGuidsAndPaths2 = proplists:delete(DirGuid, FileGuidsAndPaths),
 
     mock_file_replication_failure(WorkerP2),
-    TidsAndGuids = lists:map(fun(FileGuid) ->
+    TidsAndGuids = lists:map(fun({FileGuid, FilePath}) ->
         {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
         Tid = schedule_file_replication_by_id(WorkerP1, DomainP2, FileObjectId, Config),
-        {Tid, FileGuid}
-    end, FileGuids),
+        {Tid, FileObjectId, FilePath}
+    end, FileGuidsAndPaths2),
 
     % then
-    lists:foreach(fun({Tid, FileGuid}) ->
-        {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
+    lists:foreach(fun({Tid, FileObjectId, FilePath}) ->
         ?assertTransferStatus(#{
             <<"transferStatus">> := <<"failed">>,
             <<"targetProviderId">> := DomainP2,
@@ -2195,7 +2203,8 @@ many_simultaneous_failed_transfers(Config) ->
             <<"filesProcessed">> := 1,
             <<"failedFiles">> := 1,
             <<"filesTransferred">> := 0,
-            <<"bytesTransferred">> := 0
+            <<"bytesTransferred">> := 0,
+            <<"path">> := FilePath
         }, WorkerP1, Tid, Config)
     end, TidsAndGuids).
 
@@ -2207,27 +2216,37 @@ many_simultaneous_transfers(Config) ->
     Space = <<"/space10">>,
     RootDir = filename:join(Space, <<"simultaneous_transfers">>),
     FilesNum = 1000,
-    {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, RootDir),
+    Structure = [FilesNum],
+    FilesToCreate = lists:foldl(fun(N, AccIn) -> 1 + AccIn * N end, 1, Structure),
+    DomainP1 = domain(WorkerP1),
     DomainP2 = domain(WorkerP2),
 
-    FileGuids = lists:map(fun(N) ->
-        File = filename:join(RootDir, integer_to_binary(N)),
-        create_test_file(WorkerP1, SessionId, File, ?TEST_DATA)
-    end, lists:seq(1, FilesNum)),
+    true = register(?CREATE_FILE_COUNTER, spawn_link(?MODULE, create_file_counter, [0, FilesToCreate, self(), []])),
+    true = register(?SYNC_FILE_COUNTER, spawn_link(?MODULE, sync_file_counter, [0, FilesToCreate, self()])),
 
-    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, RootDir}), ?ATTEMPTS),
-    lists:foreach(fun(FileGuid) ->
-        ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {guid, FileGuid}), ?ATTEMPTS)
-    end, FileGuids),
+    create_nested_directory_tree(WorkerP1, SessionId, Structure, RootDir),
+    FileGuidsAndPaths = receive {create, FileGuidsAndPaths0} -> FileGuidsAndPaths0 end,
 
-    TidsAndIds = lists:map(fun(FileGuid) ->
+    lists:foreach(fun({FileGuid, _FilePath}) ->
+        worker_pool:cast(?VERIFY_POOL, {?MODULE, verify_file, [WorkerP2, SessionId2, FileGuid]})
+    end, FileGuidsAndPaths),
+    receive files_synchronized -> ok end,
+
+    ExpectedDistribution0 = [#{<<"providerId">> => DomainP1, <<"blocks">> => [[0, 4]]}],
+    verify_files_distribution(WorkerP2, FilesToCreate, ExpectedDistribution0, FileGuidsAndPaths, SessionId2, Config),
+
+    {ok, #file_attr{guid = DirGuid}} = ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, RootDir})),
+
+    FileGuidsAndPaths2 = proplists:delete(DirGuid, FileGuidsAndPaths),
+
+    TidsAndIds = lists:map(fun({FileGuid, FilePath}) ->
         {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
         Tid = schedule_file_replication_by_id(WorkerP1, DomainP2, FileObjectId, Config),
-        {Tid, FileObjectId}
-    end, FileGuids),
+        {Tid, FileObjectId, FilePath}
+    end, FileGuidsAndPaths2),
 
     % then
-    lists:foreach(fun({Tid, FileObjectId}) ->
+    lists:foreach(fun({Tid, FileObjectId, FilePath}) ->
         ?assertTransferStatus(#{
             <<"transferStatus">> := <<"completed">>,
             <<"targetProviderId">> := DomainP2,
@@ -2239,7 +2258,8 @@ many_simultaneous_transfers(Config) ->
             <<"failedFiles">> := 0,
             <<"filesInvalidated">> := 0,
             <<"filesTransferred">> := 1,
-            <<"bytesTransferred">> := 4
+            <<"bytesTransferred">> := 4,
+            <<"path">> := FilePath
         }, WorkerP1, Tid, Config)
     end, TidsAndIds).
 
@@ -2491,10 +2511,8 @@ replicate_big_file(Config) ->
     File = filename:join(Space, <<"big_file">>),
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
     {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
-    BaseSize = 1024 * 1024 * 1024,
-    Size = 2 * BaseSize,
-    lfm_proxy:write(WorkerP1, Handle, 0, crypto:strong_rand_bytes(BaseSize)),
-    lfm_proxy:write(WorkerP1, Handle, BaseSize, crypto:strong_rand_bytes(BaseSize)),
+    Size = 1024 * 1024 * 1024,
+    lfm_proxy:write(WorkerP1, Handle, 0, crypto:strong_rand_bytes(Size)),
     lfm_proxy:fsync(WorkerP1, Handle),
     lfm_proxy:close(WorkerP1, Handle),
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
