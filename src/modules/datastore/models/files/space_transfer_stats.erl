@@ -128,25 +128,40 @@ update(TransferType, SpaceId, SrcProvider, Bytes, CurrentTime) ->
         mth_hist = MthHistograms
     }) ->
         LastUpdate = maps:get(SrcProvider, LastUpdateMap, 0),
-        {ok, SpaceTransfers#space_transfer_stats{
-            last_update = LastUpdateMap#{SrcProvider => CurrentTime},
-            min_hist = transfer_histograms:update(
-                SrcProvider, Bytes, MinHistograms,
-                ?MINUTE_STAT_TYPE, LastUpdate, CurrentTime
-            ),
-            hr_hist = transfer_histograms:update(
-                SrcProvider, Bytes, HrHistograms,
-                ?HOUR_STAT_TYPE, LastUpdate, CurrentTime
-            ),
-            dy_hist = transfer_histograms:update(
-                SrcProvider, Bytes, DyHistograms,
-                ?DAY_STAT_TYPE, LastUpdate, CurrentTime
-            ),
-            mth_hist = transfer_histograms:update(
-                SrcProvider, Bytes, MthHistograms,
-                ?MONTH_STAT_TYPE, LastUpdate, CurrentTime
-            )
-        }}
+        % Due to race between processes updating stats it is possible
+        % for LastUpdate to be larger than CurrentTime, also because
+        % provider_logic:zone_time_seconds() caches zone time locally it is
+        % possible for time of various provider nodes to differ by several
+        % seconds.
+        % So if the CurrentTime is less than LastUpdate by no more than 5 sec
+        % accept it and update latest slot, otherwise silently reject it
+        case CurrentTime - LastUpdate > -5 of
+            false ->
+                {ok, SpaceTransfers};
+            true ->
+                ApproxCurrentTime = max(CurrentTime, LastUpdate),
+                {ok, SpaceTransfers#space_transfer_stats{
+                    last_update = LastUpdateMap#{
+                        SrcProvider => ApproxCurrentTime
+                    },
+                    min_hist = transfer_histograms:update(
+                        SrcProvider, Bytes, MinHistograms,
+                        ?MINUTE_STAT_TYPE, LastUpdate, ApproxCurrentTime
+                    ),
+                    hr_hist = transfer_histograms:update(
+                        SrcProvider, Bytes, HrHistograms,
+                        ?HOUR_STAT_TYPE, LastUpdate, ApproxCurrentTime
+                    ),
+                    dy_hist = transfer_histograms:update(
+                        SrcProvider, Bytes, DyHistograms,
+                        ?DAY_STAT_TYPE, LastUpdate, ApproxCurrentTime
+                    ),
+                    mth_hist = transfer_histograms:update(
+                        SrcProvider, Bytes, MthHistograms,
+                        ?MONTH_STAT_TYPE, LastUpdate, ApproxCurrentTime
+                    )
+                }}
+        end
     end,
     Default = #document{
         scope = SpaceId,

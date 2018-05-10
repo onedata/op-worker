@@ -574,26 +574,41 @@ mark_data_transfer_finished(TransferId, ProviderId, Bytes, SpaceId) ->
         mth_hist = MthHistograms
     }) ->
         LastUpdate = maps:get(ProviderId, LastUpdateMap, StartTime),
-        {ok, Transfer#transfer{
-            bytes_transferred = OldBytes + Bytes,
-            last_update = maps:put(ProviderId, CurrentTime, LastUpdateMap),
-            min_hist = transfer_histograms:update(
-                ProviderId, Bytes, MinHistograms,
-                ?MINUTE_STAT_TYPE, LastUpdate, CurrentTime
-            ),
-            hr_hist = transfer_histograms:update(
-                ProviderId, Bytes, HrHistograms,
-                ?HOUR_STAT_TYPE, LastUpdate, CurrentTime
-            ),
-            dy_hist = transfer_histograms:update(
-                ProviderId, Bytes, DyHistograms,
-                ?DAY_STAT_TYPE, LastUpdate, CurrentTime
-            ),
-            mth_hist = transfer_histograms:update(
-                ProviderId, Bytes, MthHistograms,
-                ?MONTH_STAT_TYPE, LastUpdate, CurrentTime
-            )
-        }}
+        % Due to race between processes updating stats it is possible
+        % for LastUpdate to be larger than CurrentTime, also because
+        % provider_logic:zone_time_seconds() caches zone time locally it is
+        % possible for time of various provider nodes to differ by several
+        % seconds.
+        % So if the CurrentTime is less than LastUpdate by no more than 5 sec
+        % accept it and update latest slot, otherwise silently reject it
+        case CurrentTime - LastUpdate > -5 of
+            false ->
+                {ok, Transfer};
+            true ->
+                ApproxCurrentTime = max(CurrentTime, LastUpdate),
+                {ok, Transfer#transfer{
+                    bytes_transferred = OldBytes + Bytes,
+                    last_update = LastUpdateMap#{
+                        ProviderId => ApproxCurrentTime
+                    },
+                    min_hist = transfer_histograms:update(
+                        ProviderId, Bytes, MinHistograms,
+                        ?MINUTE_STAT_TYPE, LastUpdate, ApproxCurrentTime
+                    ),
+                    hr_hist = transfer_histograms:update(
+                        ProviderId, Bytes, HrHistograms,
+                        ?HOUR_STAT_TYPE, LastUpdate, ApproxCurrentTime
+                    ),
+                    dy_hist = transfer_histograms:update(
+                        ProviderId, Bytes, DyHistograms,
+                        ?DAY_STAT_TYPE, LastUpdate, ApproxCurrentTime
+                    ),
+                    mth_hist = transfer_histograms:update(
+                        ProviderId, Bytes, MthHistograms,
+                        ?MONTH_STAT_TYPE, LastUpdate, ApproxCurrentTime
+                    )
+                }}
+        end
     end).
 
 %%--------------------------------------------------------------------
