@@ -29,7 +29,7 @@
 
 %% export for ct
 -export([all/0, init_per_suite/1, init_per_testcase/2,
-    end_per_testcase/2]).
+    end_per_testcase/2, end_per_suite/1]).
 
 %%tests
 -export([
@@ -38,6 +38,8 @@
     macaroon_connection_test/1,
     compatible_client_connection_test/1,
     incompatible_client_connection_test/1,
+    fallback_during_sending_response_test/1,
+    fulfill_promises_after_connection_close_test/1,
     protobuf_msg_test/1,
     multi_message_test/1,
     client_send_test/1,
@@ -73,6 +75,8 @@
     macaroon_connection_test,
     compatible_client_connection_test,
     incompatible_client_connection_test,
+    fallback_during_sending_response_test,
+    fulfill_promises_after_connection_close_test,
     protobuf_msg_test,
     multi_message_test,
     client_send_test,
@@ -107,17 +111,17 @@ all() -> ?ALL(?NORMAL_CASES_NAMES, ?PERFORMANCE_CASES_NAMES).
 
 -define(assertMatchTwo(Guard1, Guard2, Expr),
     begin
-        ((fun () ->
+        ((fun() ->
             case (Expr) of
                 Guard1 -> 1;
                 Guard2 -> 2;
                 __V ->
                     erlang:error({assertMatch,
-                    [{module, ?MODULE},
-                        {line, ?LINE},
-                        {expression, (??Expr)},
-                        {pattern, (??Guard1), (??Guard2)},
-                        {value, __V}]})
+                        [{module, ?MODULE},
+                            {line, ?LINE},
+                            {expression, (??Expr)},
+                            {pattern, (??Guard1), (??Guard2)},
+                            {value, __V}]})
             end
         end)())
     end).
@@ -182,7 +186,7 @@ socket_timeout_test(Config) ->
                 fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
             }, message_id = LSBin}, receive_server_message())
         end, lists:seq(MainNum * 100 + 1, MainNum * 100 + 100))
-    end, lists:seq(1,10)).
+    end, lists:seq(1, 10)).
 
 timeouts_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
@@ -229,7 +233,7 @@ create_timeouts_test(Config, Sock, RootGuid) ->
             processing_status, #'ProcessingStatus'{code = 'IN_PROGRESS'}
         }, message_id = <<"2">>},
         receive_server_message()) end
-        ),
+    ),
 
     configure_cp(Config, helper_delay),
     ok = ssl:send(Sock, generate_create_message(RootGuid, <<"3">>, <<"f3">>)),
@@ -401,6 +405,112 @@ incompatible_client_connection_test(Config) ->
     ),
     ?assertMatch('INCOMPATIBLE_VERSION', Status),
     ok.
+
+
+fallback_during_sending_response_test(Config) ->
+    % given
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+
+    SessionId = <<"12345">>,
+    % Create a couple of connections within the same session
+    {ok, {Sock1, _}} = connect_via_macaroon(Worker1, [{active, true}], SessionId),
+    {ok, {Sock2, _}} = connect_via_macaroon(Worker1, [{active, true}], SessionId),
+    {ok, {Sock3, _}} = connect_via_macaroon(Worker1, [{active, true}], SessionId),
+    {ok, {Sock4, _}} = connect_via_macaroon(Worker1, [{active, true}], SessionId),
+    {ok, {Sock5, _}} = connect_via_macaroon(Worker1, [{active, true}], SessionId),
+
+    Ping = messages:encode_msg(#'ClientMessage'{
+        message_id = crypto:strong_rand_bytes(5), message_body = {ping, #'Ping'{}}
+    }),
+
+    [ssl:setopts(Sock, [{active, once}]) || Sock <- [Sock1, Sock2, Sock3, Sock4, Sock5]],
+
+    % Send requests via each of 5 connections, immediately close four of them
+    ok = ssl:send(Sock1, Ping),
+    lists:foreach(fun(Sock) ->
+        ok = ssl:send(Sock, Ping),
+        ok = ssl:close(Sock)
+    end, [Sock2, Sock3, Sock4, Sock5]),
+
+    % Expect five responses for the ping, they should be received anyway
+    % (from Sock1), given that the fallback mechanism works.
+    lists:foreach(fun(_) ->
+        ssl:setopts(Sock1, [{active, once}]),
+        ?assertMatch(#'ServerMessage'{
+            message_body = {pong, #'Pong'{}}
+        }, receive_server_message())
+    end, lists:seq(1, 5)),
+
+    ok = ssl:close(Sock1),
+    ok.
+
+
+fulfill_promises_after_connection_close_test(Config) ->
+    % given
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    {ok, {Sock1, _}} = connect_via_macaroon(Worker1, [{active, true}], SessionId),
+    {ok, {Sock2, _}} = connect_via_macaroon(Worker1, [{active, true}], SessionId),
+    {ok, {Sock3, _}} = connect_via_macaroon(Worker1, [{active, true}], SessionId),
+    {ok, {Sock4, _}} = connect_via_macaroon(Worker1, [{active, true}], SessionId),
+    {ok, {Sock5, _}} = connect_via_macaroon(Worker1, [{active, true}], SessionId),
+
+    [ssl:setopts(Sock, [{active, once}]) || Sock <- [Sock1, Sock2, Sock3, Sock4, Sock5]],
+
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    Path = <<"/", SpaceName/binary, "/test_file">>,
+    {ok, _} = lfm_proxy:create(Worker1, SessionId, Path, 8#770),
+
+    % Fuse requests are handled using promises - connection process holds info
+    % about pending requests. Even after connection close, the promises should
+    % be handled and responses sent to other connection within the session.
+    GenFuseReq = fun() ->
+        {ok, FuseReq} = serializator:serialize_client_message(#client_message{
+            message_id = #message_id{id = crypto:strong_rand_bytes(5)},
+            message_body = #fuse_request{
+                fuse_request = #resolve_guid{
+                    path = Path
+                }
+            }
+        }),
+        FuseReq
+    end,
+
+    % Send 2 requests via each of 5 connections, immediately close four of them
+    ok = ssl:send(Sock1, GenFuseReq()),
+    ok = ssl:send(Sock1, GenFuseReq()),
+    lists:foreach(fun(Sock) ->
+        ok = ssl:send(Sock, GenFuseReq()),
+        ok = ssl:send(Sock, GenFuseReq()),
+        ok = ssl:close(Sock)
+    end, [Sock2, Sock3, Sock4, Sock5]),
+
+    GatherResponses = fun Fun(Counter) ->
+        ssl:setopts(Sock1, [{active, once}]),
+        case receive_server_message() of
+            #'ServerMessage'{
+                message_body = {processing_status, #'ProcessingStatus'{
+                    code = 'IN_PROGRESS'
+                }}
+            } ->
+                Fun(Counter);
+            #'ServerMessage'{
+                message_body = {fuse_response, #'FuseResponse'{
+                    status = #'Status'{code = ?OK}
+                }}
+            } ->
+                Fun(Counter + 1);
+            {error, timeout} ->
+                Counter
+        end
+    end,
+
+    ?assertEqual(10, GatherResponses(0)),
+
+    ok = ssl:close(Sock1),
+    ok.
+
 
 protobuf_msg_test(Config) ->
     % given
@@ -910,6 +1020,43 @@ init_per_testcase(Case, Config) when
     test_utils:mock_new(Workers, router),
     init_per_testcase(default, Config);
 
+init_per_testcase(Case, Config) when
+    Case =:= fallback_during_sending_response_test;
+    Case =:= fulfill_promises_after_connection_close_test ->
+    Workers = ?config(op_worker_nodes, Config),
+    ssl:start(),
+    initializer:remove_pending_messages(),
+
+    test_utils:mock_new(Workers, user_identity),
+    test_utils:mock_expect(Workers, user_identity, get_or_fetch,
+        fun(#macaroon_auth{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS}) ->
+            {ok, #document{value = #user_identity{user_id = <<"user1">>}}}
+        end
+    ),
+
+    % Artificially prolong message handling to avoid races between response from
+    % the server and connection close.
+    test_utils:mock_new(Workers, router),
+    test_utils:mock_expect(Workers, router, preroute_message,
+        fun(Msg, SessionId) ->
+            timer:sleep(2000),
+            meck:passthrough([Msg, SessionId])
+        end
+    ),
+
+    % Artificially prolong resolve_guid request processing to check if
+    % multiple long-lasting promises are filled properly.
+    test_utils:mock_new(Workers, guid_req),
+    test_utils:mock_expect(Workers, guid_req, resolve_guid,
+        fun(UserCtx, FileCtx) ->
+            timer:sleep(rand:uniform(5000) + 10000),
+            meck:passthrough([UserCtx, FileCtx])
+        end
+    ),
+
+    NewConfig = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
+    lfm_proxy:init(NewConfig);
+
 init_per_testcase(timeouts_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:remove_pending_messages(),
@@ -989,6 +1136,15 @@ end_per_testcase(Case, Config) when
     test_utils:mock_validate_and_unload(Workers, [router]),
     end_per_testcase(default, Config);
 
+end_per_testcase(Case, Config) when
+    Case =:= fulfill_promises_after_connection_close_test;
+    Case =:= fallback_during_sending_response_test ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_validate_and_unload(Workers, [user_identity, router, guid_req]),
+    ssl:stop(),
+    lfm_proxy:teardown(Config),
+    initializer:clean_test_users_and_spaces_no_validate(Config);
+
 end_per_testcase(python_client_test, Config) ->
     file:delete(?TEST_FILE(Config, "handshake.arg")),
     file:delete(?TEST_FILE(Config, "message.arg")),
@@ -1022,6 +1178,9 @@ end_per_testcase(default, Config) ->
 
 end_per_testcase(_Case, Config) ->
     end_per_testcase(default, Config).
+
+end_per_suite(_) ->
+    ok.
 
 %%%===================================================================
 %%% Internal functions
