@@ -441,7 +441,6 @@ transfers_should_be_ordered_by_timestamps(Config) ->
         <<"filesTransferred">> := 1,
         <<"filesInvalidated">> := 0,
         <<"bytesTransferred">> := Size,
-        <<"dyHist">> := #{DomainP1 := [Size | _]},
         <<"mthHist">> := #{DomainP1 := [Size | _]}
     }, WorkerP1, Tid, Config),
 
@@ -458,7 +457,6 @@ transfers_should_be_ordered_by_timestamps(Config) ->
         <<"filesTransferred">> := 1,
         <<"filesInvalidated">> := 0,
         <<"bytesTransferred">> := Size2,
-        <<"dyHist">> := #{DomainP1 := [Size2 | _]},
         <<"mthHist">> := #{DomainP1 := [Size2 | _]}
     }, WorkerP1, Tid2, Config),
 
