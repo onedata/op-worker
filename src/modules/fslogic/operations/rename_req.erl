@@ -280,7 +280,7 @@ rename_file_on_flat_storage_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx
             ok = logical_file_manager:unlink(SessId, {guid, TargetGuid}, false)
     end,
     ok = file_meta:rename(SourceDoc, SourceParentDoc, ParentDoc, TargetName),
-    fslogic_times:update_mtime_ctime(SourceFileCtx3, time_utils:cluster_time_seconds()),
+    fslogic_times:update_ctime(SourceFileCtx3, time_utils:cluster_time_seconds()),
     update_parent_times(SourceParentFileCtx2, TargetParentFileCtx),
     #fuse_response{
         status = #status{code = ?OK},
