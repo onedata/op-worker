@@ -117,9 +117,11 @@ communicate_async(Msg, Ref) ->
 %%--------------------------------------------------------------------
 -spec communicate_async(Msg :: #server_message{} | term(), Ref :: connection:ref(),
     Recipient :: pid() | undefined) -> {ok, #message_id{}} | {error, Reason :: term()}.
-communicate_async(#server_message{} = Msg, Ref, Recipient) ->
+communicate_async(#server_message{message_id = undefined} = Msg, Ref, Recipient) ->
     {ok, MsgId} = message_id:generate(Recipient),
-    case send(Msg#server_message{message_id = MsgId}, Ref) of
+    communicate_async(Msg#server_message{message_id = MsgId}, Ref, Recipient);
+communicate_async(#server_message{message_id = MsgId} = Msg, Ref, _) ->
+    case send(Msg, Ref) of
         ok -> {ok, MsgId};
         {error, Reason} -> {error, Reason}
     end;
