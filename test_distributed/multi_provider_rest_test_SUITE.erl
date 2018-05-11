@@ -2923,7 +2923,7 @@ create_file_counter(N, FilesToCreate, ParentPid, Files) ->
     end.
 
 verify_file(Worker, SessionId, FileGuid) ->
-    {ok, Attr} = ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Worker, SessionId, {guid, FileGuid}), 10 * ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Worker, SessionId, {guid, FileGuid}), 10 * ?ATTEMPTS),
     ?SYNC_FILE_COUNTER ! verified.
 
 verify_distribution(Worker, ExpectedDistribution, Config, FileGuid, FilePath, SessionId) ->
@@ -3059,6 +3059,7 @@ create_test_file(Worker, SessionId, File, TestData) ->
     FileGuid.
 
 verify_files_distribution(Worker, FilesNum, ExpectedDistribution, FileGuidsAndPaths, SessionId, Config) ->
+    ?assertMatch(undefined, whereis(?SYNC_FILE_COUNTER), ?ATTEMPTS),
     true = register(?SYNC_FILE_COUNTER, spawn_link(?MODULE, sync_file_counter, [0, FilesNum, self()])),
     lists:foreach(fun({FileGuid, FilePath}) ->
         worker_pool:cast(?VERIFY_POOL, {?MODULE, verify_distribution, [Worker, ExpectedDistribution, Config, FileGuid, FilePath, SessionId]})
