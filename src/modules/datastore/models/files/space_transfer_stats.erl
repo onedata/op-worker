@@ -135,25 +135,44 @@ update(TransferType, SpaceId, BytesPerProvider, CurrentTime) ->
         dy_hist = DyHistograms,
         mth_hist = MthHistograms
     }) ->
-        {ok, SpaceTransfers#space_transfer_stats{
-            last_update = maps:merge(LastUpdateMap, NewTimestamps),
-            min_hist = transfer_histograms:update(
-                BytesPerProvider, MinHistograms, ?MINUTE_STAT_TYPE,
-                LastUpdateMap, ?START_TIME, CurrentTime
-            ),
-            hr_hist = transfer_histograms:update(
-                BytesPerProvider, HrHistograms, ?HOUR_STAT_TYPE,
-                LastUpdateMap, ?START_TIME, CurrentTime
-            ),
-            dy_hist = transfer_histograms:update(
-                BytesPerProvider, DyHistograms, ?DAY_STAT_TYPE,
-                LastUpdateMap, ?START_TIME, CurrentTime
-            ),
-            mth_hist = transfer_histograms:update(
-                BytesPerProvider, MthHistograms, ?MONTH_STAT_TYPE,
-                LastUpdateMap, ?START_TIME, CurrentTime
-            )
-        }}
+        LastUpdates = lists:map(fun(ProviderId) ->
+            maps:get(ProviderId, LastUpdateMap, ?START_TIME)
+        end, maps:keys(BytesPerProvider)),
+        LatestLastUpdate = lists:max(LastUpdates),
+        % Due to race between processes updating stats it is possible
+        % for LatestLastUpdate to be larger than CurrentTime, also because
+        % provider_logic:zone_time_seconds() caches zone time locally it is
+        % possible for time of various provider nodes to differ by several
+        % seconds.
+        % So if the CurrentTime is less than LatestLastUpdate by no more than
+        % 5 sec accept it and update latest slot, otherwise silently reject it
+        case CurrentTime - LatestLastUpdate > -5 of
+            false ->
+                {ok, SpaceTransfers};
+            true ->
+                ApproxCurrentTime = max(CurrentTime, LatestLastUpdate),
+                NewTimestamps = maps:map(
+                    fun(_, _) -> ApproxCurrentTime end, BytesPerProvider),
+                {ok, SpaceTransfers#space_transfer_stats{
+                    last_update = maps:merge(LastUpdateMap, NewTimestamps),
+                    min_hist = transfer_histograms:update(
+                        BytesPerProvider, MinHistograms, ?MINUTE_STAT_TYPE,
+                        LastUpdateMap, ?START_TIME, ApproxCurrentTime
+                    ),
+                    hr_hist = transfer_histograms:update(
+                        BytesPerProvider, HrHistograms, ?HOUR_STAT_TYPE,
+                        LastUpdateMap, ?START_TIME, ApproxCurrentTime
+                    ),
+                    dy_hist = transfer_histograms:update(
+                        BytesPerProvider, DyHistograms, ?DAY_STAT_TYPE,
+                        LastUpdateMap, ?START_TIME, ApproxCurrentTime
+                    ),
+                    mth_hist = transfer_histograms:update(
+                        BytesPerProvider, MthHistograms, ?MONTH_STAT_TYPE,
+                        LastUpdateMap, ?START_TIME, ApproxCurrentTime
+                    )
+                }}
+        end
     end,
     Default = #document{
         scope = SpaceId,

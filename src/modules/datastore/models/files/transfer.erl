@@ -566,7 +566,6 @@ mark_data_transfer_finished(TransferId, SpaceId, BytesPerProvider) ->
         ?JOB_TRANSFERS_TYPE, SpaceId, BytesPerProvider, CurrentTime
     ),
 
-    NewTimestamps = maps:map(fun(_, _) -> CurrentTime end, BytesPerProvider),
     BytesTransferred = maps:fold(
         fun(_, Bytes, Acc) -> Acc + Bytes end, 0, BytesPerProvider
     ),
@@ -579,26 +578,45 @@ mark_data_transfer_finished(TransferId, SpaceId, BytesPerProvider) ->
         dy_hist = DyHistograms,
         mth_hist = MthHistograms
     }) ->
-        {ok, Transfer#transfer{
-            bytes_transferred = OldBytes + BytesTransferred,
-            last_update = maps:merge(LastUpdateMap, NewTimestamps),
-            min_hist = transfer_histograms:update(
-                BytesPerProvider, MinHistograms, ?MINUTE_STAT_TYPE,
-                LastUpdateMap, StartTime, CurrentTime
-            ),
-            hr_hist = transfer_histograms:update(
-                BytesPerProvider, HrHistograms, ?HOUR_STAT_TYPE,
-                LastUpdateMap, StartTime, CurrentTime
-            ),
-            dy_hist = transfer_histograms:update(
-                BytesPerProvider, DyHistograms, ?DAY_STAT_TYPE,
-                LastUpdateMap, StartTime, CurrentTime
-            ),
-            mth_hist = transfer_histograms:update(
-                BytesPerProvider, MthHistograms, ?MONTH_STAT_TYPE,
-                LastUpdateMap, StartTime, CurrentTime
-            )
-        }}
+        LastUpdates = lists:map(fun(ProviderId) ->
+            maps:get(ProviderId, LastUpdateMap, StartTime)
+        end, maps:keys(BytesPerProvider)),
+        LatestLastUpdate = lists:max(LastUpdates),
+        % Due to race between processes updating stats it is possible
+        % for LatestLastUpdate to be larger than CurrentTime, also because
+        % provider_logic:zone_time_seconds() caches zone time locally it is
+        % possible for time of various provider nodes to differ by several
+        % seconds.
+        % So if the CurrentTime is less than LatestLastUpdate by no more than
+        % 5 sec accept it and update latest slot, otherwise silently reject it
+        case CurrentTime - LatestLastUpdate > -5 of
+            false ->
+                {ok, Transfer};
+            true ->
+                ApproxCurrentTime = max(CurrentTime, LatestLastUpdate),
+                NewTimestamps = maps:map(
+                    fun(_, _) -> ApproxCurrentTime end, BytesPerProvider),
+                {ok, Transfer#transfer{
+                    bytes_transferred = OldBytes + BytesTransferred,
+                    last_update = maps:merge(LastUpdateMap, NewTimestamps),
+                    min_hist = transfer_histograms:update(
+                        BytesPerProvider, MinHistograms, ?MINUTE_STAT_TYPE,
+                        LastUpdateMap, StartTime, ApproxCurrentTime
+                    ),
+                    hr_hist = transfer_histograms:update(
+                        BytesPerProvider, HrHistograms, ?HOUR_STAT_TYPE,
+                        LastUpdateMap, StartTime, ApproxCurrentTime
+                    ),
+                    dy_hist = transfer_histograms:update(
+                        BytesPerProvider, DyHistograms, ?DAY_STAT_TYPE,
+                        LastUpdateMap, StartTime, ApproxCurrentTime
+                    ),
+                    mth_hist = transfer_histograms:update(
+                        BytesPerProvider, MthHistograms, ?MONTH_STAT_TYPE,
+                        LastUpdateMap, StartTime, ApproxCurrentTime
+                    )
+                }}
+        end
     end).
 
 %%--------------------------------------------------------------------
@@ -936,7 +954,6 @@ reset_status(_) -> scheduled.
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% Returns model's context.
 %% @end

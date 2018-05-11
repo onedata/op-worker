@@ -49,7 +49,8 @@
     is_import_on :: undefined | boolean(),
     extended_direct_io = false :: boolean(),
     storage_path_type :: helpers:storage_path_type(),
-    mounted_in_root :: undefined | boolean()
+    mounted_in_root :: undefined | boolean(),
+    storage_sync_info :: undefined | storage_sync_info:doc()
 }).
 
 -type ctx() :: #file_ctx{}.
@@ -77,7 +78,8 @@
     get_file_location_ids/1, get_file_location_docs/1, get_acl/1,
     get_raw_storage_path/1, get_child_canonical_path/2, get_file_size/1,
     get_owner/1, get_group_owner/1, get_local_storage_file_size/1,
-    is_import_on/1, get_and_cache_file_doc_including_deleted/1, get_dir_location_doc/1]).
+    is_import_on/1, get_and_cache_file_doc_including_deleted/1, get_dir_location_doc/1,
+    get_storage_sync_info/1]).
 -export([is_dir/1]).
 
 %%%===================================================================
@@ -969,6 +971,23 @@ get_group_owner(FileCtx = #file_ctx{
 get_group_owner(FileCtx) ->
     {_, FileCtx2} = get_file_doc(FileCtx),
     get_group_owner(FileCtx2).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns local #storage_sync_info document for given FileCtx.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_storage_sync_info(ctx()) -> {storage_sync_info:doc() | undefined, ctx()}.
+get_storage_sync_info(FileCtx = #file_ctx{storage_sync_info = undefined}) ->
+    FileUuid = get_uuid_const(FileCtx),
+    case storage_sync_info:get(FileUuid) of
+        {error, _Reason} ->
+            {undefined, FileCtx};
+        {ok, StorageSyncInfo} ->
+            {StorageSyncInfo, FileCtx#file_ctx{storage_sync_info = StorageSyncInfo}}
+    end;
+get_storage_sync_info(FileCtx = #file_ctx{storage_sync_info = StorageSyncInfo}) ->
+    {StorageSyncInfo, FileCtx}.
 
 
 %%--------------------------------------------------------------------

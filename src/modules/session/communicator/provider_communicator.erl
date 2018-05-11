@@ -92,8 +92,10 @@ stream(StmId, #client_message{} = Msg, Ref, Retry) when Retry > 1; Retry == infi
         {error, _} ->
             timer:sleep(?SEND_RETRY_DELAY),
             case Retry of
-                infinity -> provider_communicator:stream(StmId, Msg, Ref, Retry);
-                _ -> provider_communicator:stream(StmId, Msg, Ref, Retry - 1)
+                infinity ->
+                    provider_communicator:stream(StmId, Msg, Ref, Retry);
+                _ ->
+                    provider_communicator:stream(StmId, Msg, Ref, Retry - 1)
             end
     end;
 stream(StmId, #client_message{} = Msg, Ref, 1) ->
@@ -176,14 +178,15 @@ communicate_async(Msg, Ref) ->
 %%--------------------------------------------------------------------
 -spec communicate_async(Msg :: #client_message{} | term(), Ref :: connection:ref(),
     Recipient :: pid() | undefined) -> {ok, #message_id{}} | {error, Reason :: term()}.
-communicate_async(#client_message{} = Msg, Ref, Recipient) ->
+communicate_async(#client_message{message_id = undefined} = Msg, Ref, Recipient) ->
     {ok, MsgId} = message_id:generate(Recipient),
-    NewMsg = Msg#client_message{message_id = MsgId},
-    DoSend = case NewMsg of
+    communicate_async(Msg#client_message{message_id = MsgId}, Ref, Recipient);
+communicate_async(#client_message{message_id = MsgId} = Msg, Ref, _Recipient) ->
+    DoSend = case Msg of
         #client_message{message_stream = #message_stream{stream_id = StmId}} when is_integer(StmId) ->
-            fun() -> stream(StmId, NewMsg, Ref, 2) end;
+            fun() -> stream(StmId, Msg, Ref, 2) end;
         _ ->
-            fun() -> send(NewMsg, Ref, 2) end
+            fun() -> send(Msg, Ref, 2) end
     end,
     case DoSend() of
         ok -> {ok, MsgId};

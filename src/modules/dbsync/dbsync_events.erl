@@ -66,6 +66,7 @@ change_replicated_internal(SpaceId, #document{
         true ->
             FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
             fslogic_deletion_worker:request_remote_deletion(FileCtx),
+            storage_sync_info:delete(FileUuid),
             ok;
         _ ->
             ok
@@ -77,6 +78,7 @@ change_replicated_internal(SpaceId, #document{
     ?debug("change_replicated_internal: deleted file_meta (internal delete field is true) ~p",
         [FileUuid]),
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
+    storage_sync_info:delete(FileUuid),
     fslogic_event_emitter:emit_file_removed(FileCtx, []);
 change_replicated_internal(SpaceId, #document{
     key = FileUuid,

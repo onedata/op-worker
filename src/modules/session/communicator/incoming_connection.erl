@@ -121,11 +121,7 @@ takeover(_Parent, Ref, Socket, Transport, _Opts, _Buffer, _HandlerState) ->
     Interval = router:get_processes_check_interval(),
     erlang:send_after(Interval, self(), heartbeat),
 
-    NewState = handler_loop(State),
-    case NewState#state.session_id of
-        undefined -> ok;
-        SessId -> session:remove_connection(SessId, self())
-    end,
+    handler_loop(State),
     exit(normal).
 
 
@@ -178,8 +174,15 @@ handler_loop(State) ->
             State#state{continue = false}
     end,
     case NewState#state.continue of
-        true -> handler_loop(NewState);
-        false -> NewState
+        true ->
+            handler_loop(NewState);
+        false ->
+            case NewState#state.session_id of
+                undefined -> ok;
+                SessId -> session:remove_connection(SessId, self())
+            end,
+            % Fulfill remaining promises before shutdown
+            fulfill_pending_promises(NewState#state{continue = true})
     end.
 
 
@@ -191,12 +194,12 @@ handler_loop(State) ->
 %%--------------------------------------------------------------------
 -spec handle_info(term(), state()) -> state().
 handle_info({send_sync, From, #server_message{} = ServerMsg}, State) ->
-    send_server_message(State, ServerMsg),
-    From ! {result, ok},
-    State#state{last_message_timestamp = os:timestamp()};
+    {Result, NewState} = send_server_message(State, ServerMsg),
+    From ! {result, Result},
+    NewState#state{last_message_timestamp = os:timestamp()};
 handle_info({send_async, #server_message{} = ServerMsg}, State) ->
-    send_server_message(State, ServerMsg),
-    State#state{last_message_timestamp = os:timestamp()};
+    {_, NewState} = send_server_message(State, ServerMsg),
+    NewState#state{last_message_timestamp = os:timestamp()};
 handle_info({Ok, Socket, Data}, State = #state{socket = Socket, ok = Ok}) ->
     activate_socket_once(State),
     State2 = handle_client_message(State, Data),
@@ -240,14 +243,16 @@ handle_info(heartbeat, #state{wait_map = WaitMap, wait_pids = Pids,
     end,
     State#state{continue = Continue, wait_map = WaitMap2, wait_pids = Pids2};
 
-handle_info(Info, #state{wait_map = WaitMap, wait_pids = Pids} = State) ->
+handle_info(Info, State = #state{wait_map = WaitMap, wait_pids = Pids}) ->
     case router:process_ans(Info, WaitMap, Pids) of
         wrong_message ->
             ?log_bad_request(Info),
             State#state{continue = false};
         {Return, WaitMap2, Pids2} ->
-            send_server_message(State, Return),
-            State#state{last_message_timestamp = os:timestamp(),
+            % Result is ignored as there is no possible fallback if
+            % send_server_message fails (the connection will close then).
+            {_, NewState} = send_server_message(State, Return),
+            NewState#state{last_message_timestamp = os:timestamp(),
                 wait_map = WaitMap2, wait_pids = Pids2}
     end.
 
@@ -258,17 +263,25 @@ handle_info(Info, #state{wait_map = WaitMap, wait_pids = Pids} = State) ->
 %% Sends #server_message via given socket.
 %% @end
 %%--------------------------------------------------------------------
--spec send_server_message(state(), #server_message{}) -> ok.
-send_server_message(#state{transport = Transport, socket = Socket}, ServerMsg) ->
+-spec send_server_message(state(), #server_message{}) -> {Result :: ok | {error, term()}, state()}.
+send_server_message(State = #state{session_id = SessionId, transport = Transport, socket = Socket}, ServerMsg) ->
     try serializator:serialize_server_message(ServerMsg) of
         {ok, Data} ->
-            ok = Transport:send(Socket, Data)
+            case Transport:send(Socket, Data) of
+                ok ->
+                    {ok, State};
+                {error, _} ->
+                    session:remove_connection(SessionId, self()),
+                    Result = send_via_other_connection(State, ServerMsg),
+                    % Terminate as the connection was closed
+                    {Result, State#state{continue = false}}
+            end
     catch
         _:Reason ->
             ?error_stacktrace("Unable to serialize server_message ~p due to: ~p", [
                 ServerMsg, Reason
             ]),
-            ok
+            {{error, cannot_send_message}, State#state{continue = false}}
     end.
 
 
@@ -317,10 +330,12 @@ handle_handshake(State, ClientMsg) ->
                 put(session_id, SessionId),
                 State#state{peer_type = provider, peer_id = ProviderId, session_id = SessionId}
         end,
-        send_server_message(State, #server_message{
+        % Result is ignored as there is no possible fallback if
+        % send_server_message fails (the connection will close then).
+        {_, EndState} = send_server_message(NewState, #server_message{
             message_body = #handshake_response{status = 'OK'}
         }),
-        NewState
+        EndState
     catch Type:Reason ->
         ?debug_stacktrace("Invalid handshake request - ~p:~p", [
             Type, Reason
@@ -336,7 +351,7 @@ handle_handshake(State, ClientMsg) ->
 %% Sends a server message with the handshake error details.
 %% @end
 %%--------------------------------------------------------------------
--spec report_handshake_error(state(), Error :: term()) -> ok.
+-spec report_handshake_error(state(), Error :: term()) -> {Result :: ok | {error, term()}, state()}.
 report_handshake_error(State, incompatible_client_version) ->
     send_server_message(State, #server_message{
         message_body = #handshake_response{
@@ -407,8 +422,10 @@ handle_normal_message(State = #state{session_id = SessId, peer_type = PeerType,
                 ok ->
                     State;
                 {ok, ServerMsg} ->
-                    send_server_message(State, ServerMsg),
-                    State;
+                    % Result is ignored as there is no possible fallback if
+                    % send_server_message fails (the connection will close then).
+                    {_, NewState} = send_server_message(State, ServerMsg),
+                    NewState;
                 {wait, Delegation} ->
                     {WaitMap2, Pids2} = router:save_delegation(Delegation, WaitMap, Pids),
                     State#state{wait_map = WaitMap2, wait_pids = Pids2};
@@ -417,6 +434,119 @@ handle_normal_message(State = #state{session_id = SessId, peer_type = PeerType,
                     State#state{continue = false}
             end
     end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Tries to fulfill all pending promises - requests that are still being
+%% processed by the cluster.
+%% @end
+%%--------------------------------------------------------------------
+-spec fulfill_pending_promises(state()) -> state().
+fulfill_pending_promises(#state{wait_map = WaitMap} = State) when map_size(WaitMap) =:= 0 ->
+    % No more promises, flush all waiting messages and finish
+    receive
+        {send_sync, From, _} ->
+            From ! {result, {error, closed}},
+            fulfill_pending_promises(State);
+        _ ->
+            fulfill_pending_promises(State)
+    after 5000 ->
+        State
+    end;
+fulfill_pending_promises(#state{wait_map = WaitMap, wait_pids = Pids} = State) ->
+    NewState = try
+        receive
+            {send_sync, From, _} ->
+                From ! {result, {error, closed}},
+                State;
+            {send_async, _} ->
+                % Ignore when shutting down
+                State;
+            heartbeat ->
+                handle_info(heartbeat, State);
+            Info ->
+                case router:process_ans(Info, WaitMap, Pids) of
+                    wrong_message ->
+                        ?warning("Discarding message received on connection shutdown: ~p", [Info]),
+                        State;
+                    {Return, WaitMap2, Pids2} ->
+                        % Send and ignore result - if it fails, there is no further fallback here
+                        send_via_other_connection(State, Return),
+                        State#state{last_message_timestamp = os:timestamp(),
+                            wait_map = WaitMap2, wait_pids = Pids2}
+                end
+        after
+            ?PROTO_CONNECTION_TIMEOUT ->
+                % Should not appear (heartbeats)
+                ?error("Connection ~p timeout", [State#state.socket]),
+                State#state{continue = false}
+        end
+    catch Type:Reason ->
+        ?error_stacktrace("Unexpected error in protocol server - ~p:~p", [
+            Type, Reason
+        ]),
+        State#state{continue = false}
+    end,
+    case NewState#state.continue of
+        true -> fulfill_pending_promises(NewState);
+        false -> NewState
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Tries to send a message using another connection within current session.
+%% @end
+%%--------------------------------------------------------------------
+-spec send_via_other_connection(state(), #server_message{}) -> ok | {error, term()}.
+send_via_other_connection(#state{session_id = SessionId}, ServerMsg) ->
+    {ok, Connections} = session:get_connections(SessionId),
+    % Try to send the message via another connection of this session. This must
+    % be delegated to an asynchronous process so the connection process can
+    % still receive messages in the meantime. Otherwise, a deadlock is possible
+    % if two connections try to send a message via each other.
+    Parent = self(),
+    Ref = make_ref(),
+    spawn(fun() ->
+        Result = lists:foldl(fun(Pid, ResultAcc) ->
+            case ResultAcc of
+                ok ->
+                    ok;
+                _ ->
+                    try
+                        case session_manager:is_provider_session_id(SessionId) of
+                            true ->
+                                provider_communicator:send(ServerMsg, Pid);
+                            false ->
+                                communicator:send(ServerMsg, Pid)
+                        end
+                    catch _:_ ->
+                        {error, closed}
+                    end
+            end
+        end, {error, closed}, Connections -- [self()]),
+        Parent ! {Ref, Result}
+    end),
+    WaitForResult = fun Fun() ->
+        receive
+            {Ref, Result} ->
+                Result;
+            {send_sync, From, _} ->
+                From ! {result, {error, closed}},
+                Fun();
+            Other ->
+                % Defer other messages while waiting for the async process
+                erlang:send_after(500, self(), Other),
+                Fun()
+        after
+            ?PROTO_CONNECTION_TIMEOUT ->
+                {error, timeout}
+        end
+    end,
+    WaitForResult().
 
 
 %%--------------------------------------------------------------------

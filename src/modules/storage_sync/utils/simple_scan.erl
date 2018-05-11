@@ -22,6 +22,9 @@
 -include("global_definitions.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 
+-type job_result() :: imported | updated | processed | deleted | failed.
+
+-export_type([job_result/0]).
 
 %% API
 -export([run/1, maybe_import_storage_file_and_children/1,
@@ -38,13 +41,10 @@
     {space_strategy:job_result(), [space_strategy:job()]}.
 run(Job = #space_strategy_job{
     data = #{
-        space_id := SpaceId,
         storage_file_ctx := StorageFileCtx
 }}) when StorageFileCtx =/= undefined ->
-    storage_sync_monitoring:update_queue_length_counter(SpaceId, -1),
     maybe_import_storage_file_and_children(Job);
 run(Job = #space_strategy_job{
-    strategy_type = StrategyType,
     data = Data = #{
         parent_ctx := ParentCtx,
         file_name := FileName,
@@ -63,13 +63,7 @@ run(Job = #space_strategy_job{
 
     case StatResult of
         Error = {error, _} ->
-            storage_sync_monitoring:update_queue_length_counter(SpaceId, -1),
-            case StrategyType of
-                storage_import ->
-                    storage_sync_monitoring:increase_failed_file_imports_counter(SpaceId);
-                storage_update ->
-                    storage_sync_monitoring:increase_failed_file_updates_counter(SpaceId)
-            end,
+            storage_sync_monitoring:mark_failed_file(SpaceId, StorageId),
             {Error, []};
         {_StatBuf, StorageFileCtx2}  ->
             Data2 = Data#{
@@ -88,7 +82,11 @@ run(Job = #space_strategy_job{
 -spec maybe_import_storage_file_and_children(space_strategy:job()) ->
     {space_strategy:job_result(), [space_strategy:job()]}.
 maybe_import_storage_file_and_children(Job0 = #space_strategy_job{
-    data = #{storage_file_ctx := StorageFileCtx0}
+    data = #{
+        space_id := SpaceId,
+        storage_id := StorageId,
+        storage_file_ctx := StorageFileCtx0
+    }
 }) ->
     {#statbuf{
         st_mtime = StorageMtime,
@@ -97,6 +95,15 @@ maybe_import_storage_file_and_children(Job0 = #space_strategy_job{
 
     Job1 = space_strategy:update_job_data(storage_file_ctx, StorageFileCtx1, Job0),
     {LocalResult, FileCtx, Job2} = maybe_import_storage_file(Job1),
+
+    case LocalResult of
+        {error, {ErrorType, Reason}} ->
+            storage_sync_monitoring:mark_failed_file(SpaceId, StorageId),
+            erlang:ErrorType(Reason);
+        _ ->
+            ok
+    end,
+
     Data2 = Job2#space_strategy_job.data,
     Offset = maps:get(dir_offset, Data2, 0),
     Type = file_meta:type(Mode),
@@ -109,7 +116,21 @@ maybe_import_storage_file_and_children(Job0 = #space_strategy_job{
     end,
     Module = storage_sync_utils:module(Job3),
     SubJobs = delegate(Module, import_children, [Job3, Type, Offset, FileCtx, ?DIR_BATCH], 5),
-    {LocalResult, SubJobs}.
+
+    LocalResult2 = case LocalResult of
+        imported ->
+            storage_sync_monitoring:mark_imported_file(SpaceId, StorageId),
+            ok;
+        updated ->
+            storage_sync_monitoring:mark_updated_file(SpaceId, StorageId),
+            ok;
+        processed ->
+            storage_sync_monitoring:mark_processed_file(SpaceId, StorageId),
+            ok;
+        ok ->
+            ok
+    end,
+    {LocalResult2, SubJobs}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -148,11 +169,11 @@ import_children(Job = #space_strategy_job{
         max_depth := MaxDepth,
         storage_file_ctx := StorageFileCtx,
         mtime := Mtime,
-        space_id := SpaceId
+        space_id := SpaceId,
+        storage_id := StorageId
     }},
     ?DIRECTORY_TYPE, Offset, FileCtx, BatchSize
 ) when MaxDepth > 0 ->
-
     BatchKey = Offset div BatchSize,
     {ChildrenStorageCtxsBatch1, _} =
         storage_file_ctx:get_children_ctxs_batch(StorageFileCtx, Offset, BatchSize),
@@ -161,9 +182,7 @@ import_children(Job = #space_strategy_job{
     {FilesJobs, DirsJobs} = generate_jobs_for_importing_children(Job, Offset,
         FileCtx, ChildrenStorageCtxsBatch2),
     FilesToHandleNum = length(FilesJobs) + length(DirsJobs),
-    storage_sync_monitoring:update_queue_length_counter(SpaceId, FilesToHandleNum),
-    storage_sync_monitoring:update_files_to_sync_counter(SpaceId, FilesToHandleNum),
-
+    storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, FilesToHandleNum),
     FilesResults = import_regular_subfiles(FilesJobs),
 
     case StrategyType:strategy_merge_result(FilesJobs, FilesResults) of
@@ -171,9 +190,9 @@ import_children(Job = #space_strategy_job{
             FileUuid = file_ctx:get_uuid_const(FileCtx),
             case storage_sync_utils:all_children_imported(DirsJobs, FileUuid) of
                 true ->
-                    storage_sync_info:update(FileUuid, Mtime, BatchKey, BatchHash);
+                    storage_sync_info:create_or_update(FileUuid, Mtime, BatchKey, BatchHash, SpaceId);
                 _ ->
-                    storage_sync_info:update(FileUuid, undefined, BatchKey, BatchHash)
+                    storage_sync_info:create_or_update(FileUuid, undefined, BatchKey, BatchHash, SpaceId)
             end;
         _ -> ok
     end,
@@ -236,23 +255,19 @@ maybe_import_file_with_existing_metadata(Job = #space_strategy_job{
 %% Imports given storage file to onedata filesystem.
 %% @end
 %%--------------------------------------------------------------------
--spec import_file_safe(space_strategy:job()) -> {ok, file_ctx:ctx()}| no_return().
+-spec import_file_safe(space_strategy:job()) ->
+    {space_strategy:job_result(), file_ctx:ctx()}| no_return().
 import_file_safe(Job = #space_strategy_job{
     data = #{
-        space_id := SpaceId,
         file_name := FileName,
         parent_ctx := ParentCtx
 }}) ->
     try
-        Result = ?MODULE:import_file(Job),
-        storage_sync_monitoring:increase_imported_files_spirals(SpaceId),
-        storage_sync_monitoring:increase_imported_files_counter(SpaceId),
-        Result
+        ?MODULE:import_file(Job)
     catch
         Error:Reason ->
             full_update:delete_imported_file(FileName, ParentCtx),
-            storage_sync_monitoring:increase_failed_file_imports_counter(SpaceId),
-            erlang:Error(Reason)
+            {{error, {Error, Reason}}, undefined}
     end.
 
 %%--------------------------------------------------------------------
@@ -261,7 +276,8 @@ import_file_safe(Job = #space_strategy_job{
 %% Imports given storage file to onedata filesystem.
 %% @end
 %%--------------------------------------------------------------------
--spec import_file(space_strategy:job()) -> {ok, file_ctx:ctx()}| no_return().
+-spec import_file(space_strategy:job()) ->
+    {job_result(), file_ctx:ctx()}| no_return().
 import_file(#space_strategy_job{
     strategy_args = Args,
     data = #{
@@ -305,7 +321,7 @@ import_file(#space_strategy_job{
     end,
     StorageFileId = SFMHandle#sfm_handle.file,
     ?debug("Import storage file ~p", [{StorageFileId, CanonicalPath}]),
-    {ok, FileCtx}.
+    {imported, FileCtx}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -469,24 +485,21 @@ new_job(Job, Data, StorageFileCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_already_imported_file(space_strategy:job(), #file_attr{},
-    file_ctx:ctx()) -> {ok, space_strategy:job()}.
+    file_ctx:ctx()) -> {job_result(), space_strategy:job()}.
 handle_already_imported_file(Job = #space_strategy_job{
     strategy_args = Args,
-    data = #{
-        space_id := SpaceId,
-        storage_file_ctx := StorageFileCtx
-    }}, FileAttr, FileCtx) ->
+    data = #{storage_file_ctx := StorageFileCtx}
+}, FileAttr, FileCtx) ->
 
     SyncAcl = maps:get(sync_acl, Args, false),
     try
         {#statbuf{st_mode = Mode}, StorageFileCtx2} = storage_file_ctx:get_stat_buf(StorageFileCtx),
-        maybe_update_attrs(FileAttr, FileCtx, StorageFileCtx2, Mode, SpaceId, SyncAcl),
-        storage_sync_monitoring:increase_updated_files_counter(SpaceId)
+        Result = maybe_update_attrs(FileAttr, FileCtx, StorageFileCtx2, Mode, SyncAcl),
+        {Result, Job}
     catch
-        _:_ ->
-            storage_sync_monitoring:increase_failed_file_updates_counter(SpaceId)
-    end,
-    {ok, Job}.
+        Error:Reason ->
+            {{error, {Error, Reason}}, Job}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -494,8 +507,8 @@ handle_already_imported_file(Job = #space_strategy_job{
 %% @end
 %%--------------------------------------------------------------------
 -spec maybe_update_attrs(#file_attr{}, file_ctx:ctx(), storage_file_ctx:ctx(),
-    file_meta:mode(), od_space:id(), boolean()) -> ok.
-maybe_update_attrs(FileAttr, FileCtx, StorageFileCtx, Mode, SpaceId, SyncAcl) ->
+    file_meta:mode(), boolean()) -> job_result().
+maybe_update_attrs(FileAttr, FileCtx, StorageFileCtx, Mode, SyncAcl) ->
     {FileStat, StorageFileCtx2} = storage_file_ctx:get_stat_buf(StorageFileCtx),
     Results = [
         maybe_update_size(FileAttr, FileStat, FileCtx, file_meta:type(Mode)),
@@ -506,9 +519,9 @@ maybe_update_attrs(FileAttr, FileCtx, StorageFileCtx, Mode, SpaceId, SyncAcl) ->
     ],
     case lists:member(updated, Results) of
         true ->
-            storage_sync_monitoring:increase_updated_files_spirals(SpaceId);
+            updated;
         false ->
-            ok
+            processed
     end.
 
 %%--------------------------------------------------------------------
@@ -592,27 +605,30 @@ update_mode(FileCtx, NewMode) ->
 %%--------------------------------------------------------------------
 -spec maybe_update_times(#file_attr{}, #statbuf{}, file_ctx:ctx()) -> updated | not_updated.
 maybe_update_times(#file_attr{atime = ATime, mtime = MTime, ctime = CTime},
-    #statbuf{st_atime = ATime, st_mtime = MTime, st_ctime = CTime},
+    #statbuf{st_atime = StorageATime, st_mtime = StorageMTime, st_ctime = StorageCTime},
     _FileCtx
-) ->
+) when
+    ATime >= StorageATime,
+    MTime >= StorageMTime,
+    CTime >= StorageCTime
+->
     not_updated;
-maybe_update_times(#file_attr{atime = _ATime, mtime = _MTime, ctime = _CTime},
+maybe_update_times(_FileAttr,
     #statbuf{st_atime = StorageATime, st_mtime = StorageMTime, st_ctime = StorageCTime},
     FileCtx
 ) ->
-    ok = fslogic_times:update_times_and_emit(FileCtx, fun(Times =
-      #times{atime = ATime, mtime = MTime, ctime = CTime}) ->
-        case {ATime, MTime, CTime} of
-            {StorageATime, StorageMTime, StorageCTime} ->
-                {error, not_changed};
-            _ ->
-                {ok, Times#times{
-                    atime = StorageATime,
-                    mtime = StorageMTime,
-                    ctime = StorageCTime
-                }}
-        end
-    end),
+    ok = fslogic_times:update_times_and_emit(FileCtx,
+        fun(T = #times{
+            atime = ATime,
+            mtime = MTime,
+            ctime = CTime
+        }) ->
+            {ok, T#times{
+                atime = max(StorageATime, ATime),
+                mtime = max(StorageMTime, MTime),
+                ctime = max(StorageCTime, CTime)
+            }}
+        end),
     updated.
 
 %%--------------------------------------------------------------------
@@ -792,7 +808,7 @@ maybe_update_nfs4_acl(StorageFileCtx, FileCtx, true) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
     case file_ctx:is_space_dir_const(FileCtx) of
         true ->
-            not_udpated;
+            not_updated;
         false ->
             #provider_response{provider_response = ACL} = acl_req:get_acl(UserCtx, FileCtx),
             try

@@ -34,10 +34,14 @@
 %% Checks whether mtime has changed since last synchronization.
 %% @end
 %%-------------------------------------------------------------------
--spec mtime_has_changed(#file_meta{}, storage_file_ctx:ctx()) -> boolean().
-mtime_has_changed(#file_meta{storage_sync_info = StSyncInfo}, StorageFileCtx) ->
+-spec mtime_has_changed(storage_sync_info:doc() | undefined, storage_file_ctx:ctx()) -> boolean().
+mtime_has_changed(undefined, _StorageFileCtx) ->
+    true;
+mtime_has_changed(#document{
+    value = #storage_sync_info{last_synchronized_mtime = LastMtime}
+}, StorageFileCtx) ->
     {#statbuf{st_mtime = StMtime}, _} = storage_file_ctx:get_stat_buf(StorageFileCtx),
-    case StSyncInfo#storage_sync_info.last_synchronized_mtime of
+    case LastMtime of
         StMtime -> false;
         _ -> true
     end.
@@ -49,12 +53,13 @@ mtime_has_changed(#file_meta{storage_sync_info = StSyncInfo}, StorageFileCtx) ->
 %% synchronization.
 %% @end
 %%-------------------------------------------------------------------
--spec children_attrs_hash_has_changed(#file_meta{}, hash(), non_neg_integer()) ->
+-spec children_attrs_hash_has_changed(storage_sync_info:doc() | undefined, hash(), non_neg_integer()) ->
     boolean().
-children_attrs_hash_has_changed(#file_meta{storage_sync_info = StSyncInfo},
-    CurrentChildrenAttrsHash, Key
-) ->
-    PreviousHashes = StSyncInfo#storage_sync_info.children_attrs_hashes,
+children_attrs_hash_has_changed(undefined, _CurrentChildrenAttrsHash, _Key) ->
+    true;
+children_attrs_hash_has_changed(#document{
+    value = #storage_sync_info{children_attrs_hashes = PreviousHashes}
+}, CurrentChildrenAttrsHash, Key) ->
     PreviousHash = maps:get(Key, PreviousHashes, undefined),
     case {PreviousHash, CurrentChildrenAttrsHash} of
         {Hash, Hash} -> false;

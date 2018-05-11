@@ -38,6 +38,7 @@
 run(Job = #space_strategy_job{
     data = #{
         space_id := SpaceId,
+        storage_id := StorageId,
         storage_file_ctx := StorageFileCtx,
         file_name := FileName
     }}, FileCtx) ->
@@ -50,12 +51,14 @@ run(Job = #space_strategy_job{
     try
         save_db_children_names(DBTable, FileCtx),
         save_storage_children_names(StorageTable, StorageFileCtx),
-        ok = remove_files_not_existing_on_storage(StorageTable, DBTable, FileCtx, SpaceId),
-        storage_sync_monitoring:increase_updated_files_counter(SpaceId)
+        ok = remove_files_not_existing_on_storage(StorageTable, DBTable,
+            FileCtx, SpaceId, StorageId),
+        storage_sync_monitoring:mark_updated_file(SpaceId, StorageId)
     catch
-        _:_ ->
-            ?error("Error in full_update:run for file: ~p", [FileName]),
-            storage_sync_monitoring:increase_failed_file_updates_counter(SpaceId)
+        Error:Reason ->
+            ?error("full_update:run failed for file: ~p due to ~p",
+                [FileName, {Error, Reason}]),
+            storage_sync_monitoring:mark_failed_file(SpaceId, StorageId)
 
     after
         true = ets:delete(StorageTable),
@@ -69,21 +72,38 @@ run(Job = #space_strategy_job{
 %% @end
 %%-------------------------------------------------------------------
 -spec maybe_delete_imported_file_and_update_counters(file_meta:name(),
-    file_ctx:ctx(), od_space:id()) -> ok.
-maybe_delete_imported_file_and_update_counters(ChildName, ParentCtx, SpaceId) ->
+    file_ctx:ctx(), od_space:id(), storage:id()) -> ok.
+maybe_delete_imported_file_and_update_counters(ChildName, ParentCtx, SpaceId, StorageId) ->
+    UserCtx = user_ctx:new(?ROOT_SESS_ID),
+    {FileCtx, _ParentCtx2} = file_ctx:get_child(ParentCtx, ChildName, UserCtx),
+    maybe_delete_imported_file_and_update_counters(FileCtx, SpaceId, StorageId).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% This functions checks whether file is a directory or a regular file
+%% and delegates decision about deleting or not deleting file to
+%% suitable functions.
+%% @end
+%%-------------------------------------------------------------------
+-spec maybe_delete_imported_file_and_update_counters(file_ctx:ctx(), od_space:id(),
+    storage:id()) -> ok.
+maybe_delete_imported_file_and_update_counters(FileCtx, SpaceId, StorageId) ->
     try
-        UserCtx = user_ctx:new(?ROOT_SESS_ID),
-        {FileCtx, _ParentCtx2} = file_ctx:get_child(ParentCtx, ChildName, UserCtx),
         {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
         case IsDir of
             true ->
-                maybe_delete_imported_dir_and_update_counters(FileCtx2, SpaceId);
+                maybe_delete_imported_dir_and_update_counters(
+                    FileCtx2, SpaceId, StorageId);
             false ->
-                maybe_delete_imported_regular_file_and_update_counters(FileCtx2, SpaceId)
+                maybe_delete_imported_regular_file_and_update_counters(
+                    FileCtx2, SpaceId, StorageId)
         end
     catch
-        _:_ ->
-            storage_sync_monitoring:increase_failed_file_deletions_counter(SpaceId)
+        Error:Reason ->
+            ?error_stacktrace("maybe_delete_imported_file_and_update_counters failed due to ~p",
+                [Error, Reason]),
+            storage_sync_monitoring:mark_failed_file(SpaceId, StorageId),
+            ok
     end.
 
 %%-------------------------------------------------------------------
@@ -98,7 +118,7 @@ delete_imported_file(ChildName, ParentCtx) ->
         {FileCtx, _} = file_ctx:get_child(ParentCtx, ChildName, RootUserCtx),
         delete_imported_file(FileCtx)
     catch
-        throw:?ENOENT  ->
+        throw:?ENOENT ->
             ok
     end.
 
@@ -120,9 +140,52 @@ delete_imported_file(FileCtx) ->
             false, false, true),
         ok = fslogic_delete:remove_file_handles(FileCtx)
     catch
-        throw:?ENOENT  ->
+        throw:?ENOENT ->
             ok
     end.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Remove directory that had been earlier imported.
+%% @end
+%%-------------------------------------------------------------------
+-spec delete_imported_dir(file_ctx:ctx(), od_space:id(), storage:id()) -> ok.
+delete_imported_dir(FileCtx, SpaceId, StorageId) ->
+    RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
+    {ok, ChunkSize} = application:get_env(?APP_NAME, ls_chunk_size),
+    {ok, FileCtx2} = delete_imported_dir_children(FileCtx, RootUserCtx, 0,
+        ChunkSize, SpaceId, StorageId),
+    delete_imported_file(FileCtx2).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Recursively deleted children of imported directory.
+%% @end
+%%-------------------------------------------------------------------
+-spec delete_imported_dir_children(file_ctx:ctx(), user_ctx:ctx(),
+    non_neg_integer(), non_neg_integer(), od_space:id(), storage:id()) -> {ok, file_ctx:ctx()}.
+delete_imported_dir_children(FileCtx, UserCtx, Offset, ChunkSize, SpaceId, StorageId) ->
+    try
+        {ChildrenCtxs, FileCtx2} = file_ctx:get_file_children(FileCtx,
+            UserCtx, Offset, ChunkSize),
+        storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, length(ChildrenCtxs)),
+        lists:foreach(fun(ChildCtx) ->
+            maybe_delete_imported_file_and_update_counters(ChildCtx, SpaceId, StorageId)
+        end, ChildrenCtxs),
+        case length(ChildrenCtxs) < ChunkSize of
+            true ->
+                {ok, FileCtx2};
+            false ->
+                delete_imported_dir_children(FileCtx2, UserCtx,
+                    Offset + ChunkSize, ChunkSize, SpaceId, StorageId)
+        end
+    catch
+        throw:?ENOENT ->
+            {ok, FileCtx}
+    end.
+
 
 %%-------------------------------------------------------------------
 %% @private
@@ -169,12 +232,12 @@ create_ets(Name) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec remove_files_not_existing_on_storage(atom(), atom(), file_ctx:ctx(),
-    od_space:id()) -> ok.
-remove_files_not_existing_on_storage(StorageTable, DBTable, FileCtx, SpaceId) ->
+    od_space:id(), storage:id()) -> ok.
+remove_files_not_existing_on_storage(StorageTable, DBTable, FileCtx, SpaceId, StorageId) ->
     StorageFirst = ets:first(StorageTable),
     DBFirst = ets:first(DBTable),
-    ok = iterate_and_remove(StorageFirst, StorageTable, DBFirst, DBTable, 0,
-        ?DIR_BATCH, FileCtx, SpaceId).
+    ok = iterate_and_remove(StorageFirst, StorageTable, DBFirst, DBTable,
+        FileCtx, SpaceId, StorageId).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -184,53 +247,36 @@ remove_files_not_existing_on_storage(StorageTable, DBTable, FileCtx, SpaceId) ->
 %% have matching files on storage.
 %% @end
 %%-------------------------------------------------------------------
--spec iterate_and_remove(key(), atom(), key(), atom(), non_neg_integer(),
-    non_neg_integer(), file_ctx:ctx(), od_space:id()) -> ok.
-iterate_and_remove(StKey, StorageTable, DBKey, DBTable, Offset, BatchSize,
-    FileCtx, SpaceId)
-when (Offset + 1) rem BatchSize == 0  ->
-    % finished batch
-    storage_sync_monitoring:update_files_to_sync_counter(SpaceId, 1),
-    iterate_and_remove(StKey, StorageTable, DBKey, DBTable, Offset + 1,
-        BatchSize, FileCtx, SpaceId);
-iterate_and_remove('$end_of_table', _, '$end_of_table', _,  _Offset, _BatchSize,
-    _FileCtx, _SpaceId) ->
+-spec iterate_and_remove(key(), atom(), key(), atom(),file_ctx:ctx(),
+    od_space:id(), storage:id()) -> ok.
+iterate_and_remove('$end_of_table', _, '$end_of_table', _, _FileCtx, _SpaceId, _StorageId) ->
     ok;
 iterate_and_remove(StKey, StorageTable, DBKey = '$end_of_table', DBTable,
-    Offset, BatchSize, FileCtx, SpaceId
+    FileCtx, SpaceId, StorageId
 ) ->
     Next = ets:next(StorageTable, StKey),
-    iterate_and_remove(Next, StorageTable, DBKey, DBTable, Offset,
-        BatchSize, FileCtx, SpaceId);
-iterate_and_remove(StKey = '$end_of_table', StTable, DBKey, DBTable, Offset,
-    BatchSize, FileCtx, SpaceId
+    iterate_and_remove(Next, StorageTable, DBKey, DBTable, FileCtx, SpaceId, StorageId);
+iterate_and_remove(StKey = '$end_of_table', StTable, DBKey, DBTable, FileCtx,
+    SpaceId, StorageId
 ) ->
     Next = ets:next(DBTable, DBKey),
-    storage_sync_monitoring:update_files_to_sync_counter(SpaceId, 1),
-    maybe_delete_imported_file_and_update_counters(DBKey, FileCtx, SpaceId),
-    iterate_and_remove(StKey, StTable, Next, DBTable, Offset,
-        BatchSize, FileCtx, SpaceId);
-iterate_and_remove(Key, StorageTable, Key, DBTable, Offset, BatchSize, FileCtx,
-    SpaceId
-) ->
+    storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, 1),
+    maybe_delete_imported_file_and_update_counters(DBKey, FileCtx, SpaceId, StorageId),
+    iterate_and_remove(StKey, StTable, Next, DBTable, FileCtx, SpaceId, StorageId);
+iterate_and_remove(Key, StorageTable, Key, DBTable, FileCtx, SpaceId, StorageId) ->
     StNext = ets:next(StorageTable, Key),
     DBNext = ets:next(DBTable, Key),
-    iterate_and_remove(StNext, StorageTable, DBNext, DBTable, Offset, BatchSize,
-        FileCtx, SpaceId);
-iterate_and_remove(StKey, StorageTable, DBKey, DBTable, Offset, BatchSize,
-    FileCtx, SpaceId)
-when StKey > DBKey ->
+    iterate_and_remove(StNext, StorageTable, DBNext, DBTable, FileCtx, SpaceId,
+        StorageId);
+iterate_and_remove(StKey, StorageTable, DBKey, DBTable, FileCtx, SpaceId, StorageId
+) when StKey > DBKey ->
     Next = ets:next(DBTable, DBKey),
-    storage_sync_monitoring:update_files_to_sync_counter(SpaceId, 1),
-    maybe_delete_imported_file_and_update_counters(DBKey, FileCtx, SpaceId),
-    iterate_and_remove(StKey, StorageTable, Next, DBTable, Offset, BatchSize,
-        FileCtx, SpaceId);
-iterate_and_remove(StKey, StorageTable, DBKey, DBTable, Offset, BatchSize,
-    FileCtx, SpaceId
-) ->
+    storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, 1),
+    maybe_delete_imported_file_and_update_counters(DBKey, FileCtx, SpaceId, StorageId),
+    iterate_and_remove(StKey, StorageTable, Next, DBTable, FileCtx, SpaceId, StorageId);
+iterate_and_remove(StKey, StorageTable, DBKey, DBTable, FileCtx, SpaceId, StorageId) ->
     Next = ets:next(StorageTable, StKey),
-    iterate_and_remove(Next, StorageTable, DBKey, DBTable, Offset, BatchSize,
-        FileCtx, SpaceId).
+    iterate_and_remove(Next, StorageTable, DBKey, DBTable, FileCtx, SpaceId, StorageId).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -301,18 +347,18 @@ save_storage_children_names(TableName, StorageFileCtx, Offset, BatchSize) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec maybe_delete_imported_dir_and_update_counters(file_ctx:ctx(),
-    od_space:id()) -> ok.
-maybe_delete_imported_dir_and_update_counters(FileCtx, SpaceId) ->
-    {DirLocation, FileCtx2} =  file_ctx:get_dir_location_doc(FileCtx),
+    od_space:id(), storage:id()) -> ok.
+maybe_delete_imported_dir_and_update_counters(FileCtx, SpaceId, StorageId) ->
+    {DirLocation, FileCtx2} = file_ctx:get_dir_location_doc(FileCtx),
     case dir_location:is_storage_file_created(DirLocation) of
         true ->
-            delete_imported_file(FileCtx2),
-            storage_sync_monitoring:increase_deleted_files_spirals(SpaceId),
-            storage_sync_monitoring:increase_deleted_files_counter(SpaceId);
+            delete_imported_dir(FileCtx2, SpaceId, StorageId),
+            storage_sync_monitoring:mark_deleted_file(SpaceId, StorageId);
         false ->
             %file has been created in remote provider and not yet replicated
-            storage_sync_monitoring:increase_updated_files_counter(SpaceId)
-    end.
+            storage_sync_monitoring:mark_processed_file(SpaceId, StorageId)
+    end,
+    ok.
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -321,15 +367,17 @@ maybe_delete_imported_dir_and_update_counters(FileCtx, SpaceId) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec maybe_delete_imported_regular_file_and_update_counters(file_ctx:ctx(),
-    od_space:id()) -> ok.
-maybe_delete_imported_regular_file_and_update_counters(FileCtx, SpaceId) ->
+    od_space:id(), storage:id()) -> ok.
+maybe_delete_imported_regular_file_and_update_counters(FileCtx, SpaceId, StorageId) ->
     {FileLocation, FileCtx2} = file_ctx:get_local_file_location_doc(FileCtx),
     case file_location:is_storage_file_created(FileLocation) of
         true ->
             delete_imported_file(FileCtx2),
-            storage_sync_monitoring:increase_deleted_files_spirals(SpaceId),
-            storage_sync_monitoring:increase_deleted_files_counter(SpaceId);
+            storage_sync_monitoring:mark_deleted_file(SpaceId, StorageId);
         false ->
             %file has been created in remote provider and not yet replicated
-            storage_sync_monitoring:increase_updated_files_counter(SpaceId)
-    end.
+            storage_sync_monitoring:mark_processed_file(SpaceId, StorageId)
+    end,
+    ok.
+
+
