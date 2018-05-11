@@ -410,12 +410,8 @@ handle_already_imported_directory_changed_mtime(Job = #space_strategy_job{
     #file_attr{}, file_ctx:ctx()) -> {simple_scan:job_result(), space_strategy:job()}.
 handle_already_imported_directory_unchanged_mtime(Job = #space_strategy_job{
     strategy_args = #{write_once := false},
-    data = Data0 = #{
-        storage_file_ctx := StorageFileCtx,
-        file_name := FileName
-    }
-}, FileAttr, FileCtx
-) ->
+    data = Data0 = #{storage_file_ctx := StorageFileCtx}
+}, FileAttr, FileCtx) ->
     Offset = maps:get(dir_offset, Data0, 0),
     {ChildrenStorageCtxsBatch, _} = storage_file_ctx:get_children_ctxs_batch(
         StorageFileCtx, Offset, ?DIR_BATCH),

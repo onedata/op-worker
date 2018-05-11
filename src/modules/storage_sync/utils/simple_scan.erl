@@ -517,7 +517,6 @@ maybe_update_attrs(FileAttr, FileCtx, StorageFileCtx, Mode, SyncAcl) ->
         maybe_update_owner(FileAttr, StorageFileCtx2, FileCtx),
         maybe_update_nfs4_acl(StorageFileCtx2, FileCtx, SyncAcl)
     ],
-    {P, _} = file_ctx:get_canonical_path(FileCtx),
     case lists:member(updated, Results) of
         true ->
             updated;

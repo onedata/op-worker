@@ -681,8 +681,8 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     rpc:multicall(AllWorkers, worker_proxy, call, [dbsync_worker, streams_healthcheck]),
 
     lists:foreach(
-        fun({_, #user_config{id = UserId, spaces = Spaces}}) ->
-            [rpc:call(W, file_meta, setup_onedata_user, [UserId, proplists:get_keys(Spaces)]) || W <- AllWorkers]
+        fun({_, #user_config{id = UserId, spaces = UserSpaces}}) ->
+            [rpc:call(W, file_meta, setup_onedata_user, [UserId, proplists:get_keys(UserSpaces)]) || W <- AllWorkers]
         end, Users),
 
     proplists:compact(

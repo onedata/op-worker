@@ -26,7 +26,7 @@
     add_workers_storage_mount_points/1, get_mount_point/2, clean_storage/2,
     get_host_mount_point/2, storage_test_file_path/4, create_init_file/2,
     enable_storage_import/1, enable_storage_update/1, clean_reverse_luma_cache/1,
-    clean_space/1, verify_file_deleted/3, cleanup_storage_sync_monitoring_model/2,
+    clean_space/1, verify_file_deleted/4, cleanup_storage_sync_monitoring_model/2,
     assertImportTimes/2, assertImportTimes/3, assertUpdateTimes/2, assertUpdateTimes/3,
     get_storage_id/1, storage_test_dir_path/4, disable_storage_update/1,
     disable_storage_import/1, assertNoImportInProgress/3,
@@ -1517,7 +1517,6 @@ delete_and_update_files_simultaneously_update_test(Config, MountSpaceInRoot) ->
         <<"imported">> := 0,
         <<"deleted">> := 1,
         <<"failed">> := 0,
-        <<"otherProcessed">> := 0,
         <<"importedSum">> := 3,
         <<"deletedSum">> := 1,
         <<"importedMinHist">> := [3 | _],
@@ -2812,13 +2811,14 @@ clean_space(Config) ->
     [W, W2 | _] = ?config(op_worker_nodes, Config),
     SpaceGuid = rpc:call(W, fslogic_uuid, spaceid_to_space_dir_guid, [?SPACE_ID]),
     {ok, Children} = lfm_proxy:ls(W, ?ROOT_SESS_ID, {guid, SpaceGuid}, 0, 10000),
+    Attempts = 5 * ?ATTEMPTS,
     Self = self(),
     Guids = lists:map(fun({Guid, _}) ->
             lfm_proxy:rm_recursive(W, ?ROOT_SESS_ID, {guid, Guid}),
-        ok = worker_pool:cast(?VERIFY_POOL, {?MODULE, verify_file_deleted, [W2, Guid, Self]}),
+        ok = worker_pool:cast(?VERIFY_POOL, {?MODULE, verify_file_deleted, [W2, Guid, Self, Attempts]}),
         Guid
     end, Children),
-    verify_deletions(Guids, 5 * ?ATTEMPTS).
+    verify_deletions(Guids, Attempts).
 
 verify_deletions(Guids, Timeout) ->
     verify_deletions(Guids, [], Timeout).
@@ -2838,9 +2838,9 @@ verify_deletions(FileGuids, FailedToVerifyGuids, Timeout) ->
             ct:fail("Cleaning space failed")
     end.
 
-verify_file_deleted(Worker, FileGuid, Master) ->
+verify_file_deleted(Worker, FileGuid, Master, Attempts) ->
     try
-        ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Worker, ?ROOT_SESS_ID, {guid, FileGuid}), ?ATTEMPTS),
+        ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Worker, ?ROOT_SESS_ID, {guid, FileGuid}), Attempts),
         Master ! {deleted, FileGuid}
     catch
         _:_  ->
