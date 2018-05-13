@@ -346,7 +346,7 @@ prepare_histograms(Stats, ?MINUTE_STAT_TYPE, CurrentTime, LastUpdates) ->
     Histograms = get_histograms(Stats, ?MINUTE_STAT_TYPE),
     Window = ?FIVE_SEC_TIME_WINDOW,
     PaddedHistograms = transfer_histograms:pad_with_zeroes(
-        Histograms, Window, CurrentTime, LastUpdates
+        Histograms, Window, LastUpdates, CurrentTime
     ),
     {NewHistograms, NewTimestamp} = transfer_histograms:trim_min_histograms(
         PaddedHistograms, CurrentTime
@@ -359,10 +359,10 @@ prepare_histograms(Stats, HistogramsType, CurrentTime, LastUpdates) ->
     TimeWindow = transfer_histograms:type_to_time_window(HistogramsType),
 
     PaddedMinHistograms = transfer_histograms:pad_with_zeroes(
-        MinHistograms, ?FIVE_SEC_TIME_WINDOW, CurrentTime, LastUpdates
+        MinHistograms, ?FIVE_SEC_TIME_WINDOW, LastUpdates, CurrentTime
     ),
     PaddedRequestedHistograms = transfer_histograms:pad_with_zeroes(
-        RequestedHistograms, TimeWindow, CurrentTime, LastUpdates
+        RequestedHistograms, TimeWindow, LastUpdates, CurrentTime
     ),
     {_, NewRequestedHistograms, NewTimestamp} =
         transfer_histograms:trim_histograms(PaddedMinHistograms,

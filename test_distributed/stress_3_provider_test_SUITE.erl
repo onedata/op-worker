@@ -16,7 +16,11 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
+-export([
+    all/0,
+    init_per_suite/1, end_per_suite/1,
+    init_per_testcase/2, end_per_testcase/2
+]).
 -export([stress_test/1, stress_test_base/1]).
 
 -export([
@@ -82,6 +86,8 @@ rtransfer_test_base(Config) ->
 init_per_suite(Config) ->
     [{?LOAD_MODULES, [initializer, multi_provider_file_ops_test_base]} | Config].
 
+end_per_suite(_Config) ->
+    ok.
 
 init_per_testcase(stress_test, Config) ->
     ssl:start(),

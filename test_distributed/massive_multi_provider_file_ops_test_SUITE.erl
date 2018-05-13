@@ -81,7 +81,6 @@ all() ->
                 {description, "Numbers of parts of transfered file."}]
         ]},
         {description, Desc},
-        % TODO - uncomment when rtransfer will be faster
         {config, [{name, large_config},
             {parameters, [
                 [{name, small_files_num}, {value, 30}],

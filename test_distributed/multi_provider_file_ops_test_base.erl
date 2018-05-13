@@ -26,6 +26,7 @@
 -export([
     basic_opts_test_base/4,
     rtransfer_test_base/11,
+    rtransfer_test_base2/5,
     many_ops_test_base/6,
     distributed_modification_test_base/4,
     multi_space_test_base/3,
@@ -158,6 +159,63 @@ rtransfer_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, N
 
     ct:print("Read max times ~p", [AnswersMap]),
 
+    ok.
+
+% Scenario in which 1 large transfer is executed and number of transfer stats
+% updates per second and file location updates per second is checked.
+% For this test, environment with 2 1-node providers is assumed.
+rtransfer_test_base2(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten},
+    Attempts, TransferFileParts) ->
+    rtransfer_test_base2(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1},
+        Attempts, TransferFileParts);
+rtransfer_test_base2(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider},
+    Attempts, TransferFileParts) ->
+    Config = extend_config(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts),
+    SessId = ?config(session, Config),
+    SpaceName = ?config(space_name, Config),
+    Worker1 = ?config(worker1, Config),
+    Workers2 = ?config(workers2, Config),
+
+    Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir, 8#755)),
+    verify_stats(Config, Dir, true),
+    ct:pal("Dir created"),
+
+    ChunkSize = 10240,
+    ChunkNum = 1024,
+    FileSize = ChunkSize * ChunkNum * TransferFileParts,
+    Level2File = <<Dir/binary, "/", (generator:gen_name())/binary>>,
+    create_big_file(Config, ChunkSize, ChunkNum, TransferFileParts, Level2File, Worker1),
+    ct:pal("File created"),
+
+    ok = test_utils:mock_new(Workers2, transfer, [passthrough]),
+    ok = test_utils:mock_new(Workers2, replica_updater, [passthrough]),
+
+    Start = time_utils:system_time_seconds(),
+    Result = try
+        verify_workers(Workers2, fun(W) ->
+            read_big_file(Config, FileSize, Level2File, W, true)
+        end, timer:seconds(Attempts)),
+        ok
+    catch
+        T:R -> {error, T, R}
+    end,
+    ?assertMatch(ok, Result),
+
+    Duration = time_utils:system_time_seconds() - Start,
+    TransferUpdates = lists:sum(mock_get_num_calls(
+        Workers2, transfer, mark_data_transfer_finished, '_')),
+    TUPS = TransferUpdates / Duration,
+    FileLocationUpdates = lists:sum(mock_get_num_calls(
+        Workers2, replica_updater, update, '_')),
+    FLUPS = FileLocationUpdates / Duration,
+    ok = test_utils:mock_unload(Workers2, transfer),
+
+    ct:pal("Transfer duration [s]: ~p~n"
+           "Transfer stats updates per second ~p~n"
+           "File location updates per second ~p", [
+        Duration, TUPS, FLUPS
+    ]),
     ok.
 
 % TODO - add reading with chunks to test prefetching
@@ -1050,6 +1108,11 @@ teardown_env(Config) ->
 %%% Internal functions
 %%%===================================================================
 
+mock_get_num_calls(Nodes, Module, Fun, Args) ->
+    lists:map(fun(Node) ->
+        rpc:call(Node, meck, num_calls, [Module, Fun, Args], timer:seconds(60))
+              end, Nodes).
+
 get_links(W, FileUuid) ->
     rpc:call(W, ?MODULE, get_links, [FileUuid]).
 
@@ -1187,8 +1250,11 @@ verify(Config, TestFun) ->
     verify_workers(Workers, TestFun).
 
 verify_workers(Workers, TestFun) ->
+    verify_workers(Workers, TestFun, timer:minutes(5)).
+
+verify_workers(Workers, TestFun, Timeout) ->
     process_flag(trap_exit, true),
-    TestAns = verify_helper(Workers, TestFun),
+    TestAns = verify_helper(Workers, TestFun, Timeout),
 
     Error = lists:any(fun
         ({_W, error, _Reason}) -> true;
@@ -1201,22 +1267,22 @@ verify_workers(Workers, TestFun) ->
 
     lists:map(fun({_W, Ans}) -> Ans end, TestAns).
 
-verify_helper([], _TestFun) ->
+verify_helper([], _TestFun, _) ->
     [];
-verify_helper([W | Workers], TestFun) ->
+verify_helper([W | Workers], TestFun, Timeout) ->
     Master = self(),
     Pid = spawn_link(fun() ->
         Ans = TestFun(W),
         Master ! {verify_ans, W, Ans}
     end),
-    TmpAns = verify_helper(Workers, TestFun),
+    TmpAns = verify_helper(Workers, TestFun, Timeout),
     receive
         {verify_ans, W, TestAns} ->
             [{W, TestAns} | TmpAns];
         {'EXIT', Pid , Error} when Error /= normal ->
             [{W, error, Error} | TmpAns]
     after
-        timer:minutes(5) ->
+        Timeout ->
             [{W, error, timeout} | TmpAns]
     end.
 

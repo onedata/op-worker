@@ -21,7 +21,7 @@
 -export([
     key/2, key/3,
     get/1, get/2, get/3,
-    update/5,
+    update/4,
     delete/1, delete/2
 ]).
 
@@ -34,6 +34,13 @@
 -type doc() :: datastore_doc:doc(space_transfer_stats()).
 
 -export_type([space_transfer_stats/0, doc/0]).
+
+% Space transfer stats docs store aggregated statistics of various transfers
+% for the last 1 min, 1 hr, 1 day and 1 month. As such there is no conception
+% of 'start_time' known from normal transfer docs. But for some functions from
+% transfer_histograms module to work it is necessary to provide it.
+% That's why a long past value like 0 (year 1970) is used.
+-define(START_TIME, 0).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -54,7 +61,7 @@
 %%-------------------------------------------------------------------
 -spec key(TransferType :: binary(), SpaceId :: od_space:id()) -> binary().
 key(TransferType, SpaceId) ->
-    key(oneprovider:get_id_or_undefined(), TransferType, SpaceId).
+    key(oneprovider:get_id(), TransferType, SpaceId).
 
 
 %%-------------------------------------------------------------------
@@ -115,11 +122,12 @@ get(ProviderId, TransferType, SpaceId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec update(TransferType :: binary(), SpaceId :: od_space:id(),
-    SrcProvider :: od_provider:id(), Bytes :: size(), CurrentTime :: timestamp()
+    BytesPerProvider :: #{od_provider:id() => size()}, CurrentTime :: timestamp()
 ) ->
     ok | {error, term()}.
-update(TransferType, SpaceId, SrcProvider, Bytes, CurrentTime) ->
-    Key = key(oneprovider:get_id_or_undefined(), TransferType, SpaceId),
+update(TransferType, SpaceId, BytesPerProvider, CurrentTime) ->
+    NewTimestamps = maps:map(fun(_, _) -> CurrentTime end, BytesPerProvider),
+    Key = key(TransferType, SpaceId),
     Diff = fun(SpaceTransfers = #space_transfer_stats{
         last_update = LastUpdateMap,
         min_hist = MinHistograms,
@@ -127,38 +135,41 @@ update(TransferType, SpaceId, SrcProvider, Bytes, CurrentTime) ->
         dy_hist = DyHistograms,
         mth_hist = MthHistograms
     }) ->
-        LastUpdate = maps:get(SrcProvider, LastUpdateMap, 0),
+        LastUpdates = lists:map(fun(ProviderId) ->
+            maps:get(ProviderId, LastUpdateMap, ?START_TIME)
+        end, maps:keys(BytesPerProvider)),
+        LatestLastUpdate = lists:max(LastUpdates),
         % Due to race between processes updating stats it is possible
-        % for LastUpdate to be larger than CurrentTime, also because
+        % for LatestLastUpdate to be larger than CurrentTime, also because
         % provider_logic:zone_time_seconds() caches zone time locally it is
         % possible for time of various provider nodes to differ by several
         % seconds.
-        % So if the CurrentTime is less than LastUpdate by no more than 5 sec
-        % accept it and update latest slot, otherwise silently reject it
-        case CurrentTime - LastUpdate > -5 of
+        % So if the CurrentTime is less than LatestLastUpdate by no more than
+        % 5 sec accept it and update latest slot, otherwise silently reject it
+        case CurrentTime - LatestLastUpdate > -5 of
             false ->
                 {ok, SpaceTransfers};
             true ->
-                ApproxCurrentTime = max(CurrentTime, LastUpdate),
+                ApproxCurrentTime = max(CurrentTime, LatestLastUpdate),
+                NewTimestamps = maps:map(
+                    fun(_, _) -> ApproxCurrentTime end, BytesPerProvider),
                 {ok, SpaceTransfers#space_transfer_stats{
-                    last_update = LastUpdateMap#{
-                        SrcProvider => ApproxCurrentTime
-                    },
+                    last_update = maps:merge(LastUpdateMap, NewTimestamps),
                     min_hist = transfer_histograms:update(
-                        SrcProvider, Bytes, MinHistograms,
-                        ?MINUTE_STAT_TYPE, LastUpdate, ApproxCurrentTime
+                        BytesPerProvider, MinHistograms, ?MINUTE_STAT_TYPE,
+                        LastUpdateMap, ?START_TIME, ApproxCurrentTime
                     ),
                     hr_hist = transfer_histograms:update(
-                        SrcProvider, Bytes, HrHistograms,
-                        ?HOUR_STAT_TYPE, LastUpdate, ApproxCurrentTime
+                        BytesPerProvider, HrHistograms, ?HOUR_STAT_TYPE,
+                        LastUpdateMap, ?START_TIME, ApproxCurrentTime
                     ),
                     dy_hist = transfer_histograms:update(
-                        SrcProvider, Bytes, DyHistograms,
-                        ?DAY_STAT_TYPE, LastUpdate, ApproxCurrentTime
+                        BytesPerProvider, DyHistograms, ?DAY_STAT_TYPE,
+                        LastUpdateMap, ?START_TIME, ApproxCurrentTime
                     ),
                     mth_hist = transfer_histograms:update(
-                        SrcProvider, Bytes, MthHistograms,
-                        ?MONTH_STAT_TYPE, LastUpdate, ApproxCurrentTime
+                        BytesPerProvider, MthHistograms, ?MONTH_STAT_TYPE,
+                        LastUpdateMap, ?START_TIME, ApproxCurrentTime
                     )
                 }}
         end
@@ -167,11 +178,11 @@ update(TransferType, SpaceId, SrcProvider, Bytes, CurrentTime) ->
         scope = SpaceId,
         key = Key,
         value = #space_transfer_stats{
-            last_update = #{SrcProvider => CurrentTime},
-            min_hist = transfer_histograms:new(SrcProvider, Bytes, ?MINUTE_STAT_TYPE),
-            hr_hist = transfer_histograms:new(SrcProvider, Bytes, ?HOUR_STAT_TYPE),
-            dy_hist = transfer_histograms:new(SrcProvider, Bytes, ?DAY_STAT_TYPE),
-            mth_hist = transfer_histograms:new(SrcProvider, Bytes, ?MONTH_STAT_TYPE)
+            last_update = NewTimestamps,
+            min_hist = transfer_histograms:new(BytesPerProvider, ?MINUTE_STAT_TYPE),
+            hr_hist = transfer_histograms:new(BytesPerProvider, ?HOUR_STAT_TYPE),
+            dy_hist = transfer_histograms:new(BytesPerProvider, ?DAY_STAT_TYPE),
+            mth_hist = transfer_histograms:new(BytesPerProvider, ?MONTH_STAT_TYPE)
         }
     },
     case datastore_model:update(?CTX, Key, Diff, Default) of

@@ -32,7 +32,7 @@
     mark_failed_invalidation/1, mark_cancelled_invalidation/1,
     increase_files_to_process_counter/2, increase_files_processed_counter/1,
     mark_failed_file_processing/1, increase_files_transferred_counter/1,
-    mark_data_transfer_finished/4, increase_files_invalidated_counter/1,
+    mark_data_transfer_finished/3, increase_files_invalidated_counter/1,
     restart_unfinished_transfers/1]).
 
 % list functions
@@ -547,23 +547,28 @@ increase_files_invalidated_counter(TransferId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Marks in transfer doc successful transfer of 'Bytes' bytes.
+%% Marks in transfer doc successful transfer of 'Bytes' bytes per provider.
 %% @end
 %%--------------------------------------------------------------------
--spec mark_data_transfer_finished(undefined | id(), od_provider:id(),
-    non_neg_integer(), od_space:id()) -> {ok, undefined | id()} | {error, term()}.
-mark_data_transfer_finished(undefined, ProviderId, Bytes, SpaceId) ->
+-spec mark_data_transfer_finished(TransferId :: undefined | id(), od_space:id(),
+    BytesPerProvider :: #{od_provider:id() => non_neg_integer()}
+) ->
+    {ok, undefined | id()} | {error, term()}.
+mark_data_transfer_finished(undefined, SpaceId, BytesPerProvider) ->
     CurrentTime = provider_logic:zone_time_seconds(),
     ok = space_transfer_stats:update(
-        ?ON_THE_FLY_TRANSFERS_TYPE, SpaceId, ProviderId, Bytes, CurrentTime
+        ?ON_THE_FLY_TRANSFERS_TYPE, SpaceId, BytesPerProvider, CurrentTime
     ),
     {ok, undefined};
-mark_data_transfer_finished(TransferId, ProviderId, Bytes, SpaceId) ->
+mark_data_transfer_finished(TransferId, SpaceId, BytesPerProvider) ->
     CurrentTime = provider_logic:zone_time_seconds(),
     ok = space_transfer_stats:update(
-        ?JOB_TRANSFERS_TYPE, SpaceId, ProviderId, Bytes, CurrentTime
+        ?JOB_TRANSFERS_TYPE, SpaceId, BytesPerProvider, CurrentTime
     ),
 
+    BytesTransferred = maps:fold(
+        fun(_, Bytes, Acc) -> Acc + Bytes end, 0, BytesPerProvider
+    ),
     update(TransferId, fun(Transfer = #transfer{
         bytes_transferred = OldBytes,
         start_time = StartTime,
@@ -573,39 +578,42 @@ mark_data_transfer_finished(TransferId, ProviderId, Bytes, SpaceId) ->
         dy_hist = DyHistograms,
         mth_hist = MthHistograms
     }) ->
-        LastUpdate = maps:get(ProviderId, LastUpdateMap, StartTime),
+        LastUpdates = lists:map(fun(ProviderId) ->
+            maps:get(ProviderId, LastUpdateMap, StartTime)
+        end, maps:keys(BytesPerProvider)),
+        LatestLastUpdate = lists:max(LastUpdates),
         % Due to race between processes updating stats it is possible
-        % for LastUpdate to be larger than CurrentTime, also because
+        % for LatestLastUpdate to be larger than CurrentTime, also because
         % provider_logic:zone_time_seconds() caches zone time locally it is
         % possible for time of various provider nodes to differ by several
         % seconds.
-        % So if the CurrentTime is less than LastUpdate by no more than 5 sec
-        % accept it and update latest slot, otherwise silently reject it
-        case CurrentTime - LastUpdate > -5 of
+        % So if the CurrentTime is less than LatestLastUpdate by no more than
+        % 5 sec accept it and update latest slot, otherwise silently reject it
+        case CurrentTime - LatestLastUpdate > -5 of
             false ->
                 {ok, Transfer};
             true ->
-                ApproxCurrentTime = max(CurrentTime, LastUpdate),
+                ApproxCurrentTime = max(CurrentTime, LatestLastUpdate),
+                NewTimestamps = maps:map(
+                    fun(_, _) -> ApproxCurrentTime end, BytesPerProvider),
                 {ok, Transfer#transfer{
-                    bytes_transferred = OldBytes + Bytes,
-                    last_update = LastUpdateMap#{
-                        ProviderId => ApproxCurrentTime
-                    },
+                    bytes_transferred = OldBytes + BytesTransferred,
+                    last_update = maps:merge(LastUpdateMap, NewTimestamps),
                     min_hist = transfer_histograms:update(
-                        ProviderId, Bytes, MinHistograms,
-                        ?MINUTE_STAT_TYPE, LastUpdate, ApproxCurrentTime
+                        BytesPerProvider, MinHistograms, ?MINUTE_STAT_TYPE,
+                        LastUpdateMap, StartTime, ApproxCurrentTime
                     ),
                     hr_hist = transfer_histograms:update(
-                        ProviderId, Bytes, HrHistograms,
-                        ?HOUR_STAT_TYPE, LastUpdate, ApproxCurrentTime
+                        BytesPerProvider, HrHistograms, ?HOUR_STAT_TYPE,
+                        LastUpdateMap, StartTime, ApproxCurrentTime
                     ),
                     dy_hist = transfer_histograms:update(
-                        ProviderId, Bytes, DyHistograms,
-                        ?DAY_STAT_TYPE, LastUpdate, ApproxCurrentTime
+                        BytesPerProvider, DyHistograms, ?DAY_STAT_TYPE,
+                        LastUpdateMap, StartTime, ApproxCurrentTime
                     ),
                     mth_hist = transfer_histograms:update(
-                        ProviderId, Bytes, MthHistograms,
-                        ?MONTH_STAT_TYPE, LastUpdate, ApproxCurrentTime
+                        BytesPerProvider, MthHistograms, ?MONTH_STAT_TYPE,
+                        LastUpdateMap, StartTime, ApproxCurrentTime
                     )
                 }}
         end
