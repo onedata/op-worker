@@ -560,7 +560,7 @@ space_transfer_time_stat_record(StatId) ->
         timestamp = LastUpdate,
         stats_in = StatsIn,
         stats_out = StatsOut
-    } = space_transfer_stats_cache:get(TransferType, StatsType, SpaceId),
+    } = space_transfer_stats_cache:get(undefined, SpaceId, TransferType, StatsType),
 
     SpeedStatsIn = transfer_histograms:to_speed_charts(
         StatsIn, StartTime, LastUpdate, TimeWindow

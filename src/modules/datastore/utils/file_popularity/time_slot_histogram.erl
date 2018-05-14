@@ -34,7 +34,6 @@
     new/2, new/3, new/4,
     increment/2, increment/3,
     decrement/2, decrement/3,
-    merge/2,
     get_histogram_values/1, get_last_update/1,
     get_sum/1, get_average/1, get_size/1, new_cumulative/3]).
 
@@ -161,36 +160,6 @@ decrement(TSH = #time_slot_histogram{type = Type}, CurrentTimestamp, N) ->
     TSH#time_slot_histogram{
         last_update_time = CurrentTimestamp,
         values = decrement_int(ShiftedHistogram, Type, N)
-    }.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Merges 2 time slot histograms of equal size and time window
-%% @end
-%%--------------------------------------------------------------------
--spec merge(histogram(), histogram()) -> histogram().
-merge(TSH = #time_slot_histogram{
-    last_update_time = LastUpdate1,
-    time_window = TimeWindow,
-    values = Values1,
-    size = Size
-}, #time_slot_histogram{
-    last_update_time = LastUpdate2,
-    time_window = TimeWindow,
-    values = Values2,
-    size = Size
-}) ->
-    {LastUpdate, Histogram1, Histogram2} = case LastUpdate1 > LastUpdate2 of
-        true ->
-            ShiftSize = (LastUpdate1 div TimeWindow) - (LastUpdate2 div TimeWindow),
-            {LastUpdate1, Values1, histogram:shift(Values2, ShiftSize)};
-        false ->
-            ShiftSize = (LastUpdate2 div TimeWindow) - (LastUpdate1 div TimeWindow),
-            {LastUpdate2, histogram:shift(Values1, ShiftSize), Values2}
-    end,
-    TSH#time_slot_histogram{
-        last_update_time = LastUpdate,
-        values = histogram:merge(Histogram1, Histogram2)
     }.
 
 %%--------------------------------------------------------------------
