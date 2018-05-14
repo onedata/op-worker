@@ -364,8 +364,8 @@ import_file(#space_strategy_job{
 %% file associated with ParentCtx) exists in onedata filesystem.
 %% @end
 %%--------------------------------------------------------------------
--spec get_child(file_meta:path(), file_ctx:ctx()) ->
-    {true, ChildCtx :: file_ctx:ctx(), NewParentCtx :: file_ctx:ctx()} | false.
+-spec get_child(file_meta:name(), file_ctx:ctx()) ->
+    {ChildCtx :: file_ctx:ctx(), NewParentCtx :: file_ctx:ctx()} | {error, term()}.
 get_child(FileName, ParentCtx) ->
     RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
     file_ctx:get_child(ParentCtx, FileName, RootUserCtx).
