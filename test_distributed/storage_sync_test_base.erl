@@ -2750,7 +2750,6 @@ enable_storage_update(Config) ->
     WriteOnce = maps:get(write_once, UpdateConfig, ?WRITE_ONCE),
     DeleteEnable = maps:get(delete_enable, UpdateConfig, ?DELETE_ENABLE),
     SyncAcl = maps:get(delete_enable, UpdateConfig, ?SYNC_ACL),
-
     StorageId = get_storage_id(W1),
     {ok, _} = rpc:call(W1, storage_sync, start_simple_scan_update,
         [?SPACE_ID, StorageId, ?MAX_DEPTH, ScanInterval, WriteOnce, DeleteEnable, SyncAcl]).

@@ -16,7 +16,8 @@
 -include("proto/oneclient/common_messages.hrl").
 
 % API
--export([local_id/1, id/2, critical_section/2, save_and_bump_version/1, is_storage_file_created/1]).
+-export([local_id/1, id/2, critical_section/2, save_and_bump_version/1,
+    is_storage_file_created/1, get/2, get_local/1]).
 -export([create/1, create/2, save/1, get/1, update/2, delete/1, delete/2]).
 
 %% datastore_model callbacks
@@ -157,6 +158,24 @@ save(Doc = #document{key = Key, value = #file_location{
 -spec get(id()) -> {ok, doc()} | {error, term()}.
 get(Key) ->
     datastore_model:get(?CTX, Key).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file location associated with given FileUuid and ProviderId.
+%% @end
+%%--------------------------------------------------------------------
+-spec get(file_meta:uuid(), od_provider:id()) -> {ok, doc()} | {error, term()}.
+get(FileUuid, ProviderId) ->
+    ?MODULE:get(?MODULE:id(FileUuid, ProviderId)).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv get(FileUuid, oneprovider:get_id()).
+%% @end
+%%--------------------------------------------------------------------
+-spec get_local(file_meta:uuid()) -> {ok, doc()} | {error, term()}.
+get_local(FileUuid) ->
+    ?MODULE:get(FileUuid, oneprovider:get_id()).
 
 %%--------------------------------------------------------------------
 %% @doc

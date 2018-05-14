@@ -143,15 +143,36 @@ maybe_import_storage_file_and_children(Job0 = #space_strategy_job{
 maybe_import_storage_file(Job = #space_strategy_job{
     data = #{
         file_name := FileName,
-        parent_ctx := ParentCtx
+        parent_ctx := ParentCtx,
+        storage_file_ctx := StorageFileCtx
 }}) ->
-
-    case file_meta_exists(FileName, ParentCtx) of
-        false ->
-            {LocalResult, FileCtx} = import_file_safe(Job),
-            {LocalResult, FileCtx, Job};
-        {true, FileCtx0, _} ->
-            maybe_import_file_with_existing_metadata(Job, FileCtx0)
+    {#statbuf{st_mode = Mode}, StorageFileCtx2} =
+        storage_file_ctx:get_stat_buf(StorageFileCtx),
+    FileType = file_meta:type(Mode),
+    Job2 = space_strategy:update_job_data(storage_file_ctx, StorageFileCtx2, Job),
+    case try_to_resolve_child_link(FileName, ParentCtx) of
+        {error, not_found} ->
+            {LocalResult, FileCtx} = import_file_safe(Job2),
+            {LocalResult, FileCtx, Job2};
+        {ok, FileUuid} ->
+            case FileType of
+                ?DIRECTORY_TYPE ->
+                    {FileCtx0, _} = get_child(FileName, ParentCtx),
+                    maybe_import_file_with_existing_metadata(Job2, FileCtx0);
+                ?REGULAR_FILE_TYPE ->
+                    case file_location:get_local(FileUuid) of
+                        {ok, #document{
+                            value = #file_location{
+                                size = Size,
+                                blocks = [#file_block{offset = 0, size = Size}]
+                            }}} ->
+                            {FileCtx0, _} = get_child(FileName, ParentCtx),
+                            maybe_import_file_with_existing_metadata(Job2, FileCtx0);
+                        _Other ->
+                            {FileCtx0, _} = get_child(FileName, ParentCtx),
+                            {processed, FileCtx0, Job2}
+                    end
+            end
     end.
 
 %%--------------------------------------------------------------------
@@ -215,6 +236,19 @@ import_regular_subfiles(FilesJobs) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function tries to resolve child with name FileName of
+%% directory associated with ParentCtx.
+%% @end
+%%-------------------------------------------------------------------
+-spec try_to_resolve_child_link(file_meta:name(), file_ctx:ctx()) ->
+    {ok, file_meta:uuid()} | {error, term()}.
+try_to_resolve_child_link(FileName, ParentCtx) ->
+    ParentUuid = file_ctx:get_uuid_const(ParentCtx),
+    fslogic_path:to_uuid(ParentUuid, FileName).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -330,17 +364,11 @@ import_file(#space_strategy_job{
 %% file associated with ParentCtx) exists in onedata filesystem.
 %% @end
 %%--------------------------------------------------------------------
--spec file_meta_exists(file_meta:path(), file_ctx:ctx()) ->
+-spec get_child(file_meta:path(), file_ctx:ctx()) ->
     {true, ChildCtx :: file_ctx:ctx(), NewParentCtx :: file_ctx:ctx()} | false.
-file_meta_exists(FileName, ParentCtx) ->
+get_child(FileName, ParentCtx) ->
     RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
-    try file_ctx:get_child(ParentCtx, FileName, RootUserCtx) of
-        {FileCtx, ParentCtx2} ->
-            {true, FileCtx, ParentCtx2}
-    catch
-        throw:?ENOENT ->
-            false
-    end.
+    file_ctx:get_child(ParentCtx, FileName, RootUserCtx).
 
 %%--------------------------------------------------------------------
 %% @private

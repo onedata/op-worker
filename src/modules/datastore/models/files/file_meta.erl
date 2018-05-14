@@ -32,7 +32,7 @@
 -export([hidden_file_name/1, is_hidden/1, is_child_of_hidden_dir/1]).
 -export([add_share/2, remove_share/2]).
 -export([get_parent/1, get_parent_uuid/1]).
--export([get_child/2, list_children/3, list_children/4]).
+-export([get_child/2, get_child_uuid/2, list_children/3, list_children/4]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
     make_space_exist/1, new_doc/7, type/1, get_ancestors/1,
     get_locations_by_uuid/1, rename/4]).
@@ -329,12 +329,25 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec get_child(uuid(), name()) -> {ok, doc()} | {error, term()}.
 get_child(ParentUuid, Name) ->
+    case get_child_uuid(ParentUuid, Name) of
+        {ok, ChildUuid} ->
+            file_meta:get({uuid, ChildUuid});
+        Error -> Error
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns parent child's UUID by Name.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_child_uuid(uuid(), name()) -> {ok, uuid()} | {error, term()}.
+get_child_uuid(ParentUuid, Name) ->
     Tokens = binary:split(Name, <<"@">>, [global]),
     case lists:reverse(Tokens) of
         [Name] ->
-            case get_child(ParentUuid, oneprovider:get_id(), Name) of
+            case get_child_uuid(ParentUuid, oneprovider:get_id(), Name) of
                 {ok, Doc} -> {ok, Doc};
-                {error, not_found} -> get_child(ParentUuid, all, Name);
+                {error, not_found} -> get_child_uuid(ParentUuid, all, Name);
                 {error, Reason} -> {error, Reason}
             end;
         [TreeIdPrefix | Tokens2] ->
@@ -349,34 +362,17 @@ get_child(ParentUuid, Name) ->
             end, TreeIds),
             case TreeIds2 of
                 [TreeId] ->
-                    case get_child(ParentUuid, TreeId, Name2) of
+                    case get_child_uuid(ParentUuid, TreeId, Name2) of
                         {ok, Doc} ->
                             {ok, Doc};
                         {error, not_found} ->
-                            get_child(ParentUuid, all, Name);
+                            get_child_uuid(ParentUuid, all, Name);
                         {error, Reason} ->
                             {error, Reason}
                     end;
                 [] ->
-                    get_child(ParentUuid, all, Name)
+                    get_child_uuid(ParentUuid, all, Name)
             end
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns parent child by name within given links tree set.
-%% @end
-%%--------------------------------------------------------------------
--spec get_child(uuid(), datastore_links:tree_ids(), name()) ->
-    {ok, doc()} | {error, term()}.
-get_child(ParentUuid, TreeIds, Name) ->
-    case datastore_model:get_links(?CTX, ParentUuid, TreeIds, Name) of
-        {ok, [#link{target = FileUuid}]} ->
-            file_meta:get({uuid, FileUuid});
-        {ok, [#link{} | _]} ->
-            {error, not_found};
-        {error, Reason} ->
-            {error, Reason}
     end.
 
 %%--------------------------------------------------------------------
@@ -809,6 +805,25 @@ cleanup(delete, [_, FileUuid], ok) ->
     ok = storage_sync_info:delete(FileUuid);
 cleanup(_, _, Result) ->
     Result.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns parent child's UUID by name within given links tree set.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_child_uuid(uuid(), datastore_links:tree_ids(), name()) ->
+    {ok, uuid()} | {error, term()}.
+get_child_uuid(ParentUuid, TreeIds, Name) ->
+    case datastore_model:get_links(?CTX, ParentUuid, TreeIds, Name) of
+        {ok, [#link{target = FileUuid}]} ->
+            {ok, FileUuid};
+        {ok, [#link{} | _]} ->
+            {error, not_found};
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 %%%===================================================================
 %%% datastore_model callbacks

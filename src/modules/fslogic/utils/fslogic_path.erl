@@ -20,7 +20,8 @@
 
 %% API
 -export([split_skipping_dots/1]).
--export([split/1, join/1, basename_and_parent/1, logical_to_canonical_path/2]).
+-export([split/1, join/1, basename_and_parent/1, logical_to_canonical_path/2,
+    to_uuid/2]).
 -export([resolve/1, resolve/2]).
 
 %%%===================================================================
@@ -107,6 +108,16 @@ basename_and_parent(Path) ->
 logical_to_canonical_path(LogicalPath, SpaceId) ->
     [<<"/">>, _SpaceName | Rest] = split(LogicalPath),
     join([<<"/">>, SpaceId | Rest]).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns UUID of parent's child by name.
+%% @end
+%%-------------------------------------------------------------------
+-spec to_uuid(file_meta:uuid(), file_meta:name()) ->
+    {ok, file_meta:uuid()} | {error, term()}.
+to_uuid(ParentUuid, Name) ->
+    file_meta:get_child_uuid(ParentUuid, Name).
 
 %%--------------------------------------------------------------------
 %% @doc
