@@ -144,7 +144,8 @@ maybe_import_storage_file(Job = #space_strategy_job{
     data = #{
         file_name := FileName,
         parent_ctx := ParentCtx,
-        storage_file_ctx := StorageFileCtx
+        storage_file_ctx := StorageFileCtx,
+        space_id := SpaceId
 }}) ->
     {#statbuf{st_mode = Mode}, StorageFileCtx2} =
         storage_file_ctx:get_stat_buf(StorageFileCtx),
@@ -155,10 +156,11 @@ maybe_import_storage_file(Job = #space_strategy_job{
             {LocalResult, FileCtx} = import_file_safe(Job2),
             {LocalResult, FileCtx, Job2};
         {ok, FileUuid} ->
+            FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
+            FileCtx = file_ctx:new_by_guid(FileGuid),
             case FileType of
                 ?DIRECTORY_TYPE ->
-                    {FileCtx0, _} = get_child(FileName, ParentCtx),
-                    maybe_import_file_with_existing_metadata(Job2, FileCtx0);
+                    maybe_import_file_with_existing_metadata(Job2, FileCtx);
                 ?REGULAR_FILE_TYPE ->
                     case file_location:get_local(FileUuid) of
                         {ok, #document{
@@ -166,11 +168,9 @@ maybe_import_storage_file(Job = #space_strategy_job{
                                 size = Size,
                                 blocks = [#file_block{offset = 0, size = Size}]
                             }}} ->
-                            {FileCtx0, _} = get_child(FileName, ParentCtx),
-                            maybe_import_file_with_existing_metadata(Job2, FileCtx0);
+                            maybe_import_file_with_existing_metadata(Job2, FileCtx);
                         _Other ->
-                            {FileCtx0, _} = get_child(FileName, ParentCtx),
-                            {processed, FileCtx0, Job2}
+                            {processed, FileCtx, Job2}
                     end
             end
     end.
@@ -356,19 +356,6 @@ import_file(#space_strategy_job{
     StorageFileId = SFMHandle#sfm_handle.file,
     ?debug("Import storage file ~p", [{StorageFileId, CanonicalPath}]),
     {imported, FileCtx}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Checks whether file_meta of file FileName (which is child of
-%% file associated with ParentCtx) exists in onedata filesystem.
-%% @end
-%%--------------------------------------------------------------------
--spec get_child(file_meta:name(), file_ctx:ctx()) ->
-    {ChildCtx :: file_ctx:ctx(), NewParentCtx :: file_ctx:ctx()} | {error, term()}.
-get_child(FileName, ParentCtx) ->
-    RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
-    file_ctx:get_child(ParentCtx, FileName, RootUserCtx).
 
 %%--------------------------------------------------------------------
 %% @private
