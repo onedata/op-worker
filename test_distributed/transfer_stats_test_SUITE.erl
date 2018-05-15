@@ -66,7 +66,7 @@ rtransfer_stats_updates_test_base(Config) ->
     ct:timetrap({hours, 2}),
     TFP = ?config(transfer_file_parts, Config),
     multi_provider_file_ops_test_base:rtransfer_test_base2(Config, <<"user1">>,
-        {2,0,0,2}, 1800, TFP).
+        {2,0,0,2}, 3600, TFP).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
