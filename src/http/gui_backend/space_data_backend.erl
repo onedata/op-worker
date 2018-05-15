@@ -375,19 +375,40 @@ space_record(SpaceId, HasViewPrivileges) ->
         CompletedTransferListId,
         TransferOnTheFlyStatId,
         TransferJobStatId,
-        TransferAllStatId
+        TransferAllStatId,
+        TransferProviderStat
     } = case HasViewPrivileges of
-        true -> {
-            SpaceId,
-            op_gui_utils:ids_to_association(?CURRENT_TRANSFERS_PREFIX, SpaceId),
-            op_gui_utils:ids_to_association(?SCHEDULED_TRANSFERS_PREFIX, SpaceId),
-            op_gui_utils:ids_to_association(?COMPLETED_TRANSFERS_PREFIX, SpaceId),
-            op_gui_utils:ids_to_association(?ON_THE_FLY_TRANSFERS_TYPE, SpaceId),
-            op_gui_utils:ids_to_association(?JOB_TRANSFERS_TYPE, SpaceId),
-            op_gui_utils:ids_to_association(?ALL_TRANSFERS_TYPE, SpaceId)
-        };
+        true ->
+            ProvidersStats = lists:map(fun(ProviderId) ->
+                ProviderStat = [
+                    {<<"onTheFlyStat">>, op_gui_utils:ids_to_association(
+                        ?ON_THE_FLY_TRANSFERS_TYPE, ProviderId, SpaceId)},
+                    {<<"jobStat">>, op_gui_utils:ids_to_association(
+                        ?JOB_TRANSFERS_TYPE, ProviderId, SpaceId)},
+                    {<<"allStat">>, op_gui_utils:ids_to_association(
+                        ?ALL_TRANSFERS_TYPE, ProviderId, SpaceId)}
+                ],
+                {ProviderId, ProviderStat}
+            end, maps:keys(Providers)),
+
+            {
+                SpaceId,
+                op_gui_utils:ids_to_association(
+                    ?CURRENT_TRANSFERS_PREFIX, SpaceId),
+                op_gui_utils:ids_to_association(
+                    ?SCHEDULED_TRANSFERS_PREFIX, SpaceId),
+                op_gui_utils:ids_to_association(
+                    ?COMPLETED_TRANSFERS_PREFIX, SpaceId),
+                op_gui_utils:ids_to_association(
+                    ?ON_THE_FLY_TRANSFERS_TYPE, <<"undefined">>, SpaceId),
+                op_gui_utils:ids_to_association(
+                    ?JOB_TRANSFERS_TYPE, <<"undefined">>, SpaceId),
+                op_gui_utils:ids_to_association(
+                    ?ALL_TRANSFERS_TYPE, <<"undefined">>, SpaceId),
+                ProvidersStats
+            };
         false -> {
-            null, null, null, null, null, null, null
+            null, null, null, null, null, null, null, null
         }
     end,
     [
@@ -405,6 +426,7 @@ space_record(SpaceId, HasViewPrivileges) ->
         {<<"transferOnTheFlyStat">>, TransferOnTheFlyStatId},
         {<<"transferJobStat">>, TransferJobStatId},
         {<<"transferAllStat">>, TransferAllStatId},
+        {<<"transferProviderStat">>, TransferProviderStat},
         {<<"transferLinkState">>, RelationWithViewPrivileges},
         {<<"user">>, UserId}
     ].
@@ -527,18 +549,19 @@ space_on_the_fly_transfer_list_record(SpaceId) ->
 %%--------------------------------------------------------------------
 -spec space_transfer_stat_record(RecordId :: binary()) -> proplists:proplist().
 space_transfer_stat_record(RecordId) ->
-    {TransferType, SpaceId} = op_gui_utils:association_to_ids(RecordId),
+    {TransferType, TargetProvider, SpaceId} =
+        op_gui_utils:association_to_ids(RecordId),
 
     [
         {<<"id">>, RecordId},
         {<<"minuteStat">>, op_gui_utils:ids_to_association(
-            TransferType, ?MINUTE_STAT_TYPE, SpaceId)},
+            TransferType, ?MINUTE_STAT_TYPE, TargetProvider, SpaceId)},
         {<<"hourStat">>, op_gui_utils:ids_to_association(
-            TransferType, ?HOUR_STAT_TYPE, SpaceId)},
+            TransferType, ?HOUR_STAT_TYPE, TargetProvider, SpaceId)},
         {<<"dayStat">>, op_gui_utils:ids_to_association(
-            TransferType, ?DAY_STAT_TYPE, SpaceId)},
+            TransferType, ?DAY_STAT_TYPE, TargetProvider, SpaceId)},
         {<<"monthStat">>, op_gui_utils:ids_to_association(
-            TransferType, ?MONTH_STAT_TYPE, SpaceId)}
+            TransferType, ?MONTH_STAT_TYPE, TargetProvider, SpaceId)}
     ].
 
 
@@ -546,21 +569,33 @@ space_transfer_stat_record(RecordId) ->
 %% @private
 %% @doc
 %% Returns a client-compliant space-transfer-time-stat record based on stat id
-%% (combined space id and prefix defining time span of histograms).
+%% (combined space id, target provider id, transfer type and prefix
+%% defining time span of histograms).
 %% @end
 %%--------------------------------------------------------------------
 -spec space_transfer_time_stat_record(StatId :: binary()) ->
     proplists:proplist().
 space_transfer_time_stat_record(StatId) ->
-    % There is neither start nor end for aggregated transfer stats
+    % Space transfer stats docs store aggregated statistics of various transfers
+    % for the last 1 min, 1 hr, 1 day and 1 month. As such there is no conception
+    % of 'start_time' known from normal transfer docs. But for some functions from
+    % transfer_histograms module to work it is necessary to provide it.
+    % That's why a long past value like 0 (year 1970) is used.
     StartTime = 0,
-    {TransferType, StatsType, SpaceId} = op_gui_utils:association_to_ids(StatId),
+    {TransferType, StatsType, Provider, SpaceId} =
+        op_gui_utils:association_to_ids(StatId),
+    TargetProvider = case Provider of
+        <<"undefined">> -> undefined;
+        _ -> Provider
+    end,
     TimeWindow = transfer_histograms:type_to_time_window(StatsType),
+
     #space_transfer_stats_cache{
         timestamp = LastUpdate,
         stats_in = StatsIn,
         stats_out = StatsOut
-    } = space_transfer_stats_cache:get(undefined, SpaceId, TransferType, StatsType),
+    } = space_transfer_stats_cache:get(
+        TargetProvider, SpaceId, TransferType, StatsType),
 
     SpeedStatsIn = transfer_histograms:to_speed_charts(
         StatsIn, StartTime, LastUpdate, TimeWindow

@@ -18,7 +18,7 @@
 
 %% API
 -export([
-    ids_to_association/2, ids_to_association/3,
+    ids_to_association/2, ids_to_association/3, ids_to_association/4,
     association_to_ids/1
 ]).
 
@@ -49,13 +49,30 @@ ids_to_association(FirstId, SecondId, ThirdId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Creates an associative ID from four IDs which can be easily decoupled later.
+%% @end
+%%--------------------------------------------------------------------
+-spec ids_to_association(FirstId :: binary(), SecondId :: binary(),
+    ThirdId :: binary(), FourthId :: binary()) -> binary().
+ids_to_association(FirstId, SecondId, ThirdId, FourthId) ->
+    <<FirstId/binary, "|", SecondId/binary, "|",
+        ThirdId/binary, "|", FourthId/binary>>.
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Decouples an associative ID into two separate IDs.
 %% @end
 %%--------------------------------------------------------------------
 -spec association_to_ids(AssocId :: binary()) ->
-    {binary(), binary()} | {binary(), binary(), binary()}.
+    {binary(), binary()} | {binary(), binary(), binary()}
+    | {binary(), binary(), binary(), binary()}.
 association_to_ids(AssocId) ->
     case binary:split(AssocId, <<"|">>, [global]) of
-        [FirstId, SecondId] -> {FirstId, SecondId};
-        [FirstId, SecondId, ThirdId] -> {FirstId, SecondId, ThirdId}
+        [FirstId, SecondId] ->
+            {FirstId, SecondId};
+        [FirstId, SecondId, ThirdId] ->
+            {FirstId, SecondId, ThirdId};
+        [FirstId, SecondId, ThirdId, FourthId] ->
+            {FirstId, SecondId, ThirdId, FourthId}
     end.

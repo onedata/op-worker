@@ -354,9 +354,10 @@ prepare_aggregated_stats(TargetProvider, SpaceId, TransferType,
 ) ->
     [space_transfer_stats_cache()].
 aggregate_stats(TargetProvider, TransferStats, RequestedStatsTypes, CurrentTime) ->
+    LocalTime = time_utils:system_time_millis(),
     EmptyStats = [
         #space_transfer_stats_cache{
-            expires = CurrentTime + stats_type_to_expiration_timeout(StatsType),
+            expires = LocalTime + stats_type_to_expiration_timeout(StatsType),
             timestamp = CurrentTime
         } || StatsType <- RequestedStatsTypes
     ],
@@ -461,7 +462,6 @@ update_stats(TargetProvider, OldStats, StatsType,
     space_transfer_stats_cache().
 merge_stats(Stats1, Stats2) ->
     #space_transfer_stats_cache{
-        expires = Expires,
         timestamp = Timestamp,
         stats_in = StatsIn1,
         stats_out = StatsOut1

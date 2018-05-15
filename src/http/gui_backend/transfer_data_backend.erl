@@ -302,7 +302,11 @@ prepare_histograms(?JOB_TRANSFERS_TYPE, HistogramsType, TransferId) ->
     end,
     {Histograms, StartTime, LastUpdate, TimeWindow};
 prepare_histograms(?ON_THE_FLY_TRANSFERS_TYPE, HistogramsType, TransferStatsId) ->
-    % On the fly transfers have neither start nor end.
+    % Space transfer stats docs store aggregated statistics of various transfers
+    % for the last 1 min, 1 hr, 1 day and 1 month. As such there is no conception
+    % of 'start_time' known from normal transfer docs. But for some functions from
+    % transfer_histograms module to work it is necessary to provide it.
+    % That's why a long past value like 0 (year 1970) is used.
     StartTime = 0,
     CurrentTime = provider_logic:zone_time_seconds(),
     Fetched = space_transfer_stats:get(TransferStatsId),
