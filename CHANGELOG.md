@@ -4,6 +4,27 @@
 CHANGELOG
 ---------
 
+### 18.02.0-rc2
+
+* Upgrade rtransfer_link.
+* VFS-4446 Updated jiffy ref
+* VFS-4427 ensure that sync does not updates files being replicated
+* VFS-4443 Fixed generation of source archive with submodules
+* VFS-4396 ensure that sync_file_counter has been deregistered
+* VFS-4417 do not update mtime when performing move on non-posix storage
+* VFS-4393 Upon connection failure, try to send responses via other connections of related session
+* VFS-4396 fix race when updating transfer stats
+* Update cluster_worker to enable links listing with neg offset
+* VFS-4361 increase timeout for verify_helper
+* VFS-4295 Changed subtrees to submodules
+* VFS-4361 add transfer stats aggregation and flushing
+* VFS-4394 Updated helpers and rtransfer refs
+* VFS-4241 added storage_sync_monitoring model, major refactor of storage_sync mechanism
+* VFS-4393 Close incoming connection upon unexpected errors
+* VFS-4313 Updated pkg config with new aws sdk s3 version
+* VFS-4313 Updated dockers.config
+
+
 ### 18.02.0-rc1
 
 * VFS-2021 Added dockers.config
