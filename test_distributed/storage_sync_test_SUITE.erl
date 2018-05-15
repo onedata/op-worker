@@ -66,7 +66,9 @@
     sync_should_not_delete_not_replicated_file_created_in_remote_provider/1,
     sync_should_not_delete_dir_created_in_remote_provider/1,
     sync_should_not_delete_not_replicated_files_created_in_remote_provider2/1,
-    create_delete_import_test_read_both/1]).
+    create_delete_import_test_read_both/1,
+    should_not_sync_file_while_being_replicated/1
+]).
 
 -define(TEST_CASES, [
     create_directory_import_test,
@@ -113,7 +115,8 @@
     sync_should_not_delete_not_replicated_files_created_in_remote_provider2,
     import_nfs_acl_test,
     update_nfs_acl_test,
-    import_nfs_acl_with_disabled_luma_should_fail_test
+    import_nfs_acl_with_disabled_luma_should_fail_test,
+    should_not_sync_file_while_being_replicated
 %%    import_file_by_path_test, %todo uncomment after resolving and merging with VFS-3052
 %%    get_child_attr_by_path_test,
 %%    import_remote_file_by_path_test
@@ -348,6 +351,39 @@ sync_should_not_delete_not_replicated_files_created_in_remote_provider2(Config) 
 
 import_file_by_path_test(Config) ->
     storage_sync_test_base:import_file_by_path_test(Config, false).
+
+should_not_sync_file_while_being_replicated(Config) ->
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
+    SessId2 = ?config({session_id, {?USER, ?GET_DOMAIN(W2)}}, Config),
+
+    {ok, FileGuid} =
+        ?assertMatch({ok, _}, lfm_proxy:create(W2, SessId2, ?SPACE_TEST_FILE_PATH, 8#777)),
+
+    %check if file_meta was synced
+    ?assertMatch({ok, #file_attr{}},
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+
+    {ok, FileHandle} =
+        ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, {guid, FileGuid}, write)),
+    Size = 1024 * 1024 * 1024,
+    TestData = crypto:strong_rand_bytes(Size),
+    ?assertEqual({ok, Size}, lfm_proxy:write(W2, FileHandle, 0, TestData)),
+    ?assertEqual(ok, lfm_proxy:fsync(W2, FileHandle)),
+    ok = lfm_proxy:close(W2, FileHandle),
+
+    spawn(fun() ->
+        timer:sleep(timer:seconds(2)),
+        storage_sync_test_base:enable_storage_import(Config),
+        storage_sync_test_base:enable_storage_update(Config)
+    end),
+
+    {ok, FileHandle2} =
+        ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {guid, FileGuid}, read)),
+    ?assertMatch({ok, TestData},
+        lfm_proxy:read(W1, FileHandle2, 0, Size), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{size = Size}},
+        lfm_proxy:stat(W2, SessId2, {guid, FileGuid})).
 
 get_child_attr_by_path_test(Config) ->
     storage_sync_test_base:get_child_attr_by_path_test(Config, false).
