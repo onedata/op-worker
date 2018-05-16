@@ -118,7 +118,7 @@ create_record(<<"transfer">>, Data) ->
     Migration = proplists:get_value(<<"migration">>, Data),
     MigrationSource = proplists:get_value(<<"migrationSource">>, Data),
     Destination = proplists:get_value(<<"destination">>, Data),
-    {ok, TransferId} = case Migration of
+    Result = case Migration of
         false ->
             logical_file_manager:schedule_file_replication(
                 SessionId, {guid, FileGuid}, Destination
@@ -128,7 +128,23 @@ create_record(<<"transfer">>, Data) ->
                 SessionId, {guid, FileGuid}, MigrationSource, Destination
             )
     end,
-    transfer_record(TransferId).
+
+    case Result of
+        {ok, TransferId} ->
+            transfer_record(TransferId);
+        {error, ?EACCES} ->
+            gui_error:unauthorized();
+        {error, Error} ->
+            ?error("Failed to schedule transfer{"
+                   "~n~tfile=~p,"
+                   "~n~tmigration=~p,"
+                   "~n~tmigrationSource=~p,"
+                   "~n~tdestination=~p}"
+                   "~n due to: ~p", [
+                FileGuid, Migration, MigrationSource, Destination, Error
+            ]),
+            gui_error:internal_server_error()
+    end.
 
 
 %%--------------------------------------------------------------------
