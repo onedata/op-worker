@@ -255,7 +255,7 @@ schedule_file_replication(SessId, FileKey, TargetProviderId, Callback) ->
 
     % Scheduling and target providers must support given space
     HasAccess = provider_logic:supports_space(SpaceId)
-        andalso provider_logic:supports_space(TargetProviderId, SpaceId),
+        andalso space_logic:is_supported(?ROOT_SESS_ID, SpaceId, TargetProviderId),
 
     case HasAccess of
         false ->
@@ -281,13 +281,13 @@ schedule_replica_invalidation(SessId, FileKey, SourceProviderId, TargetProviderI
 
     SupportedByTarget = case TargetProviderId of
         undefined -> true;
-        _ -> provider_logic:supports_space(TargetProviderId, SpaceId)
+        _ -> space_logic:is_supported(?ROOT_SESS_ID, SpaceId, TargetProviderId)
     end,
 
     % Scheduling, source and target providers must support given space
     HasAccess = SupportedByTarget
         andalso provider_logic:supports_space(SpaceId)
-        andalso provider_logic:supports_space(SourceProviderId, SpaceId),
+        andalso space_logic:is_supported(?ROOT_SESS_ID, SpaceId, SourceProviderId),
 
     case HasAccess of
         false ->

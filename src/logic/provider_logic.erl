@@ -220,12 +220,10 @@ supports_space(SpaceId) ->
     supports_space(?ROOT_SESS_ID, oneprovider:get_id_or_undefined(), SpaceId).
 
 
--spec supports_space(od_provider:doc() | od_provider:id(), od_space:id()) ->
+-spec supports_space(od_provider:doc(), od_space:id()) ->
     boolean().
 supports_space(#document{value = #od_provider{spaces = Spaces}}, SpaceId) ->
-    maps:is_key(SpaceId, Spaces);
-supports_space(ProviderId, SpaceId) ->
-    supports_space(?ROOT_SESS_ID, ProviderId, SpaceId).
+    maps:is_key(SpaceId, Spaces).
 
 
 -spec supports_space(gs_client_worker:client(), od_provider:id(), od_space:id()) ->

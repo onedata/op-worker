@@ -117,7 +117,10 @@ create_record(<<"transfer">>, Data) ->
     FileGuid = proplists:get_value(<<"file">>, Data),
     Migration = proplists:get_value(<<"migration">>, Data),
     MigrationSource = proplists:get_value(<<"migrationSource">>, Data),
-    Destination = proplists:get_value(<<"destination">>, Data),
+    Destination = case proplists:get_value(<<"destination">>, Data) of
+        null -> undefined;
+        ProviderId -> ProviderId
+    end,
     Result = case Migration of
         false ->
             logical_file_manager:schedule_file_replication(
@@ -401,7 +404,8 @@ prepare_histograms(Stats, HistogramsType, CurrentTime, LastUpdates) ->
 transfer_current_stat_record(TransferId) ->
     {ok, #document{value = Transfer = #transfer{
         bytes_transferred = BytesTransferred,
-        files_transferred = FilesTransferred
+        files_transferred = FilesTransferred,
+        files_invalidated = FilesInvalidated
     }}} = transfer:get(TransferId),
     LastUpdate = get_last_update(Transfer),
     {ok, [
@@ -409,7 +413,8 @@ transfer_current_stat_record(TransferId) ->
         {<<"status">>, get_status(Transfer)},
         {<<"timestamp">>, LastUpdate},
         {<<"transferredBytes">>, BytesTransferred},
-        {<<"transferredFiles">>, FilesTransferred}
+        {<<"transferredFiles">>, FilesTransferred},
+        {<<"invalidatedFiles">>, FilesInvalidated}
     ]}.
 
 

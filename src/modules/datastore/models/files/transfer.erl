@@ -389,10 +389,15 @@ mark_cancelled(TransferId) ->
 mark_active_invalidation(TransferId) ->
     Pid = transfer_utils:encode_pid(self()),
     {ok, _} = ?extract_key(update(TransferId, fun(Transfer) ->
+        StartTime = case Transfer#transfer.start_time of
+            0 -> provider_logic:zone_time_seconds();
+            Timestamp -> Timestamp
+        end,
         {ok, Transfer#transfer{
             invalidation_status = active,
             files_to_process = Transfer#transfer.files_to_process + 1,
-            pid = Pid
+            pid = Pid,
+            start_time = StartTime
         }}
     end)).
 
