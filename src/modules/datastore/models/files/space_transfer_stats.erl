@@ -35,11 +35,9 @@
 
 -export_type([space_transfer_stats/0, doc/0]).
 
-% Space transfer stats docs store aggregated statistics of various transfers
-% for the last 1 min, 1 hr, 1 day and 1 month. As such there is no conception
-% of 'start_time' known from normal transfer docs. But for some functions from
-% transfer_histograms module to work it is necessary to provide it.
-% That's why a long past value like 0 (year 1970) is used.
+% Some functions from transfer_histograms module require specifying
+% start time parameter. But there is no conception of start time for
+% space_transfer_stats doc. So a long past value like 0 (year 1970) is used.
 -define(START_TIME, 0).
 
 -define(CTX, #{
