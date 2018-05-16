@@ -130,7 +130,7 @@ get(TargetProvider, SpaceId, TransferType, StatsType) ->
 -spec get_active_links(SpaceId :: od_space:id()) ->
     {ok, #{od_provider:id() => [od_provider:id()]}} | {error, term()}.
 get_active_links(SpaceId) ->
-    case get(undefined, ?JOB_TRANSFERS_TYPE, ?MINUTE_STAT_TYPE, SpaceId) of
+    case get(undefined, SpaceId, ?JOB_TRANSFERS_TYPE, ?MINUTE_STAT_TYPE) of
         #space_transfer_stats_cache{active_links = ActiveLinks} ->
             {ok, ActiveLinks};
         Error ->

@@ -93,8 +93,11 @@ find_record(PermissionsRecord, RecordId) ->
             RecordId;
         <<"space-on-the-fly-transfer-list">> ->
             RecordId;
-        <<"space-transfer-time-stat">> ->
+        <<"space-transfer-stat">> ->
             {_, _, Id} = op_gui_utils:association_to_ids(RecordId),
+            Id;
+        <<"space-transfer-time-stat">> ->
+            {_, _, _, Id} = op_gui_utils:association_to_ids(RecordId),
             Id;
         _ -> % covers space-(user|group)-permission and space-transfer-list
             {_, Id} = op_gui_utils:association_to_ids(RecordId),
