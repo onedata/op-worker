@@ -25,7 +25,7 @@
                                             6665)).
 
 %% API
--export([start_rtransfer/0, fetch/6]).
+-export([start_rtransfer/0, restart_link/0, fetch/6]).
 -export([get_nodes/1, open/2, fsync/1, close/1, auth_request/2, get_connection_secret/2]).
 -export([add_storage/1, generate_secret/2]).
 
@@ -50,6 +50,23 @@ start_rtransfer() ->
     {ok, StorageDocs} = storage:list(),
     lists:foreach(fun add_storage/1, StorageDocs),
     {ok, RtransferPid}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Restarts only `link` native application, forcing a reload of
+%% certificates and state. Ongoing tasks will be briefly interrupted
+%% but then resumed.
+%% @end
+%%--------------------------------------------------------------------
+restart_link() ->
+    case whereis(rtransfer_link_port) of
+        undefined -> {error, not_running};
+        Pid ->
+            prepare_ssl_opts(),
+            prepare_graphite_opts(),
+            erlang:exit(Pid, restarting),
+            ok
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
