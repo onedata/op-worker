@@ -45,13 +45,10 @@ all() ->
 %%%===================================================================
 
 % One of providers should not connect (and go down) because incorrect
-% compatible_oz_versions env variables are defined using env_desc.json
+% compatible_oz_versions env variables are defined in init_per_testcase.
 incompatible_zone_should_not_connect(Config) ->
-    % When provider node goes down it will send {'EXIT',noconnection}
-    % To avoid going down by test master it should trap exits
-    process_flag(trap_exit, true),
     [P1, P2] = ?config(op_worker_nodes, Config),
-    ?assertMatch(true, is_down(P1), 150),
+    ?assertMatch(true, is_down(P1), 180),
     ?assertMatch(true, is_alive(P2)),
     ok.
 
@@ -60,63 +57,56 @@ incompatible_zone_should_not_connect(Config) ->
 %%% SetUp and TearDown functions
 %%%===================================================================
 
-% Mack oz endpoint returning its versions and for one of providers
+% Mock oz endpoint returning its versions and for one of providers
 % set incorrect compatible_oz_versions env var so it should go down
 init_per_suite(Config) ->
-    Posthook = fun(NewConfig) ->
-        Workers = [P1 | _] = ?config(op_worker_nodes, NewConfig),
-        rpc:call(P1, application, set_env, [
-            ?APP_NAME, compatible_oz_versions, ["16.04-rc5"]
-        ]),
-        % Mock OZ version
-        {_AppId, _AppName, AppVersion} = lists:keyfind(
-            ?APP_NAME, 1, rpc:call(hd(Workers), application, loaded_applications, [])
-        ),
-        ZoneDomain = rpc:call(hd(Workers), oneprovider, get_oz_domain, []),
-        ZoneConfigurationURL = str_utils:format("https://~s~s", [
-            ZoneDomain, ?zone_configuration_path
-        ]),
-        ok = test_utils:mock_new(Workers, http_client, [passthrough]),
-        ok = test_utils:mock_expect(Workers, http_client, get,
-            fun(Url, Headers, Body, Options) ->
-                case Url of
-                    ZoneConfigurationURL ->
-                        {ok, 200, #{}, json_utils:encode(#{
-                            <<"version">> => list_to_binary(AppVersion),
-                            <<"compatibleOneproviderVersions">> => [
-                                % Return some random versions that will surely
-                                % not match provider's version.
-                                <<"13.04-rc2">>, <<"13.04-rc7">>
-                            ]
-                        })};
-                    _ ->
-                        meck:passthrough([Url, Headers, Body, Options])
-                end
-            end),
-        NewConfig
-    end,
-    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
-
-
-end_per_suite(_Config) ->
-    ok.
+    [{?LOAD_MODULES, [initializer]} | Config].
 
 
 init_per_testcase(_Case, Config) ->
-    % Try to init env to ensure op will make attempt to connect to oz
-    % but, while connecting, op will go down (due to oz incompatible version)
-    % so init will fail
-    try
-        initializer:mock_provider_ids(Config),
-        Config
-    catch
-        _:_ -> Config
-    end.
+    Workers = [P1 | _] = ?config(op_worker_nodes, Config),
+    rpc:call(P1, application, set_env, [
+        ?APP_NAME, compatible_oz_versions, ["16.04-rc5"]
+    ]),
+    % Mock OZ version
+    {_AppId, _AppName, AppVersion} = lists:keyfind(
+        ?APP_NAME, 1, rpc:call(hd(Workers), application, loaded_applications, [])
+    ),
+    ZoneDomain = rpc:call(hd(Workers), oneprovider, get_oz_domain, []),
+    ZoneConfigurationURL = str_utils:format("https://~s~s", [
+        ZoneDomain, ?zone_configuration_path
+    ]),
+    % Sleep a while before mocking http_client - otherwise meck's reloading
+    % and purging the module can cause the op-worker application to crash.
+    timer:sleep(5000),
+    ok = test_utils:mock_new(Workers, http_client, [passthrough]),
+    ok = test_utils:mock_expect(Workers, http_client, get,
+        fun(Url, Headers, Body, Options) ->
+            case Url of
+                ZoneConfigurationURL ->
+                    {ok, 200, #{}, json_utils:encode(#{
+                        <<"version">> => list_to_binary(AppVersion),
+                        <<"compatibleOneproviderVersions">> => [
+                            % Return some random versions that will surely
+                            % not match provider's version.
+                            <<"13.04-rc2">>, <<"13.04-rc7">>
+                        ]
+                    })};
+                _ ->
+                    meck:passthrough([Url, Headers, Body, Options])
+            end
+        end),
+    initializer:mock_provider_ids(Config),
+    Config.
 
 
 end_per_testcase(_Case, _Config) ->
-    % Because one of providers have died (due to incompatible version with oz)
-    % cleanup will fail, so skip it
+    % Because one of the providers has died (due to incompatible version with
+    % oz) cleanup would fail, so skip it
+    ok.
+
+
+end_per_suite(_Config) ->
     ok.
 
 
@@ -128,7 +118,7 @@ is_alive(Provider) ->
     not is_down(Provider).
 
 is_down(Provider) ->
-    case net_adm:ping(Provider) of
-        pong -> false;
-        pang -> true
+    case rpc:call(Provider, erlang, node, []) of
+        {badrpc, nodedown} -> true;
+        _ -> false
     end.
