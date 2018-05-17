@@ -117,18 +117,20 @@ rtransfer_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, N
                 Level2File = <<Dir/binary, "/", (generator:gen_name())/binary>>,
                 Level2File2 = <<Dir/binary, "/", (generator:gen_name())/binary>>,
                 create_big_file(Config, ChunkSize, ChunksNum, PartNum, Level2File, Worker1),
+                erlang:garbage_collect(),
 
                 T1 = lists:max(verify_workers(Workers2, fun(W) ->
                     read_big_file(Config, FileSize, Level2File, W, Transfer)
-                end)),
+                end, timer:minutes(5), not Transfer)),
                 T2 = lists:max(verify_workers(Workers3, fun(W) ->
                     read_big_file(Config, FileSize, Level2File, W, Transfer)
-                end)),
+                end, timer:minutes(5), not Transfer)),
 
                 create_big_file(Config, ChunkSize, ChunksNum, PartNum, Level2File2, Worker1),
-                T3 = lists:max(verify(Config, fun(W) ->
+                erlang:garbage_collect(),
+                T3 = lists:max(verify_workers(Workers, fun(W) ->
                     read_big_file(Config, FileSize, Level2File2, W, Transfer)
-                end)),
+                end, timer:minutes(5), not Transfer)),
 
                 Master ! {slave_ans, ChunksNum, PartNum, Transfer, {ok, lists:max([T1, T2, T3])}}
             catch
@@ -212,8 +214,8 @@ rtransfer_test_base2(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     ok = test_utils:mock_unload(Workers2, transfer),
 
     ct:pal("Transfer duration [s]: ~p~n"
-           "Transfer stats updates per second ~p~n"
-           "File location updates per second ~p", [
+    "Transfer stats updates per second ~p~n"
+    "File location updates per second ~p", [
         Duration, TUPS, FLUPS
     ]),
     ok.
@@ -1253,8 +1255,11 @@ verify_workers(Workers, TestFun) ->
     verify_workers(Workers, TestFun, timer:minutes(5)).
 
 verify_workers(Workers, TestFun, Timeout) ->
+    verify_workers(Workers, TestFun, Timeout, false).
+
+verify_workers(Workers, TestFun, Timeout, SpawnOnWorker) ->
     process_flag(trap_exit, true),
-    TestAns = verify_helper(Workers, TestFun, Timeout),
+    TestAns = verify_helper(Workers, TestFun, Timeout, SpawnOnWorker),
 
     Error = lists:any(fun
         ({_W, error, _Reason}) -> true;
@@ -1267,15 +1272,23 @@ verify_workers(Workers, TestFun, Timeout) ->
 
     lists:map(fun({_W, Ans}) -> Ans end, TestAns).
 
-verify_helper([], _TestFun, _) ->
+verify_helper([], _TestFun, _, _SpawnOnWorker) ->
     [];
-verify_helper([W | Workers], TestFun, Timeout) ->
+verify_helper([W | Workers], TestFun, Timeout, SpawnOnWorker) ->
     Master = self(),
-    Pid = spawn_link(fun() ->
-        Ans = TestFun(W),
-        Master ! {verify_ans, W, Ans}
-    end),
-    TmpAns = verify_helper(Workers, TestFun, Timeout),
+    Pid = case SpawnOnWorker of
+        true ->
+            spawn_link(W, fun() ->
+                Ans = TestFun(W),
+                Master ! {verify_ans, W, Ans}
+            end);
+        _ ->
+            spawn_link(fun() ->
+                Ans = TestFun(W),
+                Master ! {verify_ans, W, Ans}
+            end)
+    end,
+    TmpAns = verify_helper(Workers, TestFun, Timeout, SpawnOnWorker),
     receive
         {verify_ans, W, TestAns} ->
             [{W, TestAns} | TmpAns];
@@ -1378,28 +1391,29 @@ read_big_file(Config, FileSize, File, Worker, _) ->
     Attempts = ?config(attempts, Config),
     read_big_file_loop(FileSize, File, Worker, SessId, Attempts, undefined, 0).
 
-read_big_file_loop(_FileSize, _File, _Worker, _SessId, _, {{ok, _Time, true}, ok}, TimeSum) ->
+read_big_file_loop(_FileSize, _File, _Worker, _SessId, _, {{ok, _Time, true}, ok, ok}, TimeSum) ->
     TimeSum;
 read_big_file_loop(_FileSize, _File, _Worker, _SessId, 0, LastAns, _TimeSum) ->
     LastAns;
 read_big_file_loop(FileSize, File, Worker, SessId, Attempts, _LastAns, TimeSum) ->
-    Ans = case lfm_proxy:open(Worker, SessId(Worker), {path, File}, rdwr) of
+    Ans = case logical_file_manager:open(SessId(Worker), {path, File}, rdwr) of
         {ok, Handle} ->
             ReadAns = try
                 Start = os:timestamp(),
-                {ok, Bytes} = lfm_proxy:read(Worker, Handle, 0, FileSize),
+                {ok, _, Bytes} = logical_file_manager:read(Handle, 0, FileSize),
                 {ok, timer:now_diff(os:timestamp(), Start), FileSize == size(Bytes)}
             catch
                 E1:E2 ->
                     {read, E1, E2}
             end,
 
-            {ReadAns, lfm_proxy:close(Worker, Handle)};
+            {ReadAns, logical_file_manager:fsync(Handle),
+                logical_file_manager:release(Handle)};
         OpenError ->
             {open_error, OpenError}
     end,
     case Ans of
-        {{ok, Time, true}, _} ->
+        {{ok, Time, true}, _, _} ->
             read_big_file_loop(FileSize, File, Worker, SessId, Attempts - 1,
                 Ans, TimeSum + Time);
         _ ->
