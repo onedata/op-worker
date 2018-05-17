@@ -61,7 +61,7 @@
                             "127.0.0.1:49161"
                         ],
                         "oz_domain": "oz",
-                        "graph_sync_healthcheck_interval": 60000
+                        "graph_sync_healthcheck_interval": 120000
                     }
                 }
             }
@@ -92,10 +92,10 @@
                             "cm"
                         ],
                         "db_nodes": [
-                            "127.0.0.1:49161"
+                            "127.0.0.1:49162"
                         ],
                         "oz_domain": "oz",
-                        "graph_sync_healthcheck_interval": 60000
+                        "graph_sync_healthcheck_interval": 120000
                     }
                 }
             }
@@ -105,48 +105,36 @@
         "users": {
             "user1": {
                 "default_space": "space_id1"
-            },
-            "user2": {
-                "default_space": "space_id1"
             }
         },
         "groups": {
         },
         "spaces": {
-            "space_id2": {
-                "displayed_name": "space2",
+            "space_id1": {
+                "displayed_name": "space1",
                 "users": [
-                    "user1",
-                    "user2"
-                ],
-                "groups": [
-                ],
-                "providers": {
-                    "p2": {
-                        "storage": "/mnt/st2",
-                        "supported_size": 50
-
-                    }
-                }
-            },
-            "space_id3": {
-                "displayed_name": "space3",
-                "users": [
-                    "user1",
-                    "user2"
+                    "user1"
                 ],
                 "groups": [
                 ],
                 "providers": {
                     "p1": {
                         "storage": "/mnt/st1",
-                        "supported_size": 44
-
-                    },
+                        "supported_size": 1000000000
+                    }
+                }
+            },
+            "space_id2": {
+                "displayed_name": "space2",
+                "users": [
+                    "user1"
+                ],
+                "groups": [
+                ],
+                "providers": {
                     "p2": {
                         "storage": "/mnt/st2",
-                        "supported_size": 22
-
+                        "supported_size": 1000000000
                     }
                 }
             }

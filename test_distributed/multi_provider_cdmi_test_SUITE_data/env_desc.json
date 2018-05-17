@@ -29,16 +29,6 @@
             ],
             "users": [],
             "groups": {}
-        },
-        "cfg2": {
-            "storages": [
-                {
-                    "type": "posix",
-                    "name": "/mnt/st2"
-                }
-            ],
-            "users": [],
-            "groups": {}
         }
     },
     "provider_domains": {
