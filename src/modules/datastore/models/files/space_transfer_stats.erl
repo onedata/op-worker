@@ -124,7 +124,6 @@ get(ProviderId, TransferType, SpaceId) ->
 ) ->
     ok | {error, term()}.
 update(TransferType, SpaceId, BytesPerProvider, CurrentTime) ->
-    NewTimestamps = maps:map(fun(_, _) -> CurrentTime end, BytesPerProvider),
     Key = key(TransferType, SpaceId),
     Diff = fun(SpaceTransfers = #space_transfer_stats{
         last_update = LastUpdateMap,
@@ -176,7 +175,7 @@ update(TransferType, SpaceId, BytesPerProvider, CurrentTime) ->
         scope = SpaceId,
         key = Key,
         value = #space_transfer_stats{
-            last_update = NewTimestamps,
+            last_update = maps:map(fun(_, _) -> CurrentTime end, BytesPerProvider),
             min_hist = transfer_histograms:new(BytesPerProvider, ?MINUTE_STAT_TYPE),
             hr_hist = transfer_histograms:new(BytesPerProvider, ?HOUR_STAT_TYPE),
             dy_hist = transfer_histograms:new(BytesPerProvider, ?DAY_STAT_TYPE),
