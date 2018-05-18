@@ -214,8 +214,8 @@ rtransfer_test_base2(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     ok = test_utils:mock_unload(Workers2, transfer),
 
     ct:pal("Transfer duration [s]: ~p~n"
-    "Transfer stats updates per second ~p~n"
-    "File location updates per second ~p", [
+           "Transfer stats updates per second ~p~n"
+           "File location updates per second ~p", [
         Duration, TUPS, FLUPS
     ]),
     ok.
