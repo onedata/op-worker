@@ -220,7 +220,8 @@ supports_space(SpaceId) ->
     supports_space(?ROOT_SESS_ID, oneprovider:get_id_or_undefined(), SpaceId).
 
 
--spec supports_space(od_provider:doc(), od_space:id()) -> boolean().
+-spec supports_space(od_provider:doc(), od_space:id()) ->
+    boolean().
 supports_space(#document{value = #od_provider{spaces = Spaces}}, SpaceId) ->
     maps:is_key(SpaceId, Spaces).
 

@@ -252,8 +252,12 @@ schedule_file_replication(SessId, FileKey, TargetProviderId) ->
 schedule_file_replication(SessId, FileKey, TargetProviderId, Callback) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
-    % Transfers can only be scheduled on supporting providers
-    case provider_logic:supports_space(SpaceId) of
+
+    % Scheduling and target providers must support given space
+    HasAccess = provider_logic:supports_space(SpaceId)
+        andalso space_logic:is_supported(?ROOT_SESS_ID, SpaceId, TargetProviderId),
+
+    case HasAccess of
         false ->
             {error, ?EACCES};
         true ->
@@ -274,8 +278,18 @@ schedule_file_replication(SessId, FileKey, TargetProviderId, Callback) ->
 schedule_replica_invalidation(SessId, FileKey, SourceProviderId, TargetProviderId) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
-    % Replica migration can only be scheduled on supporting providers
-    case provider_logic:supports_space(SpaceId) of
+
+    SupportedByTarget = case TargetProviderId of
+        undefined -> true;
+        _ -> space_logic:is_supported(?ROOT_SESS_ID, SpaceId, TargetProviderId)
+    end,
+
+    % Scheduling, source and target providers must support given space
+    HasAccess = SupportedByTarget
+        andalso provider_logic:supports_space(SpaceId)
+        andalso space_logic:is_supported(?ROOT_SESS_ID, SpaceId, SourceProviderId),
+
+    case HasAccess of
         false ->
             {error, ?EACCES};
         true ->

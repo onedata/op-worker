@@ -35,11 +35,9 @@
 
 -export_type([space_transfer_stats/0, doc/0]).
 
-% Space transfer stats docs store aggregated statistics of various transfers
-% for the last 1 min, 1 hr, 1 day and 1 month. As such there is no conception
-% of 'start_time' known from normal transfer docs. But for some functions from
-% transfer_histograms module to work it is necessary to provide it.
-% That's why a long past value like 0 (year 1970) is used.
+% Some functions from transfer_histograms module require specifying
+% start time parameter. But there is no conception of start time for
+% space_transfer_stats doc. So a long past value like 0 (year 1970) is used.
 -define(START_TIME, 0).
 
 -define(CTX, #{
@@ -126,7 +124,6 @@ get(ProviderId, TransferType, SpaceId) ->
 ) ->
     ok | {error, term()}.
 update(TransferType, SpaceId, BytesPerProvider, CurrentTime) ->
-    NewTimestamps = maps:map(fun(_, _) -> CurrentTime end, BytesPerProvider),
     Key = key(TransferType, SpaceId),
     Diff = fun(SpaceTransfers = #space_transfer_stats{
         last_update = LastUpdateMap,
@@ -178,7 +175,7 @@ update(TransferType, SpaceId, BytesPerProvider, CurrentTime) ->
         scope = SpaceId,
         key = Key,
         value = #space_transfer_stats{
-            last_update = NewTimestamps,
+            last_update = maps:map(fun(_, _) -> CurrentTime end, BytesPerProvider),
             min_hist = transfer_histograms:new(BytesPerProvider, ?MINUTE_STAT_TYPE),
             hr_hist = transfer_histograms:new(BytesPerProvider, ?HOUR_STAT_TYPE),
             dy_hist = transfer_histograms:new(BytesPerProvider, ?DAY_STAT_TYPE),

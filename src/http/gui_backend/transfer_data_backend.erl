@@ -117,8 +117,11 @@ create_record(<<"transfer">>, Data) ->
     FileGuid = proplists:get_value(<<"file">>, Data),
     Migration = proplists:get_value(<<"migration">>, Data),
     MigrationSource = proplists:get_value(<<"migrationSource">>, Data),
-    Destination = proplists:get_value(<<"destination">>, Data),
-    {ok, TransferId} = case Migration of
+    Destination = case proplists:get_value(<<"destination">>, Data) of
+        null -> undefined;
+        ProviderId -> ProviderId
+    end,
+    Result = case Migration of
         false ->
             logical_file_manager:schedule_file_replication(
                 SessionId, {guid, FileGuid}, Destination
@@ -128,7 +131,23 @@ create_record(<<"transfer">>, Data) ->
                 SessionId, {guid, FileGuid}, MigrationSource, Destination
             )
     end,
-    transfer_record(TransferId).
+
+    case Result of
+        {ok, TransferId} ->
+            transfer_record(TransferId);
+        {error, ?EACCES} ->
+            gui_error:unauthorized();
+        {error, Error} ->
+            ?error("Failed to schedule transfer{"
+                   "~n~tfile=~p,"
+                   "~n~tmigration=~p,"
+                   "~n~tmigrationSource=~p,"
+                   "~n~tdestination=~p}"
+                   "~n due to: ~p", [
+                FileGuid, Migration, MigrationSource, Destination, Error
+            ]),
+            gui_error:internal_server_error()
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -302,7 +321,9 @@ prepare_histograms(?JOB_TRANSFERS_TYPE, HistogramsType, TransferId) ->
     end,
     {Histograms, StartTime, LastUpdate, TimeWindow};
 prepare_histograms(?ON_THE_FLY_TRANSFERS_TYPE, HistogramsType, TransferStatsId) ->
-    % On the fly transfers have neither start nor end.
+    % Some functions from transfer_histograms module require specifying
+    % start time parameter. But there is no conception of start time for
+    % space_transfer_stats doc. So a long past value like 0 (year 1970) is used.
     StartTime = 0,
     CurrentTime = provider_logic:zone_time_seconds(),
     Fetched = space_transfer_stats:get(TransferStatsId),
@@ -381,7 +402,8 @@ prepare_histograms(Stats, HistogramsType, CurrentTime, LastUpdates) ->
 transfer_current_stat_record(TransferId) ->
     {ok, #document{value = Transfer = #transfer{
         bytes_transferred = BytesTransferred,
-        files_transferred = FilesTransferred
+        files_transferred = FilesTransferred,
+        files_invalidated = FilesInvalidated
     }}} = transfer:get(TransferId),
     LastUpdate = get_last_update(Transfer),
     {ok, [
@@ -389,7 +411,8 @@ transfer_current_stat_record(TransferId) ->
         {<<"status">>, get_status(Transfer)},
         {<<"timestamp">>, LastUpdate},
         {<<"transferredBytes">>, BytesTransferred},
-        {<<"transferredFiles">>, FilesTransferred}
+        {<<"transferredFiles">>, FilesTransferred},
+        {<<"invalidatedFiles">>, FilesInvalidated}
     ]}.
 
 

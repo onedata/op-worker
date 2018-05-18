@@ -19,10 +19,10 @@
 
 %% API
 -export([
-    save/4,
-    get/3, get_active_links/1,
-    update/4,
-    delete/3
+    save/5,
+    get/4, get_active_links/1,
+    update/5,
+    delete/4
 ]).
 
 %% datastore_model callbacks
@@ -65,15 +65,19 @@
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Saves transfer statistics of given type for given space and transfer type.
+%% Saves transfer statistics of given type for specified target provider, space
+%% and transfer type.
+%% When storing aggregated statistics for all providers in space,
+%% TargetProvider should be given as 'undefined'.
 %% @end
 %%-------------------------------------------------------------------
--spec save(TransferType :: binary(), StatsType :: binary(),
-    SpaceId :: od_space:id(), Stats :: space_transfer_stats_cache()
+-spec save(TargetProvider :: od_provider:id() | undefined,
+    SpaceId :: od_space:id(), TransferType :: binary(), StatsType :: binary(),
+    Stats :: space_transfer_stats_cache()
 ) ->
     ok | {error, term()}.
-save(TransferType, StatsType, SpaceId, Stats) ->
-    Key = key(TransferType, StatsType, SpaceId),
+save(TargetProvider, SpaceId, TransferType, StatsType, Stats) ->
+    Key = key(TargetProvider, SpaceId, TransferType, StatsType),
     case datastore_model:save(?CTX, #document{key = Key, value = Stats}) of
         {ok, _} -> ok;
         Error -> Error
@@ -82,14 +86,19 @@ save(TransferType, StatsType, SpaceId, Stats) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Returns space transfer statistics of requested type for given space.
+%% Returns space transfer statistics of requested type for specified
+%% target provider, space and transfer type.
+%% When retrieving aggregated statistics for all providers in space,
+%% TargetProvider should be given as 'undefined'.
 %% @end
 %%-------------------------------------------------------------------
--spec get(TransferType :: binary(), StatsType :: binary(),
-    SpaceId :: od_space:id()) -> space_transfer_stats_cache() | {error, term()}.
-get(TransferType, StatsType, SpaceId) ->
+-spec get(TargetProvider :: od_provider:id() | undefined,
+    SpaceId :: od_space:id(), TransferType :: binary(), StatsType :: binary()
+) ->
+    space_transfer_stats_cache() | {error, term()}.
+get(TargetProvider, SpaceId, TransferType, StatsType) ->
     Now = time_utils:system_time_millis(),
-    Key = key(TransferType, StatsType, SpaceId),
+    Key = key(TargetProvider, SpaceId, TransferType, StatsType),
     Fetched = case datastore_model:get(?CTX, Key) of
         {ok, #document{value = Stats}} ->
             case Now < Stats#space_transfer_stats_cache.expires of
@@ -101,10 +110,10 @@ get(TransferType, StatsType, SpaceId) ->
     end,
     case Fetched of
         {error, not_found} ->
-            TransferStatsMap = get_transfer_stats(TransferType, SpaceId),
+            TransferStatsPerType = get_transfer_stats(TransferType, SpaceId),
             CurrentTime = provider_logic:zone_time_seconds(),
-            prepare_aggregated_stats(
-                TransferType, StatsType, SpaceId, TransferStatsMap, CurrentTime
+            prepare_aggregated_stats(TargetProvider, SpaceId,
+                TransferType, StatsType, TransferStatsPerType, CurrentTime
             );
         _ ->
             Fetched
@@ -121,7 +130,7 @@ get(TransferType, StatsType, SpaceId) ->
 -spec get_active_links(SpaceId :: od_space:id()) ->
     {ok, #{od_provider:id() => [od_provider:id()]}} | {error, term()}.
 get_active_links(SpaceId) ->
-    case get(?JOB_TRANSFERS_TYPE, ?MINUTE_STAT_TYPE, SpaceId) of
+    case get(undefined, SpaceId, ?JOB_TRANSFERS_TYPE, ?MINUTE_STAT_TYPE) of
         #space_transfer_stats_cache{active_links = ActiveLinks} ->
             {ok, ActiveLinks};
         Error ->
@@ -131,20 +140,23 @@ get_active_links(SpaceId) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Update transfer statistics of given type for given space. If previously
-%% cached stats has not expired yet do not overwrite it. It helps prevent
-%% situation when the same stats are cached 2 times longer than they should
-%% (e.g. when counting minute stats, entire time slots making up to recent
-%% n-seconds are trimmed meaning that stats counted for timestamps:
-%% 61 and 64 are the same).
+%% Update transfer statistics of given type for specified target provider,
+%% space and transfer type. If previously cached stats has not expired yet
+%% do not overwrite it. It helps prevent situation when the same stats
+%% are cached 2 times longer than they should (e.g. when counting minute stats,
+%% entire time slots making up to recent n-seconds are trimmed meaning that
+%% stats counted for timestamps: 61 and 64 are the same).
+%% When updating aggregated statistics for all providers in space,
+%% TargetProvider should be given as 'undefined'.
 %% @end
 %%-------------------------------------------------------------------
--spec update(TransferType :: binary(), StatsType :: binary(),
-    SpaceId :: od_space:id(), Stats :: space_transfer_stats_cache()
+-spec update(TargetProvider :: od_provider:id() | undefined,
+    SpaceId :: od_space:id(), TransferType :: binary(), StatsType :: binary(),
+    Stats :: space_transfer_stats_cache()
 ) ->
     ok | {error, term()}.
-update(TransferType, StatsType, SpaceId, Stats) ->
-    Key = key(TransferType, StatsType, SpaceId),
+update(TargetProvider, SpaceId, TransferType, StatsType, Stats) ->
+    Key = key(TargetProvider, SpaceId, TransferType, StatsType),
     Diff = fun(OldStats) ->
         Now = time_utils:system_time_millis(),
         NewStats = case Now < OldStats#space_transfer_stats_cache.expires of
@@ -163,12 +175,16 @@ update(TransferType, StatsType, SpaceId, Stats) ->
 %% @doc
 %% Deletes space transfer statistics of given type for given space and
 %% transfer type.
+%% When deleting aggregated statistics for all providers in space,
+%% TargetProvider should be given as 'undefined'.
 %% @end
 %%-------------------------------------------------------------------
--spec delete(TransferType :: binary(), StatsType :: binary(),
-    SpaceId :: od_space:id()) -> ok | {error, term()}.
-delete(TransferType, StatsType, SpaceId) ->
-    Key = key(TransferType, StatsType, SpaceId),
+-spec delete(TargetProvider :: od_provider:id() | undefined,
+    SpaceId :: od_space:id(), TransferType :: binary(), StatsType :: binary()
+) ->
+    ok | {error, term()}.
+delete(TargetProvider, SpaceId, TransferType, StatsType) ->
+    Key = key(TargetProvider, SpaceId, TransferType, StatsType),
     datastore_model:delete(?CTX, Key).
 
 
@@ -224,36 +240,38 @@ get_record_struct(1) ->
 %% @private
 %% @doc
 %% Gather statistics of requested types from given transfer statistics
-%% for given space. Pad them with zeroes to current time and erase recent
-%% n-seconds to avoid fluctuations on charts. To do that for type
-%% other than minute one, it is required to calculate also minute stats
-%% (otherwise it is not possible to trim histograms of other types).
+%% for specified target provider, space and transfer type.
+%% Pad them with zeroes to current time and erase recent n-seconds to avoid
+%% fluctuations on charts. To do that for type other than minute one,
+%% it is required to calculate also minute stats (otherwise it is not possible
+%% to trim histograms of other types).
 %% @end
 %%--------------------------------------------------------------------
--spec prepare_aggregated_stats(TransferType :: binary(), StatsType :: binary(),
-    SpaceId :: od_space:id(), TransferStatsMap :: #{binary() => transfer_stats()},
+-spec prepare_aggregated_stats(TargetProvider :: od_provider:id() | undefined,
+    SpaceId :: od_space:id(), TransferType :: binary(), StatsType :: binary(),
+    TransferStatsMap :: #{binary() => transfer_stats()},
     CurrentTime :: timestamp()
 ) ->
     space_transfer_stats_cache().
-prepare_aggregated_stats(?ALL_TRANSFERS_TYPE, StatsType, SpaceId,
-    TransferStatsMap, CurrentTime
+prepare_aggregated_stats(TargetProvider, SpaceId, ?ALL_TRANSFERS_TYPE,
+    StatsType, TransferStatsPerType, CurrentTime
 ) ->
-    JobStats = prepare_aggregated_stats(?JOB_TRANSFERS_TYPE,
-        StatsType, SpaceId, TransferStatsMap, CurrentTime
+    JobStats = prepare_aggregated_stats(TargetProvider, SpaceId,
+        ?JOB_TRANSFERS_TYPE, StatsType, TransferStatsPerType, CurrentTime
     ),
-    OnTheFlyStats = prepare_aggregated_stats(?ON_THE_FLY_TRANSFERS_TYPE,
-        StatsType, SpaceId, TransferStatsMap, CurrentTime
+    OnTheFlyStats = prepare_aggregated_stats(TargetProvider, SpaceId,
+        ?ON_THE_FLY_TRANSFERS_TYPE, StatsType, TransferStatsPerType, CurrentTime
     ),
     AllStats = merge_stats(JobStats, OnTheFlyStats),
-    update(?ALL_TRANSFERS_TYPE, StatsType, SpaceId, AllStats),
+    update(TargetProvider, SpaceId, ?ALL_TRANSFERS_TYPE, StatsType, AllStats),
     AllStats;
 
-prepare_aggregated_stats(TransferType, ?MINUTE_STAT_TYPE, SpaceId,
-    TransferStatsMap, CurrentTime
+prepare_aggregated_stats(TargetProvider, SpaceId, TransferType,
+    ?MINUTE_STAT_TYPE, TransferStatsPerType, CurrentTime
 ) ->
-    TransferStats = maps:get(TransferType, TransferStatsMap),
+    TransferStats = maps:get(TransferType, TransferStatsPerType),
     [MinStats] = aggregate_stats(
-        TransferStats, [?MINUTE_STAT_TYPE], CurrentTime
+        TargetProvider, TransferStats, [?MINUTE_STAT_TYPE], CurrentTime
     ),
 
     #space_transfer_stats_cache{
@@ -273,14 +291,15 @@ prepare_aggregated_stats(TransferType, ?MINUTE_STAT_TYPE, SpaceId,
         stats_in = maps:filter(Pred, TrimmedStatsIn),
         stats_out = maps:filter(Pred, TrimmedStatsOut)
     },
-    update(TransferType, ?MINUTE_STAT_TYPE, SpaceId, NewMinStats),
+
+    update(TargetProvider, SpaceId, TransferType, ?MINUTE_STAT_TYPE, NewMinStats),
     NewMinStats;
 
-prepare_aggregated_stats(TransferType, RequestedStatsType, SpaceId,
-    TransferStatsMap, CurrentTime
+prepare_aggregated_stats(TargetProvider, SpaceId, TransferType,
+    RequestedStatsType, TransferStatsMap, CurrentTime
 ) ->
     TransferStats = maps:get(TransferType, TransferStatsMap),
-    [MinStats, RequestedStats] = aggregate_stats(
+    [MinStats, RequestedStats] = aggregate_stats(TargetProvider,
         TransferStats, [?MINUTE_STAT_TYPE, RequestedStatsType], CurrentTime
     ),
 
@@ -316,20 +335,25 @@ prepare_aggregated_stats(TransferType, RequestedStatsType, SpaceId,
         active_links = undefined
     },
 
-    update(TransferType, ?MINUTE_STAT_TYPE, SpaceId, NewMinStats),
-    update(TransferType, RequestedStatsType, SpaceId, NewRequestedStats),
+    update(TargetProvider, SpaceId, TransferType, ?MINUTE_STAT_TYPE, NewMinStats),
+    update(TargetProvider, SpaceId, TransferType, RequestedStatsType, NewRequestedStats),
     NewRequestedStats.
 
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Aggregate statistics of specified type from given transfer statistics.
+%% Aggregate statistics of specified type from given transfer statistics
+%% for specified target provider.
+%% When aggregating statistics for all providers in space,
+%% TargetProvider should be given as 'undefined'.
 %% @end
 %%--------------------------------------------------------------------
--spec aggregate_stats(transfer_stats(), HistogramTypes :: [binary()],
-    CurrentTime :: timestamp()) -> [space_transfer_stats_cache()].
-aggregate_stats(TransferStats, RequestedStatsTypes, CurrentTime) ->
+-spec aggregate_stats(TargetProvider :: od_provider:id() | undefined,
+    transfer_stats(), HistogramTypes :: [binary()], CurrentTime :: timestamp()
+) ->
+    [space_transfer_stats_cache()].
+aggregate_stats(TargetProvider, TransferStats, RequestedStatsTypes, CurrentTime) ->
     LocalTime = time_utils:system_time_millis(),
     EmptyStats = [
         #space_transfer_stats_cache{
@@ -340,7 +364,8 @@ aggregate_stats(TransferStats, RequestedStatsTypes, CurrentTime) ->
 
     maps:fold(fun(Provider, TransferStat, AggregatedStats) ->
         lists:map(fun({Stats, StatsType}) ->
-            update_stats(Stats, StatsType, TransferStat, CurrentTime, Provider)
+            update_stats(TargetProvider, Stats, StatsType,
+                Provider, TransferStat, CurrentTime)
         end, lists:zip(AggregatedStats, RequestedStatsTypes))
     end, EmptyStats, TransferStats).
 
@@ -348,71 +373,89 @@ aggregate_stats(TransferStats, RequestedStatsTypes, CurrentTime) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Update given aggregated statistics for provider based on given
-%% space transfer record.
+%% Update given aggregated statistics of specified type and for specified
+%% TargetProvider (undefined if aggregating for all providers in space) with
+%% stats of given provider.
 %% @end
 %%--------------------------------------------------------------------
--spec update_stats(OldStats :: space_transfer_stats_cache(),
-    StatsType :: binary(), ST :: #space_transfer_stats{},
-    CurrentTime :: timestamp(), Provider :: od_provider:id()
+-spec update_stats(TargetProvider :: od_provider:id() | undefined,
+    OldStats :: space_transfer_stats_cache(), StatsType :: binary(),
+    Provider :: od_provider:id(), TransferStats :: #space_transfer_stats{},
+    CurrentTime :: timestamp()
 ) ->
     space_transfer_stats_cache().
-update_stats(OldStats, StatsType, ST, CurrentTime, Provider) ->
+update_stats(undefined, OldStats, StatsType,
+    Provider, TransferStats, CurrentTime
+) ->
     #space_transfer_stats_cache{
         stats_in = StatsIn,
         stats_out = StatsOut,
         active_links = ActiveLinks
     } = OldStats,
 
-    LastUpdates = ST#space_transfer_stats.last_update,
-    {Histograms, TimeWindow} = case StatsType of
-        ?MINUTE_STAT_TYPE -> {ST#space_transfer_stats.min_hist, ?FIVE_SEC_TIME_WINDOW};
-        ?HOUR_STAT_TYPE -> {ST#space_transfer_stats.hr_hist, ?MIN_TIME_WINDOW};
-        ?DAY_STAT_TYPE -> {ST#space_transfer_stats.dy_hist, ?HOUR_TIME_WINDOW};
-        ?MONTH_STAT_TYPE -> {ST#space_transfer_stats.mth_hist, ?DAY_TIME_WINDOW}
-    end,
-    HistLen = transfer_histograms:type_to_hist_length(StatsType),
-    ZeroedHist = time_slot_histogram:new(0,
-        CurrentTime, TimeWindow, histogram:new(HistLen)
-    ),
+    Histograms = get_histograms(StatsType, TransferStats),
+    LastUpdates = TransferStats#space_transfer_stats.last_update,
+    TimeWindow = transfer_histograms:type_to_time_window(StatsType),
+    ZeroedHist = histogram:new(transfer_histograms:type_to_hist_length(StatsType)),
 
-    {HistIn, HistsOut, SrcProviders} = maps:fold(fun(SrcProvider, Hist, Acc) ->
-        {OldHistIn, OldHistsOut, OldSrcProviders} = Acc,
+    {HistIn, NewStatsOut, NewActiveLinks} = maps:fold(fun(SrcProvider, Hist, Acc) ->
+        {OldHistIn, OldStatsOut, OldActiveLinks} = Acc,
         LastUpdate = maps:get(SrcProvider, LastUpdates),
-        TimeSlotHist = time_slot_histogram:new(0, LastUpdate, TimeWindow, Hist),
-        NewHistIn = time_slot_histogram:merge(OldHistIn, TimeSlotHist),
-        NewHistsOut = OldHistsOut#{SrcProvider => TimeSlotHist},
-        NewSrcProviders = case CurrentTime - LastUpdate =< ?TRANSFER_INACTIVITY of
-            false -> OldSrcProviders;
-            true -> [SrcProvider | OldSrcProviders]
-        end,
-        {NewHistIn, NewHistsOut, NewSrcProviders}
-    end, {ZeroedHist, #{}, []}, Histograms),
+        NewHistIn = merge_histograms(
+            OldHistIn, CurrentTime, Hist, LastUpdate, TimeWindow
+        ),
 
-    NewStatsIn = StatsIn#{
-        Provider => time_slot_histogram:get_histogram_values(HistIn)
-    },
-    NewStatsOut = maps:fold(fun(SrcProvider, Hist, OldStatsOut) ->
-        OldHistOut = case maps:get(SrcProvider, OldStatsOut, none) of
-            none -> ZeroedHist;
-            HistOut -> time_slot_histogram:new(0, CurrentTime, TimeWindow, HistOut)
-        end,
-        NewHistOut = time_slot_histogram:merge(OldHistOut, Hist),
-        OldStatsOut#{
-            SrcProvider => time_slot_histogram:get_histogram_values(NewHistOut)
-        }
-    end, StatsOut, HistsOut),
+        OldHistOut = maps:get(SrcProvider, OldStatsOut, ZeroedHist),
+        NewHistOut = merge_histograms(
+            OldHistOut, CurrentTime, Hist, LastUpdate, TimeWindow
+        ),
 
-    NewActiveLinks = lists:foldl(fun(SrcProvider, OldActiveLinks) ->
-        DestinationProviders = maps:get(SrcProvider, OldActiveLinks, []),
-        OldActiveLinks#{SrcProvider => [Provider | DestinationProviders]}
-    end, ActiveLinks, SrcProviders),
+        NewLinks = case CurrentTime - LastUpdate =< ?TRANSFER_INACTIVITY of
+            false ->
+                OldActiveLinks;
+            true ->
+                DestinationProviders = maps:get(SrcProvider, OldActiveLinks, []),
+                OldActiveLinks#{SrcProvider => [Provider | DestinationProviders]}
+        end,
+        {NewHistIn, OldStatsOut#{SrcProvider => NewHistOut}, NewLinks}
+    end, {ZeroedHist, StatsOut, ActiveLinks}, Histograms),
 
     OldStats#space_transfer_stats_cache{
-        stats_in = NewStatsIn,
+        stats_in = StatsIn#{Provider => HistIn},
         stats_out = NewStatsOut,
         active_links = NewActiveLinks
-    }.
+    };
+
+update_stats(TargetProvider, OldStats, StatsType,
+    TargetProvider, TransferStats, CurrentTime
+) ->
+    Histograms = get_histograms(StatsType, TransferStats),
+    LastUpdates = TransferStats#space_transfer_stats.last_update,
+    Window = transfer_histograms:type_to_time_window(StatsType),
+    OldStats#space_transfer_stats_cache{
+        stats_in = transfer_histograms:pad_with_zeroes(
+            Histograms, Window, LastUpdates, CurrentTime)
+    };
+
+update_stats(TargetProvider, OldStats, StatsType,
+    Provider, TransferStats, CurrentTime
+) ->
+    Histograms = get_histograms(StatsType, TransferStats),
+    case maps:find(TargetProvider, Histograms) of
+        {ok, Histogram} ->
+            LastUpdate = maps:get(TargetProvider,
+                TransferStats#space_transfer_stats.last_update),
+            Window = transfer_histograms:type_to_time_window(StatsType),
+            ShiftSize = max(0, (CurrentTime div Window) - (LastUpdate div Window)),
+            PaddedHistogram = histogram:shift(Histogram, ShiftSize),
+
+            StatsOut = OldStats#space_transfer_stats_cache.stats_out,
+            OldStats#space_transfer_stats_cache{
+                stats_out = StatsOut#{Provider => PaddedHistogram}
+            };
+        error ->
+            OldStats
+    end.
 
 
 -spec merge_stats(space_transfer_stats_cache(), space_transfer_stats_cache()) ->
@@ -453,11 +496,39 @@ stats_type_to_expiration_timeout(?DAY_STAT_TYPE) -> ?DAY_STAT_EXPIRATION;
 stats_type_to_expiration_timeout(?MONTH_STAT_TYPE) -> ?MONTH_STAT_EXPIRATION.
 
 
--spec key(TransferType :: binary(), StatsType :: binary(),
-    SpaceId :: od_space:id()) -> binary().
-key(TransferType, StatsType, SpaceId) ->
-    RecordId = op_gui_utils:ids_to_association(TransferType, SpaceId),
-    datastore_utils:gen_key(StatsType, RecordId).
+-spec get_histograms(HistogramsType :: binary(), #space_transfer_stats{}) ->
+    transfer_histograms:histograms().
+get_histograms(?MINUTE_STAT_TYPE, #space_transfer_stats{min_hist = Histograms}) ->
+    Histograms;
+get_histograms(?HOUR_STAT_TYPE, #space_transfer_stats{hr_hist = Histograms}) ->
+    Histograms;
+get_histograms(?DAY_STAT_TYPE, #space_transfer_stats{dy_hist = Histograms}) ->
+    Histograms;
+get_histograms(?MONTH_STAT_TYPE, #space_transfer_stats{mth_hist = Histograms}) ->
+    Histograms.
+
+
+merge_histograms(Hist1, LastUpdate1, Hist2, LastUpdate2, TimeWindow) ->
+    case LastUpdate1 > LastUpdate2 of
+        true ->
+            ShiftSize = (LastUpdate1 div TimeWindow) - (LastUpdate2 div TimeWindow),
+            histogram:merge(Hist1, histogram:shift(Hist2, ShiftSize));
+        false ->
+            ShiftSize = (LastUpdate2 div TimeWindow) - (LastUpdate1 div TimeWindow),
+            histogram:merge(histogram:shift(Hist1, ShiftSize), Hist2)
+    end.
+
+
+-spec key(TargetProvider :: od_provider:id() | undefined,
+    SpaceId :: od_space:id(), TransferType :: binary(), StatsType :: binary()
+) ->
+    binary().
+key(undefined, SpaceId, TransferType, StatsType) ->
+    key(<<"all">>, SpaceId, TransferType, StatsType);
+key(TargetProvider, SpaceId, TransferType, StatsType) ->
+    Seed = op_gui_utils:ids_to_association(TargetProvider, SpaceId),
+    Key0 = op_gui_utils:ids_to_association(TransferType, StatsType),
+    datastore_utils:gen_key(Seed, Key0).
 
 
 %%--------------------------------------------------------------------
