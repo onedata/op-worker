@@ -4,6 +4,21 @@
 CHANGELOG
 ---------
 
+### 18.02.0-rc3
+
+* VFS-4430 remove unused fields from space_strategies record, fix bug in storage_sync_monitoring:get_record_struct function
+* VFS-4366 fix badmatch when updating space_transfer_stats
+* Reduce default num of rtransfer connections to 16.
+* Update rtransfer to fix missing blocks.
+* Updating GUI, including: VFS-3945 * VFS-3945 Added data invalidation functionality
+* VFS-4431 Stabilize zone_connection test, update ctool ref - include better handling of end_per_suite crashes, update meck, clean up in rebar.config
+* VFS-4407 Updated helpers and rtransfer_link refs
+* Updating GUI, including: VFS-4355 * VFS-4355 Added summarized transfer charts per provider
+* VFS-4265 check if replica target provider supports space
+* VFS-4366 refactor space_data_backend
+* VFS-4366 refactor space_transfer_stats_cache
+
+
 ### 18.02.0-rc2
 
 * Upgrade rtransfer_link.
