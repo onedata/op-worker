@@ -345,11 +345,7 @@
 %% Model that maps space to storage strategies
 -record(storage_strategies, {
     storage_import = ?DEFAULT_STORAGE_IMPORT_STRATEGY :: space_strategy:config(),
-    storage_update = ?DEFAULT_STORAGE_UPDATE_STRATEGY :: space_strategy:config(),
-    import_start_time :: space_strategy:timestamp(),
-    import_finish_time :: space_strategy:timestamp(),
-    last_update_start_time :: space_strategy:timestamp(),
-    last_update_finish_time :: space_strategy:timestamp()
+    storage_update = ?DEFAULT_STORAGE_UPDATE_STRATEGY :: space_strategy:config()
 }).
 
 -define(DEFAULT_FILE_CONFLICT_RESOLUTION_STRATEGY, {ignore_conflicts, #{}}).
