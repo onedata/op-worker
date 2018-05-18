@@ -817,7 +817,6 @@ get_record_struct(1) ->
         {deleted, integer},
         {failed, integer},
         {other_processed, integer},
-        {started, integer},
 
         {imported_sum, integer},
         {updated_sum, integer},
