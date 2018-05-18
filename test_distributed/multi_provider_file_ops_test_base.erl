@@ -1412,6 +1412,7 @@ read_big_file_loop(FileSize, File, Worker, SessId, Attempts, _LastAns, TimeSum) 
         OpenError ->
             {open_error, OpenError}
     end,
+    erlang:garbage_collect(),
     case Ans of
         {{ok, Time, true}, _, _} ->
             read_big_file_loop(FileSize, File, Worker, SessId, Attempts - 1,
