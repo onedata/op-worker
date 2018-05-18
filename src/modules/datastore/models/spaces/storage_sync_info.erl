@@ -23,10 +23,10 @@
 -export_type([key/0, doc/0, record/0]).
 
 %% API
--export([create_or_update/5, delete/1, get/1]).
+-export([update_mtime_and_children_hash/5, delete/1, get/1, update_children_hash/4, update_mtime/3]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_struct/1]).
+-export([get_ctx/0, get_record_struct/1, get_record_version/0, upgrade_record/2]).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -51,13 +51,33 @@ get(Uuid) ->
 %% Updates storage_sync_info document.
 %% @end
 %%--------------------------------------------------------------------
--spec create_or_update(key(), undefined | non_neg_integer(), undefined | non_neg_integer(),
+-spec update_mtime_and_children_hash(key(), undefined | non_neg_integer(),
+    non_neg_integer() | undefined, binary() | undefined, od_space:id()) -> 
+    {ok, doc()} | error().
+update_mtime_and_children_hash(Uuid, NewMTime, NewHashKey, NewHashValue, 
+    SpaceId
+) ->
+    create_or_update(Uuid, NewMTime, NewHashKey, NewHashValue, SpaceId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates storage_sync_info document.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_children_hash(key(), undefined | non_neg_integer(),
     binary() | undefined, od_space:id()) -> {ok, doc()} | error().
-create_or_update(Uuid, NewMTime, NewHashKey, NewHashValue, SpaceId) ->
-    case datastore_model:exists(?CTX, Uuid) of
-        {ok, true} -> update(Uuid,  NewMTime, NewHashKey, NewHashValue);
-        {ok, false} -> create(Uuid, NewMTime, NewHashKey, NewHashValue, SpaceId)
-    end.
+update_children_hash(Uuid, NewHashKey, NewHashValue, SpaceId) ->
+    create_or_update(Uuid, undefined, NewHashKey, NewHashValue, SpaceId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates storage_sync_info document.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_mtime(key(), undefined | non_neg_integer(), od_space:id()) ->
+    {ok, doc()} | error().
+update_mtime(Uuid, NewMTime, SpaceId) ->
+    create_or_update(Uuid, NewMTime, undefined, undefined, SpaceId).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -72,17 +92,30 @@ delete(Uuid) ->
 %%% Internal functions
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates storage_sync_info document.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_or_update(key(), undefined | non_neg_integer(), undefined | non_neg_integer(),
+    binary() | undefined, od_space:id()) -> {ok, doc()} | error().
+create_or_update(Uuid, NewMTime, NewHashKey, NewHashValue, SpaceId) ->
+    case datastore_model:exists(?CTX, Uuid) of
+        {ok, true} -> update(Uuid,  NewMTime, NewHashKey, NewHashValue);
+        {ok, false} -> create(Uuid, NewMTime, NewHashKey, NewHashValue, SpaceId)
+    end.
+
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
 %% Updates existing storage_sync_info document
 %% @end
 %%-------------------------------------------------------------------
--spec update(key(), non_neg_integer() | undefined, undefined | non_neg_integer(),
+-spec update(key(), non_neg_integer() | undefined, non_neg_integer() | undefined,
     binary() | undefined) -> {ok, doc()} | error().
 update(Uuid, NewMTime, NewHashKey, NewHashValue) ->
     Diff = fun(SSI = #storage_sync_info{
-        last_synchronized_mtime = MTime0,
+        mtime = MTime0,
         children_attrs_hashes = ChildrenAttrsHashes0
     }) ->
         MTime = utils:ensure_defined(NewMTime, undefined, MTime0),
@@ -93,7 +126,7 @@ update(Uuid, NewMTime, NewHashKey, NewHashValue) ->
             {_, _} -> ChildrenAttrsHashes0#{NewHashKey => NewHashValue}
         end,
         {ok, SSI#storage_sync_info{
-            last_synchronized_mtime = MTime,
+            mtime = MTime,
             children_attrs_hashes = ChildrenAttrsHashes
         }}
     end,
@@ -105,13 +138,13 @@ update(Uuid, NewMTime, NewHashKey, NewHashValue) ->
 %% Creates new storage_sync_info document.
 %% @end
 %%-------------------------------------------------------------------
--spec create(key(), non_neg_integer() | undefined, undefined | non_neg_integer(),
+-spec create(key(), non_neg_integer() | undefined, non_neg_integer() | undefined,
     binary() | undefined, od_space:id()) -> {ok, doc()} | error().
 create(Key, NewMTime, NewHashKey, NewHashValue, SpaceId) ->
     Doc = #document{
         key = Key,
         value = #storage_sync_info{
-            last_synchronized_mtime = NewMTime,
+            mtime = NewMTime,
             children_attrs_hashes = #{NewHashKey => NewHashValue}
         },
         scope = SpaceId
@@ -121,6 +154,15 @@ create(Key, NewMTime, NewHashKey, NewHashValue, SpaceId) ->
 %%%===================================================================
 %%% datastore_model callbacks
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's record version.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_record_version() -> datastore_model:record_version().
+get_record_version() ->
+    2.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -142,4 +184,19 @@ get_record_struct(1) ->
     {record, [
         {children_attrs_hash, #{integer => binary}},
         {last_synchronized_mtime, integer}
+    ]};
+get_record_struct(2) ->
+    {record, [
+        {children_attrs_hash, #{integer => binary}},
+        {mtime, integer}
     ]}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Upgrades model's record from provided version to the next one.
+%% @end
+%%--------------------------------------------------------------------
+-spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
+    {datastore_model:record_version(), datastore_model:record()}.
+upgrade_record(1, {?MODULE, ChildrenAttrsHash, MTime}) ->
+    {2, {?MODULE, ChildrenAttrsHash, MTime}}.

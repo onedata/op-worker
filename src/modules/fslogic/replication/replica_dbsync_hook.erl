@@ -14,6 +14,7 @@
 
 -include("proto/oneclient/common_messages.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -91,6 +92,7 @@ update_local_location_replica(FileCtx,
     file_location:doc()) -> ok.
 update_outdated_local_location_replica(FileCtx,
     LocalDoc = #document{value = #file_location{
+        size = OldSize,
         version_vector = VV1
     }},
     ExternalDoc = #document{value = #file_location{
@@ -107,8 +109,9 @@ update_outdated_local_location_replica(FileCtx,
         {deleted, _FileCtx2} ->
             ok;
         {NewDoc, FileCtx2} ->
-            notify_block_change_if_necessary(FileCtx2, LocationDocWithNewVersion, NewDoc),
-            notify_size_change_if_necessary(FileCtx2, LocationDocWithNewVersion, NewDoc)
+            {ok, FileCtx3} = maybe_truncate_file_on_storage(FileCtx2, OldSize, NewSize),
+            notify_block_change_if_necessary(FileCtx3, LocationDocWithNewVersion, NewDoc),
+            notify_size_change_if_necessary(FileCtx3, LocationDocWithNewVersion, NewDoc)
     end.
 
 %%--------------------------------------------------------------------
@@ -268,3 +271,34 @@ notify_size_change_if_necessary(_FileCtx,
     ok;
 notify_size_change_if_necessary(FileCtx, _, _) ->
     ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Truncates file on storage if its size has decreased and if storage
+%% is not synced.
+%% @end
+%%-------------------------------------------------------------------
+-spec maybe_truncate_file_on_storage(file_ctx:ctx(), non_neg_integer(),
+    non_neg_integer()) -> {ok, file_ctx:ctx()}.
+maybe_truncate_file_on_storage(FileCtx, OldSize, NewSize) when OldSize > NewSize ->
+    {IsImportOn, FileCtx2} = file_ctx:is_import_on(FileCtx),
+    case IsImportOn of
+        true ->
+            {ok, FileCtx2};
+        false ->
+            {SFMHandle, FileCtx3} = storage_file_manager:new_handle(?ROOT_SESS_ID, FileCtx2),
+            case storage_file_manager:open(SFMHandle, write) of
+                {ok, Handle} ->
+                    ok = storage_file_manager:truncate(Handle, NewSize);
+                {error, ?ENOENT} ->
+                    ok
+            end,
+            {ok, FileCtx3}
+    end;
+maybe_truncate_file_on_storage(FileCtx, _OldSize, _NewSize) ->
+    {ok, FileCtx}.

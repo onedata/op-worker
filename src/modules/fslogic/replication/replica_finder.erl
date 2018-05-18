@@ -14,6 +14,8 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/oneclient/common_messages.hrl").
+-include_lib("ctool/include/logging.hrl").
+
 
 -type storage_details() :: {StorageId :: binary(), FileId :: binary()}.
 
@@ -36,15 +38,13 @@ get_blocks_for_sync(_, []) ->
     [];
 get_blocks_for_sync(Locations, Blocks) ->
     LocalProviderId = oneprovider:get_id(),
-    LocalLocations = [Loc || Loc = #document{value = #file_location{provider_id = Id}} <- Locations, Id =:= LocalProviderId],
-    RemoteLocations = Locations -- LocalLocations,
-    LocalBlocksList = [LocalBlocks || #document{value = #file_location{blocks = LocalBlocks}} <- LocalLocations],
+    [LocalLocation] = lists:filter(fun(#document{value = FL}) ->
+        FL#file_location.provider_id =:= LocalProviderId
+    end, Locations),
+    TruncatedBlocks = truncate_to_local_size(LocalLocation, Blocks),
+    BlocksToSync = invalidate_local_blocks(LocalLocation, TruncatedBlocks),
 
-    BlocksToSync = lists:foldl(
-        fun(LocalBlocks, Acc) ->
-            fslogic_blocks:invalidate(Acc, LocalBlocks)
-        end, Blocks, LocalBlocksList),
-
+    RemoteLocations = Locations -- [LocalLocation],
     RemoteList = exclude_old_blocks(RemoteLocations),
     SortedRemoteList = lists:sort(RemoteList),
     AggregatedRemoteList = lists:foldl(fun
@@ -83,6 +83,32 @@ get_unique_blocks(FileCtx) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Invalidates LocalBlocks in Blocks.
+%% @end
+%%-------------------------------------------------------------------
+-spec invalidate_local_blocks(file_location:doc(), fslogic_blocks:blocks()) -> fslogic_blocks:blocks().
+invalidate_local_blocks(#document{value = #file_location{blocks = LocalBlocks}}, Blocks) ->
+    fslogic_blocks:invalidate(Blocks, LocalBlocks).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Invalidates all blocks in Blocks that exceeds local file size
+%% @end
+%%-------------------------------------------------------------------
+-spec truncate_to_local_size(file_location:doc(), fslogic_blocks:blocks()) -> fslogic_blocks:blocks().
+truncate_to_local_size(#document{value = #file_location{size = LocalSize}}, Blocks) ->
+    GlobalUpper = fslogic_blocks:upper(Blocks),
+    case GlobalUpper > LocalSize of
+        true ->
+            fslogic_blocks:invalidate(Blocks, #file_block{offset = LocalSize, size = GlobalUpper});
+        false ->
+            Blocks
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -130,15 +156,18 @@ minimize_present_blocks([{ProviderId, Blocks, StorageDetails} | Rest], AlreadyPr
 -spec exclude_old_blocks([file_location:doc()]) ->
     [{oneprovider:id(), fslogic_blocks:blocks(), storage_details()}].
 exclude_old_blocks(RemoteLocations) ->
-    RemoteList =
-        [{RemoteBlocks, {ProviderId, VV, {StorageId, FileId}}} ||
-            #document{value = #file_location{storage_id = StorageId, file_id = FileId,
-                blocks = RemoteBlocks, provider_id = ProviderId, version_vector = VV}}
-                <- RemoteLocations],
-
-    RemoteList2 = lists:foldl(fun({RemoteBlocks, BlockInfo}, Acc) ->
-        Acc ++ lists:map(fun(RB) -> {RB, BlockInfo} end, RemoteBlocks)
-    end, [], RemoteList),
+    RemoteList = lists:flatmap(fun(#document{
+        value = #file_location{
+            storage_id = StorageId,
+            file_id = FileId,
+            blocks = RemoteBlocks,
+            provider_id = ProviderId,
+            version_vector = VV
+        }}) ->
+        lists:map(fun(RB) ->
+            {RB, {ProviderId, VV, {StorageId, FileId}}}
+        end, RemoteBlocks)
+    end, RemoteLocations),
 
     SortedRemoteList = lists:foldl(fun
         (Remote, []) ->
@@ -152,7 +181,7 @@ exclude_old_blocks(RemoteLocations) ->
                 _ ->
                     compare_blocks(Last, Remote) ++ AccTail
             end
-    end, [], lists:sort(RemoteList2)),
+    end, [], lists:sort(RemoteList)),
 
     [{ProviderId, [RemoteBlock], StorageDetails} ||
         {RemoteBlock, {ProviderId, _VV, StorageDetails}} <- SortedRemoteList].

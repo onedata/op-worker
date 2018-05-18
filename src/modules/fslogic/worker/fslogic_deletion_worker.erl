@@ -147,10 +147,10 @@ handle({open_file_deletion_request, FileCtx}) ->
                     sfm_utils:recursive_delete(FileCtx3, UserCtx)
             end
         catch
-            E2:E2 ->
+            E1:E2 ->
                 % Debug - parent could be deleted before
                 ?debug_stacktrace("Cannot check parent during delete ~p: ~p:~p",
-                    [FileCtx, E2, E2]),
+                    [FileCtx, E1, E2]),
                 sfm_utils:delete_storage_file_without_location(FileCtx2, UserCtx)
         end
     catch
@@ -158,6 +158,9 @@ handle({open_file_deletion_request, FileCtx}) ->
             ?error_stacktrace("Cannot delete file at storage ~p", [FileCtx]),
             ok;
         _:{badmatch, {error, enoent}} ->
+            ?debug_stacktrace("Cannot delete file at storage ~p", [FileCtx]),
+            ok;
+        _:{badmatch, {error, erofs}} ->
             ?debug_stacktrace("Cannot delete file at storage ~p", [FileCtx]),
             ok
     end,

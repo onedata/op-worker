@@ -242,7 +242,8 @@
 
 -record(storage_sync_info, {
     children_attrs_hashes = #{} :: #{non_neg_integer() => binary()},
-    last_synchronized_mtime = undefined :: undefined | non_neg_integer()
+    mtime :: undefined | non_neg_integer(),
+    size :: undefined | non_neg_integer()
 }).
 
 -record(file_meta, {
