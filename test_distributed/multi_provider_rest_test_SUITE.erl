@@ -2926,7 +2926,15 @@ create_file_counter(N, FilesToCreate, ParentPid, Files) ->
     end.
 
 verify_file(Worker, SessionId, FileGuid) ->
-    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Worker, SessionId, {guid, FileGuid}), 10 * ?ATTEMPTS),
+    {ok, #file_attr{type = Type}} = ?assertMatch({ok, #file_attr{}},
+        lfm_proxy:stat(Worker, SessionId, {guid, FileGuid}), 10 * ?ATTEMPTS),
+    case Type of
+        ?REGULAR_FILE_TYPE ->
+            ?assertMatch({ok, #file_attr{size = ?TEST_DATA_SIZE}},
+                lfm_proxy:stat(Worker, SessionId, {guid, FileGuid}), ?ATTEMPTS);
+        _ ->
+            ok
+    end,
     ?SYNC_FILE_COUNTER ! verified.
 
 verify_distribution(Worker, ExpectedDistribution, Config, FileGuid, FilePath, SessionId) ->
