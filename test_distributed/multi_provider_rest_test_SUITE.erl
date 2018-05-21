@@ -563,7 +563,9 @@ restart_file_replication(Config) ->
     % when
     mock_file_replication_failure(WorkerP2),
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
-    ExpectedDistribution = [#{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, ?TEST_DATA_SIZE]]}],
+    ExpectedDistribution = [
+        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, ?TEST_DATA_SIZE]]}
+    ],
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
     Tid = schedule_file_replication(WorkerP1, DomainP2, File, Config),
 
@@ -696,7 +698,9 @@ replicate_dir(Config) ->
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File1}), ?ATTEMPTS),
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File2}), ?ATTEMPTS),
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File3}), ?ATTEMPTS),
-    ExpectedDistribution = [#{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, ?TEST_DATA_SIZE]]}],
+    ExpectedDistribution = [
+        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, ?TEST_DATA_SIZE]]}
+    ],
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File1),
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File2),
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File3),
@@ -943,7 +947,8 @@ invalidate_file_replica(Config) ->
 
     Tid1 = schedule_replica_invalidation(WorkerP1, DomainP2, File, Config),
     ExpectedDistribution2 = [
-        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]}
+        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
+        #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => []}
     ],
 
     ?assertTransferStatus(#{
@@ -1010,7 +1015,8 @@ invalidate_file_replica_with_migration(Config) ->
     }, WorkerP1, Tid, Config),
 
     ExpectedDistribution2 = [
-        #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
+        #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]},
+        #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => []}
     ],
     ?assertDistribution(WorkerP1, ExpectedDistribution2, Config, File),
     ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, File),
@@ -1084,7 +1090,8 @@ restart_invalidation_of_file_replica_with_migration(Config) ->
     ?assertEqual([Tid1], list_past_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
 
     ExpectedDistribution2 = [
-        #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
+        #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]},
+        #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => []}
     ],
     ?assertDistribution(WorkerP1, ExpectedDistribution2, Config, File),
     ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, File).
@@ -1171,7 +1178,8 @@ invalidate_dir_replica(Config) ->
 
     %then
     ExpectedDistribution2 = [
-        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]}
+        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
+        #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => []}
     ],
     ?assertDistribution(WorkerP1, ExpectedDistribution2, Config, File1),
     ?assertDistribution(WorkerP1, ExpectedDistribution2, Config, File2),
@@ -1240,7 +1248,8 @@ automatic_cleanup_should_invalidate_unpopular_files(Config) ->
         #{<<"providerId">> => DomainP2, <<"blocks">> => [[0, BigSize]]}
     ],
     ExpectedDistribution4 = [
-        #{<<"providerId">> => DomainP1, <<"blocks">> => [[0, NormalSize]]}
+        #{<<"providerId">> => DomainP1, <<"blocks">> => [[0, NormalSize]]},
+        #{<<"providerId">> => DomainP2, <<"blocks">> => []}
     ],
 
     ?assertDistributionProxyByGuid(WorkerP2, SessionIdP2, ExpectedDistribution2, File1Guid),
@@ -2366,7 +2375,8 @@ quota_decreased_after_invalidation(Config) ->
 
     % File replica is invalidated
     ExpectedDistribution3 = [
-        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 10]]}
+        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 10]]},
+        #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => []}
     ],
     ?assertDistribution(WorkerP1, ExpectedDistribution3, Config, File),
     ?assertDistribution(WorkerP2, ExpectedDistribution3, Config, File),
