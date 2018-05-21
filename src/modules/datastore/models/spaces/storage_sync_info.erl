@@ -100,20 +100,6 @@ delete(Uuid) ->
 -spec create_or_update(key(), undefined | non_neg_integer(), undefined | non_neg_integer(),
     binary() | undefined, od_space:id()) -> {ok, doc()} | error().
 create_or_update(Uuid, NewMTime, NewHashKey, NewHashValue, SpaceId) ->
-    case datastore_model:exists(?CTX, Uuid) of
-        {ok, true} -> update(Uuid,  NewMTime, NewHashKey, NewHashValue);
-        {ok, false} -> create(Uuid, NewMTime, NewHashKey, NewHashValue, SpaceId)
-    end.
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Updates existing storage_sync_info document
-%% @end
-%%-------------------------------------------------------------------
--spec update(key(), non_neg_integer() | undefined, non_neg_integer() | undefined,
-    binary() | undefined) -> {ok, doc()} | error().
-update(Uuid, NewMTime, NewHashKey, NewHashValue) ->
     Diff = fun(SSI = #storage_sync_info{
         mtime = MTime0,
         children_attrs_hashes = ChildrenAttrsHashes0
@@ -130,26 +116,30 @@ update(Uuid, NewMTime, NewHashKey, NewHashValue) ->
             children_attrs_hashes = ChildrenAttrsHashes
         }}
     end,
-    datastore_model:update(?CTX, Uuid, Diff).
+    NewDoc = new_doc(Uuid, NewMTime, NewHashKey, NewHashValue, SpaceId),
+    datastore_model:update(?CTX, Uuid, Diff, NewDoc).
+
+%%===================================================================
+%% Internal functions
+%%===================================================================
 
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Creates new storage_sync_info document.
+%% Returns ?MODULE:doc()
 %% @end
 %%-------------------------------------------------------------------
--spec create(key(), non_neg_integer() | undefined, non_neg_integer() | undefined,
-    binary() | undefined, od_space:id()) -> {ok, doc()} | error().
-create(Key, NewMTime, NewHashKey, NewHashValue, SpaceId) ->
-    Doc = #document{
+-spec new_doc(key(), non_neg_integer() | undefined, non_neg_integer() | undefined,
+    binary() | undefined, od_space:id()) -> doc().
+new_doc(Key, NewMTime, NewHashKey, NewHashValue, SpaceId) ->
+    #document{
         key = Key,
         value = #storage_sync_info{
             mtime = NewMTime,
             children_attrs_hashes = #{NewHashKey => NewHashValue}
         },
         scope = SpaceId
-    },
-    datastore_model:create(?CTX, Doc).
+    }.
 
 %%%===================================================================
 %%% datastore_model callbacks

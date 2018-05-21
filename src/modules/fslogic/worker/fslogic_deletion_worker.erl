@@ -161,7 +161,7 @@ handle({open_file_deletion_request, FileCtx}) ->
             ?debug_stacktrace("Cannot delete file at storage ~p", [FileCtx]),
             ok;
         _:{badmatch, {error, erofs}} ->
-            ?debug_stacktrace("Cannot delete file at storage ~p", [FileCtx]),
+            ?warning_stacktrace("Cannot delete file at storage ~p", [FileCtx]),
             ok
     end,
 

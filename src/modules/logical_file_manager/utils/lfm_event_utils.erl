@@ -25,7 +25,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv maybe_emit_file_written(FileGuid, WrittenBlocks, SessionId, true).
+%% @equiv Emits file_written_event.
 %% @end
 %%--------------------------------------------------------------------
 -spec emit_file_written(fslogic_worker:file_guid(),
@@ -52,12 +52,7 @@ emit_file_written(FileGuid, WrittenBlocks, FileSize, SessionId) ->
 maybe_emit_file_written(_FileGuid, _WrittenBlocks, _SessionId, false) ->
     ok;
 maybe_emit_file_written(FileGuid, WrittenBlocks, SessionId, true) ->
-    WrittenSize = size_of_blocks(WrittenBlocks),
-    event:emit(#file_written_event{
-        file_guid = FileGuid,
-        blocks = WrittenBlocks,
-        size = WrittenSize
-    }, SessionId).
+    emit_file_written(FileGuid, WrittenBlocks, undefined, SessionId).
 
 %%--------------------------------------------------------------------
 %% @doc

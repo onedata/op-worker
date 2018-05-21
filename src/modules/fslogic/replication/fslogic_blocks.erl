@@ -21,7 +21,7 @@
 -export_type([block/0, blocks/0]).
 
 %% API
--export([merge/2, aggregate/2, consolidate/1, invalidate/2, upper/1, lower/1, size/1, shrink/2]).
+-export([merge/2, aggregate/2, consolidate/1, invalidate/2, upper/1, lower/1, size/1]).
 
 %%%===================================================================
 %%% API
@@ -137,21 +137,10 @@ consolidate([
 consolidate([B | Rest]) ->
     [B | consolidate(Rest)].
 
-shrink(FB = #file_block{}, ShrinkSize) ->
-    shrink([FB], ShrinkSize);
-shrink(FileBlocks, ShrinkSize) ->
-    shrink_tail(FileBlocks, [], ShrinkSize).
-
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-shrink_tail([], Shrunk, _ShrinkSize) ->
-    lists:reverse(Shrunk);
-shrink_tail([FB = #file_block{size = Size} | Rest], Shrunk, ShrinkSize) ->
-    shrink_tail(Rest, [FB#file_block{size = min(Size, ShrinkSize)} | Shrunk], ShrinkSize).
-
 
 %%--------------------------------------------------------------------
 %% @private
