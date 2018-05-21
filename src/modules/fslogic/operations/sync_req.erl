@@ -441,6 +441,7 @@ invalidate_fully_redundant_file_replica(UserCtx, FileCtx) ->
             ok -> ok;
             {error, {not_found, _}} -> ok
         end,
+        fslogic_event_emitter:emit_file_location_changed(FileCtx, []),
         #provider_response{status = #status{code = ?OK}}
     catch
         Error:Reason ->
