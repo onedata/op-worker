@@ -1248,6 +1248,10 @@ automatic_cleanup_should_invalidate_unpopular_files(Config) ->
         #{<<"providerId">> => DomainP2, <<"blocks">> => [[0, BigSize]]}
     ],
     ExpectedDistribution4 = [
+        #{<<"providerId">> => DomainP1, <<"blocks">> => [[0, NormalSize]]}
+    ],
+
+    ExpectedDistribution5 = [
         #{<<"providerId">> => DomainP1, <<"blocks">> => [[0, NormalSize]]},
         #{<<"providerId">> => DomainP2, <<"blocks">> => []}
     ],
@@ -1275,7 +1279,7 @@ automatic_cleanup_should_invalidate_unpopular_files(Config) ->
 
     ?assertDistributionProxyByGuid(WorkerP2, SessionIdP2, ExpectedDistribution2, File1Guid),
     ?assertDistributionProxyByGuid(WorkerP2, SessionIdP2, ExpectedDistribution1, File2Guid),
-    ?assertDistributionProxyByGuid(WorkerP2, SessionIdP2, ExpectedDistribution4, File3Guid),
+    ?assertDistributionProxyByGuid(WorkerP2, SessionIdP2, ExpectedDistribution5, File3Guid),
     ?assertDistributionProxyByGuid(WorkerP2, SessionIdP2, ExpectedDistribution3, File4Guid),
     ?assertDistributionProxyByGuid(WorkerP2, SessionIdP2, ExpectedDistribution1, File5Guid),
 
@@ -2608,7 +2612,8 @@ invalidate_big_dir(Config) ->
     }, WorkerP1, Tid2, Config, 600),
 
     ExpectedDistribution2 = [
-        #{<<"providerId">> => DomainP2, <<"blocks">> => [[0, 4]]}
+        #{<<"providerId">> => DomainP2, <<"blocks">> => [[0, 4]]},
+        #{<<"providerId">> => DomainP1, <<"blocks">> => []}
     ],
     verify_files_distribution(WorkerP2, FilesToCreate, ExpectedDistribution2, FileGuidsAndPaths, SessionId2, Config),
     verify_files_distribution(WorkerP1, FilesToCreate, ExpectedDistribution2, FileGuidsAndPaths, SessionId, Config).
