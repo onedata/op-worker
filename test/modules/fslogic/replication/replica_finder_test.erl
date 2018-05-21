@@ -18,7 +18,13 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 
--define(LOCATION(ProviderId, Blocks), #document{value = #file_location{provider_id = ProviderId, blocks = Blocks}}).
+-define(LOCATION(ProviderId, Blocks), ?LOCATION(ProviderId, Blocks, undefined)).
+-define(LOCATION(ProviderId, Blocks, Size), #document{
+    value = #file_location{
+        provider_id = ProviderId,
+        blocks = Blocks,
+        size = Size
+    }}).
 -define(BLOCK(Offset, Size), #file_block{offset = Offset, size = Size}).
 -define(LOCAL_PID, <<"local">>).
 -define(PID1, <<"1">>).
@@ -98,7 +104,7 @@ finder_should_find_data_in_many_locations(_) ->
     Location1_1 = ?LOCATION(?PID1, [?BLOCK(0, 2)]),
     Location1_2 = ?LOCATION(?PID1, [?BLOCK(2, 5)]),
     Location1_3 = ?LOCATION(?PID1, [?BLOCK(7, 3)]),
-    LocalLocation = ?LOCATION(?LOCAL_PID, []),
+    LocalLocation = ?LOCATION(?LOCAL_PID, [], 9),
     Locations = [Location1_1, Location1_2, Location1_3, LocalLocation],
     BlocksToSync = [?BLOCK(1, 8)],
 
@@ -170,9 +176,9 @@ finder_should_not_return_data_available_locally_in_one_location(_) ->
     ?_assertEqual([], Ans).
 
 finder_should_not_return_data_available_locally_in_many_locations(_) ->
-    LocalLocation1 = ?LOCATION(?LOCAL_PID, [?BLOCK(0, 2)]),
-    LocalLocation2 = ?LOCATION(?LOCAL_PID, [?BLOCK(2, 5)]),
-    LocalLocation3 = ?LOCATION(?LOCAL_PID, [?BLOCK(7, 3)]),
+    LocalLocation1 = ?LOCATION(?LOCAL_PID, [?BLOCK(0, 2)], 2),
+    LocalLocation2 = ?LOCATION(?LOCAL_PID, [?BLOCK(2, 5)], 7),
+    LocalLocation3 = ?LOCATION(?LOCAL_PID, [?BLOCK(7, 3)], 9),
     Location1 = ?LOCATION(?PID1, [?BLOCK(0, 10)]),
     Locations = [LocalLocation1, LocalLocation2, LocalLocation3, Location1],
     BlocksToSync = [?BLOCK(1, 8)],

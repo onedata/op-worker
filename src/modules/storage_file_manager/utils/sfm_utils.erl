@@ -165,13 +165,15 @@ create_storage_file_location(FileCtx, StorageFileCreated, GeneratedKey) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
     {StorageId, FileCtx3} = file_ctx:get_storage_id(FileCtx2),
+    {Size, FileCtx4} = file_ctx:get_file_size(FileCtx3),
     Location = #file_location{
         provider_id = oneprovider:get_id(),
         file_id = StorageFileId,
         storage_id = StorageId,
         uuid = FileUuid,
         space_id = SpaceId,
-        storage_file_created = StorageFileCreated
+        storage_file_created = StorageFileCreated,
+        size = Size
     },
     LocId = file_location:local_id(FileUuid),
     case file_location:create(#document{
@@ -179,12 +181,12 @@ create_storage_file_location(FileCtx, StorageFileCreated, GeneratedKey) ->
         value = Location
     }, GeneratedKey) of
         {ok, _LocId} ->
-            FileCtx4 = file_ctx:add_file_location(FileCtx3, LocId),
-            {Location, FileCtx4};
+            FileCtx5 = file_ctx:add_file_location(FileCtx4, LocId),
+            {Location, FileCtx5};
         {error, already_exists} ->
-            {#document{value = FileLocation}, FileCtx4} =
-                file_ctx:get_local_file_location_doc(FileCtx3),
-            {FileLocation, FileCtx4}
+            {#document{value = FileLocation}, FileCtx5} =
+                file_ctx:get_local_file_location_doc(FileCtx4),
+            {FileLocation, FileCtx5}
     end.
 
 %%--------------------------------------------------------------------

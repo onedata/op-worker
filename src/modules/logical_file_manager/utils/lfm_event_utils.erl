@@ -17,11 +17,29 @@
 
 %% API
 -export([maybe_emit_file_written/4, maybe_emit_file_read/4,
-    emit_file_truncated/3, flush_event_queue/3]).
+    emit_file_truncated/3, flush_event_queue/3, emit_file_written/4]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Emits file_written_event.
+%% @end
+%%--------------------------------------------------------------------
+-spec emit_file_written(fslogic_worker:file_guid(),
+    fslogic_blocks:blocks(), non_neg_integer() | undefined,session:id()) ->
+    ok | {error, Reason :: term()}.
+emit_file_written(FileGuid, WrittenBlocks, FileSize, SessionId) ->
+    WrittenSize = size_of_blocks(WrittenBlocks),
+    event:emit(#file_written_event{
+        file_guid = FileGuid,
+        blocks = WrittenBlocks,
+        size = WrittenSize,
+        file_size = FileSize
+    }, SessionId).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -34,12 +52,7 @@
 maybe_emit_file_written(_FileGuid, _WrittenBlocks, _SessionId, false) ->
     ok;
 maybe_emit_file_written(FileGuid, WrittenBlocks, SessionId, true) ->
-    WrittenSize = size_of_blocks(WrittenBlocks),
-    event:emit(#file_written_event{
-        file_guid = FileGuid,
-        blocks = WrittenBlocks,
-        size = WrittenSize
-    }, SessionId).
+    emit_file_written(FileGuid, WrittenBlocks, undefined, SessionId).
 
 %%--------------------------------------------------------------------
 %% @doc

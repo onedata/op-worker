@@ -54,6 +54,8 @@
 -define(SPACE_TEST_FILE_IN_DIR_PATH3, filename:join([?SPACE_TEST_DIR_PATH, ?TEST_FILE3])).
 -define(SPACE_INIT_FILE_PATH, filename:join(["/", ?SPACE_NAME, ?INIT_FILE])).
 -define(TEST_DATA, <<"test_data">>).
+-define(TEST_DATA_ONE_BYTE_CHANGED, <<"test-data">>).
+-define(TEST_DATA_CHANGED, <<"test_modified_file">>).
 -define(TEST_DATA2, <<"test_data2">>).
 
 -define(TEST_UID, 1000).

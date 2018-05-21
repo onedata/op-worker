@@ -65,7 +65,9 @@
     sync_works_properly_after_delete_test/1,
     sync_should_not_delete_not_replicated_file_created_in_remote_provider/1,
     sync_should_not_delete_dir_created_in_remote_provider/1,
-    sync_should_not_delete_not_replicated_files_created_in_remote_provider2/1]).
+    sync_should_not_delete_not_replicated_files_created_in_remote_provider2/1,
+    change_file_content_update_test/1,
+    change_file_content_update2_test/1]).
 
 -define(TEST_CASES, [
     create_directory_import_test,
@@ -94,6 +96,8 @@
     copy_file_update_test,
     move_file_update_test,
     truncate_file_update_test,
+    change_file_content_update_test,
+    change_file_content_update2_test,
     chmod_file_update_test,
     chmod_file_update2_test,
     update_timestamps_file_import_test,
@@ -936,6 +940,12 @@ chmod_file_update_test(Config) ->
         <<"deletedHourHist">> := [0 | _],
         <<"deletedDayHist">> := [0 | _]
     }, ?SPACE_ID).
+
+change_file_content_update_test(Config) ->
+    storage_sync_test_base:change_file_content_update_test(Config, true).
+
+change_file_content_update2_test(Config) ->
+    storage_sync_test_base:change_file_content_update2_test(Config, true).
 
 chmod_file_update2_test(Config) ->
     % in this test dir_batch_size is set in init_per_testcase to 2

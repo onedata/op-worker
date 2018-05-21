@@ -21,7 +21,7 @@
 -export([create_file/5, storage_file_created/2, make_file/4,
     get_file_location/2, open_file/3,
     open_file_insecure/3, storage_file_created_insecure/2,
-    open_file_insecure/4, fsync/4, release/3]).
+    open_file_insecure/4, fsync/4, release/3, flush_event_queue/2]).
 
 -define(NEW_HANDLE_ID, base64:encode(crypto:strong_rand_bytes(20))).
 
