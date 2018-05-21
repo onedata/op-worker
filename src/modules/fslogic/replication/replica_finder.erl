@@ -36,15 +36,16 @@
     [{oneprovider:id(), fslogic_blocks:blocks(), storage_details()}].
 get_blocks_for_sync(_, []) ->
     [];
+get_blocks_for_sync([], _) ->
+    [];
 get_blocks_for_sync(Locations, Blocks) ->
-    LocalProviderId = oneprovider:get_id(),
-    [LocalLocation] = lists:filter(fun(#document{value = FL}) ->
-        FL#file_location.provider_id =:= LocalProviderId
-    end, Locations),
-    TruncatedBlocks = truncate_to_local_size(LocalLocation, Blocks),
-    BlocksToSync = invalidate_local_blocks(LocalLocation, TruncatedBlocks),
+    LocalLocations = filter_local_locations(Locations),
+    BlocksToSync = lists:foldl(fun(LocalLocation, BlocksToSync0) ->
+        TruncatedBlocks = truncate_to_local_size(LocalLocation, BlocksToSync0),
+        invalidate_local_blocks(LocalLocation, TruncatedBlocks)
+    end, Blocks, LocalLocations),
 
-    RemoteLocations = Locations -- [LocalLocation],
+    RemoteLocations = Locations -- LocalLocations,
     RemoteList = exclude_old_blocks(RemoteLocations),
     SortedRemoteList = lists:sort(RemoteList),
     AggregatedRemoteList = lists:foldl(fun
@@ -73,8 +74,7 @@ get_blocks_for_sync(Locations, Blocks) ->
 -spec get_unique_blocks(file_ctx:ctx()) -> {fslogic_blocks:blocks(), file_ctx:ctx()}.
 get_unique_blocks(FileCtx) ->
     {LocationDocs, FileCtx2} = file_ctx:get_file_location_docs(FileCtx),
-    LocalProviderId = oneprovider:get_id(),
-    LocalLocations = [Loc || Loc = #document{value = #file_location{provider_id = Id}} <- LocationDocs, Id =:= LocalProviderId],
+    LocalLocations = filter_local_locations(LocationDocs),
     RemoteLocations = LocationDocs -- LocalLocations,
     LocalBlocksList = get_all_blocks(LocalLocations),
     RemoteBlocksList = get_all_blocks(RemoteLocations),
@@ -83,6 +83,19 @@ get_unique_blocks(FileCtx) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Filters local location docs from location docs list.
+%% @end
+%%-------------------------------------------------------------------
+-spec filter_local_locations([file_location:doc()]) -> [file_location:doc()].
+filter_local_locations(LocationDocs) ->
+    LocalProviderId = oneprovider:get_id(),
+    lists:filter(fun(#document{value = #file_location{provider_id = Id}}) ->
+        Id =:= LocalProviderId
+    end, LocationDocs).
 
 %%-------------------------------------------------------------------
 %% @private
