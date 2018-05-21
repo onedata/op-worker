@@ -210,9 +210,9 @@ all() ->
 -define(absPath(SpaceId, Path), <<"/", SpaceId/binary, "/", Path/binary>>).
 
 -define(TEST_DATA, <<"test">>).
--define(TEST_DATA_SIZE, byte_size(?TEST_DATA)).
+-define(TEST_DATA_SIZE, 4).
 -define(TEST_DATA2, <<"test01234">>).
--define(TEST_DATA_SIZE2, byte_size(?TEST_DATA2)).
+-define(TEST_DATA_SIZE2, 9).
 
 -define(TARGET, 30).
 -define(THRESHOLD, 35).
@@ -271,7 +271,11 @@ replicate_file(Config) ->
     {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
 
     % when
-    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{size = ?TEST_DATA_SIZE}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
+    ExpectedDistribution0 = [
+        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, ?TEST_DATA_SIZE]]}
+    ],
+    ?assertDistribution(WorkerP2, ExpectedDistribution0, Config, File),
     Tid = schedule_file_replication(WorkerP1, DomainP2, File, Config),
 
     % then
@@ -319,12 +323,11 @@ replicate_already_replicated_file(Config) ->
     DomainP2 = domain(WorkerP2),
 
     File = ?absPath(SpaceId, <<"file_already_replicated">>),
-    Size = ?TEST_DATA_SIZE,
     FileGuid = create_test_file(WorkerP1, SessionId, File, ?TEST_DATA),
     {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
 
     % when
-    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{size = ?TEST_DATA_SIZE}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
     Tid = schedule_file_replication(WorkerP1, DomainP2, File, Config),
 
     % then
@@ -340,11 +343,11 @@ replicate_already_replicated_file(Config) ->
         <<"filesTransferred">> := 1,
         <<"filesInvalidated">> := 0,
         <<"failedFiles">> := 0,
-        <<"bytesTransferred">> := Size,
-        <<"minHist">> := #{DomainP1 := [Size | _]},
-        <<"hrHist">> := #{DomainP1 := [Size | _]},
-        <<"dyHist">> := #{DomainP1 := [Size | _]},
-        <<"mthHist">> := #{DomainP1 := [Size | _]}
+        <<"bytesTransferred">> := ?TEST_DATA_SIZE,
+        <<"minHist">> := #{DomainP1 := [?TEST_DATA_SIZE | _]},
+        <<"hrHist">> := #{DomainP1 := [?TEST_DATA_SIZE | _]},
+        <<"dyHist">> := #{DomainP1 := [?TEST_DATA_SIZE | _]},
+        <<"mthHist">> := #{DomainP1 := [?TEST_DATA_SIZE | _]}
     }, WorkerP1, Tid, Config),
 
     ExpectedDistribution = [
@@ -416,8 +419,8 @@ transfers_should_be_ordered_by_timestamps(Config) ->
     {ok, FileObjectId2} = cdmi_id:guid_to_objectid(FileGuid2),
 
     % when
-    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
-    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File2}), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{size = Size}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{size = Size2}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File2}), ?ATTEMPTS),
     ExpectedDistribution = [#{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, Size]]}],
     ExpectedDistribution2 = [#{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, Size2]]}],
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
