@@ -489,6 +489,15 @@ read_should_synchronize_file(Config) ->
         rpc:call(W1, file_location, create, [RemoteLocation])
     ),
 
+    LocalLocationId = file_location:id(FileUuid, LocalProviderId),
+    %pretend that file_location size has been updated by dbsync
+    ?assertMatch(
+        {ok, _},
+        rpc:call(W1, file_location, update, [LocalLocationId, fun(FL) ->
+            {ok, FL#file_location{size = 10}}
+        end])
+    ),
+
     % mock rtransfer_link
     test_utils:mock_new(Workers, rtransfer_link, [passthrough]),
     test_utils:mock_expect(Workers, rtransfer_link, fetch,

@@ -38,7 +38,7 @@
 mtime_has_changed(undefined, _StorageFileCtx) ->
     true;
 mtime_has_changed(#document{
-    value = #storage_sync_info{last_synchronized_mtime = LastMtime}
+    value = #storage_sync_info{mtime = LastMtime}
 }, StorageFileCtx) ->
     {#statbuf{st_mtime = StMtime}, _} = storage_file_ctx:get_stat_buf(StorageFileCtx),
     case LastMtime of
