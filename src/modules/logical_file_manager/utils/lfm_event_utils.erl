@@ -25,11 +25,11 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv Emits file_written_event.
+%% Emits file_written_event.
 %% @end
 %%--------------------------------------------------------------------
 -spec emit_file_written(fslogic_worker:file_guid(),
-    fslogic_blocks:blocks(), non_neg_integer(),session:id()) ->
+    fslogic_blocks:blocks(), non_neg_integer() | undefined,session:id()) ->
     ok | {error, Reason :: term()}.
 emit_file_written(FileGuid, WrittenBlocks, FileSize, SessionId) ->
     WrittenSize = size_of_blocks(WrittenBlocks),
