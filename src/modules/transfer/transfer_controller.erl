@@ -23,8 +23,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([mark_finished/1, mark_failed/2
-]).
+-export([mark_finished/1, mark_failed/2]).
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
@@ -108,7 +107,7 @@ handle_cast({start_transfer, SessionId, TransferId, FileGuid, Callback,
         file_ctx:new_by_guid(FileGuid), undefined, TransferId),
     receive
         transfer_finished ->
-            {ok, _}  = transfer:mark_completed(TransferId),
+            {ok, _} = transfer:mark_completed(TransferId),
             notify_callback(Callback, InvalidateSourceReplica);
         {transfer_failed, Reason} ->
             ?error("Transfer ~p failed due to ~p", [TransferId, Reason]),

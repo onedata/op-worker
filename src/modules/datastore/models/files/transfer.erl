@@ -27,7 +27,7 @@
 -export([start/7, cancel/1, get_info/1, get/1, init/0, cleanup/0, restart/1,
     delete/1, update/2]).
 
--export([mark_active/1, mark_completed/1, mark_failed/1, mark_cancelled/1,
+-export([mark_enqueued/1, mark_dequeued/1, mark_completed/1, mark_failed/1, mark_cancelled/1,
     mark_active_invalidation/1, mark_completed_invalidation/1,
     mark_failed_invalidation/1, mark_cancelled_invalidation/1,
     increase_files_to_process_counter/2, increase_files_processed_counter/1,
@@ -37,18 +37,19 @@
 
 % list functions
 -export([
-    list_scheduled_transfers/1, list_scheduled_transfers/3,
-    list_past_transfers/1, list_past_transfers/3,
-    list_current_transfers/1, list_current_transfers/3,
-    list_scheduled_and_current_transfers/1, list_scheduled_and_current_transfers/3]).
+    list_scheduled_transfers/1, list_scheduled_transfers/3, list_scheduled_transfers/4,
+    list_past_transfers/1, list_past_transfers/3, list_past_transfers/4,
+    list_current_transfers/1, list_current_transfers/3, list_current_transfers/4]).
+
+-export([get_link_key/1, get_link_key/2]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_posthooks/0, get_record_version/0,
-    upgrade_record/2]).
+    upgrade_record/2, resolve_conflict/3]).
 
 -type id() :: binary().
 -type diff() :: datastore:diff(transfer()).
--type status() :: scheduled | skipped | active | completed | cancelled | failed.
+-type status() :: scheduled | enqueued | active | completed | failed | cancelled | skipped.
 -type callback() :: undefined | binary().
 -type transfer() :: #transfer{}.
 -type doc() :: datastore_doc:doc(transfer()).
@@ -145,6 +146,7 @@ start(SessionId, FileGuid, FilePath, SourceProviderId, TargetProviderId,
     session:add_transfer(SessionId, TransferId),
     ok = transfer_links:add_scheduled_transfer_link(TransferId, SpaceId, ScheduleTime),
     transfer_changes:handle(ToCreate#document{key = TransferId}),
+    transferred_file:report_transfer_start(FileGuid, TransferId, ScheduleTime),
     {ok, TransferId}.
 
 %%-------------------------------------------------------------------
@@ -188,11 +190,15 @@ restart(TransferId) ->
     FinishTime = transfer_utils:get_finish_time(TransferId),
     case update(TransferId, fun maybe_restart/1) of
         {ok, #document{value = #transfer{
+            file_uuid = FileUuid,
             space_id = SpaceId,
             schedule_time = NewScheduleTime
         }}} ->
             move_from_past_to_current_links_tree(TransferId, SpaceId,
                 FinishTime, NewScheduleTime),
+            transferred_file:report_transfer_start(
+                fslogic_uuid:uuid_to_guid(FileUuid, SpaceId), TransferId, NewScheduleTime
+            ),
             {ok, TransferId};
         {error, active_transfer} ->
             {error, active_transfer};
@@ -255,30 +261,56 @@ cancel(TransferId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Marks transfer as active and sets number of files to transfer to 1.
+%% Marks transfer as enqueued and sets number of files to transfer to 1.
 %% @end
 %%--------------------------------------------------------------------
--spec mark_active(id()) -> {ok, id()} | {error, term()}.
-mark_active(TransferId) ->
+-spec mark_enqueued(id()) -> {ok, id()} | {error, term()}.
+mark_enqueued(TransferId) ->
     Pid = transfer_utils:encode_pid(self()),
-    UpdateFun = fun(Transfer) ->
+    update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{
-            status = active,
+            status = enqueued,
             start_time = provider_logic:zone_time_seconds(),
             files_to_process = 1,
             pid = Pid
         }}
+    end).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Marks transfer as active and adds it to active transfers list.
+%% @end
+%%--------------------------------------------------------------------
+-spec mark_active(id(), od_space:id(), transfer:timestamp()) -> {ok, id()} | {error, term()}.
+mark_active(TransferId, SpaceId, ScheduleTime) ->
+    ok = transfer_links:add_active_transfer_link(TransferId, SpaceId, ScheduleTime),
+    UpdateFun = fun(Transfer) ->
+        {ok, Transfer#transfer{status = active}}
     end,
     case update(TransferId, UpdateFun) of
-        {ok, #document{value = #transfer{
-            space_id = SpaceId,
-            schedule_time = ScheduleTime
-        }}} ->
-            ok = transfer_links:add_active_transfer_link(TransferId, SpaceId, ScheduleTime),
+        {ok, _} ->
             {ok, TransferId};
         Error ->
+            ok = transfer_links:delete_active_transfer_link(TransferId, SpaceId, ScheduleTime),
             Error
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Marks transfer as dequeued and removes it from scheduled transfers list.
+%% @end
+%%--------------------------------------------------------------------
+-spec mark_dequeued(id()) -> {ok, id()} | {error, term()}.
+mark_dequeued(TransferId) ->
+    UpdateFun = fun(Transfer) ->
+        {ok, Transfer#transfer{enqueued = false}}
+    end,
+    OnSuccessfulUpdate = fun(#transfer{space_id = SpaceId, schedule_time = ScheduleTime}) ->
+        ok = transfer_links:delete_scheduled_transfer_link(TransferId,
+            SpaceId, ScheduleTime)
+    end,
+    update_and_run(TransferId, UpdateFun, OnSuccessfulUpdate).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -296,23 +328,15 @@ mark_completed(TransferId) ->
             end
         }}
     end,
-    case update(TransferId, UpdateFun) of
-        {ok, #document{
-            value = T = #transfer{
-                space_id = SpaceId,
-                schedule_time = ScheduleTime,
-                finish_time = FinishTime
-        }}} ->
-            case transfer_utils:is_migration(T) of
-                false ->
-                    move_from_current_to_past_links_tree(TransferId, SpaceId, ScheduleTime, FinishTime),
-                    {ok, TransferId};
-                true ->
-                    {ok, TransferId}
-            end;
-        Error ->
-            Error
-    end.
+    OnSuccessfulUpdate = fun(Transfer) ->
+        case transfer_utils:is_migration(Transfer) of
+            false ->
+                move_to_finished(TransferId, Transfer);
+            true ->
+                ok
+        end
+    end,
+    update_and_run(TransferId, UpdateFun, OnSuccessfulUpdate).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -335,18 +359,7 @@ mark_failed(TransferId) ->
                     InvalidationStatus
             end}}
     end,
-    case update(TransferId, UpdateFun) of
-        {ok, #document{
-            value = #transfer{
-                space_id = SpaceId,
-                schedule_time = ScheduleTime,
-                finish_time = FinishTime
-        }}}  ->
-            move_from_current_to_past_links_tree(TransferId, SpaceId, ScheduleTime, FinishTime),
-            {ok, TransferId};
-        Error ->
-            Error
-    end.
+    update_and_move_to_finished(TransferId, UpdateFun).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -366,19 +379,7 @@ mark_cancelled(TransferId) ->
             end}
         }
     end,
-    case transfer:update(TransferId, UpdateFun) of
-        {ok, #document{
-            value = #transfer{
-                space_id = SpaceId,
-                finish_time = FinishTime,
-                schedule_time = ScheduleTime
-                }}} ->
-            move_from_current_to_past_links_tree(TransferId, SpaceId, ScheduleTime,
-                FinishTime),
-            {ok, TransferId};
-        Error ->
-            Error
-    end.
+    update_and_move_to_finished(TransferId, UpdateFun).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -408,23 +409,13 @@ mark_active_invalidation(TransferId) ->
 %%--------------------------------------------------------------------
 -spec mark_completed_invalidation(id()) -> {ok, id()} | {error, term()}.
 mark_completed_invalidation(TransferId) ->
-    case update(TransferId, fun(T) ->
+    UpdateFun = fun(T) ->
         {ok, T#transfer{
             invalidation_status = completed,
             finish_time = provider_logic:zone_time_seconds()
         }}
-    end) of
-        {ok, #document{
-            value = #transfer{
-                space_id = SpaceId,
-                schedule_time = ScheduleTime,
-                finish_time = FinishTime
-            }}} ->
-            move_from_current_to_past_links_tree(TransferId, SpaceId, ScheduleTime, FinishTime),
-            {ok, TransferId};
-        Error ->
-            Error
-    end.
+    end,
+    update_and_move_to_finished(TransferId, UpdateFun).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -433,20 +424,10 @@ mark_completed_invalidation(TransferId) ->
 %%--------------------------------------------------------------------
 -spec mark_failed_invalidation(id()) -> {ok, id()} | {error, term()}.
 mark_failed_invalidation(TransferId) ->
-    case transfer:update(TransferId, fun(T) ->
+    UpdateFun = fun(T) ->
         {ok, T#transfer{invalidation_status = failed}}
-    end) of
-        {ok, #document{
-            value = #transfer{
-                space_id = SpaceId,
-                schedule_time = ScheduleTime,
-                finish_time = FinishTime
-            }}} ->
-            move_from_current_to_past_links_tree(TransferId, SpaceId, ScheduleTime, FinishTime),
-            {ok, TransferId};
-        Error ->
-            Error
-    end.
+    end,
+    update_and_move_to_finished(TransferId, UpdateFun).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -455,20 +436,10 @@ mark_failed_invalidation(TransferId) ->
 %%--------------------------------------------------------------------
 -spec mark_cancelled_invalidation(id()) -> {ok, id()} | {error, term()}.
 mark_cancelled_invalidation(TransferId) ->
-    case transfer:update(TransferId, fun(Transfer) ->
+    UpdateFun = fun(Transfer) ->
         {ok, Transfer#transfer{invalidation_status = cancelled}}
-    end) of
-        {ok, #document{
-            value = #transfer{
-                space_id = SpaceId,
-                schedule_time = ScheduleTime,
-                finish_time = FinishTime
-            }}} ->
-            move_from_current_to_past_links_tree(TransferId, SpaceId, ScheduleTime, FinishTime),
-            {ok, TransferId};
-        Error ->
-            Error
-    end.
+    end,
+    update_and_move_to_finished(TransferId, UpdateFun).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -496,11 +467,25 @@ increase_files_to_process_counter(TransferId, FilesNum) ->
 increase_files_processed_counter(undefined) ->
     {ok, undefined};
 increase_files_processed_counter(TransferId) ->
-    update(TransferId, fun(Transfer) ->
+    UpdateFun = fun(Transfer) ->
         {ok, Transfer#transfer{
             files_processed = Transfer#transfer.files_processed + 1
         }}
-    end).
+    end,
+    OnSuccessfulUpdate = fun(Transfer) ->
+        case Transfer of
+            #transfer{status = enqueued, files_processed = 1, bytes_transferred = 0,
+                space_id = SpaceId, schedule_time = ScheduleTime
+            } ->
+                % Done only once per transfer, when first bytes are sent or when the
+                % first file is processed.
+                mark_active(TransferId, SpaceId, ScheduleTime),
+                ok;
+            _ ->
+                ok
+        end
+    end,
+    update_and_run(TransferId, UpdateFun, OnSuccessfulUpdate).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -509,12 +494,28 @@ increase_files_processed_counter(TransferId) ->
 %%--------------------------------------------------------------------
 -spec mark_failed_file_processing(id()) -> {ok, id()} | {error, term()}.
 mark_failed_file_processing(TransferId) ->
-    {ok, _} = ?extract_key(update(TransferId, fun(Transfer) ->
+    UpdateFun = fun(Transfer) ->
         {ok, Transfer#transfer{
             files_processed = Transfer#transfer.files_processed + 1,
             failed_files = Transfer#transfer.failed_files + 1
         }}
-    end)).
+    end,
+    OnSuccessfulUpdate = fun(Transfer) ->
+        case Transfer of
+            #transfer{
+                status = enqueued, files_processed = 1, bytes_transferred = 0,
+                space_id = SpaceId, schedule_time = ScheduleTime
+            } ->
+                % Done only once per transfer, when first bytes are sent or when the
+                % first file is processed.
+                mark_active(TransferId, SpaceId, ScheduleTime),
+                ok;
+            _ ->
+                ok
+        end
+    end,
+    update_and_run(TransferId, UpdateFun, OnSuccessfulUpdate).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -574,7 +575,7 @@ mark_data_transfer_finished(TransferId, SpaceId, BytesPerProvider) ->
     BytesTransferred = maps:fold(
         fun(_, Bytes, Acc) -> Acc + Bytes end, 0, BytesPerProvider
     ),
-    update(TransferId, fun(Transfer = #transfer{
+    UpdateFun = fun(Transfer = #transfer{
         bytes_transferred = OldBytes,
         start_time = StartTime,
         last_update = LastUpdateMap,
@@ -622,86 +623,146 @@ mark_data_transfer_finished(TransferId, SpaceId, BytesPerProvider) ->
                     )
                 }}
         end
-    end).
+    end,
+
+    OnSuccessfulUpdate = fun(Transfer) ->
+        case Transfer of
+            #transfer{
+                status = enqueued,
+                files_processed = 0, bytes_transferred = BytesTransferred,
+                space_id = SpaceId, schedule_time = ScheduleTime
+            } ->
+                % Done only once per transfer, when first bytes are sent or when the
+                % first file is processed.
+                mark_active(TransferId, SpaceId, ScheduleTime),
+                ok;
+            _ ->
+                ok
+        end
+    end,
+    update_and_run(TransferId, UpdateFun, OnSuccessfulUpdate).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv list_scheduled_transfers(SpaceId,  0, all).
+%% @equiv list_scheduled_transfers(SpaceId, 0, all).
 %% @end
 %%-------------------------------------------------------------------
--spec list_scheduled_transfers(od_space:id()) -> {ok, [id()]}.
+-spec list_scheduled_transfers(od_space:id()) ->
+    {ok, [{id(), transfer_links:link_key()}]}.
 list_scheduled_transfers(SpaceId) ->
-    list_scheduled_transfers(SpaceId,  0, all).
+    list_scheduled_transfers(SpaceId, 0, all).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% list_scheduled_transfers(SpaceId, undefined, Offset, Limit).
+%% @end
+%%-------------------------------------------------------------------
+-spec list_scheduled_transfers(od_space:id(), integer(), list_limit()) ->
+    {ok, [{id(), transfer_links:link_key()}]}.
+list_scheduled_transfers(SpaceId, Offset, Limit) ->
+    list_scheduled_transfers(SpaceId, undefined, Offset, Limit).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns all transfers for given space that are scheduled.
 %% @end
 %%-------------------------------------------------------------------
--spec list_scheduled_transfers(od_space:id(), non_neg_integer(), list_limit()) ->
-    {ok, [id()]}.
-list_scheduled_transfers(SpaceId, Offset, Limit) ->
+-spec list_scheduled_transfers(od_space:id(), undefined | id(),
+    integer(), list_limit()) -> {ok, [{id(), transfer_links:link_key()}]}.
+list_scheduled_transfers(SpaceId, StartId, Offset, Limit) ->
     {ok, transfer_links:list_transfers(SpaceId, ?SCHEDULED_TRANSFERS_KEY,
-        Offset, Limit)}.
+        StartId, Offset, Limit)}.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv list_active_transfers(SpaceId,  0, all).
+%% @equiv list_active_transfers(SpaceId, 0, all).
 %% @end
 %%-------------------------------------------------------------------
--spec list_current_transfers(od_space:id()) -> {ok, [id()]}.
+-spec list_current_transfers(od_space:id()) ->
+    {ok, [{id(), transfer_links:link_key()}]}.
 list_current_transfers(SpaceId) ->
-    list_current_transfers(SpaceId,  0, all).
+    list_current_transfers(SpaceId, 0, all).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv list_active_transfers(SpaceId, undefined, Offset, Limit).
+%% @end
+%%-------------------------------------------------------------------
+-spec list_current_transfers(od_space:id(), integer(), list_limit()) ->
+    {ok, [{id(), transfer_links:link_key()}]}.
+list_current_transfers(SpaceId, Offset, Limit) ->
+    list_current_transfers(SpaceId, undefined, Offset, Limit).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns all transfers for given space that are active.
 %% @end
 %%-------------------------------------------------------------------
--spec list_current_transfers(od_space:id(), non_neg_integer(), list_limit()) ->
-    {ok, [id()]}.
-list_current_transfers(SpaceId, Offset, Limit) ->
-    {ok, transfer_links:list_transfers(SpaceId, ?CURRENT_TRANSFERS_KEY, Offset, Limit)}.
+-spec list_current_transfers(od_space:id(), undefined | id(),
+    integer(), list_limit()) -> {ok, [{id(), transfer_links:link_key()}]}.
+list_current_transfers(SpaceId, StartId, Offset, Limit) ->
+    {ok, transfer_links:list_transfers(SpaceId, ?CURRENT_TRANSFERS_KEY,
+        StartId, Offset, Limit)}.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv list_past_transfers(SpaceId,  0, all).
+%% @equiv list_past_transfers(SpaceId, 0, all).
 %% @end
 %%-------------------------------------------------------------------
--spec list_past_transfers(od_space:id()) -> {ok, [id()]}.
+-spec list_past_transfers(od_space:id()) ->
+    {ok, [{id(), transfer_links:link_key()}]}.
 list_past_transfers(SpaceId) ->
-    list_past_transfers(SpaceId,  0, all).
+    list_past_transfers(SpaceId, 0, all).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv list_past_transfers(SpaceId, undefined, Offset, Limit).
+%% @end
+%%-------------------------------------------------------------------
+-spec list_past_transfers(od_space:id(), integer(), list_limit()) ->
+    {ok, [{id(), transfer_links:link_key()}]}.
+list_past_transfers(SpaceId, Offset, Limit) ->
+    list_past_transfers(SpaceId, undefined, Offset, Limit).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns all transfers for given space that are past.
 %% @end
 %%-------------------------------------------------------------------
--spec list_past_transfers(od_space:id(), non_neg_integer(), list_limit()) ->
-    {ok, [id()]}.
-list_past_transfers(SpaceId, Offset, Limit) ->
-    {ok, transfer_links:list_transfers(SpaceId, ?PAST_TRANSFERS_KEY,  Offset, Limit)}.
+-spec list_past_transfers(od_space:id(), undefined | id(),
+    integer(), list_limit()) -> {ok, [{id(), transfer_links:link_key()}]}.
+list_past_transfers(SpaceId, StartId, Offset, Limit) ->
+    {ok, transfer_links:list_transfers(SpaceId, ?PAST_TRANSFERS_KEY,
+        StartId, Offset, Limit)}.
 
-%%-------------------------------------------------------------------
+%%--------------------------------------------------------------------
 %% @doc
-%% @equiv list_scheduled_and_current_transfers(SpaceId,  0, all).
+%% Returns the link key for given transfer.
 %% @end
 %%-------------------------------------------------------------------
--spec list_scheduled_and_current_transfers(od_space:id()) -> {ok, [id()]}.
-list_scheduled_and_current_transfers(SpaceId) ->
-    list_scheduled_and_current_transfers(SpaceId, 0, all).
+-spec get_link_key(id() | doc()) ->
+    {ok, transfer_links:link_key()} | {error, term()}.
+get_link_key(TransferId) when is_binary(TransferId) ->
+    case ?MODULE:get(TransferId) of
+        {ok, Transfer} -> get_link_key(Transfer);
+        {error, Reason} -> {error, Reason}
+    end;
+get_link_key(#document{key = TransferId, value = Transfer}) ->
+    Timestamp = case transfer_utils:is_ongoing(Transfer) of
+        true -> Transfer#transfer.schedule_time;
+        false -> Transfer#transfer.finish_time
+    end,
+    get_link_key(TransferId, Timestamp).
 
-%%-------------------------------------------------------------------
+%%--------------------------------------------------------------------
 %% @doc
-%% Returns transfers from merged and sorted scheduled and current
-%% transfer list in given range.
+%% Returns the link key based on transfer id and schedule time.
 %% @end
 %%-------------------------------------------------------------------
--spec list_scheduled_and_current_transfers(od_space:id(), non_neg_integer(),
-    list_limit()) -> {ok, [id()]}.
-list_scheduled_and_current_transfers(SpaceId, Offset, Limit) ->
-    {ok, transfer_links:list_aggregated_transfers(SpaceId,
-        ?SCHEDULED_TRANSFERS_KEY, ?CURRENT_TRANSFERS_KEY,  Offset, Limit)}.
+-spec get_link_key(id(), timestamp()) ->
+    {ok, transfer_links:link_key()} | {error, term()}.
+get_link_key(TransferId, Timestamp) ->
+    {ok, transfer_links:link_key(TransferId, Timestamp)}.
 
 %%%===================================================================
 %%% Internal functions
@@ -726,6 +787,53 @@ create(Doc) ->
 -spec update(id(), diff()) -> {ok, doc()} | {error, term()}.
 update(TransferId, Diff) ->
     datastore_model:update(?CTX, TransferId, Diff).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Updates transfer doc and evaluates given code upon success.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_and_run(id(), diff(), fun((transfer()) -> ok)) ->
+    {ok, id()} | {error, term()}.
+update_and_run(TransferId, UpdateFun, OnSuccessfulUpdate) ->
+    case update(TransferId, UpdateFun) of
+        {ok, #document{value = Transfer}} ->
+            ok = OnSuccessfulUpdate(Transfer),
+            {ok, TransferId};
+        {error, Error} ->
+            {error, Error}
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Updates transfer doc and moves the transfer to finished.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_and_move_to_finished(id(), diff()) ->
+    {ok, id()} | {error, term()}.
+update_and_move_to_finished(TransferId, UpdateFun) ->
+    OnSuccessfulUpdate = fun(Transfer) ->
+        move_to_finished(TransferId, Transfer)
+    end,
+    update_and_run(TransferId, UpdateFun, OnSuccessfulUpdate).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Moves the transfer link from current to past tree and reports transfer finish
+%% for the root file.
+%% @end
+%%--------------------------------------------------------------------
+-spec move_to_finished(id(), transfer()) -> ok.
+move_to_finished(TransferId, #transfer{file_uuid = FileUuid, space_id = SpaceId,
+    schedule_time = ScheduleTime, finish_time = FinishTime
+}) ->
+    transferred_file:report_transfer_finish(
+        fslogic_uuid:uuid_to_guid(FileUuid, SpaceId), TransferId, ScheduleTime
+    ),
+    move_from_current_to_past_links_tree(TransferId, SpaceId, ScheduleTime, FinishTime).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -974,7 +1082,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    6.
+    7.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1152,6 +1260,36 @@ get_record_struct(6) ->
         {hr_hist, #{string => [integer]}},
         {dy_hist, #{string => [integer]}},
         {mth_hist, #{string => [integer]}}
+    ]};
+get_record_struct(7) ->
+    {record, [
+        {file_uuid, string},
+        {space_id, string},
+        {user_id, string},
+        {path, string},
+        {callback, string},
+        {enqueued, atom},
+        {status, atom},
+        {invalidation_status, atom},
+        {schedule_provider_id, string},
+        {source_provider_id, string},
+        {target_provider_id, string},
+        {invalidate_source_replica, boolean},
+        {pid, string}, %todo VFS-3657
+        {files_to_process, integer},
+        {files_processed, integer},
+        {failed_files, integer},
+        {files_transferred, integer},
+        {bytes_transferred, integer},
+        {files_invalidated, integer},
+        {schedule_time, integer},
+        {start_time, integer},
+        {finish_time, integer},
+        {last_update, #{string => integer}},
+        {min_hist, #{string => [integer]}},
+        {hr_hist, #{string => [integer]}},
+        {dy_hist, #{string => [integer]}},
+        {mth_hist, #{string => [integer]}}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -1242,4 +1380,61 @@ upgrade_record(5, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, Status,
         FailedFiles, FilesTransferred, BytesTransferred, FilesInvalidated,
         StartTime, StartTime, FinishTime, LastUpdate, MinHist, HrHist, DyHist,
         MthHist
+    }};
+upgrade_record(6, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, Status,
+    InvalidationStatus, SchedulingProviderId, SourceProviderId, TargetProviderId,
+    InvalidateSourceReplica, Pid, FilesToProcess, FilesProcessed,
+    FailedFiles, FilesTransferred, BytesTransferred, FilesInvalidated,
+    StartTime, StartTime, FinishTime, LastUpdate, MinHist, HrHist, DyHist,
+    MthHist
+}) ->
+    {7, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, true, Status,
+        InvalidationStatus, SchedulingProviderId, SourceProviderId, TargetProviderId,
+        InvalidateSourceReplica, Pid, FilesToProcess, FilesProcessed,
+        FailedFiles, FilesTransferred, BytesTransferred, FilesInvalidated,
+        StartTime, StartTime, FinishTime, LastUpdate, MinHist, HrHist, DyHist,
+        MthHist
     }}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Provides custom resolution of remote, concurrent modification conflicts.
+%% Should return 'default' if default conflict resolution should be applied.
+%% Should return 'ignore' if new change is obsolete.
+%% Should return '{Modified, Doc}' when custom conflict resolution has been
+%% applied, where Modified defines whether next revision should be generated.
+%% If Modified is set to 'false' conflict resolution outcome will be saved as
+%% it is.
+%% =============
+%% This conflict resolution promotes the field enqueued = false in all cases
+%% in order to avoid marking a transfer dequeued multiple times.
+%% @end
+%%--------------------------------------------------------------------
+-spec resolve_conflict(datastore_model:ctx(), doc(), doc()) ->
+    {boolean(), doc()} | ignore | default.
+resolve_conflict(_Ctx, NewDoc, PreviousDoc) ->
+    case {NewDoc#document.value, PreviousDoc#document.value} of
+        {#transfer{enqueued = Enqueued}, #transfer{enqueued = Enqueued}} ->
+            % Enqueued field did not change, just take the highest rev
+            default;
+
+        {T = #transfer{enqueued = true}, #transfer{enqueued = false}} ->
+            #document{revs = [NewRev | _]} = NewDoc,
+            #document{revs = [PreviousRev | _]} = PreviousDoc,
+            case datastore_utils:is_greater_rev(NewRev, PreviousRev) of
+                true ->
+                    {true, NewDoc#document{value = T#transfer{enqueued = false}}};
+                false ->
+                    {false, PreviousDoc}
+            end;
+
+        {#transfer{enqueued = false}, T = #transfer{enqueued = true}} ->
+            #document{revs = [NewRev | _]} = NewDoc,
+            #document{revs = [PreviousRev | _]} = PreviousDoc,
+            case datastore_utils:is_greater_rev(NewRev, PreviousRev) of
+                true ->
+                    {true, NewDoc};
+                false ->
+                    {false, PreviousDoc#document{value = T#transfer{enqueued = false}}}
+            end
+    end.

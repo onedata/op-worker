@@ -119,13 +119,13 @@ get_file_distribution(_UserCtx, FileCtx) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Marks transfer as active and adds task for replication to worker_pool.
+%% Marks transfer as enqueued and adds task for replication to worker_pool.
 %% @end
 %%-------------------------------------------------------------------
 -spec start_transfer(user_ctx:ctx(), file_ctx:ctx(),
     undefined | fslogic_blocks:block(), undefined | transfer:id()) -> ok.
 start_transfer(UserCtx, FileCtx, Block, TransferId) ->
-    {ok, _} = transfer:mark_active(TransferId),
+    {ok, _} = transfer:mark_enqueued(TransferId),
     enqueue_file_replication(UserCtx, FileCtx, Block, TransferId).
 
 %%--------------------------------------------------------------------

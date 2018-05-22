@@ -507,6 +507,7 @@
     user_id :: undefined | od_user:id(),
     path :: undefined | file_meta:path(),
     callback :: undefined | transfer:callback(),
+    enqueued = true :: boolean(),
     status :: undefined | transfer:status(),
     invalidation_status :: undefined | transfer:status(),
     scheduling_provider_id :: od_provider:id(),
@@ -541,6 +542,12 @@
     hr_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
     dy_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
     mth_hist = #{} :: maps:map(od_provider:id(), histogram:histogram())
+}).
+
+%% Model that tracks what files are currently transferred
+-record(transferred_file, {
+    ongoing_transfers = ordsets:new() :: ordsets:ordset(transferred_file:entry()),
+    past_transfers = ordsets:new() :: ordsets:ordset(transferred_file:entry())
 }).
 
 %% Model that holds aggregated statistics about transfers featuring

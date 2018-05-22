@@ -24,12 +24,6 @@
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/privileges.hrl").
 
--define(CURRENT_TRANSFERS_PREFIX, <<"current">>).
--define(SCHEDULED_TRANSFERS_PREFIX, <<"scheduled">>).
--define(COMPLETED_TRANSFERS_PREFIX, <<"completed">>).
--define(MAX_TRANSFERS_TO_LIST, application:get_env(?APP_NAME, max_transfers_to_list, all)).
--define(TRANSFERS_LIST_OFFSET, application:get_env(?APP_NAME, transfers_list_offset, 0)).
-
 %% API
 -export([init/0, terminate/0]).
 -export([find_record/2, find_all/1, query/2, query_record/2]).
@@ -120,8 +114,6 @@ find_record(PermissionsRecord, RecordId) ->
                     {ok, space_group_list_record(RecordId)};
                 <<"space-provider-list">> ->
                     {ok, space_provider_list_record(RecordId)};
-                <<"space-transfer-list">> ->
-                    {ok, space_transfer_list_record(RecordId)};
                 <<"space-on-the-fly-transfer-list">> ->
                     {ok, space_on_the_fly_transfer_list_record(RecordId)};
                 <<"space-transfer-stat">> ->
@@ -373,9 +365,6 @@ space_record(SpaceId, HasViewPrivileges) ->
     % providers and transfers.
     {
         RelationWithViewPrivileges,
-        CurrentTransferListId,
-        ScheduledTransferListId, 
-        CompletedTransferListId,
         TransferOnTheFlyStatId,
         TransferJobStatId,
         TransferAllStatId,
@@ -397,12 +386,6 @@ space_record(SpaceId, HasViewPrivileges) ->
             {
                 SpaceId,
                 op_gui_utils:ids_to_association(
-                    ?CURRENT_TRANSFERS_PREFIX, SpaceId),
-                op_gui_utils:ids_to_association(
-                    ?SCHEDULED_TRANSFERS_PREFIX, SpaceId),
-                op_gui_utils:ids_to_association(
-                    ?COMPLETED_TRANSFERS_PREFIX, SpaceId),
-                op_gui_utils:ids_to_association(
                     ?ON_THE_FLY_TRANSFERS_TYPE, <<"undefined">>, SpaceId),
                 op_gui_utils:ids_to_association(
                     ?JOB_TRANSFERS_TYPE, <<"undefined">>, SpaceId),
@@ -422,9 +405,6 @@ space_record(SpaceId, HasViewPrivileges) ->
         {<<"userList">>, RelationWithViewPrivileges},
         {<<"groupList">>, RelationWithViewPrivileges},
         {<<"providerList">>, RelationWithViewPrivileges},
-        {<<"currentTransferList">>, CurrentTransferListId},
-        {<<"scheduledTransferList">>, ScheduledTransferListId},
-        {<<"completedTransferList">>, CompletedTransferListId},
         {<<"onTheFlyTransferList">>, RelationWithViewPrivileges},
         {<<"transferOnTheFlyStat">>, TransferOnTheFlyStatId},
         {<<"transferJobStat">>, TransferJobStatId},
@@ -491,36 +471,6 @@ space_provider_list_record(SpaceId) ->
     [
         {<<"id">>, SpaceId},
         {<<"list">>, Providers}
-    ].
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns a client-compliant space-transfer-list record based on space id.
-%% @end
-%%--------------------------------------------------------------------
--spec space_transfer_list_record(RecordId :: binary()) -> proplists:proplist().
-space_transfer_list_record(RecordId) ->
-    {Prefix, SpaceId} = op_gui_utils:association_to_ids(RecordId),
-    {ok, Transfers} = case Prefix of
-        ?CURRENT_TRANSFERS_PREFIX ->
-            transfer:list_current_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET,
-                ?MAX_TRANSFERS_TO_LIST);
-        ?SCHEDULED_TRANSFERS_PREFIX ->
-            {ok, Scheduled} = transfer:list_scheduled_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET,
-               ?MAX_TRANSFERS_TO_LIST),
-            {ok, Current} = transfer:list_current_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET,
-               ?MAX_TRANSFERS_TO_LIST),
-            {ok, Completed} = transfer:list_past_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET,
-               ?MAX_TRANSFERS_TO_LIST),
-            {ok, (Scheduled -- Current) -- Completed};
-        ?COMPLETED_TRANSFERS_PREFIX ->
-            transfer:list_past_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET,
-                ?MAX_TRANSFERS_TO_LIST)
-    end,
-    [
-        {<<"id">>, RecordId},
-        {<<"list">>, Transfers}
     ].
 
 

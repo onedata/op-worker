@@ -47,13 +47,13 @@ generate(Recipient) ->
 generate(undefined, Issuer) ->
     {ok, #message_id{
         issuer = Issuer,
-        id = integer_to_binary(crypto:rand_uniform(0, ?INT64)),
+        id = integer_to_binary(rand:uniform(?INT64 + 1) - 1),
         recipient = undefined
     }};
 generate(Recipient, Issuer) ->
     {ok, #message_id{
         issuer = Issuer,
-        id = integer_to_binary(crypto:rand_uniform(0, ?INT64)),
+        id = integer_to_binary(rand:uniform(?INT64 + 1) - 1),
         recipient = term_to_binary(Recipient)
     }}.
 

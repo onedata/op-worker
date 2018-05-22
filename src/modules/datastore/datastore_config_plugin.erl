@@ -59,6 +59,7 @@ get_models() -> [
     space_transfer_stats,
     space_transfer_stats_cache,
     transfer,
+    transferred_file,
     autocleaning,
     dir_location,
     storage_sync_monitoring,
