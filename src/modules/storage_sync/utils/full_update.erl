@@ -56,7 +56,7 @@ run(Job = #space_strategy_job{
         storage_sync_monitoring:mark_updated_file(SpaceId, StorageId)
     catch
         Error:Reason ->
-            ?error("full_update:run failed for file: ~p due to ~p",
+            ?error_stacktrace("full_update:run failed for file: ~p due to ~p",
                 [FileName, {Error, Reason}]),
             storage_sync_monitoring:mark_failed_file(SpaceId, StorageId)
 

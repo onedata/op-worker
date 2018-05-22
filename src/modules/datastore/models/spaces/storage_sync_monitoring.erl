@@ -104,9 +104,10 @@ ensure_created(SpaceId, StorageId) ->
     {ok, doc()}.
 prepare_new_import_scan(SpaceId, StorageId, Timestamp) ->
     {ok, _} = update(SpaceId, StorageId, fun(SSM) ->
-        SSM2 = increment_queue_length_histograms(SSM, Timestamp, 1),
-        SSM3 = reset_control_counters(SSM2),
-        {ok, SSM3#storage_sync_monitoring{
+        SSM2 = reset_queue_length_histograms(SSM, Timestamp),
+        SSM3 = increment_queue_length_histograms(SSM2, Timestamp, 1),
+        SSM4 = reset_control_counters(SSM3),
+        {ok, SSM4#storage_sync_monitoring{
             to_process = 1,
             import_start_time = Timestamp
         }}
@@ -126,9 +127,10 @@ prepare_new_import_scan(SpaceId, StorageId, Timestamp) ->
     {ok, doc()}.
 prepare_new_update_scan(SpaceId, StorageId, Timestamp) ->
     {ok, _} = update(SpaceId, StorageId, fun(SSM) ->
-        SSM2 = increment_queue_length_histograms(SSM, Timestamp, 1),
-        SSM3 = reset_control_counters(SSM2),
-        {ok, SSM3#storage_sync_monitoring{
+        SSM2 = reset_queue_length_histograms(SSM, Timestamp),
+        SSM3 = increment_queue_length_histograms(SSM2, Timestamp, 1),
+        SSM4 = reset_control_counters(SSM3),
+        {ok, SSM4#storage_sync_monitoring{
             to_process = 1,
             last_update_start_time = Timestamp
         }}
@@ -709,6 +711,30 @@ get_unhandled_jobs_value(#storage_sync_monitoring{
     failed = Failed
 }) ->
     ToProcess - Imported - Updated - Deleted - OtherProcessed - Failed.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function ensures that queue_length histograms
+%% (which are cumulative histograms) won't accumulate data from previous
+%% scans.
+%% @end
+%%-------------------------------------------------------------------
+-spec reset_queue_length_histograms(storage_sync_monitoring(),
+    non_neg_integer()) -> storage_sync_monitoring().
+reset_queue_length_histograms(SSM = #storage_sync_monitoring{
+    queue_length_min_hist = QueueLengthMinHist,
+    queue_length_hour_hist = QueueLengthHourHist,
+    queue_length_day_hist = QueueLengthDayHist
+}, Timestamp) ->
+    QueueLengthMinHist2 = time_slot_histogram:reset_cumulative(QueueLengthMinHist, Timestamp),
+    QueueLengthHourHist2 = time_slot_histogram:reset_cumulative(QueueLengthHourHist, Timestamp),
+    QueueLengthDayHist2 = time_slot_histogram:reset_cumulative(QueueLengthDayHist, Timestamp),
+    SSM#storage_sync_monitoring{
+        queue_length_min_hist = QueueLengthMinHist2,
+        queue_length_hour_hist = QueueLengthHourHist2,
+        queue_length_day_hist = QueueLengthDayHist2
+    }.
 
 %%-------------------------------------------------------------------
 %% @private

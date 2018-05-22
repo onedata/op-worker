@@ -986,7 +986,7 @@ upgrade_record(2, {?MODULE, Name, Type, Mode, Owner, Size, Version, IsScope,
     Scope, ProviderId, LinkValue, Shares}
 ) ->
     {3, {?MODULE, Name, Type, Mode, Owner, Size, Version, IsScope,
-        Scope, ProviderId, LinkValue, Shares, false, #storage_sync_info{}}};
+        Scope, ProviderId, LinkValue, Shares, false, {storage_sync_info, #{}, undefined}}};
 upgrade_record(3, {?MODULE, Name, Type, Mode, Owner, Size, Version, IsScope,
     Scope, ProviderId, LinkValue, Shares, Deleted, StorageSyncInfo}
 ) ->
