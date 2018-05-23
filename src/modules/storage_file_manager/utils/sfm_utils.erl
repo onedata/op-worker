@@ -368,7 +368,12 @@ mkdir_and_maybe_chown(SFMHandle, Mode, FileCtx, ShouldChown) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     case storage_file_manager:mkdir(SFMHandle, Mode, false) of
         ok ->
-            {ok, _} = dir_location:mark_dir_created_on_storage(FileUuid, SpaceId);
+            case dir_location:mark_dir_created_on_storage(FileUuid, SpaceId) of
+                {ok, _} -> ok;
+                % helpers on ceph and s3 always return ok on mkdir operation
+                % so we have to handle situation when doc is already in db
+                {error, already_exists} -> ok
+            end;
         {error, ?EEXIST} -> ok
     end,
     case ShouldChown of
