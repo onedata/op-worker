@@ -35,7 +35,7 @@
     increment/2, increment/3,
     decrement/2, decrement/3,
     get_histogram_values/1, get_last_update/1,
-    get_sum/1, get_average/1, get_size/1, new_cumulative/3]).
+    get_sum/1, get_average/1, get_size/1, new_cumulative/3, reset_cumulative/2]).
 
 %%%===================================================================
 %%% API
@@ -136,6 +136,22 @@ increment(TSH = #time_slot_histogram{type = Type}, CurrentTimestamp, N) ->
         last_update_time = CurrentTimestamp,
         values = increment_int(ShiftedHistogram, Type, N)
     }.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% This function shifts cumulative histogram and fills shifted slots
+%% with zeros.
+%% NOTE!!! This function must be used carefully as it's unusual for
+%% cumulative histogram to fill new slots with zeros instead of previous
+%% values.
+%% e.g. it can be used to reset cumulative histograms after restarts
+%% @end
+%%--------------------------------------------------------------------
+-spec reset_cumulative(histogram(), CurrentTimestamp :: timestamp()) ->
+    histogram().
+reset_cumulative(TSH = #time_slot_histogram{type = cumulative}, CurrentTimestamp) ->
+    TSH2 = increment(TSH#time_slot_histogram{type = normal}, CurrentTimestamp, 0),
+    TSH2#time_slot_histogram{type = cumulative}.
 
 %%--------------------------------------------------------------------
 %% @equiv decrement(Histogram, CurrentTimestamp, 1).

@@ -425,7 +425,13 @@ generate_jobs_for_subfiles(Job = #space_strategy_job{
                         AccIn
                 end
         catch
-            error:?ENOENT ->
+            throw:?ENOENT ->
+                FileId = storage_file_ctx:get_file_id_const(ChildStorageCtx),
+                {ParentPath, _} = file_ctx:get_canonical_path(FileCtx),
+                ?warning_stacktrace(
+                    "File ~p not found when generating jobs for syncing children of ~p",
+                    [FileId, ParentPath]
+                ),
                 AccIn
         end
     end, {[], []}, ChildrenStorageCtxsBatch).

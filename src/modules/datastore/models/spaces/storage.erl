@@ -373,7 +373,6 @@ get_record_struct(5) ->
         {readonly, boolean},
         {luma_config, {record, [
             {url, string},
-            {cache_timeout, integer},
             {api_key, string}
         ]}}
     ]}.
