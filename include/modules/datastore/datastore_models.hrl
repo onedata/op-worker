@@ -546,6 +546,7 @@
 
 %% Model that tracks what files are currently transferred
 -record(transferred_file, {
+    last_update = 0 :: non_neg_integer(),
     ongoing_transfers = ordsets:new() :: ordsets:ordset(transferred_file:entry()),
     past_transfers = ordsets:new() :: ordsets:ordset(transferred_file:entry())
 }).

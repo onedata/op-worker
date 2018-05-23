@@ -2843,6 +2843,11 @@ track_transferred_files(Config) ->
     ?assertMatch([], get_ongoing_transfers_for_file(Provider1, FileGuid), 60),
     ?assertMatch([], get_ongoing_transfers_for_file(Provider2, FileGuid), 60),
 
+    % Check if record cleanup works as expected
+    rpc:call(Provider1, transferred_file, report_transfer_start, [FileGuid, Transfer2, ScheduleTime + 50]),
+    rpc:call(Provider1, transferred_file, clean_up, [FileGuid]),
+    ?assertMatch([], get_ongoing_transfers_for_file(Provider1, FileGuid)),
+
     ok.
 
 %%%===================================================================

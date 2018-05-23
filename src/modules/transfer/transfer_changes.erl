@@ -47,7 +47,7 @@ handle(TransferDoc = #document{value = #transfer{status = scheduled}}) ->
 handle(TransferDoc = #document{value = #transfer{
     status = Status,
     enqueued = true
-}}) when Status =/= enqueued ->
+}}) when Status =/= enqueued -> % scheduled is covered by top function case
     handle_dequeued_transfer(TransferDoc);
 handle(TransferDoc = #document{
     value = #transfer{

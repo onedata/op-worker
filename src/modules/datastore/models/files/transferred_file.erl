@@ -20,6 +20,7 @@
 % API
 -export([report_transfer_start/3, report_transfer_finish/3]).
 -export([get_ongoing_transfers/1]).
+-export([clean_up/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -33,6 +34,10 @@
 -type entry() :: binary(). % Concatenation of schedule time and transfer id
 
 -export_type([id/0, doc/0, entry/0]).
+
+% Inactivity time (in seconds) after which the history of past transfers will
+% be erased.
+-define(HISTORY_CLEANING_DELAY, 2592000). % 1 month
 
 -define(CTX, #{
     model => ?MODULE,
@@ -54,17 +59,32 @@
 report_transfer_start(FileGuid, TransferId, ScheduleTime) ->
     SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
     Entry = entry(TransferId, ScheduleTime),
-    Diff = fun(Record = #transferred_file{ongoing_transfers = Ongoing, past_transfers = Past}) ->
+    Diff = fun(Record) ->
+        #transferred_file{
+            last_update = LastUpdate,
+            ongoing_transfers = Ongoing,
+            past_transfers = Past
+        } = Record,
+
+        % Erase past transfers if HISTORY_CLEANING_DELAY has passed
+        NewPast = case provider_logic:zone_time_seconds() - LastUpdate > ?HISTORY_CLEANING_DELAY of
+            true -> ordsets:new();
+            false -> Past
+        end,
+
         % Filter out entries for the same transfer but with other schedule time
         % and move them to past (the other entries are past runs of the transfer
         % that were unsuccessful).
         {Duplicates, OtherEntries} = find_all_duplicates(TransferId, Ongoing),
+
         {ok, Record#transferred_file{
+            last_update = provider_logic:zone_time_seconds(),
             ongoing_transfers = ordsets:add_element(Entry, OtherEntries),
-            past_transfers = ordsets:union(Duplicates, Past)
+            past_transfers = ordsets:union(Duplicates, NewPast)
         }}
     end,
     Default = #document{key = id(FileGuid), scope = SpaceId, value = #transferred_file{
+        last_update = provider_logic:zone_time_seconds(),
         ongoing_transfers = ordsets:from_list([Entry])
     }},
     case datastore_model:update(?CTX, id(FileGuid), Diff, Default) of
@@ -89,11 +109,13 @@ report_transfer_finish(FileGuid, TransferId, ScheduleTime) ->
             past_transfers = PastTransfers
         } = Record,
         {ok, Record#transferred_file{
+            last_update = provider_logic:zone_time_seconds(),
             ongoing_transfers = ordsets:del_element(Entry, OngoingTransfers),
             past_transfers = ordsets:add_element(Entry, PastTransfers)
         }}
     end,
     Default = #document{key = id(FileGuid), scope = SpaceId, value = #transferred_file{
+        last_update = provider_logic:zone_time_seconds(),
         past_transfers = ordsets:from_list([Entry])
     }},
     case datastore_model:update(?CTX, id(FileGuid), Diff, Default) of
@@ -117,6 +139,17 @@ get_ongoing_transfers(FileGuid) ->
         {error, _} ->
             {ok, []}
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Cleans up all information about transfers for given FileGuid.
+%% @end
+%%--------------------------------------------------------------------
+-spec clean_up(fslogic_worker:file_guid()) -> ok | {error, term()}.
+clean_up(FileGuid) ->
+    datastore_model:delete(?CTX, id(FileGuid)).
+
 
 %%%===================================================================
 %%% Internal functions
@@ -208,6 +241,7 @@ get_record_version() ->
     datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
+        {last_update, integer},
         {ongoing_tranfers, [string]},
         {past_tranfers, [string]}
     ]}.
