@@ -307,7 +307,7 @@ transfer_record(LinkAndTransferId, Doc) ->
     {ok, [
         {<<"id">>, LinkAndTransferId},
         {<<"migration">>, IsInvalidation},
-        {<<"migrationSource">>, SourceProviderId},
+        {<<"migrationSource">>, gs_protocol:undefined_to_null(SourceProviderId)},
         {<<"destination">>, utils:ensure_defined(DestinationProviderId, undefined, null)},
         {<<"isOngoing">>, IsOngoing},
         {<<"space">>, SpaceId},
