@@ -1179,7 +1179,7 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
 
     {ok, #document{key = StorageId}} = fslogic_storage:select_storage(SpaceId),
     FileId = Path,
-    Location = #file_location{
+    Location0 = #file_location{
         blocks = [#file_block{offset = 0, size = 3}],
         size = 3,
         provider_id = oneprovider:get_id(),
@@ -1189,13 +1189,15 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
         space_id = SpaceId,
         storage_file_created = true
     },
+    LocationDoc0 = #document{
+        key = LocId,
+        value = Location0,
+        scope = SpaceId
+    },
+    LocationDoc = version_vector:bump_version(LocationDoc0),
 
     Ctx = datastore_model_default:get_ctx(file_location),
-    {ok, _} = datastore_model:save(Ctx, #document{
-        key = LocId,
-        value = Location,
-        scope = SpaceId
-    }),
+    {ok, _} = datastore_model:save(Ctx, LocationDoc),
 
     LeafLess = filename:dirname(FileId),
     {ok, #document{key = StorageId} = Storage} = fslogic_storage:select_storage(SpaceId),
