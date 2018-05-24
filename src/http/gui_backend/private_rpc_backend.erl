@@ -112,6 +112,22 @@ handle(<<"fetchMoreDirChildren">>, Props) ->
     file_data_backend:fetch_more_dir_children(SessionId, Props);
 
 %%--------------------------------------------------------------------
+%% Transfer related procedures
+%%--------------------------------------------------------------------
+
+handle(<<"getSpaceTransfers">>, Props) ->
+    SpaceId = proplists:get_value(<<"spaceId">>, Props),
+    Type = proplists:get_value(<<"type">>, Props),
+    StartFromId = proplists:get_value(<<"startFromId">>, Props, undefined),
+    Offset = proplists:get_value(<<"offset">>, Props, 0),
+    Limit = proplists:get_value(<<"size">>, Props, all),
+    transfer_data_backend:list_transfers(SpaceId, Type, StartFromId, Offset, Limit);
+
+handle(<<"getOngoingTransfersForFile">>, Props) ->
+    FileGuid = proplists:get_value(<<"fileId">>, Props),
+    transfer_data_backend:get_ongoing_transfers_for_file(FileGuid);
+
+%%--------------------------------------------------------------------
 %% Space related procedures
 %%--------------------------------------------------------------------
 handle(<<"getTokenUserJoinSpace">>, [{<<"spaceId">>, SpaceId}]) ->

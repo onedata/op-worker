@@ -518,9 +518,10 @@ space_transfer_list_record(RecordId) ->
             transfer:list_past_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET,
                 ?MAX_TRANSFERS_TO_LIST)
     end,
+    TransferIds = [op_gui_utils:ids_to_association(Link, Transfer) || {Transfer, Link} <- Transfers],
     [
         {<<"id">>, RecordId},
-        {<<"list">>, Transfers}
+        {<<"list">>, TransferIds}
     ].
 
 

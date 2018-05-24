@@ -5,7 +5,8 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module is responsible for handling changes on transfer documents.
+%%% This module is responsible for handling changes on transfer documents. The
+%%% callback is called for all changes - remote (dbsync) and local (posthook).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(transfer_changes).
@@ -43,6 +44,11 @@
 -spec handle(transfer:doc()) -> ok.
 handle(TransferDoc = #document{value = #transfer{status = scheduled}}) ->
     handle_scheduled_transfer(TransferDoc);
+handle(TransferDoc = #document{value = #transfer{
+    status = Status,
+    enqueued = true
+}}) when Status =/= enqueued -> % scheduled is covered by top function case
+    handle_dequeued_transfer(TransferDoc);
 handle(TransferDoc = #document{
     value = #transfer{
         status = TransferStatus,
@@ -61,16 +67,6 @@ handle(TransferDoc = #document{
         invalidation_status = active
     }}) ->
     handle_active_invalidation(TransferDoc);
-handle(TransferDoc = #document{
-    value = #transfer{
-        status = TransferStatus,
-        invalidate_source_replica = false
-    }}) when
-        TransferStatus =:= completed orelse
-        TransferStatus =:= failed orelse
-        TransferStatus =:= cancelled
-    ->
-    handle_finished_transfer(TransferDoc);
 handle(TransferDoc = #document{
     value = #transfer{
         invalidation_status = InvalidationStatus,
@@ -147,6 +143,21 @@ handle_scheduled_invalidation(TransferDoc = #document{
     ?run_if_is_self(SourceProviderId, fun() ->
         new_invalidation(TransferDoc)
     end).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Function called when transfer doc with status = active is modified.
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_dequeued_transfer(transfer:doc()) -> ok.
+handle_dequeued_transfer(#document{key = TransferId, value = #transfer{
+    scheduling_provider_id = SchedulingProviderId
+}}) ->
+    ?run_if_is_self(SchedulingProviderId, fun() ->
+        transfer:mark_dequeued(TransferId)
+    end),
+    ok.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -244,27 +255,6 @@ handle_active_invalidation(#document{
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Function called when transfer doc of finished transfer is modified.
-%% @end
-%%--------------------------------------------------------------------
--spec handle_finished_transfer(transfer:doc()) -> ok.
-handle_finished_transfer(#document{
-    key = TransferId,
-    value = #transfer{
-        space_id = SpaceId,
-        scheduling_provider_id = SchedulingProviderId,
-        invalidate_source_replica = false,
-        schedule_time = ScheduleTime
-}}) ->
-    % deleting finished replication from scheduled transfers tree
-    ?run_if_is_self(SchedulingProviderId, fun() ->
-        ok = transfer_links:delete_scheduled_transfer_link(TransferId,
-            SpaceId, ScheduleTime)
-    end).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
 %% Function called when transfer doc of finished invalidation is modified.
 %% @end
 %%--------------------------------------------------------------------
@@ -273,24 +263,17 @@ handle_finished_invalidation(#document{
     key = TransferId,
     value = #transfer{
         space_id = SpaceId,
-        scheduling_provider_id = SchedulingProviderId,
         target_provider_id = TargetProviderId,
         invalidate_source_replica = true,
         schedule_time = ScheduleTime
     }}) ->
-    case oneprovider:get_id() of
-        SchedulingProviderId ->
-            % deleting finished invalidation or migration from scheduled
-            % transfers tree
-            ok = transfer_links:delete_scheduled_transfer_link(TransferId,
-                SpaceId, ScheduleTime);
-        TargetProviderId ->
-            % deleting finished migration from active transfers tree
-            % ensure that there is no duplicate in active transfers tree
-            ok = transfer_links:delete_active_transfer_link(TransferId,
-                SpaceId, ScheduleTime);
-        _ -> ok
-    end.
+    ?run_if_is_self(TargetProviderId, fun() ->
+        % deleting finished migration from active transfers tree
+        % ensure that there is no duplicate in active transfers tree
+        ok = transfer_links:delete_active_transfer_link(TransferId,
+            SpaceId, ScheduleTime)
+    end).
+
 
 %%--------------------------------------------------------------------
 %% @private

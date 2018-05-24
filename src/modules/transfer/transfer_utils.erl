@@ -168,6 +168,7 @@ is_ongoing(TransferId) ->
 %%-------------------------------------------------------------------
 -spec is_transfer_ongoing(transfer:transfer()) -> boolean().
 is_transfer_ongoing(#transfer{status = scheduled}) -> true;
+is_transfer_ongoing(#transfer{status = enqueued}) -> true;
 is_transfer_ongoing(#transfer{status = skipped}) -> false;
 is_transfer_ongoing(#transfer{status = active}) -> true;
 is_transfer_ongoing(#transfer{status = completed}) -> false;
@@ -187,6 +188,7 @@ is_invalidation_ongoing(#transfer{invalidation_status = skipped}) -> false;
 is_invalidation_ongoing(#transfer{invalidation_status = cancelled}) -> false;
 is_invalidation_ongoing(#transfer{invalidation_status = failed}) -> false;
 is_invalidation_ongoing(#transfer{invalidation_status = scheduled}) -> true;
+is_invalidation_ongoing(#transfer{invalidation_status = enqueued}) -> true;
 is_invalidation_ongoing(#transfer{invalidation_status = active}) -> true.
 
 %%--------------------------------------------------------------------
