@@ -27,7 +27,7 @@
 -define(CURRENT_TRANSFERS_PREFIX, <<"current">>).
 -define(SCHEDULED_TRANSFERS_PREFIX, <<"scheduled">>).
 -define(COMPLETED_TRANSFERS_PREFIX, <<"completed">>).
--define(MAX_TRANSFERS_TO_LIST, application:get_env(?APP_NAME, max_transfers_to_list, all)).
+-define(MAX_TRANSFERS_TO_LIST, application:get_env(?APP_NAME, max_transfers_to_list, 250)).
 -define(TRANSFERS_LIST_OFFSET, application:get_env(?APP_NAME, transfers_list_offset, 0)).
 
 %% API
