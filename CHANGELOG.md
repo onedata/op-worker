@@ -4,6 +4,18 @@
 CHANGELOG
 ---------
 
+### 18.02.0-rc4
+
+* VFS-4510 fix finish_time not set for cancellation of replication and invalidation and for failed invalidation
+* Updating GUI, including: VFS-4487 * VFS-4487 Fixed not updating completed transfer stats
+* VFS-4510 fix active transfer being restarted after restart of provider
+* Updating GUI, including: VFS-4387 * VFS-4387 Fixed not updating current transfers stats if user not scrolled view
+* VFS-4509 improve error handling in storage_sync full_update procedure
+* VFS-4481 Setting space transfer list limit to 250
+* VFS-4314 Add cleaning of tranfers history for files upon deletion or long inactivity
+* VFS-4314 Implement backend for transfers pagination in GUI   * Implement API for GUI frontend to list transfers by ranges and negative offsets   * Improve behaviour of transfer links   * Add enqueued transfer state between scheduled and active   * Add transferred_file record for tracking which files are currently being transferred
+
+
 ### 18.02.0-rc3
 
 * VFS-4430 remove unused fields from space_strategies record, fix bug in storage_sync_monitoring:get_record_struct function
