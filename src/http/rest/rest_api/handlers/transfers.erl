@@ -163,8 +163,6 @@ restart_transfer(Req, State) ->
     case transfer:restart(Id) of
         {ok, _} ->
             ok;
-        {error, active_transfer} ->
-            throw(?ERROR_NOT_TARGET_PROVIDER);
         {error, not_target_provider} ->
             throw(?ERROR_NOT_TARGET_PROVIDER);
         {error, not_source_provider} ->

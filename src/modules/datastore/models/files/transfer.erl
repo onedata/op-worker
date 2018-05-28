@@ -161,8 +161,6 @@ restart_unfinished_transfers(SpaceId) ->
             case restart(TransferId) of
                 {ok, TransferId} ->
                     {[TransferId | Restarted0], Failed0};
-                {error, active_transfer} ->
-                    {Restarted0, Failed0};
                 {error, not_target_provider} ->
                     {Restarted0, Failed0};
                 {error, not_source_provider} ->
@@ -200,8 +198,6 @@ restart(TransferId) ->
                 fslogic_uuid:uuid_to_guid(FileUuid, SpaceId), TransferId, NewScheduleTime
             ),
             {ok, TransferId};
-        {error, active_transfer} ->
-            {error, active_transfer};
         {error, not_target_provider} ->
             {error, not_target_provider};
         {error, not_source_provider} ->
@@ -843,7 +839,7 @@ move_to_finished(TransferId, #transfer{file_uuid = FileUuid, space_id = SpaceId,
 %% If true, it resets transfer document.
 %% @end
 %%-------------------------------------------------------------------
--spec maybe_restart(transfer()) -> {ok, id()} | {error, term()}.
+-spec maybe_restart(transfer()) -> {ok, transfer()} | {error, term()}.
 maybe_restart(Transfer) ->
     case {transfer_utils:is_invalidation(Transfer), transfer_utils:is_migration(Transfer)} of
         {false, false} ->
@@ -864,7 +860,7 @@ maybe_restart(Transfer) ->
 %% replication transfer. If true, it resets transfer document.
 %% @end
 %%-------------------------------------------------------------------
--spec maybe_reset_replication_record(transfer()) -> {ok, id()} | {error, term()}.
+-spec maybe_reset_replication_record(transfer()) -> {ok, transfer()} | {error, term()}.
 maybe_reset_replication_record(Transfer = #transfer{
     status = Status,
     invalidation_status = InvalidationStatus,
@@ -872,27 +868,22 @@ maybe_reset_replication_record(Transfer = #transfer{
 }) ->
     case oneprovider:get_id() =:= TargetProviderId of
         true ->
-            case transfer_utils:is_active(Transfer) of
-                true ->
-                    {error, active_transfer};
-                _ ->
-                    {ok, Transfer#transfer{
-                        status = reset_status(Status),
-                        invalidation_status = reset_status(InvalidationStatus),
-                        files_to_process = 0,
-                        files_processed = 0,
-                        failed_files = 0,
-                        files_transferred = 0,
-                        bytes_transferred = 0,
-                        pid = undefined,
-                        schedule_time = provider_logic:zone_time_seconds(),
-                        last_update = #{},
-                        min_hist = #{},
-                        hr_hist = #{},
-                        dy_hist = #{},
-                        mth_hist = #{}
-                    }}
-            end;
+            {ok, Transfer#transfer{
+                    status = reset_status(Status),
+                    invalidation_status = reset_status(InvalidationStatus),
+                    files_to_process = 0,
+                    files_processed = 0,
+                    failed_files = 0,
+                    files_transferred = 0,
+                    bytes_transferred = 0,
+                    pid = undefined,
+                    schedule_time = provider_logic:zone_time_seconds(),
+                    last_update = #{},
+                    min_hist = #{},
+                    hr_hist = #{},
+                    dy_hist = #{},
+                    mth_hist = #{}
+                }};
         false ->
             {error, not_target_provider}
     end.
@@ -904,7 +895,7 @@ maybe_reset_replication_record(Transfer = #transfer{
 %% invalidation transfer. If true, it resets transfer document.
 %% @end
 %%-------------------------------------------------------------------
--spec maybe_reset_invalidation_record(transfer()) -> {ok, id()} | {error, term()}.
+-spec maybe_reset_invalidation_record(transfer()) -> {ok, transfer()} | {error, term()}.
 maybe_reset_invalidation_record(Transfer = #transfer{
     source_provider_id = SourceProviderId
 }) ->
@@ -930,7 +921,7 @@ maybe_reset_invalidation_record(Transfer = #transfer{
 %% migration transfer. If true, it resets transfer document.
 %% @end
 %%-------------------------------------------------------------------
--spec maybe_reset_migration_record(transfer()) -> {ok, id()} | {error, term()}.
+-spec maybe_reset_migration_record(transfer()) -> {ok, transfer()} | {error, term()}.
 maybe_reset_migration_record(Transfer = #transfer{
     source_provider_id = SourceProviderId
 }) ->
