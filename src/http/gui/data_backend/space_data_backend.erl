@@ -502,7 +502,7 @@ space_provider_list_record(SpaceId) ->
 -spec space_transfer_list_record(RecordId :: binary()) -> proplists:proplist().
 space_transfer_list_record(RecordId) ->
     {Prefix, SpaceId} = op_gui_utils:association_to_ids(RecordId),
-    {ok, Transfers} = case Prefix of
+    {ok, TransferIds} = case Prefix of
         ?CURRENT_TRANSFERS_PREFIX ->
             transfer:list_current_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET,
                 ?MAX_TRANSFERS_TO_LIST);
@@ -518,7 +518,6 @@ space_transfer_list_record(RecordId) ->
             transfer:list_past_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET,
                 ?MAX_TRANSFERS_TO_LIST)
     end,
-    TransferIds = [op_gui_utils:ids_to_association(Link, Transfer) || {Transfer, Link} <- Transfers],
     [
         {<<"id">>, RecordId},
         {<<"list">>, TransferIds}

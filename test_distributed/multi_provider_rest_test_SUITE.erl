@@ -3163,18 +3163,15 @@ clean_monitoring_dir(Worker, SpaceId) ->
     end.
 
 list_past_transfers(Worker, SpaceId) ->
-    {ok, TransfersAndLinks} = rpc:call(Worker, transfer, list_past_transfers, [SpaceId]),
-    {Transfers, _Links} = lists:unzip(TransfersAndLinks),
+    {ok, Transfers} = rpc:call(Worker, transfer, list_past_transfers, [SpaceId]),
     Transfers.
 
 list_scheduled_transfers(Worker, SpaceId) ->
-    {ok, TransfersAndLinks} = rpc:call(Worker, transfer, list_scheduled_transfers, [SpaceId]),
-    {Transfers, _Links} = lists:unzip(TransfersAndLinks),
+    {ok, Transfers} = rpc:call(Worker, transfer, list_scheduled_transfers, [SpaceId]),
     Transfers.
 
 list_current_transfers(Worker, SpaceId) ->
-    {ok, TransfersAndLinks} = rpc:call(Worker, transfer, list_current_transfers, [SpaceId]),
-    {Transfers, _Links} = lists:unzip(TransfersAndLinks),
+    {ok, Transfers} = rpc:call(Worker, transfer, list_current_transfers, [SpaceId]),
     Transfers.
 
 list_ongoing_transfers(Worker, SpaceId) ->
@@ -3284,6 +3281,5 @@ verify_files_distribution(Worker, FilesNum, ExpectedDistribution, FileGuidsAndPa
     receive files_synchronized -> ok end.
 
 get_ongoing_transfers_for_file(Worker, FileGuid) ->
-    {ok, TransfersAndTimestamps} = rpc:call(Worker, transferred_file, get_ongoing_transfers, [FileGuid]),
-    {Transfers, _Timestamps} = lists:unzip(TransfersAndTimestamps),
+    {ok, Transfers} = rpc:call(Worker, transferred_file, get_ongoing_transfers, [FileGuid]),
     lists:sort(Transfers).
