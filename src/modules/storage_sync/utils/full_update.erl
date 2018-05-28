@@ -75,8 +75,21 @@ run(Job = #space_strategy_job{
     file_ctx:ctx(), od_space:id(), storage:id()) -> ok.
 maybe_delete_imported_file_and_update_counters(ChildName, ParentCtx, SpaceId, StorageId) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
-    {FileCtx, _ParentCtx2} = file_ctx:get_child(ParentCtx, ChildName, UserCtx),
-    maybe_delete_imported_file_and_update_counters(FileCtx, SpaceId, StorageId).
+    try
+        {FileCtx, _ParentCtx2} = file_ctx:get_child(ParentCtx, ChildName, UserCtx),
+        maybe_delete_imported_file_and_update_counters(FileCtx, SpaceId, StorageId)
+    catch
+        throw:?ENOENT ->
+            storage_sync_monitoring:mark_processed_file(SpaceId, StorageId),
+            ok;
+        Error:Reason ->
+            ?error_stacktrace(
+                "full_update:maybe_delete_imported_file_and_update_counters for file ~p failed with ~p",
+                [ChildName, {Error, Reason}]
+            ),
+            storage_sync_monitoring:mark_failed_file(SpaceId, StorageId),
+            ok
+    end.
 
 %%-------------------------------------------------------------------
 %% @doc
