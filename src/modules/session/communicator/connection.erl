@@ -15,7 +15,7 @@
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("modules/datastore/datastore_models.hrl").
--include("http/http_common.hrl").
+-include("http/gui_paths.hrl").
 -include("timeouts.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -95,10 +95,10 @@ fill_proxy_info(Msg, SessionId) ->
 %%--------------------------------------------------------------------
 -spec protocol_upgrade_request(Hostname :: binary()) -> binary().
 protocol_upgrade_request(Hostname) -> <<
-    "GET ", ?client_protocol_path, " HTTP/1.1\r\n"
+    "GET ", ?CLIENT_PROTOCOL_PATH, " HTTP/1.1\r\n"
     "Host: ", Hostname/binary, "\r\n"
     "Connection: Upgrade\r\n"
-    "Upgrade: ", ?client_protocol_upgrade_name, "\r\n"
+    "Upgrade: ", ?CLIENT_PROTOCOL_UPGRADE_NAME, "\r\n"
     "\r\n"
 >>.
 
@@ -114,7 +114,7 @@ verify_protocol_upgrade_response(Response) ->
         Lines = binary:split(Response, <<"\r\n">>, [global, trim_all]),
         has_member_case_insensitive(<<"HTTP/1.1 101 Switching Protocols">>, Lines) andalso
             has_member_case_insensitive(<<"Connection: Upgrade">>, Lines) andalso
-            has_member_case_insensitive(<<"Upgrade: ", ?client_protocol_upgrade_name>>, Lines)
+            has_member_case_insensitive(<<"Upgrade: ", ?CLIENT_PROTOCOL_UPGRADE_NAME>>, Lines)
     catch _:_ ->
         false
     end.

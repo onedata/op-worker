@@ -1,21 +1,21 @@
 %%%-------------------------------------------------------------------
 %%% @author Lukasz Opiola
-%%% @copyright (C) 2015 ACK CYFRONET AGH
-%%% This software is released under the MIT license
+%%% @copyright (C) 2018 ACK CYFRONET AGH
+%%% This software is released under the MIT license 
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module implements page_backend_behaviour and is called
-%%% when logout page is visited - it contains logout logic (redirects to GR).
+%%% This module implements dynamic_page_behaviour and is called
+%%% when provider version page is visited.
 %%% @end
 %%%-------------------------------------------------------------------
--module(logout_backend).
--behaviour(page_backend_behaviour).
+-module(page_provider_version).
 -author("Lukasz Opiola").
 
-%% API
--export([page_init/0]).
+-behaviour(dynamic_page_behaviour).
+
+-export([handle/2]).
 
 %%%===================================================================
 %%% API
@@ -23,10 +23,13 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link page_backend_behaviour} callback page_init/0.
+%% {@link dynamic_page_behaviour} callback handle/2.
 %% @end
 %%--------------------------------------------------------------------
--spec page_init() -> gui_html_handler:page_init_result().
-page_init() ->
-    gui_session:log_out(),
-    {redirect_absolute, str_utils:to_binary(oneprovider:get_oz_logout_page())}.
+-spec handle(new_gui:method(), cowboy_req:req()) -> cowboy_req:req().
+handle(<<"GET">>, Req) ->
+    cowboy_req:reply(200,
+        #{<<"content-type">> => <<"text/plain">>},
+        oneprovider:get_version(),
+        Req
+    ).

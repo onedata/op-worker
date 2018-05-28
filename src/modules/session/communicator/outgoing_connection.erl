@@ -17,7 +17,7 @@
 
 -include("timeouts.hrl").
 -include("global_definitions.hrl").
--include("http/http_common.hrl").
+-include("http/gui_paths.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("modules/datastore/datastore_models.hrl").

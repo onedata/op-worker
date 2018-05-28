@@ -38,7 +38,7 @@ is_authorized(Req, State) ->
 %% Authenticates user basing on request headers
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate(Req :: req()) -> {ok, auth()} | {error, term()}.
+-spec authenticate(req()) -> {ok, auth()} | {error, term()}.
 authenticate(Req) ->
     rest_auth:authenticate(Req).
 

@@ -66,7 +66,7 @@ cdmi_stream_size(Range, FileSize, ValueTransferEncoding, JsonBodyPrefix, JsonBod
 %% Returns fun that reads given ranges of file and streams to given Socket
 %% @end
 %%--------------------------------------------------------------------
--spec stream_binary(HttpStatus :: non_neg_integer(), Req :: req(),
+-spec stream_binary(HttpStatus :: non_neg_integer(), req(),
     State ::maps:map(), Size :: non_neg_integer(),
     Ranges :: [{non_neg_integer(), non_neg_integer()}] | undefined) -> req().
 stream_binary(
@@ -93,7 +93,7 @@ stream_binary(HttpStatus, Req, #{path := Path, auth := Auth} = State, Size, Rang
 %% json representing cdmi object.
 %% @end
 %%--------------------------------------------------------------------
--spec stream_cdmi(Req :: req(), State ::maps:map(), Size :: non_neg_integer(),
+-spec stream_cdmi(req(), State ::maps:map(), Size :: non_neg_integer(),
     Range :: {non_neg_integer(), non_neg_integer()},
     ValueTransferEncoding :: binary(), JsonBodyPrefix :: binary(),
     JsonBodySuffix :: binary()) -> req().
@@ -120,7 +120,7 @@ stream_cdmi(Req, #{path := Path, auth := Auth} = State, Size, Range,
 %% and streamed to given Request object.
 %% @end
 %%--------------------------------------------------------------------
--spec stream_range(Req :: req(), State :: maps:map(), Range, Encoding :: binary(),
+-spec stream_range(req(), State :: maps:map(), Range, Encoding :: binary(),
   BufferSize :: integer(), FileHandle :: onedata_file_api:file_handle()) -> Result when
     Range :: default | {From :: integer(), To :: integer()},
     Result :: ok | no_return().

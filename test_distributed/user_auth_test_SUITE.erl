@@ -98,7 +98,7 @@ connect_via_macaroon(Node, Macaroon, DischMacaroons, SessionId) ->
             version = list_to_binary(Version)}
     }},
     MacaroonAuthMessageRaw = messages:encode_msg(MacaroonAuthMessage),
-    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, gui_https_port),
+    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
 
     % when
     {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),

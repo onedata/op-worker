@@ -234,7 +234,7 @@ ensure_connected(SessId) ->
             end, IPs),
             lists:foreach(
                 fun(IPBinary) ->
-                    {ok, Port} = application:get_env(?APP_NAME, gui_https_port),
+                    Port = https_listener:port(),
                     critical_section:run([?MODULE, ProviderId, SessId], fun() ->
                         % check once more to prevent races
                         case session:get_random_connection(SessId, true) of

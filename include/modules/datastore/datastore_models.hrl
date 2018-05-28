@@ -61,12 +61,12 @@
 
 -record(od_user, {
     name :: undefined | binary(),
-    login :: undefined | binary(),
+    alias :: undefined | binary(),
     email_list = [] :: [binary()],
     linked_accounts = [] :: [od_user:linked_account()],
     default_space :: binary() | undefined,
     % List of user's aliases for spaces
-    space_aliases = #{} :: maps:map(od_space:id(), SpaceName :: od_space:login()),
+    space_aliases = #{} :: maps:map(od_space:id(), od_space:alias()),
 
     % Direct relations to other entities
     eff_groups = [] :: [od_group:id()],

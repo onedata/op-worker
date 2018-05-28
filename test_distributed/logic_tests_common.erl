@@ -14,7 +14,7 @@
 -author("Lukasz Opiola").
 
 -include("logic_tests_common.hrl").
--include("http/http_common.hrl").
+-include("http/gui_paths.hrl").
 
 %% API
 -export([

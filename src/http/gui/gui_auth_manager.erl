@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module handles authentication of users redirected for login from GR.
+%%% This module handles authentication of users redirected from Onezone.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(gui_auth_manager).
@@ -43,8 +43,8 @@ authenticate(MacaroonBin) ->
             macaroon = MacaroonBin,
             disch_macaroons = DischMacaroonsBin}}
     catch
-        T:M ->
+        Type:Reason ->
             ?error_stacktrace("Cannot authorize user with macaroon ~p - ~p:~p",
-                [MacaroonBin, T, M]),
-            {error, M}
+                [MacaroonBin, Type, Reason]),
+            {error, Reason}
     end.

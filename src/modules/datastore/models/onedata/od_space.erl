@@ -24,11 +24,11 @@
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
 
--type login() :: binary().
+-type alias() :: binary().
 -type name() :: binary().
 
 -export_type([id/0, record/0, doc/0, diff/0]).
--export_type([login/0, name/0]).
+-export_type([alias/0, name/0]).
 
 -define(CTX, #{
     model => ?MODULE,

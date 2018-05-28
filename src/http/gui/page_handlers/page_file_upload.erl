@@ -1,19 +1,19 @@
 %%%-------------------------------------------------------------------
 %%% @author Lukasz Opiola
-%%% @copyright (C) 2016 ACK CYFRONET AGH
-%%% This software is released under the MIT license
+%%% @copyright (C) 2018 ACK CYFRONET AGH
+%%% This software is released under the MIT license 
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module processes file upload requests originating from GUI.
-%%% Exposes an API required by lib ResumableJS that is used on client side.
+%%% This module implements dynamic_page_behaviour and is called
+%%% when file upload page is visited.
 %%% @end
 %%%-------------------------------------------------------------------
--module(upload_handler).
+-module(page_file_upload).
 -author("Lukasz Opiola").
 
--behaviour(cowboy_handler).
+-behaviour(dynamic_page_behaviour).
 
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -31,16 +31,53 @@
 -define(INTERVAL_WAIT_FOR_FILE_HANDLE, 300).
 
 %% Cowboy API
--export([init/2]).
+-export([handle/2]).
 %% API
--export([upload_map_insert/2, upload_map_delete/1]).
--export([wait_for_file_new_file_id/1]).
--export([clean_upload_map/0]).
+-export([upload_map_insert/3, upload_map_delete/2]).
+-export([wait_for_file_new_file_id/2]).
+-export([clean_upload_map/1]).
+
+
+%% ====================================================================
+%% Cowboy API functions
+%% ====================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link dynamic_page_behaviour} callback handle/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec handle(new_gui:method(), cowboy_req:req()) -> cowboy_req:req().
+handle(<<"POST">>, Req) ->
+    case op_gui_session:get(Req) of
+        {error, not_found} ->
+            cowboy_req:reply(401, #{<<"connection">> => <<"close">>}, Req);
+        {ok, Session = #document{key = SessionId}} ->
+            try
+                NewReq = multipart(Req, SessionId, []),
+                cowboy_req:reply(200, NewReq)
+            catch
+                throw:{missing_param, _} ->
+                    cowboy_req:reply(500, #{<<"connection">> => <<"close">>}, Req);
+                throw:stream_file_error ->
+                    cowboy_req:reply(500, #{<<"connection">> => <<"close">>}, Req);
+                Type:Message ->
+                    {ok, UserId} = session:get_user_id(Session),
+                    ?error_stacktrace("Error while processing file upload "
+                    "from user ~p - ~p:~p",
+                        [UserId, Type, Message]),
+                    % @todo VFS-1815 for now return 500,
+                    % because retries are not stable
+%%                    % Return 204 - resumable will retry the upload
+%%                    gui_ctx:reply(204, [], <<"">>)
+                    cowboy_req:reply(500, #{<<"connection">> => <<"close">>}, Req)
+            end
+    end.
+
 
 %% ====================================================================
 %% API functions
 %% ====================================================================
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -50,18 +87,19 @@
 %% @todo Should be redesigned in VFS-1815.
 %% @end
 %%--------------------------------------------------------------------
--spec upload_map_insert(UploadId :: term(), FileId :: term()) -> ok.
-upload_map_insert(_UploadId, undefined) ->
+-spec upload_map_insert(session:id(), UploadId :: term(), FileId :: term()) ->
+    ok | {error, term()}.
+upload_map_insert(_SessionId, _UploadId, undefined) ->
     error(badarg);
 
-upload_map_insert(undefined, _FileId) ->
+upload_map_insert(_SessionId, undefined, _FileId) ->
     error(badarg);
 
-upload_map_insert(UploadId, FileId) ->
+upload_map_insert(SessionId, UploadId, FileId) ->
     MapUpdateFun = fun(Map) ->
         maps:put(UploadId, FileId, Map)
     end,
-    gui_session:update_value(?UPLOAD_MAP, MapUpdateFun, #{}).
+    op_gui_session:update_value(SessionId, ?UPLOAD_MAP, MapUpdateFun, #{}).
 
 
 %%--------------------------------------------------------------------
@@ -73,9 +111,9 @@ upload_map_insert(UploadId, FileId) ->
 %% @todo Should be redesigned in VFS-1815.
 %% @end
 %%--------------------------------------------------------------------
--spec upload_map_lookup(UploadId :: term()) -> FileId :: term() | undefined.
-upload_map_lookup(UploadId) ->
-    Map = gui_session:get_value(?UPLOAD_MAP, #{}),
+-spec upload_map_lookup(session:id(), UploadId :: term()) -> FileId :: term() | undefined.
+upload_map_lookup(SessionId, UploadId) ->
+    {ok, Map} = op_gui_session:get_value(SessionId, ?UPLOAD_MAP, #{}),
     maps:get(UploadId, Map, undefined).
 
 
@@ -87,12 +125,12 @@ upload_map_lookup(UploadId) ->
 %% @todo Should be redesigned in VFS-1815.
 %% @end
 %%--------------------------------------------------------------------
--spec upload_map_delete(UploadId :: term()) -> ok.
-upload_map_delete(UploadId) ->
+-spec upload_map_delete(session:id(), UploadId :: term()) -> ok | {error, term()}.
+upload_map_delete(SessionId, UploadId) ->
     MapUpdateFun = fun(Map) ->
         maps:remove(UploadId, Map)
     end,
-    gui_session:update_value(?UPLOAD_MAP, MapUpdateFun, #{}).
+    op_gui_session:update_value(SessionId, ?UPLOAD_MAP, MapUpdateFun, #{}).
 
 
 %%--------------------------------------------------------------------
@@ -101,18 +139,19 @@ upload_map_delete(UploadId) ->
 %% retrying in intervals.
 %% @end
 %%--------------------------------------------------------------------
--spec wait_for_file_new_file_id(UploadId :: binary()) ->
+-spec wait_for_file_new_file_id(session:id(), UploadId :: binary()) ->
     fslogic_worker:file_guid().
-wait_for_file_new_file_id(UploadId) ->
-    wait_for_file_new_file_id(UploadId, ?MAX_WAIT_FOR_FILE_HANDLE).
-wait_for_file_new_file_id(_, Timeout) when Timeout < 0 ->
+wait_for_file_new_file_id(SessionId, UploadId) ->
+    wait_for_file_new_file_id(SessionId, UploadId, ?MAX_WAIT_FOR_FILE_HANDLE).
+wait_for_file_new_file_id(_SessionId, _, Timeout) when Timeout < 0 ->
     throw(cannot_resolve_new_file_id);
-wait_for_file_new_file_id(UploadId, Timeout) ->
-    case upload_map_lookup(UploadId) of
+wait_for_file_new_file_id(SessionId, UploadId, Timeout) ->
+    case upload_map_lookup(SessionId, UploadId) of
         undefined ->
             timer:sleep(?INTERVAL_WAIT_FOR_FILE_HANDLE),
             wait_for_file_new_file_id(
-                UploadId, Timeout - ?INTERVAL_WAIT_FOR_FILE_HANDLE);
+                SessionId, UploadId, Timeout - ?INTERVAL_WAIT_FOR_FILE_HANDLE
+            );
         FileId ->
             FileId
     end.
@@ -126,27 +165,9 @@ wait_for_file_new_file_id(UploadId, Timeout) ->
 %% @todo Should be redesigned in VFS-1815.
 %% @end
 %%--------------------------------------------------------------------
--spec clean_upload_map() -> ok.
-clean_upload_map() ->
-    gui_session:put_value(?UPLOAD_MAP, #{}).
-
-
-%% ====================================================================
-%% Cowboy API functions
-%% ====================================================================
-
-%%--------------------------------------------------------------------
-%% @doc Cowboy handler callback.
-%% Handles an upload request.
-%% @end
-%%--------------------------------------------------------------------
--spec init(cowboy_req:req(), term()) -> {ok, cowboy_req:req(), term()}.
-init(#{method := <<"POST">>} = Req, State) ->
-    NewReq = handle_http_upload(Req),
-    {ok, NewReq, State};
-init(Req, State) ->
-    NewReq = cowboy_req:reply(405, #{<<"allow">> => <<"POST">>}, Req),
-    {ok, NewReq, State}.
+-spec clean_upload_map(session:id()) -> ok | {error, term()}.
+clean_upload_map(SessionId) ->
+    op_gui_session:put_value(SessionId, ?UPLOAD_MAP, #{}).
 
 
 %% ====================================================================
@@ -156,57 +177,12 @@ init(Req, State) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Asserts the validity of multipart POST request and proceeds with
-%% parsing or returns an error. Returns list of parsed filed values and
-%% file body.
-%% @end
-%%--------------------------------------------------------------------
--spec handle_http_upload(Req :: cowboy_req:req()) -> cowboy_req:req().
-handle_http_upload(Req) ->
-    % Try to retrieve user's session
-    InitSession =
-        try
-            gui_ctx:init(Req, false)
-        catch _:_ ->
-            % Error logging is done inside gui_ctx:init
-            error
-        end,
-    case InitSession of
-        error ->
-            gui_ctx:reply(500, #{<<"connection">> => <<"close">>}, <<"">>);
-        ok ->
-            try
-                NewReq = multipart(Req, []),
-                gui_ctx:set_cowboy_req(NewReq),
-                gui_ctx:reply(200, #{}, <<"">>)
-            catch
-                throw:{missing_param, _} ->
-                    gui_ctx:reply(500, #{<<"connection">> => <<"close">>}, <<"">>);
-                throw:stream_file_error ->
-                    gui_ctx:reply(500, #{<<"connection">> => <<"close">>}, <<"">>);
-                Type:Message ->
-                    ?error_stacktrace("Error while processing file upload "
-                    "from user ~p - ~p:~p",
-                        [gui_session:get_user_id(), Type, Message]),
-                    % @todo VFS-1815 for now return 500,
-                    % because retries are not stable
-%%                    % Return 204 - resumable will retry the upload
-%%                    gui_ctx:reply(204, [], <<"">>)
-                    gui_ctx:reply(500, #{<<"connection">> => <<"close">>}, <<"">>)
-            end
-    end,
-    gui_ctx:finish().
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
 %% Parses a multipart HTTP form.
 %% @end
 %%--------------------------------------------------------------------
--spec multipart(Req :: cowboy_req:req(), Params :: proplists:proplist()) ->
+-spec multipart(cowboy_req:req(), session:id(), Params :: proplists:proplist()) ->
     cowboy_req:req().
-multipart(Req, Params) ->
+multipart(Req, SessionId, Params) ->
     {ok, UploadWriteSize} = application:get_env(?APP_NAME, upload_write_size),
     {ok, UploadReadTimeout} = application:get_env(?APP_NAME, upload_read_timeout),
     {ok, UploadPeriod} = application:get_env(?APP_NAME, upload_read_period),
@@ -216,10 +192,9 @@ multipart(Req, Params) ->
             case cow_multipart:form_data(Headers) of
                 {data, FieldName} ->
                     {ok, FieldValue, Req3} = cowboy_req:read_part_body(Req2),
-                    multipart(Req3, [{FieldName, FieldValue} | Params]);
+                    multipart(Req3, SessionId, [{FieldName, FieldValue} | Params]);
                 {file, _FieldName, _Filename, _CType} ->
-                    FileId = get_new_file_id(Params),
-                    SessionId = gui_session:get_session_id(),
+                    FileId = get_new_file_id(SessionId, Params),
                     {ok, FileHandle} = logical_file_manager:open(
                         SessionId, {guid, FileId}, write),
                     ChunkNumber = get_int_param(
@@ -245,14 +220,15 @@ multipart(Req, Params) ->
                     Req3 = try
                         stream_file(Req2, FileHandle, Offset, Opts)
                     catch Type:Message ->
+                        {ok, UserId} = session:get_user_id(SessionId),
                         ?error_stacktrace("Error while streaming file upload "
                         "from user ~p - ~p:~p",
-                            [gui_session:get_user_id(), Type, Message]),
+                            [UserId, Type, Message]),
                         logical_file_manager:release(FileHandle), % release if possible
                         logical_file_manager:unlink(SessionId, {guid, FileId}, false),
                         throw(stream_file_error)
                     end,
-                    multipart(Req3, Params)
+                    multipart(Req3, SessionId, Params)
             end;
         {done, Req2} ->
             Req2
@@ -290,25 +266,25 @@ stream_file(Req, FileHandle, Offset, Opts) ->
 %% resolve the ID from session memory.
 %% @end
 %%--------------------------------------------------------------------
--spec get_new_file_id(Params :: proplists:proplist()) -> file_meta:uuid().
-get_new_file_id(Params) ->
+-spec get_new_file_id(session:id(), Params :: proplists:proplist()) ->
+    file_meta:uuid().
+get_new_file_id(SessionId, Params) ->
     UploadId = get_bin_param(<<"resumableIdentifier">>, Params),
     ChunkNumber = get_int_param(<<"resumableChunkNumber">>, Params),
     % Create an upload handle for first chunk. Further chunks reuse the handle
     % or have to wait until it is created.
     case ChunkNumber of
         1 ->
-            SessionId = gui_session:get_session_id(),
             ParentId = get_bin_param(<<"parentId">>, Params),
             FileName = get_bin_param(<<"resumableFilename">>, Params),
             {ok, ParentPath} = logical_file_manager:get_file_path(
                 SessionId, ParentId),
             ProposedPath = filename:join([ParentPath, FileName]),
             FileId = create_unique_file(SessionId, ProposedPath),
-            upload_map_insert(UploadId, FileId),
+            upload_map_insert(SessionId, UploadId, FileId),
             FileId;
         _ ->
-            wait_for_file_new_file_id(UploadId, ?MAX_WAIT_FOR_FILE_HANDLE)
+            wait_for_file_new_file_id(SessionId, UploadId, ?MAX_WAIT_FOR_FILE_HANDLE)
     end.
 
 
