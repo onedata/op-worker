@@ -367,6 +367,7 @@ mark_cancelled(TransferId) ->
     UpdateFun = fun(T = #transfer{invalidation_status = InvalidationStatus}) ->
         {ok, T#transfer{
             status = cancelled,
+            finish_time = provider_logic:zone_time_seconds(),
             invalidation_status = case transfer_utils:is_invalidation(T) of
                 true ->
                     cancelled;
@@ -421,7 +422,10 @@ mark_completed_invalidation(TransferId) ->
 -spec mark_failed_invalidation(id()) -> {ok, id()} | {error, term()}.
 mark_failed_invalidation(TransferId) ->
     UpdateFun = fun(T) ->
-        {ok, T#transfer{invalidation_status = failed}}
+        {ok, T#transfer{
+            invalidation_status = failed,
+            finish_time = provider_logic:zone_time_seconds()
+        }}
     end,
     update_and_move_to_finished(TransferId, UpdateFun).
 
@@ -433,7 +437,10 @@ mark_failed_invalidation(TransferId) ->
 -spec mark_cancelled_invalidation(id()) -> {ok, id()} | {error, term()}.
 mark_cancelled_invalidation(TransferId) ->
     UpdateFun = fun(Transfer) ->
-        {ok, Transfer#transfer{invalidation_status = cancelled}}
+        {ok, Transfer#transfer{
+            invalidation_status = cancelled,
+            finish_time = provider_logic:zone_time_seconds()}
+        }
     end,
     update_and_move_to_finished(TransferId, UpdateFun).
 
