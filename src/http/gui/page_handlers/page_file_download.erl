@@ -55,15 +55,19 @@ handle(<<"GET">>, Req) ->
 -spec handle_http_download(Req :: cowboy_req:req(),
     FileId :: file_meta:uuid()) -> cowboy_req:req().
 handle_http_download(Req, FileId) ->
-    case op_gui_session:get(Req) of
-        {error, not_found} ->
+    Authorized = case {fslogic_uuid:is_share_guid(FileId), op_gui_session:get(Req)} of
+        {false, {error, not_found}} ->
+            false;
+        {true, {error, not_found}} ->
+            {true, ?GUEST_SESS_ID};
+        {_, {ok, #document{key = SessId}}} ->
+            {true, SessId}
+    end,
+    case Authorized of
+        false ->
             cowboy_req:reply(401, #{<<"connection">> => <<"close">>}, Req);
-        {ok, Session} ->
+        {true, SessionId} ->
             try
-                SessionId = case fslogic_uuid:is_share_guid(FileId) of
-                    true -> ?GUEST_SESS_ID;
-                    false -> Session#document.key
-                end,
                 {ok, FileHandle} = logical_file_manager:open(
                     SessionId, {guid, FileId}, read),
                 try
@@ -77,7 +81,7 @@ handle_http_download(Req, FileId) ->
                     stream_file(Req2, FileHandle, Size)
                 catch
                     Type2:Reason2 ->
-                        {ok, UserId2} = session:get_user_id(Session),
+                        {ok, UserId2} = session:get_user_id(SessionId),
                         ?error_stacktrace("Error while processing file download "
                         "for user ~p - ~p:~p", [UserId2, Type2, Reason2]),
                         logical_file_manager:release(FileHandle), % release if possible
@@ -85,7 +89,7 @@ handle_http_download(Req, FileId) ->
                 end
             catch
                 Type:Reason ->
-                    {ok, UserId} = session:get_user_id(Session),
+                    {ok, UserId} = session:get_user_id(SessionId),
                     ?error_stacktrace("Error while processing file download "
                     "for user ~p - ~p:~p", [UserId, Type, Reason]),
                     cowboy_req:reply(500, #{<<"connection">> => <<"close">>}, Req)
