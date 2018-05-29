@@ -171,7 +171,7 @@ delete_links(SourceId, TransferId, SpaceId, Timestamp) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec list_transfers(SpaceId :: od_space:id(), virtual_list_id(),
-    transfer:id() | undefined, offset(), list_limit()) -> [{transfer:id(), link_key()}].
+    transfer:id() | undefined, offset(), list_limit()) -> [transfer:id()].
 list_transfers(SpaceId, ListDocId, StartId, Offset, Limit) ->
     Opts = #{offset => Offset},
 
@@ -185,8 +185,8 @@ list_transfers(SpaceId, ListDocId, StartId, Offset, Limit) ->
         _ -> Opts2#{size => Limit}
     end,
 
-    {ok, Transfers} = for_each_transfer(ListDocId, fun(LinkName, TransferId, Acc) ->
-        [{TransferId, LinkName} | Acc]
+    {ok, Transfers} = for_each_transfer(ListDocId, fun(_LinkName, TransferId, Acc) ->
+        [TransferId | Acc]
     end, [], SpaceId, Opts3),
     lists:reverse(Transfers).
 

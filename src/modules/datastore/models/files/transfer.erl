@@ -651,7 +651,7 @@ mark_data_transfer_finished(TransferId, SpaceId, BytesPerProvider) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec list_scheduled_transfers(od_space:id()) ->
-    {ok, [{id(), transfer_links:link_key()}]}.
+    {ok, [id()]}.
 list_scheduled_transfers(SpaceId) ->
     list_scheduled_transfers(SpaceId, 0, all).
 
@@ -661,7 +661,7 @@ list_scheduled_transfers(SpaceId) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec list_scheduled_transfers(od_space:id(), integer(), list_limit()) ->
-    {ok, [{id(), transfer_links:link_key()}]}.
+    {ok, [id()]}.
 list_scheduled_transfers(SpaceId, Offset, Limit) ->
     list_scheduled_transfers(SpaceId, undefined, Offset, Limit).
 
@@ -671,7 +671,7 @@ list_scheduled_transfers(SpaceId, Offset, Limit) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec list_scheduled_transfers(od_space:id(), undefined | id(),
-    integer(), list_limit()) -> {ok, [{id(), transfer_links:link_key()}]}.
+    integer(), list_limit()) -> {ok, [id()]}.
 list_scheduled_transfers(SpaceId, StartId, Offset, Limit) ->
     {ok, transfer_links:list_transfers(SpaceId, ?SCHEDULED_TRANSFERS_KEY,
         StartId, Offset, Limit)}.
@@ -681,8 +681,7 @@ list_scheduled_transfers(SpaceId, StartId, Offset, Limit) ->
 %% @equiv list_active_transfers(SpaceId, 0, all).
 %% @end
 %%-------------------------------------------------------------------
--spec list_current_transfers(od_space:id()) ->
-    {ok, [{id(), transfer_links:link_key()}]}.
+-spec list_current_transfers(od_space:id()) -> {ok, [id()]}.
 list_current_transfers(SpaceId) ->
     list_current_transfers(SpaceId, 0, all).
 
@@ -692,7 +691,7 @@ list_current_transfers(SpaceId) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec list_current_transfers(od_space:id(), integer(), list_limit()) ->
-    {ok, [{id(), transfer_links:link_key()}]}.
+    {ok, [id()]}.
 list_current_transfers(SpaceId, Offset, Limit) ->
     list_current_transfers(SpaceId, undefined, Offset, Limit).
 
@@ -702,7 +701,7 @@ list_current_transfers(SpaceId, Offset, Limit) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec list_current_transfers(od_space:id(), undefined | id(),
-    integer(), list_limit()) -> {ok, [{id(), transfer_links:link_key()}]}.
+    integer(), list_limit()) -> {ok, [id()]}.
 list_current_transfers(SpaceId, StartId, Offset, Limit) ->
     {ok, transfer_links:list_transfers(SpaceId, ?CURRENT_TRANSFERS_KEY,
         StartId, Offset, Limit)}.
@@ -712,8 +711,7 @@ list_current_transfers(SpaceId, StartId, Offset, Limit) ->
 %% @equiv list_past_transfers(SpaceId, 0, all).
 %% @end
 %%-------------------------------------------------------------------
--spec list_past_transfers(od_space:id()) ->
-    {ok, [{id(), transfer_links:link_key()}]}.
+-spec list_past_transfers(od_space:id()) -> {ok, [id()]}.
 list_past_transfers(SpaceId) ->
     list_past_transfers(SpaceId, 0, all).
 
@@ -723,7 +721,7 @@ list_past_transfers(SpaceId) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec list_past_transfers(od_space:id(), integer(), list_limit()) ->
-    {ok, [{id(), transfer_links:link_key()}]}.
+    {ok, [id()]}.
 list_past_transfers(SpaceId, Offset, Limit) ->
     list_past_transfers(SpaceId, undefined, Offset, Limit).
 
@@ -733,7 +731,7 @@ list_past_transfers(SpaceId, Offset, Limit) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec list_past_transfers(od_space:id(), undefined | id(),
-    integer(), list_limit()) -> {ok, [{id(), transfer_links:link_key()}]}.
+    integer(), list_limit()) -> {ok, [id()]}.
 list_past_transfers(SpaceId, StartId, Offset, Limit) ->
     {ok, transfer_links:list_transfers(SpaceId, ?PAST_TRANSFERS_KEY,
         StartId, Offset, Limit)}.

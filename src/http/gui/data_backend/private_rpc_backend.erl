@@ -119,10 +119,10 @@ handle(<<"fetchMoreDirChildren">>, Props) ->
 handle(<<"getSpaceTransfers">>, Props) ->
     SpaceId = proplists:get_value(<<"spaceId">>, Props),
     Type = proplists:get_value(<<"type">>, Props),
-    StartFromId = proplists:get_value(<<"startFromId">>, Props, undefined),
+    StartFromIndex = proplists:get_value(<<"startFromIndex">>, Props, null),
     Offset = proplists:get_value(<<"offset">>, Props, 0),
     Limit = proplists:get_value(<<"size">>, Props, all),
-    transfer_data_backend:list_transfers(SpaceId, Type, StartFromId, Offset, Limit);
+    transfer_data_backend:list_transfers(SpaceId, Type, StartFromIndex, Offset, Limit);
 
 handle(<<"getOngoingTransfersForFile">>, Props) ->
     FileGuid = proplists:get_value(<<"fileId">>, Props),

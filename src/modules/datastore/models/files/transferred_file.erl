@@ -134,7 +134,7 @@ report_transfer_finish(FileGuid, TransferId, ScheduleTime) ->
 get_ongoing_transfers(FileGuid) ->
     case datastore_model:get(?CTX, id(FileGuid)) of
         {ok, #document{value = #transferred_file{ongoing_transfers = Transfers}}} ->
-            {ok, [entry_to_transfer_id_and_timestamp(E) || E <- ordsets:to_list(Transfers)]};
+            {ok, [entry_to_transfer_id(E) || E <- ordsets:to_list(Transfers)]};
         {error, _} ->
             {ok, []}
     end.
@@ -182,11 +182,10 @@ entry(TransferId, Timestamp) ->
 %% Returns transfer id and timestamp parsed out from entry.
 %% @end
 %%--------------------------------------------------------------------
--spec entry_to_transfer_id_and_timestamp(entry()) ->
-    {transfer:id(), transfer:timestamp()}.
-entry_to_transfer_id_and_timestamp(Entry) ->
-    [TransferId, Timestamp] = binary:split(Entry, <<"|">>),
-    {TransferId, binary_to_integer(Timestamp)}.
+-spec entry_to_transfer_id(entry()) -> transfer:id().
+entry_to_transfer_id(Entry) ->
+    [TransferId, _Timestamp] = binary:split(Entry, <<"|">>),
+    TransferId.
 
 
 %%--------------------------------------------------------------------
@@ -200,8 +199,8 @@ entry_to_transfer_id_and_timestamp(Entry) ->
     {Duplicates :: ordsets:ordset(entry()), OtherEntries :: ordsets:ordset(entry())}.
 find_all_duplicates(TransferId, Entries) ->
     ordsets:fold(fun(Entry, {DupAcc, OtherAcc}) ->
-        case entry_to_transfer_id_and_timestamp(Entry) of
-            {TransferId, _} ->
+        case entry_to_transfer_id(Entry) of
+            TransferId ->
                 {ordsets:add_element(Entry, DupAcc), OtherAcc};
             _ ->
                 {DupAcc, ordsets:add_element(Entry, OtherAcc)}
