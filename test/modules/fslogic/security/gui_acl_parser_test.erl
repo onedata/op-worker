@@ -9,7 +9,7 @@
 %%% Tests of gui acl utils, which converts acl to gui compatible format
 %%% @end
 %%%--------------------------------------------------------------------
--module(acl_utils_test).
+-module(gui_acl_parser_test).
 -author("Tomasz Lichon").
 
 -include_lib("eunit/include/eunit.hrl").

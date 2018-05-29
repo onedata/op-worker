@@ -20,7 +20,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("graph_sync/provider_graph_sync.hrl").
 -include("modules/datastore/datastore_models.hrl").
--include("http/http_common.hrl").
+-include("http/gui_paths.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -537,7 +537,7 @@ verify_provider_identity(ProviderId) ->
     try
         {ok, Domain} = get_domain(ProviderId),
         URL = str_utils:format_bin("https://~s~s", [
-            Domain, ?identity_macaroon_path
+            Domain, ?IDENTITY_MACAROON_PATH
         ]),
 
         CaCerts = oneprovider:trusted_ca_certs(),
@@ -587,7 +587,7 @@ verify_provider_nonce(ProviderId, Nonce) ->
     try
         {ok, Domain} = get_domain(ProviderId),
         URL = str_utils:format_bin("https://~s~s?nonce=~s", [
-            Domain, ?nonce_verify_path, Nonce
+            Domain, ?NONCE_VERIFY_PATH, Nonce
         ]),
 
         CaCerts = oneprovider:trusted_ca_certs(),
@@ -707,7 +707,7 @@ assert_provider_compatibility(Hostname, ProviderId, SslOpts) ->
     {error, {bad_response, Code :: integer(), Body :: binary()}} |
     {error, term()}.
 fetch_oz_compatibility_config(OzUrl, SslOpts) ->
-    URL = OzUrl ++ ?zone_configuration_path,
+    URL = OzUrl ++ ?ZONE_CONFIGURATION_PATH,
     case http_client:get(URL, #{}, <<>>, [{ssl_options, SslOpts}]) of
         {ok, 200, _, JsonBody} ->
             JsonMap = json_utils:decode(JsonBody),
@@ -736,7 +736,7 @@ fetch_oz_compatibility_config(OzUrl, SslOpts) ->
     {error, term()}.
 fetch_op_compatibility_config(Hostname, SslOpts) ->
     URL = str_utils:format_bin("https://~s~s", [
-        Hostname, ?provider_configuration_path
+        Hostname, ?PROVIDER_CONFIGURATION_PATH
     ]),
     case http_client:get(URL, #{}, <<>>, [{ssl_options, SslOpts}]) of
         {ok, 200, _, JsonBody} ->
@@ -760,7 +760,7 @@ fetch_op_compatibility_config(Hostname, SslOpts) ->
     {error, {bad_response, Code :: integer(), Body :: binary()}} |
     {error, term()}.
 deprecated_fetch_oz_compatibility_config(Hostname, SslOpts) ->
-    URL = Hostname ++ ?zone_version_path,
+    URL = Hostname ++ ?ZONE_VERSION_PATH,
     case http_client:get(URL, #{}, <<>>, [{ssl_options, SslOpts}]) of
         {ok, 200, _, Version} -> {ok, Version, []};
         {ok, Code, _, Body} -> {error, {bad_response, Code, Body}};
@@ -776,7 +776,7 @@ deprecated_fetch_oz_compatibility_config(Hostname, SslOpts) ->
     {error, {bad_response, Code :: integer(), Body :: binary()}} |
     {error, term()}.
 deprecated_fetch_op_compatibility_config(Hostname, SslOpts) ->
-    URL = str_utils:format_bin("https://~s~s", [Hostname, ?provider_version_path]),
+    URL = str_utils:format_bin("https://~s~s", [Hostname, ?PROVIDER_VERSION_PATH]),
     case http_client:get(URL, #{}, <<>>, [{ssl_options, SslOpts}]) of
         {ok, 200, _, Version} -> {ok, Version, []};
         {ok, Code, _, Body} -> {error, {bad_response, Code, Body}};

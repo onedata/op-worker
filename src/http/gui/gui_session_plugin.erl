@@ -17,7 +17,8 @@
 
 -include("global_definitions.hrl").
 -include("proto/common/credentials.hrl").
--include("http/gui_common.hrl").
+-include("http/gui_paths.hrl").
+-include("http/http_common.hrl").
 -include_lib("gui/include/gui.hrl").
 -include_lib("ctool/include/logging.hrl").
 

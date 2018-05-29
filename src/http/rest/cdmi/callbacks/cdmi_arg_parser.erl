@@ -50,7 +50,7 @@ malformed_request(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Extract the CDMI version and options and put it in State. Throw when
-%% version is not supportet
+%% version is not supported.
 %% @end
 %%--------------------------------------------------------------------
 -spec malformed_capability_request(req(), maps:map()) -> {boolean(), req(), maps:map()} | no_return().
@@ -81,7 +81,7 @@ malformed_objectid_request(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc Get requested ranges list.
 %%--------------------------------------------------------------------
--spec get_ranges(Req :: req(), Size :: non_neg_integer()) ->
+-spec get_ranges(req(), Size :: non_neg_integer()) ->
     {[{non_neg_integer(), non_neg_integer()}] | undefined, req()}.
 get_ranges(Req, Size) ->
     case cowboy_req:header(<<"range">>, Req) of
@@ -97,7 +97,7 @@ get_ranges(Req, Size) ->
 %%--------------------------------------------------------------------
 %% @doc Reads whole body and decodes it as json.
 %%--------------------------------------------------------------------
--spec parse_body(cowboy_req:req()) -> {ok, maps:map(), cowboy_req:req()}.
+-spec parse_body(req()) -> {ok, maps:map(), req()}.
 parse_body(Req) ->
     {ok, RawBody, Req1} = cowboy_req:read_body(Req),
     Body = case RawBody of
@@ -201,8 +201,8 @@ path => onedata_file_api:file_path()}.
 %% Parses request's version adds it to State.
 %% @end
 %%--------------------------------------------------------------------
--spec add_version_to_state(cowboy_req:req(), maps:map()) ->
-    {result_state(), cowboy_req:req()}.
+-spec add_version_to_state(req(), maps:map()) ->
+    {result_state(), req()}.
 add_version_to_state(Req, State) ->
     RawVersion = cowboy_req:header(?CDMI_VERSION_HEADER, Req),
     Version = get_supported_version(RawVersion),
@@ -213,8 +213,8 @@ add_version_to_state(Req, State) ->
 %% Parses request's query string options and adds it to State.
 %% @end
 %%--------------------------------------------------------------------
--spec add_opts_to_state(cowboy_req:req(), maps:map()) ->
-    {result_state(), cowboy_req:req()}.
+-spec add_opts_to_state(req(), maps:map()) ->
+    {result_state(), req()}.
 add_opts_to_state(#{qs := Qs} = Req, State) ->
     {State#{options => parse_opts(Qs)}, Req}.
 
@@ -223,8 +223,8 @@ add_opts_to_state(#{qs := Qs} = Req, State) ->
 %% Retrieves file path from req and adds it to state.
 %% @end
 %%--------------------------------------------------------------------
--spec add_path_to_state(cowboy_req:req(), maps:map()) ->
-    {result_state(), cowboy_req:req()}.
+-spec add_path_to_state(req(), maps:map()) ->
+    {result_state(), req()}.
 add_path_to_state(Req, State) ->
     {Path, NewReq} = cdmi_path:get_path(Req),
     {State#{path => Path}, NewReq}.
@@ -241,8 +241,8 @@ add_path_to_state(Req, State) ->
 %% {IdOfRootDir} -> /
 %% @end
 %%--------------------------------------------------------------------
--spec add_objectid_path_to_state(cowboy_req:req(), maps:map()) ->
-    {result_state(), cowboy_req:req()}.
+-spec add_objectid_path_to_state(req(), maps:map()) ->
+    {result_state(), req()}.
 add_objectid_path_to_state(Req, State) ->
     % get objectid
     Id = cowboy_req:binding(id, Req),
@@ -338,8 +338,8 @@ validate_body(Body) ->
 %% Chooses adequate handler for objectid request, on basis of filepath.
 %% @end
 %%--------------------------------------------------------------------
--spec choose_handler(cowboy_req:req(), onedata_file_api:file_path()) ->
-    {module(), cowboy_req:req()}.
+-spec choose_handler(req(), onedata_file_api:file_path()) ->
+    {module(), req()}.
 choose_handler(Req, Path) ->
     case filepath_utils:ends_with_slash(Path) of
         true ->
@@ -364,7 +364,7 @@ choose_handler(Req, Path) ->
 %%--------------------------------------------------------------------
 %% @doc Checks if this objectid request points to capability object
 %%--------------------------------------------------------------------
--spec is_capability_object(req()) -> {boolean(), cowboy_req:req()}.
+-spec is_capability_object(req()) -> {boolean(), req()}.
 is_capability_object(#{path := Path} = Req) ->
     Answer =
         case binary:split(Path, <<"/">>, [global]) of
@@ -377,7 +377,7 @@ is_capability_object(#{path := Path} = Req) ->
 %%--------------------------------------------------------------------
 %% @doc Authenticate user or throw ERROR_UNAUTHORIZED in case of error
 %%--------------------------------------------------------------------
--spec try_authenticate(cowboy_req:req()) -> onedata_auth_api:auth().
+-spec try_authenticate(req()) -> onedata_auth_api:auth().
 try_authenticate(Req) ->
     case onedata_auth_api:authenticate(Req) of
         {ok, Auth} ->

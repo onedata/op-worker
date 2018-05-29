@@ -29,7 +29,6 @@
 -type id() :: datastore:id().
 -type record() :: #transferred_file{}.
 -type doc() :: datastore_doc:doc(record()).
--type diff() :: datastore_doc:diff(record()).
 
 -type entry() :: binary(). % Concatenation of schedule time and transfer id
 

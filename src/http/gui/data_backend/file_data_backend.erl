@@ -20,7 +20,8 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("http/gui_common.hrl").
+-include("http/gui_paths.hrl").
+-include("http/http_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/posix/errors.hrl").

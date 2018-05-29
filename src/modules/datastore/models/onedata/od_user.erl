@@ -130,7 +130,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    2.
+    3.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -192,7 +192,12 @@ get_record_struct(2) ->
         {eff_handles, [string]},
 
         {cache_state, #{atom => term}}
-    ]}.
+    ]};
+get_record_struct(3) ->
+    {record, Struct} = get_record_struct(2),
+    % Rename login to alias
+    {record, lists:keyreplace(login, 1, Struct, {alias, string})}.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -226,20 +231,53 @@ upgrade_record(1, User) ->
         _PublicOnly,
         _RevisionHistory
     } = User,
+    {2, {od_user,
+        Name,
+        Alias,
+        EmailList,
+        [#{}],
 
-    {2, #od_user{
+        undefined,
+        #{},
+
+        [],
+        [],
+        [],
+        [],
+
+        #{}
+    }};
+upgrade_record(2, User) ->
+    {od_user,
+        Name,
+        Alias,
+        EmailList,
+        LinkedAccounts,
+
+        DefaultSpace,
+        SpaceAliases,
+
+        EffGroups,
+        EffSpaces,
+        EffHandleServices,
+        EffHandles,
+
+        _CacheState
+    } = User,
+
+    {3, #od_user{
         name = Name,
-        login = Alias,
+        alias = Alias,
         email_list = EmailList,
-        linked_accounts = [#{}],
+        linked_accounts = LinkedAccounts,
 
-        default_space = undefined,
-        space_aliases = #{},
+        default_space = DefaultSpace,
+        space_aliases = SpaceAliases,
 
-        eff_groups = [],
-        eff_spaces = [],
-        eff_handle_services = [],
-        eff_handles = [],
+        eff_groups = EffGroups,
+        eff_spaces = EffSpaces,
+        eff_handle_services = EffHandleServices,
+        eff_handles = EffHandles,
 
         cache_state = #{}
     }}.

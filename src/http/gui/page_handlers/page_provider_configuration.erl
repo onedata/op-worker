@@ -5,37 +5,36 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc This module handles requests asking for current configuration of
-%%% Oneprovider.
+%%% @doc
+%%% This module implements dynamic_page_behaviour and is called
+%%% when provider configuration page is visited.
 %%% @end
 %%%-------------------------------------------------------------------
--module(configuration_handler).
+-module(page_provider_configuration).
 -author("Lukasz Opiola").
 
--behaviour(cowboy_handler).
+-behaviour(dynamic_page_behaviour).
 
 -include("global_definitions.hrl").
--include_lib("ctool/include/logging.hrl").
--include_lib("hackney/include/hackney_lib.hrl").
 
--export([init/2]).
+-export([handle/2]).
 
+%%%===================================================================
+%%% API
+%%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Cowboy handler callback.
-%% Handles a request returning current configuration of Oneprovider.
+%% @doc
+%% {@link dynamic_page_behaviour} callback handle/2.
 %% @end
 %%--------------------------------------------------------------------
--spec init(cowboy_req:req(), term()) -> {ok, cowboy_req:req(), term()}.
-init(#{method := <<"GET">>} = Req, State) ->
-    Configuration = json_utils:encode(get_config()),
-    NewReq = cowboy_req:reply(200,
-        #{<<"content-type">> => <<"application/json">>}, Configuration, Req
-    ),
-    {ok, NewReq, State};
-init(Req, State) ->
-    NewReq = cowboy_req:reply(405, #{<<"allow">> => <<"GET">>}, Req),
-    {ok, NewReq, State}.
+-spec handle(new_gui:method(), cowboy_req:req()) -> cowboy_req:req().
+handle(<<"GET">>, Req) ->
+    cowboy_req:reply(200,
+        #{<<"content-type">> => <<"application/json">>},
+        json_utils:encode(get_config()),
+        Req
+    ).
 
 
 %%%===================================================================
@@ -44,9 +43,14 @@ init(Req, State) ->
 
 -spec get_config() -> maps:map().
 get_config() ->
+    ProviderId = case oneprovider:get_id_or_undefined() of
+        undefined -> <<"not registered yet">>;
+        Id -> Id
+    end,
     CompOpVersions = application:get_env(?APP_NAME, compatible_op_versions, []),
     CompOpVersionsBin = [list_to_binary(V) || V <- CompOpVersions],
     #{
+        <<"providerId">> => ProviderId,
         <<"version">> => oneprovider:get_version(),
         <<"build">> => oneprovider:get_build(),
         <<"compatibleOneproviderVersions">> => CompOpVersionsBin

@@ -36,6 +36,7 @@
 -export([is_special/1, is_root/1, is_guest/1, root_session_id/0]).
 -export([set_direct_io/2]).
 -export([init_counters/0, init_report/0]).
+-export([session_ttl/0]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -57,6 +58,8 @@
     disc_driver => undefined,
     fold_enabled => true
 }).
+
+-define(SESSION_TTL, application:get_env(op_worker, session_ttl, 3600)).
 
 -define(FILE_HANDLES_TREE_ID, <<"storage_file_handles">>).
 -define(HELPER_HANDLES_TREE_ID, <<"helper_handles">>).
@@ -596,6 +599,15 @@ init_counters() ->
 -spec init_report() -> ok.
 init_report() ->
     ?init_reports([{?EXOMETER_NAME(active_sessions), [value]}]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns session Time To Live in seconds.
+%% @end
+%%--------------------------------------------------------------------
+-spec session_ttl() -> integer().
+session_ttl() ->
+    ?SESSION_TTL.
 
 %%%===================================================================
 %%% Internal functions

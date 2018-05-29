@@ -80,7 +80,7 @@
 
 % Mocked user data
 -define(USER_NAME(__User), __User).
--define(USER_LOGIN(__User), __User).
+-define(USER_ALIAS(__User), __User).
 -define(USER_EMAIL_LIST(__User), [__User]).
 -define(USER_LINKED_ACCOUNTS_VALUE(__User), [#{<<"userId">> => __User}]).
 -define(USER_LINKED_ACCOUNTS_MATCHER(__User), [#{<<"userId">> := __User}]).
@@ -177,7 +177,7 @@
 
 -define(USER_PRIVATE_DATA_MATCHER(__User), #document{key = __User, value = #od_user{
     name = ?USER_NAME(__User),
-    login = ?USER_LOGIN(__User),
+    alias = ?USER_ALIAS(__User),
     email_list = ?USER_EMAIL_LIST(__User),
     linked_accounts = ?USER_LINKED_ACCOUNTS_MATCHER(__User),
     default_space = ?USER_DEFAULT_SPACE(__User),
@@ -189,7 +189,7 @@
 }}).
 -define(USER_PROTECTED_DATA_MATCHER(__User), #document{key = __User, value = #od_user{
     name = ?USER_NAME(__User),
-    login = ?USER_LOGIN(__User),
+    alias = ?USER_ALIAS(__User),
     email_list = ?USER_EMAIL_LIST(__User),
     linked_accounts = ?USER_LINKED_ACCOUNTS_MATCHER(__User),
     default_space = undefined,
@@ -201,7 +201,7 @@
 }}).
 -define(USER_SHARED_DATA_MATCHER(__User), #document{key = __User, value = #od_user{
     name = ?USER_NAME(__User),
-    login = ?USER_LOGIN(__User),
+    alias = ?USER_ALIAS(__User),
     email_list = [],
     linked_accounts = [],
     default_space = undefined,
@@ -325,7 +325,8 @@
 -define(USER_SHARED_DATA_VALUE(__UserId), #{
     <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_user, id = __UserId, aspect = instance, scope = shared}),
     <<"name">> => ?USER_NAME(__UserId),
-    <<"login">> => ?USER_LOGIN(__UserId)
+    <<"alias">> => ?USER_ALIAS(__UserId),
+    <<"login">> => ?USER_ALIAS(__UserId) % @TODO deprecated, included for backward compatibility
 }).
 -define(USER_PROTECTED_DATA_VALUE(__UserId), begin
     __SharedData = ?USER_SHARED_DATA_VALUE(__UserId),

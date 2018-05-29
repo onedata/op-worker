@@ -12,7 +12,7 @@
 -module(zone_connection_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("http/http_common.hrl").
+-include("http/gui_paths.hrl").
 -include("global_definitions.hrl").
 -include("http/rest/cdmi/cdmi_capabilities.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
@@ -74,7 +74,7 @@ init_per_testcase(_Case, Config) ->
     ),
     ZoneDomain = rpc:call(hd(Workers), oneprovider, get_oz_domain, []),
     ZoneConfigurationURL = str_utils:format("https://~s~s", [
-        ZoneDomain, ?zone_configuration_path
+        ZoneDomain, ?ZONE_CONFIGURATION_PATH
     ]),
     % Sleep a while before mocking http_client - otherwise meck's reloading
     % and purging the module can cause the op-worker application to crash.

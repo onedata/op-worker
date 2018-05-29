@@ -3039,7 +3039,7 @@ end_per_testcase(_Case, Config) ->
 do_request(Node, URL, Method, Headers, Body) ->
     do_request(Node, URL, Method, Headers, Body, [{recv_timeout, 15000}]).
 do_request(Node, URL, Method, Headers, Body, Opts) ->
-    CaCerts = rpc:call(Node, gui_listener, get_cert_chain, []),
+    CaCerts = rpc:call(Node, https_listener, get_cert_chain_pems, []),
     Opts2 = [{ssl_options, [{cacerts, CaCerts}]} | Opts],
     Result = http_client:request(
         Method, <<(rest_endpoint(Node))/binary, URL/binary>>,
@@ -3055,7 +3055,7 @@ do_request(Node, URL, Method, Headers, Body, Opts) ->
 rest_endpoint(Node) ->
     Port = case get(port) of
         undefined ->
-            {ok, P} = test_utils:get_env(Node, ?APP_NAME, gui_https_port),
+            {ok, P} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
             PStr = case P of
                 443 -> <<"">>;
                 _ -> <<":", (integer_to_binary(P))/binary>>

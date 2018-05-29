@@ -18,7 +18,7 @@
 -include("timeouts.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
--include("http/http_common.hrl").
+-include("http/gui_paths.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -record(state, {
@@ -76,7 +76,7 @@ upgrade(Req, Env, _Handler, HandlerOpts, _Opts) ->
         ok ->
             Headers = cowboy_req:response_headers(#{
                 <<"connection">> => <<"Upgrade">>,
-                <<"upgrade">> => <<?client_protocol_upgrade_name>>
+                <<"upgrade">> => <<?CLIENT_PROTOCOL_UPGRADE_NAME>>
             }, Req),
             #{pid := Pid, streamid := StreamID} = Req,
             Pid ! {{Pid, StreamID}, {switch_protocol, Headers, ?MODULE, HandlerOpts}},
@@ -84,7 +84,7 @@ upgrade(Req, Env, _Handler, HandlerOpts, _Opts) ->
         {error, upgrade_required} ->
             NewReq = cowboy_req:reply(426, #{
                 <<"connection">> => <<"Upgrade">>,
-                <<"upgrade">> => <<?client_protocol_upgrade_name>>
+                <<"upgrade">> => <<?CLIENT_PROTOCOL_UPGRADE_NAME>>
             }, Req),
             {stop, NewReq}
     catch Type:Reason ->
@@ -144,7 +144,7 @@ process_upgrade_request(Req) ->
             {error, upgrade_required};
         true ->
             case cowboy_req:parse_header(<<"upgrade">>, Req, []) of
-                [<<?client_protocol_upgrade_name>>] -> ok;
+                [<<?CLIENT_PROTOCOL_UPGRADE_NAME>>] -> ok;
                 _ -> {error, upgrade_required}
             end
     end.

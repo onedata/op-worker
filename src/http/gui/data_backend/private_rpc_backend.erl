@@ -40,8 +40,8 @@ handle(<<"fileUploadSuccess">>, Props) ->
     SessionId = gui_session:get_session_id(),
     UploadId = proplists:get_value(<<"uploadId">>, Props),
     ParentId = proplists:get_value(<<"parentId">>, Props),
-    FileId = upload_handler:wait_for_file_new_file_id(UploadId),
-    upload_handler:upload_map_delete(UploadId),
+    FileId = page_file_upload:wait_for_file_new_file_id(SessionId, UploadId),
+    page_file_upload:upload_map_delete(SessionId ,UploadId),
     {ok, FileHandle} = logical_file_manager:open(
         SessionId, {guid, FileId}, read
     ),
@@ -50,13 +50,14 @@ handle(<<"fileUploadSuccess">>, Props) ->
     file_data_backend:report_file_upload(FileId, ParentId);
 
 handle(<<"fileUploadFailure">>, Props) ->
+    SessionId = gui_session:get_session_id(),
     UploadId = proplists:get_value(<<"uploadId">>, Props),
-    upload_handler:upload_map_delete(UploadId),
+    page_file_upload:upload_map_delete(SessionId, UploadId),
     ok;
 
 handle(<<"fileBatchUploadComplete">>, Props) ->
     ParentId = proplists:get_value(<<"parentId">>, Props),
-%%    upload_handler:clean_upload_map(),
+%%    page_file_upload:clean_upload_map(gui_session:get_session_id()),
     file_data_backend:report_file_batch_complete(ParentId);
 
 % Checks if file can be downloaded (i.e. can be read by the user) and if so,

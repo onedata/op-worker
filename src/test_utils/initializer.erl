@@ -18,7 +18,7 @@
 -include("proto/oneclient/message_id.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("global_definitions.hrl").
--include("http/http_common.hrl").
+-include("http/gui_paths.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
 -include_lib("public_key/include/public_key.hrl").
@@ -748,7 +748,7 @@ user_logic_mock_setup(Workers, Users) ->
             name = UName,
             linked_accounts = [],
             email_list = [],
-            login = <<>>,
+            alias = <<>>,
             default_space = DefaultSpaceId,
             eff_spaces = SpaceIds,
             eff_groups = GroupIds
@@ -1142,7 +1142,7 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
             Hostname = ?GET_HOSTNAME(Worker),
             try
                 URL = str_utils:format_bin("https://~s~s?nonce=~s", [
-                    Hostname, ?nonce_verify_path, Nonce
+                    Hostname, ?NONCE_VERIFY_PATH, Nonce
                 ]),
 
                 CaCerts = oneprovider:trusted_ca_certs(),
