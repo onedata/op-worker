@@ -4,6 +4,14 @@
 CHANGELOG
 ---------
 
+### 18.02.0-rc5
+
+* Update rtransfer_link.
+* VFS-4422 Hotfix for broken public share download
+* VFS-4482 Do not include link ids in transfer ids (GUI backend)
+* VFS-3953 Integrate new GUI static backend
+
+
 ### 18.02.0-rc4
 
 * VFS-4510 fix finish_time not set for cancellation of replication and invalidation and for failed invalidation
