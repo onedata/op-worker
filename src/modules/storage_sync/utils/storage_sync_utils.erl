@@ -11,6 +11,7 @@
 -module(storage_sync_utils).
 -author("Jakub Kudzia").
 
+-include("global_definitions.hrl").
 -include("modules/storage_sync/strategy_config.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
@@ -18,7 +19,7 @@
 
 %% API
 -export([take_children_storage_ctxs_for_batch/2, take_hash_for_batch/2, module/1,
-    all_children_imported/2]).
+    all_children_imported/2, log_import/2, log_update/2, log_deletion/2]).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -61,9 +62,63 @@ all_children_imported([], _FileUuid) -> true;
 all_children_imported(Jobs, FileUuid) ->
     not job_matches_file(hd(Jobs), FileUuid).
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Function used to add log of import to sync audit log.
+%% @end
+%%-------------------------------------------------------------------
+-spec log_import(file_meta:path(), od_space:id()) -> ok.
+log_import(FilePath, SpaceId) ->
+    log("File ~s has been imported", [FilePath], SpaceId).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Function used to add log of update to sync audit log.
+%% @end
+%%-------------------------------------------------------------------
+-spec log_update(file_meta:path(), od_space:id()) -> ok.
+log_update(FilePath, SpaceId) ->
+    log("Update of file ~s has been detected", [FilePath], SpaceId).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Function used to add log of deletion to sync audit log.
+%% @end
+%%-------------------------------------------------------------------
+-spec log_deletion(file_meta:path(), od_space:id()) -> ok.
+log_deletion(FilePath, SpaceId) ->
+    log("File ~s has been deleted", [FilePath], SpaceId).
+
 %%===================================================================
 %% Internal functions
 %%===================================================================
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Wrapper for logger:log_with_rotation/4 function
+%% @end
+%%-------------------------------------------------------------------
+-spec log(Format :: io:format(), Args :: [term()], od_space:id()) -> ok.
+log(Format, Args, SpaceId) ->
+    LogFile = audit_log_file_name(SpaceId),
+    MaxSize = application:get_env(?APP_NAME,
+        storage_sync_audit_log_file_format_max_size, 524288000), % 500 MB
+    logger:log_with_rotation(LogFile, Format, Args, MaxSize).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns path of sync audit log for given SpaceId.
+%% @end
+%%-------------------------------------------------------------------
+-spec audit_log_file_name(od_space:id()) -> string().
+audit_log_file_name(SpaceId) ->
+    LogFilePrefix = application:get_env(?APP_NAME, storage_sync_audit_log_file_prefix,
+        "/tmp/storage_sync_"),
+    LogFileExtension = application:get_env(?APP_NAME, storage_sync_audit_log_file_extension,
+        ".log"),
+    LogFilePrefix ++ str_utils:to_list(SpaceId) ++ LogFileExtension.
 
 %%-------------------------------------------------------------------
 %% @private

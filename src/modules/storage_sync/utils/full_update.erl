@@ -114,7 +114,7 @@ maybe_delete_imported_file_and_update_counters(FileCtx, SpaceId, StorageId) ->
     catch
         Error:Reason ->
             ?error_stacktrace("maybe_delete_imported_file_and_update_counters failed due to ~p",
-                [Error, Reason]),
+                [{Error, Reason}]),
             storage_sync_monitoring:mark_failed_file(SpaceId, StorageId),
             ok
     end.
@@ -366,6 +366,8 @@ maybe_delete_imported_dir_and_update_counters(FileCtx, SpaceId, StorageId) ->
     case dir_location:is_storage_file_created(DirLocation) of
         true ->
             delete_imported_dir(FileCtx2, SpaceId, StorageId),
+            {StorageFileId, _} = file_ctx:get_storage_file_id(FileCtx2),
+            storage_sync_utils:log_deletion(StorageFileId, SpaceId),
             storage_sync_monitoring:mark_deleted_file(SpaceId, StorageId);
         false ->
             %file has been created in remote provider and not yet replicated
@@ -386,6 +388,8 @@ maybe_delete_imported_regular_file_and_update_counters(FileCtx, SpaceId, Storage
     case file_location:is_storage_file_created(FileLocation) of
         true ->
             delete_imported_file(FileCtx2),
+            {StorageFileId, _} = file_ctx:get_storage_file_id(FileCtx2),
+            storage_sync_utils:log_deletion(StorageFileId, SpaceId),
             storage_sync_monitoring:mark_deleted_file(SpaceId, StorageId);
         false ->
             %file has been created in remote provider and not yet replicated
