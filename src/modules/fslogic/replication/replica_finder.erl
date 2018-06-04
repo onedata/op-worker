@@ -16,50 +16,11 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("cluster_worker/include/exometer_utils.hrl").
 
 -type storage_details() :: {StorageId :: binary(), FileId :: binary()}.
 
 %% API
 -export([get_blocks_for_sync/2, get_unique_blocks/1]).
--export([init_counters/0, init_report/0]).
-
--define(EXOMETER_TIME_NAME(Param), ?exometer_name(?MODULE, time,
-    list_to_atom(atom_to_list(Param) ++ "_time"))).
--define(EXOMETER_COUNTERS, [get_blocks, lfm, synchronize_block, proxyio_request,
-    read_internal, synchronize, synchronize_call, queue, queue2, synchronize_complete,
-    synchronize_complete1, synchronize_complete2, synchronize_complete3,
-    flush_stats, flush_stats1, flush_stats2, flush_stats3, update_replica, update_replica1,
-    update_replica2, update_replica3, update_replica4, update_replica5, update_replica6,
-    flush_length, flush_length2, flush, synchronize_block_fun, synchronize_block_fun1,
-    synchronize_block_fun2, synchronize_block_size, open_callback, fsync_callback, close_callback]).
--define(EXOMETER_DEFAULT_DATA_POINTS_NUMBER, 100).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Initializes all counters.
-%% @end
-%%--------------------------------------------------------------------
--spec init_counters() -> ok.
-init_counters() ->
-    Size = application:get_env(?CLUSTER_WORKER_APP_NAME,
-        exometer_data_points_number, ?EXOMETER_DEFAULT_DATA_POINTS_NUMBER),
-    Counters = lists:map(fun(Name) ->
-        {?EXOMETER_TIME_NAME(Name), uniform, [{size, Size}]}
-    end, ?EXOMETER_COUNTERS),
-    ?init_counters(Counters).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Subscribe for reports for all parameters.
-%% @end
-%%--------------------------------------------------------------------
--spec init_report() -> ok.
-init_report() ->
-    Reports = lists:map(fun(Name) ->
-        {?EXOMETER_TIME_NAME(Name), [min, max, median, mean, n]}
-    end, ?EXOMETER_COUNTERS),
-    ?init_reports(Reports).
 
 %%%===================================================================
 %%% API
@@ -78,7 +39,6 @@ get_blocks_for_sync(_, []) ->
 get_blocks_for_sync([], _) ->
     [];
 get_blocks_for_sync(Locations, Blocks) ->
-%%    Now = os:timestamp(),
     LocalLocations = filter_local_locations(Locations),
     BlocksToSync = lists:foldl(fun(LocalLocation, BlocksToSync0) ->
         TruncatedBlocks = truncate_to_local_size(LocalLocation, BlocksToSync0),
@@ -104,10 +64,7 @@ get_blocks_for_sync(Locations, Blocks) ->
         {ProviderId, ConsolidatedPresentBlocks, StorageDetails}
     end, AggregatedRemoteList),
 
-    A = minimize_present_blocks(PresentBlocks, []),
-%%    Time = timer:now_diff(os:timestamp(), Now),
-%%    ?update_counter(?EXOMETER_TIME_NAME(get_blocks), Time),
-    A.
+    minimize_present_blocks(PresentBlocks, []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -146,9 +103,11 @@ filter_local_locations(LocationDocs) ->
 %% Invalidates LocalBlocks in Blocks.
 %% @end
 %%-------------------------------------------------------------------
--spec invalidate_local_blocks(file_location:doc(), fslogic_blocks:blocks()) -> fslogic_blocks:blocks().
+-spec invalidate_local_blocks(file_location:doc(), fslogic_blocks:blocks()) ->
+    fslogic_blocks:blocks().
 invalidate_local_blocks(FileLocation, Blocks) ->
-    LocalBlocks = fslogic_blocks:get_blocks(FileLocation, #{overlapping_sorted_blocks => Blocks}),
+    LocalBlocks = fslogic_blocks:get_blocks(FileLocation,
+        #{overlapping_sorted_blocks => Blocks}),
     fslogic_blocks:invalidate(Blocks, LocalBlocks).
 
 %%-------------------------------------------------------------------
@@ -220,7 +179,8 @@ exclude_old_blocks(RemoteLocations, BlocksToSync) ->
             provider_id = ProviderId,
             version_vector = VV
         }} = FL) ->
-        RemoteBlocks = fslogic_blocks:get_blocks(FL, #{overlapping_sorted_blocks => BlocksToSync}),
+        RemoteBlocks = fslogic_blocks:get_blocks(FL,
+            #{overlapping_sorted_blocks => BlocksToSync}),
         lists:map(fun(RB) ->
             {RB, {ProviderId, VV, {StorageId, FileId}}}
         end, RemoteBlocks)

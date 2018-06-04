@@ -170,7 +170,7 @@ maybe_import_storage_file(Job = #space_strategy_job{
                                 storage_id = StorageId,
                                 size = Size
                             }} = FL} ->
-                            % TODO - pobrac tylko 2 bloki - wiecej nie trzeba
+                            % TODO VFS-4412 - request only 2 blocks
                             case fslogic_blocks:get_blocks(FL, #{count => 1}) of
                                 [#file_block{offset = 0, size = Size}] ->
                                     maybe_import_file_with_existing_metadata(Job2, FileCtx);

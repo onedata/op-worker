@@ -34,7 +34,6 @@
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("cluster_worker/include/exometer_utils.hrl").
 
 -type handle() :: lfm_context:ctx().
 -type file_key() :: fslogic_worker:file_guid_or_path() | {handle, handle()}.
@@ -64,9 +63,6 @@
 -export([create_share/3, remove_share/2, remove_share_by_guid/2]).
 %% Functions concerning metadata
 -export([get_metadata/5, set_metadata/5, has_custom_metadata/2, remove_metadata/3]).
-
--define(EXOMETER_TIME_NAME(Param), ?exometer_name(replica_finder, time,
-    list_to_atom(atom_to_list(Param) ++ "_time"))).
 
 %%%===================================================================
 %%% API
@@ -404,11 +400,7 @@ read(FileHandle, Offset, MaxSize) ->
     {ok, NewHandle :: handle(), binary()} | error_reply().
 silent_read(FileHandle, Offset, MaxSize) ->
     ?run(fun() ->
-        Now = os:timestamp(),
-        Ans = lfm_files:silent_read(FileHandle, Offset, MaxSize),
-        Time = timer:now_diff(os:timestamp(), Now),
-        ?update_counter(?EXOMETER_TIME_NAME(lfm), Time),
-        Ans
+        lfm_files:silent_read(FileHandle, Offset, MaxSize)
     end).
 
 %%--------------------------------------------------------------------

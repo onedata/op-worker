@@ -19,7 +19,6 @@
 -include("proto/oneprovider/rtransfer_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("cluster_worker/include/exometer_utils.hrl").
 
 -define(RTRANSFER_PORT, proplists:get_value(server_port,
                                             application:get_env(rtransfer_link, transfer, []),
@@ -32,9 +31,6 @@
 
 %% Dialyzer doesn't find the behaviour
 %-behaviour(rtransfer_link_callback).
-
--define(EXOMETER_TIME_NAME(Param), ?exometer_name(replica_finder, time,
-    list_to_atom(atom_to_list(Param) ++ "_time"))).
 
 %%%===================================================================
 %%% API
@@ -104,14 +100,9 @@ get_nodes(ProviderId) ->
 %%--------------------------------------------------------------------
 -spec open(FileUUID :: binary(), read | write) ->
     {ok, Handle :: term()} | {error, Reason :: any()}.
-open(FileGUID, OpenFlag) ->
-    % na kazdym request?
-    % czy owtiera plik przez helper?
-    Now = os:timestamp(),
-%%    Ans = lfm_files:open(?ROOT_SESS_ID, {guid, FileGUID}, OpenFlag),
+open(FileGUID, _OpenFlag) ->
+    % TODO vfs-4412 - delete second arg and change name
     sfm_utils:create_delayed_storage_file(file_ctx:new_by_guid(FileGUID)),
-    Time = timer:now_diff(os:timestamp(), Now),
-    ?update_counter(?EXOMETER_TIME_NAME(open_callback), Time),
     {ok, undefined}.
 
 %%--------------------------------------------------------------------
@@ -120,12 +111,8 @@ open(FileGUID, OpenFlag) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec fsync(Handle :: term()) -> any().
-fsync(Handle) ->
-%%    Now = os:timestamp(),
-%%    Ans = lfm_files:fsync(Handle),
-%%    Time = timer:now_diff(os:timestamp(), Now),
-%%    ?update_counter(?EXOMETER_TIME_NAME(fsync_callback), Time),
-%%    Ans.
+fsync(_Handle) ->
+    % TODO vfs-4412 - delete callback
     ok.
 
 %%--------------------------------------------------------------------
@@ -134,12 +121,8 @@ fsync(Handle) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec close(Handle :: term()) -> any().
-close(Handle) ->
-%%    Now = os:timestamp(),
-%%    Ans = lfm_files:release(Handle),
-%%    Time = timer:now_diff(os:timestamp(), Now),
-%%    ?update_counter(?EXOMETER_TIME_NAME(close_callback), Time),
-%%    Ans.
+close(_Handle) ->
+    % TODO vfs-4412 - delete callback
     ok.
 
 %%--------------------------------------------------------------------

@@ -42,7 +42,6 @@
     times :: undefined | times:times(),
     file_name :: undefined | file_meta:name(),
     storage_doc :: undefined | storage:doc(),
-    file_location_docs :: undefined | [file_location:doc()],
     file_location_ids :: undefined | [file_location:id()],
     acl :: undefined | acl:acl(),
     is_dir :: undefined | boolean(),
@@ -58,7 +57,7 @@
 %% Functions creating context and filling its data
 -export([new_by_canonical_path/2, new_by_guid/1, new_by_doc/3, new_root_ctx/0]).
 -export([reset/1, new_by_partial_context/1, add_file_location/2, set_file_id/2,
-    set_is_dir/2, set_extended_direct_io/2, update_location_doc/2]).
+    set_is_dir/2, set_extended_direct_io/2]).
 
 %% Functions that do not modify context
 -export([get_share_id_const/1, get_space_id_const/1, get_space_dir_uuid_const/1,
@@ -162,8 +161,7 @@ add_file_location(FileCtx = #file_ctx{file_location_ids = undefined}, _LocationI
     FileCtx;
 add_file_location(FileCtx = #file_ctx{file_location_ids = Locations}, LocationId) ->
     FileCtx#file_ctx{
-        file_location_ids = [LocationId | Locations],
-        file_location_docs = undefined
+        file_location_ids = [LocationId | Locations]
     }.
 
 %%--------------------------------------------------------------------
@@ -766,12 +764,14 @@ get_file_location_with_filled_gaps(FileCtx, ReqRange0) ->
     }, FileCtx3} = file_ctx:get_or_create_local_file_location_doc(FileCtx2),
     ReqRange = utils:ensure_defined(ReqRange0, [undefined],
         [#file_block{offset = 0, size = Size}]),
-    Blocks = fslogic_blocks:get_blocks(FileLocationDoc, #{overlapping_blocks => ReqRange}),
+    Blocks = fslogic_blocks:get_blocks(FileLocationDoc,
+        #{overlapping_blocks => ReqRange}),
 
     % find gaps
     AllRanges = lists:foldl(
         fun(Doc, Acc) ->
-            fslogic_blocks:merge(Acc, fslogic_blocks:get_blocks(Doc, #{overlapping_blocks => ReqRange}))
+            fslogic_blocks:merge(Acc, fslogic_blocks:get_blocks(Doc,
+                #{overlapping_blocks => ReqRange}))
         end, [], Locations),
     ExtendedRequestedRange = lists:map(fun(RequestedRange) ->
         case RequestedRange of
@@ -812,7 +812,8 @@ get_or_create_local_file_location_doc(FileCtx, IncludeBlocks) ->
         {true, FileCtx2} ->
             {undefined, FileCtx2};
         {false, FileCtx2} ->
-            get_or_create_local_regular_file_location_doc(FileCtx2, IncludeBlocks)
+            get_or_create_local_regular_file_location_doc(FileCtx2,
+                IncludeBlocks)
     end.
 
 %%--------------------------------------------------------------------
@@ -835,7 +836,8 @@ get_local_file_location_doc(FileCtx) ->
 get_local_file_location_doc(FileCtx, IncludeBlocks) ->
     FileUuid = get_uuid_const(FileCtx),
     LocalLocationId = file_location:local_id(FileUuid),
-    case fslogic_blocks:get_location(LocalLocationId, FileUuid, IncludeBlocks) of
+    case fslogic_blocks:get_location(LocalLocationId, FileUuid,
+        IncludeBlocks) of
         {ok, Location} ->
             {Location, FileCtx};
         {error, not_found} ->
@@ -879,7 +881,7 @@ get_file_location_ids(FileCtx = #file_ctx{file_location_ids = Locations}) ->
 %%--------------------------------------------------------------------
 -spec get_file_location_docs(ctx()) ->
     {[file_location:doc()], ctx()}.
-% TODO - no location cache?
+% TODO VFS-4412 - export as _const function
 get_file_location_docs(FileCtx = #file_ctx{}) ->
     {LocationIds, FileCtx2} = get_file_location_ids(FileCtx),
     FileUuid = get_uuid_const(FileCtx),
@@ -891,27 +893,7 @@ get_file_location_docs(FileCtx = #file_ctx{}) ->
                 false
         end
     end, LocationIds),
-    {LocationDocs, FileCtx2#file_ctx{file_location_docs = LocationDocs}};
-get_file_location_docs(FileCtx = #file_ctx{file_location_docs = LocationDocs}) ->
-    {LocationDocs, FileCtx}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates file location docs.
-%% @end
-%%--------------------------------------------------------------------
--spec update_location_doc(ctx(), file_location:doc()) -> ctx().
-update_location_doc(#file_ctx{file_location_docs = undefined} = FileCtx, _Doc) ->
-    FileCtx;
-update_location_doc(#file_ctx{file_location_docs = LocationDocs} = FileCtx,
-    #document{key = FileLocationId} = Doc) ->
-    LocationDocs2 = lists:map(fun(#document{key = LocId} = LocDoc) ->
-        case LocId of
-            FileLocationId -> Doc;
-            _ -> LocDoc
-        end
-    end, LocationDocs),
-    FileCtx#file_ctx{file_location_docs = LocationDocs2}.
+    {LocationDocs, FileCtx2}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -933,8 +915,7 @@ get_acl(FileCtx = #file_ctx{acl = Acl}) ->
 -spec get_file_size(file_ctx:ctx() | file_meta:uuid()) ->
     {Size :: non_neg_integer(), file_ctx:ctx()}.
 get_file_size(FileCtx) ->
-    % TODO - podmienic
-    % Nie pobierac z lokacjami jak nie trzeba
+    % TODO VFS-4412 - do not get blocks if it is not needed
     case file_ctx:get_local_file_location_doc(FileCtx) of
         {#document{
             value = #file_location{
@@ -958,7 +939,7 @@ get_file_size(FileCtx) ->
 get_local_storage_file_size(FileCtx) ->
     case file_ctx:get_local_file_location_doc(FileCtx) of
         {#document{} = FL, FileCtx2} ->
-            % TODO - tragiczna wydajnosc !!!
+            % TODO VFS-4412 - improve performance
             {fslogic_blocks:size(fslogic_blocks:get_blocks(FL)), FileCtx2};
         {undefined, FileCtx2} ->
             {0, FileCtx2}

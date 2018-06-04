@@ -32,7 +32,6 @@
 %%--------------------------------------------------------------------
 -spec get_file_attr(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:fuse_response().
-% TODO - czy klient zawsze to wywyla przed open?
 get_file_attr(UserCtx, FileCtx) ->
     check_permissions:execute(
         [traverse_ancestors],
@@ -69,7 +68,6 @@ get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles) ->
 -spec get_file_attr_insecure(user_ctx:ctx(), file_ctx:ctx(),
     AllowDeletedFiles :: boolean(), IncludeSize :: boolean()) ->
     fslogic_worker:fuse_response().
-% TODO - czy tu pobieramy lokacje?
 get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize) ->
     {#document{
         key = Uuid,

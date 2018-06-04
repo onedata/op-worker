@@ -195,7 +195,7 @@ handle_cast(Request, State) ->
 %%--------------------------------------------------------------------
 -spec modules_with_exometer() -> list().
 modules_with_exometer() ->
-    [fslogic_worker, helpers, session, router, event_stream, event, replica_finder].
+    [fslogic_worker, helpers, session, router, event_stream, event].
 
 %%--------------------------------------------------------------------
 %% @doc

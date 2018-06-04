@@ -126,10 +126,6 @@ open_file_insecure(UserCtx, FileCtx, Flag) ->
     no_return() | #fuse_response{}.
 open_file_insecure(UserCtx, FileCtx, Flag, HandleId0) ->
     SessId = user_ctx:get_session_id(UserCtx),
-    % Nie mozemy tu tyle razy pobierac lokacje
-    % Pobierajmy z synchronizera jak istnieje wykluczajac bloki
-    % Bloki dociagajmy na zadanie
-    % Istnienie synchronizera dowodem na istnienie lokacji?
     FileCtx2 = sfm_utils:create_delayed_storage_file(FileCtx),
     {SFMHandle, FileCtx3} = storage_file_manager:new_handle(SessId, FileCtx2),
     SFMHandle2 = storage_file_manager:set_size(SFMHandle),
@@ -146,15 +142,11 @@ open_file_insecure(UserCtx, FileCtx, Flag, HandleId0) ->
 %% Opens a file and returns a handle to it with extended information about location.
 %% @end
 %%--------------------------------------------------------------------
--spec open_file_with_extended_info_insecure(user_ctx:ctx(), FileCtx :: file_ctx:ctx(),
-    fslogic_worker:open_flag()) ->
+-spec open_file_with_extended_info_insecure(user_ctx:ctx(),
+    FileCtx :: file_ctx:ctx(), fslogic_worker:open_flag()) ->
     no_return() | #fuse_response{}.
 open_file_with_extended_info_insecure(UserCtx, FileCtx, Flag) ->
     SessId = user_ctx:get_session_id(UserCtx),
-    % Nie mozemy tu tyle razy pobierac lokacje
-    % Pobierajmy z synchronizera jak istnieje wykluczajac bloki
-    % Bloki dociagajmy na zadanie
-    % Istnienie synchronizera dowodem na istnienie lokacji?
     {#document{value = #file_location{provider_id = ProviderId, file_id = FileId,
         storage_id = StorageId}}, FileCtx2} =
         sfm_utils:create_delayed_storage_file_and_return_location(FileCtx),
@@ -294,7 +286,6 @@ storage_file_created_insecure(_UserCtx, FileCtx) ->
 
     case StorageFileCreated of
         false ->
-            % TODO - bokiem (czy uzywamy?? - chyba nie)
             FileUuid = file_ctx:get_uuid_const(FileCtx),
             UpdateAns = fslogic_blocks:update_location(FileUuid, FileLocationId, fun
                 (#file_location{storage_file_created = true}) ->

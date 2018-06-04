@@ -15,13 +15,9 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("cluster_worker/include/exometer_utils.hrl").
 
 %% API
 -export([update/4, rename/2]).
-
--define(EXOMETER_TIME_NAME(Param), ?exometer_name(replica_finder, time,
-    list_to_atom(atom_to_list(Param) ++ "_time"))).
 
 %%%===================================================================
 %%% API
@@ -43,46 +39,25 @@ update(FileCtx, Blocks, FileSize, BumpVersion) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     file_location:critical_section(FileUuid,
         fun() ->
-            Now = os:timestamp(),
             {Location = #document{
                 value = #file_location{
                     size = OldSize
                 }
             }, _FileCtx2} =
                 file_ctx:get_or_create_local_file_location_doc(FileCtx),
-            Time = timer:now_diff(os:timestamp(), Now),
-            ?update_counter(?EXOMETER_TIME_NAME(update_replica1), Time),
-            Now2 = os:timestamp(),
             UpdatedLocation = append(Location, Blocks, BumpVersion),
-            Time2 = timer:now_diff(os:timestamp(), Now2),
-            ?update_counter(?EXOMETER_TIME_NAME(update_replica2), Time2),
-            Now3 = os:timestamp(),
-            Ans = case FileSize of
+            case FileSize of
                 undefined ->
                     fslogic_blocks:save_location(UpdatedLocation),
-                    Time3 = timer:now_diff(os:timestamp(), Now3),
-                    ?update_counter(?EXOMETER_TIME_NAME(update_replica3), Time3),
-                    Now4 = os:timestamp(),
-                    A = case fslogic_blocks:upper(Blocks) > OldSize of
+                    case fslogic_blocks:upper(Blocks) > OldSize of
                         true -> {ok, size_changed};
                         false -> {ok, size_not_changed}
-                    end,
-                    Time4 = timer:now_diff(os:timestamp(), Now4),
-                    ?update_counter(?EXOMETER_TIME_NAME(update_replica4), Time4),
-                    A;
+                    end;
                 _ ->
                     TruncatedLocation = do_local_truncate(FileSize, UpdatedLocation),
-                    Time3 = timer:now_diff(os:timestamp(), Now3),
-                    ?update_counter(?EXOMETER_TIME_NAME(update_replica5), Time3),
-                    Now4 = os:timestamp(),
                     fslogic_blocks:save_location(TruncatedLocation),
-                    Time4 = timer:now_diff(os:timestamp(), Now4),
-                    ?update_counter(?EXOMETER_TIME_NAME(update_replica6), Time4),
                     {ok, size_changed}
-            end,
-            Time5 = timer:now_diff(os:timestamp(), Now),
-            ?update_counter(?EXOMETER_TIME_NAME(update_replica), Time5),
-            Ans
+            end
         end).
 
 

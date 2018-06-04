@@ -213,7 +213,8 @@ reconcile_replicas(FileCtx,
             end
     end,
 
-    #document{value = NewLocation} = NewDoc = version_vector:merge_location_versions(LocalDoc, ExternalDoc),
+    #document{value = NewLocation} = NewDoc =
+        version_vector:merge_location_versions(LocalDoc, ExternalDoc),
     NewLocatoon2 = fslogic_blocks:set_blocks(NewLocation#file_location{
         size = NewSize
     }, TruncatedNewBlocks),

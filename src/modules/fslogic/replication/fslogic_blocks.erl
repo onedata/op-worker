@@ -14,7 +14,6 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("cluster_worker/include/exometer_utils.hrl").
 
 -type block() :: #file_block{}.
 -type blocks() :: [block()].
@@ -30,9 +29,6 @@
     save_location/1, update_location/3, create_location/2, get_location/2,
     get_location/3, cache_location/1, init_cache/0, flush/0, check_flush/0,
     delete_location/2, get_size/2]).
-
--define(EXOMETER_TIME_NAME(Param), ?exometer_name(replica_finder, time,
-    list_to_atom(atom_to_list(Param) ++ "_time"))).
 
 %%%===================================================================
 %%% API
@@ -62,9 +58,7 @@ get_size(LocId, Uuid) ->
         _ ->
             get_location(LocId, Uuid),
             Sizes = get(file_location_sizes),
-            A = proplists:get_value(LocId, Sizes, 0),
-%%            ?info("ssss ~p", [{A, Sizes, LocId, Uuid}]),
-            A
+            proplists:get_value(LocId, Sizes, 0)
     end.
 
 %%-------------------------------------------------------------------
@@ -115,7 +109,6 @@ get_blocks_range(Blocks) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec get_blocks(location()) -> blocks().
-% TODO - czy gdzies nie musimy wyflushowac blokow zanim nie pobierzemy blokow?
 get_blocks(FileLocation) ->
     get_blocks(FileLocation, #{}).
 
@@ -132,7 +125,6 @@ get_blocks(Location, Options) ->
 %%-------------------------------------------------------------------
 -spec get_blocks(location(), map()) -> blocks().
 get_blocks(#file_location{blocks = Blocks}, _Options, _LocKey) when is_list(Blocks) ->
-%%    ?info("bbbbb ~p", [erlang:process_info(self(), current_stacktrace)]),
     Blocks;
 get_blocks(#file_location{blocks = Blocks}, #{overlapping_sorted_blocks := OB}, LocKey) ->
     case OB of
@@ -213,8 +205,8 @@ get_block_while(Iter, Stop) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec set_blocks(location(), blocks()) -> location().
-set_blocks(#file_location{blocks = Blocks} = FileLocation, NewBlocks) when is_list(Blocks) ->
-    FileLocation#file_location{blocks = NewBlocks};
+set_blocks(#file_location{blocks = Blocks} = FileLocation, NewBlocks)
+    when is_list(Blocks) -> FileLocation#file_location{blocks = NewBlocks};
 set_blocks(#file_location{} = FileLocation, NewBlocks) ->
     FileLocation#file_location{blocks = gb_sets:from_ordset(lists:map(
         fun(#file_block{offset = O, size = S}) ->
@@ -229,9 +221,11 @@ set_blocks(#document{value = Record} = Doc, Blocks) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec update_blocks(location(), blocks()) -> location().
-update_blocks(#document{value = #file_location{blocks = Blocks} = FileLocation} = Doc, NewBlocks) when is_list(Blocks) ->
+update_blocks(#document{value = #file_location{blocks = Blocks} =
+    FileLocation} = Doc, NewBlocks) when is_list(Blocks) ->
     Doc#document{value = FileLocation#file_location{blocks = NewBlocks}};
-update_blocks(#document{key = LocID, value = #file_location{blocks = Blocks} = FileLocation} = Doc, NewBlocks) ->
+update_blocks(#document{key = LocID, value = #file_location{blocks = Blocks}
+    = FileLocation} = Doc, NewBlocks) ->
     BIU = get(blocks_in_use),
     put(blocks_in_use, proplists:delete(LocID, BIU)),
     OldBlocks = proplists:get_value(LocID, BIU, []),
@@ -239,24 +233,23 @@ update_blocks(#document{key = LocID, value = #file_location{blocks = Blocks} = F
     Sizes = get(file_location_sizes),
     Size = proplists:get_value(LocID, Sizes, 0),
 
-    {Blocks2, Exclude, Size2} = lists:foldl(fun(#file_block{offset = O, size = S} = B, {TmpBlocks, NotChanged, TmpSize}) ->
+    {Blocks2, Exclude, Size2} = lists:foldl(fun(#file_block{offset = O,
+        size = S} = B, {TmpBlocks, NotChanged, TmpSize}) ->
         B2 = #file_block{offset = O+S, size = S},
         case lists:member(B, NewBlocks) of
             true ->
                 {TmpBlocks, [B | NotChanged], TmpSize};
             _ ->
-%%                ?info("ooooo1 ~p", [S]),
                 {gb_sets:delete(B2, TmpBlocks), NotChanged, TmpSize - S}
         end
     end, {Blocks, [], Size}, OldBlocks),
 
-    {Blocks3, Size3} = lists:foldl(fun(#file_block{offset = O, size = S}, {Acc, TmpSize}) ->
+    {Blocks3, Size3} = lists:foldl(fun(#file_block{offset = O, size = S},
+        {Acc, TmpSize}) ->
         B2 = #file_block{offset = O+S, size = S},
-%%        ?info("ooooo2 ~p", [S]),
         {gb_sets:add(B2, Acc), TmpSize + S}
     end, {Blocks2, Size2}, NewBlocks -- Exclude),
 
-%%    ?info("ooooo3 ~p", [{Sizes, [{Key, Size3} | proplists:delete(Key, Sizes)]}]),
     put(file_location_sizes, [{LocID, Size3} | proplists:delete(LocID, Sizes)]),
     Doc#document{value = FileLocation#file_location{blocks = Blocks3}}.
 
@@ -278,8 +271,8 @@ set_final_blocks(#document{value = Record} = Doc, Blocks) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec save_location(file_location:doc()) -> {ok, file_location:id()} | {error, term()}.
-save_location(#document{key = Key, value = Location = #file_location{uuid = Uuid, blocks = Blocks}} = FileLocation) ->
-%%    ?info("gggg4 ~p", [{FileLocation, erlang:process_info(self(), current_stacktrace)}]),
+save_location(#document{key = Key, value = Location =
+    #file_location{uuid = Uuid, blocks = Blocks}} = FileLocation) ->
     case get(file_locations) of
         undefined ->
             Fun1 = fun() ->
@@ -316,8 +309,8 @@ save_location(#document{key = Key, value = Location = #file_location{uuid = Uuid
 %% @end
 %%-------------------------------------------------------------------
 -spec cache_location(file_location:doc()) -> ok.
-cache_location(#document{key = Key, value = Location = #file_location{uuid = Uuid, blocks = Blocks}} = FileLocation) ->
-%%    ?info("gggg5 ~p", [{FileLocation, erlang:process_info(self(), current_stacktrace)}]),
+cache_location(#document{key = Key, value = Location =
+    #file_location{uuid = Uuid, blocks = Blocks}} = FileLocation) ->
     case get(file_locations) of
         undefined ->
             Fun1 = fun() ->
@@ -354,7 +347,6 @@ cache_location(#document{key = Key, value = Location = #file_location{uuid = Uui
 -spec update_location(file_meta:uuid(), file_location:id(), file_location:diff()) ->
     {ok, file_location:doc()} | {error, term()}.
 update_location(FileUuid, LocId, Diff) ->
-%%    ?info("gggg3 ~p", [LocId]),
     case get(file_locations) of
         undefined ->
             Fun1 = fun() ->
@@ -368,7 +360,8 @@ update_location(FileUuid, LocId, Diff) ->
             GetAns = case proplists:get_value(LocId, Locations) of
                 undefined ->
                     file_location:get(LocId);
-                {#document{value = Location = #file_location{blocks = Blocks}} = LocationDoc, _} ->
+                {#document{value = Location = #file_location{blocks = Blocks}} =
+                    LocationDoc, _} ->
                     LocationDoc2 = LocationDoc#document{value =
                     Location#file_location{blocks =
                     lists:map(
@@ -405,16 +398,14 @@ update_location(FileUuid, LocId, Diff) ->
 %%-------------------------------------------------------------------
 -spec create_location(file_location:doc(), boolean()) ->
     {ok, file_location:id()} | {error, term()}.
-create_location(#document{key = Key, value = #file_location{uuid = Uuid}} = Doc, GeneratedKey) ->
-%%    ?info("gggg2 ~p", [Doc]),
+create_location(#document{key = Key, value = #file_location{uuid = Uuid}} = Doc,
+    GeneratedKey) ->
     case get(file_locations) of
         undefined ->
             Fun1 = fun() ->
-%%                ?info("ccc1 ~p", [Key]),
                 create_location(Doc, GeneratedKey)
             end,
             Fun2 = fun() ->
-%%                ?info("ccc2 ~p", [Key]),
                 file_location:create(Doc, GeneratedKey)
             end,
             replica_synchronizer:apply(Uuid, Fun1, Fun2);
@@ -428,12 +419,11 @@ create_location(#document{key = Key, value = #file_location{uuid = Uuid}} = Doc,
 
             case GetAns of
                 {ok, _} ->
-%%                    ?info("ccc3 ~p", [GetAns]),
                     {error, already_exists};
                 {error, not_found} ->
-%%                    ?info("ccc4 ~p", [Key]),
                     case file_location:create(Doc, GeneratedKey) of
-                        {ok, #document{value = Location = #file_location{blocks = Blocks}} = FileLocation} ->
+                        {ok, #document{value = Location = #file_location{blocks =
+                        Blocks}} = FileLocation} ->
                             FileLocation2 = FileLocation#document{value =
                             Location#file_location{blocks =
                             gb_sets:from_ordset(lists:map(
@@ -441,7 +431,8 @@ create_location(#document{key = Key, value = #file_location{uuid = Uuid}} = Doc,
                                     #file_block{offset = O+S, size = S}
                                 end, Blocks))}},
                             put(file_locations,
-                                [{Key, {FileLocation2, updated}} | proplists:delete(Key, Locations)]),
+                                [{Key, {FileLocation2, updated}} |
+                                    proplists:delete(Key, Locations)]),
                             put(file_location_sizes, [{Key, ?MODULE:size(Blocks)} |
                                 proplists:delete(Key, get(file_location_sizes))]),
                             {ok, FileLocation};
@@ -449,7 +440,6 @@ create_location(#document{key = Key, value = #file_location{uuid = Uuid}} = Doc,
                             Other
                     end;
                 Error ->
-%%                    ?info("ccc5 ~p", [Error]),
                     Error
             end
     end.
@@ -462,7 +452,6 @@ create_location(#document{key = Key, value = #file_location{uuid = Uuid}} = Doc,
 -spec delete_location(file_meta:uuid(), file_location:id()) ->
     ok | {error, term()}.
 delete_location(FileUuid, LocId) ->
-%%    ?info("gggg3 ~p", [LocId]),
     case get(file_locations) of
         undefined ->
             Fun1 = fun() ->
@@ -474,7 +463,8 @@ delete_location(FileUuid, LocId) ->
             replica_synchronizer:apply(FileUuid, Fun1, Fun2);
         Locations ->
             put(file_locations, proplists:delete(LocId, Locations)),
-            put(file_location_sizes, proplists:delete(LocId, get(file_location_sizes))),
+            put(file_location_sizes, proplists:delete(LocId,
+                get(file_location_sizes))),
             file_location:delete(LocId)
     end.
 
@@ -496,19 +486,18 @@ get_location(LocId, FileUuid) ->
 %%-------------------------------------------------------------------
 -spec get_location(file_location:id(), file_meta:uuid(), boolean()) ->
     {ok, file_location:doc()} | {error, term()}.
-% TODO - dac mozliwosc podawania ile blokow chcesz
+% TODO VFS-4412 - allow specification of blocks number to be fetched
 get_location(LocId, FileUuid, true) ->
-    A = case get(file_locations) of
+    case get(file_locations) of
         undefined ->
-%%            ?info("gggg1 ~p", [LocId]),
-%%            ?info("bbbbb ~p", [erlang:process_info(self(), current_stacktrace)]),
-            replica_synchronizer:flush_location(FileUuid), % TODO - zabija wydajnosc
+            replica_synchronizer:flush_location(FileUuid), % TODO VFS-4412 - kills performance
             file_location:get(LocId);
         Locations ->
             case proplists:get_value(LocId, Locations) of
                 undefined ->
                     case file_location:get(LocId) of
-                        {ok, #document{value = Location = #file_location{blocks = Blocks}} = LocationDoc} ->
+                        {ok, #document{value = Location =
+                            #file_location{blocks = Blocks}} = LocationDoc} ->
                             LocationDoc2 = LocationDoc#document{value =
                                 Location#file_location{blocks =
                                     gb_sets:from_ordset(lists:map(
@@ -519,19 +508,14 @@ get_location(LocId, FileUuid, true) ->
                                 [{LocId, {LocationDoc2, ok}} | Locations]),
                             put(file_location_sizes, [{LocId, ?MODULE:size(Blocks)} |
                                 proplists:delete(LocId, get(file_location_sizes))]),
-%%                            ?info("gggg2 ~p", [LocId]),
                             {ok, LocationDoc2};
                         Error ->
-%%                            ?info("gggg3 ~p", [LocId]),
                             Error
                     end;
                 {Doc, _} ->
-%%                    ?info("gggg4 ~p", [LocId]),
                     {ok, Doc}
             end
-    end,
-%%    ?info("gggg0 ~p", [A]),
-    A;
+    end;
 get_location(LocId, FileUuid, _) ->
     case get(file_locations) of
         undefined ->
@@ -552,7 +536,8 @@ get_location(LocId, FileUuid, _) ->
             case proplists:get_value(LocId, Locations) of
                 undefined ->
                     case file_location:get(LocId) of
-                        {ok, #document{value = Location = #file_location{blocks = Blocks}} = LocationDoc} ->
+                        {ok, #document{value = Location =
+                            #file_location{blocks = Blocks}} = LocationDoc} ->
                             LocationDoc2 = LocationDoc#document{value =
                             Location#file_location{blocks =
                             gb_sets:from_ordset(lists:map(
@@ -758,8 +743,6 @@ save_doc(#document{value = Location = #file_location{blocks = Blocks}} = Locatio
 %%-------------------------------------------------------------------
 -spec flush([datastore:document()]) -> ok.
 flush(Locations) ->
-    Now = os:timestamp(),
-    ?update_counter(?EXOMETER_TIME_NAME(flush_length), length(Locations)),
     Locations2 = lists:map(fun
         ({ID, {LocationDoc, updated}}) ->
             save_doc(LocationDoc),
@@ -770,8 +753,6 @@ flush(Locations) ->
     put(file_locations, Locations2),
     put(flush_time, os:timestamp()),
     put(flush_planned, undefined),
-    Time = timer:now_diff(os:timestamp(), Now),
-    ?update_counter(?EXOMETER_TIME_NAME(flush), Time),
     ok.
 
 %%-------------------------------------------------------------------

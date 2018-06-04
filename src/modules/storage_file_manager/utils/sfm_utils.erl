@@ -132,12 +132,12 @@ create_delayed_storage_file(FileCtx) ->
                             user_ctx:new(?ROOT_SESS_ID), FileCtx2),
                         files_to_chown:chown_or_schedule_chowning(FileCtx3),
 
-                        {ok, #document{} = Doc} = fslogic_blocks:update_location(FileUuid, FileLocationId, fun
+                        {ok, #document{}} =
+                            fslogic_blocks:update_location(FileUuid, FileLocationId, fun
                             (FileLocation = #file_location{storage_file_created = false}) ->
                                 {ok, FileLocation#file_location{storage_file_created = true}}
                         end),
                         FileCtx3
-%%                        file_ctx:update_location_doc(FileCtx3, Doc)
                 end
             end);
         true ->
@@ -172,10 +172,11 @@ create_delayed_storage_file_and_return_location(FileCtx) ->
                             user_ctx:new(?ROOT_SESS_ID), FileCtx2),
                         files_to_chown:chown_or_schedule_chowning(FileCtx3),
 
-                        {ok, #document{} = Doc} = fslogic_blocks:update_location(FileUuid, FileLocationId, fun
-                            (FileLocation = #file_location{storage_file_created = false}) ->
-                                {ok, FileLocation#file_location{storage_file_created = true}}
-                        end),
+                        {ok, #document{} = Doc} =
+                            fslogic_blocks:update_location(FileUuid, FileLocationId, fun
+                                (FileLocation = #file_location{storage_file_created = false}) ->
+                                    {ok, FileLocation#file_location{storage_file_created = true}}
+                            end),
                         {Doc, FileCtx3}
 %%                        file_ctx:update_location_doc(FileCtx3, Doc)
                 end

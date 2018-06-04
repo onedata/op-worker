@@ -19,7 +19,6 @@
 -include("modules/datastore/transfer.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("cluster_worker/include/exometer_utils.hrl").
 
 %% API
 -export([
@@ -36,9 +35,6 @@
 
 % exported for tests
 -export([get_file_children/4]).
-
--define(EXOMETER_TIME_NAME(Param), ?exometer_name(replica_finder, time,
-    list_to_atom(atom_to_list(Param) ++ "_time"))).
 
 %%%===================================================================
 %%% API
@@ -59,11 +55,14 @@ synchronize_block(UserCtx, FileCtx, undefined, Prefetch, TransferId) ->
     synchronize_block(UserCtx, FileCtx3, #file_block{offset = 0, size = Size},
         Prefetch, TransferId);
 synchronize_block(UserCtx, FileCtx, Block, Prefetch, TransferId) ->
-    Now = os:timestamp(),
     {ok, Ans} = replica_synchronizer:synchronize(UserCtx, FileCtx, Block,
         Prefetch, TransferId),
-    Time = timer:now_diff(os:timestamp(), Now),
-    ?update_counter(?EXOMETER_TIME_NAME(synchronize_block_fun), Time),
+    case Ans of
+        #file_location_changed{} -> ok;
+        _ ->
+            ?info("synchronize_block check ~p",
+                [{Ans, UserCtx, FileCtx, Block, Prefetch, TransferId}])
+    end,
     #fuse_response{status = #status{code = ?OK}, fuse_response = Ans}.
 
 %%--------------------------------------------------------------------
@@ -86,7 +85,7 @@ synchronize_block_and_compute_checksum(UserCtx, FileCtx,
     lfm_files:release(Handle),
 
     Checksum = crypto:hash(md4, Data),
-    % TODO - zwracanie calej lokacji!
+    % TODO VFS-4412 Refactor similarly to synchronize_block
     {LocationToSend, _FileCtx2} = file_ctx:get_file_location_with_filled_gaps(FileCtx, Range),
     #fuse_response{
         status = #status{code = ?OK},
