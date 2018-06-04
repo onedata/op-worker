@@ -531,7 +531,7 @@ maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
 ) ->
     {StorageSyncInfo, FileCtx2} = file_ctx:get_storage_sync_info(FileCtx),
     case StorageSyncInfo of
-        #document{value = #storage_sync_info{mtime = LastMtime}} when LastMtime >= StMtime ->
+        #document{value = #storage_sync_info{mtime = LastMtime}} when LastMtime =:= StMtime ->
             not_updated;
         _ ->
             FileUuid = file_ctx:get_uuid_const(FileCtx2),
