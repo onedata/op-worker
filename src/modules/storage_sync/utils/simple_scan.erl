@@ -356,9 +356,10 @@ import_file(#space_strategy_job{
         _ ->
             ok
     end,
-    StorageFileId = SFMHandle#sfm_handle.file,
+    {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
     ?debug("Import storage file ~p", [{StorageFileId, CanonicalPath}]),
-    {imported, FileCtx}.
+    storage_sync_utils:log_import(StorageFileId, SpaceId),
+    {imported, FileCtx2}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -500,6 +501,9 @@ maybe_update_attrs(FileAttr, FileCtx, StorageFileCtx, Mode, SyncAcl) ->
     ],
     case lists:member(updated, Results) of
         true ->
+            SpaceId = file_ctx:get_space_id_const(FileCtx),
+            {StorageFileId, _FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
+            storage_sync_utils:log_update(StorageFileId, SpaceId),
             updated;
         false ->
             processed
@@ -533,7 +537,7 @@ maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
 ) ->
     {StorageSyncInfo, FileCtx2} = file_ctx:get_storage_sync_info(FileCtx),
     case StorageSyncInfo of
-        #document{value = #storage_sync_info{mtime = LastMtime}} when LastMtime >= StMtime ->
+        #document{value = #storage_sync_info{mtime = LastMtime}} when LastMtime =:= StMtime ->
             not_updated;
         _ ->
             FileUuid = file_ctx:get_uuid_const(FileCtx2),
