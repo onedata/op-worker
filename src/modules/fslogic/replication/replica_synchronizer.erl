@@ -423,6 +423,10 @@ handle_info({Ref, complete, ErrorStatus}, State) ->
 
 handle_info(check_flush, State) ->
     fslogic_blocks:check_flush(),
+    {noreply, State, ?DIE_AFTER};
+
+handle_info(Msg, State) ->
+    ?log_bad_request(Msg),
     {noreply, State, ?DIE_AFTER}.
 
 code_change(_OldVsn, State, _Extra) ->
