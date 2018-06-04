@@ -34,6 +34,7 @@
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("cluster_worker/include/exometer_utils.hrl").
 
 -type handle() :: lfm_context:ctx().
 -type file_key() :: fslogic_worker:file_guid_or_path() | {handle, handle()}.
@@ -49,7 +50,8 @@
 -export([schedule_file_replication/3, schedule_file_replication/4, schedule_replica_invalidation/4]).
 %% Functions operating on files
 -export([create/2, create/3, create/4, open/3, fsync/1, fsync/3, write/3, read/3,
-    truncate/3, release/1, get_file_distribution/2, create_and_open/4, create_and_open/5]).
+    silent_read/3, truncate/3, release/1, get_file_distribution/2,
+    create_and_open/4, create_and_open/5]).
 %% Functions concerning file permissions
 -export([set_perms/3, check_perms/3, set_acl/3, get_acl/2, remove_acl/2]).
 %% Functions concerning file attributes
@@ -62,6 +64,9 @@
 -export([create_share/3, remove_share/2, remove_share_by_guid/2]).
 %% Functions concerning metadata
 -export([get_metadata/5, set_metadata/5, has_custom_metadata/2, remove_metadata/3]).
+
+-define(EXOMETER_TIME_NAME(Param), ?exometer_name(replica_finder, time,
+    list_to_atom(atom_to_list(Param) ++ "_time"))).
 
 %%%===================================================================
 %%% API
@@ -389,6 +394,22 @@ write(FileHandle, Offset, Buffer) ->
     {ok, NewHandle :: handle(), binary()} | error_reply().
 read(FileHandle, Offset, MaxSize) ->
     ?run(fun() -> lfm_files:read(FileHandle, Offset, MaxSize) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Reads requested part of a file (no events or prefetching).
+%% @end
+%%--------------------------------------------------------------------
+-spec silent_read(FileHandle :: handle(), Offset :: integer(), MaxSize :: integer()) ->
+    {ok, NewHandle :: handle(), binary()} | error_reply().
+silent_read(FileHandle, Offset, MaxSize) ->
+    ?run(fun() ->
+        Now = os:timestamp(),
+        Ans = lfm_files:silent_read(FileHandle, Offset, MaxSize),
+        Time = timer:now_diff(os:timestamp(), Now),
+        ?update_counter(?EXOMETER_TIME_NAME(lfm), Time),
+        Ans
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc

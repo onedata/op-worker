@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([on_file_location_change/2]).
+-export([on_file_location_change/2, update_local_location_replica/3]).
 
 %%%===================================================================
 %%% API
@@ -56,10 +56,6 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
         end
     end).
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Update local location replica according to external changes.
@@ -81,6 +77,10 @@ update_local_location_replica(FileCtx,
         lesser -> update_outdated_local_location_replica(FileCtx, LocalDoc, RemoteDoc);
         concurrent -> reconcile_replicas(FileCtx, LocalDoc, RemoteDoc)
     end.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -105,12 +105,12 @@ update_outdated_local_location_replica(FileCtx,
     LocationDocWithNewVersion = version_vector:merge_location_versions(LocalDoc, ExternalDoc),
     Diff = version_vector:version_diff(LocalDoc, ExternalDoc),
     Changes = replica_changes:get_changes(ExternalDoc, Diff),
-    case replica_invalidator:invalidate_changes(FileCtx, LocationDocWithNewVersion, Changes, NewSize) of
-        {deleted, _FileCtx2} ->
+    case replica_invalidator:invalidate_changes(FileCtx, LocationDocWithNewVersion, Changes, NewSize, []) of
+        {deleted, _FileCtx2, _} ->
             ok;
-        {NewDoc, FileCtx2} ->
+        {NewDoc, FileCtx2, ChangedBlocks} ->
             {ok, FileCtx3} = maybe_truncate_file_on_storage(FileCtx2, OldSize, NewSize),
-            notify_block_change_if_necessary(FileCtx3, LocationDocWithNewVersion, NewDoc),
+            ok = fslogic_event_emitter:emit_file_location_changed(FileCtx3, [], ChangedBlocks), % to use notify_block_change_if_necessary when ready
             notify_size_change_if_necessary(FileCtx3, LocationDocWithNewVersion, NewDoc)
     end.
 
@@ -125,15 +125,15 @@ reconcile_replicas(FileCtx,
         value = #file_location{
             uuid = Uuid,
             version_vector = VV1,
-            blocks = LocalBlocks,
             size = LocalSize
-        }},
+        }} = LocalFL,
     ExternalDoc = #document{
         value = #file_location{
             version_vector = VV2,
             size = ExternalSize
         }}
 ) ->
+    LocalBlocks = fslogic_blocks:get_blocks(LocalFL),
     FileGuid = file_ctx:get_guid_const(FileCtx),
     ?debug("Conflicting changes detected on file ~p, versions: ~p vs ~p", [FileGuid, VV1, VV2]),
     ExternalChangesNum = version_vector:version_diff(LocalDoc, ExternalDoc),
@@ -213,13 +213,11 @@ reconcile_replicas(FileCtx,
             end
     end,
 
-    NewDoc = version_vector:merge_location_versions(LocalDoc, ExternalDoc),
-    NewDoc2 = NewDoc#document{
-        value = NewDoc#document.value#file_location{
-            blocks = TruncatedNewBlocks,
-            size = NewSize
-        }
-    },
+    #document{value = NewLocation} = NewDoc = version_vector:merge_location_versions(LocalDoc, ExternalDoc),
+    NewLocatoon2 = fslogic_blocks:set_blocks(NewLocation#file_location{
+        size = NewSize
+    }, TruncatedNewBlocks),
+    NewDoc2 = NewDoc#document{value = NewLocatoon2},
 
     RenameResult = case Rename of
         skip ->
@@ -232,11 +230,11 @@ reconcile_replicas(FileCtx,
         {deleted, _} ->
             ok;
         {skipped, FileCtx2} ->
-            {ok, _} = file_location:save(NewDoc2),
+            {ok, _} = fslogic_blocks:save_location(NewDoc2),
             notify_block_change_if_necessary(file_ctx:reset(FileCtx2), LocalDoc, NewDoc2),
             notify_size_change_if_necessary(file_ctx:reset(FileCtx2), LocalDoc, NewDoc2);
         {{renamed, RenamedDoc, Uuid, TargetSpaceId}, _} ->
-            {ok, _} = file_location:save(RenamedDoc),
+            {ok, _} = fslogic_blocks:save_location(RenamedDoc),
             RenamedFileCtx =
                 file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(Uuid, TargetSpaceId)),
             files_to_chown:chown_file(RenamedFileCtx),
@@ -252,6 +250,7 @@ reconcile_replicas(FileCtx,
 -spec notify_block_change_if_necessary(file_ctx:ctx(), file_location:doc(),
     file_location:doc()) -> ok.
 %%notify_block_change_if_necessary(#document{value = #file_location{blocks = SameBlocks}}, %todo VFS-2132
+%% %todo use fslogic_blocks to get blocks from document
 %%    #document{value = #file_location{blocks = SameBlocks}}) ->
 %%    ok;
 notify_block_change_if_necessary(FileCtx, _, _) ->

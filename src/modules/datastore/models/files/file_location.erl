@@ -79,7 +79,7 @@ critical_section(ResourceId, Fun) ->
 %%--------------------------------------------------------------------
 -spec save_and_bump_version(doc()) -> {ok, doc()} | {error, term()}.
 save_and_bump_version(FileLocationDoc) ->
-    file_location:save(version_vector:bump_version(FileLocationDoc)).
+    fslogic_blocks:save_location(version_vector:bump_version(FileLocationDoc)).
 
 %%--------------------------------------------------------------------
 %% @doc

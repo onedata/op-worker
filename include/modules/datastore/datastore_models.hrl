@@ -322,7 +322,7 @@
     provider_id :: undefined | oneprovider:id(),
     storage_id :: undefined | storage:id(),
     file_id :: undefined | helpers:file_id(),
-    blocks = [] :: [fslogic_blocks:block()],
+    blocks = [] :: fslogic_blocks:stored_blocks(),
     version_vector = #{},
     size = 0 :: non_neg_integer() | undefined,
     space_id :: undefined | od_space:id(),

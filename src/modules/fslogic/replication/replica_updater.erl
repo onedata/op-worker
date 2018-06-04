@@ -15,9 +15,13 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("cluster_worker/include/exometer_utils.hrl").
 
 %% API
 -export([update/4, rename/2]).
+
+-define(EXOMETER_TIME_NAME(Param), ?exometer_name(replica_finder, time,
+    list_to_atom(atom_to_list(Param) ++ "_time"))).
 
 %%%===================================================================
 %%% API
@@ -39,25 +43,46 @@ update(FileCtx, Blocks, FileSize, BumpVersion) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     file_location:critical_section(FileUuid,
         fun() ->
+            Now = os:timestamp(),
             {Location = #document{
                 value = #file_location{
                     size = OldSize
                 }
-            }, _FileCtx2} = file_ctx:get_or_create_local_file_location_doc(file_ctx:reset(FileCtx)), % TODO - better reset in ALL critical sections
+            }, _FileCtx2} =
+                file_ctx:get_or_create_local_file_location_doc(FileCtx),
+            Time = timer:now_diff(os:timestamp(), Now),
+            ?update_counter(?EXOMETER_TIME_NAME(update_replica1), Time),
+            Now2 = os:timestamp(),
             UpdatedLocation = append(Location, Blocks, BumpVersion),
-
-            case FileSize of
+            Time2 = timer:now_diff(os:timestamp(), Now2),
+            ?update_counter(?EXOMETER_TIME_NAME(update_replica2), Time2),
+            Now3 = os:timestamp(),
+            Ans = case FileSize of
                 undefined ->
-                    file_location:save(UpdatedLocation),
-                    case fslogic_blocks:upper(Blocks) > OldSize of
+                    fslogic_blocks:save_location(UpdatedLocation),
+                    Time3 = timer:now_diff(os:timestamp(), Now3),
+                    ?update_counter(?EXOMETER_TIME_NAME(update_replica3), Time3),
+                    Now4 = os:timestamp(),
+                    A = case fslogic_blocks:upper(Blocks) > OldSize of
                         true -> {ok, size_changed};
                         false -> {ok, size_not_changed}
-                    end;
+                    end,
+                    Time4 = timer:now_diff(os:timestamp(), Now4),
+                    ?update_counter(?EXOMETER_TIME_NAME(update_replica4), Time4),
+                    A;
                 _ ->
                     TruncatedLocation = do_local_truncate(FileSize, UpdatedLocation),
-                    file_location:save(TruncatedLocation),
+                    Time3 = timer:now_diff(os:timestamp(), Now3),
+                    ?update_counter(?EXOMETER_TIME_NAME(update_replica5), Time3),
+                    Now4 = os:timestamp(),
+                    fslogic_blocks:save_location(TruncatedLocation),
+                    Time4 = timer:now_diff(os:timestamp(), Now4),
+                    ?update_counter(?EXOMETER_TIME_NAME(update_replica6), Time4),
                     {ok, size_changed}
-            end
+            end,
+            Time5 = timer:now_diff(os:timestamp(), Now),
+            ?update_counter(?EXOMETER_TIME_NAME(update_replica), Time5),
+            Ans
         end).
 
 
@@ -69,6 +94,7 @@ update(FileCtx, Blocks, FileSize, BumpVersion) ->
 %%--------------------------------------------------------------------
 -spec rename(file_ctx:ctx(), TargetFileId :: helpers:file()) ->
     ok | {error, Reason :: term()}.
+% TODO - on synchronizer
 rename(FileCtx, TargetFileId) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
@@ -113,7 +139,8 @@ do_local_truncate(FileSize, LocalLocation = #document{value = #file_location{siz
 -spec append(file_location:doc(), fslogic_blocks:blocks(), boolean()) -> file_location:doc().
 append(Doc, [], _) ->
     Doc;
-append(#document{value = #file_location{blocks = OldBlocks, size = OldSize} = Loc} = Doc, Blocks, BumpVersion) ->
+append(#document{value = #file_location{size = OldSize} = Loc} = Doc, Blocks, BumpVersion) ->
+    OldBlocks = fslogic_blocks:get_blocks(Doc, #{overlapping_sorted_blocks => Blocks}),
     NewBlocks = fslogic_blocks:merge(Blocks, OldBlocks),
     NewSize = fslogic_blocks:upper(Blocks),
 
@@ -121,13 +148,13 @@ append(#document{value = #file_location{blocks = OldBlocks, size = OldSize} = Lo
         true ->
             version_vector:bump_version(
                 replica_changes:add_change(
-                    Doc#document{value =
-                    Loc#file_location{blocks = NewBlocks, size = max(OldSize, NewSize)}},
+                    fslogic_blocks:update_blocks(Doc#document{value =
+                        Loc#file_location{size = max(OldSize, NewSize)}}, NewBlocks),
                     Blocks
                 ));
         false ->
-            Doc#document{value =
-                Loc#file_location{blocks = NewBlocks, size = max(OldSize, NewSize)}}
+            fslogic_blocks:update_blocks(Doc#document{value =
+                Loc#file_location{size = max(OldSize, NewSize)}}, NewBlocks)
     end.
 
 %%--------------------------------------------------------------------
@@ -137,13 +164,14 @@ append(#document{value = #file_location{blocks = OldBlocks, size = OldSize} = Lo
 %%--------------------------------------------------------------------
 -spec shrink(#document{value :: #file_location{}}, [#file_block{}] | lists:list(), non_neg_integer()) ->
     file_location:doc().
-shrink(Doc = #document{value = Loc = #file_location{blocks = OldBlocks}}, Blocks, NewSize) ->
+shrink(Doc = #document{value = Loc}, Blocks, NewSize) ->
+    OldBlocks = fslogic_blocks:get_blocks(Doc, #{overlapping_sorted_blocks => Blocks}),
     NewBlocks = fslogic_blocks:invalidate(OldBlocks, Blocks),
     NewBlocks1 = fslogic_blocks:consolidate(NewBlocks),
     version_vector:bump_version(
         replica_changes:add_change(
-            Doc#document{value =
-            Loc#file_location{blocks = NewBlocks1, size = NewSize}},
+            fslogic_blocks:update_blocks(Doc#document{value =
+            Loc#file_location{size = NewSize}}, NewBlocks1),
             {shrink, NewSize}
         )
     ).

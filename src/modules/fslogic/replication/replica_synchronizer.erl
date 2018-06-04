@@ -17,8 +17,10 @@
 -include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/oneclient/common_messages.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include("timeouts.hrl").
+-include_lib("cluster_worker/include/exometer_utils.hrl").
 
 -behaviour(gen_server).
 
@@ -43,8 +45,6 @@
           file_ctx :: file_ctx:ctx(),
           file_guid :: fslogic_worker:file_guid(),
           space_id :: od_space:id(),
-          user_id :: od_user:id(),
-          session_id :: session:id(),
           dest_storage_id :: storage:id(),
           dest_file_id :: helpers:file_id(),
           last_transfer :: undefined | block(),
@@ -52,14 +52,20 @@
           in_sequence_hits = 0 :: non_neg_integer(),
           from_to_refs = #{} :: #{from() => [fetch_ref()]},
           ref_to_froms = #{} :: #{fetch_ref() => [from()]},
+          from_sessions = #{} :: #{from() => session:id()},
           from_to_transfer_id = #{} :: #{from() => transfer:id() | undefined},
           transfer_id_to_from = #{} :: #{transfer:id() | undefined => from()},
           cached_stats = #{} :: #{transfer:id() => #{od_provider:id() => [block()]}},
           caching_timer :: undefined | reference()
          }).
 
--export([synchronize/5, cancel/1, init/1, handle_call/3, handle_cast/2,
-         handle_info/2, code_change/3, terminate/2, init_or_return_existing/2]).
+-export([synchronize/5, on_file_location_change/2, update_replica/4, cancel/1, init/1,
+  handle_call/3, handle_cast/2, handle_info/2, code_change/3, terminate/2,
+  init_or_return_existing/2, flush_location/1, apply/3]).
+-export([synchronize_internal/5, on_file_location_change_internal/2, 
+  update_replica_internal/4, flush_location_internal/1, apply_internal/3]).
+-define(EXOMETER_TIME_NAME(Param), ?exometer_name(replica_finder, time,
+  list_to_atom(atom_to_list(Param) ++ "_time"))).
 
 %%%===================================================================
 %%% API
@@ -67,19 +73,38 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Blocks until a block is synchronized from a remote provider with
-%% a newer version of data.
+%% @equiv synchronize_internal(UserCtx, FileCtx, Block, Prefetch, TransferId)
+%% on chosen node.
 %% @end
 %%--------------------------------------------------------------------
 -spec synchronize(user_ctx:ctx(), file_ctx:ctx(), block(),
                   Prefetch :: boolean(), transfer:id() | undefined) ->
-                         ok | {error, Reason :: any()}.
+                  {ok, #file_location_changed{}} | {error, Reason :: any()}.
 synchronize(UserCtx, FileCtx, Block, Prefetch, TransferId) ->
+  Uuid = file_ctx:get_uuid_const(FileCtx),
+  Node = consistent_hasing:get_node(Uuid),
+  rpc:call(Node, ?MODULE, synchronize_internal, [UserCtx, FileCtx, Block, Prefetch, TransferId]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Blocks until a block is synchronized from a remote provider with
+%% a newer version of data.
+%% @end
+%%--------------------------------------------------------------------
+-spec synchronize_internal(user_ctx:ctx(), file_ctx:ctx(), block(),
+    Prefetch :: boolean(), transfer:id() | undefined) ->
+  {ok, #file_location_changed{}} | {error, Reason :: any()}.
+synchronize_internal(UserCtx, FileCtx, Block, Prefetch, TransferId) ->
     EnlargedBlock = enlarge_block(Block, Prefetch),
     try
         {ok, Process} = get_process(UserCtx, FileCtx),
-        gen_server2:call(Process, {synchronize, FileCtx, EnlargedBlock,
-                                   Prefetch, TransferId}, infinity)
+        Now = os:timestamp(),
+        SessionId = user_ctx:get_session_id(UserCtx),
+        Ans = gen_server2:call(Process, {synchronize, FileCtx, EnlargedBlock,
+                                   Prefetch, TransferId, SessionId}, infinity),
+        Time = timer:now_diff(os:timestamp(), Now),
+        ?update_counter(?EXOMETER_TIME_NAME(synchronize_call), Time),
+        Ans
     catch
         %% The process we called was already terminating because of idle timeout,
         %% there's nothing to worry about.
@@ -87,6 +112,91 @@ synchronize(UserCtx, FileCtx, Block, Prefetch, TransferId) ->
             ?debug("Process stopped because of a timeout, retrying with a new one"),
             synchronize(UserCtx, FileCtx, Block, Prefetch, TransferId)
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv on_file_location_change_internal(FileCtx, ChangedLocationDoc)
+%% on chosen node.
+%% @end
+%%--------------------------------------------------------------------
+-spec on_file_location_change(file_ctx:ctx(), file_location:doc()) ->
+  ok | {error, term()}.
+on_file_location_change(FileCtx, ChangedLocationDoc = #document{value = #file_location{uuid = Uuid}}) ->
+  Node = consistent_hasing:get_node(Uuid),
+  rpc:call(Node, ?MODULE, on_file_location_change_internal, [FileCtx, ChangedLocationDoc]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Handler for file_location changes which impacts local replicas.
+%% @end
+%%--------------------------------------------------------------------
+-spec on_file_location_change_internal(file_ctx:ctx(), file_location:doc()) ->
+  ok | {error, term()}.
+on_file_location_change_internal(FileCtx, ChangedLocationDoc = #document{
+  value = #file_location{
+    uuid = Uuid,
+    provider_id = ProviderId,
+    file_id = FileId
+  }}
+) ->
+  file_location:critical_section(Uuid, fun() ->
+    case oneprovider:is_self(ProviderId) of
+      false ->
+        % set file_id as the same as for remote file, because
+        % computing it requires parent links which may be not here yet.
+        FileCtx2 = file_ctx:set_file_id(file_ctx:reset(FileCtx), FileId),
+        FileCtx3 = file_ctx:set_is_dir(FileCtx2, false),
+        % TODO - takie funkcje pobieraja file_location, trzeba przerzucic na proces
+        case file_ctx:get_local_file_location_doc(FileCtx3, false) of
+          {undefined, FileCtx4} ->
+            fslogic_event_emitter:emit_file_attr_changed(FileCtx4, []);
+          {_, FileCtx4} ->
+            update_local_location_replica(FileCtx4, ChangedLocationDoc)
+        end;
+      true ->
+        ok
+    end
+  end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv update_replica_internal(FileCtx, Blocks, FileSize, BumpVersion)
+%% on chosen node.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_replica(file_ctx:ctx(), fslogic_blocks:blocks(),
+    FileSize :: non_neg_integer() | undefined, BumpVersion :: boolean()) ->
+  {ok, size_changed} | {ok, size_not_changed} | {error, Reason :: term()}.
+update_replica(FileCtx, Blocks, FileSize, BumpVersion) ->
+  Uuid = file_ctx:get_uuid_const(FileCtx),
+  Node = consistent_hasing:get_node(Uuid),
+  rpc:call(Node, ?MODULE, update_replica_internal, [FileCtx, Blocks, FileSize, BumpVersion]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Appends given blocks to the file's local location and invalidates those blocks in its remote locations.
+%% This function in synchronized on the file.
+%% FileSize argument may be used to truncate file's blocks if needed.
+%% Return value tells whether file size has been changed by this call.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_replica_internal(file_ctx:ctx(), fslogic_blocks:blocks(),
+    FileSize :: non_neg_integer() | undefined, BumpVersion :: boolean()) ->
+  {ok, size_changed} | {ok, size_not_changed} | {error, Reason :: term()}.
+update_replica_internal(FileCtx, Blocks, FileSize, BumpVersion) ->
+  try
+    UserCtx = undefined,
+    {ok, Process} = get_process(UserCtx, FileCtx),
+    gen_server2:call(Process, {update_replica, FileCtx, Blocks,
+      FileSize, BumpVersion}, infinity)
+
+  catch
+    %% The process we called was already terminating because of idle timeout,
+    %% there's nothing to worry about.
+    exit:{{shutdown, timeout}, _} ->
+      ?debug("Process stopped because of a timeout, retrying with a new one"),
+      update_replica(FileCtx, Blocks, FileSize, BumpVersion)
+  end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -99,26 +209,78 @@ cancel(TransferId) ->
       fun(Pid) -> gen_server2:cast(Pid, {cancel, TransferId}) end,
       gproc:lookup_pids({c, l, TransferId})).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv flush_location_internal(Uuid) on chosen node.
+%% @end
+%%--------------------------------------------------------------------
+-spec flush_location(file_meta:uuid()) -> ok.
+flush_location(Uuid) ->
+  Node = consistent_hasing:get_node(Uuid),
+  rpc:call(Node, ?MODULE, flush_location_internal, [Uuid]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Forces location cache flush.
+%% @end
+%%--------------------------------------------------------------------
+-spec flush_location_internal(file_meta:uuid()) -> ok.
+flush_location_internal(Uuid) ->
+%%  ?info("aaaaa ~p", [erlang:process_info(self(), current_stacktrace)]),
+  case gproc:lookup_local_name({Uuid, undefined}) of
+    undefined ->
+      ok;
+    Process ->
+      gen_server2:call(Process, flush_location, infinity)
+  end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv apply_internal(Uuid, Fun1, Fun2) on chosen node.
+%% @end
+%%--------------------------------------------------------------------
+-spec apply(file_meta:uuid(), fun(() -> term()), fun(() -> term())) ->
+  term().
+apply(Uuid, Fun1, Fun2) ->
+  Node = consistent_hasing:get_node(Uuid),
+  rpc:call(Node, ?MODULE, apply_internal, [Uuid, Fun1, Fun2]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Applies function Fun1 on synchronizer if it exists,
+%% applies Fun2 on caller proc otherwise.
+%% @end
+%%--------------------------------------------------------------------
+-spec apply_internal(file_meta:uuid(), fun(() -> term()), fun(() -> term())) ->
+  term().
+apply_internal(Uuid, Fun1, Fun2) ->
+  case gproc:lookup_local_name({Uuid, undefined}) of
+    undefined ->
+      Fun2();
+    Process ->
+      gen_server2:call(Process, {apply, Fun1}, infinity)
+  end.
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
 
+% Informacje o sumie blokow cacheujemy i odswierzamy w synchronizerze!!
+
+
 -spec init({user_ctx:ctx(), file_ctx:ctx()}) ->
                   {ok, #state{}, Timeout :: non_neg_integer()}.
-init({UserCtx, FileCtx}) ->
+init({_UserCtx, FileCtx}) ->
+    fslogic_blocks:init_cache(),
     %% trigger creation of local file location
     {_LocalDoc, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
     FileGuid = file_ctx:get_guid_const(FileCtx2),
     SpaceId = file_ctx:get_space_id_const(FileCtx2),
-    UserId = user_ctx:get_user_id(UserCtx),
-    SessId = user_ctx:get_session_id(UserCtx),
     {DestStorageId, FileCtx3} = file_ctx:get_storage_id(FileCtx2),
     {DestFileId, FileCtx4} = file_ctx:get_storage_file_id(FileCtx3),
     {ok, #state{file_ctx = FileCtx4,
                 file_guid = FileGuid,
                 space_id = SpaceId,
-                user_id = UserId,
-                session_id = SessId,
                 dest_storage_id = DestStorageId,
                 dest_file_id = DestFileId,
                 in_progress = ordsets:new()}, ?DIE_AFTER}.
@@ -133,7 +295,10 @@ init({UserCtx, FileCtx}) ->
 %% synchronized to the newest version.
 %% @end
 %%--------------------------------------------------------------------
-handle_call({synchronize, FileCtx, Block, Prefetch, TransferId}, From, State0) ->
+handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session}, From, #state{from_sessions = FS} = State0) ->
+  {message_queue_len,QL} = erlang:process_info(self(), message_queue_len),
+  ?update_counter(?EXOMETER_TIME_NAME(queue), QL + 1),
+  Now = os:timestamp(),
     State = State0#state{file_ctx = FileCtx},
     TransferId =/= undefined andalso (catch gproc:add_local_counter(TransferId, 1)),
     OverlappingInProgress = find_overlapping(Block, State),
@@ -141,16 +306,53 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId}, From, State0) -
     Holes = get_holes(Block, OverlappingBlocks),
     NewTransfers = start_transfers(Holes, TransferId, Prefetch, State),
     {_, NewRefs} = lists:unzip(NewTransfers),
-    case ExistingRefs ++ NewRefs of
-        [] -> {reply, ok, State, ?DIE_AFTER};
+  Ans = case ExistingRefs ++ NewRefs of
+        [] ->
+            {FileLocation, _FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
+            ReturnedBlocks = fslogic_blocks:get_blocks(FileLocation, #{overlapping_sorted_blocks => [Block]}),
+          {EventOffset, EventSize} = fslogic_blocks:get_blocks_range(ReturnedBlocks, [Block]),
+    FLC = #file_location_changed{
+      file_location = fslogic_blocks:set_final_blocks(
+        FileLocation#document.value, ReturnedBlocks),
+      change_beg_offset = EventOffset, change_end_offset = EventSize},
+  {reply, {ok, FLC}, State, ?DIE_AFTER};
         RelevantRefs ->
             State1 = associate_from_with_refs(From, RelevantRefs, State),
             State2 = associate_from_with_tid(From, TransferId, State1),
             State3 = add_in_progress(NewTransfers, State2),
             State4 = adjust_sequence_hits(Block, NewRefs, State3),
             State5 = prefetch(NewTransfers, TransferId, Prefetch, State4),
-            {noreply, State5, ?DIE_AFTER}
-    end.
+            State6 = State5#state{from_sessions = maps:put(From, Session, FS)},
+            {noreply, State6, ?DIE_AFTER}
+    end,
+  Time = timer:now_diff(os:timestamp(), Now),
+  ?update_counter(?EXOMETER_TIME_NAME(synchronize), Time),
+  {message_queue_len,QL2} = erlang:process_info(self(), message_queue_len),
+  ?update_counter(?EXOMETER_TIME_NAME(queue2), QL2 + 1),
+  Ans;
+
+handle_call({update_local_location_replica, FileCtx0, ChangedLocationDoc},
+    _From, State0) ->
+%%    fslogic_blocks:save_location(ChangedLocationDoc), % TODO - zapisywac od razy przez synchronizer wiadomosc z dbsync
+    {LocalLocation, FileCtx} = file_ctx:get_local_file_location_doc(FileCtx0),
+    Ans = replica_dbsync_hook:update_local_location_replica(FileCtx,
+      LocalLocation, ChangedLocationDoc),
+    State = State0#state{file_ctx = FileCtx},
+    {reply, Ans, State, ?DIE_AFTER};
+
+handle_call({update_replica, FileCtx, Blocks, FileSize, BumpVersion},
+    _From, State) ->
+  Ans = replica_updater:update(FileCtx,
+    Blocks, FileSize, BumpVersion),
+  {reply, Ans, State, ?DIE_AFTER};
+
+handle_call(flush_location, _From, State) ->
+  Ans = fslogic_blocks:flush(),
+  {reply, Ans, State, ?DIE_AFTER};
+
+handle_call({apply, Fun}, _From, State) ->
+  Ans = Fun(),
+  {reply, Ans, State, ?DIE_AFTER}.
 
 handle_cast({cancel, TransferId}, State) ->
     try
@@ -183,16 +385,38 @@ handle_info({Ref, active, ProviderId, Block}, State) ->
     {noreply, cache_stats(TransferIds, ProviderId, Block, State), ?DIE_AFTER};
 
 handle_info(?FLUSH_STATS, State) ->
-    {noreply, flush_stats(State), ?DIE_AFTER};
+    {_, State2} = flush_stats(State, []),
+    {noreply, State2, ?DIE_AFTER};
 
-handle_info({Ref, complete, {ok, _} = _Status}, State) ->
+handle_info({Ref, complete, {ok, _} = _Status}, #state{from_sessions = FS} = State) ->
+  Now = os:timestamp(),
     #state{from_to_transfer_id = FromToTransferId} = State,
     {__Block, __AffectedFroms, FinishedFroms, State1} = disassociate_ref(Ref, State),
-    State2 = flush_stats(State1),
+  Time = timer:now_diff(os:timestamp(), Now),
+  ?update_counter(?EXOMETER_TIME_NAME(synchronize_complete1), Time),
+  Now2 = os:timestamp(),
+
+    {ExcludeSessions, FS2} = lists:foldl(fun(From, {Acc, TmpFS}) ->
+      case maps:get(From, TmpFS, undefined) of
+        undefined ->
+          {Acc, TmpFS};
+        S ->
+          {[S | Acc -- [S]], maps:remove(From, TmpFS)}
+      end
+    end, {[], FS}, FinishedFroms),
+
+  {Location, State2} = flush_stats(State1, ExcludeSessions),
+  Time2 = timer:now_diff(os:timestamp(), Now2),
+  ?update_counter(?EXOMETER_TIME_NAME(synchronize_complete2), Time2),
+  Now3 = os:timestamp(),
     TransferIds = maps:with(FinishedFroms, FromToTransferId),
     [transfer:increase_files_transferred_counter(TID) || TID <- maps:values(TransferIds)],
-    [gen_server2:reply(From, ok) || From <- FinishedFroms],
-    {noreply, State2, ?DIE_AFTER};
+    [gen_server2:reply(From, {ok, Location}) || From <- FinishedFroms],
+  Time3 = timer:now_diff(os:timestamp(), Now3),
+  ?update_counter(?EXOMETER_TIME_NAME(synchronize_complete3), Time3),
+  Time4 = timer:now_diff(os:timestamp(), Now),
+  ?update_counter(?EXOMETER_TIME_NAME(synchronize_complete), Time4),
+    {noreply, State2#state{from_sessions = FS2}, ?DIE_AFTER};
 
 handle_info({FailedRef, complete, {error, disconnected}}, State) ->
     {Block, AffectedFroms, _FinishedFroms, State1} = disassociate_ref(FailedRef, State),
@@ -216,18 +440,45 @@ handle_info({Ref, complete, ErrorStatus}, State) ->
     [gen_server2:reply(From, ErrorStatus) || From <- FinishedFroms],
     State3 = lists:foldl(fun cancel_transfer_id/2, State2, AffectedTransferIds),
 
-    {noreply, State3, ?DIE_AFTER}.
+    {noreply, State3, ?DIE_AFTER};
+
+handle_info(check_flush, State) ->
+    fslogic_blocks:check_flush(),
+    {noreply, State, ?DIE_AFTER}.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 terminate(_Reason, State) ->
-    flush_stats(State),
+    flush_stats(State, []),
+    fslogic_blocks:flush(),
     ignore.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Update local location replica according to external changes.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_local_location_replica(file_ctx:ctx(), file_location:doc()) -> ok.
+update_local_location_replica(FileCtx, ChangedLocationDoc) ->
+  try
+    UserCtx = undefined,
+    {ok, Process} = get_process(UserCtx, FileCtx),
+    gen_server2:call(Process, {update_local_location_replica,
+      FileCtx, ChangedLocationDoc}, infinity)
+
+  catch
+    %% The process we called was already terminating because of idle timeout,
+    %% there's nothing to worry about.
+    exit:{{shutdown, timeout}, _} ->
+      ?debug("Process stopped because of a timeout, retrying with a new one"),
+      update_local_location_replica(FileCtx, ChangedLocationDoc)
+  end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -405,9 +656,10 @@ get_process(UserCtx, FileCtx) ->
 -spec init_or_return_existing(user_ctx:ctx(), file_ctx:ctx()) ->
                                      no_return() | normal.
 init_or_return_existing(UserCtx, FileCtx) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
-    SessionId = user_ctx:get_session_id(UserCtx),
-    {Pid, _} = gproc:reg_or_locate({n, l, {FileGuid, SessionId}}),
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+%%    SessionId = user_ctx:get_session_id(UserCtx),
+    SessionId = undefined,
+    {Pid, _} = gproc:reg_or_locate({n, l, {FileUuid, SessionId}}),
     ok = proc_lib:init_ack({ok, Pid}),
     case self() of
         Pid ->
@@ -586,18 +838,18 @@ cache_stats(TransferIds, ProviderId, Block, State) ->
 %% Aggregate cached transfer stats and update transfer documents.
 %% @end
 %%--------------------------------------------------------------------
--spec flush_stats(#state{}) -> #state{}.
-flush_stats(#state{cached_stats = Stats} = State) when map_size(Stats) == 0 ->
-    State;
-flush_stats(State) ->
+-spec flush_stats(#state{}, [session:id()]) ->
+  {#file_location_changed{} | undefined, #state{}}.
+flush_stats(#state{cached_stats = Stats} = State, _ExcludeSessions) when map_size(Stats) == 0 ->
+    {undefined, State};
+flush_stats(State, ExcludeSessions) ->
     #state{
         file_ctx = FileCtx,
         space_id = SpaceId,
-        user_id = UserId,
-        session_id = SessId,
         cached_stats = Cache
     } = State,
 
+  Now = os:timestamp(),
     {Stats, AllBlocks} =
         maps:fold(fun(TransferId, BlocksPerProvider, {Stats0, AllBlocks0}) ->
             {BytesPerProvider, TransferredBlocks} = maps:fold(
@@ -613,9 +865,18 @@ flush_stats(State) ->
             {Stats1, AllBlocks1}
         end, {#{}, []}, Cache),
 
+  Time = timer:now_diff(os:timestamp(), Now),
+  ?update_counter(?EXOMETER_TIME_NAME(flush_stats1), Time),
+  Now2 = os:timestamp(),
     {ok, _} = replica_updater:update(FileCtx, AllBlocks, undefined, false),
-    ok = fslogic_event_emitter:emit_file_location_changed(FileCtx, [SessId], AllBlocks),
+    {Location, _FileCtx2} = file_ctx:get_file_location_with_filled_gaps(FileCtx, AllBlocks),
+    {EventOffset, EventSize} = fslogic_blocks:get_blocks_range(Location, AllBlocks),
+    ok = fslogic_event_emitter:emit_file_location_changed(Location,
+    ExcludeSessions, EventOffset, EventSize),
 
+  Time2 = timer:now_diff(os:timestamp(), Now2),
+  ?update_counter(?EXOMETER_TIME_NAME(flush_stats2), Time2),
+  Now3 = os:timestamp(),
     lists:foreach(fun({TransferId, BytesPerProvider}) ->
         case transfer:mark_data_transfer_finished(TransferId, SpaceId, BytesPerProvider) of
             {ok, _} ->
@@ -625,11 +886,23 @@ flush_stats(State) ->
                 "due to ~p", [TransferId, Error])
         end
     end, maps:to_list(Stats)),
-    monitoring_event:emit_rtransfer_statistics(
-        SpaceId, UserId, get_summarized_blocks_size(AllBlocks)
-    ),
 
-    cancel_caching_timer(State#state{cached_stats = #{}}).
+  Time3 = timer:now_diff(os:timestamp(), Now3),
+  ?update_counter(?EXOMETER_TIME_NAME(flush_stats3), Time3),
+
+%%    monitoring_event:emit_rtransfer_statistics(
+%%        SpaceId, UserId, get_summarized_blocks_size(AllBlocks)
+%%    ),
+
+  Time4 = timer:now_diff(os:timestamp(), Now),
+  ?update_counter(?EXOMETER_TIME_NAME(flush_stats), Time4),
+    erlang:garbage_collect(),
+
+    Ans = #file_location_changed{
+      file_location = Location,
+      change_beg_offset = EventOffset, change_end_offset = EventSize},
+
+    {Ans, cancel_caching_timer(State#state{cached_stats = #{}})}.
 
 -spec set_caching_timer(#state{}) -> #state{}.
 set_caching_timer(#state{caching_timer = undefined} = State) ->

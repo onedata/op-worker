@@ -396,6 +396,8 @@ handle_file_request(UserCtx, #make_file{name = Name, mode = Mode}, ParentFileCtx
     file_req:make_file(UserCtx, ParentFileCtx, Name, Mode);
 handle_file_request(UserCtx, #open_file{flag = Flag}, FileCtx) ->
     file_req:open_file(UserCtx, FileCtx, Flag);
+handle_file_request(UserCtx, #open_file_with_extended_info{flag = Flag}, FileCtx) ->
+    file_req:open_file_with_extended_info(UserCtx, FileCtx, Flag);
 handle_file_request(UserCtx, #release{handle_id = HandleId}, FileCtx) ->
     file_req:release(UserCtx, FileCtx, HandleId);
 handle_file_request(UserCtx, #get_file_location{}, FileCtx) ->

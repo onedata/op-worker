@@ -15,6 +15,7 @@
 -include("proto/oneprovider/provider_messages.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("cluster_worker/include/exometer_utils.hrl").
 
 %% API
 %% Functions operating on directories or files
@@ -27,6 +28,9 @@
     create_and_open/4]).
 
 -compile({no_auto_import, [unlink/1]}).
+
+-define(EXOMETER_TIME_NAME(Param), ?exometer_name(replica_finder, time,
+    list_to_atom(atom_to_list(Param) ++ "_time"))).
 
 %%%===================================================================
 %%% API
@@ -267,24 +271,20 @@ create_and_open(SessId, ParentGuid, Name, Mode, OpenFlag) ->
 open(SessId, FileKey, Flag) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
-        #get_file_location{},
-        fun(#file_location{provider_id = ProviderId, file_id = FileId,
+        #open_file_with_extended_info{flag = Flag},
+        fun(#file_opened_extended{handle_id = HandleId,
+            provider_id = ProviderId, file_id = FileId,
             storage_id = StorageId}) ->
-            remote_utils:call_fslogic(SessId, file_request, FileGuid,
-                #open_file{flag = Flag},
-                fun(#file_opened{handle_id = HandleId}) ->
-                    {ok, lfm_context:new(
-                        HandleId,
-                        ProviderId,
-                        SessId,
-                        FileGuid,
-                        Flag,
-                        FileId,
-                        StorageId
-                    )}
-                end)
-        end
-    ).
+            {ok, lfm_context:new(
+                HandleId,
+                ProviderId,
+                SessId,
+                FileGuid,
+                Flag,
+                FileId,
+                StorageId
+            )}
+        end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -539,12 +539,16 @@ read(FileHandle, Offset, MaxSize, GenerateEvents, PrefetchData) ->
     MaxSize :: integer(), GenerateEvents :: boolean(), PrefetchData :: boolean()) ->
     {ok, binary()} | logical_file_manager:error_reply().
 read_internal(LfmCtx, Offset, MaxSize, GenerateEvents, PrefetchData) ->
+    Now = os:timestamp(),
     FileGuid = lfm_context:get_guid(LfmCtx),
     SessId = lfm_context:get_session_id(LfmCtx),
+    Now2 = os:timestamp(),
     ok = remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #synchronize_block{block = #file_block{offset = Offset, size = MaxSize},
             prefetch = PrefetchData},
         fun(_) -> ok end),
+    Time = timer:now_diff(os:timestamp(), Now2),
+    ?update_counter(?EXOMETER_TIME_NAME(synchronize_block), Time),
 
     FileId = lfm_context:get_file_id(LfmCtx),
     StorageId = lfm_context:get_storage_id(LfmCtx),
@@ -562,10 +566,16 @@ read_internal(LfmCtx, Offset, MaxSize, GenerateEvents, PrefetchData) ->
         }
     },
 
-    remote_utils:call_fslogic(SessId, proxyio_request, ProxyIORequest,
+    Now3 = os:timestamp(),
+    Ans = remote_utils:call_fslogic(SessId, proxyio_request, ProxyIORequest,
         fun(#remote_data{data = Data}) ->
             ReadBlocks = [#file_block{offset = Offset, size = size(Data)}],
             ok = lfm_event_utils:maybe_emit_file_read(FileGuid, ReadBlocks, SessId, GenerateEvents),
             {ok, Data}
         end
-    ).
+    ),
+    Time2 = timer:now_diff(os:timestamp(), Now3),
+    ?update_counter(?EXOMETER_TIME_NAME(proxyio_request), Time2),
+    Time3 = timer:now_diff(os:timestamp(), Now),
+    ?update_counter(?EXOMETER_TIME_NAME(read_internal), Time3),
+    Ans.
