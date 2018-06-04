@@ -251,7 +251,7 @@ reconcile_replicas(FileCtx,
 -spec notify_block_change_if_necessary(file_ctx:ctx(), file_location:doc(),
     file_location:doc()) -> ok.
 %%notify_block_change_if_necessary(#document{value = #file_location{blocks = SameBlocks}}, %todo VFS-2132
-%% %todo use fslogic_blocks to get blocks from document
+%% %TODO VFS-4412 use fslogic_blocks to get blocks from document
 %%    #document{value = #file_location{blocks = SameBlocks}}) ->
 %%    ok;
 notify_block_change_if_necessary(FileCtx, _, _) ->

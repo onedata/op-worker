@@ -89,7 +89,6 @@ get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx3),
     {{Uid, Gid}, FileCtx4} = file_ctx:get_posix_storage_user_context(FileCtx3, UserCtx),
 
-    % Kiedy to pobieramy?
     {Size, FileCtx5} = case IncludeSize of
         true -> file_ctx:get_file_size(FileCtx4);
         _ -> {undefined, FileCtx4}

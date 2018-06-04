@@ -867,6 +867,7 @@ flush_stats(State, ExcludeSessions) ->
         end
     end, maps:to_list(Stats)),
 
+    % TODO VFS-4412 emit rtransfer statistics
 %%    monitoring_event:emit_rtransfer_statistics(
 %%        SpaceId, UserId, get_summarized_blocks_size(AllBlocks)
 %%    ),
