@@ -494,6 +494,7 @@ distributed_modification_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyN
     ct:print("File verified"),
 
     lists:foldl(fun(W, Acc) ->
+        ct:print("Changes of file from node ~p", [W]),
         OpenAns = lfm_proxy:open(W, SessId(W), {path, Level2File}, rdwr),
         ?assertMatch({ok, _}, OpenAns),
         {ok, Handle} = OpenAns,

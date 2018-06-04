@@ -186,7 +186,19 @@ exclude_old_blocks(RemoteLocations, BlocksToSync) ->
         end, RemoteBlocks)
     end, RemoteLocations),
 
-    SortedRemoteList = lists:foldl(fun
+    RemoteList2 = exclude_old_blocks(lists:sort(RemoteList)),
+    [{ProviderId, [RemoteBlock], StorageDetails} ||
+        {RemoteBlock, {ProviderId, _VV, StorageDetails}} <- RemoteList2].
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Excludes not up_to_date blocks from list.
+%% @end
+%%--------------------------------------------------------------------
+-spec exclude_old_blocks(list()) -> list().
+exclude_old_blocks(RemoteList) ->
+    RemoteList2 = lists:foldl(fun
         (Remote, []) ->
             [Remote];
         ({RemoteBlock, _} = Remote, [{LastBlock, _} = Last | AccTail] = Acc) ->
@@ -198,10 +210,14 @@ exclude_old_blocks(RemoteLocations, BlocksToSync) ->
                 _ ->
                     compare_blocks(Last, Remote) ++ AccTail
             end
-    end, [], lists:sort(RemoteList)),
-
-    [{ProviderId, [RemoteBlock], StorageDetails} ||
-        {RemoteBlock, {ProviderId, _VV, StorageDetails}} <- SortedRemoteList].
+    end, [], RemoteList),
+    RemoteList3 = lists:sort(RemoteList2),
+    case RemoteList3 =:= RemoteList of
+        true ->
+            RemoteList;
+        _ ->
+            exclude_old_blocks(RemoteList3)
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
