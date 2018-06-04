@@ -60,10 +60,9 @@ get_changes(_, N) when N =< 0 ->
 get_changes(#document{value = #file_location{
     size = Size,
     recent_changes = {Backup, New},
-    blocks = Blocks,
     last_rename = LastRename
-}}, N) when N > (length(New) + length(Backup)) ->
-    [Blocks, {shrink, Size}, {rename, LastRename}];
+}} = FL, N) when N > (length(New) + length(Backup)) ->
+    [fslogic_blocks:get_blocks(FL), {shrink, Size}, {rename, LastRename}];
 get_changes(#document{value = #file_location{
     recent_changes = {_Backup, New},
     last_rename = LastRename
@@ -108,26 +107,24 @@ get_merged_changes(Doc, N) ->
 -spec set_last_rename(datastore:doc(), helpers:file(), binary()) -> ok.
 set_last_rename(Doc = #document{value = Loc = #file_location{uuid = FileUuid}},
     TargetFileId, TargetSpaceId) ->
-    critical_section:run([set_last_rename, FileUuid], fun() ->
-        {ok, Locations} = file_meta:get_locations_by_uuid(FileUuid),
-        RenameNumbers = lists:map(fun(LocationId) ->
-            case file_location:get(LocationId) of
-                {ok, #document{value = #file_location{last_rename = LastRename}}} ->
-                    case LastRename of
-                        undefined -> 0;
-                        {_, N} -> N
-                    end;
-                {error, not_found} ->
-                    0
-            end
-        end, Locations),
-        Max = lists:max(RenameNumbers),
-        {ok, _} = file_location:save(
-            Doc#document{value = Loc#file_location{
-                last_rename = {{TargetFileId, TargetSpaceId}, Max + 1}
-            }}),
-        ok
-    end).
+    {ok, Locations} = file_meta:get_locations_by_uuid(FileUuid),
+    RenameNumbers = lists:map(fun(LocationId) ->
+        case fslogic_blocks:get_location(LocationId, FileUuid, false) of
+            {ok, #document{value = #file_location{last_rename = LastRename}}} ->
+                case LastRename of
+                    undefined -> 0;
+                    {_, N} -> N
+                end;
+            {error, not_found} ->
+                0
+        end
+    end, Locations),
+    Max = lists:max(RenameNumbers),
+    {ok, _} = fslogic_blocks:save_location(
+        Doc#document{value = Loc#file_location{
+            last_rename = {{TargetFileId, TargetSpaceId}, Max + 1}
+        }}),
+    ok.
 
 
 %%--------------------------------------------------------------------

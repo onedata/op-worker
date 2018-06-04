@@ -55,11 +55,9 @@ synchronize_block(UserCtx, FileCtx, undefined, Prefetch, TransferId) ->
     synchronize_block(UserCtx, FileCtx3, #file_block{offset = 0, size = Size},
         Prefetch, TransferId);
 synchronize_block(UserCtx, FileCtx, Block, Prefetch, TransferId) ->
-    ok = replica_synchronizer:synchronize(UserCtx, FileCtx, Block, Prefetch,
-        TransferId),
-    {LocationToSend, _FileCtx2} = file_ctx:get_file_location_with_filled_gaps(FileCtx, Block),
-    #fuse_response{status = #status{code = ?OK},
-                   fuse_response = LocationToSend}.
+    {ok, Ans} = replica_synchronizer:synchronize(UserCtx, FileCtx, Block,
+        Prefetch, TransferId),
+    #fuse_response{status = #status{code = ?OK}, fuse_response = Ans}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -81,6 +79,7 @@ synchronize_block_and_compute_checksum(UserCtx, FileCtx,
     lfm_files:release(Handle),
 
     Checksum = crypto:hash(md4, Data),
+    % TODO VFS-4412 Refactor similarly to synchronize_block
     {LocationToSend, _FileCtx2} = file_ctx:get_file_location_with_filled_gaps(FileCtx, Range),
     #fuse_response{
         status = #status{code = ?OK},
@@ -100,14 +99,11 @@ synchronize_block_and_compute_checksum(UserCtx, FileCtx,
 get_file_distribution(_UserCtx, FileCtx) ->
     {Locations, _FileCtx2} = file_ctx:get_file_location_docs(FileCtx),
     ProviderDistributions = lists:map(fun(#document{
-        value = #file_location{
-            provider_id = ProviderId,
-            blocks = Blocks
-        }
-    }) ->
+        value = #file_location{provider_id = ProviderId}
+    } = FL) ->
         #provider_file_distribution{
             provider_id = ProviderId,
-            blocks = Blocks
+            blocks = fslogic_blocks:get_blocks(FL)
         }
     end, Locations),
     #provider_response{
@@ -437,7 +433,7 @@ invalidate_fully_redundant_file_replica(UserCtx, FileCtx) ->
         truncate_req:truncate_insecure(UserCtx, FileCtx, 0, false),
         FileUuid = file_ctx:get_uuid_const(FileCtx),
         LocalFileId = file_location:local_id(FileUuid),
-        case file_location:delete(LocalFileId) of
+        case fslogic_blocks:delete_location(FileUuid, LocalFileId) of
             ok -> ok;
             {error, {not_found, _}} -> ok
         end,

@@ -243,7 +243,7 @@ delete(#document{
     ?run(begin
         ok = delete_child_link(ParentUuid, Scope, FileUuid, FileName),
         LocalLocationId = file_location:local_id(FileUuid),
-        file_location:delete(LocalLocationId),
+        fslogic_blocks:delete_location(FileUuid, LocalLocationId),
         datastore_model:delete(?CTX, FileUuid)
     end);
 delete({path, Path}) ->
@@ -272,7 +272,7 @@ delete_without_link(#document{
 delete_without_link(FileUuid) ->
     ?run(begin
         LocalLocationId = file_location:local_id(FileUuid),
-        file_location:delete(LocalLocationId),
+        fslogic_blocks:delete_location(FileUuid, LocalLocationId),
         datastore_model:delete(?CTX, FileUuid)
     end).
 

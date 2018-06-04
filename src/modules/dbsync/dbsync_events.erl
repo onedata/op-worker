@@ -101,7 +101,7 @@ change_replicated_internal(SpaceId, #document{
 } = Doc) ->
     ?debug("change_replicated_internal: changed file_location ~p", [FileUuid]),
     FileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId)),
-    ok = replica_dbsync_hook:on_file_location_change(FileCtx, Doc);
+    ok = replica_synchronizer:on_file_location_change(FileCtx, Doc);
 change_replicated_internal(SpaceId, #document{
     key = FileUuid,
     value = #times{}

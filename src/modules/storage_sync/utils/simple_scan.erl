@@ -163,14 +163,20 @@ maybe_import_storage_file(Job = #space_strategy_job{
                 ?DIRECTORY_TYPE ->
                     maybe_import_file_with_existing_metadata(Job2, FileCtx);
                 ?REGULAR_FILE_TYPE ->
-                    case file_location:get_local(FileUuid) of
+                    case fslogic_blocks:get_location(
+                        file_location:id(FileUuid, oneprovider:get_id()), FileUuid) of
                         {ok, #document{
                             value = #file_location{
                                 storage_id = StorageId,
-                                size = Size,
-                                blocks = [#file_block{offset = 0, size = Size}]
-                            }}} ->
-                            maybe_import_file_with_existing_metadata(Job2, FileCtx);
+                                size = Size
+                            }} = FL} ->
+                            % TODO VFS-4412 - request only 2 blocks
+                            case fslogic_blocks:get_blocks(FL, #{count => 1}) of
+                                [#file_block{offset = 0, size = Size}] ->
+                                    maybe_import_file_with_existing_metadata(Job2, FileCtx);
+                                _ ->
+                                    {processed, FileCtx, Job2}
+                            end;
                         _Other ->
                             {processed, FileCtx, Job2}
                     end
@@ -679,10 +685,6 @@ create_times(FileUuid, MTime, ATime, CTime, SpaceId) ->
     file_meta:path(), file_meta:size()) -> ok.
 create_file_location(SpaceId, StorageId, FileUuid, CanonicalPath, Size) ->
     Location = #file_location{
-        blocks = [#file_block{
-            offset = 0,
-            size = Size
-        }],
         provider_id = oneprovider:get_id(),
         file_id = CanonicalPath,
         storage_id = StorageId,
@@ -691,10 +693,14 @@ create_file_location(SpaceId, StorageId, FileUuid, CanonicalPath, Size) ->
         size = Size,
         storage_file_created = true
     },
+    Location2 = fslogic_blocks:set_blocks(Location, [#file_block{
+        offset = 0,
+        size = Size
+    }]),
     {ok, _LocId} = file_location:save_and_bump_version(
         #document{
             key = file_location:local_id(FileUuid),
-            value = Location,
+            value = Location2,
             scope = SpaceId
         }),
     ok.
