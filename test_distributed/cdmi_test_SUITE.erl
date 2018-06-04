@@ -107,7 +107,10 @@ all() ->
 %%%===================================================================
 
 list_dir_test(Config) ->
-    cdmi_test_base:list_dir(Config).
+M = <<10,19,49,53,50,56,49,49,56,48,50,56,55,53,55,49,50,51,57,52,48,122,4,10,2,8,1>>,
+    ct:print("aaa ~p", [messages:decode_msg(M, 'ClientMessage')]),
+    ok.
+%%    cdmi_test_base:list_dir(Config).
 
 get_file_test(Config) ->
     cdmi_test_base:get_file(Config).

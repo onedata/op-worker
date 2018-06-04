@@ -57,12 +57,6 @@ synchronize_block(UserCtx, FileCtx, undefined, Prefetch, TransferId) ->
 synchronize_block(UserCtx, FileCtx, Block, Prefetch, TransferId) ->
     {ok, Ans} = replica_synchronizer:synchronize(UserCtx, FileCtx, Block,
         Prefetch, TransferId),
-    case Ans of
-        #file_location_changed{} -> ok;
-        _ ->
-            ?info("synchronize_block check ~p",
-                [{Ans, UserCtx, FileCtx, Block, Prefetch, TransferId}])
-    end,
     #fuse_response{status = #status{code = ?OK}, fuse_response = Ans}.
 
 %%--------------------------------------------------------------------
