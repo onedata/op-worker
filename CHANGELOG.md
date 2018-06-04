@@ -4,6 +4,15 @@
 CHANGELOG
 ---------
 
+### 18.02.0-rc6
+
+* Upgrade rtransfer_link.
+* VFS-4412 Fix algorithm for excluding old blocks from transfers
+* not update file location only when mtime equals previously synced mtime
+* VFS-4412 Improve performance of file_location blocks management
+* VFS-4477 - add audit log for  storage_sync
+
+
 ### 18.02.0-rc5
 
 * Update rtransfer_link.
