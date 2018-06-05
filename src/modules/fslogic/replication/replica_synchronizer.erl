@@ -60,9 +60,10 @@
 
 -export([synchronize/5, on_file_location_change/2, update_replica/4, cancel/1, init/1,
     handle_call/3, handle_cast/2, handle_info/2, code_change/3, terminate/2,
-    init_or_return_existing/2, flush_location/1, apply/3]).
+    init_or_return_existing/2, flush_location/1, apply/2, apply/3]).
 -export([synchronize_internal/5, on_file_location_change_internal/2,
-    update_replica_internal/4, flush_location_internal/1, apply_internal/3]).
+    update_replica_internal/4, flush_location_internal/1, apply_internal/2,
+    apply_internal/3]).
 
 %%%===================================================================
 %%% API
@@ -130,12 +131,11 @@ on_file_location_change(FileCtx, ChangedLocationDoc =
     ok | {error, term()}.
 on_file_location_change_internal(FileCtx, ChangedLocationDoc = #document{
     value = #file_location{
-        uuid = Uuid,
         provider_id = ProviderId,
         file_id = FileId
     }}
 ) ->
-    file_location:critical_section(Uuid, fun() ->
+    replica_synchronizer:apply(FileCtx, fun() ->
         case oneprovider:is_self(ProviderId) of
             false ->
                 % set file_id as the same as for remote file, because
@@ -255,6 +255,44 @@ apply_internal(Uuid, Fun1, Fun2) ->
             Fun2();
         Process ->
             gen_server2:call(Process, {apply, Fun1}, infinity)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv apply_internal(Uuid, Fun1) on chosen node.
+%% @end
+%%--------------------------------------------------------------------
+-spec apply(file_meta:uuid(), fun(() -> term())) ->
+    term().
+apply(FileCtx, Fun) ->
+    case get(file_locations) of
+        undefined ->
+            Uuid = file_ctx:get_uuid_const(FileCtx),
+            Node = consistent_hasing:get_node(Uuid),
+            rpc:call(Node, ?MODULE, apply_internal, [FileCtx, Fun]);
+        _ ->
+            Fun()
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Applies function Fun on synchronizer.
+%% @end
+%%--------------------------------------------------------------------
+-spec apply_internal(file_meta:uuid(), fun(() -> term())) ->
+    term().
+apply_internal(FileCtx, Fun) ->
+    try
+        UserCtx = undefined,
+        {ok, Process} = get_process(UserCtx, FileCtx),
+        gen_server2:call(Process, {apply, Fun}, infinity)
+
+    catch
+        %% The process we called was already terminating because of idle timeout,
+        %% there's nothing to worry about.
+        exit:{{shutdown, timeout}, _} ->
+            ?debug("Process stopped because of a timeout, retrying with a new one"),
+            apply_internal(FileCtx, Fun)
     end.
 
 %%%===================================================================
