@@ -36,8 +36,7 @@
     FileSize :: non_neg_integer() | undefined, BumpVersion :: boolean()) ->
     {ok, size_changed} | {ok, size_not_changed} | {error, Reason :: term()}.
 update(FileCtx, Blocks, FileSize, BumpVersion) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    file_location:critical_section(FileUuid,
+    replica_synchronizer:apply(FileCtx,
         fun() ->
             {Location = #document{
                 value = #file_location{
@@ -71,9 +70,8 @@ update(FileCtx, Blocks, FileSize, BumpVersion) ->
     ok | {error, Reason :: term()}.
 % TODO - on synchronizer
 rename(FileCtx, TargetFileId) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    file_location:critical_section(FileUuid,
+    replica_synchronizer:apply(FileCtx,
         fun() ->
             {LocationDoc, _FileCtx2} = file_ctx:get_or_create_local_file_location_doc(file_ctx:reset(FileCtx)),
 

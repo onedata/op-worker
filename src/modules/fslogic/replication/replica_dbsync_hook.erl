@@ -33,12 +33,11 @@
     ok | {error, term()}.
 on_file_location_change(FileCtx, ChangedLocationDoc = #document{
     value = #file_location{
-        uuid = Uuid,
         provider_id = ProviderId,
         file_id = FileId
     }}
 ) ->
-    file_location:critical_section(Uuid, fun() ->
+    replica_synchronizer:apply(FileCtx, fun() ->
         case oneprovider:is_self(ProviderId) of
             false ->
                 % set file_id as the same as for remote file, because
