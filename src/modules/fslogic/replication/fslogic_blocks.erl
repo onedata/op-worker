@@ -94,7 +94,8 @@ get_blocks_range(#document{value = Record}) ->
     get_blocks_range(Record);
 get_blocks_range(#file_location{blocks = Blocks}) ->
     get_blocks_range(Blocks);
-get_blocks_range(Blocks) ->
+get_blocks_range(Blocks0) ->
+    Blocks = lists:sort(Blocks0),
     case Blocks of
         [] ->
             {undefined, undefined};
@@ -126,23 +127,26 @@ get_blocks(Location, Options) ->
 -spec get_blocks(location(), map()) -> blocks().
 get_blocks(#file_location{blocks = Blocks}, _Options, _LocKey) when is_list(Blocks) ->
     Blocks;
-get_blocks(#file_location{blocks = Blocks}, #{overlapping_sorted_blocks := OB}, LocKey) ->
-    case OB of
-        [] ->
-            [];
-        [Start | _] ->
-            #file_block{offset = StopOffset, size = StopSize} = lists:last(OB),
-            Iter = gb_sets:iterator_from(Start, Blocks),
-            Ans = get_block_while(Iter, StopOffset + StopSize),
-            case LocKey of
-                undefined ->
-                    ok;
-                _ ->
-                    BIU = get(blocks_in_use),
-                    put(blocks_in_use, [{LocKey, Ans} | proplists:delete(LocKey, BIU)])
-            end,
-            Ans
-    end;
+get_blocks(FL, #{overlapping_sorted_blocks := OB}, LocKey) ->
+    % TODO VFS-4412 Optimize
+%%get_blocks(#file_location{blocks = Blocks}, #{overlapping_sorted_blocks := OB}, LocKey) ->
+%%    case OB of
+%%        [] ->
+%%            [];
+%%        [Start | _] ->
+%%            #file_block{offset = StopOffset, size = StopSize} = lists:last(OB),
+%%            Iter = gb_sets:iterator_from(Start, Blocks),
+%%            Ans = get_block_while(Iter, StopOffset + StopSize),
+%%            case LocKey of
+%%                undefined ->
+%%                    ok;
+%%                _ ->
+%%                    BIU = get(blocks_in_use),
+%%                    put(blocks_in_use, [{LocKey, Ans} | proplists:delete(LocKey, BIU)])
+%%            end,
+%%            Ans
+%%    end;
+    get_blocks(FL, #{overlapping_blocks => OB}, LocKey);
 get_blocks(#file_location{blocks = Blocks}, #{overlapping_blocks := OB}, LocKey) ->
     case OB of
         [] ->
