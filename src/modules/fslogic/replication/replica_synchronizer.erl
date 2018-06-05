@@ -189,7 +189,7 @@ apply_internal(Uuid, Fun1, Fun2) ->
 %% @equiv apply_internal(Uuid, Fun1) on chosen node.
 %% @end
 %%--------------------------------------------------------------------
--spec apply(file_meta:uuid(), fun(() -> term())) ->
+-spec apply(file_ctx:ctx(), fun(() -> term())) ->
     term().
 apply(FileCtx, Fun) ->
     case get(file_locations) of
@@ -206,7 +206,7 @@ apply(FileCtx, Fun) ->
 %% Applies function Fun on synchronizer.
 %% @end
 %%--------------------------------------------------------------------
--spec apply_internal(file_meta:uuid(), fun(() -> term())) ->
+-spec apply_internal(file_ctx:ctx(), fun(() -> term())) ->
     term().
 apply_internal(FileCtx, Fun) ->
     try
@@ -232,12 +232,11 @@ apply_internal(FileCtx, Fun) ->
 init({_UserCtx, FileCtx}) ->
     fslogic_blocks:init_cache(),
     %% trigger creation of local file location
-    {_LocalDoc, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
-    FileGuid = file_ctx:get_guid_const(FileCtx2),
-    SpaceId = file_ctx:get_space_id_const(FileCtx2),
-    {DestStorageId, FileCtx3} = file_ctx:get_storage_id(FileCtx2),
-    {DestFileId, FileCtx4} = file_ctx:get_storage_file_id(FileCtx3),
-    {ok, #state{file_ctx = FileCtx4,
+    FileGuid = file_ctx:get_guid_const(FileCtx),
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    {DestStorageId, FileCtx2} = file_ctx:get_storage_id(FileCtx),
+    {DestFileId, FileCtx3} = file_ctx:get_storage_file_id(FileCtx2),
+    {ok, #state{file_ctx = FileCtx3,
         file_guid = FileGuid,
         space_id = SpaceId,
         dest_storage_id = DestStorageId,
@@ -256,7 +255,6 @@ init({_UserCtx, FileCtx}) ->
 %%--------------------------------------------------------------------
 handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session}, From,
     #state{from_sessions = FS} = State0) ->
-    {message_queue_len, QL} = erlang:process_info(self(), message_queue_len),
     State = State0#state{file_ctx = FileCtx},
     TransferId =/= undefined andalso (catch gproc:add_local_counter(TransferId, 1)),
     OverlappingInProgress = find_overlapping(Block, State),
@@ -592,10 +590,11 @@ init_or_return_existing(UserCtx, FileCtx) ->
     Prefetch :: boolean(), #state{}) ->
     NewRequests :: [{block(), fetch_ref()}].
 start_transfers(InitialBlocks, TransferId, Prefetch, State) ->
-    {LocationDocs, FileCtx2} = file_ctx:get_file_location_docs(State#state.file_ctx),
+    {_LocalDoc, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(State#state.file_ctx),
+    {LocationDocs, FileCtx3} = file_ctx:get_file_location_docs(FileCtx2),
     ProvidersAndBlocks = replica_finder:get_blocks_for_sync(LocationDocs, InitialBlocks),
     FileGuid = State#state.file_guid,
-    SpaceId = file_ctx:get_space_id_const(FileCtx2),
+    SpaceId = file_ctx:get_space_id_const(FileCtx3),
     DestStorageId = State#state.dest_storage_id,
     DestFileId = State#state.dest_file_id,
     Priority = case Prefetch of true -> high_priority; false ->
