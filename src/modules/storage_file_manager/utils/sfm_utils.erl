@@ -94,8 +94,7 @@ rename_storage_file(SessId, SpaceId, Storage, FileUuid, SourceFileId, TargetFile
 %%--------------------------------------------------------------------
 -spec create_storage_file_if_not_exists(file_ctx:ctx()) -> ok | {error, term()}.
 create_storage_file_if_not_exists(FileCtx) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    file_location:critical_section(FileUuid,
+    replica_synchronizer:apply(FileCtx,
         fun() ->
             case file_ctx:get_local_file_location_doc(file_ctx:reset(FileCtx)) of
                 {undefined, _} ->
@@ -121,7 +120,7 @@ create_delayed_storage_file(FileCtx) ->
     case StorageFileCreated of
         false ->
             FileUuid = file_ctx:get_uuid_const(FileCtx),
-            file_location:critical_section(FileUuid, fun() ->
+            replica_synchronizer:apply(FileCtx, fun() ->
                 case fslogic_blocks:get_location(FileLocationId, FileUuid, false) of
                     {ok, #document{
                         value = #file_location{storage_file_created = true}

@@ -131,6 +131,18 @@ create_or_update(Uuid, NewMTime, NewHashKey, NewHashValue, SpaceId) ->
 %%-------------------------------------------------------------------
 -spec new_doc(key(), non_neg_integer() | undefined, non_neg_integer() | undefined,
     binary() | undefined, od_space:id()) -> doc().
+new_doc(Key, NewMTime, NewHashKey, NewHashValue, SpaceId) when
+    NewHashKey =:= undefined;
+    NewHashValue =:= undefined
+->
+    #document{
+        key = Key,
+        value = #storage_sync_info{
+            mtime = NewMTime,
+            children_attrs_hashes = #{}
+        },
+        scope = SpaceId
+    };
 new_doc(Key, NewMTime, NewHashKey, NewHashValue, SpaceId) ->
     #document{
         key = Key,
