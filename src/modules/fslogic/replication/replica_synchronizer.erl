@@ -189,7 +189,7 @@ apply_internal(Uuid, Fun1, Fun2) ->
 %% @equiv apply_internal(Uuid, Fun1) on chosen node.
 %% @end
 %%--------------------------------------------------------------------
--spec apply(file_meta:uuid(), fun(() -> term())) ->
+-spec apply(file_ctx:ctx(), fun(() -> term())) ->
     term().
 apply(FileCtx, Fun) ->
     case get(file_locations) of
@@ -206,7 +206,7 @@ apply(FileCtx, Fun) ->
 %% Applies function Fun on synchronizer.
 %% @end
 %%--------------------------------------------------------------------
--spec apply_internal(file_meta:uuid(), fun(() -> term())) ->
+-spec apply_internal(file_ctx:ctx(), fun(() -> term())) ->
     term().
 apply_internal(FileCtx, Fun) ->
     try
