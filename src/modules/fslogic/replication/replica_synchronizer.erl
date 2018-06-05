@@ -58,11 +58,10 @@
     caching_timer :: undefined | reference()
 }).
 
--export([synchronize/5, on_file_location_change/2, update_replica/4, cancel/1, init/1,
+-export([synchronize/5, update_replica/4, cancel/1, init/1,
     handle_call/3, handle_cast/2, handle_info/2, code_change/3, terminate/2,
     init_or_return_existing/2, flush_location/1, apply/2, apply/3]).
--export([synchronize_internal/5, on_file_location_change_internal/2,
-    update_replica_internal/4, flush_location_internal/1, apply_internal/2,
+-export([synchronize_internal/5, flush_location_internal/1, apply_internal/2,
     apply_internal/3]).
 
 %%%===================================================================
@@ -110,51 +109,6 @@ synchronize_internal(UserCtx, FileCtx, Block, Prefetch, TransferId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv on_file_location_change_internal(FileCtx, ChangedLocationDoc)
-%% on chosen node.
-%% @end
-%%--------------------------------------------------------------------
--spec on_file_location_change(file_ctx:ctx(), file_location:doc()) ->
-    ok | {error, term()}.
-on_file_location_change(FileCtx, ChangedLocationDoc =
-    #document{value = #file_location{uuid = Uuid}}) ->
-    Node = consistent_hasing:get_node(Uuid),
-    rpc:call(Node, ?MODULE, on_file_location_change_internal,
-        [FileCtx, ChangedLocationDoc]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Handler for file_location changes which impacts local replicas.
-%% @end
-%%--------------------------------------------------------------------
--spec on_file_location_change_internal(file_ctx:ctx(), file_location:doc()) ->
-    ok | {error, term()}.
-on_file_location_change_internal(FileCtx, ChangedLocationDoc = #document{
-    value = #file_location{
-        provider_id = ProviderId,
-        file_id = FileId
-    }}
-) ->
-    replica_synchronizer:apply(FileCtx, fun() ->
-        case oneprovider:is_self(ProviderId) of
-            false ->
-                % set file_id as the same as for remote file, because
-                % computing it requires parent links which may be not here yet.
-                FileCtx2 = file_ctx:set_file_id(file_ctx:reset(FileCtx), FileId),
-                FileCtx3 = file_ctx:set_is_dir(FileCtx2, false),
-                case file_ctx:get_local_file_location_doc(FileCtx3, false) of
-                    {undefined, FileCtx4} ->
-                        fslogic_event_emitter:emit_file_attr_changed(FileCtx4, []);
-                    {_, FileCtx4} ->
-                        update_local_location_replica(FileCtx4, ChangedLocationDoc)
-                end;
-            true ->
-                ok
-        end
-    end).
-
-%%--------------------------------------------------------------------
-%% @doc
 %% @equiv update_replica_internal(FileCtx, Blocks, FileSize, BumpVersion)
 %% on chosen node.
 %% @end
@@ -163,36 +117,9 @@ on_file_location_change_internal(FileCtx, ChangedLocationDoc = #document{
     FileSize :: non_neg_integer() | undefined, BumpVersion :: boolean()) ->
     {ok, size_changed} | {ok, size_not_changed} | {error, Reason :: term()}.
 update_replica(FileCtx, Blocks, FileSize, BumpVersion) ->
-    Uuid = file_ctx:get_uuid_const(FileCtx),
-    Node = consistent_hasing:get_node(Uuid),
-    rpc:call(Node, ?MODULE, update_replica_internal,
-        [FileCtx, Blocks, FileSize, BumpVersion]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Appends given blocks to the file's local location and invalidates those blocks in its remote locations.
-%% This function in synchronized on the file.
-%% FileSize argument may be used to truncate file's blocks if needed.
-%% Return value tells whether file size has been changed by this call.
-%% @end
-%%--------------------------------------------------------------------
--spec update_replica_internal(file_ctx:ctx(), fslogic_blocks:blocks(),
-    FileSize :: non_neg_integer() | undefined, BumpVersion :: boolean()) ->
-    {ok, size_changed} | {ok, size_not_changed} | {error, Reason :: term()}.
-update_replica_internal(FileCtx, Blocks, FileSize, BumpVersion) ->
-    try
-        UserCtx = undefined,
-        {ok, Process} = get_process(UserCtx, FileCtx),
-        gen_server2:call(Process, {update_replica, FileCtx, Blocks,
-            FileSize, BumpVersion}, infinity)
-
-    catch
-        %% The process we called was already terminating because of idle timeout,
-        %% there's nothing to worry about.
-        exit:{{shutdown, timeout}, _} ->
-            ?debug("Process stopped because of a timeout, retrying with a new one"),
-            update_replica_internal(FileCtx, Blocks, FileSize, BumpVersion)
-    end.
+    ?MODULE:apply(FileCtx, fun() ->
+        replica_updater:update(FileCtx, Blocks, FileSize, BumpVersion)
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -360,20 +287,6 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session}, From,
             {noreply, State6, ?DIE_AFTER}
     end;
 
-handle_call({update_local_location_replica, FileCtx0, ChangedLocationDoc},
-    _From, State0) ->
-    {LocalLocation, FileCtx} = file_ctx:get_local_file_location_doc(FileCtx0),
-    Ans = replica_dbsync_hook:update_local_location_replica(FileCtx,
-        LocalLocation, ChangedLocationDoc),
-    State = State0#state{file_ctx = FileCtx},
-    {reply, Ans, State, ?DIE_AFTER};
-
-handle_call({update_replica, FileCtx, Blocks, FileSize, BumpVersion},
-    _From, State) ->
-    Ans = replica_updater:update(FileCtx,
-        Blocks, FileSize, BumpVersion),
-    {reply, Ans, State, ?DIE_AFTER};
-
 handle_call(flush_location, _From, State) ->
     Ans = fslogic_blocks:flush(),
     {reply, Ans, State, ?DIE_AFTER};
@@ -478,28 +391,6 @@ terminate(_Reason, State) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Update local location replica according to external changes.
-%% @end
-%%--------------------------------------------------------------------
--spec update_local_location_replica(file_ctx:ctx(), file_location:doc()) -> ok.
-update_local_location_replica(FileCtx, ChangedLocationDoc) ->
-    try
-        UserCtx = undefined,
-        {ok, Process} = get_process(UserCtx, FileCtx),
-        gen_server2:call(Process, {update_local_location_replica,
-            FileCtx, ChangedLocationDoc}, infinity)
-
-    catch
-        %% The process we called was already terminating because of idle timeout,
-        %% there's nothing to worry about.
-        exit:{{shutdown, timeout}, _} ->
-            ?debug("Process stopped because of a timeout, retrying with a new one"),
-            update_local_location_replica(FileCtx, ChangedLocationDoc)
-    end.
 
 %%--------------------------------------------------------------------
 %% @private
