@@ -149,7 +149,6 @@ flush_location(Uuid) ->
 %%--------------------------------------------------------------------
 -spec flush_location_internal(file_meta:uuid()) -> ok.
 flush_location_internal(Uuid) ->
-%%  ?info("aaaaa ~p", [erlang:process_info(self(), current_stacktrace)]),
     case gproc:lookup_local_name({Uuid, undefined}) of
         undefined ->
             ok;
@@ -210,8 +209,7 @@ apply(FileCtx, Fun) ->
     term().
 apply_internal(FileCtx, Fun) ->
     try
-        UserCtx = undefined,
-        {ok, Process} = get_process(UserCtx, FileCtx),
+        {ok, Process} = get_process(simplified, FileCtx),
         gen_server2:call(Process, {apply, Fun}, infinity)
 
     catch
@@ -226,9 +224,18 @@ apply_internal(FileCtx, Fun) ->
 %%% gen_server callbacks
 %%%===================================================================
 
--spec init({user_ctx:ctx(), file_ctx:ctx()}) ->
+-spec init({user_ctx:ctx() | simplified, file_ctx:ctx()}) ->
     {ok, #state{}, Timeout :: non_neg_integer()}.
 % TODO VFS-4412 - delete UserCtx
+init({simplified, FileCtx}) ->
+    fslogic_blocks:init_cache(),
+    %% trigger creation of local file location
+    FileGuid = file_ctx:get_guid_const(FileCtx),
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    {ok, #state{file_ctx = FileCtx,
+        file_guid = FileGuid,
+        space_id = SpaceId,
+        in_progress = ordsets:new()}, ?DIE_AFTER};
 init({_UserCtx, FileCtx}) ->
     fslogic_blocks:init_cache(),
     %% trigger creation of local file location
@@ -254,8 +261,21 @@ init({_UserCtx, FileCtx}) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session}, From,
-    #state{from_sessions = FS} = State0) ->
-    State = State0#state{file_ctx = FileCtx},
+    #state{from_sessions = FS, dest_storage_id = DSI} = State0) ->
+    #state{file_ctx = FileCtx4} = State = case DSI of
+        undefined ->
+            {_LocalDoc, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
+            {DestStorageId, FileCtx2} = file_ctx:get_storage_id(FileCtx),
+            {DestFileId, FileCtx3} = file_ctx:get_storage_file_id(FileCtx2),
+            State0#state{
+                file_ctx = FileCtx3,
+                dest_storage_id = DestStorageId,
+                dest_file_id = DestFileId
+            };
+        _ ->
+            State0#state{file_ctx = FileCtx}
+    end,
+
     TransferId =/= undefined andalso (catch gproc:add_local_counter(TransferId, 1)),
     OverlappingInProgress = find_overlapping(Block, State),
     {OverlappingBlocks, ExistingRefs} = lists:unzip(OverlappingInProgress),
@@ -264,8 +284,8 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session}, From,
     {_, NewRefs} = lists:unzip(NewTransfers),
     case ExistingRefs ++ NewRefs of
         [] ->
-            {FileLocation, _FileCtx2} =
-                file_ctx:get_or_create_local_file_location_doc(FileCtx),
+            {FileLocation, _} =
+                file_ctx:get_or_create_local_file_location_doc(FileCtx4),
             ReturnedBlocks = fslogic_blocks:get_blocks(FileLocation,
                 #{overlapping_sorted_blocks => [Block]}),
             {EventOffset, EventSize} =
@@ -552,7 +572,7 @@ is_sequential(_, _State) ->
 %% by this user session.
 %% @end
 %%--------------------------------------------------------------------
--spec get_process(user_ctx:ctx(), file_ctx:ctx()) ->
+-spec get_process(user_ctx:ctx() | simplified, file_ctx:ctx()) ->
     {ok, pid()} | {error, Reason :: any()}.
 get_process(UserCtx, FileCtx) ->
     proc_lib:start(?MODULE, init_or_return_existing, [UserCtx, FileCtx], 10000).
@@ -564,7 +584,7 @@ get_process(UserCtx, FileCtx) ->
 %% by this user session, or continues and makes this process the one.
 %% @end
 %%--------------------------------------------------------------------
--spec init_or_return_existing(user_ctx:ctx(), file_ctx:ctx()) ->
+-spec init_or_return_existing(user_ctx:ctx() | simplified, file_ctx:ctx()) ->
     no_return() | normal.
 init_or_return_existing(UserCtx, FileCtx) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),

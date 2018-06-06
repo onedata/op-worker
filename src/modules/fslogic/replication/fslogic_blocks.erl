@@ -151,11 +151,11 @@ get_blocks(#file_location{blocks = Blocks}, #{overlapping_blocks := OB}, LocKey)
     case OB of
         [] ->
             [];
-        [#file_block{offset = O1, size = S1} = Start0 | OBTail] ->
-            {Start, Stop} = lists:foldl(fun(#file_block{offset = O, size = S} = Block,
+        [#file_block{offset = O1, size = S1} | OBTail] ->
+            {Start, Stop} = lists:foldl(fun(#file_block{offset = O, size = S},
                 {#file_block{offset = TmpO} = TmpStart, TmpStop}) ->
                 Start2 = case O < TmpO of
-                    true -> Block;
+                    true -> #file_block{offset = O, size = 0};
                     _ -> TmpStart
                 end,
                 End = O + S,
@@ -164,7 +164,7 @@ get_blocks(#file_location{blocks = Blocks}, #{overlapping_blocks := OB}, LocKey)
                     _ -> TmpStop
                 end,
                 {Start2, Stop2}
-            end, {Start0, O1 + S1}, OBTail),
+            end, {#file_block{offset = O1, size = 0}, O1 + S1}, OBTail),
             Iter = gb_sets:iterator_from(Start, Blocks),
             Ans = get_block_while(Iter, Stop),
             case LocKey of
@@ -737,6 +737,7 @@ save_doc(#document{value = Location = #file_location{blocks = Blocks}} = Locatio
         fun(#file_block{offset = O, size = S}) ->
             #file_block{offset = O-S, size = S}
         end, gb_sets:to_list(Blocks))}},
+    ?info("ssss2 ~p", [LocationDoc2]),
     file_location:save(LocationDoc2).
 
 %%-------------------------------------------------------------------
