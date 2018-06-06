@@ -2030,7 +2030,7 @@ change_file_content_update_test(Config, MountSpaceInRoot) ->
     }, ?SPACE_ID),
 
     %% Check if file was imported
-    {ok, #file_attr{guid = G}} = ?assertMatch({ok, #file_attr{}},
+    ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
     {ok, Handle1} = ?assertMatch({ok, _},
         lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
@@ -2123,7 +2123,7 @@ change_file_content_update2_test(Config, MountSpaceInRoot) ->
     }, ?SPACE_ID),
 
     %% Check if file was imported
-    {ok, #file_attr{guid = G}} = ?assertMatch({ok, #file_attr{}},
+    ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
     {ok, Handle1} = ?assertMatch({ok, _},
         lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),

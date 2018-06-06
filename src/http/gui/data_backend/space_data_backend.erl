@@ -24,8 +24,8 @@
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/privileges.hrl").
 
--define(CURRENT_TRANSFERS_PREFIX, <<"current">>).
 -define(SCHEDULED_TRANSFERS_PREFIX, <<"scheduled">>).
+-define(CURRENT_TRANSFERS_PREFIX, <<"current">>).
 -define(COMPLETED_TRANSFERS_PREFIX, <<"completed">>).
 -define(MAX_TRANSFERS_TO_LIST, application:get_env(?APP_NAME, max_transfers_to_list, 250)).
 -define(TRANSFERS_LIST_OFFSET, application:get_env(?APP_NAME, transfers_list_offset, 0)).
@@ -504,18 +504,18 @@ space_transfer_list_record(RecordId) ->
     {Prefix, SpaceId} = op_gui_utils:association_to_ids(RecordId),
     {ok, TransferIds} = case Prefix of
         ?CURRENT_TRANSFERS_PREFIX ->
-            transfer:list_current_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET,
+            transfer:list_ongoing_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET,
                 ?MAX_TRANSFERS_TO_LIST);
         ?SCHEDULED_TRANSFERS_PREFIX ->
-            {ok, Scheduled} = transfer:list_scheduled_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET,
+            {ok, Scheduled} = transfer:list_waiting_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET,
                ?MAX_TRANSFERS_TO_LIST),
-            {ok, Current} = transfer:list_current_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET,
+            {ok, Current} = transfer:list_ongoing_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET,
                ?MAX_TRANSFERS_TO_LIST),
-            {ok, Completed} = transfer:list_past_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET,
+            {ok, Completed} = transfer:list_ended_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET,
                ?MAX_TRANSFERS_TO_LIST),
             {ok, (Scheduled -- Current) -- Completed};
         ?COMPLETED_TRANSFERS_PREFIX ->
-            transfer:list_past_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET,
+            transfer:list_ended_transfers(SpaceId, ?TRANSFERS_LIST_OFFSET,
                 ?MAX_TRANSFERS_TO_LIST)
     end,
     [

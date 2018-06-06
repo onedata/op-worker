@@ -21,7 +21,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([handle_handshake/1]).
+-export([handle_handshake/2]).
 
 %%%===================================================================
 %%% API
@@ -32,11 +32,12 @@
 %% Handles client handshake request
 %% @end
 %%--------------------------------------------------------------------
--spec handle_handshake(#client_handshake_request{}) -> {od_user:id(), session:id()} | no_return().
-handle_handshake(#client_handshake_request{session_id = SessId, auth = Auth, version = Version})
+-spec handle_handshake(#client_handshake_request{}, inet:ip_address()) ->
+    {od_user:id(), session:id()} | no_return().
+handle_handshake(#client_handshake_request{session_id = SessId, auth = Auth, version = Version}, IpAddress)
     when is_binary(SessId) andalso is_record(Auth, macaroon_auth) ->
 
-    assert_client_compatibility(Version),
+    assert_client_compatibility(Version, IpAddress),
     {ok, #document{
         value = Iden = #user_identity{user_id = UserId}
     }} = user_identity:get_or_fetch(Auth),
@@ -54,10 +55,10 @@ handle_handshake(#client_handshake_request{session_id = SessId, auth = Auth, ver
 %% Check if client is of compatible version.
 %% @end
 %%--------------------------------------------------------------------
--spec assert_client_compatibility(string() | binary()) -> ok | no_return().
-assert_client_compatibility(ClientVersion) when is_binary(ClientVersion)->
-    assert_client_compatibility(binary_to_list(ClientVersion));
-assert_client_compatibility(ClientVersion) ->
+-spec assert_client_compatibility(string() | binary(), inet:ip_address()) -> ok | no_return().
+assert_client_compatibility(ClientVersion, IpAddress) when is_binary(ClientVersion) ->
+    assert_client_compatibility(binary_to_list(ClientVersion), IpAddress);
+assert_client_compatibility(ClientVersion, IpAddress) ->
     {ok, CompatibleClientVersions} = application:get_env(
         ?APP_NAME, compatible_oc_versions
     ),
@@ -68,9 +69,9 @@ assert_client_compatibility(ClientVersion) ->
         true ->
             ok;
         false ->
-            ?error("Discarding connection to oneclient because of "
-                   "incompatible version (~s). Version must be one of: ~p",
-                [ClientVersion, CompatibleClientVersions]
-            ),
+            ?debug("Discarding connection from oneclient @ ~s because of "
+            "incompatible version (~s). Version must be one of: ~p", [
+                inet_parse:ntoa(IpAddress), ClientVersion, CompatibleClientVersions
+            ]),
             throw(incompatible_client_version)
     end.
