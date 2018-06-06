@@ -262,13 +262,13 @@ init({_UserCtx, FileCtx}) ->
 %%--------------------------------------------------------------------
 handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session}, From,
     #state{from_sessions = FS, dest_storage_id = DSI} = State0) ->
-    #state{file_ctx = FileCtx4} = State = case DSI of
+    #state{file_ctx = FileCtx5} = State = case DSI of
         undefined ->
             {_LocalDoc, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
-            {DestStorageId, FileCtx2} = file_ctx:get_storage_id(FileCtx),
-            {DestFileId, FileCtx3} = file_ctx:get_storage_file_id(FileCtx2),
+            {DestStorageId, FileCtx3} = file_ctx:get_storage_id(FileCtx2),
+            {DestFileId, FileCtx4} = file_ctx:get_storage_file_id(FileCtx3),
             State0#state{
-                file_ctx = FileCtx3,
+                file_ctx = FileCtx4,
                 dest_storage_id = DestStorageId,
                 dest_file_id = DestFileId
             };
@@ -285,7 +285,7 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session}, From,
     case ExistingRefs ++ NewRefs of
         [] ->
             {FileLocation, _} =
-                file_ctx:get_or_create_local_file_location_doc(FileCtx4),
+                file_ctx:get_or_create_local_file_location_doc(FileCtx5),
             ReturnedBlocks = fslogic_blocks:get_blocks(FileLocation,
                 #{overlapping_sorted_blocks => [Block]}),
             {EventOffset, EventSize} =
