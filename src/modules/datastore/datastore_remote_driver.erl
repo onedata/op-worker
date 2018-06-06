@@ -98,7 +98,7 @@ get_async(#{
     catch
         _:Reason ->
             ?error_stacktrace("Datastore remote get failed due to: ~p", [Reason]),
-            {error, Reason}
+            {error, not_found}
     end.
 
 %%--------------------------------------------------------------------
