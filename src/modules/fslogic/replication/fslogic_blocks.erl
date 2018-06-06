@@ -737,7 +737,6 @@ save_doc(#document{value = Location = #file_location{blocks = Blocks}} = Locatio
         fun(#file_block{offset = O, size = S}) ->
             #file_block{offset = O-S, size = S}
         end, gb_sets:to_list(Blocks))}},
-    ?info("ssss2 ~p", [LocationDoc2]),
     file_location:save(LocationDoc2).
 
 %%-------------------------------------------------------------------
