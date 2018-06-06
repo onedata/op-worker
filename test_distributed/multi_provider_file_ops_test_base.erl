@@ -443,11 +443,11 @@ many_ops_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, No
     verify_dir_size(Config, Level3Dir, length(Level4Files)),
 
     lists:map(fun({_, F}) ->
-        WD = lists:nth(crypto:rand_uniform(1,length(Workers) + 1), Workers),
+        WD = lists:nth(rand:uniform(length(Workers)), Workers),
         ?assertMatch(ok, lfm_proxy:unlink(WD, SessId(WD), {path, F}))
     end, Level4Files),
     lists:map(fun(D) ->
-        WD = lists:nth(crypto:rand_uniform(1,length(Workers) + 1), Workers),
+        WD = lists:nth(rand:uniform(length(Workers)), Workers),
         ?assertMatch(ok, lfm_proxy:unlink(WD, SessId(WD), {path, D}))
     end, Level3Dirs2),
     ct:print("Dirs and files deleted"),

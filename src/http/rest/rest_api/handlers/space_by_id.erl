@@ -9,7 +9,7 @@
 %%% Handler for listing spaces by id.
 %%% @end
 %%%--------------------------------------------------------------------
--module(spaces_by_id).
+-module(space_by_id).
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").

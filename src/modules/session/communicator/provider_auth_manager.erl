@@ -16,7 +16,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([handle_handshake/1]).
+-export([handle_handshake/2]).
 
 %%%===================================================================
 %%% API
@@ -27,17 +27,17 @@
 %% Handles provider handshake request
 %% @end
 %%--------------------------------------------------------------------
--spec handle_handshake(#provider_handshake_request{}) ->
+-spec handle_handshake(#provider_handshake_request{}, IpAddress :: inet:ip_address()) ->
     {od_provider:id(), session:id()} | no_return().
-handle_handshake(#provider_handshake_request{provider_id = ProviderId, nonce = Nonce})
+handle_handshake(#provider_handshake_request{provider_id = ProviderId, nonce = Nonce}, IpAddress)
     when is_binary(ProviderId) andalso is_binary(Nonce) ->
 
     case provider_logic:verify_provider_identity(ProviderId) of
         ok ->
             ok;
         Error ->
-            ?debug("Discarding provider connection as its identity cannot be verified: ~p", [
-                Error
+            ?debug("Discarding provider connection (~s @ ~s) as its identity cannot be verified: ~p", [
+                ProviderId, inet_parse:ntoa(IpAddress), Error
             ]),
             throw(invalid_provider)
     end,
@@ -46,8 +46,8 @@ handle_handshake(#provider_handshake_request{provider_id = ProviderId, nonce = N
         ok ->
             ok;
         Error1 ->
-            ?debug("Discarding provider connection as its nonce cannot be verified: ~p", [
-                Error1
+            ?debug("Discarding provider connection (~s @ ~s) as its nonce cannot be verified: ~p", [
+                ProviderId, inet_parse:ntoa(IpAddress), Error1
             ]),
             throw(invalid_nonce)
     end,
