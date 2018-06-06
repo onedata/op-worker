@@ -262,7 +262,7 @@ upgrade_record(2, User) ->
         EffHandleServices,
         EffHandles,
 
-        _CacheState
+        CacheState
     } = User,
 
     {3, #od_user{
@@ -279,5 +279,5 @@ upgrade_record(2, User) ->
         eff_handle_services = EffHandleServices,
         eff_handles = EffHandles,
 
-        cache_state = #{}
+        cache_state = CacheState
     }}.
