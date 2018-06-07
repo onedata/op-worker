@@ -85,7 +85,7 @@ rtransfer_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, N
     Workers1 = ?config(workers1, Config),
     Workers2 = ?config(workers2, Config),
     Workers = ?config(op_worker_nodes, Config),
-    Workers3 = Workers -- Workers1 -- Workers2,
+    Workers3 = (Workers -- Workers1) -- Workers2,
 
     Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
     ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir, 8#755)),
