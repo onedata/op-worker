@@ -915,13 +915,17 @@ get_acl(FileCtx = #file_ctx{acl = Acl}) ->
 -spec get_file_size(file_ctx:ctx() | file_meta:uuid()) ->
     {Size :: non_neg_integer(), file_ctx:ctx()}.
 get_file_size(FileCtx) ->
-    % TODO VFS-4412 - do not get blocks if it is not needed
-    case file_ctx:get_local_file_location_doc(FileCtx) of
+    case file_ctx:get_local_file_location_doc(FileCtx, false) of
         {#document{
             value = #file_location{
                 size = undefined
             }
         } = FL, FileCtx2} ->
+            {#document{
+                value = #file_location{
+                    size = undefined
+                }
+            } = FL, _} = file_ctx:get_local_file_location_doc(FileCtx, true),
             {fslogic_blocks:upper(fslogic_blocks:get_blocks(FL)), FileCtx2};
         {#document{value = #file_location{size = Size}}, FileCtx2} ->
             {Size, FileCtx2};
@@ -937,13 +941,9 @@ get_file_size(FileCtx) ->
 -spec get_local_storage_file_size(file_ctx:ctx() | file_meta:uuid()) ->
     {Size :: non_neg_integer(), file_ctx:ctx()}.
 get_local_storage_file_size(FileCtx) ->
-    case file_ctx:get_local_file_location_doc(FileCtx) of
-        {#document{} = FL, FileCtx2} ->
-            % TODO VFS-4412 - improve performance
-            {fslogic_blocks:size(fslogic_blocks:get_blocks(FL)), FileCtx2};
-        {undefined, FileCtx2} ->
-            {0, FileCtx2}
-    end.
+    FileUuid = get_uuid_const(FileCtx),
+    LocalLocationId = file_location:local_id(FileUuid),
+    {fslogic_blocks:get_size(LocalLocationId, FileUuid), FileCtx}.
 
 %%--------------------------------------------------------------------
 %% @doc

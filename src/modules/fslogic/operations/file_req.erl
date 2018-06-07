@@ -282,7 +282,7 @@ storage_file_created_insecure(_UserCtx, FileCtx) ->
     {#document{
         key = FileLocationId,
         value = #file_location{storage_file_created = StorageFileCreated}
-    }, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
+    }, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx, false),
 
     case StorageFileCreated of
         false ->

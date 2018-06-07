@@ -96,7 +96,7 @@ rename_storage_file(SessId, SpaceId, Storage, FileUuid, SourceFileId, TargetFile
 create_storage_file_if_not_exists(FileCtx) ->
     replica_synchronizer:apply(FileCtx,
         fun() ->
-            case file_ctx:get_local_file_location_doc(file_ctx:reset(FileCtx)) of
+            case file_ctx:get_local_file_location_doc(file_ctx:reset(FileCtx), false) of
                 {undefined, _} ->
                     {_, _FileCtx2} = create_storage_file_location(FileCtx, false),
                     ok;

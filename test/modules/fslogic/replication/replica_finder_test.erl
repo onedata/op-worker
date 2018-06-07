@@ -138,9 +138,9 @@ finder_should_find_data_in_many_providers(_) ->
 
     %then
     ?_assertMatch([
-        {?PID3, [?BLOCK(6, 3)], _},
+        {?PID1, [?BLOCK(1, 2)], _},
         {?PID2, [?BLOCK(3, 3)], _},
-        {?PID1, [?BLOCK(1, 2)], _}
+        {?PID3, [?BLOCK(6, 3)], _}
     ], Ans).
 
 
@@ -157,9 +157,7 @@ finder_should_minimize_returned_blocks(_) ->
 
     %then
     ?_assertMatch([
-        {?PID3, [?BLOCK(1, 2)], _},
-        {?PID2, [?BLOCK(3, 3)], _},
-        {?PID1, [?BLOCK(6, 3)], _}
+        {?PID1, [?BLOCK(1, 8)], _}
     ], Ans).
 
 

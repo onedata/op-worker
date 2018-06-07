@@ -384,7 +384,7 @@ maybe_delete_imported_dir_and_update_counters(FileCtx, SpaceId, StorageId) ->
 -spec maybe_delete_imported_regular_file_and_update_counters(file_ctx:ctx(),
     od_space:id(), storage:id()) -> ok.
 maybe_delete_imported_regular_file_and_update_counters(FileCtx, SpaceId, StorageId) ->
-    {FileLocation, FileCtx2} = file_ctx:get_local_file_location_doc(FileCtx),
+    {FileLocation, FileCtx2} = file_ctx:get_local_file_location_doc(FileCtx, false),
     case file_location:is_storage_file_created(FileLocation) of
         true ->
             delete_imported_file(FileCtx2),

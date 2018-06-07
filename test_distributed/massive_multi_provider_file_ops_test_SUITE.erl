@@ -18,6 +18,7 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("cluster_worker/include/global_definitions.hrl").
 
 %% API
@@ -25,12 +26,13 @@
 
 -export([
     db_sync_basic_opts_test/1, db_sync_many_ops_test/1, db_sync_distributed_modification_test/1,
-    db_sync_many_ops_test_base/1, multi_space_test/1, rtransfer_test/1, rtransfer_test_base/1
+    db_sync_many_ops_test_base/1, multi_space_test/1, rtransfer_test/1, rtransfer_test_base/1,
+    rtransfer_multisource_test/1
 ]).
 
 -define(TEST_CASES, [
     db_sync_basic_opts_test, db_sync_many_ops_test, db_sync_distributed_modification_test,
-    multi_space_test, rtransfer_test
+    multi_space_test, rtransfer_test, rtransfer_multisource_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -116,6 +118,73 @@ all() ->
             {description, ""}
         ]}
     ]).
+
+rtransfer_multisource_test(Config0) ->
+    Config = multi_provider_file_ops_test_base:extend_config(Config0,
+        <<"user1">>, {3, 0, 0, 1}, 60),
+    SessId = ?config(session, Config),
+    SpaceName = ?config(space_name, Config),
+    Worker1 = ?config(worker1, Config),
+    Workers1 = ?config(workers1, Config),
+    [Worker2] = Workers2 = ?config(workers2, Config),
+    Workers = ?config(op_worker_nodes, Config),
+    [Worker3] = (Workers -- Workers1) -- Workers2,
+
+    lists:foreach(fun(Worker) ->
+        test_utils:set_env(Worker, ?APP_NAME, minimal_sync_request, 1)
+    end, ?config(op_worker_nodes, Config)),
+
+    File = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
+
+    ?assertMatch({ok, _}, lfm_proxy:create(Worker2, SessId(Worker2), File, 8#755)),
+    OpenAns = lfm_proxy:open(Worker2, SessId(Worker2), {path, File}, rdwr),
+    ?assertMatch({ok, _}, OpenAns),
+    {ok, Handle} = OpenAns,
+    Bytes = <<"1234567890abcde">>,
+    Size1 = size(Bytes),
+    ?assertEqual({ok, Size1}, lfm_proxy:write(Worker2, Handle, 0, Bytes)),
+    ?assertEqual(ok, lfm_proxy:close(Worker2, Handle)),
+
+    ?assertMatch({ok, #file_attr{size = Size1}},
+        lfm_proxy:stat(Worker3, SessId(Worker3), {path, File}), 60),
+    OpenAns2 = lfm_proxy:open(Worker3, SessId(Worker3), {path, File}, rdwr),
+    ?assertMatch({ok, _}, OpenAns2),
+    {ok, Handle2} = OpenAns2,
+    ?assertEqual({ok, 1}, lfm_proxy:write(Worker3, Handle2, 7, <<"z">>)),
+    ?assertEqual({ok, Size1}, lfm_proxy:write(Worker3, Handle2, Size1, Bytes)),
+    ?assertEqual(ok, lfm_proxy:close(Worker3, Handle2)),
+
+    Size2 = 2 * size(Bytes),
+    ?assertMatch({ok, #file_attr{size = Size2}},
+        lfm_proxy:stat(Worker1, SessId(Worker1), {path, File}), 60),
+    OpenAns3 = lfm_proxy:open(Worker1, SessId(Worker1), {path, File}, rdwr),
+    ?assertMatch({ok, _}, OpenAns3),
+    {ok, Handle3} = OpenAns3,
+
+    ?assertMatch({ok, <<"2">>}, lfm_proxy:silent_read(Worker1, Handle3, 1, 1)),
+    ?assertMatch({ok, <<"45">>}, lfm_proxy:silent_read(Worker1, Handle3, 3, 2)),
+    ?assertMatch({ok, <<"123456">>}, lfm_proxy:silent_read(Worker1, Handle3, 0, 6)),
+
+    ?assertMatch({ok, <<"e">>}, lfm_proxy:silent_read(Worker1, Handle3, 14, 1)),
+    ?assertMatch({ok, <<"de1">>}, lfm_proxy:silent_read(Worker1, Handle3, 13, 3)),
+
+    ?assertMatch({ok, <<"9">>}, lfm_proxy:silent_read(Worker1, Handle3, 8, 1)),
+    ?assertMatch({ok, <<"7z9">>}, lfm_proxy:silent_read(Worker1, Handle3, 6, 3)),
+
+    ?assertMatch({ok, #file_attr{size = Size2}},
+        lfm_proxy:stat(Worker2, SessId(Worker2), {path, File}), 60),
+    OpenAns4 = lfm_proxy:open(Worker2, SessId(Worker2), {path, File}, rdwr),
+    ?assertMatch({ok, _}, OpenAns4),
+    {ok, Handle4} = OpenAns4,
+    ?assertMatch({ok, <<"4">>}, lfm_proxy:silent_read(Worker2, Handle4, 18, 1)),
+    ?assertEqual(ok, lfm_proxy:close(Worker2, Handle4)),
+
+    timer:sleep(15000),
+    ?assertMatch({ok, <<"3">>}, lfm_proxy:silent_read(Worker1, Handle3, 17, 1)),
+    ?assertMatch({ok, <<"2345">>}, lfm_proxy:silent_read(Worker1, Handle3, 16, 4)),
+
+    ?assertEqual(ok, lfm_proxy:close(Worker1, Handle3)),
+    ok.
 
 db_sync_basic_opts_test(Config) ->
     multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {3,0,0}, 60).
