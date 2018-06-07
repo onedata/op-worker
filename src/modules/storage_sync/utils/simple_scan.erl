@@ -543,7 +543,7 @@ maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
             FileUuid = file_ctx:get_uuid_const(FileCtx2),
             FileGuid = file_ctx:get_guid_const(FileCtx2),
             SpaceId = file_ctx:get_space_id_const(FileCtx2),
-            NewFileBlocks = [#file_block{offset = 0, size = StSize}],
+            NewFileBlocks = create_file_blocks(StSize),
             replica_updater:update(FileCtx2, NewFileBlocks, StSize, true),
             ok = lfm_event_utils:emit_file_written(FileGuid, NewFileBlocks, StSize, ?ROOT_SESS_ID),
             storage_sync_info:update_mtime(FileUuid, StMtime, SpaceId),
@@ -693,10 +693,7 @@ create_file_location(SpaceId, StorageId, FileUuid, CanonicalPath, Size) ->
         size = Size,
         storage_file_created = true
     },
-    Location2 = fslogic_blocks:set_blocks(Location, [#file_block{
-        offset = 0,
-        size = Size
-    }]),
+    Location2 = fslogic_blocks:set_blocks(Location, create_file_blocks(Size)),
     {ok, _LocId} = file_location:save_and_bump_version(
         #document{
             key = file_location:local_id(FileUuid),
@@ -704,6 +701,17 @@ create_file_location(SpaceId, StorageId, FileUuid, CanonicalPath, Size) ->
             scope = SpaceId
         }),
     ok.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns list containing one block with given size.
+%% Is Size == 0 returns empty list.
+%% @end
+%%-------------------------------------------------------------------
+-spec create_file_blocks(non_neg_integer()) -> fslogic_blocks:blocks().
+create_file_blocks(0) -> [];
+create_file_blocks(Size) -> [#file_block{offset = 0, size = Size}].
 
 %%-------------------------------------------------------------------
 %% @private
