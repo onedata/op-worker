@@ -50,7 +50,7 @@
     fslogic_worker:fuse_response().
 synchronize_block(UserCtx, FileCtx, undefined, Prefetch, TransferId) ->
     % trigger file_location creation
-    {_, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
+    {_, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx, false),
     {Size, FileCtx3} = file_ctx:get_file_size(FileCtx2),
     synchronize_block(UserCtx, FileCtx3, #file_block{offset = 0, size = Size},
         Prefetch, TransferId);
