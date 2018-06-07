@@ -20,14 +20,15 @@
 
 %% API
 % link utils functions
--export([delete_scheduled_transfer_link/3, delete_active_transfer_link/2,
-    delete_active_transfer_link/3, delete_past_transfer_link/3,
-    add_scheduled_transfer_link/3, add_active_transfer_link/3,
-    add_past_transfer_link/3, list_transfers/5, for_each_current_transfer/3]).
+-export([add_waiting_transfer_link/3, delete_waiting_transfer_link/3]).
+-export([add_ongoing_transfer_link/3, delete_ongoing_transfer_link/2,
+    delete_ongoing_transfer_link/3, for_each_ongoing_transfer/3]).
+-export([add_ended_transfer_link/3, delete_ended_transfer_link/3]).
+-export([list_transfers/5]).
 -export([link_key/2]).
 
 -type link_key() :: binary().
--type virtual_list_id() :: binary(). % ?(SCHEDULED|CURRENT|PAST)_TRANSFERS_KEY
+-type virtual_list_id() :: binary(). % ?(WAITING|ONGOING|ENDED)_TRANSFERS_KEY
 -type offset() :: integer().
 -type list_limit() :: transfer:list_limit().
 
@@ -39,40 +40,39 @@
 -define(EPOCH_INFINITY, 9999999999). % GMT: Saturday, 20 November 2286 17:46:39
 
 
-
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv add_link(?SCHEDULED_TRANSFERS_KEY, TransferId, SpaceId, StartTime).
+%% @equiv add_link(?WAITING_TRANSFERS_KEY, TransferId, SpaceId, StartTime).
 %% @end
 %%--------------------------------------------------------------------
--spec add_scheduled_transfer_link(TransferId :: transfer:id(), od_space:id(),
+-spec add_waiting_transfer_link(TransferId :: transfer:id(), od_space:id(),
     transfer:timestamp()) -> ok.
-add_scheduled_transfer_link(TransferId, SpaceId, ScheduleTime) ->
-    add_link(?SCHEDULED_TRANSFERS_KEY, TransferId, SpaceId, ScheduleTime).
+add_waiting_transfer_link(TransferId, SpaceId, ScheduleTime) ->
+    add_link(?WAITING_TRANSFERS_KEY, TransferId, SpaceId, ScheduleTime).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv add_link(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId, StartTime).
+%% @equiv add_link(?ONGOING_TRANSFERS_KEY, TransferId, SpaceId, StartTime).
 %% @end
 %%--------------------------------------------------------------------
--spec add_active_transfer_link(TransferId :: transfer:id(), od_space:id(),
+-spec add_ongoing_transfer_link(TransferId :: transfer:id(), od_space:id(),
     transfer:timestamp()) -> ok.
-add_active_transfer_link(TransferId, SpaceId, ScheduleTime) ->
-    add_link(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId, ScheduleTime).
+add_ongoing_transfer_link(TransferId, SpaceId, ScheduleTime) ->
+    add_link(?ONGOING_TRANSFERS_KEY, TransferId, SpaceId, ScheduleTime).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv add_link(?PAST_TRANSFERS_KEY, TransferId, SpaceId, FinishTime).
+%% @equiv add_link(?ENDED_TRANSFERS_KEY, TransferId, SpaceId, FinishTime).
 %% @end
 %%--------------------------------------------------------------------
--spec add_past_transfer_link(TransferId :: transfer:id(), od_space:id(),
+-spec add_ended_transfer_link(TransferId :: transfer:id(), od_space:id(),
     transfer:timestamp()) -> ok.
-add_past_transfer_link(TransferId, SpaceId, FinishTime) ->
-    add_link(?PAST_TRANSFERS_KEY, TransferId, SpaceId, FinishTime).
+add_ended_transfer_link(TransferId, SpaceId, FinishTime) ->
+    add_link(?ENDED_TRANSFERS_KEY, TransferId, SpaceId, FinishTime).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -98,43 +98,43 @@ add_link(SourceId, TransferId, SpaceId, Timestamp) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv delete_links(?SCHEDULED_TRANSFERS_KEY, TransferId, SpaceId, StartTime).
+%% @equiv delete_links(?WAITING_TRANSFERS_KEY, TransferId, SpaceId, StartTime).
 %% @end
 %%--------------------------------------------------------------------
--spec delete_scheduled_transfer_link(TransferId :: transfer:id(), od_space:id(),
+-spec delete_waiting_transfer_link(TransferId :: transfer:id(), od_space:id(),
     transfer:timestamp()) -> ok.
-delete_scheduled_transfer_link(TransferId, SpaceId, ScheduleTime) ->
-    delete_links(?SCHEDULED_TRANSFERS_KEY, TransferId, SpaceId, ScheduleTime).
+delete_waiting_transfer_link(TransferId, SpaceId, ScheduleTime) ->
+    delete_links(?WAITING_TRANSFERS_KEY, TransferId, SpaceId, ScheduleTime).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% @equiv delete_active_transfer_link(TransferId, SpaceId, get_start_time(TransferId)).
 %% @end
 %%--------------------------------------------------------------------
--spec delete_active_transfer_link(TransferId :: transfer:id(), od_space:id()) -> ok.
-delete_active_transfer_link(TransferId, SpaceId) ->
-    delete_active_transfer_link(TransferId, SpaceId,
+-spec delete_ongoing_transfer_link(TransferId :: transfer:id(), od_space:id()) -> ok.
+delete_ongoing_transfer_link(TransferId, SpaceId) ->
+    delete_ongoing_transfer_link(TransferId, SpaceId,
         transfer_utils:get_schedule_time(TransferId)).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv delete_links(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId, StartTime).
+%% @equiv delete_links(?ONGOING_TRANSFERS_KEY, TransferId, SpaceId, StartTime).
 %% @end
 %%--------------------------------------------------------------------
--spec delete_active_transfer_link(TransferId :: transfer:id(), od_space:id(),
+-spec delete_ongoing_transfer_link(TransferId :: transfer:id(), od_space:id(),
     transfer:timestamp()) -> ok.
-delete_active_transfer_link(TransferId, SpaceId, StartTime) ->
-    delete_links(?CURRENT_TRANSFERS_KEY, TransferId, SpaceId, StartTime).
+delete_ongoing_transfer_link(TransferId, SpaceId, StartTime) ->
+    delete_links(?ONGOING_TRANSFERS_KEY, TransferId, SpaceId, StartTime).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv delete_links(?PAST_TRANSFERS_KEY, TransferId, SpaceId, FinishTime).
+%% @equiv delete_links(?ENDED_TRANSFERS_KEY, TransferId, SpaceId, FinishTime).
 %% @end
 %%--------------------------------------------------------------------
--spec delete_past_transfer_link(TransferId :: transfer:id(), od_space:id(),
+-spec delete_ended_transfer_link(TransferId :: transfer:id(), od_space:id(),
     transfer:timestamp()) -> ok.
-delete_past_transfer_link(TransferId, SpaceId, FinishTime) ->
-    delete_links(?PAST_TRANSFERS_KEY, TransferId, SpaceId, FinishTime).
+delete_ended_transfer_link(TransferId, SpaceId, FinishTime) ->
+    delete_links(?ENDED_TRANSFERS_KEY, TransferId, SpaceId, FinishTime).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -195,11 +195,11 @@ list_transfers(SpaceId, ListDocId, StartId, Offset, Limit) ->
 %% Executes callback for each ongoing transfer.
 %% @end
 %%--------------------------------------------------------------------
--spec for_each_current_transfer(
+-spec for_each_ongoing_transfer(
     Callback :: fun((link_key(), transfer:id(), Acc0 :: term()) -> Acc :: term()),
     Acc0 :: term(), od_space:id()) -> {ok, Acc :: term()} | {error, term()}.
-for_each_current_transfer(Callback, Acc0, SpaceId) ->
-    for_each_transfer(?CURRENT_TRANSFERS_KEY, Callback, Acc0, SpaceId).
+for_each_ongoing_transfer(Callback, Acc0, SpaceId) ->
+    for_each_transfer(?ONGOING_TRANSFERS_KEY, Callback, Acc0, SpaceId).
 
 %%-------------------------------------------------------------------
 %% @doc

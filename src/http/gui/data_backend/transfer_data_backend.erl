@@ -192,11 +192,11 @@ list_transfers(SpaceId, Type, StartFromIndex, Offset, Limit) ->
     StartFromLink = gs_protocol:null_to_undefined(StartFromIndex),
     {ok, TransferIds} = case Type of
         ?SCHEDULED_TRANSFERS_TYPE ->
-            transfer:list_scheduled_transfers(SpaceId, StartFromLink, Offset, Limit);
+            transfer:list_waiting_transfers(SpaceId, StartFromLink, Offset, Limit);
         ?CURRENT_TRANSFERS_TYPE ->
-            transfer:list_current_transfers(SpaceId, StartFromLink, Offset, Limit);
+            transfer:list_ongoing_transfers(SpaceId, StartFromLink, Offset, Limit);
         ?COMPLETED_TRANSFERS_TYPE ->
-            transfer:list_past_transfers(SpaceId, StartFromLink, Offset, Limit)
+            transfer:list_ended_transfers(SpaceId, StartFromLink, Offset, Limit)
     end,
     {ok, [
         {<<"list">>, TransferIds}

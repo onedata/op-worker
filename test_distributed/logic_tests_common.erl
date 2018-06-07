@@ -299,7 +299,7 @@ mock_graph_create(#gri{type = od_handle, id = undefined, aspect = instance}, ?US
     end.
 
 
-mock_graph_update(#gri{type = od_group, id = _GroupId, aspect = instance}, ?USER_GS_MACAROON_AUTH(_UserId), Data) ->
+mock_graph_update(#gri{type = od_group, aspect = instance}, ?USER_GS_MACAROON_AUTH(_UserId), Data) ->
     case Data of
         #{<<"name">> := Name} when is_binary(Name) ->
             {ok, #gs_resp_graph{result = ok}};

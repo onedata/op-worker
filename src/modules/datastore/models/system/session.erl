@@ -31,7 +31,6 @@
 -export([get_helper/3]).
 -export([get_auth/1, get_user_id/1, get_rest_session_id/1, all_with_user/0]).
 -export([add_open_file/2, remove_open_file/2]).
--export([add_transfer/2, get_transfers/1, remove_transfer/2]).
 -export([add_handle/3, remove_handle/2, get_handle/2]).
 -export([is_special/1, is_root/1, is_guest/1, root_session_id/0]).
 -export([set_direct_io/2]).
@@ -407,45 +406,6 @@ remove_open_file(SessId, FileGuid) ->
         {ok, _} -> ok;
         {error, Reason} -> {error, Reason}
     end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes open file UUId from session.
-%% @end
-%%--------------------------------------------------------------------
--spec get_transfers(id()) -> {ok, [transfer:id()]} | {error, term()}.
-get_transfers(SessId) ->
-    case session:get(SessId) of
-        {ok, #document{value = #session{transfers = Transfers}}} ->
-            {ok, Transfers};
-        {error, Reason} ->
-            {error, Reason}
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes transfer from session memory
-%% @end
-%%--------------------------------------------------------------------
--spec remove_transfer(id(), transfer:id()) -> {ok, datastore:key()}.
-remove_transfer(SessId, TransferId) ->
-    session:update(SessId, fun(Sess = #session{transfers = Transfers}) ->
-        FilteredTransfers = lists:filter(fun(T) ->
-            T =/= TransferId
-        end, Transfers),
-        {ok, Sess#session{transfers = FilteredTransfers}}
-    end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Add transfer to session memory.
-%% @end
-%%--------------------------------------------------------------------
--spec add_transfer(id(), transfer:id()) -> {ok, datastore:key()}.
-add_transfer(SessId, TransferId) ->
-    session:update(SessId, fun(Sess = #session{transfers = Transfers}) ->
-        {ok, Sess#session{transfers = [TransferId | Transfers]}}
-    end).
 
 %%--------------------------------------------------------------------
 %% @doc

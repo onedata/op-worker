@@ -172,11 +172,8 @@ handle_info(_Info, State) ->
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term().
-terminate(_Reason, #state{
-    session_id = SessionId,
-    transfer_id = TransferId
-}) ->
-    session:remove_transfer(SessionId, TransferId).
+terminate(_Reason, _State) ->
+    ok.
 
 %%--------------------------------------------------------------------
 %% @private
