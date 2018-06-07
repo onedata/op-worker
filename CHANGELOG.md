@@ -4,6 +4,17 @@
 CHANGELOG
 ---------
 
+### 18.02.0-rc7
+
+* VFS-4412 Add holes consolidation
+* Updating GUI, including: VFS-4471 * VFS-4471 Improved file chunks bar rendering
+* handle {error, ebusy} from truncate
+* VFS-4412 Fix remote driver
+* VFS-4412 Fix blocks synchronization bugs
+* VFS-4523 Allow listing transfers per space rather than per session
+* Updating GUI, including: VFS-4391 * VFS-4391 More efficient infinite scroll for transfers list and file transfer status
+
+
 ### 18.02.0-rc6
 
 * Upgrade rtransfer_link.
