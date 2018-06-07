@@ -943,7 +943,7 @@ get_file_size(FileCtx) ->
 get_local_storage_file_size(FileCtx) ->
     FileUuid = get_uuid_const(FileCtx),
     LocalLocationId = file_location:local_id(FileUuid),
-    fslogic_blocks:get_size(LocalLocationId, FileUuid).
+    {fslogic_blocks:get_size(LocalLocationId, FileUuid), FileCtx}.
 
 %%--------------------------------------------------------------------
 %% @doc
