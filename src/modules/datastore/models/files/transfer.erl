@@ -563,9 +563,8 @@ increase_files_invalidated_counter(TransferId) ->
 ) ->
     {ok, undefined | id()} | {error, term()}.
 mark_data_transfer_finished(undefined, SpaceId, BytesPerProvider) ->
-    CurrentTime = provider_logic:zone_time_seconds(),
-    ok = space_transfer_stats:update(
-        ?ON_THE_FLY_TRANSFERS_TYPE, SpaceId, BytesPerProvider, CurrentTime
+    ok = space_transfer_stats:update_with_cache(
+        ?ON_THE_FLY_TRANSFERS_TYPE, SpaceId, BytesPerProvider
     ),
     {ok, undefined};
 mark_data_transfer_finished(TransferId, SpaceId, BytesPerProvider) ->
