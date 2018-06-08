@@ -133,7 +133,9 @@ update_with_cache(TransferType, SpaceId, BytesPerProvider) ->
 -spec update_with_cache_internal(TransferType :: binary(), SpaceId :: od_space:id(),
     BytesPerProvider :: #{od_provider:id() => size()}) -> ok.
 update_with_cache_internal(TransferType, SpaceId, BytesPerProvider) ->
-    case application:get_env(?APP_NAME, {space_transfer_cache, TransferType, SpaceId}) of
+    Name = binary_to_atom(term_to_binary(
+        {space_transfer_cache, TransferType, SpaceId}), utf8),
+    case application:get_env(?APP_NAME, Name) of
         {ok, Pid} ->
             case is_process_alive(Pid) of
                 true ->
@@ -301,7 +303,9 @@ get_record_struct(1) ->
 start_cache_proc(TransferType, SpaceId) ->
     critical_section:run([?MODULE, TransferType, SpaceId], fun() ->
         Pid = spawn(fun() -> cache_proc(TransferType, SpaceId, #{}) end),
-        application:set_env(?APP_NAME, {space_transfer_cache, TransferType, SpaceId}, Pid)
+        Name = binary_to_atom(term_to_binary(
+            {space_transfer_cache, TransferType, SpaceId}), utf8),
+        application:set_env(?APP_NAME, Name, Pid)
     end),
     ok.
 
@@ -320,8 +324,8 @@ cache_proc(TransferType, SpaceId, Bytes0) ->
             receive
                 {update_stats, NewBytes} ->
                     cache_proc(TransferType, SpaceId, NewBytes)
-            after 60000 ->
-                cache_proc(TransferType, SpaceId, Bytes)
+            after 300000 ->
+                ok
             end;
         _ ->
             CurrentTime = provider_logic:zone_time_seconds(),
