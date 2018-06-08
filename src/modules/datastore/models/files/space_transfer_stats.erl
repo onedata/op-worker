@@ -134,7 +134,7 @@ update_with_cache(TransferType, SpaceId, BytesPerProvider) ->
     BytesPerProvider :: #{od_provider:id() => size()}) -> ok.
 update_with_cache_internal(TransferType, SpaceId, BytesPerProvider) ->
     Name = binary_to_atom(term_to_binary(
-        {space_transfer_cache, TransferType, SpaceId}), utf8),
+        {space_transfer_cache, TransferType, SpaceId}), latin1),
     case application:get_env(?APP_NAME, Name) of
         {ok, Pid} ->
             case is_process_alive(Pid) of
@@ -304,7 +304,7 @@ start_cache_proc(TransferType, SpaceId) ->
     critical_section:run([?MODULE, TransferType, SpaceId], fun() ->
         Pid = spawn(fun() -> cache_proc(TransferType, SpaceId, #{}) end),
         Name = binary_to_atom(term_to_binary(
-            {space_transfer_cache, TransferType, SpaceId}), utf8),
+            {space_transfer_cache, TransferType, SpaceId}), latin1),
         application:set_env(?APP_NAME, Name, Pid)
     end),
     ok.
