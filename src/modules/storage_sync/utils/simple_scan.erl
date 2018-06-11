@@ -174,6 +174,8 @@ maybe_import_storage_file(Job = #space_strategy_job{
                             case fslogic_blocks:get_blocks(FL, #{count => 1}) of
                                 [#file_block{offset = 0, size = Size}] ->
                                     maybe_import_file_with_existing_metadata(Job2, FileCtx);
+                                [] when Size =:= 0 ->
+                                    maybe_import_file_with_existing_metadata(Job2, FileCtx);
                                 _ ->
                                     {processed, FileCtx, Job2}
                             end;
