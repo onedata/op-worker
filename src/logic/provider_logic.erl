@@ -43,6 +43,8 @@
 -export([verify_provider_identity/1, verify_provider_identity/2]).
 -export([verify_provider_nonce/2]).
 
+-define(IPS_CACHE_TTL, 600000). % 10 minutes
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -291,11 +293,20 @@ resolve_ips(ProviderId) ->
 -spec resolve_ips(gs_client_worker:client(), od_provider:id()) ->
     {ok, inet:ip4_address()} | {error, term()}.
 resolve_ips(SessionId, ProviderId) ->
-    case get_domain(SessionId, ProviderId) of
-        {ok, Domain} ->
-            inet:getaddrs(binary_to_list(Domain), inet);
-        {error, _} = Error ->
-            Error
+    Now = os:timestamp(),
+    Name = binary_to_atom(term_to_binary({cached_ips, ProviderId}), latin1),
+    case application:get_env(?APP_NAME, Name) of
+        {ok, {IPs, Timestamp}} when Timestamp + ?IPS_CACHE_TTL > Now ->
+            IPs;
+        _ ->
+            case get_domain(SessionId, ProviderId) of
+                {ok, Domain} ->
+                    Ans = inet:getaddrs(binary_to_list(Domain), inet),
+                    application:set_env(?APP_NAME, Name, {Ans, Now}),
+                    Ans;
+                {error, _} = Error ->
+                    Error
+            end
     end.
 
 
