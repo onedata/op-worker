@@ -21,15 +21,16 @@
 
 %% ID of this provider (assigned by global registry)
 -type id() :: binary().
-
 -export_type([id/0]).
+
+-define(OZ_VERSION_CACHE_TTL, 300). % in seconds - 5 minutes
 
 %% API
 -export([get_node_hostname/0, get_node_ip/0, get_rest_endpoint/1]).
 -export([get_id/0, get_id_or_undefined/0, is_self/1, is_registered/0]).
 -export([get_version/0, get_build/0]).
 -export([trusted_ca_certs/0]).
--export([get_oz_domain/0, get_oz_url/0]).
+-export([get_oz_domain/0, get_oz_url/0, get_oz_version/0]).
 -export([get_oz_login_page/0, get_oz_logout_page/0, get_oz_providers_page/0]).
 -export([force_oz_connection_start/0, is_connected_to_oz/0, on_connection_to_oz/0]).
 
@@ -177,6 +178,24 @@ get_oz_domain() ->
 -spec get_oz_url() -> string().
 get_oz_url() ->
     "https://" ++ get_oz_domain().
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns the OZ application version.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_oz_version() -> binary().
+get_oz_version() ->
+    Now = provider_logic:zone_time_seconds(),
+    case application:get_env(?APP_NAME, cached_oz_version) of
+        {ok, {V, Timestamp}} when Timestamp + ?OZ_VERSION_CACHE_TTL > Now ->
+            V;
+        _ ->
+            {ok, OzVersion, _} = provider_logic:fetch_oz_compatibility_config(get_oz_url()),
+            application:set_env(?APP_NAME, cached_oz_version, {OzVersion, Now}),
+            OzVersion
+    end.
 
 
 %%--------------------------------------------------------------------
