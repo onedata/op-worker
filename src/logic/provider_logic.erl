@@ -43,7 +43,7 @@
 -export([verify_provider_identity/1, verify_provider_identity/2]).
 -export([verify_provider_nonce/2]).
 
--define(IPS_CACHE_TTL, 600000). % 10 minutes
+-define(IPS_CACHE_TTL, 600). % 10 minutes
 
 %%%===================================================================
 %%% API
@@ -293,7 +293,7 @@ resolve_ips(ProviderId) ->
 -spec resolve_ips(gs_client_worker:client(), od_provider:id()) ->
     {ok, inet:ip4_address()} | {error, term()}.
 resolve_ips(SessionId, ProviderId) ->
-    Now = os:timestamp(),
+    Now = time_utils:cluster_time_seconds(),
     Name = binary_to_atom(term_to_binary({cached_ips, ProviderId}), latin1),
     case application:get_env(?APP_NAME, Name) of
         {ok, {IPs, Timestamp}} when Timestamp + ?IPS_CACHE_TTL > Now ->
