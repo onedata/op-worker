@@ -259,6 +259,7 @@ handle_changes(State = #state{
                     ok
             end
     end,
+    erlang:garbage_collect(),
     schedule_docs_handling(State#state{since = Until, changes = []}).
 
 %%--------------------------------------------------------------------
