@@ -155,8 +155,9 @@ start(SessionId, FileGuid, FilePath, SourceProviderId, TargetProviderId,
 %%-------------------------------------------------------------------
 -spec restart_unfinished_transfers(od_space:id()) -> [id()].
 restart_unfinished_transfers(SpaceId) ->
-    {ok, {Restarted, Failed}} = transfer_links:for_each_ongoing_transfer(
-        fun(_LinkName, TransferId, {Restarted0, Failed0}) ->
+    {ok, OngoingTransferIds} = list_ongoing_transfers(SpaceId),
+    {Restarted, Failed} = lists:foldl(
+        fun(TransferId, {Restarted0, Failed0}) ->
             case restart(TransferId) of
                 {ok, TransferId} ->
                     {[TransferId | Restarted0], Failed0};
@@ -167,7 +168,7 @@ restart_unfinished_transfers(SpaceId) ->
                 {error, not_found} ->
                     {Restarted0, [TransferId | Failed0]}
             end
-        end, {[], []}, SpaceId),
+        end, {[], []}, OngoingTransferIds),
 
     case Restarted of
         [] -> ok;
@@ -563,9 +564,8 @@ increase_files_invalidated_counter(TransferId) ->
 ) ->
     {ok, undefined | id()} | {error, term()}.
 mark_data_transfer_finished(undefined, SpaceId, BytesPerProvider) ->
-    CurrentTime = provider_logic:zone_time_seconds(),
-    ok = space_transfer_stats:update(
-        ?ON_THE_FLY_TRANSFERS_TYPE, SpaceId, BytesPerProvider, CurrentTime
+    ok = space_transfer_stats:update_with_cache(
+        ?ON_THE_FLY_TRANSFERS_TYPE, SpaceId, BytesPerProvider
     ),
     {ok, undefined};
 mark_data_transfer_finished(TransferId, SpaceId, BytesPerProvider) ->

@@ -23,7 +23,7 @@
 
 -behaviour(gen_server).
 
--define(MINIMAL_SYNC_REQUEST, application:get_env(?APP_NAME, minimal_sync_request, 4194304)).
+-define(MINIMAL_SYNC_REQUEST, application:get_env(?APP_NAME, minimal_sync_request, 32768)).
 -define(TRIGGER_BYTE, application:get_env(?APP_NAME, trigger_byte, 52428800)).
 -define(PREFETCH_SIZE, application:get_env(?APP_NAME, prefetch_size, 104857600)).
 
@@ -679,13 +679,18 @@ prefetch(_NewTransfers, _TransferId, false, State) -> State;
 prefetch(_NewTransfers, _TransferId, _Prefetch, #state{in_sequence_hits = 0} = State) ->
     State;
 prefetch(_, TransferId, _, #state{in_sequence_hits = Hits, last_transfer = Block} = State) ->
-    #file_block{offset = O, size = S} = Block,
-    Offset = O + S,
-    Size = min(?MINIMAL_SYNC_REQUEST * round(math:pow(2, Hits)), ?PREFETCH_SIZE),
-    PrefetchBlock = #file_block{offset = Offset, size = Size},
-    NewTransfers = start_transfers([PrefetchBlock], TransferId, true, State),
-    InProgress = ordsets:union(State#state.in_progress, ordsets:from_list(NewTransfers)),
-    State#state{last_transfer = PrefetchBlock, in_progress = InProgress}.
+    case application:get_env(?APP_NAME, synchronizer_prefetch, true) of
+        true ->
+            #file_block{offset = O, size = S} = Block,
+            Offset = O + S,
+            Size = min(?MINIMAL_SYNC_REQUEST * round(math:pow(2, Hits)), ?PREFETCH_SIZE),
+            PrefetchBlock = #file_block{offset = Offset, size = Size},
+            NewTransfers = start_transfers([PrefetchBlock], TransferId, true, State),
+            InProgress = ordsets:union(State#state.in_progress, ordsets:from_list(NewTransfers)),
+            State#state{last_transfer = PrefetchBlock, in_progress = InProgress};
+        _ ->
+            State
+    end.
 
 %%--------------------------------------------------------------------
 %% @private

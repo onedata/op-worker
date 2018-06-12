@@ -44,6 +44,8 @@
 -export([verify_provider_identity/1, verify_provider_identity/2]).
 -export([verify_provider_nonce/2]).
 
+-define(IPS_CACHE_TTL, 600). % 10 minutes
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -279,7 +281,7 @@ get_domain(SessionId, ProviderId) ->
 %% Resolves IPs of given provider via DNS using current provider's auth.
 %% @end
 %%--------------------------------------------------------------------
--spec resolve_ips(od_provider:id()) -> {ok, inet:ip4_address()} | {error, term()}.
+-spec resolve_ips(od_provider:id()) -> {ok, [inet:ip4_address()]} | {error, term()}.
 resolve_ips(ProviderId) ->
     resolve_ips(?ROOT_SESS_ID, ProviderId).
 
@@ -290,13 +292,22 @@ resolve_ips(ProviderId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec resolve_ips(gs_client_worker:client(), od_provider:id()) ->
-    {ok, inet:ip4_address()} | {error, term()}.
+    {ok, [inet:ip4_address()]} | {error, term()}.
 resolve_ips(SessionId, ProviderId) ->
-    case get_domain(SessionId, ProviderId) of
-        {ok, Domain} ->
-            inet:getaddrs(binary_to_list(Domain), inet);
-        {error, _} = Error ->
-            Error
+    Now = time_utils:cluster_time_seconds(),
+    Name = binary_to_atom(term_to_binary({cached_ips, ProviderId}), latin1),
+    case application:get_env(?APP_NAME, Name) of
+        {ok, {IPs, Timestamp}} when Timestamp + ?IPS_CACHE_TTL > Now ->
+            IPs;
+        _ ->
+            case get_domain(SessionId, ProviderId) of
+                {ok, Domain} ->
+                    Ans = inet:getaddrs(binary_to_list(Domain), inet),
+                    application:set_env(?APP_NAME, Name, {Ans, Now}),
+                    Ans;
+                {error, _} = Error ->
+                    Error
+            end
     end.
 
 

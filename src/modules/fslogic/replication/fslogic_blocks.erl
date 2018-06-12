@@ -13,6 +13,7 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/oneclient/common_messages.hrl").
+-include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -type block() :: #file_block{}.
@@ -597,11 +598,12 @@ flush() ->
 check_flush() ->
     FlushTime = get(flush_time),
     Now = os:timestamp(),
-    case {timer:now_diff(Now, FlushTime) > 3000000, get(flush_planned)} of
+    Delay = application:get_env(?APP_NAME, blocks_flush_delay, timer:seconds(3)),
+    case {timer:now_diff(Now, FlushTime) > Delay * 1000, get(flush_planned)} of
         {true, _} ->
             flush();
         {_, true} ->
-            erlang:send_after(timer:seconds(3), self(), check_flush),
+            erlang:send_after(Delay, self(), check_flush),
             ok;
         _ ->
             ok
@@ -772,7 +774,9 @@ init_flush_check() ->
             ok;
         {_, undefined} ->
             put(flush_planned, true),
-            erlang:send_after(timer:seconds(3), self(), check_flush),
+            Delay = application:get_env(?APP_NAME,
+                blocks_flush_delay, timer:seconds(3)),
+            erlang:send_after(Delay, self(), check_flush),
             ok;
         _ ->
             ok
