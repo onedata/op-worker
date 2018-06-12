@@ -60,8 +60,8 @@ random_read_test(Config) ->
     {description, "Performs multiple file operations on space 1."}
   ]).
 random_read_test_base(Config) ->
-  random_read_test_base(Config, true).
-%%  random_read_test_base(Config, false).
+  random_read_test_base(Config, true),
+  random_read_test_base(Config, false).
 
 random_read_test_base(Config0, SeparateBlocks) ->
   Config = multi_provider_file_ops_test_base:extend_config(Config0,

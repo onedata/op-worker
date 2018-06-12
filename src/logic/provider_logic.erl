@@ -280,7 +280,7 @@ get_domain(SessionId, ProviderId) ->
 %% Resolves IPs of given provider via DNS using current provider's auth.
 %% @end
 %%--------------------------------------------------------------------
--spec resolve_ips(od_provider:id()) -> {ok, inet:ip4_address()} | {error, term()}.
+-spec resolve_ips(od_provider:id()) -> {ok, [inet:ip4_address()]} | {error, term()}.
 resolve_ips(ProviderId) ->
     resolve_ips(?ROOT_SESS_ID, ProviderId).
 
@@ -291,7 +291,7 @@ resolve_ips(ProviderId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec resolve_ips(gs_client_worker:client(), od_provider:id()) ->
-    {ok, inet:ip4_address()} | {error, term()}.
+    {ok, [inet:ip4_address()]} | {error, term()}.
 resolve_ips(SessionId, ProviderId) ->
     Now = time_utils:cluster_time_seconds(),
     Name = binary_to_atom(term_to_binary({cached_ips, ProviderId}), latin1),
