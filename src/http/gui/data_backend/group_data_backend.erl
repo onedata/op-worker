@@ -20,6 +20,7 @@
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/privileges.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 
 
 %% API
@@ -182,7 +183,7 @@ update_record(<<"group">>, GroupId, [{<<"name">>, Name}]) ->
             case group_logic:update_name(SessionId, GroupId, NewName) of
                 ok ->
                     ok;
-                {error, {403, <<>>, <<>>}} ->
+                ?ERROR_FORBIDDEN ->
                     gui_error:report_warning(
                         <<"You do not have privileges to modify this group.">>);
                 {error, _} ->
@@ -199,26 +200,37 @@ update_record(<<"group-user-permission">>, AssocId, Data) ->
             direct_users = UsersAndPerms
         }}} = group_logic:get(SessionId, GroupId),
     UserPerms = maps:get(UserId, UsersAndPerms),
-    NewUserPerms = lists:foldl(
-        fun({PermGui, Flag}, PermsAcc) ->
-            Perm = perm_gui_to_db(PermGui),
-            case Flag of
-                true ->
-                    PermsAcc ++ [Perm];
-                false ->
-                    PermsAcc -- [Perm]
-            end
-        end, UserPerms, Data),
+    OzVersion = oneprovider:get_oz_version(),
 
-    Result = group_logic:update_user_privileges(
-        SessionId, GroupId, UserId, lists:usort(NewUserPerms)),
-    case Result of
-        ok ->
+    {Granted, Revoked} = lists:foldl(
+        fun({PermGui, Flag}, {GrantedAcc, RevokedAcc}) ->
+            Perm = perm_gui_to_db(PermGui, OzVersion),
+            case {Flag, lists:member(Perm, UserPerms)} of
+                {false, false} ->
+                    {GrantedAcc, RevokedAcc};
+                {false, true} ->
+                    {GrantedAcc, [Perm | RevokedAcc]};
+                {true, false} ->
+                    {[Perm | GrantedAcc], RevokedAcc};
+                {true, true} ->
+                    {GrantedAcc, RevokedAcc}
+            end
+        end, {[], []}, Data),
+
+    GrantResult = group_logic:update_user_privileges(
+        SessionId, GroupId, UserId, lists:usort(Granted), grant
+    ),
+    RevokeResult = group_logic:update_user_privileges(
+        SessionId, GroupId, UserId, lists:usort(Revoked), revoke
+    ),
+
+    case {GrantResult, RevokeResult} of
+        {ok, ok} ->
             ok;
-        {error, {403, <<>>, <<>>}} ->
+        {?ERROR_FORBIDDEN, _} ->
             gui_error:report_warning(
                 <<"You do not have privileges to modify group privileges.">>);
-        {error, _} ->
+        {_, _} ->
             gui_error:report_warning(
                 <<"Cannot change user privileges due to unknown error.">>)
     end;
@@ -231,26 +243,36 @@ update_record(<<"group-group-permission">>, AssocId, Data) ->
             direct_children = GroupsAndPerms
         }}} = group_logic:get(SessionId, ParentGroupId),
     GroupPerms = maps:get(ChildGroupId, GroupsAndPerms),
-    NewGroupPerms = lists:foldl(
-        fun({PermGui, Flag}, PermsAcc) ->
-            Perm = perm_gui_to_db(PermGui),
-            case Flag of
-                true ->
-                    PermsAcc ++ [Perm];
-                false ->
-                    PermsAcc -- [Perm]
+    OzVersion = oneprovider:get_oz_version(),
+    {Granted, Revoked} = lists:foldl(
+        fun({PermGui, Flag}, {GrantedAcc, RevokedAcc}) ->
+            Perm = perm_gui_to_db(PermGui, OzVersion),
+            case {Flag, lists:member(Perm, GroupPerms)} of
+                {false, false} ->
+                    {GrantedAcc, RevokedAcc};
+                {false, true} ->
+                    {GrantedAcc, [Perm | RevokedAcc]};
+                {true, false} ->
+                    {[Perm | GrantedAcc], RevokedAcc};
+                {true, true} ->
+                    {GrantedAcc, RevokedAcc}
             end
-        end, GroupPerms, Data),
+        end, {[], []}, Data),
 
-    Result = group_logic:update_child_privileges(
-        SessionId, ParentGroupId, ChildGroupId, lists:usort(NewGroupPerms)),
-    case Result of
-        ok ->
+    GrantResult = group_logic:update_child_privileges(
+        SessionId, ParentGroupId, ChildGroupId, lists:usort(Granted), grant
+    ),
+    RevokeResult = group_logic:update_child_privileges(
+        SessionId, ParentGroupId, ChildGroupId, lists:usort(Revoked), revoke
+    ),
+
+    case {GrantResult, RevokeResult} of
+        {ok, ok} ->
             ok;
-        {error, {403, <<>>, <<>>}} ->
+        {?ERROR_FORBIDDEN, _} ->
             gui_error:report_warning(
                 <<"You do not have privileges to modify group privileges.">>);
-        {error, _} ->
+        {_, _} ->
             gui_error:report_warning(
                 <<"Cannot change group privileges due to unknown error.">>)
     end;
@@ -276,7 +298,7 @@ delete_record(<<"group">>, GroupId) ->
                 user_data_backend:user_record(SessionId, UserId)
             ),
             ok;
-        {error, {403, <<>>, <<>>}} ->
+        ?ERROR_FORBIDDEN ->
             gui_error:report_warning(
                 <<"You do not have privileges to modify this group.">>);
         {error, _} ->
@@ -444,16 +466,71 @@ group_group_permission_record(AssocId) ->
 %%--------------------------------------------------------------------
 -spec perms_db_to_gui(atom()) -> proplists:proplist().
 perms_db_to_gui(Perms) ->
+    OzVersion = oneprovider:get_oz_version(),
     lists:foldl(
         fun(Perm, Acc) ->
-            case perm_db_to_gui(Perm) of
+            case perm_db_to_gui(Perm, OzVersion) of
                 undefined ->
                     Acc;
                 PermBin ->
                     HasPerm = lists:member(Perm, Perms),
                     [{PermBin, HasPerm} | Acc]
             end
-        end, [], privileges:group_privileges()).
+        end, [], all_group_privileges(OzVersion)).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Converts a group permission from internal form to client-compliant form.
+%% The logic is different depending on OZ version to keep backward compatibility
+%% with deprecated perms.
+%% @end
+%%--------------------------------------------------------------------
+-spec perm_db_to_gui(atom(), binary()) -> binary() | undefined.
+perm_db_to_gui(Perm, <<"18.02", _/binary>>) -> perm_db_to_gui_18_02(Perm);
+perm_db_to_gui(Perm, _) -> perm_db_to_gui(Perm).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Converts a group permission from client-compliant form to internal form.
+%% The logic is different depending on OZ version to keep backward compatibility
+%% with deprecated perms.
+%% @end
+%%--------------------------------------------------------------------
+-spec perm_gui_to_db(binary(), binary()) -> atom().
+perm_gui_to_db(Perm, <<"18.02", _/binary>>) -> perm_gui_to_db_18_02(Perm);
+perm_gui_to_db(Perm, _) -> perm_gui_to_db(Perm).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns the list of all group privileges.
+%% The logic is different depending on OZ version to keep backward compatibility
+%% with deprecated perms.
+%% @end
+%%--------------------------------------------------------------------
+-spec all_group_privileges(binary()) -> [atom()].
+all_group_privileges(<<"18.02", _/binary>>) ->
+    privileges:group_privileges();
+all_group_privileges(_) -> [
+    ?GROUP_VIEW,
+    ?GROUP_UPDATE,
+    ?GROUP_SET_PRIVILEGES,
+    ?GROUP_DELETE,
+    ?GROUP_INVITE_USER,
+    ?GROUP_REMOVE_USER,
+    group_invite_child,
+    group_remove_child,
+    group_join_parent,
+    group_leave_parent,
+    ?GROUP_CREATE_SPACE,
+    ?GROUP_JOIN_SPACE,
+    ?GROUP_LEAVE_SPACE
+].
 
 
 %%--------------------------------------------------------------------
@@ -469,10 +546,10 @@ perm_db_to_gui(?GROUP_SET_PRIVILEGES) -> <<"permSetPrivileges">>;
 perm_db_to_gui(?GROUP_DELETE) -> <<"permRemoveGroup">>;
 perm_db_to_gui(?GROUP_INVITE_USER) -> <<"permInviteUser">>;
 perm_db_to_gui(?GROUP_REMOVE_USER) -> <<"permRemoveUser">>;
-perm_db_to_gui(?GROUP_INVITE_GROUP) -> <<"permInviteGroup">>;
-perm_db_to_gui(?GROUP_REMOVE_GROUP) -> <<"permRemoveSubgroup">>;
-perm_db_to_gui(?GROUP_JOIN_GROUP) -> <<"permJoinGroup">>;
-perm_db_to_gui(?GROUP_LEAVE_GROUP) -> <<"permLeaveGroup">>;
+perm_db_to_gui(group_invite_child) -> <<"permInviteGroup">>;
+perm_db_to_gui(group_remove_child) -> <<"permRemoveSubgroup">>;
+perm_db_to_gui(group_join_parent) -> <<"permJoinGroup">>;
+perm_db_to_gui(group_leave_parent) -> <<"permLeaveGroup">>;
 perm_db_to_gui(?GROUP_CREATE_SPACE) -> <<"permCreateSpace">>;
 perm_db_to_gui(?GROUP_JOIN_SPACE) -> <<"permJoinSpace">>;
 perm_db_to_gui(?GROUP_LEAVE_SPACE) -> <<"permLeaveSpace">>;
@@ -492,17 +569,63 @@ perm_gui_to_db(<<"permSetPrivileges">>) -> ?GROUP_SET_PRIVILEGES;
 perm_gui_to_db(<<"permRemoveGroup">>) -> ?GROUP_DELETE;
 perm_gui_to_db(<<"permInviteUser">>) -> ?GROUP_INVITE_USER;
 perm_gui_to_db(<<"permRemoveUser">>) -> ?GROUP_REMOVE_USER;
-perm_gui_to_db(<<"permInviteGroup">>) -> ?GROUP_INVITE_GROUP;
-perm_gui_to_db(<<"permRemoveSubgroup">>) -> ?GROUP_REMOVE_GROUP;
-perm_gui_to_db(<<"permJoinGroup">>) -> ?GROUP_JOIN_GROUP;
-perm_gui_to_db(<<"permLeaveGroup">>) -> ?GROUP_LEAVE_GROUP;
+perm_gui_to_db(<<"permInviteGroup">>) -> group_invite_child;
+perm_gui_to_db(<<"permRemoveSubgroup">>) -> group_remove_child;
+perm_gui_to_db(<<"permJoinGroup">>) -> group_join_parent;
+perm_gui_to_db(<<"permLeaveGroup">>) -> group_leave_parent;
 perm_gui_to_db(<<"permCreateSpace">>) -> ?GROUP_CREATE_SPACE;
 perm_gui_to_db(<<"permJoinSpace">>) -> ?GROUP_JOIN_SPACE;
 perm_gui_to_db(<<"permLeaveSpace">>) -> ?GROUP_LEAVE_SPACE.
 
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% DEPRECATED - changing in future release (> 18.02)
+%% Converts a group permission from internal form to client-compliant form.
+%% @end
+%%--------------------------------------------------------------------
+-spec perm_db_to_gui_18_02(atom()) -> binary() | undefined.
+perm_db_to_gui_18_02(?GROUP_VIEW) -> <<"permViewGroup">>;
+perm_db_to_gui_18_02(?GROUP_UPDATE) -> <<"permModifyGroup">>;
+perm_db_to_gui_18_02(?GROUP_SET_PRIVILEGES) -> <<"permSetPrivileges">>;
+perm_db_to_gui_18_02(?GROUP_DELETE) -> <<"permRemoveGroup">>;
+perm_db_to_gui_18_02(?GROUP_INVITE_USER) -> <<"permInviteUser">>;
+perm_db_to_gui_18_02(?GROUP_REMOVE_USER) -> <<"permRemoveUser">>;
+perm_db_to_gui_18_02(?GROUP_INVITE_GROUP) -> <<"permInviteGroup">>;
+perm_db_to_gui_18_02(?GROUP_REMOVE_GROUP) -> <<"permRemoveSubgroup">>;
+perm_db_to_gui_18_02(?GROUP_JOIN_GROUP) -> <<"permJoinGroup">>;
+perm_db_to_gui_18_02(?GROUP_LEAVE_GROUP) -> <<"permLeaveGroup">>;
+perm_db_to_gui_18_02(?GROUP_CREATE_SPACE) -> <<"permCreateSpace">>;
+perm_db_to_gui_18_02(?GROUP_JOIN_SPACE) -> <<"permJoinSpace">>;
+perm_db_to_gui_18_02(?GROUP_LEAVE_SPACE) -> <<"permLeaveSpace">>;
+perm_db_to_gui_18_02(_) -> undefined.
 
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% DEPRECATED - changing in future release (> 18.02)
+%% Converts a group permission from client-compliant form to internal form.
+%% @end
+%%--------------------------------------------------------------------
+-spec perm_gui_to_db_18_02(binary()) -> atom().
+perm_gui_to_db_18_02(<<"permViewGroup">>) -> ?GROUP_VIEW;
+perm_gui_to_db_18_02(<<"permModifyGroup">>) -> ?GROUP_UPDATE;
+perm_gui_to_db_18_02(<<"permSetPrivileges">>) -> ?GROUP_SET_PRIVILEGES;
+perm_gui_to_db_18_02(<<"permRemoveGroup">>) -> ?GROUP_DELETE;
+perm_gui_to_db_18_02(<<"permInviteUser">>) -> ?GROUP_INVITE_USER;
+perm_gui_to_db_18_02(<<"permRemoveUser">>) -> ?GROUP_REMOVE_USER;
+perm_gui_to_db_18_02(<<"permInviteGroup">>) -> ?GROUP_INVITE_GROUP;
+perm_gui_to_db_18_02(<<"permRemoveSubgroup">>) -> ?GROUP_REMOVE_GROUP;
+perm_gui_to_db_18_02(<<"permJoinGroup">>) -> ?GROUP_JOIN_GROUP;
+perm_gui_to_db_18_02(<<"permLeaveGroup">>) -> ?GROUP_LEAVE_GROUP;
+perm_gui_to_db_18_02(<<"permCreateSpace">>) -> ?GROUP_CREATE_SPACE;
+perm_gui_to_db_18_02(<<"permJoinSpace">>) -> ?GROUP_JOIN_SPACE;
+perm_gui_to_db_18_02(<<"permLeaveSpace">>) -> ?GROUP_LEAVE_SPACE.
+
+
+-spec permission_record_to_group_id(binary(), binary()) -> binary().
 permission_record_to_group_id(<<"group-user-list">>, RecordId) ->
     RecordId;
 permission_record_to_group_id(<<"group-group-list">>, RecordId) ->

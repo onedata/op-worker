@@ -23,6 +23,7 @@
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/privileges.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 
 -define(SCHEDULED_TRANSFERS_PREFIX, <<"scheduled">>).
 -define(CURRENT_TRANSFERS_PREFIX, <<"current">>).
@@ -239,26 +240,36 @@ update_record(<<"space-user-permission">>, AssocId, Data) ->
             direct_users = UsersAndPerms
         }}} = space_logic:get(SessionId, SpaceId),
     UserPerms = maps:get(UserId, UsersAndPerms),
-    NewUserPerms = lists:foldl(
-        fun({PermGui, Flag}, PermsAcc) ->
-            Perm = perm_gui_to_db(PermGui),
-            case Flag of
-                true ->
-                    PermsAcc ++ [Perm];
-                false ->
-                    PermsAcc -- [Perm]
-            end
-        end, UserPerms, Data),
 
-    Result = space_logic:update_user_privileges(
-        SessionId, SpaceId, UserId, lists:usort(NewUserPerms)),
-    case Result of
-        ok ->
+    {Granted, Revoked} = lists:foldl(
+        fun({PermGui, Flag}, {GrantedAcc, RevokedAcc}) ->
+            Perm = perm_gui_to_db(PermGui),
+            case {Flag, lists:member(Perm, UserPerms)} of
+                {false, false} ->
+                    {GrantedAcc, RevokedAcc};
+                {false, true} ->
+                    {GrantedAcc, [Perm | RevokedAcc]};
+                {true, false} ->
+                    {[Perm | GrantedAcc], RevokedAcc};
+                {true, true} ->
+                    {GrantedAcc, RevokedAcc}
+            end
+        end, {[], []}, Data),
+
+    GrantResult = space_logic:update_user_privileges(
+        SessionId, SpaceId, UserId, lists:usort(Granted), grant
+    ),
+    RevokeResult = space_logic:update_user_privileges(
+        SessionId, SpaceId, UserId, lists:usort(Revoked), revoke
+    ),
+
+    case {GrantResult, RevokeResult} of
+        {ok, ok} ->
             ok;
-        {error, {403, <<>>, <<>>}} ->
+        {?ERROR_FORBIDDEN, _} ->
             gui_error:report_warning(
                 <<"You do not have privileges to modify space privileges.">>);
-        {error, _} ->
+        {_, _} ->
             gui_error:report_warning(
                 <<"Cannot change user privileges due to unknown error.">>)
     end;
@@ -271,26 +282,36 @@ update_record(<<"space-group-permission">>, AssocId, Data) ->
             direct_groups = GroupsAndPerms
         }}} = space_logic:get(SessionId, SpaceId),
     GroupPerms = maps:get(GroupId, GroupsAndPerms),
-    NewGroupPerms = lists:foldl(
-        fun({PermGui, Flag}, PermsAcc) ->
-            Perm = perm_gui_to_db(PermGui),
-            case Flag of
-                true ->
-                    PermsAcc ++ [Perm];
-                false ->
-                    PermsAcc -- [Perm]
-            end
-        end, GroupPerms, Data),
 
-    Result = space_logic:update_group_privileges(
-        SessionId, SpaceId, GroupId, lists:usort(NewGroupPerms)),
-    case Result of
-        ok ->
+    {Granted, Revoked} = lists:foldl(
+        fun({PermGui, Flag}, {GrantedAcc, RevokedAcc}) ->
+            Perm = perm_gui_to_db(PermGui),
+            case {Flag, lists:member(Perm, GroupPerms)} of
+                {false, false} ->
+                    {GrantedAcc, RevokedAcc};
+                {false, true} ->
+                    {GrantedAcc, [Perm | RevokedAcc]};
+                {true, false} ->
+                    {[Perm | GrantedAcc], RevokedAcc};
+                {true, true} ->
+                    {GrantedAcc, RevokedAcc}
+            end
+        end, {[], []}, Data),
+
+    GrantResult = space_logic:update_group_privileges(
+        SessionId, SpaceId, GroupId, lists:usort(Granted), grant
+    ),
+    RevokeResult = space_logic:update_group_privileges(
+        SessionId, SpaceId, GroupId, lists:usort(Revoked), revoke
+    ),
+
+    case {GrantResult, RevokeResult} of
+        {ok, ok} ->
             ok;
-        {error, {403, <<>>, <<>>}} ->
+        {?ERROR_FORBIDDEN, _} ->
             gui_error:report_warning(
                 <<"You do not have privileges to modify space privileges.">>);
-        {error, _} ->
+        {_, _} ->
             gui_error:report_warning(
                 <<"Cannot change group privileges due to unknown error.">>)
     end;
