@@ -34,7 +34,8 @@
 -export([can_view_user_through_space/3, can_view_user_through_space/4]).
 -export([can_view_group_through_space/3, can_view_group_through_space/4]).
 -export([create/2, create/3, update_name/3, delete/2]).
--export([update_user_privileges/4, update_group_privileges/4]).
+-export([update_user_privileges/4, update_user_privileges/5]).
+-export([update_group_privileges/4, update_group_privileges/5]).
 -export([create_user_invite_token/2, create_group_invite_token/2]).
 -export([create_provider_invite_token/2]).
 
@@ -279,10 +280,17 @@ delete(SessionId, SpaceId) ->
 -spec update_user_privileges(gs_client_worker:client(), od_space:id(),
     od_user:id(), [privileges:space_privilege()]) -> ok | gs_protocol:error().
 update_user_privileges(SessionId, SpaceId, UserId, Privileges) ->
+    update_user_privileges(SessionId, SpaceId, UserId, Privileges, set).
+
+
+-spec update_user_privileges(gs_client_worker:client(), od_space:id(),
+    od_user:id(), [privileges:space_privilege()], set | grant | revoke) ->
+    ok | gs_protocol:error().
+update_user_privileges(SessionId, SpaceId, UserId, Privileges, Operation) ->
     Res = gs_client_worker:request(SessionId, #gs_req_graph{
         operation = update,
         gri = #gri{type = od_space, id = SpaceId, aspect = {user_privileges, UserId}},
-        data = #{<<"privileges">> => Privileges}
+        data = #{<<"privileges">> => Privileges, <<"operation">> => Operation}
     }),
     ?ON_SUCCESS(Res, fun(_) ->
         gs_client_worker:invalidate_cache(od_space, SpaceId)
@@ -290,12 +298,19 @@ update_user_privileges(SessionId, SpaceId, UserId, Privileges) ->
 
 
 -spec update_group_privileges(gs_client_worker:client(), od_space:id(),
-    od_group:id(), [privileges:space_privilege()]) -> ok | gs_protocol:error().
+    od_group:id(), [privileges:group_privilege()]) -> ok | gs_protocol:error().
 update_group_privileges(SessionId, SpaceId, GroupId, Privileges) ->
+    update_group_privileges(SessionId, SpaceId, GroupId, Privileges, set).
+
+
+-spec update_group_privileges(gs_client_worker:client(), od_space:id(),
+    od_group:id(), [privileges:space_privilege()], set | grant | revoke) ->
+    ok | gs_protocol:error().
+update_group_privileges(SessionId, SpaceId, GroupId, Privileges, Operation) ->
     Res = gs_client_worker:request(SessionId, #gs_req_graph{
         operation = update,
         gri = #gri{type = od_space, id = SpaceId, aspect = {group_privileges, GroupId}},
-        data = #{<<"privileges">> => Privileges}
+        data = #{<<"privileges">> => Privileges, <<"operation">> => Operation}
     }),
     ?ON_SUCCESS(Res, fun(_) ->
         gs_client_worker:invalidate_cache(od_space, SpaceId)
