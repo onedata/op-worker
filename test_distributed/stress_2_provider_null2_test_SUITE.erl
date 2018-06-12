@@ -9,7 +9,7 @@
 %%% This SUITE contains stress test for 2 provider environment with null storage.
 %%% @end
 %%%--------------------------------------------------------------------
--module(stress_2_provider_null_test_SUITE).
+-module(stress_2_provider_null2_test_SUITE).
 -author("Michal Wrzeszcz").
 
 -include("global_definitions.hrl").
@@ -54,13 +54,66 @@ random_read_test(Config) ->
     {parameters, [
       [{name, file_size_gb}, {value, 1}, {description, "File size in GB"}],
       [{name, block_size}, {value, 1}, {description, "Block size in bytes"}],
-      [{name, block_per_repeat}, {value, 1000},
-        {description, "Number of blocks read in each cycle"}]
+      [{name, block_per_repeat}, {value, 100},
+        {description, "Number of blocks read in each cycle"}],
+      [{name, files_num}, {value, 20}, {description, "Number of files"}]
     ]},
     {description, "Performs multiple file operations on space 1."}
   ]).
 random_read_test_base(Config) ->
-  multi_provider_file_ops_test_base:random_read_test_base(Config).
+  random_read_test_base(Config, true),
+  random_read_test_base(Config, false).
+
+random_read_test_base(Config, SeparateBlocks) ->
+  Num = ?config(files_num, Config),
+  RepNum = ?config(rep_num, Config),
+  Names = case RepNum of
+    1 ->
+      Config2 = multi_provider_file_ops_test_base:extend_config(
+        Config, <<"user1">>, {2,0,0, 1}, 1),
+      SpaceName = ?config(space_name, Config2),
+      GeneratedNames = lists:map(fun(I) ->
+        <<"/", SpaceName/binary, "/",  (integer_to_binary(I))/binary,
+          (atom_to_binary(SeparateBlocks, latin1))/binary>>
+      end, lists:seq(1, Num)),
+      put(file_names, GeneratedNames),
+      GeneratedNames;
+    _ ->
+      get(file_names)
+  end,
+
+  Master = self(),
+  lists:foreach(fun(Name) ->
+    spawn(fun() ->
+      try
+        put({file, SeparateBlocks}, Name),
+        Master ! {ans, Num, multi_provider_file_ops_test_base:random_read_test_base(
+            Config, SeparateBlocks, false)}
+      catch
+        E1:E2 ->
+          Master ! {ans, Num, {E1, E2}}
+      end
+    end)
+  end, Names),
+
+  {ReadTime1, ReadTime2, OpenTime, CloseTime} = lists:foldl(fun(_, {RT1, RT2, OT, CT} = Acc) ->
+    receive
+      {ans, Num, {RT1_2, RT2_2, OT_2, CT_2}} ->
+        {RT1+RT1_2, RT2+RT2_2, OT+OT_2, CT+CT_2};
+      {ans, Num, Error} ->
+        ct:print("Error: ~p", [Error]),
+        timer:sleep(5000),
+        Acc
+    after timer:minutes(5) ->
+      ct:print("Timeout"),
+      timer:sleep(5000),
+      Acc
+    end
+  end, {0,0,0,0}, Names),
+
+  ct:print("Repeat: ~p, many blocks: ~p, read remote: ~p, read local: ~p, open: ~p, close: ~p", [
+    RepNum, SeparateBlocks, ReadTime1 / Num, ReadTime2 / Num, OpenTime / Num, CloseTime / Num]),
+  ok.
 
 
 %%%===================================================================
