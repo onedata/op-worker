@@ -21,8 +21,8 @@
 
 % Listener config
 -define(PORT, application:get_env(?APP_NAME, https_server_port, 443)).
--define(ACCEPTORS_NUM, application:get_env(?APP_NAME, https_acceptors, 10)).
--define(REQUEST_TIMEOUT, application:get_env(?APP_NAME, https_request_timeout, timer:seconds(30))).
+-define(ACCEPTORS_NUM, application:get_env(?APP_NAME, https_acceptors, 100)).
+-define(REQUEST_TIMEOUT, application:get_env(?APP_NAME, https_request_timeout, timer:minutes(5))).
 -define(MAX_KEEPALIVE, application:get_env(?APP_NAME, https_max_keepalive, 30)).
 
 %% listener_behaviour callbacks
