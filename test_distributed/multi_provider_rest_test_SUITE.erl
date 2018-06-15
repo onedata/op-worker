@@ -64,7 +64,6 @@
     restart_invalidation_of_file_replica_with_migration/1,
     invalidate_dir_replica/1,
     basic_autocleaning_test/1,
-    cleanup_same_file_twice_test/1,
     automatic_cleanup_should_invalidate_unpopular_files/1,
     posix_mode_get/1,
     posix_mode_put/1,
@@ -117,68 +116,67 @@
 
 all() ->
     ?ALL([
-%%        get_simple_file_distribution,
-%%        replicate_file,
-%%        replicate_already_replicated_file,
-%%        transfers_should_be_ordered_by_timestamps,
-%%        replicate_not_synced_file,
-%%        replicate_file_to_source_provider,
-%%        restart_file_replication,
-%%        cancel_file_replication,
-%%        replicate_dir,
-%%        restart_dir_replication,
-%%        replicate_file_by_id,
-%%        replicate_to_missing_provider,
-%%        replicate_to_nonsupporting_provider,
+        get_simple_file_distribution,
+        replicate_file,
+        replicate_already_replicated_file,
+        transfers_should_be_ordered_by_timestamps,
+        replicate_not_synced_file,
+        replicate_file_to_source_provider,
+        restart_file_replication,
+        cancel_file_replication,
+        replicate_dir,
+        restart_dir_replication,
+        replicate_file_by_id,
+        replicate_to_missing_provider,
+        replicate_to_nonsupporting_provider,
         invalidate_file_replica,
         invalidate_file_replica_with_migration,
         invalidation_should_succeed_when_remote_provider_modified_file_replica,
         invalidation_should_fail_when_invalidation_provider_modified_file_replica,
-        %%        restart_invalidation_of_file_replica_with_migration, %TODO uncomment after resolving VFS-4410
+%%        restart_invalidation_of_file_replica_with_migration, %TODO uncomment after resolving VFS-4410
         invalidate_dir_replica,
         basic_autocleaning_test,
-        cleanup_same_file_twice_test,
         automatic_cleanup_should_invalidate_unpopular_files,
-%%        posix_mode_get,
-%%        posix_mode_put,
-%%        attributes_list,
-%%        xattr_get,
-%%        xattr_put,
-%%        xattr_list,
-%%        metric_get,
-%%        list_file,
-%%        list_dir,
-%%        list_dir_range,
-%%        changes_stream_file_meta_test,
-%%        changes_stream_xattr_test,
-%%        changes_stream_json_metadata_test,
-%%        changes_stream_times_test,
-%%        changes_stream_file_location_test,
-%%        changes_stream_on_multi_provider_test,
-%%        list_spaces,
-%%        get_space,
-%%        set_get_json_metadata,
-%%        set_get_json_metadata_id,
-%%        set_get_rdf_metadata,
-%%        set_get_rdf_metadata_id,
-%%        remove_index,
-%%        create_list_index,
-%%        create_geospatial_index,
-%%        query_geospatial_index,
-%%        query_file_popularity_index,
-%%        set_get_json_metadata_inherited,
-%%        set_get_xattr_inherited,
-%%        set_get_json_metadata_using_filter,
-%%        primitive_json_metadata_test,
-%%        empty_metadata_invalid_json_test,
-%%        spatial_flag_test,
-%%        many_simultaneous_failed_transfers,
-%%        many_simultaneous_transfers,
-        %%        quota_exceeded_during_file_replication,   % TODO uncomment after resolving  VFS-4041
-        %%        quota_decreased_after_invalidation,   % TODO uncomment after resolving VFS-4041
-%%        file_replication_failures_should_fail_whole_transfer,
-%%        replicate_big_dir,
-%%        replicate_big_file,
+        posix_mode_get,
+        posix_mode_put,
+        attributes_list,
+        xattr_get,
+        xattr_put,
+        xattr_list,
+        metric_get,
+        list_file,
+        list_dir,
+        list_dir_range,
+        changes_stream_file_meta_test,
+        changes_stream_xattr_test,
+        changes_stream_json_metadata_test,
+        changes_stream_times_test,
+        changes_stream_file_location_test,
+        changes_stream_on_multi_provider_test,
+        list_spaces,
+        get_space,
+        set_get_json_metadata,
+        set_get_json_metadata_id,
+        set_get_rdf_metadata,
+        set_get_rdf_metadata_id,
+        remove_index,
+        create_list_index,
+        create_geospatial_index,
+        query_geospatial_index,
+        query_file_popularity_index,
+        set_get_json_metadata_inherited,
+        set_get_xattr_inherited,
+        set_get_json_metadata_using_filter,
+        primitive_json_metadata_test,
+        empty_metadata_invalid_json_test,
+        spatial_flag_test,
+        many_simultaneous_failed_transfers,
+        many_simultaneous_transfers,
+%%        quota_exceeded_during_file_replication,   % TODO uncomment after resolving  VFS-4041
+%%        quota_decreased_after_invalidation,   % TODO uncomment after resolving VFS-4041
+        file_replication_failures_should_fail_whole_transfer,
+        replicate_big_dir,
+        replicate_big_file,
         invalidate_big_dir,
         migrate_big_dir
 %%        track_transferred_files
@@ -228,6 +226,20 @@ all() ->
                 json_utils:decode(__TransferStatus);
             Error -> Error
         end, Attempts)
+).
+
+-define(assertAutocleaningReports(ExpectedReports, Worker, SpaceId),
+    ?assertAutocleaningReports(ExpectedReports, Worker, SpaceId, ?ATTEMPTS)
+).
+
+-define(assertAutocleaningReports(ExpectedReports, Worker, SpaceId, Attempts),
+    ?assertMatch(ExpectedReports, begin
+        Reports = rpc:call(Worker, autocleaning, list_reports_since, [SpaceId, 0]),
+        ReportMaps = [maps:from_list(R) || R <- Reports],
+        lists:sort(fun(#{startedAt:= S1}, #{startedAt:= S2}) ->
+            S1 =< S2
+        end, ReportMaps)
+    end, Attempts)
 ).
 
 -define(absPath(SpaceId, Path), <<"/", SpaceId/binary, "/", Path/binary>>).
@@ -1513,88 +1525,13 @@ basic_autocleaning_test(Config) ->
         #{<<"providerId">> => DomainP2, <<"blocks">> => []}
     ],
     ?assertDistributionProxyByGuid(WorkerP2, SessionIdP2, ExpectedDistribution1, File1Guid),
-    [Report] = rpc:call(WorkerP2, autocleaning, list_reports_since, [<<"space5">>, 0]),
-    ?assertMatch(#{
-        bytesToRelease := Size,
-        releasedBytes := Size,
-        filesNumber := 1,
-        startedAt := _,
-        stoppedAt := _
-    }, maps:from_list(Report)).
-
-cleanup_same_file_twice_test(Config) ->
-    % autocleaning configuration
-    %   lower_file_size_limit => 0,
-    %   upper_file_size_limit => undefined, % todo VFS-4041
-    %   max_file_not_opened_hours => 0
-    %   target => 0
-    %   threshold => 1
-    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionIdP1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    SessionIdP2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
-    SpaceId = ?config(space_id, Config),
-    Size = byte_size(?TEST_DATA),
-    DomainP1 = domain(WorkerP1),
-    DomainP2 = domain(WorkerP2),
-
-    File1 = filename:join([<<"/">>, SpaceId, <<"file_autocleaning_test">>]),
-    File1Guid = create_test_file(WorkerP1, SessionIdP1, File1, ?TEST_DATA),
-
-    % synchronize file
-    {ok, ReadHandle1} = ?assertMatch({ok, _}, lfm_proxy:open(WorkerP2, SessionIdP2, {guid, File1Guid}, read), ?ATTEMPTS),
-    ?assertMatch({ok, ?TEST_DATA}, lfm_proxy:read(WorkerP2, ReadHandle1, 0, Size), ?ATTEMPTS),
-    lfm_proxy:close(WorkerP2, ReadHandle1),
-
-    ExpectedDistributionAfterReplication = [
-        #{<<"providerId">> => DomainP1, <<"blocks">> => [[0, Size]]},
-        #{<<"providerId">> => DomainP2, <<"blocks">> => [[0, Size]]}
-    ],
-    ?assertDistributionProxyByGuid(WorkerP2, SessionIdP2, ExpectedDistributionAfterReplication, File1Guid),
-
-    timer:sleep(timer:seconds(5)),
-    rpc:call(WorkerP2, space_cleanup_api, force_cleanup, [SpaceId]),
-    ExpectedDistributionAfterCleaning = [
-        #{<<"providerId">> => DomainP1, <<"blocks">> => [[0, Size]]},
-        #{<<"providerId">> => DomainP2, <<"blocks">> => []}
-    ],
-    ?assertDistributionProxyByGuid(WorkerP2, SessionIdP2, ExpectedDistributionAfterCleaning, File1Guid),
-    [Report] = rpc:call(WorkerP2, autocleaning, list_reports_since, [<<"space5">>, 0]),
-    ?assertMatch(#{
-        bytesToRelease := Size,
-        releasedBytes := Size,
-        filesNumber := 1,
-        startedAt := _,
-        stoppedAt := _
-    }, maps:from_list(Report)),
-
-    % synchronize file
-    tracer:start(WorkerP2),
-    tracer:trace_calls(replica_synchronizer, synchronize),
-    tracer:trace_calls(sync_req, synchronize_block),
-    tracer:trace_calls(read_write_req, read),
-    tracer:trace_calls(storage_file_manager, read),
-%%    ct:pal("SLEEP"),
-%%    ct:timetrap({hours, 1}),
-%%    ct:sleep({hours, 1}),
-    timer:sleep(timer:seconds(15)),
-    {ok, ReadHandle2} = ?assertMatch({ok, _}, lfm_proxy:open(WorkerP2, SessionIdP2, {guid, File1Guid}, read), ?ATTEMPTS),
-    ?assertMatch({ok, ?TEST_DATA}, lfm_proxy:read(WorkerP2, ReadHandle2, 0, Size)),
-    lfm_proxy:close(WorkerP2, ReadHandle2),
-    ?assertDistributionProxyByGuid(WorkerP2, SessionIdP2, ExpectedDistributionAfterReplication, File1Guid),
-
-    timer:sleep(timer:seconds(5)),
-    rpc:call(WorkerP2, space_cleanup_api, force_cleanup, [SpaceId]),
-
-    ?assertDistributionProxyByGuid(WorkerP2, SessionIdP2, ExpectedDistributionAfterReplication, File1Guid).
-%%
-%%    [Report] = rpc:call(WorkerP2, autocleaning, list_reports_since, [<<"space5">>, 0]),
-%%    ?assertMatch(#{
-%%        bytesToRelease := Size,
-%%        releasedBytes := Size,
-%%        filesNumber := 1,
-%%        startedAt := _,
-%%        stoppedAt := _
-%%    }, maps:from_list(Report)).
+    ?assertAutocleaningReports([
+        #{
+            bytesToRelease := Size,
+            releasedBytes := Size,
+            filesNumber := 1
+        }
+    ], WorkerP2, SpaceId).
 
 automatic_cleanup_should_invalidate_unpopular_files(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -1623,7 +1560,6 @@ automatic_cleanup_should_invalidate_unpopular_files(Config) ->
     File4Guid = create_test_file(WorkerP1, SessionIdP1, File4, BigData),
     File5Guid = create_test_file(WorkerP1, SessionIdP1, File5, ?TEST_DATA2),
 
-    ct:pal("WorkerP2: ~p", [WorkerP2]),
     % synchronize files
     {ok, ReadHandle1} = ?assertMatch({ok, _}, lfm_proxy:open(WorkerP2, SessionIdP2, {guid, File1Guid}, read), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA}, lfm_proxy:read(WorkerP2, ReadHandle1, 0, SmallSize), ?ATTEMPTS),
@@ -1664,17 +1600,6 @@ automatic_cleanup_should_invalidate_unpopular_files(Config) ->
     ?assertDistributionProxyByGuid(WorkerP2, SessionIdP2, ExpectedDistribution1, File3Guid),
     ?assertDistributionProxyByGuid(WorkerP2, SessionIdP2, ExpectedDistribution3, File4Guid),
     ?assertDistributionProxyByGuid(WorkerP2, SessionIdP2, ExpectedDistribution4, File5Guid),
-
-    ct:pal("WorkerP2: ~p", [WorkerP2]),
-
-%%    tracer:start(WorkerP2),
-%%%%    tracer:trace_calls(replica_evictor),
-%%%%    tracer:trace_calls(autocleaning_controller),
-%%%%    tracer:trace_calls(replica_eviction_communicator),
-%%    tracer:trace_calls(replica_evictor, process_result),
-%%    tracer:trace_calls(replica_eviction_changes, handle_confirmation),
-%%    tracer:trace_calls(replica_eviction_worker),
-%%    tracer:trace_calls(autocleaning_controller, posthook),
 
     % pretend File3 hasn't been opened for 24 hours
     File3Uuid = fslogic_uuid:guid_to_uuid(File3Guid),
@@ -3000,7 +2925,6 @@ invalidate_big_dir(Config) ->
     Structure = [10, 10], % last level are files
     FilesToCreate = lists:foldl(fun(N, AccIn) ->
         1 + AccIn * N end, 1, Structure),
-    ct:pal("FilesToCreate: ~p", [FilesToCreate]),
     RegularFilesNum = lists:foldl(fun(N, AccIn) -> N * AccIn end, 1, Structure),
     DomainP2 = domain(WorkerP2),
     DomainP1 = domain(WorkerP1),
@@ -3292,8 +3216,7 @@ init_per_testcase(Case, Config) when
     init_per_testcase(all, Config2);
 
 init_per_testcase(Case, Config) when
-    Case =:= basic_autocleaning_test;
-    Case =:= cleanup_same_file_twice_test ->
+    Case =:= basic_autocleaning_test ->
     SpaceId = <<"space5">>,
     [WorkerP2 | _] = ?config(op_worker_nodes, Config),
     {ok, _} = rpc:call(WorkerP2, space_storage, enable_file_popularity, [SpaceId]),
@@ -3320,9 +3243,7 @@ end_per_testcase(metric_get = Case, Config) ->
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(Case, Config) when
-    Case =:= basic_autocleaning_test;
-    Case =:= cleanup_same_file_twice_test
-    ->
+    Case =:= basic_autocleaning_test ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SpaceId = ?config(space_id, Config),
     %%    rpc:call(WorkerP1, space_storage, disable_file_popularity, [<<"space5">>]),
@@ -3333,6 +3254,7 @@ end_per_testcase(Case, Config) when
     clean_space(WorkerP2, SpaceId),
     check_if_space_empty(WorkerP1, SpaceId),
     check_if_space_empty(WorkerP2, SpaceId),
+    remove_autocleaning_reports(WorkerP2, SpaceId),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(Case = automatic_cleanup_should_invalidate_unpopular_files, Config) ->
@@ -3342,6 +3264,7 @@ end_per_testcase(Case = automatic_cleanup_should_invalidate_unpopular_files, Con
     rpc:call(WorkerP2, space_storage, disable_file_popularity, [SpaceId]),
 %%    rpc:call(WorkerP1, space_cleanup_api, disable_autocleaning, [SpaceId]),
     rpc:call(WorkerP2, space_cleanup_api, disable_autocleaning, [SpaceId]),
+    remove_autocleaning_reports(WorkerP2, SpaceId),
     clean_space(WorkerP1, SpaceId),
     clean_space(WorkerP2, SpaceId),
     check_if_space_empty(WorkerP1, SpaceId),
@@ -3657,6 +3580,12 @@ get_ongoing_transfers_for_file(Worker, FileGuid) ->
 
 space_guid(SpaceId) ->
     fslogic_uuid:spaceid_to_space_dir_guid(SpaceId).
+
+remove_autocleaning_reports(Worker, SpaceId) ->
+    {ok, ACIds} = rpc:call(Worker, autocleaning, list, [SpaceId]),
+    lists:foreach(fun(ACId) ->
+        ok = rpc:call(Worker, autocleaning, delete, [ACId, SpaceId])
+    end, ACIds).
 
 clean_space(Worker, SpaceId) ->
     {ok, Children} = lfm_proxy:ls(Worker, <<"0">>, {guid, space_guid(SpaceId)}, 0, 100),

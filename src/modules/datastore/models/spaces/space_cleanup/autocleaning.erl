@@ -24,7 +24,7 @@
 -export_type([id/0, status/0]).
 
 %% API
--export([list_reports_since/2, remove_skipped/2,
+-export([list_reports_since/2, delete/2,
     mark_completed/1, mark_released_file/1, get_config/1, mark_active/2,
     mark_failed/1, start/3, mark_released_bytes/2, mark_released_file/2, get/1,
     list/1, remove_link/2, mark_processed_file/1]).
@@ -101,8 +101,8 @@ list_reports_since(SpaceId, Since) ->
 %% Removes skipped autocleaning.
 %% @end
 %%-------------------------------------------------------------------
--spec remove_skipped(id(), od_space:id()) -> ok.
-remove_skipped(AutocleaningId, SpaceId) ->
+-spec delete(id(), od_space:id()) -> ok.
+delete(AutocleaningId, SpaceId) ->
     remove_link(AutocleaningId, SpaceId),
     ok = datastore_model:delete(?CTX, AutocleaningId).
 

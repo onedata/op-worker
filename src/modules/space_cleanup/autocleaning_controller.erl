@@ -65,7 +65,7 @@ maybe_start(AutocleaningId, AC = #autocleaning{space_id = SpaceId}) ->
         AutocleaningId ->
             start(AutocleaningId, AC);
         _ ->
-            autocleaning:remove_skipped(AutocleaningId, SpaceId)
+            autocleaning:delete(AutocleaningId, SpaceId)
     end.
 
 %%-------------------------------------------------------------------
