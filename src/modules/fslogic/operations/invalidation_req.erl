@@ -24,7 +24,8 @@
 -export([
     start_invalidation/4,
     schedule_replica_invalidation/4,
-    invalidate_file_replica/4
+    invalidate_file_replica/4,
+    enqueue_file_invalidation/6
 ]).
 
 %%%===================================================================
@@ -203,12 +204,16 @@ invalidate_dir(UserCtx, FileCtx, MigrationProviderId, Offset, TransferId) ->
 %% Evicts regular file.
 %% @end
 %%-------------------------------------------------------------------
--spec evict_file(file_ctx:ctx(), sync_req:provider_id(), sync_req:transfer_id()) -> ok.
+-spec evict_file(file_ctx:ctx(), sync_req:provider_id(), sync_req:transfer_id())
+        -> sync_req:provider_response().
 evict_file(FileCtx, undefined, TransferId) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    {FileUuid, ProviderId, Blocks, VV} =
-        replica_evictor:get_setting_for_eviction_task(FileCtx),
-    schedule_eviction_task(FileUuid, ProviderId, Blocks, VV, TransferId, SpaceId),
+    case  replica_evictor:get_setting_for_eviction_task(FileCtx) of
+        undefined ->
+            transfer:increase_files_processed_counter(TransferId);
+        {FileUuid, ProviderId, Blocks, VV} ->
+            schedule_eviction_task(FileUuid, ProviderId, Blocks, VV, TransferId, SpaceId)
+    end,
     #provider_response{status = #status{code = ?OK}};
 evict_file(FileCtx, SupportingProviderId, TransferId) ->
     {LocalFileLocationDoc, FileCtx2} =

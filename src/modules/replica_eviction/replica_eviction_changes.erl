@@ -91,13 +91,13 @@ handle_request(#document{
         ok ->
             case can_support_eviction(RE) of
                 {true, Blocks} ->
-                    replica_eviction_communicator:confirm_invalidation_support(REId, Blocks);
+                    replica_eviction:confirm(REId, Blocks);
                 false ->
                     replica_eviction_lock:release_read_lock(FileUuid),
-                    replica_eviction_communicator:refuse_invalidation_support(REId)
+                    replica_eviction:refuse(REId)
             end;
-        error ->
-            replica_eviction_communicator:refuse_invalidation_support(REId)
+        _Error ->
+            replica_eviction:refuse(REId)
     end.
 
 %%-------------------------------------------------------------------
@@ -128,14 +128,14 @@ handle_confirmation(#document{
 %%-------------------------------------------------------------------
 -spec handle_refusal(replica_eviction:doc()) -> ok.
 handle_refusal(#document{
-    key = REId,
     value = #replica_eviction{
         space_id = SpaceId,
-        pid = Pid
+        file_uuid = FileUuid,
+        report_id = ReportId,
+        type = Type
 }}) ->
     replica_evictor:notify_finished_task(SpaceId),
-    %todo should we notify about error in different than sendin 0 bytes?
-    replica_eviction_communicator:notify_failed_invalidation(Pid, REId, {error, invalidation_refused}).
+    replica_evictor:process_result(Type, FileUuid, {error, invalidation_refused}, ReportId).
 
 %%-------------------------------------------------------------------
 %% @private

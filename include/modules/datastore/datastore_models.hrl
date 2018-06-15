@@ -592,7 +592,6 @@
     requested_blocks = [] :: fslogic_blocks:blocks(),
     supported_blocks = [] :: fslogic_blocks:blocks(),
     version_vector = #{} :: version_vector:version_vector(),
-    pid :: undefined | binary(),
     requester :: od_provider:id(),
     requestee :: od_provider:id(),
     report_id :: replica_eviction:report_id(),

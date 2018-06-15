@@ -77,16 +77,19 @@
 }).
 
 -record(notification_task, {
-   notify_fun :: function()
+   notify_fun :: notify_fun()
 }).
 
 -record(task, {
-    task :: task(),
+    task :: eviction_task() | notification_task(),
     id :: replica_eviction:report_id()
 }).
 
 
--type task() :: #eviction_task{} | #notification_task{}.
+-type task() :: #task{}.
+-type eviction_task() :: #eviction_task{}.
+-type notification_task() :: #notification_task{}.
+-type notify_fun() :: fun(() -> term()).
 
 %%TODO
 %%TODO * handle too long queue of tasks and return error
@@ -197,20 +200,19 @@ start_link(SpaceId) ->
 %%-------------------------------------------------------------------
 -spec get_setting_for_eviction_task(file_ctx:ctx()) ->
     {file_meta:uuid(), od_provider:id(), fslogic_blocks:blocks(),
-        version_vector:version_vector()} |undefined.
+        version_vector:version_vector()} | undefined.
 get_setting_for_eviction_task(FileCtx) ->
-    {LocalLocation, FileCtx2} = file_ctx:get_local_file_location_doc(FileCtx),
-    case LocalLocation of
-        undefined ->
+    case file_ctx:get_local_file_location_doc(FileCtx) of
+        {undefined, _} ->
             undefined;
-        _ ->
+        {LocalLocation, FileCtx2} ->
             VV = file_location:get_version_vector(LocalLocation),
             case replica_finder:get_blocks_available_to_evict(FileCtx2, VV) of
                 {[{Provider, Blocks} | _], FileCtx3} ->
                     % todo handle retries to other providers
                     FileUuid = file_ctx:get_uuid_const(FileCtx3),
                     {FileUuid, Provider, Blocks, VV};
-                _ ->
+                {undefined, _} ->
                     undefined
             end
     end.
@@ -397,7 +399,9 @@ handle_task(#task{
     },
     id = ReportId
 }, SpaceId) ->
-    request_eviction_support(FileUuid, ProviderId, Blocks, Version, ReportId, Type, SpaceId);
+    {ok, _} = request_eviction_support(FileUuid, ProviderId, Blocks, Version, ReportId,
+        Type, SpaceId),
+    ok;
 handle_task(#task{task = #notification_task{notify_fun = NotifyFun}}, SpaceId) ->
     NotifyFun(),
     notify_finished_task(SpaceId).
@@ -415,10 +419,8 @@ handle_task(#task{task = #notification_task{notify_fun = NotifyFun}}, SpaceId) -
 request_eviction_support(FileUuid, ProviderId, Blocks, Version, ReportId,
     Type, SpaceId
 ) ->
-    replica_eviction_communicator:request_eviction_support(
-        FileUuid, Blocks, Version, ProviderId, SpaceId, Type, ReportId
-    ).
-
+    replica_eviction:request(FileUuid, Blocks, Version, ProviderId, SpaceId,
+        Type, ReportId).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -443,6 +445,8 @@ cancel_task(#task{task = #eviction_task{type = Type}, id = ReportId}, SpaceId) -
 %%-------------------------------------------------------------------
 -spec mark_processed_file(replica_eviction:type(), replica_eviction:report_id()) -> ok.
 mark_processed_file(autocleaning, AutocleaningId) ->
-    autocleaning:mark_processed_file(AutocleaningId);
+    {ok, _} = autocleaning:mark_processed_file(AutocleaningId),
+    ok;
 mark_processed_file(invalidation, TransferId) ->
-    transfer:increase_files_processed_counter(TransferId).
+    {ok, _} = transfer:increase_files_processed_counter(TransferId),
+    ok.

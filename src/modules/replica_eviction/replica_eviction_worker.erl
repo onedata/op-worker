@@ -122,7 +122,7 @@ handle_cast({?EVICT_REPLICA, FileUuid, SpaceId, Blocks, VV, REId, Type, Id}, Sta
         Error ->
             Error
     end,
-    replica_eviction_communicator:release_invalidation_lock(REId),
+    replica_eviction:release_supporting_lock(REId),
     replica_evictor:process_result(Type, FileUuid, Result, Id),
     {noreply, State};
 handle_cast(Request, State) ->

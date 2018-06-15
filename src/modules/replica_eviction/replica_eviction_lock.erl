@@ -41,7 +41,7 @@
     model => ?MODULE,
     routing => global,
     generated_key => false,
-    disk_driver => undefined
+    disc_driver => undefined
 }).
 
 %%%===================================================================
@@ -53,7 +53,7 @@
 %% Acquires lock in read mode.
 %% @end
 %%-------------------------------------------------------------------
--spec acquire_read_lock(id()) -> ok | error.
+-spec acquire_read_lock(id()) -> ok | {error, term()}.
 acquire_read_lock(FileUuid) ->
     case read_create_or_update(FileUuid, fun acquire_read_lock_diff/1) of
         {ok, _} ->
@@ -67,7 +67,7 @@ acquire_read_lock(FileUuid) ->
 %% Acquires lock in write mode.
 %% @end
 %%-------------------------------------------------------------------
--spec acquire_write_lock(id()) -> ok | error.
+-spec acquire_write_lock(id()) -> ok | {error, term()}.
 acquire_write_lock(FileUuid) ->
     case write_create_or_update(FileUuid, fun acquire_write_lock_diff/1) of
         {ok, _} ->

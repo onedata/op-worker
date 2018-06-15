@@ -25,7 +25,7 @@
     request/7,
     confirm/2,
     refuse/1,
-    release_lock/1,
+    release_supporting_lock/1,
     delete/1
 ]).
 
@@ -95,11 +95,11 @@ refuse(Id) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Sends message allowing to release invalidation lock.
+%% Sends message allowing to release eviction supporting lock.
 %% @end
 %%-------------------------------------------------------------------
--spec release_lock(id()) -> ok.
-release_lock(Id) ->
+-spec release_supporting_lock(id()) -> ok.
+release_supporting_lock(Id) ->
     {ok, _} = update(Id, fun(ReplicaEviction) ->
         {ok, update_action(ReplicaEviction, release_lock)}
     end),
@@ -145,7 +145,6 @@ new_doc(FileUuid, FileBlocks, VV, Requestee, SpaceId, Type, Id) ->
             action = request,
             requested_blocks = FileBlocks,
             version_vector = VV,
-            pid = transfer_utils:encode_pid(self()),
             requester = oneprovider:get_id(),
             requestee = Requestee,
             type = Type,
@@ -202,7 +201,6 @@ get_record_struct(1) ->
             ]}
         ]},
         {version_vector, #{term => integer}},
-        {pid, string},
         {requester, string},
         {requestee, string},
         {doc_id, string},

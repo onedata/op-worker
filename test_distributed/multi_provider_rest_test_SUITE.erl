@@ -1253,8 +1253,8 @@ invalidation_should_fail_when_invalidation_provider_modified_file_replica(Config
     ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File),
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
 
-    test_utils:mock_new(WorkerP2, invalidation_req),
-    test_utils:mock_expect(WorkerP2, invalidation_req, invalidate_regular_file, fun(FileCtx, Blocks, AllowedVV) ->
+    ok = test_utils:mock_new(WorkerP2, replica_eviction_req),
+    ok = test_utils:mock_expect(WorkerP2, replica_eviction_req, evict_blocks, fun(FileCtx, Blocks, AllowedVV) ->
         {ok, Handle} = logical_file_manager:open(SessionId2, {path, File}, write),
         {ok, _, 1} = logical_file_manager:write(Handle, 1, <<"#">>),
         ok = logical_file_manager:fsync(Handle),
@@ -3399,6 +3399,7 @@ end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     remove_transfers(Config),
     ensure_transfers_removed(Config),
+    test_utils:mock_unload(Workers, [sync_req, replica_eviction_req]),
     unmock_file_replication(Workers),
     lfm_proxy:teardown(Config).
 
