@@ -11,7 +11,9 @@
 {application, op_worker,
     [
         {description, "Application starts node of oneprovider cluster"},
-        {vsn, "18.02.0-rc7"},
+        % @TODO temporarily bumping the OP version to indicate new, incompatible
+        % functionalities. REVISE before releasing an official version.
+        {vsn, "18.07.0-alpha"},
         {registered, [op_worker_sup]},
         {applications, [
             kernel,
