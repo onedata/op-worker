@@ -36,7 +36,7 @@
 -define(STATS_AGGREGATION_TIME, application:get_env(
     ?APP_NAME, rtransfer_stats_aggregation_time, 2000)
 ).
-%% How long transfer stats are aggregated before updating transfer document
+%% How long file blocks are aggregated before updating location document
 -define(BLOCKS_AGGREGATION_TIME, application:get_env(
     ?APP_NAME, rtransfer_blocks_aggregation_time, 1000)
 ).
@@ -820,7 +820,7 @@ cache_stats_and_blocks(TransferIds, ProviderId, Block, State) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Aggregate cached transfer stats and update transfer documents.
+%% Flush aggregated so far file blocks.
 %% @end
 %%--------------------------------------------------------------------
 -spec flush_blocks(#state{}, [session:id()]) ->
@@ -855,7 +855,7 @@ flush_blocks(State, ExcludeSessions) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Aggregate cached transfer stats and update transfer documents.
+%% Flush aggregated so far transfer stats.
 %% @end
 %%--------------------------------------------------------------------
 -spec flush_stats(#state{}) -> #state{}.
@@ -916,7 +916,7 @@ cancel_caching_blocks_timer(#state{caching_blocks_timer = TimerRef} = State) ->
     State#state{caching_blocks_timer = undefined}.
 
 
--spec get_summarized_blocks_size([block()]) -> non_neg_integer().
-get_summarized_blocks_size(Blocks) ->
-    lists:foldl(fun(#file_block{size = Size}, Acc) ->
-        Acc + Size end, 0, Blocks).
+%%-spec get_summarized_blocks_size([block()]) -> non_neg_integer().
+%%get_summarized_blocks_size(Blocks) ->
+%%    lists:foldl(fun(#file_block{size = Size}, Acc) ->
+%%        Acc + Size end, 0, Blocks).

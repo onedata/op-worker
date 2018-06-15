@@ -139,7 +139,8 @@ update_with_cache_internal(TransferType, SpaceId, BytesPerProvider) ->
         {ok, Pid} ->
             case is_process_alive(Pid) of
                 true ->
-                    Pid ! {update_stats, BytesPerProvider};
+                    transfer_onf_controller:update_statistics(Pid, BytesPerProvider);
+%%                    Pid ! {update_stats, BytesPerProvider};
                 _ ->
                     start_cache_proc(TransferType, SpaceId),
                     update_with_cache(TransferType, SpaceId, BytesPerProvider)
@@ -302,55 +303,56 @@ get_record_struct(1) ->
 -spec start_cache_proc(TransferType :: binary(), SpaceId :: od_space:id()) -> ok.
 start_cache_proc(TransferType, SpaceId) ->
     critical_section:run([?MODULE, TransferType, SpaceId], fun() ->
-        Pid = spawn(fun() -> cache_proc(TransferType, SpaceId, #{}) end),
+        {ok, Pid} = gen_server2:start(transfer_onf_controller, SpaceId, []),
+%%        Pid = spawn(fun() -> cache_proc(TransferType, SpaceId, #{}) end),
         Name = binary_to_atom(term_to_binary(
             {space_transfer_cache, TransferType, SpaceId}), latin1),
         application:set_env(?APP_NAME, Name, Pid)
     end),
     ok.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Cache process (process that caches transfer stats).
-%% @end
-%%--------------------------------------------------------------------
--spec cache_proc(TransferType :: binary(), SpaceId :: od_space:id(),
-    Bytes :: #{od_provider:id() => size()}) -> ok.
-cache_proc(TransferType, SpaceId, Bytes0) ->
-    Bytes = get_messages(Bytes0, 0),
-    case maps:size(Bytes) of
-        0 ->
-            receive
-                {update_stats, NewBytes} ->
-                    cache_proc(TransferType, SpaceId, NewBytes)
-            after 300000 ->
-                ok
-            end;
-        _ ->
-            CurrentTime = provider_logic:zone_time_seconds(),
-            update(TransferType, SpaceId, Bytes, CurrentTime),
-            cache_proc(TransferType, SpaceId, #{})
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Gets and aggregates messages.
-%% @end
-%%--------------------------------------------------------------------
--spec get_messages(Bytes :: #{od_provider:id() => size()},
-    Counter :: non_neg_integer()) -> #{od_provider:id() => size()}.
-get_messages(Bytes, 1000) ->
-    Bytes;
-get_messages(Bytes, Counter) ->
-    receive
-        {update_stats, NewBytes} ->
-            Bytes2 = maps:fold(fun(K, V, Acc) ->
-                Value = maps:get(K, Acc, 0),
-                maps:put(K, Value + V, Acc)
-            end, Bytes, NewBytes),
-            get_messages(Bytes2, Counter + 1)
-    after 0 ->
-        Bytes
-    end.
+%%%%--------------------------------------------------------------------
+%%%% @private
+%%%% @doc
+%%%% Cache process (process that caches transfer stats).
+%%%% @end
+%%%%--------------------------------------------------------------------
+%%-spec cache_proc(TransferType :: binary(), SpaceId :: od_space:id(),
+%%    Bytes :: #{od_provider:id() => size()}) -> ok.
+%%cache_proc(TransferType, SpaceId, Bytes0) ->
+%%    Bytes = get_messages(Bytes0, 0),
+%%    case maps:size(Bytes) of
+%%        0 ->
+%%            receive
+%%                {update_stats, NewBytes} ->
+%%                    cache_proc(TransferType, SpaceId, NewBytes)
+%%            after 300000 ->
+%%                ok
+%%            end;
+%%        _ ->
+%%            CurrentTime = provider_logic:zone_time_seconds(),
+%%            update(TransferType, SpaceId, Bytes, CurrentTime),
+%%            cache_proc(TransferType, SpaceId, #{})
+%%    end.
+%%
+%%%%--------------------------------------------------------------------
+%%%% @private
+%%%% @doc
+%%%% Gets and aggregates messages.
+%%%% @end
+%%%%--------------------------------------------------------------------
+%%-spec get_messages(Bytes :: #{od_provider:id() => size()},
+%%    Counter :: non_neg_integer()) -> #{od_provider:id() => size()}.
+%%get_messages(Bytes, 1000) ->
+%%    Bytes;
+%%get_messages(Bytes, Counter) ->
+%%    receive
+%%        {update_stats, NewBytes} ->
+%%            Bytes2 = maps:fold(fun(K, V, Acc) ->
+%%                Value = maps:get(K, Acc, 0),
+%%                maps:put(K, Value + V, Acc)
+%%            end, Bytes, NewBytes),
+%%            get_messages(Bytes2, Counter + 1)
+%%    after 0 ->
+%%        Bytes
+%%    end.
