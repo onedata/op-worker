@@ -34,9 +34,15 @@
 
 %% How long transfer stats are aggregated before updating transfer document
 -define(STATS_AGGREGATION_TIME, application:get_env(
-    ?APP_NAME, rtransfer_stats_aggregation_time, 1000)
+    ?APP_NAME, rtransfer_stats_aggregation_time, 2000)
 ).
+%% How long transfer stats are aggregated before updating transfer document
+-define(BLOCKS_AGGREGATION_TIME, application:get_env(
+    ?APP_NAME, rtransfer_blocks_aggregation_time, 1000)
+).
+
 -define(FLUSH_STATS, flush_stats).
+-define(FLUSH_BLOCKS, flush_blocks).
 
 -type fetch_ref() :: reference().
 -type block() :: fslogic_blocks:block().
@@ -56,8 +62,10 @@
     from_sessions = #{} :: #{from() => session:id()},
     from_to_transfer_id = #{} :: #{from() => transfer:id() | undefined},
     transfer_id_to_from = #{} :: #{transfer:id() | undefined => from()},
-    cached_stats = #{} :: #{transfer:id() => #{od_provider:id() => [block()]}},
-    caching_timer :: undefined | reference()
+    cached_stats = #{} :: #{transfer:id() => #{od_provider:id() => integer()}},
+    cached_blocks = [] :: [block()],
+    caching_stats_timer :: undefined | reference(),
+    caching_blocks_timer :: undefined | reference()
 }).
 
 -export([synchronize/5, update_replica/4, cancel/1, init/1,
@@ -363,10 +371,13 @@ handle_info({Ref, active, ProviderId, Block}, State) ->
         [] -> [undefined];
         Values -> Values
     end,
-    {noreply, cache_stats(TransferIds, ProviderId, Block, State), ?DIE_AFTER};
+    {noreply, cache_stats_and_blocks(TransferIds, ProviderId, Block, State), ?DIE_AFTER};
 
 handle_info(?FLUSH_STATS, State) ->
-    {_, State2} = flush_stats(State, []),
+    {noreply, flush_stats(State), ?DIE_AFTER};
+
+handle_info(?FLUSH_BLOCKS, State) ->
+    {_, State2} = flush_blocks(State, []),
     {noreply, State2, ?DIE_AFTER};
 
 handle_info({Ref, complete, {ok, _} = _Status}, #state{from_sessions = FS} = State) ->
@@ -382,7 +393,7 @@ handle_info({Ref, complete, {ok, _} = _Status}, #state{from_sessions = FS} = Sta
         end
     end, {[], FS}, FinishedFroms),
 
-    {Location, State2} = flush_stats(State1, ExcludeSessions),
+    {Location, State2} = flush_blocks(State1, ExcludeSessions),
     TransferIds = maps:with(FinishedFroms, FromToTransferId),
     [transfer:increase_files_transferred_counter(TID) || TID <- maps:values(TransferIds)],
     [gen_server2:reply(From, {ok, Location}) || From <- FinishedFroms],
@@ -424,8 +435,9 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 terminate(_Reason, State) ->
-    flush_stats(State, []),
+    {_, State2} = flush_blocks(State, []),
     fslogic_blocks:flush(),
+    flush_stats(State2),
     ignore.
 
 %%%===================================================================
@@ -786,19 +798,24 @@ get_holes(Offset, Size, [#file_block{offset = O} | Blocks], Acc) ->
 %% be flushed.
 %% @end
 %%--------------------------------------------------------------------
--spec cache_stats([transfer:id() | undefined], od_provider:id(), block(),
+-spec cache_stats_and_blocks([transfer:id() | undefined], od_provider:id(), block(),
     #state{}) -> #state{}.
-cache_stats(TransferIds, ProviderId, Block, State) ->
-    UpdatedStats = lists:foldl(fun(TransferId, Stats) ->
-        TransferStats = maps:get(TransferId, Stats, #{}),
-        NewTransferStats = TransferStats#{
-            ProviderId => [Block | maps:get(ProviderId, TransferStats, [])]
+cache_stats_and_blocks(TransferIds, ProviderId, Block, State) ->
+    #file_block{size = Size} = Block,
+
+    UpdatedStats = lists:foldl(fun(TransferId, StatsPerTransfer) ->
+        BytesPerProvider = maps:get(TransferId, StatsPerTransfer, #{}),
+        NewTransferStats = BytesPerProvider#{
+            ProviderId => Size + maps:get(ProviderId, BytesPerProvider, 0)
         },
-        Stats#{TransferId => NewTransferStats}
+        StatsPerTransfer#{TransferId => NewTransferStats}
     end, State#state.cached_stats, TransferIds),
 
-    NewState = State#state{cached_stats = UpdatedStats},
-    set_caching_timer(NewState).
+    NewState = State#state{
+        cached_stats = UpdatedStats,
+        cached_blocks = [Block | State#state.cached_blocks]
+    },
+    set_caching_timers(NewState).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -806,36 +823,19 @@ cache_stats(TransferIds, ProviderId, Block, State) ->
 %% Aggregate cached transfer stats and update transfer documents.
 %% @end
 %%--------------------------------------------------------------------
--spec flush_stats(#state{}, [session:id()]) ->
+-spec flush_blocks(#state{}, [session:id()]) ->
     {#file_location_changed{} | undefined, #state{}}.
-flush_stats(#state{cached_stats = Stats, file_ctx = FileCtx} = State, _ExcludeSessions)
-    when map_size(Stats) == 0 ->
+flush_blocks(#state{cached_blocks = [], file_ctx = FileCtx} = State, _ExcludeSessions) ->
     {#document{value = Location}, _FileCtx2} =
         file_ctx:get_or_create_local_file_location_doc(FileCtx, false),
     {#file_location_changed{
         file_location = Location,
         change_beg_offset = 0, change_end_offset = 0}, State};
-flush_stats(State, ExcludeSessions) ->
+flush_blocks(State, ExcludeSessions) ->
     #state{
         file_ctx = FileCtx,
-        space_id = SpaceId,
-        cached_stats = Cache
+        cached_blocks = AllBlocks
     } = State,
-
-    {Stats, AllBlocks} =
-        maps:fold(fun(TransferId, BlocksPerProvider, {Stats0, AllBlocks0}) ->
-            {BytesPerProvider, TransferredBlocks} = maps:fold(
-                fun(ProviderId, Blocks, {BytesPerProvider0, TransferredBlocks0}) ->
-                    Bytes = get_summarized_blocks_size(Blocks),
-                    BytesPerProvider1 = BytesPerProvider0#{ProviderId => Bytes},
-                    TransferredBlocks1 = Blocks ++ TransferredBlocks0,
-                    {BytesPerProvider1, TransferredBlocks1}
-                end, {#{}, []}, BlocksPerProvider),
-
-            Stats1 = Stats0#{TransferId => BytesPerProvider},
-            AllBlocks1 = TransferredBlocks ++ AllBlocks0,
-            {Stats1, AllBlocks1}
-        end, {#{}, []}, Cache),
 
     {ok, _} = replica_updater:update(FileCtx, AllBlocks, undefined, false),
     {Location, _FileCtx2} = file_ctx:get_file_location_with_filled_gaps(FileCtx, AllBlocks),
@@ -843,15 +843,36 @@ flush_stats(State, ExcludeSessions) ->
     ok = fslogic_event_emitter:emit_file_location_changed(Location,
         ExcludeSessions, EventOffset, EventSize),
 
+    erlang:garbage_collect(),
+
+    Ans = #file_location_changed{
+        file_location = Location,
+        change_beg_offset = EventOffset, change_end_offset = EventSize},
+
+    {Ans, cancel_caching_blocks_timer(State#state{cached_blocks = []})}.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Aggregate cached transfer stats and update transfer documents.
+%% @end
+%%--------------------------------------------------------------------
+-spec flush_stats(#state{}) -> #state{}.
+flush_stats(#state{cached_stats = Stats} = State) when map_size(Stats) == 0 ->
+    State;
+flush_stats(#state{space_id = SpaceId} = State) ->
     lists:foreach(fun({TransferId, BytesPerProvider}) ->
-        case transfer:mark_data_transfer_finished(TransferId, SpaceId, BytesPerProvider) of
+        case transfer:mark_data_transfer_finished(
+            TransferId, SpaceId, BytesPerProvider
+        ) of
             {ok, _} ->
                 ok;
             {error, Error} ->
                 ?error("Failed to update trasnfer statistics for ~p transfer "
                 "due to ~p", [TransferId, Error])
         end
-    end, maps:to_list(Stats)),
+    end, maps:to_list(State#state.cached_stats)),
 
     % TODO VFS-4412 emit rtransfer statistics
 %%    monitoring_event:emit_rtransfer_statistics(
@@ -865,25 +886,35 @@ flush_stats(State, ExcludeSessions) ->
             ok
     end,
 
-    Ans = #file_location_changed{
-        file_location = Location,
-        change_beg_offset = EventOffset, change_end_offset = EventSize},
+    cancel_caching_stats_timer(State#state{cached_stats = #{}}).
 
-    {Ans, cancel_caching_timer(State#state{cached_stats = #{}})}.
 
--spec set_caching_timer(#state{}) -> #state{}.
-set_caching_timer(#state{caching_timer = undefined} = State) ->
+-spec set_caching_timers(#state{}) -> #state{}.
+set_caching_timers(#state{caching_stats_timer = undefined} = State) ->
     TimerRef = erlang:send_after(?STATS_AGGREGATION_TIME, self(), ?FLUSH_STATS),
-    State#state{caching_timer = TimerRef};
-set_caching_timer(State) ->
+    set_caching_timers(State#state{caching_stats_timer = TimerRef});
+set_caching_timers(#state{caching_blocks_timer = undefined} = State) ->
+    TimerRef = erlang:send_after(?BLOCKS_AGGREGATION_TIME, self(), ?FLUSH_BLOCKS),
+    State#state{caching_blocks_timer = TimerRef};
+set_caching_timers(State) ->
     State.
 
--spec cancel_caching_timer(#state{}) -> #state{}.
-cancel_caching_timer(#state{caching_timer = undefined} = State) ->
+
+-spec cancel_caching_stats_timer(#state{}) -> #state{}.
+cancel_caching_stats_timer(#state{caching_stats_timer = undefined} = State) ->
     State;
-cancel_caching_timer(#state{caching_timer = TimerRef} = State) ->
+cancel_caching_stats_timer(#state{caching_stats_timer = TimerRef} = State) ->
     erlang:cancel_timer(TimerRef, [{async, true}, {info, false}]),
-    State#state{caching_timer = undefined}.
+    State#state{caching_stats_timer = undefined}.
+
+
+-spec cancel_caching_blocks_timer(#state{}) -> #state{}.
+cancel_caching_blocks_timer(#state{caching_blocks_timer = undefined} = State) ->
+    State;
+cancel_caching_blocks_timer(#state{caching_blocks_timer = TimerRef} = State) ->
+    erlang:cancel_timer(TimerRef, [{async, true}, {info, false}]),
+    State#state{caching_blocks_timer = undefined}.
+
 
 -spec get_summarized_blocks_size([block()]) -> non_neg_integer().
 get_summarized_blocks_size(Blocks) ->
