@@ -1,15 +1,14 @@
 %%%-------------------------------------------------------------------
 %%% @author Jakub Kudzia
-%%% @copyright (C) 2017 ACK CYFRONET AGH
+%%% @copyright (C) 2018 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Implementation of worker for transfer_workers_pool.
-%%% Worker is responsible for replication of one file.
+%%% WRITEME
 %%% @end
 %%%-------------------------------------------------------------------
--module(transfer_worker).
+-module(invalidation_worker).
 -author("Jakub Kudzia").
 
 -behaviour(gen_server).
@@ -19,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/0]).
+-export([start_link/0, process_eviction_result/3]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -31,8 +30,8 @@
 
 -define(SERVER, ?MODULE).
 
--define(MAX_FILE_TRANSFER_RETRIES,
-    application:get_env(?APP_NAME, max_file_transfer_retries_per_file, 5)).
+-define(MAX_FILE_INVALIDATION_RETRIES,
+    application:get_env(?APP_NAME, max_file_invalidation_retries_per_file, 5)).
 
 -record(state, {}).
 -type state() :: #state{}.
@@ -51,6 +50,23 @@
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Posthook executed by replica_eviction_worker after evicting file.
+%% @end
+%%-------------------------------------------------------------------
+-spec process_eviction_result(replica_eviction:result(), file_meta:uuid(),
+    transfer:id()) -> ok.
+process_eviction_result({ok, ReleasedBytes}, FileUuid, TransferId) ->
+    ?debug("Invalidation of file ~p in transfer ~p released ~p bytes.",
+        [FileUuid, TransferId, ReleasedBytes]),
+    {ok, _} = transfer:increase_files_invalidated_and_processed_counter(TransferId),
+    ok;
+process_eviction_result(Error, FileUuid, TransferId) ->
+    ?error("Error ~p occured during invalidation of file ~p in procedure ~p",
+        [Error, FileUuid, TransferId]),
+    {ok, _} = transfer:increase_files_processed_counter(TransferId),
+    ok.
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -96,17 +112,17 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}).
-handle_cast({start_file_replication, UserCtx, FileCtx, Block, TransferId,
-    RetriesLeft, NextRetryTimestamp}, State
+handle_cast({start_file_invalidation, UserCtx, FileCtx,  SupportingProviderId,
+    TransferId, RetriesLeft, NextRetryTimestamp}, State
 ) ->
     RetriesLeft2 = utils:ensure_defined(RetriesLeft, undefined,
-        ?MAX_FILE_TRANSFER_RETRIES),
+        ?MAX_FILE_INVALIDATION_RETRIES),
     case should_start(NextRetryTimestamp) of
         true ->
-            case replicate_file(UserCtx, FileCtx, Block, TransferId, RetriesLeft2) of
+            case invalidate_file(UserCtx, FileCtx, SupportingProviderId, 
+                TransferId, RetriesLeft2) 
+            of
                 ok ->
-                    ok;
-                {error, transfer_cancelled} ->
                     ok;
                 {error, not_found} ->
                     % todo VFS-4218 currently we ignore this case
@@ -115,7 +131,7 @@ handle_cast({start_file_replication, UserCtx, FileCtx, Block, TransferId,
                     {ok, _} = transfer:mark_failed_file_processing(TransferId)
             end;
         _ ->
-            sync_req:enqueue_file_replication(UserCtx, FileCtx, Block,
+            invalidation_req:enqueue_file_invalidation(UserCtx, FileCtx, SupportingProviderId,
                 TransferId, RetriesLeft2, NextRetryTimestamp)
     end,
     {noreply, State, hibernate}.
@@ -169,69 +185,78 @@ code_change(_OldVsn, State, _Extra) ->
 %% Replicates files
 %% @end
 %%-------------------------------------------------------------------
--spec replicate_file(user:ctx(), file_ctx:ctx(), fslogic_blocks:block(),
-    transfer:id(), non_neg_integer()) -> ok | {error, term()}.
-replicate_file(UserCtx, FileCtx, Block, TransferId, RetriesLeft) ->
-    try sync_req:replicate_file(UserCtx, FileCtx, Block, TransferId) of
+-spec invalidate_file(user:ctx(), file_ctx:ctx(), sync_req:provider_id(),
+    sync_req:transfer_id(), non_neg_integer()) -> ok | {error, term()}.
+invalidate_file(UserCtx, FileCtx, SupportingProviderId, TransferId, RetriesLeft) ->
+    try invalidation_req:invalidate_file_replica(UserCtx, FileCtx,
+        SupportingProviderId, TransferId)
+    of
         #provider_response{status = #status{code = ?OK}}  ->
             ok;
         Error = {error, not_found} ->
-            maybe_retry(UserCtx, FileCtx, Block, TransferId, RetriesLeft, Error)
+            maybe_retry(UserCtx, FileCtx, SupportingProviderId, TransferId,
+                RetriesLeft, Error);
+        Error = {error, invalidation_timeout} ->
+            maybe_retry(UserCtx, FileCtx, SupportingProviderId, TransferId,
+                RetriesLeft, Error)
     catch
         throw:{transfer_cancelled, TransferId} ->
             {error, transfer_cancelled};
         Error:Reason ->
-            maybe_retry(UserCtx, FileCtx, Block, TransferId, RetriesLeft,
+            maybe_retry(UserCtx, FileCtx, SupportingProviderId, TransferId,
+                RetriesLeft,
                 {Error, Reason})
     end.
 
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Checks whether file replication can be retried and repeats
-%% replication if it's possible.
+%% Checks whether file invalidation can be retried and repeats
+%% invalidation if it's possible.
 %% @end
 %%-------------------------------------------------------------------
--spec maybe_retry(user:ctx(), file_ctx:ctx(), fslogic_blocks:block(),
-    transfer:id(), non_neg_integer(), term()) -> ok | {error, term()}.
-maybe_retry(_UserCtx, _FileCtx, _Block, TransferId, 0, Error = {error, not_found}) ->
+-spec maybe_retry(user:ctx(), file_ctx:ctx(), sync_req:provider_id(),
+    sync_req:transfer_id(), non_neg_integer(), term()) -> ok | {error, term()}.
+maybe_retry(_UserCtx, _FileCtx, _SupportingProviderId, TransferId, 0, Error = {error, not_found}) ->
     ?error(
-        "Replication in scope of transfer ~p failed due to ~p~n"
+        "Invalidation in scope of transfer ~p failed due to ~p~n"
         "No retries left", [TransferId, Error]),
     Error;
-maybe_retry(UserCtx, FileCtx, Block, TransferId, RetriesLeft,
+maybe_retry(UserCtx, FileCtx, SupportingProviderId, TransferId, RetriesLeft,
     Error = {error, not_found}
 ) ->
-    ?warning(
-        "Replication in scope of transfer ~p failed due to ~p~n"
-        "File transfer will be retried (attempts left: ~p)",
+    ?warning_stacktrace(
+        "Invalidation in scope of transfer ~p failed due to ~p~n"
+        "File Invalidation will be retried (attempts left: ~p)",
         [TransferId, Error, RetriesLeft - 1]),
-    sync_req:enqueue_file_replication(UserCtx, FileCtx, Block, TransferId,
+    invalidation_req:enqueue_file_invalidation(UserCtx, FileCtx, SupportingProviderId, TransferId,
         RetriesLeft - 1, next_retry(RetriesLeft));
-maybe_retry(_UserCtx, FileCtx, _Block, TransferId, 0, Error) ->
+maybe_retry(_UserCtx, FileCtx, _SupportingProviderId, TransferId, 0, Error) ->
     {Path, _FileCtx2} = file_ctx:get_canonical_path(FileCtx),
     ?error(
-        "Replication of file ~p in scope of transfer ~p failed due to ~p~n"
+        "Invalidation of file ~p in scope of transfer ~p failed due to ~p~n"
         "No retries left", [Path, TransferId, Error]),
     {error, retries_per_file_transfer_exceeded};
-maybe_retry(UserCtx, FileCtx, Block, TransferId, Retries, Error) ->
+maybe_retry(UserCtx, FileCtx, SupportingProviderId, TransferId, Retries, Error) ->
     {Path, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
-    ?warning(
-        "Replication of file ~p in scope of transfer ~p failed due to ~p~n"
-        "File transfer will be retried (attempts left: ~p)",
+    ?warning_stacktrace(
+        "Invalidation of file ~p in scope of transfer ~p failed due to ~p~n"
+        "File Invalidation will be retried (attempts left: ~p)",
         [Path, TransferId, Error, Retries - 1]),
-    sync_req:enqueue_file_replication(UserCtx, FileCtx2, Block, TransferId,
+    invalidation_req:enqueue_file_invalidation(UserCtx, FileCtx2, SupportingProviderId, TransferId,
         Retries - 1, next_retry(Retries)).
 
+
+%%TODO move below functions to utils module, because they're duplicated in transfer_worker !!!
 
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% This functions check whether replication can be started.
+%% This functions check whether invalidation can be started.
 %% if NextRetryTimestamp is:
-%%  * undefined - replication can be started
-%%  * greater than current timestamp - replication cannot be started
-%%  * otherwise replication can be started
+%%  * undefined - invalidation can be started
+%%  * greater than current timestamp - invalidation cannot be started
+%%  * otherwise invalidation can be started
 %% @end
 %%-------------------------------------------------------------------
 -spec should_start(undefined | non_neg_integer()) -> boolean().
@@ -249,8 +274,8 @@ should_start(NextRetryTimestamp) ->
 %%-------------------------------------------------------------------
 -spec next_retry(non_neg_integer()) -> non_neg_integer().
 next_retry(RetriesLeft) ->
-    RetryNum = ?MAX_FILE_TRANSFER_RETRIES - RetriesLeft,
-    MinSecsToWait = backoff(RetryNum, ?MAX_FILE_TRANSFER_RETRIES),
+    RetryNum = ?MAX_FILE_INVALIDATION_RETRIES - RetriesLeft,
+    MinSecsToWait = backoff(RetryNum, ?MAX_FILE_INVALIDATION_RETRIES),
     time_utils:cluster_time_seconds() + MinSecsToWait.
 
 

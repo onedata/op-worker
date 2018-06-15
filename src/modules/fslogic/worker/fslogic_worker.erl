@@ -447,7 +447,7 @@ handle_provider_request(UserCtx, #schedule_file_replication{
 handle_provider_request(UserCtx, #schedule_replica_invalidation{
     source_provider_id = SourceProviderId, target_provider_id = TargetProviderId
 }, FileCtx) ->
-    sync_req:schedule_replica_invalidation(UserCtx, FileCtx, SourceProviderId, TargetProviderId);
+    invalidation_req:schedule_replica_invalidation(UserCtx, FileCtx, SourceProviderId, TargetProviderId);
 handle_provider_request(UserCtx, #get_parent{}, FileCtx) ->
     guid_req:get_parent(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #get_file_path{}, FileCtx) ->

@@ -145,7 +145,7 @@ consolidate([B | Rest]) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Aggregates lists of 'file_block' records using acumulator AggBlocks.
+%% Aggregates lists of 'file_block' records using accumulator AggBlocks.
 %% @end
 %%--------------------------------------------------------------------
 -spec aggregate_blocks(Blocks1 :: blocks(), Blocks2 :: blocks(), AggBlocks :: blocks()) ->

@@ -32,7 +32,7 @@
     mark_failed_invalidation/1, mark_cancelled_invalidation/1,
     increase_files_to_process_counter/2, increase_files_processed_counter/1,
     mark_failed_file_processing/1, increase_files_transferred_counter/1,
-    mark_data_transfer_finished/3, increase_files_invalidated_counter/1,
+    mark_data_transfer_finished/3, increase_files_invalidated_and_processed_counter/1,
     restart_unfinished_transfers/1]).
 
 % list functions
@@ -156,8 +156,9 @@ start(SessionId, FileGuid, FilePath, SourceProviderId, TargetProviderId,
 %%-------------------------------------------------------------------
 -spec restart_unfinished_transfers(od_space:id()) -> [id()].
 restart_unfinished_transfers(SpaceId) ->
-    {ok, {Restarted, Failed}} = transfer_links:for_each_current_transfer(
-        fun(_LinkName, TransferId, {Restarted0, Failed0}) ->
+    {ok, CurrentTransferIds} = list_current_transfers(SpaceId),
+    {Restarted, Failed} = lists:foldl(
+        fun(TransferId, {Restarted0, Failed0}) ->
             case restart(TransferId) of
                 {ok, TransferId} ->
                     {[TransferId | Restarted0], Failed0};
@@ -168,7 +169,7 @@ restart_unfinished_transfers(SpaceId) ->
                 {error, not_found} ->
                     {Restarted0, [TransferId | Failed0]}
             end
-        end, {[], []}, SpaceId),
+        end, {[], []}, CurrentTransferIds),
 
     case Restarted of
         [] -> ok;
@@ -543,13 +544,14 @@ increase_files_transferred_counter(TransferId) ->
 %% transfer is marked as finished.
 %% @end
 %%--------------------------------------------------------------------
--spec increase_files_invalidated_counter(undefined | id()) ->
+-spec increase_files_invalidated_and_processed_counter(undefined | id()) ->
     {ok, undefined | id()} | {error, term()}.
-increase_files_invalidated_counter(undefined) ->
+increase_files_invalidated_and_processed_counter(undefined) ->
     {ok, undefined};
-increase_files_invalidated_counter(TransferId) ->
+increase_files_invalidated_and_processed_counter(TransferId) ->
     update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{
+            files_processed = Transfer#transfer.files_processed + 1,
             files_invalidated = Transfer#transfer.files_invalidated + 1
         }}
     end).
@@ -980,7 +982,13 @@ start_pools() ->
         {worker, {transfer_controller, []}}
     ]),
     {ok, _} = worker_pool:start_sup_pool(?INVALIDATION_WORKERS_POOL, [
-        {workers, ?INVALIDATION_WORKERS_NUM}
+        {workers, ?INVALIDATION_WORKERS_NUM},
+        {worker, {invalidation_worker, []}},
+        {queue_type, lifo}
+    ]),
+    {ok, _} = worker_pool:start_sup_pool(?REPLICA_EVICTION_WORKERS_POOL, [
+        {workers, ?REPLICA_EVICTION_WORKERS_NUM},
+        {worker, {replica_eviction_worker, []}}
     ]),
     ok.
 
@@ -992,9 +1000,10 @@ start_pools() ->
 %%-------------------------------------------------------------------
 -spec stop_pools() -> ok.
 stop_pools() ->
-    true = worker_pool:stop_pool(?TRANSFER_WORKERS_POOL),
-    true = worker_pool:stop_pool(?TRANSFER_CONTROLLERS_POOL),
+    true = wpool:stop_sup_pool(transfer_workers_pool),
+    true = wpool:stop_sup_pool(transfer_controllers_pool),
     true = worker_pool:stop_pool(?INVALIDATION_WORKERS_POOL),
+    true = worker_pool:stop_pool(?REPLICA_EVICTION_WORKERS_POOL),
     ok.
 
 %%-------------------------------------------------------------------

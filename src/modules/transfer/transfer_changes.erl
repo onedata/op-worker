@@ -313,10 +313,11 @@ new_invalidation(#document{
     value = #transfer{
         file_uuid = FileUuid,
         space_id = SpaceId,
-        callback = Callback
+        callback = Callback,
+        target_provider_id = TargetProviderId
     }
 }) ->
     FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
     {ok, _Pid} = gen_server2:start(invalidation_controller,
-        [session:root_session_id(), TransferId, FileGuid, Callback], []),
+        [session:root_session_id(), TransferId, FileGuid, Callback, TargetProviderId], []),
     ok.

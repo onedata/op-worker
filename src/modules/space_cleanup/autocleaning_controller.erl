@@ -21,7 +21,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/0, maybe_start/2, stop/0]).
+-export([maybe_start/2, stop/1, process_eviction_result/3]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -35,11 +35,19 @@
 
 -record(state, {
     autocleaning_id :: autocleaning:id(),
-    space_id :: od_space:id()
+    space_id :: od_space:id(),
+    autocleaning_config :: autocleaning_config:config()
 }).
 
 -define(START_CLEANUP, start_autocleaning).
 -define(STOP_CLEAN, finish_autocleaning).
+-define(CHECK_QUOTA, check_quota).
+
+
+-define(RESPONSE_ARRIVED, response_arrived).
+-define(CHECK_QUOTA_INTERVAL, 20).
+
+-define(NAME(SpaceId), {globa, {?SERVER, SpaceId}}).
 
 %%%===================================================================
 %%% API
@@ -60,25 +68,32 @@ maybe_start(AutocleaningId, AC = #autocleaning{space_id = SpaceId}) ->
             autocleaning:remove_skipped(AutocleaningId, SpaceId)
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Starts the server
-%% @end
-%%--------------------------------------------------------------------
--spec(start_link() ->
-    {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
-
-
 %%-------------------------------------------------------------------
 %% @doc
 %% Stops autocleaning_controller process and marks transfer as completed.
 %% @end
 %%-------------------------------------------------------------------
--spec stop() -> ok.
-stop() ->
-    gen_server2:cast(self(), ?STOP_CLEAN).
+-spec stop(od_space:id()) -> ok.
+stop(SpaceId) ->
+    gen_server2:cast({global, {?SERVER, SpaceId}}, ?STOP_CLEAN).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Posthook executed by replica_eviction_worker after evicting file.
+%% @end
+%%-------------------------------------------------------------------
+-spec process_eviction_result(replica_eviction:result(), file_meta:uuid(),
+    autocleaning:id()) -> ok.
+process_eviction_result({ok, ReleasedBytes}, FileUuid, AutocleaningId) ->
+    ?debug("Autocleaning of file ~p in procedure ~p released ~p bytes.",
+        [FileUuid, AutocleaningId, ReleasedBytes]),
+    {ok, _} = autocleaning:mark_released_file(AutocleaningId, ReleasedBytes),
+    ok;
+process_eviction_result(Error, FileUuid, AutocleaningId) ->
+    ?error("Error ~p occured during autocleanig of file ~p in procedure ~p",
+        [Error, FileUuid, AutocleaningId]),
+    {ok, _} = autocleaning:mark_processed_file(AutocleaningId),
+    ok.
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -95,10 +110,10 @@ stop() ->
 init([AutocleaningId, SpaceId, Config]) ->
     ok = gen_server2:cast(self(), {?START_CLEANUP, Config}),
     ?info("Autocleaning: ~p started in space ~p", [AutocleaningId, SpaceId]),
-    {ok, _} = autocleaning:mark_active(AutocleaningId),
     {ok, #state{
         autocleaning_id = AutocleaningId,
-        space_id = SpaceId
+        space_id = SpaceId,
+        autocleaning_config = Config
     }}.
 
 %%--------------------------------------------------------------------
@@ -132,15 +147,22 @@ handle_call(_Request, _From, State) ->
 handle_cast({?START_CLEANUP, #autocleaning_config{
     lower_file_size_limit = LowerFileLimit,
     upper_file_size_limit = UpperFileLimit,
-    max_file_not_opened_hours = MaxNotOpenedHours,
-    target = Target
+    max_file_not_opened_hours = MaxNotOpenedHours
 }}, State = #state{
     autocleaning_id = AutocleaningId,
     space_id = SpaceId
 }) ->
     try
-        cleanup_space(SpaceId, AutocleaningId, LowerFileLimit, UpperFileLimit,
-            MaxNotOpenedHours, Target),
+        FilesToClean = file_popularity_view:get_unpopular_files(
+            SpaceId, LowerFileLimit, UpperFileLimit, MaxNotOpenedHours, null,
+            null, null, null
+        ),
+        case FilesToClean of
+            [] ->
+                stop(SpaceId);
+            _ ->
+                evict_files(FilesToClean, AutocleaningId, SpaceId)
+        end,
         {noreply, State}
     catch
         _:Reason ->
@@ -148,11 +170,24 @@ handle_cast({?START_CLEANUP, #autocleaning_config{
             ?error_stacktrace("Could not autoclean space ~p due to ~p", [SpaceId, Reason]),
             {stop, Reason, State}
     end;
+handle_cast(?CHECK_QUOTA, State = #state{
+    space_id = SpaceId,
+    autocleaning_id = AutocleaningId,
+    autocleaning_config = #autocleaning_config{target = Target}
+}) ->
+    case should_stop(SpaceId, Target) of
+        true ->
+            replica_evictor:cancel(AutocleaningId, SpaceId);
+        false ->
+            ok
+    end,
+    {noreply, State};
 handle_cast(?STOP_CLEAN, State = #state{
     autocleaning_id = AutocleaningId,
     space_id = SpaceId
 }) ->
     autocleaning:mark_completed(AutocleaningId),
+    replica_evictor:cancelling_finished(AutocleaningId, SpaceId),
     ?info("Autocleaning ~p of space ~p finished", [AutocleaningId, SpaceId]),
     {stop, normal, State};
 handle_cast(_Request, State) ->
@@ -206,75 +241,73 @@ code_change(_OldVsn, State, _Extra) ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
+%% Adds all FilesToClean to replica_evictor queue.
+%% @end
+%%-------------------------------------------------------------------
+-spec evict_files([file_ctx:ctx()], autocleaning:id(), od_space:id()) -> ok.
+evict_files(FilesToClean, AutocleaningId, SpaceId) ->
+
+    EvictionSettingsList = lists:filtermap(fun(FileCtx) ->
+        case replica_evictor:get_setting_for_eviction_task(FileCtx) of
+            undefined ->
+                false;
+            EvictionSettings ->
+                {true, EvictionSettings}
+        end
+    end, FilesToClean),
+
+    FilesToCleanNum = length(EvictionSettingsList),
+    {ok, _} = autocleaning:mark_active(AutocleaningId, FilesToCleanNum),
+
+    lists:foreach(fun({N, {FileUuid, Provider, Blocks, VV}}) ->
+        case N rem ?CHECK_QUOTA_INTERVAL of
+            0 ->
+                % every ?CHECK_QUOTA_INTERVAL task, add notification task
+                % it will trigger checking guota
+                Self = self(),
+                replica_evictor:notify(fun() -> check_quota(Self) end, AutocleaningId, SpaceId),
+                schedule_eviction_task(FileUuid, Provider, Blocks, VV, AutocleaningId, SpaceId);
+            _ ->
+                schedule_eviction_task(FileUuid, Provider, Blocks, VV, AutocleaningId, SpaceId)
+        end
+    end, lists:zip(lists:seq(1, FilesToCleanNum), EvictionSettingsList)).
+
+
+-spec schedule_eviction_task(file_meta:uuid(), od_provider:id(), fslogic_blocks:blocks(),
+    version_vector:version_vector(), autocleaning:id(), od_space:id()) -> ok.
+schedule_eviction_task(FileUuid, Provider, Blocks, VV, AutoCleaningId, SpaceId) ->
+    replica_evictor:evict(FileUuid, Provider, Blocks, VV, AutoCleaningId, autocleaning, SpaceId).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Casts task for checking quota
+%% @end
+%%-------------------------------------------------------------------
+-spec check_quota(pid()) -> ok.
+check_quota(Pid) ->
+    gen_server2:cast(Pid, ?CHECK_QUOTA).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function checks whether current storage occupancy has been
+%% lowered beneath configure Target
+%% @end
+%%-------------------------------------------------------------------
+-spec should_stop(od_space:id(), non_neg_integer()) -> boolean().
+should_stop(SpaceId, Target) ->
+    space_quota:current_size(SpaceId) =< Target.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
 %% Starts process responsible for performing autocleaning
 %% @end
 %%-------------------------------------------------------------------
 -spec start(autocleaning:id(), autocleaning:autocleaning()) -> ok.
 start(AutocleaningId, AC = #autocleaning{space_id = SpaceId}) ->
     Config = #autocleaning_config{} = autocleaning:get_config(AC),
-    {ok, _Pid} = gen_server2:start(autocleaning_controller, [AutocleaningId,
-        SpaceId, Config], []),
+    {ok, _Pid} = gen_server2:start({global, {?SERVER, SpaceId}}, ?MODULE,
+        [AutocleaningId, SpaceId, Config], []),
     ok.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Cleanups unpopular files from space
-%% @end
-%%--------------------------------------------------------------------
--spec cleanup_space(od_space:id(), autocleaning:id(), non_neg_integer(),
-    non_neg_integer(), non_neg_integer(), non_neg_integer()) -> ok.
-cleanup_space(SpaceId, AutocleaningId, SizeLowerLimit, SizeUpperLimit, MaxNotOpenedHours, Target) ->
-    FilesToClean = file_popularity_view:get_unpopular_files(
-        SpaceId, SizeLowerLimit, SizeUpperLimit, MaxNotOpenedHours, null,
-        null, null, null
-    ),
-    ConditionFun = fun() ->
-        CurrentSize = space_quota:current_size(SpaceId),
-        CurrentSize =< Target
-    end,
-    ForeachFun = fun(FileCtx) -> cleanup_replica(FileCtx, AutocleaningId) end,
-    foreach_until(ForeachFun, ConditionFun, FilesToClean),
-    stop().
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Executes Fun for each element of the List until Condition is satisfied.
-%% @end
-%%-------------------------------------------------------------------
--spec foreach_until(fun((FileCtx :: file_ctx:ctx()) -> ok),
-    fun(() -> boolean()), [file_ctx:ctx()]) -> ok.
-foreach_until(Fun, Condition, List) ->
-    case Condition() of
-        true -> ok;
-        false ->
-            lists:foldl(fun
-                (_Arg, true) ->
-                    true;
-                (Arg, false) ->
-                    Fun(Arg),
-                    Condition()
-            end, false, List)
-    end,
-    ok.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Invalidates local replica of given file
-%% @end
-%%--------------------------------------------------------------------
--spec cleanup_replica(file_ctx:ctx(), autocleaning:id()) -> ok.
-cleanup_replica(FileCtx, AutocleaningId) ->
-    RootUserCtx = user_ctx:new(session:root_session_id()),
-    try
-        #provider_response{status = #status{code = ?OK}} =
-            sync_req:invalidate_file_replica(RootUserCtx, FileCtx,
-                undefined, undefined, AutocleaningId),
-        ok
-    catch
-        _Error:Reason ->
-            ?error_stacktrace("Error of autocleaning procedure ~p due to ~p",
-                [AutocleaningId, Reason]
-            )
-    end.

@@ -17,11 +17,11 @@
 
 %% API
 -export([compare/2, merge_location_versions/2, bump_version/1, version_diff/2,
-    replica_id_is_greater/2, get_local_version/1]).
+    replica_id_is_greater/2, get_local_version/1, get_version_of_provider/2]).
 
 -type replica_id() :: {oneprovider:id(), file_location:id()}.
 -type version_vector() :: #{{binary(), binary()} => non_neg_integer()}.
--type comparsion_result() :: lesser | greater | identical | concurrent.
+-type comparison_result() :: lesser | greater | identical | concurrent.
 
 %%%===================================================================
 %%% API
@@ -32,9 +32,9 @@
 %% Compare two version vectors for its precedence.
 %% @end
 %%--------------------------------------------------------------------
--spec compare(VV1 :: version_vector(), VV2 :: version_vector()) -> comparsion_result().
+-spec compare(VV1 :: version_vector(), VV2 :: version_vector()) -> comparison_result().
 compare(VV1, VV2) ->
-    Comparison = [get_version(ReplicaId, VV1) - get_version(ReplicaId, VV2) || ReplicaId <- identificators([VV1, VV2])],
+    Comparison = [get_version(ReplicaId, VV1) - get_version(ReplicaId, VV2) || ReplicaId <- identifiers([VV1, VV2])],
     case lists:all(fun(X) -> X =:= 0 end, Comparison) of
         true -> identical;
         false ->
@@ -92,17 +92,28 @@ version_diff(#document{value = #file_location{version_vector = LocalVV}},
 replica_id_is_greater(LocalDoc, ExternalDoc) ->
     get_replica_id(LocalDoc) > get_replica_id(ExternalDoc).
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns visible version of the replica for given ProviderId.
+%% @end
+%%-------------------------------------------------------------------
+get_version_of_provider(#document{value = FileLocation}, ProviderId) ->
+    get_version_of_provider(FileLocation, ProviderId);
+get_version_of_provider(#file_location{uuid = FileUuid, version_vector = VV}, ProviderId) ->
+    LocationId = file_location:id(FileUuid, ProviderId),
+    ReplicaId = {ProviderId, LocationId},
+    get_version(ReplicaId, VV).
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns local version of the replica.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_local_version(file_location:record()) -> non_neg_integer().
-get_local_version(#file_location{uuid = FileUuid, version_vector = VV,
-                                 provider_id = ProviderId}) ->
-    LocationId = file_location:id(FileUuid, ProviderId),
-    ReplicaId = {ProviderId, LocationId},
-    get_version(ReplicaId, VV).
+get_local_version(#document{value = FileLocation}) ->
+    get_local_version(FileLocation);
+get_local_version(FL = #file_location{provider_id = ProviderId}) ->
+    get_version_of_provider(FL, ProviderId).
 
 %%%===================================================================
 %%% Internal functions
@@ -122,8 +133,8 @@ get_version(ReplicaId, VV) ->
 %% Return list of replica_ids which are stored in given version_vector.
 %% @end
 %%--------------------------------------------------------------------
--spec identificators([version_vector()]) -> [replica_id()].
-identificators(VVs) ->
+-spec identifiers([version_vector()]) -> [replica_id()].
+identifiers(VVs) ->
     [Key || VV <- VVs, Key <- maps:keys(VV)].
 
 %%--------------------------------------------------------------------

@@ -54,3 +54,7 @@
 
 -define(INVALIDATION_WORKERS_POOL, invalidation_workers_pool).
 -define(INVALIDATION_WORKERS_NUM, application:get_env(?APP_NAME, invalidation_workers_num, 10)).
+
+-define(REPLICA_EVICTION_WORKERS_POOL, replica_eviction_workers_pool).
+-define(REPLICA_EVICTION_WORKERS_NUM,
+    application:get_env(?APP_NAME, replica_eviction_workers_num, 10)).

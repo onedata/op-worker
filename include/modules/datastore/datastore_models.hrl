@@ -304,6 +304,10 @@
     space_id :: undefined | od_space:id(),
     started_at = 0 :: non_neg_integer(),
     stopped_at :: undefined | non_neg_integer(),
+
+    files_to_process = 0 :: non_neg_integer(),
+    files_processed = 0 :: non_neg_integer(),
+
     released_bytes = 0 :: non_neg_integer(),
     bytes_to_release = 0 :: non_neg_integer(),
     released_files = 0 :: non_neg_integer(),
@@ -579,5 +583,27 @@
     active_links = #{} :: undefined | #{od_provider:id() => [od_provider:id()]}
 }).
 
+%% Model used for communication between providers during
+%% eviction of file replica.
+-record(replica_eviction, {
+    file_uuid :: undefined | file_meta:uuid(),
+    space_id :: undefined | od_space:id(),
+    action :: replica_eviction:action(),
+    requested_blocks = [] :: fslogic_blocks:blocks(),
+    supported_blocks = [] :: fslogic_blocks:blocks(),
+    version_vector = #{} :: version_vector:version_vector(),
+    pid :: undefined | binary(),
+    requester :: od_provider:id(),
+    requestee :: od_provider:id(),
+    report_id :: replica_eviction:report_id(),
+    type :: replica_eviction:type()
+}).
+
+%% Model used for setting read-write lock to synchronize invalidation
+%% of file replicas.
+-record(replica_eviction_lock, {
+    read = 0 :: non_neg_integer(),
+    write = 0 :: non_neg_integer()
+}).
 
 -endif.

@@ -20,7 +20,8 @@
 -type storage_details() :: {StorageId :: binary(), FileId :: binary()}.
 
 %% API
--export([get_blocks_for_sync/2, get_unique_blocks/1]).
+-export([get_blocks_for_sync/2, get_unique_blocks/1,
+    get_blocks_available_to_evict/2, get_all_blocks/1]).
 
 %%%===================================================================
 %%% API
@@ -80,6 +81,65 @@ get_unique_blocks(FileCtx) ->
     RemoteBlocksList = get_all_blocks(RemoteLocations),
     {fslogic_blocks:invalidate(LocalBlocksList, RemoteBlocksList), FileCtx2}.
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Finds block which can be evicted because they are replicated in
+%% other provider.
+%% NOTE: Currently this functions support only whole files.
+%%       If remote provider doesn't have whole file, he is not included
+%% in the response.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_blocks_available_to_evict(file_ctx:ctx(), version_vector:version_vector()) ->
+    {{undefined | [{od_provider:id(), fslogic_blocks:blocks()}]} , file_ctx:ctx()}.
+get_blocks_available_to_evict(FileCtx, LocalVV) ->
+    {LocationDocs, FileCtx2} = file_ctx:get_file_location_docs(FileCtx),
+    LocalLocations = filter_local_locations(LocationDocs),
+    LocalBlocksList = get_all_blocks(LocalLocations),
+    case LocalBlocksList of
+        [] ->
+            {undefined, FileCtx2};
+        _ ->
+            RemoteLocations = LocationDocs -- LocalLocations,
+            Result = lists:filtermap(fun(Doc = #document{
+                value = #file_location{
+                    version_vector = VV,
+                    provider_id = ProviderId
+                }
+            }) ->
+                case version_vector:compare(LocalVV, VV) of
+                    ComparisonResult when
+                        ComparisonResult =:= identical orelse
+                        ComparisonResult =:= lesser
+                    ->
+                        RemoteBlocksList = get_all_blocks([Doc]),
+                        % TODO currently we choose only providers who have all local blocks replicated
+                        case fslogic_blocks:invalidate(LocalBlocksList, RemoteBlocksList) of
+                            [] ->
+                                {true, {ProviderId, LocalBlocksList}};
+                            _ ->
+                                false
+                        end;
+                    _ ->
+                        false
+                end
+            end, RemoteLocations),
+            %TODO maybe result should be sorted by version or by size?
+            {Result, FileCtx2}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns all blocks from given location list
+%% @end
+%%--------------------------------------------------------------------
+-spec get_all_blocks([file_location:doc()]) -> fslogic_blocks:blocks().
+get_all_blocks(LocationList) ->
+    fslogic_blocks:consolidate(lists:sort([Block ||
+        #document{value = #file_location{blocks = Blocks}} <- LocationList,
+        Block <- Blocks
+    ])).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -122,19 +182,6 @@ truncate_to_local_size(#document{value = #file_location{size = LocalSize}}, Bloc
         false ->
             Blocks
     end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns all blocks from given location list
-%% @end
-%%--------------------------------------------------------------------
--spec get_all_blocks([file_location:doc()]) -> fslogic_blocks:blocks().
-get_all_blocks(LocationList) ->
-    fslogic_blocks:consolidate(lists:sort([Block ||
-        #document{value = #file_location{blocks = Blocks}} <- LocationList,
-        Block <- Blocks
-    ])).
 
 %%--------------------------------------------------------------------
 %% @private

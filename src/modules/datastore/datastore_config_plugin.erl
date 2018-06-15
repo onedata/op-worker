@@ -63,7 +63,9 @@ get_models() -> [
     autocleaning,
     dir_location,
     storage_sync_monitoring,
-    storage_sync_info
+    storage_sync_info,
+    replica_eviction,
+    replica_eviction_lock
 ].
 
 %%--------------------------------------------------------------------

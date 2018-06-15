@@ -32,7 +32,8 @@
     session_id :: session:id(),
     file_guid :: fslogic_worker:file_guid(),
     callback :: transfer:callback(),
-    space_id :: od_space:id()
+    space_id :: od_space:id(),
+    supporting_provider_id :: od_provider:id()
 }).
 
 %%%===================================================================
@@ -72,14 +73,15 @@ mark_failed(Pid, Error) ->
 -spec init(Args :: term()) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
-init([SessionId, TransferId, FileGuid, Callback]) ->
+init([SessionId, TransferId, FileGuid, Callback, SupportingProviderId]) ->
     ok = gen_server2:cast(self(), start_invalidation),
     {ok, #state{
         transfer_id = TransferId,
         session_id = SessionId,
         file_guid = FileGuid,
         callback = Callback,
-        space_id = fslogic_uuid:guid_to_space_id(FileGuid)
+        space_id = fslogic_uuid:guid_to_space_id(FileGuid),
+        supporting_provider_id = SupportingProviderId
     }}.
 
 %%--------------------------------------------------------------------
@@ -113,15 +115,18 @@ handle_call(_Request, _From, State) ->
 handle_cast(start_invalidation, State = #state{
     transfer_id = TransferId,
     session_id = SessionId,
-    file_guid = FileGuid
+    file_guid = FileGuid,
+    supporting_provider_id = SupportingProviderId
 }) ->
     try
-        transfer:mark_active_invalidation(TransferId),
-        #provider_response{
-            status = #status{code = ?OK}
-        } = sync_req:invalidate_file_replica(user_ctx:new(SessionId),
-            file_ctx:new_by_guid(FileGuid), undefined, TransferId, undefined
-        ),
+%%        transfer:mark_active_invalidation(TransferId),
+        UserCtx = user_ctx:new(SessionId),
+        FileCtx = file_ctx:new_by_guid(FileGuid),
+        invalidation_req:start_invalidation(UserCtx, FileCtx, SupportingProviderId, TransferId),
+%%        #provider_response{
+%%            status = #status{code = ?OK}
+%%        } = sync_req:invalidate_file_replica(UserCtx, FileCtx, undefined, TransferId, undefined
+%%        ),
         {noreply, State}
     catch
         _Error:Reason ->
