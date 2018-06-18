@@ -73,7 +73,7 @@ evict_whole_file_replica(FileCtx, AllowedVV) ->
                 #fuse_response{status = #status{code = ?OK}} =
                     truncate_req:truncate_insecure(UserCtx, FileCtx, 0, false),
                 %todo file_popularity should be updated after updates on file_location
-                case file_location:delete(LocalFileId) of
+                case fslogic_blocks:delete_location(FileUuid, LocalFileId) of
                     ok ->
                         ok;
                     {error, {not_found, _}} ->

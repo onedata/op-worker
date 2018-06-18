@@ -105,12 +105,12 @@ handle_scheduled_transfer(TransferDoc = #document{
     case oneprovider:get_id() of
         TargetProviderId ->
             % ensure that there is no duplicate in past transfers tree
-            transfer_links:delete_past_transfer_link(TransferId, SpaceId,
+            transfer_links:delete_ended_transfer_link(TransferId, SpaceId,
                 FinishTime),
             new_transfer(TransferDoc);
         SourceProviderId ->
             % ensure that there is no duplicate in past transfers tree
-            transfer_links:delete_past_transfer_link(TransferId, SpaceId,
+            transfer_links:delete_ended_transfer_link(TransferId, SpaceId,
                 FinishTime);
         _ ->
             ok
@@ -270,7 +270,7 @@ handle_finished_invalidation(#document{
     ?run_if_is_self(TargetProviderId, fun() ->
         % deleting finished migration from active transfers tree
         % ensure that there is no duplicate in active transfers tree
-        ok = transfer_links:delete_active_transfer_link(TransferId,
+        ok = transfer_links:delete_ongoing_transfer_link(TransferId,
             SpaceId, ScheduleTime)
     end).
 

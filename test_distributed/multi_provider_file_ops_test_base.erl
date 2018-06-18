@@ -36,7 +36,9 @@
     echo_and_delete_file_loop_test_base/3,
     create_and_delete_file_loop_test_base/3,
     distributed_delete_test_base/4,
-    create_after_del_test_base/4
+    create_after_del_test_base/4,
+    random_read_test_base/1,
+    random_read_test_base/3
 ]).
 -export([init_env/1, teardown_env/1]).
 
@@ -68,6 +70,80 @@
 %%% Test skeletons
 %%%===================================================================
 
+random_read_test_base(Config) ->
+    random_read_test_base(Config, true, true),
+    random_read_test_base(Config, false, true).
+
+random_read_test_base(Config0, SeparateBlocks, PrintAns) ->
+    Config = extend_config(Config0, <<"user1">>, {2,0,0, 1}, 1),
+    FileSize = ?config(file_size_gb, Config),
+    BlockSize = ?config(block_size, Config),
+    BlocksCount = ?config(block_per_repeat, Config),
+
+    [Worker1, Worker2] = ?config(op_worker_nodes, Config),
+    SessId = ?config(session, Config),
+    SpaceName = ?config(space_name, Config),
+
+    RepNum = ?config(rep_num, Config),
+    FilePath = case RepNum of
+        1 ->
+            File = case get({file, SeparateBlocks}) of
+                undefined ->
+                    <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>;
+                FN ->
+                    FN
+            end,
+
+            ?assertMatch({ok, _}, lfm_proxy:create(Worker2, SessId(Worker2), File, 8#755)),
+            OpenAns = lfm_proxy:open(Worker2, SessId(Worker2), {path, File}, rdwr),
+            ?assertMatch({ok, _}, OpenAns),
+            {ok, Handle} = OpenAns,
+
+            ChunkSize = 10240,
+            ChunksNum = 1024,
+            PartNum = 100 * FileSize,
+            FileSizeBytes = ChunkSize * ChunksNum * PartNum,
+
+            BytesChunk = crypto:strong_rand_bytes(ChunkSize),
+            Bytes = lists:foldl(fun(_, Acc) ->
+                <<Acc/binary, BytesChunk/binary>>
+            end, <<>>, lists:seq(1, ChunksNum)),
+
+            PartSize = ChunksNum * ChunkSize,
+            lists:foreach(fun(Num) ->
+                ?assertEqual({ok, PartSize}, lfm_proxy:write(Worker2, Handle, Num * PartSize, Bytes))
+            end, lists:seq(0, PartNum - 1)),
+
+            ?assertEqual(ok, lfm_proxy:close(Worker2, Handle)),
+
+            ?assertMatch({ok, #file_attr{size = FileSizeBytes}},
+                lfm_proxy:stat(Worker1, SessId(Worker1), {path, File}), 60),
+
+            put({file, SeparateBlocks}, File),
+            File;
+        _ ->
+            get({file, SeparateBlocks})
+    end,
+
+    Start1 = os:timestamp(),
+    OpenAns2 = lfm_proxy:open(Worker1, SessId(Worker1), {path, FilePath}, rdwr),
+    OpenTime = timer:now_diff(os:timestamp(), Start1),
+    ?assertMatch({ok, _}, OpenAns2),
+    {ok, Handle2} = OpenAns2,
+    ReadTime1 = read_blocks(Worker1, Handle2, BlockSize, BlocksCount, RepNum, SeparateBlocks),
+    ReadTime2 = read_blocks(Worker1, Handle2, BlockSize, BlocksCount, RepNum, SeparateBlocks),
+    Start2 = os:timestamp(),
+    ?assertEqual(ok, lfm_proxy:close(Worker1, Handle2)),
+    CloseTime = timer:now_diff(os:timestamp(), Start2),
+
+    case PrintAns of
+        true ->
+            ct:print("Repeat: ~p, many blocks: ~p, read remote: ~p, read local: ~p, open: ~p, close: ~p", [
+                RepNum, SeparateBlocks, ReadTime1 / BlocksCount, ReadTime2 / BlocksCount, OpenTime, CloseTime]),
+            ok;
+        _ ->
+            {ReadTime1 / BlocksCount, ReadTime2 / BlocksCount, OpenTime, CloseTime}
+    end.
 
 rtransfer_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten},
     Attempts, Timeout, SmallFilesNum, MediumFilesNum, BigFilesNum,
@@ -85,7 +161,7 @@ rtransfer_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, N
     Workers1 = ?config(workers1, Config),
     Workers2 = ?config(workers2, Config),
     Workers = ?config(op_worker_nodes, Config),
-    Workers3 = Workers -- Workers1 -- Workers2,
+    Workers3 = (Workers -- Workers1) -- Workers2,
 
     Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
     ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir, 8#755)),
@@ -443,11 +519,11 @@ many_ops_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, No
     verify_dir_size(Config, Level3Dir, length(Level4Files)),
 
     lists:map(fun({_, F}) ->
-        WD = lists:nth(crypto:rand_uniform(1,length(Workers) + 1), Workers),
+        WD = lists:nth(rand:uniform(length(Workers)), Workers),
         ?assertMatch(ok, lfm_proxy:unlink(WD, SessId(WD), {path, F}))
     end, Level4Files),
     lists:map(fun(D) ->
-        WD = lists:nth(crypto:rand_uniform(1,length(Workers) + 1), Workers),
+        WD = lists:nth(rand:uniform(length(Workers)), Workers),
         ?assertMatch(ok, lfm_proxy:unlink(WD, SessId(WD), {path, D}))
     end, Level3Dirs2),
     ct:print("Dirs and files deleted"),
@@ -494,6 +570,7 @@ distributed_modification_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyN
     ct:print("File verified"),
 
     lists:foldl(fun(W, Acc) ->
+        ct:print("Changes of file from node ~p", [W]),
         OpenAns = lfm_proxy:open(W, SessId(W), {path, Level2File}, rdwr),
         ?assertMatch({ok, _}, OpenAns),
         {ok, Handle} = OpenAns,
@@ -1548,3 +1625,23 @@ verify_dir_size(Config, DirToCheck, DSize) ->
             {ProxyNodes - ProxyNodesWritten, SyncNodes + ProxyNodesWritten}
     end,
     ?match(ToMatch, AssertLinks(), Attempts).
+
+read_blocks(Worker, Handle, BlockSize, BlocksCount, RepNum, SeparateBlocks) ->
+    Blocks = case SeparateBlocks of
+        true ->
+            lists:map(fun(Num) ->
+                2 * Num - 1 + 2 * BlocksCount * (RepNum - 1)
+            end, lists:seq(1, BlocksCount));
+        _ ->
+            lists:map(fun(Num) ->
+                Num + BlocksCount * (RepNum - 1)
+            end, lists:seq(1, BlocksCount))
+    end,
+
+    lists:foldl(fun(BlockNum, Acc) ->
+        Start = os:timestamp(),
+        ReadAns = lfm_proxy:silent_read(Worker, Handle, BlockNum, BlockSize),
+        Time = timer:now_diff(os:timestamp(), Start),
+        ?assertMatch({ok, _}, ReadAns),
+        Acc + Time
+    end, 0, Blocks).

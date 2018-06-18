@@ -40,8 +40,11 @@
 -export([zone_time_seconds/0]).
 -export([assert_zone_compatibility/0]).
 -export([assert_provider_compatibility/3]).
+-export([fetch_oz_compatibility_config/1]).
 -export([verify_provider_identity/1, verify_provider_identity/2]).
 -export([verify_provider_nonce/2]).
+
+-define(IPS_CACHE_TTL, 600). % 10 minutes
 
 %%%===================================================================
 %%% API
@@ -278,7 +281,7 @@ get_domain(SessionId, ProviderId) ->
 %% Resolves IPs of given provider via DNS using current provider's auth.
 %% @end
 %%--------------------------------------------------------------------
--spec resolve_ips(od_provider:id()) -> {ok, inet:ip4_address()} | {error, term()}.
+-spec resolve_ips(od_provider:id()) -> {ok, [inet:ip4_address()]} | {error, term()}.
 resolve_ips(ProviderId) ->
     resolve_ips(?ROOT_SESS_ID, ProviderId).
 
@@ -289,13 +292,22 @@ resolve_ips(ProviderId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec resolve_ips(gs_client_worker:client(), od_provider:id()) ->
-    {ok, inet:ip4_address()} | {error, term()}.
+    {ok, [inet:ip4_address()]} | {error, term()}.
 resolve_ips(SessionId, ProviderId) ->
-    case get_domain(SessionId, ProviderId) of
-        {ok, Domain} ->
-            inet:getaddrs(binary_to_list(Domain), inet);
-        {error, _} = Error ->
-            Error
+    Now = time_utils:cluster_time_seconds(),
+    Name = binary_to_atom(term_to_binary({cached_ips, ProviderId}), latin1),
+    case application:get_env(?APP_NAME, Name) of
+        {ok, {IPs, Timestamp}} when Timestamp + ?IPS_CACHE_TTL > Now ->
+            IPs;
+        _ ->
+            case get_domain(SessionId, ProviderId) of
+                {ok, Domain} ->
+                    Ans = inet:getaddrs(binary_to_list(Domain), inet),
+                    application:set_env(?APP_NAME, Name, {Ans, Now}),
+                    Ans;
+                {error, _} = Error ->
+                    Error
+            end
     end.
 
 
@@ -620,9 +632,9 @@ verify_provider_nonce(ProviderId, Nonce) ->
 -spec assert_zone_compatibility() -> ok | no_return().
 assert_zone_compatibility() ->
     OzUrl = oneprovider:get_oz_url(),
-    SslOpts = [{cacerts, oneprovider:trusted_ca_certs()}],
 
-    case fetch_oz_compatibility_config(OzUrl, SslOpts) of
+
+    case fetch_oz_compatibility_config(OzUrl) of
         {ok, OzVersion, CompOpVersionsBin} ->
             OpVersion = oneprovider:get_version(),
             CompOzVersions = application:get_env(
@@ -696,17 +708,13 @@ assert_provider_compatibility(Hostname, ProviderId, SslOpts) ->
             error(Error)
     end.
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
 
-%% @private
--spec fetch_oz_compatibility_config(OzUrl :: string(),
-    [http_client:ssl_opt()]) ->
+-spec fetch_oz_compatibility_config(OzUrl :: string()) ->
     {ok, OzVersion :: binary(), CompatibleOpVersions :: [binary()]} |
     {error, {bad_response, Code :: integer(), Body :: binary()}} |
     {error, term()}.
-fetch_oz_compatibility_config(OzUrl, SslOpts) ->
+fetch_oz_compatibility_config(OzUrl) ->
+    SslOpts = [{cacerts, oneprovider:trusted_ca_certs()}],
     URL = OzUrl ++ ?ZONE_CONFIGURATION_PATH,
     case http_client:get(URL, #{}, <<>>, [{ssl_options, SslOpts}]) of
         {ok, 200, _, JsonBody} ->
@@ -720,12 +728,16 @@ fetch_oz_compatibility_config(OzUrl, SslOpts) ->
                     {ok, OzVersion, CompatibleOpVersions};
                 false ->
                     % Fallback for older OZ versions
-                    deprecated_fetch_oz_compatibility_config(OzUrl, SslOpts)
+                    deprecated_fetch_oz_compatibility_config(OzUrl)
             end;
         _ ->
             % Fallback for older OZ versions
-            deprecated_fetch_oz_compatibility_config(OzUrl, SslOpts)
+            deprecated_fetch_oz_compatibility_config(OzUrl)
     end.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 
 %% @private
@@ -754,12 +766,12 @@ fetch_op_compatibility_config(Hostname, SslOpts) ->
 
 %% @private
 % @TODO VFS-4294 Remove when obsolete
--spec deprecated_fetch_oz_compatibility_config(Hostname :: string(),
-    [http_client:ssl_opt()]) ->
+-spec deprecated_fetch_oz_compatibility_config(Hostname :: string()) ->
     {ok, OzVersion :: binary(), CompatibleOpVersions :: [binary()]} |
     {error, {bad_response, Code :: integer(), Body :: binary()}} |
     {error, term()}.
-deprecated_fetch_oz_compatibility_config(Hostname, SslOpts) ->
+deprecated_fetch_oz_compatibility_config(Hostname) ->
+    SslOpts = [{cacerts, oneprovider:trusted_ca_certs()}],
     URL = Hostname ++ ?ZONE_VERSION_PATH,
     case http_client:get(URL, #{}, <<>>, [{ssl_options, SslOpts}]) of
         {ok, 200, _, Version} -> {ok, Version, []};

@@ -4,6 +4,34 @@
 CHANGELOG
 ---------
 
+### 18.02.0-rc7
+
+* VFS-4412 Add holes consolidation
+* Updating GUI, including: VFS-4471 * VFS-4471 Improved file chunks bar rendering
+* handle {error, ebusy} from truncate
+* VFS-4412 Fix remote driver
+* VFS-4412 Fix blocks synchronization bugs
+* VFS-4523 Allow listing transfers per space rather than per session
+* Updating GUI, including: VFS-4391 * VFS-4391 More efficient infinite scroll for transfers list and file transfer status
+
+
+### 18.02.0-rc6
+
+* Upgrade rtransfer_link.
+* VFS-4412 Fix algorithm for excluding old blocks from transfers
+* not update file location only when mtime equals previously synced mtime
+* VFS-4412 Improve performance of file_location blocks management
+* VFS-4477 - add audit log for  storage_sync
+
+
+### 18.02.0-rc5
+
+* Update rtransfer_link.
+* VFS-4422 Hotfix for broken public share download
+* VFS-4482 Do not include link ids in transfer ids (GUI backend)
+* VFS-3953 Integrate new GUI static backend
+
+
 ### 18.02.0-rc4
 
 * VFS-4510 fix finish_time not set for cancellation of replication and invalidation and for failed invalidation

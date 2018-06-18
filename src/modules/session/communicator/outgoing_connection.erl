@@ -106,6 +106,12 @@ init(ProviderId, SessionId, Domain, IP, Port, Transport, Timeout) ->
                 throw:incompatible_peer_op_version ->
                     postpone_next_reconnect(Intervals, ProviderId, Interval),
                     exit(normal);
+                throw:cannot_check_peer_op_version ->
+                    postpone_next_reconnect(Intervals, ProviderId, Interval),
+                    exit(normal);
+                throw:cannot_verify_identity ->
+                    postpone_next_reconnect(Intervals, ProviderId, Interval),
+                    exit(normal);
                 exit:normal ->
                     ?info("Connection to peer provider(~p) closed", [
                         ProviderId
@@ -117,7 +123,7 @@ init(ProviderId, SessionId, Domain, IP, Port, Transport, Timeout) ->
                         ProviderId, Type, Reason, Interval
                     ]),
                     postpone_next_reconnect(Intervals, ProviderId, Interval),
-                    exit(Reason)
+                    exit(normal)
             end
     end.
 
@@ -492,7 +498,7 @@ init_provider_conn(SessionId, ProviderId, Domain, IP, Port, Transport, Timeout) 
             ?warning("Cannot verify identity of provider ~p, skipping connection - ~p", [
                 ProviderId, Err
             ]),
-            erlang:error({cannot_verify_identity, ProviderId})
+            throw(cannot_verify_identity)
     end,
 
     CaCerts = oneprovider:trusted_ca_certs(),

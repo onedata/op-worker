@@ -31,7 +31,7 @@
     parse_id/2, parse_objectid/2, parse_attribute/2, parse_extended/2, parse_attribute_body/2,
     parse_provider_id/2, parse_migration_provider_id/2, parse_callback/2, parse_space_id/2, parse_user_id/2,
     parse_timeout/2, parse_last_seq/2, parse_offset/2, parse_dir_limit/2,
-    parse_status/2, parse_metadata_type/2, parse_name/2, parse_query_space_id/2,
+    parse_transfer_state/2, parse_page_token/2, parse_metadata_type/2, parse_name/2, parse_query_space_id/2,
     parse_function/2, parse_bbox/2, parse_descending/2, parse_endkey/2, parse_key/2,
     parse_keys/2, parse_skip/2, parse_stale/2, parse_limit/2, parse_inclusive_end/2,
     parse_startkey/2, parse_filter/2, parse_filter_type/2, parse_inherited/2,
@@ -159,8 +159,8 @@ parse_attribute_body(Req, State = #{extended := Extended}) ->
                 Mode ->
                     {State#{attribute_body => {<<"mode">>, Mode}}, Req2}
             catch
-               _:_ ->
-                   throw(?ERROR_INVALID_MODE)
+                _:_ ->
+                    throw(?ERROR_INVALID_MODE)
             end;
         {[{_Attr, _Value}], false} ->
             throw(?ERROR_INVALID_ATTRIBUTE);
@@ -306,14 +306,18 @@ parse_dir_limit(Req, State) ->
         undefined ->
             {State#{limit => undefined}, NewReq};
         _ ->
-            try binary_to_integer(RawLimit) of
-                Limit ->
-                    case Limit > ?MAX_LIMIT of
-                        true ->
-                            throw(?ERROR_LIMIT_TOO_LARGE(?MAX_LIMIT));
-                        false ->
-                            {State#{limit => Limit}, NewReq}
-                    end
+            try
+                Limit = binary_to_integer(RawLimit),
+                case Limit > 0 of
+                    true -> ok;
+                    false -> throw(?ERROR_INVALID_LIMIT)
+                end,
+                case Limit < ?MAX_LIMIT of
+                    true ->
+                        {State#{limit => Limit}, NewReq};
+                    false ->
+                        throw(?ERROR_LIMIT_TOO_LARGE(?MAX_LIMIT))
+                end
             catch
                 _:_ ->
                     throw(?ERROR_INVALID_LIMIT)
@@ -322,14 +326,28 @@ parse_dir_limit(Req, State) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Retrieves request's limit and adds it to State.
+%% Retrieves request's transfer state param and adds it to State.
 %% @end
 %%--------------------------------------------------------------------
--spec parse_status(cowboy_req:req(), maps:map()) ->
+-spec parse_transfer_state(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
-parse_status(Req, State) ->
-    {Status, NewReq} = qs_val(<<"status">>, Req),
-    {State#{status => Status}, NewReq}.
+parse_transfer_state(Req, State) ->
+    {TransferState, NewReq} = qs_val(<<"state">>, Req, <<"ongoing">>),
+    case lists:member(TransferState, [<<"waiting">>, <<"ongoing">>, <<"ended">>]) of
+        true -> {State#{transfer_state => TransferState}, NewReq};
+        _ -> throw(?ERROR_INVALID_STATUS)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's status and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_page_token(cowboy_req:req(), maps:map()) ->
+    {parse_result(), cowboy_req:req()}.
+parse_page_token(Req, State) ->
+    {PageToken, NewReq} = qs_val(<<"page_token">>, Req, <<"null">>),
+    {State#{page_token => PageToken}, NewReq}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -424,7 +442,7 @@ parse_bbox(Req, State) ->
                 true = is_float(catch binary_to_float(N)) orelse is_integer(catch binary_to_integer(N))
         end
     catch
-        _:_  ->
+        _:_ ->
             throw(?ERROR_INVALID_BBOX)
     end,
     {State#{bbox => Val}, NewReq}.

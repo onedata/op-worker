@@ -37,9 +37,9 @@
 
 % list functions
 -export([
-    list_scheduled_transfers/1, list_scheduled_transfers/3, list_scheduled_transfers/4,
-    list_past_transfers/1, list_past_transfers/3, list_past_transfers/4,
-    list_current_transfers/1, list_current_transfers/3, list_current_transfers/4]).
+    list_waiting_transfers/1, list_waiting_transfers/3, list_waiting_transfers/4,
+    list_ongoing_transfers/1, list_ongoing_transfers/3, list_ongoing_transfers/4,
+    list_ended_transfers/1, list_ended_transfers/3, list_ended_transfers/4]).
 
 -export([get_link_key/1, get_link_key/2]).
 
@@ -143,8 +143,7 @@ start(SessionId, FileGuid, FilePath, SourceProviderId, TargetProviderId,
 
         }},
     {ok, #document{key = TransferId}} = create(ToCreate),
-    session:add_transfer(SessionId, TransferId),
-    ok = transfer_links:add_scheduled_transfer_link(TransferId, SpaceId, ScheduleTime),
+    ok = transfer_links:add_waiting_transfer_link(TransferId, SpaceId, ScheduleTime),
     transfer_changes:handle(ToCreate#document{key = TransferId}),
     transferred_file:report_transfer_start(FileGuid, TransferId, ScheduleTime),
     {ok, TransferId}.
@@ -156,7 +155,7 @@ start(SessionId, FileGuid, FilePath, SourceProviderId, TargetProviderId,
 %%-------------------------------------------------------------------
 -spec restart_unfinished_transfers(od_space:id()) -> [id()].
 restart_unfinished_transfers(SpaceId) ->
-    {ok, CurrentTransferIds} = list_current_transfers(SpaceId),
+    {ok, OngoingTransferIds} = list_ongoing_transfers(SpaceId),
     {Restarted, Failed} = lists:foldl(
         fun(TransferId, {Restarted0, Failed0}) ->
             case restart(TransferId) of
@@ -169,7 +168,7 @@ restart_unfinished_transfers(SpaceId) ->
                 {error, not_found} ->
                     {Restarted0, [TransferId | Failed0]}
             end
-        end, {[], []}, CurrentTransferIds),
+        end, {[], []}, OngoingTransferIds),
 
     case Restarted of
         [] -> ok;
@@ -240,9 +239,9 @@ delete(TransferId) ->
         schedule_time = ScheduleTime,
         finish_time = FinishTime
     }}} = ?MODULE:get(TransferId),
-    ok = transfer_links:delete_scheduled_transfer_link(TransferId, SpaceId, ScheduleTime),
-    ok = transfer_links:delete_active_transfer_link(TransferId, SpaceId, ScheduleTime),
-    ok = transfer_links:delete_past_transfer_link(TransferId, SpaceId, FinishTime),
+    ok = transfer_links:delete_waiting_transfer_link(TransferId, SpaceId, ScheduleTime),
+    ok = transfer_links:delete_ongoing_transfer_link(TransferId, SpaceId, ScheduleTime),
+    ok = transfer_links:delete_ended_transfer_link(TransferId, SpaceId, FinishTime),
     ok = datastore_model:delete(?CTX, TransferId).
 
 %%--------------------------------------------------------------------
@@ -281,7 +280,7 @@ mark_enqueued(TransferId) ->
 %%--------------------------------------------------------------------
 -spec mark_active(id(), od_space:id(), transfer:timestamp()) -> {ok, id()} | {error, term()}.
 mark_active(TransferId, SpaceId, ScheduleTime) ->
-    ok = transfer_links:add_active_transfer_link(TransferId, SpaceId, ScheduleTime),
+    ok = transfer_links:add_ongoing_transfer_link(TransferId, SpaceId, ScheduleTime),
     UpdateFun = fun(Transfer) ->
         {ok, Transfer#transfer{status = active}}
     end,
@@ -289,7 +288,7 @@ mark_active(TransferId, SpaceId, ScheduleTime) ->
         {ok, _} ->
             {ok, TransferId};
         Error ->
-            ok = transfer_links:delete_active_transfer_link(TransferId, SpaceId, ScheduleTime),
+            ok = transfer_links:delete_ongoing_transfer_link(TransferId, SpaceId, ScheduleTime),
             Error
     end.
 
@@ -304,7 +303,7 @@ mark_dequeued(TransferId) ->
         {ok, Transfer#transfer{enqueued = false}}
     end,
     OnSuccessfulUpdate = fun(#transfer{space_id = SpaceId, schedule_time = ScheduleTime}) ->
-        ok = transfer_links:delete_scheduled_transfer_link(TransferId,
+        ok = transfer_links:delete_waiting_transfer_link(TransferId,
             SpaceId, ScheduleTime)
     end,
     update_and_run(TransferId, UpdateFun, OnSuccessfulUpdate).
@@ -566,9 +565,8 @@ increase_files_invalidated_and_processed_counter(TransferId) ->
 ) ->
     {ok, undefined | id()} | {error, term()}.
 mark_data_transfer_finished(undefined, SpaceId, BytesPerProvider) ->
-    CurrentTime = provider_logic:zone_time_seconds(),
-    ok = space_transfer_stats:update(
-        ?ON_THE_FLY_TRANSFERS_TYPE, SpaceId, BytesPerProvider, CurrentTime
+    ok = space_transfer_stats:update_with_cache(
+        ?ON_THE_FLY_TRANSFERS_TYPE, SpaceId, BytesPerProvider
     ),
     {ok, undefined};
 mark_data_transfer_finished(TransferId, SpaceId, BytesPerProvider) ->
@@ -652,30 +650,30 @@ mark_data_transfer_finished(TransferId, SpaceId, BytesPerProvider) ->
 %% @equiv list_scheduled_transfers(SpaceId, 0, all).
 %% @end
 %%-------------------------------------------------------------------
--spec list_scheduled_transfers(od_space:id()) ->
+-spec list_waiting_transfers(od_space:id()) ->
     {ok, [id()]}.
-list_scheduled_transfers(SpaceId) ->
-    list_scheduled_transfers(SpaceId, 0, all).
+list_waiting_transfers(SpaceId) ->
+    list_waiting_transfers(SpaceId, 0, all).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% list_scheduled_transfers(SpaceId, undefined, Offset, Limit).
 %% @end
 %%-------------------------------------------------------------------
--spec list_scheduled_transfers(od_space:id(), integer(), list_limit()) ->
+-spec list_waiting_transfers(od_space:id(), integer(), list_limit()) ->
     {ok, [id()]}.
-list_scheduled_transfers(SpaceId, Offset, Limit) ->
-    list_scheduled_transfers(SpaceId, undefined, Offset, Limit).
+list_waiting_transfers(SpaceId, Offset, Limit) ->
+    list_waiting_transfers(SpaceId, undefined, Offset, Limit).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns all transfers for given space that are scheduled.
 %% @end
 %%-------------------------------------------------------------------
--spec list_scheduled_transfers(od_space:id(), undefined | id(),
+-spec list_waiting_transfers(od_space:id(), undefined | id(),
     integer(), list_limit()) -> {ok, [id()]}.
-list_scheduled_transfers(SpaceId, StartId, Offset, Limit) ->
-    {ok, transfer_links:list_transfers(SpaceId, ?SCHEDULED_TRANSFERS_KEY,
+list_waiting_transfers(SpaceId, StartId, Offset, Limit) ->
+    {ok, transfer_links:list_transfers(SpaceId, ?WAITING_TRANSFERS_KEY,
         StartId, Offset, Limit)}.
 
 %%--------------------------------------------------------------------
@@ -683,29 +681,29 @@ list_scheduled_transfers(SpaceId, StartId, Offset, Limit) ->
 %% @equiv list_active_transfers(SpaceId, 0, all).
 %% @end
 %%-------------------------------------------------------------------
--spec list_current_transfers(od_space:id()) -> {ok, [id()]}.
-list_current_transfers(SpaceId) ->
-    list_current_transfers(SpaceId, 0, all).
+-spec list_ongoing_transfers(od_space:id()) -> {ok, [id()]}.
+list_ongoing_transfers(SpaceId) ->
+    list_ongoing_transfers(SpaceId, 0, all).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% @equiv list_active_transfers(SpaceId, undefined, Offset, Limit).
 %% @end
 %%-------------------------------------------------------------------
--spec list_current_transfers(od_space:id(), integer(), list_limit()) ->
+-spec list_ongoing_transfers(od_space:id(), integer(), list_limit()) ->
     {ok, [id()]}.
-list_current_transfers(SpaceId, Offset, Limit) ->
-    list_current_transfers(SpaceId, undefined, Offset, Limit).
+list_ongoing_transfers(SpaceId, Offset, Limit) ->
+    list_ongoing_transfers(SpaceId, undefined, Offset, Limit).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns all transfers for given space that are active.
 %% @end
 %%-------------------------------------------------------------------
--spec list_current_transfers(od_space:id(), undefined | id(),
+-spec list_ongoing_transfers(od_space:id(), undefined | id(),
     integer(), list_limit()) -> {ok, [id()]}.
-list_current_transfers(SpaceId, StartId, Offset, Limit) ->
-    {ok, transfer_links:list_transfers(SpaceId, ?CURRENT_TRANSFERS_KEY,
+list_ongoing_transfers(SpaceId, StartId, Offset, Limit) ->
+    {ok, transfer_links:list_transfers(SpaceId, ?ONGOING_TRANSFERS_KEY,
         StartId, Offset, Limit)}.
 
 %%--------------------------------------------------------------------
@@ -713,29 +711,29 @@ list_current_transfers(SpaceId, StartId, Offset, Limit) ->
 %% @equiv list_past_transfers(SpaceId, 0, all).
 %% @end
 %%-------------------------------------------------------------------
--spec list_past_transfers(od_space:id()) -> {ok, [id()]}.
-list_past_transfers(SpaceId) ->
-    list_past_transfers(SpaceId, 0, all).
+-spec list_ended_transfers(od_space:id()) -> {ok, [id()]}.
+list_ended_transfers(SpaceId) ->
+    list_ended_transfers(SpaceId, 0, all).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% @equiv list_past_transfers(SpaceId, undefined, Offset, Limit).
 %% @end
 %%-------------------------------------------------------------------
--spec list_past_transfers(od_space:id(), integer(), list_limit()) ->
+-spec list_ended_transfers(od_space:id(), integer(), list_limit()) ->
     {ok, [id()]}.
-list_past_transfers(SpaceId, Offset, Limit) ->
-    list_past_transfers(SpaceId, undefined, Offset, Limit).
+list_ended_transfers(SpaceId, Offset, Limit) ->
+    list_ended_transfers(SpaceId, undefined, Offset, Limit).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns all transfers for given space that are past.
 %% @end
 %%-------------------------------------------------------------------
--spec list_past_transfers(od_space:id(), undefined | id(),
+-spec list_ended_transfers(od_space:id(), undefined | id(),
     integer(), list_limit()) -> {ok, [id()]}.
-list_past_transfers(SpaceId, StartId, Offset, Limit) ->
-    {ok, transfer_links:list_transfers(SpaceId, ?PAST_TRANSFERS_KEY,
+list_ended_transfers(SpaceId, StartId, Offset, Limit) ->
+    {ok, transfer_links:list_transfers(SpaceId, ?ENDED_TRANSFERS_KEY,
         StartId, Offset, Limit)}.
 
 %%--------------------------------------------------------------------
@@ -1000,10 +998,10 @@ start_pools() ->
 %%-------------------------------------------------------------------
 -spec stop_pools() -> ok.
 stop_pools() ->
-    true = wpool:stop_sup_pool(transfer_workers_pool),
-    true = wpool:stop_sup_pool(transfer_controllers_pool),
-    true = worker_pool:stop_pool(?INVALIDATION_WORKERS_POOL),
-    true = worker_pool:stop_pool(?REPLICA_EVICTION_WORKERS_POOL),
+    ok = wpool:stop_sup_pool(?TRANSFER_WORKERS_POOL),
+    ok = wpool:stop_sup_pool(?TRANSFER_CONTROLLERS_POOL),
+    ok = wpool:stop_sup_pool(?INVALIDATION_WORKERS_POOL),
+    ok = wpool:stop_sup_pool(?REPLICA_EVICTION_WORKERS_POOL),
     ok.
 
 %%-------------------------------------------------------------------
@@ -1029,7 +1027,7 @@ run_on_transfer_doc_change(_, _, Result) ->
 -spec remove_unfinished_transfers_links([id()], od_space:id()) -> ok.
 remove_unfinished_transfers_links(TransferIds, SpaceId) ->
     lists:foreach(fun(TransferId) ->
-        ok = transfer_links:delete_active_transfer_link(TransferId, SpaceId)
+        ok = transfer_links:delete_ongoing_transfer_link(TransferId, SpaceId)
     end, TransferIds).
 
 %%-------------------------------------------------------------------
@@ -1041,8 +1039,8 @@ remove_unfinished_transfers_links(TransferIds, SpaceId) ->
 -spec move_from_past_to_current_links_tree(id(), od_space:id(),
     non_neg_integer(), non_neg_integer()) -> ok.
 move_from_past_to_current_links_tree(TransferId, SpaceId, FinishTime, NewScheduleTime) ->
-    ok = transfer_links:add_active_transfer_link(TransferId, SpaceId, NewScheduleTime),
-    ok = transfer_links:delete_past_transfer_link(TransferId, SpaceId, FinishTime).
+    ok = transfer_links:add_ongoing_transfer_link(TransferId, SpaceId, NewScheduleTime),
+    ok = transfer_links:delete_ended_transfer_link(TransferId, SpaceId, FinishTime).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -1053,8 +1051,8 @@ move_from_past_to_current_links_tree(TransferId, SpaceId, FinishTime, NewSchedul
 -spec move_from_current_to_past_links_tree(id(), od_space:id(),
     non_neg_integer(), non_neg_integer()) -> ok.
 move_from_current_to_past_links_tree(TransferId, SpaceId, ScheduleTime, FinishTime) ->
-    ok = transfer_links:add_past_transfer_link(TransferId, SpaceId, FinishTime),
-    ok = transfer_links:delete_active_transfer_link(TransferId, SpaceId, ScheduleTime).
+    ok = transfer_links:add_ended_transfer_link(TransferId, SpaceId, FinishTime),
+    ok = transfer_links:delete_ongoing_transfer_link(TransferId, SpaceId, ScheduleTime).
 
 %%-------------------------------------------------------------------
 %% @private

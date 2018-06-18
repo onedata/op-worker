@@ -100,8 +100,10 @@ get_nodes(ProviderId) ->
 %%--------------------------------------------------------------------
 -spec open(FileUUID :: binary(), read | write) ->
     {ok, Handle :: term()} | {error, Reason :: any()}.
-open(FileGUID, OpenFlag) ->
-    lfm_files:open(?ROOT_SESS_ID, {guid, FileGUID}, OpenFlag).
+open(FileGUID, _OpenFlag) ->
+    % TODO vfs-4412 - delete second arg and change name
+    sfm_utils:create_delayed_storage_file(file_ctx:new_by_guid(FileGUID)),
+    {ok, undefined}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -109,8 +111,9 @@ open(FileGUID, OpenFlag) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec fsync(Handle :: term()) -> any().
-fsync(Handle) ->
-    lfm_files:fsync(Handle).
+fsync(_Handle) ->
+    % TODO vfs-4412 - delete callback
+    ok.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -118,8 +121,9 @@ fsync(Handle) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec close(Handle :: term()) -> any().
-close(Handle) ->
-    lfm_files:release(Handle).
+close(_Handle) ->
+    % TODO vfs-4412 - delete callback
+    ok.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -157,7 +161,7 @@ auth_request(TransferData, ProviderId) ->
         end,
 
         FileCtx = file_ctx:new_by_guid(FileGuid),
-        {Loc, _} = file_ctx:get_local_file_location_doc(FileCtx),
+        {Loc, _} = file_ctx:get_local_file_location_doc(FileCtx, false),
         #document{value =
                       #file_location{storage_id = StorageId,
                                      file_id = FileId}} = Loc,

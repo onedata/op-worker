@@ -59,18 +59,14 @@
     Prefetch :: boolean(), transfer_id()) -> fuse_response().
 synchronize_block(UserCtx, FileCtx, undefined, Prefetch, TransferId) ->
     % trigger file_location creation
-    {_, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
+    {_, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx, false),
     {Size, FileCtx3} = file_ctx:get_file_size(FileCtx2),
     synchronize_block(UserCtx, FileCtx3, #file_block{offset = 0, size = Size},
         Prefetch, TransferId);
 synchronize_block(UserCtx, FileCtx, Block, Prefetch, TransferId) ->
-    ok = replica_synchronizer:synchronize(UserCtx, FileCtx, Block, Prefetch,
-        TransferId),
-    {LocationToSend, _FileCtx2} =
-        file_ctx:get_file_location_with_filled_gaps(FileCtx, Block),
-    #fuse_response{status = #status{code = ?OK},
-        fuse_response = LocationToSend
-    }.
+    {ok, Ans} = replica_synchronizer:synchronize(UserCtx, FileCtx, Block,
+        Prefetch,TransferId),
+    #fuse_response{status = #status{code = ?OK}, fuse_response = Ans}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -92,8 +88,8 @@ synchronize_block_and_compute_checksum(UserCtx, FileCtx,
     lfm_files:release(Handle),
 
     Checksum = crypto:hash(md4, Data),
-    {LocationToSend, _FileCtx2} =
-        file_ctx:get_file_location_with_filled_gaps(FileCtx, Range),
+    % TODO VFS-4412 Refactor similarly to synchronize_block
+    {LocationToSend, _FileCtx2} = file_ctx:get_file_location_with_filled_gaps(FileCtx, Range),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #sync_response{
@@ -111,14 +107,11 @@ synchronize_block_and_compute_checksum(UserCtx, FileCtx,
 get_file_distribution(_UserCtx, FileCtx) ->
     {Locations, _FileCtx2} = file_ctx:get_file_location_docs(FileCtx),
     ProviderDistributions = lists:map(fun(#document{
-        value = #file_location{
-            provider_id = ProviderId,
-            blocks = Blocks
-        }
-    }) ->
+        value = #file_location{provider_id = ProviderId}
+    } = FL) ->
         #provider_file_distribution{
             provider_id = ProviderId,
-            blocks = Blocks
+            blocks = fslogic_blocks:get_blocks(FL)
         }
     end, Locations),
     #provider_response{

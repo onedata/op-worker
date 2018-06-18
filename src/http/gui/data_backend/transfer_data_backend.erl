@@ -23,9 +23,9 @@
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--define(CURRENT_TRANSFERS_TYPE, <<"current">>).
--define(SCHEDULED_TRANSFERS_TYPE, <<"scheduled">>).
--define(COMPLETED_TRANSFERS_TYPE, <<"completed">>).
+-define(WAITING_TRANSFERS_STATE, <<"waiting">>).
+-define(ONGOING_TRANSFERS_STATE, <<"ongoing">>).
+-define(ENDED_TRANSFERS_STATE, <<"ended">>).
 
 %% API
 -export([init/0, terminate/0]).
@@ -191,12 +191,12 @@ delete_record(_ResourceType, _Id) ->
 list_transfers(SpaceId, Type, StartFromIndex, Offset, Limit) ->
     StartFromLink = gs_protocol:null_to_undefined(StartFromIndex),
     {ok, TransferIds} = case Type of
-        ?SCHEDULED_TRANSFERS_TYPE ->
-            transfer:list_scheduled_transfers(SpaceId, StartFromLink, Offset, Limit);
-        ?CURRENT_TRANSFERS_TYPE ->
-            transfer:list_current_transfers(SpaceId, StartFromLink, Offset, Limit);
-        ?COMPLETED_TRANSFERS_TYPE ->
-            transfer:list_past_transfers(SpaceId, StartFromLink, Offset, Limit)
+        ?WAITING_TRANSFERS_STATE ->
+            transfer:list_waiting_transfers(SpaceId, StartFromLink, Offset, Limit);
+        ?ONGOING_TRANSFERS_STATE ->
+            transfer:list_ongoing_transfers(SpaceId, StartFromLink, Offset, Limit);
+        ?ENDED_TRANSFERS_STATE ->
+            transfer:list_ended_transfers(SpaceId, StartFromLink, Offset, Limit)
     end,
     {ok, [
         {<<"list">>, TransferIds}

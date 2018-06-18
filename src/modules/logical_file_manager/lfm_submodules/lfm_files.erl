@@ -267,24 +267,20 @@ create_and_open(SessId, ParentGuid, Name, Mode, OpenFlag) ->
 open(SessId, FileKey, Flag) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
-        #get_file_location{},
-        fun(#file_location{provider_id = ProviderId, file_id = FileId,
+        #open_file_with_extended_info{flag = Flag},
+        fun(#file_opened_extended{handle_id = HandleId,
+            provider_id = ProviderId, file_id = FileId,
             storage_id = StorageId}) ->
-            remote_utils:call_fslogic(SessId, file_request, FileGuid,
-                #open_file{flag = Flag},
-                fun(#file_opened{handle_id = HandleId}) ->
-                    {ok, lfm_context:new(
-                        HandleId,
-                        ProviderId,
-                        SessId,
-                        FileGuid,
-                        Flag,
-                        FileId,
-                        StorageId
-                    )}
-                end)
-        end
-    ).
+            {ok, lfm_context:new(
+                HandleId,
+                ProviderId,
+                SessId,
+                FileGuid,
+                Flag,
+                FileId,
+                StorageId
+            )}
+        end).
 
 %%--------------------------------------------------------------------
 %% @doc

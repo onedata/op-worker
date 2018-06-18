@@ -88,7 +88,7 @@
 -define(ERROR_INVALID_LIMIT, ?ERROR_REPLY(
     ?BAD_REQUEST,
     <<"invalid_limit">>,
-    <<"Requested limit is invalid, it must be of integer type.">>)
+    <<"Requested limit is invalid, it must be a positive integer.">>)
 ).
 
 -define(ERROR_LIMIT_TOO_LARGE(Max), ?ERROR_REPLY(
@@ -99,7 +99,7 @@
 -define(ERROR_INVALID_STATUS, ?ERROR_REPLY(
     ?BAD_REQUEST,
     <<"invalid_status">>,
-    <<"Requested transfer status is invalid.">>)
+    <<"Requested transfer status is invalid, must be one of: scheduled, current, past.">>)
 ).
 -define(ERROR_INVALID_METADATA_TYPE, ?ERROR_REPLY(
     ?BAD_REQUEST,

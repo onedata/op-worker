@@ -49,7 +49,8 @@
 -export([schedule_file_replication/3, schedule_file_replication/4, schedule_replica_invalidation/4]).
 %% Functions operating on files
 -export([create/2, create/3, create/4, open/3, fsync/1, fsync/3, write/3, read/3,
-    truncate/3, release/1, get_file_distribution/2, create_and_open/4, create_and_open/5]).
+    silent_read/3, truncate/3, release/1, get_file_distribution/2,
+    create_and_open/4, create_and_open/5]).
 %% Functions concerning file permissions
 -export([set_perms/3, check_perms/3, set_acl/3, get_acl/2, remove_acl/2]).
 %% Functions concerning file attributes
@@ -389,6 +390,18 @@ write(FileHandle, Offset, Buffer) ->
     {ok, NewHandle :: handle(), binary()} | error_reply().
 read(FileHandle, Offset, MaxSize) ->
     ?run(fun() -> lfm_files:read(FileHandle, Offset, MaxSize) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Reads requested part of a file (no events or prefetching).
+%% @end
+%%--------------------------------------------------------------------
+-spec silent_read(FileHandle :: handle(), Offset :: integer(), MaxSize :: integer()) ->
+    {ok, NewHandle :: handle(), binary()} | error_reply().
+silent_read(FileHandle, Offset, MaxSize) ->
+    ?run(fun() ->
+        lfm_files:silent_read(FileHandle, Offset, MaxSize)
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
