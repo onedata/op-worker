@@ -188,7 +188,7 @@ process_result(invalidation, FileUuid, Result, ReportId) ->
 -spec(start_link(od_space:id()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link(SpaceId) ->
-    gen_server:start_link(?SERVER(SpaceId), ?MODULE, [SpaceId], []).
+    gen_server2:start_link(?SERVER(SpaceId), ?MODULE, [SpaceId], []).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -212,6 +212,8 @@ get_setting_for_eviction_task(FileCtx) ->
                     % todo handle retries to other providers
                     FileUuid = file_ctx:get_uuid_const(FileCtx3),
                     {FileUuid, Provider, Blocks, VV};
+                {[], _} ->
+                    undefined;
                 {undefined, _} ->
                     undefined
             end
@@ -266,7 +268,7 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}).
 handle_cast(check, State = #state{ids_queue = IdsQueue, active_tasks = Active}) ->
-    io:format("Queue: ~p~nActive: ~p~n", [queue:len(IdsQueue), Active]),
+    ?critical("Queue: ~p~nActive: ~p~n", [queue:len(IdsQueue), Active]),
     {noreply, State};
 handle_cast(Task = #task{id = ReportId}, State = #state{
     active_tasks = ActiveTasks,
