@@ -182,14 +182,19 @@ translate_from_protobuf(#'SubscriptionCancellation'{id = Id}) ->
 
 
 %% HANDSHAKE
-translate_from_protobuf(#'ClientHandshakeRequest'{macaroon = Macaroon, session_id = SessionId, version = Version}) ->
-    #client_handshake_request{auth = translate_from_protobuf(Macaroon), session_id = SessionId, version = Version};
+translate_from_protobuf(#'ClientHandshakeRequest'{} = Req) ->
+    #client_handshake_request{
+        auth = translate_from_protobuf(Req#'ClientHandshakeRequest'.macaroon),
+        session_id = Req#'ClientHandshakeRequest'.session_id,
+        version = Req#'ClientHandshakeRequest'.version,
+        compatible_oneprovider_versions = Req#'ClientHandshakeRequest'.compatible_oneprovider_versions
+    };
 translate_from_protobuf(#'ProviderHandshakeRequest'{provider_id = ProviderId, nonce = Nonce}) ->
     #provider_handshake_request{provider_id = ProviderId, nonce = Nonce};
 translate_from_protobuf(#'Macaroon'{macaroon = Macaroon, disch_macaroons = DischargeMacaroons}) ->
     #macaroon_auth{macaroon = Macaroon, disch_macaroons = DischargeMacaroons};
-translate_from_protobuf(#'HandshakeResponse'{status = Status}) ->
-    #handshake_response{status = Status};
+translate_from_protobuf(#'HandshakeResponse'{status = Status, compatible_oneclient_versions = CompVersions}) ->
+    #handshake_response{status = Status, compatible_oneclient_versions = CompVersions};
 
 % PROCESSING STATUS
 translate_from_protobuf(#'ProcessingStatus'{code = Code}) ->
@@ -707,14 +712,13 @@ translate_to_protobuf(#subscription_cancellation{id = Id}) ->
     {subscription_cancellation, #'SubscriptionCancellation'{
         id = binary_to_integer(Id)}};
 
-
 %% HANDSHAKE
 translate_to_protobuf(#provider_handshake_request{provider_id = ProviderId, nonce = Nonce}) ->
     {provider_handshake_request, #'ProviderHandshakeRequest'{
         provider_id = ProviderId, nonce = Nonce
     }};
-translate_to_protobuf(#handshake_response{status = Status}) ->
-    {handshake_response, #'HandshakeResponse'{status = Status}};
+translate_to_protobuf(#handshake_response{status = Status, compatible_oneclient_versions = CompVersions}) ->
+    {handshake_response, #'HandshakeResponse'{status = Status, compatible_oneclient_versions = CompVersions}};
 translate_to_protobuf(#macaroon_auth{macaroon = Macaroon, disch_macaroons = DMacaroons}) ->
     #'Macaroon'{macaroon = Macaroon, disch_macaroons = DMacaroons};
 

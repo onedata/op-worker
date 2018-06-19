@@ -18,7 +18,8 @@
 -record(client_handshake_request, {
     auth :: #macaroon_auth{},
     session_id :: session:id(),
-    version :: binary()
+    version :: binary(),
+    compatible_oneprovider_versions :: [binary()]
 }).
 
 -record(provider_handshake_request, {
@@ -31,7 +32,8 @@
     'INVALID_METHOD' | 'ROOT_RESOURCE_NOT_FOUND' | 'INVALID_PROVIDER' |
     'BAD_SIGNATURE_FOR_MACAROON' | 'FAILED_TO_DESCRYPT_CAVEAT' |
     'NO_DISCHARGE_MACAROON_FOR_CAVEAT' | 'INVALID_MACAROON' | 'INVALID_NONCE' |
-    'INCOMPATIBLE_VERSION' | 'INTERNAL_SERVER_ERROR'
+    'INCOMPATIBLE_VERSION' | 'INTERNAL_SERVER_ERROR',
+    compatible_oneclient_versions = [] :: [binary()]
 }).
 
 -endif.

@@ -37,6 +37,7 @@
     rtransfer_connection_secret_test/1,
     macaroon_connection_test/1,
     compatible_client_connection_test/1,
+    forward_compatible_client_connection_test/1,
     incompatible_client_connection_test/1,
     fallback_during_sending_response_test/1,
     fulfill_promises_after_connection_close_test/1,
@@ -74,6 +75,7 @@
     rtransfer_connection_secret_test,
     macaroon_connection_test,
     compatible_client_connection_test,
+    forward_compatible_client_connection_test,
     incompatible_client_connection_test,
     fallback_during_sending_response_test,
     fulfill_promises_after_connection_close_test,
@@ -380,6 +382,35 @@ compatible_client_connection_test(Config) ->
     ?assertMatch('OK', Status),
     ok.
 
+forward_compatible_client_connection_test(Config) ->
+    % given
+    [Node | _] = ?config(op_worker_nodes, Config),
+
+    OpVersion = rpc:call(Node, oneprovider, get_version, []),
+
+    MacaroonAuthMessage = #'ClientMessage'{message_body = {client_handshake_request,
+        #'ClientHandshakeRequest'{session_id = crypto:strong_rand_bytes(10),
+            macaroon = #'Macaroon'{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS},
+            version = <<"30.01.01-very-future-version">>,
+            compatible_oneprovider_versions = [OpVersion, <<"30.01.01-very-future-version">>]
+        }
+    }},
+    MacaroonAuthMessageRaw = messages:encode_msg(MacaroonAuthMessage),
+    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
+
+    % when
+    {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),
+    ok = ssl:send(Sock, MacaroonAuthMessageRaw),
+
+    % then
+    #'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{
+        status = Status
+    }}} = ?assertMatch(#'ServerMessage'{message_body = {handshake_response, _}},
+        receive_server_message()
+    ),
+    ?assertMatch('OK', Status),
+    ok.
+
 incompatible_client_connection_test(Config) ->
     % given
     [Node | _] = ?config(op_worker_nodes, Config),
@@ -387,7 +418,8 @@ incompatible_client_connection_test(Config) ->
     MacaroonAuthMessage = #'ClientMessage'{message_body = {client_handshake_request,
         #'ClientHandshakeRequest'{session_id = crypto:strong_rand_bytes(10),
             macaroon = #'Macaroon'{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS},
-            version = <<"16.07-rc2">>
+            version = <<"16.07-rc2">>,
+            compatible_oneprovider_versions = [<<"16.07-rc2">>, <<"16.07-rc1">>]
         }
     }},
     MacaroonAuthMessageRaw = messages:encode_msg(MacaroonAuthMessage),
