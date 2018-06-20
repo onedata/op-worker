@@ -34,7 +34,7 @@
 
 %% How long transfer stats are aggregated before updating transfer document
 -define(STATS_AGGREGATION_TIME, application:get_env(
-    ?APP_NAME, rtransfer_stats_aggregation_time, 2000)
+    ?APP_NAME, rtransfer_stats_aggregation_time, 1000)
 ).
 %% How long file blocks are aggregated before updating location document
 -define(BLOCKS_AGGREGATION_TIME, application:get_env(
@@ -869,8 +869,10 @@ flush_stats(#state{space_id = SpaceId} = State) ->
             {ok, _} ->
                 ok;
             {error, Error} ->
-                ?error("Failed to update trasnfer statistics for ~p transfer "
-                "due to ~p", [TransferId, Error])
+                ?error(
+                    "Failed to update trasnfer statistics for ~p transfer "
+                    "due to ~p", [TransferId, Error]
+                )
         end
     end, maps:to_list(State#state.cached_stats)),
 
