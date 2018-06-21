@@ -39,13 +39,15 @@ compile:
 	$(REBAR) compile
 
 deps:
+	$(REBAR) get-deps
+	make -C _build/default/lib/helpers submodules submodule=clproto
 	$(LIB_DIR)/gui/pull-gui.sh gui-config.sh
 
 upgrade:
 	$(REBAR) upgrade
 
 ## Generates a production release
-generate: compile deps template
+generate: deps compile template
 	$(REBAR) release $(OVERLAY_VARS)
 
 clean: relclean pkgclean
