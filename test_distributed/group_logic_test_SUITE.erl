@@ -514,7 +514,7 @@ convenience_functions_test(Config) ->
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
     ?assertMatch(
         false,
-        rpc:call(Node, group_logic, has_eff_privilege, [User1Sess, ?GROUP_1, ?USER_1, ?GROUP_INVITE_GROUP])
+        rpc:call(Node, group_logic, has_eff_privilege, [User1Sess, ?GROUP_1, ?USER_1, ?GROUP_INVITE_CHILD])
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
 
@@ -617,7 +617,7 @@ update_privileges_test(Config) ->
             User1Sess,
             ?GROUP_1,
             ?USER_1,
-            [?GROUP_VIEW, ?GROUP_INVITE_GROUP]
+            [?GROUP_VIEW, ?GROUP_INVITE_CHILD]
         ])
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
@@ -627,7 +627,7 @@ update_privileges_test(Config) ->
             User1Sess,
             ?GROUP_1,
             ?USER_3,
-            [?GROUP_VIEW, ?GROUP_INVITE_GROUP]
+            [?GROUP_VIEW, ?GROUP_INVITE_CHILD]
         ])
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
@@ -638,7 +638,7 @@ update_privileges_test(Config) ->
             User1Sess,
             ?GROUP_1,
             ?GROUP_2,
-            [?GROUP_VIEW, ?GROUP_INVITE_GROUP]
+            [?GROUP_VIEW, ?GROUP_INVITE_CHILD]
         ])
     ),
     ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph)),
@@ -648,7 +648,7 @@ update_privileges_test(Config) ->
             User1Sess,
             ?GROUP_1,
             <<"wrongId">>,
-            [?GROUP_VIEW, ?GROUP_INVITE_GROUP]
+            [?GROUP_VIEW, ?GROUP_INVITE_CHILD]
         ])
     ),
     ?assertEqual(GraphCalls + 4, logic_tests_common:count_reqs(Config, graph)),
