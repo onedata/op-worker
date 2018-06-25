@@ -104,6 +104,12 @@ synchronize_internal(UserCtx, FileCtx, Block, Prefetch, TransferId) ->
         %% there's nothing to worry about.
         exit:{{shutdown, timeout}, _} ->
             ?debug("Process stopped because of a timeout, retrying with a new one"),
+            synchronize_internal(UserCtx, FileCtx, Block, Prefetch, TransferId);
+        _:{noproc, _} ->
+            ?debug("Synchronizer noproc, retrying with a new one"),
+            synchronize_internal(UserCtx, FileCtx, Block, Prefetch, TransferId);
+        exit:{normal, _} ->
+            ?debug("Process stopped because of exit:normal, retrying with a new one"),
             synchronize_internal(UserCtx, FileCtx, Block, Prefetch, TransferId)
     end.
 
@@ -217,6 +223,12 @@ apply_internal(FileCtx, Fun) ->
         %% there's nothing to worry about.
         exit:{{shutdown, timeout}, _} ->
             ?debug("Process stopped because of a timeout, retrying with a new one"),
+            apply_internal(FileCtx, Fun);
+        _:{noproc, _} ->
+            ?debug("Synchronizer noproc, retrying with a new one"),
+            apply_internal(FileCtx, Fun);
+        exit:{normal, _} ->
+            ?debug("Process stopped because of exit:normal, retrying with a new one"),
             apply_internal(FileCtx, Fun)
     end.
 
