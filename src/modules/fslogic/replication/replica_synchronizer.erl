@@ -26,6 +26,8 @@
 -define(MINIMAL_SYNC_REQUEST, application:get_env(?APP_NAME, minimal_sync_request, 32768)).
 -define(TRIGGER_BYTE, application:get_env(?APP_NAME, trigger_byte, 52428800)).
 -define(PREFETCH_SIZE, application:get_env(?APP_NAME, prefetch_size, 104857600)).
+-define(MAX_OVERLAPPING_MULTIPLIER,
+    application:get_env(?APP_NAME, overlapping_block_max_multiplier, 5)).
 
 %% The process is supposed to die after ?DIE_AFTER time of idling (no requests in flight)
 -define(DIE_AFTER, 60000).
@@ -724,10 +726,17 @@ enlarge_block(Block, _Prefetch) ->
 %%--------------------------------------------------------------------
 -spec find_overlapping(block(), #state{}) -> Overlapping :: [{block(), fetch_ref()}].
 find_overlapping(#file_block{offset = Offset, size = Size}, #state{in_progress = InProgress}) ->
+    MaxMultip = ?MAX_OVERLAPPING_MULTIPLIER,
     lists:filter(
         fun({#file_block{offset = O, size = S}, _Ref}) ->
-            (O =< Offset andalso Offset < O + S) orelse
-                (Offset =< O andalso O < Offset + Size)
+            case
+                (O =< Offset andalso Offset < O + S) orelse
+                    (Offset =< O andalso O < Offset + Size) of
+                true ->
+                    (S < MaxMultip * Size) orelse (MaxMultip =:= 0);
+                false ->
+                    false
+            end
         end,
         InProgress).
 
