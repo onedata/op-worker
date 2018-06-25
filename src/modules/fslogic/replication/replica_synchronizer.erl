@@ -712,10 +712,17 @@ enlarge_block(Block, _Prefetch) ->
 %%--------------------------------------------------------------------
 -spec find_overlapping(block(), #state{}) -> Overlapping :: [{block(), fetch_ref()}].
 find_overlapping(#file_block{offset = Offset, size = Size}, #state{in_progress = InProgress}) ->
+    MaxMultip = application:get_env(?APP_NAME, overlapping_block_max_multip, 5),
     lists:filter(
         fun({#file_block{offset = O, size = S}, _Ref}) ->
-            (O =< Offset andalso Offset < O + S) orelse
-                (Offset =< O andalso O < Offset + Size)
+            case
+                (O =< Offset andalso Offset < O + S) orelse
+                    (Offset =< O andalso O < Offset + Size) of
+                true ->
+                    (S < MaxMultip * Size) orelse (MaxMultip =:= 0);
+                false ->
+                    false
+            end
         end,
         InProgress).
 
