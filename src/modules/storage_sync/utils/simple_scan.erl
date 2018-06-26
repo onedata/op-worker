@@ -333,7 +333,7 @@ import_file(#space_strategy_job{
         st_mtime = MTime,
         st_size = FSize
     } = StatBuf,
-    {SFMHandle, StorageFileCtx3} = storage_file_ctx:get_handle(StorageFileCtx2),
+    {_SFMHandle, StorageFileCtx3} = storage_file_ctx:get_handle(StorageFileCtx2),
     OwnerId = get_owner_id(StorageFileCtx3),
     GroupId = get_group_owner_id(StorageFileCtx3),
     ParentUuid = file_ctx:get_uuid_const(ParentCtx),

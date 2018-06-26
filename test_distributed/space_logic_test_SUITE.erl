@@ -46,9 +46,9 @@ all() -> ?ALL([
 get_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
-    User1Sess = logic_tests_common:create_user_session(Config, ?USER_1),
+    User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
     % User 3 does not have access to the space
-    User3Sess = logic_tests_common:create_user_session(Config, ?USER_3),
+    User3Sess = logic_tests_common:get_user_session(Config, ?USER_3),
 
     GraphCalls = logic_tests_common:count_reqs(Config, graph),
 
@@ -101,9 +101,9 @@ get_test(Config) ->
 get_protected_data_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
-    User1Sess = logic_tests_common:create_user_session(Config, ?USER_1),
+    User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
     % User 3 does not have access to the space
-    User3Sess = logic_tests_common:create_user_session(Config, ?USER_3),
+    User3Sess = logic_tests_common:get_user_session(Config, ?USER_3),
 
     GraphCalls = logic_tests_common:count_reqs(Config, graph),
 
@@ -156,7 +156,7 @@ get_protected_data_test(Config) ->
 mixed_get_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
-    User1Sess = logic_tests_common:create_user_session(Config, ?USER_1),
+    User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
 
     GraphCalls = logic_tests_common:count_reqs(Config, graph),
     UnsubCalls = logic_tests_common:count_reqs(Config, unsub),
@@ -299,7 +299,7 @@ subscribe_test(Config) ->
 convenience_functions_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
-    User1Sess = logic_tests_common:create_user_session(Config, ?USER_1),
+    User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
 
     GraphCalls = logic_tests_common:count_reqs(Config, graph),
 
@@ -421,7 +421,7 @@ convenience_functions_test(Config) ->
 create_update_delete_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
-    User1Sess = logic_tests_common:create_user_session(Config, ?USER_1),
+    User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
 
     GraphCalls = logic_tests_common:count_reqs(Config, graph),
 
@@ -472,7 +472,7 @@ create_update_delete_test(Config) ->
 update_privileges_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
-    User1Sess = logic_tests_common:create_user_session(Config, ?USER_1),
+    User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
 
     GraphCalls = logic_tests_common:count_reqs(Config, graph),
 
@@ -523,7 +523,7 @@ update_privileges_test(Config) ->
 create_tokens_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
-    User1Sess = logic_tests_common:create_user_session(Config, ?USER_1),
+    User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
 
     GraphCalls = logic_tests_common:count_reqs(Config, graph),
 
@@ -575,11 +575,9 @@ init_per_suite(Config) ->
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [logic_tests_common, initializer]} | Config].
 
 init_per_testcase(_, Config) ->
-    logic_tests_common:wait_for_mocked_connection(Config),
-    Config.
+    logic_tests_common:init_per_testcase(Config).
 
-end_per_testcase(_, Config) ->
-    logic_tests_common:invalidate_all_test_records(Config),
+end_per_testcase(_, _Config) ->
     ok.
 
 end_per_suite(Config) ->
