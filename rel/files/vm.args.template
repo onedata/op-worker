@@ -36,6 +36,6 @@
 ## Enable Symmetric Multiprocessing
 -smp enable
 
-## Set default heap size (512 MB with 8byte word), do not kill processes
+## Set default heap size (1024 MB with 8byte word), do not kill processes
 +hmax 134217728
 +hmaxk false
