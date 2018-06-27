@@ -23,15 +23,15 @@
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--define(CURRENT_TRANSFERS_TYPE, <<"current">>).
--define(SCHEDULED_TRANSFERS_TYPE, <<"scheduled">>).
--define(COMPLETED_TRANSFERS_TYPE, <<"completed">>).
+-define(WAITING_TRANSFERS_STATE, <<"waiting">>).
+-define(ONGOING_TRANSFERS_STATE, <<"ongoing">>).
+-define(ENDED_TRANSFERS_STATE, <<"ended">>).
 
 %% API
 -export([init/0, terminate/0]).
 -export([find_record/2, find_all/1, query/2, query_record/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
--export([list_transfers/5, get_ongoing_transfers_for_file/1]).
+-export([list_transfers/5, get_transfers_for_file/1]).
 
 %%%===================================================================
 %%% data_backend_behaviour callbacks
@@ -144,10 +144,10 @@ create_record(<<"transfer">>, Data) ->
             gui_error:unauthorized();
         {error, Error} ->
             ?error("Failed to schedule transfer{"
-            "~n~tfile=~p,"
-            "~n~tmigration=~p,"
-            "~n~tmigrationSource=~p,"
-            "~n~tdestination=~p}"
+            "~n\tfile=~p,"
+            "~n\tmigration=~p,"
+            "~n\tmigrationSource=~p,"
+            "~n\tdestination=~p}"
             "~n due to: ~p", [
                 FileGuid, Migration, MigrationSource, Destination, Error
             ]),
@@ -191,11 +191,11 @@ delete_record(_ResourceType, _Id) ->
 list_transfers(SpaceId, Type, StartFromIndex, Offset, Limit) ->
     StartFromLink = gs_protocol:null_to_undefined(StartFromIndex),
     {ok, TransferIds} = case Type of
-        ?SCHEDULED_TRANSFERS_TYPE ->
+        ?WAITING_TRANSFERS_STATE ->
             transfer:list_waiting_transfers(SpaceId, StartFromLink, Offset, Limit);
-        ?CURRENT_TRANSFERS_TYPE ->
+        ?ONGOING_TRANSFERS_STATE ->
             transfer:list_ongoing_transfers(SpaceId, StartFromLink, Offset, Limit);
-        ?COMPLETED_TRANSFERS_TYPE ->
+        ?ENDED_TRANSFERS_STATE ->
             transfer:list_ended_transfers(SpaceId, StartFromLink, Offset, Limit)
     end,
     {ok, [
@@ -210,13 +210,11 @@ list_transfers(SpaceId, Type, StartFromIndex, Offset, Limit) ->
 %% show any transfer.
 %% @end
 %%--------------------------------------------------------------------
--spec get_ongoing_transfers_for_file(fslogic_worker:file_guid()) ->
+-spec get_transfers_for_file(fslogic_worker:file_guid()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-get_ongoing_transfers_for_file(FileGuid) ->
-    {ok, TransferIds} = transferred_file:get_ongoing_transfers(FileGuid),
-    {ok, [
-        {<<"list">>, TransferIds}
-    ]}.
+get_transfers_for_file(FileGuid) ->
+    {ok, ResultMap} = transferred_file:get_transfers(FileGuid),
+    {ok, maps:to_list(ResultMap)}.
 
 
 %%%===================================================================

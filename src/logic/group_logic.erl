@@ -33,7 +33,8 @@
 -export([can_view_user_through_group/3, can_view_user_through_group/4]).
 -export([can_view_child_through_group/3, can_view_child_through_group/4]).
 -export([create/2, create/3, update_name/3, delete/2]).
--export([update_user_privileges/4, update_child_privileges/4]).
+-export([update_user_privileges/4, update_user_privileges/5]).
+-export([update_child_privileges/4, update_child_privileges/5]).
 -export([create_user_invite_token/2, create_group_invite_token/2]).
 -export([leave_space/3, join_space/3]).
 -export([join_group/3, leave_group/3]).
@@ -277,10 +278,17 @@ delete(SessionId, GroupId) ->
 -spec update_user_privileges(gs_client_worker:client(), od_group:id(),
     od_user:id(), [privileges:group_privilege()]) -> ok | gs_protocol:error().
 update_user_privileges(SessionId, GroupId, UserId, Privileges) ->
+    update_user_privileges(SessionId, GroupId, UserId, Privileges, set).
+
+
+-spec update_user_privileges(gs_client_worker:client(), od_group:id(),
+    od_user:id(), [privileges:group_privilege()], set | grant | revoke) ->
+    ok | gs_protocol:error().
+update_user_privileges(SessionId, GroupId, UserId, Privileges, Operation) ->
     Res = gs_client_worker:request(SessionId, #gs_req_graph{
         operation = update,
         gri = #gri{type = od_group, id = GroupId, aspect = {user_privileges, UserId}},
-        data = #{<<"privileges">> => Privileges}
+        data = #{<<"privileges">> => Privileges, <<"operation">> => Operation}
     }),
     ?ON_SUCCESS(Res, fun(_) ->
         gs_client_worker:invalidate_cache(od_group, GroupId)
@@ -288,13 +296,19 @@ update_user_privileges(SessionId, GroupId, UserId, Privileges) ->
 
 
 -spec update_child_privileges(gs_client_worker:client(), od_group:id(),
-    ChildGroupId :: od_group:id(), [privileges:group_privilege()]) ->
-    ok | gs_protocol:error().
+    ChildGroupId :: od_group:id(), [privileges:group_privilege()]) -> ok | gs_protocol:error().
 update_child_privileges(SessionId, GroupId, ChildGroupId, Privileges) ->
+    update_child_privileges(SessionId, GroupId, ChildGroupId, Privileges, set).
+
+
+-spec update_child_privileges(gs_client_worker:client(), od_group:id(),
+    ChildGroupId :: od_group:id(), [privileges:group_privilege()], set | grant | revoke) ->
+    ok | gs_protocol:error().
+update_child_privileges(SessionId, GroupId, ChildGroupId, Privileges, Operation) ->
     Res = gs_client_worker:request(SessionId, #gs_req_graph{
         operation = update,
         gri = #gri{type = od_group, id = GroupId, aspect = {child_privileges, ChildGroupId}},
-        data = #{<<"privileges">> => Privileges}
+        data = #{<<"privileges">> => Privileges, <<"operation">> => Operation}
     }),
     ?ON_SUCCESS(Res, fun(_) ->
         gs_client_worker:invalidate_cache(od_group, GroupId)
