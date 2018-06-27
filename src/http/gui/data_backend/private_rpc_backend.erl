@@ -41,7 +41,7 @@ handle(<<"fileUploadSuccess">>, Props) ->
     UploadId = proplists:get_value(<<"uploadId">>, Props),
     ParentId = proplists:get_value(<<"parentId">>, Props),
     FileId = page_file_upload:wait_for_file_new_file_id(SessionId, UploadId),
-    page_file_upload:upload_map_delete(SessionId ,UploadId),
+    page_file_upload:upload_map_delete(SessionId, UploadId),
     {ok, FileHandle} = logical_file_manager:open(
         SessionId, {guid, FileId}, read
     ),
@@ -124,9 +124,17 @@ handle(<<"getSpaceTransfers">>, Props) ->
     Limit = proplists:get_value(<<"size">>, Props, all),
     transfer_data_backend:list_transfers(SpaceId, Type, StartFromIndex, Offset, Limit);
 
-handle(<<"getOngoingTransfersForFile">>, Props) ->
+handle(<<"getTransfersForFile">>, Props) ->
     FileGuid = proplists:get_value(<<"fileId">>, Props),
-    transfer_data_backend:get_ongoing_transfers_for_file(FileGuid);
+    EndedInfo = proplists:get_value(<<"endedInfo">>, Props, <<"count">>),
+    {ok, Result} = transfer_data_backend:get_transfers_for_file(FileGuid),
+    case EndedInfo of
+        <<"count">> ->
+            EndedCount = length(proplists:get_value(ended, Result)),
+            {ok, [{ended, EndedCount} | proplists:delete(ended, Result)]};
+        <<"ids">> ->
+            {ok, Result}
+    end;
 
 %%--------------------------------------------------------------------
 %% Space related procedures

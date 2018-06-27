@@ -40,9 +40,9 @@ all() -> ?ALL([
 get_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
-    User1Sess = logic_tests_common:create_user_session(Config, ?USER_1),
+    User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
     % User 3 does not belong to the share
-    User3Sess = logic_tests_common:create_user_session(Config, ?USER_3),
+    User3Sess = logic_tests_common:get_user_session(Config, ?USER_3),
 
     % Cache space 1 and provider 1 private data, as it is required to verify
     % access to share in cache
@@ -95,9 +95,9 @@ get_test(Config) ->
 get_public_data_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
-    User1Sess = logic_tests_common:create_user_session(Config, ?USER_1),
+    User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
     % User 3 does not belong to the share
-    User3Sess = logic_tests_common:create_user_session(Config, ?USER_3),
+    User3Sess = logic_tests_common:get_user_session(Config, ?USER_3),
 
     % Cache space 1 private data, as it is required to verify access to
     % share in cache
@@ -152,7 +152,7 @@ get_public_data_test(Config) ->
 mixed_get_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
-    User1Sess = logic_tests_common:create_user_session(Config, ?USER_1),
+    User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
 
     % Cache space 1 private data, as it is required to verify access to
     % share in cache
@@ -197,7 +197,7 @@ mixed_get_test(Config) ->
 subscribe_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
-    User1Sess = logic_tests_common:create_user_session(Config, ?USER_1),
+    User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
 
     % Cache space 1 private data, as it is required to verify access to
     % share in cache
@@ -297,7 +297,7 @@ subscribe_test(Config) ->
 create_update_delete_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
-    User1Sess = logic_tests_common:create_user_session(Config, ?USER_1),
+    User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
 
     GraphCalls = logic_tests_common:count_reqs(Config, graph),
 
@@ -364,16 +364,17 @@ init_per_suite(Config) ->
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [logic_tests_common, initializer]} | Config].
 
 init_per_testcase(get_test, Config) ->
-    % Provider must be aware of its ID to check access to cached share
+    Nodes = ?config(op_worker_nodes, Config),
+    % Access to cached shares depends on checking if provider supports given space
+    ok = test_utils:mock_expect(Nodes, provider_logic, supports_space,
+        fun(?ROOT_SESS_ID, ?DUMMY_PROVIDER_ID, Space) ->
+            Space == ?SPACE_1 orelse Space == ?SPACE_2
+        end),
     init_per_testcase(default, Config);
 init_per_testcase(_, Config) ->
-    logic_tests_common:wait_for_mocked_connection(Config),
-    Config.
+    logic_tests_common:init_per_testcase(Config).
 
-end_per_testcase(get_test, Config) ->
-    end_per_testcase(default, Config);
-end_per_testcase(_, Config) ->
-    logic_tests_common:invalidate_all_test_records(Config),
+end_per_testcase(_, _Config) ->
     ok.
 
 end_per_suite(Config) ->
