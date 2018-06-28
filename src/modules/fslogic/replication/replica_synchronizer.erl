@@ -881,6 +881,7 @@ flush_stats(#state{space_id = SpaceId} = State) ->
 %%        SpaceId, UserId, get_summarized_blocks_size(AllBlocks)
 %%    ),
 
+    NewState = cancel_caching_stats_timer(State#state{cached_stats = #{}}),
     case application:get_env(?APP_NAME, synchronizer_gc, on_flush_location) of
         on_flush_stats ->
             erlang:garbage_collect();
@@ -888,7 +889,7 @@ flush_stats(#state{space_id = SpaceId} = State) ->
             ok
     end,
 
-    cancel_caching_stats_timer(State#state{cached_stats = #{}}).
+    NewState.
 
 
 -spec set_caching_timers(#state{}) -> #state{}.

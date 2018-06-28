@@ -1429,6 +1429,7 @@ resolve_conflict(_Ctx, NewDoc, PreviousDoc) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% @private
 %% Compares 2 transfers given as args and returns them as tuple with first
 %% element being the greater/newer one.
 %% Fields being compared are in order: files_to_process, files_processed,
@@ -1438,8 +1439,7 @@ resolve_conflict(_Ctx, NewDoc, PreviousDoc) ->
 %% the other.
 %% @end
 %%--------------------------------------------------------------------
--spec order_transfers(transfer:transfer(), transfer:transfer()) ->
-    {transfer:transfer(), transfer:transfer()}.
+-spec order_transfers(doc(), doc()) -> {doc(), doc()}.
 order_transfers(D1, D2) ->
     #document{revs = [Rev1 | _], value = T1} = D1,
     #document{revs = [Rev2 | _], value = T2} = D2,

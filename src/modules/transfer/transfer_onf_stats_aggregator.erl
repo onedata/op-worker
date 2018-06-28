@@ -24,7 +24,8 @@
 %% API
 -export([
     start_link/0,
-    update_statistics/2
+    update_statistics/2,
+    spec/0
 ]).
 
 %% gen_server callbacks
@@ -73,6 +74,23 @@ start_link() ->
 -spec update_statistics(od_space:id(), stats()) -> ok.
 update_statistics(SpaceId, BytesPerProvider) ->
     gen_server2:cast(?MODULE, {update_stats, SpaceId, BytesPerProvider}).
+
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns child spec for transfer_onf_stats_aggregator to attach it
+%% to supervision.
+%% @end
+%%-------------------------------------------------------------------
+-spec spec() -> supervisor:child_spec().
+spec() -> #{
+    id => ?MODULE,
+    start => {?MODULE, start_link, []},
+    restart => temporary,
+    shutdown => timer:seconds(10),
+    type => worker,
+    modules => [?MODULE]
+}.
 
 
 %%%===================================================================
@@ -227,10 +245,11 @@ flush_stats(SpaceId, #state{cached_stats = StatsPerSpace} = State) ->
                     )
             end,
 
+            NewState = cancel_caching_timer(SpaceId, State#state{
+                cached_stats = RestStatsPerSpace
+            }),
             erlang:garbage_collect(),
-
-            NewState = State#state{cached_stats = RestStatsPerSpace},
-            cancel_caching_timer(SpaceId, NewState)
+            NewState
     end.
 
 
