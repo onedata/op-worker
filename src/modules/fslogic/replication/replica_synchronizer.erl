@@ -321,6 +321,14 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session}, From,
 
 handle_call(flush_location, _From, State) ->
     Ans = fslogic_blocks:flush(),
+
+    case application:get_env(?APP_NAME, synchronizer_gc, on_flush_location) of
+        on_flush_location ->
+            erlang:garbage_collect();
+        _ ->
+            ok
+    end,
+
     {reply, Ans, State, ?DIE_AFTER};
 
 handle_call({apply, Fun}, _From, State) ->
@@ -850,7 +858,12 @@ flush_stats(State, ExcludeSessions) ->
 %%        SpaceId, UserId, get_summarized_blocks_size(AllBlocks)
 %%    ),
 
-    erlang:garbage_collect(),
+    case application:get_env(?APP_NAME, synchronizer_gc, on_flush_location) of
+        on_flush_stats ->
+            erlang:garbage_collect();
+        _ ->
+            ok
+    end,
 
     Ans = #file_location_changed{
         file_location = Location,
