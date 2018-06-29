@@ -13,7 +13,7 @@
 %%% Lock are used per file and therefore lock ids are file_uuids.
 %%% @end
 %%%-------------------------------------------------------------------
--module(replica_eviction_lock).
+-module(replica_deletion_lock).
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
@@ -33,7 +33,7 @@
 -export([get_ctx/0, get_record_struct/1]).
 
 -type id() :: file_meta:uuid().
--type lock() :: #replica_eviction_lock{}.
+-type lock() :: #replica_deletion_lock{}.
 -type diff() :: datastore_doc:diff(lock()).
 -type doc() :: datastore_doc:doc(lock()).
 
@@ -83,8 +83,8 @@ acquire_write_lock(FileUuid) ->
 %%-------------------------------------------------------------------
 -spec release_read_lock(id()) -> ok.
 release_read_lock(FileUuid) ->
-    {ok, _} = update(FileUuid, fun(Lock = #replica_eviction_lock{read = Read}) ->
-        {ok, Lock#replica_eviction_lock{read = max(0, Read - 1)}}
+    {ok, _} = update(FileUuid, fun(Lock = #replica_deletion_lock{read = Read}) ->
+        {ok, Lock#replica_deletion_lock{read = max(0, Read - 1)}}
     end),
     ok.
 
@@ -95,8 +95,8 @@ release_read_lock(FileUuid) ->
 %%-------------------------------------------------------------------
 -spec release_write_lock(id()) -> ok.
 release_write_lock(FileUuid) ->
-    {ok, _} = update(FileUuid, fun(Lock = #replica_eviction_lock{write = Write}) ->
-        {ok, Lock#replica_eviction_lock{write = max(0, Write - 1)}}
+    {ok, _} = update(FileUuid, fun(Lock = #replica_deletion_lock{write = Write}) ->
+        {ok, Lock#replica_deletion_lock{write = max(0, Write - 1)}}
     end),
     ok.
 
@@ -151,9 +151,9 @@ create_or_update(Key, Diff, NewDoc) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec acquire_read_lock_diff(lock()) -> {ok, lock()}.
-acquire_read_lock_diff(Lock = #replica_eviction_lock{read = Read, write = 0}) ->
-    {ok, Lock#replica_eviction_lock{read = Read + 1}};
-acquire_read_lock_diff(#replica_eviction_lock{}) ->
+acquire_read_lock_diff(Lock = #replica_deletion_lock{read = Read, write = 0}) ->
+    {ok, Lock#replica_deletion_lock{read = Read + 1}};
+acquire_read_lock_diff(#replica_deletion_lock{}) ->
     {error, lock_not_available}.
 
 %%-------------------------------------------------------------------
@@ -163,9 +163,9 @@ acquire_read_lock_diff(#replica_eviction_lock{}) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec acquire_write_lock_diff(lock()) -> {ok, lock()}.
-acquire_write_lock_diff(Lock = #replica_eviction_lock{read = 0, write = 0}) ->
-    {ok, Lock#replica_eviction_lock{write = 1}};
-acquire_write_lock_diff(#replica_eviction_lock{}) ->
+acquire_write_lock_diff(Lock = #replica_deletion_lock{read = 0, write = 0}) ->
+    {ok, Lock#replica_deletion_lock{write = 1}};
+acquire_write_lock_diff(#replica_deletion_lock{}) ->
     {error, lock_not_available}.
 
 
@@ -179,12 +179,12 @@ acquire_write_lock_diff(#replica_eviction_lock{}) ->
 new_doc(Key, read) ->
     #document{
         key = Key,
-        value = #replica_eviction_lock{read = 1}
+        value = #replica_deletion_lock{read = 1}
     };
 new_doc(Key, write) ->
     #document{
         key = Key,
-        value = #replica_eviction_lock{write = 1}
+        value = #replica_deletion_lock{write = 1}
     }.
 %%%===================================================================
 %%% datastore_model callbacks

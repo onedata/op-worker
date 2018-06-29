@@ -21,7 +21,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([maybe_start/2, stop/1, process_eviction_result/3]).
+-export([maybe_start/2, stop/1, process_replica_deletion_result/3]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -79,17 +79,18 @@ stop(SpaceId) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Posthook executed by replica_eviction_worker after evicting file.
+%% Posthook executed by replica_deletion_worker after deleting file
+%% replica.
 %% @end
 %%-------------------------------------------------------------------
--spec process_eviction_result(replica_eviction:result(), file_meta:uuid(),
+-spec process_replica_deletion_result(replica_deletion:result(), file_meta:uuid(),
     autocleaning:id()) -> ok.
-process_eviction_result({ok, ReleasedBytes}, FileUuid, AutocleaningId) ->
+process_replica_deletion_result({ok, ReleasedBytes}, FileUuid, AutocleaningId) ->
     ?debug("Autocleaning of file ~p in procedure ~p released ~p bytes.",
         [FileUuid, AutocleaningId, ReleasedBytes]),
     {ok, _} = autocleaning:mark_released_file(AutocleaningId, ReleasedBytes),
     ok;
-process_eviction_result(Error, FileUuid, AutocleaningId) ->
+process_replica_deletion_result(Error, FileUuid, AutocleaningId) ->
     ?error("Error ~p occured during autocleanig of file ~p in procedure ~p",
         [Error, FileUuid, AutocleaningId]),
     {ok, _} = autocleaning:mark_processed_file(AutocleaningId),
@@ -161,7 +162,7 @@ handle_cast({?START_CLEANUP, #autocleaning_config{
             [] ->
                 stop(SpaceId);
             _ ->
-                evict_files(FilesToClean, AutocleaningId, SpaceId)
+                delete_file_replicas(FilesToClean, AutocleaningId, SpaceId)
         end,
         {noreply, State}
     catch
@@ -177,7 +178,7 @@ handle_cast(?CHECK_QUOTA, State = #state{
 }) ->
     case should_stop(SpaceId, Target) of
         true ->
-            replica_evictor:cancel(AutocleaningId, SpaceId);
+            replica_deletion_master:cancel(AutocleaningId, SpaceId);
         false ->
             ok
     end,
@@ -187,7 +188,7 @@ handle_cast(?STOP_CLEAN, State = #state{
     space_id = SpaceId
 }) ->
     autocleaning:mark_completed(AutocleaningId),
-    replica_evictor:cancelling_finished(AutocleaningId, SpaceId),
+    replica_deletion_master:cancelling_finished(AutocleaningId, SpaceId),
     ?info("Autocleaning ~p of space ~p finished", [AutocleaningId, SpaceId]),
     {stop, normal, State};
 handle_cast(_Request, State) ->
@@ -241,22 +242,22 @@ code_change(_OldVsn, State, _Extra) ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Adds all FilesToClean to replica_evictor queue.
+%% Adds all FilesToClean to replica_deletion_master queue.
 %% @end
 %%-------------------------------------------------------------------
--spec evict_files([file_ctx:ctx()], autocleaning:id(), od_space:id()) -> ok.
-evict_files(FilesToClean, AutocleaningId, SpaceId) ->
+-spec delete_file_replicas([file_ctx:ctx()], autocleaning:id(), od_space:id()) -> ok.
+delete_file_replicas(FilesToClean, AutocleaningId, SpaceId) ->
 
-    EvictionSettingsList = lists:filtermap(fun(FileCtx) ->
-        case replica_evictor:get_setting_for_eviction_task(FileCtx) of
+    DeletionSettingsList = lists:filtermap(fun(FileCtx) ->
+        case replica_deletion_master:get_setting_for_deletion_task(FileCtx) of
             undefined ->
                 false;
-            EvictionSettings ->
-                {true, EvictionSettings}
+            DeletionSettings ->
+                {true, DeletionSettings}
         end
     end, FilesToClean),
 
-    FilesToCleanNum = length(EvictionSettingsList),
+    FilesToCleanNum = length(DeletionSettingsList),
     {ok, _} = autocleaning:mark_active(AutocleaningId, FilesToCleanNum),
 
     lists:foreach(fun({N, {FileUuid, Provider, Blocks, VV}}) ->
@@ -265,18 +266,23 @@ evict_files(FilesToClean, AutocleaningId, SpaceId) ->
                 % every ?CHECK_QUOTA_INTERVAL task, add notification task
                 % it will trigger checking guota
                 Self = self(),
-                replica_evictor:notify(fun() -> check_quota(Self) end, AutocleaningId, SpaceId),
-                schedule_eviction_task(FileUuid, Provider, Blocks, VV, AutocleaningId, SpaceId);
+                replica_deletion_master:notify(fun() -> check_quota(Self) end, AutocleaningId, SpaceId),
+                schedule_replica_deletion_task(FileUuid, Provider, Blocks, VV, AutocleaningId, SpaceId);
             _ ->
-                schedule_eviction_task(FileUuid, Provider, Blocks, VV, AutocleaningId, SpaceId)
+                schedule_replica_deletion_task(FileUuid, Provider, Blocks, VV, AutocleaningId, SpaceId)
         end
-    end, lists:zip(lists:seq(1, FilesToCleanNum), EvictionSettingsList)).
+    end, lists:zip(lists:seq(1, FilesToCleanNum), DeletionSettingsList)).
 
-
--spec schedule_eviction_task(file_meta:uuid(), od_provider:id(), fslogic_blocks:blocks(),
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Adds task of replica deletion to replica_deletion_master queue.
+%% @end
+%%-------------------------------------------------------------------
+-spec schedule_replica_deletion_task(file_meta:uuid(), od_provider:id(), fslogic_blocks:blocks(),
     version_vector:version_vector(), autocleaning:id(), od_space:id()) -> ok.
-schedule_eviction_task(FileUuid, Provider, Blocks, VV, AutoCleaningId, SpaceId) ->
-    replica_evictor:evict(FileUuid, Provider, Blocks, VV, AutoCleaningId, autocleaning, SpaceId).
+schedule_replica_deletion_task(FileUuid, Provider, Blocks, VV, AutoCleaningId, SpaceId) ->
+    replica_deletion_master:enqueue(FileUuid, Provider, Blocks, VV, AutoCleaningId, autocleaning, SpaceId).
 
 %%-------------------------------------------------------------------
 %% @private

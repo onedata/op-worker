@@ -46,15 +46,20 @@
 -define(DAY_STAT_TYPE, <<"day">>).
 -define(MONTH_STAT_TYPE, <<"month">>).
 
+
+-define(TRANSFER_WORKER, transfer_worker).
 -define(TRANSFER_WORKERS_POOL, transfer_workers_pool).
 -define(TRANSFER_WORKERS_NUM, application:get_env(?APP_NAME, transfer_workers_num, 50)).
 
+-define(TRANSFER_CONTROLLER, transfer_controller).
 -define(TRANSFER_CONTROLLERS_POOL, transfer_controllers_pool).
 -define(TRANSFER_CONTROLLERS_NUM, application:get_env(?APP_NAME, transfer_controllers_num, 10)).
 
+-define(INVALIDATION_WORKER, invalidation_worker).
 -define(INVALIDATION_WORKERS_POOL, invalidation_workers_pool).
 -define(INVALIDATION_WORKERS_NUM, application:get_env(?APP_NAME, invalidation_workers_num, 10)).
 
--define(REPLICA_EVICTION_WORKERS_POOL, replica_eviction_workers_pool).
--define(REPLICA_EVICTION_WORKERS_NUM,
-    application:get_env(?APP_NAME, replica_eviction_workers_num, 10)).
+-define(REPLICA_DELETION_WORKER, replica_deletion_worker).
+-define(REPLICA_DELETION_WORKERS_POOL, replica_deletion_workers_pool).
+-define(REPLICA_DELETION_WORKERS_NUM,
+    application:get_env(?APP_NAME, replica_deletion_workers_num, 10)).

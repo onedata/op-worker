@@ -119,14 +119,9 @@ handle_cast(start_invalidation, State = #state{
     supporting_provider_id = SupportingProviderId
 }) ->
     try
-%%        transfer:mark_active_invalidation(TransferId),
         UserCtx = user_ctx:new(SessionId),
         FileCtx = file_ctx:new_by_guid(FileGuid),
         invalidation_req:start_invalidation(UserCtx, FileCtx, SupportingProviderId, TransferId),
-%%        #provider_response{
-%%            status = #status{code = ?OK}
-%%        } = sync_req:invalidate_file_replica(UserCtx, FileCtx, undefined, TransferId, undefined
-%%        ),
         {noreply, State}
     catch
         _Error:Reason ->

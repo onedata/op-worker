@@ -972,21 +972,21 @@ maybe_reset_migration_record(Transfer = #transfer{
 start_pools() ->
     {ok, _} = worker_pool:start_sup_pool(?TRANSFER_WORKERS_POOL, [
         {workers, ?TRANSFER_WORKERS_NUM},
-        {worker, {transfer_worker, []}},
+        {worker, {?TRANSFER_WORKER, []}},
         {queue_type, lifo}
     ]),
     {ok, _} = worker_pool:start_sup_pool(?TRANSFER_CONTROLLERS_POOL, [
         {workers, ?TRANSFER_CONTROLLERS_NUM},
-        {worker, {transfer_controller, []}}
+        {worker, {?TRANSFER_CONTROLLER, []}}
     ]),
     {ok, _} = worker_pool:start_sup_pool(?INVALIDATION_WORKERS_POOL, [
         {workers, ?INVALIDATION_WORKERS_NUM},
-        {worker, {invalidation_worker, []}},
+        {worker, {?INVALIDATION_WORKER, []}},
         {queue_type, lifo}
     ]),
-    {ok, _} = worker_pool:start_sup_pool(?REPLICA_EVICTION_WORKERS_POOL, [
-        {workers, ?REPLICA_EVICTION_WORKERS_NUM},
-        {worker, {replica_eviction_worker, []}}
+    {ok, _} = worker_pool:start_sup_pool(?REPLICA_DELETION_WORKERS_POOL, [
+        {workers, ?REPLICA_DELETION_WORKERS_NUM},
+        {worker, {?REPLICA_DELETION_WORKER, []}}
     ]),
     ok.
 
@@ -1001,7 +1001,7 @@ stop_pools() ->
     ok = wpool:stop_sup_pool(?TRANSFER_WORKERS_POOL),
     ok = wpool:stop_sup_pool(?TRANSFER_CONTROLLERS_POOL),
     ok = wpool:stop_sup_pool(?INVALIDATION_WORKERS_POOL),
-    ok = wpool:stop_sup_pool(?REPLICA_EVICTION_WORKERS_POOL),
+    ok = wpool:stop_sup_pool(?REPLICA_DELETION_WORKERS_POOL),
     ok.
 
 %%-------------------------------------------------------------------

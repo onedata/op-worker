@@ -584,23 +584,23 @@
 }).
 
 %% Model used for communication between providers during
-%% eviction of file replica.
--record(replica_eviction, {
+%% deletion of file replica.
+-record(replica_deletion, {
     file_uuid :: undefined | file_meta:uuid(),
     space_id :: undefined | od_space:id(),
-    action :: replica_eviction:action(),
+    action :: replica_deletion:action(),
     requested_blocks = [] :: fslogic_blocks:blocks(),
     supported_blocks = [] :: fslogic_blocks:blocks(),
     version_vector = #{} :: version_vector:version_vector(),
     requester :: od_provider:id(),
     requestee :: od_provider:id(),
-    report_id :: replica_eviction:report_id(),
-    type :: replica_eviction:type()
+    report_id :: replica_deletion:report_id(),
+    type :: replica_deletion:type()
 }).
 
 %% Model used for setting read-write lock to synchronize invalidation
 %% of file replicas.
--record(replica_eviction_lock, {
+-record(replica_deletion_lock, {
     read = 0 :: non_neg_integer(),
     write = 0 :: non_neg_integer()
 }).

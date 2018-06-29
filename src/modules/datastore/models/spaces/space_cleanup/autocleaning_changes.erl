@@ -22,6 +22,12 @@
 %%% API
 %%%===================================================================
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Handles change on autocleaning document
+%% @end
+%%-------------------------------------------------------------------
+-spec handle(autocleaning:doc()) -> ok.
 handle(#document{
     value = #autocleaning{
         space_id = SpaceId,

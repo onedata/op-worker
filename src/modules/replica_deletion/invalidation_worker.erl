@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/0, process_eviction_result/3]).
+-export([start_link/0, process_replica_deletion_result/3]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -52,17 +52,18 @@ start_link() ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Posthook executed by replica_eviction_worker after evicting file.
+%% Posthook executed by replica_deletion_worker after deleting file
+%% replica.
 %% @end
 %%-------------------------------------------------------------------
--spec process_eviction_result(replica_eviction:result(), file_meta:uuid(),
+-spec process_replica_deletion_result(replica_deletion:result(), file_meta:uuid(),
     transfer:id()) -> ok.
-process_eviction_result({ok, ReleasedBytes}, FileUuid, TransferId) ->
+process_replica_deletion_result({ok, ReleasedBytes}, FileUuid, TransferId) ->
     ?debug("Invalidation of file ~p in transfer ~p released ~p bytes.",
         [FileUuid, TransferId, ReleasedBytes]),
     {ok, _} = transfer:increase_files_invalidated_and_processed_counter(TransferId),
     ok;
-process_eviction_result(Error, FileUuid, TransferId) ->
+process_replica_deletion_result(Error, FileUuid, TransferId) ->
     ?error("Error ~p occured during invalidation of file ~p in procedure ~p",
         [Error, FileUuid, TransferId]),
     {ok, _} = transfer:increase_files_processed_counter(TransferId),
@@ -247,7 +248,7 @@ maybe_retry(UserCtx, FileCtx, SupportingProviderId, TransferId, Retries, Error) 
         Retries - 1, next_retry(Retries)).
 
 
-%%TODO move below functions to utils module, because they're duplicated in transfer_worker !!!
+%%TODO VFS-4624 move below functions to utils module, because they're duplicated in transfer_worker !
 
 %%-------------------------------------------------------------------
 %% @private

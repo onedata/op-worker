@@ -17,7 +17,7 @@
 
 % API
 -export([local_id/1, id/2, critical_section/2, save_and_bump_version/1,
-    is_storage_file_created/1, get/2, get_local/1, get_blocks/1,
+    is_storage_file_created/1, get/2, get_local/1,
     get_version_vector/1]).
 -export([create/1, create/2, save/1, get/1, update/2, delete/1, delete/2]).
 
@@ -237,17 +237,6 @@ is_storage_file_created(#file_location{storage_file_created = StorageFileCreated
     StorageFileCreated;
 is_storage_file_created(#document{value=FileLocation}) ->
     is_storage_file_created(FileLocation).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Getter for blocks field of #file_location{} record.
-%% @end
-%%-------------------------------------------------------------------
--spec get_blocks(doc() | record()) -> fslogic_blocks:blocks().
-get_blocks(#document{value = FileLocation}) ->
-    get_blocks(FileLocation);
-get_blocks(#file_location{blocks = Blocks}) ->
-    Blocks.
 
 %-------------------------------------------------------------------
 %% @doc

@@ -34,7 +34,7 @@
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Marks transfer as active and adds task for replication to worker_pool.
+%% Marks invalidation as active and adds task for invalidation to worker_pool.
 %% @end
 %%-------------------------------------------------------------------
 -spec start_invalidation(user_ctx:ctx(), file_ctx:ctx(), sync_req:provider_id(),
@@ -163,7 +163,7 @@ invalidate_file_replica_insecure(UserCtx, FileCtx, MigrationProviderId, Transfer
                     invalidate_dir(UserCtx, FileCtx2, MigrationProviderId, 0,
                         TransferId);
                 {false, FileCtx2} ->
-                    evict_file(FileCtx2, MigrationProviderId, TransferId)
+                    delete_file_replica(FileCtx2, MigrationProviderId, TransferId)
             end;
         false ->
             #provider_response{status = #status{code = ?OK}}
@@ -201,21 +201,21 @@ invalidate_dir(UserCtx, FileCtx, MigrationProviderId, Offset, TransferId) ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Evicts regular file.
+%% Deletes regular file replica.
 %% @end
 %%-------------------------------------------------------------------
--spec evict_file(file_ctx:ctx(), sync_req:provider_id(), sync_req:transfer_id())
+-spec delete_file_replica(file_ctx:ctx(), sync_req:provider_id(), sync_req:transfer_id())
         -> sync_req:provider_response().
-evict_file(FileCtx, undefined, TransferId) ->
+delete_file_replica(FileCtx, undefined, TransferId) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    case  replica_evictor:get_setting_for_eviction_task(FileCtx) of
+    case  replica_deletion_master:get_setting_for_deletion_task(FileCtx) of
         undefined ->
             transfer:increase_files_processed_counter(TransferId);
         {FileUuid, ProviderId, Blocks, VV} ->
-            schedule_eviction_task(FileUuid, ProviderId, Blocks, VV, TransferId, SpaceId)
+            schedule_replica_deletion_task(FileUuid, ProviderId, Blocks, VV, TransferId, SpaceId)
     end,
     #provider_response{status = #status{code = ?OK}};
-evict_file(FileCtx, SupportingProviderId, TransferId) ->
+delete_file_replica(FileCtx, SupportingProviderId, TransferId) ->
     {LocalFileLocationDoc, FileCtx2} =
         file_ctx:get_or_create_local_file_location_doc(FileCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx2),
@@ -223,13 +223,19 @@ evict_file(FileCtx, SupportingProviderId, TransferId) ->
     {Size, FileCtx} = file_ctx:get_file_size(FileCtx2),
     VV = file_location:get_version_vector(LocalFileLocationDoc),
     Blocks = [#file_block{offset = 0, size = Size}],
-    schedule_eviction_task(FileUuid, SupportingProviderId, Blocks, VV, TransferId,
+    schedule_replica_deletion_task(FileUuid, SupportingProviderId, Blocks, VV, TransferId,
         SpaceId),
     #provider_response{status = #status{code = ?OK}}.
 
 
--spec schedule_eviction_task(file_meta:uuid(), od_provider:id(), fslogic_blocks:blocks(),
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Adds task of replica deletion to replica_deletion_master queue.
+%% @end
+%%-------------------------------------------------------------------
+-spec schedule_replica_deletion_task(file_meta:uuid(), od_provider:id(), fslogic_blocks:blocks(),
     version_vector:version_vector(), transfer:id(), od_space:id()) -> ok.
-schedule_eviction_task(FileUuid, Provider, Blocks, VV, TransferId, SpaceId) ->
-    replica_evictor:evict(FileUuid, Provider, Blocks, VV, TransferId, invalidation, SpaceId).
+schedule_replica_deletion_task(FileUuid, Provider, Blocks, VV, TransferId, SpaceId) ->
+    replica_deletion_master:enqueue(FileUuid, Provider, Blocks, VV, TransferId, invalidation, SpaceId).
 

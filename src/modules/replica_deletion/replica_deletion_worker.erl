@@ -5,11 +5,11 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% gen_server started used replica_eviction_workers_pool
-%%% This processes are used to evict file_replicas. 
+%%% gen_server started as a worker of replica_deletion_workers_pool
+%%% This processes are used to delete file_replicas from storage
 %%% @end
 %%%-------------------------------------------------------------------
--module(replica_eviction_worker).
+-module(replica_deletion_worker).
 -author("Jakub Kudzia").
 
 -behaviour(gen_server).
@@ -33,7 +33,7 @@
     code_change/3]).
 
 -define(SERVER, ?MODULE).
--define(EVICT_REPLICA, evict_replica).
+-define(DELETE_REPLICA, delete_replica).
 
 -record(state, {}).
 
@@ -53,15 +53,15 @@ start_link() ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Casts task to worker pool called ?REPLICA_EVICTION_WORKERS_POOL
+%% Casts task to worker pool called ?REPLICA_DELETION_WORKERS_POOL
 %% @end
 %%-------------------------------------------------------------------
 -spec cast(file_meta:uuid(), od_space:id(), fslogic_blocks:blocks(),
-    version_vector:version_vector(), replica_evicion:id(),replica_eviction:type(),
-    replica_eviction:report_id()) -> ok.
-cast(FileUuid, SpaceId, Blocks, VV, REId, Type, Id) ->
-    Task = {?EVICT_REPLICA, FileUuid, SpaceId, Blocks, VV, REId, Type, Id},
-    worker_pool:cast(?REPLICA_EVICTION_WORKERS_POOL, Task).
+    version_vector:version_vector(), replica_evicion:id(),replica_deletion:type(),
+    replica_deletion:report_id()) -> ok.
+cast(FileUuid, SpaceId, Blocks, VV, RDId, Type, Id) ->
+    Task = {?DELETE_REPLICA, FileUuid, SpaceId, Blocks, VV, RDId, Type, Id},
+    worker_pool:cast(?REPLICA_DELETION_WORKERS_POOL, Task).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -104,26 +104,26 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}).
-handle_cast({?EVICT_REPLICA, FileUuid, SpaceId, Blocks, VV, REId, Type, Id}, State) ->
+handle_cast({?DELETE_REPLICA, FileUuid, SpaceId, Blocks, VV, RDId, Type, Id}, State) ->
     FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
     FileCtx = file_ctx:new_by_guid(FileGuid),
-    Result = case replica_eviction_lock:acquire_write_lock(FileUuid) of
+    Result = case replica_deletion_lock:acquire_write_lock(FileUuid) of
         ok ->
             FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
             FileCtx = file_ctx:new_by_guid(FileGuid),
-            EvictionResult = case replica_eviction_req:evict_blocks(FileCtx, Blocks, VV) of
+            DeletionResult = case replica_deletion_req:delete_blocks(FileCtx, Blocks, VV) of
                 ok ->
                     {ok, fslogic_blocks:size(Blocks)};
                 Error ->
                     Error
             end,
-            replica_eviction_lock:release_write_lock(FileUuid),
-            EvictionResult;
+            replica_deletion_lock:release_write_lock(FileUuid),
+            DeletionResult;
         Error ->
             Error
     end,
-    replica_eviction:release_supporting_lock(REId),
-    replica_evictor:process_result(Type, FileUuid, Result, Id),
+    replica_deletion:release_supporting_lock(RDId),
+    replica_deletion_master:process_result(Type, FileUuid, Result, Id),
     {noreply, State};
 handle_cast(Request, State) ->
     ?log_bad_request(Request),

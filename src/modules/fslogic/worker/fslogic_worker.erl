@@ -58,7 +58,7 @@
     spaces_cleanup_interval, timer:hours(1))).
 
 -define(TRANSFERS_RESTART_DELAY, application:get_env(?APP_NAME,
-    transfers_restart_delay, timer:seconds(10))).
+    transfers_restart_delay, timer:seconds(3))).
 
 -define(EXOMETER_NAME(Param), ?exometer_name(?MODULE, count, Param)).
 -define(EXOMETER_TIME_NAME(Param), ?exometer_name(?MODULE, time,

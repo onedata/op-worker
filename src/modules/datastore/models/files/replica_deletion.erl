@@ -11,7 +11,7 @@
 %%% will appear in the remote provider via DBSync.
 %%% @end
 %%%-------------------------------------------------------------------
--module(replica_eviction).
+-module(replica_deletion).
 -author("Jakub Kudzia").
 
 -include("modules/datastore/datastore_models.hrl").
@@ -33,7 +33,7 @@
 -export([get_ctx/0, get_record_struct/1]).
 
 -type id() :: binary().
--type record() :: #replica_eviction{}.
+-type record() :: #replica_deletion{}.
 -type doc() :: datastore_doc:doc(record()).
 -type action() :: request | confirm | refuse | release_lock.
 -type diff() :: datastore_doc:diff(record()).
@@ -73,8 +73,8 @@ request(FileUuid, FileBlocks, VV, Requestee, SpaceId, Type, Id) ->
 %%-------------------------------------------------------------------
 -spec confirm(id(), fslogic_blocks:blocks()) -> ok.
 confirm(Id, Blocks) ->
-    {ok, _} = update(Id, fun(ReplicaEviction) ->
-        {ok, ReplicaEviction#replica_eviction{
+    {ok, _} = update(Id, fun(ReplicaDeletion) ->
+        {ok, ReplicaDeletion#replica_deletion{
             action = confirm,
             supported_blocks = Blocks
         }}
@@ -88,20 +88,20 @@ confirm(Id, Blocks) ->
 %%-------------------------------------------------------------------
 -spec refuse(id()) -> ok.
 refuse(Id) ->
-    {ok, _} = update(Id, fun(ReplicaEviction) ->
-        {ok, update_action(ReplicaEviction, refuse)}
+    {ok, _} = update(Id, fun(ReplicaDeletion) ->
+        {ok, update_action(ReplicaDeletion, refuse)}
     end),
     ok.
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Sends message allowing to release eviction supporting lock.
+%% Sends message allowing to release deletion supporting lock.
 %% @end
 %%-------------------------------------------------------------------
 -spec release_supporting_lock(id()) -> ok.
 release_supporting_lock(Id) ->
-    {ok, _} = update(Id, fun(ReplicaEviction) ->
-        {ok, update_action(ReplicaEviction, release_lock)}
+    {ok, _} = update(Id, fun(ReplicaDeletion) ->
+        {ok, update_action(ReplicaDeletion, release_lock)}
     end),
     ok.
 
@@ -139,7 +139,7 @@ update(Id, Diff) ->
     type(), report_id()) -> doc().
 new_doc(FileUuid, FileBlocks, VV, Requestee, SpaceId, Type, Id) ->
     #document{
-        value = #replica_eviction{
+        value = #replica_deletion{
             file_uuid = FileUuid,
             space_id = SpaceId,
             action = request,
@@ -160,8 +160,8 @@ new_doc(FileUuid, FileBlocks, VV, Requestee, SpaceId, Type, Id) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec update_action(record(), action()) -> record().
-update_action(ReplicaEviction, NewStatus) ->
-    ReplicaEviction#replica_eviction{action = NewStatus}.
+update_action(ReplicaDeletion, NewStatus) ->
+    ReplicaDeletion#replica_deletion{action = NewStatus}.
 
 %%%===================================================================
 %%% datastore_model callbacks

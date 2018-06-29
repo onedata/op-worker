@@ -234,7 +234,6 @@ mark_processed_file(AutocleaningId) ->
         end).
 
 %%-------------------------------------------------------------------
-%% @private
 %% @doc
 %% Returns autocleaning_config.
 %% @end
@@ -248,10 +247,21 @@ get_config(AutocleaningId) ->
     {ok, Doc} = datastore_model:get(?CTX, AutocleaningId),
     get_config(Doc).
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns autocleaning document.
+%% @end
+%%-------------------------------------------------------------------
 -spec get(id()) -> {ok, doc()} | {error, term()}.
 get(AutocleaningId) ->
     datastore_model:get(?CTX, AutocleaningId).
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Lists all autocleaning documents.
+%% TODO autocleaning docs should be stored in sorted order VFS-4583
+%% @end
+%%-------------------------------------------------------------------
 -spec list(od_space:id()) -> {ok, [id()]}.
 list(SpaceId) ->
     for_each_autocleaning(SpaceId, fun(A, Acc) -> [A | Acc] end, []).

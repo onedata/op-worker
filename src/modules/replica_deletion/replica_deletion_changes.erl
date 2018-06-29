@@ -5,10 +5,10 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module is used to handle changes of replica_eviction model.
+%%% This module is used to handle changes of replica_deletion model.
 %%% @end
 %%%-------------------------------------------------------------------
--module(replica_eviction_changes).
+-module(replica_deletion_changes).
 -author("Jakub Kudzia").
 
 -include("modules/datastore/datastore_models.hrl").
@@ -37,32 +37,32 @@
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Handles change of replica_eviction document.
+%% Handles change of replica_deletion document.
 %% @end
 %%-------------------------------------------------------------------
--spec handle(replica_eviction:doc()) -> ok.
-handle(REDoc = #document{value = #replica_eviction{
+-spec handle(replica_deletion:doc()) -> ok.
+handle(REDoc = #document{value = #replica_deletion{
     action = request,
     requestee = Requestee
 }}) ->
     ?run_if_is_self(Requestee, fun() ->
         handle_request(REDoc)
     end);
-handle(REDoc = #document{value = #replica_eviction{
+handle(REDoc = #document{value = #replica_deletion{
     action = confirm,
     requester = Requester
 }}) ->
     ?run_if_is_self(Requester, fun() ->
         handle_confirmation(REDoc)
     end);
-handle(REDoc = #document{value = #replica_eviction{
+handle(REDoc = #document{value = #replica_deletion{
     action = refuse,
     requester = Requester
 }}) ->
     ?run_if_is_self(Requester, fun() ->
         handle_refusal(REDoc)
     end);
-handle(REDoc = #document{value = #replica_eviction{
+handle(REDoc = #document{value = #replica_deletion{
     action = release_lock,
     requestee = Requestee
 }}) ->
@@ -78,38 +78,38 @@ handle(REDoc = #document{value = #replica_eviction{
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Handles replica_eviction request.
+%% Handles replica_deletion request.
 %% @end
 %%-------------------------------------------------------------------
--spec handle_request(replica_eviction:doc()) -> ok.
+-spec handle_request(replica_deletion:doc()) -> ok.
 handle_request(#document{
-    key = REId,
-    value = RE = #replica_eviction{
+    key = RDId,
+    value = RD = #replica_deletion{
         file_uuid = FileUuid
 }}) ->
-    case replica_eviction_lock:acquire_read_lock(FileUuid) of
+    case replica_deletion_lock:acquire_read_lock(FileUuid) of
         ok ->
-            case can_support_eviction(RE) of
+            case can_support_deletion(RD) of
                 {true, Blocks} ->
-                    replica_eviction:confirm(REId, Blocks);
+                    replica_deletion:confirm(RDId, Blocks);
                 false ->
-                    replica_eviction_lock:release_read_lock(FileUuid),
-                    replica_eviction:refuse(REId)
+                    replica_deletion_lock:release_read_lock(FileUuid),
+                    replica_deletion:refuse(RDId)
             end;
         _Error ->
-            replica_eviction:refuse(REId)
+            replica_deletion:refuse(RDId)
     end.
 
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Handles replica_eviction confirmation.
+%% Handles replica_deletion confirmation.
 %% @end
 %%-------------------------------------------------------------------
--spec handle_confirmation(replica_eviction:doc()) -> ok.
+-spec handle_confirmation(replica_deletion:doc()) -> ok.
 handle_confirmation(#document{
-    key = REId,
-    value = #replica_eviction{
+    key = RDId,
+    value = #replica_deletion{
         file_uuid = FileUuid,
         space_id = SpaceId,
         supported_blocks = Blocks,
@@ -117,34 +117,34 @@ handle_confirmation(#document{
         type = Type,
         report_id = ReportId
     }}) ->
-    replica_evictor:notify_finished_task(SpaceId),
-    replica_eviction_worker:cast(FileUuid, SpaceId, Blocks, VV, REId, Type, ReportId).
+    replica_deletion_master:notify_finished_task(SpaceId),
+    replica_deletion_worker:cast(FileUuid, SpaceId, Blocks, VV, RDId, Type, ReportId).
 
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Handles replica_eviction refusal.
+%% Handles replica_deletion refusal.
 %% @end
 %%-------------------------------------------------------------------
--spec handle_refusal(replica_eviction:doc()) -> ok.
+-spec handle_refusal(replica_deletion:doc()) -> ok.
 handle_refusal(#document{
-    value = #replica_eviction{
+    value = #replica_deletion{
         space_id = SpaceId,
         file_uuid = FileUuid,
         report_id = ReportId,
         type = Type
 }}) ->
-    replica_evictor:notify_finished_task(SpaceId),
-    replica_evictor:process_result(Type, FileUuid, {error, invalidation_refused}, ReportId).
+    replica_deletion_master:notify_finished_task(SpaceId),
+    replica_deletion_master:process_result(Type, FileUuid, {error, invalidation_refused}, ReportId).
 
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Checks whether local replica of file is sufficient to support eviction.
+%% Checks whether local replica of file is sufficient to support deletion.
 %% @end
 %%-------------------------------------------------------------------
--spec can_support_eviction(replica_eviction:record()) -> boolean().
-can_support_eviction(#replica_eviction{
+-spec can_support_deletion(replica_deletion:record()) -> boolean().
+can_support_deletion(#replica_deletion{
     file_uuid = FileUuid,
     space_id = SpaceId,
     version_vector = VV,
@@ -156,7 +156,7 @@ can_support_eviction(#replica_eviction{
     LocalBlocks = replica_finder:get_all_blocks([LocalLocationDoc]),
     case fslogic_blocks:invalidate(RequestedBlocks, LocalBlocks) of
         [] ->
-            % todo currently works only if provider has all requested blocks
+            % todo VFS-3728 currently works only if provider has all requested blocks
             LocalVV = file_location:get_version_vector(LocalLocationDoc),
             case version_vector:compare(LocalVV, VV)  of
                 greater ->
@@ -173,13 +173,13 @@ can_support_eviction(#replica_eviction{
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Handles replica_eviction release_lock action.
+%% Handles replica_deletion release_lock action.
 %% @end
 %%-------------------------------------------------------------------
--spec handle_release_lock(replica_eviction:doc()) -> ok.
+-spec handle_release_lock(replica_deletion:doc()) -> ok.
 handle_release_lock(#document{
-    key = REId,
-    value = #replica_eviction{file_uuid = FileUuid}
+    key = RDId,
+    value = #replica_deletion{file_uuid = FileUuid}
 }) ->
-    replica_eviction:delete(REId),
-    replica_eviction_lock:release_read_lock(FileUuid).
+    replica_deletion:delete(RDId),
+    replica_deletion_lock:release_read_lock(FileUuid).

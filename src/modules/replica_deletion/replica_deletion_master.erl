@@ -5,13 +5,13 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% gen_server responsible for requesting support for eviction of files
+%%% gen_server responsible for requesting support for deletion of files
 %%% from other providers. It is responsible for limiting number of
 %%% concurrent requests so that remote provider won't be flooded with them.
 %%% One such server is started per node.
 %%% @end
 %%%-------------------------------------------------------------------
--module(replica_evictor).
+-module(replica_deletion_master).
 -author("Jakub Kudzia").
 
 -behaviour(gen_server).
@@ -23,13 +23,10 @@
 
 %% API
 -export([start_link/1, notify/3, cancel/2, cancelling_finished/2,
-    notify_finished_task/1, process_result/4, evict/7, get_setting_for_eviction_task/1]).
+    notify_finished_task/1, process_result/4, enqueue/7, get_setting_for_deletion_task/1]).
 
 %% function exported for monitoring performance
 -export([check/1]).
-
-%%TODO do usuniecia, to nie powinno przejsc przez PR !!!
--export([fix/1]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -44,7 +41,7 @@
 
 % messages
 -define(TASK(Task, ReportId), #task{task = Task, id = ReportId}).
--define(EVICT(FileUuid, ProviderId, Blocks, Version, Type), #eviction_task{
+-define(DELETE(FileUuid, ProviderId, Blocks, Version, Type), #deletion_task{
     uuid = FileUuid,
     supporting_provider = ProviderId,
     blocks = Blocks,
@@ -56,24 +53,24 @@
 -define(CANCEL_DONE(ReportId), {cancel_done, ReportId}).
 -define(FINISHED, finished).
 
--define(MAX_ACTIVE_TASKS, application:get_env(?APP_NAME, max_active_eviction_requests, 2000)).
+-define(MAX_ACTIVE_TASKS, application:get_env(?APP_NAME, max_active_deletion_tasks, 2000)).
 
 -record(state, {
     space_id :: od_space:id(),
     active_tasks = 0 :: non_neg_integer(),
-    queues = #{} :: #{replica_eviction:report_id() => queue:queue()},
+    queues = #{} :: #{replica_deletion:report_id() => queue:queue()},
     ids_queue = queue:new() :: queue:queue(),
     ids_to_cancel = gb_sets:new() :: gb_sets:set(),
     max_active_tasks = ?MAX_ACTIVE_TASKS
 }).
 
--record(eviction_task, {
+-record(deletion_task, {
     uuid :: file_meta:uuid(),
     file :: file_ctx:ctx(),
     supporting_provider :: od_provider:id(),
     blocks :: fslogic_blocks:blocks(),
     version :: version_vector:version_vector(),
-    type :: replica_eviction:type()
+    type :: replica_deletion:type()
 }).
 
 -record(notification_task, {
@@ -81,48 +78,44 @@
 }).
 
 -record(task, {
-    task :: eviction_task() | notification_task(),
-    id :: replica_eviction:report_id()
+    task :: deletion_task() | notification_task(),
+    id :: replica_deletion:report_id()
 }).
 
 
 -type task() :: #task{}.
--type eviction_task() :: #eviction_task{}.
+-type deletion_task() :: #deletion_task{}.
 -type notification_task() :: #notification_task{}.
 -type notify_fun() :: fun(() -> term()).
 
-%%TODO
-%%TODO * handle too long queue of tasks and return error
+%%TODO VFS-4625 handle too long queue of tasks and return error
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
-%%TODO wywalić
-fix(SpaceId) ->
-    gen_server2:cast(?SERVER(SpaceId), fix).
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Casts task for sending new eviction_request.
+%% Casts task for sending new replica_deletion request.
 %% @end
 %%-------------------------------------------------------------------
--spec evict(file_meta:uuid(), od_provider:id(), fslogic_blocks:blocks(),
-    version_vector:version_vector(), replica_eviction:report_id(),
-    replica_eviction:type(), od_space:id()) -> ok.
-evict(FileUuid, ProviderId, Blocks, Version, ReportId, Type, SpaceId) ->
+-spec enqueue(file_meta:uuid(), od_provider:id(), fslogic_blocks:blocks(),
+    version_vector:version_vector(), replica_deletion:report_id(),
+    replica_deletion:type(), od_space:id()) -> ok.
+enqueue(FileUuid, ProviderId, Blocks, Version, ReportId, Type, SpaceId) ->
     ensure_started(SpaceId),
-    gen_server2:cast(?SERVER(SpaceId), ?TASK(?EVICT(FileUuid, ProviderId,
+    gen_server2:cast(?SERVER(SpaceId), ?TASK(?DELETE(FileUuid, ProviderId,
         Blocks, Version, Type), ReportId)).
 
 %%-------------------------------------------------------------------
 %% @doc
 %% Casts notification task. 
 %% NotifyFun can be literally any function.
-%% It will be called by replica_evictor to notify requester.
+%% It will be called by replica_deletion_master to notify requester.
 %% @end
 %%-------------------------------------------------------------------
--spec notify(function(), replica_eviction:report_id(), od_space:id()) -> ok.
+-spec notify(function(), replica_deletion:report_id(), od_space:id()) -> ok.
 notify(NotifyFun, ReportId, SpaceId) ->
     gen_server2:cast(?SERVER(SpaceId), ?TASK(?NOTIFY(NotifyFun), ReportId)).
 
@@ -135,7 +128,7 @@ notify(NotifyFun, ReportId, SpaceId) ->
 %%         They just won't be executed when they reach head of queue. 
 %% @end
 %%-------------------------------------------------------------------
--spec cancel(replica_eviction:report_id(), od_space:id()) -> ok.
+-spec cancel(replica_deletion:report_id(), od_space:id()) -> ok.
 cancel(ReportId, SpaceId) ->
     gen_server2:cast(?SERVER(SpaceId), ?CANCEL(ReportId)).
 
@@ -144,7 +137,7 @@ cancel(ReportId, SpaceId) ->
 %% Removes given if from ids to be cancelled.
 %% @end
 %%-------------------------------------------------------------------
--spec cancelling_finished(replica_eviction:report_id(), od_space:id()) -> ok.
+-spec cancelling_finished(replica_deletion:report_id(), od_space:id()) -> ok.
 cancelling_finished(ReportId, SpaceId) ->
     gen_server2:cast(?SERVER(SpaceId), ?CANCEL_DONE(ReportId)).
 
@@ -170,15 +163,15 @@ check(SpaceId) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Delegates processing of eviction results to appropriate model
+%% Delegates processing of deletion results to appropriate model
 %% @end
 %%-------------------------------------------------------------------
--spec process_result(replica_eviction:type(), file_meta:uuid(), 
-    replica_eviction:result(), replica_eviction:report_id()) -> ok.
+-spec process_result(replica_deletion:type(), file_meta:uuid(),
+    replica_deletion:result(), replica_deletion:report_id()) -> ok.
 process_result(autocleaning, FileUuid, Result, ReportId) ->
-    autocleaning_controller:process_eviction_result(Result, FileUuid, ReportId);
+    autocleaning_controller:process_replica_deletion_result(Result, FileUuid, ReportId);
 process_result(invalidation, FileUuid, Result, ReportId) ->
-    invalidation_worker:process_eviction_result(Result, FileUuid, ReportId).
+    invalidation_worker:process_replica_deletion_result(Result, FileUuid, ReportId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -192,24 +185,24 @@ start_link(SpaceId) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Returns setting for evictions tasks.
+%% Returns setting for deletion tasks.
 %% Finds supporting provider and blocks it can support
 %% NOTE!!! currently it finds only providers who have whole file
 %%         replicated and chooses one of them.
 %% @end
 %%-------------------------------------------------------------------
--spec get_setting_for_eviction_task(file_ctx:ctx()) ->
+-spec get_setting_for_deletion_task(file_ctx:ctx()) ->
     {file_meta:uuid(), od_provider:id(), fslogic_blocks:blocks(),
         version_vector:version_vector()} | undefined.
-get_setting_for_eviction_task(FileCtx) ->
+get_setting_for_deletion_task(FileCtx) ->
     case file_ctx:get_local_file_location_doc(FileCtx) of
         {undefined, _} ->
             undefined;
         {LocalLocation, FileCtx2} ->
             VV = file_location:get_version_vector(LocalLocation),
-            case replica_finder:get_blocks_available_to_evict(FileCtx2, VV) of
+            case replica_finder:get_duplicated_blocks(FileCtx2, VV) of
                 {[{Provider, Blocks} | _], FileCtx3} ->
-                    % todo handle retries to other providers
+                    % todo VFS-4628 handle retries to other providers
                     FileUuid = file_ctx:get_uuid_const(FileCtx3),
                     {FileUuid, Provider, Blocks, VV};
                 {[], _} ->
@@ -298,12 +291,12 @@ handle_cast(Task = #task{id = ReportId}, State = #state{
 handle_cast(finished, State = #state{
     queues = Queues,
     ids_queue = IdsQueue,
-    active_tasks = ActiveEvictionsNum
+    active_tasks = ActiveTasks
 }) ->
     case queue:out(IdsQueue) of
         {empty, IdsQueue} ->
             State2 = State#state{
-                active_tasks = ActiveEvictionsNum - 1
+                active_tasks = ActiveTasks - 1
             },
             {noreply, State2};
         {{value, ReportId}, IdsQueue2} ->
@@ -312,7 +305,7 @@ handle_cast(finished, State = #state{
             State2 = State#state{
                 ids_queue = IdsQueue2,
                 queues = Queues#{ReportId => QueuePerId2},
-                active_tasks = ActiveEvictionsNum - 1
+                active_tasks = ActiveTasks - 1
             },
             handle_cast(Task, State2)
     end;
@@ -392,7 +385,7 @@ ensure_started(SpaceId) ->
 %%-------------------------------------------------------------------
 -spec handle_task(task(), od_space:id()) -> ok.
 handle_task(#task{
-    task = #eviction_task{
+    task = #deletion_task{
         uuid = FileUuid,
         supporting_provider = ProviderId,
         blocks = Blocks,
@@ -401,7 +394,7 @@ handle_task(#task{
     },
     id = ReportId
 }, SpaceId) ->
-    {ok, _} = request_eviction_support(FileUuid, ProviderId, Blocks, Version, ReportId,
+    {ok, _} = request_deletion_support(FileUuid, ProviderId, Blocks, Version, ReportId,
         Type, SpaceId),
     ok;
 handle_task(#task{task = #notification_task{notify_fun = NotifyFun}}, SpaceId) ->
@@ -411,31 +404,31 @@ handle_task(#task{task = #notification_task{notify_fun = NotifyFun}}, SpaceId) -
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Requests eviction support
+%% Requests deletion support
 %% @end
 %%-------------------------------------------------------------------
--spec request_eviction_support(file_meta:uuid(), od_provider:id(),
+-spec request_deletion_support(file_meta:uuid(), od_provider:id(),
     fslogic_blocks:blocks(), version_vector:version_vector(),
-    replica_eviction:report_id(), replica_eviction:type(), od_space:id()) ->
-    {ok, replica_eviction:id()} | {error, term()}.
-request_eviction_support(FileUuid, ProviderId, Blocks, Version, ReportId,
+    replica_deletion:report_id(), replica_deletion:type(), od_space:id()) ->
+    {ok, replica_deletion:id()} | {error, term()}.
+request_deletion_support(FileUuid, ProviderId, Blocks, Version, ReportId,
     Type, SpaceId
 ) ->
-    replica_eviction:request(FileUuid, Blocks, Version, ProviderId, SpaceId,
+    replica_deletion:request(FileUuid, Blocks, Version, ProviderId, SpaceId,
         Type, ReportId).
 
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
 %% Cancels task.
-%% Notification tasks are just ignored. Eviction tasks are handled
-%% by functions appropriate to eviction_task type.
+%% Notification tasks are just ignored. Deletion tasks are handled
+%% by functions appropriate to deletion_task type.
 %% @end
 %%-------------------------------------------------------------------
 -spec cancel_task(task(), od_space:id()) -> ok.
 cancel_task(#task{task = #notification_task{}}, SpaceId) ->
     notify_finished_task(SpaceId);
-cancel_task(#task{task = #eviction_task{type = Type}, id = ReportId}, SpaceId) ->
+cancel_task(#task{task = #deletion_task{type = Type}, id = ReportId}, SpaceId) ->
     mark_processed_file(Type, ReportId),
     notify_finished_task(SpaceId).
 
@@ -445,7 +438,7 @@ cancel_task(#task{task = #eviction_task{type = Type}, id = ReportId}, SpaceId) -
 %% Delegates increasing processed_files counter to appropriate module
 %% @end
 %%-------------------------------------------------------------------
--spec mark_processed_file(replica_eviction:type(), replica_eviction:report_id()) -> ok.
+-spec mark_processed_file(replica_deletion:type(), replica_deletion:report_id()) -> ok.
 mark_processed_file(autocleaning, AutocleaningId) ->
     {ok, _} = autocleaning:mark_processed_file(AutocleaningId),
     ok;

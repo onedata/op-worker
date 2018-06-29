@@ -64,8 +64,8 @@ get_models() -> [
     dir_location,
     storage_sync_monitoring,
     storage_sync_info,
-    replica_eviction,
-    replica_eviction_lock
+    replica_deletion,
+    replica_deletion_lock
 ].
 
 %%--------------------------------------------------------------------

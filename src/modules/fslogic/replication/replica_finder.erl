@@ -21,7 +21,7 @@
 
 %% API
 -export([get_blocks_for_sync/2, get_unique_blocks/1,
-    get_blocks_available_to_evict/2, get_all_blocks/1]).
+    get_duplicated_blocks/2, get_all_blocks/1]).
 
 %%%===================================================================
 %%% API
@@ -90,16 +90,16 @@ get_unique_blocks(FileCtx) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Finds block which can be evicted because they are replicated in
-%% other provider.
+%% Finds block which can be deleted locally because they are
+%% replicated in other provider.
 %% NOTE: Currently this functions support only whole files.
 %%       If remote provider doesn't have whole file, he is not included
 %% in the response.
 %% @end
 %%-------------------------------------------------------------------
--spec get_blocks_available_to_evict(file_ctx:ctx(), version_vector:version_vector()) ->
+-spec get_duplicated_blocks(file_ctx:ctx(), version_vector:version_vector()) ->
     {undefined | [{od_provider:id(), fslogic_blocks:blocks()}] , file_ctx:ctx()}.
-get_blocks_available_to_evict(FileCtx, LocalVV) ->
+get_duplicated_blocks(FileCtx, LocalVV) ->
     {LocationDocs, FileCtx2} = file_ctx:get_file_location_docs(FileCtx),
     LocalLocations = filter_local_locations(LocationDocs),
     LocalBlocksList = get_all_blocks(LocalLocations),
@@ -108,9 +108,9 @@ get_blocks_available_to_evict(FileCtx, LocalVV) ->
             {undefined, FileCtx2};
         _ ->
             RemoteLocations = LocationDocs -- LocalLocations,
-            Result = get_blocks_available_to_evict_per_provider(LocalBlocksList,
+            Result = get_duplicated_blocks_per_provider(LocalBlocksList,
                 LocalVV, RemoteLocations),
-            %TODO maybe result should be sorted by version or by size?
+            %TODO VFS-4622 maybe result should be sorted by version or by size?
             {Result, FileCtx2}
     end.
 
@@ -121,19 +121,19 @@ get_blocks_available_to_evict(FileCtx, LocalVV) ->
 %%--------------------------------------------------------------------
 -spec get_all_blocks([file_location:doc()]) -> fslogic_blocks:blocks().
 get_all_blocks(LocationList) ->
-    fslogic_blocks:consolidate(lists:sort([Block ||
-        #document{value = #file_location{blocks = Blocks}} <- LocationList,
-        Block <- Blocks
-    ])).
+    Blocks = lists:flatmap(fun(Location) ->
+        fslogic_blocks:get_blocks(Location)
+    end, LocationList),
+    fslogic_blocks:consolidate(lists:sort(Blocks)).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
--spec get_blocks_available_to_evict_per_provider(fslogic_blocks:blocks(),
+-spec get_duplicated_blocks_per_provider(fslogic_blocks:blocks(),
     version_vector:version_vector(), [file_location:doc()]) ->
     [{od_provider:id(), fslogic_block:blocks()}].
-get_blocks_available_to_evict_per_provider(LocalBlocksList, LocalVV, RemoteLocations) ->
+get_duplicated_blocks_per_provider(LocalBlocksList, LocalVV, RemoteLocations) ->
     lists:filtermap(fun(Doc = #document{
         value = #file_location{
             version_vector = VV,
@@ -146,7 +146,7 @@ get_blocks_available_to_evict_per_provider(LocalBlocksList, LocalVV, RemoteLocat
                 ComparisonResult =:= lesser
             ->
                 RemoteBlocksList = get_all_blocks([Doc]),
-                % TODO currently we choose only providers who have all local blocks replicated
+                % TODO VFS-3728 currently we choose only providers who have all local blocks replicated
                 case fslogic_blocks:invalidate(LocalBlocksList, RemoteBlocksList) of
                     [] ->
                         {true, {ProviderId, LocalBlocksList}};
