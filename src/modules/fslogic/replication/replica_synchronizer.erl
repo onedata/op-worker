@@ -26,6 +26,8 @@
 -define(MINIMAL_SYNC_REQUEST, application:get_env(?APP_NAME, minimal_sync_request, 32768)).
 -define(TRIGGER_BYTE, application:get_env(?APP_NAME, trigger_byte, 52428800)).
 -define(PREFETCH_SIZE, application:get_env(?APP_NAME, prefetch_size, 104857600)).
+-define(MAX_OVERLAPPING_MULTIPLIER,
+    application:get_env(?APP_NAME, overlapping_block_max_multiplier, 5)).
 
 %% The process is supposed to die after ?DIE_AFTER time of idling (no requests in flight)
 -define(DIE_AFTER, 60000).
@@ -104,6 +106,12 @@ synchronize_internal(UserCtx, FileCtx, Block, Prefetch, TransferId) ->
         %% there's nothing to worry about.
         exit:{{shutdown, timeout}, _} ->
             ?debug("Process stopped because of a timeout, retrying with a new one"),
+            synchronize_internal(UserCtx, FileCtx, Block, Prefetch, TransferId);
+        _:{noproc, _} ->
+            ?debug("Synchronizer noproc, retrying with a new one"),
+            synchronize_internal(UserCtx, FileCtx, Block, Prefetch, TransferId);
+        exit:{normal, _} ->
+            ?debug("Process stopped because of exit:normal, retrying with a new one"),
             synchronize_internal(UserCtx, FileCtx, Block, Prefetch, TransferId)
     end.
 
@@ -217,6 +225,12 @@ apply_internal(FileCtx, Fun) ->
         %% there's nothing to worry about.
         exit:{{shutdown, timeout}, _} ->
             ?debug("Process stopped because of a timeout, retrying with a new one"),
+            apply_internal(FileCtx, Fun);
+        _:{noproc, _} ->
+            ?debug("Synchronizer noproc, retrying with a new one"),
+            apply_internal(FileCtx, Fun);
+        exit:{normal, _} ->
+            ?debug("Process stopped because of exit:normal, retrying with a new one"),
             apply_internal(FileCtx, Fun)
     end.
 
@@ -307,6 +321,14 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session}, From,
 
 handle_call(flush_location, _From, State) ->
     Ans = fslogic_blocks:flush(),
+
+    case application:get_env(?APP_NAME, synchronizer_gc, on_flush_location) of
+        on_flush_location ->
+            erlang:garbage_collect();
+        _ ->
+            ok
+    end,
+
     {reply, Ans, State, ?DIE_AFTER};
 
 handle_call({apply, Fun}, _From, State) ->
@@ -712,10 +734,17 @@ enlarge_block(Block, _Prefetch) ->
 %%--------------------------------------------------------------------
 -spec find_overlapping(block(), #state{}) -> Overlapping :: [{block(), fetch_ref()}].
 find_overlapping(#file_block{offset = Offset, size = Size}, #state{in_progress = InProgress}) ->
+    MaxMultip = ?MAX_OVERLAPPING_MULTIPLIER,
     lists:filter(
         fun({#file_block{offset = O, size = S}, _Ref}) ->
-            (O =< Offset andalso Offset < O + S) orelse
-                (Offset =< O andalso O < Offset + Size)
+            case
+                (O =< Offset andalso Offset < O + S) orelse
+                    (Offset =< O andalso O < Offset + Size) of
+                true ->
+                    (S < MaxMultip * Size) orelse (MaxMultip =:= 0);
+                false ->
+                    false
+            end
         end,
         InProgress).
 
@@ -829,7 +858,12 @@ flush_stats(State, ExcludeSessions) ->
 %%        SpaceId, UserId, get_summarized_blocks_size(AllBlocks)
 %%    ),
 
-    erlang:garbage_collect(),
+    case application:get_env(?APP_NAME, synchronizer_gc, on_flush_location) of
+        on_flush_stats ->
+            erlang:garbage_collect();
+        _ ->
+            ok
+    end,
 
     Ans = #file_location_changed{
         file_location = Location,

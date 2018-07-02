@@ -159,6 +159,9 @@ public_rpc_backend() -> public_rpc_backend.
 session_details() ->
     ProviderId = oneprovider:get_id(),
     {ok, ProviderName} = provider_logic:get_name(ProviderId),
+    TransfersHistoryLimitPerFile = application:get_env(
+        ?APP_NAME, transfers_history_limit_per_file, 100
+    ),
     Res = [
         {<<"userId">>, gui_session:get_user_id()},
         {<<"providerId">>, ProviderId},
@@ -169,7 +172,10 @@ session_details() ->
         {<<"manageProvidersURL">>,
             str_utils:to_binary(oneprovider:get_oz_providers_page())
         },
-        {<<"serviceVersion">>, oneprovider:get_version()}
+        {<<"serviceVersion">>, oneprovider:get_version()},
+        {<<"config">>, [
+            {<<"transfersHistoryLimitPerFile">>, TransfersHistoryLimitPerFile}
+        ]}
     ],
     {ok, Res}.
 

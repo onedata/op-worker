@@ -27,6 +27,8 @@
 -define(MOCK_CAVEAT_ID, <<"mockCaveat">>).
 -define(MOCK_DISCH_MACAROON, <<"mockDischMac">>).
 
+-define(DUMMY_PROVIDER_ID, <<"dummyProviderId">>).
+
 -define(MOCK_PROVIDER_IDENTITY_MACAROON(__ProviderId), <<"DUMMY-PROVIDER-IDENTITY-MACAROON-", __ProviderId/binary>>).
 -define(MOCK_PROVIDER_AUTH_MACAROON(__ProviderId), <<"DUMMY-PROVIDER-AUTH-MACAROON-", __ProviderId/binary>>).
 
@@ -430,9 +432,18 @@ end).
         <<"subdomainDelegation">> => ?PROVIDER_SUBDOMAIN_DELEGATION(__ProviderId),
         <<"subdomain">> => ?PROVIDER_SUBDOMAIN(__ProviderId),
         <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_provider, id = __ProviderId, aspect = instance, scope = private}),
-        <<"spaces">> => ?PROVIDER_SPACES_VALUE(__ProviderId),
-        <<"effectiveUsers">> => ?PROVIDER_EFF_USERS(__ProviderId),
-        <<"effectiveGroups">> => ?PROVIDER_EFF_GROUPS(__ProviderId)
+        <<"spaces">> => case __ProviderId of
+            ?DUMMY_PROVIDER_ID -> #{};
+            _ -> ?PROVIDER_SPACES_VALUE(__ProviderId)
+        end,
+        <<"effectiveUsers">> => case __ProviderId of
+            ?DUMMY_PROVIDER_ID -> [];
+            _ -> ?PROVIDER_EFF_USERS(__ProviderId)
+        end,
+        <<"effectiveGroups">> => case __ProviderId of
+            ?DUMMY_PROVIDER_ID -> [];
+            _ -> ?PROVIDER_EFF_GROUPS(__ProviderId)
+        end
 
     }
 end).
