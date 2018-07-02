@@ -86,7 +86,7 @@ update_statistics(SpaceId, BytesPerProvider) ->
 spec() -> #{
     id => ?MODULE,
     start => {?MODULE, start_link, []},
-    restart => temporary,
+    restart => permanent,
     shutdown => timer:seconds(10),
     type => worker,
     modules => [?MODULE]
@@ -158,7 +158,7 @@ handle_cast(Request, State) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
 handle_info({?FLUSH_STATS, SpaceId}, State) ->
-    {noreply, flush_stats(State, SpaceId)};
+    {noreply, flush_stats(SpaceId, State)};
 handle_info(Info, State) ->
     ?log_bad_request(Info),
     {noreply, State}.

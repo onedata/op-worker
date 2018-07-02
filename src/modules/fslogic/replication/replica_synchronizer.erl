@@ -62,7 +62,7 @@
     from_sessions = #{} :: #{from() => session:id()},
     from_to_transfer_id = #{} :: #{from() => transfer:id() | undefined},
     transfer_id_to_from = #{} :: #{transfer:id() | undefined => from()},
-    cached_stats = #{} :: #{transfer:id() => #{od_provider:id() => integer()}},
+    cached_stats = #{} :: #{undefined | transfer:id() => #{od_provider:id() => integer()}},
     cached_blocks = [] :: [block()],
     caching_stats_timer :: undefined | reference(),
     caching_blocks_timer :: undefined | reference()
@@ -374,7 +374,7 @@ handle_info({Ref, active, ProviderId, Block}, State) ->
     {noreply, cache_stats_and_blocks(TransferIds, ProviderId, Block, State), ?DIE_AFTER};
 
 handle_info(?FLUSH_STATS, State) ->
-    {noreply, flush_stats(State), ?DIE_AFTER};
+    {noreply, flush_stats(State, true), ?DIE_AFTER};
 
 handle_info(?FLUSH_BLOCKS, State) ->
     {_, State2} = flush_blocks(State, []),
@@ -394,10 +394,17 @@ handle_info({Ref, complete, {ok, _} = _Status}, #state{from_sessions = FS} = Sta
     end, {[], FS}, FinishedFroms),
 
     {Location, State2} = flush_blocks(State1, ExcludeSessions),
+    State3 = case maps:take(undefined, State2#state.cached_stats) of
+        error ->
+            flush_stats(State2, true);
+        {OnfStats, JobsStats} ->
+            TempState = flush_stats(State2#state{cached_stats = JobsStats}, false),
+            TempState#state{cached_stats = #{undefined => OnfStats}}
+    end,
     TransferIds = maps:with(FinishedFroms, FromToTransferId),
     [transfer:increase_files_transferred_counter(TID) || TID <- maps:values(TransferIds)],
     [gen_server2:reply(From, {ok, Location}) || From <- FinishedFroms],
-    {noreply, State2#state{from_sessions = FS2}, ?DIE_AFTER};
+    {noreply, State3#state{from_sessions = FS2}, ?DIE_AFTER};
 
 handle_info({FailedRef, complete, {error, disconnected}}, State) ->
     {Block, AffectedFroms, _FinishedFroms, State1} = disassociate_ref(FailedRef, State),
@@ -437,7 +444,7 @@ code_change(_OldVsn, State, _Extra) ->
 terminate(_Reason, State) ->
     {_, State2} = flush_blocks(State, []),
     fslogic_blocks:flush(),
-    flush_stats(State2),
+    flush_stats(State2, true),
     ignore.
 
 %%%===================================================================
@@ -855,13 +862,13 @@ flush_blocks(State, ExcludeSessions) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Flush aggregated so far transfer stats.
+%% Flush aggregated so far transfer stats and optionally cancels timer.
 %% @end
 %%--------------------------------------------------------------------
--spec flush_stats(#state{}) -> #state{}.
-flush_stats(#state{cached_stats = Stats} = State) when map_size(Stats) == 0 ->
+-spec flush_stats(#state{}, boolean()) -> #state{}.
+flush_stats(#state{cached_stats = Stats} = State, _) when map_size(Stats) == 0 ->
     State;
-flush_stats(#state{space_id = SpaceId} = State) ->
+flush_stats(#state{space_id = SpaceId} = State, CancelTimer) ->
     lists:foreach(fun({TransferId, BytesPerProvider}) ->
         case transfer:mark_data_transfer_finished(
             TransferId, SpaceId, BytesPerProvider
@@ -881,7 +888,13 @@ flush_stats(#state{space_id = SpaceId} = State) ->
 %%        SpaceId, UserId, get_summarized_blocks_size(AllBlocks)
 %%    ),
 
-    NewState = cancel_caching_stats_timer(State#state{cached_stats = #{}}),
+    NewState = case CancelTimer of
+        true ->
+            cancel_caching_stats_timer(State#state{cached_stats = #{}});
+        false ->
+            State#state{cached_stats = #{}}
+    end,
+
     case application:get_env(?APP_NAME, synchronizer_gc, on_flush_location) of
         on_flush_stats ->
             erlang:garbage_collect();

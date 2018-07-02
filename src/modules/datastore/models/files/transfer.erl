@@ -1408,56 +1408,28 @@ upgrade_record(6, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, Status,
 -spec resolve_conflict(datastore_model:ctx(), doc(), doc()) ->
     {boolean(), doc()} | ignore | default.
 resolve_conflict(_Ctx, NewDoc, PreviousDoc) ->
-    #document{value = PrevTransfer} = PreviousDoc,
-    #document{revs = [NewRev], value = NewTransfer} = NewDoc,
+    case {NewDoc#document.value, PreviousDoc#document.value} of
+        {#transfer{enqueued = Enqueued}, #transfer{enqueued = Enqueued}} ->
+            % Enqueued field did not change, just take the highest rev
+            default;
 
-    {D1, D2} = order_transfers(PreviousDoc, NewDoc),
+        {T = #transfer{enqueued = true}, #transfer{enqueued = false}} ->
+            #document{revs = [NewRev | _]} = NewDoc,
+            #document{revs = [PreviousRev | _]} = PreviousDoc,
+            case datastore_utils:is_greater_rev(NewRev, PreviousRev) of
+                true ->
+                    {true, NewDoc#document{value = T#transfer{enqueued = false}}};
+                false ->
+                    {false, PreviousDoc}
+            end;
 
-    case PrevTransfer#transfer.enqueued == NewTransfer#transfer.enqueued of
-        true ->
-            {false, D1};
-        false ->
-            #document{revs = [Rev], value = T1} = D1,
-            #document{value = T2} = D2,
-
-            EmergingTransfer = T1#transfer{
-                enqueued = T1#transfer.enqueued and T2#transfer.enqueued
-            },
-            {Rev == NewRev, D1#document{value = EmergingTransfer}}
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% @private
-%% Compares 2 transfers given as args and returns them as tuple with first
-%% element being the greater/newer one.
-%% Fields being compared are in order: files_to_process, files_processed,
-%% files_transferred, bytes_transferred and files_invalidated, revision.
-%% Since only provider performing replication/invalidation modifies those
-%% fields, all of them must be greater or equal when comparing one transfer to
-%% the other.
-%% @end
-%%--------------------------------------------------------------------
--spec order_transfers(doc(), doc()) -> {doc(), doc()}.
-order_transfers(D1, D2) ->
-    #document{revs = [Rev1 | _], value = T1} = D1,
-    #document{revs = [Rev2 | _], value = T2} = D2,
-    IsGreaterRev = datastore_utils:is_greater_rev(Rev1, Rev2),
-
-    Vec1 = {
-        T1#transfer.files_to_process, T1#transfer.files_processed,
-        T1#transfer.files_transferred, T1#transfer.bytes_transferred,
-        T1#transfer.files_invalidated, IsGreaterRev
-    },
-
-    Vec2 = {
-        T2#transfer.files_to_process, T2#transfer.files_processed,
-        T2#transfer.files_transferred, T2#transfer.bytes_transferred,
-        T2#transfer.files_invalidated, not IsGreaterRev
-    },
-
-    case Vec1 >= Vec2 of
-        true -> {D1, D2};
-        false -> {D2, D1}
+        {#transfer{enqueued = false}, T = #transfer{enqueued = true}} ->
+            #document{revs = [NewRev | _]} = NewDoc,
+            #document{revs = [PreviousRev | _]} = PreviousDoc,
+            case datastore_utils:is_greater_rev(NewRev, PreviousRev) of
+                true ->
+                    {true, NewDoc};
+                false ->
+                    {false, PreviousDoc#document{value = T#transfer{enqueued = false}}}
+            end
     end.
