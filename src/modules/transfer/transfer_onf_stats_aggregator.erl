@@ -15,9 +15,6 @@
 
 -behaviour(gen_server).
 
--include("global_definitions.hrl").
--include("proto/oneprovider/provider_messages.hrl").
--include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/transfer.hrl").
 -include_lib("ctool/include/logging.hrl").
 
