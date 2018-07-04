@@ -71,7 +71,7 @@
     create_delete_import_test_read_remote_only/2, copy_file_update_test/2,
     change_file_content_update_test/2, change_file_content_update2_test/2,
     create_empty_file_import_test/2,
-    append_empty_file_update_test/2]).
+    append_empty_file_update_test/2, import_file_with_link_but_no_doc_test/2]).
 
 %%%===================================================================
 %%% Test functions
@@ -261,6 +261,54 @@ create_directory_import_test(Config, MountSpaceInRoot) ->
         <<"deletedDayHist">> := [0 | _]
     }, ?SPACE_ID).
 
+import_file_with_link_but_no_doc_test(Config, MountSpaceInRoot) ->
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    W1MountPoint = get_host_mount_point(W1, Config),
+    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
+    SessId2 = ?config({session_id, {?USER, ?GET_DOMAIN(W2)}}, Config),
+    StorageTestDirPath =
+        storage_test_dir_path(W1MountPoint, ?SPACE_ID, ?TEST_DIR, MountSpaceInRoot),
+    ok = file:make_dir(StorageTestDirPath),
+    Ctx = rpc:call(W1, file_meta, get_ctx, []),
+    TreeId = rpc:call(W1, oneprovider, get_id, []),
+    FileUuid = datastore_utils:gen_key(),
+    SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_ID),
+    {ok, _} = rpc:call(W1, datastore_model, add_links, [Ctx#{scope=>?SPACE_ID}, SpaceUuid, TreeId, {?TEST_DIR, FileUuid}]),
+    storage_sync_test_base:enable_storage_import(Config),
+
+    % wait till scan is finished
+    assertImportTimes(W1, ?SPACE_ID),
+
+    %% Check if dir was imported
+    {ok, #file_attr{guid = FileGuid}} = ?assertMatch({ok, #file_attr{}},
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
+    ?assertMatch(FileUuid, fslogic_uuid:guid_to_uuid(FileGuid)),
+    ?assertMatch({ok, #file_attr{}},
+        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> := 1,
+        <<"toProcess">> := 2,
+        <<"imported">> := 1,
+        <<"updated">> := 1,
+        <<"deleted">> := 0,
+        <<"failed">> := 0,
+        <<"otherProcessed">> := 0,
+        <<"importedSum">> := 1,
+        <<"updatedSum">> := 1,
+        <<"deletedSum">> := 0,
+        <<"importedMinHist">> := [1 | _],
+        <<"importedHourHist">> := [1 | _],
+        <<"importedDayHist">> := [1 | _],
+        <<"updatedMinHist">> := [1 | _],
+        <<"updatedHourHist">> := [1 | _],
+        <<"updatedDayHist">> := [1 | _],
+        <<"deletedMinHist">> := [0 | _],
+        <<"deletedHourHist">> := [0 | _],
+        <<"deletedDayHist">> := [0 | _]
+    }, ?SPACE_ID).
+
+
 create_directory_import_error_test(Config, MountSpaceInRoot) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     W1MountPoint = get_host_mount_point(W1, Config),
@@ -275,7 +323,7 @@ create_directory_import_error_test(Config, MountSpaceInRoot) ->
     test_utils:mock_expect(W1, simple_scan, import_file,
         fun(Job = #space_strategy_job{
             data = #{file_name := FileName}
-        }) ->
+        }, _) ->
             case FileName of
                 ?TEST_DIR ->
                     throw(test_error);
@@ -333,7 +381,7 @@ update_syncs_files_after_import_failed_test(Config, MountSpaceInRoot) ->
     test_utils:mock_expect(W1, simple_scan, import_file,
         fun(Job = #space_strategy_job{
             data = #{file_name := FileName}
-        }) ->
+        }, _) ->
             case FileName of
                 ?TEST_DIR ->
                     throw(test_error);
@@ -441,7 +489,7 @@ update_syncs_files_after_previous_update_failed_test(Config, MountSpaceInRoot) -
     timer:sleep(timer:seconds(1)),
     test_utils:mock_new(W1, simple_scan),
     test_utils:mock_expect(W1, simple_scan, import_file, fun(Job = #space_strategy_job{
-        data = #{file_name := FileName}}
+        data = #{file_name := FileName}}, _
     ) ->
         case FileName of
             ?TEST_DIR ->

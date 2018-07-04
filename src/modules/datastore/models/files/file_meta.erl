@@ -34,7 +34,7 @@
 -export([get_parent/1, get_parent_uuid/1]).
 -export([get_child/2, get_child_uuid/2, list_children/3, list_children/4]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
-    make_space_exist/1, new_doc/7, type/1, get_ancestors/1,
+    make_space_exist/1, new_doc/9, type/1, get_ancestors/1,
     get_locations_by_uuid/1, rename/4]).
 
 
@@ -83,8 +83,10 @@
 
 create(#document{value = #file_meta{is_scope = true}} = Doc) ->
     ?extract_key(datastore_model:save(?CTX, Doc));
+create(#document{key = undefined} = Doc) ->
+    ?extract_key(datastore_model:save(?CTX#{generated_key => true}, Doc));
 create(Doc) ->
-    ?extract_key(datastore_model:save(?CTX#{generated_key => true}, Doc)).
+    ?extract_key(datastore_model:save(?CTX, Doc)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -694,19 +696,27 @@ make_space_exist(SpaceId) ->
 %% Return file_meta doc.
 %% @end
 %%--------------------------------------------------------------------
--spec new_doc(undefined | file_meta:name(), undefined | file_meta:type(),
-    file_meta:posix_permissions(), undefined | od_user:id(), undefined | od_group:id(),
-    undefined | file_meta:size(), uuid()) -> doc().
-new_doc(FileName, FileType, Mode, Owner, GroupOwner, Size, ParentUuid) ->
-    #document{value = #file_meta{
-        name = FileName,
-        type = FileType,
-        mode = Mode,
-        owner = Owner,
-        group_owner = GroupOwner,
-        size = Size,
-        parent_uuid = ParentUuid
-    }}.
+-spec new_doc(undefined | uuid(), undefined | name(), undefined | type(),
+    posix_permissions(), undefined | od_user:id(), undefined | od_group:id(),
+    undefined | size(), uuid(), od_space:id()) -> doc().
+new_doc(FileUuid, FileName, FileType, Mode, Owner, GroupOwner, Size, ParentUuid,
+    SpaceId
+) ->
+    #document{
+        key = FileUuid,
+        value = #file_meta{
+            name = FileName,
+            type = FileType,
+            mode = Mode,
+            owner = Owner,
+            group_owner = GroupOwner,
+            size = Size,
+            parent_uuid = ParentUuid,
+            provider_id = oneprovider:get_id(),
+            scope = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)
+        },
+        scope = SpaceId
+    }.
 
 %%--------------------------------------------------------------------
 %% @doc
