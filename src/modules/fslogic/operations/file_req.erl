@@ -237,7 +237,7 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
                 ?NEW_HANDLE_ID;
             _ ->
                 % open file on adequate node
-                Node = consistent_hasing:get_node(FileUuid),
+                Node = consistent_hashing:get_node(FileUuid),
                 #fuse_response{
                     status = #status{code = ?OK},
                     fuse_response = #file_opened{handle_id = HId}

@@ -6,7 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc This test verifies if the core cluster mechanisms such as nagios,
-%%% hasing and datastore models work as expected.
+%%% hashing and datastore models work as expected.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(core_mechanism_test_SUITE).

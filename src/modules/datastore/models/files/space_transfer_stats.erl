@@ -119,7 +119,7 @@ get(ProviderId, TransferType, SpaceId) ->
 -spec update_with_cache(TransferType :: binary(), SpaceId :: od_space:id(),
     BytesPerProvider :: #{od_provider:id() => size()}) -> ok.
 update_with_cache(TransferType, SpaceId, BytesPerProvider) ->
-    Node = consistent_hasing:get_node(SpaceId),
+    Node = consistent_hashing:get_node(SpaceId),
     rpc:call(Node, ?MODULE, update_with_cache_internal,
         [TransferType, SpaceId, BytesPerProvider]).
 

@@ -217,7 +217,7 @@ get_connection_status() ->
 %% @end
 %%--------------------------------------------------------------------
 get_gs_client_node() ->
-    consistent_hasing:get_node(?GS_CLIENT_WORKER_GLOBAL_NAME).
+    consistent_hashing:get_node(?GS_CLIENT_WORKER_GLOBAL_NAME).
 
 
 -spec start_gs_client_worker() -> alive | connection_error.

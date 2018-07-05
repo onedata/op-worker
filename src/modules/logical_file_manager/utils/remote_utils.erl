@@ -54,7 +54,7 @@ call_fslogic(SessId, fuse_request, Request = #file_request{
     file_request = FileReq
 }, OKHandle) when is_record(FileReq, open_file) orelse
     is_record(FileReq, open_file_with_extended_info) orelse is_record(FileReq, release) ->
-    Node = consistent_hasing:get_node(fslogic_uuid:guid_to_uuid(FileGuid)),
+    Node = consistent_hashing:get_node(fslogic_uuid:guid_to_uuid(FileGuid)),
 
     case worker_proxy:call({fslogic_worker, Node}, {fuse_request, SessId,
         #fuse_request{fuse_request = Request}}) of
@@ -74,7 +74,7 @@ call_fslogic(SessId, fuse_request, Request, OKHandle) ->
 call_fslogic(SessId, proxyio_request, Request = #proxyio_request{
     parameters = #{?PROXYIO_PARAMETER_FILE_GUID := FileGuid}
 }, OKHandle) ->
-    Node = consistent_hasing:get_node(fslogic_uuid:guid_to_uuid(FileGuid)),
+    Node = consistent_hashing:get_node(fslogic_uuid:guid_to_uuid(FileGuid)),
     case worker_proxy:call({fslogic_worker, Node}, {proxyio_request, SessId, Request}) of
         {ok, #proxyio_response{status = #status{code = ?OK}, proxyio_response = Response}} ->
             OKHandle(Response);

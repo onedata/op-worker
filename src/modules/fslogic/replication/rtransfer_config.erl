@@ -202,7 +202,7 @@ add_storage(#document{key = StorageId, value = #storage{}} = Storage) ->
     HelperParams = helper:get_params(Helper, helper:get_admin_ctx(Helper)),
     HelperName = helper:get_name(HelperParams),
     HelperArgs = maps:to_list(helper:get_args(HelperParams)),
-    {_, BadNodes} = rpc:multicall(consistent_hasing:get_all_nodes(),
+    {_, BadNodes} = rpc:multicall(consistent_hashing:get_all_nodes(),
                                   rtransfer_link, add_storage,
                                   [StorageId, HelperName, HelperArgs]),
     BadNodes =/= [] andalso
@@ -217,7 +217,7 @@ add_storage(#document{key = StorageId, value = #storage{}} = Storage) ->
 -spec generate_secret(ProviderId :: binary(), PeerSecret :: binary()) -> binary().
 generate_secret(ProviderId, PeerSecret) ->
     MySecret = do_generate_secret(),
-    {_, BadNodes} = rpc:multicall(consistent_hasing:get_all_nodes(),
+    {_, BadNodes} = rpc:multicall(consistent_hashing:get_all_nodes(),
                                   rtransfer_link, allow_connection,
                                   [ProviderId, MySecret, PeerSecret, 60000]),
     BadNodes =/= [] andalso
