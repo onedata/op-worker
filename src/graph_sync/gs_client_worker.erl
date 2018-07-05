@@ -47,6 +47,7 @@
 -type connection_ref() :: pid().
 -type doc() :: datastore:document().
 
+
 %% API
 -export([start_link/0]).
 -export([request/1, request/2]).
