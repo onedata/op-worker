@@ -149,7 +149,7 @@ start_streams() ->
         lists:foreach(fun(SpaceId) ->
             Name = {Module, SpaceId},
             Pid = global:whereis_name(Name),
-            Node = consistent_hasing:get_node(Name),
+            Node = consistent_hashing:get_node(Name),
             case {Pid, Node =:= node(), Module} of
                 {undefined, true, dbsync_in_stream} ->
                     start_in_stream(SpaceId);
@@ -257,7 +257,7 @@ handle_changes_request(ProviderId, #changes_request2{
             ?APP_NAME, dbsync_changes_resend_interval, timer:seconds(1)
         )}
     ]),
-    Node = consistent_hasing:get_node({dbsync_out_stream, SpaceId}),
+    Node = consistent_hashing:get_node({dbsync_out_stream, SpaceId}),
     rpc:call(Node, supervisor, start_child, [?DBSYNC_WORKER_SUP, Spec]).
 
 %%--------------------------------------------------------------------

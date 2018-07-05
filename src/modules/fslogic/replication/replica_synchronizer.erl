@@ -81,7 +81,7 @@
     {ok, #file_location_changed{}} | {error, Reason :: any()}.
 synchronize(UserCtx, FileCtx, Block, Prefetch, TransferId) ->
     Uuid = file_ctx:get_uuid_const(FileCtx),
-    Node = consistent_hasing:get_node(Uuid),
+    Node = consistent_hashing:get_node(Uuid),
     rpc:call(Node, ?MODULE, synchronize_internal,
         [UserCtx, FileCtx, Block, Prefetch, TransferId]).
 
@@ -147,7 +147,7 @@ cancel(TransferId) ->
 %%--------------------------------------------------------------------
 -spec flush_location(file_meta:uuid()) -> ok.
 flush_location(Uuid) ->
-    Node = consistent_hasing:get_node(Uuid),
+    Node = consistent_hashing:get_node(Uuid),
     rpc:call(Node, ?MODULE, flush_location_internal, [Uuid]).
 
 %%--------------------------------------------------------------------
@@ -172,7 +172,7 @@ flush_location_internal(Uuid) ->
 -spec apply(file_meta:uuid(), fun(() -> term()), fun(() -> term())) ->
     term().
 apply(Uuid, Fun1, Fun2) ->
-    Node = consistent_hasing:get_node(Uuid),
+    Node = consistent_hashing:get_node(Uuid),
     rpc:call(Node, ?MODULE, apply_internal, [Uuid, Fun1, Fun2]).
 
 %%--------------------------------------------------------------------
@@ -202,7 +202,7 @@ apply(FileCtx, Fun) ->
     case get(file_locations) of
         undefined ->
             Uuid = file_ctx:get_uuid_const(FileCtx),
-            Node = consistent_hasing:get_node(Uuid),
+            Node = consistent_hashing:get_node(Uuid),
             rpc:call(Node, ?MODULE, apply_internal, [FileCtx, Fun]);
         _ ->
             Fun()

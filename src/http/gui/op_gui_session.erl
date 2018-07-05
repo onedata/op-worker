@@ -14,6 +14,7 @@
 
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("gui/include/gui_session.hrl").
 
 -export([log_in/3, log_out/1, get/1, get_user_id/1]).
 -export([put_value/3, get_value/2, get_value/3, update_value/4]).
@@ -33,7 +34,7 @@
 log_in(Identity, Auth, Req) ->
     {ok, SessionId} = session_manager:create_gui_session(Identity, Auth),
     put_value(SessionId, gui_session_user_id, Identity#user_identity.user_id),
-    new_gui:set_session_cookie(SessionId, session:session_ttl(), Req).
+    set_session_cookie(SessionId, session:session_ttl(), Req).
 
 
 %%--------------------------------------------------------------------
@@ -44,12 +45,12 @@ log_in(Identity, Auth, Req) ->
 %%--------------------------------------------------------------------
 -spec log_out(cowboy_req:req()) -> cowboy_req:req().
 log_out(Req) ->
-    case new_gui:get_session_cookie(Req) of
+    case get_session_cookie(Req) of
         undefined ->
             Req;
         SessionId ->
             session_manager:remove_session(SessionId),
-            new_gui:unset_session_cookie(Req)
+            unset_session_cookie(Req)
     end.
 
 
@@ -62,7 +63,7 @@ log_out(Req) ->
 get(SessionId) when is_binary(SessionId) ->
     session:get(SessionId);
 get(Req) ->
-    case new_gui:get_session_cookie(Req) of
+    case get_session_cookie(Req) of
         undefined ->
             {error, not_found};
         SessionId ->
@@ -161,3 +162,45 @@ update_session(SessionId, MemoryUpdateFun) ->
         {ok, _} -> ok;
         {error, Error} -> {error, Error}
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns the value of session cookie sent by the client, or undefined.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_session_cookie(cowboy_req:req()) -> undefined | binary().
+get_session_cookie(Req) ->
+    Cookies = cowboy_req:parse_cookies(Req),
+    case proplists:get_value(?SESSION_COOKIE_KEY, Cookies, ?NO_SESSION) of
+        ?NO_SESSION -> undefined;
+        Cookie -> Cookie
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets the value of session cookie in the response to client request.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_session_cookie(SessionId :: binary(), TTL :: integer(), cowboy_req:req()) ->
+    cowboy_req:req().
+set_session_cookie(SessionId, TTL, Req) ->
+    Options = #{
+        path => <<"/">>,
+        max_age => TTL,
+        secure => true,
+        http_only => true
+    },
+    cowboy_req:set_resp_cookie(?SESSION_COOKIE_KEY, SessionId, Req, Options).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Clears the value of session cookie in the response to client request
+%% (effectively clearing his session).
+%% @end
+%%--------------------------------------------------------------------
+-spec unset_session_cookie(cowboy_req:req()) -> cowboy_req:req().
+unset_session_cookie(Req) ->
+    set_session_cookie(?NO_SESSION, 0, Req).
