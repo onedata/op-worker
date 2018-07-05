@@ -47,6 +47,10 @@
 -type connection_ref() :: pid().
 -type doc() :: datastore:document().
 
+-define(KEEPALIVE_INTERVAL,
+    application:get_env(?APP_NAME, graph_sync_keepalive_interval, timer:seconds(30))
+).
+
 %% API
 -export([start_link/0]).
 -export([request/1, request/2]).
@@ -150,6 +154,7 @@ init([]) ->
             yes = global:register_name(?GS_CLIENT_WORKER_GLOBAL_NAME, self()),
             ?info("Started connection to Onezone: ~p", [ClientRef]),
             oneprovider:on_connection_to_oz(),
+            erlang:send_after(?KEEPALIVE_INTERVAL, self(), keepalive),
             {ok, #state{client_ref = ClientRef}};
         {error, _} = Error ->
             ?warning("Cannot start connection to Onezone: ~p", [Error]),
@@ -206,6 +211,17 @@ handle_cast(Request, #state{} = State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
+handle_info(keepalive, State = #state{client_ref = ClientRef}) ->
+    GsReq = #gs_req{
+        subtype = graph,
+        request = #gs_req_graph{
+            operation = get,
+            gri = #gri{type = od_provider, id = undefined, aspect = current_time}
+        }
+    },
+    {ok, _} = gs_client:sync_request(ClientRef, GsReq),
+    erlang:send_after(?KEEPALIVE_INTERVAL, self(), keepalive),
+    {noreply, State};
 handle_info({'EXIT', Pid, Reason}, #state{client_ref = Pid} = State) ->
     ?warning("Connection to Onezone lost, reason: ~p", [Reason]),
     {stop, normal, State};
