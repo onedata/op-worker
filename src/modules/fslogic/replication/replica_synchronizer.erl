@@ -394,6 +394,9 @@ handle_info({Ref, complete, {ok, _} = _Status}, #state{from_sessions = FS} = Sta
     end, {[], FS}, FinishedFroms),
 
     {Location, State2} = flush_blocks(State1, ExcludeSessions),
+    % Transfer on the fly statistics are being kept under `undefined` key in
+    % `state.cached_stats` map, so take it from it and flush only jobs stats;
+    % on the lfy transfer stats are flushed only on cache timer timeout
     State3 = case maps:take(undefined, State2#state.cached_stats) of
         error ->
             flush_stats(State2, true);
@@ -850,7 +853,12 @@ flush_blocks(State, ExcludeSessions) ->
     ok = fslogic_event_emitter:emit_file_location_changed(Location,
         ExcludeSessions, EventOffset, EventSize),
 
-    erlang:garbage_collect(),
+    case application:get_env(?APP_NAME, synchronizer_gc, on_flush_location) of
+        on_flush_blocks ->
+            erlang:garbage_collect();
+        _ ->
+            ok
+    end,
 
     Ans = #file_location_changed{
         file_location = Location,
@@ -932,6 +940,7 @@ cancel_caching_blocks_timer(#state{caching_blocks_timer = TimerRef} = State) ->
     State#state{caching_blocks_timer = undefined}.
 
 
+% TODO VFS-4412 emit rtransfer statistics
 %%-spec get_summarized_blocks_size([block()]) -> non_neg_integer().
 %%get_summarized_blocks_size(Blocks) ->
 %%    lists:foldl(fun(#file_block{size = Size}, Acc) ->

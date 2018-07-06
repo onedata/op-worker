@@ -225,7 +225,7 @@ cache_stats(SpaceId, BytesPerProvider, #state{cached_stats = Stats} = State) ->
 flush_stats(SpaceId, #state{cached_stats = StatsPerSpace} = State) ->
     case maps:take(SpaceId, StatsPerSpace) of
         error ->
-            State;
+            cancel_caching_timer(SpaceId, State);
         {Stats, RestStatsPerSpace} ->
             CurrentTime = provider_logic:zone_time_seconds(),
             case space_transfer_stats:update(
@@ -245,11 +245,25 @@ flush_stats(SpaceId, #state{cached_stats = StatsPerSpace} = State) ->
             NewState = cancel_caching_timer(SpaceId, State#state{
                 cached_stats = RestStatsPerSpace
             }),
-            erlang:garbage_collect(),
+
+            case application:get_env(
+                ?APP_NAME, transfer_onf_stats_aggregator_gc, off
+            ) of
+                on ->
+                    erlang:garbage_collect();
+                _ ->
+                    ok
+            end,
             NewState
     end.
 
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Flushes all stats, that is stats for every space aggregated so far.
+%% @end
+%%--------------------------------------------------------------------
 -spec flush_all_stats(state()) -> state().
 flush_all_stats(#state{cached_stats = StatsPerSpace} = State) ->
     lists:foldl(fun(SpaceId, Acc) ->
@@ -257,6 +271,13 @@ flush_all_stats(#state{cached_stats = StatsPerSpace} = State) ->
     end, State, maps:keys(StatsPerSpace)).
 
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Sets caching timer for stats of given space.
+%% After timeout msg to flush them will be send.
+%% @end
+%%--------------------------------------------------------------------
 -spec set_caching_timer(od_space:id(), state()) -> state().
 set_caching_timer(SpaceId, #state{caching_timers = Timers} = State) ->
     TimerRef = case maps:get(SpaceId, Timers, undefined) of
@@ -269,6 +290,12 @@ set_caching_timer(SpaceId, #state{caching_timers = Timers} = State) ->
     State#state{caching_timers = Timers#{SpaceId => TimerRef}}.
 
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Cancels caching timer for specified space.
+%% @end
+%%--------------------------------------------------------------------
 -spec cancel_caching_timer(od_space:id(), state()) -> state().
 cancel_caching_timer(SpaceId, #state{caching_timers = Timers} = State) ->
     NewTimers = case maps:take(SpaceId, Timers) of
