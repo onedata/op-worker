@@ -26,7 +26,7 @@
 %% How many entries shall be processed in one batch for set_scope operation.
 -define(SET_SCOPE_BATCH_SIZE, 100).
 
--export([create/1, create/2, save/1, get/1, exists/1, update/2, delete/1,
+-export([save/1, create/2, save/2, get/1, exists/1, update/2, delete/1,
     delete_without_link/1]).
 -export([delete_child_link/4, foreach_child/3]).
 -export([hidden_file_name/1, is_hidden/1, is_child_of_hidden_dir/1]).
@@ -76,17 +76,24 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates file meta.
+%% Saves file meta doc.
 %% @end
 %%--------------------------------------------------------------------
--spec create(doc()) -> {ok, uuid()} | {error, term()}.
+-spec save(doc()) -> {ok, uuid()} | {error, term()}.
+save(Doc) ->
+    save(Doc, true).
 
-create(#document{value = #file_meta{is_scope = true}} = Doc) ->
+%%--------------------------------------------------------------------
+%% @doc
+%% Saves file meta doc.
+%% @end
+%%--------------------------------------------------------------------
+-spec save(doc(), boolean()) -> {ok, uuid()} | {error, term()}.
+
+save(#document{value = #file_meta{is_scope = true}} = Doc, _GeneratedKey) ->
     ?extract_key(datastore_model:save(?CTX, Doc));
-create(#document{key = undefined} = Doc) ->
-    ?extract_key(datastore_model:save(?CTX#{generated_key => true}, Doc));
-create(Doc) ->
-    ?extract_key(datastore_model:save(?CTX, Doc)).
+save(Doc, GeneratedKey) ->
+    ?extract_key(datastore_model:save(?CTX#{generated_key => GeneratedKey}, Doc)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -125,7 +132,7 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{
         Link = {FileName, FileUuid},
         case datastore_model:add_links(Ctx, ParentUuid, TreeId, Link) of
             {ok, #link{}} ->
-                case create(FileDoc3) of
+                case save(FileDoc3) of
                     {ok, FileUuid} -> {ok, FileUuid};
                     Error -> Error
                 end;
@@ -157,14 +164,6 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{
         end
     end).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Saves file meta.
-%% @end
-%%--------------------------------------------------------------------
--spec save(doc()) -> {ok, uuid()} | {error, term()}.
-save(Doc) ->
-    ?extract_key(datastore_model:save(?CTX, Doc)).
 
 %%--------------------------------------------------------------------
 %% @doc

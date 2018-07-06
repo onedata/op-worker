@@ -667,7 +667,7 @@ create_file_meta(FileUuid, FileName, Mode, OwnerId, GroupId, FileSize,
         undefined ->
             file_meta:create({uuid, ParentUuid}, FileMetaDoc);
         _ ->
-            file_meta:create(FileMetaDoc)
+            file_meta:save(FileMetaDoc, false)
     end.
 
 %%--------------------------------------------------------------------
