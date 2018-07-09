@@ -20,11 +20,12 @@
 -include("proto/oneclient/fuse_messages.hrl").
 
 %% API
--export([new_ceph_helper/7, new_posix_helper/4, new_s3_helper/7,
-    new_swift_helper/7, new_glusterfs_helper/6, new_nulldevice_helper/4]).
--export([new_ceph_user_ctx/2, new_posix_user_ctx/2, new_s3_user_ctx/2,
-    new_swift_user_ctx/2, new_glusterfs_user_ctx/2, new_nulldevice_user_ctx/2,
-    validate_user_ctx/2, validate_group_ctx/2]).
+-export([new_ceph_helper/7, new_cephrados_helper/7, new_posix_helper/4,
+    new_s3_helper/7, new_swift_helper/7, new_glusterfs_helper/6,
+    new_nulldevice_helper/4]).
+-export([new_ceph_user_ctx/2,new_cephrados_user_ctx/2,  new_posix_user_ctx/2,
+    new_s3_user_ctx/2, new_swift_user_ctx/2, new_glusterfs_user_ctx/2,
+    new_nulldevice_user_ctx/2, validate_user_ctx/2, validate_group_ctx/2]).
 -export([get_name/1, get_args/1, get_admin_ctx/1, is_insecure/1, get_params/2,
     get_proxy_params/2, get_timeout/1, get_storage_path_type/1]).
 -export([set_user_ctx/2]).
@@ -50,6 +51,29 @@
 -spec new_ceph_helper(binary(), binary(), binary(), args(), user_ctx(),
     boolean(), helpers:storage_path_type()) -> helpers:helper().
 new_ceph_helper(MonitorHostname, ClusterName, PoolName, OptArgs, AdminCtx,
+    Insecure, StoragePathType) ->
+
+    #helper{
+        name = ?CEPH_HELPER_NAME,
+        args = maps:merge(OptArgs, #{
+            <<"monitorHostname">> => MonitorHostname,
+            <<"clusterName">> => ClusterName,
+            <<"poolName">> => PoolName
+        }),
+        admin_ctx = AdminCtx,
+        insecure = Insecure,
+        extended_direct_io = true,
+        storage_path_type = StoragePathType
+    }.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Constructs CephRados storage helper record.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_cephrados_helper(binary(), binary(), binary(), args(), user_ctx(),
+    boolean(), helpers:storage_path_type()) -> helpers:helper().
+new_cephrados_helper(MonitorHostname, ClusterName, PoolName, OptArgs, AdminCtx,
     Insecure, StoragePathType) ->
 
     #helper{
@@ -180,6 +204,18 @@ new_ceph_user_ctx(Username, Key) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Constructs CephRados storage helper user context record.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_cephrados_user_ctx(binary(), binary()) -> user_ctx().
+new_cephrados_user_ctx(Username, Key) ->
+    #{
+        <<"username">> => Username,
+        <<"key">> => Key
+    }.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Constructs POSIX storage helper user context record.
 %% @end
 %%--------------------------------------------------------------------
@@ -246,6 +282,8 @@ new_nulldevice_user_ctx(Uid, Gid) ->
 -spec validate_user_ctx(storage:helper(), user_ctx()) ->
     ok | {error, Reason :: term()}.
 validate_user_ctx(#helper{name = ?CEPH_HELPER_NAME}, UserCtx) ->
+    check_user_or_group_ctx_fields([<<"username">>, <<"key">>], UserCtx);
+validate_user_ctx(#helper{name = ?CEPHRADOS_HELPER_NAME}, UserCtx) ->
     check_user_or_group_ctx_fields([<<"username">>, <<"key">>], UserCtx);
 validate_user_ctx(#helper{name = ?POSIX_HELPER_NAME}, UserCtx) ->
     check_user_or_group_ctx_fields([<<"uid">>, <<"gid">>], UserCtx);

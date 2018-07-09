@@ -25,7 +25,7 @@
 -export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/4, link/2, readdir/3,
     get_child_handle/2]).
 -export([stat/1, read/3, write/3, create/2, create/3, open/2, release/1,
-    truncate/2, unlink/1, fsync/2, rmdir/1]).
+    truncate/3, unlink/2, fsync/2, rmdir/1]).
 -export([setxattr/5, getxattr/2, removexattr/2, listxattr/1]).
 -export([open_at_creation/1]).
 
@@ -392,21 +392,23 @@ create(#sfm_handle{
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Truncates a file on storage.
+%% Truncates a file on storage to Size. CurrentSize specifies the
+%% current size of the file known by the op-worker.
 %% @end
 %%--------------------------------------------------------------------
--spec truncate(handle(), Size :: integer()) -> ok | error_reply().
-truncate(#sfm_handle{open_flag = undefined}, _) ->
+-spec truncate(handle(), Size :: integer(), CurrentSize :: non_neg_integer())
+    -> ok | error_reply().
+truncate(#sfm_handle{open_flag = undefined}, _, _) ->
     throw(?EPERM);
-truncate(#sfm_handle{open_flag = read}, _) -> throw(?EPERM);
+truncate(#sfm_handle{open_flag = read}, _, _) -> throw(?EPERM);
 truncate(#sfm_handle{
     storage = Storage,
     file = FileId,
     space_id = SpaceId,
     session_id = SessionId
-}, Size) ->
+}, Size, CurrentSize) ->
     {ok, HelperHandle} = session:get_helper(SessionId, SpaceId, Storage),
-    helpers:truncate(HelperHandle, FileId, Size).
+    helpers:truncate(HelperHandle, FileId, Size, CurrentSize).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -471,18 +473,19 @@ listxattr(#sfm_handle{
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Removes a file.
+%% Removes a file. CurrentSize specifies the current size of the file
+%% known by the op-worker.
 %% @end
 %%--------------------------------------------------------------------
--spec unlink(handle()) -> ok | error_reply().
+-spec unlink(handle(), CurrentSize :: integer()) -> ok | error_reply().
 unlink(#sfm_handle{
     storage = Storage,
     file = FileId,
     space_id = SpaceId,
     session_id = SessionId
-}) ->
+}, CurrentSize) ->
     {ok, HelperHandle} = session:get_helper(SessionId, SpaceId, Storage),
-    helpers:unlink(HelperHandle, FileId).
+    helpers:unlink(HelperHandle, FileId, CurrentSize).
 
 %%--------------------------------------------------------------------
 %% @doc

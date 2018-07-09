@@ -56,7 +56,8 @@ truncate_insecure(UserCtx, FileCtx, Size, UpdateTimes) ->
             {SFMHandle, FileCtx3} = storage_file_manager:new_handle(SessId, FileCtx2),
             case storage_file_manager:open(SFMHandle, write) of
                 {ok, Handle} ->
-                    case storage_file_manager:truncate(Handle, Size) of
+                    {CurrentSize, _} = file_ctx:get_file_size(FileCtx3),
+                    case storage_file_manager:truncate(Handle, Size, CurrentSize) of
                         ok ->
                             ok;
                         Error = {error, ?EBUSY} ->

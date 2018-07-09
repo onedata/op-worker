@@ -27,8 +27,8 @@
 %% API
 -export([init/0]).
 -export([get_handle/2]).
--export([getattr/2, access/3, mknod/5, mkdir/3, unlink/2, rmdir/2, symlink/3,
-    rename/3, link/3, chmod/3, chown/4, truncate/3, setxattr/6, getxattr/3,
+-export([getattr/2, access/3, mknod/5, mkdir/3, unlink/3, rmdir/2, symlink/3,
+    rename/3, link/3, chmod/3, chown/4, truncate/4, setxattr/6, getxattr/3,
     removexattr/3, listxattr/2, open/3, read/3, write/3, release/1, flush/1,
     fsync/2, readdir/4]).
 -export([start_monitoring/0, stop_monitoring/0]).
@@ -80,9 +80,9 @@ mkdir(_Handle, _FileId, _Mode) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 
--spec unlink(helper_handle(), helpers:file_id()) ->
+-spec unlink(helper_handle(), helpers:file_id(), CurrentSize :: non_neg_integer()) ->
     {ok, response_ref()} | {error, Reason :: term()}.
-unlink(_Handle, _FileId) ->
+unlink(_Handle, _FileId, _CurrentSize) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 
@@ -122,9 +122,10 @@ chown(_Handle, _FileId, _Uid, _Gid) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 
--spec truncate(helper_handle(), helpers:file_id(), Size :: non_neg_integer()) ->
+-spec truncate(helper_handle(), helpers:file_id(), Size :: non_neg_integer(),
+    CurrentSize :: non_neg_integer()) ->
     {ok, response_ref()} | {error, Reason :: term()}.
-truncate(_Handle, _FileId, _Size) ->
+truncate(_Handle, _FileId, _Size, _CurrentSize) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 

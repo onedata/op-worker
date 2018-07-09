@@ -20,6 +20,7 @@
 
 %% Helper types
 -define(CEPH_HELPER_NAME, <<"ceph">>).
+-define(CEPHRADOS_HELPER_NAME, <<"cephrados">>).
 -define(POSIX_HELPER_NAME, <<"posix">>).
 -define(PROXY_HELPER_NAME, <<"proxy">>).
 -define(S3_HELPER_NAME, <<"s3">>).

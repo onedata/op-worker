@@ -86,7 +86,7 @@ unlink_test(Config) ->
     File = gen_filename(),
 
     {ok, _} = call(Config, file, open, [?path(Config, File), write]),
-    ?assertMatch(ok, call(Config, unlink, [File])).
+    ?assertMatch(ok, call(Config, unlink, [File, 0])).
 
 rmdir_test(Config) ->
     File = gen_filename(),
@@ -126,7 +126,7 @@ truncate_test(Config) ->
     File = gen_filename(),
 
     {ok, _} = call(Config, file, open, [?path(Config, File), write]),
-    ?assertMatch(ok, call(Config, truncate, [File, 10])).
+    ?assertMatch(ok, call(Config, truncate, [File, 10, 0])).
 
 setxattr_test(Config) ->
     File = gen_filename(),

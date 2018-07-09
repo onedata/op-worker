@@ -23,8 +23,8 @@
 
 %% API
 -export([get_helper_handle/2]).
--export([getattr/2, access/3, mknod/4, mkdir/3, unlink/2, rmdir/2, symlink/3,
-    rename/3, link/3, chmod/3, chown/4, truncate/3, setxattr/6, getxattr/3,
+-export([getattr/2, access/3, mknod/4, mkdir/3, unlink/3, rmdir/2, symlink/3,
+    rename/3, link/3, chmod/3, chown/4, truncate/4, setxattr/6, getxattr/3,
     removexattr/3, listxattr/2, open/3, read/3, write/3, release/1, flush/1,
     fsync/2, readdir/4]).
 -export([init_counters/0, init_report/0]).
@@ -128,9 +128,10 @@ mkdir(Handle, FileId, Mode) ->
 %% Calls {@link helpers_nif:unlink/2} function.
 %% @end
 %%--------------------------------------------------------------------
--spec unlink(helper_handle(), file_id()) -> ok | {error, Reason :: term()}.
-unlink(Handle, FileId) ->
-    ?MODULE:apply_helper_nif(Handle, unlink, [FileId]).
+-spec unlink(helper_handle(), file_id(), CurrentSize :: non_neg_integer())
+    -> ok | {error, Reason :: term()}.
+unlink(Handle, FileId, CurrentSize) ->
+    ?MODULE:apply_helper_nif(Handle, unlink, [FileId, CurrentSize]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -196,10 +197,11 @@ chown(Handle, FileId, UID, GID) ->
 %% Calls {@link helpers_nif:truncate/3} function.
 %% @end
 %%--------------------------------------------------------------------
--spec truncate(helper_handle(), file_id(), Size :: non_neg_integer()) ->
+-spec truncate(helper_handle(), file_id(), Size :: non_neg_integer(),
+    CurrentSize :: non_neg_integer()) ->
     ok | {error, Reason :: term()}.
-truncate(Handle, FileId, Size) ->
-    ?MODULE:apply_helper_nif(Handle, truncate, [FileId, Size]).
+truncate(Handle, FileId, Size, CurrentSize) ->
+    ?MODULE:apply_helper_nif(Handle, truncate, [FileId, Size, CurrentSize]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -316,7 +318,7 @@ fsync(Handle, IsDataSync) ->
 %%--------------------------------------------------------------------
 -spec init_counters() -> ok.
 init_counters() ->
-    Size = application:get_env(?CLUSTER_WORKER_APP_NAME, 
+    Size = application:get_env(?CLUSTER_WORKER_APP_NAME,
         exometer_data_points_number, ?EXOMETER_DEFAULT_DATA_POINTS_NUMBER),
     Counters = lists:map(fun(Name) ->
         {?EXOMETER_NAME(Name), counter}

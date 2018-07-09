@@ -293,7 +293,7 @@ maybe_truncate_file_on_storage(FileCtx, OldSize, NewSize) when OldSize > NewSize
             {SFMHandle, FileCtx3} = storage_file_manager:new_handle(?ROOT_SESS_ID, FileCtx2),
             case storage_file_manager:open(SFMHandle, write) of
                 {ok, Handle} ->
-                    ok = storage_file_manager:truncate(Handle, NewSize);
+                    ok = storage_file_manager:truncate(Handle, NewSize, OldSize);
                 {error, ?ENOENT} ->
                     ok
             end,

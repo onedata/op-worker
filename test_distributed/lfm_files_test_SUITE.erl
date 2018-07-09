@@ -684,15 +684,16 @@ lfm_basic_rdwr_after_file_delete_test(Config) ->
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, 8#755),
     {ok, Handle} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr),
+    FileContent = <<"test_data">>,
 
     %remove file
     FileCtx = rpc:call(W, file_ctx, new_by_guid, [FileGuid]),
     {SfmHandle, _} = rpc:call(W, storage_file_manager, new_handle, [SessId1, FileCtx]),
-    ok = rpc:call(W, storage_file_manager, unlink, [SfmHandle]),
+    ok = rpc:call(W, storage_file_manager, unlink, [SfmHandle, size(FileContent)]),
 
     %read opened file
-    ?assertEqual({ok, 9}, lfm_proxy:write(W, Handle, 0, <<"test_data">>)),
-    ?assertEqual({ok, <<"test_data">>}, lfm_proxy:read(W, Handle, 0, 100)),
+    ?assertEqual({ok, 9}, lfm_proxy:write(W, Handle, 0, FileContent)),
+    ?assertEqual({ok, FileContent}, lfm_proxy:read(W, Handle, 0, 100)),
     ?assertEqual(ok, lfm_proxy:close(W, Handle)).
 
 lfm_write_test(Config) ->

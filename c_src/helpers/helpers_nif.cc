@@ -553,9 +553,10 @@ ERL_NIF_TERM mkdir(
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
-ERL_NIF_TERM unlink(NifCTX ctx, helper_ptr helper, folly::fbstring file)
+ERL_NIF_TERM unlink(NifCTX ctx, helper_ptr helper, folly::fbstring file,
+    const size_t currentSize)
 {
-    handle_result(ctx, helper->unlink(file));
+    handle_result(ctx, helper->unlink(file, currentSize));
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
@@ -600,10 +601,10 @@ ERL_NIF_TERM chown(NifCTX ctx, helper_ptr helper, folly::fbstring file,
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
-ERL_NIF_TERM truncate(
-    NifCTX ctx, helper_ptr helper, folly::fbstring file, const off_t size)
+ERL_NIF_TERM truncate(NifCTX ctx, helper_ptr helper, folly::fbstring file,
+    const off_t size, const size_t currentSize)
 {
-    handle_result(ctx, helper->truncate(file, size));
+    handle_result(ctx, helper->truncate(file, size, currentSize));
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
@@ -848,10 +849,10 @@ static ErlNifFunc nif_funcs[] = {{"get_handle", 2, get_handle},
     {"start_monitoring", 0, start_monitoring},
     {"stop_monitoring", 0, stop_monitoring}, {"getattr", 2, sh_getattr},
     {"access", 3, sh_access}, {"readdir", 4, sh_readdir},
-    {"mknod", 5, sh_mknod}, {"mkdir", 3, sh_mkdir}, {"unlink", 2, sh_unlink},
+    {"mknod", 5, sh_mknod}, {"mkdir", 3, sh_mkdir}, {"unlink", 3, sh_unlink},
     {"rmdir", 2, sh_rmdir}, {"symlink", 3, sh_symlink},
     {"rename", 3, sh_rename}, {"link", 3, sh_link}, {"chmod", 3, sh_chmod},
-    {"chown", 4, sh_chown}, {"truncate", 3, sh_truncate},
+    {"chown", 4, sh_chown}, {"truncate", 4, sh_truncate},
     {"setxattr", 6, sh_setxattr}, {"getxattr", 3, sh_getxattr},
     {"removexattr", 3, sh_removexattr}, {"listxattr", 2, sh_listxattr},
     {"open", 3, sh_open}, {"read", 3, sh_read}, {"write", 3, sh_write},
