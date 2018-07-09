@@ -135,7 +135,7 @@ init_per_testcase(_Case, Config) ->
         test_utils:set_env(Worker, ?APP_NAME, minimal_sync_request, 1)
     end, Workers),
 
-    ok = test_utils:mock_new(Workers, rtransfer_config, [passthrough]),
+    ok = test_utils:mock_new(Workers, rtransfer_config),
     test_utils:mock_expect(Workers, rtransfer_config, fetch,
         fun(#{offset := O, size := S} = _Request, NotifyFun, CompleteFun,
             TransferId, SpaceId, FileGuid) ->
