@@ -22,32 +22,26 @@
 
 %% API
 -export([
+    schedule_replica_invalidation/4
+]).
+
+%% internal API
+-export([
     start_invalidation/4,
-    schedule_replica_invalidation/4,
-    invalidate_file_replica/4,
-    enqueue_file_invalidation/6
+    enqueue_file_invalidation/6,
+    invalidate_file_replica/4
 ]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
-%%-------------------------------------------------------------------
-%% @doc
-%% Marks invalidation as active and adds task for invalidation to worker_pool.
-%% @end
-%%-------------------------------------------------------------------
--spec start_invalidation(user_ctx:ctx(), file_ctx:ctx(), sync_req:provider_id(),
-    sync_req:transfer_id()) -> ok.
-start_invalidation(UserCtx, FileCtx, MigrationProviderId, TransferId) ->
-    {ok, _} = transfer:mark_active_invalidation(TransferId),
-    enqueue_file_invalidation(UserCtx, FileCtx, MigrationProviderId, TransferId).
-
 %%--------------------------------------------------------------------
 %% @doc
-%% Schedules invalidation of replica, returns the id of created transfer doc
-%% wrapped in 'scheduled_transfer' provider response.
-%% Resolves file path based on file guid.
+%% Schedules invalidation of replica by creating transfer doc.
+%% Returns the id of the created transfer doc wrapped in
+%% 'scheduled_transfer' provider response. Resolves file path
+%% based on file guid.
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_replica_invalidation(user_ctx:ctx(), file_ctx:ctx(),
@@ -59,6 +53,22 @@ schedule_replica_invalidation(UserCtx, FileCtx, SourceProviderId,
     {FilePath, _} = file_ctx:get_logical_path(FileCtx, UserCtx),
     schedule_replica_invalidation(UserCtx, FileCtx, FilePath, SourceProviderId,
         MigrationProviderId).
+
+%%%===================================================================
+%%% Internal API
+%%%===================================================================
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Marks invalidation as active and adds task for invalidation to
+%% worker_pool.
+%% @end
+%%-------------------------------------------------------------------
+-spec start_invalidation(user_ctx:ctx(), file_ctx:ctx(), sync_req:provider_id(),
+    sync_req:transfer_id()) -> ok.
+start_invalidation(UserCtx, FileCtx, MigrationProviderId, TransferId) ->
+    {ok, _} = transfer:mark_active_invalidation(TransferId),
+    enqueue_file_invalidation(UserCtx, FileCtx, MigrationProviderId, TransferId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -76,7 +86,8 @@ invalidate_file_replica(UserCtx, FileCtx, MigrationProviderId, TransferId) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Adds task of file invalidation to worker from ?INVALIDATION_WORKERS_POOL.
+%% Adds task of file invalidation to worker from
+%% ?INVALIDATION_WORKERS_POOL.
 %% @end
 %%-------------------------------------------------------------------
 -spec enqueue_file_invalidation(user_ctx:ctx(), file_ctx:ctx(),
@@ -92,7 +103,8 @@ enqueue_file_invalidation(UserCtx, FileCtx, MigrationProviderId, TransferId,
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Enqueues invalidation of children.
+%% Adds task of file invalidation to worker from
+%% ?INVALIDATION_WORKERS_POOL.
 %% @end
 %%--------------------------------------------------------------------
 -spec enqueue_children_invalidation(user_ctx:ctx(), [file_ctx:ctx()],
@@ -163,7 +175,7 @@ invalidate_file_replica_insecure(UserCtx, FileCtx, MigrationProviderId, Transfer
                     invalidate_dir(UserCtx, FileCtx2, MigrationProviderId, 0,
                         TransferId);
                 {false, FileCtx2} ->
-                    delete_file_replica(FileCtx2, MigrationProviderId, TransferId)
+                    schedule_file_replica_deletion(FileCtx2, MigrationProviderId, TransferId)
             end;
         false ->
             #provider_response{status = #status{code = ?OK}}
@@ -201,12 +213,14 @@ invalidate_dir(UserCtx, FileCtx, MigrationProviderId, Offset, TransferId) ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Deletes regular file replica.
+%% Schedules safe file_replica_deletion via replica_deletion mechanism.
+%% If SupportingProviderId is undefined, it will bo chosen from
+%% providers who have given file replicated.
 %% @end
 %%-------------------------------------------------------------------
--spec delete_file_replica(file_ctx:ctx(), sync_req:provider_id(), sync_req:transfer_id())
+-spec schedule_file_replica_deletion(file_ctx:ctx(), sync_req:provider_id(), sync_req:transfer_id())
         -> sync_req:provider_response().
-delete_file_replica(FileCtx, undefined, TransferId) ->
+schedule_file_replica_deletion(FileCtx, undefined, TransferId) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     case  replica_deletion_master:get_setting_for_deletion_task(FileCtx) of
         undefined ->
@@ -215,7 +229,7 @@ delete_file_replica(FileCtx, undefined, TransferId) ->
             schedule_replica_deletion_task(FileUuid, ProviderId, Blocks, VV, TransferId, SpaceId)
     end,
     #provider_response{status = #status{code = ?OK}};
-delete_file_replica(FileCtx, SupportingProviderId, TransferId) ->
+schedule_file_replica_deletion(FileCtx, SupportingProviderId, TransferId) ->
     {LocalFileLocationDoc, FileCtx2} =
         file_ctx:get_or_create_local_file_location_doc(FileCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx2),

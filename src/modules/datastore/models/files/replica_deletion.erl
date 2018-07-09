@@ -5,10 +5,30 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module implements model that is used by
-%%% invalidation_communicator to communication between providers that
-%%% take part in file replica invalidation. Changes in the model
-%%% will appear in the remote provider via DBSync.
+%%% This module implements model that is used for communication between
+%%% providers that take part in file replica deletion procedure.
+%%% Changes in the model will appear in the remote provider via DBSync.
+%%% All functions responsible for handling changes of this model are in
+%%% replica_deletion_changes module.
+%%% Replica deletion requests are scheduled by replica_deletion_master
+%%% which is used to limit the number of simultaneous requests.
+%%% Communication flow is present on the below example.
+%%% Let's assume that we have providers P1 and P2, both supporting
+%%% the same space.
+%%% 1. replica_deletion_master:enqueue is called on P1 as the result of
+%%%    autocleaning or replica_eviction
+%%% 2. Request for support of replica_deletion is sent to P2.
+%%%    replica_deletion_master calls ?MODULE:request which created
+%%%    replica_deletion document and sets action=request.
+%%% 3. P2 handles change of the document:
+%%%     1) if it can support deletion, it acquires write lock for given
+%%%        file and replies by calling ?MODULE:confirm
+%%%     2) otherwise it refuses by calling ?MODULE:refuse
+%%% 4. P1 handles reply from P2
+%%%     1) If P2 confirmed, task for deleting blocks from storage is cast to
+%%%        replica_deletion_workers_pool
+%%% 5. P1 calls ?MODULE:release_supporting_lock to notify P2 that it
+%%%    can release the lock
 %%% @end
 %%%-------------------------------------------------------------------
 -module(replica_deletion).
@@ -46,7 +66,6 @@
 -define(CTX, #{
     model => ?MODULE,
     sync_enabled => true,
-    remote_driver => datastore_remote_driver,
     mutator => oneprovider:get_id_or_undefined()
 }).
 

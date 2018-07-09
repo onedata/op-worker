@@ -53,6 +53,8 @@
 -define(CANCEL_DONE(ReportId), {cancel_done, ReportId}).
 -define(FINISHED, finished).
 
+%% The process is supposed to die after ?DIE_AFTER time of idling (no requests in flight)
+-define(DIE_AFTER, timer:minutes(1)).
 -define(MAX_ACTIVE_TASKS, application:get_env(?APP_NAME, max_active_deletion_tasks, 2000)).
 
 -record(state, {
@@ -104,8 +106,7 @@
     version_vector:version_vector(), replica_deletion:report_id(),
     replica_deletion:type(), od_space:id()) -> ok.
 enqueue(FileUuid, ProviderId, Blocks, Version, ReportId, Type, SpaceId) ->
-    ensure_started(SpaceId),
-    gen_server2:cast(?SERVER(SpaceId), ?TASK(?DELETE(FileUuid, ProviderId,
+    call(SpaceId, ?TASK(?DELETE(FileUuid, ProviderId,
         Blocks, Version, Type), ReportId)).
 
 %%-------------------------------------------------------------------
@@ -117,7 +118,7 @@ enqueue(FileUuid, ProviderId, Blocks, Version, ReportId, Type, SpaceId) ->
 %%-------------------------------------------------------------------
 -spec notify(function(), replica_deletion:report_id(), od_space:id()) -> ok.
 notify(NotifyFun, ReportId, SpaceId) ->
-    gen_server2:cast(?SERVER(SpaceId), ?TASK(?NOTIFY(NotifyFun), ReportId)).
+    call(SpaceId, ?TASK(?NOTIFY(NotifyFun), ReportId)).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -130,7 +131,7 @@ notify(NotifyFun, ReportId, SpaceId) ->
 %%-------------------------------------------------------------------
 -spec cancel(replica_deletion:report_id(), od_space:id()) -> ok.
 cancel(ReportId, SpaceId) ->
-    gen_server2:cast(?SERVER(SpaceId), ?CANCEL(ReportId)).
+    call(SpaceId, ?CANCEL(ReportId)).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -139,7 +140,7 @@ cancel(ReportId, SpaceId) ->
 %%-------------------------------------------------------------------
 -spec cancelling_finished(replica_deletion:report_id(), od_space:id()) -> ok.
 cancelling_finished(ReportId, SpaceId) ->
-    gen_server2:cast(?SERVER(SpaceId), ?CANCEL_DONE(ReportId)).
+    call(SpaceId, ?CANCEL_DONE(ReportId)).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -148,8 +149,7 @@ cancelling_finished(ReportId, SpaceId) ->
 %%-------------------------------------------------------------------
 -spec notify_finished_task(od_space:id()) -> ok.
 notify_finished_task(SpaceId) ->
-    ensure_started(SpaceId),
-    gen_server2:cast(?SERVER(SpaceId), ?FINISHED).
+    call(SpaceId, ?FINISHED).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -159,7 +159,7 @@ notify_finished_task(SpaceId) ->
 %%-------------------------------------------------------------------
 -spec check(od_space:id()) -> ok.
 check(SpaceId) ->
-    gen_server2:cast(?SERVER(SpaceId), check).
+    call(SpaceId, check).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -245,9 +245,9 @@ init([SpaceId]) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}).
-handle_call(_Request, _From, State) ->
-    ?log_bad_request(_Request),
-    {reply, ok, State}.
+handle_call(Request, From, State) ->
+    gen_server2:reply(From, ok),
+    handle_cast(Request, State).
 
 
 %%--------------------------------------------------------------------
@@ -262,7 +262,7 @@ handle_call(_Request, _From, State) ->
     {stop, Reason :: term(), NewState :: #state{}}).
 handle_cast(check, State = #state{ids_queue = IdsQueue, active_tasks = Active}) ->
     ?critical("Queue: ~p~nActive: ~p~n", [queue:len(IdsQueue), Active]),
-    {noreply, State};
+    {noreply, State, ?DIE_AFTER};
 handle_cast(Task = #task{id = ReportId}, State = #state{
     active_tasks = ActiveTasks,
     ids_to_cancel = IdsToCancel,
@@ -276,7 +276,7 @@ handle_cast(Task = #task{id = ReportId}, State = #state{
         false ->
             handle_task(Task, SpaceId)
     end,
-    {noreply, State#state{active_tasks = ActiveTasks + 1}};
+    {noreply, State#state{active_tasks = ActiveTasks + 1}, ?DIE_AFTER};
 handle_cast(Task = #task{id = ReportId}, State = #state{
     queues = Queues,
     ids_queue = IdsQueue
@@ -287,7 +287,7 @@ handle_cast(Task = #task{id = ReportId}, State = #state{
     {noreply, State#state{
         queues = Queues#{ReportId => QueuePerId2},
         ids_queue = queue:in(ReportId, IdsQueue)
-    }};
+    }, ?DIE_AFTER};
 handle_cast(finished, State = #state{
     queues = Queues,
     ids_queue = IdsQueue,
@@ -298,7 +298,7 @@ handle_cast(finished, State = #state{
             State2 = State#state{
                 active_tasks = ActiveTasks - 1
             },
-            {noreply, State2};
+            {noreply, State2, ?DIE_AFTER};
         {{value, ReportId}, IdsQueue2} ->
             QueuePerId = maps:get(ReportId, Queues),
             {{value, Task}, QueuePerId2} = queue:out(QueuePerId),
@@ -310,14 +310,14 @@ handle_cast(finished, State = #state{
             handle_cast(Task, State2)
     end;
 handle_cast({cancel, ReportId}, State = #state{ids_to_cancel = CancelledIds}) ->
-    {noreply, State#state{ids_to_cancel = gb_sets:add(ReportId, CancelledIds)}};
+    {noreply, State#state{ids_to_cancel = gb_sets:add(ReportId, CancelledIds)}, ?DIE_AFTER};
 handle_cast({cancel_done, ReportId}, State = #state{ids_to_cancel = CancelledIds}) ->
-    {noreply, State#state{ids_to_cancel = gb_sets:delete_any(ReportId, CancelledIds)}};
+    {noreply, State#state{ids_to_cancel = gb_sets:delete_any(ReportId, CancelledIds)}, ?DIE_AFTER};
 handle_cast(fix, State) ->
-    {noreply, State#state{active_tasks = 0, queues = #{}, ids_queue = queue:new()}};
+    {noreply, State#state{active_tasks = 0, queues = #{}, ids_queue = queue:new()}, ?DIE_AFTER};
 handle_cast(Request, State) ->
     ?log_bad_request(Request),
-    {noreply, State}.
+    {noreply, State, ?DIE_AFTER}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -365,16 +365,19 @@ code_change(_OldVsn, State, _Extra) ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Ensures that server is started.
+%% Performs call to replica_deletion_master for given SpaceId.
+%% If server is not started, this function starts it and performs
+%% call one more time.
 %% @end
 %%-------------------------------------------------------------------
--spec ensure_started(od_space:id()) -> ok.
-ensure_started(SpaceId) ->
-    case start_link(SpaceId) of
-        {error,{already_started, _}} ->
-            ok;
-        {ok, _} ->
-            ok
+-spec call(od_space:id(), task()) -> ok.
+call(SpaceId, Task) ->
+    try
+        gen_server2:call(?SERVER(SpaceId), Task)
+    catch
+        exit:{noproc, _} ->
+            start_link(SpaceId),
+            call(SpaceId, Task)
     end.
 
 %%-------------------------------------------------------------------

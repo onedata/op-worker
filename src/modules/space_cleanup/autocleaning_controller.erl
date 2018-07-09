@@ -162,7 +162,7 @@ handle_cast({?START_CLEANUP, #autocleaning_config{
             [] ->
                 stop(SpaceId);
             _ ->
-                delete_file_replicas(FilesToClean, AutocleaningId, SpaceId)
+                schedule_file_replicas_deletion(FilesToClean, AutocleaningId, SpaceId)
         end,
         {noreply, State}
     catch
@@ -245,9 +245,8 @@ code_change(_OldVsn, State, _Extra) ->
 %% Adds all FilesToClean to replica_deletion_master queue.
 %% @end
 %%-------------------------------------------------------------------
--spec delete_file_replicas([file_ctx:ctx()], autocleaning:id(), od_space:id()) -> ok.
-delete_file_replicas(FilesToClean, AutocleaningId, SpaceId) ->
-
+-spec schedule_file_replicas_deletion([file_ctx:ctx()], autocleaning:id(), od_space:id()) -> ok.
+schedule_file_replicas_deletion(FilesToClean, AutocleaningId, SpaceId) ->
     DeletionSettingsList = lists:filtermap(fun(FileCtx) ->
         case replica_deletion_master:get_setting_for_deletion_task(FileCtx) of
             undefined ->

@@ -183,7 +183,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Replicates files
+%% Invalidates file replica
 %% @end
 %%-------------------------------------------------------------------
 -spec invalidate_file(user:ctx(), file_ctx:ctx(), sync_req:provider_id(),
