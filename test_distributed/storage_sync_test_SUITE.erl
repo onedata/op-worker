@@ -69,7 +69,8 @@
     create_delete_import_test_read_both/1,
     should_not_sync_file_while_being_replicated/1,
     change_file_content_update_test/1,
-    change_file_content_update2_test/1, append_empty_file_update_test/1]).
+    change_file_content_update2_test/1, append_empty_file_update_test/1,
+    import_file_with_link_but_no_doc_test/1]).
 
 -define(TEST_CASES, [
     create_directory_import_test,
@@ -82,6 +83,7 @@
     create_directory_import_many_test,
     create_directory_export_test,
     create_file_import_test,
+    import_file_with_link_but_no_doc_test,
     create_empty_file_import_test,
     create_delete_import_test_read_both,
     create_delete_import_test_read_remote_only,
@@ -162,6 +164,9 @@ create_directory_export_test(Config) ->
 
 create_file_import_test(Config) ->
     storage_sync_test_base:create_file_import_test(Config, false).
+
+import_file_with_link_but_no_doc_test(Config) ->
+    storage_sync_test_base:import_file_with_link_but_no_doc_test(Config, false).
 
 create_empty_file_import_test(Config) ->
     storage_sync_test_base:create_empty_file_import_test(Config, false).
