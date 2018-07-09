@@ -60,7 +60,7 @@ synchronizer_test(Config) ->
             ]},
             {description, ""}
         ]},
-        {config, [{name, simle},
+        {config, [{name, simple},
             {parameters, [
                 [{name, separate_blocks}, {value, false}]
             ]},
@@ -87,6 +87,34 @@ synchronizer_test(Config) ->
         {config, [{name, many4},
             {parameters, [
                 [{name, threads_num}, {value, 50}]
+            ]},
+            {description, ""}
+        ]},
+        {config, [{name, many1_random},
+            {parameters, [
+                [{name, threads_num}, {value, 5}],
+                [{name, random_read}, {value, true}]
+            ]},
+            {description, ""}
+        ]},
+        {config, [{name, many2_random},
+            {parameters, [
+                [{name, threads_num}, {value, 10}],
+                [{name, random_read}, {value, true}]
+            ]},
+            {description, ""}
+        ]},
+        {config, [{name, many3_random},
+            {parameters, [
+                [{name, threads_num}, {value, 20}],
+                [{name, random_read}, {value, true}]
+            ]},
+            {description, ""}
+        ]},
+        {config, [{name, many4_random},
+            {parameters, [
+                [{name, threads_num}, {value, 50}],
+                [{name, random_read}, {value, true}]
             ]},
             {description, ""}
         ]}

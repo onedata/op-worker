@@ -124,7 +124,7 @@ synchronizer_test_base(Config0) ->
     Blocks = case {SeparateBlocks, RandomRead} of
         {true, true} ->
             lists:map(fun(_Num) ->
-                random:uniform(FileSize)
+                random:uniform(FileSizeBytes)
             end, lists:seq(1, BlocksCount));
         {true, _} ->
             lists:map(fun(Num) ->
