@@ -38,7 +38,8 @@
     distributed_delete_test_base/4,
     create_after_del_test_base/4,
     random_read_test_base/1,
-    random_read_test_base/3
+    random_read_test_base/3,
+    synchronizer_test_base/1
 ]).
 -export([init_env/1, teardown_env/1]).
 
@@ -47,6 +48,7 @@
 
 -export([extend_config/4]).
 -export([verify/2, verify_workers/2]).
+-export([sync_blocks/4]).
 
 -define(match(Expect, Expr, Attempts),
     case Attempts of
@@ -69,6 +71,84 @@
 %%%===================================================================
 %%% Test skeletons
 %%%===================================================================
+
+synchronizer_test_base(Config0) ->
+    Config = extend_config(Config0, <<"user1">>, {2,0,0,1}, 1),
+    FileSize = ?config(file_size_mb, Config),
+    BlockSize = ?config(block_size, Config),
+    BlocksCount = ?config(block_count, Config),
+    RandomRead = ?config(random_read, Config),
+    SeparateBlocks = ?config(separate_blocks, Config),
+    Threads = ?config(threads_num, Config),
+
+    [Worker1, Worker2] = ?config(op_worker_nodes, Config),
+    SessId = ?config(session, Config),
+    SpaceName = ?config(space_name, Config),
+
+    FilePaths = lists:map(fun(_) ->
+        <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>
+    end, lists:seq(1, Threads)),
+
+    ChunkSize = 1024,
+    ChunksNum = 1024,
+    PartNum = FileSize,
+    FileSizeBytes = ChunkSize * ChunksNum * PartNum,
+
+    BytesChunk = crypto:strong_rand_bytes(ChunkSize),
+    Bytes = lists:foldl(fun(_, Acc) ->
+        <<Acc/binary, BytesChunk/binary>>
+    end, <<>>, lists:seq(1, ChunksNum)),
+
+    PartSize = ChunksNum * ChunkSize,
+
+    lists:foreach(fun(FilePath) ->
+        ?assertMatch({ok, _}, lfm_proxy:create(Worker2, SessId(Worker2), FilePath, 8#755)),
+        OpenAns = lfm_proxy:open(Worker2, SessId(Worker2), {path, FilePath}, rdwr),
+        ?assertMatch({ok, _}, OpenAns),
+        {ok, Handle} = OpenAns,
+
+        lists:foreach(fun(Num) ->
+            ?assertEqual({ok, PartSize}, lfm_proxy:write(Worker2, Handle, Num * PartSize, Bytes))
+        end, lists:seq(0, PartNum - 1)),
+
+        ?assertEqual(ok, lfm_proxy:close(Worker2, Handle))
+    end, FilePaths),
+
+    FileCtxs = lists:map(fun(FilePath) ->
+        {ok, #file_attr{guid = GUID}} =
+            ?assertMatch({ok, #file_attr{size = FileSizeBytes}},
+                lfm_proxy:stat(Worker1, SessId(Worker1), {path, FilePath}), 60),
+        file_ctx:new_by_guid(GUID)
+    end, FilePaths),
+
+    Blocks = case {SeparateBlocks, RandomRead} of
+        {true, true} ->
+            lists:map(fun(_Num) ->
+                random:uniform(FileSize)
+            end, lists:seq(1, BlocksCount));
+        {true, _} ->
+            lists:map(fun(Num) ->
+                2 * Num - 1
+            end, lists:seq(1, BlocksCount));
+        _ ->
+            lists:seq(1, BlocksCount)
+    end,
+
+    ct:print("Files created"),
+
+    lists:foreach(fun(FileCtx) ->
+        ?assertMatch({ok, _}, sync_blocks(Worker1, SessId(Worker1), FileCtx,
+            BlockSize, [FileSizeBytes-1]))
+    end, FileCtxs),
+
+    {SyncTime1, SyncTime1_2} = do_sync_test(FileCtxs, Worker1, SessId(Worker1), BlockSize, Blocks),
+    {SyncTime2, SyncTime2_2} = do_sync_test(FileCtxs, Worker1, SessId(Worker1), BlockSize, Blocks),
+
+    ct:print("Separate blocks: ~p, random read ~p, threads ~p,"
+    " iops remote 1: ~p, iops remote 2: ~p, iops local 1: ~p, iops local 2: ~p", [
+        SeparateBlocks, RandomRead, Threads,  1000000 * Threads * BlocksCount / SyncTime1,
+        1000000 * Threads * BlocksCount / SyncTime1_2, 1000000 * Threads * BlocksCount / SyncTime2,
+        1000000 * Threads * BlocksCount / SyncTime2_2]).
 
 random_read_test_base(Config) ->
     random_read_test_base(Config, true, true),
@@ -1645,3 +1725,52 @@ read_blocks(Worker, Handle, BlockSize, BlocksCount, RepNum, SeparateBlocks) ->
         ?assertMatch({ok, _}, ReadAns),
         Acc + Time
     end, 0, Blocks).
+
+sync_blocks(Worker, SessionID, FileCtx, BlockSize, Blocks) ->
+    rpc:call(Worker, ?MODULE, sync_blocks, [SessionID, FileCtx, BlockSize, Blocks]).
+
+sync_blocks(SessionID, FileCtx, BlockSize, Blocks) ->
+    UserCtx = user_ctx:new(SessionID),
+    FinalTime = lists:foldl(fun(BlockNum, Acc) ->
+        Start = os:timestamp(),
+        SyncAns = replica_synchronizer:synchronize(UserCtx, FileCtx,
+            #file_block{offset = BlockNum, size = BlockSize}, false, undefined),
+        Time = timer:now_diff(os:timestamp(), Start),
+        ?assertMatch({ok, _}, SyncAns),
+        Acc + Time
+    end, 0, Blocks),
+    {ok, FinalTime}.
+
+do_sync_test(FileCtxs, Worker1, Session, BlockSize, Blocks) ->
+    Master = self(),
+    Start = os:timestamp(),
+    lists:foreach(fun(FileCtx) ->
+        spawn(fun() ->
+            try
+                SyncAns = sync_blocks(Worker1, Session, FileCtx, BlockSize, Blocks),
+                ?assertMatch({ok, _}, SyncAns),
+                {ok, SyncTime} = SyncAns,
+                Master ! {ans, ok, SyncTime}
+            catch
+                E1:E2 ->
+                    Master ! {ans, {E1, E2}}
+            end
+        end)
+    end, FileCtxs),
+
+    SyncTime = lists:foldl(fun(_, Acc) ->
+        receive
+            {ans, ok, T} ->
+                T + Acc;
+            {ans, Error} ->
+                ct:print("Error: ~p", [Error]),
+                ?assertEqual(ok, Error),
+                Acc
+        after timer:minutes(5) ->
+            ?assertEqual(ok, timeout),
+            Acc
+        end
+    end, 0, FileCtxs),
+
+    SyncTime_2 = timer:now_diff(os:timestamp(), Start),
+    {SyncTime / length(FileCtxs), SyncTime_2}.
