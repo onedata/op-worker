@@ -30,7 +30,7 @@
 -export([run/1, maybe_import_storage_file_and_children/1,
     maybe_import_storage_file/1, import_children/5,
     handle_already_imported_file/3, generate_jobs_for_importing_children/4,
-    import_regular_subfiles/1, import_file_safe/1, import_file/1]).
+    import_regular_subfiles/1, import_file_safe/2, import_file/2]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -154,7 +154,7 @@ maybe_import_storage_file(Job = #space_strategy_job{
     Job2 = space_strategy:update_job_data(storage_file_ctx, StorageFileCtx2, Job),
     case try_to_resolve_child_link(FileName, ParentCtx) of
         {error, not_found} ->
-            {LocalResult, FileCtx} = import_file_safe(Job2),
+            {LocalResult, FileCtx} = import_file_safe(Job2, undefined),
             {LocalResult, FileCtx, Job2};
         {ok, FileUuid} ->
             FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
@@ -284,7 +284,8 @@ maybe_import_file_with_existing_metadata(Job = #space_strategy_job{}, FileCtx) -
             ErrorCode =:= ?ENOENT;
             ErrorCode =:= ?EAGAIN
         ->
-            {LocalResult, FileCtx3} = import_file_safe(Job),
+            FileUuid = file_ctx:get_uuid_const(FileCtx),
+            {LocalResult, FileCtx3} = import_file_safe(Job, FileUuid),
             {LocalResult, FileCtx3, Job}
     end.
 
@@ -293,17 +294,18 @@ maybe_import_file_with_existing_metadata(Job = #space_strategy_job{}, FileCtx) -
 %% Imports given storage file to onedata filesystem.
 %% @end
 %%--------------------------------------------------------------------
--spec import_file_safe(space_strategy:job()) ->
+-spec import_file_safe(space_strategy:job(), file_meta:uuid() | undefined) ->
     {space_strategy:job_result(), file_ctx:ctx()}| no_return().
 import_file_safe(Job = #space_strategy_job{
     data = #{
         file_name := FileName,
         parent_ctx := ParentCtx
-}}) ->
+}}, FileUuid) ->
     try
-        ?MODULE:import_file(Job)
+        ?MODULE:import_file(Job, FileUuid)
     catch
         Error:Reason ->
+            ?error_stacktrace("importing file ~p failed with ~p:~p", [FileName, Error, Reason]),
             full_update:delete_imported_file(FileName, ParentCtx),
             {{error, {Error, Reason}}, undefined}
     end.
@@ -314,7 +316,7 @@ import_file_safe(Job = #space_strategy_job{
 %% Imports given storage file to onedata filesystem.
 %% @end
 %%--------------------------------------------------------------------
--spec import_file(space_strategy:job()) ->
+-spec import_file(space_strategy:job(), file_meta:uuid() | undefined) ->
     {job_result(), file_ctx:ctx()}| no_return().
 import_file(#space_strategy_job{
     strategy_args = Args,
@@ -324,7 +326,7 @@ import_file(#space_strategy_job{
         storage_id := StorageId,
         parent_ctx := ParentCtx,
         storage_file_ctx := StorageFileCtx
-}}) ->
+}}, FileUuid) ->
     {StatBuf, StorageFileCtx2} = storage_file_ctx:get_stat_buf(StorageFileCtx),
     #statbuf{
         st_mode = Mode,
@@ -337,20 +339,20 @@ import_file(#space_strategy_job{
     OwnerId = get_owner_id(StorageFileCtx3),
     GroupId = get_group_owner_id(StorageFileCtx3),
     ParentUuid = file_ctx:get_uuid_const(ParentCtx),
-    FileMetaDoc = file_meta:new_doc(FileName, file_meta:type(Mode),
-        Mode band 8#1777, OwnerId, GroupId, FSize, ParentUuid),
+    {ok, FileUuid2} = create_file_meta(FileUuid, FileName, Mode, OwnerId,
+        GroupId, FSize, ParentUuid, SpaceId),
+    {ok, _} = create_times(FileUuid2, MTime, ATime, CTime, SpaceId),
     {ParentPath, _} = file_ctx:get_storage_file_id(ParentCtx),
-    {ok, FileUuid} = create_file_meta(FileMetaDoc, ParentUuid),
-    {ok, _} = create_times(FileUuid, MTime, ATime, CTime, SpaceId),
     CanonicalPath = filename:join([ParentPath, FileName]),
     case file_meta:type(Mode) of
         ?REGULAR_FILE_TYPE ->
-            storage_sync_info:update_mtime(FileUuid, MTime, SpaceId),
-            ok = create_file_location(SpaceId, StorageId, FileUuid, CanonicalPath, FSize);
+            storage_sync_info:update_mtime(FileUuid2, MTime, SpaceId),
+            ok = create_file_location(SpaceId, StorageId, FileUuid2, CanonicalPath, FSize);
         _ ->
-            {ok, _} = dir_location:mark_dir_created_on_storage(FileUuid, SpaceId)
+            {ok, _} = dir_location:mark_dir_created_on_storage(FileUuid2, SpaceId)
     end,
-    FileCtx = file_ctx:new_by_doc(FileMetaDoc#document{key = FileUuid}, SpaceId, undefined),
+    FileGuid = fslogic_uuid:uuid_to_guid(FileUuid2, SpaceId),
+    FileCtx = file_ctx:new_by_guid(FileGuid),
     SyncAcl = maps:get(sync_acl, Args, false),
     case SyncAcl of
         true ->
@@ -653,9 +655,20 @@ maybe_update_owner(#file_attr{owner_id = OldOwnerId}, StorageFileCtx, FileCtx) -
 %% Creates file meta
 %% @end
 %%--------------------------------------------------------------------
--spec create_file_meta(datastore:doc(), file_meta:uuid()) -> {ok, file_meta:uuid()}.
-create_file_meta(FileMetaDoc, ParentUuid) ->
-    file_meta:create({uuid, ParentUuid}, FileMetaDoc).
+-spec create_file_meta(file_meta:uuid() | undefined, file_meta:name(),
+    file_meta:mode(), od_user:id(), undefined | od_group:id(), file_meta:size(),
+    file_meta:uuid(), od_space:id()) -> {ok, file_meta:uuid()}.
+create_file_meta(FileUuid, FileName, Mode, OwnerId, GroupId, FileSize,
+    ParentUuid, SpaceId
+) ->
+    FileMetaDoc = file_meta:new_doc(FileUuid, FileName, file_meta:type(Mode),
+        Mode band 8#1777, OwnerId, GroupId, FileSize, ParentUuid, SpaceId),
+    case FileUuid of
+        undefined ->
+            file_meta:create({uuid, ParentUuid}, FileMetaDoc);
+        _ ->
+            file_meta:save(FileMetaDoc, false)
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
