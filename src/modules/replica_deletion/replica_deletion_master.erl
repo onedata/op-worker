@@ -370,14 +370,14 @@ code_change(_OldVsn, State, _Extra) ->
 %% call one more time.
 %% @end
 %%-------------------------------------------------------------------
--spec call(od_space:id(), task()) -> ok.
-call(SpaceId, Task) ->
+-spec call(od_space:id(), term()) -> ok.
+call(SpaceId, Request) ->
     try
-        gen_server2:call(?SERVER(SpaceId), Task)
+        gen_server2:call(?SERVER(SpaceId), Request)
     catch
         exit:{noproc, _} ->
             start_link(SpaceId),
-            call(SpaceId, Task)
+            call(SpaceId, Request)
     end.
 
 %%-------------------------------------------------------------------

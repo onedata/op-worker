@@ -50,9 +50,25 @@
 schedule_replica_invalidation(UserCtx, FileCtx, SourceProviderId,
     MigrationProviderId
 ) ->
-    {FilePath, _} = file_ctx:get_logical_path(FileCtx, UserCtx),
-    schedule_replica_invalidation(UserCtx, FileCtx, FilePath, SourceProviderId,
-        MigrationProviderId).
+    check_permissions:execute(
+        [traverse_ancestors, ?write_object],
+        [UserCtx, FileCtx, SourceProviderId, MigrationProviderId],
+        fun schedule_replica_invalidation_insecure/4).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv invalidate_file_replica_internal/4 but catches exception and
+%% notifies invalidation_controller
+%% @end
+%%--------------------------------------------------------------------
+-spec invalidate_file_replica(user_ctx:ctx(), file_ctx:ctx(), sync_req:block(),
+    sync_req:transfer_id()) -> sync_req:provider_response().
+invalidate_file_replica(UserCtx, FileCtx, MigrationProviderId, TransferId) ->
+    check_permissions:execute(
+        [traverse_ancestors, ?write_object],
+        [UserCtx, FileCtx, MigrationProviderId, TransferId],
+        fun invalidate_file_replica_insecure/4).
+
 
 %%%===================================================================
 %%% Internal API
@@ -69,20 +85,6 @@ schedule_replica_invalidation(UserCtx, FileCtx, SourceProviderId,
 start_invalidation(UserCtx, FileCtx, MigrationProviderId, TransferId) ->
     {ok, _} = transfer:mark_active_invalidation(TransferId),
     enqueue_file_invalidation(UserCtx, FileCtx, MigrationProviderId, TransferId).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% @equiv invalidate_file_replica_internal/4 but catches exception and
-%% notifies invalidation_controller
-%% @end
-%%--------------------------------------------------------------------
--spec invalidate_file_replica(user_ctx:ctx(), file_ctx:ctx(), sync_req:block(),
-    sync_req:transfer_id()) -> sync_req:provider_response().
-invalidate_file_replica(UserCtx, FileCtx, MigrationProviderId, TransferId) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?write_object],
-        [UserCtx, FileCtx, MigrationProviderId, TransferId],
-        fun invalidate_file_replica_insecure/4).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -140,12 +142,12 @@ enqueue_file_invalidation(UserCtx, FileCtx, MigrationProviderId, TransferId) ->
 %% wrapped in 'scheduled_transfer' provider response.
 %% @end
 %%--------------------------------------------------------------------
--spec schedule_replica_invalidation(user_ctx:ctx(), file_ctx:ctx(),
-    file_meta:path(), sync_req:provider_id(), sync_req:provider_id()) ->
-    sync_req:provider_response().
-schedule_replica_invalidation(UserCtx, FileCtx, FilePath, SourceProviderId,
+-spec schedule_replica_invalidation_insecure(user_ctx:ctx(), file_ctx:ctx(),
+    sync_req:provider_id(), sync_req:provider_id()) -> sync_req:provider_response().
+schedule_replica_invalidation_insecure(UserCtx, FileCtx, SourceProviderId,
     MigrationProviderId
 ) ->
+    {FilePath, _} = file_ctx:get_logical_path(FileCtx, UserCtx),
     SessionId = user_ctx:get_session_id(UserCtx),
     FileGuid = file_ctx:get_guid_const(FileCtx),
     {ok, TransferId} = transfer:start(SessionId, FileGuid, FilePath,

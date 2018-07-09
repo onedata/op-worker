@@ -109,7 +109,7 @@
     list_transfers/1,
     invalidate_big_dir/1,
     track_transferred_files/1
-]).
+    , fail_to_invalidate_file_replica_without_permissions/1]).
 
 %utils
 -export([verify_file/3, create_file/3, create_dir/3,
@@ -1066,6 +1066,75 @@ invalidate_file_replica(Config) ->
     ?assertEqual([], list_ongoing_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqual([Tid1, Tid], list_ended_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS).
+
+fail_to_invalidate_file_replica_without_permissions(Config) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    %NOTE in this test file will be created by user2 and user1 will try to invalidate it
+    SessionId = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    SessionId2 = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(WorkerP2)}}, Config),
+    SpaceId = ?config(space_id, Config),
+    File = ?absPath(SpaceId, <<"file_invalidate">>),
+    FileGuid = create_test_file(WorkerP1, SessionId, File, ?TEST_DATA),
+
+    DomainP2 = domain(WorkerP2),
+    {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
+
+    % when
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
+    Tid = schedule_file_replication(WorkerP1, DomainP2, File, Config),
+    ?assertEqual([Tid], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
+
+    ?assertTransferStatus(#{
+        <<"transferStatus">> := <<"completed">>,
+        <<"targetProviderId">> := DomainP2,
+        <<"path">> := File,
+        <<"invalidationStatus">> := <<"skipped">>,
+        <<"fileId">> := FileObjectId,
+        <<"callback">> := null,
+        <<"filesToProcess">> := 1,
+        <<"filesProcessed">> := 1,
+        <<"failedFiles">> := 0,
+        <<"filesInvalidated">> := 0,
+        <<"filesTransferred">> := 1,
+        <<"bytesTransferred">> := 4
+    }, WorkerP1, Tid, Config),
+
+    ?assertEqual([], list_waiting_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], list_ongoing_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqual([Tid], list_ended_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
+
+    ?assertEqual([], list_waiting_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], list_ongoing_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqual([Tid], list_ended_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
+
+    ExpectedDistribution = [
+        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
+        #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
+    ],
+    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File),
+    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
+
+    % user1 should fail to schedule file_invalidation
+    ?assertMatch({ok, 403, _, _}, do_request(WorkerP1,
+        <<"replicas/", File/binary, "?provider_id=", DomainP2/binary>>,
+        delete, [user_1_token_header(Config)], []),
+        ?ATTEMPTS),
+
+    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File),
+    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
+
+    ?assertEqual([], list_waiting_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], list_ongoing_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqual([Tid], list_ended_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
+
+    ?assertEqual([], list_waiting_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], list_ongoing_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqual([Tid], list_ended_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
+    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS).
+
 
 invalidate_file_replica_with_migration(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -3226,6 +3295,7 @@ init_per_testcase(Case, Config) when
     Case =:= replicate_to_missing_provider;
     Case =:= replicate_file_by_id;
     Case =:= invalidate_file_replica;
+    Case =:= fail_to_invalidate_file_replica_without_permissions;
     Case =:= invalidate_file_replica_with_migration;
     Case =:= invalidation_should_succeed_when_remote_provider_modified_file_replica;
     Case =:= invalidation_should_fail_when_invalidation_provider_modified_file_replica;
@@ -3371,6 +3441,7 @@ end_per_testcase(Case, Config) when
     Case =:= replicate_file_by_id;
     Case =:= replicate_to_missing_provider;
     Case =:= invalidate_file_replica;
+    Case =:= fail_to_invalidate_file_replica_without_permissions;
     Case =:= invalidate_file_replica_with_migration;
     Case =:= invalidation_should_succeed_when_remote_provider_modified_file_replica;
     Case =:= invalidation_should_fail_when_invalidation_provider_modified_file_replica;
@@ -3431,6 +3502,10 @@ rest_endpoint(Node) ->
 
 user_1_token_header(Config) ->
     #macaroon_auth{macaroon = Macaroon} = ?config({auth, <<"user1">>}, Config),
+    {<<"Macaroon">>, Macaroon}.
+
+user_2_token_header(Config) ->
+    #macaroon_auth{macaroon = Macaroon} = ?config({auth, <<"user2">>}, Config),
     {<<"Macaroon">>, Macaroon}.
 
 domain(Node) ->
