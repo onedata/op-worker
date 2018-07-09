@@ -79,14 +79,9 @@ restart_link() ->
             rtransfer_link:on_complete_fun(), TransferId :: binary(),
             SpaceId :: binary(), FileGuid :: binary()) ->
                    {ok, reference()} | {error, Reason :: any()}.
-fetch(#{offset := O, size := S} = Request, NotifyFun, CompleteFun,
-    TransferId, SpaceId, FileGuid) ->
+fetch(Request, NotifyFun, CompleteFun, TransferId, SpaceId, FileGuid) ->
     TransferData = erlang:term_to_binary({TransferId, SpaceId, FileGuid}),
-    Ref = make_ref(),
-    NotifyFun(Ref, O, S),
-    CompleteFun(Ref, {ok, ok}),
-    {ok, Ref}.
-%%    rtransfer_link:fetch(Request, TransferData, NotifyFun, CompleteFun).
+    rtransfer_link:fetch(Request, TransferData, NotifyFun, CompleteFun).
 
 %%--------------------------------------------------------------------
 %% @doc

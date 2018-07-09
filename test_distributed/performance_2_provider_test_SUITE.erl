@@ -130,9 +130,21 @@ init_per_suite(Config) ->
     [{?LOAD_MODULES, [initializer, multi_provider_file_ops_test_base]} | Config].
 
 init_per_testcase(_Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
     lists:foreach(fun(Worker) ->
         test_utils:set_env(Worker, ?APP_NAME, minimal_sync_request, 1)
-    end, ?config(op_worker_nodes, Config)),
+    end, Workers),
+
+    ok = test_utils:mock_new(Workers, rtransfer_config, [passthrough]),
+    test_utils:mock_expect(Workers, rtransfer_config, fetch,
+        fun(#{offset := O, size := S} = _Request, NotifyFun, CompleteFun,
+            TransferId, SpaceId, FileGuid) ->
+            _TransferData = erlang:term_to_binary({TransferId, SpaceId, FileGuid}),
+            Ref = make_ref(),
+            NotifyFun(Ref, O, S),
+            CompleteFun(Ref, {ok, ok}),
+            {ok, Ref}
+        end),
 
     ssl:start(),
     hackney:start(),
@@ -141,9 +153,12 @@ init_per_testcase(_Case, Config) ->
     lfm_proxy:init(ConfigWithSessionInfo).
 
 end_per_testcase(_Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
     lfm_proxy:teardown(Config),
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:unload_quota_mocks(Config),
     hackney:stop(),
-    ssl:stop().
+    ssl:stop(),
+
+    ok = test_utils:mock_unload(Workers, rtransfer_config).
