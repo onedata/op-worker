@@ -35,6 +35,7 @@
 -export([
     provider_connection_test/1,
     rtransfer_connection_secret_test/1,
+    rtransfer_nodes_ips_test/1,
     macaroon_connection_test/1,
     compatible_client_connection_test/1,
     incompatible_client_connection_test/1,
@@ -72,6 +73,7 @@
     client_keepalive_test,
     provider_connection_test,
     rtransfer_connection_secret_test,
+    rtransfer_nodes_ips_test,
     macaroon_connection_test,
     compatible_client_connection_test,
     incompatible_client_connection_test,
@@ -341,6 +343,43 @@ rtransfer_connection_secret_test(Config) ->
         Msg
     ),
     ?assert(is_binary(Secret)),
+    ok = ssl:close(Sock).
+
+rtransfer_nodes_ips_test(Config) ->
+    % given
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    ClusterIPs = rpc:call(Worker1, node_manager, get_cluster_ips, []),
+
+    ExpectedIPs = [list_to_binary(inet:ntoa(IP)) || IP <- ClusterIPs],
+    ExpectedPort = proplists:get_value(server_port,
+        application:get_env(rtransfer_link, transfer, []), 6665),
+
+    ExpectedNodes = lists:sort(
+        [#'IpAndPort'{ip_string = IP, port = ExpectedPort} || IP <- ExpectedIPs]
+    ),
+
+    {ok, #'HandshakeResponse'{status = 'OK'}, Sock} = connect_as_provider(
+        Worker1, ?CORRECT_PROVIDER_ID, ?CORRECT_NONCE
+    ),
+
+    {ok, MsgId} = message_id:generate(self(), <<"provId">>),
+    {ok, EncodedId} = message_id:encode(MsgId),
+    ClientMsg = #'ClientMessage'{
+        message_id = EncodedId,
+        message_body = {get_rtransfer_nodes_ips, #'GetRTransferNodesIPs'{}}
+    },
+
+    RawMsg = messages:encode_msg(ClientMsg),
+    ssl:send(Sock, RawMsg),
+    ssl:setopts(Sock, [{active, once}, {packet, 4}]),
+
+    #'ServerMessage'{message_body = Msg} = ?assertMatch(#'ServerMessage'{}, receive_server_message()),
+
+    {rtransfer_nodes_ips, #'RTransferNodesIPs'{nodes = RespNodes}} = ?assertMatch(
+        {rtransfer_nodes_ips, #'RTransferNodesIPs'{}},
+        Msg
+    ),
+    ?assertEqual(ExpectedNodes, RespNodes),
     ok = ssl:close(Sock).
 
 macaroon_connection_test(Config) ->
@@ -986,7 +1025,8 @@ init_per_suite(Config) ->
 
 init_per_testcase(Case, Config) when
     Case =:= provider_connection_test;
-    Case =:= rtransfer_connection_secret_test ->
+    Case =:= rtransfer_connection_secret_test;
+    Case =:= rtransfer_nodes_ips_test ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, provider_logic, [passthrough]),
 
