@@ -24,9 +24,14 @@
 -define(PORT, application:get_env(?APP_NAME, http_server_port, 80)).
 -define(ACCEPTORS_NUM, application:get_env(?APP_NAME, http_acceptors, 10)).
 -define(REQUEST_TIMEOUT, application:get_env(?APP_NAME, http_request_timeout, timer:seconds(30))).
+-define(LE_CHALLENGE_PATH, application:get_env(?APP_NAME, letsencrypt_challenge_api_prefix,
+    "/.well-known/acme-challenge")).
+-define(LE_CHALLENGE_ROOT, application:get_env(?APP_NAME, letsencrypt_challenge_static_root,
+    "/tmp/op_worker/http/.well-known/acme-challenge/")).
 
 %% listener_behaviour callbacks
 -export([port/0, start/0, stop/0, healthcheck/0]).
+-export([set_response_to_letsencrypt_challenge/2]).
 
 %%%===================================================================
 %%% listener_behaviour callbacks
@@ -51,6 +56,7 @@ port() ->
 start() ->
     RedirectDispatch = cowboy_router:compile([
         {'_', [
+            {?LE_CHALLENGE_PATH ++ "/[...]", cowboy_static, {dir, ?LE_CHALLENGE_ROOT}},
             {'_', redirector_handler, https_listener:port()}
         ]}
     ]),
@@ -97,4 +103,21 @@ healthcheck() ->
     case http_client:get(Endpoint) of
         {ok, _, _, _} -> ok;
         _ -> {error, server_not_responding}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Writes a file serverd by http in a directory expected by Let's Encrypt
+%% for the HTTP authorization challenge.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_response_to_letsencrypt_challenge(Name :: file:name_all(), Content :: binary()) ->
+    ok | {error, Reason}
+    when Reason :: file:posix() | badarg | terminated | system_limit.
+set_response_to_letsencrypt_challenge(Name, Content) ->
+    Path = filename:join(?LE_CHALLENGE_ROOT, Name),
+    case filelib:ensure_dir(Path) of
+        ok -> file:write_file(Path, Content);
+        {error, Reason} -> {error, Reason}
     end.
