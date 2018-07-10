@@ -22,11 +22,16 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/1, notify/3, cancel/2, cancelling_finished/2,
-    notify_finished_task/1, process_result/4, enqueue/7, get_setting_for_deletion_task/1]).
+-export([start_link/1,
+    enqueue_task/7, enqueue_task_internal/7,
+    enqueue_notification/3, enqueue_notification_internal/3,
+    cancel/2, cancel_internal/2,
+    cancelling_finished/2, cancelling_finished_internal/2,
+    notify_finished_task/1, notify_finished_task_internal/1,
+    process_result/4, get_setting_for_deletion_task/1]).
 
 %% function exported for monitoring performance
--export([check/1]).
+-export([check/1 , check_internal/1]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -99,26 +104,63 @@
 
 %%-------------------------------------------------------------------
 %% @doc
+%% @equiv enqueue_internal(FileUuid, ProviderId, Blocks, Version,
+%%        ReportId, Type, SpaceId).  on chosen node.
+%% @end
+%%-------------------------------------------------------------------
+-spec enqueue_task(file_meta:uuid(), od_provider:id(), fslogic_blocks:blocks(),
+    version_vector:version_vector(), replica_deletion:report_id(),
+    replica_deletion:type(), od_space:id()) -> ok.
+enqueue_task(FileUuid, ProviderId, Blocks, Version, ReportId, Type, SpaceId) ->
+    Node = consistent_hasing:get_node(SpaceId),
+    rpc:call(Node, ?MODULE, enqueue_task_internal,
+        [FileUuid, ProviderId, Blocks, Version, ReportId, Type, SpaceId]).
+
+%%-------------------------------------------------------------------
+%% @doc
 %% Casts task for sending new replica_deletion request.
 %% @end
 %%-------------------------------------------------------------------
--spec enqueue(file_meta:uuid(), od_provider:id(), fslogic_blocks:blocks(),
-    version_vector:version_vector(), replica_deletion:report_id(),
-    replica_deletion:type(), od_space:id()) -> ok.
-enqueue(FileUuid, ProviderId, Blocks, Version, ReportId, Type, SpaceId) ->
+-spec enqueue_task_internal(file_meta:uuid(), od_provider:id(),
+    fslogic_blocks:blocks(), version_vector:version_vector(),
+    replica_deletion:report_id(), replica_deletion:type(), od_space:id()) -> ok.
+enqueue_task_internal(FileUuid, ProviderId, Blocks, Version, ReportId, Type, SpaceId) ->
     call(SpaceId, ?TASK(?DELETE(FileUuid, ProviderId,
         Blocks, Version, Type), ReportId)).
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Casts notification task. 
+%% @equiv notify_internal(NotifyFun, ReportId, SpaceId) on chosen node.
+%% @end
+%%-------------------------------------------------------------------
+-spec enqueue_notification(function(), replica_deletion:report_id(),
+    od_space:id()) -> ok.
+enqueue_notification(NotifyFun, ReportId, SpaceId) ->
+    Node = consistent_hasing:get_node(SpaceId),
+    rpc:call(Node, ?MODULE, enqueue_notification_internal,
+        [?TASK(?NOTIFY(NotifyFun), ReportId)]).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Casts notification task.
 %% NotifyFun can be literally any function.
 %% It will be called by replica_deletion_master to notify requester.
 %% @end
 %%-------------------------------------------------------------------
--spec notify(function(), replica_deletion:report_id(), od_space:id()) -> ok.
-notify(NotifyFun, ReportId, SpaceId) ->
+-spec enqueue_notification_internal(function(), replica_deletion:report_id(),
+    od_space:id()) -> ok.
+enqueue_notification_internal(NotifyFun, ReportId, SpaceId) ->
     call(SpaceId, ?TASK(?NOTIFY(NotifyFun), ReportId)).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% @equiv cancel_internal(ReportId, SpaceId) on chosen node.
+%% @end
+%%-------------------------------------------------------------------
+-spec cancel(replica_deletion:report_id(), od_space:id()) -> ok.
+cancel(ReportId, SpaceId) ->
+    Node = consistent_hasing:get_node(SpaceId),
+    rpc:call(Node, ?MODULE, cancel_internal, [ReportId, SpaceId]).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -126,30 +168,60 @@ notify(NotifyFun, ReportId, SpaceId) ->
 %% All new arriving tasks and those popped from queue associated
 %% with given ReportId will be cancelled.
 %% NOTE!!! Queue is not searched for tasks to be cancelled.
-%%         They just won't be executed when they reach head of queue. 
+%%         They just won't be executed when they reach head of queue.
 %% @end
 %%-------------------------------------------------------------------
--spec cancel(replica_deletion:report_id(), od_space:id()) -> ok.
-cancel(ReportId, SpaceId) ->
+-spec cancel_internal(replica_deletion:report_id(), od_space:id()) -> ok.
+cancel_internal(ReportId, SpaceId) ->
     call(SpaceId, ?CANCEL(ReportId)).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% @equiv cancelling_finished_internal(ReportId, SpaceId) on chosen node
+%% @end
+%%-------------------------------------------------------------------
+-spec cancelling_finished(replica_deletion:report_id(), od_space:id()) -> ok.
+cancelling_finished(ReportId, SpaceId) ->
+    Node = consistent_hasing:get_node(SpaceId),
+    rpc:call(Node, ?MODULE, cancelling_finished_internal, ReportId, SpaceId).
 
 %%-------------------------------------------------------------------
 %% @doc
 %% Removes given if from ids to be cancelled.
 %% @end
 %%-------------------------------------------------------------------
--spec cancelling_finished(replica_deletion:report_id(), od_space:id()) -> ok.
-cancelling_finished(ReportId, SpaceId) ->
+-spec cancelling_finished_internal(replica_deletion:report_id(), od_space:id()) -> ok.
+cancelling_finished_internal(ReportId, SpaceId) ->
     call(SpaceId, ?CANCEL_DONE(ReportId)).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% @equiv notify_finished_task_internal(SpaceId) on chosen node.
+%% @end
+%%-------------------------------------------------------------------
+-spec notify_finished_task(od_space:id()) -> ok.
+notify_finished_task(SpaceId) ->
+    Node = consistent_hasing:get_node(SpaceId),
+    rpc:call(Node, ?MODULE, notify_finished_task_internal, [SpaceId]).
 
 %%-------------------------------------------------------------------
 %% @doc
 %% Sends message to server to notify about finished task.
 %% @end
 %%-------------------------------------------------------------------
--spec notify_finished_task(od_space:id()) -> ok.
-notify_finished_task(SpaceId) ->
+-spec notify_finished_task_internal(od_space:id()) -> ok.
+notify_finished_task_internal(SpaceId) ->
     call(SpaceId, ?FINISHED).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% @equiv check_internal(SpaceId)
+%% @end
+%%-------------------------------------------------------------------
+-spec check(od_space:id()) -> ok.
+check(SpaceId) ->
+    Node = consistent_hasing:get_node(SpaceId),
+    rpc:call(Node, ?MODULE, check_internal, [SpaceId]).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -157,8 +229,8 @@ notify_finished_task(SpaceId) ->
 %% of active tasks.
 %% @end
 %%-------------------------------------------------------------------
--spec check(od_space:id()) -> ok.
-check(SpaceId) ->
+-spec check_internal(od_space:id()) -> ok.
+check_internal(SpaceId) ->
     call(SpaceId, check).
 
 %%-------------------------------------------------------------------
@@ -181,7 +253,8 @@ process_result(invalidation, FileUuid, Result, ReportId) ->
 -spec(start_link(od_space:id()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link(SpaceId) ->
-    gen_server2:start_link(?SERVER(SpaceId), ?MODULE, [SpaceId], []).
+    Node = consistent_hasing:get_node(SpaceId),
+    rpc:call(Node, gen_server2, start_link, [?SERVER(SpaceId), ?MODULE, [SpaceId], []]).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -376,6 +449,12 @@ call(SpaceId, Request) ->
         gen_server2:call(?SERVER(SpaceId), Request)
     catch
         exit:{noproc, _} ->
+            start_link(SpaceId),
+            call(SpaceId, Request);
+        exit:{normal, _} ->
+            start_link(SpaceId),
+            call(SpaceId, Request);
+        exit:{{shutdown, timeout}, _} ->
             start_link(SpaceId),
             call(SpaceId, Request)
     end.

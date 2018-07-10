@@ -253,5 +253,5 @@ schedule_file_replica_deletion(FileCtx, SupportingProviderId, TransferId) ->
 -spec schedule_replica_deletion_task(file_meta:uuid(), od_provider:id(), fslogic_blocks:blocks(),
     version_vector:version_vector(), transfer:id(), od_space:id()) -> ok.
 schedule_replica_deletion_task(FileUuid, Provider, Blocks, VV, TransferId, SpaceId) ->
-    replica_deletion_master:enqueue(FileUuid, Provider, Blocks, VV, TransferId, invalidation, SpaceId).
+    replica_deletion_master:enqueue_task(FileUuid, Provider, Blocks, VV, TransferId, invalidation, SpaceId).
 

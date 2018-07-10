@@ -265,7 +265,7 @@ schedule_file_replicas_deletion(FilesToClean, AutocleaningId, SpaceId) ->
                 % every ?CHECK_QUOTA_INTERVAL task, add notification task
                 % it will trigger checking guota
                 Self = self(),
-                replica_deletion_master:notify(fun() -> check_quota(Self) end, AutocleaningId, SpaceId),
+                replica_deletion_master:enqueue_notification(fun() -> check_quota(Self) end, AutocleaningId, SpaceId),
                 schedule_replica_deletion_task(FileUuid, Provider, Blocks, VV, AutocleaningId, SpaceId);
             _ ->
                 schedule_replica_deletion_task(FileUuid, Provider, Blocks, VV, AutocleaningId, SpaceId)
@@ -281,7 +281,7 @@ schedule_file_replicas_deletion(FilesToClean, AutocleaningId, SpaceId) ->
 -spec schedule_replica_deletion_task(file_meta:uuid(), od_provider:id(), fslogic_blocks:blocks(),
     version_vector:version_vector(), autocleaning:id(), od_space:id()) -> ok.
 schedule_replica_deletion_task(FileUuid, Provider, Blocks, VV, AutoCleaningId, SpaceId) ->
-    replica_deletion_master:enqueue(FileUuid, Provider, Blocks, VV, AutoCleaningId, autocleaning, SpaceId).
+    replica_deletion_master:enqueue_task(FileUuid, Provider, Blocks, VV, AutoCleaningId, autocleaning, SpaceId).
 
 %%-------------------------------------------------------------------
 %% @private
