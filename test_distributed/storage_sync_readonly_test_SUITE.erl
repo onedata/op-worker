@@ -32,6 +32,7 @@
 -export([
     create_directory_import_test/1,
     create_file_import_test/1,
+    import_file_with_link_but_no_doc_test/1,
     create_file_in_dir_update_test/1,
     delete_file_update_test/1,
     append_file_update_test/1,
@@ -68,7 +69,8 @@
     sync_should_not_delete_not_replicated_files_created_in_remote_provider2/1,
     change_file_content_update_test/1,
     change_file_content_update2_test/1, create_empty_file_import_test/1,
-    append_empty_file_update_test/1]).
+    append_empty_file_update_test/1
+]).
 
 -define(TEST_CASES, [
     create_directory_import_test,
@@ -80,6 +82,7 @@
     create_directory_import_without_read_permission_test,
     create_directory_import_many_test,
     create_file_import_test,
+    import_file_with_link_but_no_doc_test,
     create_empty_file_import_test,
     create_file_import_check_user_id_test,
     create_file_import_check_user_id_error_test,
@@ -145,7 +148,7 @@ update_syncs_files_after_import_failed_test(Config) ->
     test_utils:mock_expect(W1, simple_scan, import_file,
         fun(Job = #space_strategy_job{
             data = #{file_name := FileName}
-        }) ->
+        }, _) ->
             case FileName of
                 ?TEST_DIR ->
                     throw(test_error);
@@ -252,7 +255,7 @@ update_syncs_files_after_previous_update_failed_test(Config) ->
     timer:sleep(timer:seconds(1)),
     test_utils:mock_new(W1, simple_scan),
     test_utils:mock_expect(W1, simple_scan, import_file, fun(Job = #space_strategy_job{
-        data = #{file_name := FileName}}
+        data = #{file_name := FileName}}, _
     ) ->
         case FileName of
             ?TEST_DIR ->
@@ -334,6 +337,9 @@ create_directory_import_many_test(Config) ->
 
 create_file_import_test(Config) ->
     storage_sync_test_base:create_file_import_test(Config, true).
+
+import_file_with_link_but_no_doc_test(Config) ->
+    storage_sync_test_base:import_file_with_link_but_no_doc_test(Config, true).
 
 create_empty_file_import_test(Config) ->
     storage_sync_test_base:create_empty_file_import_test(Config, true).
