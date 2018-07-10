@@ -183,7 +183,7 @@ cancel_internal(ReportId, SpaceId) ->
 -spec cancelling_finished(replica_deletion:report_id(), od_space:id()) -> ok.
 cancelling_finished(ReportId, SpaceId) ->
     Node = consistent_hasing:get_node(SpaceId),
-    rpc:call(Node, ?MODULE, cancelling_finished_internal, ReportId, SpaceId).
+    rpc:call(Node, ?MODULE, cancelling_finished_internal, [ReportId, SpaceId]).
 
 %%-------------------------------------------------------------------
 %% @doc
