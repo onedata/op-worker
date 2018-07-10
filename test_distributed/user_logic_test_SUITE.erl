@@ -95,8 +95,8 @@ get_by_auth_test(Config) ->
 get_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
-    User1Sess = logic_tests_common:create_user_session(Config, ?USER_1),
-    User2Sess = logic_tests_common:create_user_session(Config, ?USER_2),
+    User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
+    User2Sess = logic_tests_common:get_user_session(Config, ?USER_2),
     % Creating session should fetch user (private aspect), invalidate
     logic_tests_common:invalidate_cache(Config, od_user, ?USER_1),
     logic_tests_common:invalidate_cache(Config, od_user, ?USER_2),
@@ -146,8 +146,8 @@ get_test(Config) ->
 get_protected_data_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
-    User1Sess = logic_tests_common:create_user_session(Config, ?USER_1),
-    User2Sess = logic_tests_common:create_user_session(Config, ?USER_2),
+    User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
+    User2Sess = logic_tests_common:get_user_session(Config, ?USER_2),
     % Creating session should fetch user (private aspect), invalidate
     logic_tests_common:invalidate_cache(Config, od_user, ?USER_1),
     logic_tests_common:invalidate_cache(Config, od_user, ?USER_2),
@@ -202,8 +202,8 @@ get_protected_data_test(Config) ->
 get_shared_data_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
-    User1Sess = logic_tests_common:create_user_session(Config, ?USER_1),
-    User2Sess = logic_tests_common:create_user_session(Config, ?USER_2),
+    User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
+    User2Sess = logic_tests_common:get_user_session(Config, ?USER_2),
     % Creating session should fetch user (private aspect), invalidate
     logic_tests_common:invalidate_cache(Config, od_user, ?USER_1),
     logic_tests_common:invalidate_cache(Config, od_user, ?USER_2),
@@ -288,7 +288,7 @@ get_shared_data_test(Config) ->
 mixed_get_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
-    User1Sess = logic_tests_common:create_user_session(Config, ?USER_1),
+    User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
     % Creating session should fetch user (private aspect), invalidate
     logic_tests_common:invalidate_cache(Config, od_user, ?USER_1),
 
@@ -346,7 +346,7 @@ mixed_get_test(Config) ->
 subscribe_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
-    User1Sess = logic_tests_common:create_user_session(Config, ?USER_1),
+    User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
     % Creating session should fetch user (private aspect), invalidate
     logic_tests_common:invalidate_cache(Config, od_user, ?USER_1),
 
@@ -497,7 +497,7 @@ subscribe_test(Config) ->
 convenience_functions_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
-    User1Sess = logic_tests_common:create_user_session(Config, ?USER_1),
+    User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
     % Creating session should fetch user (private aspect), invalidate
     logic_tests_common:invalidate_cache(Config, od_user, ?USER_1),
 
@@ -604,7 +604,7 @@ convenience_functions_test(Config) ->
 set_default_space_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
-    User1Sess = logic_tests_common:create_user_session(Config, ?USER_1),
+    User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
     % Creating session should fetch user (private aspect), invalidate
     logic_tests_common:invalidate_cache(Config, od_user, ?USER_1),
 
@@ -628,7 +628,7 @@ set_default_space_test(Config) ->
 join_or_leave_group_or_space_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
-    User1Sess = logic_tests_common:create_user_session(Config, ?USER_1),
+    User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
     % Creating session should fetch user (private aspect), invalidate
     logic_tests_common:invalidate_cache(Config, od_user, ?USER_1),
 
@@ -692,11 +692,9 @@ init_per_suite(Config) ->
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [logic_tests_common, initializer]} | Config].
 
 init_per_testcase(_, Config) ->
-    logic_tests_common:wait_for_mocked_connection(Config),
-    Config.
+    logic_tests_common:init_per_testcase(Config).
 
-end_per_testcase(_, Config) ->
-    logic_tests_common:invalidate_all_test_records(Config),
+end_per_testcase(_, _Config) ->
     ok.
 
 end_per_suite(Config) ->

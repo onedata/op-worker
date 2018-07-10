@@ -269,7 +269,14 @@ apply_changes_batch(Since, Until, Docs, State) ->
     State2 = cancel_changes_request(State),
     {Docs2, Until2, State3} = prepare_batch(Docs, Until, State2),
     dbsync_changes:apply_batch(Docs2, {Since, Until2}),
-    erlang:garbage_collect(),
+
+    case application:get_env(?APP_NAME, dbsync_in_stream_worker_gc, on) of
+        on ->
+            erlang:garbage_collect();
+        _ ->
+            ok
+    end,
+
     State3#state{apply_batch = Until2}.
 
 %%--------------------------------------------------------------------

@@ -21,7 +21,7 @@
 -export([emit_file_attr_changed/2, emit_sizeless_file_attrs_changed/1,
     emit_file_location_changed/2, emit_file_location_changed/3,
     emit_file_location_changed/4, emit_file_perm_changed/1, emit_file_removed/2,
-    emit_file_renamed_to_client/3, emit_quota_exeeded/0]).
+    emit_file_renamed_to_client/3, emit_quota_exceeded/0]).
 
 %%%===================================================================
 %%% API
@@ -153,11 +153,15 @@ emit_file_renamed_to_client(FileCtx, NewName, UserCtx) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sends a list of currently disabled spaces due to exeeded quota.
+%% Sends a list of currently disabled spaces due to exceeded quota.
 %% @end
 %%--------------------------------------------------------------------
--spec emit_quota_exeeded() -> ok | {error, Reason :: term()}.
-emit_quota_exeeded() ->
-    BlockedSpaces = space_quota:get_disabled_spaces(),
-    ?debug("Sending disabled spaces ~p", [BlockedSpaces]),
-    event:emit(#quota_exceeded_event{spaces = BlockedSpaces}).
+-spec emit_quota_exceeded() -> ok | {error, Reason :: term()}.
+emit_quota_exceeded() ->
+    case space_quota:get_disabled_spaces() of
+        {ok, BlockedSpaces} ->
+            ?debug("Sending disabled spaces event ~p", [BlockedSpaces]),
+            event:emit(#quota_exceeded_event{spaces = BlockedSpaces});
+        {error, _} = Error ->
+            ?debug("Cannot send disabled spaces event due to ~p", [Error])
+    end.

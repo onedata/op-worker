@@ -203,7 +203,14 @@ forward_changes_batch(ProviderId, Since, Until, Docs, State = #state{
                 workers = maps:put(ProviderId, Worker, Workers)
             }
     end,
-    erlang:garbage_collect(),
+
+    case application:get_env(?APP_NAME, dbsync_in_stream_gc, on) of
+        on ->
+            erlang:garbage_collect();
+        _ ->
+            ok
+    end,
+
     State2.
 
 %%--------------------------------------------------------------------

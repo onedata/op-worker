@@ -26,7 +26,7 @@
 %% How many entries shall be processed in one batch for set_scope operation.
 -define(SET_SCOPE_BATCH_SIZE, 100).
 
--export([create/1, create/2, save/1, get/1, exists/1, update/2, delete/1,
+-export([save/1, create/2, save/2, get/1, exists/1, update/2, delete/1,
     delete_without_link/1]).
 -export([delete_child_link/4, foreach_child/3]).
 -export([hidden_file_name/1, is_hidden/1, is_child_of_hidden_dir/1]).
@@ -34,7 +34,7 @@
 -export([get_parent/1, get_parent_uuid/1]).
 -export([get_child/2, get_child_uuid/2, list_children/3, list_children/4]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
-    make_space_exist/1, new_doc/7, type/1, get_ancestors/1,
+    make_space_exist/1, new_doc/9, type/1, get_ancestors/1,
     get_locations_by_uuid/1, rename/4]).
 
 
@@ -76,15 +76,24 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates file meta.
+%% Saves file meta doc.
 %% @end
 %%--------------------------------------------------------------------
--spec create(doc()) -> {ok, uuid()} | {error, term()}.
+-spec save(doc()) -> {ok, uuid()} | {error, term()}.
+save(Doc) ->
+    save(Doc, true).
 
-create(#document{value = #file_meta{is_scope = true}} = Doc) ->
+%%--------------------------------------------------------------------
+%% @doc
+%% Saves file meta doc.
+%% @end
+%%--------------------------------------------------------------------
+-spec save(doc(), boolean()) -> {ok, uuid()} | {error, term()}.
+
+save(#document{value = #file_meta{is_scope = true}} = Doc, _GeneratedKey) ->
     ?extract_key(datastore_model:save(?CTX, Doc));
-create(Doc) ->
-    ?extract_key(datastore_model:save(?CTX#{generated_key => true}, Doc)).
+save(Doc, GeneratedKey) ->
+    ?extract_key(datastore_model:save(?CTX#{generated_key => GeneratedKey}, Doc)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -123,7 +132,7 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{
         Link = {FileName, FileUuid},
         case datastore_model:add_links(Ctx, ParentUuid, TreeId, Link) of
             {ok, #link{}} ->
-                case create(FileDoc3) of
+                case save(FileDoc3) of
                     {ok, FileUuid} -> {ok, FileUuid};
                     Error -> Error
                 end;
@@ -155,14 +164,6 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{
         end
     end).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Saves file meta.
-%% @end
-%%--------------------------------------------------------------------
--spec save(doc()) -> {ok, uuid()} | {error, term()}.
-save(Doc) ->
-    ?extract_key(datastore_model:save(?CTX, Doc)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -694,19 +695,27 @@ make_space_exist(SpaceId) ->
 %% Return file_meta doc.
 %% @end
 %%--------------------------------------------------------------------
--spec new_doc(undefined | file_meta:name(), undefined | file_meta:type(),
-    file_meta:posix_permissions(), undefined | od_user:id(), undefined | od_group:id(),
-    undefined | file_meta:size(), uuid()) -> doc().
-new_doc(FileName, FileType, Mode, Owner, GroupOwner, Size, ParentUuid) ->
-    #document{value = #file_meta{
-        name = FileName,
-        type = FileType,
-        mode = Mode,
-        owner = Owner,
-        group_owner = GroupOwner,
-        size = Size,
-        parent_uuid = ParentUuid
-    }}.
+-spec new_doc(undefined | uuid(), undefined | name(), undefined | type(),
+    posix_permissions(), undefined | od_user:id(), undefined | od_group:id(),
+    undefined | size(), uuid(), od_space:id()) -> doc().
+new_doc(FileUuid, FileName, FileType, Mode, Owner, GroupOwner, Size, ParentUuid,
+    SpaceId
+) ->
+    #document{
+        key = FileUuid,
+        value = #file_meta{
+            name = FileName,
+            type = FileType,
+            mode = Mode,
+            owner = Owner,
+            group_owner = GroupOwner,
+            size = Size,
+            parent_uuid = ParentUuid,
+            provider_id = oneprovider:get_id(),
+            scope = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)
+        },
+        scope = SpaceId
+    }.
 
 %%--------------------------------------------------------------------
 %% @doc

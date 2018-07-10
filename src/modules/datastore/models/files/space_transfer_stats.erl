@@ -21,7 +21,7 @@
 -export([
     key/2, key/3,
     get/1, get/2, get/3,
-    update/4, update_with_cache/3, update_with_cache_internal/3,
+    update/4, update_with_cache/3,
     delete/1, delete/2
 ]).
 
@@ -111,44 +111,18 @@ get(TransferType, SpaceId) ->
 get(ProviderId, TransferType, SpaceId) ->
     ?MODULE:get(key(ProviderId, TransferType, SpaceId)).
 
+
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv update_with_cache(TransferType, SpaceId, BytesPerProvider) on chosen node.
+%% Sends stats to onf_transfer_stats_aggregator process instead of updating doc
+%% manually.
 %% @end
 %%--------------------------------------------------------------------
 -spec update_with_cache(TransferType :: binary(), SpaceId :: od_space:id(),
     BytesPerProvider :: #{od_provider:id() => size()}) -> ok.
-update_with_cache(TransferType, SpaceId, BytesPerProvider) ->
-    Node = consistent_hasing:get_node(SpaceId),
-    rpc:call(Node, ?MODULE, update_with_cache_internal,
-        [TransferType, SpaceId, BytesPerProvider]).
+update_with_cache(?ON_THE_FLY_TRANSFERS_TYPE, SpaceId, BytesPerProvider) ->
+    transfer_onf_stats_aggregator:update_statistics(SpaceId, BytesPerProvider).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates space transfers stats document for given transfer type, space id
-%% (provider is assumed to be the calling one) or creates it
-%% if one doesn't exists already. Uses cache process for update.
-%% @end
-%%--------------------------------------------------------------------
--spec update_with_cache_internal(TransferType :: binary(), SpaceId :: od_space:id(),
-    BytesPerProvider :: #{od_provider:id() => size()}) -> ok.
-update_with_cache_internal(TransferType, SpaceId, BytesPerProvider) ->
-    Name = binary_to_atom(term_to_binary(
-        {space_transfer_cache, TransferType, SpaceId}), latin1),
-    case application:get_env(?APP_NAME, Name) of
-        {ok, Pid} ->
-            case is_process_alive(Pid) of
-                true ->
-                    Pid ! {update_stats, BytesPerProvider};
-                _ ->
-                    start_cache_proc(TransferType, SpaceId),
-                    update_with_cache(TransferType, SpaceId, BytesPerProvider)
-            end;
-        _ ->
-            start_cache_proc(TransferType, SpaceId),
-            update_with_cache(TransferType, SpaceId, BytesPerProvider)
-    end,
-    ok.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -288,69 +262,3 @@ get_record_struct(1) ->
         {dy_hist, #{string => [integer]}},
         {mth_hist, #{string => [integer]}}
     ]}.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Starts cache process (process that caches transfer stats).
-%% @end
-%%--------------------------------------------------------------------
--spec start_cache_proc(TransferType :: binary(), SpaceId :: od_space:id()) -> ok.
-start_cache_proc(TransferType, SpaceId) ->
-    critical_section:run([?MODULE, TransferType, SpaceId], fun() ->
-        Pid = spawn(fun() -> cache_proc(TransferType, SpaceId, #{}) end),
-        Name = binary_to_atom(term_to_binary(
-            {space_transfer_cache, TransferType, SpaceId}), latin1),
-        application:set_env(?APP_NAME, Name, Pid)
-    end),
-    ok.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Cache process (process that caches transfer stats).
-%% @end
-%%--------------------------------------------------------------------
--spec cache_proc(TransferType :: binary(), SpaceId :: od_space:id(),
-    Bytes :: #{od_provider:id() => size()}) -> ok.
-cache_proc(TransferType, SpaceId, Bytes0) ->
-    Bytes = get_messages(Bytes0, 0),
-    case maps:size(Bytes) of
-        0 ->
-            receive
-                {update_stats, NewBytes} ->
-                    cache_proc(TransferType, SpaceId, NewBytes)
-            after 300000 ->
-                ok
-            end;
-        _ ->
-            CurrentTime = provider_logic:zone_time_seconds(),
-            update(TransferType, SpaceId, Bytes, CurrentTime),
-            cache_proc(TransferType, SpaceId, #{})
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Gets and aggregates messages.
-%% @end
-%%--------------------------------------------------------------------
--spec get_messages(Bytes :: #{od_provider:id() => size()},
-    Counter :: non_neg_integer()) -> #{od_provider:id() => size()}.
-get_messages(Bytes, 1000) ->
-    Bytes;
-get_messages(Bytes, Counter) ->
-    receive
-        {update_stats, NewBytes} ->
-            Bytes2 = maps:fold(fun(K, V, Acc) ->
-                Value = maps:get(K, Acc, 0),
-                maps:put(K, Value + V, Acc)
-            end, Bytes, NewBytes),
-            get_messages(Bytes2, Counter + 1)
-    after 0 ->
-        Bytes
-    end.
