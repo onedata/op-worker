@@ -13,8 +13,8 @@
         "cfg1": {
             "storages": [
                 {
-                    "type": "ceph",
-                    "name": "ceph",
+                    "type": "cephrados",
+                    "name": "cephrados",
                     "pool": "onedata:8"
                 }
             ],

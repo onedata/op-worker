@@ -77,7 +77,7 @@ new_cephrados_helper(MonitorHostname, ClusterName, PoolName, OptArgs, AdminCtx,
     Insecure, StoragePathType) ->
 
     #helper{
-        name = ?CEPH_HELPER_NAME,
+        name = ?CEPHRADOS_HELPER_NAME,
         args = maps:merge(OptArgs, #{
             <<"monitorHostname">> => MonitorHostname,
             <<"clusterName">> => ClusterName,
@@ -435,6 +435,7 @@ set_user_ctx(#helper{args = Args} = Helper, UserCtx) ->
 %%--------------------------------------------------------------------
 -spec translate_name(OldName :: binary()) -> NewName :: binary().
 translate_name(<<"Ceph">>) -> ?CEPH_HELPER_NAME;
+translate_name(<<"CephRados">>) -> ?CEPHRADOS_HELPER_NAME;
 translate_name(<<"DirectIO">>) -> ?POSIX_HELPER_NAME;
 translate_name(<<"ProxyIO">>) -> ?PROXY_HELPER_NAME;
 translate_name(<<"AmazonS3">>) -> ?S3_HELPER_NAME;

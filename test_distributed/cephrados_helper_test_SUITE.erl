@@ -22,8 +22,7 @@
 %% tests
 -export([write_test/1, multipart_write_test/1,
     truncate_test/1, write_read_test/1, multipart_read_test/1,
-    write_unlink_test/1, write_read_truncate_unlink_test/1,
-    setxattr_test/1, listxattr_test/1, removexattr_test/1]).
+    write_unlink_test/1, write_read_truncate_unlink_test/1]).
 
 %% test_bases
 -export([write_test_base/1, multipart_write_test_base/1,
@@ -36,14 +35,11 @@
     write_read_truncate_unlink_test
 ]).
 
--define(XATTR_TEST_CASES, [
-    setxattr_test, listxattr_test, removexattr_test]).
-
--define(TEST_CASES, ?PERF_TEST_CASES ++ ?XATTR_TEST_CASES).
+-define(TEST_CASES, ?PERF_TEST_CASES).
 
 all() -> ?ALL(?TEST_CASES, ?PERF_TEST_CASES).
 
--define(CEPH_STORAGE_NAME, ceph).
+-define(CEPHRADOS_STORAGE_NAME, cephrados).
 -define(CEPH_CLUSTER_NAME, <<"ceph">>).
 -define(CEPH_POOL_NAME, <<"onedata">>).
 -define(FILE_ID_SIZE, 20).
@@ -244,45 +240,6 @@ write_read_truncate_unlink_test_base(Config) ->
         delete_helper(Helper)
     end, ?config(threads_num, Config)).
 
-setxattr_test(Config) ->
-    Helper = new_helper(Config),
-    FileId = random_file_id(),
-    XattrName = str_utils:join_binary([<<"user.">>, random_file_id()]),
-    XattrValue = random_file_id(),
-    {ok, _} = open(Helper, FileId, rdwr),
-    ?assertMatch(ok,
-        call(Helper, setxattr, [FileId, XattrName, XattrValue, false, false])),
-    ?assertMatch({ok, XattrValue}, call(Helper, getxattr, [FileId, XattrName])).
-
-listxattr_test(Config) ->
-    Helper = new_helper(Config),
-    FileId = random_file_id(),
-    {ok, _} = open(Helper, FileId, rdwr),
-    ?assertMatch(ok,
-        call(Helper, setxattr,
-            [FileId, <<"user.XATTR1">>, random_file_id(), false, false])),
-    ?assertMatch(ok,
-        call(Helper, setxattr,
-            [FileId, <<"user.XATTR2">>, random_file_id(), false, false])),
-    ?assertMatch(ok,
-        call(Helper, setxattr,
-            [FileId, <<"user.XATTR3">>, random_file_id(), false, false])),
-    {ok, XattrNames} = call(Helper, listxattr, [FileId]),
-    ?assertEqual(3, length(XattrNames)).
-
-removexattr_test(Config) ->
-    Helper = new_helper(Config),
-    FileId = random_file_id(),
-    XattrName = str_utils:join_binary([<<"user.">>, random_file_id()]),
-    XattrValue = random_file_id(),
-    {ok, _} = open(Helper, FileId, rdwr),
-    ?assertMatch(ok,
-        call(Helper, setxattr, [FileId, XattrName, XattrValue, false, false])),
-    {ok, XattrNames} = call(Helper, listxattr, [FileId]),
-    ?assertEqual(1, length(XattrNames)),
-    ?assertMatch(ok, call(Helper, removexattr, [FileId, XattrName])),
-    ?assertMatch({ok, []}, call(Helper, listxattr, [FileId])).
-
 
 %%%===================================================================
 %%% Internal functions
@@ -291,7 +248,7 @@ removexattr_test(Config) ->
 new_helper(Config) ->
     process_flag(trap_exit, true),
     [Node | _] = ?config(op_worker_nodes, Config),
-    CephConfig = ?config(ceph, ?config(ceph, ?config(storages, Config))),
+    CephConfig = ?config(cephrados, ?config(cephrados, ?config(storages, Config))),
 
     UserCtx = helper:new_cephrados_user_ctx(
         atom_to_binary(?config(username, CephConfig), utf8),

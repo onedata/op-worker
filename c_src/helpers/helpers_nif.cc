@@ -56,6 +56,7 @@ struct HelpersNIF {
         for (const auto &entry :
             std::unordered_map<folly::fbstring, folly::fbstring>(
                 {{CEPH_HELPER_NAME, "ceph_helper_threads_number"},
+                    {CEPHRADOS_HELPER_NAME, "cephrados_helper_threads_number"},
                     {POSIX_HELPER_NAME, "posix_helper_threads_number"},
                     {S3_HELPER_NAME, "s3_helper_threads_number"},
                     {SWIFT_HELPER_NAME, "swift_helper_threads_number"},
@@ -73,6 +74,7 @@ struct HelpersNIF {
 
         SHCreator = std::make_unique<one::helpers::StorageHelperCreator>(
             services[CEPH_HELPER_NAME]->service,
+            services[CEPHRADOS_HELPER_NAME]->service,
             services[POSIX_HELPER_NAME]->service,
             services[S3_HELPER_NAME]->service,
             services[SWIFT_HELPER_NAME]->service,
@@ -451,6 +453,9 @@ static void configurePerformanceMonitoring(
             ONE_METRIC_COUNTER_SET(
                 "comp.oneprovider.mod.options.ceph_helper_thread_count",
                 std::stoul(args["ceph_helper_threads_number"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.cephrados_helper_thread_count",
+                std::stoul(args["cephrados_helper_threads_number"].toStdString()));
             ONE_METRIC_COUNTER_SET(
                 "comp.oneprovider.mod.options.posix_helper_thread_count",
                 std::stoul(args["posix_helper_threads_number"].toStdString()));

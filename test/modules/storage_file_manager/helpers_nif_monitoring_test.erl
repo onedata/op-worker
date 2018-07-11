@@ -61,6 +61,7 @@ stop(_) ->
 -spec prepare_environment() -> ok.
 prepare_environment() ->
     application:set_env(?APP_NAME, ceph_helper_threads_number, 1),
+    application:set_env(?APP_NAME, cephrados_helper_threads_number, 1),
     application:set_env(?APP_NAME, posix_helper_threads_number, 1),
     application:set_env(?APP_NAME, s3_helper_threads_number, 1),
     application:set_env(?APP_NAME, swift_helper_threads_number, 1),

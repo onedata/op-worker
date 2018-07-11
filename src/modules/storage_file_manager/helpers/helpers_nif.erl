@@ -240,6 +240,7 @@ prepare_args() ->
         maps:put(str_utils:to_binary(EnvKey), str_utils:to_binary(EnvValue), Map)
     end, #{}, [
         ceph_helper_threads_number,
+        cephrados_helper_threads_number,
         posix_helper_threads_number,
         s3_helper_threads_number,
         swift_helper_threads_number,
