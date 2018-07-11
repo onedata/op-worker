@@ -106,11 +106,13 @@
 
 -record(synchronize_block, {
     block :: #file_block{},
-    prefetch = false :: boolean()
+    prefetch = false :: boolean(),
+    priority :: non_neg_integer()
 }).
 
 -record(synchronize_block_and_compute_checksum, {
-    block :: #file_block{}
+    block :: #file_block{},
+    priority :: non_neg_integer()
 }).
 
 -record(get_xattr, {

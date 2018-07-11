@@ -41,6 +41,9 @@
     ?APP_NAME, rtransfer_blocks_aggregation_time, 1000)
 ).
 
+-define(RESTART_PRIORITY, 50).
+-define(PREFETCH_PRIORITY, 50).
+
 -define(FLUSH_STATS, flush_stats).
 -define(FLUSH_BLOCKS, flush_blocks).
 
@@ -68,10 +71,10 @@
     caching_blocks_timer :: undefined | reference()
 }).
 
--export([synchronize/5, update_replica/4, cancel/1, init/1,
+-export([synchronize/6, update_replica/4, cancel/1, init/1,
     handle_call/3, handle_cast/2, handle_info/2, code_change/3, terminate/2,
     init_or_return_existing/2, flush_location/1, apply/2, apply/3]).
--export([synchronize_internal/5, flush_location_internal/1, apply_internal/2,
+-export([synchronize_internal/6, flush_location_internal/1, apply_internal/2,
     apply_internal/3]).
 
 %%%===================================================================
@@ -85,13 +88,13 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec synchronize(user_ctx:ctx(), file_ctx:ctx(), block(),
-    Prefetch :: boolean(), transfer:id() | undefined) ->
+    Prefetch :: boolean(), transfer:id() | undefined, non_neg_integer()) ->
     {ok, #file_location_changed{}} | {error, Reason :: any()}.
-synchronize(UserCtx, FileCtx, Block, Prefetch, TransferId) ->
+synchronize(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
     Uuid = file_ctx:get_uuid_const(FileCtx),
     Node = consistent_hasing:get_node(Uuid),
     rpc:call(Node, ?MODULE, synchronize_internal,
-        [UserCtx, FileCtx, Block, Prefetch, TransferId]).
+        [UserCtx, FileCtx, Block, Prefetch, TransferId, Priority]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -100,27 +103,30 @@ synchronize(UserCtx, FileCtx, Block, Prefetch, TransferId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec synchronize_internal(user_ctx:ctx(), file_ctx:ctx(), block(),
-    Prefetch :: boolean(), transfer:id() | undefined) ->
+    Prefetch :: boolean(), transfer:id() | undefined, non_neg_integer()) ->
     {ok, #file_location_changed{}} | {error, Reason :: any()}.
-synchronize_internal(UserCtx, FileCtx, Block, Prefetch, TransferId) ->
+synchronize_internal(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
     EnlargedBlock = enlarge_block(Block, Prefetch),
     try
         {ok, Process} = get_process(UserCtx, FileCtx),
         SessionId = user_ctx:get_session_id(UserCtx),
         gen_server2:call(Process, {synchronize, FileCtx, EnlargedBlock,
-            Prefetch, TransferId, SessionId}, infinity)
+            Prefetch, TransferId, SessionId, Priority}, infinity)
     catch
         %% The process we called was already terminating because of idle timeout,
         %% there's nothing to worry about.
         exit:{{shutdown, timeout}, _} ->
             ?debug("Process stopped because of a timeout, retrying with a new one"),
-            synchronize_internal(UserCtx, FileCtx, Block, Prefetch, TransferId);
+            synchronize_internal(UserCtx, FileCtx, Block, Prefetch,
+                TransferId, Priority);
         _:{noproc, _} ->
             ?debug("Synchronizer noproc, retrying with a new one"),
-            synchronize_internal(UserCtx, FileCtx, Block, Prefetch, TransferId);
+            synchronize_internal(UserCtx, FileCtx, Block, Prefetch,
+                TransferId, Priority);
         exit:{normal, _} ->
             ?debug("Process stopped because of exit:normal, retrying with a new one"),
-            synchronize_internal(UserCtx, FileCtx, Block, Prefetch, TransferId)
+            synchronize_internal(UserCtx, FileCtx, Block, Prefetch,
+                TransferId, Priority)
     end.
 
 %%--------------------------------------------------------------------
@@ -282,8 +288,8 @@ init({_UserCtx, FileCtx}) ->
 %% synchronized to the newest version.
 %% @end
 %%--------------------------------------------------------------------
-handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session}, From,
-    #state{from_sessions = FS, dest_storage_id = DSI} = State0) ->
+handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priority},
+    From, #state{from_sessions = FS, dest_storage_id = DSI} = State0) ->
     #state{file_ctx = FileCtx5} = State = case DSI of
         undefined ->
             {_LocalDoc, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
@@ -302,7 +308,7 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session}, From,
     OverlappingInProgress = find_overlapping(Block, State),
     {OverlappingBlocks, ExistingRefs} = lists:unzip(OverlappingInProgress),
     Holes = get_holes(Block, OverlappingBlocks),
-    NewTransfers = start_transfers(Holes, TransferId, Prefetch, State),
+    NewTransfers = start_transfers(Holes, TransferId, State, Priority),
     {_, NewRefs} = lists:unzip(NewTransfers),
     case ExistingRefs ++ NewRefs of
         [] ->
@@ -411,7 +417,8 @@ handle_info({Ref, complete, {ok, _} = _Status}, #state{from_sessions = FS} = Sta
 
 handle_info({FailedRef, complete, {error, disconnected}}, State) ->
     {Block, AffectedFroms, _FinishedFroms, State1} = disassociate_ref(FailedRef, State),
-    NewTransfers = start_transfers([Block], undefined, false, State1),
+    % TODO - use the same priority as for transfer
+    NewTransfers = start_transfers([Block], undefined, State1, ?RESTART_PRIORITY),
 
     ?warning("Replaced failed transfer ~p (~p) with new transfers ~p",
         [FailedRef, Block, NewTransfers]),
@@ -651,9 +658,9 @@ init_or_return_existing(UserCtx, FileCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec start_transfers([block()], transfer:id() | undefined,
-    Prefetch :: boolean(), #state{}) ->
+    #state{}, non_neg_integer()) ->
     NewRequests :: [{block(), fetch_ref()}].
-start_transfers(InitialBlocks, TransferId, Prefetch, State) ->
+start_transfers(InitialBlocks, TransferId, State, Priority) ->
     {_LocalDoc, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(State#state.file_ctx),
     {LocationDocs, FileCtx3} = file_ctx:get_file_location_docs(FileCtx2),
     ProvidersAndBlocks = replica_finder:get_blocks_for_sync(LocationDocs, InitialBlocks),
@@ -661,8 +668,6 @@ start_transfers(InitialBlocks, TransferId, Prefetch, State) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx3),
     DestStorageId = State#state.dest_storage_id,
     DestFileId = State#state.dest_file_id,
-    Priority = case Prefetch of true -> high_priority; false ->
-        medium_priority end,
     lists:flatmap(
         fun({ProviderId, Blocks, {SrcStorageId, SrcFileId}}) ->
             lists:map(
@@ -729,7 +734,7 @@ prefetch(_, TransferId, _, #state{in_sequence_hits = Hits, last_transfer = Block
             Offset = O + S,
             Size = min(?MINIMAL_SYNC_REQUEST * round(math:pow(2, Hits)), ?PREFETCH_SIZE),
             PrefetchBlock = #file_block{offset = Offset, size = Size},
-            NewTransfers = start_transfers([PrefetchBlock], TransferId, true, State),
+            NewTransfers = start_transfers([PrefetchBlock], TransferId, State, ?PREFETCH_PRIORITY),
             InProgress = ordsets:union(State#state.in_progress, ordsets:from_list(NewTransfers)),
             State#state{last_transfer = PrefetchBlock, in_progress = InProgress};
         _ ->

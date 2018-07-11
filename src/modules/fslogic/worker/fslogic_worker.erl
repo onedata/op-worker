@@ -404,10 +404,12 @@ handle_file_request(UserCtx, #get_file_location{}, FileCtx) ->
     file_req:get_file_location(UserCtx, FileCtx);
 handle_file_request(UserCtx, #truncate{size = Size}, FileCtx) ->
     truncate_req:truncate(UserCtx, FileCtx, Size);
-handle_file_request(UserCtx, #synchronize_block{block = Block, prefetch = Prefetch}, FileCtx) ->
-    sync_req:synchronize_block(UserCtx, FileCtx, Block, Prefetch, undefined);
-handle_file_request(UserCtx, #synchronize_block_and_compute_checksum{block = Block}, FileCtx) ->
-    sync_req:synchronize_block_and_compute_checksum(UserCtx, FileCtx, Block);
+handle_file_request(UserCtx, #synchronize_block{block = Block, prefetch = Prefetch,
+    priority = Priority}, FileCtx) ->
+    sync_req:synchronize_block(UserCtx, FileCtx, Block, Prefetch, undefined, Priority);
+handle_file_request(UserCtx, #synchronize_block_and_compute_checksum{block = Block,
+    priority = Priority}, FileCtx) ->
+    sync_req:synchronize_block_and_compute_checksum(UserCtx, FileCtx, Block, Priority);
 handle_file_request(UserCtx, #get_xattr{
     name = XattrName,
     inherited = Inherited

@@ -31,8 +31,8 @@
 
 %% API
 -export([
-    synchronize_block/5,
-    synchronize_block_and_compute_checksum/3,
+    synchronize_block/6,
+    synchronize_block_and_compute_checksum/4,
     get_file_distribution/2,
     start_transfer/4
 ]).
@@ -46,6 +46,8 @@
 % exported for tests
 -export([get_file_children/4]).
 
+-define(DEFAULT_REPLICATION_PRIORITY, 100).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -56,16 +58,16 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec synchronize_block(user_ctx:ctx(), file_ctx:ctx(), block(),
-    Prefetch :: boolean(), transfer_id()) -> fuse_response().
-synchronize_block(UserCtx, FileCtx, undefined, Prefetch, TransferId) ->
+    Prefetch :: boolean(), transfer_id(), non_neg_integer()) -> fuse_response().
+synchronize_block(UserCtx, FileCtx, undefined, Prefetch, TransferId, Priority) ->
     % trigger file_location creation
     {_, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx, false),
     {Size, FileCtx3} = file_ctx:get_file_size(FileCtx2),
     synchronize_block(UserCtx, FileCtx3, #file_block{offset = 0, size = Size},
-        Prefetch, TransferId);
-synchronize_block(UserCtx, FileCtx, Block, Prefetch, TransferId) ->
+        Prefetch, TransferId, Priority);
+synchronize_block(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
     {ok, Ans} = replica_synchronizer:synchronize(UserCtx, FileCtx, Block,
-        Prefetch,TransferId),
+        Prefetch,TransferId, Priority),
     #fuse_response{status = #status{code = ?OK}, fuse_response = Ans}.
 
 %%--------------------------------------------------------------------
@@ -75,16 +77,16 @@ synchronize_block(UserCtx, FileCtx, Block, Prefetch, TransferId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec synchronize_block_and_compute_checksum(user_ctx:ctx(), file_ctx:ctx(),
-    block()) -> fuse_response().
+    block(), non_neg_integer()) -> fuse_response().
 synchronize_block_and_compute_checksum(UserCtx, FileCtx,
-    Range = #file_block{offset = Offset, size = Size}
+    Range = #file_block{offset = Offset, size = Size}, Priority
 ) ->
     SessId = user_ctx:get_session_id(UserCtx),
     FileGuid = file_ctx:get_guid_const(FileCtx),
     %todo do not use lfm, operate on fslogic directly
     {ok, Handle} = lfm_files:open(SessId, {guid, FileGuid}, read),
     % does sync internally
-    {ok, _, Data} = lfm_files:read_without_events(Handle, Offset, Size),
+    {ok, _, Data} = lfm_files:read_without_events(Handle, Offset, Size, Priority),
     lfm_files:release(Handle),
 
     Checksum = crypto:hash(md4, Data),
@@ -267,8 +269,8 @@ replicate_dir(UserCtx, FileCtx, Block, Offset, TransferId) ->
 -spec replicate_regular_file(user_ctx:ctx(), file_ctx:ctx(), block(),
     transfer_id()) -> provider_response().
 replicate_regular_file(UserCtx, FileCtx, Block, TransferId) ->
-    #fuse_response{status = Status} =
-        synchronize_block(UserCtx, FileCtx, Block, false, TransferId),
+    #fuse_response{status = Status} = synchronize_block(UserCtx, FileCtx,
+        Block, false, TransferId, ?DEFAULT_REPLICATION_PRIORITY),
     transfer:increase_files_processed_counter(TransferId),
     #provider_response{status = Status}.
 
