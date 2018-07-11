@@ -66,6 +66,7 @@ change_replicated_internal(SpaceId, #document{
         true ->
             FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
             fslogic_deletion_worker:request_remote_deletion(FileCtx),
+            file_popularity:delete(FileUuid),
             storage_sync_info:delete(FileUuid),
             ok;
         _ ->
@@ -79,6 +80,7 @@ change_replicated_internal(SpaceId, #document{
         [FileUuid]),
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
     storage_sync_info:delete(FileUuid),
+    file_popularity:delete(FileUuid),
     fslogic_event_emitter:emit_file_removed(FileCtx, []);
 change_replicated_internal(SpaceId, #document{
     key = FileUuid,
@@ -114,10 +116,17 @@ change_replicated_internal(_SpaceId, #document{
     value = #custom_metadata{}
 }) ->
     ?debug("change_replicated_internal: changed custom_metadata ~p", [FileUuid]);
-change_replicated_internal(_SpaceId, Transfer = #document{value = #transfer{
-    file_uuid = FileUuid
-}}) ->
-    ?debug("change_replicated_internal: changed transfer ~p", [FileUuid]),
+change_replicated_internal(_SpaceId, Transfer = #document{
+    key = TransferId,
+    value = #transfer{}
+}) ->
+    ?debug("change_replicated_internal: changed transfer ~p", [TransferId]),
     transfer_changes:handle(Transfer);
+change_replicated_internal(_SpaceId, InvalidationMessage = #document{
+    key = MsgId,
+    value = #replica_deletion{}
+}) ->
+    ?debug("change_replicated_internal: changed replica_deletion ~p", [MsgId]),
+    replica_deletion_changes:handle(InvalidationMessage);
 change_replicated_internal(_SpaceId, _Change) ->
     ok.

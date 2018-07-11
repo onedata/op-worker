@@ -35,7 +35,10 @@
 create(SpaceId) ->
     ViewFunction =
         <<"function (doc, meta) {"
-        "   if(doc['_record'] == 'file_popularity' && doc['space_id'] == '", SpaceId/binary , "') { "
+        "   if(doc['_record'] == 'file_popularity' "
+        "       && doc['space_id'] == '", SpaceId/binary , "' "
+        "       && doc['_deleted'] == false) "
+        "{ "
         "      emit("
         "         ["
         "             doc['size'],",

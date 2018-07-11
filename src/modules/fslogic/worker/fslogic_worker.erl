@@ -58,7 +58,7 @@
     spaces_cleanup_interval, timer:hours(1))).
 
 -define(TRANSFERS_RESTART_DELAY, application:get_env(?APP_NAME,
-    transfers_restart_delay, timer:seconds(10))).
+    transfers_restart_delay, timer:seconds(3))).
 
 -define(EXOMETER_NAME(Param), ?exometer_name(?MODULE, count, Param)).
 -define(EXOMETER_TIME_NAME(Param), ?exometer_name(?MODULE, time,
@@ -449,7 +449,7 @@ handle_provider_request(UserCtx, #schedule_file_replication{
 handle_provider_request(UserCtx, #schedule_replica_invalidation{
     source_provider_id = SourceProviderId, target_provider_id = TargetProviderId
 }, FileCtx) ->
-    sync_req:schedule_replica_invalidation(UserCtx, FileCtx, SourceProviderId, TargetProviderId);
+    invalidation_req:schedule_replica_invalidation(UserCtx, FileCtx, SourceProviderId, TargetProviderId);
 handle_provider_request(UserCtx, #get_parent{}, FileCtx) ->
     guid_req:get_parent(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #get_file_path{}, FileCtx) ->

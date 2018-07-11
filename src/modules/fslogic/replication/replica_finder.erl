@@ -20,7 +20,8 @@
 -type storage_details() :: {StorageId :: binary(), FileId :: binary()}.
 
 %% API
--export([get_blocks_for_sync/2, get_unique_blocks/1]).
+-export([get_blocks_for_sync/2, get_unique_blocks/1,
+    get_duplicated_blocks/2, get_all_blocks/1]).
 
 %%%===================================================================
 %%% API
@@ -87,9 +88,75 @@ get_unique_blocks(FileCtx) ->
     RemoteBlocksList = get_all_blocks(RemoteLocations),
     {fslogic_blocks:invalidate(LocalBlocksList, RemoteBlocksList), FileCtx2}.
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Finds block which can be deleted locally because they are
+%% replicated in other provider.
+%% NOTE: Currently this functions support only whole files.
+%%       If remote provider doesn't have whole file, he is not included
+%% in the response.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_duplicated_blocks(file_ctx:ctx(), version_vector:version_vector()) ->
+    {undefined | [{od_provider:id(), fslogic_blocks:blocks()}] , file_ctx:ctx()}.
+get_duplicated_blocks(FileCtx, LocalVV) ->
+    {LocationDocs, FileCtx2} = file_ctx:get_file_location_docs(FileCtx),
+    LocalLocations = filter_local_locations(LocationDocs),
+    LocalBlocksList = get_all_blocks(LocalLocations),
+    case LocalBlocksList of
+        [] ->
+            {undefined, FileCtx2};
+        _ ->
+            RemoteLocations = LocationDocs -- LocalLocations,
+            Result = get_duplicated_blocks_per_provider(LocalBlocksList,
+                LocalVV, RemoteLocations),
+            %TODO VFS-4622 maybe result should be sorted by version or by size?
+            {Result, FileCtx2}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns all blocks from given location list
+%% @end
+%%--------------------------------------------------------------------
+-spec get_all_blocks([file_location:doc()]) -> fslogic_blocks:blocks().
+get_all_blocks(LocationList) ->
+    Blocks = lists:flatmap(fun(Location) ->
+        fslogic_blocks:get_blocks(Location)
+    end, LocationList),
+    fslogic_blocks:consolidate(lists:sort(Blocks)).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+-spec get_duplicated_blocks_per_provider(fslogic_blocks:blocks(),
+    version_vector:version_vector(), [file_location:doc()]) ->
+    [{od_provider:id(), fslogic_block:blocks()}].
+get_duplicated_blocks_per_provider(LocalBlocksList, LocalVV, RemoteLocations) ->
+    lists:filtermap(fun(Doc = #document{
+        value = #file_location{
+            version_vector = VV,
+            provider_id = ProviderId
+        }
+    }) ->
+        case version_vector:compare(LocalVV, VV) of
+            ComparisonResult when
+                ComparisonResult =:= identical orelse
+                ComparisonResult =:= lesser
+            ->
+                RemoteBlocksList = get_all_blocks([Doc]),
+                % TODO VFS-3728 currently we choose only providers who have all local blocks replicated
+                case fslogic_blocks:invalidate(LocalBlocksList, RemoteBlocksList) of
+                    [] ->
+                        {true, {ProviderId, LocalBlocksList}};
+                    _ ->
+                        false
+                end;
+            _ ->
+                false
+        end
+    end, RemoteLocations).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -162,6 +229,7 @@ filter_small(PresentBlocks) ->
         {ProviderId, Blocks2, StorageDetails}
     end, PresentBlocks).
 
+
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
@@ -203,19 +271,6 @@ truncate_to_local_size(#document{value = #file_location{size = LocalSize}}, Bloc
         false ->
             Blocks
     end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns all blocks from given location list
-%% @end
-%%--------------------------------------------------------------------
--spec get_all_blocks([file_location:doc()]) -> fslogic_blocks:blocks().
-get_all_blocks(LocationList) ->
-    Blocks = lists:map(fun(Doc) -> fslogic_blocks:get_blocks(Doc) end, LocationList),
-    fslogic_blocks:consolidate(lists:sort([Block ||
-        Block <- lists:flatten(Blocks)
-    ])).
 
 %%--------------------------------------------------------------------
 %% @private

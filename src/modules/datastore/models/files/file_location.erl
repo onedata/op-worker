@@ -17,7 +17,8 @@
 
 % API
 -export([local_id/1, id/2, critical_section/2, save_and_bump_version/1,
-    is_storage_file_created/1, get/2, get_local/1]).
+    is_storage_file_created/1, get/2, get_local/1,
+    get_version_vector/1]).
 -export([create/1, create/2, save/1, get/1, update/2, delete/1, delete/2]).
 
 %% datastore_model callbacks
@@ -236,6 +237,17 @@ is_storage_file_created(#file_location{storage_file_created = StorageFileCreated
     StorageFileCreated;
 is_storage_file_created(#document{value=FileLocation}) ->
     is_storage_file_created(FileLocation).
+
+%-------------------------------------------------------------------
+%% @doc
+%% Getter for version_vector field of #file_location{} record.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_version_vector(doc() | record()) -> version_vector:version_vector().
+get_version_vector(#document{value = FileLocation}) ->
+    get_version_vector(FileLocation);
+get_version_vector(#file_location{version_vector = VV}) ->
+    VV.
 
 %%%===================================================================
 %%% Internal functions

@@ -30,6 +30,7 @@
     spaces,
     space_by_id,
     transfers,
+    transfer_by_id,
     cdmi_capabilities_handler,
     cdmi_container_capabilities_handler,
     cdmi_container_handler,
