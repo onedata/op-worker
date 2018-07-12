@@ -68,8 +68,10 @@
     sync_should_not_delete_not_replicated_files_created_in_remote_provider2/1,
     create_delete_import_test_read_both/1,
     should_not_sync_file_while_being_replicated/1,
+    change_file_content_constant_size_test/1,
     change_file_content_update_test/1,
-    change_file_content_update2_test/1, append_empty_file_update_test/1,
+    change_file_content_the_same_moment_when_sync_performs_stat_on_file_test/1,
+    append_empty_file_update_test/1,
     import_file_with_link_but_no_doc_test/1, append_file_not_changing_mtime_update_test/1]).
 
 -define(TEST_CASES, [
@@ -111,8 +113,9 @@
     copy_file_update_test,
     move_file_update_test,
     truncate_file_update_test,
+    change_file_content_constant_size_test,
     change_file_content_update_test,
-    change_file_content_update2_test,
+    change_file_content_the_same_moment_when_sync_performs_stat_on_file_test,
     chmod_file_update_test,
     chmod_file_update2_test,
     update_timestamps_file_import_test,
@@ -339,11 +342,14 @@ move_file_update_test(Config) ->
 truncate_file_update_test(Config) ->
     storage_sync_test_base:truncate_file_update_test(Config, false).
 
+change_file_content_constant_size_test(Config) ->
+    storage_sync_test_base:change_file_content_constant_size_test(Config, false).
+
 change_file_content_update_test(Config) ->
     storage_sync_test_base:change_file_content_update_test(Config, false).
 
-change_file_content_update2_test(Config) ->
-    storage_sync_test_base:change_file_content_update2_test(Config, false).
+change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(Config) ->
+    storage_sync_test_base:change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(Config, false).
 
 chmod_file_update_test(Config) ->
     storage_sync_test_base:chmod_file_update_test(Config, false).

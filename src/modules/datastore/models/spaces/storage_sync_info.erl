@@ -23,7 +23,9 @@
 -export_type([key/0, doc/0, record/0]).
 
 %% API
--export([update_mtime_and_children_hash/5, delete/1, get/1, update_children_hash/4, update_mtime/3]).
+-export([update_mtime_and_children_hash/5, update_mtime_and_stat_time/4,
+    update_children_hash/4, update_stat_time/3, update_mtime/3,
+    delete/1, get/1, new_doc/6]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0, upgrade_record/2]).
@@ -57,7 +59,7 @@ get(Uuid) ->
 update_mtime_and_children_hash(Uuid, NewMTime, NewHashKey, NewHashValue, 
     SpaceId
 ) ->
-    create_or_update(Uuid, NewMTime, NewHashKey, NewHashValue, SpaceId).
+    create_or_update(Uuid, NewMTime, NewHashKey, NewHashValue, undefined, SpaceId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -67,7 +69,7 @@ update_mtime_and_children_hash(Uuid, NewMTime, NewHashKey, NewHashValue,
 -spec update_children_hash(key(), undefined | non_neg_integer(),
     binary() | undefined, od_space:id()) -> {ok, doc()} | error().
 update_children_hash(Uuid, NewHashKey, NewHashValue, SpaceId) ->
-    create_or_update(Uuid, undefined, NewHashKey, NewHashValue, SpaceId).
+    create_or_update(Uuid, undefined, NewHashKey, NewHashValue, undefined, SpaceId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -77,7 +79,27 @@ update_children_hash(Uuid, NewHashKey, NewHashValue, SpaceId) ->
 -spec update_mtime(key(), undefined | non_neg_integer(), od_space:id()) ->
     {ok, doc()} | error().
 update_mtime(Uuid, NewMTime, SpaceId) ->
-    create_or_update(Uuid, NewMTime, undefined, undefined, SpaceId).
+    create_or_update(Uuid, NewMTime, undefined, undefined, undefined, SpaceId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates storage_sync_info document.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_stat_time(key(), undefined | non_neg_integer(), od_space:id()) ->
+    {ok, doc()} | error().
+update_stat_time(Uuid, NewStatTime, SpaceId) ->
+    create_or_update(Uuid, undefined, undefined, undefined, NewStatTime, SpaceId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates storage_sync_info document.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_mtime_and_stat_time(key(), undefined | non_neg_integer(),
+    undefined | non_neg_integer(), od_space:id()) -> {ok, doc()} | error().
+update_mtime_and_stat_time(Uuid, NewMTime, StatTime, SpaceId) ->
+    create_or_update(Uuid, NewMTime, undefined, undefined, StatTime, SpaceId).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -97,12 +119,14 @@ delete(Uuid) ->
 %% Updates storage_sync_info document.
 %% @end
 %%--------------------------------------------------------------------
--spec create_or_update(key(), undefined | non_neg_integer(), undefined | non_neg_integer(),
+-spec create_or_update(key(), undefined | non_neg_integer(),
+    undefined | non_neg_integer(), undefined | non_neg_integer(),
     binary() | undefined, od_space:id()) -> {ok, doc()} | error().
-create_or_update(Uuid, NewMTime, NewHashKey, NewHashValue, SpaceId) ->
+create_or_update(Uuid, NewMTime, NewHashKey, NewHashValue, NewStatTime, SpaceId) ->
     Diff = fun(SSI = #storage_sync_info{
         mtime = MTime0,
-        children_attrs_hashes = ChildrenAttrsHashes0
+        children_attrs_hashes = ChildrenAttrsHashes0,
+        last_stat = StatTime0
     }) ->
         MTime = utils:ensure_defined(NewMTime, undefined, MTime0),
         ChildrenAttrsHashes = case {NewHashKey, NewHashValue} of
@@ -111,12 +135,14 @@ create_or_update(Uuid, NewMTime, NewHashKey, NewHashValue, SpaceId) ->
             {_, <<"">>} -> ChildrenAttrsHashes0;
             {_, _} -> ChildrenAttrsHashes0#{NewHashKey => NewHashValue}
         end,
+        StatTime = utils:ensure_defined(NewStatTime, undefined, StatTime0),
         {ok, SSI#storage_sync_info{
             mtime = MTime,
-            children_attrs_hashes = ChildrenAttrsHashes
+            children_attrs_hashes = ChildrenAttrsHashes,
+            last_stat = StatTime
         }}
     end,
-    NewDoc = new_doc(Uuid, NewMTime, NewHashKey, NewHashValue, SpaceId),
+    NewDoc = new_doc(Uuid, NewMTime, NewHashKey, NewHashValue, NewStatTime, SpaceId),
     datastore_model:update(?CTX, Uuid, Diff, NewDoc).
 
 %%===================================================================
@@ -130,8 +156,8 @@ create_or_update(Uuid, NewMTime, NewHashKey, NewHashValue, SpaceId) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec new_doc(key(), non_neg_integer() | undefined, non_neg_integer() | undefined,
-    binary() | undefined, od_space:id()) -> doc().
-new_doc(Key, NewMTime, NewHashKey, NewHashValue, SpaceId) when
+    binary() | undefined, non_neg_integer() | undefined, od_space:id()) -> doc().
+new_doc(Key, NewMTime, NewHashKey, NewHashValue, StatTime, SpaceId) when
     NewHashKey =:= undefined;
     NewHashValue =:= undefined
 ->
@@ -139,16 +165,18 @@ new_doc(Key, NewMTime, NewHashKey, NewHashValue, SpaceId) when
         key = Key,
         value = #storage_sync_info{
             mtime = NewMTime,
-            children_attrs_hashes = #{}
+            children_attrs_hashes = #{},
+            last_stat = StatTime
         },
         scope = SpaceId
     };
-new_doc(Key, NewMTime, NewHashKey, NewHashValue, SpaceId) ->
+new_doc(Key, NewMTime, NewHashKey, NewHashValue, StatTime, SpaceId) ->
     #document{
         key = Key,
         value = #storage_sync_info{
             mtime = NewMTime,
-            children_attrs_hashes = #{NewHashKey => NewHashValue}
+            children_attrs_hashes = #{NewHashKey => NewHashValue},
+            last_stat = StatTime
         },
         scope = SpaceId
     }.
@@ -191,6 +219,12 @@ get_record_struct(2) ->
     {record, [
         {children_attrs_hash, #{integer => binary}},
         {mtime, integer}
+    ]};
+get_record_struct(3) ->
+    {record, [
+        {children_attrs_hash, #{integer => binary}},
+        {mtime, integer},
+        {last_stat, integer}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -201,4 +235,6 @@ get_record_struct(2) ->
 -spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
     {datastore_model:record_version(), datastore_model:record()}.
 upgrade_record(1, {?MODULE, ChildrenAttrsHash, MTime}) ->
-    {2, {?MODULE, ChildrenAttrsHash, MTime}}.
+    {2, {?MODULE, ChildrenAttrsHash, MTime}};
+upgrade_record(2, {?MODULE, ChildrenAttrsHash, MTime}) ->
+    {3, {?MODULE, ChildrenAttrsHash, MTime, 0}}.
