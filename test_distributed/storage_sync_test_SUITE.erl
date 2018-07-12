@@ -70,7 +70,7 @@
     should_not_sync_file_while_being_replicated/1,
     change_file_content_update_test/1,
     change_file_content_update2_test/1, append_empty_file_update_test/1,
-    import_file_with_link_but_no_doc_test/1]).
+    import_file_with_link_but_no_doc_test/1, append_file_not_changing_mtime_update_test/1]).
 
 -define(TEST_CASES, [
     create_directory_import_test,
@@ -105,6 +105,7 @@
     delete_file_update_test,
     delete_file_export_test,
     append_file_update_test,
+    append_file_not_changing_mtime_update_test,
     append_empty_file_update_test,
     append_file_export_test,
     copy_file_update_test,
@@ -230,6 +231,9 @@ delete_file_export_test(Config) ->
 
 append_file_update_test(Config) ->
     storage_sync_test_base:append_file_update_test(Config, false).
+
+append_file_not_changing_mtime_update_test(Config) ->
+    storage_sync_test_base:append_file_not_changing_mtime_update_test(Config, false).
 
 append_empty_file_update_test(Config) ->
     storage_sync_test_base:append_empty_file_update_test(Config, false).

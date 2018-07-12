@@ -540,15 +540,18 @@ maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
     FileCtx, ?REGULAR_FILE_TYPE
 ) ->
     {StorageSyncInfo, FileCtx2} = file_ctx:get_storage_sync_info(FileCtx),
+    {Size, FileCtx3} = file_ctx:get_file_size(FileCtx2),
     case StorageSyncInfo of
-        #document{value = #storage_sync_info{mtime = LastMtime}} when LastMtime =:= StMtime ->
+        #document{value = #storage_sync_info{mtime = LastMtime}} when
+            LastMtime =:= StMtime andalso Size =:= StSize
+        ->
             not_updated;
         _ ->
-            FileUuid = file_ctx:get_uuid_const(FileCtx2),
-            FileGuid = file_ctx:get_guid_const(FileCtx2),
-            SpaceId = file_ctx:get_space_id_const(FileCtx2),
+            FileUuid = file_ctx:get_uuid_const(FileCtx3),
+            FileGuid = file_ctx:get_guid_const(FileCtx3),
+            SpaceId = file_ctx:get_space_id_const(FileCtx3),
             NewFileBlocks = create_file_blocks(StSize),
-            replica_updater:update(FileCtx2, NewFileBlocks, StSize, true),
+            replica_updater:update(FileCtx3, NewFileBlocks, StSize, true),
             ok = lfm_event_utils:emit_file_written(FileGuid, NewFileBlocks, StSize, ?ROOT_SESS_ID),
             storage_sync_info:update_mtime(FileUuid, StMtime, SpaceId),
             updated
