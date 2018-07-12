@@ -32,7 +32,7 @@
     mark_failed_invalidation/1, mark_cancelled_invalidation/1,
     increase_files_to_process_counter/2, increase_files_processed_counter/1,
     mark_failed_file_processing/1, increase_files_transferred_counter/1,
-    mark_data_transfer_finished/3, increase_files_invalidated_counter/1,
+    mark_data_transfer_finished/3, increase_files_invalidated_and_processed_counter/1,
     restart_unfinished_transfers/1]).
 
 % list functions
@@ -543,13 +543,14 @@ increase_files_transferred_counter(TransferId) ->
 %% transfer is marked as finished.
 %% @end
 %%--------------------------------------------------------------------
--spec increase_files_invalidated_counter(undefined | id()) ->
+-spec increase_files_invalidated_and_processed_counter(undefined | id()) ->
     {ok, undefined | id()} | {error, term()}.
-increase_files_invalidated_counter(undefined) ->
+increase_files_invalidated_and_processed_counter(undefined) ->
     {ok, undefined};
-increase_files_invalidated_counter(TransferId) ->
+increase_files_invalidated_and_processed_counter(TransferId) ->
     update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{
+            files_processed = Transfer#transfer.files_processed + 1,
             files_invalidated = Transfer#transfer.files_invalidated + 1
         }}
     end).
@@ -971,15 +972,21 @@ maybe_reset_migration_record(Transfer = #transfer{
 start_pools() ->
     {ok, _} = worker_pool:start_sup_pool(?TRANSFER_WORKERS_POOL, [
         {workers, ?TRANSFER_WORKERS_NUM},
-        {worker, {transfer_worker, []}},
+        {worker, {?TRANSFER_WORKER, []}},
         {queue_type, lifo}
     ]),
     {ok, _} = worker_pool:start_sup_pool(?TRANSFER_CONTROLLERS_POOL, [
         {workers, ?TRANSFER_CONTROLLERS_NUM},
-        {worker, {transfer_controller, []}}
+        {worker, {?TRANSFER_CONTROLLER, []}}
     ]),
     {ok, _} = worker_pool:start_sup_pool(?INVALIDATION_WORKERS_POOL, [
-        {workers, ?INVALIDATION_WORKERS_NUM}
+        {workers, ?INVALIDATION_WORKERS_NUM},
+        {worker, {?INVALIDATION_WORKER, []}},
+        {queue_type, lifo}
+    ]),
+    {ok, _} = worker_pool:start_sup_pool(?REPLICA_DELETION_WORKERS_POOL, [
+        {workers, ?REPLICA_DELETION_WORKERS_NUM},
+        {worker, {?REPLICA_DELETION_WORKER, []}}
     ]),
     ok.
 
@@ -991,9 +998,10 @@ start_pools() ->
 %%-------------------------------------------------------------------
 -spec stop_pools() -> ok.
 stop_pools() ->
-    true = worker_pool:stop_pool(?TRANSFER_WORKERS_POOL),
-    true = worker_pool:stop_pool(?TRANSFER_CONTROLLERS_POOL),
-    true = worker_pool:stop_pool(?INVALIDATION_WORKERS_POOL),
+    ok = wpool:stop_sup_pool(?TRANSFER_WORKERS_POOL),
+    ok = wpool:stop_sup_pool(?TRANSFER_CONTROLLERS_POOL),
+    ok = wpool:stop_sup_pool(?INVALIDATION_WORKERS_POOL),
+    ok = wpool:stop_sup_pool(?REPLICA_DELETION_WORKERS_POOL),
     ok.
 
 %%-------------------------------------------------------------------
