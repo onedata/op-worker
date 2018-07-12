@@ -84,12 +84,6 @@ synchronizer_test(Config) ->
             ]},
             {description, ""}
         ]},
-%%        {config, [{name, many4},
-%%            {parameters, [
-%%                [{name, threads_num}, {value, 50}]
-%%            ]},
-%%            {description, ""}
-%%        ]},
         {config, [{name, many1_random},
             {parameters, [
                 [{name, threads_num}, {value, 5}],
@@ -111,13 +105,6 @@ synchronizer_test(Config) ->
             ]},
             {description, ""}
         ]}
-%%        {config, [{name, many4_random},
-%%            {parameters, [
-%%                [{name, threads_num}, {value, 50}],
-%%                [{name, random_read}, {value, true}]
-%%            ]},
-%%            {description, ""}
-%%        ]}
     ]).
 synchronizer_test_base(Config) ->
     multi_provider_file_ops_test_base:synchronizer_test_base(Config).
