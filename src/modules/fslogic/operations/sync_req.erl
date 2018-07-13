@@ -46,7 +46,8 @@
 % exported for tests
 -export([get_file_children/4]).
 
--define(DEFAULT_REPLICATION_PRIORITY, 224).
+-define(DEFAULT_REPLICATION_PRIORITY,
+    application:get_env(?APP_NAME, default_replication_priority, 224)).
 
 %%%===================================================================
 %%% API
