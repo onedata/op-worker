@@ -29,7 +29,7 @@
 
 -compile({no_auto_import, [unlink/1]}).
 
--define(DEFAULT_SYNC_PRIORITY, 100).
+-define(DEFAULT_SYNC_PRIORITY, 32).
 
 %%%===================================================================
 %%% API

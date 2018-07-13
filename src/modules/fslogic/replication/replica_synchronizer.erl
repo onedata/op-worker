@@ -41,8 +41,8 @@
     ?APP_NAME, rtransfer_blocks_aggregation_time, 1000)
 ).
 
--define(RESTART_PRIORITY, 50).
--define(PREFETCH_PRIORITY, 50).
+-define(RESTART_PRIORITY, 32).
+-define(PREFETCH_PRIORITY, 96).
 
 -define(FLUSH_STATS, flush_stats).
 -define(FLUSH_BLOCKS, flush_blocks).

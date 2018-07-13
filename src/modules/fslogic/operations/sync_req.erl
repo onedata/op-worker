@@ -46,7 +46,7 @@
 % exported for tests
 -export([get_file_children/4]).
 
--define(DEFAULT_REPLICATION_PRIORITY, 100).
+-define(DEFAULT_REPLICATION_PRIORITY, 224).
 
 %%%===================================================================
 %%% API
