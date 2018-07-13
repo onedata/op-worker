@@ -250,7 +250,8 @@ create_storage_file(UserCtx, FileCtx) ->
         {error, ?EEXIST} = Eexists ->
             case application:get_env(?APP_NAME, unlink_on_create, true) of
               true ->
-                storage_file_manager:unlink(SFMHandle),
+                {Size, _} = file_ctx:get_file_size(FileCtx3),
+                storage_file_manager:unlink(SFMHandle, Size),
                 {storage_file_manager:create(SFMHandle, Mode), FileCtx3};
               _ ->
                 Eexists
@@ -289,7 +290,8 @@ delete_storage_file(FileCtx, UserCtx) ->
 delete_storage_file_without_location(FileCtx, UserCtx) ->
     SessId = user_ctx:get_session_id(UserCtx),
     {SFMHandle, _} = storage_file_manager:new_handle(SessId, FileCtx),
-    storage_file_manager:unlink(SFMHandle).
+    {Size, _} = file_ctx:get_file_size(FileCtx),
+    storage_file_manager:unlink(SFMHandle, Size).
 
 %%--------------------------------------------------------------------
 %% @doc

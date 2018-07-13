@@ -29,7 +29,7 @@
 
 %% API
 -export([get_configuration/1, get_helper_params/4, create_storage_test_file/3,
-    verify_storage_test_file/5, remove_storage_test_file/4]).
+    verify_storage_test_file/5, remove_storage_test_file/5]).
 
 %%%===================================================================
 %%% API
@@ -127,13 +127,14 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
 
             {RawStoragePath, FileCtx2} = file_ctx:get_raw_storage_path(FileCtx),
             Dirname = filename:dirname(RawStoragePath),
-            _FileCtx3 = sfm_utils:create_parent_dirs(FileCtx2),
+            FileCtx3 = sfm_utils:create_parent_dirs(FileCtx2),
+            {Size, _} = file_ctx:get_file_size(FileCtx3),
             TestFileName = storage_detector:generate_file_id(),
             TestFileId = fslogic_path:join([Dirname, TestFileName]),
             FileContent = storage_detector:create_test_file(Helper, ServerStorageUserUserCtx, TestFileId),
 
             spawn(storage_req, remove_storage_test_file, [
-                Helper, ServerStorageUserUserCtx, TestFileId, ?REMOVE_STORAGE_TEST_FILE_DELAY]),
+                Helper, ServerStorageUserUserCtx, TestFileId, Size, ?REMOVE_STORAGE_TEST_FILE_DELAY]),
 
             #fuse_response{
                 status = #status{code = ?OK},
@@ -175,10 +176,10 @@ verify_storage_test_file(UserCtx, SpaceId, StorageId, FileId, FileContent) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_storage_test_file(helpers:helper(), helper:user_ctx(), helpers:file_id(),
-    Delay :: timeout()) -> ok.
-remove_storage_test_file(Helper, StorageUserCtx, FileId, Delay) ->
+    Size::non_neg_integer(), Delay :: timeout()) -> ok.
+remove_storage_test_file(Helper, StorageUserCtx, FileId, Size, Delay) ->
     timer:sleep(Delay),
-    storage_detector:remove_test_file(Helper, StorageUserCtx, FileId).
+    storage_detector:remove_test_file(Helper, StorageUserCtx, FileId, Size).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -196,7 +197,7 @@ verify_storage_test_file_loop(_, _, _, _, Code, 0) ->
 verify_storage_test_file_loop(Helper, StorageUserCtx, FileId, FileContent, _, Attempts) ->
     try storage_detector:read_test_file(Helper, StorageUserCtx, FileId) of
         FileContent ->
-            storage_detector:remove_test_file(Helper, StorageUserCtx, FileId),
+            storage_detector:remove_test_file(Helper, StorageUserCtx, FileId, size(FileContent)),
             #fuse_response{status = #status{code = ?OK}};
         _ ->
             timer:sleep(?VERIFY_STORAGE_TEST_FILE_DELAY),
