@@ -105,7 +105,11 @@
         "users": {
             "user1": {
                 "default_space": "space1"
+            },
+            "user2": {
+                "default_space": "space1"
             }
+
         },
         "groups": {
         },
@@ -113,7 +117,8 @@
             "space1": {
                 "displayed_name": "space1",
                 "users": [
-                    "user1"
+                    "user1",
+                    "user2"
                 ],
                 "groups": [
                 ],
@@ -139,7 +144,8 @@
             "space3": {
                 "displayed_name": "space3",
                 "users": [
-                    "user1"
+                    "user1",
+                    "user2"
                 ],
                 "groups": [
                 ],

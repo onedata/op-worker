@@ -24,11 +24,14 @@
 -export_type([id/0, status/0]).
 
 %% API
--export([list_reports_since/2, remove_skipped/2,
-    mark_completed/1, mark_released_file/2, get_config/1, mark_active/1, mark_failed/1, start/3]).
+-export([list_reports_since/2, delete/2,
+    mark_completed/1, mark_released_file/1, get_config/1, mark_active/2,
+    mark_failed/1, start/3, mark_released_bytes/2, mark_released_file/2, get/1,
+    list/1, remove_link/2, mark_processed_file/1]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_struct/1, get_record_version/0]).
+-export([get_ctx/0, get_record_struct/1, get_record_version/0, get_posthooks/0,
+    upgrade_record/2]).
 
 -define(LINK_PREFIX, <<"autocleaning_">>).
 
@@ -98,28 +101,60 @@ list_reports_since(SpaceId, Since) ->
 %% Removes skipped autocleaning.
 %% @end
 %%-------------------------------------------------------------------
--spec remove_skipped(id(), od_space:id()) -> ok.
-remove_skipped(AutocleaningId, SpaceId) ->
+-spec delete(id(), od_space:id()) -> ok.
+delete(AutocleaningId, SpaceId) ->
     remove_link(AutocleaningId, SpaceId),
     ok = datastore_model:delete(?CTX, AutocleaningId).
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Mark released file and it's size.
+%% Mark released file.
+%% @end
+%%-------------------------------------------------------------------
+-spec mark_released_file(undefined | id()) -> {ok, id() | undefined}.
+mark_released_file(undefined) ->
+    {ok, undefined};
+mark_released_file(AutocleaningId) ->
+    datastore_model:update(?CTX, AutocleaningId, fun(AC = #autocleaning{
+        released_files = ReleasedFiles
+    }) ->
+        {ok, AC#autocleaning{released_files = ReleasedFiles + 1}}
+    end).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Mark released file.
 %% @end
 %%-------------------------------------------------------------------
 -spec mark_released_file(undefined | id(), non_neg_integer()) -> {ok, id() | undefined}.
-mark_released_file(undefined, _Size) ->
+mark_released_file(undefined, _) ->
     {ok, undefined};
 mark_released_file(AutocleaningId, Size) ->
     datastore_model:update(?CTX, AutocleaningId, fun(AC = #autocleaning{
+        released_files = ReleasedFiles,
         released_bytes = ReleasedBytes,
-        released_files = ReleasedFiles
+        files_processed = FilesProcessed
     }) ->
         {ok, AC#autocleaning{
+            released_files = ReleasedFiles + 1,
             released_bytes = ReleasedBytes + Size,
-            released_files = ReleasedFiles + 1
+            files_processed = FilesProcessed + 1
         }}
+    end).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Mark released bytes.
+%% @end
+%%-------------------------------------------------------------------
+-spec mark_released_bytes(undefined | id(), non_neg_integer()) -> {ok, id() | undefined}.
+mark_released_bytes(undefined, _) ->
+    {ok, undefined};
+mark_released_bytes(AutocleaningId, Size) ->
+    datastore_model:update(?CTX, AutocleaningId, fun(AC = #autocleaning{
+        released_bytes = ReleasedBytes
+    }) ->
+        {ok, AC#autocleaning{released_bytes = ReleasedBytes + Size}}
     end).
 
 %%-------------------------------------------------------------------
@@ -127,12 +162,15 @@ mark_released_file(AutocleaningId, Size) ->
 %% Mark given autocleaning as active.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_active(undefined | id()) -> {ok, id() | undefined}.
-mark_active(undefined) ->
+-spec mark_active(undefined | id(), non_neg_integer()) -> {ok, id() | undefined}.
+mark_active(undefined, _) ->
     {ok, undefined};
-mark_active(AutocleaningId) ->
-    datastore_model:update(?CTX, AutocleaningId, fun(AC) ->
-        {ok, AC#autocleaning{status = active}}
+mark_active(AutocleaningId, FilesToProcess) ->
+    {ok, _} = datastore_model:update(?CTX, AutocleaningId, fun(AC) ->
+        {ok, AC#autocleaning{
+            status = active,
+            files_to_process = FilesToProcess
+        }}
     end).
 
 %%-------------------------------------------------------------------
@@ -153,7 +191,8 @@ mark_failed(AutocleaningId) ->
         {ok, #document{value = #autocleaning{space_id = SpaceId}}} ->
             {ok, _} = space_storage:mark_cleanup_finished(SpaceId);
         Error ->
-            ?error_stacktrace("Fail to mark autocleaning ~p as failed due to ~p", [AutocleaningId, Error]),
+            ?error_stacktrace("Fail to mark autocleaning ~p as failed due to ~p",
+                [AutocleaningId, Error]),
             Error
     end.
 
@@ -175,13 +214,26 @@ mark_completed(AutocleaningId) ->
         {ok, #document{value = #autocleaning{space_id = SpaceId}}} ->
             {ok, _} = space_storage:mark_cleanup_finished(SpaceId);
         Error ->
-            ?error_stacktrace("Fail to mark autocleaning ~p as completed due to ~p", [AutocleaningId, Error]),
+            ?error_stacktrace("Fail to mark autocleaning ~p as completed due to ~p",
+                [AutocleaningId, Error]),
             Error
     end.
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Increment files_processed counter.
+%% @end
+%%-------------------------------------------------------------------
+-spec mark_processed_file(undefined | id()) -> {ok, id() | undefined} | {error, term()}.
+mark_processed_file(undefined) ->
+    {ok, undefined};
+mark_processed_file(AutocleaningId) ->
+    datastore_model:update(?CTX, AutocleaningId,
+        fun(AC = #autocleaning{files_processed = FilesProcessed}) ->
+            {ok, AC#autocleaning{files_processed = FilesProcessed + 1}}
+        end).
 
 %%-------------------------------------------------------------------
-%% @private
 %% @doc
 %% Returns autocleaning_config.
 %% @end
@@ -195,7 +247,24 @@ get_config(AutocleaningId) ->
     {ok, Doc} = datastore_model:get(?CTX, AutocleaningId),
     get_config(Doc).
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns autocleaning document.
+%% @end
+%%-------------------------------------------------------------------
+-spec get(id()) -> {ok, doc()} | {error, term()}.
+get(AutocleaningId) ->
+    datastore_model:get(?CTX, AutocleaningId).
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Lists all autocleaning documents.
+%% TODO autocleaning docs should be stored in sorted order VFS-4583
+%% @end
+%%-------------------------------------------------------------------
+-spec list(od_space:id()) -> {ok, [id()]}.
+list(SpaceId) ->
+    for_each_autocleaning(SpaceId, fun(A, Acc) -> [A | Acc] end, []).
 
 %%%===================================================================
 %%% Internal functions
@@ -211,7 +280,8 @@ get_config(AutocleaningId) ->
 add_link(AutocleaningId, SpaceId) ->
     Ctx = ?CTX#{scope => SpaceId},
     TreeId = oneprovider:get_id(),
-    {ok, _} = datastore_model:add_links(Ctx, space_link_root(SpaceId), TreeId, {AutocleaningId, <<>>}),
+    {ok, _} = datastore_model:add_links(Ctx, space_link_root(SpaceId), TreeId,
+        {AutocleaningId, <<>>}),
     ok.
 
 %%--------------------------------------------------------------------
@@ -224,7 +294,8 @@ add_link(AutocleaningId, SpaceId) ->
 remove_link(AutocleaningId, SpaceId) ->
     Ctx = ?CTX#{scope => SpaceId},
     TreeId = oneprovider:get_id(),
-    ok = datastore_model:delete_links(Ctx, space_link_root(SpaceId), TreeId, AutocleaningId).
+    ok = datastore_model:delete_links(Ctx, space_link_root(SpaceId), TreeId,
+        AutocleaningId).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -259,9 +330,10 @@ active_completed_or_failed(#autocleaning{}) -> false.
     AccIn :: term()) -> {ok, Acc :: term()} | {error, term()}.
 for_each_autocleaning(SpaceId, Callback, AccIn) ->
     Ctx = ?CTX#{scope => SpaceId},
-    datastore_model:fold_links(Ctx, space_link_root(SpaceId), all, fun(#link{name = Name}, Acc) ->
-        {ok, Callback(Name, Acc)}
-    end, AccIn, #{}).
+    datastore_model:fold_links(Ctx, space_link_root(SpaceId), all,
+        fun(#link{name = Name}, Acc) ->
+            {ok, Callback(Name, Acc)}
+        end, AccIn, #{}).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -290,6 +362,30 @@ get_info(#autocleaning{
         {filesNumber, ReleasedFiles}
     ].
 
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns links tree root for given space.
+%% @end
+%%-------------------------------------------------------------------
+-spec space_link_root(od_space:id()) -> binary().
+space_link_root(SpaceId) ->
+    <<?LINK_PREFIX/binary, SpaceId/binary>>.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Posthook responsible for calling autocleaning_changes:handle
+%% function for locally updated document.
+%% @end
+%%-------------------------------------------------------------------
+-spec run_on_doc_change(atom(), list(), term()) -> {ok, doc()}.
+run_on_doc_change(update, [_, _, _], Result = {ok, Doc}) ->
+    autocleaning_changes:handle(Doc),
+    Result;
+run_on_doc_change(_, _, Result) ->
+    Result.
+
 %%%===================================================================
 %%% datastore_model callbacks
 %%%===================================================================
@@ -311,7 +407,19 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    1.
+    2.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of callbacks which will be called after each operation
+%% on datastore model.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_posthooks() -> [datastore_hooks:posthook()].
+get_posthooks() ->
+    [
+        fun run_on_doc_change/3
+    ].
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -336,13 +444,35 @@ get_record_struct(1) ->
             {target, integer},
             {threshold, integer}
         ]}}
+    ]};
+get_record_struct(2) ->
+    {record, [
+        {space_id, string},
+        {started_at, integer},
+        {stopped_at, integer},
+        {files_to_process, integer},
+        {files_processed, integer},
+        {released_bytes, integer},
+        {bytes_to_release, integer},
+        {released_files, integer},
+        {status, atom},
+        {config, {record, [
+            {lower_file_size_limit, integer},
+            {upper_file_size_limit, integer},
+            {max_file_not_opened_hours, integer},
+            {target, integer},
+            {threshold, integer}
+        ]}}
     ]}.
-%%-------------------------------------------------------------------
-%% @private
+
+%%--------------------------------------------------------------------
 %% @doc
-%% Returns links tree root for given space.
+%% Upgrades model's record from provided version to the next one.
 %% @end
-%%-------------------------------------------------------------------
--spec space_link_root(od_space:id()) -> binary().
-space_link_root(SpaceId) ->
-    <<?LINK_PREFIX/binary, SpaceId/binary>>.
+%%--------------------------------------------------------------------
+-spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
+    {datastore_model:record_version(), datastore_model:record()}.
+upgrade_record(1, {?MODULE, SpaceId, StartedAt, StoppedAt, ReleasedBytes,
+    BytesToRelease, ReleasedFiles, Status, Config}
+) -> {2, {?MODULE, SpaceId, StartedAt, StoppedAt, 0, 0, ReleasedBytes,
+    BytesToRelease, ReleasedFiles, Status, Config}}.
