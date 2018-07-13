@@ -134,7 +134,7 @@ truncate_test(Config) ->
 truncate_test_base(Config) ->
     Helper = new_helper(Config),
     lists:foreach(fun(_) ->
-        truncate(Helper, 0)
+        truncate(Helper, 0, 0)
     end, lists:seq(1, ?config(truncate_num, Config))),
     delete_helper(Helper).
 
@@ -175,7 +175,7 @@ multipart_read_test_base(Config) ->
     Size = ?config(read_size, Config) * ?MB,
     BlockSize = ?config(read_blk_size, Config) * ?KB,
     write(Handle, 0, 0),
-    truncate(Helper, FileId, Size),
+    truncate(Helper, FileId, Size, 0),
     multipart(Handle, fun read/3, 0, Size, BlockSize),
     delete_helper(Helper).
 
@@ -193,9 +193,10 @@ write_unlink_test_base(Config) ->
     Helper = new_helper(Config),
     lists:foreach(fun(_) ->
         FileId = random_file_id(),
+        Size = ?config(op_size, Config) * ?MB,
         {ok, Handle} = open(Helper, FileId, write),
-        write(Handle, 0, ?config(op_size, Config) * ?MB),
-        unlink(Helper, FileId)
+        write(Handle, 0, Size),
+        unlink(Helper, FileId, Size)
     end, lists:seq(1, ?config(op_num, Config))),
     delete_helper(Helper).
 
@@ -214,11 +215,12 @@ write_read_truncate_unlink_test_base(Config) ->
     Helper = new_helper(Config),
     lists:foreach(fun(_) ->
         FileId = random_file_id(),
+        Size = ?config(op_size, Config) * ?MB,
         {ok, Handle} = open(Helper, FileId, rdwr),
-        Content = write(Handle, 0, ?config(op_size, Config) * ?MB),
+        Content = write(Handle, 0, Size),
         ?assertEqual(Content, read(Handle, size(Content))),
-        truncate(Helper, FileId, 0),
-        unlink(Helper, FileId)
+        truncate(Helper, FileId, 0, Size),
+        unlink(Helper, FileId, 0)
     end, lists:seq(1, ?config(op_num, Config))),
     delete_helper(Helper).
 
@@ -321,15 +323,15 @@ write(FileHandle, Offset, Size) ->
     ?assertEqual({ok, ActualSize}, call(FileHandle, write, [Offset, Content])),
     Content.
 
-truncate(Helper, Size) ->
+truncate(Helper, Size, CurrentSize) ->
     FileId = random_file_id(),
-    truncate(Helper, FileId, Size).
+    truncate(Helper, FileId, Size, CurrentSize).
 
-truncate(Helper, FileId, Size) ->
-    ?assertEqual(ok, call(Helper, truncate, [FileId, Size])).
+truncate(Helper, FileId, Size, CurrentSize) ->
+    ?assertEqual(ok, call(Helper, truncate, [FileId, Size, CurrentSize])).
 
-unlink(Helper, FileId) ->
-    ?assertEqual(ok, call(Helper, unlink, [FileId])).
+unlink(Helper, FileId, CurrentSize) ->
+    ?assertEqual(ok, call(Helper, unlink, [FileId, CurrentSize])).
 
 multipart(Helper, Method, Size, BlockSize) ->
     multipart(Helper, Method, 0, Size, BlockSize).
