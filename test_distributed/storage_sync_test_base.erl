@@ -833,7 +833,6 @@ create_file_import_check_user_id_test(Config, MountSpaceInRoot) ->
     %% Create file on storage
     ok = file:write_file(StorageTestFilePath, ?TEST_DATA),
     ok = file:change_owner(StorageTestFilePath, ?TEST_UID, ?TEST_GID),
-
     storage_sync_test_base:enable_storage_import(Config),
 
     assertImportTimes(W1, ?SPACE_ID),

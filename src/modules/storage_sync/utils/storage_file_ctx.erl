@@ -170,7 +170,8 @@ get_handle(StorageFileCtx = #storage_file_ctx{handle = SFMHandle}) ->
 %%-------------------------------------------------------------------
 -spec get_storage_doc(ctx()) -> {storage:doc(), ctx()}.
 get_storage_doc(StorageFileCtx = #storage_file_ctx{handle = undefined}) ->
-    get_storage_doc(set_sfm_handle(StorageFileCtx));
+    StorageFileCtx2 = set_sfm_handle(StorageFileCtx),
+    get_storage_doc(StorageFileCtx2);
 get_storage_doc(StorageFileCtx = #storage_file_ctx{
     handle = #sfm_handle{
         storage = StorageDoc = #document{}

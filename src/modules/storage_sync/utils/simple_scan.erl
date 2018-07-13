@@ -761,11 +761,11 @@ delegate(Module, Function, Args, Arity) ->
 %%-------------------------------------------------------------------
 -spec get_owner_id(storage_file_ctx:ctx()) -> {od_user:id(), storage_file_ctx:ctx()}.
 get_owner_id(StorageFileCtx) ->
-    {StatBuf, _} = storage_file_ctx:get_stat_buf(StorageFileCtx),
+    {StatBuf, StorageFileCtx2} = storage_file_ctx:get_stat_buf(StorageFileCtx),
     #statbuf{st_uid = Uid} = StatBuf,
-    {StorageDoc, _} = storage_file_ctx:get_storage_doc(StorageFileCtx),
+    {StorageDoc, StorageFileCtx3} = storage_file_ctx:get_storage_doc(StorageFileCtx2),
     {ok, OwnerId} = reverse_luma:get_user_id(Uid, StorageDoc),
-    {OwnerId, StorageFileCtx}.
+    {OwnerId, StorageFileCtx3}.
 
 %%-------------------------------------------------------------------
 %% @private
@@ -785,7 +785,7 @@ get_group_owner_id(StorageFileCtx) ->
     catch
         _:Reason ->
             ?error_stacktrace("Resolving group with Gid ~p failed due to ~p", [Gid, Reason]),
-            {undefined, StorageFileCtx}
+            {undefined, StorageFileCtx3}
     end.
 
 %%-------------------------------------------------------------------
