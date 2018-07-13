@@ -149,7 +149,7 @@
   0},
  {<<"rtransfer_link">>,
   {git,"ssh://git@git.plgrid.pl:7999/vfs/rtransfer_link.git",
-       {ref,"175b33f79e4ef10f4c0a96b683eaebac5731da9d"}},
+       {ref,"3a4d56d9d560311bec6bb108459ec8029f5383f5"}},
   0},
  {<<"setup">>,
   {git,"git://github.com/uwiger/setup.git",
