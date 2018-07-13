@@ -773,7 +773,8 @@ get_owner_id(StorageFileCtx) ->
 %% Returns owner id of given file, acquired from reverse LUMA.
 %% @end
 %%-------------------------------------------------------------------
--spec get_group_owner_id(storage_file_ctx:ctx()) -> od_group:id() | undefined.
+-spec get_group_owner_id(storage_file_ctx:ctx()) ->
+    {od_group:id() | undefined, storage_file_ctx:ctx()}.
 get_group_owner_id(StorageFileCtx) ->
     {StatBuf, StorageFileCtx2} = storage_file_ctx:get_stat_buf(StorageFileCtx),
     #statbuf{st_gid = Gid} = StatBuf,

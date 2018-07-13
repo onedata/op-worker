@@ -25,7 +25,7 @@
     storage_id :: storage:id(),
     handle = undefined :: undefined | storage_file_manager:handle(),
     stat = undefined :: undefined | #statbuf{},
-    stat_timestamp :: non_neg_integer(),
+    stat_timestamp :: undefined | non_neg_integer(),
     xattr = undefined :: undefined | binary()
 }).
 

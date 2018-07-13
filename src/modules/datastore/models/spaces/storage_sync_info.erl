@@ -120,8 +120,8 @@ delete(Uuid) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_or_update(key(), undefined | non_neg_integer(),
-    undefined | non_neg_integer(), undefined | non_neg_integer(),
-    binary() | undefined, od_space:id()) -> {ok, doc()} | error().
+    undefined | non_neg_integer(), binary() | undefined,
+    undefined | non_neg_integer(), od_space:id()) -> {ok, doc()} | error().
 create_or_update(Uuid, NewMTime, NewHashKey, NewHashValue, NewStatTime, SpaceId) ->
     Diff = fun(SSI = #storage_sync_info{
         mtime = MTime0,
@@ -237,4 +237,4 @@ get_record_struct(3) ->
 upgrade_record(1, {?MODULE, ChildrenAttrsHash, MTime}) ->
     {2, {?MODULE, ChildrenAttrsHash, MTime}};
 upgrade_record(2, {?MODULE, ChildrenAttrsHash, MTime}) ->
-    {3, {?MODULE, ChildrenAttrsHash, MTime, 0}}.
+    {3, {?MODULE, ChildrenAttrsHash, MTime, MTime + 1}}.
