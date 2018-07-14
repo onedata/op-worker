@@ -3598,7 +3598,7 @@ domain(Node) ->
 mock_file_replication_failure(Node) ->
     test_utils:mock_new(Node, replica_synchronizer),
     test_utils:mock_expect(Node, replica_synchronizer, synchronize,
-        fun(_, _, _, _, _) ->
+        fun(_, _, _, _, _, _) ->
             throw(test_error)
         end
     ).
