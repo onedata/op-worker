@@ -1735,7 +1735,7 @@ sync_blocks(SessionID, FileCtx, BlockSize, Blocks) ->
     FinalTime = lists:foldl(fun(BlockNum, Acc) ->
         Start = os:timestamp(),
         SyncAns = replica_synchronizer:synchronize(UserCtx, FileCtx,
-            #file_block{offset = BlockNum, size = BlockSize}, false, undefined),
+            #file_block{offset = BlockNum, size = BlockSize}, false, undefined, 32),
         Time = timer:now_diff(os:timestamp(), Start),
         ?assertMatch({ok, _}, SyncAns),
         Acc + Time
