@@ -84,7 +84,7 @@ translate_from_protobuf(#'FileRenamedEntry'{} = Record) ->
         new_parent_guid = Record#'FileRenamedEntry'.new_parent_uuid,
         new_name = Record#'FileRenamedEntry'.new_name
     };
-translate_from_protobuf(#'IpAndPort'{ip_string = IpString, port = Port}) ->
+translate_from_protobuf(#'IpAndPort'{ip = IpString, port = Port}) ->
     {ok, IP} = inet:parse_ipv4strict_address(binary_to_list(IpString)),
     #ip_and_port{ip = IP, port = Port};
 translate_from_protobuf(#'Dir'{uuid = UUID}) ->
@@ -632,7 +632,7 @@ translate_to_protobuf(#file_renamed_entry{} = Record) ->
         new_name = Record#'file_renamed_entry'.new_name
     };
 translate_to_protobuf(#ip_and_port{ip = IP, port = Port}) ->
-    #'IpAndPort'{ip_string = list_to_binary(inet:ntoa(IP)), port = Port};
+    #'IpAndPort'{ip = list_to_binary(inet:ntoa(IP)), port = Port};
 translate_to_protobuf(#dir{guid = UUID}) ->
     {dir, #'Dir'{uuid = UUID}};
 

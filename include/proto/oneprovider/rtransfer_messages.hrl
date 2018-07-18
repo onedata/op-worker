@@ -26,7 +26,7 @@
 }).
 
 -record('rtransfer_nodes_ips', {
-    nodes = [] :: [#'ip_and_port'{}] % = 1
+    nodes = [] :: [#'ip_and_port'{}]
 }).
 
 -endif.

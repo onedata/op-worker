@@ -355,7 +355,7 @@ rtransfer_nodes_ips_test(Config) ->
         application:get_env(rtransfer_link, transfer, []), 6665),
 
     ExpectedNodes = lists:sort(
-        [#'IpAndPort'{ip_string = IP, port = ExpectedPort} || IP <- ExpectedIPs]
+        [#'IpAndPort'{ip = IP, port = ExpectedPort} || IP <- ExpectedIPs]
     ),
 
     {ok, #'HandshakeResponse'{status = 'OK'}, Sock} = connect_as_provider(
