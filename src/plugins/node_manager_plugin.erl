@@ -69,7 +69,7 @@ db_nodes() ->
 %%--------------------------------------------------------------------
 -spec listeners() -> Listeners :: [atom()].
 listeners() -> [
-    redirector_listener,
+    http_listener,
     https_listener
 ].
 

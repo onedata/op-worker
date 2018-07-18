@@ -9,7 +9,7 @@
 %%% redirector listener that redirects client from HTTP (port 80) to HTTPS.
 %%% @end
 %%%--------------------------------------------------------------------
--module(redirector_listener).
+-module(http_listener).
 -author("Lukasz Opiola").
 
 -behaviour(listener_behaviour).
@@ -18,12 +18,13 @@
 -include_lib("ctool/include/logging.hrl").
 
 % Cowboy listener reference
--define(HTTP_REDIRECTOR_LISTENER, http_listener).
+-define(HTTP_LISTENER, http_listener).
 
 % Listener config
 -define(PORT, application:get_env(?APP_NAME, http_server_port, 80)).
 -define(ACCEPTORS_NUM, application:get_env(?APP_NAME, http_acceptors, 10)).
 -define(REQUEST_TIMEOUT, application:get_env(?APP_NAME, http_request_timeout, timer:seconds(30))).
+
 -define(LE_CHALLENGE_PATH, application:get_env(?APP_NAME, letsencrypt_challenge_api_prefix,
     "/.well-known/acme-challenge")).
 -define(LE_CHALLENGE_ROOT, application:get_env(?APP_NAME, letsencrypt_challenge_static_root,
@@ -54,18 +55,18 @@ port() ->
 %%--------------------------------------------------------------------
 -spec start() -> ok | {error, Reason :: term()}.
 start() ->
-    RedirectDispatch = cowboy_router:compile([
+    Dispatch = cowboy_router:compile([
         {'_', [
             {?LE_CHALLENGE_PATH ++ "/[...]", cowboy_static, {dir, ?LE_CHALLENGE_ROOT}},
             {'_', redirector_handler, https_listener:port()}
         ]}
     ]),
-    Result = cowboy:start_clear(?HTTP_REDIRECTOR_LISTENER,
+    Result = cowboy:start_clear(?HTTP_LISTENER,
         [
             {port, port()},
             {num_acceptors, ?ACCEPTORS_NUM}
         ], #{
-            env => #{dispatch => RedirectDispatch},
+            env => #{dispatch => Dispatch},
             max_keepalive => 1,
             request_timeout => ?REQUEST_TIMEOUT
         }),
@@ -82,12 +83,12 @@ start() ->
 %%--------------------------------------------------------------------
 -spec stop() -> ok | {error, Reason :: term()}.
 stop() ->
-    case cowboy:stop_listener(?HTTP_REDIRECTOR_LISTENER) of
+    case cowboy:stop_listener(?HTTP_LISTENER) of
         ok ->
             ok;
         {error, Error} ->
             ?error("Error on stopping listener ~p: ~p",
-                [?HTTP_REDIRECTOR_LISTENER, Error]),
+                [?HTTP_LISTENER, Error]),
             {error, redirector_stop_error}
     end.
 
@@ -108,8 +109,8 @@ healthcheck() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Writes a file serverd by http in a directory expected by Let's Encrypt
-%% for the HTTP authorization challenge.
+%% Writes a file served via HTTP in a directory expected by
+%% Let's Encrypt HTTP authorization challenge.
 %% @end
 %%--------------------------------------------------------------------
 -spec set_response_to_letsencrypt_challenge(Name :: file:name_all(), Content :: binary()) ->
