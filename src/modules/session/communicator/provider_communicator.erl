@@ -183,7 +183,8 @@ communicate_async(#client_message{message_id = undefined} = Msg, Ref, Recipient)
     communicate_async(Msg#client_message{message_id = MsgId}, Ref, Recipient);
 communicate_async(#client_message{message_id = MsgId} = Msg, Ref, _Recipient) ->
     DoSend = case Msg of
-        #client_message{message_stream = #message_stream{stream_id = StmId}} when is_integer(StmId) ->
+        #client_message{message_stream = #message_stream{stream_id = StmId}} when is_integer(
+            StmId) ->
             fun() -> stream(StmId, Msg, Ref, 2) end;
         _ ->
             fun() -> send(Msg, Ref, 2) end
@@ -213,7 +214,8 @@ ensure_connected(SessId) ->
     case session:get_random_connection(SessId, true) of
         {error, _} ->
             ProviderId = case session:get(SessId) of
-                {ok, #document{value = #session{proxy_via = ProxyVia}}} when is_binary(ProxyVia) ->
+                {ok, #document{value = #session{proxy_via = ProxyVia}}} when is_binary(
+                    ProxyVia) ->
                     ProxyVia;
                 _ ->
                     session_manager:session_id_to_provider_id(SessId)
@@ -228,24 +230,24 @@ ensure_connected(SessId) ->
             end,
 
             {ok, Domain} = provider_logic:get_domain(ProviderId),
-            {ok, IPs} = inet:getaddrs(binary_to_list(Domain), inet),
-            IPBinaries = lists:map(fun(IP) ->
-                list_to_binary(inet:ntoa(IP))
-            end, IPs),
+            Hosts = case provider_logic:resolve_ips(ProviderId) of
+                {ok, IPs} -> [list_to_binary(inet:ntoa(IP)) || IP <- IPs];
+                _ -> [Domain]
+            end,
             lists:foreach(
-                fun(IPBinary) ->
+                fun(Host) ->
                     Port = https_listener:port(),
                     critical_section:run([?MODULE, ProviderId, SessId], fun() ->
                         % check once more to prevent races
                         case session:get_random_connection(SessId, true) of
                             {error, _} ->
                                 outgoing_connection:start(ProviderId, SessId,
-                                    Domain, IPBinary, Port, ranch_ssl, timer:seconds(5));
+                                    Domain, Host, Port, ranch_ssl, timer:seconds(5));
                             _ ->
                                 ensure_connected(SessId)
                         end
                     end)
-                end, IPBinaries),
+                end, Hosts),
             ok;
         {ok, Pid} ->
             case utils:process_info(Pid, initial_call) of
@@ -263,8 +265,8 @@ ensure_connected(SessId) ->
 %% Receives reply from other provider
 %% @end
 %%--------------------------------------------------------------------
--spec receive_server_message(MsgId :: #message_id{}) ->
-    {ok, #server_message{}} | {error, timeout} | {error, Reason :: term()}.
+        - spec receive_server_message(MsgId :: #message_id{}) ->
+{ok, #server_message{}} | {error, timeout} | {error, Reason :: term()}.
 receive_server_message(MsgId) ->
     Timeout = 3 * router:get_processes_check_interval(),
     receive
