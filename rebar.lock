@@ -79,7 +79,7 @@
  {<<"gproc">>,{pkg,<<"gproc">>,<<"0.6.1">>},1},
  {<<"gui">>,
   {git,"ssh://git@git.plgrid.pl:7999/vfs/gui.git",
-       {ref,"90dda15166ca46dc861a7df6c3ba525ccf64c1df"}},
+       {ref,"dd0c5082b8abe777e65744009895a5933cdf94d4"}},
   0},
  {<<"hackney">>,
   {git,"git://github.com/benoitc/hackney.git",
