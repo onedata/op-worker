@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
-%%% @author Rafal Slota
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @author Michał Wrzeszcz
+%%% @copyright (C) 2018 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -11,7 +11,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(fslogic_location_cache).
--author("Rafal Slota").
+-author("Michał Wrzeszcz").
 
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/oneclient/common_messages.hrl").
@@ -21,7 +21,7 @@
 
 -type block() :: fslogic_blocks:block().
 -type blocks() :: fslogic_blocks:blocks().
--type blocks_tree() :: gb_sets:set().
+-type blocks_tree() :: gb_sets:set(). % TODO - use gb_trees (it is faster)
 -type stored_blocks() :: blocks() | blocks_tree(). % set only when used by blocks' cache
 -type location() :: file_location:doc().
 -type location_or_record() :: location() | file_location:record().
