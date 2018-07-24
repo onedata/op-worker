@@ -50,6 +50,11 @@
 -define(PREFETCH_PRIORITY,
     application:get_env(?APP_NAME, default_prefetch_priority, 96)).
 
+-define(RESTART_PRIORITY,
+    application:get_env(?APP_NAME, default_restart_priority, 32)).
+-define(PREFETCH_PRIORITY,
+    application:get_env(?APP_NAME, default_prefetch_priority, 96)).
+
 -define(FLUSH_STATS, flush_stats).
 -define(FLUSH_BLOCKS, flush_blocks).
 -define(FLUSH_EVENTS, flush_events).
