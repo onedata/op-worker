@@ -1036,18 +1036,6 @@ remove_unfinished_transfers_links(TransferIds, SpaceId) ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Moves given TransferId from past to current transfers links tree.
-%% @end
-%%-------------------------------------------------------------------
--spec move_from_past_to_current_links_tree(id(), od_space:id(),
-    non_neg_integer(), non_neg_integer()) -> ok.
-move_from_past_to_current_links_tree(TransferId, SpaceId, FinishTime, NewScheduleTime) ->
-    ok = transfer_links:add_ongoing_transfer_link(TransferId, SpaceId, NewScheduleTime),
-    ok = transfer_links:delete_ended_transfer_link(TransferId, SpaceId, FinishTime).
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
 %% Moves given TransferId from current to past transfers links tree.
 %% @end
 %%-------------------------------------------------------------------
