@@ -73,12 +73,13 @@ delete_whole_file_replica(FileCtx, AllowedVV) ->
                 #fuse_response{status = #status{code = ?OK}} =
                     truncate_req:truncate_insecure(UserCtx, FileCtx, 0, false),
                 %todo VFS-4433 file_popularity should be updated after updates on file_location
-                case fslogic_blocks:delete_location(FileUuid, LocalFileId) of
+                case fslogic_location_cache:delete_location(FileUuid, LocalFileId) of
                     ok ->
                         ok;
                     {error, {not_found, _}} ->
                         ok
                 end,
+                replica_synchronizer:force_flush_events(FileUuid),
                 fslogic_event_emitter:emit_file_location_changed(FileCtx, []);
             _ ->
                 {error, file_modified_locally}

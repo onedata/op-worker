@@ -163,15 +163,15 @@ maybe_import_storage_file(Job = #space_strategy_job{
                 ?DIRECTORY_TYPE ->
                     maybe_import_file_with_existing_metadata(Job2, FileCtx);
                 ?REGULAR_FILE_TYPE ->
-                    case fslogic_blocks:get_location(
-                        file_location:id(FileUuid, oneprovider:get_id()), FileUuid) of
+                    % Get only two blocks - it is enough to verify if file can be imported
+                    case fslogic_location_cache:get_location(
+                        file_location:id(FileUuid, oneprovider:get_id()), FileUuid, {blocks_num, 2}) of
                         {ok, #document{
                             value = #file_location{
                                 storage_id = StorageId,
                                 size = Size
                             }} = FL} ->
-                            % TODO VFS-4412 - request only 2 blocks
-                            case fslogic_blocks:get_blocks(FL, #{count => 1}) of
+                            case fslogic_location_cache:get_blocks(FL, #{count => 2}) of
                                 [#file_block{offset = 0, size = Size}] ->
                                     maybe_import_file_with_existing_metadata(Job2, FileCtx);
                                 [] when Size =:= 0 ->
@@ -716,13 +716,13 @@ create_file_location(SpaceId, StorageId, FileUuid, CanonicalPath, Size) ->
         size = Size,
         storage_file_created = true
     },
-    Location2 = fslogic_blocks:set_blocks(Location, create_file_blocks(Size)),
-    {ok, _LocId} = file_location:save_and_bump_version(
-        #document{
-            key = file_location:local_id(FileUuid),
-            value = Location2,
-            scope = SpaceId
-        }),
+    LocationDoc = #document{
+        key = file_location:local_id(FileUuid),
+        value = Location,
+        scope = SpaceId
+    },
+    LocationDoc2 = fslogic_location_cache:set_blocks(LocationDoc, create_file_blocks(Size)),
+    {ok, _LocId} = file_location:save_and_bump_version(LocationDoc2),
     ok.
 
 %%-------------------------------------------------------------------

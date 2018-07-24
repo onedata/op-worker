@@ -122,7 +122,7 @@ get_duplicated_blocks(FileCtx, LocalVV) ->
 -spec get_all_blocks([file_location:doc()]) -> fslogic_blocks:blocks().
 get_all_blocks(LocationList) ->
     Blocks = lists:flatmap(fun(Location) ->
-        fslogic_blocks:get_blocks(Location)
+        fslogic_location_cache:get_blocks(Location)
     end, LocationList),
     fslogic_blocks:consolidate(lists:sort(Blocks)).
 
@@ -252,8 +252,8 @@ filter_local_locations(LocationDocs) ->
 -spec invalidate_local_blocks(file_location:doc(), fslogic_blocks:blocks()) ->
     fslogic_blocks:blocks().
 invalidate_local_blocks(FileLocation, Blocks) ->
-    LocalBlocks = fslogic_blocks:get_blocks(FileLocation,
-        #{overlapping_sorted_blocks => Blocks}),
+    LocalBlocks = fslogic_location_cache:get_blocks(FileLocation,
+        #{overlapping_blocks => Blocks}),
     fslogic_blocks:invalidate(Blocks, LocalBlocks).
 
 %%-------------------------------------------------------------------
@@ -312,8 +312,8 @@ exclude_old_blocks(RemoteLocations, BlocksToSync) ->
             provider_id = ProviderId,
             version_vector = VV
         }} = FL) ->
-        RemoteBlocks = fslogic_blocks:get_blocks(FL,
-            #{overlapping_sorted_blocks => BlocksToSync}),
+        RemoteBlocks = fslogic_location_cache:get_blocks(FL,
+            #{overlapping_blocks => BlocksToSync}),
         lists:map(fun(RB) ->
             {RB, {ProviderId, VV, {StorageId, FileId}}}
         end, RemoteBlocks)
