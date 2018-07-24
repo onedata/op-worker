@@ -247,6 +247,9 @@ maybe_add_reverse_mapping(_StorageId, _UserCtx, _UserId, _GroupOrSpaceId) ->
 decode_user_ctx(Encoded, ?CEPH_HELPER_NAME) ->
     [UserName, Key] = binary:split(Encoded, ?SEP, [global]),
     #{<<"username">> => UserName, <<"key">> => Key};
+decode_user_ctx(Encoded, ?CEPHRADOS_HELPER_NAME) ->
+    [UserName, Key] = binary:split(Encoded, ?SEP, [global]),
+    #{<<"username">> => UserName, <<"key">> => Key};
 decode_user_ctx(Encoded, ?S3_HELPER_NAME) ->
     [AccessKey, SecretKey] = binary:split(Encoded, ?SEP, [global]),
     #{<<"accessKey">> => AccessKey, <<"secretKey">> => SecretKey};
@@ -270,6 +273,10 @@ decode_user_ctx(Encoded, HelperName) when
 -spec encode_user_ctx(luma:user_ctx(), helper:name()) -> binary().
 encode_user_ctx(#{<<"username">> := UserName, <<"key">> := Key},
     ?CEPH_HELPER_NAME
+) ->
+    encode(UserName, Key);
+encode_user_ctx(#{<<"username">> := UserName, <<"key">> := Key},
+    ?CEPHRADOS_HELPER_NAME
 ) ->
     encode(UserName, Key);
 encode_user_ctx(#{<<"accessKey">> := AccessKey, <<"secretKey">> := SecretKey},

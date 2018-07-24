@@ -1624,6 +1624,11 @@ basic_autocleaning_test(Config) ->
 
     % ensure that events from rtransfer are handled
     ?assertEqual(Size, rpc:call(WorkerP2, space_quota, current_size, [<<"space5">>]), ?ATTEMPTS),
+    ExpectedDistribution0 = [
+        #{<<"providerId">> => DomainP1, <<"blocks">> => [[0, Size]]},
+        #{<<"providerId">> => DomainP2, <<"blocks">> => [[0, Size]]}
+    ],
+    ?assertDistributionProxyByGuid(WorkerP1, SessionIdP1, ExpectedDistribution0, File1Guid),
 
     rpc:call(WorkerP2, space_cleanup_api, force_cleanup, [SpaceId]),
     ExpectedDistribution1 = [
@@ -3598,7 +3603,7 @@ domain(Node) ->
 mock_file_replication_failure(Node) ->
     test_utils:mock_new(Node, replica_synchronizer),
     test_utils:mock_expect(Node, replica_synchronizer, synchronize,
-        fun(_, _, _, _, _) ->
+        fun(_, _, _, _, _, _) ->
             throw(test_error)
         end
     ).

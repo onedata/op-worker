@@ -60,6 +60,8 @@ get_user_ctx(SessionId, UserId, SpaceId, StorageDoc = #document{
     {ok, luma:group_ctx()} | {error, term()}.
 get_group_ctx(_GroupId, _SpaceId, _StorageDoc, #helper{name = ?CEPH_HELPER_NAME}) ->
     undefined;
+get_group_ctx(_GroupId, _SpaceId, _StorageDoc, #helper{name = ?CEPHRADOS_HELPER_NAME}) ->
+    undefined;
 get_group_ctx(_GroupId, _SpaceId, _StorageDoc, #helper{name = ?S3_HELPER_NAME}) ->
     undefined;
 get_group_ctx(_GroupId, _SpaceId, _StorageDoc, #helper{name = ?SWIFT_HELPER_NAME}) ->

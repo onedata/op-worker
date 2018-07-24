@@ -121,7 +121,7 @@ create_delayed_storage_file(FileCtx) ->
         false ->
             FileUuid = file_ctx:get_uuid_const(FileCtx),
             replica_synchronizer:apply(FileCtx, fun() ->
-                case fslogic_blocks:get_location(FileLocationId, FileUuid, false) of
+                case fslogic_location_cache:get_location(FileLocationId, FileUuid, false) of
                     {ok, #document{
                         value = #file_location{storage_file_created = true}
                     }} ->
@@ -132,10 +132,10 @@ create_delayed_storage_file(FileCtx) ->
                         files_to_chown:chown_or_schedule_chowning(FileCtx3),
 
                         {ok, #document{}} =
-                            fslogic_blocks:update_location(FileUuid, FileLocationId, fun
+                            fslogic_location_cache:update_location(FileUuid, FileLocationId, fun
                             (FileLocation = #file_location{storage_file_created = false}) ->
                                 {ok, FileLocation#file_location{storage_file_created = true}}
-                        end),
+                        end, false),
                         FileCtx3
                 end
             end);
@@ -161,7 +161,7 @@ create_delayed_storage_file_and_return_location(FileCtx) ->
         false ->
             FileUuid = file_ctx:get_uuid_const(FileCtx),
             file_location:critical_section(FileUuid, fun() ->
-                case fslogic_blocks:get_location(FileLocationId, FileUuid, false) of
+                case fslogic_location_cache:get_location(FileLocationId, FileUuid, false) of
                     {ok, #document{
                         value = #file_location{storage_file_created = true}
                     }} ->
@@ -172,10 +172,10 @@ create_delayed_storage_file_and_return_location(FileCtx) ->
                         files_to_chown:chown_or_schedule_chowning(FileCtx3),
 
                         {ok, #document{} = Doc} =
-                            fslogic_blocks:update_location(FileUuid, FileLocationId, fun
+                            fslogic_location_cache:update_location(FileUuid, FileLocationId, fun
                                 (FileLocation = #file_location{storage_file_created = false}) ->
                                     {ok, FileLocation#file_location{storage_file_created = true}}
-                            end),
+                            end, false),
                         {Doc, FileCtx3}
 %%                        file_ctx:update_location_doc(FileCtx3, Doc)
                 end
@@ -218,7 +218,7 @@ create_storage_file_location(FileCtx, StorageFileCreated, GeneratedKey) ->
         size = Size
     },
     LocId = file_location:local_id(FileUuid),
-    case fslogic_blocks:create_location(#document{
+    case fslogic_location_cache:create_location(#document{
         key = LocId,
         value = Location
     }, GeneratedKey) of
@@ -250,7 +250,8 @@ create_storage_file(UserCtx, FileCtx) ->
         {error, ?EEXIST} = Eexists ->
             case application:get_env(?APP_NAME, unlink_on_create, true) of
               true ->
-                storage_file_manager:unlink(SFMHandle),
+                {Size, _} = file_ctx:get_file_size(FileCtx3),
+                storage_file_manager:unlink(SFMHandle, Size),
                 {storage_file_manager:create(SFMHandle, Mode), FileCtx3};
               _ ->
                 Eexists
@@ -277,7 +278,7 @@ create_storage_file(UserCtx, FileCtx) ->
 delete_storage_file(FileCtx, UserCtx) ->
     delete_storage_file_without_location(FileCtx, UserCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    fslogic_blocks:delete_location(FileUuid, file_location:local_id(FileUuid)).
+    fslogic_location_cache:delete_location(FileUuid, file_location:local_id(FileUuid)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -289,7 +290,8 @@ delete_storage_file(FileCtx, UserCtx) ->
 delete_storage_file_without_location(FileCtx, UserCtx) ->
     SessId = user_ctx:get_session_id(UserCtx),
     {SFMHandle, _} = storage_file_manager:new_handle(SessId, FileCtx),
-    storage_file_manager:unlink(SFMHandle).
+    {Size, _} = file_ctx:get_file_size(FileCtx),
+    storage_file_manager:unlink(SFMHandle, Size).
 
 %%--------------------------------------------------------------------
 %% @doc

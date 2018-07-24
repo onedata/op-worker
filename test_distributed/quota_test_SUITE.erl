@@ -463,14 +463,15 @@ init_per_testcase(_Case, Config) ->
 
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    lists:foreach(
-        fun({SpaceId, _}) ->
-            rpc:multicall(Workers, space_quota, delete, [SpaceId])
-        end, ?config(spaces, Config)),
 
     lfm_proxy:teardown(Config),
      %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
-    initializer:clean_test_users_and_spaces_no_validate(Config).
+    initializer:clean_test_users_and_spaces_no_validate(Config),
+
+    lists:foreach(
+        fun({SpaceId, _}) ->
+            rpc:multicall(Workers, space_quota, delete, [SpaceId])
+        end, ?config(spaces, Config)).
 
 %%%===================================================================
 %%% Internal functions
@@ -509,8 +510,19 @@ truncate(Worker, SessionId, Path, Size) ->
     Result.
 
 rename(Worker, SessionId, Path, Target) ->
-    lfm_proxy:mv(Worker, SessionId, {path, Path}, Target).
+    Result = lfm_proxy:mv(Worker, SessionId, {path, Path}, Target),
+    fsync(Worker, SessionId, Target),
+    Result.
 
+fsync(Worker, SessionId, Path) ->
+    case open_file(Worker, SessionId, Path, write) of
+        {ok, FileHandle} ->
+            Result = lfm_proxy:fsync(Worker, FileHandle),
+            lfm_proxy:close(Worker, FileHandle),
+            Result;
+        _ ->
+            ok
+    end.
 
 gen_test_env(Config) ->
     [P1, P2] = ?config(op_worker_nodes, Config),

@@ -281,11 +281,14 @@ translate_from_protobuf(#'Release'{handle_id = HandleId}) ->
     #release{handle_id = HandleId};
 translate_from_protobuf(#'Truncate'{size = Size}) ->
     #truncate{size = Size};
-translate_from_protobuf(#'SynchronizeBlock'{block = #'FileBlock'{offset = O, size = S}, prefetch = Prefetch}) ->
-    #synchronize_block{block = #file_block{offset = O, size = S}, prefetch = Prefetch};
+translate_from_protobuf(#'SynchronizeBlock'{block = #'FileBlock'{
+    offset = O, size = S}, prefetch = Prefetch, priority = Priority}) ->
+    #synchronize_block{block = #file_block{offset = O, size = S},
+        prefetch = Prefetch, priority = Priority};
 translate_from_protobuf(#'SynchronizeBlockAndComputeChecksum'{
-    block = #'FileBlock'{offset = O, size = S}}) ->
-    #synchronize_block_and_compute_checksum{block = #file_block{offset = O, size = S}};
+    block = #'FileBlock'{offset = O, size = S}, priority = Priority}) ->
+    #synchronize_block_and_compute_checksum{block =
+    #file_block{offset = O, size = S}, priority = Priority};
 
 translate_from_protobuf(#'FuseResponse'{status = Status, fuse_response = {_, FuseResponse}}) ->
     #fuse_response{
@@ -329,17 +332,17 @@ translate_from_protobuf(#'FileChildrenAttrs'{child_attrs = Children,
             translate_from_protobuf(Child)
         end, Children), index_token = Token, is_last = IsLast};
 translate_from_protobuf(#'FileLocation'{} = Record) ->
-    FL = #file_location{
+    #file_location{
         uuid = fslogic_uuid:guid_to_uuid(Record#'FileLocation'.uuid),
         provider_id = Record#'FileLocation'.provider_id,
         space_id = Record#'FileLocation'.space_id,
         storage_id = Record#'FileLocation'.storage_id,
-        file_id = Record#'FileLocation'.file_id
-    },
-    fslogic_blocks:set_blocks(FL, lists:map(
-        fun(#'FileBlock'{offset = Offset, size = Size}) ->
-            #file_block{offset = Offset, size = Size}
-        end, Record#'FileLocation'.blocks));
+        file_id = Record#'FileLocation'.file_id,
+        blocks = lists:map(
+            fun(#'FileBlock'{offset = Offset, size = Size}) ->
+                #file_block{offset = Offset, size = Size}
+            end, Record#'FileLocation'.blocks)
+    };
 translate_from_protobuf(#'FileLocationChanged'{file_location = FileLocation,
     change_beg_offset = O, change_end_offset = S}) ->
     #file_location_changed{
@@ -805,12 +808,16 @@ translate_to_protobuf(#release{handle_id = HandleId}) ->
     {release, #'Release'{handle_id = HandleId}};
 translate_to_protobuf(#truncate{size = Size}) ->
     {truncate, #'Truncate'{size = Size}};
-translate_to_protobuf(#synchronize_block{block = Block, prefetch = Prefetch}) ->
+translate_to_protobuf(#synchronize_block{block = Block, prefetch = Prefetch,
+    priority = Priority}) ->
     {synchronize_block,
-        #'SynchronizeBlock'{block = translate_to_protobuf(Block), prefetch = Prefetch}};
-translate_to_protobuf(#synchronize_block_and_compute_checksum{block = Block}) ->
+        #'SynchronizeBlock'{block = translate_to_protobuf(Block),
+            prefetch = Prefetch, priority = Priority}};
+translate_to_protobuf(#synchronize_block_and_compute_checksum{block = Block,
+    priority = Priority}) ->
     {synchronize_block_and_compute_checksum,
-        #'SynchronizeBlockAndComputeChecksum'{block = translate_to_protobuf(Block)}};
+        #'SynchronizeBlockAndComputeChecksum'{block =
+        translate_to_protobuf(Block), priority = Priority}};
 
 translate_to_protobuf(#fuse_response{status = Status, fuse_response = FuseResponse}) ->
     {status, StatProto} = translate_to_protobuf(Status),
@@ -863,7 +870,7 @@ translate_to_protobuf(#file_location{} = Record) ->
                 file_id = Record#file_location.file_id,
                 storage_id = Record#file_location.storage_id
             }
-        end, fslogic_blocks:get_blocks(Record))
+        end, Record#file_location.blocks)
     }};
 translate_to_protobuf(#file_location_changed{file_location = FileLocation,
     change_beg_offset = O, change_end_offset = S}) ->

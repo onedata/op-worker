@@ -242,7 +242,8 @@
 
 -record(storage_sync_info, {
     children_attrs_hashes = #{} :: #{non_neg_integer() => binary()},
-    mtime :: undefined | non_neg_integer()
+    mtime :: undefined | non_neg_integer(),
+    last_stat :: undefined | non_neg_integer()
 }).
 
 -record(file_meta, {
@@ -326,7 +327,7 @@
     provider_id :: undefined | oneprovider:id(),
     storage_id :: undefined | storage:id(),
     file_id :: undefined | helpers:file_id(),
-    blocks = [] :: fslogic_blocks:stored_blocks(),
+    blocks = [] :: fslogic_location_cache:stored_blocks(),
     version_vector = #{},
     size = 0 :: non_neg_integer() | undefined,
     space_id :: undefined | od_space:id(),
