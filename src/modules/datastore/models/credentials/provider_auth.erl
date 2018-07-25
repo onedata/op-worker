@@ -69,8 +69,7 @@ save(ProviderId, Macaroon) ->
             root_macaroon = Macaroon
         }
     }),
-    application:set_env(?APP_NAME, ?PROVIDER_ID_CACHE_KEY, ProviderId),
-    ok.
+    simple_cache:put(?PROVIDER_ID_CACHE_KEY, ProviderId).
 
 
 %%--------------------------------------------------------------------
@@ -82,20 +81,18 @@ save(ProviderId, Macaroon) ->
 %%--------------------------------------------------------------------
 -spec get_provider_id() -> od_provider:id() | {error, term()}.
 get_provider_id() ->
-    case application:get_env(?APP_NAME, ?PROVIDER_ID_CACHE_KEY) of
-        {ok, ProviderId} ->
-            ProviderId;
-        _ ->
-            case datastore_model:get(?CTX, ?PROVIDER_AUTH_KEY) of
-                {error, not_found} ->
-                    ?ERROR_UNREGISTERED_PROVIDER;
-                {error, _} = Error ->
-                    Error;
-                {ok, #document{value = #provider_auth{provider_id = Id}}} ->
-                    application:set_env(?APP_NAME, ?PROVIDER_ID_CACHE_KEY, Id),
-                    Id
-            end
-    end.
+    GetProviderId = fun() ->
+        case datastore_model:get(?CTX, ?PROVIDER_AUTH_KEY) of
+            {error, not_found} ->
+                {false, ?ERROR_UNREGISTERED_PROVIDER};
+            {error, _} = Error ->
+                {false, Error};
+            {ok, #document{value = #provider_auth{provider_id = Id}}} ->
+                {true, Id}
+        end
+    end,
+    {ok, ProviderId} = simple_cache:get(?PROVIDER_ID_CACHE_KEY, GetProviderId),
+    ProviderId.
 
 
 %%--------------------------------------------------------------------
@@ -105,7 +102,7 @@ get_provider_id() ->
 %%--------------------------------------------------------------------
 -spec clear_provider_id_cache() -> ok.
 clear_provider_id_cache() ->
-    application:unset_env(?APP_NAME, ?PROVIDER_ID_CACHE_KEY).
+    simple_cache:clear(?PROVIDER_ID_CACHE_KEY).
 
 
 %%--------------------------------------------------------------------

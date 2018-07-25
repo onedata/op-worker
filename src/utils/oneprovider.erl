@@ -23,7 +23,7 @@
 -type id() :: binary().
 -export_type([id/0]).
 
--define(OZ_VERSION_CACHE_TTL, 300). % in seconds - 5 minutes
+-define(OZ_VERSION_CACHE_TTL, timer:minutes(5)).
 
 %% API
 -export([get_node_hostname/0, get_node_ip/0, get_rest_endpoint/1]).
@@ -187,15 +187,12 @@ get_oz_url() ->
 %%--------------------------------------------------------------------
 -spec get_oz_version() -> binary().
 get_oz_version() ->
-    Now = provider_logic:zone_time_seconds(),
-    case application:get_env(?APP_NAME, cached_oz_version) of
-        {ok, {V, Timestamp}} when Timestamp + ?OZ_VERSION_CACHE_TTL > Now ->
-            V;
-        _ ->
-            {ok, OzVersion, _} = provider_logic:fetch_oz_compatibility_config(get_oz_url()),
-            application:set_env(?APP_NAME, cached_oz_version, {OzVersion, Now}),
-            OzVersion
-    end.
+    GetOzVersion = fun() ->
+        {ok, OzVersion, _} = provider_logic:fetch_oz_compatibility_config(get_oz_url()),
+        {true, OzVersion, ?OZ_VERSION_CACHE_TTL}
+    end,
+    {ok, OzVersion} = simple_cache:get(cached_oz_version, GetOzVersion),
+    OzVersion.
 
 
 %%--------------------------------------------------------------------

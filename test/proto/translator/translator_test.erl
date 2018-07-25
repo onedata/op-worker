@@ -67,7 +67,7 @@ translate_write_event_from_protobuf_test() ->
 
 translate_client_handshake_request_from_protobuf_test() ->
     Macaroon = <<"DUMMY-MACAROON">>,
-    {Internal, Protobuf} = get_client_handshake_request(Macaroon, 1),
+    {Internal, Protobuf} = get_client_handshake_request(Macaroon, 1, [<<"18.01.01">>, <<"18.01.02">>]),
     ?assertEqual(Internal, translator:translate_from_protobuf(Protobuf)).
 
 translate_provider_handshake_request_from_protobuf_test() ->
@@ -326,11 +326,11 @@ get_macaroon(Val) ->
         #'Macaroon'{macaroon = Val, disch_macaroons = [DM1, DM2]}
     }.
 
-get_client_handshake_request(Macaroon, SessionId) ->
+get_client_handshake_request(Macaroon, SessionId, CompOpVersions) ->
     {IntMacaroon, PBMacaroon} = get_macaroon(Macaroon),
     {
-        #client_handshake_request{auth = IntMacaroon, session_id = SessionId},
-        #'ClientHandshakeRequest'{macaroon = PBMacaroon, session_id = SessionId}
+        #client_handshake_request{auth = IntMacaroon, session_id = SessionId, compatible_oneprovider_versions = CompOpVersions},
+        #'ClientHandshakeRequest'{macaroon = PBMacaroon, session_id = SessionId, compatible_oneprovider_versions = CompOpVersions}
     }.
 
 get_provider_handshake_request(ProviderId, Nonce) ->

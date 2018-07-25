@@ -34,10 +34,10 @@
 %%--------------------------------------------------------------------
 -spec handle_handshake(#client_handshake_request{}, inet:ip_address()) ->
     {od_user:id(), session:id()} | no_return().
-handle_handshake(#client_handshake_request{session_id = SessId, auth = Auth, version = Version}, IpAddress)
+handle_handshake(Req = #client_handshake_request{session_id = SessId, auth = Auth}, IpAddress)
     when is_binary(SessId) andalso is_record(Auth, macaroon_auth) ->
 
-    assert_client_compatibility(Version, IpAddress),
+    assert_client_compatibility(Req, IpAddress),
     {ok, #document{
         value = Iden = #user_identity{user_id = UserId}
     }} = user_identity:get_or_fetch(Auth),
@@ -55,23 +55,31 @@ handle_handshake(#client_handshake_request{session_id = SessId, auth = Auth, ver
 %% Check if client is of compatible version.
 %% @end
 %%--------------------------------------------------------------------
--spec assert_client_compatibility(string() | binary(), inet:ip_address()) -> ok | no_return().
-assert_client_compatibility(ClientVersion, IpAddress) when is_binary(ClientVersion) ->
-    assert_client_compatibility(binary_to_list(ClientVersion), IpAddress);
-assert_client_compatibility(ClientVersion, IpAddress) ->
-    {ok, CompatibleClientVersions} = application:get_env(
-        ?APP_NAME, compatible_oc_versions
-    ),
+-spec assert_client_compatibility(#client_handshake_request{}, inet:ip_address()) ->
+    ok | no_return().
+assert_client_compatibility(HandshakeRequest, IpAddress) ->
+    #client_handshake_request{
+        version = OcVersionBin,
+        compatible_oneprovider_versions = CompatibleOpVersions
+    } = HandshakeRequest,
+    OcVersion = binary_to_list(OcVersionBin),
+    {ok, CompatibleOcVersions} = application:get_env(?APP_NAME, compatible_oc_versions),
+    OpVersion = oneprovider:get_version(),
     % Client sends full build version (e.g. 17.06.0-rc9-aiosufshx) so instead
-    % of matching whole build version we check only prefix
-    Pred = fun(Ver) -> lists:prefix(Ver, ClientVersion) end,
-    case lists:any(Pred, CompatibleClientVersions) of
+    % of matching whole build version we check only the prefix
+    IsOcVersionPrefix = fun(Ver) -> lists:prefix(Ver, OcVersion) end,
+    case lists:any(IsOcVersionPrefix, CompatibleOcVersions) orelse
+        lists:member(OpVersion, CompatibleOpVersions) of
         true ->
             ok;
         false ->
             ?debug("Discarding connection from oneclient @ ~s because of "
-            "incompatible version (~s). Version must be one of: ~p", [
-                inet_parse:ntoa(IpAddress), ClientVersion, CompatibleClientVersions
+            "incompatible version.~n"
+            "Oneclient version: ~s, supports providers: ~p~n"
+            "Oneprovider version: ~s, supports clients: ~p~n", [
+                inet_parse:ntoa(IpAddress),
+                OcVersion, CompatibleOpVersions,
+                OpVersion, CompatibleOcVersions
             ]),
             throw(incompatible_client_version)
     end.
