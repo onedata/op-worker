@@ -36,4 +36,9 @@
     guid :: fslogic_worker:file_guid()
 }).
 
+-record(ip_and_port, {
+    ip:: inet:ip4_address(),
+    port :: 0..65535
+}).
+
 -endif.

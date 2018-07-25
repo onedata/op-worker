@@ -698,7 +698,11 @@ assert_provider_compatibility(Hostname, ProviderId, SslOpts) ->
                     ]),
                     throw(incompatible_peer_op_version)
             end;
-        {error, {bad_response, _Code, _ResponseBody}} ->
+        {error, {bad_response, Code, _ResponseBody}} ->
+            ?warning("Discarding connection to provider ~p because its "
+            "version cannot be determined (HTTP ~b). ~n", [
+                ProviderId, Code
+            ]),
             throw(cannot_check_peer_op_version);
         {error, Error} ->
             error(Error)
