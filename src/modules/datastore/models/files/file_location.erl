@@ -17,9 +17,10 @@
 
 % API
 -export([local_id/1, id/2, critical_section/2, save_and_bump_version/1,
-    is_storage_file_created/1, get/2, get_local/1,
-    get_version_vector/1]).
--export([create/1, create/2, save/1, get/1, update/2, delete/1, delete/2]).
+    is_storage_file_created/1, get/2, get_local/1, get_version_vector/1]).
+-export([create/1, create/2, create_and_update_quota/2, save/1,
+    save_and_update_quota/1, get/1, update/2,
+    delete/1, delete_and_update_quota/1, get_owner_id/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -80,7 +81,7 @@ critical_section(ResourceId, Fun) ->
 %%--------------------------------------------------------------------
 -spec save_and_bump_version(doc()) -> {ok, doc()} | {error, term()}.
 save_and_bump_version(FileLocationDoc) ->
-    fslogic_blocks:save_location(version_vector:bump_version(FileLocationDoc)).
+    fslogic_location_cache:save_location(version_vector:bump_version(FileLocationDoc)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -98,7 +99,19 @@ create(Doc) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create(doc(), boolean()) -> {ok, doc()} | {error, term()}.
-create(Doc = #document{value = #file_location{
+create(Doc = #document{value = #file_location{space_id = SpaceId}}, true) ->
+    datastore_model:save(?CTX#{generated_key => true},
+        Doc#document{scope = SpaceId});
+create(Doc = #document{value = #file_location{space_id = SpaceId}}, _) ->
+    datastore_model:create(?CTX, Doc#document{scope = SpaceId}).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates file location and updates quota.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_and_update_quota(doc(), boolean()) -> {ok, doc()} | {error, term()}.
+create_and_update_quota(Doc = #document{value = #file_location{
     uuid = FileUuid,
     space_id = SpaceId
 }}, GeneratedKey) ->
@@ -112,11 +125,11 @@ create(Doc = #document{value = #file_location{
     end,
     case GeneratedKey of
         true ->
-            ?extract_key(datastore_model:save(?CTX#{generated_key => GeneratedKey},
-                Doc#document{scope = SpaceId}));
+            datastore_model:save(?CTX#{generated_key => GeneratedKey},
+                Doc#document{scope = SpaceId});
         _ ->
-            ?extract_key(datastore_model:create(?CTX,
-                Doc#document{scope = SpaceId}))
+            datastore_model:create(?CTX,
+                Doc#document{scope = SpaceId})
     end.
 
 %%--------------------------------------------------------------------
@@ -125,7 +138,16 @@ create(Doc = #document{value = #file_location{
 %% @end
 %%--------------------------------------------------------------------
 -spec save(doc()) -> {ok, id()} | {error, term()}.
-save(Doc = #document{key = Key, value = #file_location{
+save(Doc = #document{value = #file_location{space_id = SpaceId}}) ->
+    ?extract_key(datastore_model:save(?CTX, Doc#document{scope = SpaceId})).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Saves file location and updates quota.
+%% @end
+%%--------------------------------------------------------------------
+-spec save_and_update_quota(doc()) -> {ok, id()} | {error, term()}.
+save_and_update_quota(Doc = #document{key = Key, value = #file_location{
     uuid = FileUuid,
     space_id = SpaceId
 }}) ->
@@ -139,7 +161,6 @@ save(Doc = #document{key = Key, value = #file_location{
 
         {ok, #document{value = #file_location{space_id = OldSpaceId}} = OldDoc} ->
             OldSize = count_bytes(OldDoc),
-
             space_quota:apply_size_change_and_maybe_emit(OldSpaceId, -1 * OldSize),
             monitoring_event:emit_storage_used_updated(OldSpaceId, UserId, -1 * OldSize),
 
@@ -194,6 +215,15 @@ update(Key, Diff) ->
 %%--------------------------------------------------------------------
 -spec delete(id()) -> ok | {error, term()}.
 delete(Key) ->
+   datastore_model:delete(?CTX, Key).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes file location and updates quota.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_and_update_quota(id()) -> ok | {error, term()}.
+delete_and_update_quota(Key) ->
     case datastore_model:get(?CTX, Key) of
         {ok, Doc = #document{value = #file_location{
             uuid = FileUuid,
@@ -202,23 +232,6 @@ delete(Key) ->
             Size = count_bytes(Doc),
             space_quota:apply_size_change_and_maybe_emit(SpaceId, -1 * Size),
             {ok, UserId} = get_owner_id(FileUuid),
-            monitoring_event:emit_storage_used_updated(SpaceId, UserId, -1 * Size);
-        _ ->
-            ok
-    end,
-   datastore_model:delete(?CTX, Key).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Deletes doc and emits event for owner.
-%% @end
-%%--------------------------------------------------------------------
--spec delete(id(), od_user:id()) -> ok | {error, term()}.
-delete(Key, UserId) ->
-    case datastore_model:get(?CTX, Key) of
-        {ok, Doc = #document{value = #file_location{space_id = SpaceId}}} ->
-            Size = count_bytes(Doc),
-            space_quota:apply_size_change_and_maybe_emit(SpaceId, -1 * Size),
             monitoring_event:emit_storage_used_updated(SpaceId, UserId, -1 * Size);
         _ ->
             ok

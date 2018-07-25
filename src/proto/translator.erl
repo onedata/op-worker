@@ -340,17 +340,17 @@ translate_from_protobuf(#'FileChildrenAttrs'{child_attrs = Children,
             translate_from_protobuf(Child)
         end, Children), index_token = Token, is_last = IsLast};
 translate_from_protobuf(#'FileLocation'{} = Record) ->
-    FL = #file_location{
+    #file_location{
         uuid = fslogic_uuid:guid_to_uuid(Record#'FileLocation'.uuid),
         provider_id = Record#'FileLocation'.provider_id,
         space_id = Record#'FileLocation'.space_id,
         storage_id = Record#'FileLocation'.storage_id,
-        file_id = Record#'FileLocation'.file_id
-    },
-    fslogic_blocks:set_blocks(FL, lists:map(
-        fun(#'FileBlock'{offset = Offset, size = Size}) ->
-            #file_block{offset = Offset, size = Size}
-        end, Record#'FileLocation'.blocks));
+        file_id = Record#'FileLocation'.file_id,
+        blocks = lists:map(
+            fun(#'FileBlock'{offset = Offset, size = Size}) ->
+                #file_block{offset = Offset, size = Size}
+            end, Record#'FileLocation'.blocks)
+    };
 translate_from_protobuf(#'FileLocationChanged'{file_location = FileLocation,
     change_beg_offset = O, change_end_offset = S}) ->
     #file_location_changed{
@@ -887,7 +887,7 @@ translate_to_protobuf(#file_location{} = Record) ->
                 file_id = Record#file_location.file_id,
                 storage_id = Record#file_location.storage_id
             }
-        end, fslogic_blocks:get_blocks(Record))
+        end, Record#file_location.blocks)
     }};
 translate_to_protobuf(#file_location_changed{file_location = FileLocation,
     change_beg_offset = O, change_end_offset = S}) ->
