@@ -13,8 +13,14 @@
         "cfg1": {
             "storages": [
                 {
-                    "type": "posix",
-                    "name": "/mnt/st"
+                    "name": "/mnt/st",
+                    "type": "nulldevice",
+                    "latencyMin": "0",
+                    "latencyMax": "0",
+                    "timeoutProbability": "0.0",
+                    "filter": "*",
+                    "simulatedFilesystemParameters": "",
+                    "simulatedFilesystemGrowSpeed": "0.0"
                 }
             ],
             "users": [],
@@ -23,8 +29,14 @@
         "cfg2": {
             "storages": [
                 {
-                    "type": "posix",
-                    "name": "/mnt/st2"
+                    "name": "/mnt/st2",
+                    "type": "nulldevice",
+                    "latencyMin": "0",
+                    "latencyMax": "0",
+                    "timeoutProbability": "0.0",
+                    "filter": "*",
+                    "simulatedFilesystemParameters": "",
+                    "simulatedFilesystemGrowSpeed": "0.0"
                 }
             ],
             "users": [],
@@ -33,8 +45,14 @@
         "cfg3": {
             "storages": [
                 {
-                    "type": "posix",
-                    "name": "/mnt/st3"
+                    "name": "/mnt/st3",
+                    "type": "nulldevice",
+                    "latencyMin": "0",
+                    "latencyMax": "0",
+                    "timeoutProbability": "0.0",
+                    "filter": "*",
+                    "simulatedFilesystemParameters": "",
+                    "simulatedFilesystemGrowSpeed": "0.0"
                 }
             ],
             "users": [],
