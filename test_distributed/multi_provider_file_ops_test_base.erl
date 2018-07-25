@@ -26,6 +26,7 @@
 -export([
     basic_opts_test_base/4,
     rtransfer_test_base/11,
+    rtransfer_blocking_test_base/6,
     rtransfer_test_base2/5,
     many_ops_test_base/6,
     distributed_modification_test_base/4,
@@ -374,6 +375,112 @@ rtransfer_test_base2(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
            "File location updates per second ~p", [
         Duration, TUPS, FLUPS
     ]),
+    ok.
+
+rtransfer_blocking_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten},
+    Attempts, Timeout, TransferFileParts) ->
+    rtransfer_blocking_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1},
+        Attempts, Timeout, TransferFileParts);
+rtransfer_blocking_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider},
+    Attempts, Timeout, TransferFileParts) ->
+    Config = extend_config(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts),
+    SessId = ?config(session, Config),
+    SpaceName = ?config(space_name, Config),
+    Worker1 = ?config(worker1, Config),
+    [Worker2 | _] = Workers2 = ?config(workers2, Config),
+
+    Master = self(),
+    test_utils:mock_new(Workers2, [replica_synchronizer, rtransfer_config], [passthrough]),
+    test_utils:mock_expect(Workers2, replica_synchronizer, synchronize,
+        fun(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
+            case TransferId of
+                undefined ->
+                    ok;
+                _ ->
+                    Master ! transfer_started
+            end,
+            meck:passthrough([UserCtx, FileCtx, Block, Prefetch, TransferId, Priority])
+        end),
+
+    Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir, 8#755)),
+
+    verify_stats(Config, Dir, true),
+    ct:print("Dir created"),
+
+    ChunkSize = 10240,
+    TransferChunksNum = 1024,
+    FileSize = ChunkSize * TransferChunksNum * TransferFileParts,
+    SmallFile = {1, 1, false},
+    Transfer = {TransferChunksNum, TransferFileParts, true},
+    Files = [Transfer, SmallFile],
+
+    Level2File = <<Dir/binary, "/", (generator:gen_name())/binary>>,
+    Level2File2 = <<Dir/binary, "/", (generator:gen_name())/binary>>,
+    create_big_file(Config, ChunkSize, TransferChunksNum, TransferFileParts,
+        Level2File, Worker1),
+    create_big_file(Config, ChunkSize, 1, 1, Level2File2, Worker1),
+    ?match({ok, #file_attr{size = FileSize}},
+        lfm_proxy:stat(Worker2, SessId(Worker2), {path, Level2File}), Attempts),
+
+    % Init rtransfer using another file
+    verify_workers(Workers2, fun(W) ->
+        read_big_file(Config, ChunkSize, Level2File2, W, Transfer)
+    end, timer:minutes(5), true),
+
+    lists:foreach(fun({ChunksNum, PartNum, Transfer}) ->
+        Check = case Transfer =:= false of
+            true ->
+                receive
+                    transfer_started ->
+                        timer:sleep(300),
+                        ok
+                after
+                    timer:minutes(1) ->
+                        timeout
+                end;
+            _ ->
+                ok
+        end,
+        ?assertEqual(ok, Check),
+        spawn(fun() ->
+            put(master, Master),
+            try
+                ReadSize = ChunkSize * ChunksNum * PartNum,
+                T = lists:max(verify_workers(Workers2, fun(W) ->
+                    read_big_file(Config, ReadSize, Level2File, W, Transfer)
+                end, timer:minutes(5), not Transfer)),
+                Master ! {slave_ans, ChunksNum, PartNum, Transfer, {ok, T}}
+            catch
+                E1:E2 ->
+                    Master ! {slave_ans, ChunksNum, PartNum, Transfer,
+                        {error, E1, E2}}
+            end
+        end)
+    end, Files),
+
+    Answers = lists:foldl(fun({ChunksNum, PartNum, Transfer}, Acc) ->
+        SlaveAns = receive
+            {slave_ans, ChunksNum, PartNum, Transfer, Ans} ->
+                Ans
+        after
+            Timeout ->
+                timeout
+        end,
+        ?assertMatch({ok, _}, SlaveAns),
+        {ok, Time} = SlaveAns,
+        [{ChunksNum, PartNum, Transfer, Time} | Acc]
+    end, [], Files),
+
+    AnswersMap = lists:foldl(fun({ChunksNum, PartNum, Transfer, Time}, Acc) ->
+        Key = {ChunksNum, PartNum, Transfer},
+        V = maps:get(Key, Acc, 0),
+        maps:put(Key, max(V, Time), Acc)
+    end, #{}, Answers),
+
+    FetchCalls = rpc:call(Worker2, meck, num_calls, [rtransfer_config, fetch, 6]),
+    ct:print("Times ~p, fetch calls ~p", [AnswersMap, FetchCalls]),
+    test_utils:mock_validate_and_unload(Workers2, [replica_synchronizer, rtransfer_config]),
     ok.
 
 % TODO - add reading with chunks to test prefetching
