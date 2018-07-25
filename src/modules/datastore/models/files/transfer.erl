@@ -186,14 +186,17 @@ restart_unfinished_transfers(SpaceId) ->
 -spec restart(id()) -> {ok, id()} | {error, term()}.
 restart(TransferId) ->
     FinishTime = transfer_utils:get_finish_time(TransferId),
+    ScheduleTime = transfer_utils:get_schedule_time(TransferId),
     case update(TransferId, fun maybe_restart/1) of
         {ok, #document{value = #transfer{
             file_uuid = FileUuid,
             space_id = SpaceId,
             schedule_time = NewScheduleTime
         }}} ->
-            move_from_past_to_current_links_tree(TransferId, SpaceId,
-                FinishTime, NewScheduleTime),
+            transfer_links:delete_waiting_transfer_link(TransferId,  SpaceId, ScheduleTime),
+            transfer_links:delete_ongoing_transfer_link(TransferId,  SpaceId, ScheduleTime),
+            transfer_links:delete_ended_transfer_link(TransferId,  SpaceId, FinishTime),
+            transfer_links:add_ongoing_transfer_link(TransferId, SpaceId, NewScheduleTime),
             transferred_file:report_transfer_start(
                 fslogic_uuid:uuid_to_guid(FileUuid, SpaceId), TransferId, NewScheduleTime
             ),
@@ -1029,18 +1032,6 @@ remove_unfinished_transfers_links(TransferIds, SpaceId) ->
     lists:foreach(fun(TransferId) ->
         ok = transfer_links:delete_ongoing_transfer_link(TransferId, SpaceId)
     end, TransferIds).
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Moves given TransferId from past to current transfers links tree.
-%% @end
-%%-------------------------------------------------------------------
--spec move_from_past_to_current_links_tree(id(), od_space:id(),
-    non_neg_integer(), non_neg_integer()) -> ok.
-move_from_past_to_current_links_tree(TransferId, SpaceId, FinishTime, NewScheduleTime) ->
-    ok = transfer_links:add_ongoing_transfer_link(TransferId, SpaceId, NewScheduleTime),
-    ok = transfer_links:delete_ended_transfer_link(TransferId, SpaceId, FinishTime).
 
 %%-------------------------------------------------------------------
 %% @private
