@@ -6,6 +6,12 @@ CHANGELOG
 
 ### 18.02.0-rc10
 
+* fix duplicated transfer links after restart
+* VFS-4611 Refactor od optimize replica_synchronizer and blocks management
+* VFS-4146 Renmae ip_string to ip in clproto
+* VFS-4146 Prevent silencing of failure in resolving peer domain
+* VFS-4146 Introduce proto message with rtransfer nodes
+* VFS-4029 Implement responding to Let's Encrypt http challenge
 * VFS-4660 Allow configuration of sync priorities
 * VFS-4660 Set sync priorities
 * VFS-4656 Added cephrados to luma cache
