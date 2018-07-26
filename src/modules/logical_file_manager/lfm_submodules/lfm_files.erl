@@ -327,9 +327,13 @@ fsync(Handle) ->
     ok | logical_file_manager:error_reply().
 fsync(SessId, FileKey, ProviderId) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
-
-    lfm_event_utils:flush_event_queue(SessId, ProviderId,
-        fslogic_uuid:guid_to_uuid(FileGuid)),
+    case oneprovider:is_self(ProviderId) of
+        true ->
+            ok; % flush also flushes events for provider
+        _ ->
+            lfm_event_utils:flush_event_queue(SessId, ProviderId,
+                fslogic_uuid:guid_to_uuid(FileGuid))
+    end,
     remote_utils:call_fslogic(SessId, file_request,
         FileGuid, #fsync{data_only = false}, fun(_) -> ok end).
 

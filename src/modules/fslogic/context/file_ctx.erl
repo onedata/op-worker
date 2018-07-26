@@ -72,7 +72,8 @@
     get_file_doc_including_deleted/1, get_parent/2, get_storage_file_id/1,
     get_aliased_name/2, get_posix_storage_user_context/2, get_times/1,
     get_parent_guid/2, get_child/3, get_file_children/4, get_file_children/5, get_logical_path/2,
-    get_storage_id/1, get_storage_doc/1, get_file_location_with_filled_gaps/2,
+    get_storage_id/1, get_storage_doc/1, get_file_location_with_filled_gaps/1,
+    get_file_location_with_filled_gaps/2, fill_location_gaps/4,
     get_or_create_local_file_location_doc/1, get_local_file_location_doc/1,
     get_local_file_location_doc/2, get_or_create_local_file_location_doc/2,
     get_file_location_ids/1, get_file_location_docs/1, get_acl/1,
@@ -744,6 +745,17 @@ get_storage_doc(FileCtx = #file_ctx{storage_doc = undefined}) ->
 get_storage_doc(FileCtx = #file_ctx{storage_doc = StorageDoc}) ->
     {StorageDoc, FileCtx}.
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv get_file_location_with_filled_gaps(FileCtx, undefined)
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_location_with_filled_gaps(ctx()) -> {#file_location{}, ctx()}.
+get_file_location_with_filled_gaps(FileCtx) ->
+    get_file_location_with_filled_gaps(FileCtx, undefined).
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns location that can be understood by client. It has gaps filled, and
@@ -753,24 +765,36 @@ get_storage_doc(FileCtx = #file_ctx{storage_doc = StorageDoc}) ->
 -spec get_file_location_with_filled_gaps(ctx(),
     fslogic_blocks:blocks() | fslogic_blocks:block() | undefined) ->
     {#file_location{}, ctx()}.
-get_file_location_with_filled_gaps(FileCtx, ReqRange) when not is_list(ReqRange)->
-    get_file_location_with_filled_gaps(FileCtx, [ReqRange]);
-get_file_location_with_filled_gaps(FileCtx, ReqRange0) ->
+get_file_location_with_filled_gaps(FileCtx, ReqRange)
+    when is_list(ReqRange) orelse ReqRange == undefined ->
     % get locations
     {Locations, FileCtx2} = file_ctx:get_file_location_docs(FileCtx),
-    {FileLocationDoc = #document{value = FileLocation = #file_location{
-        size = Size
-    }
-    }, FileCtx3} = file_ctx:get_or_create_local_file_location_doc(FileCtx2),
-    ReqRange = utils:ensure_defined(ReqRange0, [undefined],
+    {FileLocationDoc, FileCtx3} =
+        file_ctx:get_or_create_local_file_location_doc(FileCtx2),
+    {fill_location_gaps(ReqRange, FileLocationDoc, Locations,
+        file_ctx:get_uuid_const(FileCtx3)), FileCtx3};
+get_file_location_with_filled_gaps(FileCtx, ReqRange) ->
+    get_file_location_with_filled_gaps(FileCtx, [ReqRange]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns location that can be understood by client. It has gaps filled, and
+%% stores guid instead of uuid.
+%% @end
+%%--------------------------------------------------------------------
+-spec fill_location_gaps(fslogic_blocks:blocks() | undefined, file_location:doc(),
+    [file_location:doc()], file_location:id()) -> #file_location{}.
+fill_location_gaps(ReqRange0, #document{value = FileLocation = #file_location{
+    size = Size}} = FileLocationDoc, Locations, Uuid) ->
+    ReqRange = utils:ensure_defined(ReqRange0, undefined,
         [#file_block{offset = 0, size = Size}]),
-    Blocks = fslogic_blocks:get_blocks(FileLocationDoc,
+    Blocks = fslogic_location_cache:get_blocks(FileLocationDoc,
         #{overlapping_blocks => ReqRange}),
 
     % find gaps
     AllRanges = lists:foldl(
         fun(Doc, Acc) ->
-            fslogic_blocks:merge(Acc, fslogic_blocks:get_blocks(Doc,
+            fslogic_blocks:merge(Acc, fslogic_location_cache:get_blocks(Doc,
                 #{overlapping_blocks => ReqRange}))
         end, [], Locations),
     ExtendedRequestedRange = lists:map(fun(RequestedRange) ->
@@ -786,9 +810,8 @@ get_file_location_with_filled_gaps(FileCtx, ReqRange0) ->
     BlocksWithFilledGaps = fslogic_blocks:merge(Blocks, Gaps),
 
     % fill gaps transform uid and emit
-    {fslogic_blocks:set_final_blocks(FileLocation#file_location{
-        uuid = file_ctx:get_uuid_const(FileCtx)
-    }, BlocksWithFilledGaps), FileCtx3}.
+    fslogic_location_cache:set_final_blocks(FileLocation#file_location{
+        uuid = Uuid}, BlocksWithFilledGaps).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -836,7 +859,7 @@ get_local_file_location_doc(FileCtx) ->
 get_local_file_location_doc(FileCtx, IncludeBlocks) ->
     FileUuid = get_uuid_const(FileCtx),
     LocalLocationId = file_location:local_id(FileUuid),
-    case fslogic_blocks:get_location(LocalLocationId, FileUuid,
+    case fslogic_location_cache:get_location(LocalLocationId, FileUuid,
         IncludeBlocks) of
         {ok, Location} ->
             {Location, FileCtx};
@@ -886,7 +909,7 @@ get_file_location_docs(FileCtx = #file_ctx{}) ->
     {LocationIds, FileCtx2} = get_file_location_ids(FileCtx),
     FileUuid = get_uuid_const(FileCtx),
     LocationDocs = lists:filtermap(fun(LocId) ->
-        case fslogic_blocks:get_location(LocId, FileUuid) of
+        case fslogic_location_cache:get_location(LocId, FileUuid) of
             {ok, Location} ->
                 {true, Location};
             _Error ->
@@ -926,7 +949,7 @@ get_file_size(FileCtx) ->
                     size = undefined
                 }
             } = FL, _} = file_ctx:get_local_file_location_doc(FileCtx, true),
-            {fslogic_blocks:upper(fslogic_blocks:get_blocks(FL)), FileCtx2};
+            {fslogic_blocks:upper(fslogic_location_cache:get_blocks(FL)), FileCtx2};
         {#document{value = #file_location{size = Size}}, FileCtx2} ->
             {Size, FileCtx2};
         {undefined, FileCtx2} ->
@@ -943,7 +966,7 @@ get_file_size(FileCtx) ->
 get_local_storage_file_size(FileCtx) ->
     FileUuid = get_uuid_const(FileCtx),
     LocalLocationId = file_location:local_id(FileUuid),
-    {fslogic_blocks:get_size(LocalLocationId, FileUuid), FileCtx}.
+    {fslogic_location_cache:get_location_size(LocalLocationId, FileUuid), FileCtx}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1258,7 +1281,7 @@ get_file_size_from_remote_locations(FileCtx) ->
                         size = undefined
                     }
                 } = FL ->
-                    {fslogic_blocks:upper(fslogic_blocks:get_blocks(FL)), FileCtx2};
+                    {fslogic_blocks:upper(fslogic_location_cache:get_blocks(FL)), FileCtx2};
                 #document{value = #file_location{size = Size}} ->
                     {Size, FileCtx2}
             end

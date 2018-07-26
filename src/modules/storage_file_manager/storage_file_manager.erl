@@ -590,4 +590,4 @@ open_insecure(#sfm_handle{
 %%--------------------------------------------------------------------
 -spec get_size(file_meta:uuid(), od_space:id()) -> non_neg_integer().
 get_size(FileUuid, _SpaceId) ->
-    fslogic_blocks:get_size(file_location:local_id(FileUuid), FileUuid).
+    fslogic_location_cache:get_location_size(file_location:local_id(FileUuid), FileUuid).

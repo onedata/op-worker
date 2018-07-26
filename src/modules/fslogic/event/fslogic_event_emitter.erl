@@ -20,7 +20,8 @@
 %% API
 -export([emit_file_attr_changed/2, emit_sizeless_file_attrs_changed/1,
     emit_file_location_changed/2, emit_file_location_changed/3,
-    emit_file_location_changed/4, emit_file_perm_changed/1, emit_file_removed/2,
+    emit_file_location_changed/4, create_file_location_changed/3,
+    emit_file_perm_changed/1, emit_file_removed/2,
     emit_file_renamed_to_client/3, emit_quota_exceeded/0]).
 
 %%%===================================================================
@@ -92,7 +93,7 @@ emit_file_location_changed(FileCtx, ExcludedSessions) ->
     ok | {error, Reason :: term()}.
 emit_file_location_changed(FileCtx, ExcludedSessions, Range) ->
     {Location, _FileCtx2} = file_ctx:get_file_location_with_filled_gaps(FileCtx, Range),
-    {Offset, Size} = fslogic_blocks:get_blocks_range(Location, Range),
+    {Offset, Size} = fslogic_location_cache:get_blocks_range(Location, Range),
     emit_file_location_changed(Location, ExcludedSessions, Offset, Size).
 
 %%--------------------------------------------------------------------
@@ -106,10 +107,22 @@ emit_file_location_changed(FileCtx, ExcludedSessions, Range) ->
     non_neg_integer() | undefined, non_neg_integer() | undefined) ->
     ok | {error, Reason :: term()}.
 emit_file_location_changed(Location, ExcludedSessions, Offset, OffsetEnd) ->
-    event:emit(#file_location_changed_event{
+    event:emit(create_file_location_changed(Location, Offset, OffsetEnd),
+        {exclude, ExcludedSessions}).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates #file_location_changed_event.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_file_location_changed(file_ctx:ctx(),
+    non_neg_integer() | undefined, non_neg_integer() | undefined) ->
+    #file_location_changed_event{}.
+create_file_location_changed(Location, Offset, OffsetEnd) ->
+    #file_location_changed_event{
         file_location = Location,
         change_beg_offset = Offset, change_end_offset = OffsetEnd
-    }, {exclude, ExcludedSessions}).
+    }.
 
 %%--------------------------------------------------------------------
 %% @doc
