@@ -165,7 +165,6 @@ get_user_id_by_acl_username_should_fail_with_not_supported_storage_error(Config)
 
 get_user_id_on_posix_storage_should_query_reverse_luma_once(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, reverse_luma_proxy, [passthrough]),
     ExpectedSubjectId = datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
         [?TEST_PROVIDER_ID, ?TEST_USER_ID])),
 
@@ -182,7 +181,6 @@ get_user_id_on_posix_storage_should_query_reverse_luma_once(Config) ->
 
 get_user_id_on_posix_storage_by_acl_username_should_query_reverse_luma_once(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, reverse_luma_proxy, [passthrough]),
     ExpectedSubjectId = datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
         [?TEST_PROVIDER_ID, ?TEST_USER_ID])),
 
@@ -199,7 +197,6 @@ get_user_id_on_posix_storage_by_acl_username_should_query_reverse_luma_once(Conf
 
 get_user_id_on_posix_storage_should_query_reverse_luma_twice(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, reverse_luma_proxy, [passthrough]),
     ExpectedSubjectId = datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
         [?TEST_PROVIDER_ID, ?TEST_USER_ID])),
 
@@ -219,7 +216,6 @@ get_user_id_on_posix_storage_should_query_reverse_luma_twice(Config) ->
 
 get_user_id_on_posix_storage_by_acl_username_should_query_reverse_luma_twice(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, reverse_luma_proxy, [passthrough]),
     ExpectedSubjectId = datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
         [?TEST_PROVIDER_ID, ?TEST_USER_ID])),
 
@@ -287,8 +283,6 @@ get_group_id_by_acl_groupname_should_fail_with_not_supported_storage_error(Confi
 
 get_group_id_on_posix_storage_should_query_reverse_luma_once(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, reverse_luma_proxy, [passthrough]),
-
     Result = rpc:call(Worker, reverse_luma, get_group_id,
         [<<"0">>, ?STORAGE_ID, ?SPACE_ID, ?STORAGE]),
     ?assertEqual({ok, ?TEST_MAPPED_GROUP_ID}, Result),
@@ -302,8 +296,6 @@ get_group_id_on_posix_storage_should_query_reverse_luma_once(Config) ->
 
 get_group_id_on_posix_storage_by_acl_groupname_should_query_reverse_luma_once(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, reverse_luma_proxy, [passthrough]),
-
     Result = rpc:call(Worker, reverse_luma, get_group_id_by_name,
         [<<"group@nfsdomain.org">>, ?SPACE_ID, ?STORAGE_DOC(?STORAGE_ID, ?STORAGE)]),
     ?assertEqual({ok, ?TEST_MAPPED_GROUP_ID}, Result),
@@ -317,8 +309,6 @@ get_group_id_on_posix_storage_by_acl_groupname_should_query_reverse_luma_once(Co
 
 get_group_id_on_posix_storage_should_query_reverse_luma_twice(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, reverse_luma_proxy, [passthrough]),
-
     Result = rpc:call(Worker, reverse_luma, get_group_id,
         [<<"0">>, ?SPACE_ID, ?STORAGE_ID, ?STORAGE(?LUMA_CONFIG)]),
     ?assertEqual({ok, ?TEST_MAPPED_GROUP_ID}, Result),
@@ -333,8 +323,6 @@ get_group_id_on_posix_storage_should_query_reverse_luma_twice(Config) ->
 
 get_group_id_on_posix_storage_by_acl_groupname_should_query_reverse_luma_twice(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, reverse_luma_proxy, [passthrough]),
-
     Result = rpc:call(Worker, reverse_luma, get_group_id_by_name,
         [<<"group@nfsdomain.org">>, ?SPACE_ID, ?STORAGE_ID, ?STORAGE(?LUMA_CONFIG)]),
     ?assertEqual({ok, ?TEST_MAPPED_GROUP_ID}, Result),
@@ -360,7 +348,7 @@ init_per_suite(Config) ->
     end,
     [
         {?ENV_UP_POSTHOOK, Posthook},
-        {?LOAD_MODULES, [initializer]}
+        {?LOAD_MODULES, [initializer, ?MODULE]}
         | Config
     ].
 
@@ -372,7 +360,7 @@ init_per_testcase(Case, Config) when
     Case =:= get_user_id_on_posix_storage_should_query_reverse_luma_once ->
 
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, [http_client, storage]),
+    test_utils:mock_new(Worker, [reverse_luma_proxy, storage], [passthrough]),
     mock_resolve_user_post(Worker,
         {ok, 200, [], str_utils:format_bin("{
         \"idp\": \"~s\",
@@ -385,7 +373,7 @@ init_per_testcase(Case, Config) when
     Case =:= get_user_id_on_posix_storage_by_acl_username_should_query_reverse_luma_once ->
 
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, [http_client, storage]),
+    test_utils:mock_new(Worker, [reverse_luma_proxy, storage], [passthrough]),
     mock_resolve_acl_user_post(Worker,
         {ok, 200, [], str_utils:format_bin("{
         \"idp\": \"~s\",
@@ -395,7 +383,7 @@ init_per_testcase(Case, Config) when
 
 init_per_testcase(Case = get_user_id_on_posix_storage_should_query_reverse_luma_twice, Config)->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, [http_client, reverse_luma_proxy]),
+    test_utils:mock_new(Worker, [reverse_luma_proxy], [passthrough]),
     mock_resolve_user_post(Worker,
         {ok, 200, [], str_utils:format_bin("{
         \"idp\": \"~s\",
@@ -405,7 +393,7 @@ init_per_testcase(Case = get_user_id_on_posix_storage_should_query_reverse_luma_
 
 init_per_testcase(Case = get_user_id_on_posix_storage_by_acl_username_should_query_reverse_luma_twice, Config)->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, [http_client, reverse_luma_proxy]),
+    test_utils:mock_new(Worker, [reverse_luma_proxy], [passthrough]),
     mock_resolve_acl_user_post(Worker,
         {ok, 200, [], str_utils:format_bin("{
         \"idp\": \"~s\",
@@ -415,13 +403,13 @@ init_per_testcase(Case = get_user_id_on_posix_storage_by_acl_username_should_que
 
 init_per_testcase(Case = get_user_id_on_posix_storage_should_fail_with_404_error, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, [http_client]),
+    test_utils:mock_new(Worker, [reverse_luma_proxy], [passthrough]),
     mock_resolve_user_post(Worker, {ok, 404, [], <<"{\"error\": \"reason\"\}">>}),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(Case = get_user_id_on_posix_storage_by_acl_username_should_fail_with_404_error, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, [http_client]),
+    test_utils:mock_new(Worker, [reverse_luma_proxy], [passthrough]),
     mock_resolve_acl_user_post(Worker, {ok, 404, [], <<"{\"error\": \"reason\"\}">>}),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
@@ -432,7 +420,7 @@ init_per_testcase(Case, Config) when
     ->
 
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, [http_client, storage, provider_logic]),
+    test_utils:mock_new(Worker, [reverse_luma_proxy, storage, provider_logic], [passthrough]),
     mock_resolve_group_post(Worker,
         {
             ok, 200, [], str_utils:format_bin("{
@@ -452,7 +440,7 @@ init_per_testcase(Case, Config) when
     Case =:= get_group_id_on_posix_storage_by_acl_groupname_should_query_reverse_luma_once->
 
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, [http_client, storage]),
+    test_utils:mock_new(Worker, [reverse_luma_proxy, storage], [passthrough]),
     mock_resolve_acl_group_post(Worker,
         {
             ok, 200, [], str_utils:format_bin("{
@@ -468,13 +456,13 @@ init_per_testcase(Case, Config) when
 
 init_per_testcase(Case = get_group_id_on_posix_storage_should_fail_with_404_error, Config)  ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, [http_client]),
+    test_utils:mock_new(Worker, [reverse_luma_proxy], [passthrough]),
     mock_resolve_group_post(Worker, {ok, 404, [], <<"{\"error\": \"reason\"\}">>}),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(Case = get_group_id_on_posix_storage_by_acl_groupname_should_fail_with_404_error, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, [http_client]),
+    test_utils:mock_new(Worker, [reverse_luma_proxy], [passthrough]),
     mock_resolve_acl_group_post(Worker, {ok, 404, [], <<"{\"error\": \"reason\"\}">>}),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
@@ -484,10 +472,10 @@ init_per_testcase(_Case, Config) ->
 end_per_testcase(_Case, Config) ->
     Workers = [Worker | _] = ?config(op_worker_nodes, Config),
     ok = rpc:call(Worker, luma_cache, invalidate, [?STORAGE_ID]),
-    test_utils:mock_unload(Workers, [http_client, reverse_luma_proxy, provider_logic]).
+    test_utils:mock_unload(Workers, [reverse_luma_proxy, provider_logic]).
 
 mock_resolve_acl_user_post(Worker, Expected) ->
-    test_utils:mock_expect(Worker, http_client, post, fun
+    test_utils:mock_expect(Worker, reverse_luma_proxy, http_client_post, fun
         (Url, Headers, Body) when is_binary(Url) ->
             case lists:last(binary:split(Url, <<"/">>, [global])) of
                 <<"resolve_acl_user">> ->
@@ -500,7 +488,7 @@ mock_resolve_acl_user_post(Worker, Expected) ->
     end).
 
 mock_resolve_user_post(Worker, Expected) ->
-    test_utils:mock_expect(Worker, http_client, post, fun
+    test_utils:mock_expect(Worker, reverse_luma_proxy, http_client_post, fun
         (Url, Headers, Body) when is_binary(Url) ->
             case lists:last(binary:split(Url, <<"/">>, [global])) of
                 <<"resolve_user">> ->
@@ -513,7 +501,7 @@ mock_resolve_user_post(Worker, Expected) ->
     end).
 
 mock_resolve_group_post(Worker, ExpectedLuma) ->
-    test_utils:mock_expect(Worker, http_client, post, fun
+    test_utils:mock_expect(Worker, reverse_luma_proxy, http_client_post, fun
         (Url, Headers, Body) when is_binary(Url) ->
             case lists:last(binary:split(Url, <<"/">>, [global])) of
                 <<"resolve_group">> ->
@@ -526,7 +514,7 @@ mock_resolve_group_post(Worker, ExpectedLuma) ->
     end).
 
 mock_resolve_acl_group_post(Worker, ExpectedLuma) ->
-    test_utils:mock_expect(Worker, http_client, post, fun
+    test_utils:mock_expect(Worker, reverse_luma_proxy, http_client_post, fun
         (Url, Headers, Body) when is_binary(Url) ->
             case lists:last(binary:split(Url, <<"/">>, [global])) of
                 <<"resolve_acl_group">> ->

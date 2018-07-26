@@ -43,7 +43,7 @@ force_cleanup(SpaceId) ->
             CurrentSize = space_quota:current_size(SpaceId),
             autocleaning:start(SpaceId, CleanupConfig, CurrentSize);
         Error = {error, _} ->
-            ?error_stacktrace("No space_storage mapping for space ~p", [SpaceId]),
+            ?error("No space_storage mapping for space ~p due to: ~p", [SpaceId, Error]),
             Error
     end.
 
@@ -79,8 +79,8 @@ is_autocleaning_enabled(SpaceId) ->
     case space_storage:get(SpaceId) of
         {ok, #document{value = #space_storage{cleanup_enabled = CleanupEnabled}}} ->
             CleanupEnabled;
-        {error, _} ->
-            ?error_stacktrace("No space_storage mapping for space ~p", [SpaceId]),
+        Error = {error, _} ->
+            ?error("No space_storage mapping for space ~p due to: ~p", [SpaceId, Error]),
             false
     end.
 
