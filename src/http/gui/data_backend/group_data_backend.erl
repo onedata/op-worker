@@ -527,7 +527,7 @@ all_group_privileges(_) -> [
     group_remove_child,
     group_join_parent,
     group_leave_parent,
-    ?GROUP_CREATE_SPACE,
+    group_add_space,
     ?GROUP_JOIN_SPACE,
     ?GROUP_LEAVE_SPACE
 ].
@@ -546,12 +546,11 @@ perm_db_to_gui(?GROUP_SET_PRIVILEGES) -> <<"permSetPrivileges">>;
 perm_db_to_gui(?GROUP_DELETE) -> <<"permRemoveGroup">>;
 perm_db_to_gui(?GROUP_INVITE_USER) -> <<"permInviteUser">>;
 perm_db_to_gui(?GROUP_REMOVE_USER) -> <<"permRemoveUser">>;
-perm_db_to_gui(group_invite_child) -> <<"permInviteGroup">>;
+perm_db_to_gui(group_add_child) -> <<"permInviteGroup">>;
 perm_db_to_gui(group_remove_child) -> <<"permRemoveSubgroup">>;
-perm_db_to_gui(group_join_parent) -> <<"permJoinGroup">>;
+perm_db_to_gui(group_add_parent) -> <<"permJoinGroup">>;
 perm_db_to_gui(group_leave_parent) -> <<"permLeaveGroup">>;
-perm_db_to_gui(?GROUP_CREATE_SPACE) -> <<"permCreateSpace">>;
-perm_db_to_gui(?GROUP_JOIN_SPACE) -> <<"permJoinSpace">>;
+perm_db_to_gui(group_add_space) -> <<"permCreateSpace">>;
 perm_db_to_gui(?GROUP_LEAVE_SPACE) -> <<"permLeaveSpace">>;
 perm_db_to_gui(_) -> undefined.
 
@@ -569,12 +568,12 @@ perm_gui_to_db(<<"permSetPrivileges">>) -> ?GROUP_SET_PRIVILEGES;
 perm_gui_to_db(<<"permRemoveGroup">>) -> ?GROUP_DELETE;
 perm_gui_to_db(<<"permInviteUser">>) -> ?GROUP_INVITE_USER;
 perm_gui_to_db(<<"permRemoveUser">>) -> ?GROUP_REMOVE_USER;
-perm_gui_to_db(<<"permInviteGroup">>) -> group_invite_child;
+perm_gui_to_db(<<"permInviteGroup">>) -> group_add_child;
 perm_gui_to_db(<<"permRemoveSubgroup">>) -> group_remove_child;
-perm_gui_to_db(<<"permJoinGroup">>) -> group_join_parent;
+perm_gui_to_db(<<"permJoinGroup">>) -> group_add_parent;
 perm_gui_to_db(<<"permLeaveGroup">>) -> group_leave_parent;
-perm_gui_to_db(<<"permCreateSpace">>) -> ?GROUP_CREATE_SPACE;
-perm_gui_to_db(<<"permJoinSpace">>) -> ?GROUP_JOIN_SPACE;
+perm_gui_to_db(<<"permCreateSpace">>) -> group_add_space;
+perm_gui_to_db(<<"permJoinSpace">>) -> group_add_space;
 perm_gui_to_db(<<"permLeaveSpace">>) -> ?GROUP_LEAVE_SPACE.
 
 
