@@ -38,23 +38,22 @@
 update(FileCtx, Blocks, FileSize, BumpVersion) ->
     replica_synchronizer:apply(FileCtx,
         fun() ->
-            {Location = #document{
+            Location = #document{
                 value = #file_location{
                     size = OldSize
                 }
-            }, _FileCtx2} =
-                file_ctx:get_or_create_local_file_location_doc(FileCtx),
+            } = fslogic_cache:get_local_location(),
             UpdatedLocation = append(Location, Blocks, BumpVersion),
             case FileSize of
                 undefined ->
-                    fslogic_blocks:save_location(UpdatedLocation),
+                    fslogic_location_cache:save_location(UpdatedLocation),
                     case fslogic_blocks:upper(Blocks) > OldSize of
                         true -> {ok, size_changed};
                         false -> {ok, size_not_changed}
                     end;
                 _ ->
                     TruncatedLocation = do_local_truncate(FileSize, UpdatedLocation),
-                    fslogic_blocks:save_location(TruncatedLocation),
+                    fslogic_location_cache:save_location(TruncatedLocation),
                     {ok, size_changed}
             end
         end).
@@ -68,7 +67,6 @@ update(FileCtx, Blocks, FileSize, BumpVersion) ->
 %%--------------------------------------------------------------------
 -spec rename(file_ctx:ctx(), TargetFileId :: helpers:file()) ->
     ok | {error, Reason :: term()}.
-% TODO - on synchronizer
 rename(FileCtx, TargetFileId) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     replica_synchronizer:apply(FileCtx,
@@ -113,7 +111,7 @@ do_local_truncate(FileSize, LocalLocation = #document{value = #file_location{siz
 append(Doc, [], _) ->
     Doc;
 append(#document{value = #file_location{size = OldSize} = Loc} = Doc, Blocks, BumpVersion) ->
-    OldBlocks = fslogic_blocks:get_blocks(Doc, #{overlapping_sorted_blocks => Blocks}),
+    OldBlocks = fslogic_location_cache:get_blocks(Doc, #{overlapping_blocks => Blocks}),
     NewBlocks = fslogic_blocks:merge(Blocks, OldBlocks),
     NewSize = fslogic_blocks:upper(Blocks),
 
@@ -121,12 +119,12 @@ append(#document{value = #file_location{size = OldSize} = Loc} = Doc, Blocks, Bu
         true ->
             version_vector:bump_version(
                 replica_changes:add_change(
-                    fslogic_blocks:update_blocks(Doc#document{value =
+                    fslogic_location_cache:update_blocks(Doc#document{value =
                         Loc#file_location{size = max(OldSize, NewSize)}}, NewBlocks),
                     Blocks
                 ));
         false ->
-            fslogic_blocks:update_blocks(Doc#document{value =
+            fslogic_location_cache:update_blocks(Doc#document{value =
                 Loc#file_location{size = max(OldSize, NewSize)}}, NewBlocks)
     end.
 
@@ -138,12 +136,12 @@ append(#document{value = #file_location{size = OldSize} = Loc} = Doc, Blocks, Bu
 -spec shrink(#document{value :: #file_location{}}, [#file_block{}] | lists:list(), non_neg_integer()) ->
     file_location:doc().
 shrink(Doc = #document{value = Loc}, Blocks, NewSize) ->
-    OldBlocks = fslogic_blocks:get_blocks(Doc, #{overlapping_sorted_blocks => Blocks}),
+    OldBlocks = fslogic_location_cache:get_blocks(Doc, #{overlapping_blocks => Blocks}),
     NewBlocks = fslogic_blocks:invalidate(OldBlocks, Blocks),
     NewBlocks1 = fslogic_blocks:consolidate(NewBlocks),
     version_vector:bump_version(
         replica_changes:add_change(
-            fslogic_blocks:update_blocks(Doc#document{value =
+            fslogic_location_cache:update_blocks(Doc#document{value =
             Loc#file_location{size = NewSize}}, NewBlocks1),
             {shrink, NewSize}
         )

@@ -77,6 +77,7 @@ handle_file_written_event(#file_written_event{
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     monitoring_event:emit_file_written_statistics(SpaceId, UserId, Size, Counter),
 
+    replica_synchronizer:force_flush_events(file_ctx:get_uuid_const(FileCtx)),
     case replica_synchronizer:update_replica(FileCtx, Blocks, FileSize, true) of
         {ok, size_changed} ->
             fslogic_times:update_mtime_ctime(FileCtx),

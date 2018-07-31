@@ -28,6 +28,7 @@
 -export([start_rtransfer/0, restart_link/0, fetch/6]).
 -export([get_nodes/1, open/2, fsync/1, close/1, auth_request/2, get_connection_secret/2]).
 -export([add_storage/1, generate_secret/2]).
+-export([get_local_ip_and_port/0]).
 
 %% Dialyzer doesn't find the behaviour
 %-behaviour(rtransfer_link_callback).
@@ -224,6 +225,18 @@ generate_secret(ProviderId, PeerSecret) ->
         ?error("Failed to allow rtransfer connection from ~p on nodes ~p",
                [ProviderId, BadNodes]),
     MySecret.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Generates this provider's connection secret needed for a client
+%% rtransfer to establish new connections to this rtransfer.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_local_ip_and_port() -> {IP :: inet:ip4_address(), Port :: 0..65535}.
+get_local_ip_and_port() ->
+    IP = node_manager:get_ip_address(),
+    Port = ?RTRANSFER_PORT,
+    {IP, Port}.
 
 %%%===================================================================
 %%% Internal functions

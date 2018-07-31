@@ -61,7 +61,7 @@ add_subscriber(Sub, SessId) ->
 %% Returns list of event subscribers.
 %% @end
 %%--------------------------------------------------------------------
--spec get_subscribers(Key :: key() | event:base() | event:type()) ->
+-spec get_subscribers(Key :: key() | event:base_or_aggregated() | event:type()) ->
     {ok, SessIds :: [session:id()]} | {error, Reason :: term()}.
 get_subscribers(<<_/binary>> = Key) ->
     case file_subscription:get(Key) of
@@ -73,6 +73,8 @@ get_subscribers(<<_/binary>> = Key) ->
             {error, Reason}
     end;
 
+get_subscribers({aggregated, [Evt | _]}) ->
+    get_subscribers(Evt);
 get_subscribers(Evt) ->
     case event_type:get_routing_key(Evt) of
         {ok, Key} -> get_subscribers(Key);

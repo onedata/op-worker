@@ -62,7 +62,7 @@ get_changes(#document{value = #file_location{
     recent_changes = {Backup, New},
     last_rename = LastRename
 }} = FL, N) when N > (length(New) + length(Backup)) ->
-    [fslogic_blocks:get_blocks(FL), {shrink, Size}, {rename, LastRename}];
+    [fslogic_location_cache:get_blocks(FL), {shrink, Size}, {rename, LastRename}];
 get_changes(#document{value = #file_location{
     recent_changes = {_Backup, New},
     last_rename = LastRename
@@ -109,7 +109,7 @@ set_last_rename(Doc = #document{value = Loc = #file_location{uuid = FileUuid}},
     TargetFileId, TargetSpaceId) ->
     {ok, Locations} = file_meta:get_locations_by_uuid(FileUuid),
     RenameNumbers = lists:map(fun(LocationId) ->
-        case fslogic_blocks:get_location(LocationId, FileUuid, false) of
+        case fslogic_location_cache:get_location(LocationId, FileUuid, false) of
             {ok, #document{value = #file_location{last_rename = LastRename}}} ->
                 case LastRename of
                     undefined -> 0;
@@ -120,7 +120,7 @@ set_last_rename(Doc = #document{value = Loc = #file_location{uuid = FileUuid}},
         end
     end, Locations),
     Max = lists:max(RenameNumbers),
-    {ok, _} = fslogic_blocks:save_location(
+    {ok, _} = fslogic_location_cache:save_location(
         Doc#document{value = Loc#file_location{
             last_rename = {{TargetFileId, TargetSpaceId}, Max + 1}
         }}),

@@ -114,7 +114,7 @@ get_file_distribution(_UserCtx, FileCtx) ->
     } = FL) ->
         #provider_file_distribution{
             provider_id = ProviderId,
-            blocks = fslogic_blocks:get_blocks(FL)
+            blocks = fslogic_location_cache:get_blocks(FL)
         }
     end, Locations),
     #provider_response{

@@ -4,6 +4,29 @@
 CHANGELOG
 ---------
 
+### 18.02.0-rc10
+
+* fix duplicated transfer links after restart
+* VFS-4611 Refactor od optimize replica_synchronizer and blocks management
+* VFS-4146 Renmae ip_string to ip in clproto
+* VFS-4146 Prevent silencing of failure in resolving peer domain
+* VFS-4146 Introduce proto message with rtransfer nodes
+* VFS-4029 Implement responding to Let's Encrypt http challenge
+* VFS-4660 Allow configuration of sync priorities
+* VFS-4660 Set sync priorities
+* VFS-4656 Added cephrados to luma cache
+* VFS-4660 Extend synch messages with priority option
+* VFS-4656 Added cephrados helper
+* VFS-4562 check permissions when scheduling invalidation job
+* VFS-4590 Update cluster-worker ref to include pings in Graph Sync connection
+* VFS-4652 sync files with existing links but missing file-meta
+* VFS-4574 improve transfer doc conflict resolution
+* VFS-4574 add transfer_onf_stats_aggregator
+* VFS-4574 aggregate separately file blocks and transfer stats
+* VFS-4478 do not include deleted files in file_popularity_view
+* VFS-4478 implementation of replica_eviction
+
+
 ### 18.02.0-rc9
 
 * VFS-4611 Update garbage collection
