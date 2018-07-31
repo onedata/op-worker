@@ -68,7 +68,7 @@ synchronize_block(UserCtx, FileCtx, undefined, Prefetch, TransferId, Priority) -
         Prefetch, TransferId, Priority);
 synchronize_block(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
     {ok, Ans} = replica_synchronizer:synchronize(UserCtx, FileCtx, Block,
-        Prefetch,TransferId, Priority),
+        Prefetch, TransferId, Priority),
     #fuse_response{status = #status{code = ?OK}, fuse_response = Ans}.
 
 %%--------------------------------------------------------------------
