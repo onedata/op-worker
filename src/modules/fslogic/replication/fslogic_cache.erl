@@ -310,16 +310,19 @@ delete_doc(Key) ->
     Ans = file_location:delete(Key),
 
     Size = get_local_size(Key),
-    #document{value = #file_location{uuid = FileUuid, space_id = SpaceId}} =
-        get_doc(Key),
-    Changes = case get({?SIZE_CHANGES, Key}) of
-        undefined -> [];
-        Value -> Value
+    case get_doc(Key) of
+        #document{value = #file_location{uuid = FileUuid, space_id = SpaceId}} ->
+            Changes = case get({?SIZE_CHANGES, Key}) of
+                undefined -> [];
+                Value -> Value
+            end,
+            SpaceChange = proplists:get_value(SpaceId, Changes, 0),
+            put({?SIZE_CHANGES, Key}, [{SpaceId, SpaceChange - Size} |
+                proplists:delete(SpaceId, Changes)]),
+            apply_size_change(Key, FileUuid);
+        _ ->
+            ok
     end,
-    SpaceChange = proplists:get_value(SpaceId, Changes, 0),
-    put({?SIZE_CHANGES, Key}, [{SpaceId, SpaceChange - Size} |
-        proplists:delete(SpaceId, Changes)]),
-    apply_size_change(Key, FileUuid),
 
     erase({?DOCS, Key}),
     erase({?BLOCKS, Key}),
