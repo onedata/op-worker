@@ -74,7 +74,8 @@
     from_to_transfer_id = #{} :: #{from() => transfer:id() | undefined},
     transfer_id_to_from = #{} :: #{transfer:id() | undefined => from()},
     cached_stats = #{} :: #{undefined | transfer:id() => #{od_provider:id() => integer()}},
-    cached_blocks = #{} :: #{from() => [block()]},
+    requested_blocks = #{} :: #{from() => block()},
+    cached_blocks = [] :: [block()],
     caching_stats_timer :: undefined | reference(),
     caching_blocks_timer :: undefined | reference(),
     caching_events_timer :: undefined | reference()
@@ -396,7 +397,7 @@ init(FileCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priority}, From,
-    #state{from_sessions = FS, file_guid = FG} = State0) ->
+    #state{from_sessions = FS, requested_blocks = RB, file_guid = FG} = State0) ->
     State = case FG of
         undefined ->
             FileGuid = file_ctx:get_guid_const(FileCtx),
@@ -448,7 +449,8 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
                     State3
             end,
             State6 = State5#state{from_sessions = maps:put(From, Session, FS)},
-            {noreply, State6, ?DIE_AFTER}
+            State7 = State6#state{requested_blocks = maps:put(From, Block, RB)},
+            {noreply, State7, ?DIE_AFTER}
     end;
 
 handle_call(?FLUSH_LOCATION, _From, State) ->
@@ -491,28 +493,31 @@ handle_info(timeout, #state{in_progress = []} = State) ->
 handle_info(timeout, State) ->
     {noreply, State, ?DIE_AFTER};
 
-handle_info({Ref, active, ProviderId, Block}, State) ->
-    #state{ref_to_froms = RefToFroms, from_to_transfer_id = FromToTransferId} = State,
+handle_info({Ref, active, ProviderId, Block}, #state{
+    file_ctx = FileCtx,
+    ref_to_froms = RefToFroms,
+    from_to_transfer_id = FromToTransferId
+} = State) ->
+    {ok, _} = replica_updater:update(FileCtx, [Block], undefined, false),
     AffectedFroms = maps:get(Ref, RefToFroms, []),
     TransferIds = case maps:values(maps:with(AffectedFroms, FromToTransferId)) of
         [] -> [undefined];
         Values -> Values
     end,
-    {noreply, cache_stats_and_blocks(AffectedFroms, TransferIds, ProviderId,
-        Block, State), ?DIE_AFTER};
+    {noreply, cache_stats_and_blocks(TransferIds, ProviderId, Block, State), ?DIE_AFTER};
 
 handle_info(?FLUSH_STATS, State) ->
     {noreply, flush_stats(State, true), ?DIE_AFTER};
 
 handle_info(?FLUSH_BLOCKS, State) ->
-    {_, State2} = flush_blocks(State, [], []),
+    {_, State2} = flush_blocks(State),
     {noreply, flush_events(State2), ?DIE_AFTER};
 
 handle_info(?FLUSH_EVENTS, State) ->
     {noreply, flush_events(State), ?DIE_AFTER};
 
-handle_info({Ref, complete, {ok, _} = _Status}, #state{from_sessions = FS} = State) ->
-    #state{from_to_transfer_id = FromToTransferId} = State,
+handle_info({Ref, complete, {ok, _} = _Status}, #state{from_sessions = FS,
+    requested_blocks = RB, from_to_transfer_id = FromToTransferId} = State) ->
     {__Block, __AffectedFroms, FinishedFroms, State1} = disassociate_ref(Ref, State),
 
     {ExcludeSessions, FS2} = lists:foldl(fun(From, {Acc, TmpFS}) ->
@@ -524,10 +529,18 @@ handle_info({Ref, complete, {ok, _} = _Status}, #state{from_sessions = FS} = Sta
         end
     end, {[], FS}, FinishedFroms),
 
-    {AnsMap, State2} = flush_blocks(State1, ExcludeSessions, FinishedFroms),
+    FinishedBlocks = [{From, maps:get(From, RB)} || From <- FinishedFroms],
+    RB2 = lists:foldl(fun(From, Acc) ->
+        maps:remove(From, Acc)
+    end, RB, FinishedFroms),
+    TransferIds = maps:with(FinishedFroms, FromToTransferId),
+    TransferIdsList = [TID || TID <- maps:values(TransferIds)],
+    {Ans, State2} = flush_blocks(State1, ExcludeSessions, FinishedBlocks,
+        TransferIdsList =/= []),
     % Transfer on the fly statistics are being kept under `undefined` key in
     % `state.cached_stats` map, so take it from it and flush only jobs stats;
     % on the lfy transfer stats are flushed only on cache timer timeout
+
     State3 = case maps:take(undefined, State2#state.cached_stats) of
         error ->
             flush_stats(State2, true);
@@ -535,10 +548,9 @@ handle_info({Ref, complete, {ok, _} = _Status}, #state{from_sessions = FS} = Sta
             TempState = flush_stats(State2#state{cached_stats = JobsStats}, false),
             TempState#state{cached_stats = #{undefined => OnfStats}}
     end,
-    TransferIds = maps:with(FinishedFroms, FromToTransferId),
-    [transfer:increase_files_transferred_counter(TID) || TID <- maps:values(TransferIds)],
-    [gen_server2:reply(From, {ok, maps:get(From, AnsMap)}) || From <- FinishedFroms],
-    {noreply, State3#state{from_sessions = FS2}, ?DIE_AFTER};
+    [transfer:increase_files_transferred_counter(TID) || TID <- TransferIdsList],
+    [gen_server2:reply(From, {ok, Message}) || {From, Message} <- Ans],
+    {noreply, State3#state{from_sessions = FS2, requested_blocks = RB2}, ?DIE_AFTER};
 
 handle_info({FailedRef, complete, {error, disconnected}}, State) ->
     {Block, AffectedFroms, _FinishedFroms, State1} = disassociate_ref(FailedRef, State),
@@ -577,7 +589,7 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 terminate(_Reason, State) ->
-    {_, State2} = flush_blocks(State, [], []),
+    {_, State2} = flush_blocks(State),
     flush_stats(State2, true),
     flush_events(State2),
     % TODO VFS-4691 - should not terminate when flush failed
@@ -904,9 +916,9 @@ get_holes(Offset, Size, [#file_block{offset = O} | Blocks], Acc) ->
 %% be flushed.
 %% @end
 %%--------------------------------------------------------------------
--spec cache_stats_and_blocks([from()], [transfer:id() | undefined],
-    od_provider:id(), block(), #state{}) -> #state{}.
-cache_stats_and_blocks(AffectedFroms, TransferIds, ProviderId, Block, State) ->
+-spec cache_stats_and_blocks([transfer:id() | undefined], od_provider:id(), block(),
+    #state{}) -> #state{}.
+cache_stats_and_blocks(TransferIds, ProviderId, Block, State) ->
     #file_block{size = Size} = Block,
 
     UpdatedStats = lists:foldl(fun(TransferId, StatsPerTransfer) ->
@@ -917,16 +929,35 @@ cache_stats_and_blocks(AffectedFroms, TransferIds, ProviderId, Block, State) ->
         StatsPerTransfer#{TransferId => NewTransferStats}
     end, State#state.cached_stats, TransferIds),
 
-    NewCachedBlocks = lists:foldl(fun(From, Acc) ->
-        FromBlocks = maps:get(From, Acc, []),
-        maps:put(From, [Block | FromBlocks], Acc)
-    end, State#state.cached_blocks, AffectedFroms),
-
+    CachedBlocks = case application:get_env(?APP_NAME, synchronizer_events, transfers_only) of
+        transfers_only ->
+            case TransferIds of
+                [undefined] ->
+                    [];
+                _ ->
+                    [Block | State#state.cached_blocks]
+            end;
+        all ->
+            [Block | State#state.cached_blocks];
+        off ->
+            []
+    end,
     NewState = State#state{
         cached_stats = UpdatedStats,
-        cached_blocks = NewCachedBlocks
+        cached_blocks = CachedBlocks
     },
     set_caching_timers(NewState).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% @equiv flush_blocks(State, [], [], false)
+%% @end
+%%--------------------------------------------------------------------
+-spec flush_blocks(#state{}) ->
+    {[], #state{}}.
+flush_blocks(State) ->
+    flush_blocks(State, [], [], false).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -934,20 +965,34 @@ cache_stats_and_blocks(AffectedFroms, TransferIds, ProviderId, Block, State) ->
 %% Flush aggregated so far file blocks.
 %% @end
 %%--------------------------------------------------------------------
--spec flush_blocks(#state{}, [session:id()], [from()]) ->
-    {#{from() => #file_location_changed{} | undefined}, #state{}}.
-flush_blocks(#state{cached_blocks = Blocks, file_ctx = FileCtx} = State,
-    ExcludeSessions, ForcedFroms) ->
-    Blocks2 = lists:foldl(fun(From, Acc) ->
-        case maps:is_key(From, Acc) of
-            true -> Acc;
-            _ -> maps:put(From, [], Acc)
-        end
-    end, Blocks, ForcedFroms),
+-spec flush_blocks(#state{}, [session:id()], [{from(), block()}], boolean()) ->
+    {[{from(), #file_location_changed{}}], #state{}}.
+flush_blocks(#state{cached_blocks = Blocks} = State, ExcludeSessions,
+    FinalBlocks, IsTransfer) ->
 
-    Ans = maps:map(fun(_From, FromBlocks) ->
-        flush_blocks_list(FileCtx, FromBlocks, ExcludeSessions)
-    end, Blocks2),
+    FlushFinalBlocks = case application:get_env(?APP_NAME, synchronizer_events, transfers_only) of
+        transfers_only ->
+            IsTransfer;
+        all ->
+            true;
+        off ->
+            false
+    end,
+
+    Ans = lists:map(fun({From, FinalBlock}) ->
+        {From, flush_blocks_list([FinalBlock], ExcludeSessions, FlushFinalBlocks)}
+    end, FinalBlocks),
+
+    case application:get_env(?APP_NAME, synchronizer_events, transfers_only) of
+        off ->
+            false;
+        _ ->
+            ToInvalidate = [FinalBlock || {_From, FinalBlock} <- FinalBlocks],
+            Blocks2 = fslogic_blocks:consolidate(fslogic_blocks:invalidate(Blocks, ToInvalidate)),
+            lists:foreach(fun(Block) ->
+                flush_blocks_list([Block], ExcludeSessions, true)
+            end, Blocks2)
+    end,
 
     case application:get_env(?APP_NAME, synchronizer_gc, on_flush_location) of
         on_flush_blocks ->
@@ -957,7 +1002,7 @@ flush_blocks(#state{cached_blocks = Blocks, file_ctx = FileCtx} = State,
     end,
 
     {Ans, set_events_timer(cancel_caching_blocks_timer(
-        State#state{cached_blocks = #{}}))}.
+        State#state{cached_blocks = []}))}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -965,24 +1010,21 @@ flush_blocks(#state{cached_blocks = Blocks, file_ctx = FileCtx} = State,
 %% Flush aggregated so far file blocks.
 %% @end
 %%--------------------------------------------------------------------
--spec flush_blocks_list(file_ctx:ctx(), [block()], [session:id()]) ->
-    #file_location_changed{} | undefined.
-flush_blocks_list(_FileCtx, [], _ExcludeSessions) ->
-    case fslogic_cache:get_local_location() of
-        #document{value = Location} ->
-            #file_location_changed{file_location = Location,
-                change_beg_offset = 0, change_end_offset = 0};
-        _ ->
-            undefined
-    end;
-flush_blocks_list(FileCtx, AllBlocks, ExcludeSessions) ->
-    {ok, _} = replica_updater:update(FileCtx, AllBlocks, undefined, false),
+-spec flush_blocks_list([block()], [session:id()], boolean()) ->
+    #file_location_changed{}.
+flush_blocks_list(AllBlocks, ExcludeSessions, Flush) ->
     Location = file_ctx:fill_location_gaps(AllBlocks, fslogic_cache:get_local_location(),
         fslogic_cache:get_all_locations(), fslogic_cache:get_uuid()),
     {EventOffset, EventSize} = fslogic_location_cache:get_blocks_range(Location, AllBlocks),
-    fslogic_cache:cache_event(ExcludeSessions,
-        fslogic_event_emitter:create_file_location_changed(Location,
-            EventOffset, EventSize)),
+
+    case Flush of
+        false ->
+            ok;
+        _ ->
+            fslogic_cache:cache_event(ExcludeSessions,
+                fslogic_event_emitter:create_file_location_changed(Location,
+                    EventOffset, EventSize))
+    end,
 
     #file_location_changed{file_location = Location,
         change_beg_offset = EventOffset, change_end_offset = EventSize}.
