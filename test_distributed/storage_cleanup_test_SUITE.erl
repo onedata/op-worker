@@ -34,8 +34,8 @@
     remote_directory_replica_should_be_deleted_from_storage_after_deletion/1,
     remote_replica_should_be_truncated_on_storage_after_truncate/1,
     replica_should_be_deleted_from_storage_after_releasing_handle_to_remotely_deleted_file/1,
-    empty_remote_directory_replica_should_be_deleted_from_storage_after_deletion/1,
-    replica_should_be_truncated_after_remote_modification_of_end_of_file/1]).
+    empty_remote_directory_replica_should_be_deleted_from_storage_after_deletion/1
+]).
 
 -define(ATTEMPTS, 60).
 
@@ -59,7 +59,6 @@ all() -> [
     remote_directory_replica_should_be_deleted_from_storage_after_deletion,
     empty_remote_directory_replica_should_be_deleted_from_storage_after_deletion,
     replica_should_be_deleted_from_storage_after_releasing_handle_to_remotely_deleted_file
-%%    replica_should_be_truncated_after_remote_modification_of_end_of_file TODO uncomment after resolving VFS-4600
 ].
 
 %%%===================================================================
@@ -350,41 +349,6 @@ replica_should_be_deleted_from_storage_after_releasing_handle_to_remotely_delete
     ok = lfm_proxy:close(WorkerP2, FileHandle2),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(WorkerP2, SessionId2, {guid, FileGuid}), ?ATTEMPTS),
     ?assertMatch({error, ?ENOENT}, read_file(WorkerP2, StorageFilePath1)).
-
-replica_should_be_truncated_after_remote_modification_of_end_of_file(Config) ->
-    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
-    [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    FilePath = filename:join([<<"/">>, SpaceName, ?FILE_NAME]),
-    StorageFilePath2 = storage_file_path(WorkerP2, SpaceId, ?FILE_NAME),
-    TestDataLength = ?TEST_DATA_LENGTH,
-    TestDataLength2 = TestDataLength - 1,
-
-    % when
-    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, FilePath, 8#644),
-    {ok, FileHandle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
-    {ok, _} = lfm_proxy:write(WorkerP1, FileHandle, 0, ?TEST_DATA),
-    ok = lfm_proxy:close(WorkerP1, FileHandle),
-
-    % and
-    {ok, FileHandle2} = ?assertMatch({ok, _},
-        lfm_proxy:open(WorkerP2, SessionId2, {guid, FileGuid}, read), ?ATTEMPTS),
-    ?assertMatch({ok, ?TEST_DATA},
-        lfm_proxy:read(WorkerP2, FileHandle2, 0, TestDataLength), ?ATTEMPTS),
-    ?assertMatch({ok, ?TEST_DATA}, read_file(WorkerP2, StorageFilePath2), ?ATTEMPTS),
-    ok = lfm_proxy:close(WorkerP2, FileHandle2),
-    ?assertMatch({ok, #file_info{size = TestDataLength}},
-        read_file_info(WorkerP2, StorageFilePath2), ?ATTEMPTS),
-
-    % files is modified on WorkerP1
-    {ok, FileHandle12} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
-    {ok, _} = lfm_proxy:write(WorkerP1, FileHandle12, TestDataLength2, <<"#">>),
-    ok = lfm_proxy:close(WorkerP1, FileHandle12),
-
-    %then
-    ?assertMatch({ok, #file_info{size = TestDataLength2}},
-        read_file_info(WorkerP2, StorageFilePath2), ?ATTEMPTS).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
