@@ -232,10 +232,11 @@ update_record(<<"space-user-permission">>, AssocId, Data) ->
             direct_users = UsersAndPerms
         }}} = space_logic:get(SessionId, SpaceId),
     UserPerms = maps:get(UserId, UsersAndPerms),
+    OzVersion = oneprovider:get_oz_version(),
 
     {Granted, Revoked} = lists:foldl(
         fun({PermGui, Flag}, {GrantedAcc, RevokedAcc}) ->
-            Perm = perm_gui_to_db(PermGui),
+            Perm = perm_gui_to_db(PermGui, OzVersion),
             case {Flag, lists:member(Perm, UserPerms)} of
                 {false, false} ->
                     {GrantedAcc, RevokedAcc};
@@ -274,10 +275,11 @@ update_record(<<"space-group-permission">>, AssocId, Data) ->
             direct_groups = GroupsAndPerms
         }}} = space_logic:get(SessionId, SpaceId),
     GroupPerms = maps:get(GroupId, GroupsAndPerms),
+    OzVersion = oneprovider:get_oz_version(),
 
     {Granted, Revoked} = lists:foldl(
         fun({PermGui, Flag}, {GrantedAcc, RevokedAcc}) ->
-            Perm = perm_gui_to_db(PermGui),
+            Perm = perm_gui_to_db(PermGui, OzVersion),
             case {Flag, lists:member(Perm, GroupPerms)} of
                 {false, false} ->
                     {GrantedAcc, RevokedAcc};
@@ -658,16 +660,70 @@ space_group_permission_record(AssocId) ->
 %%--------------------------------------------------------------------
 -spec perms_db_to_gui(atom()) -> proplists:proplist().
 perms_db_to_gui(Perms) ->
+    OzVersion = oneprovider:get_oz_version(),
     lists:foldl(
         fun(Perm, Acc) ->
-            case perm_db_to_gui(Perm) of
+            case perm_db_to_gui(Perm, OzVersion) of
                 undefined ->
                     Acc;
                 PermBin ->
                     HasPerm = lists:member(Perm, Perms),
                     [{PermBin, HasPerm} | Acc]
             end
-        end, [], privileges:space_privileges()).
+        end, [], all_space_privileges(OzVersion)).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Converts a space permission from internal form to client-compliant form.
+%% The logic is different depending on OZ version to keep backward compatibility
+%% with deprecated perms.
+%% @end
+%%--------------------------------------------------------------------
+-spec perm_db_to_gui(atom(), binary()) -> binary() | undefined.
+perm_db_to_gui(Perm, <<"18.02", _/binary>>) -> perm_db_to_gui_18_02(Perm);
+perm_db_to_gui(Perm, _) -> perm_db_to_gui(Perm).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Converts a space permission from client-compliant form to internal form.
+%% The logic is different depending on OZ version to keep backward compatibility
+%% with deprecated perms.
+%% @end
+%%--------------------------------------------------------------------
+-spec perm_gui_to_db(binary(), binary()) -> atom().
+perm_gui_to_db(Perm, <<"18.02", _/binary>>) -> perm_gui_to_db_18_02(Perm);
+perm_gui_to_db(Perm, _) -> perm_gui_to_db(Perm).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns the list of all space privileges.
+%% The logic is different depending on OZ version to keep backward compatibility
+%% with deprecated perms.
+%% @end
+%%--------------------------------------------------------------------
+-spec all_space_privileges(binary()) -> [atom()].
+all_space_privileges(<<"18.02", _/binary>>) ->
+    privileges:space_privileges();
+all_space_privileges(_) -> [
+    ?SPACE_VIEW,
+    ?SPACE_UPDATE,
+    ?SPACE_DELETE,
+    ?SPACE_SET_PRIVILEGES,
+    ?SPACE_INVITE_USER,
+    ?SPACE_REMOVE_USER,
+    space_add_group,
+    ?SPACE_REMOVE_GROUP,
+    ?SPACE_INVITE_PROVIDER,
+    ?SPACE_REMOVE_PROVIDER,
+    ?SPACE_MANAGE_SHARES,
+    ?SPACE_WRITE_DATA
+].
 
 
 %%--------------------------------------------------------------------
@@ -683,7 +739,7 @@ perm_db_to_gui(?SPACE_DELETE) -> <<"permRemoveSpace">>;
 perm_db_to_gui(?SPACE_SET_PRIVILEGES) -> <<"permSetPrivileges">>;
 perm_db_to_gui(?SPACE_INVITE_USER) -> <<"permInviteUser">>;
 perm_db_to_gui(?SPACE_REMOVE_USER) -> <<"permRemoveUser">>;
-perm_db_to_gui(?SPACE_INVITE_GROUP) -> <<"permInviteGroup">>;
+perm_db_to_gui(space_add_group) -> <<"permInviteGroup">>;
 perm_db_to_gui(?SPACE_REMOVE_GROUP) -> <<"permRemoveGroup">>;
 perm_db_to_gui(?SPACE_INVITE_PROVIDER) -> <<"permInviteProvider">>;
 perm_db_to_gui(?SPACE_REMOVE_PROVIDER) -> <<"permRemoveProvider">>;
@@ -705,9 +761,54 @@ perm_gui_to_db(<<"permRemoveSpace">>) -> ?SPACE_DELETE;
 perm_gui_to_db(<<"permSetPrivileges">>) -> ?SPACE_SET_PRIVILEGES;
 perm_gui_to_db(<<"permInviteUser">>) -> ?SPACE_INVITE_USER;
 perm_gui_to_db(<<"permRemoveUser">>) -> ?SPACE_REMOVE_USER;
-perm_gui_to_db(<<"permInviteGroup">>) -> ?SPACE_INVITE_GROUP;
+perm_gui_to_db(<<"permInviteGroup">>) -> space_add_group;
 perm_gui_to_db(<<"permRemoveGroup">>) -> ?SPACE_REMOVE_GROUP;
 perm_gui_to_db(<<"permInviteProvider">>) -> ?SPACE_INVITE_PROVIDER;
 perm_gui_to_db(<<"permRemoveProvider">>) -> ?SPACE_REMOVE_PROVIDER;
 perm_gui_to_db(<<"permManageShares">>) -> ?SPACE_MANAGE_SHARES;
 perm_gui_to_db(<<"permWriteFiles">>) -> ?SPACE_WRITE_DATA.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% DEPRECATED - changing in future release (> 18.02)
+%% Converts a space permission from internal form to client-compliant form.
+%% @end
+%%--------------------------------------------------------------------
+-spec perm_db_to_gui_18_02(atom()) -> binary() | undefined.
+perm_db_to_gui_18_02(?SPACE_VIEW) -> <<"permViewSpace">>;
+perm_db_to_gui_18_02(?SPACE_UPDATE) -> <<"permModifySpace">>;
+perm_db_to_gui_18_02(?SPACE_DELETE) -> <<"permRemoveSpace">>;
+perm_db_to_gui_18_02(?SPACE_SET_PRIVILEGES) -> <<"permSetPrivileges">>;
+perm_db_to_gui_18_02(?SPACE_INVITE_USER) -> <<"permInviteUser">>;
+perm_db_to_gui_18_02(?SPACE_REMOVE_USER) -> <<"permRemoveUser">>;
+perm_db_to_gui_18_02(?SPACE_INVITE_GROUP) -> <<"permInviteGroup">>;
+perm_db_to_gui_18_02(?SPACE_REMOVE_GROUP) -> <<"permRemoveGroup">>;
+perm_db_to_gui_18_02(?SPACE_INVITE_PROVIDER) -> <<"permInviteProvider">>;
+perm_db_to_gui_18_02(?SPACE_REMOVE_PROVIDER) -> <<"permRemoveProvider">>;
+perm_db_to_gui_18_02(?SPACE_MANAGE_SHARES) -> <<"permManageShares">>;
+perm_db_to_gui_18_02(?SPACE_WRITE_DATA) -> <<"permWriteFiles">>;
+perm_db_to_gui_18_02(_) -> undefined.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% DEPRECATED - changing in future release (> 18.02)
+%% Converts a space permission from client-compliant form to internal form.
+%% @end
+%%--------------------------------------------------------------------
+-spec perm_gui_to_db_18_02(binary()) -> atom().
+perm_gui_to_db_18_02(<<"permViewSpace">>) -> ?SPACE_VIEW;
+perm_gui_to_db_18_02(<<"permModifySpace">>) -> ?SPACE_UPDATE;
+perm_gui_to_db_18_02(<<"permRemoveSpace">>) -> ?SPACE_DELETE;
+perm_gui_to_db_18_02(<<"permSetPrivileges">>) -> ?SPACE_SET_PRIVILEGES;
+perm_gui_to_db_18_02(<<"permInviteUser">>) -> ?SPACE_INVITE_USER;
+perm_gui_to_db_18_02(<<"permRemoveUser">>) -> ?SPACE_REMOVE_USER;
+perm_gui_to_db_18_02(<<"permInviteGroup">>) -> ?SPACE_INVITE_GROUP;
+perm_gui_to_db_18_02(<<"permRemoveGroup">>) -> ?SPACE_REMOVE_GROUP;
+perm_gui_to_db_18_02(<<"permInviteProvider">>) -> ?SPACE_INVITE_PROVIDER;
+perm_gui_to_db_18_02(<<"permRemoveProvider">>) -> ?SPACE_REMOVE_PROVIDER;
+perm_gui_to_db_18_02(<<"permManageShares">>) -> ?SPACE_MANAGE_SHARES;
+perm_gui_to_db_18_02(<<"permWriteFiles">>) -> ?SPACE_WRITE_DATA.
