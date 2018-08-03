@@ -27,6 +27,7 @@
     basic_opts_test_base/4,
     rtransfer_test_base/11,
     rtransfer_blocking_test_base/6,
+    rtransfer_blocking_test_cleanup/1,
     rtransfer_test_base2/5,
     many_ops_test_base/6,
     distributed_modification_test_base/4,
@@ -429,8 +430,8 @@ rtransfer_blocking_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWr
     end, timer:minutes(5), true),
 
     lists:foreach(fun({ChunksNum, PartNum, Transfer}) ->
-        Check = case Transfer =:= false of
-            true ->
+        Check = case Transfer of
+            false ->
                 receive
                     transfer_started ->
                         timer:sleep(300),
@@ -480,8 +481,18 @@ rtransfer_blocking_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWr
 
     FetchCalls = rpc:call(Worker2, meck, num_calls, [rtransfer_config, fetch, 6]),
     ct:print("Times ~p, fetch calls ~p", [AnswersMap, FetchCalls]),
-    test_utils:mock_validate_and_unload(Workers2, [replica_synchronizer, rtransfer_config]),
     ok.
+
+rtransfer_blocking_test_cleanup(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    Workers2 = lists:foldl(fun(W, Acc) ->
+        case string:str(atom_to_list(W), "p2") of
+            0 -> Acc;
+            _ -> [W | Acc]
+        end
+    end, [], Workers),
+
+    test_utils:mock_validate_and_unload(Workers2, [replica_synchronizer, rtransfer_config]).
 
 % TODO - add reading with chunks to test prefetching
 basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts) ->

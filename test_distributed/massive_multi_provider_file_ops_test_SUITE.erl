@@ -249,5 +249,8 @@ init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 60}),
     lfm_proxy:init(Config).
 
+end_per_testcase(rtransfer_blocking_test, Config) ->
+    multi_provider_file_ops_test_base:rtransfer_blocking_test_cleanup(Config),
+    lfm_proxy:teardown(Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).
