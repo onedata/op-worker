@@ -123,9 +123,9 @@ synchronize(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
     FileSize :: non_neg_integer() | undefined, BumpVersion :: boolean()) ->
     {ok, size_changed} | {ok, size_not_changed} | {error, Reason :: term()}.
 update_replica(FileCtx, Blocks, FileSize, BumpVersion) ->
-    apply_no_check(FileCtx, fun() ->
-        replica_updater:update(FileCtx, Blocks, FileSize, BumpVersion)
-    end).
+%%    apply_no_check(FileCtx, fun() ->
+        replica_updater:update(FileCtx, Blocks, FileSize, BumpVersion).
+%%    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -498,7 +498,9 @@ handle_info({Ref, active, ProviderId, Block}, #state{
     ref_to_froms = RefToFroms,
     from_to_transfer_id = FromToTransferId
 } = State) ->
+    fslogic_cache:set_local_change(true),
     {ok, _} = replica_updater:update(FileCtx, [Block], undefined, false),
+    fslogic_cache:set_local_change(false),
     AffectedFroms = maps:get(Ref, RefToFroms, []),
     TransferIds = case maps:values(maps:with(AffectedFroms, FromToTransferId)) of
         [] -> [undefined];

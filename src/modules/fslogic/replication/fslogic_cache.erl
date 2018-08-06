@@ -26,7 +26,8 @@
 -export([get_doc/1, save_doc/1, cache_doc/1, delete_doc/1, attach_blocks/1]).
 % Block API
 -export([get_blocks/1, save_blocks/2, cache_blocks/2, get_blocks_tree/1,
-    use_blocks/2, finish_blocks_usage/1]).
+    use_blocks/2, finish_blocks_usage/1, get_changed_blocks/1,
+    mark_changed_blocks/3, set_local_change/1]).
 % Size API
 -export([get_local_size/1, update_size/2]).
 
@@ -42,6 +43,7 @@
 
 -define(DOCS, fslogic_cache_docs).
 -define(BLOCKS, fslogic_cache_blocks).
+-define(PUBLIC_BLOCKS, fslogic_cache_public_blocks).
 -define(SIZES, fslogic_cache_sizes).
 -define(SIZE_CHANGES, fslogic_cache_size_changes).
 -define(SPACE_IDS, fslogic_cache_space_ids).
@@ -53,9 +55,10 @@
 
 -define(EVENTS_CACHE, fslogic_cache_events).
 
-% To be used in next step of refactoring
 -define(SAVED_BLOCKS, fslogic_cache_saved_blocks).
 -define(DELETED_BLOCKS, fslogic_cache_deleted_blocks).
+-define(RESET_BLOCKS, fslogic_cache_reset_blocks).
+-define(LOCAL_CHANGES, fslogic_cache_local_changes).
 
 %%%===================================================================
 %%% Control API
@@ -326,6 +329,7 @@ delete_doc(Key) ->
 
     erase({?DOCS, Key}),
     erase({?BLOCKS, Key}),
+    erase({?PUBLIC_BLOCKS, Key}),
     erase({?SIZES, Key}),
     erase({?SIZE_CHANGES, Key}),
     erase({?SPACE_IDS, Key}),
@@ -392,7 +396,8 @@ get_blocks_tree(Key) ->
 save_blocks(Key, Blocks) ->
     Keys = get(?KEYS_BLOCKS_MODIFIED),
     put(?KEYS_BLOCKS_MODIFIED, [Key | (Keys -- [Key])]),
-    cache_blocks(Key, Blocks).
+    put({?BLOCKS, Key}, blocks_to_tree(Blocks)),
+    ok.
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -402,6 +407,7 @@ save_blocks(Key, Blocks) ->
 -spec cache_blocks(file_location:id(), fslogic_blocks:stored_blocks()) -> ok.
 cache_blocks(Key, Blocks) ->
     put({?BLOCKS, Key}, blocks_to_tree(Blocks)),
+    put({?PUBLIC_BLOCKS, Key}, Blocks),
     ok.
 
 %%-------------------------------------------------------------------
@@ -432,6 +438,38 @@ finish_blocks_usage(Key) ->
             Ans
     end.
 
+get_changed_blocks(Key) ->
+    Local = get(?LOCAL_CHANGES),
+    Saved = case get({?SAVED_BLOCKS, Key, Local}) of
+        undefined -> sets:new();
+        Value -> Value
+    end,
+
+    Deleted = case get({?DELETED_BLOCKS, Key, Local}) of
+        undefined -> sets:new();
+        Value2 -> Value2
+    end,
+
+    {Saved, Deleted}.
+
+mark_changed_blocks(Key, all, all) ->
+    Local = get(?LOCAL_CHANGES),
+    put({?SAVED_BLOCKS, Key, Local}, sets:new()),
+    put({?DELETED_BLOCKS, Key, Local}, sets:new()),
+    put({?RESET_BLOCKS, Key, Local}, true),
+    ok;
+mark_changed_blocks(Key, Saved, Deleted) ->
+    Local = get(?LOCAL_CHANGES),
+    put({?SAVED_BLOCKS, Key, Local}, Saved),
+    put({?DELETED_BLOCKS, Key, Local}, Deleted),
+    ok.
+
+set_local_change(false) ->
+    erase(?LOCAL_CHANGES);
+set_local_change(Value) ->
+    put(?LOCAL_CHANGES, Value),
+    ok.
+
 %%%===================================================================
 %%% Size API
 %%%===================================================================
@@ -458,6 +496,7 @@ get_local_size(Key) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec update_size(file_location:id(), non_neg_integer()) -> ok.
+% TODO - do we use size of any other replica than local
 update_size(Key, Change) ->
     Size2 = get_local_size(Key) + Change,
     put({?SIZES, Key}, Size2),
@@ -502,13 +541,30 @@ init_flush_check() ->
 %% @end
 %%-------------------------------------------------------------------
 -spec flush_key(file_location:id()) -> ok | {error, term()}.
+% TODO - do we save any other location than local?
 flush_key(Key) ->
     case get({?DOCS, Key}) of
         undefined ->
             ok;
-        #document{key = Key, value = #file_location{uuid = FileUuid}} = Doc ->
-            case file_location:save(attach_blocks(Doc)) of
+        #document{key = Key, value = #file_location{uuid = FileUuid} = Location} = Doc ->
+            DocToSave = case get({?RESET_BLOCKS, Key}) of
+                true ->
+                    attach_blocks(Doc);
+                _ ->
+                    BlocksToSave = get({?PUBLIC_BLOCKS, Key}),
+                    {Saved, Deleted} = get_changed_blocks(Key),
+                    BlocksToSave2 = BlocksToSave -- sets:to_list(Deleted),
+                    BlocksToSave3 = BlocksToSave2 ++ sets:to_list(Saved),
+                    BlocksToSave4 = lists:sort(BlocksToSave3),
+                    Doc#document{value = Location#file_location{blocks = BlocksToSave4}}
+            end,
+            case file_location:save(DocToSave) of
                 {ok, _} ->
+                    erase({?SAVED_BLOCKS, Key, true}),
+                    erase({?DELETED_BLOCKS, Key, true}),
+                    erase({?SAVED_BLOCKS, Key, undefined}),
+                    erase({?DELETED_BLOCKS, Key, undefined}),
+                    erase({?RESET_BLOCKS, Key}),
                     apply_size_change(Key, FileUuid);
                 Error ->
                     Error
