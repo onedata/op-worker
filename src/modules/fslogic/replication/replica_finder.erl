@@ -149,7 +149,7 @@ get_duplicated_blocks_per_provider(LocalBlocksList, LocalVV, RemoteLocations) ->
                 % TODO VFS-3728 currently we choose only providers who have all local blocks replicated
                 case fslogic_blocks:invalidate(LocalBlocksList, RemoteBlocksList) of
                     [] ->
-                        {true, {ProviderId, LocalBlocksList}};
+                        {true, {ProviderId, RemoteBlocksList}};
                     _ ->
                         false
                 end;
