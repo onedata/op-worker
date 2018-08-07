@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% WRITEME
+%%% This module contains definitions of macros used in tests of transfers.
 %%% @end
 %%%-------------------------------------------------------------------
 

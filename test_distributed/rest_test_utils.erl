@@ -13,18 +13,20 @@
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
+-include("proto/common/credentials.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 
 %% API
--export([do_request/5, do_request/6]).
+-export([request/5, request/6, user_token_header/2]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
-do_request(Node, URL, Method, Headers, Body) ->
-    do_request(Node, URL, Method, Headers, Body, [{recv_timeout, 15000}]).
+request(Node, URL, Method, Headers, Body) ->
+    request(Node, URL, Method, Headers, Body, [{recv_timeout, 15000}]).
 
-do_request(Node, URL, Method, Headers, Body, Opts) ->
+request(Node, URL, Method, Headers, Body, Opts) ->
     CaCerts = rpc:call(Node, https_listener, get_cert_chain_pems, []),
     Opts2 = [{ssl_options, [{cacerts, CaCerts}]} | Opts],
     Result = http_client:request(
@@ -37,6 +39,11 @@ do_request(Node, URL, Method, Headers, Body, Opts) ->
         Other ->
             Other
     end.
+
+user_token_header(Config, User)  ->
+    #macaroon_auth{macaroon = Macaroon} = ?config({auth, User}, Config),
+    {<<"Macaroon">>, Macaroon}.
+
 
 %%%===================================================================
 %%% Internal functions

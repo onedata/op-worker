@@ -5,15 +5,16 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%%
+%%% WRITEME
 %%% @end
 %%%-------------------------------------------------------------------
--module(transfers_test_base).
+-module(transfers_test_mechanism).
 -author("Jakub Kudzia").
 
 -include("modules/datastore/datastore_models.hrl").
 -include("transfers_test_base.hrl").
 -include("countdown_server.hrl").
+-include("rest_test_utils.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
@@ -21,15 +22,25 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([run_test/2, replicate_root_directory/2, provider_id/1,
-    remove_transfers/1, ensure_transfers_removed/1, replicate_each_file_separately/2,
-    assert_file_visible/5, create_file/6, create_files_structure/10,
-    assert_file_distribution/6, move_transfer_ids_to_old_key/1,
-    get_space_support/2, unmock_space_occupancy/2, mock_space_occupancy/3,
-    change_soft_quota/2, lengthen_file_replication/1, unmock_file_replication/1, 
-    error_on_replicating_files/2, root_name/3, cancel_replication_on_target_nodes/2,
-    root_name/2, maybe_mock_prolonged_replication/3, unmock_replica_synchronizer_failure/1,
-    mock_replica_synchronizer_failure/1, restart_replication_on_target_nodes/2]).
+-export([run_test/2]).
+
+% test scenarios
+-export([
+    replicate_root_directory/2,
+    replicate_each_file_separately/2,
+    error_on_replicating_files/2,
+    cancel_replication_on_target_nodes/2,
+    restart_replication_on_target_nodes/2
+]).
+
+-export([move_transfer_ids_to_old_key/1]).
+
+% functions exported to be called by rpc
+-export([create_files_structure/10, create_file/6,
+    assert_file_visible/5, assert_file_distribution/6]).
+
+-define(DEFAULT_USER_TOKEN_HEADERS(Config),
+    [?USER_TOKEN_HEADER(Config, ?DEFAULT_USER)]).
 
 %%%===================================================================
 %%% API
@@ -83,7 +94,7 @@ replicate_root_directory(Config, #scenario{
     {Guid, Path} = ?config(?ROOT_DIR_KEY, Config),
     FileKey = file_key(Guid, Path, FileKeyType),
     NodesTransferIdsAndFiles = lists:map(fun(TargetNode) ->
-        TargetProviderId = provider_id(TargetNode),
+        TargetProviderId = transfers_test_utils:provider_id(TargetNode),
         {ok, Tid} = schedule_file_replication(ScheduleNode, TargetProviderId, FileKey, Config, Type),
         {TargetNode, Tid, Guid, Path}
     end, TargetNodes),
@@ -102,7 +113,7 @@ replicate_each_file_separately(Config, #scenario{
     NodesTransferIdsAndFiles = lists:flatmap(fun(TargetNode) ->
         lists:map(fun({Guid, Path}) ->
             FileKey = file_key(Guid, Path, FileKeyType),
-            TargetProviderId = provider_id(TargetNode),
+            TargetProviderId = transfers_test_utils:provider_id(TargetNode),
             {ok, Tid} = schedule_file_replication(ScheduleNode, TargetProviderId, FileKey, Config, Type),
             {TargetNode, Tid, Guid, Path}
         end, FilesGuidsAndPaths)
@@ -121,7 +132,7 @@ error_on_replicating_files(Config, #scenario{
     FilesGuidsAndPaths = ?config(?FILES_KEY, Config),
     lists:foreach(fun(TargetNode) ->
         lists:foreach(fun({Guid, Path}) ->
-            TargetProviderId = provider_id(TargetNode),
+            TargetProviderId = transfers_test_utils:provider_id(TargetNode),
             FileKey = file_key(Guid, Path, FileKeyType),
             ?assertMatch({error, _},
                 schedule_file_replication(ScheduleNode, TargetProviderId, FileKey, Config, Type))
@@ -138,7 +149,7 @@ cancel_replication_on_target_nodes(Config, #scenario{
     {Guid, Path} = ?config(?ROOT_DIR_KEY, Config),
     FileKey = file_key(Guid, Path, FileKeyType),
     NodesTransferIdsAndFiles = lists:map(fun(TargetNode) ->
-        TargetProviderId = provider_id(TargetNode),
+        TargetProviderId = transfers_test_utils:provider_id(TargetNode),
         {ok, Tid} = schedule_file_replication(ScheduleNode, TargetProviderId, FileKey, Config, Type),
         {TargetNode, Tid, Guid, Path}
     end, TargetNodes),
@@ -200,17 +211,17 @@ assert_expectations(Config, Expected = #expected{
                 FileGuid, FilePath, TargetNode),
             assert_files_distribution_on_all_nodes(Config, AssertionNodes,
                 ExpectedDistribution, Attempts, Timetrap),
-            ?assertEqual([], get_ongoing_transfers_for_file(AssertionNode, FileGuid), Attempts),
+            ?assertEqual([], transfers_test_utils:get_ongoing_transfers_for_file(AssertionNode, FileGuid), Attempts),
             ?assertEqual(true, begin
-                EndedTransfersForFile = get_ended_transfers_for_file(AssertionNode, FileGuid),
+                EndedTransfersForFile = transfers_test_utils:get_ended_transfers_for_file(AssertionNode, FileGuid),
                 lists:member(TransferId, EndedTransfersForFile)
             end, Attempts),
             TransferId
         end, NodesTransferIdsAndFiles),
 
-        ?assertEqual([], list_waiting_transfers(AssertionNode, SpaceId), Attempts),
-        ?assertEqual([], list_ongoing_transfers(AssertionNode, SpaceId), Attempts),
-        ?assertEqual(AllTids, lists:sort(list_ended_transfers(AssertionNode, SpaceId)), Attempts)
+        ?assertEqual([], transfers_test_utils:list_waiting_transfers(AssertionNode, SpaceId), Attempts),
+        ?assertEqual([], transfers_test_utils:list_ongoing_transfers(AssertionNode, SpaceId), Attempts),
+        ?assertEqual(AllTids, lists:sort(transfers_test_utils:list_ended_transfers(AssertionNode, SpaceId)), Attempts)
 
     end, AssertionNodes).
 
@@ -231,10 +242,10 @@ assert_transfer_state(Node, TransferId, SpaceId, FileGuid, FilePath, TargetNode,
     ExpectedTransfer, Attempts
 ) ->
     try
-        Transfer = get_transfer(Node, TransferId),
+        Transfer = transfers_test_utils:get_transfer(Node, TransferId),
         assert(ExpectedTransfer, Transfer)
     catch
-        throw:not_found_transfer ->
+        throw:transfer_not_found ->
             case Attempts == 0 of
                 false ->
                     timer:sleep(timer:seconds(1)),
@@ -262,21 +273,6 @@ assert_transfer_state(Node, TransferId, SpaceId, FileGuid, FilePath, TargetNode,
             end
     end.
 
-get_transfer(Node, TransferId) ->
-    case rpc:call(Node, transfer, get, [TransferId]) of
-        {ok, #document{value=Transfer}} ->
-            Transfer;
-        {error, not_found} ->
-            throw(not_found_transfer)
-    end.
-
-get_default_session(Node, Config) ->
-    ?config({session_id, {?DEFAULT_USER, ?GET_DOMAIN(Node)}}, Config).
-
-get_default_user_token_header(Config) ->
-    #macaroon_auth{macaroon = Macaroon} = ?config({auth, ?DEFAULT_USER}, Config),
-    {<<"Macaroon">>, Macaroon}.
-
 create_files(Config, #setup{
     setup_node = SetupNode,
     files_structure = FilesStructure,
@@ -290,7 +286,7 @@ create_files(Config, #setup{
 
     validate_root_directory(RootDirectory),
     RootDirectory2 = utils:ensure_defined(RootDirectory, undefined, <<"">>),
-    SessionId = get_default_session(SetupNode, Config),
+    SessionId = ?DEFAULT_SESSION(SetupNode, Config),
     SpaceId = ?config(?SPACE_ID_KEY, Config),
     {DirsToCreate, FilesToCreate} = count_files_and_dirs(FilesStructure),
 
@@ -362,7 +358,7 @@ assert_files_distribution_on_all_nodes(Config, AssertionNodes, ExpectedDistribut
 
 cast_files_distribution_assertion(Config, Node, Expected, Attempts) ->
     FileGuidsAndPaths = ?config(?FILES_KEY, Config),
-    SessionId = get_default_session(Node, Config),
+    SessionId = ?DEFAULT_SESSION(Node, Config),
     CounterRef = countdown_server:init_counter(Node, length(FileGuidsAndPaths)),
     lists:foreach(fun({FileGuid, _FilePath}) ->
         cast_file_distribution_assertion(Expected, Node, SessionId, FileGuid, CounterRef, Attempts)
@@ -373,7 +369,7 @@ cast_files_visible_assertion(Config, Node, Attempts) ->
     RootDirGuidAndPath = ?config(?ROOT_DIR_KEY, Config),
     FilesGuidsAndPaths = ?config(?FILES_KEY, Config),
     DirsGuidsAndPaths = ?config(?DIRS_KEY, Config),
-    SessionId = get_default_session(Node, Config),
+    SessionId = ?DEFAULT_SESSION(Node, Config),
     GuidsAndPaths = FilesGuidsAndPaths ++ [RootDirGuidAndPath | DirsGuidsAndPaths],
     CounterRef = countdown_server:init_counter(Node, length(GuidsAndPaths)),
     lists:foreach(fun({FileGuid, _FilePath}) ->
@@ -416,7 +412,6 @@ assert_file_distribution(Expected, Node, SessId, FileGuid, CounterRef, Attempts)
             % this catch is used to avoid "ugly" worker pool error log
             ok
     end.
-
 
 maybe_create_root_dir(Node, RootDirectory, SessionId, SpaceId) ->
     case RootDirectory of
@@ -514,60 +509,9 @@ count_files_and_dirs(Structure) ->
     end, {0, 0, 1}, Structure),
     {DirsSum, FilesSum}.
 
-list_ended_transfers(Worker, SpaceId) ->
-    {ok, Transfers} = rpc:call(Worker, transfer, list_ended_transfers, [SpaceId]),
-    Transfers.
-
-list_waiting_transfers(Worker, SpaceId) ->
-    {ok, Transfers} = rpc:call(Worker, transfer, list_waiting_transfers, [SpaceId]),
-    Transfers.
-
-list_ongoing_transfers(Worker, SpaceId) ->
-    {ok, Transfers} = rpc:call(Worker, transfer, list_ongoing_transfers, [SpaceId]),
-    Transfers.
-
-get_ongoing_transfers_for_file(Worker, FileGuid) ->
-    {ok, #{ongoing := Transfers}} = rpc:call(Worker, transferred_file, get_transfers, [FileGuid]),
-    lists:sort(Transfers).
-
-get_ended_transfers_for_file(Worker, FileGuid) ->
-    {ok, #{ended := Transfers}} = rpc:call(Worker, transferred_file, get_transfers, [FileGuid]),
-    lists:sort(Transfers).
-
 ensure_verification_pool_started() ->
     {ok, _} = application:ensure_all_started(worker_pool),
     worker_pool:start_sup_pool(?WORKER_POOL, [{workers, 8}]).
-
-provider_id(?MISSING_PROVIDER_NODE) ->
-    % overridden for test reason
-    ?MISSING_PROVIDER_ID;
-provider_id(Node) ->
-    rpc:call(Node, oneprovider, get_id, []).
-
-remove_transfers(Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    lists:foreach(fun(Worker) ->
-        {ok, SpaceIds} = rpc:call(Worker, provider_logic, get_spaces, []),
-        lists:foreach(fun(SpaceId) ->
-            Ongoing = list_ongoing_transfers(Worker, SpaceId),
-            Past = list_ended_transfers(Worker, SpaceId),
-            Scheduled = list_waiting_transfers(Worker, SpaceId),
-            lists:foreach(fun(Tid) ->
-                rpc:call(Worker, transfer, delete, [Tid])
-            end, lists:umerge([Ongoing, Past, Scheduled]))
-        end, SpaceIds)
-    end, Workers).
-
-ensure_transfers_removed(Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    lists:foreach(fun(Worker) ->
-        {ok, SpaceIds} = rpc:call(Worker, provider_logic, get_spaces, []),
-        lists:foreach(fun(SpaceId) ->
-            ?assertMatch([], list_ended_transfers(Worker, SpaceId), ?ATTEMPTS),
-            ?assertMatch([], list_ongoing_transfers(Worker, SpaceId), ?ATTEMPTS),
-            ?assertMatch([], list_waiting_transfers(Worker, SpaceId), ?ATTEMPTS)
-        end, SpaceIds)
-    end, Workers).
 
 move_transfer_ids_to_old_key(Config) ->
     map_config_key(?TRANSFERS_KEY, ?OLD_TRANSFERS_KEY, Config).
@@ -588,54 +532,19 @@ update_config(Key, UpdateFun, Config, DefaultValue) ->
             lists:keyreplace(Key, 1, Config, {Key, UpdateFun(OldValue)})
     end.
 
-
-mock_space_occupancy(Node, SpaceId, MockedSize) ->
-    CurrentSize = rpc:call(Node, space_quota, current_size, [SpaceId]),
-    rpc:call(Node, space_quota, apply_size_change, [SpaceId, MockedSize - CurrentSize]).
-
-unmock_space_occupancy(Node, SpaceId) ->
-    CurrentSize = rpc:call(Node, space_quota, current_size, [SpaceId]),
-    rpc:call(Node, space_quota, apply_size_change, [SpaceId, -CurrentSize]).
-
-get_space_support(Node, SpaceId) ->
-    ProviderId = provider_id(Node),
-    {ok, Supports} = rpc:call(Node, space_logic, get_providers_supports, [<<"0">>, SpaceId]),
-    maps:get(ProviderId, Supports, 0).
-
-change_soft_quota(Node, NewSoftQuota) ->
-    rpc:call(Node, application, set_env, [op_worker, soft_quota_limit_size, NewSoftQuota]).
-
-lengthen_file_replication(Node) ->
-    test_utils:mock_new(Node, sync_req),
-    test_utils:mock_expect(Node, sync_req, replicate_file, fun(_, _, _, _) ->
-        timer:sleep(timer:seconds(60))
-    end).
-
-unmock_file_replication(Node) ->
-    test_utils:mock_unload(Node, sync_req).
-
-mock_replica_synchronizer_failure(Node) ->
-    test_utils:mock_new(Node, replica_synchronizer),
-    test_utils:mock_expect(Node, replica_synchronizer, synchronize,
-        fun(_, _, _, _, _, _) -> throw(test_error) end
-    ).
-
-unmock_replica_synchronizer_failure(Node) ->
-    ok = test_utils:mock_unload(Node, replica_synchronizer).
-
 schedule_file_replication(ScheduleNode, ProviderId, FileKey, Config, lfm) ->
     schedule_file_replication_by_lfm(ScheduleNode, ProviderId, FileKey, Config);
 schedule_file_replication(ScheduleNode, ProviderId, FileKey, Config, rest) ->
     schedule_file_replication_by_rest(ScheduleNode, ProviderId, FileKey, Config).
 
 schedule_file_replication_by_lfm(ScheduleNode, ProviderId, FileKey, Config) ->
-    SessionId = get_default_session(ScheduleNode, Config),
+    SessionId = ?DEFAULT_SESSION(ScheduleNode, Config),
     lfm_proxy:schedule_file_replication(ScheduleNode, SessionId, FileKey, ProviderId).
 
 schedule_file_replication_by_rest(Worker, ProviderId, {path, FilePath}, Config) ->
-    case rest_test_utils:do_request(Worker,
+    case rest_test_utils:request(Worker,
         <<"replicas/", FilePath/binary, "?provider_id=", ProviderId/binary>>,
-        post, [get_default_user_token_header(Config)], []
+        post, ?DEFAULT_USER_TOKEN_HEADERS(Config), []
     ) of
     {ok, 200, _, Body} ->
         DecodedBody = json_utils:decode(Body),
@@ -646,9 +555,9 @@ schedule_file_replication_by_rest(Worker, ProviderId, {path, FilePath}, Config) 
     end;
 schedule_file_replication_by_rest(Worker, ProviderId, {guid, FileGuid}, Config) ->
     {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
-    case rest_test_utils:do_request(Worker,
+    case rest_test_utils:request(Worker,
         <<"replicas-id/", FileObjectId/binary, "?provider_id=", ProviderId/binary>>,
-        post, [get_default_user_token_header(Config)], []
+        post, ?DEFAULT_USER_TOKEN_HEADERS(Config), []
     ) of
         {ok, 200, _, Body} ->
             DecodedBody = json_utils:decode(Body),
@@ -675,47 +584,17 @@ restart_transfer_by_lfm(_ScheduleNode, _Tid, _Config) ->
     erlang:error(not_implemented).
 
 cancel_transfer_by_rest(Worker, Tid, Config) ->
-    rest_test_utils:do_request(Worker, <<"transfers/", Tid/binary>>, delete, 
-        [get_default_user_token_header(Config)], []).
+    rest_test_utils:request(Worker, <<"transfers/", Tid/binary>>, delete,
+        ?DEFAULT_USER_TOKEN_HEADERS(Config), []).
 
 restart_transfer_by_rest(Worker, Tid, Config) ->
-    rest_test_utils:do_request(Worker, <<"transfers/", Tid/binary>>, patch, 
-        [get_default_user_token_header(Config)], []).
+    rest_test_utils:request(Worker, <<"transfers/", Tid/binary>>, patch,
+        ?DEFAULT_USER_TOKEN_HEADERS(Config), []).
 
 file_key(Guid, _Path, guid) ->
     {guid, Guid};
 file_key(_Guid, Path, path) ->
     {path, Path}.
-
-root_name(FunctionName, Type) ->
-    root_name(FunctionName, Type, <<"">>).
-
-root_name(FunctionName, Type, FileKeyType) ->
-    TypeBin = str_utils:to_binary(Type),
-    FileKeyTypeBin = str_utils:to_binary(FileKeyType),
-    FunctionNameBin = str_utils:to_binary(FunctionName),
-    <<FunctionNameBin/binary, "_", TypeBin/binary, "_" , FileKeyTypeBin/binary>>.
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Prolongs call to sync_req:replicate_file/4 function for
-%% ProlongationTime seconds with probability ProlongationProbability.
-%% This function should be used to prolong duration time of transfers
-%% @end
-%%-------------------------------------------------------------------
--spec maybe_mock_prolonged_replication(node(), non_neg_integer(), non_neg_integer()) -> ok.
-maybe_mock_prolonged_replication(Worker, ProlongationProbability, ProlongationTime) ->
-    ok = test_utils:mock_new(Worker, sync_req),
-    ok = test_utils:mock_expect(Worker, sync_req, replicate_file,
-        fun(UserCtx, FileCtx, Block, TransferId) ->
-            case rand:uniform() < ProlongationProbability of
-                true ->
-                    timer:sleep(timer:seconds(ProlongationTime));
-                false ->
-                    ok
-            end,
-            meck:passthrough([UserCtx, FileCtx, Block, TransferId])
-        end).
 
 assert(ExpectedTransfer, Transfer) ->
     maps:fold(fun(FieldName, ExpectedValue, _AccIn) ->

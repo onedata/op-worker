@@ -67,7 +67,7 @@ start_link(Parent, Node) ->
 %%-------------------------------------------------------------------
 -spec init_counter(node(), non_neg_integer()) -> reference().
 init_counter(Node, InitialValue) ->
-    gen_server2:call(?COUNTDOWN_SERVER(Node), {init, InitialValue}).
+    gen_server:call(?COUNTDOWN_SERVER(Node), {init, InitialValue}).
 
 %%-------------------------------------------------------------------
 %% @doc

@@ -17,6 +17,10 @@
 -define(DEFAULT_MODE, 8#664).
 -define(DEFAULT_CONTENT, <<"test_data">>).
 -define(DEFAULT_SIZE, byte_size(?DEFAULT_CONTENT)).
+-define(DEFAULT_SESSION(Node, Config),
+    ?config({session_id, {?DEFAULT_USER, ?GET_DOMAIN(Node)}}, Config)
+).
+
 
 -define(ATTEMPTS, 60).
 -define(DEFAULT_TIMETRAP, timer:minutes(2)).

@@ -19,6 +19,8 @@
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 
+-export([init_per_suite/1, init_per_testcase/2, end_per_testcase/2, end_per_suite/1]).
+
 %% API
 -export([
     replicate_empty_dir/3,
@@ -42,7 +44,6 @@
     many_simultaneous_failed_transfers/3]).
 
 -define(SPACE_ID, <<"space1">>).
--define(DEFAULT_SOFT_QUOTA, 1073741824). % 1GB
 
 %%%===================================================================
 %%% API
@@ -50,25 +51,25 @@
 
 replicate_empty_dir(Config, Type, FileKeyType) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    transfers_test_base:run_test(
+    transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{
                 setup_node = WorkerP1,
                 assertion_nodes = [WorkerP2],
                 files_structure = [],
-                root_directory = transfers_test_base:root_name(?FUNCTION_NAME, Type, FileKeyType)
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType)
             },
             scenario = #scenario{
                 type = Type,
                 file_key_type = FileKeyType,
                 schedule_node = WorkerP1,
                 target_nodes = [WorkerP2],
-                function = fun transfers_test_base:replicate_root_directory/2
+                function = fun transfers_test_mechanism:replicate_root_directory/2
             },
             expected = #expected{
                 expected_transfer = #{
                     status => completed,
-                    scheduling_provider_id => transfers_test_base:provider_id(WorkerP1),
+                    scheduling_provider_id => transfers_test_utils:provider_id(WorkerP1),
                     files_to_process => 1,
                     files_processed => 1,
                     files_transferred => 0,
@@ -81,25 +82,25 @@ replicate_empty_dir(Config, Type, FileKeyType) ->
 
 replicate_tree_of_empty_dirs(Config, Type, FileKeyType) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    transfers_test_base:run_test(
+    transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{
                 setup_node = WorkerP1,
                 assertion_nodes = [WorkerP2],
                 files_structure = [{10, 0}, {10, 0}, {10, 0}],
-                root_directory = transfers_test_base:root_name(?FUNCTION_NAME, Type, FileKeyType)
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType)
             },
             scenario = #scenario{
                 type = Type,
                 file_key_type = FileKeyType,
                 schedule_node = WorkerP1,
                 target_nodes = [WorkerP2],
-                function = fun transfers_test_base:replicate_root_directory/2
+                function = fun transfers_test_mechanism:replicate_root_directory/2
             },
             expected = #expected{
                 expected_transfer = #{
                     status => completed,
-                    scheduling_provider_id => transfers_test_base:provider_id(WorkerP1),
+                    scheduling_provider_id => transfers_test_utils:provider_id(WorkerP1),
                     files_to_process => 1111,
                     files_processed => 1111,
                     files_transferred => 0,
@@ -113,13 +114,13 @@ replicate_tree_of_empty_dirs(Config, Type, FileKeyType) ->
 
 replicate_regular_file(Config, Type, FileKeyType) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    transfers_test_base:run_test(
+    transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{
                 setup_node = WorkerP1,
                 assertion_nodes = [WorkerP2],
                 files_structure = [{0, 1}],
-                root_directory = transfers_test_base:root_name(?FUNCTION_NAME, Type, FileKeyType),
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
                 distribution = [
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ]
@@ -129,21 +130,22 @@ replicate_regular_file(Config, Type, FileKeyType) ->
                 file_key_type = FileKeyType,
                 schedule_node = WorkerP1,
                 target_nodes = [WorkerP2],
-                function = fun transfers_test_base:replicate_each_file_separately/2
+                function = fun transfers_test_mechanism:replicate_each_file_separately/2
             },
             expected = #expected{
-                expected_transfer = #{
-                    status => completed,
-                    scheduling_provider_id => transfers_test_base:provider_id(WorkerP1),
-                    files_to_process => 1,
-                    files_processed => 1,
-                    files_transferred => 1,
-                    bytes_transferred => ?DEFAULT_SIZE,
-                    min_hist => ?MIN_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
-                    hr_hist => ?HOUR_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
-                    dy_hist => ?DAY_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
-                    mth_hist => ?MONTH_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE})
-                },
+                expected_transfer = undefined,
+%%                #{
+%%                    status => completed,
+%%                    scheduling_provider_id => transfers_test_utils:provider_id(WorkerP1),
+%%                    files_to_process => 1,
+%%                    files_processed => 1,
+%%                    files_transferred => 1,
+%%                    bytes_transferred => ?DEFAULT_SIZE,
+%%                    min_hist => ?MIN_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
+%%                    hr_hist => ?HOUR_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
+%%                    dy_hist => ?DAY_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
+%%                    mth_hist => ?MONTH_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE})
+%%                },
                 distribution = [
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP2), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
@@ -155,13 +157,13 @@ replicate_regular_file(Config, Type, FileKeyType) ->
 
 replicate_file_in_directory(Config, Type, FileKeyType) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    transfers_test_base:run_test(
+    transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{
                 setup_node = WorkerP1,
                 assertion_nodes = [WorkerP2],
                 files_structure = [{0, 1}],
-                root_directory = transfers_test_base:root_name(?FUNCTION_NAME, Type, FileKeyType),
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
                 distribution = [
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ]
@@ -171,12 +173,12 @@ replicate_file_in_directory(Config, Type, FileKeyType) ->
                 file_key_type = FileKeyType,
                 schedule_node = WorkerP1,
                 target_nodes = [WorkerP2],
-                function = fun transfers_test_base:replicate_root_directory/2
+                function = fun transfers_test_mechanism:replicate_root_directory/2
             },
             expected = #expected{
                 expected_transfer = #{
                     status => completed,
-                    scheduling_provider_id => transfers_test_base:provider_id(WorkerP1),
+                    scheduling_provider_id => transfers_test_utils:provider_id(WorkerP1),
                     files_to_process => 2,
                     files_processed => 2,
                     files_transferred => 1,
@@ -198,14 +200,14 @@ replicate_file_in_directory(Config, Type, FileKeyType) ->
 replicate_big_file(Config, Type, FileKeyType) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     Size = 1024 * 1024 * 1024,
-    transfers_test_base:run_test(
+    transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{
                 size = Size,
                 setup_node = WorkerP1,
                 assertion_nodes = [WorkerP2],
                 files_structure = [{0, 1}],
-                root_directory = transfers_test_base:root_name(?FUNCTION_NAME, Type, FileKeyType),
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
                 distribution = [
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, Size]]}
                 ]
@@ -215,12 +217,12 @@ replicate_big_file(Config, Type, FileKeyType) ->
                 file_key_type = FileKeyType,
                 schedule_node = WorkerP1,
                 target_nodes = [WorkerP2],
-                function = fun transfers_test_base:replicate_each_file_separately/2
+                function = fun transfers_test_mechanism:replicate_each_file_separately/2
             },
             expected = #expected{
                 expected_transfer = #{
                     status => completed,
-                    scheduling_provider_id => transfers_test_base:provider_id(WorkerP1),
+                    scheduling_provider_id => transfers_test_utils:provider_id(WorkerP1),
                     files_to_process => 1,
                     files_processed => 1,
                     files_transferred => 1,
@@ -240,13 +242,13 @@ replicate_big_file(Config, Type, FileKeyType) ->
 
 schedule_replication_to_source_provider(Config, Type, FileKeyType) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    transfers_test_base:run_test(
+    transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{
                 setup_node = WorkerP1,
                 assertion_nodes = [WorkerP2],
                 files_structure = [{0, 1}],
-                root_directory = transfers_test_base:root_name(?FUNCTION_NAME, Type, FileKeyType),
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
                 distribution = [
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ]
@@ -256,12 +258,12 @@ schedule_replication_to_source_provider(Config, Type, FileKeyType) ->
                 file_key_type = FileKeyType,
                 schedule_node = WorkerP1,
                 target_nodes = [WorkerP1],
-                function = fun transfers_test_base:replicate_each_file_separately/2
+                function = fun transfers_test_mechanism:replicate_each_file_separately/2
             },
             expected = #expected{
                 expected_transfer = #{
                     status => completed,
-                    scheduling_provider_id => transfers_test_base:provider_id(WorkerP1),
+                    scheduling_provider_id => transfers_test_utils:provider_id(WorkerP1),
                     files_to_process => 1,
                     files_processed => 1,
                     files_transferred => 0,
@@ -281,13 +283,13 @@ schedule_replication_to_source_provider(Config, Type, FileKeyType) ->
 
 replicate_already_replicated_file(Config, Type, FileKeyType) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    Config2 = transfers_test_base:run_test(
+    Config2 = transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{
                 setup_node = WorkerP1,
                 assertion_nodes = [WorkerP2],
                 files_structure = [{0, 1}],
-                root_directory = transfers_test_base:root_name(?FUNCTION_NAME, Type, FileKeyType),
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
                 distribution = [
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ]
@@ -297,12 +299,12 @@ replicate_already_replicated_file(Config, Type, FileKeyType) ->
                 file_key_type = FileKeyType,
                 schedule_node = WorkerP1,
                 target_nodes = [WorkerP2],
-                function = fun transfers_test_base:replicate_each_file_separately/2
+                function = fun transfers_test_mechanism:replicate_each_file_separately/2
             },
             expected = #expected{
                 expected_transfer = #{
                     status => completed,
-                    scheduling_provider_id => transfers_test_base:provider_id(WorkerP1),
+                    scheduling_provider_id => transfers_test_utils:provider_id(WorkerP1),
                     files_to_process => 1,
                     files_processed => 1,
                     files_transferred => 1,
@@ -320,21 +322,21 @@ replicate_already_replicated_file(Config, Type, FileKeyType) ->
             }
         }
     ),
-    Config3 = transfers_test_base:move_transfer_ids_to_old_key(Config2),
-    transfers_test_base:run_test(
+    Config3 = transfers_test_mechanism:move_transfer_ids_to_old_key(Config2),
+    transfers_test_mechanism:run_test(
         Config3, #transfer_test_spec{
             setup = undefined,
             scenario = #scenario{
                 schedule_node = WorkerP1,
                 target_nodes = [WorkerP1],
-                function = fun transfers_test_base:replicate_each_file_separately/2,
+                function = fun transfers_test_mechanism:replicate_each_file_separately/2,
                 type = Type,
                 file_key_type = FileKeyType
             },
             expected = #expected{
                 expected_transfer = #{
                     status => completed,
-                    scheduling_provider_id => transfers_test_base:provider_id(WorkerP1),
+                    scheduling_provider_id => transfers_test_utils:provider_id(WorkerP1),
                     files_to_process => 1,
                     files_processed => 1,
                     files_transferred => 0,
@@ -357,25 +359,25 @@ not_synced_file_should_not_be_replicated(Config, Type, FileKeyType) ->
     % list on Dir1 is mocked to return not existing file
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
 
-    transfers_test_base:run_test(
+    transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{
                 setup_node = WorkerP1,
                 assertion_nodes = [],
                 files_structure = [{0, 1}],
-                root_directory = transfers_test_base:root_name(?FUNCTION_NAME, Type, FileKeyType)
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType)
             },
             scenario = #scenario{
                 type = Type,
                 file_key_type = FileKeyType,
                 schedule_node = WorkerP1,
                 target_nodes = [WorkerP2],
-                function = fun transfers_test_base:replicate_each_file_separately/2
+                function = fun transfers_test_mechanism:replicate_each_file_separately/2
             },
             expected = #expected{
                 expected_transfer = #{
                     status => completed,
-                    scheduling_provider_id => transfers_test_base:provider_id(WorkerP1),
+                    scheduling_provider_id => transfers_test_utils:provider_id(WorkerP1),
                     files_to_process => 1,
                     files_processed => 1,
                     files_transferred => 0,
@@ -395,13 +397,13 @@ not_synced_file_should_not_be_replicated(Config, Type, FileKeyType) ->
 
 replicate_100_files_separately(Config, Type, FileKeyType) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    transfers_test_base:run_test(
+    transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{
                 setup_node = WorkerP1,
                 assertion_nodes = [WorkerP2],
                 files_structure = [{0, 100}],
-                root_directory = transfers_test_base:root_name(?FUNCTION_NAME, Type, FileKeyType),
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
                 distribution = [
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ]
@@ -411,12 +413,12 @@ replicate_100_files_separately(Config, Type, FileKeyType) ->
                 file_key_type = FileKeyType,
                 schedule_node = WorkerP1,
                 target_nodes = [WorkerP2],
-                function = fun transfers_test_base:replicate_each_file_separately/2
+                function = fun transfers_test_mechanism:replicate_each_file_separately/2
             },
             expected = #expected{
                 expected_transfer = #{
                     status => completed,
-                    scheduling_provider_id => transfers_test_base:provider_id(WorkerP1),
+                    scheduling_provider_id => transfers_test_utils:provider_id(WorkerP1),
                     files_to_process => 1,
                     files_processed => 1,
                     files_transferred => 1,
@@ -439,14 +441,14 @@ replicate_100_files_in_one_transfer(Config, Type, FileKeyType) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     FilesNum = 100,
     TotalTransferredBytes = FilesNum * ?DEFAULT_SIZE,
-    transfers_test_base:run_test(
+    transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{
                 setup_node = WorkerP1,
                 assertion_nodes = [WorkerP2],
                 %%                files_structure = [{0, 10}],
                 files_structure = [{10, 0}, {0, 10}],
-                root_directory = transfers_test_base:root_name(?FUNCTION_NAME, Type, FileKeyType),
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
                 distribution = [
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
@@ -458,12 +460,12 @@ replicate_100_files_in_one_transfer(Config, Type, FileKeyType) ->
                 file_key_type = FileKeyType,
                 schedule_node = WorkerP1,
                 target_nodes = [WorkerP2],
-                function = fun transfers_test_base:replicate_root_directory/2
+                function = fun transfers_test_mechanism:replicate_root_directory/2
             },
             expected = #expected{
                 expected_transfer = #{
                     status => completed,
-                    scheduling_provider_id => transfers_test_base:provider_id(WorkerP1),
+                    scheduling_provider_id => transfers_test_utils:provider_id(WorkerP1),
                     files_to_process => 111,
                     files_processed => 111,
                     files_transferred => FilesNum,
@@ -486,16 +488,16 @@ replicate_100_files_in_one_transfer(Config, Type, FileKeyType) ->
 replication_should_succeed_when_there_is_enough_space_for_file(Config, Type, FileKeyType) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
 
-    Support = transfers_test_base:get_space_support(WorkerP2, ?SPACE_ID),
-    transfers_test_base:mock_space_occupancy(WorkerP2, ?SPACE_ID, Support - ?DEFAULT_SIZE),
+    Support = transfers_test_utils:get_space_support(WorkerP2, ?SPACE_ID),
+    transfers_test_utils:mock_space_occupancy(WorkerP2, ?SPACE_ID, Support - ?DEFAULT_SIZE),
 
-    transfers_test_base:run_test(
+    transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{
                 setup_node = WorkerP1,
                 assertion_nodes = [WorkerP2],
                 files_structure = [{0, 1}],
-                root_directory = transfers_test_base:root_name(?FUNCTION_NAME, Type, FileKeyType),
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
                 distribution = [
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ]
@@ -505,12 +507,12 @@ replication_should_succeed_when_there_is_enough_space_for_file(Config, Type, Fil
                 file_key_type = FileKeyType,
                 schedule_node = WorkerP1,
                 target_nodes = [WorkerP2],
-                function = fun transfers_test_base:replicate_each_file_separately/2
+                function = fun transfers_test_mechanism:replicate_each_file_separately/2
             },
             expected = #expected{
                 expected_transfer = #{
                     status => completed,
-                    scheduling_provider_id => transfers_test_base:provider_id(WorkerP1),
+                    scheduling_provider_id => transfers_test_utils:provider_id(WorkerP1),
                     files_to_process => 1,
                     files_processed => 1,
                     failed_files => 0,
@@ -532,16 +534,16 @@ replication_should_succeed_when_there_is_enough_space_for_file(Config, Type, Fil
 
 replication_should_fail_when_space_is_full(Config, Type, FileKeyType) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    Support = transfers_test_base:get_space_support(WorkerP2, ?SPACE_ID),
-    transfers_test_base:mock_space_occupancy(WorkerP2, ?SPACE_ID, Support),
+    Support = transfers_test_utils:get_space_support(WorkerP2, ?SPACE_ID),
+    transfers_test_utils:mock_space_occupancy(WorkerP2, ?SPACE_ID, Support),
 
-    transfers_test_base:run_test(
+    transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{
                 setup_node = WorkerP1,
                 assertion_nodes = [WorkerP2],
                 files_structure = [{0, 1}],
-                root_directory = transfers_test_base:root_name(?FUNCTION_NAME, Type, FileKeyType),
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
                 distribution = [
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ]
@@ -551,12 +553,12 @@ replication_should_fail_when_space_is_full(Config, Type, FileKeyType) ->
                 file_key_type = FileKeyType,
                 schedule_node = WorkerP1,
                 target_nodes = [WorkerP2],
-                function = fun transfers_test_base:replicate_each_file_separately/2
+                function = fun transfers_test_mechanism:replicate_each_file_separately/2
             },
             expected = #expected{
                 expected_transfer = #{
                     status => failed,
-                    scheduling_provider_id => transfers_test_base:provider_id(WorkerP1),
+                    scheduling_provider_id => transfers_test_utils:provider_id(WorkerP1),
                     files_to_process => 1,
                     files_processed => 1,
                     failed_files => 1,
@@ -579,13 +581,13 @@ replication_should_fail_when_space_is_full(Config, Type, FileKeyType) ->
 replicate_to_missing_provider(Config, Type, FileKeyType) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
 
-    transfers_test_base:run_test(
+    transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{
                 setup_node = WorkerP1,
                 assertion_nodes = [WorkerP1],
                 files_structure = [{0, 1}],
-                root_directory = transfers_test_base:root_name(?FUNCTION_NAME, Type, FileKeyType),
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
                 distribution = [
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ]
@@ -595,7 +597,7 @@ replicate_to_missing_provider(Config, Type, FileKeyType) ->
                 file_key_type = FileKeyType,
                 schedule_node = WorkerP1,
                 target_nodes = [?MISSING_PROVIDER_NODE],
-                function = fun transfers_test_base:error_on_replicating_files/2
+                function = fun transfers_test_mechanism:error_on_replicating_files/2
             },
             expected = #expected{
                 expected_transfer = undefined,
@@ -610,13 +612,14 @@ replicate_to_missing_provider(Config, Type, FileKeyType) ->
 replicate_to_not_supporting_provider(Config, Type, FileKeyType) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     Config2 = [{space_id, <<"space2">>} | Config],
-    transfers_test_base:run_test(
+    % space2 is supported only by P1
+    transfers_test_mechanism:run_test(
         Config2, #transfer_test_spec{
             setup = #setup{
                 setup_node = WorkerP1,
                 assertion_nodes = [WorkerP2],
                 files_structure = [{0, 1}],
-                root_directory = transfers_test_base:root_name(?FUNCTION_NAME, Type, FileKeyType),
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
                 distribution = [
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ]
@@ -626,7 +629,7 @@ replicate_to_not_supporting_provider(Config, Type, FileKeyType) ->
                 file_key_type = FileKeyType,
                 schedule_node = WorkerP1,
                 target_nodes = [WorkerP2],
-                function = fun transfers_test_base:error_on_replicating_files/2
+                function = fun transfers_test_mechanism:error_on_replicating_files/2
             },
             expected = #expected{
                 expected_transfer = undefined,
@@ -641,13 +644,13 @@ replicate_to_not_supporting_provider(Config, Type, FileKeyType) ->
 schedule_replication_on_not_supporting_provider(Config, Type, FileKeyType) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     Config2 = [{space_id, <<"space2">>} | Config],
-    transfers_test_base:run_test(
+    transfers_test_mechanism:run_test(
         Config2, #transfer_test_spec{
             setup = #setup{
                 setup_node = WorkerP2,
                 assertion_nodes = [WorkerP1],
                 files_structure = [{0, 1}],
-                root_directory = transfers_test_base:root_name(?FUNCTION_NAME, Type, FileKeyType),
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
                 distribution = [
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ]
@@ -657,7 +660,7 @@ schedule_replication_on_not_supporting_provider(Config, Type, FileKeyType) ->
                 file_key_type = FileKeyType,
                 schedule_node = WorkerP2,
                 target_nodes = [WorkerP1],
-                function = fun transfers_test_base:error_on_replicating_files/2
+                function = fun transfers_test_mechanism:error_on_replicating_files/2
             },
             expected = #expected{
                 expected_transfer = undefined,
@@ -671,14 +674,14 @@ schedule_replication_on_not_supporting_provider(Config, Type, FileKeyType) ->
 
 cancel_replication_on_target_nodes(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    transfers_test_base:maybe_mock_prolonged_replication(WorkerP2, 0.5, 15),
-    transfers_test_base:run_test(
+    transfers_test_utils:maybe_mock_prolonged_replication(WorkerP2, 0.5, 15),
+    transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{
                 setup_node = WorkerP1,
                 assertion_nodes = [WorkerP2],
                 files_structure = [{10, 0}, {0, 10}],
-                root_directory = transfers_test_base:root_name(?FUNCTION_NAME, Type),
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type),
                 distribution = [
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ]
@@ -687,12 +690,12 @@ cancel_replication_on_target_nodes(Config, Type) ->
                 type = Type,
                 schedule_node = WorkerP1,
                 target_nodes = [WorkerP2],
-                function = fun transfers_test_base:cancel_replication_on_target_nodes/2
+                function = fun transfers_test_mechanism:cancel_replication_on_target_nodes/2
             },
             expected = #expected{
                 expected_transfer = #{
                     status => cancelled,
-                    scheduling_provider_id => transfers_test_base:provider_id(WorkerP1),
+                    scheduling_provider_id => transfers_test_utils:provider_id(WorkerP1),
                     failed_files => 0
                 },
                 distribution = undefined,
@@ -703,15 +706,15 @@ cancel_replication_on_target_nodes(Config, Type) ->
 
 restart_replication_on_target_nodes(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    transfers_test_base:mock_replica_synchronizer_failure(WorkerP2),
+    transfers_test_utils:mock_replica_synchronizer_failure(WorkerP2),
 
-    Config2 = transfers_test_base:run_test(
+    Config2 = transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{
                 setup_node = WorkerP1,
                 assertion_nodes = [WorkerP2],
                 files_structure = [{0, 1}],
-                root_directory = transfers_test_base:root_name(?FUNCTION_NAME, Type),
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type),
                 distribution = [
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ]
@@ -720,12 +723,12 @@ restart_replication_on_target_nodes(Config, Type) ->
                 type = Type,
                 schedule_node = WorkerP1,
                 target_nodes = [WorkerP2],
-                function = fun transfers_test_base:replicate_root_directory/2
+                function = fun transfers_test_mechanism:replicate_root_directory/2
             },
             expected = #expected{
                 expected_transfer = #{
                     status => failed,
-                    scheduling_provider_id => transfers_test_base:provider_id(WorkerP1),
+                    scheduling_provider_id => transfers_test_utils:provider_id(WorkerP1),
                     files_to_process => 2,
                     files_processed => 2,
                     failed_files => 1,
@@ -740,15 +743,15 @@ restart_replication_on_target_nodes(Config, Type) ->
             }
         }
     ),
-    transfers_test_base:unmock_replica_synchronizer_failure(WorkerP2),
-    transfers_test_base:run_test(
+    transfers_test_utils:unmock_replica_synchronizer_failure(WorkerP2),
+    transfers_test_mechanism:run_test(
         Config2, #transfer_test_spec{
             setup = undefined,
             scenario = #scenario{
                 type = Type,
                 schedule_node = WorkerP1,
                 target_nodes = [WorkerP2],
-                function = fun transfers_test_base:restart_replication_on_target_nodes/2
+                function = fun transfers_test_mechanism:restart_replication_on_target_nodes/2
             },
             expected = #expected{
                 expected_transfer = #{
@@ -771,14 +774,14 @@ restart_replication_on_target_nodes(Config, Type) ->
 file_replication_failures_should_fail_whole_transfer(Config, Type, FileKeyType) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     AllFiles = 111,
-    transfers_test_base:mock_replica_synchronizer_failure(WorkerP2),
-    transfers_test_base:run_test(
+    transfers_test_utils:mock_replica_synchronizer_failure(WorkerP2),
+    transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{
                 setup_node = WorkerP1,
                 assertion_nodes = [WorkerP2],
                 files_structure = [{10, 0}, {0, 10}],
-                root_directory = transfers_test_base:root_name(?FUNCTION_NAME, Type, FileKeyType),
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
                 distribution = [
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
@@ -790,12 +793,12 @@ file_replication_failures_should_fail_whole_transfer(Config, Type, FileKeyType) 
                 file_key_type = FileKeyType,
                 schedule_node = WorkerP1,
                 target_nodes = [WorkerP2],
-                function = fun transfers_test_base:replicate_root_directory/2
+                function = fun transfers_test_mechanism:replicate_root_directory/2
             },
             expected = #expected{
                 expected_transfer = #{
                     status => failed,
-                    scheduling_provider_id => transfers_test_base:provider_id(WorkerP1),
+                    scheduling_provider_id => transfers_test_utils:provider_id(WorkerP1),
                     files_to_process => AllFiles,
                     files_processed => AllFiles,
                     files_transferred => 0,
@@ -812,14 +815,14 @@ file_replication_failures_should_fail_whole_transfer(Config, Type, FileKeyType) 
 
 many_simultaneous_failed_transfers(Config, Type, FileKeyType) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    transfers_test_base:mock_replica_synchronizer_failure(WorkerP2),
-    transfers_test_base:run_test(
+    transfers_test_utils:mock_replica_synchronizer_failure(WorkerP2),
+    transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{
                 setup_node = WorkerP1,
                 assertion_nodes = [WorkerP2],
                 files_structure = [{10, 0}, {0, 10}],
-                root_directory = transfers_test_base:root_name(?FUNCTION_NAME, Type, FileKeyType),
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
                 distribution = [
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
@@ -831,12 +834,12 @@ many_simultaneous_failed_transfers(Config, Type, FileKeyType) ->
                 file_key_type = FileKeyType,
                 schedule_node = WorkerP1,
                 target_nodes = [WorkerP2],
-                function = fun transfers_test_base:replicate_each_file_separately/2
+                function = fun transfers_test_mechanism:replicate_each_file_separately/2
             },
             expected = #expected{
                 expected_transfer = #{
                     status => failed,
-                    scheduling_provider_id => transfers_test_base:provider_id(WorkerP1),
+                    scheduling_provider_id => transfers_test_utils:provider_id(WorkerP1),
                     files_to_process => 1,
                     files_processed => 1,
                     failed_files => 1,
@@ -853,5 +856,68 @@ many_simultaneous_failed_transfers(Config, Type, FileKeyType) ->
     ).
 
 %%%===================================================================
-%%% Internal functions
+%%% SetUp and TearDown functions
 %%%===================================================================
+
+init_per_suite(Config) ->
+    Posthook = fun(NewConfig) ->
+        NewConfig1 = [{space_storage_mock, false} | NewConfig],
+        NewConfig2 = initializer:setup_storage(NewConfig1),
+        lists:foreach(fun(Worker) ->
+            test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
+            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_update_interval, timer:seconds(1)),
+            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_stream_update_interval, timer:seconds(1)),
+            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
+            test_utils:set_env(Worker, ?APP_NAME, prefetching, off)
+        end, ?config(op_worker_nodes, NewConfig2)),
+
+        application:start(ssl),
+        hackney:start(),
+        NewConfig3 = initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2),
+        NewConfig3
+    end,
+    [
+        {?ENV_UP_POSTHOOK, Posthook},
+        {?LOAD_MODULES, [initializer, transfers_test_base, ?MODULE]}
+        | Config
+    ].
+
+init_per_testcase(not_synced_file_should_not_be_replicated, Config) ->
+    [WorkerP2 | _] = ?config(op_worker_nodes, Config),
+    ok = test_utils:mock_new(WorkerP2, sync_req),
+    ok = test_utils:mock_expect(WorkerP2, sync_req, replicate_file, fun(_, _, _, _) ->
+        {error, not_found}
+    end),
+    init_per_testcase(all, Config);
+
+init_per_testcase(_Case, Config) ->
+    ct:timetrap(timer:minutes(10)),
+    lfm_proxy:init(Config),
+    [{space_id, ?SPACE_ID} | Config].
+
+end_per_testcase(not_synced_file_should_not_be_replicated, Config) ->
+    [WorkerP2 | _] = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(WorkerP2, sync_req),
+    end_per_testcase(all, Config);
+
+end_per_testcase(Case, Config) when
+    Case =:= replication_should_succeed_when_there_is_enough_space_for_file;
+    Case =:= replication_should_fail_when_space_is_full
+    ->
+    [WorkerP2 | _] = ?config(op_worker_nodes, Config),
+    transfers_test_utils:unmock_space_occupancy(WorkerP2, ?SPACE_ID),
+    end_per_testcase(all, Config);
+
+end_per_testcase(_Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    transfers_test_utils:unmock_sync_req(Workers),
+    transfers_test_utils:unmock_replica_synchronizer_failure(Workers),
+    transfers_test_utils:remove_transfers(Config),
+    transfers_test_utils:ensure_transfers_removed(Config).
+
+end_per_suite(Config) ->
+    %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
+    initializer:clean_test_users_and_spaces_no_validate(Config),
+    hackney:stop(),
+    application:stop(ssl),
+    initializer:teardown_storage(Config).
