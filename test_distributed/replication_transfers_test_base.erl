@@ -12,7 +12,7 @@
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
--include("transfers_test_base.hrl").
+-include("transfers_test_mechanism.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -133,19 +133,18 @@ replicate_regular_file(Config, Type, FileKeyType) ->
                 function = fun transfers_test_mechanism:replicate_each_file_separately/2
             },
             expected = #expected{
-                expected_transfer = undefined,
-%%                #{
-%%                    status => completed,
-%%                    scheduling_provider_id => transfers_test_utils:provider_id(WorkerP1),
-%%                    files_to_process => 1,
-%%                    files_processed => 1,
-%%                    files_transferred => 1,
-%%                    bytes_transferred => ?DEFAULT_SIZE,
-%%                    min_hist => ?MIN_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
-%%                    hr_hist => ?HOUR_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
-%%                    dy_hist => ?DAY_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
-%%                    mth_hist => ?MONTH_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE})
-%%                },
+                expected_transfer = #{
+                    status => completed,
+                    scheduling_provider_id => transfers_test_utils:provider_id(WorkerP1),
+                    files_to_process => 1,
+                    files_processed => 1,
+                    files_transferred => 1,
+                    bytes_transferred => ?DEFAULT_SIZE,
+                    min_hist => ?MIN_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
+                    hr_hist => ?HOUR_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
+                    dy_hist => ?DAY_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
+                    mth_hist => ?MONTH_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE})
+                },
                 distribution = [
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP2), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
@@ -674,7 +673,7 @@ schedule_replication_on_not_supporting_provider(Config, Type, FileKeyType) ->
 
 cancel_replication_on_target_nodes(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    transfers_test_utils:maybe_mock_prolonged_replication(WorkerP2, 0.5, 15),
+    transfers_test_utils:mock_prolonged_replication(WorkerP2, 0.1, 15),
     transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{
@@ -878,7 +877,7 @@ init_per_suite(Config) ->
     end,
     [
         {?ENV_UP_POSTHOOK, Posthook},
-        {?LOAD_MODULES, [initializer, transfers_test_base, ?MODULE]}
+        {?LOAD_MODULES, [initializer, transfers_test_utils, transfers_test_mechanism, ?MODULE]}
         | Config
     ].
 

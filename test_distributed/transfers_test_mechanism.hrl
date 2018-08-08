@@ -80,7 +80,7 @@
     status = skipped :: transfer:status(),
     invalidation_status = skipped ::  transfer:status(),
     scheduling_provider_id :: od_provider:id(),
-%%    source_provider_id :: undefined | od_provider:id(),
+    source_provider_id :: undefined | od_provider:id(),
     invalidate_source_replica = false :: boolean(),
     files_to_process :: non_neg_integer(),
     files_processed :: non_neg_integer(),

@@ -5,14 +5,14 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% WRITEME
+%%% This module contains util functions used in tests of transfers.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(transfers_test_utils).
 -author("Jakub Kudzia").
 
 -include("modules/datastore/datastore_models.hrl").
--include("transfers_test_base.hrl").
+-include("transfers_test_mechanism.hrl").
 -include("countdown_server.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -27,7 +27,7 @@
     remove_transfers/1, get_space_support/2,
     mock_space_occupancy/3, unmock_space_occupancy/2, unmock_sync_req/1,
     root_name/2, root_name/3,
-    maybe_mock_prolonged_replication/3, mock_replica_synchronizer_failure/1,
+    mock_prolonged_replication/3, mock_replica_synchronizer_failure/1,
     unmock_replica_synchronizer_failure/1
 ]).
 
@@ -126,8 +126,8 @@ root_name(FunctionName, Type, FileKeyType) ->
 %% This function should be used to prolong duration time of transfers
 %% @end
 %%-------------------------------------------------------------------
--spec maybe_mock_prolonged_replication(node(), non_neg_integer(), non_neg_integer()) -> ok.
-maybe_mock_prolonged_replication(Worker, ProlongationProbability, ProlongationTime) ->
+-spec mock_prolonged_replication(node(), non_neg_integer(), non_neg_integer()) -> ok.
+mock_prolonged_replication(Worker, ProlongationProbability, ProlongationTime) ->
     ok = test_utils:mock_new(Worker, sync_req),
     ok = test_utils:mock_expect(Worker, sync_req, replicate_file,
         fun(UserCtx, FileCtx, Block, TransferId) ->

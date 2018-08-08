@@ -5,14 +5,17 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% WRITEME
+%%% This module contains implementation of generic mechanism for
+%%% tests of transfers.
+%%% It also contains implementation of test scenarios which are used to
+%%% compose test cases.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(transfers_test_mechanism).
 -author("Jakub Kudzia").
 
 -include("modules/datastore/datastore_models.hrl").
--include("transfers_test_base.hrl").
+-include("transfers_test_mechanism.hrl").
 -include("countdown_server.hrl").
 -include("rest_test_utils.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -154,9 +157,8 @@ cancel_replication_on_target_nodes(Config, #scenario{
         {TargetNode, Tid, Guid, Path}
     end, TargetNodes),
 
-    timer:sleep(timer:seconds(5)),
-
-    lists:foreach(fun({TargetNode, Tid, _Guid, _Path}) ->
+    utils:pforeach(fun({TargetNode, Tid, _Guid, _Path}) ->
+        await_transfer_starts(TargetNode, Tid),
         cancel_transfer(TargetNode, Tid, Config, Type)
     end, NodesTransferIdsAndFiles),
 
@@ -202,7 +204,7 @@ assert_expectations(Config, Expected = #expected{
     OldNodesTransferIdsAndFiles = ?config(?OLD_TRANSFERS_KEY, Config, []),
     Tids = [Tid || {_, Tid, _, _} <- NodesTransferIdsAndFiles],
     OldTids = [Tid || {_, Tid, _, _} <- OldNodesTransferIdsAndFiles],
-    AllTids = lists:sort(Tids ++ OldTids),
+    AllTids = lists:usort(Tids ++ OldTids),
 
     lists:foreach(fun(AssertionNode) ->
         SpaceId = ?config(?SPACE_ID_KEY, Config),
@@ -252,8 +254,7 @@ assert_transfer_state(Node, TransferId, SpaceId, FileGuid, FilePath, TargetNode,
                     assert_transfer_state(Node, TransferId, SpaceId, FileGuid,
                         FilePath, TargetNode, ExpectedTransfer, Attempts - 1);
                 true ->
-                    ct:pal(
-                        "Transfer: ~p not found.", [TransferId]),
+                    ct:pal("Transfer: ~p not found.", [TransferId]),
                     ct:fail("Transfer: ~p not found.", [TransferId])
 
             end;
@@ -264,12 +265,12 @@ assert_transfer_state(Node, TransferId, SpaceId, FileGuid, FilePath, TargetNode,
                     assert_transfer_state(Node, TransferId, SpaceId, FileGuid,
                         FilePath, TargetNode, ExpectedTransfer, Attempts - 1);
                 true ->
+                    {Format, Args} = transfer_fields_description(Node, TransferId),
                     ct:pal(
-                        "Assertion of transfer field ~p failed.~n"
+                        "Assertion of field \"~p\" in transfer ~p failed.~n"
                         "    Expected: ~p~n"
-                        "    Value: ~p~n", [Field, Expected, Value]),
+                        "    Value: ~p~n" ++ Format,[Field, TransferId, Expected, Value | Args]),
                     ct:fail("assertion failed")
-
             end
     end.
 
@@ -626,3 +627,28 @@ index(Key, List) ->
         {Index, _} ->
             Index
     end.
+
+transfer_fields_description(Node, TransferId) ->
+    FieldsList = record_info(fields, transfer),
+    Transfer = transfers_test_utils:get_transfer(Node, TransferId),
+    lists:foldl(fun(FieldName, {AccFormat, AccArgs}) ->
+        {AccFormat ++ "    ~p = ~p~n", AccArgs ++ [FieldName, get_transfer_value(Transfer, FieldName)]}
+    end, {"~nTransfer ~p fields values:~n", [TransferId]}, FieldsList).
+
+await_transfer_starts(Node, TransferId) ->
+    ct:pal("AAAA"),
+    ?assertEqual(true, begin
+        try
+            #transfer{
+                bytes_transferred = BytesTransferred,
+                files_transferred = FilesTransferred
+            } = transfers_test_utils:get_transfer(Node, TransferId),
+                ct:pal("BytesTransferred: ~p~nFilesTransferred: ~p", [BytesTransferred, FilesTransferred]),
+            (BytesTransferred > 0) or (FilesTransferred > 0)
+        catch
+            throw:transfer_not_found ->
+                false;
+            Other:Error ->
+                ct:pal("DUUUPA: ~p:~p", [Other, Error])
+        end
+    end, 60).
