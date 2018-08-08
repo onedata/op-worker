@@ -340,14 +340,13 @@ replica_should_be_deleted_from_storage_after_releasing_handle_to_remotely_delete
     ?assertMatch({error, ?ENOENT}, read_file(WorkerP1, StorageFilePath1)),
 
     % ensure that unlinking file is synced
-    timer:sleep(timer:seconds(10)),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(WorkerP2, SessionId2, {guid, FileGuid}), ?ATTEMPTS),
 
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(WorkerP2, FileHandle2, 0, ?TEST_DATA_LENGTH), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA}, read_file(WorkerP2, StorageFilePath2)),
 
     ok = lfm_proxy:close(WorkerP2, FileHandle2),
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(WorkerP2, SessionId2, {guid, FileGuid}), ?ATTEMPTS),
     ?assertMatch({error, ?ENOENT}, read_file(WorkerP2, StorageFilePath1)).
 
 %%%===================================================================

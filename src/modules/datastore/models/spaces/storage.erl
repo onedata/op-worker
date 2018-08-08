@@ -172,7 +172,7 @@ is_readonly(#document{value = #storage{} = Value}) ->
 %% Returns list of storage helpers.
 %% @end
 %%--------------------------------------------------------------------
--spec get_helpers(record() | doc()) -> [helper()].
+-spec get_helpers(record() | doc() | id()) -> [helper()].
 get_helpers(#storage{helpers = Helpers}) ->
     Helpers;
 get_helpers(#document{value = #storage{} = Value}) ->
