@@ -27,12 +27,12 @@
 -export([
     db_sync_basic_opts_test/1, db_sync_many_ops_test/1, db_sync_distributed_modification_test/1,
     db_sync_many_ops_test_base/1, multi_space_test/1, rtransfer_test/1, rtransfer_test_base/1,
-    rtransfer_multisource_test/1
+    rtransfer_multisource_test/1, rtransfer_blocking_test/1
 ]).
 
 -define(TEST_CASES, [
     db_sync_basic_opts_test, db_sync_many_ops_test, db_sync_distributed_modification_test,
-    multi_space_test, rtransfer_test, rtransfer_multisource_test
+    multi_space_test, rtransfer_test, rtransfer_multisource_test, rtransfer_blocking_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -201,6 +201,10 @@ rtransfer_test_base(Config) ->
     multi_provider_file_ops_test_base:rtransfer_test_base(Config, <<"user1">>,
         {3,0,0}, 180, timer:minutes(5), SMN, MFN, BFN, BFP, TN, TFP).
 
+rtransfer_blocking_test(Config) ->
+    multi_provider_file_ops_test_base:rtransfer_blocking_test_base(Config, <<"user1">>,
+        {3,0,0}, 180, timer:minutes(5), 30).
+
 db_sync_many_ops_test(Config) ->
     ?PERFORMANCE(Config, ?db_sync_performance_description("Tests working on dirs and files with db_sync")).
 db_sync_many_ops_test_base(Config) ->
@@ -245,5 +249,8 @@ init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 60}),
     lfm_proxy:init(Config).
 
+end_per_testcase(rtransfer_blocking_test, Config) ->
+    multi_provider_file_ops_test_base:rtransfer_blocking_test_cleanup(Config),
+    lfm_proxy:teardown(Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).

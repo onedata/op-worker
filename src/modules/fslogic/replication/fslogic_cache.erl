@@ -195,10 +195,10 @@ cache_event(SessionIds, Event) ->
     case get(?EVENTS_CACHE) of
         undefined ->
             put(?EVENTS_CACHE, [{SessionIds, [Event]}]);
-        [{SessionIds, TmpEvents} | Tail] ->
-            put(?EVENTS_CACHE, [{SessionIds, [Event | TmpEvents]} | Tail]);
         Events ->
-            put(?EVENTS_CACHE, [{SessionIds, [Event]} | Events])
+            TmpEvents = proplists:get_value(SessionIds, Events, []),
+            Events2 = proplists:delete(SessionIds, Events),
+            put(?EVENTS_CACHE, [{SessionIds, [Event | TmpEvents]} | Events2])
     end,
 
     ok.
@@ -309,7 +309,6 @@ cache_doc(#document{key = Key, value = #file_location{space_id = SpaceId} =
 delete_doc(Key) ->
     Ans = file_location:delete(Key),
 
-    Size = get_local_size(Key),
     case get_doc(Key) of
         #document{value = #file_location{uuid = FileUuid, space_id = SpaceId}} ->
             Changes = case get({?SIZE_CHANGES, Key}) of
@@ -317,6 +316,7 @@ delete_doc(Key) ->
                 Value -> Value
             end,
             SpaceChange = proplists:get_value(SpaceId, Changes, 0),
+            Size = get_local_size(Key),
             put({?SIZE_CHANGES, Key}, [{SpaceId, SpaceChange - Size} |
                 proplists:delete(SpaceId, Changes)]),
             apply_size_change(Key, FileUuid);
