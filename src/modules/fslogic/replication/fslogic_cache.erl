@@ -440,28 +440,26 @@ finish_blocks_usage(Key) ->
 
 get_changed_blocks(Key) ->
     Local = get(?LOCAL_CHANGES),
-    Saved = case get({?SAVED_BLOCKS, Key, Local}) of
-        undefined -> sets:new();
-        Value -> Value
-    end,
-
-    Deleted = case get({?DELETED_BLOCKS, Key, Local}) of
-        undefined -> sets:new();
-        Value2 -> Value2
-    end,
-
+    Saved = get_set({?SAVED_BLOCKS, Key, Local}),
+    Deleted = get_set({?DELETED_BLOCKS, Key}),
     {Saved, Deleted}.
 
+get_set(Key) ->
+    case get(Key) of
+        undefined -> sets:new();
+        Value -> Value
+    end.
+
 mark_changed_blocks(Key, all, all) ->
-    Local = get(?LOCAL_CHANGES),
-    put({?SAVED_BLOCKS, Key, Local}, sets:new()),
-    put({?DELETED_BLOCKS, Key, Local}, sets:new()),
-    put({?RESET_BLOCKS, Key, Local}, true),
+    erase({?SAVED_BLOCKS, Key, true}),
+    erase({?SAVED_BLOCKS, Key, undefined}),
+    erase({?DELETED_BLOCKS, Key}),
+    put({?RESET_BLOCKS, Key}, true),
     ok;
 mark_changed_blocks(Key, Saved, Deleted) ->
     Local = get(?LOCAL_CHANGES),
     put({?SAVED_BLOCKS, Key, Local}, Saved),
-    put({?DELETED_BLOCKS, Key, Local}, Deleted),
+    put({?DELETED_BLOCKS, Key}, Deleted),
     ok.
 
 set_local_change(false) ->
@@ -546,24 +544,45 @@ flush_key(Key) ->
     case get({?DOCS, Key}) of
         undefined ->
             ok;
-        #document{key = Key, value = #file_location{uuid = FileUuid} = Location} = Doc ->
+        #document{key = Key, value = #file_location{uuid = FileUuid,
+            size = Size0} = Location} = Doc ->
             DocToSave = case get({?RESET_BLOCKS, Key}) of
                 true ->
                     attach_blocks(Doc);
                 _ ->
+                    Size = case Size0 of
+                        undefined -> 0;
+                        _ -> Size0
+                    end,
+                    SizeThreshold = application:get_env(?APP_NAME,
+                        public_block_size_treshold, 104857600),
+                    PercentThreshold = application:get_env(?APP_NAME,
+                        public_block_percent_treshold, 10),
+
+                    PublicBlocks = get_set({?SAVED_BLOCKS, Key, undefined}),
+                    {_LocalBlocks, PublicBlocks2} = sets:fold(
+                        fun(#file_block{size = S} = Block, {TmpLocalBlocks, TmpPublicBlocks}) ->
+                            case (S >= SizeThreshold) orelse (S >= (Size * PercentThreshold / 100)) of
+                                true ->
+                                    {TmpLocalBlocks, sets:add_element(Block, TmpPublicBlocks)};
+                                _ ->
+                                    {[Block | TmpLocalBlocks], TmpPublicBlocks}
+                            end
+                        end, {[], PublicBlocks}, get_set({?SAVED_BLOCKS, Key, true})),
+
+                    DeletedBlocks = get_set({?DELETED_BLOCKS, Key}),
+
                     BlocksToSave = get({?PUBLIC_BLOCKS, Key}),
-                    {Saved, Deleted} = get_changed_blocks(Key),
-                    BlocksToSave2 = BlocksToSave -- sets:to_list(Deleted),
-                    BlocksToSave3 = BlocksToSave2 ++ sets:to_list(Saved),
+                    BlocksToSave2 = BlocksToSave -- sets:to_list(DeletedBlocks),
+                    BlocksToSave3 = BlocksToSave2 ++ sets:to_list(PublicBlocks2),
                     BlocksToSave4 = lists:sort(BlocksToSave3),
                     Doc#document{value = Location#file_location{blocks = BlocksToSave4}}
             end,
             case file_location:save(DocToSave) of
                 {ok, _} ->
                     erase({?SAVED_BLOCKS, Key, true}),
-                    erase({?DELETED_BLOCKS, Key, true}),
                     erase({?SAVED_BLOCKS, Key, undefined}),
-                    erase({?DELETED_BLOCKS, Key, undefined}),
+                    erase({?DELETED_BLOCKS, Key}),
                     erase({?RESET_BLOCKS, Key}),
                     apply_size_change(Key, FileUuid);
                 Error ->
