@@ -560,6 +560,7 @@ flush_key(Key) ->
                         public_block_percent_treshold, 10),
 
                     PublicBlocks = get_set({?SAVED_BLOCKS, Key, undefined}),
+                    % Warning - LocalBlocks are not sorted
                     {_LocalBlocks, PublicBlocks2} = sets:fold(
                         fun(#file_block{size = S} = Block, {TmpLocalBlocks, TmpPublicBlocks}) ->
                             case (S >= SizeThreshold) orelse (S >= (Size * PercentThreshold / 100)) of
@@ -571,11 +572,13 @@ flush_key(Key) ->
                         end, {[], PublicBlocks}, get_set({?SAVED_BLOCKS, Key, true})),
 
                     DeletedBlocks = get_set({?DELETED_BLOCKS, Key}),
-
                     BlocksToSave = get({?PUBLIC_BLOCKS, Key}),
                     BlocksToSave2 = BlocksToSave -- sets:to_list(DeletedBlocks),
                     BlocksToSave3 = BlocksToSave2 ++ sets:to_list(PublicBlocks2),
                     BlocksToSave4 = lists:sort(BlocksToSave3),
+
+                    % TODO - wyfiltrowac zapisy jesli nic sie nie zmienilo
+                    put({?PUBLIC_BLOCKS, Key}, BlocksToSave4),
                     Doc#document{value = Location#file_location{blocks = BlocksToSave4}}
             end,
             case file_location:save(DocToSave) of
