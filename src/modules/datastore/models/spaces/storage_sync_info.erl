@@ -192,7 +192,7 @@ new_doc(Key, NewMTime, NewHashKey, NewHashValue, StatTime, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    2.
+    3.
 
 %%--------------------------------------------------------------------
 %% @doc
