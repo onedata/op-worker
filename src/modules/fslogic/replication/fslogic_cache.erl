@@ -125,6 +125,7 @@ flush() ->
 -spec flush(file_location:id(), boolean()) -> ok | {error, term()}.
 % Second arg to be used in next step of refactoring
 flush(Key, _FlushBlocks) ->
+    % TODO - sprawdzic czy jest co flushowac
     case flush_key(Key) of
         ok ->
             KM = get(?KEYS_MODIFIED),
@@ -236,12 +237,17 @@ get_doc(Key) ->
     case get({?DOCS, Key}) of
         undefined ->
             case file_location:get(Key) of
-                {ok, #document{key = Key, value = #file_location{blocks = Blocks}
+                {ok, #document{key = Key, value = #file_location{blocks = PublicBlocks}
                     = Location} = LocationDoc} ->
                     LocationDoc2 = LocationDoc#document{value =
                     Location#file_location{blocks = []}},
                     cache_doc(LocationDoc2),
-                    cache_blocks(Key, Blocks),
+
+                    {ok, LocalBlocks} = file_location:get_local_blocks(Key),
+%%                    ?info("gggg ~p", [{length(LocalBlocks), length(PublicBlocks)}]),
+
+                    put({?BLOCKS, Key}, blocks_to_tree(PublicBlocks ++ LocalBlocks)),
+                    put({?PUBLIC_BLOCKS, Key}, PublicBlocks),
                     LocationDoc2;
                 {error, not_found} = ENF ->
                     ENF;
@@ -548,6 +554,8 @@ flush_key(Key) ->
             size = Size0} = Location} = Doc ->
             DocToSave = case get({?RESET_BLOCKS, Key}) of
                 true ->
+                    % TODO - powoduje zrobienie wszystkich blokow publicznymi !
+                    ok = file_location:delete_local_blocks(Key, all),
                     attach_blocks(Doc);
                 _ ->
                     Size = case Size0 of
@@ -561,7 +569,7 @@ flush_key(Key) ->
 
                     PublicBlocks = get_set({?SAVED_BLOCKS, Key, undefined}),
                     % Warning - LocalBlocks are not sorted
-                    {_LocalBlocks, PublicBlocks2} = sets:fold(
+                    {LocalBlocks, PublicBlocks2} = sets:fold(
                         fun(#file_block{size = S} = Block, {TmpLocalBlocks, TmpPublicBlocks}) ->
                             case (S >= SizeThreshold) orelse (S >= (Size * PercentThreshold / 100)) of
                                 true ->
@@ -571,18 +579,30 @@ flush_key(Key) ->
                             end
                         end, {[], PublicBlocks}, get_set({?SAVED_BLOCKS, Key, true})),
 
-                    DeletedBlocks = get_set({?DELETED_BLOCKS, Key}),
+                    DeletedBlocksSet = get_set({?DELETED_BLOCKS, Key}),
+                    DeletedBlocks = sets:to_list(DeletedBlocksSet),
                     BlocksToSave = get({?PUBLIC_BLOCKS, Key}),
-                    BlocksToSave2 = BlocksToSave -- sets:to_list(DeletedBlocks),
+                    BlocksToSave2 = BlocksToSave -- DeletedBlocks,
                     BlocksToSave3 = BlocksToSave2 ++ sets:to_list(PublicBlocks2),
                     BlocksToSave4 = lists:sort(BlocksToSave3),
 
-                    % TODO - wyfiltrowac zapisy jesli nic sie nie zmienilo
+                    % TODO - nie powinnien poleciec wyjatek
+%%                    ?info("xxxxx ~p", [{length(BlocksToSave4), length(LocalBlocks), DeletedBlocks}]),
+                    % TODO - bloku moze nie byc (moze byc publiczny)
+                    file_location:delete_local_blocks(Key, DeletedBlocks),
+
+                    % TODO - w przypadku already exists rzucic tylko warning (uwage - jest w liscie)
+                    % TODO - match
+                    file_location:save_local_blocks(Key, LocalBlocks),
+
+                    % TODO - wyfiltrowac zapisy jesli nic sie nie zmienilo (np. tylko lokalne bloki)
                     put({?PUBLIC_BLOCKS, Key}, BlocksToSave4),
                     Doc#document{value = Location#file_location{blocks = BlocksToSave4}}
             end,
+
             case file_location:save(DocToSave) of
                 {ok, _} ->
+                    % TODO - kasowac lokalne tylko jak sie powiedzie
                     erase({?SAVED_BLOCKS, Key, true}),
                     erase({?SAVED_BLOCKS, Key, undefined}),
                     erase({?DELETED_BLOCKS, Key}),
@@ -624,12 +644,20 @@ apply_size_change(Key, FileUuid) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec blocks_to_tree(fslogic_blocks:stored_blocks()) -> fslogic_blocks:blocks_tree().
-blocks_to_tree(Blocks) when is_list(Blocks) ->
+blocks_to_tree(Blocks) ->
+    blocks_to_tree(Blocks, true).
+
+blocks_to_tree(Blocks, true) when is_list(Blocks) ->
     gb_sets:from_ordset(lists:map(
         fun(#file_block{offset = O, size = S}) ->
             #file_block{offset = O+S, size = S}
         end, Blocks));
-blocks_to_tree(Blocks) ->
+blocks_to_tree(Blocks, _) when is_list(Blocks) ->
+    gb_sets:from_list(lists:map(
+        fun(#file_block{offset = O, size = S}) ->
+            #file_block{offset = O+S, size = S}
+        end, Blocks));
+blocks_to_tree(Blocks, _) ->
     Blocks.
 
 %%-------------------------------------------------------------------

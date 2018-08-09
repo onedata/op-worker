@@ -21,6 +21,7 @@
 -export([create/1, create/2, create_and_update_quota/2, save/1,
     save_and_update_quota/1, get/1, update/2,
     delete/1, delete_and_update_quota/1, get_owner_id/1]).
+-export([save_local_blocks/2, get_local_blocks/1, delete_local_blocks/2]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -36,7 +37,12 @@
 -define(CTX, #{
     model => ?MODULE,
     sync_enabled => true,
-    remote_driver => datastore_remote_driver,
+    mutator => oneprovider:get_id_or_undefined(),
+    local_links_tree_id => oneprovider:get_id_or_undefined()
+}).
+
+-define(LINKS_CTX, #{
+    model => ?MODULE,
     mutator => oneprovider:get_id_or_undefined(),
     local_links_tree_id => oneprovider:get_id_or_undefined()
 }).
@@ -215,6 +221,7 @@ update(Key, Diff) ->
 %%--------------------------------------------------------------------
 -spec delete(id()) -> ok | {error, term()}.
 delete(Key) ->
+   % TODO - skasowac linki (ale to moze trwac wieki !)
    datastore_model:delete(?CTX, Key).
 
 %%--------------------------------------------------------------------
@@ -261,6 +268,46 @@ get_version_vector(#document{value = FileLocation}) ->
     get_version_vector(FileLocation);
 get_version_vector(#file_location{version_vector = VV}) ->
     VV.
+
+save_local_blocks(_Key, []) ->
+    ok;
+save_local_blocks(Key, Blocks) ->
+    Links = lists:map(fun(#file_block{offset = O, size = S}) -> {O, S} end, Blocks),
+    TreeId = oneprovider:get_id(),
+    datastore_model:add_links(?LINKS_CTX, Key, TreeId, Links).
+
+delete_local_blocks(_Key, []) ->
+    ok;
+delete_local_blocks(Key, all) ->
+    TreeId = oneprovider:get_id(),
+    Ctx = ?LINKS_CTX,
+    FoldAns = datastore_model:fold_links(Ctx, Key, TreeId, fun
+        (#link{name = O}, Acc) ->
+            {ok, {[O | Acc]}}
+    end, [], #{}),
+    case FoldAns of
+        {ok, Links} ->
+            datastore_model:delete_links(Ctx, Key, TreeId, Links);
+        {error, Reason} ->
+            {error, Reason}
+    end;
+delete_local_blocks(Key, Blocks) ->
+    TreeId = oneprovider:get_id(),
+    Links = lists:map(fun(#file_block{offset = O}) -> O end, Blocks),
+    datastore_model:delete_links(?LINKS_CTX, Key, TreeId, Links).
+
+get_local_blocks(Key) ->
+    TreeId = oneprovider:get_id(),
+    FoldAns = datastore_model:fold_links(?LINKS_CTX, Key, TreeId, fun
+        (#link{name = O, target = S}, Acc) ->
+            {ok, [#file_block{offset = O, size = S} | Acc]}
+    end, [], #{}),
+    case FoldAns of
+        {ok, Links} ->
+            {ok, lists:reverse(Links)};
+        Error ->
+            Error
+    end.
 
 %%%===================================================================
 %%% Internal functions
