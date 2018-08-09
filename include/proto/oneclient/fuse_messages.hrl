@@ -112,6 +112,7 @@
 
 -record(synchronize_block_and_compute_checksum, {
     block :: #file_block{},
+    prefetch = false :: boolean(),
     priority :: non_neg_integer()
 }).
 
@@ -218,9 +219,15 @@
     file_content :: binary()
 }).
 
+-record(file_location_changed, {
+    file_location :: #file_location{},
+    change_beg_offset :: undefined | non_neg_integer(),
+    change_end_offset :: undefined | non_neg_integer()
+}).
+
 -record(sync_response, {
     checksum :: binary(),
-    file_location :: #file_location{}
+    file_location_changed :: #file_location_changed{}
 }).
 
 -record(file_created, {
@@ -251,12 +258,6 @@
 
 -record(xattr_list, {
     names :: [xattr:name()]
-}).
-
--record(file_location_changed, {
-    file_location :: #file_location{},
-    change_beg_offset :: undefined | non_neg_integer(),
-    change_end_offset :: undefined | non_neg_integer()
 }).
 
 -type fuse_response_type() ::

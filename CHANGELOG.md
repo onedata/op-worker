@@ -4,6 +4,13 @@
 CHANGELOG
 ---------
 
+### 18.02.0-rc11
+
+* Upgrade rtransfer_link.
+* VFS-4055 Update bp_tree
+* VFS-4726 Add backwards compatibility for changing privileges in 18.07
+
+
 ### 18.02.0-rc10
 
 * fix duplicated transfer links after restart

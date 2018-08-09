@@ -294,9 +294,9 @@ translate_from_protobuf(#'SynchronizeBlock'{block = #'FileBlock'{
     #synchronize_block{block = #file_block{offset = O, size = S},
         prefetch = Prefetch, priority = Priority};
 translate_from_protobuf(#'SynchronizeBlockAndComputeChecksum'{
-    block = #'FileBlock'{offset = O, size = S}, priority = Priority}) ->
+    block = #'FileBlock'{offset = O, size = S}, prefetch = Prefetch, priority = Priority}) ->
     #synchronize_block_and_compute_checksum{block =
-    #file_block{offset = O, size = S}, priority = Priority};
+    #file_block{offset = O, size = S}, prefetch = Prefetch, priority = Priority};
 
 translate_from_protobuf(#'FuseResponse'{status = Status, fuse_response = {_, FuseResponse}}) ->
     #fuse_response{
@@ -369,8 +369,10 @@ translate_from_protobuf(#'HelperArg'{key = Key, value = Value}) ->
     #helper_arg{key = Key, value = Value};
 translate_from_protobuf(#'Parameter'{key = Key, value = Value}) ->
     {Key, Value};
-translate_from_protobuf(#'SyncResponse'{checksum = Checksum, file_location = FileLocation}) ->
-    #sync_response{checksum = Checksum, file_location = translate_from_protobuf(FileLocation)};
+translate_from_protobuf(#'SyncResponse'{checksum = Checksum,
+    file_location_changed = FileLocationChanged}) ->
+    #sync_response{checksum = Checksum,
+        file_location_changed = translate_from_protobuf(FileLocationChanged)};
 translate_from_protobuf(#'FileCreated'{} = Record) ->
     #file_created{
         handle_id = Record#'FileCreated'.handle_id,
@@ -831,10 +833,10 @@ translate_to_protobuf(#synchronize_block{block = Block, prefetch = Prefetch,
         #'SynchronizeBlock'{block = translate_to_protobuf(Block),
             prefetch = Prefetch, priority = Priority}};
 translate_to_protobuf(#synchronize_block_and_compute_checksum{block = Block,
-    priority = Priority}) ->
+    prefetch = Prefetch, priority = Priority}) ->
     {synchronize_block_and_compute_checksum,
         #'SynchronizeBlockAndComputeChecksum'{block =
-        translate_to_protobuf(Block), priority = Priority}};
+        translate_to_protobuf(Block), prefetch = Prefetch, priority = Priority}};
 
 translate_to_protobuf(#fuse_response{status = Status, fuse_response = FuseResponse}) ->
     {status, StatProto} = translate_to_protobuf(Status),
@@ -908,9 +910,11 @@ translate_to_protobuf(#storage_test_file{helper_params = HelperParams,
     {_, Record} = translate_to_protobuf(HelperParams),
     {storage_test_file, #'StorageTestFile'{helper_params = Record,
         space_id = SpaceId, file_id = FileId, file_content = FileContent}};
-translate_to_protobuf(#sync_response{checksum = Value, file_location = FileLocation}) ->
-    {_, ProtoFileLocation} = translate_to_protobuf(FileLocation),
-    {sync_response, #'SyncResponse'{checksum = Value, file_location = ProtoFileLocation}};
+translate_to_protobuf(#sync_response{checksum = Value,
+    file_location_changed = FileLocationChanged}) ->
+    {_, ProtoFileLocationChanged} = translate_to_protobuf(FileLocationChanged),
+    {sync_response, #'SyncResponse'{checksum = Value,
+        file_location_changed = ProtoFileLocationChanged}};
 translate_to_protobuf(#file_created{} = Record) ->
     {_, FileAttr} = translate_to_protobuf(Record#file_created.file_attr),
     {_, FileLocation} = translate_to_protobuf(Record#file_created.file_location),
