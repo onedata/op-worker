@@ -523,11 +523,11 @@ all_group_privileges(_) -> [
     ?GROUP_DELETE,
     ?GROUP_INVITE_USER,
     ?GROUP_REMOVE_USER,
-    group_invite_child,
-    group_remove_child,
-    group_join_parent,
-    group_leave_parent,
-    group_add_space,
+    ?GROUP_INVITE_CHILD,
+    ?GROUP_REMOVE_CHILD,
+    ?GROUP_JOIN_PARENT,
+    ?GROUP_LEAVE_PARENT,
+    ?GROUP_CREATE_SPACE,
     ?GROUP_JOIN_SPACE,
     ?GROUP_LEAVE_SPACE
 ].
@@ -546,11 +546,12 @@ perm_db_to_gui(?GROUP_SET_PRIVILEGES) -> <<"permSetPrivileges">>;
 perm_db_to_gui(?GROUP_DELETE) -> <<"permRemoveGroup">>;
 perm_db_to_gui(?GROUP_INVITE_USER) -> <<"permInviteUser">>;
 perm_db_to_gui(?GROUP_REMOVE_USER) -> <<"permRemoveUser">>;
-perm_db_to_gui(group_add_child) -> <<"permInviteGroup">>;
-perm_db_to_gui(group_remove_child) -> <<"permRemoveSubgroup">>;
-perm_db_to_gui(group_add_parent) -> <<"permJoinGroup">>;
-perm_db_to_gui(group_leave_parent) -> <<"permLeaveGroup">>;
-perm_db_to_gui(group_add_space) -> <<"permCreateSpace">>;
+perm_db_to_gui(?GROUP_INVITE_CHILD) -> <<"permInviteGroup">>;
+perm_db_to_gui(?GROUP_REMOVE_CHILD) -> <<"permRemoveSubgroup">>;
+perm_db_to_gui(?GROUP_JOIN_PARENT) -> <<"permJoinGroup">>;
+perm_db_to_gui(?GROUP_LEAVE_PARENT) -> <<"permLeaveGroup">>;
+perm_db_to_gui(?GROUP_CREATE_SPACE) -> <<"permCreateSpace">>;
+perm_db_to_gui(?GROUP_JOIN_SPACE) -> <<"permJoinSpace">>;
 perm_db_to_gui(?GROUP_LEAVE_SPACE) -> <<"permLeaveSpace">>;
 perm_db_to_gui(_) -> undefined.
 
@@ -568,12 +569,12 @@ perm_gui_to_db(<<"permSetPrivileges">>) -> ?GROUP_SET_PRIVILEGES;
 perm_gui_to_db(<<"permRemoveGroup">>) -> ?GROUP_DELETE;
 perm_gui_to_db(<<"permInviteUser">>) -> ?GROUP_INVITE_USER;
 perm_gui_to_db(<<"permRemoveUser">>) -> ?GROUP_REMOVE_USER;
-perm_gui_to_db(<<"permInviteGroup">>) -> group_add_child;
-perm_gui_to_db(<<"permRemoveSubgroup">>) -> group_remove_child;
-perm_gui_to_db(<<"permJoinGroup">>) -> group_add_parent;
-perm_gui_to_db(<<"permLeaveGroup">>) -> group_leave_parent;
-perm_gui_to_db(<<"permCreateSpace">>) -> group_add_space;
-perm_gui_to_db(<<"permJoinSpace">>) -> group_add_space;
+perm_gui_to_db(<<"permInviteGroup">>) -> ?GROUP_INVITE_CHILD;
+perm_gui_to_db(<<"permRemoveSubgroup">>) -> ?GROUP_REMOVE_CHILD;
+perm_gui_to_db(<<"permJoinGroup">>) -> ?GROUP_JOIN_PARENT;
+perm_gui_to_db(<<"permLeaveGroup">>) -> ?GROUP_LEAVE_PARENT;
+perm_gui_to_db(<<"permCreateSpace">>) -> ?GROUP_CREATE_SPACE;
+perm_gui_to_db(<<"permJoinSpace">>) -> ?GROUP_JOIN_SPACE;
 perm_gui_to_db(<<"permLeaveSpace">>) -> ?GROUP_LEAVE_SPACE.
 
 
@@ -591,10 +592,10 @@ perm_db_to_gui_18_02(?GROUP_SET_PRIVILEGES) -> <<"permSetPrivileges">>;
 perm_db_to_gui_18_02(?GROUP_DELETE) -> <<"permRemoveGroup">>;
 perm_db_to_gui_18_02(?GROUP_INVITE_USER) -> <<"permInviteUser">>;
 perm_db_to_gui_18_02(?GROUP_REMOVE_USER) -> <<"permRemoveUser">>;
-perm_db_to_gui_18_02(?GROUP_INVITE_GROUP) -> <<"permInviteGroup">>;
-perm_db_to_gui_18_02(?GROUP_REMOVE_GROUP) -> <<"permRemoveSubgroup">>;
-perm_db_to_gui_18_02(?GROUP_JOIN_GROUP) -> <<"permJoinGroup">>;
-perm_db_to_gui_18_02(?GROUP_LEAVE_GROUP) -> <<"permLeaveGroup">>;
+perm_db_to_gui_18_02(group_invite_group) -> <<"permInviteGroup">>;
+perm_db_to_gui_18_02(group_remove_group) -> <<"permRemoveSubgroup">>;
+perm_db_to_gui_18_02(group_join_group) -> <<"permJoinGroup">>;
+perm_db_to_gui_18_02(group_leave_group) -> <<"permLeaveGroup">>;
 perm_db_to_gui_18_02(?GROUP_CREATE_SPACE) -> <<"permCreateSpace">>;
 perm_db_to_gui_18_02(?GROUP_JOIN_SPACE) -> <<"permJoinSpace">>;
 perm_db_to_gui_18_02(?GROUP_LEAVE_SPACE) -> <<"permLeaveSpace">>;
@@ -615,10 +616,10 @@ perm_gui_to_db_18_02(<<"permSetPrivileges">>) -> ?GROUP_SET_PRIVILEGES;
 perm_gui_to_db_18_02(<<"permRemoveGroup">>) -> ?GROUP_DELETE;
 perm_gui_to_db_18_02(<<"permInviteUser">>) -> ?GROUP_INVITE_USER;
 perm_gui_to_db_18_02(<<"permRemoveUser">>) -> ?GROUP_REMOVE_USER;
-perm_gui_to_db_18_02(<<"permInviteGroup">>) -> ?GROUP_INVITE_GROUP;
-perm_gui_to_db_18_02(<<"permRemoveSubgroup">>) -> ?GROUP_REMOVE_GROUP;
-perm_gui_to_db_18_02(<<"permJoinGroup">>) -> ?GROUP_JOIN_GROUP;
-perm_gui_to_db_18_02(<<"permLeaveGroup">>) -> ?GROUP_LEAVE_GROUP;
+perm_gui_to_db_18_02(<<"permInviteGroup">>) -> group_invite_group;
+perm_gui_to_db_18_02(<<"permRemoveSubgroup">>) -> group_remove_group;
+perm_gui_to_db_18_02(<<"permJoinGroup">>) -> group_join_group;
+perm_gui_to_db_18_02(<<"permLeaveGroup">>) -> group_leave_group;
 perm_gui_to_db_18_02(<<"permCreateSpace">>) -> ?GROUP_CREATE_SPACE;
 perm_gui_to_db_18_02(<<"permJoinSpace">>) -> ?GROUP_JOIN_SPACE;
 perm_gui_to_db_18_02(<<"permLeaveSpace">>) -> ?GROUP_LEAVE_SPACE.

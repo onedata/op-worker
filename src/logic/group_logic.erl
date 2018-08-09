@@ -36,8 +36,8 @@
 -export([update_user_privileges/4, update_user_privileges/5]).
 -export([update_child_privileges/4, update_child_privileges/5]).
 -export([create_user_invite_token/2, create_group_invite_token/2]).
--export([leave_space/3, join_space/3]).
 -export([join_group/3, leave_group/3]).
+-export([leave_space/3, join_space/3]).
 
 %%%===================================================================
 %%% API
