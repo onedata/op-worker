@@ -636,19 +636,15 @@ transfer_fields_description(Node, TransferId) ->
     end, {"~nTransfer ~p fields values:~n", [TransferId]}, FieldsList).
 
 await_transfer_starts(Node, TransferId) ->
-    ct:pal("AAAA"),
     ?assertEqual(true, begin
         try
             #transfer{
                 bytes_transferred = BytesTransferred,
                 files_transferred = FilesTransferred
             } = transfers_test_utils:get_transfer(Node, TransferId),
-                ct:pal("BytesTransferred: ~p~nFilesTransferred: ~p", [BytesTransferred, FilesTransferred]),
             (BytesTransferred > 0) or (FilesTransferred > 0)
         catch
             throw:transfer_not_found ->
-                false;
-            Other:Error ->
-                ct:pal("DUUUPA: ~p:~p", [Other, Error])
+                false
         end
     end, 60).

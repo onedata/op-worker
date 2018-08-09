@@ -75,6 +75,7 @@ all() -> [
     schedule_replication_on_not_supporting_provider_by_guid,
     schedule_replication_on_not_supporting_provider_by_path,
     cancel_replication_on_target_nodes,
+    restart_replication_on_target_nodes,
     file_replication_failures_should_fail_whole_transfer,
     many_simultaneous_failed_transfers
 ].
