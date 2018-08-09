@@ -32,7 +32,7 @@
 %% API
 -export([
     synchronize_block/6,
-    synchronize_block_and_compute_checksum/4,
+    synchronize_block_and_compute_checksum/5,
     get_file_distribution/2,
     start_transfer/4
 ]).
@@ -78,26 +78,28 @@ synchronize_block(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec synchronize_block_and_compute_checksum(user_ctx:ctx(), file_ctx:ctx(),
-    block(), non_neg_integer()) -> fuse_response().
+    block(), boolean(), non_neg_integer()) -> fuse_response().
 synchronize_block_and_compute_checksum(UserCtx, FileCtx,
-    Range = #file_block{offset = Offset, size = Size}, Priority
+    Range = #file_block{offset = Offset, size = Size}, Prefetch, Priority
 ) ->
     SessId = user_ctx:get_session_id(UserCtx),
     FileGuid = file_ctx:get_guid_const(FileCtx),
+
+    {ok, Ans} = replica_synchronizer:synchronize(UserCtx, FileCtx, Range,
+        Prefetch, undefined, Priority),
+
     %todo do not use lfm, operate on fslogic directly
     {ok, Handle} = lfm_files:open(SessId, {guid, FileGuid}, read),
     % does sync internally
-    {ok, _, Data} = lfm_files:read_without_events(Handle, Offset, Size, Priority),
+    {ok, _, Data} = lfm_files:read_without_events(Handle, Offset, Size, off),
     lfm_files:release(Handle),
 
     Checksum = crypto:hash(md4, Data),
-    % TODO VFS-4412 Refactor similarly to synchronize_block
-    {LocationToSend, _FileCtx2} = file_ctx:get_file_location_with_filled_gaps(FileCtx, Range),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #sync_response{
             checksum = Checksum,
-            file_location = LocationToSend
+            file_location_changed = Ans
         }
     }.
 

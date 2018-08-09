@@ -41,7 +41,7 @@
     replicate_to_missing_provider_by_guid/1,
     replicate_to_missing_provider_by_path/1,
     replicate_to_not_supporting_provider_by_guid/1,
-    replicate_to_not_supporting_provider_by_path/1, 
+    replicate_to_not_supporting_provider_by_path/1,
     schedule_replication_on_not_supporting_provider_by_guid/1,
     schedule_replication_on_not_supporting_provider_by_path/1,
     file_replication_failures_should_fail_whole_transfer/1,
