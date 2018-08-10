@@ -21,6 +21,10 @@
 TARGET_DIR='_build/default/lib/gui_static'
 # Image which will be used by default to get the static files. If it cannot
 # be resolved, the script will fall back to secondary.
-PRIMARY_IMAGE='docker.onedata.org/op-gui-default:VFS-4753-disable-transfer-lock'
+
+# @FIXME!
+
+
+PRIMARY_IMAGE='docker.onedata.org/op-gui-default:VFS-4738-disable-group-spaces-tab'
 # Image which will be used if primary image is not resolved.
-SECONDARY_IMAGE='onedata/op-gui-default:VFS-4753-disable-transfer-lock'
+SECONDARY_IMAGE='onedata/op-gui-default:VFS-4738-disable-group-spaces-tab'

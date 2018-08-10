@@ -540,10 +540,6 @@ is_authorized(?ROOT_SESS_ID, _, #gri{type = od_user, scope = protected}, _) ->
 is_authorized(?ROOT_SESS_ID, _, #gri{type = od_user, scope = shared}, _) ->
     true;
 
-is_authorized(?ROOT_SESS_ID, _, #gri{type = od_group, scope = private}, _) ->
-    false;
-is_authorized(?ROOT_SESS_ID, _, #gri{type = od_group, scope = protected}, _) ->
-    true;
 is_authorized(?ROOT_SESS_ID, _, #gri{type = od_group, scope = shared}, _) ->
     true;
 
@@ -604,26 +600,18 @@ is_user_authorized(UserId, _, _, #gri{type = od_user, id = UserId, scope = share
     true;
 is_user_authorized(ClientUserId, Client, AuthHint, #gri{type = od_user, id = TargetUserId, scope = shared}, _) ->
     case AuthHint of
-        ?THROUGH_GROUP(GroupId) ->
-            group_logic:can_view_user_through_group(Client, GroupId, ClientUserId, TargetUserId);
         ?THROUGH_SPACE(SpaceId) ->
             space_logic:can_view_user_through_space(Client, SpaceId, ClientUserId, TargetUserId);
         _ ->
             false
     end;
 
-is_user_authorized(UserId, _, _, #gri{type = od_group, scope = private}, CachedDoc) ->
-    group_logic:has_eff_privilege(CachedDoc, UserId, ?GROUP_VIEW);
-is_user_authorized(UserId, SessionId, _, #gri{type = od_group, scope = protected}, CachedDoc) ->
-    user_logic:has_eff_group(SessionId, UserId, CachedDoc#document.key);
-is_user_authorized(ClientUserId, Client, AuthHint, GRI = #gri{type = od_group, id = ChildId, scope = shared}, CachedDoc) ->
+is_user_authorized(ClientUserId, Client, AuthHint, #gri{type = od_group, id = ChildId, scope = shared}, CachedDoc) ->
     case AuthHint of
-        ?THROUGH_GROUP(GroupId) ->
-            group_logic:can_view_child_through_group(Client, GroupId, ClientUserId, ChildId);
         ?THROUGH_SPACE(SpaceId) ->
             space_logic:can_view_group_through_space(Client, SpaceId, ClientUserId, ChildId);
         _ ->
-            is_user_authorized(ClientUserId, Client, AuthHint, GRI#gri{scope = protected}, CachedDoc)
+            user_logic:has_eff_group(ClientUserId, Client, CachedDoc#document.key)
     end;
 
 is_user_authorized(UserId, _, _, #gri{type = od_space, scope = private}, CachedDoc) ->
