@@ -929,7 +929,7 @@ cache_stats_and_blocks(TransferIds, ProviderId, Block, State) ->
         StatsPerTransfer#{TransferId => NewTransferStats}
     end, State#state.cached_stats, TransferIds),
 
-    CachedBlocks = case application:get_env(?APP_NAME, synchronizer_events, transfers_only) of
+    CachedBlocks = case application:get_env(?APP_NAME, synchronizer_in_progress_events, transfers_only) of
         transfers_only ->
             case TransferIds of
                 [undefined] ->
@@ -970,20 +970,18 @@ flush_blocks(State) ->
 flush_blocks(#state{cached_blocks = Blocks} = State, ExcludeSessions,
     FinalBlocks, IsTransfer) ->
 
-    FlushFinalBlocks = case application:get_env(?APP_NAME, synchronizer_events, transfers_only) of
-        transfers_only ->
-            IsTransfer;
-        all ->
-            true;
-        off ->
-            false
+    FlushFinalBlocks = case IsTransfer of
+        true ->
+            application:get_env(?APP_NAME, synchronizer_transfer_finished_events, all);
+        _ ->
+            application:get_env(?APP_NAME, synchronizer_on_fly_finished_events, all)
     end,
 
     Ans = lists:map(fun({From, FinalBlock}) ->
         {From, flush_blocks_list([FinalBlock], ExcludeSessions, FlushFinalBlocks)}
     end, FinalBlocks),
 
-    case application:get_env(?APP_NAME, synchronizer_events, transfers_only) of
+    case application:get_env(?APP_NAME, synchronizer_in_progress_events, transfers_only) of
         off ->
             false;
         _ ->
@@ -1010,20 +1008,30 @@ flush_blocks(#state{cached_blocks = Blocks} = State, ExcludeSessions,
 %% Flush aggregated so far file blocks.
 %% @end
 %%--------------------------------------------------------------------
--spec flush_blocks_list([block()], [session:id()], boolean()) ->
-    #file_location_changed{}.
+-spec flush_blocks_list([block()], [session:id()], all | off
+    | {threshold, non_neg_integer()}) -> #file_location_changed{}.
 flush_blocks_list(AllBlocks, ExcludeSessions, Flush) ->
     Location = file_ctx:fill_location_gaps(AllBlocks, fslogic_cache:get_local_location(),
         fslogic_cache:get_all_locations(), fslogic_cache:get_uuid()),
     {EventOffset, EventSize} = fslogic_location_cache:get_blocks_range(Location, AllBlocks),
 
     case Flush of
-        false ->
+        off ->
             ok;
-        _ ->
+        all ->
             fslogic_cache:cache_event(ExcludeSessions,
                 fslogic_event_emitter:create_file_location_changed(Location,
-                    EventOffset, EventSize))
+                    EventOffset, EventSize));
+        {threshold, Bytes} ->
+            BlocksSize = fslogic_blocks:size(AllBlocks),
+            case BlocksSize >= Bytes of
+                true ->
+                    fslogic_cache:cache_event(ExcludeSessions,
+                        fslogic_event_emitter:create_file_location_changed(Location,
+                            EventOffset, EventSize));
+                _ ->
+                    ok
+            end
     end,
 
     #file_location_changed{file_location = Location,
