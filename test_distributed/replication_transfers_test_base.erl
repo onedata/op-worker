@@ -405,7 +405,9 @@ replicate_100_files_separately(Config, Type, FileKeyType) ->
                 root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
                 distribution = [
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
-                ]
+                ],
+                attempts = 600,
+                timeout = timer:minutes(10)
             },
             scenario = #scenario{
                 type = Type,
@@ -431,7 +433,9 @@ replicate_100_files_separately(Config, Type, FileKeyType) ->
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP2), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
-                assertion_nodes = [WorkerP2]
+                assertion_nodes = [WorkerP2],
+                attempts = 600,
+                timeout = timer:minutes(10)
             }
         }
     ).
@@ -445,14 +449,13 @@ replicate_100_files_in_one_transfer(Config, Type, FileKeyType) ->
             setup = #setup{
                 setup_node = WorkerP1,
                 assertion_nodes = [WorkerP2],
-                %%                files_structure = [{0, 10}],
                 files_structure = [{10, 0}, {0, 10}],
                 root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
                 distribution = [
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
-                attempts = 3600,
-                timeout = timer:minutes(60)
+                attempts = 600,
+                timeout = timer:minutes(10)
             },
             scenario = #scenario{
                 type = Type,
@@ -683,7 +686,9 @@ cancel_replication_on_target_nodes(Config, Type) ->
                 root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type),
                 distribution = [
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
-                ]
+                ],
+                attempts = 120,
+                timeout = timer:minutes(10)
             },
             scenario = #scenario{
                 type = Type,
@@ -807,7 +812,8 @@ file_replication_failures_should_fail_whole_transfer(Config, Type, FileKeyType) 
                     mth_hist => ?MONTH_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0})
                 },
                 assertion_nodes = [WorkerP2],
-                attempts = 60
+                attempts = 120,
+                timeout = timer:minutes(10)
             }
         }
     ).
