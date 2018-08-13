@@ -259,6 +259,14 @@ handle_changes(State = #state{
                     ok
             end
     end,
+
+    case application:get_env(?APP_NAME, dbsync_out_stream_gc, on) of
+        on ->
+            erlang:garbage_collect();
+        _ ->
+            ok
+    end,
+
     schedule_docs_handling(State#state{since = Until, changes = []}).
 
 %%--------------------------------------------------------------------

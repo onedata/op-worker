@@ -21,15 +21,16 @@
 
 %% ID of this provider (assigned by global registry)
 -type id() :: binary().
-
 -export_type([id/0]).
+
+-define(OZ_VERSION_CACHE_TTL, 300). % in seconds - 5 minutes
 
 %% API
 -export([get_node_hostname/0, get_node_ip/0, get_rest_endpoint/1]).
 -export([get_id/0, get_id_or_undefined/0, is_self/1, is_registered/0]).
 -export([get_version/0, get_build/0]).
 -export([trusted_ca_certs/0]).
--export([get_oz_domain/0, get_oz_url/0]).
+-export([get_oz_domain/0, get_oz_url/0, get_oz_version/0]).
 -export([get_oz_login_page/0, get_oz_logout_page/0, get_oz_providers_page/0]).
 -export([force_oz_connection_start/0, is_connected_to_oz/0, on_connection_to_oz/0]).
 
@@ -68,7 +69,7 @@ get_node_ip() ->
 %%-------------------------------------------------------------------
 -spec get_rest_endpoint(string()) -> string().
 get_rest_endpoint(Path) ->
-    {ok, Port} = application:get_env(?APP_NAME, gui_https_port),
+    Port = https_listener:port(),
     Host = oneprovider:get_node_hostname(),
     str_utils:format("https://~s:~B/api/v3/oneprovider/~s", [Host, Port, Path]).
 
@@ -181,14 +182,32 @@ get_oz_url() ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns the OZ application version.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_oz_version() -> binary().
+get_oz_version() ->
+    Now = provider_logic:zone_time_seconds(),
+    case application:get_env(?APP_NAME, cached_oz_version) of
+        {ok, {V, Timestamp}} when Timestamp + ?OZ_VERSION_CACHE_TTL > Now ->
+            V;
+        _ ->
+            {ok, OzVersion, _} = provider_logic:fetch_oz_compatibility_config(get_oz_url()),
+            application:set_env(?APP_NAME, cached_oz_version, {OzVersion, Now}),
+            OzVersion
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Returns the URL to OZ login page.
 %% @end
 %%--------------------------------------------------------------------
--spec get_oz_login_page() -> string().
+-spec get_oz_login_page() -> binary().
 get_oz_login_page() ->
     {ok, Page} = application:get_env(?APP_NAME, oz_login_page),
     % Page is in format '/page_name.html'
-    str_utils:format("https://~s~s", [get_oz_domain(), Page]).
+    str_utils:format_bin("https://~s~s", [get_oz_domain(), Page]).
 
 
 %%--------------------------------------------------------------------
@@ -196,11 +215,11 @@ get_oz_login_page() ->
 %% Returns the URL to OZ logout page.
 %% @end
 %%--------------------------------------------------------------------
--spec get_oz_logout_page() -> string().
+-spec get_oz_logout_page() -> binary().
 get_oz_logout_page() ->
     {ok, Page} = application:get_env(?APP_NAME, oz_logout_page),
     % Page is in format '/page_name.html'
-    str_utils:format("https://~s~s", [get_oz_domain(), Page]).
+    str_utils:format_bin("https://~s~s", [get_oz_domain(), Page]).
 
 
 %%--------------------------------------------------------------------
@@ -208,11 +227,11 @@ get_oz_logout_page() ->
 %% Returns the URL to OZ logout page.
 %% @end
 %%--------------------------------------------------------------------
--spec get_oz_providers_page() -> string().
+-spec get_oz_providers_page() -> binary().
 get_oz_providers_page() ->
     {ok, Page} = application:get_env(?APP_NAME, oz_providers_page),
     % Page is in format '/page_name.html'
-    str_utils:format("https://~s~s", [get_oz_domain(), Page]).
+    str_utils:format_bin("https://~s~s", [get_oz_domain(), Page]).
 
 
 %%--------------------------------------------------------------------

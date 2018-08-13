@@ -16,6 +16,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("global_definitions.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -111,7 +112,7 @@ apply_size_change_and_maybe_emit(SpaceId, SizeDiff) ->
     {ok, _} = space_quota:apply_size_change(SpaceId, SizeDiff),
     After = space_quota:available_size(SpaceId),
     case Before * After =< 0 of
-        true -> fslogic_event_emitter:emit_quota_exeeded();
+        true -> fslogic_event_emitter:emit_quota_exceeded();
         false -> ok
     end.
 
@@ -197,15 +198,21 @@ soft_assert_write(SpaceId, WriteSize) ->
 %% Returns list of spaces that are currently over quota limit.
 %% @end
 %%--------------------------------------------------------------------
--spec get_disabled_spaces() -> [od_space:id()].
+-spec get_disabled_spaces() -> [od_space:id()] | {error, term()}.
 get_disabled_spaces() ->
-    {ok, SpaceIds} = provider_logic:get_spaces(),
-    SpacesWithASize = lists:map(fun(SpaceId) ->
-        {SpaceId, catch space_quota:available_size(SpaceId)}
-    end, SpaceIds),
+    case provider_logic:get_spaces() of
+        {ok, SpaceIds} ->
+            SpacesWithASize = lists:map(fun(SpaceId) ->
+                {SpaceId, catch space_quota:available_size(SpaceId)}
+            end, SpaceIds),
 
-    [SpaceId || {SpaceId, AvailableSize} <- SpacesWithASize,
-        AvailableSize =< 0 orelse not is_integer(AvailableSize)].
+            {ok, [
+                SpaceId || {SpaceId, AvailableSize} <- SpacesWithASize,
+                AvailableSize =< 0 orelse not is_integer(AvailableSize)
+            ]};
+        {error, _} = Error ->
+            Error
+    end.
 
 %%-------------------------------------------------------------------
 %% @doc

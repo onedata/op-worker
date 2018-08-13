@@ -365,7 +365,7 @@ compatible_client_connection_test(Config) ->
         }
     }},
     MacaroonAuthMessageRaw = messages:encode_msg(MacaroonAuthMessage),
-    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, gui_https_port),
+    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
 
     % when
     {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),
@@ -391,7 +391,7 @@ incompatible_client_connection_test(Config) ->
         }
     }},
     MacaroonAuthMessageRaw = messages:encode_msg(MacaroonAuthMessage),
-    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, gui_https_port),
+    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
 
     % when
     {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),
@@ -930,7 +930,7 @@ python_client_test_base(Config) ->
     file:write_file(MessagePath, PacketRaw),
     file:write_file(HandshakeMsgPath, HandshakeMessageRaw),
     Host = utils:get_host(Worker1),
-    {ok, Port} = test_utils:get_env(Worker1, ?APP_NAME, gui_https_port),
+    {ok, Port} = test_utils:get_env(Worker1, ?APP_NAME, https_server_port),
 
     % when
     T1 = erlang:monotonic_time(milli_seconds),
@@ -1225,7 +1225,7 @@ connect_via_macaroon(Node, SocketOpts, SessId) ->
         undefined -> [];
         Other -> [{active, Other}]
     end,
-    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, gui_https_port),
+    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
 
     % when
     {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),
@@ -1247,7 +1247,7 @@ connect_as_provider(Node, ProviderId, Nonce) ->
         #'ProviderHandshakeRequest'{provider_id = ProviderId, nonce = Nonce}
     }},
     MacaroonAuthMessageRaw = messages:encode_msg(MacaroonAuthMessage),
-    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, gui_https_port),
+    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
 
     % when
     {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),

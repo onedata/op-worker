@@ -165,7 +165,7 @@ do_request(Config, Method, URL, Headers, Body) ->
     do_request(Config, Method, URL, Headers, Body, []).
 do_request(Config, Method, URL, Headers, Body, Opts) ->
     [Node | _] = ?config(op_worker_nodes, Config),
-    CaCerts = rpc:call(Node, gui_listener, get_cert_chain, []),
+    CaCerts = rpc:call(Node, https_listener, get_cert_chain_pems, []),
     Opts2 = [{ssl_options, [{cacerts, CaCerts}]} | Opts],
     http_client:request(Method, URL, Headers, Body, Opts2).
 
@@ -173,7 +173,7 @@ do_request(Config, Method, URL, Headers, Body, Opts) ->
 rest_endpoint(Node) ->
     Port = case get(port) of
         undefined ->
-            {ok, P} = test_utils:get_env(Node, ?APP_NAME, gui_https_port),
+            {ok, P} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
             PStr = case P of
                 443 -> "";
                 _ -> ":" ++ integer_to_list(P)

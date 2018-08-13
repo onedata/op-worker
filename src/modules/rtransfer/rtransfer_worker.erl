@@ -51,13 +51,17 @@ handle(ping) ->
 handle(healthcheck) ->
     ok;
 handle(refresh_disabled_spaces) ->
-    BlockedSpaces = space_quota:get_disabled_spaces(),
-    {_, BadNodes} = rpc:multicall(consistent_hasing:get_all_nodes(),
-                                  rtransfer_link_quota_manager,
-                                  update_disabled_spaces,
-                                  [BlockedSpaces]),
-    BadNodes =/= [] andalso
-        ?error("Failed to update disabled spaces on nodes ~p", [BadNodes]),
+    case space_quota:get_disabled_spaces() of
+        {ok, BlockedSpaces} ->
+            {_, BadNodes} = rpc:multicall(consistent_hasing:get_all_nodes(),
+                rtransfer_link_quota_manager,
+                update_disabled_spaces,
+                [BlockedSpaces]),
+            BadNodes =/= [] andalso
+                ?error("Failed to update disabled spaces on nodes ~p", [BadNodes]);
+        {error, _} = Error ->
+            ?debug("Cannot update disabled spaces due to ~p", [Error])
+    end,
     schedule_refresh_disabled_spaces();
 handle(Request) ->
     ?log_bad_request(Request).

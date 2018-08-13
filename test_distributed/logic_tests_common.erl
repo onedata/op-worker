@@ -14,10 +14,12 @@
 -author("Lukasz Opiola").
 
 -include("logic_tests_common.hrl").
--include("http/http_common.hrl").
+-include("http/gui_paths.hrl").
 
 %% API
 -export([
+    init_per_testcase/1,
+    get_user_session/2,
     mock_gs_client/1, unmock_gs_client/1,
     wait_for_mocked_connection/1,
     create_user_session/2,
@@ -27,6 +29,23 @@
 ]).
 
 
+init_per_testcase(Config) ->
+    wait_for_mocked_connection(Config),
+
+    invalidate_all_test_records(Config),
+
+    UserSessions = #{
+        ?USER_1 => create_user_session(Config, ?USER_1),
+        ?USER_2 => create_user_session(Config, ?USER_2),
+        ?USER_3 => create_user_session(Config, ?USER_3)
+    },
+
+    [{sessions, UserSessions} | Config].
+
+
+get_user_session(Config, UserId) ->
+    maps:get(UserId, proplists:get_value(sessions, Config, #{})).
+
 
 mock_gs_client(Config) ->
     Nodes = ?config(op_worker_nodes, Config),
@@ -34,8 +53,16 @@ mock_gs_client(Config) ->
     ok = test_utils:mock_new(Nodes, provider_logic, [passthrough]),
     ok = test_utils:mock_new(Nodes, macaroon, [passthrough]),
     ok = test_utils:mock_new(Nodes, onedata_macaroons, [passthrough]),
+    ok = test_utils:mock_new(Nodes, oneprovider, [passthrough]),
     ok = test_utils:mock_expect(Nodes, gs_client, start_link, fun mock_start_link/5),
     ok = test_utils:mock_expect(Nodes, gs_client, sync_request, fun mock_sync_request/2),
+
+    GetProviderId = fun() ->
+        ?DUMMY_PROVIDER_ID
+    end,
+
+    ok = test_utils:mock_expect(Nodes, oneprovider, get_id, GetProviderId),
+    ok = test_utils:mock_expect(Nodes, oneprovider, get_id_or_undefined, GetProviderId),
 
     initializer:mock_provider_id(
         Nodes, ?PROVIDER_1, ?MOCK_PROVIDER_AUTH_MACAROON(?PROVIDER_1), ?MOCK_PROVIDER_IDENTITY_MACAROON(?PROVIDER_1)
@@ -59,14 +86,17 @@ mock_gs_client(Config) ->
     end),
     ok = test_utils:mock_expect(Nodes, macaroon, prepare_for_request, fun(_, DM) ->
         DM
-    end).
+    end),
+
+    % Fetch dummy provider so it is cached and does not generate Graph Sync requests.
+    rpc:call(hd(Nodes), provider_logic, get, []).
 
 
 
 
 unmock_gs_client(Config) ->
     Nodes = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Nodes, [gs_client, provider_logic, macaroon, onedata_macaroons]),
+    test_utils:mock_unload(Nodes, [gs_client, provider_logic, macaroon, onedata_macaroons, oneprovider]),
     initializer:unmock_provider_ids(Nodes),
     ok.
 
@@ -299,7 +329,7 @@ mock_graph_create(#gri{type = od_handle, id = undefined, aspect = instance}, ?US
     end.
 
 
-mock_graph_update(#gri{type = od_group, id = _GroupId, aspect = instance}, ?USER_GS_MACAROON_AUTH(_UserId), Data) ->
+mock_graph_update(#gri{type = od_group, aspect = instance}, ?USER_GS_MACAROON_AUTH(_UserId), Data) ->
     case Data of
         #{<<"name">> := Name} when is_binary(Name) ->
             {ok, #gs_resp_graph{result = ok}};

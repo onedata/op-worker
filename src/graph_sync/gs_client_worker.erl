@@ -18,7 +18,7 @@
 -include("graph_sync/provider_graph_sync.hrl").
 -include("proto/common/credentials.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("http/http_common.hrl").
+-include("http/gui_paths.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/api_errors.hrl").

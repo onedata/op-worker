@@ -695,9 +695,10 @@ remote_change_should_invalidate_only_updated_part_of_file(Config) ->
     },
     {ok, RemoteLocationId} = ?assertMatch(
         {ok, _},
-        rpc:call(W1, file_location, create, [#document{value = RemoteLocation}])
+        rpc:call(W1, fslogic_blocks, create_location,
+            [#document{key = datastore_utils:gen_key(), value = RemoteLocation}, true])
     ),
-    {ok, RemoteLocationDoc} = rpc:call(W1, file_location, get, [RemoteLocationId]),
+    {ok, RemoteLocationDoc} = rpc:call(W1, fslogic_blocks, get_location, [RemoteLocationId, FileUuid]),
     UpdatedRemoteLocationDoc = #document{
         value = #file_location{
             version_vector = VV
@@ -710,13 +711,13 @@ remote_change_should_invalidate_only_updated_part_of_file(Config) ->
             version_vector = NewLocalVV
         }
     } = bump_version(RemoteLocationDoc, 2),
-    rpc:call(W1, file_location, save, [LocalDoc#document{
+    rpc:call(W1, fslogic_blocks, save_location, [LocalDoc#document{
         value = LocalLocation#file_location{
             version_vector = NewLocalVV
         }
     }]),
 
-    ?assertMatch({ok, _}, rpc:call(W1, file_location, save, [UpdatedRemoteLocationDoc])),
+    ?assertMatch({ok, _}, rpc:call(W1, fslogic_blocks, save_location, [UpdatedRemoteLocationDoc])),
 
     % when
     rpc:call(W1, dbsync_events, change_replicated, [SpaceId, UpdatedRemoteLocationDoc]),
@@ -900,18 +901,18 @@ remote_change_of_blocks_should_notify_clients(Config) ->
     },
     {ok, RemoteLocationId} = ?assertMatch(
         {ok, _},
-        rpc:call(W1, file_location, create, [#document{value = RemoteLocation}])
+        rpc:call(W1, fslogic_blocks, create_location, [#document{key = datastore_utils:gen_key(), value = RemoteLocation}, true])
     ),
     {ok, RemoteLocationDoc} = rpc:call(W1, file_location, get, [RemoteLocationId]),
     UpdatedRemoteLocationDoc = bump_version(RemoteLocationDoc, 1),
 
     % attach external location
-    ?assertMatch({ok, _}, rpc:call(W1, file_location, save, [UpdatedRemoteLocationDoc])),
+    ?assertMatch({ok, _}, rpc:call(W1, fslogic_blocks, save_location, [UpdatedRemoteLocationDoc])),
 
     % mock events
     test_utils:mock_new(W1, [fslogic_event_emitter], [passthrough]),
     test_utils:mock_expect(W1, fslogic_event_emitter, emit_file_location_changed,
-        fun(_Entry, _ExcludedSessions) -> ok end),
+        fun(_Entry, _ExcludedSessions, _Offset, _OffsetEnd) -> ok end),
 
     % when
     rpc:call(W1, dbsync_events, change_replicated, [SpaceId, UpdatedRemoteLocationDoc]),
@@ -921,7 +922,7 @@ remote_change_of_blocks_should_notify_clients(Config) ->
         FileGuid =:= file_ctx:get_guid_const(FileCtx)
     end,
     ?assert(rpc:call(W1, meck, called, [fslogic_event_emitter, emit_file_location_changed,
-        [meck:is(TheFileCtxWithGuid), []]])),
+        [meck:is(TheFileCtxWithGuid), [], [#file_block{offset = 1, size = 1}]]])),
     test_utils:mock_validate_and_unload(W1, fslogic_event_emitter).
 
 remote_irrelevant_change_should_not_notify_clients(Config) ->
@@ -1034,15 +1035,16 @@ conflicting_remote_changes_should_be_reconciled(Config) ->
     },
     {ok, RemoteLocationId} = ?assertMatch(
         {ok, _},
-        rpc:call(W1, file_location, create, [#document{value = RemoteLocation}])
+        rpc:call(W1, fslogic_blocks, create_location,
+            [#document{key = datastore_utils:gen_key(),value = RemoteLocation}, true])
     ),
-    {ok, RemoteLocationDoc} = rpc:call(W1, file_location, get, [RemoteLocationId]),
+    {ok, RemoteLocationDoc} = rpc:call(W1, fslogic_blocks, get_location, [RemoteLocationId, FileUuid]),
     UpdatedRemoteLocationDoc = #document{
         value = #file_location{
             version_vector = ExternalVV
         }
     } = bump_version(RemoteLocationDoc, 3),
-    ?assertMatch({ok, _}, rpc:call(W1, file_location, save, [UpdatedRemoteLocationDoc])),
+    ?assertMatch({ok, _}, rpc:call(W1, fslogic_blocks, save_location, [UpdatedRemoteLocationDoc])),
 
     % update local location
     #document{value = #file_location{version_vector = NewLocalVV}} =
@@ -1052,7 +1054,7 @@ conflicting_remote_changes_should_be_reconciled(Config) ->
         {shrink, 6},
         [#file_block{offset = 5, size = 1}]
     ],
-    rpc:call(W1, file_location, save, [LocalDoc#document{
+    rpc:call(W1, fslogic_blocks, save_location, [LocalDoc#document{
         value = LocalLocation#file_location{
             version_vector = NewLocalVV,
             recent_changes = {[], LocalChanges}
@@ -1068,6 +1070,7 @@ conflicting_remote_changes_should_be_reconciled(Config) ->
     }} = bump_version(LocalDoc#document{value = LocalLocation#file_location{
         version_vector = ExternalVV
     }}, 3),
+
     ?assertMatch(
         {#document{
             value = #file_location{

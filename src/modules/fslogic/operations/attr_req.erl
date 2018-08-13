@@ -168,7 +168,24 @@ update_times(_UserCtx, FileCtx, ATime, MTime, CTime) ->
     Name :: file_meta:name()) -> fslogic_worker:fuse_response().
 get_child_attr_insecure(UserCtx, ParentFileCtx, Name) ->
     {ChildFileCtx, _NewParentFileCtx} = file_ctx:get_child(ParentFileCtx, Name, UserCtx),
-    attr_req:get_file_attr(UserCtx, ChildFileCtx).
+    Response = attr_req:get_file_attr(UserCtx, ChildFileCtx),
+    ensure_proper_file_name(Response, Name).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function ensures that requested Name is in returned #file_attr{}.
+%% @end
+%%-------------------------------------------------------------------
+-spec ensure_proper_file_name(fslogic_worker:fuse_response(), file_meta:name()) ->
+    fslogic_worker:fuse_response().
+ensure_proper_file_name(FuseResponse = #fuse_response{
+    status = #status{code = ?OK},
+    fuse_response = FileAttr
+}, Name) ->
+    FuseResponse#fuse_response{fuse_response = FileAttr#file_attr{name = Name}};
+ensure_proper_file_name(FuseResponse, _Name) ->
+    FuseResponse.
 
 %%--------------------------------------------------------------------
 %% @doc

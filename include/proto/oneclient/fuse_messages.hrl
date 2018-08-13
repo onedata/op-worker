@@ -89,6 +89,10 @@
     flag :: fslogic_worker:open_flag()
 }).
 
+-record(open_file_with_extended_info, {
+    flag :: fslogic_worker:open_flag()
+}).
+
 -record(get_file_location, {
 }).
 
@@ -144,7 +148,7 @@
     #synchronize_block{} | #synchronize_block_and_compute_checksum{} |
     #get_child_attr{} | #get_xattr{} | #set_xattr{} | #remove_xattr{} |
     #list_xattr{} | #fsync{} | #get_file_children_attrs{} |
-    #storage_file_created{}.
+    #storage_file_created{} | #open_file_with_extended_info{}.
 
 -record(file_request, {
     context_guid :: fslogic_worker:file_guid(),
@@ -227,6 +231,13 @@
     handle_id :: binary()
 }).
 
+-record(file_opened_extended, {
+    handle_id :: binary(),
+    provider_id,
+    file_id,
+    storage_id
+}).
+
 -record(file_renamed, {
     new_guid :: fslogic_worker:file_guid(),
     child_entries :: undefined | [#file_renamed_entry{}]
@@ -240,11 +251,18 @@
     names :: [xattr:name()]
 }).
 
+-record(file_location_changed, {
+    file_location :: #file_location{},
+    change_beg_offset :: undefined | non_neg_integer(),
+    change_end_offset :: undefined | non_neg_integer()
+}).
+
 -type fuse_response_type() ::
     #file_attr{} | #file_children{} | #file_location{} | #helper_params{} |
     #storage_test_file{} | #dir{} | #sync_response{} | #file_created{} |
     #file_opened{} | #file_renamed{} | #guid{} | #xattr_list{} | #xattr{} |
-    #file_children_attrs{} | undefined.
+    #file_children_attrs{} | #file_location_changed{} | #file_opened_extended{} |
+    undefined.
 
 -record(fuse_response, {
     status :: undefined | #status{},

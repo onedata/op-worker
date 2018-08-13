@@ -105,10 +105,12 @@ delete_insecure(UserCtx, FileCtx, Silent) ->
         name = FileName
     }}, FileCtx3} = file_ctx:get_file_doc(FileCtx2),
     FileUuid = file_ctx:get_uuid_const(FileCtx3),
+    FileGuid = file_ctx:get_guid_const(FileCtx3),
     {ok, _} = file_meta:update(FileUuid, fun(FileMeta = #file_meta{}) ->
         {ok, FileMeta#file_meta{deleted = true}}
     end),
     ok = file_meta:delete_child_link(ParentUuid, Scope, FileUuid, FileName),
     fslogic_deletion_worker:request_deletion(UserCtx, FileCtx3, Silent),
     file_popularity:delete(FileUuid),
+    transferred_file:clean_up(FileGuid),
     #fuse_response{status = #status{code = ?OK}}.

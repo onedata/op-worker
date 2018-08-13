@@ -68,8 +68,9 @@ db_nodes() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec listeners() -> Listeners :: [atom()].
-listeners() -> node_manager:cluster_worker_listeners() ++ [
-    gui_listener
+listeners() -> [
+    redirector_listener,
+    https_listener
 ].
 
 %%--------------------------------------------------------------------

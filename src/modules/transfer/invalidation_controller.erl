@@ -8,6 +8,8 @@
 %%% @doc
 %%% Manages replica invalidation, which include starting the invalidation and
 %%% tracking invalidation's status.
+%%% It will change status on receiving certain messages according to
+%%% state machine presented in invalidation_status module.
 %%% Such gen_server is created for each replica invalidation.
 %%% @end
 %%%--------------------------------------------------------------------
@@ -16,23 +18,25 @@
 
 -behaviour(gen_server).
 
--include("proto/oneprovider/provider_messages.hrl").
--include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([mark_finished/1, mark_failed/2]).
+-export([mark_aborting/2, mark_completed/1, mark_failed/1, mark_cancelled/1]).
 
 %% gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
-    code_change/3]).
+-export([
+    init/1, 
+    handle_call/3, handle_cast/2, handle_info/2, 
+    terminate/2, code_change/3
+]).
 
 -record(state, {
     transfer_id :: transfer:id(),
     session_id :: session:id(),
     file_guid :: fslogic_worker:file_guid(),
     callback :: transfer:callback(),
-    space_id :: od_space:id()
+    space_id :: od_space:id(),
+    status :: transfer:status()
 }).
 
 %%%===================================================================
@@ -41,22 +45,39 @@
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Stops invalidation_controller process and marks invalidation as completed.
+%% Informs invalidation_controller process about aborting invalidation.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_finished(pid()) -> ok.
-mark_finished(Pid) ->
-    gen_server2:cast(Pid, finish_invalidation),
-    ok.
+-spec mark_aborting(pid(), term()) -> ok.
+mark_aborting(Pid, Reason) ->
+    gen_server2:cast(Pid, {invalidation_aborting, Reason}).
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Stops transfer_controller process and marks transfer as failed.
+%% Stops invalidation_controller process and marks invalidation as completed.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_failed(pid(), term()) -> ok.
-mark_failed(Pid, Error) ->
-    gen_server2:cast(Pid, {failed_invalidation, Error}).
+-spec mark_completed(pid()) -> ok.
+mark_completed(Pid) ->
+    gen_server2:cast(Pid, invalidation_completed).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Stops invalidation_controller process and marks transfer as failed.
+%% @end
+%%-------------------------------------------------------------------
+-spec mark_failed(pid()) -> ok.
+mark_failed(Pid) ->
+    gen_server2:cast(Pid, invalidation_failed).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Stops invalidation_controller process and marks transfer as failed.
+%% @end
+%%-------------------------------------------------------------------
+-spec mark_cancelled(pid()) -> ok.
+mark_cancelled(Pid) ->
+    gen_server2:cast(Pid, invalidation_cancelled).
 
 
 %%%===================================================================
@@ -79,7 +100,8 @@ init([SessionId, TransferId, FileGuid, Callback]) ->
         session_id = SessionId,
         file_guid = FileGuid,
         callback = Callback,
-        space_id = fslogic_uuid:guid_to_space_id(FileGuid)
+        space_id = fslogic_uuid:guid_to_space_id(FileGuid),
+        status = enqueued
     }}.
 
 %%--------------------------------------------------------------------
@@ -115,36 +137,61 @@ handle_cast(start_invalidation, State = #state{
     session_id = SessionId,
     file_guid = FileGuid
 }) ->
-    try
-        transfer:mark_active_invalidation(TransferId),
-        #provider_response{
-            status = #status{code = ?OK}
-        } = sync_req:invalidate_file_replica(user_ctx:new(SessionId),
-            file_ctx:new_by_guid(FileGuid), undefined, TransferId, undefined
-        ),
-        {noreply, State}
-    catch
-        _Error:Reason ->
-            ?error_stacktrace("Could not invalidate file ~p due to ~p", [FileGuid, Reason]),
-            transfer:mark_failed_invalidation(TransferId),
-            {stop, Reason, State}
+    flush(),
+    case invalidation_status:handle_active(TransferId) of
+        {ok, _} ->
+            sync_req:enqueue_file_invalidation(user_ctx:new(SessionId),
+                file_ctx:new_by_guid(FileGuid), undefined, TransferId, undefined
+            ),
+            {noreply, State#state{status = active}};
+        {error, active} ->
+            {ok, _} = transfer:set_controller_process(TransferId),
+            {noreply, State#state{status = active}};
+        {error, aborting} ->
+            {ok, _} = transfer:set_controller_process(TransferId),
+            {noreply, State#state{status = aborting}};
+        {error, S} when S == completed orelse S == cancelled orelse S == failed ->
+            {stop, normal, S}
     end;
-handle_cast(finish_invalidation, State = #state{
+
+handle_cast(invalidation_completed, State = #state{
     transfer_id = TransferId,
-    callback = Callback
+    callback = Callback,
+    status = active
 }) ->
-    transfer:mark_completed_invalidation(TransferId),
+    {ok, _} = invalidation_status:handle_completed(TransferId),
     notify_callback(Callback),
     {stop, normal, State};
-handle_cast({failed_invalidation, Error}, State = #state{
+
+handle_cast({invalidation_aborting, Reason}, State = #state{
+    transfer_id = TransferId,
     file_guid = FileGuid,
-    transfer_id = TransferId
+    status = active
 }) ->
-    ?error_stacktrace("Could not invalidate file ~p due to ~p", [FileGuid, Error]),
-    transfer:mark_failed_invalidation(TransferId),
-    {stop, Error, State};
-handle_cast(_Request, State) ->
-    ?log_bad_request(_Request),
+    {ok, _} = invalidation_status:handle_aborting(TransferId),
+    ?error_stacktrace("Could not invalidate file ~p due to ~p", [
+        FileGuid, Reason
+    ]),
+    {noreply, State#state{status = aborting}};
+
+handle_cast(invalidation_cancelled, State = #state{
+    transfer_id = TransferId,
+    status = aborting
+}) ->
+    {ok, _} = invalidation_status:handle_cancelled(TransferId),
+    {stop, normal, State};
+
+handle_cast(invalidation_failed, State = #state{
+    transfer_id = TransferId,
+    status = aborting
+}) ->
+    {ok, _} = invalidation_status:handle_failed(TransferId, false),
+    {stop, normal, State};
+
+handle_cast(Request, State = #state{status = Status}) ->
+    ?warning("~p:~p - bad request ~p while in status ~p", [
+        ?MODULE, ?LINE, Request, Status
+    ]),
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -172,11 +219,8 @@ handle_info(_Info, State) ->
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term().
-terminate(_Reason, #state{
-    session_id = SessionId,
-    transfer_id = TransferId
-}) ->
-    session:remove_transfer(SessionId, TransferId).
+terminate(_Reason, _State) ->
+    ok.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -191,12 +235,12 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%%===================================================================
 %%% Internal functions
-%%%===================================================================\
+%%%===================================================================
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Notifies callback about successful transfer
+%% Notifies callback about successful invalidation
 %% @end
 %%--------------------------------------------------------------------
 -spec notify_callback(transfer:callback()) -> ok.
@@ -204,3 +248,27 @@ notify_callback(undefined) -> ok;
 notify_callback(<<>>) -> ok;
 notify_callback(Callback) ->
     {ok, _, _, _} = http_client:get(Callback).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Flushes message queue. It is necessary because this module is executed
+%% by some pool worker, which could have taken care of other invalidation
+%% previously. As such some messages for previous invalidation may be still
+%% in queue.
+%% @end
+%%--------------------------------------------------------------------
+flush() ->
+    receive
+        invalidation_completed ->
+            flush();
+        {invalidation_aborting, _Reason} ->
+            flush();
+        invalidation_failed ->
+            flush();
+        invalidation_cancelled ->
+            flush()
+    after 0 ->
+        ok
+    end.

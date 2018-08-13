@@ -190,7 +190,7 @@ forward_changes_batch(ProviderId, Since, Until, Docs, State = #state{
     space_id = SpaceId,
     workers = Workers
 }) ->
-    case maps:find(ProviderId, Workers) of
+    State2 = case maps:find(ProviderId, Workers) of
         {ok, Worker} ->
             gen_server:cast(Worker, {changes_batch, Since, Until, Docs}),
             State;
@@ -202,7 +202,16 @@ forward_changes_batch(ProviderId, Since, Until, Docs, State = #state{
             State#state{
                 workers = maps:put(ProviderId, Worker, Workers)
             }
-    end.
+    end,
+
+    case application:get_env(?APP_NAME, dbsync_in_stream_gc, on) of
+        on ->
+            erlang:garbage_collect();
+        _ ->
+            ok
+    end,
+
+    State2.
 
 %%--------------------------------------------------------------------
 %% @private

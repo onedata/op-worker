@@ -66,6 +66,7 @@ cat > rpm.vars.config <<EOF
 
 {runner_script_dir,   "%{platform_bin_dir}"}.
 {runner_base_dir,     "%{platform_base_dir}"}.
+{runner_data_dir,     "%{platform_data_dir}"}.
 {runner_etc_dir,      "%{platform_etc_dir}"}.
 {runner_log_dir,      "%{platform_log_dir}"}.
 {runner_lib_dir,      "%{platform_lib_dir}"}.

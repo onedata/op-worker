@@ -35,9 +35,6 @@
     Offset :: non_neg_integer(), Size :: pos_integer()) ->
     fslogic_worker:proxyio_response().
 read(UserCtx, FileCtx, HandleId, Offset, Size) ->
-    #fuse_response{status = #status{code = ?OK}} =
-        sync_req:synchronize_block(UserCtx, FileCtx,
-            #file_block{offset = Offset, size = Size}, false, undefined),
     {ok, Handle} =  get_handle(UserCtx, FileCtx, HandleId),
     {ok, Data} = storage_file_manager:read(Handle, Offset, Size),
     #proxyio_response{
@@ -100,8 +97,7 @@ get_handle(UserCtx, FileCtx, HandleId) ->
 -spec create_handle(user_ctx:ctx(), file_ctx:ctx(),
     HandleId :: storage_file_manager:handle_id()) -> ok.
 create_handle(UserCtx, FileCtx, HandleId) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
-    Node = consistent_hasing:get_node(FileGuid),
+    Node = consistent_hasing:get_node(file_ctx:get_uuid_const(FileCtx)),
     #fuse_response{
         status = #status{code = ?OK}
     } = rpc:call(Node, file_req, open_file_insecure,

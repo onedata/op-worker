@@ -27,6 +27,8 @@
 -define(MOCK_CAVEAT_ID, <<"mockCaveat">>).
 -define(MOCK_DISCH_MACAROON, <<"mockDischMac">>).
 
+-define(DUMMY_PROVIDER_ID, <<"dummyProviderId">>).
+
 -define(MOCK_PROVIDER_IDENTITY_MACAROON(__ProviderId), <<"DUMMY-PROVIDER-IDENTITY-MACAROON-", __ProviderId/binary>>).
 -define(MOCK_PROVIDER_AUTH_MACAROON(__ProviderId), <<"DUMMY-PROVIDER-AUTH-MACAROON-", __ProviderId/binary>>).
 
@@ -80,7 +82,7 @@
 
 % Mocked user data
 -define(USER_NAME(__User), __User).
--define(USER_LOGIN(__User), __User).
+-define(USER_ALIAS(__User), __User).
 -define(USER_EMAIL_LIST(__User), [__User]).
 -define(USER_LINKED_ACCOUNTS_VALUE(__User), [#{<<"userId">> => __User}]).
 -define(USER_LINKED_ACCOUNTS_MATCHER(__User), [#{<<"userId">> := __User}]).
@@ -177,7 +179,7 @@
 
 -define(USER_PRIVATE_DATA_MATCHER(__User), #document{key = __User, value = #od_user{
     name = ?USER_NAME(__User),
-    login = ?USER_LOGIN(__User),
+    alias = ?USER_ALIAS(__User),
     email_list = ?USER_EMAIL_LIST(__User),
     linked_accounts = ?USER_LINKED_ACCOUNTS_MATCHER(__User),
     default_space = ?USER_DEFAULT_SPACE(__User),
@@ -189,7 +191,7 @@
 }}).
 -define(USER_PROTECTED_DATA_MATCHER(__User), #document{key = __User, value = #od_user{
     name = ?USER_NAME(__User),
-    login = ?USER_LOGIN(__User),
+    alias = ?USER_ALIAS(__User),
     email_list = ?USER_EMAIL_LIST(__User),
     linked_accounts = ?USER_LINKED_ACCOUNTS_MATCHER(__User),
     default_space = undefined,
@@ -201,7 +203,7 @@
 }}).
 -define(USER_SHARED_DATA_MATCHER(__User), #document{key = __User, value = #od_user{
     name = ?USER_NAME(__User),
-    login = ?USER_LOGIN(__User),
+    alias = ?USER_ALIAS(__User),
     email_list = [],
     linked_accounts = [],
     default_space = undefined,
@@ -325,7 +327,8 @@
 -define(USER_SHARED_DATA_VALUE(__UserId), #{
     <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_user, id = __UserId, aspect = instance, scope = shared}),
     <<"name">> => ?USER_NAME(__UserId),
-    <<"login">> => ?USER_LOGIN(__UserId)
+    <<"alias">> => ?USER_ALIAS(__UserId),
+    <<"login">> => ?USER_ALIAS(__UserId) % @TODO deprecated, included for backward compatibility
 }).
 -define(USER_PROTECTED_DATA_VALUE(__UserId), begin
     __SharedData = ?USER_SHARED_DATA_VALUE(__UserId),
@@ -429,9 +432,18 @@ end).
         <<"subdomainDelegation">> => ?PROVIDER_SUBDOMAIN_DELEGATION(__ProviderId),
         <<"subdomain">> => ?PROVIDER_SUBDOMAIN(__ProviderId),
         <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_provider, id = __ProviderId, aspect = instance, scope = private}),
-        <<"spaces">> => ?PROVIDER_SPACES_VALUE(__ProviderId),
-        <<"effectiveUsers">> => ?PROVIDER_EFF_USERS(__ProviderId),
-        <<"effectiveGroups">> => ?PROVIDER_EFF_GROUPS(__ProviderId)
+        <<"spaces">> => case __ProviderId of
+            ?DUMMY_PROVIDER_ID -> #{};
+            _ -> ?PROVIDER_SPACES_VALUE(__ProviderId)
+        end,
+        <<"effectiveUsers">> => case __ProviderId of
+            ?DUMMY_PROVIDER_ID -> [];
+            _ -> ?PROVIDER_EFF_USERS(__ProviderId)
+        end,
+        <<"effectiveGroups">> => case __ProviderId of
+            ?DUMMY_PROVIDER_ID -> [];
+            _ -> ?PROVIDER_EFF_GROUPS(__ProviderId)
+        end
 
     }
 end).

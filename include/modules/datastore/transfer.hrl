@@ -11,17 +11,17 @@
 
 -include("global_definitions.hrl").
 
--define(SCHEDULED_TRANSFERS_KEY, <<"SCHEDULED_TRANSFERS_KEY">>).
--define(CURRENT_TRANSFERS_KEY, <<"CURRENT_TRANSFERS_KEY">>).
--define(PAST_TRANSFERS_KEY, <<"PAST_TRANSFERS_KEY">>).
+-define(WAITING_TRANSFERS_KEY, <<"SCHEDULED_TRANSFERS_KEY">>).
+-define(ONGOING_TRANSFERS_KEY, <<"CURRENT_TRANSFERS_KEY">>).
+-define(ENDED_TRANSFERS_KEY, <<"PAST_TRANSFERS_KEY">>).
 
 -define(JOB_TRANSFERS_TYPE, <<"job">>).
 -define(ON_THE_FLY_TRANSFERS_TYPE, <<"onTheFly">>).
 -define(ALL_TRANSFERS_TYPE, <<"all">>).
 
-% Time windows and lengths of histograms. They offer one extra, historical value,
-% as the leading one is not yet measured - this way there are always full
-% measurements from the whole histogram span.
+% Time windows and lengths of histograms. They offer one extra, historical
+% value, as the leading one is not yet measured - this way there are always
+% full measurements from the whole histogram span.
 % To avoid fluctuation of speed charts, they are generated with 30s delay.
 % For this it is required that minute bytes histogram has additional 6 slots.
 % As for other stats types 1 additional slot is enough.
@@ -46,11 +46,17 @@
 -define(DAY_STAT_TYPE, <<"day">>).
 -define(MONTH_STAT_TYPE, <<"month">>).
 
--define(TRANSFER_WORKERS_POOL, transfer_workers_pool).
--define(TRANSFER_WORKERS_NUM, application:get_env(?APP_NAME, transfer_workers_num, 50)).
+-define(REPLICATION_WORKERS_POOL, replication_workers_pool).
+-define(REPLICATION_WORKERS_NUM, application:get_env(
+    ?APP_NAME, replication_workers_num, 50)
+).
 
--define(TRANSFER_CONTROLLERS_POOL, transfer_controllers_pool).
--define(TRANSFER_CONTROLLERS_NUM, application:get_env(?APP_NAME, transfer_controllers_num, 10)).
+-define(REPLICATION_CONTROLLERS_POOL, replication_controllers_pool).
+-define(REPLICATION_CONTROLLERS_NUM, application:get_env(
+    ?APP_NAME, replication_controllers_num, 10)
+).
 
 -define(INVALIDATION_WORKERS_POOL, invalidation_workers_pool).
--define(INVALIDATION_WORKERS_NUM, application:get_env(?APP_NAME, invalidation_workers_num, 10)).
+-define(INVALIDATION_WORKERS_NUM, application:get_env(
+    ?APP_NAME, invalidation_workers_num, 10)
+).

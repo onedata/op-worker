@@ -25,13 +25,13 @@
     synchronize_block/5,
     synchronize_block_and_compute_checksum/3,
     get_file_distribution/2,
-    enqueue_file_replication/4,
-    start_transfer/4
+    enqueue_file_replication/4
 ]).
 -export([
     schedule_file_replication/4, schedule_file_replication/5, replicate_file/4,
     schedule_replica_invalidation/4, schedule_replica_invalidation/5,
-    invalidate_file_replica/5, enqueue_file_replication/6]).
+    invalidate_file_replica/5, enqueue_file_replication/6,
+    enqueue_file_invalidation/5]).
 
 % exported for tests
 -export([get_file_children/4]).
@@ -50,16 +50,17 @@
     fslogic_worker:fuse_response().
 synchronize_block(UserCtx, FileCtx, undefined, Prefetch, TransferId) ->
     % trigger file_location creation
-    {_, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
+    {_, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx, false),
     {Size, FileCtx3} = file_ctx:get_file_size(FileCtx2),
     synchronize_block(UserCtx, FileCtx3, #file_block{offset = 0, size = Size},
         Prefetch, TransferId);
 synchronize_block(UserCtx, FileCtx, Block, Prefetch, TransferId) ->
-    ok = replica_synchronizer:synchronize(UserCtx, FileCtx, Block, Prefetch,
-        TransferId),
-    {LocationToSend, _FileCtx2} = file_ctx:get_file_location_with_filled_gaps(FileCtx, Block),
-    #fuse_response{status = #status{code = ?OK},
-                   fuse_response = LocationToSend}.
+    case replica_synchronizer:synchronize(UserCtx, FileCtx, Block, Prefetch, TransferId) of
+        {ok, Ans} ->
+            #fuse_response{status = #status{code = ?OK}, fuse_response = Ans};
+        {error, _} = Error ->
+            Error
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -81,6 +82,7 @@ synchronize_block_and_compute_checksum(UserCtx, FileCtx,
     lfm_files:release(Handle),
 
     Checksum = crypto:hash(md4, Data),
+    % TODO VFS-4412 Refactor similarly to synchronize_block
     {LocationToSend, _FileCtx2} = file_ctx:get_file_location_with_filled_gaps(FileCtx, Range),
     #fuse_response{
         status = #status{code = ?OK},
@@ -100,14 +102,11 @@ synchronize_block_and_compute_checksum(UserCtx, FileCtx,
 get_file_distribution(_UserCtx, FileCtx) ->
     {Locations, _FileCtx2} = file_ctx:get_file_location_docs(FileCtx),
     ProviderDistributions = lists:map(fun(#document{
-        value = #file_location{
-            provider_id = ProviderId,
-            blocks = Blocks
-        }
-    }) ->
+        value = #file_location{provider_id = ProviderId}
+    } = FL) ->
         #provider_file_distribution{
             provider_id = ProviderId,
-            blocks = Blocks
+            blocks = fslogic_blocks:get_blocks(FL)
         }
     end, Locations),
     #provider_response{
@@ -116,17 +115,6 @@ get_file_distribution(_UserCtx, FileCtx) ->
             provider_file_distributions = ProviderDistributions
         }
     }.
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Marks transfer as enqueued and adds task for replication to worker_pool.
-%% @end
-%%-------------------------------------------------------------------
--spec start_transfer(user_ctx:ctx(), file_ctx:ctx(),
-    undefined | fslogic_blocks:block(), undefined | transfer:id()) -> ok.
-start_transfer(UserCtx, FileCtx, Block, TransferId) ->
-    {ok, _} = transfer:mark_enqueued(TransferId),
-    enqueue_file_replication(UserCtx, FileCtx, Block, TransferId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -154,7 +142,7 @@ schedule_file_replication(UserCtx, FileCtx, FilePath, TargetProviderId, Callback
     SessionId = user_ctx:get_session_id(UserCtx),
     FileGuid = file_ctx:get_guid_const(FileCtx),
     {ok, TransferId} = transfer:start(SessionId, FileGuid, FilePath, undefined,
-        TargetProviderId, Callback, false),
+        TargetProviderId, Callback),
     #provider_response{
         status = #status{code = ?OK},
         provider_response = #scheduled_transfer{
@@ -195,7 +183,7 @@ schedule_replica_invalidation(UserCtx, FileCtx, FilePath, SourceProviderId,
     SessionId = user_ctx:get_session_id(UserCtx),
     FileGuid = file_ctx:get_guid_const(FileCtx),
     {ok, TransferId} = transfer:start(SessionId, FileGuid, FilePath,
-        SourceProviderId, MigrationProviderId, undefined, true),
+        SourceProviderId, MigrationProviderId, undefined),
     #provider_response{
         status = #status{code = ?OK},
         provider_response = #scheduled_transfer{
@@ -232,15 +220,21 @@ replicate_file(UserCtx, FileCtx, Block, TransferId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec invalidate_file_replica(user_ctx:ctx(), file_ctx:ctx(),
-    undefined | fslogic_blocks:block(), undefined | transfer:id(),
+    undefined | oneprovider:id(), undefined | transfer:id(),
     autocleaning:id() | undefined) -> fslogic_worker:provider_response().
 invalidate_file_replica(UserCtx, FileCtx, MigrationProviderId, TransferId,
-    AutocleaningId
+    AutoCleaningId
 ) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?write_object],
-        [UserCtx, FileCtx, MigrationProviderId, 0, TransferId, AutocleaningId],
-        fun invalidate_file_replica_insecure/6).
+    try
+        check_permissions:execute(
+            [traverse_ancestors, ?write_object],
+            [UserCtx, FileCtx, MigrationProviderId, 0, TransferId, AutoCleaningId],
+            fun invalidate_file_replica_insecure/6)
+    catch
+        Error:Reason ->
+            transfer:mark_failed_file_processing(TransferId),
+            erlang:Error(Reason)
+    end.
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -263,8 +257,23 @@ enqueue_file_replication(UserCtx, FileCtx, Block, TransferId) ->
     undefined | fslogic_blocks:block(), transfer:id() | undefined,
     undefined | non_neg_integer(), undefined | non_neg_integer()) -> ok.
 enqueue_file_replication(UserCtx, FileCtx, Block, TransferId, Retries, NextRetry) ->
-    worker_pool:cast(?TRANSFER_WORKERS_POOL,
+    worker_pool:cast(?REPLICATION_WORKERS_POOL,
         {start_file_replication, UserCtx, FileCtx, Block, TransferId, Retries, NextRetry}).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Adds task of file invalidation to worker from ?INVALIDATION_WORKERS_POOL.
+%% @end
+%%-------------------------------------------------------------------
+-spec enqueue_file_invalidation(user_ctx:ctx(), file_ctx:ctx(),
+    undefined | oneprovider:id(), undefined | transfer:id(),
+    undefined | autocleaning:id()) -> ok.
+enqueue_file_invalidation(UserCtx, FileCtx, MigrationProviderId, TransferId,
+    AutoCleaningId
+) ->
+    worker_pool:cast(?INVALIDATION_WORKERS_POOL,
+        {?MODULE, invalidate_file_replica, [UserCtx, FileCtx,
+            MigrationProviderId, TransferId, AutoCleaningId]}).
 
 %%%===================================================================
 %%% Internal functions
@@ -281,7 +290,7 @@ enqueue_file_replication(UserCtx, FileCtx, Block, TransferId, Retries, NextRetry
     fslogic_blocks:block(), non_neg_integer(), undefined | transfer:id()) ->
     fslogic_worker:provider_response().
 replicate_file_insecure(UserCtx, FileCtx, Block, Offset, TransferId) ->
-    case transfer_utils:is_ongoing(TransferId) of
+    case transfer:is_ongoing(TransferId) of
         true ->
             {ok, Chunk} = application:get_env(?APP_NAME, ls_chunk_size),
             case file_ctx:is_dir(FileCtx) of
@@ -290,13 +299,13 @@ replicate_file_insecure(UserCtx, FileCtx, Block, Offset, TransferId) ->
                         Chunk)
                     of
                         {Children, _FileCtx3} when length(Children) < Chunk ->
-                            transfer:increase_files_to_process_counter(
+                            transfer:increment_files_to_process_counter(
                                 TransferId, length(Children)),
                             replicate_children(UserCtx, Children, Block, TransferId),
-                            transfer:increase_files_processed_counter(TransferId),
+                            transfer:increment_files_processed_counter(TransferId),
                             #provider_response{status = #status{code = ?OK}};
                         {Children, FileCtx3} ->
-                            transfer:increase_files_to_process_counter(
+                            transfer:increment_files_to_process_counter(
                                 TransferId, Chunk),
                             replicate_children(UserCtx, Children, Block,
                                 TransferId),
@@ -304,13 +313,16 @@ replicate_file_insecure(UserCtx, FileCtx, Block, Offset, TransferId) ->
                                 Offset + Chunk, TransferId)
                     end;
                 {false, FileCtx2} ->
-                    #fuse_response{status = Status} =
-                        synchronize_block(UserCtx, FileCtx2, Block, false, TransferId),
-                    transfer:increase_files_processed_counter(TransferId),
-                    #provider_response{status = Status}
+                    case synchronize_block(UserCtx, FileCtx2, Block, false, TransferId) of
+                        #fuse_response{status = Status} ->
+                            transfer:increment_files_processed_counter(TransferId),
+                            #provider_response{status = Status};
+                        {error, cancelled} ->
+                            throw(replication_cancelled)
+                    end
             end;
         false ->
-            throw({transfer_cancelled, TransferId})
+            throw(replication_cancelled)
     end.
 
 %%-------------------------------------------------------------------
@@ -345,27 +357,29 @@ replicate_children(UserCtx, Children, Block, TransferId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec invalidate_file_replica_insecure(user_ctx:ctx(), file_ctx:ctx(),
-    oneprovider:id() | undefined, non_neg_integer(), undefined | transfer:id(),
-    autocleaning:id() | undefined) -> fslogic_worker:provider_response().
+    undefined | oneprovider:id() | undefined, non_neg_integer(),
+    undefined | transfer:id(), autocleaning:id() | undefined
+) ->
+    fslogic_worker:provider_response().
 invalidate_file_replica_insecure(UserCtx, FileCtx, MigrationProviderId, Offset,
     TransferId, AutoCleaningId
 ) ->
     %TODO VFS-3795 refactor this function
-    case transfer_utils:is_ongoing(TransferId) of
+    case transfer:is_ongoing(TransferId) of
         true ->
             {ok, Chunk} = application:get_env(?APP_NAME, ls_chunk_size),
             case file_ctx:is_dir(FileCtx) of
                 {true, FileCtx2} ->
                     case file_ctx:get_file_children(FileCtx2, UserCtx, Offset, Chunk) of
                         {Children, _FileCtx3} when length(Children) < Chunk ->
-                            transfer:increase_files_to_process_counter(
+                            transfer:increment_files_to_process_counter(
                                 TransferId, length(Children)),
                             invalidate_children_replicas(UserCtx, Children,
                                 MigrationProviderId, TransferId, AutoCleaningId),
-                            transfer:increase_files_processed_counter(TransferId),
+                            transfer:increment_files_processed_counter(TransferId),
                             #provider_response{status = #status{code = ?OK}};
                         {Children, FileCtx3} ->
-                            transfer:increase_files_to_process_counter(TransferId, Chunk),
+                            transfer:increment_files_to_process_counter(TransferId, Chunk),
                             invalidate_children_replicas(UserCtx, Children,
                                 MigrationProviderId, TransferId, AutoCleaningId),
                             invalidate_file_replica_insecure(UserCtx, FileCtx3,
@@ -381,8 +395,8 @@ invalidate_file_replica_insecure(UserCtx, FileCtx, MigrationProviderId, Offset,
                             case Code of
                                 ?OK ->
                                     autocleaning:mark_released_file(AutoCleaningId, ReleasedSize),
-                                    transfer:increase_files_invalidated_counter(TransferId),
-                                    transfer:increase_files_processed_counter(TransferId),
+                                    transfer:increment_files_invalidated_counter(TransferId),
+                                    transfer:increment_files_processed_counter(TransferId),
                                     Response;
                                 ?EAGAIN ->
                                     transfer:mark_failed_file_processing(TransferId),
@@ -394,7 +408,7 @@ invalidate_file_replica_insecure(UserCtx, FileCtx, MigrationProviderId, Offset,
                                 FileCtx3, MigrationProviderId
                             ),
                             % todo VFS-3795
-                            transfer:increase_files_processed_counter(TransferId),
+                            transfer:increment_files_processed_counter(TransferId),
                             Response
                     end
             end;
@@ -437,7 +451,7 @@ invalidate_fully_redundant_file_replica(UserCtx, FileCtx) ->
         truncate_req:truncate_insecure(UserCtx, FileCtx, 0, false),
         FileUuid = file_ctx:get_uuid_const(FileCtx),
         LocalFileId = file_location:local_id(FileUuid),
-        case file_location:delete(LocalFileId) of
+        case fslogic_blocks:delete_location(FileUuid, LocalFileId) of
             ok -> ok;
             {error, {not_found, _}} -> ok
         end,
@@ -456,11 +470,11 @@ invalidate_fully_redundant_file_replica(UserCtx, FileCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec invalidate_children_replicas(user_ctx:ctx(), [file_ctx:ctx()],
-    oneprovider:id(), undefined | transfer:id(), undefined | autocleaning:id()) -> ok.
+    undefined | oneprovider:id(), undefined | transfer:id(),
+    undefined | autocleaning:id()) -> ok.
 invalidate_children_replicas(UserCtx, Children, MigrationProviderId,
     TransferId, AutoCleaningId) ->
     lists:foreach(fun(ChildCtx) ->
-        worker_pool:cast(?INVALIDATION_WORKERS_POOL,
-            {?MODULE, invalidate_file_replica, [UserCtx, ChildCtx,
-                MigrationProviderId, TransferId, AutoCleaningId]})
+        enqueue_file_invalidation(
+            UserCtx, ChildCtx, MigrationProviderId, TransferId, AutoCleaningId)
     end, Children).

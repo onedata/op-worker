@@ -18,7 +18,7 @@
 -include("timeouts.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
--include("http/http_common.hrl").
+-include("http/gui_paths.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -record(state, {
@@ -76,7 +76,7 @@ upgrade(Req, Env, _Handler, HandlerOpts, _Opts) ->
         ok ->
             Headers = cowboy_req:response_headers(#{
                 <<"connection">> => <<"Upgrade">>,
-                <<"upgrade">> => <<?client_protocol_upgrade_name>>
+                <<"upgrade">> => <<?CLIENT_PROTOCOL_UPGRADE_NAME>>
             }, Req),
             #{pid := Pid, streamid := StreamID} = Req,
             Pid ! {{Pid, StreamID}, {switch_protocol, Headers, ?MODULE, HandlerOpts}},
@@ -84,7 +84,7 @@ upgrade(Req, Env, _Handler, HandlerOpts, _Opts) ->
         {error, upgrade_required} ->
             NewReq = cowboy_req:reply(426, #{
                 <<"connection">> => <<"Upgrade">>,
-                <<"upgrade">> => <<?client_protocol_upgrade_name>>
+                <<"upgrade">> => <<?CLIENT_PROTOCOL_UPGRADE_NAME>>
             }, Req),
             {stop, NewReq}
     catch Type:Reason ->
@@ -144,7 +144,7 @@ process_upgrade_request(Req) ->
             {error, upgrade_required};
         true ->
             case cowboy_req:parse_header(<<"upgrade">>, Req, []) of
-                [<<?client_protocol_upgrade_name>>] -> ok;
+                [<<?CLIENT_PROTOCOL_UPGRADE_NAME>>] -> ok;
                 _ -> {error, upgrade_required}
             end
     end.
@@ -317,16 +317,21 @@ handle_client_message(State = #state{session_id = SessId}, Data) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_handshake(state(), #client_message{}) -> state().
-handle_handshake(State, ClientMsg) ->
+handle_handshake(#state{socket = Socket} = State, ClientMsg) ->
     try
         #client_message{message_body = HandshakeMsg} = ClientMsg,
+        {ok, {IpAddress, _Port}} = ssl:peername(Socket),
         NewState = case HandshakeMsg of
             #client_handshake_request{} ->
-                {UserId, SessionId} = fuse_auth_manager:handle_handshake(HandshakeMsg),
+                {UserId, SessionId} = fuse_auth_manager:handle_handshake(
+                    HandshakeMsg, IpAddress
+                ),
                 put(session_id, SessionId),
                 State#state{peer_type = fuse_client, peer_id = UserId, session_id = SessionId};
             #provider_handshake_request{} ->
-                {ProviderId, SessionId} = provider_auth_manager:handle_handshake(HandshakeMsg),
+                {ProviderId, SessionId} = provider_auth_manager:handle_handshake(
+                    HandshakeMsg, IpAddress
+                ),
                 put(session_id, SessionId),
                 State#state{peer_type = provider, peer_id = ProviderId, session_id = SessionId}
         end,

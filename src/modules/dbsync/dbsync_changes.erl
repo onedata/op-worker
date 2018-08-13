@@ -87,7 +87,14 @@ apply(Doc = #document{value = Value, scope = SpaceId, seq = Seq}) ->
                 Model = element(1, Value),
                 Ctx = datastore_model_default:get_ctx(Model),
                 Ctx2 = Ctx#{sync_change => true, hooks_disabled => true},
-                {ok, _} = datastore_model:save(Ctx2, Doc)
+                {ok, _} = datastore_model:save(Ctx2, Doc),
+
+                case Value of
+                    #file_location{} ->
+                        fslogic_blocks:cache_location(Doc);
+                    _ ->
+                        ok
+                end
         end,
 
         try

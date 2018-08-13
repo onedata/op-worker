@@ -42,7 +42,7 @@ translate(#gri{type = od_user, id = Id, aspect = instance, scope = private}, Res
         key = Id,
         value = #od_user{
             name = maps:get(<<"name">>, Result),
-            login = gs_protocol:null_to_undefined(maps:get(<<"login">>, Result)),
+            alias = gs_protocol:null_to_undefined(maps:get(<<"alias">>, Result, null)),
             email_list = maps:get(<<"emailList">>, Result),
             linked_accounts = maps:get(<<"linkedAccounts">>, Result),
             default_space = gs_protocol:null_to_undefined(maps:get(<<"defaultSpaceId">>, Result)),
@@ -60,7 +60,7 @@ translate(#gri{type = od_user, id = Id, aspect = instance, scope = protected}, R
         key = Id,
         value = #od_user{
             name = maps:get(<<"name">>, Result),
-            login = gs_protocol:null_to_undefined(maps:get(<<"login">>, Result)),
+            alias = gs_protocol:null_to_undefined(maps:get(<<"alias">>, Result, null)),
             email_list = maps:get(<<"emailList">>, Result),
             linked_accounts = maps:get(<<"linkedAccounts">>, Result)
         }
@@ -71,7 +71,7 @@ translate(#gri{type = od_user, id = Id, aspect = instance, scope = shared}, Resu
         key = Id,
         value = #od_user{
             name = maps:get(<<"name">>, Result),
-            login = gs_protocol:null_to_undefined(maps:get(<<"login">>, Result))
+            alias = gs_protocol:null_to_undefined(maps:get(<<"alias">>, Result, null))
         }
     };
 

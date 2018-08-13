@@ -28,7 +28,7 @@
     query_index,
     replicas,
     spaces,
-    spaces_by_id,
+    space_by_id,
     transfers,
     cdmi_capabilities_handler,
     cdmi_container_capabilities_handler,

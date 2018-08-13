@@ -61,12 +61,12 @@
 
 -record(od_user, {
     name :: undefined | binary(),
-    login :: undefined | binary(),
+    alias :: undefined | binary(),
     email_list = [] :: [binary()],
     linked_accounts = [] :: [od_user:linked_account()],
     default_space :: binary() | undefined,
     % List of user's aliases for spaces
-    space_aliases = #{} :: maps:map(od_space:id(), SpaceName :: od_space:login()),
+    space_aliases = #{} :: maps:map(od_space:id(), od_space:alias()),
 
     % Direct relations to other entities
     eff_groups = [] :: [od_group:id()],
@@ -322,7 +322,7 @@
     provider_id :: undefined | oneprovider:id(),
     storage_id :: undefined | storage:id(),
     file_id :: undefined | helpers:file_id(),
-    blocks = [] :: [fslogic_blocks:block()],
+    blocks = [] :: fslogic_blocks:stored_blocks(),
     version_vector = #{},
     size = 0 :: non_neg_integer() | undefined,
     space_id :: undefined | od_space:id(),
@@ -505,16 +505,17 @@
     file_uuid :: undefined | file_meta:uuid(),
     space_id :: undefined | od_space:id(),
     user_id :: undefined | od_user:id(),
+    rerun_id = undefined :: undefined | transfer:id(),
     path :: undefined | file_meta:path(),
     callback :: undefined | transfer:callback(),
     enqueued = true :: boolean(),
-    status :: undefined | transfer:status(),
+    cancel = false :: boolean(),
+    replication_status :: undefined | transfer:status(),
     invalidation_status :: undefined | transfer:status(),
     scheduling_provider_id :: od_provider:id(),
-    source_provider_id :: undefined | od_provider:id(),
-    target_provider_id :: undefined | od_provider:id(),
-    invalidate_source_replica :: undefined | boolean(),
-    % pid of transfer or invalidation controller, as both cannot execute
+    replicating_provider :: undefined | od_provider:id(),
+    invalidating_provider :: undefined | od_provider:id(),
+    % pid of replication or invalidation controller, as both cannot execute
     % simultaneously for given TransferId
     pid :: undefined | binary(), %todo VFS-3657
 
@@ -526,8 +527,8 @@
     failed_files = 0 :: non_neg_integer(),
 
     % counters interesting for users
-    files_transferred = 0 :: non_neg_integer(),
-    bytes_transferred = 0 :: non_neg_integer(),
+    files_replicated = 0 :: non_neg_integer(),
+    bytes_replicated = 0 :: non_neg_integer(),
     files_invalidated = 0 :: non_neg_integer(),
     schedule_time = 0 :: non_neg_integer(),
     start_time = 0 :: non_neg_integer(),
@@ -547,7 +548,7 @@
 %% Model that tracks what files are currently transferred
 -record(transferred_file, {
     ongoing_transfers = ordsets:new() :: ordsets:ordset(transferred_file:entry()),
-    past_transfers = ordsets:new() :: ordsets:ordset(transferred_file:entry())
+    ended_transfers = ordsets:new() :: ordsets:ordset(transferred_file:entry())
 }).
 
 %% Model that holds aggregated statistics about transfers featuring

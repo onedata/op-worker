@@ -50,10 +50,14 @@ get_configuration(SessId) ->
             false -> false
         end
     end, Docs),
+    DisabledSpaces = case space_quota:get_disabled_spaces() of
+        {ok, Spaces} -> Spaces;
+        {error, _} -> []
+    end,
     #configuration{
         root_guid = fslogic_uuid:user_root_dir_guid(UserId),
         subscriptions = Subs,
-        disabled_spaces = space_quota:get_disabled_spaces()
+        disabled_spaces = DisabledSpaces
     }.
 
 %%--------------------------------------------------------------------

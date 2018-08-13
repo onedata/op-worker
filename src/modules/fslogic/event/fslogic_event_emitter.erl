@@ -20,8 +20,8 @@
 %% API
 -export([emit_file_attr_changed/2, emit_sizeless_file_attrs_changed/1,
     emit_file_location_changed/2, emit_file_location_changed/3,
-    emit_file_perm_changed/1, emit_file_removed/2,
-    emit_file_renamed_to_client/3, emit_quota_exeeded/0]).
+    emit_file_location_changed/4, emit_file_perm_changed/1, emit_file_removed/2,
+    emit_file_renamed_to_client/3, emit_quota_exceeded/0]).
 
 %%%===================================================================
 %%% API
@@ -92,8 +92,23 @@ emit_file_location_changed(FileCtx, ExcludedSessions) ->
     ok | {error, Reason :: term()}.
 emit_file_location_changed(FileCtx, ExcludedSessions, Range) ->
     {Location, _FileCtx2} = file_ctx:get_file_location_with_filled_gaps(FileCtx, Range),
+    {Offset, Size} = fslogic_blocks:get_blocks_range(Location, Range),
+    emit_file_location_changed(Location, ExcludedSessions, Offset, Size).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends current file location to all subscribers except for the ones present
+%% in 'ExcludedSessions' list. The given range tells what range specifies which
+%% range of blocks should be included in event.
+%% @end
+%%--------------------------------------------------------------------
+-spec emit_file_location_changed(file_ctx:ctx(), [session:id()],
+    non_neg_integer() | undefined, non_neg_integer() | undefined) ->
+    ok | {error, Reason :: term()}.
+emit_file_location_changed(Location, ExcludedSessions, Offset, OffsetEnd) ->
     event:emit(#file_location_changed_event{
-        file_location = Location
+        file_location = Location,
+        change_beg_offset = Offset, change_end_offset = OffsetEnd
     }, {exclude, ExcludedSessions}).
 
 %%--------------------------------------------------------------------
@@ -138,11 +153,15 @@ emit_file_renamed_to_client(FileCtx, NewName, UserCtx) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sends a list of currently disabled spaces due to exeeded quota.
+%% Sends a list of currently disabled spaces due to exceeded quota.
 %% @end
 %%--------------------------------------------------------------------
--spec emit_quota_exeeded() -> ok | {error, Reason :: term()}.
-emit_quota_exeeded() ->
-    BlockedSpaces = space_quota:get_disabled_spaces(),
-    ?debug("Sending disabled spaces ~p", [BlockedSpaces]),
-    event:emit(#quota_exceeded_event{spaces = BlockedSpaces}).
+-spec emit_quota_exceeded() -> ok | {error, Reason :: term()}.
+emit_quota_exceeded() ->
+    case space_quota:get_disabled_spaces() of
+        {ok, BlockedSpaces} ->
+            ?debug("Sending disabled spaces event ~p", [BlockedSpaces]),
+            event:emit(#quota_exceeded_event{spaces = BlockedSpaces});
+        {error, _} = Error ->
+            ?debug("Cannot send disabled spaces event due to ~p", [Error])
+    end.

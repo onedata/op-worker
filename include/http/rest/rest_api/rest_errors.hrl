@@ -88,7 +88,7 @@
 -define(ERROR_INVALID_LIMIT, ?ERROR_REPLY(
     ?BAD_REQUEST,
     <<"invalid_limit">>,
-    <<"Requested limit is invalid, it must be of integer type.">>)
+    <<"Requested limit is invalid, it must be a positive integer.">>)
 ).
 
 -define(ERROR_LIMIT_TOO_LARGE(Max), ?ERROR_REPLY(
@@ -99,7 +99,7 @@
 -define(ERROR_INVALID_STATUS, ?ERROR_REPLY(
     ?BAD_REQUEST,
     <<"invalid_status">>,
-    <<"Requested transfer status is invalid.">>)
+    <<"Requested transfer status is invalid, must be one of: scheduled, current, past.">>)
 ).
 -define(ERROR_INVALID_METADATA_TYPE, ?ERROR_REPLY(
     ?BAD_REQUEST,
@@ -232,6 +232,16 @@
     ?BAD_REQUEST,
     <<"error_transfer_not_found">>,
     <<"Given transfer could not be found.">>)
+).
+-define(ERROR_TRANSFER_ALREADY_ENDED, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"error_transfer_already_ended">>,
+    <<"Given transfer could not be cancelled because it has already ended.">>)
+).
+-define(ERROR_TRANSFER_NOT_ENDED, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"error_transfer_not_ended">>,
+    <<"Given transfer could not be rerun because it has not ended yet.">>)
 ).
 
 %% HTTP 401 errors

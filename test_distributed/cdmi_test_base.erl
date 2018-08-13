@@ -1851,7 +1851,7 @@ do_request([_ | _] = Nodes, RestSubpath, get, Headers, Body) ->
     end,
     FRes;
 do_request([_ | _] = Nodes, RestSubpath, Method, Headers, Body) ->
-    do_request_impl(lists:nth(crypto:rand_uniform(1, length(Nodes) + 1), Nodes), RestSubpath, Method, Headers, Body);
+    do_request_impl(lists:nth(rand:uniform(length(Nodes)), Nodes), RestSubpath, Method, Headers, Body);
 do_request(Node, RestSubpath, Method, Headers, Body) when is_atom(Node) ->
     do_request_impl(Node, RestSubpath, Method, Headers, Body).
 
@@ -1867,7 +1867,7 @@ remove_times_metadata(ResponseJSON) ->
 
 % Performs a single request using http_client
 do_request_impl(Node, RestSubpath, Method, Headers, Body) ->
-    CaCerts = rpc:call(Node, gui_listener, get_cert_chain, []),
+    CaCerts = rpc:call(Node, https_listener, get_cert_chain_pems, []),
     {ok, Domain} = test_utils:get_env(Node, ?APP_NAME, test_web_cert_domain),
     Result = http_client:request(
         Method,
@@ -1890,7 +1890,7 @@ do_request_impl(Node, RestSubpath, Method, Headers, Body) ->
 cdmi_endpoint(Node) ->
     Port = case get(port) of
         undefined ->
-            {ok, P} = test_utils:get_env(Node, ?APP_NAME, gui_https_port),
+            {ok, P} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
             PStr = case P of
                 443 -> "";
                 _ -> ":" ++ integer_to_list(P)

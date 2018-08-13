@@ -955,7 +955,7 @@ init_per_testcase(Case, Config) when
         fun(?MOCK_SESS_ID, ?MOCK_USER_ID) ->
             {ok, #document{value = #od_user{
                 name = <<"whatever">>,
-                login = <<"whatever">>,
+                alias = <<"whatever">>,
                 email_list = [<<"whatever">>],
                 linked_accounts = []
             }}}

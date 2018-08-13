@@ -58,7 +58,7 @@
     spaces_cleanup_interval, timer:hours(1))).
 
 -define(TRANSFERS_RESTART_DELAY, application:get_env(?APP_NAME,
-    transfers_restart_delay, timer:seconds(10))).
+    transfers_restart_delay, timer:seconds(0))).
 
 -define(EXOMETER_NAME(Param), ?exometer_name(?MODULE, count, Param)).
 -define(EXOMETER_TIME_NAME(Param), ?exometer_name(?MODULE, time,
@@ -141,7 +141,7 @@ handle(restart_transfers) ->
     try provider_logic:get_spaces() of
         {ok, SpaceIds} ->
             lists:foreach(fun(SpaceId) ->
-                Restarted = transfer:restart_unfinished_transfers(SpaceId),
+                Restarted = transfer:rerun_not_ended_transfers(SpaceId),
                 ?debug("Restarted following transfers: ~p", [Restarted])
             end, SpaceIds);
         ?ERROR_UNREGISTERED_PROVIDER ->
@@ -396,6 +396,8 @@ handle_file_request(UserCtx, #make_file{name = Name, mode = Mode}, ParentFileCtx
     file_req:make_file(UserCtx, ParentFileCtx, Name, Mode);
 handle_file_request(UserCtx, #open_file{flag = Flag}, FileCtx) ->
     file_req:open_file(UserCtx, FileCtx, Flag);
+handle_file_request(UserCtx, #open_file_with_extended_info{flag = Flag}, FileCtx) ->
+    file_req:open_file_with_extended_info(UserCtx, FileCtx, Flag);
 handle_file_request(UserCtx, #release{handle_id = HandleId}, FileCtx) ->
     file_req:release(UserCtx, FileCtx, HandleId);
 handle_file_request(UserCtx, #get_file_location{}, FileCtx) ->

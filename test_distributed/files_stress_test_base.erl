@@ -269,7 +269,6 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS) ->
             spawn_workers(Dirs, Fun, Fun2, SpawnBegLevel, SpawnEndLevel),
             LastLevelDirs = math:pow(DirsPerParent, DirLevel - SpawnBegLevel + 1),
             DirsToDo = DirsPerParent * (1 - LastLevelDirs) / (1 - DirsPerParent),
-            FilesToDo = LastLevelDirs * FilesPerDir,
             % Gather test results
             GatherAns = gather_answers([{file_ok, {0,0}}, {dir_ok, {0,0}},
                 {other, {0,0}}], round(DirsToDo + LastLevelDirs)),

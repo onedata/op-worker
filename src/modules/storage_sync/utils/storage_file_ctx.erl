@@ -35,7 +35,8 @@
 %% API
 -export([new/3, get_child_ctx/2, get_children_ctxs_batch/3, reset/1]).
 -export([get_stat_buf/1, get_handle/1, get_file_id_const/1,
-    get_storage_doc/1, get_nfs4_acl/1, get_space_id_const/1]).
+    get_storage_doc/1, get_nfs4_acl/1, get_space_id_const/1
+]).
 
 
 %%-------------------------------------------------------------------

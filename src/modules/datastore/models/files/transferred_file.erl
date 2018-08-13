@@ -12,27 +12,37 @@
 -module(transferred_file).
 -author("Lukasz Opiola").
 
+-include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 % API
--export([report_transfer_start/3, report_transfer_finish/3]).
--export([get_ongoing_transfers/1]).
+-export([
+    report_transfer_start/3,
+    report_transfer_finish/4,
+    report_transfer_deletion/1
+]).
+-export([get_transfers/1]).
+-export([clean_up/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
--export([get_record_version/0, get_record_struct/1, resolve_conflict/3]).
+-export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
+-export([resolve_conflict/3]).
 
 -type id() :: datastore:id().
 -type record() :: #transferred_file{}.
 -type doc() :: datastore_doc:doc(record()).
--type diff() :: datastore_doc:diff(record()).
 
 -type entry() :: binary(). % Concatenation of schedule time and transfer id
 
 -export_type([id/0, doc/0, entry/0]).
+
+% Inactivity time (in seconds) after which the history of past transfers will
+% be erased.
+-define(HISTORY_LIMIT, application:get_env(?APP_NAME, transfers_history_limit_per_file, 100)).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -49,25 +59,26 @@
 %% Registers a new transfer for given file/dir.
 %% @end
 %%--------------------------------------------------------------------
--spec report_transfer_start(fslogic_worker:file_guid(), transfer:id(), transfer:timestamp()) ->
-    ok | {error, term()}.
+-spec report_transfer_start(fslogic_worker:file_guid(), transfer:id(),
+    transfer:timestamp()) -> ok | {error, term()}.
 report_transfer_start(FileGuid, TransferId, ScheduleTime) ->
     SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
-    Entry = entry(TransferId, ScheduleTime),
-    Diff = fun(Record = #transferred_file{ongoing_transfers = Ongoing, past_transfers = Past}) ->
-        % Filter out entries for the same transfer but with other schedule time
-        % and move them to past (the other entries are past runs of the transfer
-        % that were unsuccessful).
-        {Duplicates, OtherEntries} = find_all_duplicates(TransferId, Ongoing),
+    Entry = build_entry(TransferId, ScheduleTime),
+
+    Key = file_guid_to_id(FileGuid),
+    Diff = fun(#transferred_file{ongoing_transfers = Ongoing} = Record) ->
         {ok, Record#transferred_file{
-            ongoing_transfers = ordsets:add_element(Entry, OtherEntries),
-            past_transfers = ordsets:union(Duplicates, Past)
+            ongoing_transfers = ordsets:add_element(Entry, Ongoing)
         }}
     end,
-    Default = #document{key = id(FileGuid), scope = SpaceId, value = #transferred_file{
-        ongoing_transfers = ordsets:from_list([Entry])
-    }},
-    case datastore_model:update(?CTX, id(FileGuid), Diff, Default) of
+    Default = #document{key = Key,
+        scope = SpaceId,
+        value = #transferred_file{
+            ongoing_transfers = ordsets:from_list([Entry])
+        }
+    },
+
+    case datastore_model:update(?CTX, Key, Diff, Default) of
         {ok, _} -> ok;
         {error, Reason} -> {error, Reason}
     end.
@@ -78,26 +89,76 @@ report_transfer_start(FileGuid, TransferId, ScheduleTime) ->
 %% Registers a finished transfer for given file/dir.
 %% @end
 %%--------------------------------------------------------------------
--spec report_transfer_finish(fslogic_worker:file_guid(), transfer:id(), transfer:timestamp()) ->
-    ok | {error, term()}.
-report_transfer_finish(FileGuid, TransferId, ScheduleTime) ->
+-spec report_transfer_finish(fslogic_worker:file_guid(), transfer:id(),
+    transfer:timestamp(), transfer:timestamp()) -> ok | {error, term()}.
+report_transfer_finish(FileGuid, TransferId, ScheduleTime, FinishTime) ->
     SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
-    Entry = entry(TransferId, ScheduleTime),
+    OldEntry = build_entry(TransferId, ScheduleTime),
+    NewEntry = build_entry(TransferId, FinishTime),
+
+    Key = file_guid_to_id(FileGuid),
     Diff = fun(Record) ->
         #transferred_file{
             ongoing_transfers = OngoingTransfers,
-            past_transfers = PastTransfers
+            ended_transfers = PastTransfers
         } = Record,
+
         {ok, Record#transferred_file{
-            ongoing_transfers = ordsets:del_element(Entry, OngoingTransfers),
-            past_transfers = ordsets:add_element(Entry, PastTransfers)
+            ongoing_transfers = ordsets:del_element(OldEntry, OngoingTransfers),
+            ended_transfers = enforce_history_limit(ordsets:add_element(
+                NewEntry, PastTransfers
+            ))
         }}
     end,
-    Default = #document{key = id(FileGuid), scope = SpaceId, value = #transferred_file{
-        past_transfers = ordsets:from_list([Entry])
-    }},
-    case datastore_model:update(?CTX, id(FileGuid), Diff, Default) of
+    Default = #document{key = Key,
+        scope = SpaceId,
+        value = #transferred_file{
+            ended_transfers = ordsets:from_list([NewEntry])
+        }
+    },
+
+    case datastore_model:update(?CTX, Key, Diff, Default) of
         {ok, _} -> ok;
+        {error, Reason} -> {error, Reason}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes given transfer (either active or finished) for given file.
+%% @end
+%%--------------------------------------------------------------------
+-spec report_transfer_deletion(transfer:doc()) -> ok | {error, term()}.
+report_transfer_deletion(#document{key = TransferId, value = Transfer}) ->
+    #transfer{
+        file_uuid = FileUuid,
+        space_id = SpaceId,
+        schedule_time = ScheduleTime,
+        finish_time = FinishTime
+    } = Transfer,
+
+    FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
+    OngoingEntry = build_entry(TransferId, ScheduleTime),
+    PastEntry = build_entry(TransferId, FinishTime),
+
+    Key = file_guid_to_id(FileGuid),
+    Diff = fun(Record) ->
+        #transferred_file{
+            ongoing_transfers = OngoingTransfers,
+            ended_transfers = PastTransfers
+        } = Record,
+
+        {ok, Record#transferred_file{
+            ongoing_transfers = ordsets:del_element(
+                OngoingEntry, OngoingTransfers
+            ),
+            ended_transfers = ordsets:del_element(PastEntry, PastTransfers)
+        }}
+    end,
+
+    case datastore_model:update(?CTX, Key, Diff) of
+        {ok, _} -> ok;
+        {error, not_found} -> ok;
         {error, Reason} -> {error, Reason}
     end.
 
@@ -108,73 +169,31 @@ report_transfer_finish(FileGuid, TransferId, ScheduleTime) ->
 %% schedule times of the transfers.
 %% @end
 %%--------------------------------------------------------------------
--spec get_ongoing_transfers(fslogic_worker:file_guid()) ->
-    {ok, [{transfer:id(), transfer:timestamp()}]}.
-get_ongoing_transfers(FileGuid) ->
-    case datastore_model:get(?CTX, id(FileGuid)) of
-        {ok, #document{value = #transferred_file{ongoing_transfers = Transfers}}} ->
-            {ok, [entry_to_transfer_id_and_timestamp(E) || E <- ordsets:to_list(Transfers)]};
+-spec get_transfers(fslogic_worker:file_guid()) ->
+    {ok, #{ongoing => ordsets:ordset(transfer:id()), ended => ordsets:ordset(transfer:id())}}.
+get_transfers(FileGuid) ->
+    case datastore_model:get(?CTX, file_guid_to_id(FileGuid)) of
+        {ok, #document{value = TF}} ->
+            {ok, #{
+                ongoing => entries_to_transfer_ids(TF#transferred_file.ongoing_transfers),
+                ended => entries_to_transfer_ids(TF#transferred_file.ended_transfers)
+            }};
         {error, _} ->
-            {ok, []}
+            {ok, #{
+                ongoing => [],
+                ended => []
+            }}
     end.
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
-%% Returns doc id based on file guid.
+%% Cleans up all information about transfers for given FileGuid.
 %% @end
 %%--------------------------------------------------------------------
--spec id(file_meta:guid()) -> id().
-id(FileGuid) ->
-    datastore_utils:gen_key(<<>>, FileGuid).
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns transfer entry based on transfer id and timestamp.
-%% @end
-%%--------------------------------------------------------------------
--spec entry(transfer:id(), transfer:timestamp()) -> entry().
-entry(TransferId, Timestamp) ->
-    <<TransferId/binary, "|", (integer_to_binary(Timestamp))/binary>>.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns transfer id and timestamp parsed out from entry.
-%% @end
-%%--------------------------------------------------------------------
--spec entry_to_transfer_id_and_timestamp(entry()) ->
-    {transfer:id(), transfer:timestamp()}.
-entry_to_transfer_id_and_timestamp(Entry) ->
-    [TransferId, Timestamp] = binary:split(Entry, <<"|">>),
-    {TransferId, binary_to_integer(Timestamp)}.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Splits the list of entries into two lists, one with duplicates of given
-%% transfer id and another with the rest.
-%% @end
-%%--------------------------------------------------------------------
--spec find_all_duplicates(transfer:id(), ordsets:ordset(entry())) ->
-    {Duplicates :: ordsets:ordset(entry()), OtherEntries :: ordsets:ordset(entry())}.
-find_all_duplicates(TransferId, Entries) ->
-    ordsets:fold(fun(Entry, {DupAcc, OtherAcc}) ->
-        case entry_to_transfer_id_and_timestamp(Entry) of
-            {TransferId, _} ->
-                {ordsets:add_element(Entry, DupAcc), OtherAcc};
-            _ ->
-                {DupAcc, ordsets:add_element(Entry, OtherAcc)}
-        end
-    end, {ordsets:new(), ordsets:new()}, Entries).
+-spec clean_up(fslogic_worker:file_guid()) -> ok | {error, term()}.
+clean_up(FileGuid) ->
+    datastore_model:delete(?CTX, file_guid_to_id(FileGuid)).
 
 
 %%%===================================================================
@@ -197,7 +216,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    1.
+    2.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -208,9 +227,35 @@ get_record_version() ->
     datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
+        {last_update, integer},
         {ongoing_tranfers, [string]},
         {past_tranfers, [string]}
+    ]};
+get_record_struct(2) ->
+    {record, [
+        {ongoing_tranfers, [string]},
+        {ended_tranfers, [string]}
     ]}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Upgrades model's record from provided version to the next one.
+%% @end
+%%--------------------------------------------------------------------
+-spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
+    {datastore_model:record_version(), datastore_model:record()}.
+upgrade_record(1, {?MODULE, _LastUpdate, Ongoing, Past}) ->
+    ConvertEntries = fun(Entries) ->
+        ordsets:from_list(lists:map(fun(Entry) ->
+            [TransferId, TimestampBin] = binary:split(Entry, <<"|">>),
+            build_entry(TransferId, binary_to_integer(TimestampBin))
+        end, Entries))
+    end,
+
+    {2, #transferred_file{
+        ongoing_transfers = ConvertEntries(Ongoing),
+        ended_transfers = ConvertEntries(Past)
+    }}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -228,20 +273,21 @@ get_record_struct(1) ->
 resolve_conflict(_Ctx, NewDoc, PrevDoc) ->
     #document{revs = [NewRev | _], value = NewRecord = #transferred_file{
         ongoing_transfers = NewOngoing,
-        past_transfers = NewPast
+        ended_transfers = NewPast
     }} = NewDoc,
     #document{revs = [PreviousRev | _], value = PrevRecord = #transferred_file{
         ongoing_transfers = PrevOngoing,
-        past_transfers = PrevPast
+        ended_transfers = PrevPast
     }} = PrevDoc,
 
-    AllPast = ordsets:union(NewPast, PrevPast),
+    AllPast = enforce_history_limit(ordsets:union(NewPast, PrevPast)),
     MergedPastDoc = case datastore_utils:is_greater_rev(NewRev, PreviousRev) of
         true ->
-            NewDoc#document{value = NewRecord#transferred_file{past_transfers = AllPast}};
+            NewDoc#document{value = NewRecord#transferred_file{ended_transfers = AllPast}};
         false ->
-            PrevDoc#document{value = PrevRecord#transferred_file{past_transfers = AllPast}}
+            PrevDoc#document{value = PrevRecord#transferred_file{ended_transfers = AllPast}}
     end,
+    AllPastTransferIds = entries_to_transfer_ids(AllPast),
 
     % Disjunctive union of ongoing transfers to get those added to either one
     % of the docs
@@ -256,10 +302,10 @@ resolve_conflict(_Ctx, NewDoc, PrevDoc) ->
             % Drop any entries that were already marked as past
             ordsets:fold(fun(Entry, AccDoc) ->
                 #document{value = Record = #transferred_file{
-                    ongoing_transfers = AccOngoing,
-                    past_transfers = AccPast
+                    ongoing_transfers = AccOngoing
                 }} = AccDoc,
-                case ordsets:is_element(Entry, AccPast) of
+                TransferId = entry_to_transfer_id(Entry),
+                case lists:member(TransferId, AllPastTransferIds) of
                     true ->
                         AccDoc#document{value = Record#transferred_file{
                             ongoing_transfers = ordsets:del_element(Entry, AccOngoing)
@@ -275,4 +321,43 @@ resolve_conflict(_Ctx, NewDoc, PrevDoc) ->
     case ResultDoc of
         PrevDoc -> ignore;
         _ -> {true, ResultDoc}
+    end.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%% @private
+-spec file_guid_to_id(file_meta:guid()) -> id().
+file_guid_to_id(FileGuid) ->
+    datastore_utils:gen_key(<<>>, FileGuid).
+
+
+%% @private
+-spec build_entry(transfer:id(), transfer:timestamp()) -> entry().
+build_entry(TransferId, Timestamp) ->
+    {ok, LinkKey} = transfer:get_link_key(TransferId, Timestamp),
+    <<LinkKey/binary, "|", TransferId/binary>>.
+
+
+%% @private
+-spec entry_to_transfer_id(entry()) -> transfer:id().
+entry_to_transfer_id(Entry) ->
+    [_LinkKey, TransferId] = binary:split(Entry, <<"|">>),
+    TransferId.
+
+
+%% @private
+-spec entries_to_transfer_ids([entry()]) -> ordsets:ordset(transfer:id()).
+entries_to_transfer_ids(Entries) ->
+    ordsets:from_list([entry_to_transfer_id(E) || E <- ordsets:to_list(Entries)]).
+
+
+%% @private
+-spec enforce_history_limit([id()]) -> [id()].
+enforce_history_limit(Transfers) ->
+    Limit = ?HISTORY_LIMIT,
+    case length(Transfers) > Limit of
+        true -> lists:sublist(Transfers, Limit);
+        false -> Transfers
     end.

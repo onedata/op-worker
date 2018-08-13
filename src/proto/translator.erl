@@ -118,9 +118,11 @@ translate_from_protobuf(#'FileAttrChangedEvent'{file_attr = FileAttr}) ->
     #file_attr_changed_event{
         file_attr = translate_from_protobuf(FileAttr)
     };
-translate_from_protobuf(#'FileLocationChangedEvent'{file_location = FileLocation}) ->
+translate_from_protobuf(#'FileLocationChangedEvent'{file_location = FileLocation,
+    change_beg_offset = O, change_end_offset = S}) ->
     #file_location_changed_event{
-        file_location = translate_from_protobuf(FileLocation)
+        file_location = translate_from_protobuf(FileLocation),
+        change_beg_offset = O, change_end_offset = S
     };
 translate_from_protobuf(#'FilePermChangedEvent'{file_uuid = FileGuid}) ->
     #file_perm_changed_event{file_guid = FileGuid};
@@ -271,6 +273,8 @@ translate_from_protobuf(#'MakeFile'{name = Name, mode = Mode}) ->
     #make_file{name = Name, mode = Mode};
 translate_from_protobuf(#'OpenFile'{flag = Flag}) ->
     #open_file{flag = open_flag_translate_from_protobuf(Flag)};
+translate_from_protobuf(#'OpenFileWithExtendedInfo'{flag = Flag}) ->
+    #open_file_with_extended_info{flag = open_flag_translate_from_protobuf(Flag)};
 translate_from_protobuf(#'GetFileLocation'{}) ->
     #get_file_location{};
 translate_from_protobuf(#'Release'{handle_id = HandleId}) ->
@@ -325,16 +329,22 @@ translate_from_protobuf(#'FileChildrenAttrs'{child_attrs = Children,
             translate_from_protobuf(Child)
         end, Children), index_token = Token, is_last = IsLast};
 translate_from_protobuf(#'FileLocation'{} = Record) ->
-    #file_location{
+    FL = #file_location{
         uuid = fslogic_uuid:guid_to_uuid(Record#'FileLocation'.uuid),
         provider_id = Record#'FileLocation'.provider_id,
         space_id = Record#'FileLocation'.space_id,
         storage_id = Record#'FileLocation'.storage_id,
-        file_id = Record#'FileLocation'.file_id,
-        blocks = lists:map(
-            fun(#'FileBlock'{offset = Offset, size = Size}) ->
-                #file_block{offset = Offset, size = Size}
-            end, Record#'FileLocation'.blocks)
+        file_id = Record#'FileLocation'.file_id
+    },
+    fslogic_blocks:set_blocks(FL, lists:map(
+        fun(#'FileBlock'{offset = Offset, size = Size}) ->
+            #file_block{offset = Offset, size = Size}
+        end, Record#'FileLocation'.blocks));
+translate_from_protobuf(#'FileLocationChanged'{file_location = FileLocation,
+    change_beg_offset = O, change_end_offset = S}) ->
+    #file_location_changed{
+        file_location = translate_from_protobuf(FileLocation),
+        change_beg_offset = O, change_end_offset = S
     };
 translate_from_protobuf(#'HelperParams'{helper_name = HelperName,
     helper_args = HelpersArgs, extended_direct_io = ExtendedDirectIO}) ->
@@ -359,6 +369,13 @@ translate_from_protobuf(#'FileCreated'{} = Record) ->
 translate_from_protobuf(#'FileOpened'{} = Record) ->
     #file_opened{
         handle_id = Record#'FileOpened'.handle_id
+    };
+translate_from_protobuf(#'FileOpenedExtended'{} = Record) ->
+    #file_opened_extended{
+        handle_id = Record#'FileOpenedExtended'.handle_id,
+        provider_id = Record#'FileOpenedExtended'.provider_id,
+        file_id = Record#'FileOpenedExtended'.file_id,
+        storage_id = Record#'FileOpenedExtended'.storage_id
     };
 translate_from_protobuf(#'FileRenamed'{new_uuid = NewGuid, child_entries = ChildEntries}) ->
     #file_renamed{
@@ -631,9 +648,11 @@ translate_to_protobuf(#file_written_event{} = Record) ->
 translate_to_protobuf(#file_attr_changed_event{file_attr = FileAttr}) ->
     {_, Record} = translate_to_protobuf(FileAttr),
     {file_attr_changed, #'FileAttrChangedEvent'{file_attr = Record}};
-translate_to_protobuf(#file_location_changed_event{file_location = FileLocation}) ->
+translate_to_protobuf(#file_location_changed_event{file_location = FileLocation,
+    change_beg_offset = O, change_end_offset = S}) ->
     {_, Record} = translate_to_protobuf(FileLocation),
-    {file_location_changed, #'FileLocationChangedEvent'{file_location = Record}};
+    {file_location_changed, #'FileLocationChangedEvent'{file_location = Record,
+        change_beg_offset = O, change_end_offset = S}};
 translate_to_protobuf(#file_perm_changed_event{file_guid = FileGuid}) ->
     {file_perm_changed, #'FilePermChangedEvent'{file_uuid = FileGuid}};
 translate_to_protobuf(#file_removed_event{file_guid = FileGuid}) ->
@@ -778,6 +797,8 @@ translate_to_protobuf(#make_file{name = Name, mode = Mode}) ->
     {make_file, #'MakeFile'{name = Name, mode = Mode}};
 translate_to_protobuf(#open_file{flag = Flag}) ->
     {open_file, #'OpenFile'{flag = open_flag_translate_to_protobuf(Flag)}};
+translate_to_protobuf(#open_file_with_extended_info{flag = Flag}) ->
+    {open_file_with_extended_info, #'OpenFileWithExtendedInfo'{flag = open_flag_translate_to_protobuf(Flag)}};
 translate_to_protobuf(#get_file_location{}) ->
     {get_file_location, #'GetFileLocation'{}};
 translate_to_protobuf(#release{handle_id = HandleId}) ->
@@ -842,8 +863,13 @@ translate_to_protobuf(#file_location{} = Record) ->
                 file_id = Record#file_location.file_id,
                 storage_id = Record#file_location.storage_id
             }
-        end, Record#file_location.blocks)
+        end, fslogic_blocks:get_blocks(Record))
     }};
+translate_to_protobuf(#file_location_changed{file_location = FileLocation,
+    change_beg_offset = O, change_end_offset = S}) ->
+    {_, Record} = translate_to_protobuf(FileLocation),
+    {file_location_changed, #'FileLocationChanged'{file_location = Record,
+        change_beg_offset = O, change_end_offset = S}};
 translate_to_protobuf(#helper_params{helper_name = HelperName,
     helper_args = HelpersArgs, extended_direct_io = ExtendedDirectIO}) ->
     {helper_params, #'HelperParams'{helper_name = HelperName,
@@ -872,6 +898,13 @@ translate_to_protobuf(#file_created{} = Record) ->
 translate_to_protobuf(#file_opened{} = Record) ->
     {file_opened, #'FileOpened'{
         handle_id = Record#file_opened.handle_id
+    }};
+translate_to_protobuf(#file_opened_extended{} = Record) ->
+    {file_opened_extended, #'FileOpenedExtended'{
+        handle_id = Record#file_opened_extended.handle_id,
+        provider_id = Record#file_opened_extended.provider_id,
+        file_id = Record#file_opened_extended.file_id,
+        storage_id = Record#file_opened_extended.storage_id
     }};
 translate_to_protobuf(#file_renamed{new_guid = NewGuid, child_entries = ChildEntries}) ->
     {file_renamed, #'FileRenamed'{

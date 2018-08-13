@@ -49,7 +49,7 @@ is_authorized(Req, State) ->
 %% Authenticates user based on request headers.
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate(Req :: req()) -> {ok, session:id()} | {error, term()}.
+-spec authenticate(req()) -> {ok, session:id()} | {error, term()}.
 authenticate(Req) ->
     case resolve_auth(Req) of
         {error, Reason} ->
@@ -79,7 +79,7 @@ authenticate(Req) ->
 %% Resolves authorization carried by request (if any).
 %% @end
 %%--------------------------------------------------------------------
--spec resolve_auth(Req :: req()) -> user_identity:credentials() | {error, term()}.
+-spec resolve_auth(req()) -> user_identity:credentials() | {error, term()}.
 resolve_auth(Req) ->
     case parse_macaroon_from_header(Req) of
         undefined -> {error, not_found};
@@ -95,7 +95,7 @@ resolve_auth(Req) ->
 %%  * X-Auth-Token
 %% @end
 %%--------------------------------------------------------------------
--spec parse_macaroon_from_header(Req :: req()) -> undefined | binary().
+-spec parse_macaroon_from_header(req()) -> undefined | binary().
 parse_macaroon_from_header(Req) ->
     case cowboy_req:header(<<"macaroon">>, Req) of
         undefined ->

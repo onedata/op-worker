@@ -42,7 +42,6 @@
     times :: undefined | times:times(),
     file_name :: undefined | file_meta:name(),
     storage_doc :: undefined | storage:doc(),
-    file_location_docs :: undefined | [file_location:doc()],
     file_location_ids :: undefined | [file_location:id()],
     acl :: undefined | acl:acl(),
     is_dir :: undefined | boolean(),
@@ -58,7 +57,7 @@
 %% Functions creating context and filling its data
 -export([new_by_canonical_path/2, new_by_guid/1, new_by_doc/3, new_root_ctx/0]).
 -export([reset/1, new_by_partial_context/1, add_file_location/2, set_file_id/2,
-    set_is_dir/2, set_extended_direct_io/2, update_location_doc/2]).
+    set_is_dir/2, set_extended_direct_io/2]).
 
 %% Functions that do not modify context
 -export([get_share_id_const/1, get_space_id_const/1, get_space_dir_uuid_const/1,
@@ -75,6 +74,7 @@
     get_parent_guid/2, get_child/3, get_file_children/4, get_file_children/5, get_logical_path/2,
     get_storage_id/1, get_storage_doc/1, get_file_location_with_filled_gaps/2,
     get_or_create_local_file_location_doc/1, get_local_file_location_doc/1,
+    get_local_file_location_doc/2, get_or_create_local_file_location_doc/2,
     get_file_location_ids/1, get_file_location_docs/1, get_acl/1,
     get_raw_storage_path/1, get_child_canonical_path/2, get_file_size/1,
     get_owner/1, get_group_owner/1, get_local_storage_file_size/1,
@@ -161,8 +161,7 @@ add_file_location(FileCtx = #file_ctx{file_location_ids = undefined}, _LocationI
     FileCtx;
 add_file_location(FileCtx = #file_ctx{file_location_ids = Locations}, LocationId) ->
     FileCtx#file_ctx{
-        file_location_ids = [LocationId | Locations],
-        file_location_docs = undefined
+        file_location_ids = [LocationId | Locations]
     }.
 
 %%--------------------------------------------------------------------
@@ -473,7 +472,7 @@ get_parent_guid(FileCtx, UserCtx) ->
 %%--------------------------------------------------------------------
 -spec get_storage_file_id(ctx()) -> {StorageFileId :: helpers:file_id(), ctx()}.
 get_storage_file_id(FileCtx0 = #file_ctx{storage_file_id = undefined}) ->
-    case get_local_file_location_doc(FileCtx0) of
+    case get_local_file_location_doc(FileCtx0, false) of
         {#document{value = #file_location{file_id = ID}}, FileCtx}
             when ID =/= undefined ->
             {ID, FileCtx};
@@ -756,19 +755,23 @@ get_storage_doc(FileCtx = #file_ctx{storage_doc = StorageDoc}) ->
     {#file_location{}, ctx()}.
 get_file_location_with_filled_gaps(FileCtx, ReqRange) when not is_list(ReqRange)->
     get_file_location_with_filled_gaps(FileCtx, [ReqRange]);
-get_file_location_with_filled_gaps(FileCtx, ReqRange) ->
+get_file_location_with_filled_gaps(FileCtx, ReqRange0) ->
     % get locations
     {Locations, FileCtx2} = file_ctx:get_file_location_docs(FileCtx),
-    {#document{value = FileLocation = #file_location{
-        blocks = Blocks,
+    {FileLocationDoc = #document{value = FileLocation = #file_location{
         size = Size
     }
     }, FileCtx3} = file_ctx:get_or_create_local_file_location_doc(FileCtx2),
+    ReqRange = utils:ensure_defined(ReqRange0, [undefined],
+        [#file_block{offset = 0, size = Size}]),
+    Blocks = fslogic_blocks:get_blocks(FileLocationDoc,
+        #{overlapping_blocks => ReqRange}),
 
     % find gaps
     AllRanges = lists:foldl(
-        fun(#document{value = #file_location{blocks = _Blocks}}, Acc) ->
-            fslogic_blocks:merge(Acc, _Blocks)
+        fun(Doc, Acc) ->
+            fslogic_blocks:merge(Acc, fslogic_blocks:get_blocks(Doc,
+                #{overlapping_blocks => ReqRange}))
         end, [], Locations),
     ExtendedRequestedRange = lists:map(fun(RequestedRange) ->
         case RequestedRange of
@@ -776,44 +779,65 @@ get_file_location_with_filled_gaps(FileCtx, ReqRange) ->
                 RequestedRange#file_block{size = Size - O};
             _ -> RequestedRange
         end
-    end, utils:ensure_defined(ReqRange, [undefined], [#file_block{offset = 0, size = Size}])),
+    end, ReqRange),
     Gaps = fslogic_blocks:consolidate(
         fslogic_blocks:invalidate(ExtendedRequestedRange, AllRanges)
     ),
     BlocksWithFilledGaps = fslogic_blocks:merge(Blocks, Gaps),
 
     % fill gaps transform uid and emit
-    {FileLocation#file_location{
-        uuid = file_ctx:get_uuid_const(FileCtx),
-        blocks = BlocksWithFilledGaps
-    }, FileCtx3}.
+    {fslogic_blocks:set_final_blocks(FileLocation#file_location{
+        uuid = file_ctx:get_uuid_const(FileCtx)
+    }, BlocksWithFilledGaps), FileCtx3}.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns local file location doc.
+%% @equiv get_or_create_local_file_location_doc(FileCtx, true)
 %% @end
 %%--------------------------------------------------------------------
 -spec get_or_create_local_file_location_doc(ctx()) ->
     {file_location:doc() | undefined, ctx()}.
 get_or_create_local_file_location_doc(FileCtx) ->
-    case is_dir(FileCtx) of
-        {true, FileCtx2} ->
-            {undefined, FileCtx2};
-        {false, FileCtx2} ->
-            get_or_create_local_regular_file_location_doc(FileCtx2)
-    end.
+    get_or_create_local_file_location_doc(FileCtx, true).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns local file location doc.
 %% @end
 %%--------------------------------------------------------------------
+-spec get_or_create_local_file_location_doc(ctx(), boolean()) ->
+    {file_location:doc() | undefined, ctx()}.
+get_or_create_local_file_location_doc(FileCtx, IncludeBlocks) ->
+    case is_dir(FileCtx) of
+        {true, FileCtx2} ->
+            {undefined, FileCtx2};
+        {false, FileCtx2} ->
+            get_or_create_local_regular_file_location_doc(FileCtx2,
+                IncludeBlocks)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv get_local_file_location_doc(FileCtx, true)
+%% @end
+%%--------------------------------------------------------------------
 -spec get_local_file_location_doc(ctx()) ->
     {file_location:doc() | undefined, ctx()}.
 get_local_file_location_doc(FileCtx) ->
+    get_local_file_location_doc(FileCtx, true).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns local file location doc.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_local_file_location_doc(ctx(), boolean()) ->
+    {file_location:doc() | undefined, ctx()}.
+get_local_file_location_doc(FileCtx, IncludeBlocks) ->
     FileUuid = get_uuid_const(FileCtx),
     LocalLocationId = file_location:local_id(FileUuid),
-    case file_location:get(LocalLocationId) of
+    case fslogic_blocks:get_location(LocalLocationId, FileUuid,
+        IncludeBlocks) of
         {ok, Location} ->
             {Location, FileCtx};
         {error, not_found} ->
@@ -857,37 +881,19 @@ get_file_location_ids(FileCtx = #file_ctx{file_location_ids = Locations}) ->
 %%--------------------------------------------------------------------
 -spec get_file_location_docs(ctx()) ->
     {[file_location:doc()], ctx()}.
-get_file_location_docs(FileCtx = #file_ctx{file_location_docs = undefined}) ->
+% TODO VFS-4412 - export as _const function
+get_file_location_docs(FileCtx = #file_ctx{}) ->
     {LocationIds, FileCtx2} = get_file_location_ids(FileCtx),
+    FileUuid = get_uuid_const(FileCtx),
     LocationDocs = lists:filtermap(fun(LocId) ->
-        case file_location:get(LocId) of
+        case fslogic_blocks:get_location(LocId, FileUuid) of
             {ok, Location} ->
                 {true, Location};
             _Error ->
                 false
         end
     end, LocationIds),
-    {LocationDocs, FileCtx2#file_ctx{file_location_docs = LocationDocs}};
-get_file_location_docs(FileCtx = #file_ctx{file_location_docs = LocationDocs}) ->
-    {LocationDocs, FileCtx}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates file location docs.
-%% @end
-%%--------------------------------------------------------------------
--spec update_location_doc(ctx(), file_location:doc()) -> ctx().
-update_location_doc(#file_ctx{file_location_docs = undefined} = FileCtx, _Doc) ->
-    FileCtx;
-update_location_doc(#file_ctx{file_location_docs = LocationDocs} = FileCtx,
-    #document{key = FileLocationId} = Doc) ->
-    LocationDocs2 = lists:map(fun(#document{key = LocId} = LocDoc) ->
-        case LocId of
-            FileLocationId -> Doc;
-            _ -> LocDoc
-        end
-    end, LocationDocs),
-    FileCtx#file_ctx{file_location_docs = LocationDocs2}.
+    {LocationDocs, FileCtx2}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -909,14 +915,18 @@ get_acl(FileCtx = #file_ctx{acl = Acl}) ->
 -spec get_file_size(file_ctx:ctx() | file_meta:uuid()) ->
     {Size :: non_neg_integer(), file_ctx:ctx()}.
 get_file_size(FileCtx) ->
-    case file_ctx:get_local_file_location_doc(FileCtx) of
+    case file_ctx:get_local_file_location_doc(FileCtx, false) of
         {#document{
             value = #file_location{
-                size = undefined,
-                blocks = Blocks
+                size = undefined
             }
-        }, FileCtx2} ->
-            {fslogic_blocks:upper(Blocks), FileCtx2};
+        } = FL, FileCtx2} ->
+            {#document{
+                value = #file_location{
+                    size = undefined
+                }
+            } = FL, _} = file_ctx:get_local_file_location_doc(FileCtx, true),
+            {fslogic_blocks:upper(fslogic_blocks:get_blocks(FL)), FileCtx2};
         {#document{value = #file_location{size = Size}}, FileCtx2} ->
             {Size, FileCtx2};
         {undefined, FileCtx2} ->
@@ -931,16 +941,9 @@ get_file_size(FileCtx) ->
 -spec get_local_storage_file_size(file_ctx:ctx() | file_meta:uuid()) ->
     {Size :: non_neg_integer(), file_ctx:ctx()}.
 get_local_storage_file_size(FileCtx) ->
-    case file_ctx:get_local_file_location_doc(FileCtx) of
-        {#document{
-            value = #file_location{
-                blocks = Blocks
-            }
-        }, FileCtx2} ->
-            {fslogic_blocks:size(Blocks), FileCtx2};
-        {undefined, FileCtx2} ->
-            {0, FileCtx2}
-    end.
+    FileUuid = get_uuid_const(FileCtx),
+    LocalLocationId = file_location:local_id(FileUuid),
+    {fslogic_blocks:get_size(LocalLocationId, FileUuid), FileCtx}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1195,15 +1198,15 @@ get_name_of_nonspace_file(FileCtx = #file_ctx{file_name = FileName}) ->
 %% Returns local file location doc, creates it if it's not present
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_create_local_regular_file_location_doc(ctx()) ->
+-spec get_or_create_local_regular_file_location_doc(ctx(), boolean()) ->
     {file_location:doc() | undefined, ctx()}.
-get_or_create_local_regular_file_location_doc(FileCtx) ->
-    case get_local_file_location_doc(FileCtx) of
+get_or_create_local_regular_file_location_doc(FileCtx, IncludeBlocks) ->
+    case get_local_file_location_doc(FileCtx, IncludeBlocks) of
         {undefined, FileCtx2} ->
             {CreatedLocation, FileCtx3} =
                 sfm_utils:create_storage_file_location(FileCtx2, false),
             {LocationDocs, FileCtx4} = get_file_location_docs(FileCtx3),
-            lists:map(fun(ChangedLocation) ->
+            lists:foreach(fun(ChangedLocation) ->
                 replica_dbsync_hook:on_file_location_change(FileCtx4, ChangedLocation)
             end, LocationDocs),
             FileUuid = get_uuid_const(FileCtx),
@@ -1252,11 +1255,10 @@ get_file_size_from_remote_locations(FileCtx) ->
             case ChocenDoc of
                 #document{
                     value = #file_location{
-                        size = undefined,
-                        blocks = Blocks
+                        size = undefined
                     }
-                } ->
-                    {fslogic_blocks:upper(Blocks), FileCtx2};
+                } = FL ->
+                    {fslogic_blocks:upper(fslogic_blocks:get_blocks(FL)), FileCtx2};
                 #document{value = #file_location{size = Size}} ->
                     {Size, FileCtx2}
             end
