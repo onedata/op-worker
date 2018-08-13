@@ -207,13 +207,7 @@
 
 -define(GROUP_SHARED_DATA_MATCHER(__Group), #document{key = __Group, value = #od_group{
     name = ?GROUP_NAME(__Group),
-    type = ?GROUP_TYPE_ATOM(__Group),
-    direct_parents = [],
-    direct_children = #{},
-    eff_children = #{},
-    direct_users = #{},
-    eff_users = #{},
-    eff_spaces = []
+    type = ?GROUP_TYPE_ATOM(__Group)
 }}).
 
 

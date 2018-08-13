@@ -867,7 +867,7 @@ user_logic_mock_setup(Workers, Users) ->
 group_logic_mock_setup(Workers, Groups, _Users) ->
     test_utils:mock_new(Workers, group_logic),
 
-    test_utils:mock_expect(Workers, group_logic, get_name, fun(Client, GroupId) ->
+    test_utils:mock_expect(Workers, group_logic, get_name, fun(_Client, GroupId) ->
         GroupName = proplists:get_value(GroupId, Groups),
         {ok, GroupName}
     end).

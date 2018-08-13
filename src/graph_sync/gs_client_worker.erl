@@ -606,12 +606,12 @@ is_user_authorized(ClientUserId, Client, AuthHint, #gri{type = od_user, id = Tar
             false
     end;
 
-is_user_authorized(ClientUserId, Client, AuthHint, #gri{type = od_group, id = ChildId, scope = shared}, CachedDoc) ->
+is_user_authorized(ClientUserId, Client, AuthHint, #gri{type = od_group, id = GroupId, scope = shared}, _) ->
     case AuthHint of
         ?THROUGH_SPACE(SpaceId) ->
-            space_logic:can_view_group_through_space(Client, SpaceId, ClientUserId, ChildId);
+            space_logic:can_view_group_through_space(Client, SpaceId, ClientUserId, GroupId);
         _ ->
-            user_logic:has_eff_group(ClientUserId, Client, CachedDoc#document.key)
+            user_logic:has_eff_group(Client, ClientUserId, GroupId)
     end;
 
 is_user_authorized(UserId, _, _, #gri{type = od_space, scope = private}, CachedDoc) ->

@@ -315,7 +315,10 @@ mock_graph_get(GRI = #gri{type = od_group, id = GroupId, aspect = instance}, Aut
         {?USER_GS_MACAROON_AUTH(UserId), shared, _} ->
             lists:member(GroupId, ?USER_EFF_GROUPS(UserId));
         {?USER_GS_MACAROON_AUTH(_UserId), _, _} ->
-            false
+            false;
+        % undefined Authorization means asking with provider's auth
+        {undefined, shared, _} ->
+            true
     end,
     case Authorized of
         true ->

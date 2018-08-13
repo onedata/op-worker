@@ -110,9 +110,9 @@ subscribe_test(Config) ->
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
     % Update of shared scope should not affect the cache
-    ChangedData3 = Group1SharedData#{<<"name">> => <<"changedName3">>},
-    PushMessage3 = #gs_push_graph{gri = Group1SharedGRI, data = ChangedData3, change_type = updated},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage3]),
+    ChangedData2 = Group1SharedData#{<<"name">> => <<"changedName2">>},
+    PushMessage2 = #gs_push_graph{gri = Group1SharedGRI, data = ChangedData2, change_type = updated},
+    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage2]),
 
     ?assertMatch(
         {ok, #document{key = ?GROUP_1, value = #od_group{
