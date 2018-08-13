@@ -260,7 +260,7 @@ transfers_should_be_ordered_by_timestamps(Config) ->
     DomainP2 = domain(WorkerP2),
 
     File = ?absPath(SpaceId, <<"file_sorted">>),
-    Size = 1024 * 1024,
+    Size = 1,
     FileGuid = create_test_file(WorkerP1, SessionId, File, crypto:strong_rand_bytes(Size)),
     {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
 
@@ -280,6 +280,7 @@ transfers_should_be_ordered_by_timestamps(Config) ->
     Tid2 = schedule_file_replication(WorkerP1, DomainP2, File2, Config),
     ?assertEqual([Tid2], get_ongoing_transfers_for_file(WorkerP1, FileGuid2), ?ATTEMPTS),
     ?assertEqual([], get_ended_transfers_for_file(WorkerP1, FileGuid2), ?ATTEMPTS),
+    % Wait 1 second to be sure that transfer Tid will have greater timestamp than transfer Tid2
     timer:sleep(timer:seconds(1)),
     Tid = schedule_file_replication(WorkerP1, DomainP2, File, Config),
     ?assertEqual([Tid], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
