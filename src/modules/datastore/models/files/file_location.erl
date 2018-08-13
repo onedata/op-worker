@@ -276,7 +276,7 @@ get_version_vector(#file_location{version_vector = VV}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec save_local_blocks(id(), fslogic_blocks:blocks()) ->
-    one_or_many({ok, datastore:link()} | {error, term()}).
+    ok | one_or_many({ok, datastore:link()} | {error, term()}).
 save_local_blocks(_Key, []) ->
     ok;
 save_local_blocks(Key, Blocks) ->
