@@ -123,18 +123,22 @@ flush() ->
 %% @end
 %%-------------------------------------------------------------------
 -spec flush(file_location:id(), boolean()) -> ok | {error, term()}.
-% Second arg to be used in next step of refactoring
+% TODO VFS-4743 - Second arg to be used in next step of refactoring
 flush(Key, _FlushBlocks) ->
-    % TODO - sprawdzic czy jest co flushowac
-    case flush_key(Key) of
-        ok ->
-            KM = get(?KEYS_MODIFIED),
-            KBM = get(?KEYS_BLOCKS_MODIFIED),
-            put(?KEYS_MODIFIED, KM -- [Key]),
-            put(?KEYS_BLOCKS_MODIFIED, KBM -- [Key]),
-            ok;
-        Error ->
-            Error
+    KM = get(?KEYS_MODIFIED),
+    KBM = get(?KEYS_BLOCKS_MODIFIED),
+    case lists:member(Key, KM) orelse lists:member(Key, KM) of
+        true ->
+            case flush_key(Key) of
+                ok ->
+                    put(?KEYS_MODIFIED, KM -- [Key]),
+                    put(?KEYS_BLOCKS_MODIFIED, KBM -- [Key]),
+                    ok;
+                Error ->
+                    Error
+            end;
+        _ ->
+            ok
     end.
 
 %%-------------------------------------------------------------------
@@ -244,9 +248,8 @@ get_doc(Key) ->
                     cache_doc(LocationDoc2),
 
                     {ok, LocalBlocks} = file_location:get_local_blocks(Key),
-%%                    ?info("gggg ~p", [{length(LocalBlocks), length(PublicBlocks)}]),
 
-                    put({?BLOCKS, Key}, blocks_to_tree(PublicBlocks ++ LocalBlocks)),
+                    put({?BLOCKS, Key}, blocks_to_tree(PublicBlocks ++ LocalBlocks, false)),
                     put({?PUBLIC_BLOCKS, Key}, PublicBlocks),
                     LocationDoc2;
                 {error, not_found} = ENF ->
@@ -444,18 +447,25 @@ finish_blocks_usage(Key) ->
             Ans
     end.
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns blocks changed since last flush.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_changed_blocks(file_location:id()) -> {sets:set(), sets:set()}.
 get_changed_blocks(Key) ->
     Local = get(?LOCAL_CHANGES),
     Saved = get_set({?SAVED_BLOCKS, Key, Local}),
     Deleted = get_set({?DELETED_BLOCKS, Key}),
     {Saved, Deleted}.
 
-get_set(Key) ->
-    case get(Key) of
-        undefined -> sets:new();
-        Value -> Value
-    end.
-
+%%-------------------------------------------------------------------
+%% @doc
+%% Marks blocks as changed.
+%% @end
+%%-------------------------------------------------------------------
+-spec mark_changed_blocks(file_location:id(), sets:set() | all,
+    sets:set() | all) -> ok.
 mark_changed_blocks(Key, all, all) ->
     erase({?SAVED_BLOCKS, Key, true}),
     erase({?SAVED_BLOCKS, Key, undefined}),
@@ -468,8 +478,15 @@ mark_changed_blocks(Key, Saved, Deleted) ->
     put({?DELETED_BLOCKS, Key}, Deleted),
     ok.
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Sets change as local or public.
+%% @end
+%%-------------------------------------------------------------------
+-spec set_local_change(boolean()) -> ok.
 set_local_change(false) ->
-    erase(?LOCAL_CHANGES);
+    erase(?LOCAL_CHANGES),
+    ok;
 set_local_change(Value) ->
     put(?LOCAL_CHANGES, Value),
     ok.
@@ -500,7 +517,7 @@ get_local_size(Key) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec update_size(file_location:id(), non_neg_integer()) -> ok.
-% TODO - do we use size of any other replica than local
+% TODO VFS-4743 - do we use size of any other replica than local
 update_size(Key, Change) ->
     Size2 = get_local_size(Key) + Change,
     put({?SIZES, Key}, Size2),
@@ -545,7 +562,7 @@ init_flush_check() ->
 %% @end
 %%-------------------------------------------------------------------
 -spec flush_key(file_location:id()) -> ok | {error, term()}.
-% TODO - do we save any other location than local?
+% TODO VFS-4743 - do we save any other location than local?
 flush_key(Key) ->
     case get({?DOCS, Key}) of
         undefined ->
@@ -587,7 +604,6 @@ flush_key(Key) ->
                     BlocksToSave4 = lists:sort(BlocksToSave3),
 
                     % TODO - nie powinnien poleciec wyjatek
-%%                    ?info("xxxxx ~p", [{length(BlocksToSave4), length(LocalBlocks), DeletedBlocks}]),
                     % TODO - bloku moze nie byc (moze byc publiczny)
                     file_location:delete_local_blocks(Key, DeletedBlocks),
 
@@ -640,13 +656,21 @@ apply_size_change(Key, FileUuid) ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Translates blocks (list or tree) to tree.
+%% @equiv blocks_to_tree(Blocks, true).
 %% @end
 %%-------------------------------------------------------------------
 -spec blocks_to_tree(fslogic_blocks:stored_blocks()) -> fslogic_blocks:blocks_tree().
 blocks_to_tree(Blocks) ->
     blocks_to_tree(Blocks, true).
 
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Translates blocks (list or tree) to tree.
+%% @end
+%%-------------------------------------------------------------------
+-spec blocks_to_tree(fslogic_blocks:stored_blocks(), boolean()) ->
+    fslogic_blocks:blocks_tree().
 blocks_to_tree(Blocks, true) when is_list(Blocks) ->
     gb_sets:from_ordset(lists:map(
         fun(#file_block{offset = O, size = S}) ->
@@ -672,3 +696,16 @@ tree_to_blocks(Tree) ->
         fun(#file_block{offset = O, size = S}) ->
             #file_block{offset = O-S, size = S}
         end, gb_sets:to_list(Tree)).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns set from memory or empty one.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_set(term()) -> sets:set().
+get_set(Key) ->
+    case get(Key) of
+        undefined -> sets:new();
+        Value -> Value
+    end.

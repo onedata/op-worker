@@ -31,6 +31,7 @@
 -type record() :: #file_location{}.
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
+-type one_or_many(Type) :: Type | [Type].
 
 -export_type([id/0, doc/0]).
 
@@ -221,7 +222,7 @@ update(Key, Diff) ->
 %%--------------------------------------------------------------------
 -spec delete(id()) -> ok | {error, term()}.
 delete(Key) ->
-   % TODO - skasowac linki (ale to moze trwac wieki !)
+   % TODO VFS-4739 - delete links
    datastore_model:delete(?CTX, Key).
 
 %%--------------------------------------------------------------------
@@ -269,6 +270,13 @@ get_version_vector(#document{value = FileLocation}) ->
 get_version_vector(#file_location{version_vector = VV}) ->
     VV.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Saves local blocks as links.
+%% @end
+%%--------------------------------------------------------------------
+-spec save_local_blocks(id(), fslogic_blocks:blocks()) ->
+    one_or_many({ok, datastore:link()} | {error, term()}).
 save_local_blocks(_Key, []) ->
     ok;
 save_local_blocks(Key, Blocks) ->
@@ -276,6 +284,13 @@ save_local_blocks(Key, Blocks) ->
     TreeId = oneprovider:get_id(),
     datastore_model:add_links(?LINKS_CTX, Key, TreeId, Links).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes local blocks.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_local_blocks(id(), fslogic_blocks:blocks() | all) ->
+    one_or_many(ok | {error, term()}).
 delete_local_blocks(_Key, []) ->
     ok;
 delete_local_blocks(Key, all) ->
@@ -296,6 +311,12 @@ delete_local_blocks(Key, Blocks) ->
     Links = lists:map(fun(#file_block{offset = O}) -> O end, Blocks),
     datastore_model:delete_links(?LINKS_CTX, Key, TreeId, Links).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes local blocks.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_local_blocks(id()) -> {ok, datastore:fold_acc()} | {error, term()}.
 get_local_blocks(Key) ->
     TreeId = oneprovider:get_id(),
     FoldAns = datastore_model:fold_links(?LINKS_CTX, Key, TreeId, fun

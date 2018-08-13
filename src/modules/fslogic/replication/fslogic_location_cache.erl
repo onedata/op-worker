@@ -127,7 +127,7 @@ cache_location(#document{key = Key, value = #file_location{uuid = Uuid, blocks =
 -spec update_location(file_meta:uuid(), file_location:id(), file_location:diff(),
     boolean()) -> {ok, file_location:doc()} | {error, term()}.
 update_location(FileUuid, LocId, Diff, ModifyBlocks) ->
-    % TODO - uwazac na lokalne bloki (moze nie pozwalac na modyfikacje updatem)
+    % TODO 4743 - Cannot update local blocks with update
     replica_synchronizer:apply_or_run_locally(FileUuid, fun() ->
         case fslogic_cache:flush(LocId, ModifyBlocks) of
             ok ->

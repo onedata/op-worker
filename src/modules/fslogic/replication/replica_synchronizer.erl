@@ -123,9 +123,7 @@ synchronize(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
     FileSize :: non_neg_integer() | undefined, BumpVersion :: boolean()) ->
     {ok, size_changed} | {ok, size_not_changed} | {error, Reason :: term()}.
 update_replica(FileCtx, Blocks, FileSize, BumpVersion) ->
-%%    apply_no_check(FileCtx, fun() ->
-        replica_updater:update(FileCtx, Blocks, FileSize, BumpVersion).
-%%    end).
+    replica_updater:update(FileCtx, Blocks, FileSize, BumpVersion).
 
 %%--------------------------------------------------------------------
 %% @doc
