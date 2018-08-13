@@ -988,7 +988,7 @@ flush_blocks(#state{cached_blocks = Blocks} = State, ExcludeSessions,
             ToInvalidate = [FinalBlock || {_From, FinalBlock} <- FinalBlocks],
             Blocks2 = fslogic_blocks:consolidate(fslogic_blocks:invalidate(Blocks, ToInvalidate)),
             lists:foreach(fun(Block) ->
-                flush_blocks_list([Block], ExcludeSessions, true)
+                flush_blocks_list([Block], ExcludeSessions, all)
             end, Blocks2)
     end,
 
