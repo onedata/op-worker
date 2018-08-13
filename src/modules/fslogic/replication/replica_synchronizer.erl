@@ -424,6 +424,7 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
     case ExistingRefs ++ NewRefs of
         [] ->
             FileLocation = fslogic_cache:get_local_location(),
+            % TODO VFS-4743 - fill gaps?
             ReturnedBlocks = fslogic_location_cache:get_blocks(FileLocation,
                 #{overlapping_blocks => [Block]}),
             {EventOffset, EventSize} =

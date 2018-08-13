@@ -563,17 +563,17 @@ init_flush_check() ->
 %%-------------------------------------------------------------------
 -spec flush_key(file_location:id()) -> ok | {error, term()}.
 % TODO VFS-4743 - do we save any other location than local?
+% TODO VFS-4743 - do not save location when only blocks differ
 flush_key(Key) ->
     case get({?DOCS, Key}) of
         undefined ->
             ok;
         #document{key = Key, value = #file_location{uuid = FileUuid,
             size = Size0} = Location} = Doc ->
-            DocToSave = case get({?RESET_BLOCKS, Key}) of
+            {DocToSave, AddBlocks, DelBlocks} = case get({?RESET_BLOCKS, Key}) of
                 true ->
-                    % TODO - powoduje zrobienie wszystkich blokow publicznymi !
-                    ok = file_location:delete_local_blocks(Key, all),
-                    attach_blocks(Doc);
+                    % TODO VFS-4743 - makes all blocks public
+                    {attach_blocks(Doc), [], all};
                 _ ->
                     Size = case Size0 of
                         undefined -> 0;
@@ -603,28 +603,59 @@ flush_key(Key) ->
                     BlocksToSave3 = BlocksToSave2 ++ sets:to_list(PublicBlocks2),
                     BlocksToSave4 = lists:sort(BlocksToSave3),
 
-                    % TODO - nie powinnien poleciec wyjatek
-                    % TODO - bloku moze nie byc (moze byc publiczny)
-                    file_location:delete_local_blocks(Key, DeletedBlocks),
-
-                    % TODO - w przypadku already exists rzucic tylko warning (uwage - jest w liscie)
-                    % TODO - match
-                    file_location:save_local_blocks(Key, LocalBlocks),
-
-                    % TODO - wyfiltrowac zapisy jesli nic sie nie zmienilo (np. tylko lokalne bloki)
                     put({?PUBLIC_BLOCKS, Key}, BlocksToSave4),
-                    Doc#document{value = Location#file_location{blocks = BlocksToSave4}}
+                    {Doc#document{value = Location#file_location{
+                        blocks = BlocksToSave4}}, LocalBlocks, DeletedBlocks}
             end,
 
+            apply_size_change(Key, FileUuid),
             case file_location:save(DocToSave) of
                 {ok, _} ->
-                    % TODO - kasowac lokalne tylko jak sie powiedzie
-                    erase({?SAVED_BLOCKS, Key, true}),
-                    erase({?SAVED_BLOCKS, Key, undefined}),
-                    erase({?DELETED_BLOCKS, Key}),
-                    erase({?RESET_BLOCKS, Key}),
-                    apply_size_change(Key, FileUuid);
+                    Check1 = case file_location:delete_local_blocks(Key, DelBlocks) of
+                        ok ->
+                            [];
+                        List1 ->
+                            lists:filter(fun
+                                (ok) -> false;
+                                ({error, not_found}) -> false;
+                                (_) -> true
+                            end, List1)
+                    end,
+
+                    case Check1 of
+                        [] ->
+                            erase({?DELETED_BLOCKS, Key}),
+                            erase({?RESET_BLOCKS, Key}),
+
+                            Check2 = case file_location:save_local_blocks(Key, AddBlocks) of
+                                ok ->
+                                    [];
+                                List2 ->
+                                    lists:filter(fun
+                                        ({ok, _}) -> false;
+                                        ({error, already_exists}) -> false;
+                                        (_) -> true
+                                    end, List2)
+                            end,
+
+                            case Check2 of
+                                [] ->
+                                    erase({?SAVED_BLOCKS, Key, true}),
+                                    erase({?SAVED_BLOCKS, Key, undefined}),
+
+                                    ok;
+                                _ ->
+                                    ?error("Local blocks flush failed for key"
+                                    " ~p: ~p", [Key, Check2]),
+                                    Check2
+                            end;
+                        _ ->
+                            ?error("Local blocks del failed for key"
+                            " ~p: ~p", [Key, Check1]),
+                            Check1
+                    end;
                 Error ->
+                    ?error("Flush failed for key ~p: ~p", [Key, Error]),
                     Error
             end
     end.
