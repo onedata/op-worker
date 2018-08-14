@@ -74,10 +74,9 @@ find_record(<<"space">>, SpaceId) ->
             gui_error:unauthorized()
     end;
 
-% PermissionsRecord matches <<"space-(user|group)-(list|permission)">>
-find_record(PermissionsRecord, RecordId) ->
+find_record(RecordType, RecordId) ->
     SessionId = gui_session:get_session_id(),
-    SpaceId = case PermissionsRecord of
+    SpaceId = case RecordType of
         <<"space-user-list">> ->
             RecordId;
         <<"space-group-list">> ->
@@ -94,7 +93,7 @@ find_record(PermissionsRecord, RecordId) ->
         <<"space-transfer-time-stat">> ->
             {_, _, _, Id} = op_gui_utils:association_to_ids(RecordId),
             Id;
-        _ -> % covers space-(user|group)-permission and space-transfer-list
+        <<"space-transfer-list">> ->
             {_, Id} = op_gui_utils:association_to_ids(RecordId),
             Id
     end,
@@ -108,7 +107,7 @@ find_record(PermissionsRecord, RecordId) ->
         false ->
             gui_error:unauthorized();
         true ->
-            case PermissionsRecord of
+            case RecordType of
                 <<"space-user-list">> ->
                     {ok, space_user_list_record(RecordId)};
                 <<"space-group-list">> ->
@@ -122,11 +121,7 @@ find_record(PermissionsRecord, RecordId) ->
                 <<"space-transfer-time-stat">> ->
                     {ok, space_transfer_time_stat_record(RecordId)};
                 <<"space-transfer-link-state">> ->
-                    {ok, space_transfer_active_links_record(RecordId)};
-                <<"space-user-permission">> ->
-                    {ok, space_user_permission_record(RecordId)};
-                <<"space-group-permission">> ->
-                    {ok, space_group_permission_record(RecordId)}
+                    {ok, space_transfer_active_links_record(RecordId)}
             end
     end.
 
@@ -171,28 +166,8 @@ query_record(<<"space">>, _Data) ->
 %%--------------------------------------------------------------------
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-create_record(<<"space">>, Data) ->
-    SessionId = gui_session:get_session_id(),
-    UserId = gui_session:get_user_id(),
-    Name = proplists:get_value(<<"name">>, Data),
-    case Name of
-        <<"">> ->
-            gui_error:report_warning(
-                <<"Cannot create space with empty name.">>);
-        _ ->
-            case user_logic:create_space(SessionId, UserId, Name) of
-                {ok, SpaceId} ->
-                    gui_async:push_updated(
-                        <<"user">>,
-                        user_data_backend:user_record(SessionId, UserId)
-                    ),
-                    SpaceRecord = space_record(SpaceId, true),
-                    {ok, SpaceRecord};
-                _ ->
-                    gui_error:report_warning(
-                        <<"Cannot create new space due to unknown error.">>)
-            end
-    end.
+create_record(<<"space">>, _Data) ->
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -203,113 +178,6 @@ create_record(<<"space">>, Data) ->
 -spec update_record(RsrcType :: binary(), Id :: binary(),
     Data :: proplists:proplist()) ->
     ok | gui_error:error_result().
-update_record(<<"space">>, SpaceId, [{<<"name">>, Name}]) ->
-    SessionId = gui_session:get_session_id(),
-    case Name of
-        undefined ->
-            ok;
-        <<"">> ->
-            gui_error:report_warning(
-                <<"Cannot set space name to empty string.">>);
-        NewName ->
-            case space_logic:update_name(SessionId, SpaceId, NewName) of
-                ok ->
-                    ok;
-                {error, {403, <<>>, <<>>}} ->
-                    gui_error:report_warning(
-                        <<"You do not have privileges to modify this space.">>);
-                {error, _} ->
-                    gui_error:report_warning(
-                        <<"Cannot change space name due to unknown error.">>)
-            end
-    end;
-
-update_record(<<"space-user-permission">>, AssocId, Data) ->
-    SessionId = gui_session:get_session_id(),
-    {UserId, SpaceId} = op_gui_utils:association_to_ids(AssocId),
-    {ok, #document{
-        value = #od_space{
-            direct_users = UsersAndPerms
-        }}} = space_logic:get(SessionId, SpaceId),
-    UserPerms = maps:get(UserId, UsersAndPerms),
-    OzVersion = oneprovider:get_oz_version(),
-
-    {Granted, Revoked} = lists:foldl(
-        fun({PermGui, Flag}, {GrantedAcc, RevokedAcc}) ->
-            Perm = perm_gui_to_db(PermGui, OzVersion),
-            case {Flag, lists:member(Perm, UserPerms)} of
-                {false, false} ->
-                    {GrantedAcc, RevokedAcc};
-                {false, true} ->
-                    {GrantedAcc, [Perm | RevokedAcc]};
-                {true, false} ->
-                    {[Perm | GrantedAcc], RevokedAcc};
-                {true, true} ->
-                    {GrantedAcc, RevokedAcc}
-            end
-        end, {[], []}, Data),
-
-    GrantResult = space_logic:update_user_privileges(
-        SessionId, SpaceId, UserId, lists:usort(Granted), grant
-    ),
-    RevokeResult = space_logic:update_user_privileges(
-        SessionId, SpaceId, UserId, lists:usort(Revoked), revoke
-    ),
-
-    case {GrantResult, RevokeResult} of
-        {ok, ok} ->
-            ok;
-        {?ERROR_FORBIDDEN, _} ->
-            gui_error:report_warning(
-                <<"You do not have privileges to modify space privileges.">>);
-        {_, _} ->
-            gui_error:report_warning(
-                <<"Cannot change user privileges due to unknown error.">>)
-    end;
-
-update_record(<<"space-group-permission">>, AssocId, Data) ->
-    SessionId = gui_session:get_session_id(),
-    {GroupId, SpaceId} = op_gui_utils:association_to_ids(AssocId),
-    {ok, #document{
-        value = #od_space{
-            direct_groups = GroupsAndPerms
-        }}} = space_logic:get(SessionId, SpaceId),
-    GroupPerms = maps:get(GroupId, GroupsAndPerms),
-    OzVersion = oneprovider:get_oz_version(),
-
-    {Granted, Revoked} = lists:foldl(
-        fun({PermGui, Flag}, {GrantedAcc, RevokedAcc}) ->
-            Perm = perm_gui_to_db(PermGui, OzVersion),
-            case {Flag, lists:member(Perm, GroupPerms)} of
-                {false, false} ->
-                    {GrantedAcc, RevokedAcc};
-                {false, true} ->
-                    {GrantedAcc, [Perm | RevokedAcc]};
-                {true, false} ->
-                    {[Perm | GrantedAcc], RevokedAcc};
-                {true, true} ->
-                    {GrantedAcc, RevokedAcc}
-            end
-        end, {[], []}, Data),
-
-    GrantResult = space_logic:update_group_privileges(
-        SessionId, SpaceId, GroupId, lists:usort(Granted), grant
-    ),
-    RevokeResult = space_logic:update_group_privileges(
-        SessionId, SpaceId, GroupId, lists:usort(Revoked), revoke
-    ),
-
-    case {GrantResult, RevokeResult} of
-        {ok, ok} ->
-            ok;
-        {?ERROR_FORBIDDEN, _} ->
-            gui_error:report_warning(
-                <<"You do not have privileges to modify space privileges.">>);
-        {_, _} ->
-            gui_error:report_warning(
-                <<"Cannot change group privileges due to unknown error.">>)
-    end;
-
 update_record(_ResourceType, _Id, _Data) ->
     gui_error:report_error(<<"Not implemented">>).
 
@@ -321,23 +189,8 @@ update_record(_ResourceType, _Id, _Data) ->
 %%--------------------------------------------------------------------
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
     ok | gui_error:error_result().
-delete_record(<<"space">>, SpaceId) ->
-    SessionId = gui_session:get_session_id(),
-    UserId = gui_session:get_user_id(),
-    case space_logic:delete(SessionId, SpaceId) of
-        ok ->
-            gui_async:push_updated(
-                <<"user">>,
-                user_data_backend:user_record(SessionId, UserId)
-            ),
-            ok;
-        {error, {403, <<>>, <<>>}} ->
-            gui_error:report_warning(
-                <<"You do not have privileges to modify this space.">>);
-        {error, _} ->
-            gui_error:report_warning(
-                <<"Cannot remove space due to unknown error.">>)
-    end.
+delete_record(<<"space">>, _Data) ->
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%%===================================================================
@@ -446,17 +299,11 @@ space_record(SpaceId, HasViewPrivileges) ->
 -spec space_user_list_record(SpaceId :: binary()) -> proplists:proplist().
 space_user_list_record(SpaceId) ->
     SessionId = gui_session:get_session_id(),
-    {ok, #document{value = #od_space{
-        direct_users = UsersWithPerms
-    }}} = space_logic:get(SessionId, SpaceId),
-    UserPermissions = lists:map(
-        fun(UsId) ->
-            op_gui_utils:ids_to_association(UsId, SpaceId)
-        end, maps:keys(UsersWithPerms)),
+    {ok, EffUsers} = space_logic:get_eff_users(SessionId, SpaceId),
     [
         {<<"id">>, SpaceId},
         {<<"space">>, SpaceId},
-        {<<"permissions">>, UserPermissions}
+        {<<"systemUsers">>, maps:keys(EffUsers)}
     ].
 
 
@@ -468,17 +315,11 @@ space_user_list_record(SpaceId) ->
 -spec space_group_list_record(SpaceId :: binary()) -> proplists:proplist().
 space_group_list_record(SpaceId) ->
     SessionId = gui_session:get_session_id(),
-    {ok, #document{value = #od_space{
-        direct_groups = GroupsWithPerms
-    }}} = space_logic:get(SessionId, SpaceId),
-    GroupPermissions = lists:map(
-        fun(GrId) ->
-            op_gui_utils:ids_to_association(GrId, SpaceId)
-        end, maps:keys(GroupsWithPerms)),
+    {ok, EffGroups} = space_logic:get_eff_groups(SessionId, SpaceId),
     [
         {<<"id">>, SpaceId},
         {<<"space">>, SpaceId},
-        {<<"permissions">>, GroupPermissions}
+        {<<"systemGroups">>, maps:keys(EffGroups)}
     ].
 
 
@@ -603,212 +444,3 @@ space_transfer_active_links_record(SpaceId) ->
         {<<"id">>, SpaceId},
         {<<"activeLinks">>, maps:to_list(ActiveLinks)}
     ].
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns a client-compliant space-user-permission record based on its id.
-%% @end
-%%--------------------------------------------------------------------
--spec space_user_permission_record(AssocId :: binary()) -> proplists:proplist().
-space_user_permission_record(AssocId) ->
-    SessionId = gui_session:get_session_id(),
-    {UserId, SpaceId} = op_gui_utils:association_to_ids(AssocId),
-    {ok, #document{
-        value = #od_space{
-            direct_users = UsersAndPerms
-        }}} = space_logic:get(SessionId, SpaceId),
-    UserPerms = maps:get(UserId, UsersAndPerms),
-    PermsMapped = perms_db_to_gui(UserPerms),
-    PermsMapped ++ [
-        {<<"id">>, AssocId},
-        {<<"space">>, SpaceId},
-        {<<"systemUserId">>, UserId}
-    ].
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns a client-compliant space-group-permission record based on its id.
-%% @end
-%%--------------------------------------------------------------------
--spec space_group_permission_record(AssocId :: binary()) ->
-    proplists:proplist().
-space_group_permission_record(AssocId) ->
-    SessionId = gui_session:get_session_id(),
-    {GroupId, SpaceId} = op_gui_utils:association_to_ids(AssocId),
-    {ok, #document{
-        value = #od_space{
-            direct_groups = GroupsAndPerms
-        }}} = space_logic:get(SessionId, SpaceId),
-    GroupPerms = maps:get(GroupId, GroupsAndPerms),
-    PermsMapped = perms_db_to_gui(GroupPerms),
-    PermsMapped ++ [
-        {<<"id">>, AssocId},
-        {<<"space">>, SpaceId},
-        {<<"systemGroupId">>, GroupId}
-    ].
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Converts a list of space permissions from internal form to client-compliant form.
-%% @end
-%%--------------------------------------------------------------------
--spec perms_db_to_gui(atom()) -> proplists:proplist().
-perms_db_to_gui(Perms) ->
-    OzVersion = oneprovider:get_oz_version(),
-    lists:foldl(
-        fun(Perm, Acc) ->
-            case perm_db_to_gui(Perm, OzVersion) of
-                undefined ->
-                    Acc;
-                PermBin ->
-                    HasPerm = lists:member(Perm, Perms),
-                    [{PermBin, HasPerm} | Acc]
-            end
-        end, [], all_space_privileges(OzVersion)).
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Converts a space permission from internal form to client-compliant form.
-%% The logic is different depending on OZ version to keep backward compatibility
-%% with deprecated perms.
-%% @end
-%%--------------------------------------------------------------------
--spec perm_db_to_gui(atom(), binary()) -> binary() | undefined.
-perm_db_to_gui(Perm, <<"18.02", _/binary>>) -> perm_db_to_gui_18_02(Perm);
-perm_db_to_gui(Perm, _) -> perm_db_to_gui(Perm).
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Converts a space permission from client-compliant form to internal form.
-%% The logic is different depending on OZ version to keep backward compatibility
-%% with deprecated perms.
-%% @end
-%%--------------------------------------------------------------------
--spec perm_gui_to_db(binary(), binary()) -> atom().
-perm_gui_to_db(Perm, <<"18.02", _/binary>>) -> perm_gui_to_db_18_02(Perm);
-perm_gui_to_db(Perm, _) -> perm_gui_to_db(Perm).
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns the list of all space privileges.
-%% The logic is different depending on OZ version to keep backward compatibility
-%% with deprecated perms.
-%% @end
-%%--------------------------------------------------------------------
--spec all_space_privileges(binary()) -> [atom()].
-all_space_privileges(<<"18.02", _/binary>>) ->
-    privileges:space_privileges();
-all_space_privileges(_) -> [
-    ?SPACE_VIEW,
-    ?SPACE_UPDATE,
-    ?SPACE_DELETE,
-    ?SPACE_SET_PRIVILEGES,
-    ?SPACE_INVITE_USER,
-    ?SPACE_REMOVE_USER,
-    space_add_group,
-    ?SPACE_REMOVE_GROUP,
-    ?SPACE_INVITE_PROVIDER,
-    ?SPACE_REMOVE_PROVIDER,
-    ?SPACE_MANAGE_SHARES,
-    ?SPACE_WRITE_DATA
-].
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Converts a space permission from internal form to client-compliant form.
-%% @end
-%%--------------------------------------------------------------------
--spec perm_db_to_gui(atom()) -> binary() | undefined.
-perm_db_to_gui(?SPACE_VIEW) -> <<"permViewSpace">>;
-perm_db_to_gui(?SPACE_UPDATE) -> <<"permModifySpace">>;
-perm_db_to_gui(?SPACE_DELETE) -> <<"permRemoveSpace">>;
-perm_db_to_gui(?SPACE_SET_PRIVILEGES) -> <<"permSetPrivileges">>;
-perm_db_to_gui(?SPACE_INVITE_USER) -> <<"permInviteUser">>;
-perm_db_to_gui(?SPACE_REMOVE_USER) -> <<"permRemoveUser">>;
-perm_db_to_gui(space_add_group) -> <<"permInviteGroup">>;
-perm_db_to_gui(?SPACE_REMOVE_GROUP) -> <<"permRemoveGroup">>;
-perm_db_to_gui(?SPACE_INVITE_PROVIDER) -> <<"permInviteProvider">>;
-perm_db_to_gui(?SPACE_REMOVE_PROVIDER) -> <<"permRemoveProvider">>;
-perm_db_to_gui(?SPACE_MANAGE_SHARES) -> <<"permManageShares">>;
-perm_db_to_gui(?SPACE_WRITE_DATA) -> <<"permWriteFiles">>;
-perm_db_to_gui(_) -> undefined.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Converts a space permission from client-compliant form to internal form.
-%% @end
-%%--------------------------------------------------------------------
--spec perm_gui_to_db(binary()) -> atom().
-perm_gui_to_db(<<"permViewSpace">>) -> ?SPACE_VIEW;
-perm_gui_to_db(<<"permModifySpace">>) -> ?SPACE_UPDATE;
-perm_gui_to_db(<<"permRemoveSpace">>) -> ?SPACE_DELETE;
-perm_gui_to_db(<<"permSetPrivileges">>) -> ?SPACE_SET_PRIVILEGES;
-perm_gui_to_db(<<"permInviteUser">>) -> ?SPACE_INVITE_USER;
-perm_gui_to_db(<<"permRemoveUser">>) -> ?SPACE_REMOVE_USER;
-perm_gui_to_db(<<"permInviteGroup">>) -> space_add_group;
-perm_gui_to_db(<<"permRemoveGroup">>) -> ?SPACE_REMOVE_GROUP;
-perm_gui_to_db(<<"permInviteProvider">>) -> ?SPACE_INVITE_PROVIDER;
-perm_gui_to_db(<<"permRemoveProvider">>) -> ?SPACE_REMOVE_PROVIDER;
-perm_gui_to_db(<<"permManageShares">>) -> ?SPACE_MANAGE_SHARES;
-perm_gui_to_db(<<"permWriteFiles">>) -> ?SPACE_WRITE_DATA.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% DEPRECATED - changing in future release (> 18.02)
-%% Converts a space permission from internal form to client-compliant form.
-%% @end
-%%--------------------------------------------------------------------
--spec perm_db_to_gui_18_02(atom()) -> binary() | undefined.
-perm_db_to_gui_18_02(?SPACE_VIEW) -> <<"permViewSpace">>;
-perm_db_to_gui_18_02(?SPACE_UPDATE) -> <<"permModifySpace">>;
-perm_db_to_gui_18_02(?SPACE_DELETE) -> <<"permRemoveSpace">>;
-perm_db_to_gui_18_02(?SPACE_SET_PRIVILEGES) -> <<"permSetPrivileges">>;
-perm_db_to_gui_18_02(?SPACE_INVITE_USER) -> <<"permInviteUser">>;
-perm_db_to_gui_18_02(?SPACE_REMOVE_USER) -> <<"permRemoveUser">>;
-perm_db_to_gui_18_02(?SPACE_INVITE_GROUP) -> <<"permInviteGroup">>;
-perm_db_to_gui_18_02(?SPACE_REMOVE_GROUP) -> <<"permRemoveGroup">>;
-perm_db_to_gui_18_02(?SPACE_INVITE_PROVIDER) -> <<"permInviteProvider">>;
-perm_db_to_gui_18_02(?SPACE_REMOVE_PROVIDER) -> <<"permRemoveProvider">>;
-perm_db_to_gui_18_02(?SPACE_MANAGE_SHARES) -> <<"permManageShares">>;
-perm_db_to_gui_18_02(?SPACE_WRITE_DATA) -> <<"permWriteFiles">>;
-perm_db_to_gui_18_02(_) -> undefined.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% DEPRECATED - changing in future release (> 18.02)
-%% Converts a space permission from client-compliant form to internal form.
-%% @end
-%%--------------------------------------------------------------------
--spec perm_gui_to_db_18_02(binary()) -> atom().
-perm_gui_to_db_18_02(<<"permViewSpace">>) -> ?SPACE_VIEW;
-perm_gui_to_db_18_02(<<"permModifySpace">>) -> ?SPACE_UPDATE;
-perm_gui_to_db_18_02(<<"permRemoveSpace">>) -> ?SPACE_DELETE;
-perm_gui_to_db_18_02(<<"permSetPrivileges">>) -> ?SPACE_SET_PRIVILEGES;
-perm_gui_to_db_18_02(<<"permInviteUser">>) -> ?SPACE_INVITE_USER;
-perm_gui_to_db_18_02(<<"permRemoveUser">>) -> ?SPACE_REMOVE_USER;
-perm_gui_to_db_18_02(<<"permInviteGroup">>) -> ?SPACE_INVITE_GROUP;
-perm_gui_to_db_18_02(<<"permRemoveGroup">>) -> ?SPACE_REMOVE_GROUP;
-perm_gui_to_db_18_02(<<"permInviteProvider">>) -> ?SPACE_INVITE_PROVIDER;
-perm_gui_to_db_18_02(<<"permRemoveProvider">>) -> ?SPACE_REMOVE_PROVIDER;
-perm_gui_to_db_18_02(<<"permManageShares">>) -> ?SPACE_MANAGE_SHARES;
-perm_gui_to_db_18_02(<<"permWriteFiles">>) -> ?SPACE_WRITE_DATA.

@@ -127,40 +127,37 @@ query_record(<<"system-provider">>, Data) ->
 query_record(<<"system-user">>, Data) ->
     SessionId = gui_session:get_session_id(),
     UserId = proplists:get_value(<<"id">>, Data),
-    [{EntityType, EntityId}] = proplists:get_value(<<"context">>, Data),
-    AuthHint = case EntityType of
-        <<"od_group">> -> ?THROUGH_GROUP(EntityId);
-        <<"od_space">> -> ?THROUGH_SPACE(EntityId)
-    end,
-
-    case user_logic:get_name(SessionId, UserId, AuthHint) of
-        ?ERROR_FORBIDDEN ->
-            gui_error:unauthorized();
-        {ok, UserName} ->
-            {ok, [
-                {<<"id">>, UserId},
-                {<<"name">>, UserName}
-            ]}
+    case proplists:get_value(<<"context">>, Data) of
+        [{<<"od_space">>, SpaceId}] ->
+            case user_logic:get_name(SessionId, UserId, ?THROUGH_SPACE(SpaceId)) of
+                ?ERROR_FORBIDDEN ->
+                    gui_error:unauthorized();
+                {ok, UserName} ->
+                    {ok, [
+                        {<<"id">>, UserId},
+                        {<<"name">>, UserName}
+                    ]}
+            end;
+        _ ->
+            gui_error:unauthorized()
     end;
 
 query_record(<<"system-group">>, Data) ->
     SessionId = gui_session:get_session_id(),
     GroupId = proplists:get_value(<<"id">>, Data),
-    Context = proplists:get_value(<<"context">>, Data),
-    [{EntityType, EntityId}] = Context,
-    AuthHint = case EntityType of
-        <<"od_group">> -> ?THROUGH_GROUP(EntityId);
-        <<"od_space">> -> ?THROUGH_SPACE(EntityId)
-    end,
-
-    case group_logic:get_name(SessionId, GroupId, AuthHint) of
-        ?ERROR_FORBIDDEN ->
-            gui_error:unauthorized();
-        {ok, GroupName} ->
-            {ok, [
-                {<<"id">>, GroupId},
-                {<<"name">>, GroupName}
-            ]}
+    case proplists:get_value(<<"context">>, Data) of
+        [{<<"od_space">>, SpaceId}] ->
+            case group_logic:get_name(SessionId, GroupId, ?THROUGH_SPACE(SpaceId)) of
+                ?ERROR_FORBIDDEN ->
+                    gui_error:unauthorized();
+                {ok, GroupName} ->
+                    {ok, [
+                        {<<"id">>, GroupId},
+                        {<<"name">>, GroupName}
+                    ]}
+            end;
+        _ ->
+            gui_error:unauthorized()
     end.
 
 
