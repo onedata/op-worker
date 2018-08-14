@@ -76,7 +76,7 @@ all() -> [
     schedule_replication_on_not_supporting_provider_by_path,
     cancel_replication_on_target_nodes,
     restart_replication_on_target_nodes,
-    file_replication_failures_should_fail_whole_transfer,
+    % file_replication_failures_should_fail_whole_transfer, TODO uncomment after resolving VFS-4742
     many_simultaneous_failed_transfers
 ].
 

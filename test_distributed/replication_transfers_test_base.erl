@@ -676,7 +676,7 @@ schedule_replication_on_not_supporting_provider(Config, Type, FileKeyType) ->
 
 cancel_replication_on_target_nodes(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    transfers_test_utils:mock_prolonged_replication(WorkerP2, 0.1, 15),
+    transfers_test_utils:mock_prolonged_replication(WorkerP2, 0.5, 15),
     transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{

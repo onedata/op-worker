@@ -71,7 +71,7 @@ all() -> [
     replicate_to_not_supporting_provider_by_path,
     schedule_replication_on_not_supporting_provider_by_guid,
     schedule_replication_on_not_supporting_provider_by_path,
-    file_replication_failures_should_fail_whole_transfer,
+    % file_replication_failures_should_fail_whole_transfer, TODO uncomment after resolving VFS-4742
     many_simultaneous_failed_transfers
 ].
 
