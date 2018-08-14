@@ -564,6 +564,7 @@ init_flush_check() ->
 -spec flush_key(file_location:id()) -> ok | {error, term()}.
 % TODO VFS-4743 - do we save any other location than local?
 % TODO VFS-4743 - do not save location when only blocks differ
+% TODO VFS-4743 - save doc and blocks in separate functions
 flush_key(Key) ->
     case get({?DOCS, Key}) of
         undefined ->
