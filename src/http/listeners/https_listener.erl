@@ -68,8 +68,8 @@ start() ->
     DynamicPageRoutes = [
         {?LOGIN_PATH, [<<"GET">>], page_login},
         {?LOGOUT_PATH, [<<"GET">>], page_logout},
-        {?VALIDATE_LOGIN_PATH_DEPRECATED, [<<"GET">>], page_validate_login},
-        {?VALIDATE_LOGIN_PATH, [<<"GET">>], page_validate_login},
+        {?VALIDATE_LOGIN_PATH_DEPRECATED, [<<"GET">>], page_consume_onezone_login},
+        {?VALIDATE_LOGIN_PATH, [<<"GET">>], page_consume_onezone_login},
         {?NAGIOS_OZ_CONNECTIVITY_PATH, [<<"GET">>], page_oz_connectivity},
         {?IDENTITY_MACAROON_PATH, [<<"GET">>], page_identity_macaroon},
         {?NONCE_VERIFY_PATH, [<<"GET">>], page_nonce_verify},
