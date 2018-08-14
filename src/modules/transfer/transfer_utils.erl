@@ -155,7 +155,7 @@ get_finish_time(TransferId) ->
 %%      invalidation hasn't finished.
 %% @end
 %%-------------------------------------------------------------------
--spec is_ongoing(transfer:transfer() | transfer:id() | undefined) -> boolean().
+-spec is_ongoing(transfer:transfer() | transfer:id() | transfer:doc() | undefined) -> boolean().
 is_ongoing(undefined) ->
     true;
 is_ongoing(Transfer = #transfer{}) ->
