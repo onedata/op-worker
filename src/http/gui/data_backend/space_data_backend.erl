@@ -74,7 +74,6 @@ find_record(<<"space">>, SpaceId) ->
             gui_error:unauthorized()
     end;
 
-% PermissionsRecord matches <<"space-(user|group)-(list|permission)">>
 find_record(RecordType, RecordId) ->
     SessionId = gui_session:get_session_id(),
     SpaceId = case RecordType of

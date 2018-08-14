@@ -105,7 +105,6 @@ query(_ResourceType, _Data) ->
 -spec query_record(ResourceType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 query_record(<<"system-provider">>, Data) ->
-    ?dump({<<"system-provider">>, Data}),
     SessionId = gui_session:get_session_id(),
     ProviderId = proplists:get_value(<<"id">>, Data),
     case provider_logic:get_protected_data(SessionId, ProviderId) of
@@ -126,7 +125,6 @@ query_record(<<"system-provider">>, Data) ->
     end;
 
 query_record(<<"system-user">>, Data) ->
-    ?dump({<<"system-user">>, Data}),
     SessionId = gui_session:get_session_id(),
     UserId = proplists:get_value(<<"id">>, Data),
     case proplists:get_value(<<"context">>, Data) of
@@ -145,7 +143,6 @@ query_record(<<"system-user">>, Data) ->
     end;
 
 query_record(<<"system-group">>, Data) ->
-    ?dump({<<"system-group">>, Data}),
     SessionId = gui_session:get_session_id(),
     GroupId = proplists:get_value(<<"id">>, Data),
     case proplists:get_value(<<"context">>, Data) of
