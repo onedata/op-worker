@@ -216,6 +216,7 @@ synchronize_stress_test_base(Config0) ->
 
 random_read_test_base(Config) ->
     random_read_test_base(Config, true, true),
+    random_read_test_base(Config, random, true),
     random_read_test_base(Config, false, true).
 
 random_read_test_base(Config0, SeparateBlocks, PrintAns) ->
@@ -227,6 +228,11 @@ random_read_test_base(Config0, SeparateBlocks, PrintAns) ->
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
     SessId = ?config(session, Config),
     SpaceName = ?config(space_name, Config),
+
+    ChunkSize = 10240,
+    ChunksNum = 1024,
+    PartNum = 100 * FileSize,
+    FileSizeBytes = ChunkSize * ChunksNum * PartNum,
 
     RepNum = ?config(rep_num, Config),
     FilePath = case RepNum of
@@ -242,11 +248,6 @@ random_read_test_base(Config0, SeparateBlocks, PrintAns) ->
             OpenAns = lfm_proxy:open(Worker2, SessId(Worker2), {path, File}, rdwr),
             ?assertMatch({ok, _}, OpenAns),
             {ok, Handle} = OpenAns,
-
-            ChunkSize = 10240,
-            ChunksNum = 1024,
-            PartNum = 100 * FileSize,
-            FileSizeBytes = ChunkSize * ChunksNum * PartNum,
 
             BytesChunk = crypto:strong_rand_bytes(ChunkSize),
             Bytes = lists:foldl(fun(_, Acc) ->
@@ -274,8 +275,24 @@ random_read_test_base(Config0, SeparateBlocks, PrintAns) ->
     OpenTime = timer:now_diff(os:timestamp(), Start1),
     ?assertMatch({ok, _}, OpenAns2),
     {ok, Handle2} = OpenAns2,
-    ReadTime1 = read_blocks(Worker1, Handle2, BlockSize, BlocksCount, RepNum, SeparateBlocks),
-    ReadTime2 = read_blocks(Worker1, Handle2, BlockSize, BlocksCount, RepNum, SeparateBlocks),
+
+    Blocks = case SeparateBlocks of
+        true ->
+            lists:map(fun(Num) ->
+                2 * Num - 1 + 2 * BlocksCount * (RepNum - 1)
+            end, lists:seq(1, BlocksCount));
+        random ->
+            lists:map(fun(_Num) ->
+                random:uniform(FileSizeBytes)
+            end, lists:seq(1, BlocksCount));
+        _ ->
+            lists:map(fun(Num) ->
+                Num + BlocksCount * (RepNum - 1)
+            end, lists:seq(1, BlocksCount))
+    end,
+
+    ReadTime1 = read_blocks(Worker1, Handle2, BlockSize, Blocks),
+    ReadTime2 = read_blocks(Worker1, Handle2, BlockSize, Blocks),
     Start2 = os:timestamp(),
     ?assertEqual(ok, lfm_proxy:close(Worker1, Handle2)),
     CloseTime = timer:now_diff(os:timestamp(), Start2),
@@ -1887,18 +1904,7 @@ verify_dir_size(Config, DirToCheck, DSize) ->
     end,
     ?match(ToMatch, AssertLinks(), Attempts).
 
-read_blocks(Worker, Handle, BlockSize, BlocksCount, RepNum, SeparateBlocks) ->
-    Blocks = case SeparateBlocks of
-        true ->
-            lists:map(fun(Num) ->
-                2 * Num - 1 + 2 * BlocksCount * (RepNum - 1)
-            end, lists:seq(1, BlocksCount));
-        _ ->
-            lists:map(fun(Num) ->
-                Num + BlocksCount * (RepNum - 1)
-            end, lists:seq(1, BlocksCount))
-    end,
-
+read_blocks(Worker, Handle, BlockSize, Blocks) ->
     lists:foldl(fun(BlockNum, Acc) ->
         Start = os:timestamp(),
         ReadAns = lfm_proxy:silent_read(Worker, Handle, BlockNum, BlockSize),
