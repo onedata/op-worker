@@ -236,7 +236,7 @@ mock_graph_create(#gri{type = od_user, id = UserId, aspect = default_space}, ?US
 mock_graph_create(#gri{type = od_group, id = undefined, aspect = instance}, ?USER_GS_MACAROON_AUTH(_UserId), Data) ->
     case Data of
         #{<<"name">> := Name} when is_binary(Name) ->
-            {ok, #gs_resp_graph{result = ?GROUP_PRIVATE_DATA_VALUE(?MOCK_CREATED_GROUP_ID)}};
+            {ok, #gs_resp_graph{data_format = resource, data = ?GROUP_PRIVATE_DATA_VALUE(?MOCK_CREATED_GROUP_ID)}};
         _ ->
             ?ERROR_BAD_VALUE_BINARY(<<"name">>)
     end;
@@ -244,21 +244,21 @@ mock_graph_create(#gri{type = od_group, id = undefined, aspect = join}, ?USER_GS
     #{<<"token">> := Token} = Data,
     case Token of
         ?MOCK_JOIN_GROUP_TOKEN ->
-            {ok, #gs_resp_graph{result = ?GROUP_PRIVATE_DATA_VALUE(?MOCK_JOINED_GROUP_ID)}};
+            {ok, #gs_resp_graph{data_format = resource, data = ?GROUP_PRIVATE_DATA_VALUE(?MOCK_JOINED_GROUP_ID)}};
         _ ->
             ?ERROR_BAD_VALUE_TOKEN(<<"token">>)
     end;
 mock_graph_create(#gri{type = od_group, id = GroupId, aspect = invite_user_token}, ?USER_GS_MACAROON_AUTH(_UserId), _) ->
     case lists:member(GroupId, [?GROUP_1, ?GROUP_2]) of
         true ->
-            {ok, #gs_resp_graph{result = #{<<"data">> => ?MOCK_INVITE_USER_TOKEN}}};
+            {ok, #gs_resp_graph{data_format = value, data = ?MOCK_INVITE_USER_TOKEN}};
         _ ->
             ?ERROR_NOT_FOUND
     end;
 mock_graph_create(#gri{type = od_group, id = GroupId, aspect = invite_group_token}, ?USER_GS_MACAROON_AUTH(_UserId), _) ->
     case lists:member(GroupId, [?GROUP_1, ?GROUP_2]) of
         true ->
-            {ok, #gs_resp_graph{result = #{<<"data">> => ?MOCK_INVITE_GROUP_TOKEN}}};
+            {ok, #gs_resp_graph{data_format = value, data = ?MOCK_INVITE_GROUP_TOKEN}};
         _ ->
             ?ERROR_NOT_FOUND
     end;
@@ -266,7 +266,7 @@ mock_graph_create(#gri{type = od_group, id = GroupId, aspect = invite_group_toke
 mock_graph_create(#gri{type = od_space, id = undefined, aspect = instance}, ?USER_GS_MACAROON_AUTH(_UserId), Data) ->
     case Data of
         #{<<"name">> := Name} when is_binary(Name) ->
-            {ok, #gs_resp_graph{result = ?SPACE_PRIVATE_DATA_VALUE(?MOCK_CREATED_SPACE_ID)}};
+            {ok, #gs_resp_graph{data_format = resource, data = ?SPACE_PRIVATE_DATA_VALUE(?MOCK_CREATED_SPACE_ID)}};
         _ ->
             ?ERROR_BAD_VALUE_BINARY(<<"name">>)
     end;
@@ -274,28 +274,28 @@ mock_graph_create(#gri{type = od_space, id = undefined, aspect = join}, ?USER_GS
     #{<<"token">> := Token} = Data,
     case Token of
         ?MOCK_JOIN_SPACE_TOKEN ->
-            {ok, #gs_resp_graph{result = ?SPACE_PRIVATE_DATA_VALUE(?MOCK_JOINED_SPACE_ID)}};
+            {ok, #gs_resp_graph{data_format = resource, data = ?SPACE_PRIVATE_DATA_VALUE(?MOCK_JOINED_SPACE_ID)}};
         _ ->
             ?ERROR_BAD_VALUE_TOKEN(<<"token">>)
     end;
 mock_graph_create(#gri{type = od_space, id = SpaceId, aspect = invite_user_token}, ?USER_GS_MACAROON_AUTH(_UserId), _) ->
     case lists:member(SpaceId, [?SPACE_1, ?SPACE_2]) of
         true ->
-            {ok, #gs_resp_graph{result = #{<<"data">> => ?MOCK_INVITE_USER_TOKEN}}};
+            {ok, #gs_resp_graph{data_format = value, data = ?MOCK_INVITE_USER_TOKEN}};
         _ ->
             ?ERROR_NOT_FOUND
     end;
 mock_graph_create(#gri{type = od_space, id = SpaceId, aspect = invite_group_token}, ?USER_GS_MACAROON_AUTH(_UserId), _) ->
     case lists:member(SpaceId, [?SPACE_1, ?SPACE_2]) of
         true ->
-            {ok, #gs_resp_graph{result = #{<<"data">> => ?MOCK_INVITE_GROUP_TOKEN}}};
+            {ok, #gs_resp_graph{data_format = value, data = ?MOCK_INVITE_GROUP_TOKEN}};
         _ ->
             ?ERROR_NOT_FOUND
     end;
 mock_graph_create(#gri{type = od_space, id = SpaceId, aspect = invite_provider_token}, ?USER_GS_MACAROON_AUTH(_UserId), _) ->
     case lists:member(SpaceId, [?SPACE_1, ?SPACE_1]) of
         true ->
-            {ok, #gs_resp_graph{result = #{<<"data">> => ?MOCK_INVITE_PROVIDER_TOKEN}}};
+            {ok, #gs_resp_graph{data_format = value, data = ?MOCK_INVITE_PROVIDER_TOKEN}};
         _ ->
             ?ERROR_NOT_FOUND
     end;
@@ -309,7 +309,7 @@ mock_graph_create(#gri{type = od_share, id = undefined, aspect = instance}, ?USE
     } = Data,
     case lists:member(SpaceId, [?SPACE_1, ?SPACE_2]) of
         true ->
-            {ok, #gs_resp_graph{result = ?SHARE_PRIVATE_DATA_VALUE(ShareId)}};
+            {ok, #gs_resp_graph{data_format = resource, data = ?SHARE_PRIVATE_DATA_VALUE(ShareId)}};
         _ ->
             ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"spaceId">>)
     end;
@@ -323,7 +323,7 @@ mock_graph_create(#gri{type = od_handle, id = undefined, aspect = instance}, ?US
     } = Data,
     case lists:member(HandleServiceId, [?HANDLE_SERVICE_1, ?HANDLE_SERVICE_2]) of
         true ->
-            {ok, #gs_resp_graph{result = ?HANDLE_PRIVATE_DATA_VALUE(?MOCK_CREATED_HANDLE_ID)}};
+            {ok, #gs_resp_graph{data_format = resource, data = ?HANDLE_PRIVATE_DATA_VALUE(?MOCK_CREATED_HANDLE_ID)}};
         _ ->
             ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"handleServiceId">>)
     end.
@@ -332,21 +332,21 @@ mock_graph_create(#gri{type = od_handle, id = undefined, aspect = instance}, ?US
 mock_graph_update(#gri{type = od_group, aspect = instance}, ?USER_GS_MACAROON_AUTH(_UserId), Data) ->
     case Data of
         #{<<"name">> := Name} when is_binary(Name) ->
-            {ok, #gs_resp_graph{result = ok}};
+            {ok, #gs_resp_graph{}};
         _ ->
             ?ERROR_BAD_VALUE_BINARY(<<"name">>)
     end;
 mock_graph_update(#gri{type = od_group, id = GroupId, aspect = {user_privileges, UserId}}, ?USER_GS_MACAROON_AUTH(_UserId), _Data) ->
     case maps:is_key(UserId, ?GROUP_EFF_USERS_VALUE(GroupId)) of
         true ->
-            {ok, #gs_resp_graph{result = ok}};
+            {ok, #gs_resp_graph{}};
         false ->
             ?ERROR_NOT_FOUND
     end;
 mock_graph_update(#gri{type = od_group, id = GroupId, aspect = {child_privileges, ChildId}}, ?USER_GS_MACAROON_AUTH(_UserId), _Data) ->
     case maps:is_key(ChildId, ?GROUP_EFF_CHILDREN_VALUE(GroupId)) of
         true ->
-            {ok, #gs_resp_graph{result = ok}};
+            {ok, #gs_resp_graph{}};
         false ->
             ?ERROR_NOT_FOUND
     end;
@@ -354,21 +354,21 @@ mock_graph_update(#gri{type = od_group, id = GroupId, aspect = {child_privileges
 mock_graph_update(#gri{type = od_space, id = _SpaceId, aspect = instance}, ?USER_GS_MACAROON_AUTH(_UserId), Data) ->
     case Data of
         #{<<"name">> := Name} when is_binary(Name) ->
-            {ok, #gs_resp_graph{result = ok}};
+            {ok, #gs_resp_graph{}};
         _ ->
             ?ERROR_BAD_VALUE_BINARY(<<"name">>)
     end;
 mock_graph_update(#gri{type = od_space, id = SpaceId, aspect = {user_privileges, UserId}}, ?USER_GS_MACAROON_AUTH(_UserId), _Data) ->
     case maps:is_key(UserId, ?SPACE_EFF_USERS_VALUE(SpaceId)) of
         true ->
-            {ok, #gs_resp_graph{result = ok}};
+            {ok, #gs_resp_graph{}};
         false ->
             ?ERROR_NOT_FOUND
     end;
 mock_graph_update(#gri{type = od_space, id = SpaceId, aspect = {group_privileges, GroupId}}, ?USER_GS_MACAROON_AUTH(_UserId), _Data) ->
     case maps:is_key(GroupId, ?SPACE_EFF_GROUPS_VALUE(SpaceId)) of
         true ->
-            {ok, #gs_resp_graph{result = ok}};
+            {ok, #gs_resp_graph{}};
         false ->
             ?ERROR_NOT_FOUND
     end;
@@ -376,7 +376,7 @@ mock_graph_update(#gri{type = od_space, id = SpaceId, aspect = {group_privileges
 mock_graph_update(#gri{type = od_share, id = _ShareId, aspect = instance}, ?USER_GS_MACAROON_AUTH(_UserId), Data) ->
     case Data of
         #{<<"name">> := Name} when is_binary(Name) ->
-            {ok, #gs_resp_graph{result = ok}};
+            {ok, #gs_resp_graph{}};
         _ ->
             ?ERROR_BAD_VALUE_BINARY(<<"name">>)
     end.
@@ -469,7 +469,7 @@ mock_graph_get(GRI = #gri{type = od_user, id = Id, aspect = instance}, Authoriza
                 protected -> ?USER_PROTECTED_DATA_VALUE(UserId);
                 private -> ?USER_PRIVATE_DATA_VALUE(UserId)
             end,
-            {ok, #gs_resp_graph{result = Data}};
+            {ok, #gs_resp_graph{data_format = resource, data = Data}};
         false ->
             ?ERROR_FORBIDDEN
     end;
@@ -503,7 +503,7 @@ mock_graph_get(GRI = #gri{type = od_group, id = GroupId, aspect = instance}, Aut
                 protected -> ?GROUP_PROTECTED_DATA_VALUE(GroupId);
                 private -> ?GROUP_PRIVATE_DATA_VALUE(GroupId)
             end,
-            {ok, #gs_resp_graph{result = Data}};
+            {ok, #gs_resp_graph{data_format = resource, data = Data}};
         false ->
             ?ERROR_FORBIDDEN
     end;
@@ -524,7 +524,7 @@ mock_graph_get(GRI = #gri{type = od_space, id = SpaceId, aspect = instance}, Aut
                 protected -> ?SPACE_PROTECTED_DATA_VALUE(SpaceId);
                 private -> ?SPACE_PRIVATE_DATA_VALUE(SpaceId)
             end,
-            {ok, #gs_resp_graph{result = Data}};
+            {ok, #gs_resp_graph{data_format = resource, data = Data}};
         false ->
             ?ERROR_FORBIDDEN
     end;
@@ -546,7 +546,7 @@ mock_graph_get(GRI = #gri{type = od_share, id = ShareId, aspect = instance}, Aut
                 public -> ?SHARE_PUBLIC_DATA_VALUE(ShareId);
                 private -> ?SHARE_PRIVATE_DATA_VALUE(ShareId)
             end,
-            {ok, #gs_resp_graph{result = Data}};
+            {ok, #gs_resp_graph{data_format = resource, data = Data}};
         false ->
             ?ERROR_FORBIDDEN
     end;
@@ -567,7 +567,7 @@ mock_graph_get(GRI = #gri{type = od_provider, id = ProviderId, aspect = instance
                 protected -> ?PROVIDER_PROTECTED_DATA_VALUE(ProviderId);
                 private -> ?PROVIDER_PRIVATE_DATA_VALUE(ProviderId)
             end,
-            {ok, #gs_resp_graph{result = Data}};
+            {ok, #gs_resp_graph{data_format = resource, data = Data}};
         false ->
             ?ERROR_FORBIDDEN
     end;
@@ -582,7 +582,7 @@ mock_graph_get(#gri{type = od_handle_service, id = HServiceId, aspect = instance
     end,
     case Authorized of
         true ->
-            {ok, #gs_resp_graph{result = ?HANDLE_SERVICE_PRIVATE_DATA_VALUE(HServiceId)}};
+            {ok, #gs_resp_graph{data_format = resource, data = ?HANDLE_SERVICE_PRIVATE_DATA_VALUE(HServiceId)}};
         false ->
             ?ERROR_FORBIDDEN
     end;
@@ -603,7 +603,7 @@ mock_graph_get(GRI = #gri{type = od_handle, id = HandleId, aspect = instance}, A
                 public -> ?HANDLE_PUBLIC_DATA_VALUE(HandleId);
                 private -> ?HANDLE_PRIVATE_DATA_VALUE(HandleId)
             end,
-            {ok, #gs_resp_graph{result = Data}};
+            {ok, #gs_resp_graph{data_format = resource, data = Data}};
         false ->
             ?ERROR_FORBIDDEN
     end.

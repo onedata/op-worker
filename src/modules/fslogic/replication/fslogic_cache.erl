@@ -26,7 +26,8 @@
 -export([get_doc/1, save_doc/1, cache_doc/1, delete_doc/1, attach_blocks/1]).
 % Block API
 -export([get_blocks/1, save_blocks/2, cache_blocks/2, get_blocks_tree/1,
-    use_blocks/2, finish_blocks_usage/1]).
+    use_blocks/2, finish_blocks_usage/1, get_changed_blocks/1,
+    mark_changed_blocks/3, set_local_change/1]).
 % Size API
 -export([get_local_size/1, update_size/2]).
 
@@ -42,6 +43,7 @@
 
 -define(DOCS, fslogic_cache_docs).
 -define(BLOCKS, fslogic_cache_blocks).
+-define(PUBLIC_BLOCKS, fslogic_cache_public_blocks).
 -define(SIZES, fslogic_cache_sizes).
 -define(SIZE_CHANGES, fslogic_cache_size_changes).
 -define(SPACE_IDS, fslogic_cache_space_ids).
@@ -53,9 +55,10 @@
 
 -define(EVENTS_CACHE, fslogic_cache_events).
 
-% To be used in next step of refactoring
 -define(SAVED_BLOCKS, fslogic_cache_saved_blocks).
 -define(DELETED_BLOCKS, fslogic_cache_deleted_blocks).
+-define(RESET_BLOCKS, fslogic_cache_reset_blocks).
+-define(LOCAL_CHANGES, fslogic_cache_local_changes).
 
 %%%===================================================================
 %%% Control API
@@ -120,17 +123,22 @@ flush() ->
 %% @end
 %%-------------------------------------------------------------------
 -spec flush(file_location:id(), boolean()) -> ok | {error, term()}.
-% Second arg to be used in next step of refactoring
+% TODO VFS-4743 - Second arg to be used in next step of refactoring
 flush(Key, _FlushBlocks) ->
-    case flush_key(Key) of
-        ok ->
-            KM = get(?KEYS_MODIFIED),
-            KBM = get(?KEYS_BLOCKS_MODIFIED),
-            put(?KEYS_MODIFIED, KM -- [Key]),
-            put(?KEYS_BLOCKS_MODIFIED, KBM -- [Key]),
-            ok;
-        Error ->
-            Error
+    KM = get(?KEYS_MODIFIED),
+    KBM = get(?KEYS_BLOCKS_MODIFIED),
+    case lists:member(Key, KM) orelse lists:member(Key, KM) of
+        true ->
+            case flush_key(Key) of
+                ok ->
+                    put(?KEYS_MODIFIED, KM -- [Key]),
+                    put(?KEYS_BLOCKS_MODIFIED, KBM -- [Key]),
+                    ok;
+                Error ->
+                    Error
+            end;
+        _ ->
+            ok
     end.
 
 %%-------------------------------------------------------------------
@@ -233,12 +241,16 @@ get_doc(Key) ->
     case get({?DOCS, Key}) of
         undefined ->
             case file_location:get(Key) of
-                {ok, #document{key = Key, value = #file_location{blocks = Blocks}
+                {ok, #document{key = Key, value = #file_location{blocks = PublicBlocks}
                     = Location} = LocationDoc} ->
                     LocationDoc2 = LocationDoc#document{value =
                     Location#file_location{blocks = []}},
                     cache_doc(LocationDoc2),
-                    cache_blocks(Key, Blocks),
+
+                    {ok, LocalBlocks} = file_location:get_local_blocks(Key),
+
+                    put({?BLOCKS, Key}, blocks_to_tree(PublicBlocks ++ LocalBlocks, false)),
+                    put({?PUBLIC_BLOCKS, Key}, PublicBlocks),
                     LocationDoc2;
                 {error, not_found} = ENF ->
                     ENF;
@@ -326,6 +338,7 @@ delete_doc(Key) ->
 
     erase({?DOCS, Key}),
     erase({?BLOCKS, Key}),
+    erase({?PUBLIC_BLOCKS, Key}),
     erase({?SIZES, Key}),
     erase({?SIZE_CHANGES, Key}),
     erase({?SPACE_IDS, Key}),
@@ -392,7 +405,8 @@ get_blocks_tree(Key) ->
 save_blocks(Key, Blocks) ->
     Keys = get(?KEYS_BLOCKS_MODIFIED),
     put(?KEYS_BLOCKS_MODIFIED, [Key | (Keys -- [Key])]),
-    cache_blocks(Key, Blocks).
+    put({?BLOCKS, Key}, blocks_to_tree(Blocks)),
+    ok.
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -402,6 +416,7 @@ save_blocks(Key, Blocks) ->
 -spec cache_blocks(file_location:id(), fslogic_blocks:stored_blocks()) -> ok.
 cache_blocks(Key, Blocks) ->
     put({?BLOCKS, Key}, blocks_to_tree(Blocks)),
+    put({?PUBLIC_BLOCKS, Key}, Blocks),
     ok.
 
 %%-------------------------------------------------------------------
@@ -432,6 +447,50 @@ finish_blocks_usage(Key) ->
             Ans
     end.
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns blocks changed since last flush.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_changed_blocks(file_location:id()) -> {sets:set(), sets:set()}.
+get_changed_blocks(Key) ->
+    Local = get(?LOCAL_CHANGES),
+    Saved = get_set({?SAVED_BLOCKS, Key, Local}),
+    Deleted = get_set({?DELETED_BLOCKS, Key}),
+    {Saved, Deleted}.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Marks blocks as changed.
+%% @end
+%%-------------------------------------------------------------------
+-spec mark_changed_blocks(file_location:id(), sets:set() | all,
+    sets:set() | all) -> ok.
+mark_changed_blocks(Key, all, all) ->
+    erase({?SAVED_BLOCKS, Key, true}),
+    erase({?SAVED_BLOCKS, Key, undefined}),
+    erase({?DELETED_BLOCKS, Key}),
+    put({?RESET_BLOCKS, Key}, true),
+    ok;
+mark_changed_blocks(Key, Saved, Deleted) ->
+    Local = get(?LOCAL_CHANGES),
+    put({?SAVED_BLOCKS, Key, Local}, Saved),
+    put({?DELETED_BLOCKS, Key}, Deleted),
+    ok.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Sets change as local or public.
+%% @end
+%%-------------------------------------------------------------------
+-spec set_local_change(boolean()) -> ok.
+set_local_change(false) ->
+    erase(?LOCAL_CHANGES),
+    ok;
+set_local_change(Value) ->
+    put(?LOCAL_CHANGES, Value),
+    ok.
+
 %%%===================================================================
 %%% Size API
 %%%===================================================================
@@ -458,6 +517,7 @@ get_local_size(Key) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec update_size(file_location:id(), non_neg_integer()) -> ok.
+% TODO VFS-4743 - do we use size of any other replica than local
 update_size(Key, Change) ->
     Size2 = get_local_size(Key) + Change,
     put({?SIZES, Key}, Size2),
@@ -502,15 +562,101 @@ init_flush_check() ->
 %% @end
 %%-------------------------------------------------------------------
 -spec flush_key(file_location:id()) -> ok | {error, term()}.
+% TODO VFS-4743 - do we save any other location than local?
+% TODO VFS-4743 - do not save location when only blocks differ
+% TODO VFS-4743 - save doc and blocks in separate functions
 flush_key(Key) ->
     case get({?DOCS, Key}) of
         undefined ->
             ok;
-        #document{key = Key, value = #file_location{uuid = FileUuid}} = Doc ->
-            case file_location:save(attach_blocks(Doc)) of
+        #document{key = Key, value = #file_location{uuid = FileUuid,
+            size = Size0} = Location} = Doc ->
+            {DocToSave, AddBlocks, DelBlocks} = case get({?RESET_BLOCKS, Key}) of
+                true ->
+                    % TODO VFS-4743 - makes all blocks public
+                    {attach_blocks(Doc), [], all};
+                _ ->
+                    Size = case Size0 of
+                        undefined -> 0;
+                        _ -> Size0
+                    end,
+                    SizeThreshold = application:get_env(?APP_NAME,
+                        public_block_size_treshold, 104857600),
+                    PercentThreshold = application:get_env(?APP_NAME,
+                        public_block_percent_treshold, 10),
+
+                    PublicBlocks = get_set({?SAVED_BLOCKS, Key, undefined}),
+                    % Warning - LocalBlocks are not sorted
+                    {LocalBlocks, PublicBlocks2} = sets:fold(
+                        fun(#file_block{size = S} = Block, {TmpLocalBlocks, TmpPublicBlocks}) ->
+                            case (S >= SizeThreshold) orelse (S >= (Size * PercentThreshold / 100)) of
+                                true ->
+                                    {TmpLocalBlocks, sets:add_element(Block, TmpPublicBlocks)};
+                                _ ->
+                                    {[Block | TmpLocalBlocks], TmpPublicBlocks}
+                            end
+                        end, {[], PublicBlocks}, get_set({?SAVED_BLOCKS, Key, true})),
+
+                    DeletedBlocksSet = get_set({?DELETED_BLOCKS, Key}),
+                    DeletedBlocks = sets:to_list(DeletedBlocksSet),
+                    BlocksToSave = get({?PUBLIC_BLOCKS, Key}),
+                    BlocksToSave2 = BlocksToSave -- DeletedBlocks,
+                    BlocksToSave3 = BlocksToSave2 ++ sets:to_list(PublicBlocks2),
+                    BlocksToSave4 = lists:sort(BlocksToSave3),
+
+                    put({?PUBLIC_BLOCKS, Key}, BlocksToSave4),
+                    {Doc#document{value = Location#file_location{
+                        blocks = BlocksToSave4}}, LocalBlocks, DeletedBlocks}
+            end,
+
+            apply_size_change(Key, FileUuid),
+            case file_location:save(DocToSave) of
                 {ok, _} ->
-                    apply_size_change(Key, FileUuid);
+                    Check1 = case file_location:delete_local_blocks(Key, DelBlocks) of
+                        ok ->
+                            [];
+                        List1 ->
+                            lists:filter(fun
+                                (ok) -> false;
+                                ({error, not_found}) -> false;
+                                (_) -> true
+                            end, List1)
+                    end,
+
+                    case Check1 of
+                        [] ->
+                            erase({?DELETED_BLOCKS, Key}),
+                            erase({?RESET_BLOCKS, Key}),
+
+                            Check2 = case file_location:save_local_blocks(Key, AddBlocks) of
+                                ok ->
+                                    [];
+                                List2 ->
+                                    lists:filter(fun
+                                        ({ok, _}) -> false;
+                                        ({error, already_exists}) -> false;
+                                        (_) -> true
+                                    end, List2)
+                            end,
+
+                            case Check2 of
+                                [] ->
+                                    erase({?SAVED_BLOCKS, Key, true}),
+                                    erase({?SAVED_BLOCKS, Key, undefined}),
+
+                                    ok;
+                                _ ->
+                                    ?error("Local blocks flush failed for key"
+                                    " ~p: ~p", [Key, Check2]),
+                                    Check2
+                            end;
+                        _ ->
+                            ?error("Local blocks del failed for key"
+                            " ~p: ~p", [Key, Check1]),
+                            Check1
+                    end;
                 Error ->
+                    ?error("Flush failed for key ~p: ~p", [Key, Error]),
                     Error
             end
     end.
@@ -542,16 +688,32 @@ apply_size_change(Key, FileUuid) ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Translates blocks (list or tree) to tree.
+%% @equiv blocks_to_tree(Blocks, true).
 %% @end
 %%-------------------------------------------------------------------
 -spec blocks_to_tree(fslogic_blocks:stored_blocks()) -> fslogic_blocks:blocks_tree().
-blocks_to_tree(Blocks) when is_list(Blocks) ->
+blocks_to_tree(Blocks) ->
+    blocks_to_tree(Blocks, true).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Translates blocks (list or tree) to tree.
+%% @end
+%%-------------------------------------------------------------------
+-spec blocks_to_tree(fslogic_blocks:stored_blocks(), boolean()) ->
+    fslogic_blocks:blocks_tree().
+blocks_to_tree(Blocks, true) when is_list(Blocks) ->
     gb_sets:from_ordset(lists:map(
         fun(#file_block{offset = O, size = S}) ->
             #file_block{offset = O+S, size = S}
         end, Blocks));
-blocks_to_tree(Blocks) ->
+blocks_to_tree(Blocks, _) when is_list(Blocks) ->
+    gb_sets:from_list(lists:map(
+        fun(#file_block{offset = O, size = S}) ->
+            #file_block{offset = O+S, size = S}
+        end, Blocks));
+blocks_to_tree(Blocks, _) ->
     Blocks.
 
 %%-------------------------------------------------------------------
@@ -566,3 +728,16 @@ tree_to_blocks(Tree) ->
         fun(#file_block{offset = O, size = S}) ->
             #file_block{offset = O-S, size = S}
         end, gb_sets:to_list(Tree)).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns set from memory or empty one.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_set(term()) -> sets:set().
+get_set(Key) ->
+    case get(Key) of
+        undefined -> sets:new();
+        Value -> Value
+    end.
