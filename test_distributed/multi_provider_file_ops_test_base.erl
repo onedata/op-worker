@@ -212,7 +212,14 @@ synchronize_stress_test_base(Config0) ->
     ct:print("Repeat: ~p: iops remote 1: ~p, iops remote 2: ~p, "
         "iops local 1: ~p, iops local 2: ~p", [RepNum,  1000000 * BlocksCount / SyncTime1,
         1000000 * BlocksCount / SyncTime1_2, 1000000 * BlocksCount / SyncTime2,
-        1000000 * BlocksCount / SyncTime2_2]).
+        1000000 * BlocksCount / SyncTime2_2]),
+
+    case RepNum >= 10000 of
+        true ->
+            [stop, ok];
+        _ ->
+            ok
+    end.
 
 random_read_test_base(Config) ->
     random_read_test_base(Config, true, true),
