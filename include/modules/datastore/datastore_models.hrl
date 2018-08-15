@@ -242,7 +242,8 @@
 
 -record(storage_sync_info, {
     children_attrs_hashes = #{} :: #{non_neg_integer() => binary()},
-    mtime :: undefined | non_neg_integer()
+    mtime :: undefined | non_neg_integer(),
+    last_stat :: undefined | non_neg_integer()
 }).
 
 -record(file_meta, {
@@ -304,6 +305,10 @@
     space_id :: undefined | od_space:id(),
     started_at = 0 :: non_neg_integer(),
     stopped_at :: undefined | non_neg_integer(),
+
+    files_to_process = 0 :: non_neg_integer(),
+    files_processed = 0 :: non_neg_integer(),
+
     released_bytes = 0 :: non_neg_integer(),
     bytes_to_release = 0 :: non_neg_integer(),
     released_files = 0 :: non_neg_integer(),
@@ -322,7 +327,7 @@
     provider_id :: undefined | oneprovider:id(),
     storage_id :: undefined | storage:id(),
     file_id :: undefined | helpers:file_id(),
-    blocks = [] :: fslogic_blocks:stored_blocks(),
+    blocks = [] :: fslogic_location_cache:stored_blocks(),
     version_vector = #{},
     size = 0 :: non_neg_integer() | undefined,
     space_id :: undefined | od_space:id(),
@@ -579,5 +584,26 @@
     active_links = #{} :: undefined | #{od_provider:id() => [od_provider:id()]}
 }).
 
+%% Model used for communication between providers during
+%% deletion of file replica.
+-record(replica_deletion, {
+    file_uuid :: undefined | file_meta:uuid(),
+    space_id :: undefined | od_space:id(),
+    action :: replica_deletion:action(),
+    requested_blocks = [] :: fslogic_blocks:blocks(),
+    supported_blocks = [] :: fslogic_blocks:blocks(),
+    version_vector = #{} :: version_vector:version_vector(),
+    requester :: od_provider:id(),
+    requestee :: od_provider:id(),
+    report_id :: replica_deletion:report_id(),
+    type :: replica_deletion:type()
+}).
+
+%% Model used for setting read-write lock to synchronize invalidation
+%% of file replicas.
+-record(replica_deletion_lock, {
+    read = 0 :: non_neg_integer(),
+    write = 0 :: non_neg_integer()
+}).
 
 -endif.

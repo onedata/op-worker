@@ -63,12 +63,22 @@
     transfer:timestamp()) -> ok | {error, term()}.
 report_transfer_start(FileGuid, TransferId, ScheduleTime) ->
     SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
-    Entry = build_entry(TransferId, ScheduleTime),
-
     Key = file_guid_to_id(FileGuid),
-    Diff = fun(#transferred_file{ongoing_transfers = Ongoing} = Record) ->
+    Entry = build_entry(TransferId, ScheduleTime),
+    Diff = fun(Record) ->
+        #transferred_file{
+            ongoing_transfers = Ongoing,
+            ended_transfers = Past
+        } = Record,
+
+        % Filter out entries for the same transfer but with other schedule time
+        % and move them to past (the other entries are past runs of the transfer
+        % that were unsuccessful).
+        {Duplicates, OtherEntries} = find_all_duplicates(TransferId, Ongoing),
+
         {ok, Record#transferred_file{
-            ongoing_transfers = ordsets:add_element(Entry, Ongoing)
+            ongoing_transfers = ordsets:add_element(Entry, OtherEntries),
+            ended_transfers = enforce_history_limit(ordsets:union(Duplicates, Past))
         }}
     end,
     Default = #document{key = Key,
@@ -77,7 +87,6 @@ report_transfer_start(FileGuid, TransferId, ScheduleTime) ->
             ongoing_transfers = ordsets:from_list([Entry])
         }
     },
-
     case datastore_model:update(?CTX, Key, Diff, Default) of
         {ok, _} -> ok;
         {error, Reason} -> {error, Reason}
@@ -121,7 +130,6 @@ report_transfer_finish(FileGuid, TransferId, ScheduleTime, FinishTime) ->
         {ok, _} -> ok;
         {error, Reason} -> {error, Reason}
     end.
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -302,7 +310,8 @@ resolve_conflict(_Ctx, NewDoc, PrevDoc) ->
             % Drop any entries that were already marked as past
             ordsets:fold(fun(Entry, AccDoc) ->
                 #document{value = Record = #transferred_file{
-                    ongoing_transfers = AccOngoing
+                    ongoing_transfers = AccOngoing,
+                    ended_transfers = AccPast
                 }} = AccDoc,
                 TransferId = entry_to_transfer_id(Entry),
                 case lists:member(TransferId, AllPastTransferIds) of
@@ -351,6 +360,20 @@ entry_to_transfer_id(Entry) ->
 -spec entries_to_transfer_ids([entry()]) -> ordsets:ordset(transfer:id()).
 entries_to_transfer_ids(Entries) ->
     ordsets:from_list([entry_to_transfer_id(E) || E <- ordsets:to_list(Entries)]).
+
+
+%% @private
+-spec find_all_duplicates(transfer:id(), ordsets:ordset(entry())) ->
+    {Duplicates :: ordsets:ordset(entry()), OtherEntries :: ordsets:ordset(entry())}.
+find_all_duplicates(TransferId, Entries) ->
+    ordsets:fold(fun(Entry, {DupAcc, OtherAcc}) ->
+        case entry_to_transfer_id(Entry) of
+            TransferId ->
+                {ordsets:add_element(Entry, DupAcc), OtherAcc};
+            _ ->
+                {DupAcc, ordsets:add_element(Entry, OtherAcc)}
+        end
+    end, {ordsets:new(), ordsets:new()}, Entries).
 
 
 %% @private

@@ -17,8 +17,6 @@
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 
-%%todo check whether files and dirs were deleted on storage VFS-4331
-
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
@@ -202,7 +200,8 @@ init_should_clear_open_files_test_base(Config, DelayedFileCreation) ->
     test_utils:mock_assert_num_calls(Worker, file_meta, delete_without_link, 1, 1),
     case DelayedFileCreation of
         true -> ok;
-        false -> test_utils:mock_assert_num_calls(Worker, storage_file_manager, unlink, 1, 1)
+        false ->
+            test_utils:mock_assert_num_calls(Worker, storage_file_manager, unlink, 2, 1)
     end.
 
 open_file_deletion_request(Config) ->
@@ -215,14 +214,16 @@ open_file_deletion_request_test_base(Config, DelayedFileCreation) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
     FileGuid = create_test_file(Config, Worker, SessId, DelayedFileCreation),
+    FileCtx = file_ctx:new_by_guid(FileGuid),
 
-    ?assertEqual(ok, ?req(Worker, {open_file_deletion_request, file_ctx:new_by_guid(FileGuid)})),
+    ?assertEqual(ok, ?req(Worker, {open_file_deletion_request, FileCtx})),
 
     test_utils:mock_assert_num_calls(Worker, rename_req, rename, 4, 0),
     test_utils:mock_assert_num_calls(Worker, file_meta, delete_without_link, 1, 1),
     case DelayedFileCreation of
         true -> ok;
-        false -> test_utils:mock_assert_num_calls(Worker, storage_file_manager, unlink, 1, 1)
+        false ->
+            test_utils:mock_assert_num_calls(Worker, storage_file_manager, unlink, 2, 1)
     end.
 
 deletion_of_not_open_file(Config) ->
@@ -237,15 +238,17 @@ deletion_of_not_open_file_test_base(Config, DelayedFileCreation) ->
     UserCtx = rpc:call(Worker, user_ctx, new, [SessId]),
     FileGuid = create_test_file(Config, Worker, SessId, DelayedFileCreation),
     FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+    FileCtx = file_ctx:new_by_guid(FileGuid),
 
     ?assertEqual(false, rpc:call(Worker, file_handles, exists, [FileUuid])),
-    ?assertEqual(ok, ?req(Worker, {fslogic_deletion_request, UserCtx, file_ctx:new_by_guid(FileGuid), false})),
+    ?assertEqual(ok, ?req(Worker, {fslogic_deletion_request, UserCtx, FileCtx, false})),
 
     test_utils:mock_assert_num_calls(Worker, rename_req, rename, 4, 0),
     test_utils:mock_assert_num_calls(Worker, file_meta, delete_without_link, 1, 1),
     case DelayedFileCreation of
         true -> ok;
-        false -> test_utils:mock_assert_num_calls(Worker, storage_file_manager, unlink, 1, 1)
+        false ->
+            test_utils:mock_assert_num_calls(Worker, storage_file_manager, unlink, 2, 1)
     end.
 
 file_shouldnt_be_listed_after_deletion(Config) ->

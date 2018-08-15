@@ -404,10 +404,12 @@ handle_file_request(UserCtx, #get_file_location{}, FileCtx) ->
     file_req:get_file_location(UserCtx, FileCtx);
 handle_file_request(UserCtx, #truncate{size = Size}, FileCtx) ->
     truncate_req:truncate(UserCtx, FileCtx, Size);
-handle_file_request(UserCtx, #synchronize_block{block = Block, prefetch = Prefetch}, FileCtx) ->
-    sync_req:synchronize_block(UserCtx, FileCtx, Block, Prefetch, undefined);
-handle_file_request(UserCtx, #synchronize_block_and_compute_checksum{block = Block}, FileCtx) ->
-    sync_req:synchronize_block_and_compute_checksum(UserCtx, FileCtx, Block);
+handle_file_request(UserCtx, #synchronize_block{block = Block, prefetch = Prefetch,
+    priority = Priority}, FileCtx) ->
+    sync_req:synchronize_block(UserCtx, FileCtx, Block, Prefetch, undefined, Priority);
+handle_file_request(UserCtx, #synchronize_block_and_compute_checksum{block = Block,
+    prefetch = Prefetch, priority = Priority}, FileCtx) ->
+    sync_req:synchronize_block_and_compute_checksum(UserCtx, FileCtx, Block, Prefetch, Priority);
 handle_file_request(UserCtx, #get_xattr{
     name = XattrName,
     inherited = Inherited
@@ -449,7 +451,7 @@ handle_provider_request(UserCtx, #schedule_file_replication{
 handle_provider_request(UserCtx, #schedule_replica_invalidation{
     source_provider_id = SourceProviderId, target_provider_id = TargetProviderId
 }, FileCtx) ->
-    sync_req:schedule_replica_invalidation(UserCtx, FileCtx, SourceProviderId, TargetProviderId);
+    invalidation_req:schedule_replica_invalidation(UserCtx, FileCtx, SourceProviderId, TargetProviderId);
 handle_provider_request(UserCtx, #get_parent{}, FileCtx) ->
     guid_req:get_parent(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #get_file_path{}, FileCtx) ->

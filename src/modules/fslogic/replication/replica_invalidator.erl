@@ -34,7 +34,7 @@
     {file_location:doc() | deleted, file_ctx:ctx(), [fslogic_blocks:block()]}.
 invalidate_changes(FileCtx, Doc = #document{value = Loc}, [], NewSize, ChangedBlocks) ->
     NewDoc = Doc#document{value = Loc#file_location{size = NewSize}},
-    {ok, _} = fslogic_blocks:save_location(NewDoc),
+    {ok, _} = fslogic_location_cache:save_location(NewDoc),
     {NewDoc, file_ctx:reset(FileCtx), ChangedBlocks};
 invalidate_changes(FileCtx, Doc = #document{value = Loc}, [{rename, Rename}],
     NewSize, ChangedBlocks) ->
@@ -44,10 +44,10 @@ invalidate_changes(FileCtx, Doc = #document{value = Loc}, [{rename, Rename}],
         {deleted, FileCtx2} ->
             {deleted, FileCtx2, ChangedBlocks};
         {skipped, FileCtx2} ->
-            {ok, _} = fslogic_blocks:save_location(NewDoc),
+            {ok, _} = fslogic_location_cache:save_location(NewDoc),
             {NewDoc, file_ctx:reset(FileCtx2), ChangedBlocks};
         {{renamed, RenamedDoc, _FileUuid, _TargetSpaceId}, FileCtx2} ->
-            {ok, _} = fslogic_blocks:save_location(RenamedDoc),
+            {ok, _} = fslogic_location_cache:save_location(RenamedDoc),
             {RenamedDoc, file_ctx:reset(FileCtx2), ChangedBlocks}
     end;
 invalidate_changes(FileCtx, Doc = #document{
@@ -56,19 +56,19 @@ invalidate_changes(FileCtx, Doc = #document{
     }}, [{shrink, ShrinkSize} | Rest], Size, ChangedBlocks
 ) when OldSize > ShrinkSize ->
     ChangeBlocks = [#file_block{offset = ShrinkSize, size = OldSize - ShrinkSize}],
-    OldBlocks = fslogic_blocks:get_blocks(Doc, #{overlapping_blocks => ChangeBlocks}),
+    OldBlocks = fslogic_location_cache:get_blocks(Doc, #{overlapping_blocks => ChangeBlocks}),
     NewBlocks = fslogic_blocks:invalidate(OldBlocks, ChangeBlocks),
     NewBlocks1 = fslogic_blocks:consolidate(NewBlocks),
-    invalidate_changes(FileCtx, fslogic_blocks:update_blocks(Doc, NewBlocks1),
+    invalidate_changes(FileCtx, fslogic_location_cache:update_blocks(Doc, NewBlocks1),
         Rest, Size, ChangedBlocks ++ ChangeBlocks);
 invalidate_changes(FileCtx, Doc, [{shrink, _} | Rest], Size, ChangedBlocks) ->
     invalidate_changes(FileCtx, Doc, Rest, Size, ChangedBlocks);
 invalidate_changes(FileCtx, Doc, [Blocks | Rest], Size, ChangedBlocks
 ) ->
-    OldBlocks = fslogic_blocks:get_blocks(Doc, #{overlapping_blocks => Blocks}),
+    OldBlocks = fslogic_location_cache:get_blocks(Doc, #{overlapping_blocks => Blocks}),
     NewBlocks = fslogic_blocks:invalidate(OldBlocks, Blocks),
     NewBlocks1 = fslogic_blocks:consolidate(NewBlocks),
-    invalidate_changes(FileCtx, fslogic_blocks:update_blocks(Doc, NewBlocks1),
+    invalidate_changes(FileCtx, fslogic_location_cache:update_blocks(Doc, NewBlocks1),
         Rest, Size, ChangedBlocks ++ Blocks).
 
 %%%===================================================================

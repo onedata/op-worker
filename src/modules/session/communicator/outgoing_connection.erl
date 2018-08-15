@@ -77,10 +77,10 @@ start(ProviderId, SessionId, Domain, IP, Port, Transport, Timeout) ->
 %% Initializes an outgoing connection.
 %% @end
 %%--------------------------------------------------------------------
--spec init(od_provider:id(), session:id(), Domain :: binary(), IP :: binary(),
+-spec init(od_provider:id(), session:id(), Domain :: binary(), Host :: binary(),
     Port :: non_neg_integer(), Transport :: atom(), Timeout :: non_neg_integer()) ->
     no_return().
-init(ProviderId, SessionId, Domain, IP, Port, Transport, Timeout) ->
+init(ProviderId, SessionId, Domain, Host, Port, Transport, Timeout) ->
     % Map keeping reconnect interval and time between provider connection
     % retries; needed to implement backoff algorithm
     Intervals = application:get_env(
@@ -98,7 +98,7 @@ init(ProviderId, SessionId, Domain, IP, Port, Transport, Timeout) ->
         true ->
             try
                 State = init_provider_conn(
-                    SessionId, ProviderId, Domain, IP, Port, Transport, Timeout
+                    SessionId, ProviderId, Domain, Host, Port, Transport, Timeout
                 ),
                 reset_reconnect_interval(Intervals, ProviderId),
                 gen_server2:enter_loop(?MODULE, [], State, ?PROTO_CONNECTION_TIMEOUT)
@@ -487,10 +487,10 @@ socket_send(#state{transport = Transport, socket = Socket}, Data) ->
 %% Attempt to connect to peer provider.
 %% @end
 %%--------------------------------------------------------------------
--spec init_provider_conn(session:id(), od_provider:id(), Domain :: binary(), IP :: binary(),
+-spec init_provider_conn(session:id(), od_provider:id(), Domain :: binary(), Host :: binary(),
     Port :: non_neg_integer(), Transport :: atom(),
     Timeout :: non_neg_integer()) -> #state{} | no_return().
-init_provider_conn(SessionId, ProviderId, Domain, IP, Port, Transport, Timeout) ->
+init_provider_conn(SessionId, ProviderId, Domain, Host, Port, Transport, Timeout) ->
     case provider_logic:verify_provider_identity(ProviderId) of
         ok ->
             ok;
@@ -505,15 +505,15 @@ init_provider_conn(SessionId, ProviderId, Domain, IP, Port, Transport, Timeout) 
     SecureFlag = application:get_env(?APP_NAME, interprovider_connections_security, true),
     SslOpts = [{cacerts, CaCerts}, {secure, SecureFlag}, {hostname, Domain}],
 
-    provider_logic:assert_provider_compatibility(IP, ProviderId, SslOpts),
+    provider_logic:assert_provider_compatibility(Host, ProviderId, SslOpts),
 
     DomainAndIpInfo = case Domain of
-        IP -> str_utils:format("@ ~s:~b", [IP, Port]);
-        _ -> str_utils:format("(~s) @ ~s:~b", [Domain, IP, Port])
+        Host -> str_utils:format("@ ~s:~b", [Host, Port]);
+        _ -> str_utils:format("(~s) @ ~s:~b", [Domain, Host, Port])
     end,
     ?info("Connecting to provider '~s' ~s", [ProviderId, DomainAndIpInfo]),
-    ConnectOpts = secure_ssl_opts:expand(IP, SslOpts),
-    {ok, Socket} = Transport:connect(binary_to_list(IP), Port, ConnectOpts, Timeout),
+    ConnectOpts = secure_ssl_opts:expand(Host, SslOpts),
+    {ok, Socket} = Transport:connect(binary_to_list(Host), Port, ConnectOpts, Timeout),
 
     {Ok, Closed, Error} = Transport:messages(),
 
@@ -525,7 +525,7 @@ init_provider_conn(SessionId, ProviderId, Domain, IP, Port, Transport, Timeout) 
     State = #state{
         socket = Socket,
         transport = Transport,
-        ip = IP,
+        ip = Host,
         ok = Ok,
         closed = Closed,
         error = Error,

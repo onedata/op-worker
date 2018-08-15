@@ -16,7 +16,7 @@
 
 %% API
 -export([generate_file_id/0, create_test_file/3, read_test_file/3,
-    update_test_file/3, remove_test_file/3]).
+    update_test_file/3, remove_test_file/4]).
 
 -define(TEST_FILE_NAME_LEN, application:get_env(?APP_NAME,
     storage_test_file_name_size, 32)).
@@ -86,12 +86,12 @@ update_test_file(Helper, UserCtx, FileId) ->
 %% Removes storage test file.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_test_file(helpers:helper(), helpers:user_ctx(), helpers:file_id()) ->
-    ok.
-remove_test_file(Helper, UserCtx, FileId) ->
+-spec remove_test_file(helpers:helper(), helpers:user_ctx(), helpers:file_id(),
+    Size :: non_neg_integer()) -> ok.
+remove_test_file(Helper, UserCtx, FileId, Size) ->
     Noop = fun(_) -> ok end,
     Handle = helpers:get_helper_handle(Helper, UserCtx),
-    case helpers:unlink(Handle, FileId) of
+    case helpers:unlink(Handle, FileId, Size) of
         ok -> ok;
         {error, enoent} -> ok
     end,

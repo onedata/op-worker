@@ -103,7 +103,7 @@ handle_cast({start_file_replication, UserCtx, FileCtx, Block, TransferId,
 ) ->
     RetriesLeft2 = utils:ensure_defined(RetriesLeft, undefined,
         ?MAX_FILE_TRANSFER_RETRIES),
-    case should_start_replication(NextRetryTimestamp) of
+    case should_start(NextRetryTimestamp) of
         true ->
             case replicate_file(UserCtx, FileCtx, Block, TransferId, RetriesLeft2) of
                 ok ->
@@ -236,10 +236,10 @@ maybe_retry(UserCtx, FileCtx, Block, TransferId, Retries, Error) ->
 %%  * otherwise replication can be started
 %% @end
 %%-------------------------------------------------------------------
--spec should_start_replication(undefined | non_neg_integer()) -> boolean().
-should_start_replication(undefined) ->
+-spec should_start(undefined | non_neg_integer()) -> boolean().
+should_start(undefined) ->
     true;
-should_start_replication(NextRetryTimestamp) ->
+should_start(NextRetryTimestamp) ->
     time_utils:cluster_time_seconds() >= NextRetryTimestamp.
 
 %%-------------------------------------------------------------------

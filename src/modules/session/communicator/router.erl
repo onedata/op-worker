@@ -411,6 +411,17 @@ route_and_send_answer(#client_message{
     MySecret = rtransfer_config:generate_secret(ProviderId, PeerSecret),
     Response = #rtransfer_conn_secret{secret = MySecret},
     {ok, #server_message{message_id = Id, message_body = Response}};
+route_and_send_answer(#client_message{
+    message_id = Id,
+    message_body = #get_rtransfer_nodes_ips{}
+}) ->
+    {ok, Nodes} = node_manager:get_cluster_nodes(),
+    IpsAndPorts = lists:map(fun(Node) ->
+        {{_,_,_,_} = IP, Port} = rpc:call(Node, rtransfer_config, get_local_ip_and_port, []),
+        #ip_and_port{ip = IP, port = Port}
+    end, Nodes),
+    Response = #rtransfer_nodes_ips{nodes = IpsAndPorts},
+    {ok, #server_message{message_id = Id, message_body = Response}};
 route_and_send_answer(Msg = #client_message{
     message_id = Id,
     message_body = #get_configuration{}

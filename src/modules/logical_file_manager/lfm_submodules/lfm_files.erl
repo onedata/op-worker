@@ -22,11 +22,17 @@
     get_file_guid/2, schedule_file_replication/4, schedule_replica_invalidation/4]).
 %% Functions operating on files
 -export([create/2, create/3, create/4, open/3, fsync/1, fsync/3, write/3,
-    write_without_events/3, read/3, read_without_events/3, silent_read/3,
+    write_without_events/3, read/3, read/4, read_without_events/3,
+    read_without_events/4, silent_read/3, silent_read/4,
     truncate/3, release/1, get_file_distribution/2, create_and_open/5,
     create_and_open/4]).
 
 -compile({no_auto_import, [unlink/1]}).
+
+-define(DEFAULT_SYNC_PRIORITY,
+    application:get_env(?APP_NAME, default_sync_priority, 32)).
+
+-type sync_options() :: {priority, non_neg_integer()} | off.
 
 %%%===================================================================
 %%% API
@@ -323,9 +329,13 @@ fsync(Handle) ->
     ok | logical_file_manager:error_reply().
 fsync(SessId, FileKey, ProviderId) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
-
-    lfm_event_utils:flush_event_queue(SessId, ProviderId,
-        fslogic_uuid:guid_to_uuid(FileGuid)),
+    case oneprovider:is_self(ProviderId) of
+        true ->
+            ok; % flush also flushes events for provider
+        _ ->
+            lfm_event_utils:flush_event_queue(SessId, ProviderId,
+                fslogic_uuid:guid_to_uuid(FileGuid))
+    end,
     remote_utils:call_fslogic(SessId, file_request,
         FileGuid, #fsync{data_only = false}, fun(_) -> ok end).
 
@@ -350,34 +360,70 @@ write_without_events(FileHandle, Offset, Buffer) ->
     write(FileHandle, Offset, Buffer, false).
 
 %%--------------------------------------------------------------------
-%% @equiv read(FileHandle, Offset, MaxSize, true, true)
+%% @equiv read(FileHandle, Offset, MaxSize, true, true,
+%% {priority, ?DEFAULT_SYNC_PRIORITY})
 %%--------------------------------------------------------------------
 -spec read(FileHandle :: logical_file_manager:handle(), Offset :: integer(),
     MaxSize :: integer()) ->
     {ok, NewHandle :: logical_file_manager:handle(), binary()} |
     logical_file_manager:error_reply().
 read(FileHandle, Offset, MaxSize) ->
-    read(FileHandle, Offset, MaxSize, true, true).
+    read(FileHandle, Offset, MaxSize, true, true,
+        {priority, ?DEFAULT_SYNC_PRIORITY}).
 
 %%--------------------------------------------------------------------
-%% @equiv read(FileHandle, Offset, MaxSize, false, true)
+%% @equiv read(FileHandle, Offset, MaxSize, true, true, SyncOptions)
+%%--------------------------------------------------------------------
+-spec read(FileHandle :: logical_file_manager:handle(), Offset :: integer(),
+    MaxSize :: integer(), SyncOptions :: sync_options()) ->
+    {ok, NewHandle :: logical_file_manager:handle(), binary()} |
+    logical_file_manager:error_reply().
+read(FileHandle, Offset, MaxSize, SyncOptions) ->
+    read(FileHandle, Offset, MaxSize, true, true, SyncOptions).
+
+%%--------------------------------------------------------------------
+%% @equiv read(FileHandle, Offset, MaxSize, false, true,
+%% {priority, ?DEFAULT_SYNC_PRIORITY)}
 %%--------------------------------------------------------------------
 -spec read_without_events(FileHandle :: logical_file_manager:handle(),
     Offset :: integer(), MaxSize :: integer()) ->
     {ok, NewHandle :: logical_file_manager:handle(), binary()} |
     logical_file_manager:error_reply().
 read_without_events(FileHandle, Offset, MaxSize) ->
-    read(FileHandle, Offset, MaxSize, false, true).
+    read(FileHandle, Offset, MaxSize, false, true,
+        {priority, ?DEFAULT_SYNC_PRIORITY}).
 
 %%--------------------------------------------------------------------
-%% @equiv read(FileHandle, Offset, MaxSize, false, false)
+%% @equiv read(FileHandle, Offset, MaxSize, false, true, SyncOptions)
+%%--------------------------------------------------------------------
+-spec read_without_events(FileHandle :: logical_file_manager:handle(),
+    Offset :: integer(), MaxSize :: integer(), SyncOptions :: sync_options()) ->
+    {ok, NewHandle :: logical_file_manager:handle(), binary()} |
+    logical_file_manager:error_reply().
+read_without_events(FileHandle, Offset, MaxSize, SyncOptions) ->
+    read(FileHandle, Offset, MaxSize, false, true, SyncOptions).
+
+%%--------------------------------------------------------------------
+%% @equiv read(FileHandle, Offset, MaxSize, false, false,
+%% {priority, ?DEFAULT_SYNC_PRIORITY)}
 %%--------------------------------------------------------------------
 -spec silent_read(FileHandle :: logical_file_manager:handle(),
     Offset :: integer(), MaxSize :: integer()) ->
     {ok, NewHandle :: logical_file_manager:handle(), binary()} |
     logical_file_manager:error_reply().
 silent_read(FileHandle, Offset, MaxSize) ->
-    read(FileHandle, Offset, MaxSize, false, false).
+    read(FileHandle, Offset, MaxSize, false, false,
+        {priority, ?DEFAULT_SYNC_PRIORITY}).
+
+%%--------------------------------------------------------------------
+%% @equiv read(FileHandle, Offset, MaxSize, false, false, SyncOptions)
+%%--------------------------------------------------------------------
+-spec silent_read(FileHandle :: logical_file_manager:handle(),
+    Offset :: integer(), MaxSize :: integer(), SyncOptions :: sync_options()) ->
+    {ok, NewHandle :: logical_file_manager:handle(), binary()} |
+    logical_file_manager:error_reply().
+silent_read(FileHandle, Offset, MaxSize, SyncOptions) ->
+    read(FileHandle, Offset, MaxSize, false, false, SyncOptions).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -500,11 +546,13 @@ write_internal(LfmCtx, Offset, Buffer, GenerateEvents) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec read(FileHandle :: logical_file_manager:handle(), Offset :: integer(),
-    MaxSize :: integer(), GenerateEvents :: boolean(), PrefetchData :: boolean()) ->
+    MaxSize :: integer(), GenerateEvents :: boolean(), PrefetchData :: boolean(),
+    SyncOptions :: sync_options()) ->
     {ok, NewHandle :: logical_file_manager:handle(), binary()} |
     logical_file_manager:error_reply().
-read(FileHandle, Offset, MaxSize, GenerateEvents, PrefetchData) ->
-    case read_internal(FileHandle, Offset, MaxSize, GenerateEvents, PrefetchData) of
+read(FileHandle, Offset, MaxSize, GenerateEvents, PrefetchData, SyncOptions) ->
+    case read_internal(FileHandle, Offset, MaxSize, GenerateEvents,
+        PrefetchData, SyncOptions) of
         {error, Reason} ->
             {error, Reason};
         {ok, Bytes} ->
@@ -515,7 +563,7 @@ read(FileHandle, Offset, MaxSize, GenerateEvents, PrefetchData) ->
                     {ok, FileHandle, Bytes};
                 Size ->
                     case read(FileHandle, Offset + Size, MaxSize - Size,
-                        GenerateEvents, PrefetchData)
+                        GenerateEvents, PrefetchData, SyncOptions)
                     of
                         {ok, NewHandle1, Bytes1} ->
                             {ok, NewHandle1, <<Bytes/binary, Bytes1/binary>>};
@@ -532,15 +580,21 @@ read(FileHandle, Offset, MaxSize, GenerateEvents, PrefetchData) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec read_internal(FileHandle :: logical_file_manager:handle(), Offset :: integer(),
-    MaxSize :: integer(), GenerateEvents :: boolean(), PrefetchData :: boolean()) ->
+    MaxSize :: integer(), GenerateEvents :: boolean(), PrefetchData :: boolean(),
+    SyncOptions :: sync_options()) ->
     {ok, binary()} | logical_file_manager:error_reply().
-read_internal(LfmCtx, Offset, MaxSize, GenerateEvents, PrefetchData) ->
+read_internal(LfmCtx, Offset, MaxSize, GenerateEvents, PrefetchData, SyncOptions) ->
     FileGuid = lfm_context:get_guid(LfmCtx),
     SessId = lfm_context:get_session_id(LfmCtx),
-    ok = remote_utils:call_fslogic(SessId, file_request, FileGuid,
-        #synchronize_block{block = #file_block{offset = Offset, size = MaxSize},
-            prefetch = PrefetchData},
-        fun(_) -> ok end),
+    case SyncOptions of
+        off ->
+            ok;
+        {priority, Priority} ->
+            ok = remote_utils:call_fslogic(SessId, file_request, FileGuid,
+                #synchronize_block{block = #file_block{offset = Offset, size = MaxSize},
+                    prefetch = PrefetchData, priority = Priority},
+                fun(_) -> ok end)    
+    end,
 
     FileId = lfm_context:get_file_id(LfmCtx),
     StorageId = lfm_context:get_storage_id(LfmCtx),

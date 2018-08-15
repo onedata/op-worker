@@ -25,6 +25,7 @@
     storage_id :: storage:id(),
     handle = undefined :: undefined | storage_file_manager:handle(),
     stat = undefined :: undefined | #statbuf{},
+    stat_timestamp :: undefined | non_neg_integer(),
     xattr = undefined :: undefined | binary()
 }).
 
@@ -35,8 +36,8 @@
 %% API
 -export([new/3, get_child_ctx/2, get_children_ctxs_batch/3, reset/1]).
 -export([get_stat_buf/1, get_handle/1, get_file_id_const/1,
-    get_storage_doc/1, get_nfs4_acl/1, get_space_id_const/1
-]).
+    get_storage_doc/1, get_nfs4_acl/1, get_space_id_const/1,
+    get_stat_timestamp_const/1]).
 
 
 %%-------------------------------------------------------------------
@@ -127,14 +128,27 @@ get_child_ctx(ParentCtx = #storage_file_ctx{
 get_stat_buf(StorageFileCtx = #storage_file_ctx{stat = undefined, handle = undefined}) ->
     get_stat_buf(set_sfm_handle(StorageFileCtx));
 get_stat_buf(StorageFileCtx = #storage_file_ctx{stat = undefined, handle = SFMHandle}) ->
+    Timestamp = time_utils:system_time_seconds(),
     case storage_file_manager:stat(SFMHandle) of
         {ok, StatBuf} ->
-            {StatBuf, StorageFileCtx#storage_file_ctx{stat = StatBuf}};
+            {StatBuf, StorageFileCtx#storage_file_ctx{
+                stat = StatBuf,
+                stat_timestamp = Timestamp
+            }};
         {error, ?ENOENT} ->
             throw(?ENOENT)
     end;
 get_stat_buf(StorageFileCtx = #storage_file_ctx{stat = StatBuf}) ->
     {StatBuf, StorageFileCtx}.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns timestamp of last stat performed on storage.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_stat_timestamp_const(ctx()) -> non_neg_integer().
+get_stat_timestamp_const(#storage_file_ctx{stat_timestamp = StatTimestamp}) ->
+    StatTimestamp.
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -156,7 +170,8 @@ get_handle(StorageFileCtx = #storage_file_ctx{handle = SFMHandle}) ->
 %%-------------------------------------------------------------------
 -spec get_storage_doc(ctx()) -> {storage:doc(), ctx()}.
 get_storage_doc(StorageFileCtx = #storage_file_ctx{handle = undefined}) ->
-    get_storage_doc(set_sfm_handle(StorageFileCtx));
+    StorageFileCtx2 = set_sfm_handle(StorageFileCtx),
+    get_storage_doc(StorageFileCtx2);
 get_storage_doc(StorageFileCtx = #storage_file_ctx{
     handle = #sfm_handle{
         storage = StorageDoc = #document{}

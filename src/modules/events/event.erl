@@ -28,6 +28,7 @@
 
 -type key() :: term().
 -type base() :: #event{}.
+-type aggregated() :: {aggregated, [base()]}.
 -type type() :: #file_read_event{} | #file_written_event{} |
                 #file_attr_changed_event{} | #file_location_changed_event{} |
                 #file_perm_changed_event{} | #file_removed_event{} |
@@ -64,7 +65,7 @@ emit(Evt) ->
 %% Sends an event to selected event managers.
 %% @end
 %%--------------------------------------------------------------------
--spec emit(Evt :: base() | type(), MgrRef :: manager_ref()) ->
+-spec emit(Evt :: base() | aggregated() | type(), MgrRef :: manager_ref()) ->
     ok | {error, Reason :: term()}.
 emit(Evt, {exclude, MgrRef}) ->
     case event_router:get_subscribers(Evt) of
@@ -79,6 +80,14 @@ emit(Evt, {exclude, MgrRef}) ->
 emit(#event{} = Evt, MgrRef) ->
     ?update_counter(?EXOMETER_NAME(emit)),
     send_to_event_managers(Evt, get_event_managers(MgrRef));
+
+emit({aggregated, [#event{} | _]} = Evts, MgrRef) ->
+    ?update_counter(?EXOMETER_NAME(emit)),
+    send_to_event_managers(Evts, get_event_managers(MgrRef));
+
+emit({aggregated, Evts}, MgrRef) ->
+    WrappedEvents = lists:map(fun(Evt) -> #event{type = Evt} end, Evts),
+    emit({aggregated, WrappedEvents}, MgrRef);
 
 emit(Evt, MgrRef) ->
     emit(#event{type = Evt}, MgrRef).
@@ -230,12 +239,16 @@ get_event_manager(MgrRef) ->
 %% Sends message to event managers.
 %% @end
 %%--------------------------------------------------------------------
--spec send_to_event_managers(Msg :: term(), Mgrs :: [pid()]) ->
+-spec send_to_event_managers(Message :: term(), Managers :: [pid()]) ->
     ok.
-send_to_event_managers(Msg, Mgrs) ->
-    lists:foreach(fun(Mgr) ->
-        gen_server2:cast(Mgr, Msg)
-    end, Mgrs).
+send_to_event_managers({aggregated, Messages}, Managers) ->
+    lists:foreach(fun(Message) ->
+        send_to_event_managers(Message, Managers)
+    end, Messages);
+send_to_event_managers(Message, Managers) ->
+    lists:foreach(fun(Manager) ->
+        gen_server2:cast(Manager, Message)
+    end, Managers).
 
 %%--------------------------------------------------------------------
 %% @private

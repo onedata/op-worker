@@ -68,8 +68,11 @@
     sync_should_not_delete_not_replicated_files_created_in_remote_provider2/1,
     create_delete_import_test_read_both/1,
     should_not_sync_file_while_being_replicated/1,
+    change_file_content_constant_size_test/1,
     change_file_content_update_test/1,
-    change_file_content_update2_test/1, append_empty_file_update_test/1]).
+    change_file_content_the_same_moment_when_sync_performs_stat_on_file_test/1,
+    append_empty_file_update_test/1,
+    import_file_with_link_but_no_doc_test/1, append_file_not_changing_mtime_update_test/1]).
 
 -define(TEST_CASES, [
     create_directory_import_test,
@@ -82,6 +85,7 @@
     create_directory_import_many_test,
     create_directory_export_test,
     create_file_import_test,
+    import_file_with_link_but_no_doc_test,
     create_empty_file_import_test,
     create_delete_import_test_read_both,
     create_delete_import_test_read_remote_only,
@@ -103,13 +107,15 @@
     delete_file_update_test,
     delete_file_export_test,
     append_file_update_test,
+    append_file_not_changing_mtime_update_test,
     append_empty_file_update_test,
     append_file_export_test,
     copy_file_update_test,
     move_file_update_test,
     truncate_file_update_test,
+    change_file_content_constant_size_test,
     change_file_content_update_test,
-    change_file_content_update2_test,
+    change_file_content_the_same_moment_when_sync_performs_stat_on_file_test,
     chmod_file_update_test,
     chmod_file_update2_test,
     update_timestamps_file_import_test,
@@ -162,6 +168,9 @@ create_directory_export_test(Config) ->
 
 create_file_import_test(Config) ->
     storage_sync_test_base:create_file_import_test(Config, false).
+
+import_file_with_link_but_no_doc_test(Config) ->
+    storage_sync_test_base:import_file_with_link_but_no_doc_test(Config, false).
 
 create_empty_file_import_test(Config) ->
     storage_sync_test_base:create_empty_file_import_test(Config, false).
@@ -225,6 +234,9 @@ delete_file_export_test(Config) ->
 
 append_file_update_test(Config) ->
     storage_sync_test_base:append_file_update_test(Config, false).
+
+append_file_not_changing_mtime_update_test(Config) ->
+    storage_sync_test_base:append_file_not_changing_mtime_update_test(Config, false).
 
 append_empty_file_update_test(Config) ->
     storage_sync_test_base:append_empty_file_update_test(Config, false).
@@ -330,11 +342,14 @@ move_file_update_test(Config) ->
 truncate_file_update_test(Config) ->
     storage_sync_test_base:truncate_file_update_test(Config, false).
 
+change_file_content_constant_size_test(Config) ->
+    storage_sync_test_base:change_file_content_constant_size_test(Config, false).
+
 change_file_content_update_test(Config) ->
     storage_sync_test_base:change_file_content_update_test(Config, false).
 
-change_file_content_update2_test(Config) ->
-    storage_sync_test_base:change_file_content_update2_test(Config, false).
+change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(Config) ->
+    storage_sync_test_base:change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(Config, false).
 
 chmod_file_update_test(Config) ->
     storage_sync_test_base:chmod_file_update_test(Config, false).
@@ -442,8 +457,8 @@ init_per_testcase(Case, Config) when
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, [reverse_luma_proxy, storage_file_ctx]),
     test_utils:mock_expect(Workers, storage_file_ctx, get_storage_doc, fun(Ctx) ->
-        {StorageDoc = #document{value = Storage = #storage{}}, Ctx} = meck:passthrough([Ctx]),
-        {StorageDoc#document{value = Storage#storage{luma_config = ?LUMA_CONFIG}}, Ctx}
+        {StorageDoc = #document{value = Storage = #storage{}}, Ctx2} = meck:passthrough([Ctx]),
+        {StorageDoc#document{value = Storage#storage{luma_config = ?LUMA_CONFIG}}, Ctx2}
     end),
     test_utils:mock_expect(Workers, reverse_luma_proxy, get_group_id, fun(_, _, _, _, _) ->
         {ok, ?GROUP}
@@ -460,8 +475,8 @@ init_per_testcase(Case, Config) when
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, [reverse_luma_proxy, storage_file_ctx]),
     test_utils:mock_expect(Workers, storage_file_ctx, get_storage_doc, fun(Ctx) ->
-        {StorageDoc = #document{value = Storage = #storage{}}, Ctx} = meck:passthrough([Ctx]),
-        {StorageDoc#document{value = Storage#storage{luma_config = ?LUMA_CONFIG}}, Ctx}
+        {StorageDoc = #document{value = Storage = #storage{}}, Ctx2} = meck:passthrough([Ctx]),
+        {StorageDoc#document{value = Storage#storage{luma_config = ?LUMA_CONFIG}}, Ctx2}
     end),
     test_utils:mock_expect(Workers, reverse_luma_proxy, get_group_id, fun(_, _, _, _, _) ->
         {ok, ?GROUP}

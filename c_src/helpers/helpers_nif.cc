@@ -56,6 +56,7 @@ struct HelpersNIF {
         for (const auto &entry :
             std::unordered_map<folly::fbstring, folly::fbstring>(
                 {{CEPH_HELPER_NAME, "ceph_helper_threads_number"},
+                    {CEPHRADOS_HELPER_NAME, "cephrados_helper_threads_number"},
                     {POSIX_HELPER_NAME, "posix_helper_threads_number"},
                     {S3_HELPER_NAME, "s3_helper_threads_number"},
                     {SWIFT_HELPER_NAME, "swift_helper_threads_number"},
@@ -73,6 +74,7 @@ struct HelpersNIF {
 
         SHCreator = std::make_unique<one::helpers::StorageHelperCreator>(
             services[CEPH_HELPER_NAME]->service,
+            services[CEPHRADOS_HELPER_NAME]->service,
             services[POSIX_HELPER_NAME]->service,
             services[S3_HELPER_NAME]->service,
             services[SWIFT_HELPER_NAME]->service,
@@ -452,6 +454,9 @@ static void configurePerformanceMonitoring(
                 "comp.oneprovider.mod.options.ceph_helper_thread_count",
                 std::stoul(args["ceph_helper_threads_number"].toStdString()));
             ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.cephrados_helper_thread_count",
+                std::stoul(args["cephrados_helper_threads_number"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
                 "comp.oneprovider.mod.options.posix_helper_thread_count",
                 std::stoul(args["posix_helper_threads_number"].toStdString()));
             ONE_METRIC_COUNTER_SET(
@@ -553,9 +558,10 @@ ERL_NIF_TERM mkdir(
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
-ERL_NIF_TERM unlink(NifCTX ctx, helper_ptr helper, folly::fbstring file)
+ERL_NIF_TERM unlink(NifCTX ctx, helper_ptr helper, folly::fbstring file,
+    const size_t currentSize)
 {
-    handle_result(ctx, helper->unlink(file));
+    handle_result(ctx, helper->unlink(file, currentSize));
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
@@ -600,10 +606,10 @@ ERL_NIF_TERM chown(NifCTX ctx, helper_ptr helper, folly::fbstring file,
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
-ERL_NIF_TERM truncate(
-    NifCTX ctx, helper_ptr helper, folly::fbstring file, const off_t size)
+ERL_NIF_TERM truncate(NifCTX ctx, helper_ptr helper, folly::fbstring file,
+    const off_t size, const size_t currentSize)
 {
-    handle_result(ctx, helper->truncate(file, size));
+    handle_result(ctx, helper->truncate(file, size, currentSize));
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
@@ -848,10 +854,10 @@ static ErlNifFunc nif_funcs[] = {{"get_handle", 2, get_handle},
     {"start_monitoring", 0, start_monitoring},
     {"stop_monitoring", 0, stop_monitoring}, {"getattr", 2, sh_getattr},
     {"access", 3, sh_access}, {"readdir", 4, sh_readdir},
-    {"mknod", 5, sh_mknod}, {"mkdir", 3, sh_mkdir}, {"unlink", 2, sh_unlink},
+    {"mknod", 5, sh_mknod}, {"mkdir", 3, sh_mkdir}, {"unlink", 3, sh_unlink},
     {"rmdir", 2, sh_rmdir}, {"symlink", 3, sh_symlink},
     {"rename", 3, sh_rename}, {"link", 3, sh_link}, {"chmod", 3, sh_chmod},
-    {"chown", 4, sh_chown}, {"truncate", 3, sh_truncate},
+    {"chown", 4, sh_chown}, {"truncate", 4, sh_truncate},
     {"setxattr", 6, sh_setxattr}, {"getxattr", 3, sh_getxattr},
     {"removexattr", 3, sh_removexattr}, {"listxattr", 2, sh_listxattr},
     {"open", 3, sh_open}, {"read", 3, sh_read}, {"write", 3, sh_write},

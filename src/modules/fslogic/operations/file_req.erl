@@ -287,12 +287,12 @@ storage_file_created_insecure(_UserCtx, FileCtx) ->
     case StorageFileCreated of
         false ->
             FileUuid = file_ctx:get_uuid_const(FileCtx),
-            UpdateAns = fslogic_blocks:update_location(FileUuid, FileLocationId, fun
+            UpdateAns = fslogic_location_cache:update_location(FileUuid, FileLocationId, fun
                 (#file_location{storage_file_created = true}) ->
                     {error, already_created};
                 (FileLocation = #file_location{storage_file_created = false}) ->
                     {ok, FileLocation#file_location{storage_file_created = true}}
-            end),
+            end, false),
 
             case UpdateAns of
                 {ok, #document{}} ->
@@ -330,7 +330,7 @@ make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     catch
         Error:Reason ->
             FileUuid = file_ctx:get_uuid_const(FileCtx),
-            fslogic_blocks:delete_location(FileUuid, file_location:local_id(FileUuid)),
+            fslogic_location_cache:delete_location(FileUuid, file_location:local_id(FileUuid)),
             file_meta:delete(FileUuid),
             times:delete(FileUuid),
             erlang:Error(Reason)
@@ -498,7 +498,16 @@ open_file_with_extended_info_for_rdwr(UserCtx, FileCtx) ->
 -spec fsync_insecure(user_ctx:ctx(), FileCtx :: file_ctx:ctx(),
     boolean(), binary()) -> #fuse_response{}.
 fsync_insecure(UserCtx, FileCtx, _DataOnly, undefined) ->
-    flush_event_queue(UserCtx, FileCtx);
+    Ans = flush_event_queue(UserCtx, FileCtx),
+    case fslogic_location_cache:force_flush(file_ctx:get_uuid_const(FileCtx)) of
+        ok ->
+            Ans;
+        _ ->
+            #fuse_response{
+                status = #status{code = ?EAGAIN,
+                    description = <<"Blocks_flush_error">>}
+            }
+    end;
 fsync_insecure(UserCtx, FileCtx, DataOnly, HandleId) ->
     SessId = user_ctx:get_session_id(UserCtx),
     ok = case session:get_handle(SessId, HandleId) of
@@ -512,7 +521,16 @@ fsync_insecure(UserCtx, FileCtx, DataOnly, HandleId) ->
             Other
     end,
 
-    flush_event_queue(UserCtx, FileCtx).
+    Ans = flush_event_queue(UserCtx, FileCtx),
+    case fslogic_location_cache:force_flush(file_ctx:get_uuid_const(FileCtx)) of
+        ok ->
+            Ans;
+        _ ->
+            #fuse_response{
+                status = #status{code = ?EAGAIN,
+                    description = <<"Blocks_flush_error">>}
+            }
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

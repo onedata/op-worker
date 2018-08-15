@@ -91,7 +91,7 @@ apply(Doc = #document{value = Value, scope = SpaceId, seq = Seq}) ->
 
                 case Value of
                     #file_location{} ->
-                        fslogic_blocks:cache_location(Doc);
+                        fslogic_location_cache:cache_location(Doc);
                     _ ->
                         ok
                 end

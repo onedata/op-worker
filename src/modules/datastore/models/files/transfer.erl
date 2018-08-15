@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Model storing information about transfer. Creation of doc works
+%%% Model storing information about transfers. Creation of doc works
 %%% as a trigger for starting a transfer.
 %%% We distinguish 3 types of transfers:
 %%%     - replication
@@ -40,7 +40,7 @@
     increment_files_to_process_counter/2, increment_files_processed_counter/1,
     mark_failed_file_processing/1, increment_files_replicated_counter/1,
     mark_data_replication_finished/3, increment_files_invalidated_counter/1,
-
+    increment_files_invalidated_and_processed_counters/1,
     rerun_not_ended_transfers/1
 ]).
 
@@ -283,6 +283,7 @@ cancel(TransferId) ->
 %%--------------------------------------------------------------------
 -spec mark_dequeued(id()) -> {ok, doc()} | {error, term()}.
 mark_dequeued(TransferId) ->
+    %todo move to utils???
     update_and_run(
         TransferId,
         fun(Transfer) -> {ok, Transfer#transfer{enqueued = false}} end,
@@ -388,6 +389,18 @@ increment_files_processed_counter(TransferId) ->
         }}
     end).
 
+-spec increment_files_invalidated_and_processed_counters(undefined | id()) ->
+    {ok, undefined | doc()} | {error, term()}.
+increment_files_invalidated_and_processed_counters(undefined) ->
+    {ok, undefined};
+increment_files_invalidated_and_processed_counters(TransferId) ->
+    update(TransferId, fun(Transfer) ->
+        {ok, Transfer#transfer{
+            files_invalidated = Transfer#transfer.files_invalidated + 1,
+            files_processed = Transfer#transfer.files_processed + 1
+        }}
+    end).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -423,6 +436,8 @@ increment_files_invalidated_counter(undefined) ->
 increment_files_invalidated_counter(TransferId) ->
     update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{
+%%            TODO osobna funkcja???
+%%            files_processed = Transfer#transfer.files_processed + 1,
             files_invalidated = Transfer#transfer.files_invalidated + 1
         }}
     end).
@@ -736,15 +751,21 @@ maybe_rerun(TransferId) ->
 start_pools() ->
     {ok, _} = worker_pool:start_sup_pool(?REPLICATION_WORKERS_POOL, [
         {workers, ?REPLICATION_WORKERS_NUM},
-        {worker, {replication_worker, []}},
+        {worker, {?REPLICATION_WORKER, []}},
         {queue_type, lifo}
     ]),
     {ok, _} = worker_pool:start_sup_pool(?REPLICATION_CONTROLLERS_POOL, [
         {workers, ?REPLICATION_CONTROLLERS_NUM},
-        {worker, {replication_controller, []}}
+        {worker, {?REPLICATION_CONTROLLER, []}}
     ]),
     {ok, _} = worker_pool:start_sup_pool(?INVALIDATION_WORKERS_POOL, [
-        {workers, ?INVALIDATION_WORKERS_NUM}
+        {workers, ?INVALIDATION_WORKERS_NUM},
+        {worker, {?INVALIDATION_WORKER, []}},
+        {queue_type, lifo}
+    ]),
+    {ok, _} = worker_pool:start_sup_pool(?REPLICA_DELETION_WORKERS_POOL, [
+        {workers, ?REPLICA_DELETION_WORKERS_NUM},
+        {worker, {?REPLICA_DELETION_WORKER, []}}
     ]),
     ok.
 
@@ -757,9 +778,10 @@ start_pools() ->
 %%-------------------------------------------------------------------
 -spec stop_pools() -> ok.
 stop_pools() ->
-    true = worker_pool:stop_pool(?REPLICATION_WORKERS_POOL),
-    true = worker_pool:stop_pool(?REPLICATION_CONTROLLERS_POOL),
-    true = worker_pool:stop_pool(?INVALIDATION_WORKERS_POOL),
+    ok = wpool:stop_sup_pool(?REPLICATION_WORKERS_POOL),
+    ok = wpool:stop_sup_pool(?REPLICATION_CONTROLLERS_POOL),
+    ok = wpool:stop_sup_pool(?INVALIDATION_WORKERS_POOL),
+    ok = wpool:stop_sup_pool(?REPLICA_DELETION_WORKERS_POOL),
     ok.
 
 %%-------------------------------------------------------------------

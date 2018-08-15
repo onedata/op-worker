@@ -23,10 +23,8 @@
 
 
 %% API
--export([
-    terminate/3, allowed_methods/2, is_authorized/2,
-    content_types_provided/2
-]).
+-export([terminate/3, allowed_methods/2, is_authorized/2,
+    content_types_provided/2]).
 
 %% resource functions
 -export([list_transfers/2]).

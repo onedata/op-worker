@@ -84,6 +84,9 @@ translate_from_protobuf(#'FileRenamedEntry'{} = Record) ->
         new_parent_guid = Record#'FileRenamedEntry'.new_parent_uuid,
         new_name = Record#'FileRenamedEntry'.new_name
     };
+translate_from_protobuf(#'IpAndPort'{ip = IpString, port = Port}) ->
+    {ok, IP} = inet:parse_ipv4strict_address(binary_to_list(IpString)),
+    #ip_and_port{ip = IP, port = Port};
 translate_from_protobuf(#'Dir'{uuid = UUID}) ->
     #dir{guid = UUID};
 
@@ -281,11 +284,14 @@ translate_from_protobuf(#'Release'{handle_id = HandleId}) ->
     #release{handle_id = HandleId};
 translate_from_protobuf(#'Truncate'{size = Size}) ->
     #truncate{size = Size};
-translate_from_protobuf(#'SynchronizeBlock'{block = #'FileBlock'{offset = O, size = S}, prefetch = Prefetch}) ->
-    #synchronize_block{block = #file_block{offset = O, size = S}, prefetch = Prefetch};
+translate_from_protobuf(#'SynchronizeBlock'{block = #'FileBlock'{
+    offset = O, size = S}, prefetch = Prefetch, priority = Priority}) ->
+    #synchronize_block{block = #file_block{offset = O, size = S},
+        prefetch = Prefetch, priority = Priority};
 translate_from_protobuf(#'SynchronizeBlockAndComputeChecksum'{
-    block = #'FileBlock'{offset = O, size = S}}) ->
-    #synchronize_block_and_compute_checksum{block = #file_block{offset = O, size = S}};
+    block = #'FileBlock'{offset = O, size = S}, prefetch = Prefetch, priority = Priority}) ->
+    #synchronize_block_and_compute_checksum{block =
+    #file_block{offset = O, size = S}, prefetch = Prefetch, priority = Priority};
 
 translate_from_protobuf(#'FuseResponse'{status = Status, fuse_response = {_, FuseResponse}}) ->
     #fuse_response{
@@ -329,17 +335,17 @@ translate_from_protobuf(#'FileChildrenAttrs'{child_attrs = Children,
             translate_from_protobuf(Child)
         end, Children), index_token = Token, is_last = IsLast};
 translate_from_protobuf(#'FileLocation'{} = Record) ->
-    FL = #file_location{
+    #file_location{
         uuid = fslogic_uuid:guid_to_uuid(Record#'FileLocation'.uuid),
         provider_id = Record#'FileLocation'.provider_id,
         space_id = Record#'FileLocation'.space_id,
         storage_id = Record#'FileLocation'.storage_id,
-        file_id = Record#'FileLocation'.file_id
-    },
-    fslogic_blocks:set_blocks(FL, lists:map(
-        fun(#'FileBlock'{offset = Offset, size = Size}) ->
-            #file_block{offset = Offset, size = Size}
-        end, Record#'FileLocation'.blocks));
+        file_id = Record#'FileLocation'.file_id,
+        blocks = lists:map(
+            fun(#'FileBlock'{offset = Offset, size = Size}) ->
+                #file_block{offset = Offset, size = Size}
+            end, Record#'FileLocation'.blocks)
+    };
 translate_from_protobuf(#'FileLocationChanged'{file_location = FileLocation,
     change_beg_offset = O, change_end_offset = S}) ->
     #file_location_changed{
@@ -358,8 +364,10 @@ translate_from_protobuf(#'HelperArg'{key = Key, value = Value}) ->
     #helper_arg{key = Key, value = Value};
 translate_from_protobuf(#'Parameter'{key = Key, value = Value}) ->
     {Key, Value};
-translate_from_protobuf(#'SyncResponse'{checksum = Checksum, file_location = FileLocation}) ->
-    #sync_response{checksum = Checksum, file_location = translate_from_protobuf(FileLocation)};
+translate_from_protobuf(#'SyncResponse'{checksum = Checksum,
+    file_location_changed = FileLocationChanged}) ->
+    #sync_response{checksum = Checksum,
+        file_location_changed = translate_from_protobuf(FileLocationChanged)};
 translate_from_protobuf(#'FileCreated'{} = Record) ->
     #file_created{
         handle_id = Record#'FileCreated'.handle_id,
@@ -594,6 +602,14 @@ translate_from_protobuf(#'GenerateRTransferConnSecret'{secret = Secret}) ->
     #generate_rtransfer_conn_secret{secret = Secret};
 translate_from_protobuf(#'RTransferConnSecret'{secret = Secret}) ->
     #rtransfer_conn_secret{secret = Secret};
+translate_from_protobuf(#'GetRTransferNodesIPs'{}) ->
+    #get_rtransfer_nodes_ips{};
+translate_from_protobuf(#'RTransferNodesIPs'{nodes = undefined}) ->
+    #rtransfer_nodes_ips{nodes = []};
+translate_from_protobuf(#'RTransferNodesIPs'{nodes = Nodes}) ->
+    #rtransfer_nodes_ips{
+        nodes = [translate_from_protobuf(N) || N <- Nodes]
+    };
 
 translate_from_protobuf(undefined) ->
     undefined.
@@ -617,6 +633,8 @@ translate_to_protobuf(#file_renamed_entry{} = Record) ->
         new_parent_uuid = Record#'file_renamed_entry'.new_parent_guid,
         new_name = Record#'file_renamed_entry'.new_name
     };
+translate_to_protobuf(#ip_and_port{ip = IP, port = Port}) ->
+    #'IpAndPort'{ip = list_to_binary(inet:ntoa(IP)), port = Port};
 translate_to_protobuf(#dir{guid = UUID}) ->
     {dir, #'Dir'{uuid = UUID}};
 
@@ -805,12 +823,16 @@ translate_to_protobuf(#release{handle_id = HandleId}) ->
     {release, #'Release'{handle_id = HandleId}};
 translate_to_protobuf(#truncate{size = Size}) ->
     {truncate, #'Truncate'{size = Size}};
-translate_to_protobuf(#synchronize_block{block = Block, prefetch = Prefetch}) ->
+translate_to_protobuf(#synchronize_block{block = Block, prefetch = Prefetch,
+    priority = Priority}) ->
     {synchronize_block,
-        #'SynchronizeBlock'{block = translate_to_protobuf(Block), prefetch = Prefetch}};
-translate_to_protobuf(#synchronize_block_and_compute_checksum{block = Block}) ->
+        #'SynchronizeBlock'{block = translate_to_protobuf(Block),
+            prefetch = Prefetch, priority = Priority}};
+translate_to_protobuf(#synchronize_block_and_compute_checksum{block = Block,
+    prefetch = Prefetch, priority = Priority}) ->
     {synchronize_block_and_compute_checksum,
-        #'SynchronizeBlockAndComputeChecksum'{block = translate_to_protobuf(Block)}};
+        #'SynchronizeBlockAndComputeChecksum'{block =
+        translate_to_protobuf(Block), prefetch = Prefetch, priority = Priority}};
 
 translate_to_protobuf(#fuse_response{status = Status, fuse_response = FuseResponse}) ->
     {status, StatProto} = translate_to_protobuf(Status),
@@ -863,7 +885,7 @@ translate_to_protobuf(#file_location{} = Record) ->
                 file_id = Record#file_location.file_id,
                 storage_id = Record#file_location.storage_id
             }
-        end, fslogic_blocks:get_blocks(Record))
+        end, Record#file_location.blocks)
     }};
 translate_to_protobuf(#file_location_changed{file_location = FileLocation,
     change_beg_offset = O, change_end_offset = S}) ->
@@ -884,9 +906,11 @@ translate_to_protobuf(#storage_test_file{helper_params = HelperParams,
     {_, Record} = translate_to_protobuf(HelperParams),
     {storage_test_file, #'StorageTestFile'{helper_params = Record,
         space_id = SpaceId, file_id = FileId, file_content = FileContent}};
-translate_to_protobuf(#sync_response{checksum = Value, file_location = FileLocation}) ->
-    {_, ProtoFileLocation} = translate_to_protobuf(FileLocation),
-    {sync_response, #'SyncResponse'{checksum = Value, file_location = ProtoFileLocation}};
+translate_to_protobuf(#sync_response{checksum = Value,
+    file_location_changed = FileLocationChanged}) ->
+    {_, ProtoFileLocationChanged} = translate_to_protobuf(FileLocationChanged),
+    {sync_response, #'SyncResponse'{checksum = Value,
+        file_location_changed = ProtoFileLocationChanged}};
 translate_to_protobuf(#file_created{} = Record) ->
     {_, FileAttr} = translate_to_protobuf(Record#file_created.file_attr),
     {_, FileLocation} = translate_to_protobuf(Record#file_created.file_location),
@@ -1120,6 +1144,12 @@ translate_to_protobuf(#generate_rtransfer_conn_secret{secret = Secret}) ->
     {generate_rtransfer_conn_secret, #'GenerateRTransferConnSecret'{secret = Secret}};
 translate_to_protobuf(#rtransfer_conn_secret{secret = Secret}) ->
     {rtransfer_conn_secret, #'RTransferConnSecret'{secret = Secret}};
+translate_to_protobuf(#get_rtransfer_nodes_ips{}) ->
+    {get_rtransfer_nodes_ips, #'GetRTransferNodesIPs'{}};
+translate_to_protobuf(#rtransfer_nodes_ips{nodes = Nodes}) ->
+    {rtransfer_nodes_ips, #'RTransferNodesIPs'{
+        nodes = [translate_to_protobuf(N) || N <- Nodes]
+    }};
 
 translate_to_protobuf(undefined) ->
     undefined.

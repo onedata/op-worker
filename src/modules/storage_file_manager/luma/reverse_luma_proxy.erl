@@ -21,6 +21,9 @@
 -export([get_user_id/4, get_user_id_by_name/4,
     get_group_id/5, get_group_id_by_name/5]).
 
+%% exported for test reasons
+-export([http_client_post/3]).
+
 %%%===================================================================
 %%% API functions
 %%%===================================================================
@@ -37,7 +40,7 @@ get_user_id(Uid, StorageId, StorageName, LumaConfig = #luma_config{url = LumaUrl
     Url = str_utils:format_bin("~s/resolve_user", [LumaUrl]),
     ReqHeaders = luma_proxy:get_request_headers(LumaConfig),
     ReqBody = get_user_request_body(Uid, StorageId, StorageName),
-    case http_client:post(Url, ReqHeaders, ReqBody) of
+    case ?MODULE:http_client_post(Url, ReqHeaders, ReqBody) of
         {ok, 200, _RespHeaders, RespBody} ->
             Response = json_utils:decode(RespBody),
             Idp = maps:get(<<"idp">>, Response),
@@ -62,7 +65,7 @@ get_user_id_by_name(Name, StorageId, StorageName, LumaConfig = #luma_config{url 
     Url = str_utils:format_bin("~s/resolve_acl_user", [LumaUrl]),
     ReqHeaders = luma_proxy:get_request_headers(LumaConfig),
     ReqBody = get_user_request_body_by_name(Name, StorageId, StorageName),
-    case http_client:post(Url, ReqHeaders, ReqBody) of
+    case ?MODULE:http_client_post(Url, ReqHeaders, ReqBody) of
         {ok, 200, _RespHeaders, RespBody} ->
             Response = json_utils:decode(RespBody),
             Idp = maps:get(<<"idp">>, Response),
@@ -87,7 +90,7 @@ get_group_id(Gid, SpaceId, StorageId, StorageName, LumaConfig = #luma_config{url
     Url = str_utils:format_bin("~s/resolve_group", [LumaUrl]),
     ReqHeaders = luma_proxy:get_request_headers(LumaConfig),
     ReqBody = get_group_request_body(Gid, SpaceId, StorageId, StorageName),
-    case http_client:post(Url, ReqHeaders, ReqBody) of
+    case ?MODULE:http_client_post(Url, ReqHeaders, ReqBody) of
         {ok, 200, _RespHeaders, RespBody} ->
             Response = json_utils:decode(RespBody),
             Idp = maps:get(<<"idp">>, Response),
@@ -118,7 +121,7 @@ get_group_id_by_name(Name, SpaceId, StorageId, StorageName,
     Url = str_utils:format_bin("~s/resolve_acl_group", [LumaUrl]),
     ReqHeaders = luma_proxy:get_request_headers(LumaConfig),
     ReqBody = get_group_request_body_by_name(Name, SpaceId, StorageId, StorageName),
-    case http_client:post(Url, ReqHeaders, ReqBody) of
+    case ?MODULE:http_client_post(Url, ReqHeaders, ReqBody) of
         {ok, 200, _RespHeaders, RespBody} ->
             Response = json_utils:decode(RespBody),
             Idp = maps:get(<<"idp">>, Response),
@@ -134,6 +137,18 @@ get_group_id_by_name(Name, SpaceId, StorageId, StorageName,
         {error, Reason} ->
             {error, Reason}
     end.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Simple wrapper for http_client:post.
+%% This function is used to avoid mocking http_client in tests.
+%% Mocking http_client is dangerous because meck's reloading and
+%% purging the module can result in node_manager being killed.
+%%-------------------------------------------------------------------
+-spec http_client_post(http_client:url(), http_client:headers(),
+    http_client:body()) -> http_client:response().
+http_client_post(Url, ReqHeaders, ReqBody) ->
+    http_client:post(Url, ReqHeaders, ReqBody).
 
 %%%===================================================================
 %%% Internal functions
