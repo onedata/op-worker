@@ -306,10 +306,10 @@ do_request(ConnRef, Client, #gs_req_graph{operation = get} = GraphReq) ->
             case call_onezone(ConnRef, Client, GraphReq) of
                 {error, _} = Err2 ->
                     Err2;
-                {ok, #gs_resp_graph{result = Res}} ->
-                    GRIStr = maps:get(<<"gri">>, Res),
+                {ok, #gs_resp_graph{data_format = resource, data = Resource}} ->
+                    GRIStr = maps:get(<<"gri">>, Resource),
                     NewGRI = gs_protocol:string_to_gri(GRIStr),
-                    Doc = gs_client_translator:translate(NewGRI, maps:remove(<<"gri">>, Res)),
+                    Doc = gs_client_translator:translate(NewGRI, maps:remove(<<"gri">>, Resource)),
                     cache_record(ConnRef, NewGRI, Doc),
                     {ok, Doc}
             end
@@ -318,15 +318,15 @@ do_request(ConnRef, Client, #gs_req_graph{operation = create} = GraphReq) ->
     case call_onezone(ConnRef, Client, GraphReq) of
         {error, _} = Error ->
             Error;
-        {ok, #gs_resp_graph{result = Res}} ->
-            case Res of
-                undefined ->
+        {ok, GsRespGraph} ->
+            case GsRespGraph of
+                #gs_resp_graph{data_format = undefined} ->
                     ok;
-                #{<<"data">> := IntData} = Map when map_size(Map) =:= 1 ->
-                    {ok, IntData};
-                #{<<"gri">> := GRIStr} = Map when map_size(Map) > 1 ->
+                #gs_resp_graph{data_format = value, data = Data} ->
+                    {ok, Data};
+                #gs_resp_graph{data_format = resource, data = #{<<"gri">> := GRIStr} = Map} ->
                     NewGRI = gs_protocol:string_to_gri(GRIStr),
-                    Doc = gs_client_translator:translate(NewGRI, maps:remove(<<"gri">>, Res)),
+                    Doc = gs_client_translator:translate(NewGRI, maps:remove(<<"gri">>, Map)),
                     cache_record(ConnRef, NewGRI, Doc),
                     {ok, {NewGRI, Doc}}
             end

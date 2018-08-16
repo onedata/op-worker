@@ -10,7 +10,7 @@
 %%% when validate login page is visited.
 %%% @end
 %%%-------------------------------------------------------------------
--module(page_validate_login).
+-module(page_consume_onezone_login).
 -author("Lukasz Opiola").
 
 -behaviour(dynamic_page_behaviour).

@@ -233,7 +233,7 @@ mock_graph_create(#gri{type = od_share, id = undefined, aspect = instance}, ?USE
     } = Data,
     case lists:member(SpaceId, [?SPACE_1, ?SPACE_2]) of
         true ->
-            {ok, #gs_resp_graph{result = ?SHARE_PRIVATE_DATA_VALUE(ShareId)}};
+            {ok, #gs_resp_graph{data_format = resource, data = ?SHARE_PRIVATE_DATA_VALUE(ShareId)}};
         _ ->
             ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"spaceId">>)
     end;
@@ -247,7 +247,7 @@ mock_graph_create(#gri{type = od_handle, id = undefined, aspect = instance}, ?US
     } = Data,
     case lists:member(HandleServiceId, [?HANDLE_SERVICE_1, ?HANDLE_SERVICE_2]) of
         true ->
-            {ok, #gs_resp_graph{result = ?HANDLE_PRIVATE_DATA_VALUE(?MOCK_CREATED_HANDLE_ID)}};
+            {ok, #gs_resp_graph{data_format = resource, data = ?HANDLE_PRIVATE_DATA_VALUE(?MOCK_CREATED_HANDLE_ID)}};
         _ ->
             ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"handleServiceId">>)
     end.
@@ -256,7 +256,7 @@ mock_graph_create(#gri{type = od_handle, id = undefined, aspect = instance}, ?US
 mock_graph_update(#gri{type = od_share, id = _ShareId, aspect = instance}, ?USER_GS_MACAROON_AUTH(_UserId), Data) ->
     case Data of
         #{<<"name">> := Name} when is_binary(Name) ->
-            {ok, #gs_resp_graph{result = ok}};
+            {ok, #gs_resp_graph{}};
         _ ->
             ?ERROR_BAD_VALUE_BINARY(<<"name">>)
     end.
@@ -302,7 +302,7 @@ mock_graph_get(GRI = #gri{type = od_user, id = Id, aspect = instance}, Authoriza
                 protected -> ?USER_PROTECTED_DATA_VALUE(UserId);
                 private -> ?USER_PRIVATE_DATA_VALUE(UserId)
             end,
-            {ok, #gs_resp_graph{result = Data}};
+            {ok, #gs_resp_graph{data_format = resource, data = Data}};
         false ->
             ?ERROR_FORBIDDEN
     end;
@@ -322,7 +322,7 @@ mock_graph_get(GRI = #gri{type = od_group, id = GroupId, aspect = instance}, Aut
     end,
     case Authorized of
         true ->
-            {ok, #gs_resp_graph{result = ?GROUP_SHARED_DATA_VALUE(GroupId)}};
+            {ok, #gs_resp_graph{data_format = resource, data = ?GROUP_SHARED_DATA_VALUE(GroupId)}};
         false ->
             ?ERROR_FORBIDDEN
     end;
@@ -343,7 +343,7 @@ mock_graph_get(GRI = #gri{type = od_space, id = SpaceId, aspect = instance}, Aut
                 protected -> ?SPACE_PROTECTED_DATA_VALUE(SpaceId);
                 private -> ?SPACE_PRIVATE_DATA_VALUE(SpaceId)
             end,
-            {ok, #gs_resp_graph{result = Data}};
+            {ok, #gs_resp_graph{data_format = resource, data = Data}};
         false ->
             ?ERROR_FORBIDDEN
     end;
@@ -365,7 +365,7 @@ mock_graph_get(GRI = #gri{type = od_share, id = ShareId, aspect = instance}, Aut
                 public -> ?SHARE_PUBLIC_DATA_VALUE(ShareId);
                 private -> ?SHARE_PRIVATE_DATA_VALUE(ShareId)
             end,
-            {ok, #gs_resp_graph{result = Data}};
+            {ok, #gs_resp_graph{data_format = resource, data = Data}};
         false ->
             ?ERROR_FORBIDDEN
     end;
@@ -386,7 +386,7 @@ mock_graph_get(GRI = #gri{type = od_provider, id = ProviderId, aspect = instance
                 protected -> ?PROVIDER_PROTECTED_DATA_VALUE(ProviderId);
                 private -> ?PROVIDER_PRIVATE_DATA_VALUE(ProviderId)
             end,
-            {ok, #gs_resp_graph{result = Data}};
+            {ok, #gs_resp_graph{data_format = resource, data = Data}};
         false ->
             ?ERROR_FORBIDDEN
     end;
@@ -401,7 +401,7 @@ mock_graph_get(#gri{type = od_handle_service, id = HServiceId, aspect = instance
     end,
     case Authorized of
         true ->
-            {ok, #gs_resp_graph{result = ?HANDLE_SERVICE_PRIVATE_DATA_VALUE(HServiceId)}};
+            {ok, #gs_resp_graph{data_format = resource, data = ?HANDLE_SERVICE_PRIVATE_DATA_VALUE(HServiceId)}};
         false ->
             ?ERROR_FORBIDDEN
     end;
@@ -422,7 +422,7 @@ mock_graph_get(GRI = #gri{type = od_handle, id = HandleId, aspect = instance}, A
                 public -> ?HANDLE_PUBLIC_DATA_VALUE(HandleId);
                 private -> ?HANDLE_PRIVATE_DATA_VALUE(HandleId)
             end,
-            {ok, #gs_resp_graph{result = Data}};
+            {ok, #gs_resp_graph{data_format = resource, data = Data}};
         false ->
             ?ERROR_FORBIDDEN
     end.
