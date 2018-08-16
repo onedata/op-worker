@@ -9,7 +9,7 @@
 %%% This SUITE contains stress test for 2 provider environment with null storage.
 %%% @end
 %%%--------------------------------------------------------------------
--module(stress_blocks_2_provider_null_test_SUITE).
+-module(stress_random_blocks_2_provider_null_test_SUITE).
 -author("Michal Wrzeszcz").
 
 -include("global_definitions.hrl").
@@ -60,7 +60,7 @@ random_read_test(Config) ->
     {description, "Performs multiple file operations on space 1."}
   ]).
 random_read_test_base(Config) ->
-  multi_provider_file_ops_test_base:synchronize_stress_test_base(Config, false).
+  multi_provider_file_ops_test_base:synchronize_stress_test_base(Config, true).
 
 
 %%%===================================================================

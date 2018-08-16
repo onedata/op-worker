@@ -123,9 +123,7 @@ synchronize(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
     FileSize :: non_neg_integer() | undefined, BumpVersion :: boolean()) ->
     {ok, size_changed} | {ok, size_not_changed} | {error, Reason :: term()}.
 update_replica(FileCtx, Blocks, FileSize, BumpVersion) ->
-    apply_no_check(FileCtx, fun() ->
-        replica_updater:update(FileCtx, Blocks, FileSize, BumpVersion)
-    end).
+    replica_updater:update(FileCtx, Blocks, FileSize, BumpVersion).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -426,6 +424,7 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
     case ExistingRefs ++ NewRefs of
         [] ->
             FileLocation = fslogic_cache:get_local_location(),
+            % TODO VFS-4743 - fill gaps?
             ReturnedBlocks = fslogic_location_cache:get_blocks(FileLocation,
                 #{overlapping_blocks => [Block]}),
             {EventOffset, EventSize} =
@@ -498,7 +497,9 @@ handle_info({Ref, active, ProviderId, Block}, #state{
     ref_to_froms = RefToFroms,
     from_to_transfer_id = FromToTransferId
 } = State) ->
+    fslogic_cache:set_local_change(true),
     {ok, _} = replica_updater:update(FileCtx, [Block], undefined, false),
+    fslogic_cache:set_local_change(false),
     AffectedFroms = maps:get(Ref, RefToFroms, []),
     TransferIds = case maps:values(maps:with(AffectedFroms, FromToTransferId)) of
         [] -> [undefined];
@@ -929,7 +930,7 @@ cache_stats_and_blocks(TransferIds, ProviderId, Block, State) ->
         StatsPerTransfer#{TransferId => NewTransferStats}
     end, State#state.cached_stats, TransferIds),
 
-    CachedBlocks = case application:get_env(?APP_NAME, synchronizer_events, transfers_only) of
+    CachedBlocks = case application:get_env(?APP_NAME, synchronizer_in_progress_events, transfers_only) of
         transfers_only ->
             case TransferIds of
                 [undefined] ->
@@ -970,27 +971,25 @@ flush_blocks(State) ->
 flush_blocks(#state{cached_blocks = Blocks} = State, ExcludeSessions,
     FinalBlocks, IsTransfer) ->
 
-    FlushFinalBlocks = case application:get_env(?APP_NAME, synchronizer_events, transfers_only) of
-        transfers_only ->
-            IsTransfer;
-        all ->
-            true;
-        off ->
-            false
+    FlushFinalBlocks = case IsTransfer of
+        true ->
+            application:get_env(?APP_NAME, synchronizer_transfer_finished_events, all);
+        _ ->
+            application:get_env(?APP_NAME, synchronizer_on_fly_finished_events, all)
     end,
 
     Ans = lists:map(fun({From, FinalBlock}) ->
         {From, flush_blocks_list([FinalBlock], ExcludeSessions, FlushFinalBlocks)}
     end, FinalBlocks),
 
-    case application:get_env(?APP_NAME, synchronizer_events, transfers_only) of
+    case application:get_env(?APP_NAME, synchronizer_in_progress_events, transfers_only) of
         off ->
             false;
         _ ->
             ToInvalidate = [FinalBlock || {_From, FinalBlock} <- FinalBlocks],
             Blocks2 = fslogic_blocks:consolidate(fslogic_blocks:invalidate(Blocks, ToInvalidate)),
             lists:foreach(fun(Block) ->
-                flush_blocks_list([Block], ExcludeSessions, true)
+                flush_blocks_list([Block], ExcludeSessions, all)
             end, Blocks2)
     end,
 
@@ -1010,20 +1009,30 @@ flush_blocks(#state{cached_blocks = Blocks} = State, ExcludeSessions,
 %% Flush aggregated so far file blocks.
 %% @end
 %%--------------------------------------------------------------------
--spec flush_blocks_list([block()], [session:id()], boolean()) ->
-    #file_location_changed{}.
+-spec flush_blocks_list([block()], [session:id()], all | off
+    | {threshold, non_neg_integer()}) -> #file_location_changed{}.
 flush_blocks_list(AllBlocks, ExcludeSessions, Flush) ->
     Location = file_ctx:fill_location_gaps(AllBlocks, fslogic_cache:get_local_location(),
         fslogic_cache:get_all_locations(), fslogic_cache:get_uuid()),
     {EventOffset, EventSize} = fslogic_location_cache:get_blocks_range(Location, AllBlocks),
 
     case Flush of
-        false ->
+        off ->
             ok;
-        _ ->
+        all ->
             fslogic_cache:cache_event(ExcludeSessions,
                 fslogic_event_emitter:create_file_location_changed(Location,
-                    EventOffset, EventSize))
+                    EventOffset, EventSize));
+        {threshold, Bytes} ->
+            BlocksSize = fslogic_blocks:size(AllBlocks),
+            case BlocksSize >= Bytes of
+                true ->
+                    fslogic_cache:cache_event(ExcludeSessions,
+                        fslogic_event_emitter:create_file_location_changed(Location,
+                            EventOffset, EventSize));
+                _ ->
+                    ok
+            end
     end,
 
     #file_location_changed{file_location = Location,

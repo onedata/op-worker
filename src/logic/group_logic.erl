@@ -104,7 +104,7 @@ get_name(SessionId, GroupId, AuthHint) ->
 
 
 -spec get_eff_children(gs_client_worker:client(), od_group:id()) ->
-    {ok, [od_group:id()]} | gs_protocol:error().
+    {ok, maps:map(od_group:id(), [privileges:group_privilege()])} | gs_protocol:error().
 get_eff_children(SessionId, GroupId) ->
     case get(SessionId, GroupId) of
         {ok, #document{value = #od_group{eff_children = EffChildren}}} ->
