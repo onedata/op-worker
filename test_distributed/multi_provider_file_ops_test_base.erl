@@ -42,7 +42,7 @@
     random_read_test_base/1,
     random_read_test_base/3,
     synchronizer_test_base/1,
-    synchronize_stress_test_base/1
+    synchronize_stress_test_base/2
 ]).
 -export([init_env/1, teardown_env/1]).
 
@@ -153,7 +153,7 @@ synchronizer_test_base(Config0) ->
         1000000 * Threads * BlocksCount / SyncTime1_2, 1000000 * Threads * BlocksCount / SyncTime2,
         1000000 * Threads * BlocksCount / SyncTime2_2]).
 
-synchronize_stress_test_base(Config0) ->
+synchronize_stress_test_base(Config0, RandomRead) ->
     Config = extend_config(Config0, <<"user1">>, {2,0,0,1}, 1),
     FileSize = ?config(file_size_gb, Config),
     BlockSize = ?config(block_size, Config),
@@ -163,6 +163,11 @@ synchronize_stress_test_base(Config0) ->
     SessId = ?config(session, Config),
     SpaceName = ?config(space_name, Config),
 
+    ChunkSize = 10240,
+    ChunksNum = 1024,
+    PartNum = 100 * FileSize,
+    FileSizeBytes = ChunkSize * ChunksNum * PartNum,
+
     RepNum = ?config(rep_num, Config),
     FileCtxs = case RepNum of
         1 ->
@@ -171,11 +176,6 @@ synchronize_stress_test_base(Config0) ->
             OpenAns = lfm_proxy:open(Worker2, SessId(Worker2), {path, File}, rdwr),
             ?assertMatch({ok, _}, OpenAns),
             {ok, Handle} = OpenAns,
-
-            ChunkSize = 10240,
-            ChunksNum = 1024,
-            PartNum = 100 * FileSize,
-            FileSizeBytes = ChunkSize * ChunksNum * PartNum,
 
             BytesChunk = crypto:strong_rand_bytes(ChunkSize),
             Bytes = lists:foldl(fun(_, Acc) ->
@@ -202,9 +202,16 @@ synchronize_stress_test_base(Config0) ->
             get(ctxs)
     end,
 
-    Blocks = lists:map(fun(Num) ->
-        2 * Num - 1 + 2 * BlocksCount * (RepNum - 1)
-    end, lists:seq(1, BlocksCount)),
+    Blocks = case RandomRead of
+        true ->
+            lists:map(fun(_Num) ->
+                random:uniform(FileSizeBytes)
+            end, lists:seq(1, BlocksCount));
+        _ ->
+            lists:map(fun(Num) ->
+                2 * Num - 1 + 2 * BlocksCount * (RepNum - 1)
+            end, lists:seq(1, BlocksCount))
+    end,
 
     {SyncTime1, SyncTime1_2} = do_sync_test(FileCtxs, Worker1, SessId(Worker1), BlockSize, Blocks),
     {SyncTime2, SyncTime2_2} = do_sync_test(FileCtxs, Worker1, SessId(Worker1), BlockSize, Blocks),
@@ -212,7 +219,14 @@ synchronize_stress_test_base(Config0) ->
     ct:print("Repeat: ~p: iops remote 1: ~p, iops remote 2: ~p, "
         "iops local 1: ~p, iops local 2: ~p", [RepNum,  1000000 * BlocksCount / SyncTime1,
         1000000 * BlocksCount / SyncTime1_2, 1000000 * BlocksCount / SyncTime2,
-        1000000 * BlocksCount / SyncTime2_2]).
+        1000000 * BlocksCount / SyncTime2_2]),
+
+    case RepNum >= 10000 of
+        true ->
+            [stop, ok];
+        _ ->
+            ok
+    end.
 
 random_read_test_base(Config) ->
     random_read_test_base(Config, true, true),
