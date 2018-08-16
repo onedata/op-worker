@@ -107,7 +107,7 @@ handle_cast({start_file_replication, UserCtx, FileCtx, Block, TransferId,
                 ok ->
                     ok;
                 {error, transfer_cancelled} ->
-                    ok;
+                    {ok, _} = transfer:increase_files_processed_counter(TransferId);
                 {error, not_found} ->
                     % todo VFS-4218 currently we ignore this case
                     {ok, _} = transfer:increase_files_processed_counter(TransferId);

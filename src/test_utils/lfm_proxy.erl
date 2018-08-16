@@ -407,7 +407,7 @@ invalidate_file_replica(Worker, SessId, FileKey, ProviderId, MigrationProviderId
     ?EXEC(Worker, logical_file_manager:schedule_replica_invalidation(SessId, FileKey, ProviderId, MigrationProviderId)).
 
 -spec schedule_file_replication(node(), session:id(), logical_file_manager:file_key(),
-    ProviderId :: oneprovider:id()) -> ok.
+    ProviderId :: oneprovider:id()) -> {ok, transfer:id()} | {error, term()}.
 schedule_file_replication(Worker, SessId, FileKey, ProviderId) ->
     ?EXEC(Worker, logical_file_manager:schedule_file_replication(SessId, FileKey, ProviderId)).
 
