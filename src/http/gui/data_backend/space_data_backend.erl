@@ -270,7 +270,7 @@ space_record(SpaceId, HasViewPrivileges) ->
                 ProvidersStats
             };
         false -> {
-            null, null, null, null, null, null, null, null
+            null, null, null, null, null
         }
     end,
     [
