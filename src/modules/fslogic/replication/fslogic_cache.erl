@@ -18,7 +18,8 @@
 -include_lib("ctool/include/logging.hrl").
 
 % Control API
--export([init/1, is_current_proc_cache/0, flush/0, flush/2, check_flush/0]).
+-export([init/1, is_current_proc_cache/0, flush/0, flush/2, check_flush/0,
+    verify_flush_ans/3]).
 % File/UUID API
 -export([get_uuid/0, get_local_location/0, get_all_locations/0,
     cache_event/2, clear_events/0]).
@@ -39,7 +40,9 @@
 
 -define(FLUSH_TIME, fslogic_cache_flush_time).
 -define(IS_FLUSH_PLANNED, fslogic_cache_flush_planned).
--define(CHECK_FLUSH, check_flush).
+-define(CHECK_FLUSH, fslogic_cache_check_flush).
+-define(FLUSH_PID, fslogic_cache_flush_pid).
+-define(FLUSH_CONFIRMATION, fslogic_cache_flushed).
 
 -define(DOCS, fslogic_cache_docs).
 -define(BLOCKS, fslogic_cache_blocks).
@@ -89,15 +92,24 @@ is_current_proc_cache() ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Flushes cache.
+%% @equiv flush(false).
 %% @end
 %%-------------------------------------------------------------------
 -spec flush() -> ok | flush_error.
 flush() ->
+    flush(false).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Flushes cache.
+%% @end
+%%-------------------------------------------------------------------
+-spec flush(boolean()) -> ok | flush_error.
+flush(Spawn) ->
     KM = get(?KEYS_MODIFIED),
     KBM = get(?KEYS_BLOCKS_MODIFIED),
     Saved = lists:foldl(fun(Key, Acc) ->
-        case flush_key(Key) of
+        case flush_key(Key, Spawn) of
             ok -> [Key | Acc];
             _ -> Acc
         end
@@ -129,7 +141,7 @@ flush(Key, _FlushBlocks) ->
     KBM = get(?KEYS_BLOCKS_MODIFIED),
     case lists:member(Key, KM) orelse lists:member(Key, KM) of
         true ->
-            case flush_key(Key) of
+            case flush_key(Key, false) of
                 ok ->
                     put(?KEYS_MODIFIED, KM -- [Key]),
                     put(?KEYS_BLOCKS_MODIFIED, KBM -- [Key]),
@@ -153,12 +165,43 @@ check_flush() ->
     Delay = application:get_env(?APP_NAME, blocks_flush_delay, timer:seconds(3)),
     case {timer:now_diff(Now, FlushTime) > Delay * 1000, get(?IS_FLUSH_PLANNED)} of
         {true, _} ->
-            flush();
+            flush(true);
         {_, true} ->
             erlang:send_after(Delay, self(), ?CHECK_FLUSH),
             ok;
         _ ->
             ok
+    end.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Checks if flush ended successfully.
+%% @end
+%%-------------------------------------------------------------------
+-spec verify_flush_ans(file_location:id(), list(), list()) ->
+    ok | [{error, term()}].
+verify_flush_ans(Key, Check1, Check2) ->
+    erase(?FLUSH_PID),
+    case Check1 of
+        [] ->
+            erase({?DELETED_BLOCKS, Key}),
+            erase({?RESET_BLOCKS, Key}),
+
+            case Check2 of
+                [] ->
+                    erase({?SAVED_BLOCKS, Key, true}),
+                    erase({?SAVED_BLOCKS, Key, undefined}),
+
+                    ok;
+                _ ->
+                    ?error("Local blocks flush failed for key"
+                    " ~p: ~p", [Key, Check2]),
+                    Check2
+            end;
+        _ ->
+            ?error("Local blocks del failed for key"
+            " ~p: ~p", [Key, Check1]),
+            Check1
     end.
 
 %%%===================================================================
@@ -561,11 +604,12 @@ init_flush_check() ->
 %% Flushes location and blocks for a key.
 %% @end
 %%-------------------------------------------------------------------
--spec flush_key(file_location:id()) -> ok | {error, term()}.
+-spec flush_key(file_location:id(), boolean()) ->
+    ok | {error, term()} | [{error, term()}].
 % TODO VFS-4743 - do we save any other location than local?
 % TODO VFS-4743 - do not save location when only blocks differ
 % TODO VFS-4743 - save doc and blocks in separate functions
-flush_key(Key) ->
+flush_key(Key, Spawn) ->
     case get({?DOCS, Key}) of
         undefined ->
             ok;
@@ -609,55 +653,87 @@ flush_key(Key) ->
                         blocks = BlocksToSave4}}, LocalBlocks, DeletedBlocks}
             end,
 
+            case get(?FLUSH_PID) of
+                undefined ->
+                    ok;
+                FlushPid ->
+                    wait_for_flush(Key, FlushPid)
+            end,
+
             apply_size_change(Key, FileUuid),
             case file_location:save(DocToSave) of
                 {ok, _} ->
-                    Check1 = case file_location:delete_local_blocks(Key, DelBlocks) of
-                        ok ->
-                            [];
-                        List1 ->
-                            lists:filter(fun
-                                (ok) -> false;
-                                ({error, not_found}) -> false;
-                                (_) -> true
-                            end, List1)
-                    end,
-
-                    case Check1 of
-                        [] ->
-                            erase({?DELETED_BLOCKS, Key}),
-                            erase({?RESET_BLOCKS, Key}),
-
-                            Check2 = case file_location:save_local_blocks(Key, AddBlocks) of
-                                ok ->
-                                    [];
-                                List2 ->
-                                    lists:filter(fun
-                                        ({ok, _}) -> false;
-                                        ({error, already_exists}) -> false;
-                                        (_) -> true
-                                    end, List2)
-                            end,
-
-                            case Check2 of
-                                [] ->
-                                    erase({?SAVED_BLOCKS, Key, true}),
-                                    erase({?SAVED_BLOCKS, Key, undefined}),
-
-                                    ok;
-                                _ ->
-                                    ?error("Local blocks flush failed for key"
-                                    " ~p: ~p", [Key, Check2]),
-                                    Check2
-                            end;
+                    case Spawn of
+                        true ->
+                            Master = self(),
+                            Pid = spawn(fun() ->
+                                {Check1, Check2} = flush_local_blocks(Key, DelBlocks, AddBlocks),
+                                Master ! {?FLUSH_CONFIRMATION, Key, Check1, Check2}
+                            end),
+                            put(?FLUSH_PID, Pid),
+                            ok;
                         _ ->
-                            ?error("Local blocks del failed for key"
-                            " ~p: ~p", [Key, Check1]),
-                            Check1
+                            {Check1, Check2} = flush_local_blocks(Key, DelBlocks, AddBlocks),
+                            verify_flush_ans(Key, Check1, Check2)
                     end;
                 Error ->
                     ?error("Flush failed for key ~p: ~p", [Key, Error]),
                     Error
+            end
+    end.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Flushes local blocks.
+%% @end
+%%-------------------------------------------------------------------
+-spec flush_local_blocks(file_location:id(), list(), list()) ->
+    {[{error, term()}], [{error, term()}]}.
+flush_local_blocks(Key, DelBlocks, AddBlocks) ->
+    Check1 = case file_location:delete_local_blocks(Key, DelBlocks) of
+        ok ->
+            [];
+        List1 ->
+            lists:filter(fun
+                (ok) -> false;
+                ({error, not_found}) -> false;
+                (_) -> true
+            end, List1)
+    end,
+
+    Check2 = case file_location:save_local_blocks(Key, AddBlocks) of
+        ok ->
+            [];
+        List2 ->
+            lists:filter(fun
+                ({ok, _}) -> false;
+                ({error, already_exists}) -> false;
+                (_) -> true
+            end, List2)
+    end,
+
+    {Check1, Check2}.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Waits for flush confirmation.
+%% @end
+%%-------------------------------------------------------------------
+-spec wait_for_flush(file_location:id(), pid()) -> ok.
+wait_for_flush(Key, FlushPid) ->
+    receive
+        {?FLUSH_CONFIRMATION, Key, Check1, Check2} ->
+            verify_flush_ans(Key, Check1, Check2),
+            ok
+    after
+        1000 ->
+            case rlang:is_process_alive(FlushPid) of
+                true ->
+                    wait_for_flush(Key, FlushPid);
+                _ ->
+                    ok
             end
     end.
 

@@ -82,8 +82,7 @@
 }).
 
 % API
--export([synchronize/6, update_replica/4, flush_location/1,
-    force_flush_events/1, cancel/1]).
+-export([synchronize/6, update_replica/4, force_flush_events/1, cancel/1]).
 % gen_server callbacks
 -export([handle_call/3, handle_cast/2, handle_info/2, init/1, code_change/3,
     terminate/2]).
@@ -124,15 +123,6 @@ synchronize(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
     {ok, size_changed} | {ok, size_not_changed} | {error, Reason :: term()}.
 update_replica(FileCtx, Blocks, FileSize, BumpVersion) ->
     replica_updater:update(FileCtx, Blocks, FileSize, BumpVersion).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Forces location cache flush.
-%% @end
-%%--------------------------------------------------------------------
--spec flush_location(file_meta:uuid()) -> ok.
-flush_location(Uuid) ->
-    apply_if_alive_no_check(Uuid, ?FLUSH_LOCATION).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -452,18 +442,6 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
             {noreply, State7, ?DIE_AFTER}
     end;
 
-handle_call(?FLUSH_LOCATION, _From, State) ->
-    Ans = fslogic_cache:flush(),
-
-    case application:get_env(?APP_NAME, synchronizer_gc, on_flush_location) of
-        on_flush_location ->
-            erlang:garbage_collect();
-        _ ->
-            ok
-    end,
-
-    {reply, Ans, State, ?DIE_AFTER};
-
 handle_call(?FLUSH_EVENTS, _From, State) ->
     {reply, ok, flush_events(State), ?DIE_AFTER};
 
@@ -580,6 +558,18 @@ handle_info({Ref, complete, ErrorStatus}, State) ->
 
 handle_info(check_flush, State) ->
     fslogic_cache:check_flush(),
+
+    case application:get_env(?APP_NAME, synchronizer_gc, on_flush_location) of
+        on_flush_location ->
+            erlang:garbage_collect();
+        _ ->
+            ok
+    end,
+
+    {noreply, State, ?DIE_AFTER};
+
+handle_info({fslogic_cache_flushed, Key, Check1, Check2}, State) ->
+    fslogic_cache:verify_flush_ans(Key, Check1, Check2),
     {noreply, State, ?DIE_AFTER};
 
 handle_info(Msg, State) ->
