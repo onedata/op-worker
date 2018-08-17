@@ -1200,6 +1200,11 @@ resolve_conflict(_Ctx, NewDoc, PreviousDoc) ->
     #document{value = PrevTransfer} = PreviousDoc,
     #document{value = NewTransfer} = NewDoc,
 
+    ?critical("resolve_conflict~n"
+    "PreviousDoc: ~p~n"
+    "NewDoc: ~p", [PreviousDoc, NewDoc]),
+
+
     PrevDocVec = {
         PrevTransfer#transfer.cancel,
         PrevTransfer#transfer.enqueued,
@@ -1212,7 +1217,7 @@ resolve_conflict(_Ctx, NewDoc, PreviousDoc) ->
     },
     {D1, D2} = order_transfers(PreviousDoc, NewDoc),
 
-    case PrevDocVec == NewDocVec of
+    Res = {_, DOC} = case PrevDocVec == NewDocVec of
         true ->
             {false, D1};
         false ->
@@ -1230,7 +1235,9 @@ resolve_conflict(_Ctx, NewDoc, PreviousDoc) ->
                 )
             },
             {true , D1#document{value = EmergingTransfer}}
-    end.
+    end,
+    ?critical("resolve_conflict result: ~p", [DOC]),
+    Res.
 
 
 %%--------------------------------------------------------------------

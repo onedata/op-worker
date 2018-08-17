@@ -35,9 +35,9 @@
 
 -type state() :: #state{}.
 
--define(log_bad_replication_msg(__Req, __Status),
-    ?warning("~p:~p - bad request ~p while in status ~p", [
-        ?MODULE, ?LINE, __Req, __Status
+-define(log_bad_replication_msg(__Req, __Status, __TransferId),
+    ?warning("~p:~p - bad request ~p while in status ~p proceeding transfer: ~p", [
+        ?MODULE, ?LINE, __Req, __Status, __TransferId
     ])
 ).
 
@@ -233,7 +233,7 @@ handle_enqueued(TransferId, Callback, InvalidateSourceReplica) ->
             ?error("Replication ~p aborting due to ~p", [TransferId, Reason]),
             handle_aborting(TransferId);
         Msg ->
-            ?log_bad_replication_msg(Msg, enqueued),
+            ?log_bad_replication_msg(Msg, enqueued, TransferId),
             handle_enqueued(TransferId, Callback, InvalidateSourceReplica)
     end,
     ok.
@@ -249,7 +249,7 @@ handle_active(TransferId, Callback, InvalidateSourceReplica) ->
             ?error("Replication ~p aborting due to ~p", [TransferId, Reason]),
             handle_aborting(TransferId);
         Msg ->
-            ?log_bad_replication_msg(Msg, active),
+            ?log_bad_replication_msg(Msg, active, TransferId),
             handle_active(TransferId, Callback, InvalidateSourceReplica)
     end,
     ok.
@@ -262,7 +262,7 @@ handle_aborting(TransferId) ->
         replication_failed ->
             {ok, _} = replication_status:handle_failed(TransferId, false);
         Msg ->
-            ?log_bad_replication_msg(Msg, aborting),
+            ?log_bad_replication_msg(Msg, aborting, TransferId),
             handle_aborting(TransferId)
     end,
     ok.

@@ -108,21 +108,21 @@
 
 all() ->
     ?ALL([
-%%        get_simple_file_distribution,
-%%        replicate_file,
-%%        replicate_already_replicated_file,
-%%        transfers_should_be_ordered_by_timestamps,
-%%        replicate_not_synced_file,
-%%        replicate_file_to_source_provider,
-%%        rerun_file_replication,
-%%        rerun_file_replication_by_other_user,
-%%        cancel_file_replication,
-%%        cancel_file_replication_on_2_providers_simultaneously,
-%%        replicate_dir,
-%%        rerun_dir_replication,
-%%        replicate_file_by_id,
-%%        replicate_to_missing_provider,
-%%        replicate_to_nonsupporting_provider,
+        get_simple_file_distribution,
+        replicate_file,
+        replicate_already_replicated_file,
+        transfers_should_be_ordered_by_timestamps,
+        replicate_not_synced_file,
+        replicate_file_to_source_provider,
+        rerun_file_replication,
+        rerun_file_replication_by_other_user,
+        cancel_file_replication,
+        cancel_file_replication_on_2_providers_simultaneously,
+        replicate_dir,
+        rerun_dir_replication,
+        replicate_file_by_id,
+        replicate_to_missing_provider,
+        replicate_to_nonsupporting_provider,
         invalidate_file_replica,
         invalidate_file_replica_with_migration,
         invalidation_should_succeed_when_remote_provider_modified_file_replica,
@@ -434,13 +434,13 @@ replicate_already_replicated_file(Config) ->
     ?assertEqual([], list_ongoing_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqual([Tid2, Tid], list_ended_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqual([], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-    ?assertEqual(lists:sort([Tid2, Tid]), get_ended_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
+    ?assertEqual([Tid2, Tid], get_ended_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
 
     ?assertEqual([], list_waiting_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqual([], list_ongoing_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqual([Tid2, Tid], list_ended_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
-    ?assertEqual(lists:sort([Tid2, Tid]), get_ended_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS).
+    ?assertEqual([Tid2, Tid], get_ended_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS).
 
 transfers_should_be_ordered_by_timestamps(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -718,14 +718,14 @@ rerun_file_replication(Config) ->
     ?assertEqual([], list_ongoing_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqual([NewTransferId, Tid], list_ended_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqual([], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-    ?assertEqual(lists:sort([Tid, NewTransferId]),
+    ?assertEqual([NewTransferId, Tid],
         get_ended_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
 
     ?assertEqual([], list_waiting_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqual([], list_ongoing_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqual([NewTransferId, Tid], list_ended_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
-    ?assertEqual(lists:sort([Tid, NewTransferId]),
+    ?assertEqual([NewTransferId, Tid],
         get_ended_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS).
 
 rerun_file_replication_by_other_user(Config) ->
@@ -831,14 +831,14 @@ rerun_file_replication_by_other_user(Config) ->
     ?assertEqual([], list_ongoing_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqual([NewTransferId, Tid], list_ended_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqual([], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-    ?assertEqual(lists:sort([Tid, NewTransferId]),
+    ?assertEqual([NewTransferId, Tid],
         get_ended_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
 
     ?assertEqual([], list_waiting_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqual([], list_ongoing_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqual([NewTransferId, Tid], list_ended_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
-    ?assertEqual(lists:sort([Tid, NewTransferId]),
+    ?assertEqual([NewTransferId, Tid],
         get_ended_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS).
 
 cancel_file_replication(Config) ->
@@ -1124,14 +1124,14 @@ rerun_dir_replication(Config) ->
     ?assertEqual([], list_ongoing_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqual([NewTransferId, Tid], list_ended_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqual([], get_ongoing_transfers_for_file(WorkerP1, Dir1Guid), ?ATTEMPTS),
-    ?assertEqual(lists:sort([Tid, NewTransferId]),
+    ?assertEqual([NewTransferId, Tid],
         get_ended_transfers_for_file(WorkerP1, Dir1Guid), ?ATTEMPTS),
 
     ?assertEqual([], list_waiting_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqual([], list_ongoing_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqual([NewTransferId, Tid], list_ended_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, Dir1Guid), ?ATTEMPTS),
-    ?assertEqual(lists:sort([Tid, NewTransferId]),
+    ?assertEqual([NewTransferId, Tid],
         get_ended_transfers_for_file(WorkerP2, Dir1Guid), ?ATTEMPTS).
 
 replicate_file_by_id(Config) ->
@@ -1300,13 +1300,13 @@ invalidate_file_replica(Config) ->
     ?assertEqual([], list_ongoing_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqual([Tid1, Tid], list_ended_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqual([], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-    ?assertEqual(lists:sort([Tid1, Tid]), get_ended_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
+    ?assertEqual([Tid1, Tid], get_ended_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
 
     ?assertEqual([], list_waiting_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqual([], list_ongoing_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqual([Tid1, Tid], list_ended_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
-    ?assertEqual(lists:sort([Tid1, Tid]), get_ended_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS).
+    ?assertEqual([Tid1, Tid], get_ended_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS).
 
 fail_to_invalidate_file_replica_without_permissions(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -1430,6 +1430,8 @@ invalidate_file_replica_with_migration(Config) ->
     ?assertEqual([Tid], list_ended_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqual([], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
 
+    ct:pal("Tid: ~p", [Tid]),
+
     ?assertEqual([], list_waiting_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqual([], list_ongoing_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqual([Tid], list_ended_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
@@ -1444,6 +1446,9 @@ invalidation_should_succeed_when_remote_provider_modified_file_replica(Config) -
     FileGuid = create_test_file(WorkerP1, SessionId, File, ?TEST_DATA),
     DomainP2 = domain(WorkerP2),
     {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
+
+%%    tracer:start([WorkerP1, WorkerP2]),
+%%    tracer:trace_calls(transfer_changes, handle_enqueued_replication),
 
     % when
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
@@ -1464,7 +1469,7 @@ invalidation_should_succeed_when_remote_provider_modified_file_replica(Config) -
         <<"filesReplicated">> := 1,
         <<"bytesReplicated">> := 4
     }, WorkerP1, Tid, Config),
-
+    ct:pal("Tid: ~p", [Tid]),
     ?assertEqual([], list_waiting_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqual([], list_ongoing_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqual([Tid], list_ended_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
@@ -1487,12 +1492,16 @@ invalidation_should_succeed_when_remote_provider_modified_file_replica(Config) -
     {ok, _} = lfm_proxy:write(WorkerP1, Handle, 1, <<"#">>),
     lfm_proxy:close(WorkerP1, Handle),
     Tid1 = schedule_replica_invalidation(WorkerP1, DomainP2, File, Config),
-
+    ct:pal("Tid1: ~p", [Tid1]),
     ?assertEqual([Tid1], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
     ExpectedDistribution2 = [
         #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
         #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => []}
     ],
+%%
+%%    ct:pal("Sleep"),
+%%    ct:timetrap({hours, 1}),
+%%    ct:sleep({hours, 1}),
 
     ?assertTransferStatus(#{
         <<"replicationStatus">> := <<"skipped">>,
@@ -1704,14 +1713,14 @@ rerun_invalidation_of_file_replica_with_migration(Config) ->
     ?assertEqual([], list_ongoing_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqual([NewTransferId, Tid1], list_ended_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqual([], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-    ?assertEqual(lists:sort([Tid1, NewTransferId]),
+    ?assertEqual([NewTransferId, Tid1],
         get_ended_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
 
     ?assertEqual([], list_waiting_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqual([], list_ongoing_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqual([NewTransferId, Tid1], list_ended_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
-    ?assertEqual(lists:sort([Tid1, NewTransferId]),
+    ?assertEqual([NewTransferId, Tid1],
         get_ended_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
 
     ExpectedDistribution2 = [
@@ -1827,13 +1836,13 @@ invalidate_dir_replica(Config) ->
     ?assertEqual([], list_ongoing_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqual([Tid2, Tid], list_ended_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqual([], get_ongoing_transfers_for_file(WorkerP1, Dir1Guid), ?ATTEMPTS),
-    ?assertEqual(lists:sort([Tid2, Tid]), get_ended_transfers_for_file(WorkerP1, Dir1Guid), ?ATTEMPTS),
+    ?assertEqual([Tid2, Tid], get_ended_transfers_for_file(WorkerP1, Dir1Guid), ?ATTEMPTS),
 
     ?assertEqual([], list_waiting_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqual([], list_ongoing_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqual([Tid2, Tid], list_ended_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, Dir1Guid), ?ATTEMPTS),
-    ?assertEqual(lists:sort([Tid2, Tid]), get_ended_transfers_for_file(WorkerP2, Dir1Guid), ?ATTEMPTS).
+    ?assertEqual([Tid2, Tid], get_ended_transfers_for_file(WorkerP2, Dir1Guid), ?ATTEMPTS).
 
 basic_autocleaning_test(Config) ->
     % autocleaning configuration
@@ -3017,13 +3026,16 @@ list_transfers(Config) ->
 
     % List using random chunk sizes
     Waiting = fun(Worker) ->
-        list_all_transfers_via_rest(Config, Worker, Space, <<"waiting">>, rand:uniform(FilesNum))
+        list_all_transfers_via_rest(Config, Worker, Space, <<"waiting">>, FilesNum)
+%%        list_all_transfers_via_rest(Config, Worker, Space, <<"waiting">>, rand:uniform(FilesNum))
     end,
     Ongoing = fun(Worker) ->
-        list_all_transfers_via_rest(Config, Worker, Space, <<"ongoing">>, rand:uniform(FilesNum))
+        list_all_transfers_via_rest(Config, Worker, Space, <<"ongoing">>, FilesNum)
+%%        list_all_transfers_via_rest(Config, Worker, Space, <<"ongoing">>, rand:uniform(FilesNum))
     end,
     Ended = fun(Worker) ->
-        list_all_transfers_via_rest(Config, Worker, Space, <<"ended">>, rand:uniform(FilesNum))
+        list_all_transfers_via_rest(Config, Worker, Space, <<"ended">>, FilesNum)
+%%        list_all_transfers_via_rest(Config, Worker, Space, <<"ended">>, rand:uniform(FilesNum))
     end,
     All = fun(Worker) ->
         lists:usort(Waiting(Worker) ++ Ongoing(Worker) ++ Ended(Worker)) end,
@@ -3138,13 +3150,13 @@ quota_decreased_after_invalidation(Config) ->
     ?assertEqual([], list_ongoing_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqual([Tid2, Tid], list_ended_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqual([], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-    ?assertEqual(lists:sort([Tid2, Tid]), get_ended_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
+    ?assertEqual([Tid2, Tid], get_ended_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
 
     ?assertEqual([], list_waiting_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqual([], list_ongoing_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqual([Tid2, Tid], list_ended_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
-    ?assertEqual(lists:sort([Tid2, Tid]), get_ended_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
+    ?assertEqual([Tid2, Tid], get_ended_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
 
     ExpectedDistribution2 = [
         #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 10]]},
@@ -3208,13 +3220,13 @@ quota_decreased_after_invalidation(Config) ->
     ?assertEqual([], list_ongoing_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqual([Tid4, Tid3, Tid2, Tid], list_ended_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqual([], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-    ?assertEqual(lists:sort([Tid4, Tid3, Tid2, Tid]), get_ended_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
+    ?assertEqual([Tid4, Tid3, Tid2, Tid], get_ended_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
 
     ?assertEqual([], list_waiting_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqual([], list_ongoing_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqual([Tid4, Tid3, Tid2, Tid], list_ended_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
-    ?assertEqual(lists:sort([Tid4, Tid3, Tid2, Tid]), get_ended_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS).
+    ?assertEqual([Tid4, Tid3, Tid2, Tid], get_ended_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS).
 
 file_replication_failures_should_fail_whole_transfer(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -3435,9 +3447,9 @@ invalidate_big_dir(Config) ->
     verify_files_distribution(WorkerP1, FilesToCreate, ExpectedDistribution2, FileGuidsAndPaths, SessionId, Config),
 
     ?assertEqual([], get_ongoing_transfers_for_file(WorkerP1, DirGuid), ?ATTEMPTS),
-    ?assertEqual(lists:sort([Tid, Tid2]), get_ended_transfers_for_file(WorkerP1, DirGuid), ?ATTEMPTS),
+    ?assertEqual([Tid2, Tid], get_ended_transfers_for_file(WorkerP1, DirGuid), ?ATTEMPTS),
     ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, DirGuid), ?ATTEMPTS),
-    ?assertEqual(lists:sort([Tid, Tid2]), get_ended_transfers_for_file(WorkerP2, DirGuid), ?ATTEMPTS).
+    ?assertEqual([Tid2, Tid], get_ended_transfers_for_file(WorkerP2, DirGuid), ?ATTEMPTS).
 
 migrate_big_dir(Config) ->
     ct:timetrap({hours, 1}),
@@ -3503,7 +3515,6 @@ track_transferred_files(Config) ->
     Transfer2 = <<"transfer2">>,
     Transfer3 = <<"transfer3">>,
     Transfer4 = <<"transfer4">>,
-    BothTransfers = lists:sort([Transfer1, Transfer2]),
 
     % Check if counting ongoing transfers works as expected and is synchronized
     % by another provider
@@ -3518,16 +3529,16 @@ track_transferred_files(Config) ->
     rpc:call(Provider1, transferred_file, report_transfer_start, [
         FileGuid, Transfer2, ScheduleTime + 20
     ]),
-    ?assertMatch(BothTransfers, get_ongoing_transfers_for_file(Provider1, FileGuid), ?ATTEMPTS),
-    ?assertMatch(BothTransfers, get_ongoing_transfers_for_file(Provider2, FileGuid), ?ATTEMPTS),
+    ?assertMatch([Transfer2, Transfer1], get_ongoing_transfers_for_file(Provider1, FileGuid), ?ATTEMPTS),
+    ?assertMatch([Transfer2, Transfer1], get_ongoing_transfers_for_file(Provider2, FileGuid), ?ATTEMPTS),
     ?assertMatch([], get_ended_transfers_for_file(Provider1, FileGuid), ?ATTEMPTS),
     ?assertMatch([], get_ended_transfers_for_file(Provider2, FileGuid), ?ATTEMPTS),
 
     rpc:call(Provider1, transferred_file, report_transfer_start, [
         FileGuid, Transfer2, ScheduleTime + 20
     ]),
-    ?assertMatch(BothTransfers, get_ongoing_transfers_for_file(Provider1, FileGuid), ?ATTEMPTS),
-    ?assertMatch(BothTransfers, get_ongoing_transfers_for_file(Provider2, FileGuid), ?ATTEMPTS),
+    ?assertMatch([Transfer2, Transfer1], get_ongoing_transfers_for_file(Provider1, FileGuid), ?ATTEMPTS),
+    ?assertMatch([Transfer2, Transfer1], get_ongoing_transfers_for_file(Provider2, FileGuid), ?ATTEMPTS),
     ?assertMatch([], get_ended_transfers_for_file(Provider1, FileGuid), ?ATTEMPTS),
     ?assertMatch([], get_ended_transfers_for_file(Provider2, FileGuid), ?ATTEMPTS),
 
@@ -3544,8 +3555,8 @@ track_transferred_files(Config) ->
     ]),
     ?assertMatch([], get_ongoing_transfers_for_file(Provider1, FileGuid), ?ATTEMPTS),
     ?assertMatch([], get_ongoing_transfers_for_file(Provider2, FileGuid), ?ATTEMPTS),
-    ?assertMatch(BothTransfers, get_ended_transfers_for_file(Provider1, FileGuid), ?ATTEMPTS),
-    ?assertMatch(BothTransfers, get_ended_transfers_for_file(Provider2, FileGuid), ?ATTEMPTS),
+    ?assertMatch([Transfer2, Transfer1], get_ended_transfers_for_file(Provider1, FileGuid), ?ATTEMPTS),
+    ?assertMatch([Transfer2, Transfer1], get_ended_transfers_for_file(Provider2, FileGuid), ?ATTEMPTS),
 
     % Check if changes from concurrent operations on two providers are reconciled correctly
     rpc:call(Provider1, transferred_file, report_transfer_start, [
@@ -3557,9 +3568,9 @@ track_transferred_files(Config) ->
     % Cross checks to make sure the changes have been propagated
     ?assertMatch([], get_ongoing_transfers_for_file(Provider1, FileGuid), ?ATTEMPTS),
     ?assertMatch([], get_ongoing_transfers_for_file(Provider2, FileGuid), ?ATTEMPTS),
-    ExpTransfers = lists:sort([Transfer3 | BothTransfers]),
-    ?assertMatch(ExpTransfers, get_ended_transfers_for_file(Provider1, FileGuid), ?ATTEMPTS),
-    ?assertMatch(ExpTransfers, get_ended_transfers_for_file(Provider2, FileGuid), ?ATTEMPTS),
+
+    ?assertMatch([Transfer3, Transfer2, Transfer1], get_ended_transfers_for_file(Provider1, FileGuid), ?ATTEMPTS),
+    ?assertMatch([Transfer3, Transfer2, Transfer1], get_ended_transfers_for_file(Provider2, FileGuid), ?ATTEMPTS),
 
     % Check if record cleanup works as expected
     rpc:call(Provider1, transferred_file, report_transfer_start, [
@@ -4056,11 +4067,11 @@ verify_files_distribution(Worker, FilesNum, ExpectedDistribution, FileGuidsAndPa
 get_ongoing_transfers_for_file(Worker, FileGuid) ->
     {ok, #{ongoing := Transfers}} = rpc:call(Worker, transferred_file, get_transfers, [FileGuid]),
     {ok, #{ongoing := Transfers}} = rpc:call(Worker, transferred_file, get_transfers, [FileGuid]),
-    lists:sort(Transfers).
+    Transfers.
 
 get_ended_transfers_for_file(Worker, FileGuid) ->
     {ok, #{ended := Transfers}} = rpc:call(Worker, transferred_file, get_transfers, [FileGuid]),
-    lists:sort(Transfers).
+    Transfers.
 
 list_all_transfers_via_rest(Config, Worker, Space, State, ChunkSize) ->
     Result = list_all_transfers_via_rest(Config, Worker, Space, State, ChunkSize, <<"null">>, []),

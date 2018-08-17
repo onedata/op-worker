@@ -42,49 +42,78 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(transfer:doc()) -> ok.
-handle(Doc = #document{value = #transfer{replication_status = scheduled}}) ->
+handle(Doc = #document{
+    value = #transfer{replication_status = scheduled},
+    deleted = false
+}) ->
     handle_scheduled_replication(Doc);
 
-handle(Doc = #document{value = #transfer{replication_status = enqueued}}) ->
+handle(Doc = #document{
+    value = #transfer{replication_status = enqueued},
+    deleted = false
+}) ->
     handle_enqueued_replication(Doc);
 
-handle(Doc = #document{value = #transfer{
-    replication_status = Status,
-    enqueued = true
-}}) when Status =/= skipped ->
+handle(Doc = #document{
+    deleted = false,
+    value = #transfer{
+        replication_status = Status,
+        enqueued = true
+    }
+}) when Status =/= skipped ->
     handle_dequeued_transfer(Doc);
 
-handle(Doc = #document{value = #transfer{replication_status = active}}) ->
+handle(Doc = #document{
+    value = #transfer{replication_status = active},
+    deleted = false
+}) ->
     handle_active_replication(Doc);
 
-handle(Doc = #document{value = #transfer{replication_status = aborting}}) ->
+handle(Doc = #document{
+    value = #transfer{replication_status = aborting},
+    deleted = false
+}) ->
     handle_aborting_replication(Doc);
 
-handle(Doc = #document{value = #transfer{
-    replication_status = ReplicationStatus,
-    invalidation_status = scheduled
-}}) when ReplicationStatus == completed orelse ReplicationStatus == skipped ->
+handle(Doc = #document{
+    deleted = false,
+    value = #transfer{
+        replication_status = ReplicationStatus,
+        invalidation_status = scheduled
+    }
+}) when ReplicationStatus == completed orelse ReplicationStatus == skipped ->
     handle_scheduled_invalidation(Doc);
 
-handle(Doc = #document{value = #transfer{invalidation_status = enqueued}}) ->
+handle(Doc = #document{
+    value = #transfer{invalidation_status = enqueued},
+    deleted = false
+}) ->
     handle_enqueued_invalidation(Doc);
 
-handle(Doc = #document{value = #transfer{
-    replication_status = skipped,
-    enqueued = true
-}}) ->
+handle(Doc = #document{
+    value = #transfer{replication_status = skipped, enqueued = true}
+}) ->
     handle_dequeued_transfer(Doc);
 
-handle(Doc = #document{value = #transfer{invalidation_status = active}}) ->
+handle(Doc = #document{
+    value = #transfer{invalidation_status = active},
+    deleted = false
+}) ->
     handle_active_invalidation(Doc);
 
-handle(Doc = #document{value = #transfer{invalidation_status = aborting}}) ->
+handle(Doc = #document{
+    value = #transfer{invalidation_status = aborting},
+    deleted = false
+}) ->
     handle_aborting_invalidation(Doc);
 
-handle(Doc = #document{value = #transfer{
-    replication_status = ReplicationStatus,
-    invalidation_status = InvalidationStatus
-}}) when ReplicationStatus =/= skipped andalso
+handle(Doc = #document{
+    deleted = false,
+    value = #transfer{
+        replication_status = ReplicationStatus,
+        invalidation_status = InvalidationStatus
+    }
+}) when ReplicationStatus =/= skipped andalso
     (InvalidationStatus =:= completed orelse
      InvalidationStatus =:= failed orelse
      InvalidationStatus =:= cancelled)
@@ -139,7 +168,7 @@ handle_scheduled_replication(Doc = #document{
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_enqueued_replication(transfer:doc()) -> ok.
-handle_enqueued_replication(Doc = #document{value = #transfer{
+handle_enqueued_replication(Doc = #document{key=Id,value = #transfer{
     replication_status = enqueued,
     replicating_provider = ReplicatingProviderId,
     cancel = Cancel,
@@ -170,7 +199,9 @@ handle_enqueued_replication(Doc = #document{value = #transfer{
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_active_replication(transfer:doc()) -> ok.
-handle_active_replication(Doc = #document{value = #transfer{
+handle_active_replication(Doc = #document{
+    key = TransferId,
+    value = #transfer{
     cancel = true,
     replicating_provider = ReplicatingProviderId
 }}) ->
@@ -458,7 +489,7 @@ handle_dequeued_transfer(#document{key = TransferId, value = #transfer{
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_finished_migration(transfer:doc()) -> ok.
-handle_finished_migration(Doc = #document{value = #transfer{
+handle_finished_migration(Doc = #document{key=TransferId, value = Transfer = #transfer{
     replicating_provider = ReplicatingProviderId
 }}) ->
     ?run_if_is_self(ReplicatingProviderId, fun() ->
