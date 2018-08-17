@@ -556,7 +556,7 @@ handle_info({Ref, complete, ErrorStatus}, State) ->
 
     {noreply, State3, ?DIE_AFTER};
 
-handle_info(check_flush, State) ->
+handle_info(fslogic_cache_check_flush, State) ->
     fslogic_cache:check_flush(),
 
     case application:get_env(?APP_NAME, synchronizer_gc, on_flush_location) of
