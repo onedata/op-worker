@@ -690,10 +690,19 @@ flush_key(Key, Spawn) ->
                             end;
                         doc ->
                             case file_local_blocks:update(Key, get_blocks(Key)) of
-                                {ok, _} -> ok;
+                                {ok, _} ->
+                                    erase({?DELETED_BLOCKS, Key}),
+                                    erase({?RESET_BLOCKS, Key}),
+                                    erase({?SAVED_BLOCKS, Key, true}),
+                                    erase({?SAVED_BLOCKS, Key, undefined}),
+                                    ok;
                                 Error -> Error
                             end;
                         none ->
+                            erase({?DELETED_BLOCKS, Key}),
+                            erase({?RESET_BLOCKS, Key}),
+                            erase({?SAVED_BLOCKS, Key, true}),
+                            erase({?SAVED_BLOCKS, Key, undefined}),
                             ok
                     end;
                 Error ->
