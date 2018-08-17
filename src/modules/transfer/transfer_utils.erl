@@ -107,10 +107,15 @@ is_migration(Transfer) ->
 %% Gets status of the transfer
 %% @end
 %%--------------------------------------------------------------------
--spec get_status(TransferId :: transfer:id()) -> transfer:status().
+-spec get_status(transfer:id() | transfer:transfer() | transfer:doc()) ->
+    transfer:status().
+get_status(#transfer{status = Status}) ->
+    Status;
+get_status(#document{value = Transfer}) ->
+    get_status(Transfer);
 get_status(TransferId) ->
-    {ok, #document{value = #transfer{status = Status}}} = transfer:get(TransferId),
-    Status.
+    {ok, TransferDoc} = transfer:get(TransferId),
+    get_status(TransferDoc).
 
 %%------------------------------------------------------------------
 %% @doc
@@ -150,11 +155,13 @@ get_finish_time(TransferId) ->
 %%      invalidation hasn't finished.
 %% @end
 %%-------------------------------------------------------------------
--spec is_ongoing(transfer:transfer() | transfer:id() | undefined) -> boolean().
+-spec is_ongoing(transfer:transfer() | transfer:id() | transfer:doc() | undefined) -> boolean().
 is_ongoing(undefined) ->
     true;
 is_ongoing(Transfer = #transfer{}) ->
     is_transfer_ongoing(Transfer) orelse is_invalidation_ongoing(Transfer);
+is_ongoing(#document{value = Transfer}) ->
+    is_ongoing(Transfer);
 is_ongoing(TransferId) ->
     {ok, #document{value = Transfer}} = transfer:get(TransferId),
     is_ongoing(Transfer).

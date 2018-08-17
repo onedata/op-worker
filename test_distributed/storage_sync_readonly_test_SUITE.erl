@@ -1277,7 +1277,7 @@ update_timestamps_file_import_test(Config) ->
         <<"deletedDayHist">> := [0 | _]
     }, ?SPACE_ID),
 
-    %% Change file permissions
+    %% Change file timestamp
     NewTimestamp = 9999999999,
     storage_sync_test_base:change_time(StorageTestFilePath, NewTimestamp, NewTimestamp),
     storage_sync_test_base:enable_storage_update(Config),
