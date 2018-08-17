@@ -63,6 +63,8 @@
 -define(RESET_BLOCKS, fslogic_cache_reset_blocks).
 -define(LOCAL_CHANGES, fslogic_cache_local_changes).
 
+-define(LOCAL_BLOCKS_STORE, application:get_env(?APP_NAME, local_blocks_store, links)).
+
 %%%===================================================================
 %%% Control API
 %%%===================================================================
@@ -290,9 +292,17 @@ get_doc(Key) ->
                     Location#file_location{blocks = []}},
                     cache_doc(LocationDoc2),
 
-                    {ok, LocalBlocks} = file_location:get_local_blocks(Key),
+                    case ?LOCAL_BLOCKS_STORE of
+                        links ->
+                            {ok, LocalBlocks} = file_local_blocks:get_local_blocks(Key),
+                            put({?BLOCKS, Key}, blocks_to_tree(PublicBlocks ++ LocalBlocks, false));
+                        doc ->
+                            {ok, LocalBlocks} = file_local_blocks:get(Key),
+                            put({?BLOCKS, Key}, blocks_to_tree(LocalBlocks));
+                        none ->
+                            put({?BLOCKS, Key}, blocks_to_tree(PublicBlocks))
+                    end,
 
-                    put({?BLOCKS, Key}, blocks_to_tree(PublicBlocks ++ LocalBlocks, false)),
                     put({?PUBLIC_BLOCKS, Key}, PublicBlocks),
                     LocationDoc2;
                 {error, not_found} = ENF ->
@@ -663,18 +673,28 @@ flush_key(Key, Spawn) ->
             apply_size_change(Key, FileUuid),
             case file_location:save(DocToSave) of
                 {ok, _} ->
-                    case Spawn of
-                        true ->
-                            Master = self(),
-                            Pid = spawn(fun() ->
-                                {Check1, Check2} = flush_local_blocks(Key, DelBlocks, AddBlocks),
-                                Master ! {?FLUSH_CONFIRMATION, Key, Check1, Check2}
-                            end),
-                            put(?FLUSH_PID, Pid),
-                            ok;
-                        _ ->
-                            {Check1, Check2} = flush_local_blocks(Key, DelBlocks, AddBlocks),
-                            verify_flush_ans(Key, Check1, Check2)
+                    case ?LOCAL_BLOCKS_STORE of
+                        links ->
+                            case Spawn of
+                                true ->
+                                    Master = self(),
+                                    Pid = spawn(fun() ->
+                                        {Check1, Check2} = flush_local_blocks(Key, DelBlocks, AddBlocks),
+                                        Master ! {?FLUSH_CONFIRMATION, Key, Check1, Check2}
+                                    end),
+                                    put(?FLUSH_PID, Pid),
+                                    ok;
+                                _ ->
+                                    {Check1, Check2} = flush_local_blocks(Key, DelBlocks, AddBlocks),
+                                    verify_flush_ans(Key, Check1, Check2)
+                            end;
+                        doc ->
+                            case file_local_blocks:update(Key, get_blocks(Key)) of
+                                {ok, _} -> ok;
+                                Error -> Error
+                            end;
+                        none ->
+                            ok
                     end;
                 Error ->
                     ?error("Flush failed for key ~p: ~p", [Key, Error]),
@@ -691,7 +711,7 @@ flush_key(Key, Spawn) ->
 -spec flush_local_blocks(file_location:id(), list(), list()) ->
     {[{error, term()}], [{error, term()}]}.
 flush_local_blocks(Key, DelBlocks, AddBlocks) ->
-    Check1 = case file_location:delete_local_blocks(Key, DelBlocks) of
+    Check1 = case file_local_blocks:delete_local_blocks(Key, DelBlocks) of
         ok ->
             [];
         List1 ->
@@ -702,7 +722,7 @@ flush_local_blocks(Key, DelBlocks, AddBlocks) ->
             end, List1)
     end,
 
-    Check2 = case file_location:save_local_blocks(Key, AddBlocks) of
+    Check2 = case file_local_blocks:save_local_blocks(Key, AddBlocks) of
         ok ->
             [];
         List2 ->
