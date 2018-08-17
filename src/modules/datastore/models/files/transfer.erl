@@ -33,7 +33,7 @@
     increase_files_to_process_counter/2, increase_files_processed_counter/1,
     mark_failed_file_processing/1, increase_files_transferred_counter/1,
     mark_data_transfer_finished/3, increase_files_invalidated_and_processed_counter/1,
-    restart_unfinished_transfers/1]).
+    restart_unfinished_transfers/1, restart_pools/0]).
 
 % list functions
 -export([
@@ -767,6 +767,16 @@ get_link_key(#document{key = TransferId, value = Transfer}) ->
     {ok, transfer_links:link_key()} | {error, term()}.
 get_link_key(TransferId, Timestamp) ->
     {ok, transfer_links:link_key(TransferId, Timestamp)}.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Restarts worker pools used by replication and invalidation mechanisms.
+%% @end
+%%-------------------------------------------------------------------
+-spec restart_pools() -> ok.
+restart_pools() ->
+    ok = stop_pools(),
+    ok = start_pools().
 
 %%%===================================================================
 %%% Internal functions
