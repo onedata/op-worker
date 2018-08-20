@@ -14,6 +14,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("proto/oneclient/common_messages.hrl").
+-include("global_definitions.hrl").
 
 % API
 -export([update/2, get/1, delete/1]).
@@ -36,45 +37,30 @@
     local_links_tree_id => oneprovider:get_id_or_undefined()
 }).
 
+-define(MAX_DOC_SIZE,
+    application:get_env(?APP_NAME, blocks_doc_max_size, 50000)).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Updates blocks in doc.
+%% @equiv update(Key, Blocks, 0).
 %% @end
 %%--------------------------------------------------------------------
--spec update(id(), fslogic_blocks:blocks()) -> {ok, doc()} | {error, term()}.
+-spec update(id(), fslogic_blocks:blocks()) -> ok | {error, term()}.
 update(Key, Blocks) ->
-    Diff = fun
-        (_) ->
-            {ok, #file_local_blocks{
-                blocks = Blocks
-            }}
-    end,
-    Default = #document{key = Key, value = #file_local_blocks{
-        blocks = Blocks
-    }},
-    datastore_model:update(?CTX, Key, Diff, Default).
+    update(Key, Blocks, 0).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns blocks from doc.
+%% @equiv get(Key, 0).
 %% @end
 %%--------------------------------------------------------------------
 -spec get(id()) -> {ok, fslogic_blocks:blocks()} | {error, term()}.
 get(Key) ->
-    case datastore_model:get(?CTX, Key) of
-        {ok, #document{value = #file_local_blocks{
-            blocks = Blocks
-        }}} ->
-            {ok, Blocks};
-        {error, not_found} ->
-            {ok, []};
-        Other ->
-            Other
-    end.
+    get(Key, 0).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -178,3 +164,68 @@ get_record_struct(1) ->
     {record, [
         {blocks, [term]}
     ]}.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Updates blocks in doc.
+%% @end
+%%--------------------------------------------------------------------
+-spec update(id(), fslogic_blocks:blocks(), non_neg_integer()) ->
+    ok | {error, term()}.
+update(Key, Blocks, Num) ->
+    MaxSize = ?MAX_DOC_SIZE,
+    {{Blocks1, Blocks2}, Last} = case length(Blocks) > MaxSize of
+        true -> {lists:split(MaxSize, Blocks), false};
+        _ -> {{Blocks, []}, true}
+    end,
+
+    DocKey = datastore_utils:gen_key(integer_to_binary(Num), Key),
+    Diff = fun
+        (_) ->
+            {ok, #file_local_blocks{
+                blocks = Blocks1, last = Last
+            }}
+    end,
+    Default = #document{key = DocKey, value = #file_local_blocks{
+        blocks = Blocks1, last = Last
+    }},
+
+    case {datastore_model:update(?CTX, DocKey, Diff, Default), Last} of
+        {{ok, _}, true} -> ok;
+        {{ok, _}, _} -> update(Key, Blocks2, Num + 1);
+        {Error, _} -> Error
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns blocks from doc.
+%% @end
+%%--------------------------------------------------------------------
+-spec get(id(), non_neg_integer()) ->
+    {ok, fslogic_blocks:blocks()} | {error, term()}.
+get(Key, Num) ->
+    DocKey = datastore_utils:gen_key(integer_to_binary(Num), Key),
+    case datastore_model:get(?CTX, DocKey) of
+        {ok, #document{value = #file_local_blocks{
+            blocks = Blocks, last = Last
+        }}} ->
+            case Last of
+                true ->
+                    {ok, Blocks};
+                _ ->
+                    case get(Key, Num + 1) of
+                        {ok, Blocks2} -> {ok, Blocks ++ Blocks2};
+                        Error -> Error
+                    end
+            end;
+        {error, not_found} ->
+            {ok, []};
+        Other ->
+            Other
+    end.

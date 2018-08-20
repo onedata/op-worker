@@ -30,7 +30,6 @@
 -type record() :: #file_location{}.
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
--type one_or_many(Type) :: Type | [Type].
 
 -export_type([id/0, doc/0]).
 

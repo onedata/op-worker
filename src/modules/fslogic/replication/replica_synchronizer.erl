@@ -584,7 +584,7 @@ terminate(_Reason, State) ->
     flush_stats(State2, true),
     flush_events(State2),
     % TODO VFS-4691 - should not terminate when flush failed
-    fslogic_cache:flush(),
+    fslogic_cache:flush(terminate),
     ignore.
 
 %%%===================================================================

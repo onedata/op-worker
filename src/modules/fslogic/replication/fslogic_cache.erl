@@ -18,13 +18,14 @@
 -include_lib("ctool/include/logging.hrl").
 
 % Control API
--export([init/1, is_current_proc_cache/0, flush/0, flush/2, check_flush/0,
+-export([init/1, is_current_proc_cache/0, flush/0, flush/1, flush/2, check_flush/0,
     verify_flush_ans/3]).
 % File/UUID API
 -export([get_uuid/0, get_local_location/0, get_all_locations/0,
     cache_event/2, clear_events/0]).
 % Doc API
--export([get_doc/1, save_doc/1, cache_doc/1, delete_doc/1, attach_blocks/1]).
+-export([get_doc/1, save_doc/1, cache_doc/1, delete_doc/1, attach_blocks/1,
+    attach_local_blocks/1, merge_local_blocks/1]).
 % Block API
 -export([get_blocks/1, save_blocks/2, cache_blocks/2, get_blocks_tree/1,
     use_blocks/2, finish_blocks_usage/1, get_changed_blocks/1,
@@ -63,7 +64,14 @@
 -define(RESET_BLOCKS, fslogic_cache_reset_blocks).
 -define(LOCAL_CHANGES, fslogic_cache_local_changes).
 
--define(LOCAL_BLOCKS_STORE, application:get_env(?APP_NAME, local_blocks_store, links)).
+-define(LOCAL_BLOCKS_STORE,
+    application:get_env(?APP_NAME, local_blocks_store, doc)).
+-define(LOCAL_BLOCKS_FLUSH,
+    application:get_env(?APP_NAME, local_blocks_flush, on_terminate)).
+-define(BLOCKS_FLUSH_DELAY,
+    application:get_env(?APP_NAME, blocks_flush_delay, timer:seconds(3))).
+
+-type flush_type() :: sync | async | terminate.
 
 %%%===================================================================
 %%% Control API
@@ -94,24 +102,24 @@ is_current_proc_cache() ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% @equiv flush(false).
+%% @equiv flush(sync).
 %% @end
 %%-------------------------------------------------------------------
 -spec flush() -> ok | flush_error.
 flush() ->
-    flush(false).
+    flush(sync).
 
 %%-------------------------------------------------------------------
 %% @doc
 %% Flushes cache.
 %% @end
 %%-------------------------------------------------------------------
--spec flush(boolean()) -> ok | flush_error.
-flush(Spawn) ->
+-spec flush(flush_type()) -> ok | flush_error.
+flush(Type) ->
     KM = get(?KEYS_MODIFIED),
     KBM = get(?KEYS_BLOCKS_MODIFIED),
     Saved = lists:foldl(fun(Key, Acc) ->
-        case flush_key(Key, Spawn) of
+        case flush_key(Key, Type) of
             ok -> [Key | Acc];
             _ -> Acc
         end
@@ -143,7 +151,7 @@ flush(Key, _FlushBlocks) ->
     KBM = get(?KEYS_BLOCKS_MODIFIED),
     case lists:member(Key, KM) orelse lists:member(Key, KM) of
         true ->
-            case flush_key(Key, false) of
+            case flush_key(Key, sync) of
                 ok ->
                     put(?KEYS_MODIFIED, KM -- [Key]),
                     put(?KEYS_BLOCKS_MODIFIED, KBM -- [Key]),
@@ -164,10 +172,10 @@ flush(Key, _FlushBlocks) ->
 check_flush() ->
     FlushTime = get(?FLUSH_TIME),
     Now = os:timestamp(),
-    Delay = application:get_env(?APP_NAME, blocks_flush_delay, timer:seconds(3)),
+    Delay = ?BLOCKS_FLUSH_DELAY,
     case {timer:now_diff(Now, FlushTime) > Delay * 1000, get(?IS_FLUSH_PLANNED)} of
         {true, _} ->
-            flush(true);
+            flush(async);
         {_, true} ->
             erlang:send_after(Delay, self(), ?CHECK_FLUSH),
             ok;
@@ -292,16 +300,8 @@ get_doc(Key) ->
                     Location#file_location{blocks = []}},
                     cache_doc(LocationDoc2),
 
-                    case ?LOCAL_BLOCKS_STORE of
-                        links ->
-                            {ok, LocalBlocks} = file_local_blocks:get_local_blocks(Key),
-                            put({?BLOCKS, Key}, blocks_to_tree(PublicBlocks ++ LocalBlocks, false));
-                        doc ->
-                            {ok, LocalBlocks} = file_local_blocks:get(Key),
-                            put({?BLOCKS, Key}, blocks_to_tree(LocalBlocks));
-                        none ->
-                            put({?BLOCKS, Key}, blocks_to_tree(PublicBlocks))
-                    end,
+                    {Blocks, Sorted} = merge_local_blocks(LocationDoc),
+                    put({?BLOCKS, Key}, blocks_to_tree(Blocks, Sorted)),
 
                     put({?PUBLIC_BLOCKS, Key}, PublicBlocks),
                     LocationDoc2;
@@ -415,6 +415,17 @@ delete_doc(Key) ->
 attach_blocks(#document{key = Key, value = Location} = LocationDoc) ->
     Blocks = get_blocks(Key),
     LocationDoc#document{value = Location#file_location{blocks = Blocks}}.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Attaches local blocks to public blocks.
+%% @end
+%%-------------------------------------------------------------------
+-spec attach_local_blocks(file_location:doc()) -> file_location:doc().
+attach_local_blocks(#document{value = Location} = LocationDoc) ->
+    {Blocks, Sorted} = merge_local_blocks(LocationDoc),
+    LocationDoc#document{value =
+    Location#file_location{blocks = blocks_to_tree(Blocks, Sorted)}}.
 
 %%%===================================================================
 %%% Block API
@@ -600,9 +611,7 @@ init_flush_check() ->
     case get(?IS_FLUSH_PLANNED) of
         undefined ->
             put(?IS_FLUSH_PLANNED, true),
-            Delay = application:get_env(?APP_NAME,
-                blocks_flush_delay, timer:seconds(3)),
-            erlang:send_after(Delay, self(), ?CHECK_FLUSH),
+            erlang:send_after(?BLOCKS_FLUSH_DELAY, self(), ?CHECK_FLUSH),
             ok;
         _ ->
             ok
@@ -614,12 +623,12 @@ init_flush_check() ->
 %% Flushes location and blocks for a key.
 %% @end
 %%-------------------------------------------------------------------
--spec flush_key(file_location:id(), boolean()) ->
+-spec flush_key(file_location:id(), flush_type()) ->
     ok | {error, term()} | [{error, term()}].
 % TODO VFS-4743 - do we save any other location than local?
 % TODO VFS-4743 - do not save location when only blocks differ
 % TODO VFS-4743 - save doc and blocks in separate functions
-flush_key(Key, Spawn) ->
+flush_key(Key, Type) ->
     case get({?DOCS, Key}) of
         undefined ->
             ok;
@@ -673,38 +682,7 @@ flush_key(Key, Spawn) ->
             apply_size_change(Key, FileUuid),
             case file_location:save(DocToSave) of
                 {ok, _} ->
-                    case ?LOCAL_BLOCKS_STORE of
-                        links ->
-                            case Spawn of
-                                true ->
-                                    Master = self(),
-                                    Pid = spawn(fun() ->
-                                        {Check1, Check2} = flush_local_blocks(Key, DelBlocks, AddBlocks),
-                                        Master ! {?FLUSH_CONFIRMATION, Key, Check1, Check2}
-                                    end),
-                                    put(?FLUSH_PID, Pid),
-                                    ok;
-                                _ ->
-                                    {Check1, Check2} = flush_local_blocks(Key, DelBlocks, AddBlocks),
-                                    verify_flush_ans(Key, Check1, Check2)
-                            end;
-                        doc ->
-                            case file_local_blocks:update(Key, get_blocks(Key)) of
-                                {ok, _} ->
-                                    erase({?DELETED_BLOCKS, Key}),
-                                    erase({?RESET_BLOCKS, Key}),
-                                    erase({?SAVED_BLOCKS, Key, true}),
-                                    erase({?SAVED_BLOCKS, Key, undefined}),
-                                    ok;
-                                Error -> Error
-                            end;
-                        none ->
-                            erase({?DELETED_BLOCKS, Key}),
-                            erase({?RESET_BLOCKS, Key}),
-                            erase({?SAVED_BLOCKS, Key, true}),
-                            erase({?SAVED_BLOCKS, Key, undefined}),
-                            ok
-                    end;
+                    flush_local_blocks(Key, DelBlocks, AddBlocks, Type);
                 Error ->
                     ?error("Flush failed for key ~p: ~p", [Key, Error]),
                     Error
@@ -717,9 +695,55 @@ flush_key(Key, Spawn) ->
 %% Flushes local blocks.
 %% @end
 %%-------------------------------------------------------------------
--spec flush_local_blocks(file_location:id(), list(), list()) ->
+-spec flush_local_blocks(file_location:id(), list(), list(), flush_type()) ->
+    ok | {error, term()} | [{error, term()}].
+flush_local_blocks(Key, DelBlocks, AddBlocks, Type) ->
+    Proceed = case ?LOCAL_BLOCKS_FLUSH of
+        always -> true;
+        on_terminate -> Type =:= terminate
+    end,
+    case {Proceed, ?LOCAL_BLOCKS_STORE} of
+        {true, links} ->
+            case Type of
+                spawn ->
+                    Master = self(),
+                    Pid = spawn(fun() ->
+                        {Check1, Check2} = flush_local_links(Key, DelBlocks, AddBlocks),
+                        Master ! {?FLUSH_CONFIRMATION, Key, Check1, Check2}
+                    end),
+                    put(?FLUSH_PID, Pid),
+                    ok;
+                _ ->
+                    {Check1, Check2} = flush_local_links(Key, DelBlocks, AddBlocks),
+                    verify_flush_ans(Key, Check1, Check2)
+            end;
+        {true, doc} ->
+            case file_local_blocks:update(Key, get_blocks(Key)) of
+                ok ->
+                    erase({?DELETED_BLOCKS, Key}),
+                    erase({?RESET_BLOCKS, Key}),
+                    erase({?SAVED_BLOCKS, Key, true}),
+                    erase({?SAVED_BLOCKS, Key, undefined}),
+                    ok;
+                Error -> Error
+            end;
+        _ ->
+            erase({?DELETED_BLOCKS, Key}),
+            erase({?RESET_BLOCKS, Key}),
+            erase({?SAVED_BLOCKS, Key, true}),
+            erase({?SAVED_BLOCKS, Key, undefined}),
+            ok
+    end.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Flushes local blocks.
+%% @end
+%%-------------------------------------------------------------------
+-spec flush_local_links(file_location:id(), list(), list()) ->
     {[{error, term()}], [{error, term()}]}.
-flush_local_blocks(Key, DelBlocks, AddBlocks) ->
+flush_local_links(Key, DelBlocks, AddBlocks) ->
     Check1 = case file_local_blocks:delete_local_blocks(Key, DelBlocks) of
         ok ->
             [];
@@ -845,4 +869,25 @@ get_set(Key) ->
     case get(Key) of
         undefined -> sets:new();
         Value -> Value
+    end.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Attaches local blocks to public blocks.
+%% @end
+%%-------------------------------------------------------------------
+-spec merge_local_blocks(file_location:doc()) ->
+    {fslogic_blocks:blocks(), Sorted :: boolean()}.
+merge_local_blocks(#document{key = Key,
+    value = #file_location{blocks = PublicBlocks}}) ->
+    case ?LOCAL_BLOCKS_STORE of
+        links ->
+            {ok, LocalBlocks} = file_local_blocks:get_local_blocks(Key),
+            {PublicBlocks ++ LocalBlocks, false};
+        doc ->
+            {ok, LocalBlocks} = file_local_blocks:get(Key),
+            {LocalBlocks, true};
+        none ->
+            {PublicBlocks, true}
     end.
