@@ -14,6 +14,7 @@
 
 -include("global_definitions.hrl").
 -include("http/http_common.hrl").
+-include("modules/datastore/transfer.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include("http/rest/http_status.hrl").
@@ -102,21 +103,27 @@ list_transfers(Req, State) ->
     end,
 
     {ok, Transfers} = case TransferState of
-        <<"waiting">> ->
+        ?WAITING_TRANSFERS_STATE ->
             transfer:list_waiting_transfers(SpaceId, StartId, Offset, Limit);
-        <<"ongoing">> ->
+        ?ONGOING_TRANSFERS_STATE ->
             transfer:list_ongoing_transfers(SpaceId, StartId, Offset, Limit);
-        <<"ended">> ->
+        ?ENDED_TRANSFERS_STATE ->
             transfer:list_ended_transfers(SpaceId, StartId, Offset, Limit)
     end,
 
     NextPageToken = case length(Transfers) of
         Limit ->
-            {ok, LinkKey} = transfer:get_link_key(lists:last(Transfers)),
+            {ok, LinkKey} = transfer:get_link_key_by_state(lists:last(Transfers), TransferState),
             #{<<"nextPageToken">> => LinkKey};
         _ ->
             #{}
     end,
+
+    ?emergency("Transfers: ~p~n"
+    "NextPageToken: ~p~n"
+    "Limit: ~p~n"
+    "PreviousPageToken: ~p~n"
+    "TransferState: ~p~n", [Transfers, NextPageToken, Limit, PageToken, TransferState]),
 
     Result = maps:merge(#{<<"transfers">> => Transfers}, NextPageToken),
 

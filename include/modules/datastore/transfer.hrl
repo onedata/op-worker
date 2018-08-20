@@ -11,6 +11,10 @@
 
 -include("global_definitions.hrl").
 
+-define(WAITING_TRANSFERS_STATE, <<"waiting">>).
+-define(ONGOING_TRANSFERS_STATE, <<"ongoing">>).
+-define(ENDED_TRANSFERS_STATE, <<"ended">>).
+
 -define(WAITING_TRANSFERS_KEY, <<"SCHEDULED_TRANSFERS_KEY">>).
 -define(ONGOING_TRANSFERS_KEY, <<"CURRENT_TRANSFERS_KEY">>).
 -define(ENDED_TRANSFERS_KEY, <<"PAST_TRANSFERS_KEY">>).

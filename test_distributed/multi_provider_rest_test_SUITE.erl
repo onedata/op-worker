@@ -3026,16 +3026,22 @@ list_transfers(Config) ->
 
     % List using random chunk sizes
     Waiting = fun(Worker) ->
-        list_all_transfers_via_rest(Config, Worker, Space, <<"waiting">>, FilesNum)
-%%        list_all_transfers_via_rest(Config, Worker, Space, <<"waiting">>, rand:uniform(FilesNum))
+%%        list_all_transfers_via_rest(Config, Worker, Space, <<"waiting">>, FilesNum)
+        Chunk = rand:uniform(FilesNum),
+        ct:pal("Waiting transfers chunk size: ~p", [Chunk]),
+        list_all_transfers_via_rest(Config, Worker, Space, <<"waiting">>, Chunk)
     end,
     Ongoing = fun(Worker) ->
-        list_all_transfers_via_rest(Config, Worker, Space, <<"ongoing">>, FilesNum)
-%%        list_all_transfers_via_rest(Config, Worker, Space, <<"ongoing">>, rand:uniform(FilesNum))
+%%        list_all_transfers_via_rest(Config, Worker, Space, <<"ongoing">>, FilesNum)
+        Chunk = rand:uniform(FilesNum),
+        ct:pal("Ongoing transfers chunk size: ~p", [Chunk]),
+        list_all_transfers_via_rest(Config, Worker, Space, <<"ongoing">>, Chunk)
     end,
     Ended = fun(Worker) ->
-        list_all_transfers_via_rest(Config, Worker, Space, <<"ended">>, FilesNum)
-%%        list_all_transfers_via_rest(Config, Worker, Space, <<"ended">>, rand:uniform(FilesNum))
+%%        list_all_transfers_via_rest(Config, Worker, Space, <<"ended">>, FilesNum)
+        Chunk = rand:uniform(FilesNum),
+        ct:pal("Ended transfers chunk size: ~p", [Chunk]),
+        list_all_transfers_via_rest(Config, Worker, Space, <<"ended">>, Chunk)
     end,
     All = fun(Worker) ->
         lists:usort(Waiting(Worker) ++ Ongoing(Worker) ++ Ended(Worker)) end,
@@ -3043,8 +3049,9 @@ list_transfers(Config) ->
     OneFourth = FilesNum div 4,
 
     % Check if listing different
+    try
     ?assertMatch(AllTransfers, All(P1), ?ATTEMPTS),
-    ?assertMatch(AllTransfers, All(P2), ?ATTEMPTS),
+        ?assertMatch(AllTransfers, All(P2), ?ATTEMPTS),
     ?assertMatch(true, length(Ended(P1)) > OneFourth, ?ATTEMPTS),
     ?assertMatch(true, length(Ended(P2)) > OneFourth, ?ATTEMPTS),
 
@@ -3064,7 +3071,13 @@ list_transfers(Config) ->
     ?assertMatch(true, length(Ended(P2)) =:= FilesNum, ?ATTEMPTS),
 
     ?assertMatch(AllTransfers, lists:sort(Ended(P1)), ?ATTEMPTS),
-    ?assertMatch(AllTransfers, lists:sort(Ended(P2)), ?ATTEMPTS).
+    ?assertMatch(AllTransfers, lists:sort(Ended(P2)), ?ATTEMPTS)
+    catch
+        _:_ ->
+            ct:pal("SLEEP"),
+            ct:timetrap({hours, 24}),
+            ct:sleep({hours, 24})
+    end.
 
 
 quota_decreased_after_invalidation(Config) ->
@@ -4107,6 +4120,7 @@ list_transfers_via_rest(Config, Worker, Space, State, StartId, LimitOrUndef) ->
     ParsedBody = json_utils:decode(Body),
     Transfers = maps:get(<<"transfers">>, ParsedBody),
     NextPageToken = maps:get(<<"nextPageToken">>, ParsedBody, <<"null">>),
+    ct:pal("Transfers chunk: ~p~nNexPageToken: ~p", [Transfers, NextPageToken]),
     {Transfers, NextPageToken}.
 
 space_guid(SpaceId) ->

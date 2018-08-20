@@ -51,7 +51,7 @@
     list_ended_transfers/1, list_ended_transfers/3, list_ended_transfers/4
 ]).
 
--export([get_link_key/1, get_link_key/2]).
+-export([get_link_key/2, get_link_key_by_state/2]).
 
 %% datastore_model callbacks
 -export([
@@ -600,17 +600,17 @@ list_ended_transfers(SpaceId, StartId, Offset, Limit) ->
 %% Returns the link key for given transfer.
 %% @end
 %%-------------------------------------------------------------------
--spec get_link_key(id() | doc()) ->
+-spec get_link_key_by_state(id() | doc(), binary()) ->
     {ok, transfer_links:link_key()} | {error, term()}.
-get_link_key(TransferId) when is_binary(TransferId) ->
+get_link_key_by_state(TransferId, TransferState) when is_binary(TransferId) ->
     case ?MODULE:get(TransferId) of
-        {ok, Transfer} -> get_link_key(Transfer);
+        {ok, Transfer} -> get_link_key_by_state(Transfer, TransferState);
         {error, Reason} -> {error, Reason}
     end;
-get_link_key(#document{key = TransferId, value = Transfer}) ->
-    Timestamp = case is_ongoing(Transfer) of
-        true -> Transfer#transfer.schedule_time;
-        false -> Transfer#transfer.finish_time
+get_link_key_by_state(#document{key = TransferId, value = Transfer}, TransferState) ->
+    Timestamp = case TransferState of
+        ?ENDED_TRANSFERS_STATE -> Transfer#transfer.finish_time;
+        _ -> Transfer#transfer.schedule_time
     end,
     get_link_key(TransferId, Timestamp).
 

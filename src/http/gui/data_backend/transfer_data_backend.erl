@@ -23,9 +23,6 @@
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--define(WAITING_TRANSFERS_STATE, <<"waiting">>).
--define(ONGOING_TRANSFERS_STATE, <<"ongoing">>).
--define(ENDED_TRANSFERS_STATE, <<"ended">>).
 
 %% API
 -export([init/0, terminate/0]).
@@ -67,8 +64,8 @@ terminate() ->
 %%--------------------------------------------------------------------
 -spec find_record(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find_record(<<"transfer">>, TransferId) ->
-    transfer_record(TransferId);
+find_record(<<"transfer">>, TypeAndTransferId) ->
+    transfer_record(TypeAndTransferId);
 
 find_record(<<"on-the-fly-transfer">>, TransferId) ->
     on_the_fly_transfer_record(TransferId);
@@ -150,7 +147,7 @@ create_record(<<"transfer">>, Data) ->
 
     case Result of
         {ok, TransferId} ->
-            transfer_record(TransferId);
+            transfer_record(op_gui_utils:ids_to_association(?WAITING_TRANSFERS_STATE, TransferId));
         {error, ?EACCES} ->
             gui_error:unauthorized();
         {error, Error} ->
@@ -196,9 +193,10 @@ delete_record(_ResourceType, _Id) ->
 %% Cancel transfer of given id.
 %% @end
 %%--------------------------------------------------------------------
--spec cancel_transfer(TransferId :: transfer:id()) ->
+-spec cancel_transfer(TypeAndTransferId :: binary()) ->
     ok | gui_error:error_result().
-cancel_transfer(TransferId) ->
+cancel_transfer(TypeAndTransferId) ->
+    {_, TransferId} = op_gui_utils:association_to_ids(TypeAndTransferId),
     case transfer:cancel(TransferId) of
         ok ->
             ok;
@@ -215,9 +213,10 @@ cancel_transfer(TransferId) ->
 %% Rerun transfer of given id.
 %% @end
 %%--------------------------------------------------------------------
--spec rerun_transfer(SessionId :: session:id(), TransferId :: transfer:id()) ->
+-spec rerun_transfer(SessionId :: session:id(), TypeAndTransferId :: binary()) ->
     ok | gui_error:error_result().
-rerun_transfer(SessionId, TransferId) ->
+rerun_transfer(SessionId, TypeAndTransferId) ->
+    {_, TransferId} = op_gui_utils:association_to_ids(TypeAndTransferId),
     {ok, UserId} = session:get_user_id(SessionId),
     case transfer:rerun(UserId, TransferId) of
         {ok, NewTransferId} ->
@@ -253,7 +252,7 @@ list_transfers(SpaceId, Type, StartFromIndex, Offset, Limit) ->
             transfer:list_ended_transfers(SpaceId, StartFromLink, Offset, Limit)
     end,
     {ok, [
-        {<<"list">>, TransferIds}
+        {<<"list">>, [op_gui_utils:ids_to_association(Type, TId) || TId <- TransferIds]}
     ]}.
 
 
@@ -267,8 +266,15 @@ list_transfers(SpaceId, Type, StartFromIndex, Offset, Limit) ->
 -spec get_transfers_for_file(fslogic_worker:file_guid()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 get_transfers_for_file(FileGuid) ->
-    {ok, ResultMap} = transferred_file:get_transfers(FileGuid),
-    {ok, maps:to_list(ResultMap)}.
+    {ok, ResultMap = #{
+        ongoing := Ongoing,
+        ended := Ended
+    }} = transferred_file:get_transfers(FileGuid),
+    ResultMap2 = ResultMap#{
+        ongoing => [op_gui_utils:ids_to_association(?ONGOING_TRANSFERS_STATE, TId) || TId <- Ongoing],
+        ended => [op_gui_utils:ids_to_association(?ENDED_TRANSFERS_STATE, TId) || TId <- Ended]
+    },
+    {ok, maps:to_list(ResultMap2)}.
 
 
 %%%===================================================================
@@ -281,10 +287,11 @@ get_transfers_for_file(FileGuid) ->
 %% Returns a client-compliant transfer record based on link and transfer id.
 %% @end
 %%--------------------------------------------------------------------
--spec transfer_record(transfer:id()) -> {ok, proplists:proplist()}.
-transfer_record(TransferId) ->
+-spec transfer_record(binary()) -> {ok, proplists:proplist()}.
+transfer_record(TypeAndTransferId) ->
+    {Type, TransferId} = op_gui_utils:association_to_ids(TypeAndTransferId),
     SessionId = gui_session:get_session_id(),
-    {ok, Doc = #document{value = Transfer = #transfer{
+    {ok, #document{value = Transfer = #transfer{
         replicating_provider = ReplicatingProviderId,
         invalidating_provider = InvalidatingProviderId,
         file_uuid = FileUuid,
@@ -294,7 +301,6 @@ transfer_record(TransferId) ->
         schedule_time = ScheduleTime,
         start_time = StartTime
     }}} = transfer:get(TransferId),
-    {ok, LinkKey} = transfer:get_link_key(Doc),
     FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
     FileType = case logical_file_manager:stat(SessionId, {guid, FileGuid}) of
         {ok, #file_attr{type = ?DIRECTORY_TYPE}} -> <<"dir">>;
@@ -307,6 +313,7 @@ transfer_record(TransferId) ->
         true -> null;
         false -> Transfer#transfer.finish_time
     end,
+    {ok, LinkKey} = transfer:get_link_key_by_state(TransferId, Type),
     {ok, [
         {<<"id">>, TransferId},
         {<<"index">>, LinkKey},

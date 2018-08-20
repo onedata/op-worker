@@ -29,7 +29,7 @@
 ]).
 -export([for_each_ongoing_transfer/3]).
 -export([list_links/5]).
--export([link_key/2]).
+-export([link_key/2, choose_link_timestamp_by_type/3]).
 
 -type link_key() :: binary().
 -type virtual_list_id() :: binary(). % ?(WAITING|ONGOING|ENDED)_TRANSFERS_KEY
@@ -145,7 +145,9 @@ list_links(SpaceId, ListDocId, StartId, Offset, Limit) ->
         _ -> Opts2#{size => Limit}
     end,
 
-    {ok, Transfers} = for_each_transfer(ListDocId, fun(_LinkName, TransferId, Acc) ->
+    {ok, Transfers} = for_each_transfer(ListDocId, fun(LinkName, TransferId, Acc) ->
+        ?alert("LinkName: ~p~n"
+        "TransferId: ~p", [LinkName, TransferId]),
         [TransferId | Acc]
     end, [], SpaceId, Opts3),
     lists:reverse(Transfers).
@@ -170,6 +172,16 @@ link_key(TransferId, Timestamp) ->
     <<TimestampPart/binary, IdPart/binary>>.
 
 
+-spec choose_link_timestamp_by_type(non_neg_integer(), non_neg_integer(), binary()) ->
+    non_neg_integer().
+choose_link_timestamp_by_type(ScheduleTime, _FinishTime, ?WAITING_TRANSFERS_STATE) ->
+    ScheduleTime;
+choose_link_timestamp_by_type(ScheduleTime, _FinishTime, ?ONGOING_TRANSFERS_STATE) ->
+    ScheduleTime;
+choose_link_timestamp_by_type(_ScheduleTime, FinishTime, ?ENDED_TRANSFERS_STATE) ->
+    FinishTime.
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -189,6 +201,7 @@ add_link(SourceId, TransferId, SpaceId, Timestamp) ->
     Ctx = ?CTX#{scope => SpaceId},
     Key = link_key(TransferId, Timestamp),
     LinkRoot = link_root(SourceId, SpaceId),
+    ?critical("add_link(~p, ~p, ~p)", [SourceId, TransferId, Key]),
     case datastore_model:add_links(Ctx, LinkRoot, TreeId, {Key, TransferId}) of
         {ok, _} ->
             ok;
