@@ -210,7 +210,7 @@ invalidate_dir(UserCtx, FileCtx, MigrationProviderId, Offset, TransferId) ->
         -> sync_req:provider_response().
 schedule_file_replica_deletion(FileCtx, undefined, TransferId) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    case  replica_deletion_master:get_setting_for_deletion_task(FileCtx) of
+    case replica_deletion_master:get_setting_for_deletion_task(FileCtx) of
         undefined ->
             transfer:increment_files_processed_counter(TransferId);
         {FileUuid, ProviderId, Blocks, VV} ->

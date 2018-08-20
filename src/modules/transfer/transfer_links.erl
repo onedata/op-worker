@@ -112,8 +112,8 @@ delete_ended_transfer_link(#document{key = TransferId, value = Transfer}) ->
 
 -spec move_transfer_link_from_ongoing_to_ended(transfer:doc()) -> ok.
 move_transfer_link_from_ongoing_to_ended(Doc) ->
-    transfer_links:add_ended_transfer_link(Doc),
-    transfer_links:delete_ongoing_transfer_link(Doc).
+    add_ended_transfer_link(Doc),
+    delete_ongoing_transfer_link(Doc).
 
 
 %%--------------------------------------------------------------------
@@ -126,7 +126,7 @@ move_transfer_link_from_ongoing_to_ended(Doc) ->
 move_to_ended_if_not_migration(Doc = #document{value = Transfer}) ->
     case transfer:is_migration(Transfer) of
         true -> ok;
-        false -> transfer_links:move_transfer_link_from_ongoing_to_ended(Doc)
+        false -> move_transfer_link_from_ongoing_to_ended(Doc)
     end.
 
 

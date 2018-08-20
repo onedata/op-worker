@@ -39,7 +39,7 @@
 
     increment_files_to_process_counter/2, increment_files_processed_counter/1,
     mark_failed_file_processing/1, increment_files_replicated_counter/1,
-    mark_data_replication_finished/3, increment_files_invalidated_counter/1,
+    mark_data_replication_finished/3,
     increment_files_invalidated_and_processed_counters/1,
     rerun_not_ended_transfers/1
 ]).
@@ -425,20 +425,6 @@ increment_files_replicated_counter(TransferId) ->
     update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{
             files_replicated = Transfer#transfer.files_replicated + 1
-        }}
-    end).
-
-
--spec increment_files_invalidated_counter(undefined | id()) ->
-    {ok, undefined | doc()} | {error, term()}.
-increment_files_invalidated_counter(undefined) ->
-    {ok, undefined};
-increment_files_invalidated_counter(TransferId) ->
-    update(TransferId, fun(Transfer) ->
-        {ok, Transfer#transfer{
-%%            TODO osobna funkcja???
-%%            files_processed = Transfer#transfer.files_processed + 1,
-            files_invalidated = Transfer#transfer.files_invalidated + 1
         }}
     end).
 

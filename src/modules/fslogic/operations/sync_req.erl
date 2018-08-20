@@ -266,10 +266,15 @@ replicate_dir(UserCtx, FileCtx, Block, Offset, TransferId) ->
 -spec replicate_regular_file(user_ctx:ctx(), file_ctx:ctx(), block(),
     transfer_id()) -> provider_response().
 replicate_regular_file(UserCtx, FileCtx, Block, TransferId) ->
-    #fuse_response{status = Status} = synchronize_block(UserCtx, FileCtx,
-        Block, false, TransferId, ?DEFAULT_REPLICATION_PRIORITY),
-    transfer:increment_files_processed_counter(TransferId),
-    #provider_response{status = Status}.
+    case synchronize_block(UserCtx, FileCtx, Block, false, TransferId,
+        ?DEFAULT_REPLICATION_PRIORITY
+    ) of
+        #fuse_response{status = Status} ->
+            transfer:increment_files_processed_counter(TransferId),
+            #provider_response{status = Status};
+        {error, cancelled} ->
+            throw(replication_cancelled)
+    end.
 
 %%-------------------------------------------------------------------
 %% @doc

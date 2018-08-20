@@ -73,7 +73,7 @@ mark_failed(Pid) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Stops invalidation_controller process and marks transfer as failed.
+%% Stops invalidation_controller process and marks transfer as cancelled.
 %% @end
 %%-------------------------------------------------------------------
 -spec mark_cancelled(pid()) -> ok.
