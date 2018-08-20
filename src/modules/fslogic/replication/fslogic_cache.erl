@@ -895,8 +895,8 @@ get_set(Key) ->
 -spec merge_local_blocks(file_location:doc()) ->
     {fslogic_blocks:blocks(), Sorted :: boolean()}.
 merge_local_blocks(#document{key = Key,
-    value = #file_location{blocks = PublicBlocks}}) ->
-    case file_location:local_id(get(?MAIN_KEY)) of
+    value = #file_location{uuid = Uuid, blocks = PublicBlocks}}) ->
+    case file_location:local_id(Uuid) of
         Key ->
             case ?LOCAL_BLOCKS_STORE of
                 links ->
