@@ -588,7 +588,7 @@ handle_info({fslogic_cache_flushed, Key, Check1, Check2}, State) ->
     {noreply, State, ?DIE_AFTER};
 
 handle_info(terminate, State) ->
-    {stop, terminate_request, State};
+    {stop, normal, State};
 
 handle_info(Msg, State) ->
     ?log_bad_request(Msg),
@@ -1020,7 +1020,8 @@ flush_blocks(#state{cached_blocks = Blocks} = State, ExcludeSessions,
 -spec flush_blocks_list([block()], [session:id()], all | off
     | {threshold, non_neg_integer()}) -> #file_location_changed{}.
 flush_blocks_list(AllBlocks, ExcludeSessions, Flush) ->
-    Location = file_ctx:fill_location_gaps(AllBlocks, fslogic_cache:get_local_location(),
+    #file_location{blocks = FinalBlocks} = Location =
+        file_ctx:fill_location_gaps(AllBlocks, fslogic_cache:get_local_location(),
         fslogic_cache:get_all_locations(), fslogic_cache:get_uuid()),
     {EventOffset, EventSize} = fslogic_location_cache:get_blocks_range(Location, AllBlocks),
 
@@ -1032,7 +1033,7 @@ flush_blocks_list(AllBlocks, ExcludeSessions, Flush) ->
                 fslogic_event_emitter:create_file_location_changed(Location,
                     EventOffset, EventSize));
         {threshold, Bytes} ->
-            BlocksSize = fslogic_blocks:size(AllBlocks),
+            BlocksSize = fslogic_blocks:size(FinalBlocks),
             case BlocksSize >= Bytes of
                 true ->
                     fslogic_cache:cache_event(ExcludeSessions,
@@ -1174,7 +1175,7 @@ request_terminate(List) ->
 %% Waits for synchronizers termination.
 %% @end
 %%--------------------------------------------------------------------
--spec wait_for_terminate([pid()]) -> ok.
+-spec wait_for_terminate(pid() | [pid()]) -> ok.
 wait_for_terminate([]) ->
     ok;
 wait_for_terminate([Pid | Pids]) ->

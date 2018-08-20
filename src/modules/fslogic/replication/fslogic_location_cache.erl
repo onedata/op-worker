@@ -486,13 +486,10 @@ get_location_not_cached(LocId, true) ->
     end;
 get_location_not_cached(LocId, {blocks_num, Num}) ->
     case file_location:get(LocId) of
-        {ok, #document{value = Location} = LocationDoc} ->
-            {Blocks0, Sorted} = fslogic_cache:merge_local_blocks(LocationDoc),
-            Blocks = case Sorted of
-                true -> Blocks0;
-                _ -> lists:sort(Blocks0)
-            end,
-            {ok, LocationDoc#document{value =
+        {ok, LocationDoc} ->
+            #document{value = #file_location{blocks = Blocks} = Location}
+                = LocationDoc2 = fslogic_cache:attach_local_blocks(LocationDoc),
+            {ok, LocationDoc2#document{value =
             Location#file_location{blocks = lists:sublist(Blocks, Num)}}};
         Error ->
             Error

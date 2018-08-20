@@ -424,8 +424,12 @@ attach_blocks(#document{key = Key, value = Location} = LocationDoc) ->
 -spec attach_local_blocks(file_location:doc()) -> file_location:doc().
 attach_local_blocks(#document{value = Location} = LocationDoc) ->
     {Blocks, Sorted} = merge_local_blocks(LocationDoc),
+    Blocks2 = case Sorted of
+        true -> Blocks;
+        _ -> lists:sort(Blocks)
+    end,
     LocationDoc#document{value =
-    Location#file_location{blocks = blocks_to_tree(Blocks, Sorted)}}.
+    Location#file_location{blocks = Blocks2}}.
 
 %%%===================================================================
 %%% Block API
@@ -892,13 +896,18 @@ get_set(Key) ->
     {fslogic_blocks:blocks(), Sorted :: boolean()}.
 merge_local_blocks(#document{key = Key,
     value = #file_location{blocks = PublicBlocks}}) ->
-    case ?LOCAL_BLOCKS_STORE of
-        links ->
-            {ok, LocalBlocks} = file_local_blocks:get_local_blocks(Key),
-            {PublicBlocks ++ LocalBlocks, false};
-        doc ->
-            {ok, LocalBlocks} = file_local_blocks:get(Key),
-            {LocalBlocks, true};
-        none ->
+    case file_location:local_id(get(?MAIN_KEY)) of
+        Key ->
+            case ?LOCAL_BLOCKS_STORE of
+                links ->
+                    {ok, LocalBlocks} = file_local_blocks:get_local_blocks(Key),
+                    {PublicBlocks ++ LocalBlocks, false};
+                doc ->
+                    {ok, LocalBlocks} = file_local_blocks:get(Key),
+                    {LocalBlocks, true};
+                none ->
+                    {PublicBlocks, true}
+            end;
+        _ ->
             {PublicBlocks, true}
     end.
