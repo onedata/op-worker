@@ -679,13 +679,19 @@ flush_key(Key, Type) ->
                     wait_for_flush(Key, FlushPid)
             end,
 
-            apply_size_change(Key, FileUuid),
-            case file_location:save(DocToSave) of
+            Ans = case file_location:save(DocToSave) of
                 {ok, _} ->
                     flush_local_blocks(Key, DelBlocks, AddBlocks, Type);
                 Error ->
                     ?error("Flush failed for key ~p: ~p", [Key, Error]),
                     Error
+            end,
+
+            case Ans of
+                ok ->
+                    apply_size_change(Key, FileUuid);
+                _ ->
+                    Ans
             end
     end.
 
@@ -804,14 +810,19 @@ apply_size_change(Key, FileUuid) ->
         [] ->
             ok;
         Changes ->
-            {ok, UserId} = file_location:get_owner_id(FileUuid),
-            lists:foreach(fun({SpaceId, ChangeSize}) ->
-                space_quota:apply_size_change_and_maybe_emit(SpaceId, ChangeSize),
-                monitoring_event:emit_storage_used_updated(SpaceId, UserId, ChangeSize)
-            end, Changes),
+            try
+                {ok, UserId} = file_location:get_owner_id(FileUuid),
+                lists:foreach(fun({SpaceId, ChangeSize}) ->
+                    space_quota:apply_size_change_and_maybe_emit(SpaceId, ChangeSize),
+                    monitoring_event:emit_storage_used_updated(SpaceId, UserId, ChangeSize)
+                end, Changes),
 
-            put({?SIZE_CHANGES, Key}, []),
-            ok
+                put({?SIZE_CHANGES, Key}, []),
+                ok
+            catch
+                E1:E2 ->
+                    {apply_quota_error, E1, E2}
+            end
     end.
 
 %%-------------------------------------------------------------------

@@ -82,7 +82,8 @@
 }).
 
 % API
--export([synchronize/6, update_replica/4, force_flush_events/1, cancel/1]).
+-export([synchronize/6, update_replica/4, force_flush_events/1, cancel/1,
+    terminate_all/0]).
 % gen_server callbacks
 -export([handle_call/3, handle_cast/2, handle_info/2, init/1, code_change/3,
     terminate/2]).
@@ -143,6 +144,20 @@ cancel(TransferId) ->
     lists:foreach(
         fun(Pid) -> gen_server2:cast(Pid, {cancel, TransferId}) end,
         gproc:lookup_pids({c, l, TransferId})).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Terminates all synchronizers.
+%% @end
+%%--------------------------------------------------------------------
+-spec terminate_all() -> ok.
+terminate_all() ->
+    Selection = gproc:select([{{{'_', '_', '$1'}, '_', '_'},
+        [{is_binary, '$1'}], ['$$']}]),
+    Pids = request_terminate(Selection),
+
+    lists:foreach(fun(Pid) -> Pid ! terminate end, Pids),
+    wait_for_terminate(Pids).
 
 %%%===================================================================
 %%% Apply functions
@@ -571,6 +586,9 @@ handle_info(fslogic_cache_check_flush, State) ->
 handle_info({fslogic_cache_flushed, Key, Check1, Check2}, State) ->
     fslogic_cache:verify_flush_ans(Key, Check1, Check2),
     {noreply, State, ?DIE_AFTER};
+
+handle_info(terminate, State) ->
+    {stop, terminate_request, State};
 
 handle_info(Msg, State) ->
     ?log_bad_request(Msg),
@@ -1135,3 +1153,38 @@ cancel_events_timer(#state{caching_events_timer = TimerRef} = State) ->
 %%get_summarized_blocks_size(Blocks) ->
 %%    lists:foldl(fun(#file_block{size = Size}, Acc) ->
 %%        Acc + Size end, 0, Blocks).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Requests termination of all synchronizers.
+%% @end
+%%--------------------------------------------------------------------
+-spec request_terminate(term()) -> [pid()].
+request_terminate('$end_of_table') ->
+    [];
+request_terminate({Match, Continuation}) ->
+    request_terminate(Match) ++ request_terminate(gproc:select(Continuation));
+request_terminate(List) ->
+    lists:map(fun([_, Pid, _]) -> Pid end, List).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Waits for synchronizers termination.
+%% @end
+%%--------------------------------------------------------------------
+-spec wait_for_terminate([pid()]) -> ok.
+wait_for_terminate([]) ->
+    ok;
+wait_for_terminate([Pid | Pids]) ->
+    wait_for_terminate(Pid),
+    wait_for_terminate(Pids);
+wait_for_terminate(Pid) ->
+    case erlang:is_process_alive(Pid) of
+        true ->
+            timer:sleep(500),
+            wait_for_terminate(Pid);
+        _ ->
+            ok
+    end.
