@@ -74,19 +74,9 @@ init_per_suite(Config) ->
 init_per_testcase(stress_test, Config) ->
   Workers = ?config(op_worker_nodes, Config),
   lists:foreach(fun(Worker) ->
-    test_utils:set_env(Worker, ?APP_NAME, minimal_sync_request, 1)
+    test_utils:set_env(Worker, ?APP_NAME, minimal_sync_request, 1),
+    test_utils:set_env(Worker, ?APP_NAME, rtransfer_mock, true)
   end, Workers),
-
-  ok = test_utils:mock_new(Workers, rtransfer_config),
-  test_utils:mock_expect(Workers, rtransfer_config, fetch,
-    fun(#{offset := O, size := S} = _Request, NotifyFun, CompleteFun,
-        TransferId, SpaceId, FileGuid) ->
-      _TransferData = erlang:term_to_binary({TransferId, SpaceId, FileGuid}),
-      Ref = make_ref(),
-      NotifyFun(Ref, O, S),
-      CompleteFun(Ref, {ok, ok}),
-      {ok, Ref}
-    end),
 
   ssl:start(),
   hackney:start(),
@@ -106,7 +96,9 @@ end_per_testcase(stress_test, Config) ->
   hackney:stop(),
   ssl:stop(),
 
-  ok = test_utils:mock_unload(Workers, rtransfer_config);
+  lists:foreach(fun(Worker) ->
+    test_utils:set_env(Worker, ?APP_NAME, rtransfer_mock, false)
+  end, Workers);
 
 end_per_testcase(_Case, Config) ->
   Config.
