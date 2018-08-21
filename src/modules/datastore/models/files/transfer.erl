@@ -38,7 +38,7 @@
     is_ended/1, is_replication_ended/1, is_invalidation_ended/1,
 
     increment_files_to_process_counter/2, increment_files_processed_counter/1,
-    mark_failed_file_processing/1, increment_files_replicated_counter/1,
+    increment_files_failed_and_processed_counters/1, increment_files_replicated_counter/1,
     mark_data_replication_finished/3,
     increment_files_invalidated_and_processed_counters/1,
     rerun_not_ended_transfers/1
@@ -389,6 +389,7 @@ increment_files_processed_counter(TransferId) ->
         }}
     end).
 
+
 -spec increment_files_invalidated_and_processed_counters(undefined | id()) ->
     {ok, undefined | doc()} | {error, term()}.
 increment_files_invalidated_and_processed_counters(undefined) ->
@@ -402,13 +403,9 @@ increment_files_invalidated_and_processed_counters(TransferId) ->
     end).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Increments failed_files and files_processed counters.
-%% @end
-%%--------------------------------------------------------------------
--spec mark_failed_file_processing(id()) -> {ok, doc()} | {error, term()}.
-mark_failed_file_processing(TransferId) ->
+-spec increment_files_failed_and_processed_counters(id()) ->
+    {ok, doc()} | {error, term()}.
+increment_files_failed_and_processed_counters(TransferId) ->
     update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{
             files_processed = Transfer#transfer.files_processed + 1,

@@ -114,7 +114,7 @@ handle_cast({start_file_replication, UserCtx, FileCtx, Block, TransferId,
                     % todo VFS-4218 currently we ignore this case
                     {ok, _} = transfer:increment_files_processed_counter(TransferId);
                 {error, _Reason} ->
-                    {ok, _} = transfer:mark_failed_file_processing(TransferId)
+                    {ok, _} = transfer:increment_files_failed_and_processed_counters(TransferId)
             end;
         _ ->
             sync_req:enqueue_file_replication(UserCtx, FileCtx, Block,

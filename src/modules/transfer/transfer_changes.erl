@@ -38,24 +38,23 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Callback called when transfer doc is modified (via dbsync or local provider)
+%% Callback called when transfer doc is modified (via dbsync or local provider).
+%% Calls appropriate handler depending on transfer status if document wasn't
+%% yet deleted (deleted docs are not removed from db but kept with 'deleted'
+%% set to 'true' instead). Otherwise ignores changes.
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(transfer:doc()) -> ok.
-handle(Doc = #document{
-    value = #transfer{replication_status = scheduled},
-    deleted = false
-}) ->
+handle(#document{deleted = true}) ->
+    ok;
+
+handle(Doc = #document{value = #transfer{replication_status = scheduled}}) ->
     handle_scheduled_replication(Doc);
 
-handle(Doc = #document{
-    value = #transfer{replication_status = enqueued},
-    deleted = false
-}) ->
+handle(Doc = #document{value = #transfer{replication_status = enqueued}}) ->
     handle_enqueued_replication(Doc);
 
 handle(Doc = #document{
-    deleted = false,
     value = #transfer{
         replication_status = Status,
         enqueued = true
@@ -63,20 +62,13 @@ handle(Doc = #document{
 }) when Status =/= skipped ->
     handle_dequeued_transfer(Doc);
 
-handle(Doc = #document{
-    value = #transfer{replication_status = active},
-    deleted = false
-}) ->
+handle(Doc = #document{value = #transfer{replication_status = active}}) ->
     handle_active_replication(Doc);
 
-handle(Doc = #document{
-    value = #transfer{replication_status = aborting},
-    deleted = false
-}) ->
+handle(Doc = #document{value = #transfer{replication_status = aborting}}) ->
     handle_aborting_replication(Doc);
 
 handle(Doc = #document{
-    deleted = false,
     value = #transfer{
         replication_status = ReplicationStatus,
         invalidation_status = scheduled
@@ -84,31 +76,24 @@ handle(Doc = #document{
 }) when ReplicationStatus == completed orelse ReplicationStatus == skipped ->
     handle_scheduled_invalidation(Doc);
 
-handle(Doc = #document{
-    value = #transfer{invalidation_status = enqueued},
-    deleted = false
-}) ->
+handle(Doc = #document{value = #transfer{invalidation_status = enqueued}}) ->
     handle_enqueued_invalidation(Doc);
 
 handle(Doc = #document{
-    value = #transfer{replication_status = skipped, enqueued = true}
+    value = #transfer{
+        replication_status = skipped,
+        enqueued = true
+    }
 }) ->
     handle_dequeued_transfer(Doc);
 
-handle(Doc = #document{
-    value = #transfer{invalidation_status = active},
-    deleted = false
-}) ->
+handle(Doc = #document{value = #transfer{invalidation_status = active}}) ->
     handle_active_invalidation(Doc);
 
-handle(Doc = #document{
-    value = #transfer{invalidation_status = aborting},
-    deleted = false
-}) ->
+handle(Doc = #document{value = #transfer{invalidation_status = aborting}}) ->
     handle_aborting_invalidation(Doc);
 
 handle(Doc = #document{
-    deleted = false,
     value = #transfer{
         replication_status = ReplicationStatus,
         invalidation_status = InvalidationStatus
@@ -168,7 +153,7 @@ handle_scheduled_replication(Doc = #document{
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_enqueued_replication(transfer:doc()) -> ok.
-handle_enqueued_replication(Doc = #document{key=Id,value = #transfer{
+handle_enqueued_replication(Doc = #document{value = #transfer{
     replication_status = enqueued,
     replicating_provider = ReplicatingProviderId,
     cancel = Cancel,
@@ -199,9 +184,7 @@ handle_enqueued_replication(Doc = #document{key=Id,value = #transfer{
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_active_replication(transfer:doc()) -> ok.
-handle_active_replication(Doc = #document{
-    key = TransferId,
-    value = #transfer{
+handle_active_replication(Doc = #document{value = #transfer{
     cancel = true,
     replicating_provider = ReplicatingProviderId
 }}) ->
@@ -489,7 +472,7 @@ handle_dequeued_transfer(#document{key = TransferId, value = #transfer{
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_finished_migration(transfer:doc()) -> ok.
-handle_finished_migration(Doc = #document{key=TransferId, value = Transfer = #transfer{
+handle_finished_migration(Doc = #document{value = #transfer{
     replicating_provider = ReplicatingProviderId
 }}) ->
     ?run_if_is_self(ReplicatingProviderId, fun() ->
