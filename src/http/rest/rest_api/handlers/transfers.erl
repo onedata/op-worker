@@ -119,12 +119,6 @@ list_transfers(Req, State) ->
             #{}
     end,
 
-    ?emergency("Transfers: ~p~n"
-    "NextPageToken: ~p~n"
-    "Limit: ~p~n"
-    "PreviousPageToken: ~p~n"
-    "TransferState: ~p~n", [Transfers, NextPageToken, Limit, PageToken, TransferState]),
-
     Result = maps:merge(#{<<"transfers">> => Transfers}, NextPageToken),
 
     Response = json_utils:encode(Result),
