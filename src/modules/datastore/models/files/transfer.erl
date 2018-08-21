@@ -41,7 +41,8 @@
     increment_files_failed_and_processed_counters/1, increment_files_replicated_counter/1,
     mark_data_replication_finished/3,
     increment_files_invalidated_and_processed_counters/1,
-    rerun_not_ended_transfers/1
+    rerun_not_ended_transfers/1,
+    restart_pools/0
 ]).
 
 % list functions
@@ -51,7 +52,7 @@
     list_ended_transfers/1, list_ended_transfers/3, list_ended_transfers/4
 ]).
 
--export([get_link_key/2, get_link_key_by_state/2]).
+-export([get_link_key/2, get_link_key_by_state/2, get_replication_status/1]).
 
 %% datastore_model callbacks
 -export([
@@ -324,6 +325,8 @@ is_migration(#transfer{
 -spec is_ongoing(transfer() | id() | undefined) -> boolean().
 is_ongoing(undefined) ->
     true;
+is_ongoing(#document{value = Transfer}) ->
+    is_ongoing(Transfer);
 is_ongoing(Transfer = #transfer{}) ->
     is_replication_ongoing(Transfer) orelse is_invalidation_ongoing(Transfer);
 is_ongoing(TransferId) ->
@@ -620,6 +623,22 @@ get_link_key_by_state(#document{key = TransferId, value = Transfer}, TransferSta
     {ok, transfer_links:link_key()} | {error, term()}.
 get_link_key(TransferId, Timestamp) ->
     {ok, transfer_links:link_key(TransferId, Timestamp)}.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Restarts worker pools used by replication and invalidation mechanisms.
+%% @end
+%%-------------------------------------------------------------------
+-spec restart_pools() -> ok.
+restart_pools() ->
+    ok = stop_pools(),
+    ok = start_pools().
+
+-spec get_replication_status(doc() | transfer()) -> status().
+get_replication_status(#transfer{replication_status = Status}) ->
+    Status;
+get_replication_status(#document{value = Transfer}) ->
+    get_replication_status(Transfer).
 
 %%%===================================================================
 %%% Internal functions
@@ -1183,11 +1202,6 @@ resolve_conflict(_Ctx, NewDoc, PreviousDoc) ->
     #document{value = PrevTransfer} = PreviousDoc,
     #document{value = NewTransfer} = NewDoc,
 
-    ?critical("resolve_conflict~n"
-    "PreviousDoc: ~p~n"
-    "NewDoc: ~p", [PreviousDoc, NewDoc]),
-
-
     PrevDocVec = {
         PrevTransfer#transfer.cancel,
         PrevTransfer#transfer.enqueued,
@@ -1200,7 +1214,7 @@ resolve_conflict(_Ctx, NewDoc, PreviousDoc) ->
     },
     {D1, D2} = order_transfers(PreviousDoc, NewDoc),
 
-    Res = {_, DOC} = case PrevDocVec == NewDocVec of
+    case PrevDocVec == NewDocVec of
         true ->
             {false, D1};
         false ->
@@ -1218,10 +1232,7 @@ resolve_conflict(_Ctx, NewDoc, PreviousDoc) ->
                 )
             },
             {true , D1#document{value = EmergingTransfer}}
-    end,
-    ?critical("resolve_conflict result: ~p", [DOC]),
-    Res.
-
+    end.
 
 %%--------------------------------------------------------------------
 %% @private

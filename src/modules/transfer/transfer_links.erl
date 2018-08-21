@@ -146,8 +146,6 @@ list_links(SpaceId, ListDocId, StartId, Offset, Limit) ->
     end,
 
     {ok, Transfers} = for_each_transfer(ListDocId, fun(LinkName, TransferId, Acc) ->
-        ?alert("LinkName: ~p~n"
-        "TransferId: ~p", [LinkName, TransferId]),
         [TransferId | Acc]
     end, [], SpaceId, Opts3),
     lists:reverse(Transfers).
@@ -201,7 +199,6 @@ add_link(SourceId, TransferId, SpaceId, Timestamp) ->
     Ctx = ?CTX#{scope => SpaceId},
     Key = link_key(TransferId, Timestamp),
     LinkRoot = link_root(SourceId, SpaceId),
-    ?critical("add_link(~p, ~p, ~p)", [SourceId, TransferId, Key]),
     case datastore_model:add_links(Ctx, LinkRoot, TreeId, {Key, TransferId}) of
         {ok, _} ->
             ok;
