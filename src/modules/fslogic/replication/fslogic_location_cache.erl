@@ -288,7 +288,7 @@ set_blocks(#document{key = Key, value = FileLocation} = Doc, Blocks) ->
 %% Updates blocks in location document.
 %% @end
 %%-------------------------------------------------------------------
--spec update_blocks(location(), blocks()) -> location().
+-spec update_blocks(location(), blocks()) -> {location(), boolean()}.
 update_blocks(#document{key = LocID, value = FileLocation} = Doc, NewBlocks) ->
     case fslogic_cache:is_current_proc_cache() of
         false ->
@@ -326,8 +326,8 @@ update_blocks(#document{key = LocID, value = FileLocation} = Doc, NewBlocks) ->
 
             fslogic_cache:update_size(LocID, SizeChange2),
             fslogic_cache:save_blocks(LocID, Blocks3),
-            fslogic_cache:mark_changed_blocks(LocID, BlocksToSave3, BlocksToDel2),
-            Doc
+            MarkAns = fslogic_cache:mark_changed_blocks(LocID, BlocksToSave3, BlocksToDel2),
+            {Doc, MarkAns}
     end.
 
 %%-------------------------------------------------------------------

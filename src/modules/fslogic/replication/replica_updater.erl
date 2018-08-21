@@ -118,15 +118,19 @@ append(#document{value = #file_location{size = OldSize} = Loc} = Doc, Blocks, Bu
 
     case BumpVersion of
         true ->
-            version_vector:bump_version(
-                replica_changes:add_change(
-                    fslogic_location_cache:update_blocks(Doc#document{value =
-                        Loc#file_location{size = max(OldSize, NewSize)}}, NewBlocks),
-                    Blocks
-                ));
+            {NewDoc, PublicUpdate} = fslogic_location_cache:update_blocks(
+                Doc#document{value =
+                Loc#file_location{size = max(OldSize, NewSize)}}, NewBlocks),
+            case PublicUpdate of
+                true ->
+                    version_vector:bump_version(
+                        replica_changes:add_change(NewDoc, Blocks));
+                _ -> NewDoc
+            end;
         false ->
-            fslogic_location_cache:update_blocks(Doc#document{value =
-                Loc#file_location{size = max(OldSize, NewSize)}}, NewBlocks)
+            {NewDoc, _} = fslogic_location_cache:update_blocks(Doc#document{value =
+                Loc#file_location{size = max(OldSize, NewSize)}}, NewBlocks),
+            NewDoc
     end.
 
 %%--------------------------------------------------------------------
@@ -140,10 +144,11 @@ shrink(Doc = #document{value = Loc}, Blocks, NewSize) ->
     OldBlocks = fslogic_location_cache:get_blocks(Doc, #{overlapping_blocks => Blocks}),
     NewBlocks = fslogic_blocks:invalidate(OldBlocks, Blocks),
     NewBlocks1 = fslogic_blocks:consolidate(NewBlocks),
-    version_vector:bump_version(
-        replica_changes:add_change(
-            fslogic_location_cache:update_blocks(Doc#document{value =
-            Loc#file_location{size = NewSize}}, NewBlocks1),
-            {shrink, NewSize}
-        )
-    ).
+    {NewDoc, PublicUpdate} = fslogic_location_cache:update_blocks(
+        Doc#document{value = Loc#file_location{size = NewSize}}, NewBlocks1),
+    case PublicUpdate of
+        true ->
+            version_vector:bump_version(
+                replica_changes:add_change(NewDoc, {shrink, NewSize}));
+        _ -> NewDoc
+    end.

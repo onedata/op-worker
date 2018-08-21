@@ -46,6 +46,7 @@
 -define(FLUSH_CONFIRMATION, fslogic_cache_flushed).
 
 -define(DOCS, fslogic_cache_docs).
+-define(FLUSHED_DOCS, fslogic_cache_flushed_docs).
 -define(BLOCKS, fslogic_cache_blocks).
 -define(PUBLIC_BLOCKS, fslogic_cache_public_blocks).
 -define(SIZES, fslogic_cache_sizes).
@@ -298,7 +299,7 @@ get_doc(Key) ->
                     = Location} = LocationDoc} ->
                     LocationDoc2 = LocationDoc#document{value =
                     Location#file_location{blocks = []}},
-                    cache_doc(LocationDoc2),
+                    cache_doc(LocationDoc),
 
                     {Blocks, Sorted} = merge_local_blocks(LocationDoc),
                     put({?BLOCKS, Key}, blocks_to_tree(Blocks, Sorted)),
@@ -339,6 +340,7 @@ cache_doc(#document{key = Key, value = #file_location{space_id = SpaceId} =
     LocationDoc2 = LocationDoc#document{value =
     Location#file_location{blocks = []}},
     put({?DOCS, Key}, LocationDoc2),
+    put({?FLUSHED_DOCS, Key}, LocationDoc),
 
     Keys = get(?KEYS),
     put(?KEYS, [Key | (Keys -- [Key])]),
@@ -390,6 +392,7 @@ delete_doc(Key) ->
     end,
 
     erase({?DOCS, Key}),
+    erase({?FLUSHED_DOCS, Key}),
     erase({?BLOCKS, Key}),
     erase({?PUBLIC_BLOCKS, Key}),
     erase({?SIZES, Key}),
@@ -533,18 +536,20 @@ get_changed_blocks(Key) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec mark_changed_blocks(file_location:id(), sets:set() | all,
-    sets:set() | all) -> ok.
+    sets:set() | all) -> boolean().
 mark_changed_blocks(Key, all, all) ->
     erase({?SAVED_BLOCKS, Key, true}),
     erase({?SAVED_BLOCKS, Key, undefined}),
     erase({?DELETED_BLOCKS, Key}),
     put({?RESET_BLOCKS, Key}, true),
-    ok;
+    true;
 mark_changed_blocks(Key, Saved, Deleted) ->
     Local = get(?LOCAL_CHANGES),
 
     case Local of
         true ->
+            put({?DELETED_BLOCKS, Key}, Deleted),
+
             PublicBlocks = get({?PUBLIC_BLOCKS, Key}),
             PublicDel = lists:any(fun(Block) ->
                 sets:is_element(Block, Deleted)
@@ -552,16 +557,17 @@ mark_changed_blocks(Key, Saved, Deleted) ->
 
             case PublicDel of
                 true ->
-                    put({?SAVED_BLOCKS, Key, undefined}, Saved);
+                    put({?SAVED_BLOCKS, Key, undefined}, Saved),
+                    true;
                 _ ->
-                    put({?SAVED_BLOCKS, Key, Local}, Saved)
-            end,
-            put({?DELETED_BLOCKS, Key}, Deleted);
+                    put({?SAVED_BLOCKS, Key, Local}, Saved),
+                    false
+            end;
         _ ->
             put({?SAVED_BLOCKS, Key, Local}, Saved),
-            put({?DELETED_BLOCKS, Key}, Deleted)
-    end,
-    ok.
+            put({?DELETED_BLOCKS, Key}, Deleted),
+            true
+    end.
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -707,12 +713,18 @@ flush_key(Key, Type) ->
                     wait_for_flush(Key, FlushPid)
             end,
 
-            Ans = case file_location:save(DocToSave) of
-                {ok, _} ->
+            Ans = case get({?FLUSHED_DOCS, Key}) =:= DocToSave of
+                true ->
                     flush_local_blocks(DocToSave, DelBlocks, AddBlocks, Type);
-                Error ->
-                    ?error("Flush failed for key ~p: ~p", [Key, Error]),
-                    Error
+                _ ->
+                    case file_location:save(DocToSave) of
+                        {ok, _} ->
+                            put({?FLUSHED_DOCS, Key}, DocToSave),
+                            flush_local_blocks(DocToSave, DelBlocks, AddBlocks, Type);
+                        Error ->
+                            ?error("Flush failed for key ~p: ~p", [Key, Error]),
+                            Error
+                    end
             end,
 
             case Ans of
