@@ -482,7 +482,9 @@ get_location_not_cached(LocId, false) ->
 get_location_not_cached(LocId, true) ->
     case file_location:get(LocId) of
         {ok, Doc} ->
-            {ok, fslogic_cache:attach_local_blocks(Doc)}
+            {ok, fslogic_cache:attach_local_blocks(Doc)};
+        Error ->
+            Error
     end;
 get_location_not_cached(LocId, {blocks_num, Num}) ->
     case file_location:get(LocId) of
