@@ -186,25 +186,32 @@ transfer_to_json(Transfer) ->
     NullableCallback = utils:ensure_defined(Callback, undefined, null),
     {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
 
+    ReplicationStatusBin = atom_to_binary(ReplicationStatus, utf8),
+    ReplicatingProvider = utils:ensure_defined(
+        ReplicatingProviderId, undefined, null
+    ),
+
     #{
         <<"fileId">> => FileObjectId,
         <<"userId">> => UserId,
         <<"rerunId">> => utils:ensure_defined(RerunId, undefined, null),
         <<"path">> => Path,
-        <<"replicationStatus">> => atom_to_binary(ReplicationStatus, utf8),
+        <<"transferStatus">> => ReplicationStatusBin,
+        <<"replicationStatus">> => ReplicationStatusBin,
         <<"invalidationStatus">> => atom_to_binary(InvalidationStatus, utf8),
-        <<"replicatingProviderId">> => utils:ensure_defined(
-            ReplicatingProviderId, undefined, null
-        ),
+        <<"targetProviderId">> => ReplicatingProvider,
+        <<"replicatingProviderId">> => ReplicatingProvider,
         <<"invalidatingProviderId">> => utils:ensure_defined(
             InvalidatingProvider, undefined, null
         ),
         <<"callback">> => NullableCallback,
         <<"filesToProcess">> => FilesToProcess,
         <<"filesProcessed">> => FilesProcessed,
+        <<"filesTransferred">> => FilesReplicated,
         <<"filesReplicated">> => FilesReplicated,
         <<"failedFiles">> => FailedFiles,
         <<"filesInvalidated">> => FilesInvalidated,
+        <<"bytesTransferred">> => BytesReplicated,
         <<"bytesReplicated">> => BytesReplicated,
         <<"scheduleTime">> => ScheduleTime,
         <<"startTime">> => StartTime,
