@@ -326,8 +326,7 @@ save_doc(#document{key = Key} = LocationDoc) ->
     Keys = get(?KEYS_MODIFIED),
     put(?KEYS_MODIFIED, [Key | (Keys -- [Key])]),
     init_flush_check(),
-
-    cache_doc(LocationDoc).
+    store_doc(LocationDoc).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -335,37 +334,9 @@ save_doc(#document{key = Key} = LocationDoc) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec cache_doc(file_location:doc()) -> {ok, file_location:id()}.
-cache_doc(#document{key = Key, value = #file_location{space_id = SpaceId} =
-    Location} = LocationDoc) ->
-    LocationDoc2 = LocationDoc#document{value =
-    Location#file_location{blocks = []}},
-    put({?DOCS, Key}, LocationDoc2),
+cache_doc(#document{key = Key} = LocationDoc) ->
     put({?FLUSHED_DOCS, Key}, LocationDoc),
-
-    Keys = get(?KEYS),
-    put(?KEYS, [Key | (Keys -- [Key])]),
-
-    case get({?SPACE_IDS, Key}) of
-        undefined ->
-            ok;
-        SpaceId ->
-            ok;
-        OldSpaceId ->
-            Changes = case get({?SIZE_CHANGES, Key}) of
-                undefined -> [];
-                Value -> Value
-            end,
-            SpaceChange = proplists:get_value(SpaceId, Changes, 0),
-            OldSpaceChange = proplists:get_value(OldSpaceId, Changes, 0),
-            Size = get_local_size(Key),
-
-            put({?SIZE_CHANGES, Key}, [{OldSpaceId, -1 * Size + OldSpaceChange},
-                {SpaceId, Size + OldSpaceChange + SpaceChange} |
-                proplists:delete(OldSpaceId, proplists:delete(SpaceId, Changes))])
-    end,
-    put({?SPACE_IDS, Key}, SpaceId),
-
-    {ok, Key}.
+    store_doc(LocationDoc).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -948,3 +919,41 @@ merge_local_blocks(#document{key = Key,
         _ ->
             {PublicBlocks, true}
     end.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Stores doc in memory.
+%% @end
+%%-------------------------------------------------------------------
+-spec store_doc(file_location:doc()) -> {ok, file_location:id()}.
+store_doc(#document{key = Key, value = #file_location{space_id = SpaceId} =
+    Location} = LocationDoc) ->
+    LocationDoc2 = LocationDoc#document{value =
+    Location#file_location{blocks = []}},
+    put({?DOCS, Key}, LocationDoc2),
+
+    Keys = get(?KEYS),
+    put(?KEYS, [Key | (Keys -- [Key])]),
+
+    case get({?SPACE_IDS, Key}) of
+        undefined ->
+            ok;
+        SpaceId ->
+            ok;
+        OldSpaceId ->
+            Changes = case get({?SIZE_CHANGES, Key}) of
+                undefined -> [];
+                Value -> Value
+            end,
+            SpaceChange = proplists:get_value(SpaceId, Changes, 0),
+            OldSpaceChange = proplists:get_value(OldSpaceId, Changes, 0),
+            Size = get_local_size(Key),
+
+            put({?SIZE_CHANGES, Key}, [{OldSpaceId, -1 * Size + OldSpaceChange},
+                {SpaceId, Size + OldSpaceChange + SpaceChange} |
+                proplists:delete(OldSpaceId, proplists:delete(SpaceId, Changes))])
+    end,
+    put({?SPACE_IDS, Key}, SpaceId),
+
+    {ok, Key}.
