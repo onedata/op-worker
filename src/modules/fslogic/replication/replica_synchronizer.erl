@@ -428,15 +428,11 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
     {_, NewRefs} = lists:unzip(NewTransfers),
     case ExistingRefs ++ NewRefs of
         [] ->
-            FileLocation = fslogic_cache:get_local_location(),
-            % TODO VFS-4743 - fill gaps?
-            ReturnedBlocks = fslogic_location_cache:get_blocks(FileLocation,
-                #{overlapping_blocks => [Block]}),
-            {EventOffset, EventSize} =
-                fslogic_location_cache:get_blocks_range(ReturnedBlocks, [Block]),
-            FLC = #file_location_changed{
-                file_location = fslogic_location_cache:set_final_blocks(
-                    FileLocation#document.value, ReturnedBlocks),
+            FileLocation =
+                file_ctx:fill_location_gaps([Block], fslogic_cache:get_local_location(),
+                    fslogic_cache:get_all_locations(), fslogic_cache:get_uuid()),
+            {EventOffset, EventSize} = fslogic_location_cache:get_blocks_range(FileLocation, [Block]),
+            FLC = #file_location_changed{file_location = FileLocation,
                 change_beg_offset = EventOffset, change_end_offset = EventSize},
             {reply, {ok, FLC}, State, ?DIE_AFTER};
         RelevantRefs ->

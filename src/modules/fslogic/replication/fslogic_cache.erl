@@ -542,8 +542,25 @@ mark_changed_blocks(Key, all, all) ->
     ok;
 mark_changed_blocks(Key, Saved, Deleted) ->
     Local = get(?LOCAL_CHANGES),
-    put({?SAVED_BLOCKS, Key, Local}, Saved),
-    put({?DELETED_BLOCKS, Key}, Deleted),
+
+    case Local of
+        true ->
+            PublicBlocks = get({?PUBLIC_BLOCKS, Key}),
+            PublicDel = lists:any(fun(Block) ->
+                sets:is_element(Block, Deleted)
+            end, PublicBlocks),
+
+            case PublicDel of
+                true ->
+                    put({?SAVED_BLOCKS, Key, undefined}, Saved);
+                _ ->
+                    put({?SAVED_BLOCKS, Key, Local}, Saved)
+            end,
+            put({?DELETED_BLOCKS, Key}, Deleted);
+        _ ->
+            put({?SAVED_BLOCKS, Key, Local}, Saved),
+            put({?DELETED_BLOCKS, Key}, Deleted)
+    end,
     ok.
 
 %%-------------------------------------------------------------------
@@ -671,9 +688,16 @@ flush_key(Key, Type) ->
                     BlocksToSave3 = BlocksToSave2 ++ sets:to_list(PublicBlocks2),
                     BlocksToSave4 = lists:sort(BlocksToSave3),
 
-                    put({?PUBLIC_BLOCKS, Key}, BlocksToSave4),
+                    {BlocksToSave5, LocalBlocks2} = case {BlocksToSave4, LocalBlocks} of
+                        {[], [FirstLocal | LocalBlocksTail]} ->
+                            {[FirstLocal], LocalBlocksTail};
+                        _ ->
+                            {BlocksToSave4, LocalBlocks}
+                    end,
+
+                    put({?PUBLIC_BLOCKS, Key}, BlocksToSave5),
                     {Doc#document{value = Location#file_location{
-                        blocks = BlocksToSave4}}, LocalBlocks, DeletedBlocks}
+                        blocks = BlocksToSave5}}, LocalBlocks2, DeletedBlocks}
             end,
 
             case get(?FLUSH_PID) of
