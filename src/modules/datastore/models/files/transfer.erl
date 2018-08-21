@@ -322,7 +322,7 @@ is_migration(#transfer{
     is_binary(ReplicatingProvider) andalso is_binary(EvictingProviderId).
 
 
--spec is_ongoing(transfer() | id() | undefined) -> boolean().
+-spec is_ongoing(doc() | transfer() | id() | undefined) -> boolean().
 is_ongoing(undefined) ->
     true;
 is_ongoing(#document{value = Transfer}) ->
