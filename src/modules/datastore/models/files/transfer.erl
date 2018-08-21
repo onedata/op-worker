@@ -1136,28 +1136,28 @@ upgrade_record(6, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, Status,
     InvalidationStatus, SchedulingProviderId, SourceProviderId, TargetProviderId,
     InvalidateSourceReplica, Pid, FilesToProcess, FilesProcessed,
     FailedFiles, FilesTransferred, BytesTransferred, FilesInvalidated,
-    StartTime, StartTime, FinishTime, LastUpdate, MinHist, HrHist, DyHist,
+    ScheduleTime, StartTime, FinishTime, LastUpdate, MinHist, HrHist, DyHist,
     MthHist
 }) ->
     {7, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, true, Status,
         InvalidationStatus, SchedulingProviderId, SourceProviderId, TargetProviderId,
         InvalidateSourceReplica, Pid, FilesToProcess, FilesProcessed,
         FailedFiles, FilesTransferred, BytesTransferred, FilesInvalidated,
-        StartTime, StartTime, FinishTime, LastUpdate, MinHist, HrHist, DyHist,
+        ScheduleTime, StartTime, FinishTime, LastUpdate, MinHist, HrHist, DyHist,
         MthHist
     }};
 upgrade_record(7, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, Enqueued,
     Status, InvalidationStatus, SchedulingProviderId, SourceProviderId,
     TargetProviderId, _InvalidateSourceReplica, Pid, FilesToProcess,
     FilesProcessed, FailedFiles, FilesTransferred, BytesTransferred,
-    FilesInvalidated, StartTime, StartTime, FinishTime, LastUpdate,
-    MinHist, HrHist, DyHist, MthHist
+    FilesInvalidated, ScheduleTime, StartTime, FinishTime,
+    LastUpdate, MinHist, HrHist, DyHist, MthHist
 }) ->
     {8, {?MODULE, FileUuid, SpaceId, UserId, undefined, Path, CallBack, Enqueued,
         false, Status, InvalidationStatus, SchedulingProviderId,
         TargetProviderId, SourceProviderId, Pid, FilesToProcess,
         FilesProcessed, FailedFiles, FilesTransferred, BytesTransferred,
-        FilesInvalidated, StartTime, StartTime, FinishTime,
+        FilesInvalidated, ScheduleTime, StartTime, FinishTime,
         LastUpdate, MinHist, HrHist, DyHist, MthHist
     }}.
 
