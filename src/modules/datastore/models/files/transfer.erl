@@ -695,22 +695,23 @@ maybe_rerun(Doc = #document{key = TransferId, value = Transfer}) ->
             invalidation_status:handle_failed(TransferId, true),
             {ok, marked_failed};
         {false, false, false, false, _} ->
-            IsMigration = is_migration(Transfer),
             IsInvalidation = is_invalidation(Transfer),
-            case {IsInvalidation, IsMigration, SelfId} of
+            IsReplication = is_replication(Transfer),
+            IsMigration = is_migration(Transfer),
+            case {IsInvalidation, IsReplication, IsMigration, SelfId} of
+                % invalidation
+                {true, false, false, SourceProviderId} ->
+                    transfer_links:move_transfer_link_from_ongoing_to_ended(Doc),
+                    {ok, moved_to_ended};
                 % replication
-                {false, false, TargetProviderId} ->
+                {false, true, false, TargetProviderId} ->
                     transfer_links:move_transfer_link_from_ongoing_to_ended(Doc),
                     {ok, moved_to_ended};
                 % migration
-                {true, true, TargetProviderId} ->
+                {false, false, true, TargetProviderId} ->
                     transfer_links:move_transfer_link_from_ongoing_to_ended(Doc),
                     {ok, moved_to_ended};
-                % invalidation
-                {true, false, SourceProviderId} ->
-                    transfer_links:move_transfer_link_from_ongoing_to_ended(Doc),
-                    {ok, moved_to_ended};
-                {_, _, _} ->
+                {_, _, _, _} ->
                     {error, non_participating_provider}
             end;
         {_, _, _, _, _} ->
