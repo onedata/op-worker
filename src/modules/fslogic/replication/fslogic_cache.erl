@@ -507,20 +507,18 @@ get_changed_blocks(Key) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec mark_changed_blocks(file_location:id(), sets:set() | all,
-    sets:set() | all) -> boolean().
+    sets:set() | all) -> ok.
 mark_changed_blocks(Key, all, all) ->
     erase({?SAVED_BLOCKS, Key, true}),
     erase({?SAVED_BLOCKS, Key, undefined}),
     erase({?DELETED_BLOCKS, Key}),
     put({?RESET_BLOCKS, Key}, true),
-    true;
+    ok;
 mark_changed_blocks(Key, Saved, Deleted) ->
     Local = get(?LOCAL_CHANGES),
 
     case Local of
         true ->
-            put({?DELETED_BLOCKS, Key}, Deleted),
-
             PublicBlocks = get({?PUBLIC_BLOCKS, Key}),
             PublicDel = lists:any(fun(Block) ->
                 sets:is_element(Block, Deleted)
@@ -528,17 +526,16 @@ mark_changed_blocks(Key, Saved, Deleted) ->
 
             case PublicDel of
                 true ->
-                    put({?SAVED_BLOCKS, Key, undefined}, Saved),
-                    true;
+                    put({?SAVED_BLOCKS, Key, undefined}, Saved);
                 _ ->
-                    put({?SAVED_BLOCKS, Key, Local}, Saved),
-                    false
-            end;
+                    put({?SAVED_BLOCKS, Key, Local}, Saved)
+            end,
+            put({?DELETED_BLOCKS, Key}, Deleted);
         _ ->
             put({?SAVED_BLOCKS, Key, Local}, Saved),
-            put({?DELETED_BLOCKS, Key}, Deleted),
-            true
-    end.
+            put({?DELETED_BLOCKS, Key}, Deleted)
+    end,
+    ok.
 
 %%-------------------------------------------------------------------
 %% @doc

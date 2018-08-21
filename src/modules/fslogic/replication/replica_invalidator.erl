@@ -59,8 +59,8 @@ invalidate_changes(FileCtx, Doc = #document{
     OldBlocks = fslogic_location_cache:get_blocks(Doc, #{overlapping_blocks => ChangeBlocks}),
     NewBlocks = fslogic_blocks:invalidate(OldBlocks, ChangeBlocks),
     NewBlocks1 = fslogic_blocks:consolidate(NewBlocks),
-    {NewDoc, _} = fslogic_location_cache:update_blocks(Doc, NewBlocks1),
-    invalidate_changes(FileCtx, NewDoc, Rest, Size, ChangedBlocks ++ ChangeBlocks);
+    invalidate_changes(FileCtx, fslogic_location_cache:update_blocks(Doc, NewBlocks1),
+        Rest, Size, ChangedBlocks ++ ChangeBlocks);
 invalidate_changes(FileCtx, Doc, [{shrink, _} | Rest], Size, ChangedBlocks) ->
     invalidate_changes(FileCtx, Doc, Rest, Size, ChangedBlocks);
 invalidate_changes(FileCtx, Doc, [Blocks | Rest], Size, ChangedBlocks
@@ -68,8 +68,8 @@ invalidate_changes(FileCtx, Doc, [Blocks | Rest], Size, ChangedBlocks
     OldBlocks = fslogic_location_cache:get_blocks(Doc, #{overlapping_blocks => Blocks}),
     NewBlocks = fslogic_blocks:invalidate(OldBlocks, Blocks),
     NewBlocks1 = fslogic_blocks:consolidate(NewBlocks),
-    {NewDoc, _} = fslogic_location_cache:update_blocks(Doc, NewBlocks1),
-    invalidate_changes(FileCtx, NewDoc, Rest, Size, ChangedBlocks ++ Blocks).
+    invalidate_changes(FileCtx, fslogic_location_cache:update_blocks(Doc, NewBlocks1),
+        Rest, Size, ChangedBlocks ++ Blocks).
 
 %%%===================================================================
 %%% Internal functions
