@@ -145,7 +145,7 @@ list_links(SpaceId, ListDocId, StartId, Offset, Limit) ->
         _ -> Opts2#{size => Limit}
     end,
 
-    {ok, Transfers} = for_each_transfer(ListDocId, fun(LinkName, TransferId, Acc) ->
+    {ok, Transfers} = for_each_transfer(ListDocId, fun(_LinkName, TransferId, Acc) ->
         [TransferId | Acc]
     end, [], SpaceId, Opts3),
     lists:reverse(Transfers).

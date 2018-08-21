@@ -714,22 +714,23 @@ maybe_rerun(Doc = #document{key = TransferId, value = Transfer}) ->
             invalidation_status:handle_failed(TransferId, true),
             {ok, marked_failed};
         {false, false, false, false, _} ->
-            IsMigration = is_migration(Transfer),
             IsInvalidation = is_invalidation(Transfer),
-            case {IsInvalidation, IsMigration, SelfId} of
+            IsReplication = is_replication(Transfer),
+            IsMigration = is_migration(Transfer),
+            case {IsInvalidation, IsReplication, IsMigration, SelfId} of
+                % invalidation
+                {true, false, false, SourceProviderId} ->
+                    transfer_links:move_transfer_link_from_ongoing_to_ended(Doc),
+                    {ok, moved_to_ended};
                 % replication
-                {false, false, TargetProviderId} ->
+                {false, true, false, TargetProviderId} ->
                     transfer_links:move_transfer_link_from_ongoing_to_ended(Doc),
                     {ok, moved_to_ended};
                 % migration
-                {true, true, TargetProviderId} ->
+                {false, false, true, TargetProviderId} ->
                     transfer_links:move_transfer_link_from_ongoing_to_ended(Doc),
                     {ok, moved_to_ended};
-                % invalidation
-                {true, false, SourceProviderId} ->
-                    transfer_links:move_transfer_link_from_ongoing_to_ended(Doc),
-                    {ok, moved_to_ended};
-                {_, _, _} ->
+                {_, _, _, _} ->
                     {error, non_participating_provider}
             end;
         {_, _, _, _, _} ->
@@ -1155,28 +1156,28 @@ upgrade_record(6, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, Status,
     InvalidationStatus, SchedulingProviderId, SourceProviderId, TargetProviderId,
     InvalidateSourceReplica, Pid, FilesToProcess, FilesProcessed,
     FailedFiles, FilesTransferred, BytesTransferred, FilesInvalidated,
-    StartTime, StartTime, FinishTime, LastUpdate, MinHist, HrHist, DyHist,
+    ScheduleTime, StartTime, FinishTime, LastUpdate, MinHist, HrHist, DyHist,
     MthHist
 }) ->
     {7, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, true, Status,
         InvalidationStatus, SchedulingProviderId, SourceProviderId, TargetProviderId,
         InvalidateSourceReplica, Pid, FilesToProcess, FilesProcessed,
         FailedFiles, FilesTransferred, BytesTransferred, FilesInvalidated,
-        StartTime, StartTime, FinishTime, LastUpdate, MinHist, HrHist, DyHist,
+        ScheduleTime, StartTime, FinishTime, LastUpdate, MinHist, HrHist, DyHist,
         MthHist
     }};
 upgrade_record(7, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, Enqueued,
     Status, InvalidationStatus, SchedulingProviderId, SourceProviderId,
     TargetProviderId, _InvalidateSourceReplica, Pid, FilesToProcess,
     FilesProcessed, FailedFiles, FilesTransferred, BytesTransferred,
-    FilesInvalidated, StartTime, StartTime, FinishTime, LastUpdate,
-    MinHist, HrHist, DyHist, MthHist
+    FilesInvalidated, ScheduleTime, StartTime, FinishTime,
+    LastUpdate, MinHist, HrHist, DyHist, MthHist
 }) ->
     {8, {?MODULE, FileUuid, SpaceId, UserId, undefined, Path, CallBack, Enqueued,
         false, Status, InvalidationStatus, SchedulingProviderId,
         TargetProviderId, SourceProviderId, Pid, FilesToProcess,
         FilesProcessed, FailedFiles, FilesTransferred, BytesTransferred,
-        FilesInvalidated, StartTime, StartTime, FinishTime,
+        FilesInvalidated, ScheduleTime, StartTime, FinishTime,
         LastUpdate, MinHist, HrHist, DyHist, MthHist
     }}.
 

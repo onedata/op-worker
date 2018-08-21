@@ -677,6 +677,12 @@ schedule_replication_on_not_supporting_provider(Config, Type, FileKeyType) ->
 cancel_replication_on_target_nodes(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     transfers_test_utils:mock_prolonged_replication(WorkerP2, 0.5, 15),
+%%    tracer:start([WorkerP1, WorkerP2]),
+%%    tracer:trace_calls(replication_worker, replicate_file),
+%%    tracer:trace_calls(sync_req, replicate_file),
+%%    tracer:trace_calls(sync_req, replicate_file_insecure),
+%%    tracer:trace_calls(sync_req, replicate_regular_file),
+%%    tracer:trace_calls(sync_req, replicate_dir),
     transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{
