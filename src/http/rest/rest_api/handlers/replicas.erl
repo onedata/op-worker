@@ -73,15 +73,16 @@ content_types_provided(Req, State) ->
 
 %%--------------------------------------------------------------------
 %% '/api/v3/oneprovider/replicas/{path}'
-%% @doc This method invalidates file or dir replicas
+%% @doc This method evicts file or dir replicas
 %%
 %% HTTP method: DELETE
 %%
 %% @param path File path (e.g. &#39;/My Private Space/testfiles/file1.txt&#39;)
-%% @param provider_id The ID of the provider in which the replica should be invalidated.
+%% @param provider_id The ID of the provider in which the replica should be evicted.
 %%    By default the file will be replicated to the provider handling this REST call.\n
 %% @param migration_provider_id The ID of the provider to which the replica should be
-%%    synchronized before invalidation. By default the file will be migrated to random provider.\n
+%%    synchronized before replica eviction.
+%%    By default the file will be migrated to random provider.\n
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_resource(req(), maps:map()) -> {term(), req(), maps:map()}.
@@ -90,13 +91,13 @@ delete_resource(Req, State = #{resource_type := id}) ->
     {State3, Req3} = validator:parse_provider_id(Req2, State2),
     {State4, Req4} = validator:parse_migration_provider_id(Req3, State3),
 
-    invalidate_file_replica_internal(Req4, State4);
+    evict_file_replica_internal(Req4, State4);
 delete_resource(Req, State) ->
     {State2, Req2} = validator:parse_path(Req, State),
     {State3, Req3} = validator:parse_provider_id(Req2, State2),
     {State4, Req4} = validator:parse_migration_provider_id(Req3, State3),
 
-    invalidate_file_replica_internal(Req4, State4).
+    evict_file_replica_internal(Req4, State4).
 
 %%%===================================================================
 %%% Content type handler functions
@@ -160,8 +161,8 @@ get_file_replicas(Req, State) ->
 %% @doc internal version of delete_resource/2
 %% @end
 %%--------------------------------------------------------------------
--spec invalidate_file_replica_internal(req(), maps:map()) -> {term(), req(), maps:map()}.
-invalidate_file_replica_internal(Req, State = #{
+-spec evict_file_replica_internal(req(), maps:map()) -> {term(), req(), maps:map()}.
+evict_file_replica_internal(Req, State = #{
     auth := Auth,
     provider_id := SourceProviderId,
     migration_provider_id := MigrationProviderId
@@ -172,7 +173,7 @@ invalidate_file_replica_internal(Req, State = #{
     throw_if_non_local_space(SpaceId),
     throw_if_nonexistent_provider(SpaceId, MigrationProviderId),
     {ok, _} = onedata_file_api:stat(Auth, {guid, FileGuid}),
-    {ok, TransferId} = onedata_file_api:schedule_replica_invalidation(
+    {ok, TransferId} = onedata_file_api:schedule_replica_eviction(
         Auth, {guid, FileGuid}, SourceProviderId, MigrationProviderId
     ),
 

@@ -43,7 +43,7 @@
 %%%                    ||                             ||
 %%%
 %%%
-%%% Since migration is just invalidation preceded by replication, if
+%%% Since migration is just replica_eviction preceded by replication, if
 %%% replication fails/is cancelled, then whole migration fails/is cancelled.
 %%% Also failed status can be forced from any waiting or ongoing status.
 %%% It is necessary when transfer were interrupted abruptly,
@@ -200,9 +200,9 @@ mark_failed_forced(Transfer) ->
             {ok, Transfer#transfer{
                 replication_status = failed,
                 finish_time = provider_logic:zone_time_seconds(),
-                invalidation_status = case IsMigration of
+                eviction_status = case IsMigration of
                     true -> failed;
-                    false -> Transfer#transfer.invalidation_status
+                    false -> Transfer#transfer.eviction_status
                 end
             }}
     end.
@@ -213,18 +213,18 @@ mark_failed_forced(Transfer) ->
 mark_cancelled(Transfer = #transfer{replication_status = scheduled}) ->
     {ok, Transfer#transfer{
         replication_status = cancelled,
-        invalidation_status = case transfer:is_migration(Transfer) of
+        eviction_status = case transfer:is_migration(Transfer) of
             true -> cancelled;
-            false -> Transfer#transfer.invalidation_status
+            false -> Transfer#transfer.eviction_status
         end
     }};
 mark_cancelled(Transfer = #transfer{replication_status = aborting}) ->
     {ok, Transfer#transfer{
         replication_status = cancelled,
         finish_time = provider_logic:zone_time_seconds(),
-        invalidation_status = case transfer:is_migration(Transfer) of
+        eviction_status = case transfer:is_migration(Transfer) of
             true -> cancelled;
-            false -> Transfer#transfer.invalidation_status
+            false -> Transfer#transfer.eviction_status
         end
     }};
 mark_cancelled(#transfer{replication_status = Status}) ->

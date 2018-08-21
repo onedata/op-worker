@@ -149,7 +149,7 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
 handle_cast({start_replication, SessionId, TransferId, FileGuid, Callback,
-    InvalidateSourceReplica}, State
+    EvictSourceReplica}, State
 ) ->
     flush(),
     case replication_status:handle_enqueued(TransferId) of
@@ -157,13 +157,13 @@ handle_cast({start_replication, SessionId, TransferId, FileGuid, Callback,
             sync_req:enqueue_file_replication(user_ctx:new(SessionId),
                 file_ctx:new_by_guid(FileGuid), undefined, TransferId
             ),
-            handle_enqueued(TransferId, Callback, InvalidateSourceReplica);
+            handle_enqueued(TransferId, Callback, EvictSourceReplica);
         {error, enqueued} ->
             {ok, _} = transfer:set_controller_process(TransferId),
-            handle_enqueued(TransferId, Callback, InvalidateSourceReplica);
+            handle_enqueued(TransferId, Callback, EvictSourceReplica);
         {error, active} ->
             {ok, _} = transfer:set_controller_process(TransferId),
-            handle_active(TransferId, Callback, InvalidateSourceReplica);
+            handle_active(TransferId, Callback, EvictSourceReplica);
         {error, aborting} ->
             {ok, _} = transfer:set_controller_process(TransferId),
             handle_aborting(TransferId);
@@ -223,34 +223,34 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 
-handle_enqueued(TransferId, Callback, InvalidateSourceReplica) ->
+handle_enqueued(TransferId, Callback, EvictSourceReplica) ->
     receive
         replication_active ->
             {ok, _} = replication_status:handle_active(TransferId),
-            handle_active(TransferId, Callback, InvalidateSourceReplica);
+            handle_active(TransferId, Callback, EvictSourceReplica);
         {replication_aborting, Reason} ->
             {ok, _} = replication_status:handle_aborting(TransferId),
             ?error("Replication ~p aborting due to ~p", [TransferId, Reason]),
             handle_aborting(TransferId);
         Msg ->
             ?log_bad_replication_msg(Msg, enqueued, TransferId),
-            handle_enqueued(TransferId, Callback, InvalidateSourceReplica)
+            handle_enqueued(TransferId, Callback, EvictSourceReplica)
     end,
     ok.
 
 
-handle_active(TransferId, Callback, InvalidateSourceReplica) ->
+handle_active(TransferId, Callback, EvictSourceReplica) ->
     receive
         replication_completed ->
             {ok, _} = replication_status:handle_completed(TransferId),
-            notify_callback(Callback, InvalidateSourceReplica);
+            notify_callback(Callback, EvictSourceReplica);
         {replication_aborting, Reason} ->
             {ok, _} = replication_status:handle_aborting(TransferId),
             ?error("Replication ~p aborting due to ~p", [TransferId, Reason]),
             handle_aborting(TransferId);
         Msg ->
             ?log_bad_replication_msg(Msg, active, TransferId),
-            handle_active(TransferId, Callback, InvalidateSourceReplica)
+            handle_active(TransferId, Callback, EvictSourceReplica)
     end,
     ok.
 
@@ -275,7 +275,7 @@ handle_aborting(TransferId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec notify_callback(transfer:callback(),
-    InvalidationSourceReplica :: boolean()) -> ok.
+    EvictSourceReplica :: boolean()) -> ok.
 notify_callback(_Callback, true) -> ok;
 notify_callback(undefined, false) -> ok;
 notify_callback(<<>>, false) -> ok;

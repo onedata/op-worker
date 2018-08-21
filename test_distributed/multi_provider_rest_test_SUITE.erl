@@ -39,14 +39,14 @@
     rerun_file_replication_by_other_user/1,
     cancel_file_replication_on_2_providers_simultaneously/1,
     rerun_dir_replication/1,
-    invalidate_file_replica/1,
-    invalidate_file_replica_with_migration/1,
-    invalidation_should_succeed_when_remote_provider_modified_file_replica/1,
-    invalidation_should_fail_when_invalidation_provider_modified_file_replica/1,
-    rerun_invalidation_of_file_replica_with_migration/1,
-    invalidate_dir_replica/1,
+    evict_file_replica/1,
+    evict_file_replica_with_migration/1,
+    eviction_should_succeed_when_remote_provider_modified_file_replica/1,
+    eviction_should_fail_when_eviction_provider_modified_file_replica/1,
+    rerun_eviction_of_file_replica_with_migration/1,
+    evict_dir_replica/1,
     basic_autocleaning_test/1,
-    automatic_cleanup_should_invalidate_unpopular_files/1,
+    automatic_cleanup_should_evict_unpopular_files/1,
     posix_mode_get/1,
     posix_mode_put/1,
     attributes_list/1,
@@ -80,12 +80,12 @@
     primitive_json_metadata_test/1,
     empty_metadata_invalid_json_test/1,
     spatial_flag_test/1,
-    quota_decreased_after_invalidation/1,
+    quota_decreased_after_eviciton/1,
     migrate_big_dir/1,
     list_transfers/1,
-    invalidate_big_dir/1,
+    evict_big_dir/1,
     track_transferred_files/1,
-    fail_to_invalidate_file_replica_without_permissions/1]).
+    fail_to_evict_file_replica_without_permissions/1]).
 
 %utils
 -export([verify_file/3, create_file/3, create_dir/3,
@@ -100,14 +100,14 @@ all() ->
         rerun_file_replication_by_other_user,
         cancel_file_replication_on_2_providers_simultaneously,
         rerun_dir_replication,
-        invalidate_file_replica,
-        invalidate_file_replica_with_migration,
-        invalidation_should_succeed_when_remote_provider_modified_file_replica,
-        invalidation_should_fail_when_invalidation_provider_modified_file_replica,
-        rerun_invalidation_of_file_replica_with_migration,
-        invalidate_dir_replica,
+        evict_file_replica,
+        evict_file_replica_with_migration,
+        eviction_should_succeed_when_remote_provider_modified_file_replica,
+        eviction_should_fail_when_eviction_provider_modified_file_replica,
+        rerun_eviction_of_file_replica_with_migration,
+        evict_dir_replica,
         basic_autocleaning_test,
-        automatic_cleanup_should_invalidate_unpopular_files,
+        automatic_cleanup_should_evict_unpopular_files,
         posix_mode_get,
         posix_mode_put,
         attributes_list,
@@ -142,8 +142,8 @@ all() ->
         empty_metadata_invalid_json_test,
         spatial_flag_test,
         list_transfers,
-        %% quota_decreased_after_invalidation,   % TODO uncomment after resolving VFS-4041
-        invalidate_big_dir,
+        %% quota_decreased_after_eviciton,   % TODO uncomment after resolving VFS-4041
+        evict_big_dir,
         migrate_big_dir,
         track_transferred_files
     ]).
@@ -299,14 +299,14 @@ transfers_should_be_ordered_by_timestamps(Config) ->
         <<"replicationStatus">> := <<"completed">>,
         <<"replicatingProviderId">> := DomainP2,
         <<"path">> := File,
-        <<"invalidationStatus">> := <<"skipped">>,
+        <<"replicaEvictionStatus">> := <<"skipped">>,
         <<"fileId">> := FileObjectId,
         <<"callback">> := null,
         <<"filesToProcess">> := 1,
         <<"filesProcessed">> := 1,
         <<"failedFiles">> := 0,
         <<"filesReplicated">> := 1,
-        <<"filesInvalidated">> := 0,
+        <<"fileReplicasEvicted">> := 0,
         <<"bytesReplicated">> := Size,
         <<"mthHist">> := #{DomainP1 := [Size | _]}
     }, WorkerP1, Tid, Config),
@@ -315,13 +315,13 @@ transfers_should_be_ordered_by_timestamps(Config) ->
         <<"replicationStatus">> := <<"completed">>,
         <<"replicatingProviderId">> := DomainP2,
         <<"path">> := File2,
-        <<"invalidationStatus">> := <<"skipped">>,
+        <<"replicaEvictionStatus">> := <<"skipped">>,
         <<"fileId">> := FileObjectId2,
         <<"callback">> := null,
         <<"filesToProcess">> := 1,
         <<"filesProcessed">> := 1,
         <<"filesReplicated">> := 1,
-        <<"filesInvalidated">> := 0,
+        <<"fileReplicasEvicted">> := 0,
         <<"bytesReplicated">> := Size2,
         <<"mthHist">> := #{DomainP1 := [Size2 | _]}
     }, WorkerP1, Tid2, Config),
@@ -375,9 +375,9 @@ rerun_file_replication(Config) ->
         <<"filesToProcess">> := 1,
         <<"filesProcessed">> := 1,
         <<"failedFiles">> := 1,
-        <<"filesInvalidated">> := 0,
+        <<"fileReplicasEvicted">> := 0,
         <<"filesReplicated">> := 0,
-        <<"invalidationStatus">> := <<"skipped">>,
+        <<"replicaEvictionStatus">> := <<"skipped">>,
         <<"fileId">> := FileObjectId
     }, WorkerP1, Tid, Config),
 
@@ -407,9 +407,9 @@ rerun_file_replication(Config) ->
         <<"filesToProcess">> := 1,
         <<"filesProcessed">> := 1,
         <<"failedFiles">> := 1,
-        <<"filesInvalidated">> := 0,
+        <<"fileReplicasEvicted">> := 0,
         <<"filesReplicated">> := 0,
-        <<"invalidationStatus">> := <<"skipped">>,
+        <<"replicaEvictionStatus">> := <<"skipped">>,
         <<"fileId">> := FileObjectId
     }, WorkerP1, Tid, Config),
 
@@ -418,13 +418,13 @@ rerun_file_replication(Config) ->
         <<"replicationStatus">> := <<"completed">>,
         <<"replicatingProviderId">> := DomainP2,
         <<"path">> := File,
-        <<"invalidationStatus">> := <<"skipped">>,
+        <<"replicaEvictionStatus">> := <<"skipped">>,
         <<"fileId">> := FileObjectId,
         <<"callback">> := null,
         <<"filesToProcess">> := 1,
         <<"filesProcessed">> := 1,
         <<"failedFiles">> := 0,
-        <<"filesInvalidated">> := 0,
+        <<"fileReplicasEvicted">> := 0,
         <<"filesReplicated">> := 1,
         <<"bytesReplicated">> := 4,
         <<"minHist">> := #{DomainP1 := [4 | _]},
@@ -488,9 +488,9 @@ rerun_file_replication_by_other_user(Config) ->
         <<"filesToProcess">> := 1,
         <<"filesProcessed">> := 1,
         <<"failedFiles">> := 1,
-        <<"filesInvalidated">> := 0,
+        <<"fileReplicasEvicted">> := 0,
         <<"filesReplicated">> := 0,
-        <<"invalidationStatus">> := <<"skipped">>,
+        <<"replicaEvictionStatus">> := <<"skipped">>,
         <<"fileId">> := FileObjectId
     }, WorkerP1, Tid, Config),
 
@@ -520,9 +520,9 @@ rerun_file_replication_by_other_user(Config) ->
         <<"filesToProcess">> := 1,
         <<"filesProcessed">> := 1,
         <<"failedFiles">> := 1,
-        <<"filesInvalidated">> := 0,
+        <<"fileReplicasEvicted">> := 0,
         <<"filesReplicated">> := 0,
-        <<"invalidationStatus">> := <<"skipped">>,
+        <<"replicaEvictionStatus">> := <<"skipped">>,
         <<"fileId">> := FileObjectId
     }, WorkerP1, Tid, Config),
 
@@ -531,13 +531,13 @@ rerun_file_replication_by_other_user(Config) ->
         <<"replicationStatus">> := <<"completed">>,
         <<"replicatingProviderId">> := DomainP2,
         <<"path">> := File,
-        <<"invalidationStatus">> := <<"skipped">>,
+        <<"replicaEvictionStatus">> := <<"skipped">>,
         <<"fileId">> := FileObjectId,
         <<"callback">> := null,
         <<"filesToProcess">> := 1,
         <<"filesProcessed">> := 1,
         <<"failedFiles">> := 0,
-        <<"filesInvalidated">> := 0,
+        <<"fileReplicasEvicted">> := 0,
         <<"filesReplicated">> := 1,
         <<"bytesReplicated">> := 4,
         <<"minHist">> := #{DomainP1 := [4 | _]},
@@ -608,7 +608,7 @@ cancel_file_replication_on_2_providers_simultaneously(Config) ->
         <<"replicatingProviderId">> := DomainP2,
         <<"path">> := File,
         <<"fileId">> := FileObjectId,
-        <<"invalidationStatus">> := <<"skipped">>
+        <<"replicaEvictionStatus">> := <<"skipped">>
     }, WorkerP2, Tid, Config),
 
     ?assertEqual([], list_waiting_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
@@ -661,7 +661,7 @@ rerun_dir_replication(Config) ->
         <<"replicatingProviderId">> := DomainP2,
         <<"rerunId">> := null,
         <<"path">> := Dir1,
-        <<"invalidationStatus">> := <<"skipped">>,
+        <<"replicaEvictionStatus">> := <<"skipped">>,
         <<"fileId">> := FileObjectId
     }, WorkerP1, Tid, Config),
 
@@ -689,7 +689,7 @@ rerun_dir_replication(Config) ->
         <<"replicatingProviderId">> := DomainP2,
         <<"rerunId">> := NewTransferId,
         <<"path">> := Dir1,
-        <<"invalidationStatus">> := <<"skipped">>,
+        <<"replicaEvictionStatus">> := <<"skipped">>,
         <<"fileId">> := FileObjectId
     }, WorkerP1, Tid, Config),
 
@@ -697,13 +697,13 @@ rerun_dir_replication(Config) ->
         <<"replicationStatus">> := <<"completed">>,
         <<"replicatingProviderId">> := DomainP2,
         <<"path">> := Dir1,
-        <<"invalidationStatus">> := <<"skipped">>,
+        <<"replicaEvictionStatus">> := <<"skipped">>,
         <<"fileId">> := FileObjectId,
         <<"callback">> := null,
         <<"filesToProcess">> := 5,
         <<"filesProcessed">> := 5,
         <<"failedFiles">> := 0,
-        <<"filesInvalidated">> := 0,
+        <<"fileReplicasEvicted">> := 0,
         <<"filesReplicated">> := 3,
         <<"bytesReplicated">> := 12
     }, WorkerP1, NewTransferId, Config),
@@ -733,12 +733,12 @@ rerun_dir_replication(Config) ->
     ?assertEqual([NewTransferId, Tid],
         get_ended_transfers_for_file(WorkerP2, Dir1Guid), ?ATTEMPTS).
 
-invalidate_file_replica(Config) ->
+evict_file_replica(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
     SpaceId = ?config(space_id, Config),
-    File = ?absPath(SpaceId, <<"file_invalidate">>),
+    File = ?absPath(SpaceId, <<"file_evict">>),
     FileGuid = create_test_file(WorkerP1, SessionId, File, ?TEST_DATA),
     DomainP2 = domain(WorkerP2),
     {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
@@ -753,13 +753,13 @@ invalidate_file_replica(Config) ->
         <<"replicationStatus">> := <<"completed">>,
         <<"replicatingProviderId">> := DomainP2,
         <<"path">> := File,
-        <<"invalidationStatus">> := <<"skipped">>,
+        <<"replicaEvictionStatus">> := <<"skipped">>,
         <<"fileId">> := FileObjectId,
         <<"callback">> := null,
         <<"filesToProcess">> := 1,
         <<"filesProcessed">> := 1,
         <<"failedFiles">> := 0,
-        <<"filesInvalidated">> := 0,
+        <<"fileReplicasEvicted">> := 0,
         <<"filesReplicated">> := 1,
         <<"bytesReplicated">> := 4
     }, WorkerP1, Tid, Config),
@@ -783,7 +783,7 @@ invalidate_file_replica(Config) ->
     ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File),
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
 
-    Tid1 = schedule_replica_invalidation(WorkerP1, DomainP2, File, Config),
+    Tid1 = schedule_replica_eviction(WorkerP1, DomainP2, File, Config),
     ?assertEqual([Tid1], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
     ExpectedDistribution2 = [
         #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
@@ -793,16 +793,16 @@ invalidate_file_replica(Config) ->
     ?assertTransferStatus(#{
         <<"replicationStatus">> := <<"skipped">>,
         <<"replicatingProviderId">> := null,
-        <<"invalidatingProviderId">> := DomainP2,
+        <<"evictingProviderId">> := DomainP2,
         <<"path">> := File,
-        <<"invalidationStatus">> := <<"completed">>,
+        <<"replicaEvictionStatus">> := <<"completed">>,
         <<"fileId">> := FileObjectId,
         <<"callback">> := null,
         <<"filesToProcess">> := 1,
         <<"filesProcessed">> := 1,
         <<"failedFiles">> :=0,
         <<"filesReplicated">> := 0,
-        <<"filesInvalidated">> := 1,
+        <<"fileReplicasEvicted">> := 1,
         <<"bytesReplicated">> := 0
     }, WorkerP1, Tid1, Config),
 
@@ -821,13 +821,13 @@ invalidate_file_replica(Config) ->
     ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
     ?assertEqual([Tid1, Tid], get_ended_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS).
 
-fail_to_invalidate_file_replica_without_permissions(Config) ->
+fail_to_evict_file_replica_without_permissions(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    %NOTE in this test file will be created by user2 and user1 will try to invalidate it
+    %NOTE in this test file will be created by user2 and user1 will try to evict it
     SessionId = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     SessionId2 = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(WorkerP2)}}, Config),
     SpaceId = ?config(space_id, Config),
-    File = ?absPath(SpaceId, <<"file_invalidate">>),
+    File = ?absPath(SpaceId, <<"file_evict">>),
     FileGuid = create_test_file(WorkerP1, SessionId, File, ?TEST_DATA),
 
     DomainP2 = domain(WorkerP2),
@@ -842,13 +842,13 @@ fail_to_invalidate_file_replica_without_permissions(Config) ->
         <<"replicationStatus">> := <<"completed">>,
         <<"replicatingProviderId">> := DomainP2,
         <<"path">> := File,
-        <<"invalidationStatus">> := <<"skipped">>,
+        <<"replicaEvictionStatus">> := <<"skipped">>,
         <<"fileId">> := FileObjectId,
         <<"callback">> := null,
         <<"filesToProcess">> := 1,
         <<"filesProcessed">> := 1,
         <<"failedFiles">> := 0,
-        <<"filesInvalidated">> := 0,
+        <<"fileReplicasEvicted">> := 0,
         <<"filesReplicated">> := 1,
         <<"bytesReplicated">> := 4
     }, WorkerP1, Tid, Config),
@@ -870,7 +870,7 @@ fail_to_invalidate_file_replica_without_permissions(Config) ->
     ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File),
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
 
-    % user1 should fail to schedule file_invalidation
+    % user1 should fail to schedule file replica eviction
     ?assertMatch({ok, 403, _, _}, rest_test_utils:request(WorkerP1,
         <<"replicas/", File/binary, "?provider_id=", DomainP2/binary>>,
         delete, ?USER_1_AUTH_HEADERS(Config), []),
@@ -889,12 +889,12 @@ fail_to_invalidate_file_replica_without_permissions(Config) ->
     ?assertEqual([Tid], list_ended_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS).
 
-invalidate_file_replica_with_migration(Config) ->
+evict_file_replica_with_migration(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
     SpaceId = ?config(space_id, Config),
-    File = ?absPath(SpaceId, <<"file_invalidate_migration">>),
+    File = ?absPath(SpaceId, <<"file_evict_migration">>),
     FileGuid = create_test_file(WorkerP1, SessionId, File, ?TEST_DATA),
     DomainP1 = domain(WorkerP1),
     DomainP2 = domain(WorkerP2),
@@ -909,16 +909,16 @@ invalidate_file_replica_with_migration(Config) ->
 
     % then
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
-    Tid = schedule_replica_invalidation(WorkerP1, DomainP1, DomainP2, File, Config),
+    Tid = schedule_replica_eviction(WorkerP1, DomainP1, DomainP2, File, Config),
     ?assertEqual([Tid], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
     ?assertEqual([], get_ended_transfers_for_file(WorkerP1, FileGuid)),
 
     ?assertTransferStatus(#{
         <<"replicationStatus">> := <<"completed">>,
         <<"replicatingProviderId">> := DomainP2,
-        <<"invalidatingProviderId">> := DomainP1,
+        <<"evictingProviderId">> := DomainP1,
         <<"path">> := File,
-        <<"invalidationStatus">> := <<"completed">>,
+        <<"replicaEvictionStatus">> := <<"completed">>,
         <<"fileId">> := FileObjectId,
         <<"callback">> := null,
         <<"filesToProcess">> := 2,
@@ -926,7 +926,7 @@ invalidate_file_replica_with_migration(Config) ->
         <<"failedFiles">> := 0,
         <<"filesReplicated">> := 1,
         <<"bytesReplicated">> := 4,
-        <<"filesInvalidated">> := 1,
+        <<"fileReplicasEvicted">> := 1,
         <<"callback">> := null
     }, WorkerP1, Tid, Config),
 
@@ -942,19 +942,17 @@ invalidate_file_replica_with_migration(Config) ->
     ?assertEqual([Tid], list_ended_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqual([], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
 
-    ct:pal("Tid: ~p", [Tid]),
-
     ?assertEqual([], list_waiting_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqual([], list_ongoing_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqual([Tid], list_ended_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS).
 
-invalidation_should_succeed_when_remote_provider_modified_file_replica(Config) ->
+eviction_should_succeed_when_remote_provider_modified_file_replica(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
     SpaceId = ?config(space_id, Config),
-    File = ?absPath(SpaceId, <<"file_invalidate_remote_modification">>),
+    File = ?absPath(SpaceId, <<"file_evict_remote_modification">>),
     FileGuid = create_test_file(WorkerP1, SessionId, File, ?TEST_DATA),
     DomainP2 = domain(WorkerP2),
     {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
@@ -968,17 +966,16 @@ invalidation_should_succeed_when_remote_provider_modified_file_replica(Config) -
         <<"replicationStatus">> := <<"completed">>,
         <<"replicatingProviderId">> := DomainP2,
         <<"path">> := File,
-        <<"invalidationStatus">> := <<"skipped">>,
+        <<"replicaEvictionStatus">> := <<"skipped">>,
         <<"fileId">> := FileObjectId,
         <<"callback">> := null,
         <<"filesToProcess">> := 1,
         <<"filesProcessed">> := 1,
         <<"failedFiles">> := 0,
-        <<"filesInvalidated">> := 0,
+        <<"fileReplicasEvicted">> := 0,
         <<"filesReplicated">> := 1,
         <<"bytesReplicated">> := 4
     }, WorkerP1, Tid, Config),
-    ct:pal("Tid: ~p", [Tid]),
     ?assertEqual([], list_waiting_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqual([], list_ongoing_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
     ?assertEqual([Tid], list_ended_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
@@ -1000,30 +997,25 @@ invalidation_should_succeed_when_remote_provider_modified_file_replica(Config) -
     {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
     {ok, _} = lfm_proxy:write(WorkerP1, Handle, 1, <<"#">>),
     lfm_proxy:close(WorkerP1, Handle),
-    Tid1 = schedule_replica_invalidation(WorkerP1, DomainP2, File, Config),
-    ct:pal("Tid1: ~p", [Tid1]),
+    Tid1 = schedule_replica_eviction(WorkerP1, DomainP2, File, Config),
     ?assertEqual([Tid1], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
     ExpectedDistribution2 = [
         #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
         #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => []}
     ],
-%%
-%%    ct:pal("Sleep"),
-%%    ct:timetrap({hours, 1}),
-%%    ct:sleep({hours, 1}),
 
     ?assertTransferStatus(#{
         <<"replicationStatus">> := <<"skipped">>,
         <<"replicatingProviderId">> := null,
         <<"path">> := File,
-        <<"invalidationStatus">> := <<"completed">>,
+        <<"replicaEvictionStatus">> := <<"completed">>,
         <<"fileId">> := FileObjectId,
         <<"callback">> := null,
         <<"filesToProcess">> := 1,
         <<"filesProcessed">> := 1,
         <<"failedFiles">> :=0,
         <<"filesReplicated">> := 0,
-        <<"filesInvalidated">> := 1,
+        <<"fileReplicasEvicted">> := 1,
         <<"bytesReplicated">> := 0
     }, WorkerP1, Tid1, Config),
 
@@ -1042,12 +1034,12 @@ invalidation_should_succeed_when_remote_provider_modified_file_replica(Config) -
     ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
     ?assertEqual([Tid1, Tid], get_ended_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS).
 
-invalidation_should_fail_when_invalidation_provider_modified_file_replica(Config) ->
+eviction_should_fail_when_eviction_provider_modified_file_replica(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
     SpaceId = ?config(space_id, Config),
-    File = ?absPath(SpaceId, <<"file_invalidate_local_modification">>),
+    File = ?absPath(SpaceId, <<"file_evict_local_modification">>),
     FileGuid = create_test_file(WorkerP1, SessionId, File, ?TEST_DATA),
     lfm_proxy:set_perms(WorkerP1, SessionId, {guid, FileGuid}, 8#777),
     DomainP2 = domain(WorkerP2),
@@ -1062,13 +1054,13 @@ invalidation_should_fail_when_invalidation_provider_modified_file_replica(Config
         <<"replicationStatus">> := <<"completed">>,
         <<"replicatingProviderId">> := DomainP2,
         <<"path">> := File,
-        <<"invalidationStatus">> := <<"skipped">>,
+        <<"replicaEvictionStatus">> := <<"skipped">>,
         <<"fileId">> := FileObjectId,
         <<"callback">> := null,
         <<"filesToProcess">> := 1,
         <<"filesProcessed">> := 1,
         <<"failedFiles">> := 0,
-        <<"filesInvalidated">> := 0,
+        <<"fileReplicasEvicted">> := 0,
         <<"filesReplicated">> := 1,
         <<"bytesReplicated">> := 4
     }, WorkerP1, Tid, Config),
@@ -1101,7 +1093,7 @@ invalidation_should_fail_when_invalidation_provider_modified_file_replica(Config
         meck:passthrough([FileCtx, Blocks, AllowedVV])
     end),
 
-    Tid1 = schedule_replica_invalidation(WorkerP1, DomainP2, File, Config),
+    Tid1 = schedule_replica_eviction(WorkerP1, DomainP2, File, Config),
 
     ?assertEqual([Tid1], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
 
@@ -1114,14 +1106,14 @@ invalidation_should_fail_when_invalidation_provider_modified_file_replica(Config
         <<"replicationStatus">> := <<"skipped">>,
         <<"replicatingProviderId">> := null,
         <<"path">> := File,
-        <<"invalidationStatus">> := <<"completed">>,
+        <<"replicaEvictionStatus">> := <<"completed">>,
         <<"fileId">> := FileObjectId,
         <<"callback">> := null,
         <<"filesToProcess">> := 1,
         <<"filesProcessed">> := 1,
         <<"failedFiles">> := 0,
         <<"filesReplicated">> := 0,
-        <<"filesInvalidated">> := 0,
+        <<"fileReplicasEvicted">> := 0,
         <<"bytesReplicated">> := 0
     }, WorkerP1, Tid1, Config),
 
@@ -1139,12 +1131,12 @@ invalidation_should_fail_when_invalidation_provider_modified_file_replica(Config
     ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS).
 
 
-rerun_invalidation_of_file_replica_with_migration(Config) ->
+rerun_eviction_of_file_replica_with_migration(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
     SpaceId = ?config(space_id, Config),
-    File = ?absPath(SpaceId, <<"file_invalidate_migration_rerun">>),
+    File = ?absPath(SpaceId, <<"file_evict_migration_rerun">>),
     FileGuid = create_test_file(WorkerP1, SessionId, File, ?TEST_DATA),
     DomainP1 = domain(WorkerP1),
     DomainP2 = domain(WorkerP2),
@@ -1158,7 +1150,7 @@ rerun_invalidation_of_file_replica_with_migration(Config) ->
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
 
     mock_file_replication_failure(WorkerP2),
-    Tid1 = schedule_replica_invalidation(WorkerP1, DomainP1, DomainP2, File, Config),
+    Tid1 = schedule_replica_eviction(WorkerP1, DomainP1, DomainP2, File, Config),
     ?assertEqual([Tid1], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
     ?assertEqual([], get_ended_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
 
@@ -1166,12 +1158,12 @@ rerun_invalidation_of_file_replica_with_migration(Config) ->
     ?assertTransferStatus(#{
         <<"rerunId">> := null,
         <<"replicationStatus">> := <<"failed">>,
-        <<"invalidationStatus">> := <<"failed">>,
-        <<"invalidatingProviderId">> := DomainP1,
+        <<"replicaEvictionStatus">> := <<"failed">>,
+        <<"evictingProviderId">> := DomainP1,
         <<"filesToProcess">> := 1,
         <<"filesProcessed">> := 1,
         <<"failedFiles">> := 1,
-        <<"filesInvalidated">> := 0,
+        <<"fileReplicasEvicted">> := 0,
         <<"filesReplicated">> := 0,
         <<"bytesReplicated">> := 0
     }, WorkerP1, Tid1, Config),
@@ -1196,24 +1188,24 @@ rerun_invalidation_of_file_replica_with_migration(Config) ->
     ?assertTransferStatus(#{
         <<"rerunId">> := NewTransferId,
         <<"replicationStatus">> := <<"failed">>,
-        <<"invalidationStatus">> := <<"failed">>,
-        <<"invalidatingProviderId">> := DomainP1,
+        <<"replicaEvictionStatus">> := <<"failed">>,
+        <<"evictingProviderId">> := DomainP1,
         <<"filesToProcess">> := 1,
         <<"filesProcessed">> := 1,
         <<"failedFiles">> := 1,
-        <<"filesInvalidated">> := 0,
+        <<"fileReplicasEvicted">> := 0,
         <<"filesReplicated">> := 0,
         <<"bytesReplicated">> := 0
     }, WorkerP1, Tid1, Config),
 
     ?assertTransferStatus(#{
         <<"replicationStatus">> := <<"completed">>,
-        <<"invalidationStatus">> := <<"completed">>,
-        <<"invalidatingProviderId">> := DomainP1,
+        <<"replicaEvictionStatus">> := <<"completed">>,
+        <<"evictingProviderId">> := DomainP1,
         <<"filesToProcess">> := 2,
         <<"filesProcessed">> := 2,
         <<"failedFiles">> := 0,
-        <<"filesInvalidated">> := 1,
+        <<"fileReplicasEvicted">> := 1,
         <<"filesReplicated">> := 1,
         <<"bytesReplicated">> := 4
     }, WorkerP1, NewTransferId, Config),
@@ -1239,18 +1231,18 @@ rerun_invalidation_of_file_replica_with_migration(Config) ->
     ?assertDistribution(WorkerP1, ExpectedDistribution2, Config, File),
     ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, File).
 
-invalidate_dir_replica(Config) ->
+evict_dir_replica(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
     SpaceId = ?config(space_id, Config),
     DomainP2 = domain(WorkerP2),
 
-    Dir1 = ?absPath(SpaceId, <<"dir1_invalidate">>),
-    Dir2 = ?absPath(SpaceId, <<"dir1_invalidate/dir2">>),
-    File1 = ?absPath(SpaceId, <<"dir1_invalidate/file1">>),
-    File2 = ?absPath(SpaceId, <<"dir1_invalidate/file2">>),
-    File3 = ?absPath(SpaceId, <<"dir1_invalidate/dir2/file3">>),
+    Dir1 = ?absPath(SpaceId, <<"dir1_evict">>),
+    Dir2 = ?absPath(SpaceId, <<"dir1_evict/dir2">>),
+    File1 = ?absPath(SpaceId, <<"dir1_evict/file1">>),
+    File2 = ?absPath(SpaceId, <<"dir1_evict/file2">>),
+    File3 = ?absPath(SpaceId, <<"dir1_evict/dir2/file3">>),
     {ok, Dir1Guid} = lfm_proxy:mkdir(WorkerP1, SessionId, Dir1),
     {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, Dir2),
     create_test_file(WorkerP1, SessionId, File1, ?TEST_DATA),
@@ -1275,13 +1267,13 @@ invalidate_dir_replica(Config) ->
         <<"replicationStatus">> := <<"completed">>,
         <<"replicatingProviderId">> := DomainP2,
         <<"path">> := Dir1,
-        <<"invalidationStatus">> := <<"skipped">>,
+        <<"replicaEvictionStatus">> := <<"skipped">>,
         <<"fileId">> := FileObjectId,
         <<"callback">> := null,
         <<"filesToProcess">> := 5,
         <<"filesProcessed">> := 5,
         <<"failedFiles">> := 0,
-        <<"filesInvalidated">> := 0,
+        <<"fileReplicasEvicted">> := 0,
         <<"filesReplicated">> := 3,
         <<"bytesReplicated">> := 12
     }, WorkerP1, Tid, Config),
@@ -1309,7 +1301,7 @@ invalidate_dir_replica(Config) ->
     ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, Dir1Guid), ?ATTEMPTS),
     ?assertEqual([Tid], get_ended_transfers_for_file(WorkerP2, Dir1Guid), ?ATTEMPTS),
 
-    Tid2 = schedule_replica_invalidation(WorkerP1, DomainP2, Dir1, Config),
+    Tid2 = schedule_replica_eviction(WorkerP1, DomainP2, Dir1, Config),
     ?assertEqual([Tid2],
         get_ongoing_transfers_for_file(WorkerP1, Dir1Guid), ?ATTEMPTS),
 
@@ -1317,14 +1309,14 @@ invalidate_dir_replica(Config) ->
         <<"path">> := Dir1,
         <<"callback">> := null,
         <<"replicationStatus">> := <<"skipped">>,
-        <<"invalidationStatus">> := <<"completed">>,
+        <<"replicaEvictionStatus">> := <<"completed">>,
         <<"replicatingProviderId">> := null,
-        <<"invalidatingProviderId">> := DomainP2,
+        <<"evictingProviderId">> := DomainP2,
         <<"fileId">> := FileObjectId,
         <<"filesToProcess">> := 5,
         <<"filesProcessed">> := 5,
         <<"failedFiles">> := 0,
-        <<"filesInvalidated">> := 3,
+        <<"fileReplicasEvicted">> := 3,
         <<"filesReplicated">> := 0,
         <<"bytesReplicated">> := 0
     }, WorkerP1, Tid2, Config),
@@ -1399,7 +1391,7 @@ basic_autocleaning_test(Config) ->
     ], WorkerP2, SpaceId).
 
 
-automatic_cleanup_should_invalidate_unpopular_files(Config) ->
+automatic_cleanup_should_evict_unpopular_files(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionIdP1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     SessionIdP2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
@@ -2361,22 +2353,15 @@ list_transfers(Config) ->
 
     % List using random chunk sizes
     Waiting = fun(Worker) ->
-%%        list_all_transfers_via_rest(Config, Worker, Space, <<"waiting">>, FilesNum)
         Chunk = rand:uniform(FilesNum),
-        ct:pal("Waiting transfers chunk size: ~p", [Chunk]),
-        list_all_transfers_via_rest(Config, Worker, Space, <<"waiting">>, Chunk)
+        list_all_transfers_via_rest(Config, Worker, Space, <<"waiting">>, rand:uniform(FilesNum))
     end,
     Ongoing = fun(Worker) ->
-%%        list_all_transfers_via_rest(Config, Worker, Space, <<"ongoing">>, FilesNum)
         Chunk = rand:uniform(FilesNum),
-        ct:pal("Ongoing transfers chunk size: ~p", [Chunk]),
-        list_all_transfers_via_rest(Config, Worker, Space, <<"ongoing">>, Chunk)
+        list_all_transfers_via_rest(Config, Worker, Space, <<"ongoing">>, rand:uniform(FilesNum))
     end,
     Ended = fun(Worker) ->
-%%        list_all_transfers_via_rest(Config, Worker, Space, <<"ended">>, FilesNum)
-        Chunk = rand:uniform(FilesNum),
-        ct:pal("Ended transfers chunk size: ~p", [Chunk]),
-        list_all_transfers_via_rest(Config, Worker, Space, <<"ended">>, Chunk)
+        list_all_transfers_via_rest(Config, Worker, Space, <<"ended">>, rand:uniform(FilesNum))
     end,
     All = fun(Worker) ->
         lists:usort(Waiting(Worker) ++ Ongoing(Worker) ++ Ended(Worker)) end,
@@ -2384,7 +2369,6 @@ list_transfers(Config) ->
     OneFourth = FilesNum div 4,
 
     % Check if listing different
-    try
     ?assertMatch(AllTransfers, All(P1), ?ATTEMPTS),
         ?assertMatch(AllTransfers, All(P2), ?ATTEMPTS),
     ?assertMatch(true, length(Ended(P1)) > OneFourth, ?ATTEMPTS),
@@ -2406,15 +2390,9 @@ list_transfers(Config) ->
     ?assertMatch(true, length(Ended(P2)) =:= FilesNum, ?ATTEMPTS),
 
     ?assertMatch(AllTransfers, lists:sort(Ended(P1)), ?ATTEMPTS),
-    ?assertMatch(AllTransfers, lists:sort(Ended(P2)), ?ATTEMPTS)
-    catch
-        _:_ ->
-            ct:pal("SLEEP"),
-            ct:timetrap({hours, 24}),
-            ct:sleep({hours, 24})
-    end.
+    ?assertMatch(AllTransfers, lists:sort(Ended(P2)), ?ATTEMPTS).
 
-quota_decreased_after_invalidation(Config) ->
+quota_decreased_after_eviciton(Config) ->
     ct:timetrap({hours, 1}),
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
@@ -2443,13 +2421,13 @@ quota_decreased_after_invalidation(Config) ->
         <<"replicationStatus">> := <<"completed">>,
         <<"replicatingProviderId">> := DomainP2,
         <<"path">> := File,
-        <<"invalidationStatus">> := <<"skipped">>,
+        <<"replicaEvictionStatus">> := <<"skipped">>,
         <<"fileId">> := FileObjectId,
         <<"callback">> := null,
         <<"filesToProcess">> := 1,
         <<"filesProcessed">> := 1,
         <<"failedFiles">> := 0,
-        <<"filesInvalidated">> := 0,
+        <<"fileReplicasEvicted">> := 0,
         <<"filesReplicated">> := 1,
         <<"bytesReplicated">> := 10
     }, WorkerP1, Tid, Config),
@@ -2482,13 +2460,13 @@ quota_decreased_after_invalidation(Config) ->
         <<"replicationStatus">> := <<"failed">>,
         <<"replicatingProviderId">> := DomainP2,
         <<"path">> := File2,
-        <<"invalidationStatus">> := <<"skipped">>,
+        <<"replicaEvictionStatus">> := <<"skipped">>,
         <<"fileId">> := FileObjectId2,
         <<"callback">> := null,
         <<"filesToProcess">> := 1,
         <<"filesProcessed">> := 1,
         <<"failedFiles">> := 1,
-        <<"filesInvalidated">> := 0,
+        <<"fileReplicasEvicted">> := 0,
         <<"filesReplicated">> := 0,
         <<"bytesReplicated">> := 0
     }, WorkerP1, Tid2, Config),
@@ -2512,7 +2490,7 @@ quota_decreased_after_invalidation(Config) ->
     ?assertDistribution(WorkerP1, ExpectedDistribution2, Config, File2),
     ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, File2),
 
-    Tid3 = schedule_replica_invalidation(WorkerP2, DomainP2, File, Config),
+    Tid3 = schedule_replica_eviction(WorkerP2, DomainP2, File, Config),
     ?assertEqual([Tid3],
         get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
 
@@ -2520,17 +2498,17 @@ quota_decreased_after_invalidation(Config) ->
         <<"replicationStatus">> := <<"skipped">>,
         <<"replicatingProviderId">> := null,
         <<"path">> := File,
-        <<"invalidationStatus">> := <<"completed">>,
+        <<"replicaEvictionStatus">> := <<"completed">>,
         <<"callback">> := null,
         <<"filesToProcess">> := 1,
         <<"filesProcessed">> := 1,
         <<"failedFiles">> := 0,
-        <<"filesInvalidated">> := 1,
+        <<"fileReplicasEvicted">> := 1,
         <<"filesReplicated">> := 0,
         <<"bytesReplicated">> := 0
     }, WorkerP1, Tid3, Config),
 
-    % File replica is invalidated
+    % File replica is evicted
     ExpectedDistribution3 = [
         #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 10]]},
         #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => []}
@@ -2550,12 +2528,12 @@ quota_decreased_after_invalidation(Config) ->
         <<"replicationStatus">> := <<"completed">>,
         <<"replicatingProviderId">> := DomainP2,
         <<"path">> := File2,
-        <<"invalidationStatus">> := <<"skipped">>,
+        <<"replicaEvictionStatus">> := <<"skipped">>,
         <<"fileId">> := FileObjectId2,
         <<"callback">> := null,
         <<"filesToProcess">> := 1,
         <<"filesProcessed">> := 1,
-        <<"filesInvalidated">> := 0,
+        <<"fileReplicasEvicted">> := 0,
         <<"filesReplicated">> := 1,
         <<"bytesReplicated">> := 10
     }, WorkerP1, Tid4, Config),
@@ -2575,13 +2553,13 @@ quota_decreased_after_invalidation(Config) ->
     ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
     ?assertEqual([Tid4, Tid3, Tid2, Tid], get_ended_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS).
 
-invalidate_big_dir(Config) ->
+evict_big_dir(Config) ->
     ct:timetrap({hours, 1}),
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
     Space = <<"/space3">>,
-    RootDir = filename:join(Space, <<"big_dir_invalidation">>),
+    RootDir = filename:join(Space, <<"big_dir_eviction">>),
     Structure = [10, 10], % last level are files
     FilesToCreate = lists:foldl(fun(N, AccIn) ->
         1 + AccIn * N end, 1, Structure),
@@ -2613,12 +2591,12 @@ invalidate_big_dir(Config) ->
         <<"replicationStatus">> := <<"completed">>,
         <<"replicatingProviderId">> := DomainP2,
         <<"path">> := RootDir,
-        <<"invalidationStatus">> := <<"skipped">>,
+        <<"replicaEvictionStatus">> := <<"skipped">>,
         <<"callback">> := null,
         <<"filesToProcess">> := FilesToCreate,
         <<"filesProcessed">> := FilesToCreate,
         <<"filesReplicated">> := RegularFilesNum,
-        <<"filesInvalidated">> := 0,
+        <<"fileReplicasEvicted">> := 0,
         <<"failedFiles">> := 0
     }, WorkerP1, Tid, Config, 600),
 
@@ -2628,21 +2606,21 @@ invalidate_big_dir(Config) ->
     ],
 
     verify_files_distribution(WorkerP1, FilesToCreate, ExpectedDistribution, FileGuidsAndPaths, SessionId, Config),
-    Tid2 = schedule_replica_invalidation(WorkerP1, DomainP1, RootDir, Config),
+    Tid2 = schedule_replica_eviction(WorkerP1, DomainP1, RootDir, Config),
     ?assertEqual([Tid2], get_ongoing_transfers_for_file(WorkerP1, DirGuid), ?ATTEMPTS),
 
     % then
     ?assertTransferStatus(#{
         <<"replicationStatus">> := <<"skipped">>,
         <<"replicatingProviderId">> := null,
-        <<"invalidatingProviderId">> := DomainP1,
+        <<"evictingProviderId">> := DomainP1,
         <<"path">> := RootDir,
-        <<"invalidationStatus">> := <<"completed">>,
+        <<"replicaEvictionStatus">> := <<"completed">>,
         <<"callback">> := null,
         <<"filesToProcess">> := FilesToCreate,
         <<"filesProcessed">> := FilesToCreate,
         <<"filesReplicated">> := 0,
-        <<"filesInvalidated">> := RegularFilesNum,
+        <<"fileReplicasEvicted">> := RegularFilesNum,
         <<"failedFiles">> := 0
     }, WorkerP1, Tid2, Config, 600),
 
@@ -2686,7 +2664,7 @@ migrate_big_dir(Config) ->
 
     receive files_synchronized -> ok end,
 
-    Tid = schedule_replica_invalidation(WorkerP2, DomainP1, DomainP2, RootDir, Config),
+    Tid = schedule_replica_eviction(WorkerP2, DomainP1, DomainP2, RootDir, Config),
     ?assertEqual([Tid], get_ongoing_transfers_for_file(WorkerP1, DirGuid), ?ATTEMPTS),
     ?assertEqual([], get_ended_transfers_for_file(WorkerP1, DirGuid), ?ATTEMPTS),
 
@@ -2695,14 +2673,14 @@ migrate_big_dir(Config) ->
     ?assertTransferStatus(#{
         <<"replicationStatus">> := <<"completed">>,
         <<"replicatingProviderId">> := DomainP2,
-        <<"invalidatingProviderId">> := DomainP1,
+        <<"evictingProviderId">> := DomainP1,
         <<"path">> := RootDir,
-        <<"invalidationStatus">> := <<"completed">>,
+        <<"replicaEvictionStatus">> := <<"completed">>,
         <<"callback">> := null,
         <<"filesToProcess">> := FilesToProcess,
         <<"filesProcessed">> := FilesToProcess,
         <<"filesReplicated">> := RegularFilesNum,
-        <<"filesInvalidated">> := RegularFilesNum,
+        <<"fileReplicasEvicted">> := RegularFilesNum,
         <<"failedFiles">> := 0
     }, WorkerP1, Tid, Config, 600),
 
@@ -2837,13 +2815,13 @@ init_per_testcase(Case, Config) when
     Case =:= rerun_file_replication;
     Case =:= rerun_file_replication_by_other_user;
     Case =:= rerun_dir_replication;
-    Case =:= invalidate_file_replica;
-    Case =:= fail_to_invalidate_file_replica_without_permissions;
-    Case =:= invalidate_file_replica_with_migration;
-    Case =:= invalidation_should_succeed_when_remote_provider_modified_file_replica;
-    Case =:= invalidation_should_fail_when_invalidation_provider_modified_file_replica;
-    Case =:= rerun_invalidation_of_file_replica_with_migration;
-    Case =:= invalidate_dir_replica
+    Case =:= evict_file_replica;
+    Case =:= fail_to_evict_file_replica_without_permissions;
+    Case =:= evict_file_replica_with_migration;
+    Case =:= eviction_should_succeed_when_remote_provider_modified_file_replica;
+    Case =:= eviction_should_fail_when_eviction_provider_modified_file_replica;
+    Case =:= rerun_eviction_of_file_replica_with_migration;
+    Case =:= evict_dir_replica
     ->
     init_per_testcase(all, [{space_id, <<"space3">>} | Config]);
 
@@ -2865,7 +2843,7 @@ init_per_testcase(Case, Config) when
     init_per_testcase(all, Config);
 
 init_per_testcase(Case, Config) when
-    Case =:= quota_decreased_after_invalidation
+    Case =:= quota_decreased_after_eviciton
     ->
     [WorkerP2, _WorkerP1] = ?config(op_worker_nodes, Config),
     SpaceId = <<"space6">>,
@@ -2885,7 +2863,7 @@ init_per_testcase(Case, Config) when
     {ok, _} = rpc:call(WorkerP2, space_cleanup_api, disable_autocleaning, [SpaceId]),
     init_per_testcase(all, [{space_id, SpaceId} | Config]);
 
-init_per_testcase(automatic_cleanup_should_invalidate_unpopular_files, Config) ->
+init_per_testcase(automatic_cleanup_should_evict_unpopular_files, Config) ->
     SpaceId = <<"space5">>,
     [WorkerP2 | _] = ?config(op_worker_nodes, Config),
     {ok, _} = rpc:call(WorkerP2, space_storage, enable_file_popularity, [SpaceId]),
@@ -2917,7 +2895,7 @@ end_per_testcase(Case, Config) when
     remove_autocleaning_reports(WorkerP2, SpaceId),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
-end_per_testcase(Case = automatic_cleanup_should_invalidate_unpopular_files, Config) ->
+end_per_testcase(Case = automatic_cleanup_should_evict_unpopular_files, Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SpaceId = ?config(space_id, Config),
     %%    rpc:call(WorkerP1, space_storage, disable_file_popularity, [<<"space5">>]),
@@ -2932,7 +2910,7 @@ end_per_testcase(Case = automatic_cleanup_should_invalidate_unpopular_files, Con
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(Case, Config) when
-    Case =:= quota_decreased_after_invalidation
+    Case =:= quota_decreased_after_eviciton
     ->
     [WorkerP2, _WorkerP1] = ?config(op_worker_nodes, Config),
     {ok, OldSoftQuota} = ?config(old_soft_quota, Config),
@@ -2954,13 +2932,13 @@ end_per_testcase(Case, Config) when
     Case =:= rerun_file_replication;
     Case =:= rerun_file_replication_by_other_user;
     Case =:= rerun_dir_replication;
-    Case =:= invalidate_file_replica;
-    Case =:= fail_to_invalidate_file_replica_without_permissions;
-    Case =:= invalidate_file_replica_with_migration;
-    Case =:= invalidation_should_succeed_when_remote_provider_modified_file_replica;
-    Case =:= invalidation_should_fail_when_invalidation_provider_modified_file_replica;
-    Case =:= rerun_invalidation_of_file_replica_with_migration;
-    Case =:= invalidate_dir_replica
+    Case =:= evict_file_replica;
+    Case =:= fail_to_evict_file_replica_without_permissions;
+    Case =:= evict_file_replica_with_migration;
+    Case =:= eviction_should_succeed_when_remote_provider_modified_file_replica;
+    Case =:= eviction_should_fail_when_eviction_provider_modified_file_replica;
+    Case =:= rerun_eviction_of_file_replica_with_migration;
+    Case =:= evict_dir_replica
     ->
     end_per_testcase(all, Config);
 
@@ -3148,10 +3126,10 @@ rerun_file_replication(UserId, Worker, Tid, Config) ->
     [_, NewTransferId] = binary:split(Location, <<"transfers/">>),
     {ok, NewTransferId}.
 
-schedule_replica_invalidation(Worker, ProviderId, File, Config) ->
-    schedule_replica_invalidation(Worker, ProviderId, undefined, File, Config).
+schedule_replica_eviction(Worker, ProviderId, File, Config) ->
+    schedule_replica_eviction(Worker, ProviderId, undefined, File, Config).
 
-schedule_replica_invalidation(Worker, ProviderId, undefined, File, Config) ->
+schedule_replica_eviction(Worker, ProviderId, undefined, File, Config) ->
     {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(Worker,
         <<"replicas/", File/binary, "?provider_id=", ProviderId/binary>>,
         delete, ?USER_1_AUTH_HEADERS(Config), []),
@@ -3159,7 +3137,7 @@ schedule_replica_invalidation(Worker, ProviderId, undefined, File, Config) ->
     DecodedBody = json_utils:decode(Body),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
     Tid;
-schedule_replica_invalidation(Worker, ProviderId, MigrationProviderId, File, Config) ->
+schedule_replica_eviction(Worker, ProviderId, MigrationProviderId, File, Config) ->
     {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(Worker, <<"replicas", File/binary, "?provider_id=",
         ProviderId/binary, "&migration_provider_id=", MigrationProviderId/binary>>,
         delete, ?USER_1_AUTH_HEADERS(Config), []),
@@ -3231,7 +3209,6 @@ list_transfers_via_rest(Config, Worker, Space, State, StartId, LimitOrUndef) ->
     ParsedBody = json_utils:decode(Body),
     Transfers = maps:get(<<"transfers">>, ParsedBody),
     NextPageToken = maps:get(<<"nextPageToken">>, ParsedBody, <<"null">>),
-    ct:pal("Transfers chunk: ~p~nNexPageToken: ~p", [Transfers, NextPageToken]),
     {Transfers, NextPageToken}.
 
 space_guid(SpaceId) ->

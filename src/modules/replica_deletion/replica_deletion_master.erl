@@ -242,8 +242,8 @@ check_internal(SpaceId) ->
     replica_deletion:result(), replica_deletion:report_id()) -> ok.
 process_result(autocleaning, FileUuid, Result, ReportId) ->
     autocleaning_controller:process_replica_deletion_result(Result, FileUuid, ReportId);
-process_result(invalidation, FileUuid, Result, ReportId) ->
-    invalidation_worker:process_replica_deletion_result(Result, FileUuid, ReportId).
+process_result(eviction, FileUuid, Result, ReportId) ->
+    replica_eviction_worker:process_replica_deletion_result(Result, FileUuid, ReportId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -524,6 +524,6 @@ cancel_task(#task{task = #deletion_task{type = Type}, id = ReportId}, SpaceId) -
 mark_processed_file(autocleaning, AutocleaningId) ->
     {ok, _} = autocleaning:mark_processed_file(AutocleaningId),
     ok;
-mark_processed_file(invalidation, TransferId) ->
+mark_processed_file(eviction, TransferId) ->
     {ok, _} = transfer:increment_files_processed_counter(TransferId),
     ok.

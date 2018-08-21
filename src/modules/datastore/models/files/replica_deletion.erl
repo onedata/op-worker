@@ -57,7 +57,7 @@
 -type doc() :: datastore_doc:doc(record()).
 -type action() :: request | confirm | refuse | release_lock.
 -type diff() :: datastore_doc:diff(record()).
--type type() :: autocleaning | invalidation.
+-type type() :: autocleaning | eviciton.
 -type report_id() :: autocleaning:id() | transfer:id().
 -type result() :: {ok, non_neg_integer()} | {error, term()}.
 
@@ -75,7 +75,7 @@
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Sends message requesting invalidation support.
+%% Sends message requesting replica_deletion support.
 %% @end
 %%-------------------------------------------------------------------
 -spec request(file_meta:uuid(), fslogic_blocks:blocks(),
@@ -87,7 +87,7 @@ request(FileUuid, FileBlocks, VV, Requestee, SpaceId, Type, Id) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Sends message confirming invalidation support.
+%% Sends message confirming replica_deletion support.
 %% @end
 %%-------------------------------------------------------------------
 -spec confirm(id(), fslogic_blocks:blocks()) -> ok.
@@ -102,7 +102,7 @@ confirm(Id, Blocks) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Sends message refusing invalidation support.
+%% Sends message refusing replica_deletion support.
 %% @end
 %%-------------------------------------------------------------------
 -spec refuse(id()) -> ok.
@@ -175,7 +175,7 @@ new_doc(FileUuid, FileBlocks, VV, Requestee, SpaceId, Type, Id) ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Updates action field in #invalidation_msg{} record.
+%% Updates action field in #replica_deletion_msg{} record.
 %% @end
 %%-------------------------------------------------------------------
 -spec update_action(record(), action()) -> record().

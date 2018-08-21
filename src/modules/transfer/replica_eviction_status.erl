@@ -6,12 +6,12 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module contains functions that handle invalidation status transition
+%%% This module contains functions that handle replica_eviction status transition
 %%% for transfers. This includes updating/marking status and moving from one
 %%% link tree to other according to following state machine.
 %%%
 %%%
-%%%                       INVALIDATION STATE MACHINE:
+%%%                       REPLICA_EVICTION STATE MACHINE:
 %%%
 %%% WAITING LINKS TREE ||     ONGOING LINKS TREE      ||    ENDED LINKS TREE
 %%%                    ||                             ||
@@ -48,10 +48,10 @@
 %%% It is necessary when transfer were interrupted abruptly,
 %%% like for example shutdown and restart of provider.
 %%% There is one more status not shown on state machines, which is skipped.
-%%% It is used to mark that given invalidation never happened/should not happen.
+%%% It is used to mark that given REPLICA_EVICTION never happened/should not happen.
 %%% @end
 %%%-------------------------------------------------------------------
--module(invalidation_status).
+-module(replica_eviction_status).
 -author("Bartosz Walkowicz").
 
 -include("modules/datastore/datastore_models.hrl").
@@ -77,10 +77,10 @@ handle_enqueued(TransferId) ->
 handle_active(TransferId) ->
     EncodedPid = transfer_utils:encode_pid(self()),
     UpdateFun = fun(Transfer) ->
-        case Transfer#transfer.invalidation_status of
+        case Transfer#transfer.eviction_status of
             enqueued ->
                 {ok, Transfer#transfer{
-                    invalidation_status = active,
+                    eviction_status = active,
                     files_to_process = Transfer#transfer.files_to_process + 1,
                     pid = EncodedPid
                 }};
@@ -149,54 +149,54 @@ handle_cancelled(TransferId) ->
 
 -spec mark_enqueued(transfer:transfer()) ->
     {ok, transfer:transfer()} | {error, term()}.
-mark_enqueued(T = #transfer{invalidation_status = scheduled}) ->
+mark_enqueued(T = #transfer{eviction_status = scheduled}) ->
     {ok, T#transfer{
-        invalidation_status = enqueued,
+        eviction_status = enqueued,
         start_time = case transfer:is_migration(T) of
             true -> T#transfer.start_time;
             false -> provider_logic:zone_time_seconds()
         end
     }};
-mark_enqueued(#transfer{invalidation_status = Status}) ->
+mark_enqueued(#transfer{eviction_status = Status}) ->
     {error, Status}.
 
 
 -spec mark_aborting(transfer:transfer()) ->
     {ok, transfer:transfer()} | {error, term()}.
-mark_aborting(T = #transfer{invalidation_status = active}) ->
-    {ok, T#transfer{invalidation_status = aborting}};
-mark_aborting(#transfer{invalidation_status = Status}) ->
+mark_aborting(T = #transfer{eviction_status = active}) ->
+    {ok, T#transfer{eviction_status = aborting}};
+mark_aborting(#transfer{eviction_status = Status}) ->
     {error, Status}.
 
 
 -spec mark_completed(transfer:transfer()) ->
     {ok, transfer:transfer()} | {error, term()}.
-mark_completed(T = #transfer{invalidation_status = active}) ->
+mark_completed(T = #transfer{eviction_status = active}) ->
     {ok, T#transfer{
-        invalidation_status = completed,
+        eviction_status = completed,
         finish_time = provider_logic:zone_time_seconds()
     }};
-mark_completed(#transfer{invalidation_status = Status}) ->
+mark_completed(#transfer{eviction_status = Status}) ->
     {error, Status}.
 
 
 -spec mark_failed(transfer:transfer()) ->
     {ok, transfer:transfer()} | {error, term()}.
-mark_failed(T = #transfer{invalidation_status = aborting}) ->
+mark_failed(T = #transfer{eviction_status = aborting}) ->
     mark_failed_forced(T);
-mark_failed(#transfer{invalidation_status = Status}) ->
+mark_failed(#transfer{eviction_status = Status}) ->
     {error, Status}.
 
 
 -spec mark_failed_forced(transfer:transfer()) ->
     {ok, transfer:transfer()} | {error, term()}.
 mark_failed_forced(Transfer) ->
-    case transfer:is_invalidation_ended(Transfer) of
+    case transfer:is_eviction_ended(Transfer) of
         true ->
             {error, already_ended};
         false ->
             {ok, Transfer#transfer{
-                invalidation_status = failed,
+                eviction_status = failed,
                 finish_time = provider_logic:zone_time_seconds()
             }}
     end.
@@ -205,14 +205,14 @@ mark_failed_forced(Transfer) ->
 -spec mark_cancelled(transfer:transfer()) ->
     {ok, transfer:transfer()} | {error, term()}.
 mark_cancelled(Transfer) ->
-    case Transfer#transfer.invalidation_status of
+    case Transfer#transfer.eviction_status of
         scheduled ->
             {ok, Transfer#transfer{
-                invalidation_status = cancelled
+                eviction_status = cancelled
             }};
         Status when Status == enqueued orelse Status == aborting ->
             {ok, Transfer#transfer{
-                invalidation_status = cancelled,
+                eviction_status = cancelled,
                 finish_time = provider_logic:zone_time_seconds()
             }};
         Status ->

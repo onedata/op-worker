@@ -10,8 +10,8 @@
 %%% as a trigger for starting a transfer.
 %%% We distinguish 3 types of transfers:
 %%%     - replication
-%%%     - invalidation
-%%%     - migration (invalidation preceded by replication)
+%%%     - replica_eviction
+%%%     - migration (replica_eviction preceded by replication)
 %%% @end
 %%%-------------------------------------------------------------------
 -module(transfer).
@@ -33,14 +33,14 @@
 -export([
     mark_dequeued/1, set_controller_process/1,
 
-    is_replication/1, is_invalidation/1, is_migration/1,
-    is_ongoing/1, is_replication_ongoing/1, is_invalidation_ongoing/1,
-    is_ended/1, is_replication_ended/1, is_invalidation_ended/1,
+    is_replication/1, is_eviction/1, is_migration/1,
+    is_ongoing/1, is_replication_ongoing/1, is_eviction_ongoing/1,
+    is_ended/1, is_replication_ended/1, is_eviction_ended/1,
 
     increment_files_to_process_counter/2, increment_files_processed_counter/1,
     increment_files_failed_and_processed_counters/1, increment_files_replicated_counter/1,
     mark_data_replication_finished/3,
-    increment_files_invalidated_and_processed_counters/1,
+    increment_files_evicted_and_processed_counters/1,
     rerun_not_ended_transfers/1,
     restart_pools/0
 ]).
@@ -127,14 +127,14 @@ start(SessionId, FileGuid, FilePath, SourceProviderId, TargetProviderId, Callbac
 -spec start_for_user(od_user:id(), fslogic_worker:file_uuid(),
     file_meta:path(), undefined | od_provider:id(), undefined | od_provider:id(),
     binary()) -> {ok, id()} | ignore | {error, Reason :: term()}.
-start_for_user(UserId, FileGuid, FilePath, InvalidatingProviderId,
+start_for_user(UserId, FileGuid, FilePath, EvictingProviderId,
     ReplicatingProviderId, Callback
 ) ->
     ReplicationStatus = case ReplicatingProviderId of
         undefined -> skipped;
         _ -> scheduled
     end,
-    InvalidationStatus = case InvalidatingProviderId of
+    EvictionStatus = case EvictingProviderId of
         undefined -> skipped;
         _ -> scheduled
     end,
@@ -149,9 +149,9 @@ start_for_user(UserId, FileGuid, FilePath, InvalidatingProviderId,
             path = FilePath,
             callback = Callback,
             replication_status = ReplicationStatus,
-            invalidation_status = InvalidationStatus,
+            eviction_status = EvictionStatus,
             scheduling_provider_id = oneprovider:get_id(),
-            invalidating_provider = InvalidatingProviderId,
+            evicting_provider = EvictingProviderId,
             replicating_provider = ReplicatingProviderId,
             schedule_time = ScheduleTime,
             start_time = 0,
@@ -210,7 +210,7 @@ rerun(UserId, #document{key = TransferId, value = Transfer}) ->
                 space_id = SpaceId,
                 user_id = OldUserId,
                 path = FilePath,
-                invalidating_provider = InvalidatingProviderId,
+                evicting_provider = EvictingProviderId,
                 replicating_provider = ReplicatingProviderId,
                 callback = Callback
             } = Transfer,
@@ -219,7 +219,7 @@ rerun(UserId, #document{key = TransferId, value = Transfer}) ->
             FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
 
             {ok, NewTransferId} = start_for_user(NewUserId, FileGuid, FilePath,
-                InvalidatingProviderId, ReplicatingProviderId, Callback
+                EvictingProviderId, ReplicatingProviderId, Callback
             ),
             update(TransferId, fun(OldTransfer) ->
                 {ok, OldTransfer#transfer{rerun_id = NewTransferId}}
@@ -301,25 +301,25 @@ set_controller_process(TransferId) ->
 
 
 -spec is_replication(transfer()) -> boolean().
-is_replication(#transfer{invalidating_provider = undefined} = Transfer) ->
+is_replication(#transfer{evicting_provider = undefined} = Transfer) ->
     is_binary(Transfer#transfer.replicating_provider);
 is_replication(#transfer{}) ->
     false.
 
 
--spec is_invalidation(transfer()) -> boolean().
-is_invalidation(#transfer{replicating_provider = undefined} = Transfer) ->
-    is_binary(Transfer#transfer.invalidating_provider);
-is_invalidation(#transfer{}) ->
+-spec is_eviction(transfer()) -> boolean().
+is_eviction(#transfer{replicating_provider = undefined} = Transfer) ->
+    is_binary(Transfer#transfer.evicting_provider);
+is_eviction(#transfer{}) ->
     false.
 
 
 -spec is_migration(transfer()) -> boolean().
 is_migration(#transfer{
     replicating_provider = ReplicatingProvider,
-    invalidating_provider = InvalidatingProvider
+    evicting_provider = EvictingProviderId
 }) ->
-    is_binary(ReplicatingProvider) andalso is_binary(InvalidatingProvider).
+    is_binary(ReplicatingProvider) andalso is_binary(EvictingProviderId).
 
 
 -spec is_ongoing(transfer() | id() | undefined) -> boolean().
@@ -328,7 +328,7 @@ is_ongoing(undefined) ->
 is_ongoing(#document{value = Transfer}) ->
     is_ongoing(Transfer);
 is_ongoing(Transfer = #transfer{}) ->
-    is_replication_ongoing(Transfer) orelse is_invalidation_ongoing(Transfer);
+    is_replication_ongoing(Transfer) orelse is_eviction_ongoing(Transfer);
 is_ongoing(TransferId) ->
     {ok, #document{value = Transfer}} = transfer:get(TransferId),
     is_ongoing(Transfer).
@@ -341,16 +341,16 @@ is_replication_ongoing(#transfer{replication_status = active}) -> true;
 is_replication_ongoing(#transfer{replication_status = _}) -> false.
 
 
--spec is_invalidation_ongoing(transfer()) -> boolean().
-is_invalidation_ongoing(#transfer{invalidation_status = scheduled}) -> true;
-is_invalidation_ongoing(#transfer{invalidation_status = enqueued}) -> true;
-is_invalidation_ongoing(#transfer{invalidation_status = active}) -> true;
-is_invalidation_ongoing(#transfer{invalidation_status = _}) -> false.
+-spec is_eviction_ongoing(transfer()) -> boolean().
+is_eviction_ongoing(#transfer{eviction_status = scheduled}) -> true;
+is_eviction_ongoing(#transfer{eviction_status = enqueued}) -> true;
+is_eviction_ongoing(#transfer{eviction_status = active}) -> true;
+is_eviction_ongoing(#transfer{eviction_status = _}) -> false.
 
 
 -spec is_ended(transfer()) -> boolean().
 is_ended(Transfer) ->
-    is_replication_ended(Transfer) and is_invalidation_ended(Transfer).
+    is_replication_ended(Transfer) and is_eviction_ended(Transfer).
 
 
 -spec is_replication_ended(transfer()) -> boolean().
@@ -361,12 +361,12 @@ is_replication_ended(#transfer{replication_status = failed}) -> true;
 is_replication_ended(#transfer{replication_status = _}) -> false.
 
 
--spec is_invalidation_ended(transfer()) -> boolean().
-is_invalidation_ended(#transfer{invalidation_status = completed}) -> true;
-is_invalidation_ended(#transfer{invalidation_status = cancelled}) -> true;
-is_invalidation_ended(#transfer{invalidation_status = skipped}) -> true;
-is_invalidation_ended(#transfer{invalidation_status = failed}) -> true;
-is_invalidation_ended(#transfer{invalidation_status = _}) -> false.
+-spec is_eviction_ended(transfer()) -> boolean().
+is_eviction_ended(#transfer{eviction_status = completed}) -> true;
+is_eviction_ended(#transfer{eviction_status = cancelled}) -> true;
+is_eviction_ended(#transfer{eviction_status = skipped}) -> true;
+is_eviction_ended(#transfer{eviction_status = failed}) -> true;
+is_eviction_ended(#transfer{eviction_status = _}) -> false.
 
 
 -spec increment_files_to_process_counter(undefined | id(), non_neg_integer()) ->
@@ -393,14 +393,14 @@ increment_files_processed_counter(TransferId) ->
     end).
 
 
--spec increment_files_invalidated_and_processed_counters(undefined | id()) ->
+-spec increment_files_evicted_and_processed_counters(undefined | id()) ->
     {ok, undefined | doc()} | {error, term()}.
-increment_files_invalidated_and_processed_counters(undefined) ->
+increment_files_evicted_and_processed_counters(undefined) ->
     {ok, undefined};
-increment_files_invalidated_and_processed_counters(TransferId) ->
+increment_files_evicted_and_processed_counters(TransferId) ->
     update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{
-            files_invalidated = Transfer#transfer.files_invalidated + 1,
+            files_evicted = Transfer#transfer.files_evicted + 1,
             files_processed = Transfer#transfer.files_processed + 1
         }}
     end).
@@ -626,7 +626,7 @@ get_link_key(TransferId, Timestamp) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Restarts worker pools used by replication and invalidation mechanisms.
+%% Restarts worker pools used by replication and replica_eviction mechanisms.
 %% @end
 %%-------------------------------------------------------------------
 -spec restart_pools() -> ok.
@@ -683,23 +683,23 @@ update_and_run(TransferId, UpdateFun, OnSuccessfulUpdate) ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% This function reruns given transfer (replication, migration or invalidation)
+%% This function reruns given transfer (replication, migration or replica_eviction)
 %% if possible.
 %% @end
 %%-------------------------------------------------------------------
 maybe_rerun(Doc = #document{key = TransferId, value = Transfer}) ->
-    SourceProviderId = Transfer#transfer.invalidating_provider,
+    SourceProviderId = Transfer#transfer.evicting_provider,
     TargetProviderId = Transfer#transfer.replicating_provider,
     SelfId = oneprovider:get_id(),
 
     IsReplicationAborting = Transfer#transfer.replication_status =:= aborting,
-    IsInvalidationAborting = Transfer#transfer.invalidation_status =:= aborting,
+    IsEvictionAborting = Transfer#transfer.eviction_status =:= aborting,
     IsReplicationOngoing = is_replication_ongoing(Transfer),
-    IsInvalidationOngoing = is_invalidation_ongoing(Transfer),
+    IsEvictionOngoing = is_eviction_ongoing(Transfer),
 
     case {
         IsReplicationOngoing, IsReplicationAborting,
-        IsInvalidationOngoing, IsInvalidationAborting, SelfId
+        IsEvictionOngoing, IsEvictionAborting, SelfId
     } of
         {true, _, _, _, TargetProviderId} ->
             replication_status:handle_failed(TransferId, true),
@@ -708,17 +708,17 @@ maybe_rerun(Doc = #document{key = TransferId, value = Transfer}) ->
             replication_status:handle_failed(TransferId, true),
             {ok, marked_failed};
         {_, _, true, _, SourceProviderId} ->
-            invalidation_status:handle_failed(TransferId, true),
+            replica_eviction_status:handle_failed(TransferId, true),
             rerun(undefined, TransferId);
         {_, _, _, true, SourceProviderId} ->
-            invalidation_status:handle_failed(TransferId, true),
+            replica_eviction_status:handle_failed(TransferId, true),
             {ok, marked_failed};
         {false, false, false, false, _} ->
-            IsInvalidation = is_invalidation(Transfer),
+            IsEviction = is_eviction(Transfer),
             IsReplication = is_replication(Transfer),
             IsMigration = is_migration(Transfer),
-            case {IsInvalidation, IsReplication, IsMigration, SelfId} of
-                % invalidation
+            case {IsEviction, IsReplication, IsMigration, SelfId} of
+                % replica_eviction
                 {true, false, false, SourceProviderId} ->
                     transfer_links:move_transfer_link_from_ongoing_to_ended(Doc),
                     {ok, moved_to_ended};
@@ -746,7 +746,7 @@ maybe_rerun(TransferId) ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Starts worker pools responsible for invalidating and replicating
+%% Starts worker pools responsible for evicting and replicating
 %% files and directories.
 %% @end
 %%-------------------------------------------------------------------
@@ -761,9 +761,9 @@ start_pools() ->
         {workers, ?REPLICATION_CONTROLLERS_NUM},
         {worker, {?REPLICATION_CONTROLLER, []}}
     ]),
-    {ok, _} = worker_pool:start_sup_pool(?INVALIDATION_WORKERS_POOL, [
-        {workers, ?INVALIDATION_WORKERS_NUM},
-        {worker, {?INVALIDATION_WORKER, []}},
+    {ok, _} = worker_pool:start_sup_pool(?REPLICA_EVICTION_WORKERS_POOL, [
+        {workers, ?REPLICA_EVICTION_WORKERS_NUM},
+        {worker, {?REPLICA_EVICTION_WORKER, []}},
         {queue_type, lifo}
     ]),
     {ok, _} = worker_pool:start_sup_pool(?REPLICA_DELETION_WORKERS_POOL, [
@@ -775,7 +775,7 @@ start_pools() ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Stops worker pools responsible for invalidating or replicating
+%% Stops worker pools responsible for evicting or replicating
 %% files and directories.
 %% @end
 %%-------------------------------------------------------------------
@@ -783,7 +783,7 @@ start_pools() ->
 stop_pools() ->
     ok = wpool:stop_sup_pool(?REPLICATION_WORKERS_POOL),
     ok = wpool:stop_sup_pool(?REPLICATION_CONTROLLERS_POOL),
-    ok = wpool:stop_sup_pool(?INVALIDATION_WORKERS_POOL),
+    ok = wpool:stop_sup_pool(?REPLICA_EVICTION_WORKERS_POOL),
     ok = wpool:stop_sup_pool(?REPLICA_DELETION_WORKERS_POOL),
     ok.
 
@@ -1042,17 +1042,17 @@ get_record_struct(8) ->
         {enqueued, atom},
         {cancel, atom},
         {replication_status, atom},
-        {invalidation_status, atom},
+        {eviction_status, atom},
         {schedule_provider_id, string},
         {replicating_provider, string},
-        {invalidating_provider, string},
+        {evicting_provider, string},
         {pid, string}, %todo VFS-3657
         {files_to_process, integer},
         {files_processed, integer},
         {failed_files, integer},
         {files_replicated, integer},
         {bytes_replicated, integer},
-        {files_invalidated, integer},
+        {files_evicted, integer},
         {schedule_time, integer},
         {start_time, integer},
         {finish_time, integer},
@@ -1240,10 +1240,10 @@ resolve_conflict(_Ctx, NewDoc, PreviousDoc) ->
 %% @doc
 %% Compares 2 transfers given as args and returns them as tuple with first
 %% element being the greater/newer one.
-%% Fields being compared are in order: status, invalidation_status,
+%% Fields being compared are in order: status, replica_eviction_status,
 %% files_to_process, files_processed, files_replicated, bytes_replicated
-%% and files_invalidated.
-%% Since only provider performing replication/invalidation modifies those
+%% and files_evicted.
+%% Since only provider performing replication/replica_eviction modifies those
 %% fields, all of them must be greater or equal when comparing one transfer to
 %% the other.
 %% @end
@@ -1256,19 +1256,19 @@ order_transfers(D1, D2) ->
 
     Vec1 = {
         status_to_int(T1#transfer.replication_status),
-        status_to_int(T1#transfer.invalidation_status),
+        status_to_int(T1#transfer.eviction_status),
         T1#transfer.files_to_process, T1#transfer.files_processed,
         T1#transfer.failed_files, T1#transfer.files_replicated,
-        T1#transfer.bytes_replicated, T1#transfer.files_invalidated,
+        T1#transfer.bytes_replicated, T1#transfer.files_evicted,
         T1#transfer.start_time, T1#transfer.finish_time, IsGreaterRev
     },
 
     Vec2 = {
         status_to_int(T2#transfer.replication_status),
-        status_to_int(T2#transfer.invalidation_status),
+        status_to_int(T2#transfer.eviction_status),
         T2#transfer.files_to_process, T2#transfer.files_processed,
         T2#transfer.failed_files, T2#transfer.files_replicated,
-        T2#transfer.bytes_replicated, T2#transfer.files_invalidated,
+        T2#transfer.bytes_replicated, T2#transfer.files_evicted,
         T2#transfer.start_time, T2#transfer.finish_time, not IsGreaterRev
     },
 

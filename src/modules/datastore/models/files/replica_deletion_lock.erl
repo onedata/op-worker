@@ -6,7 +6,7 @@
 %%%--------------------------------------------------------------------
 %%% @doc
 %%% This module implements read-write lock used by file replica
-%%% invalidation algorithm. It can be acquired simultaneously by many
+%%% deletion algorithm. It can be acquired simultaneously by many
 %%% processes in context of reader and only by one in context of writer.
 %%% Acquiring the lock is not blocking, if it is impossible to acquire
 %%% lock in given situation, locking function returns an error.

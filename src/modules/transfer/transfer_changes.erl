@@ -71,13 +71,13 @@ handle(Doc = #document{value = #transfer{replication_status = aborting}}) ->
 handle(Doc = #document{
     value = #transfer{
         replication_status = ReplicationStatus,
-        invalidation_status = scheduled
+        eviction_status = scheduled
     }
 }) when ReplicationStatus == completed orelse ReplicationStatus == skipped ->
-    handle_scheduled_invalidation(Doc);
+    handle_scheduled_replica_eviction(Doc);
 
-handle(Doc = #document{value = #transfer{invalidation_status = enqueued}}) ->
-    handle_enqueued_invalidation(Doc);
+handle(Doc = #document{value = #transfer{eviction_status = enqueued}}) ->
+    handle_enqueued_replica_eviction(Doc);
 
 handle(Doc = #document{
     value = #transfer{
@@ -87,21 +87,21 @@ handle(Doc = #document{
 }) ->
     handle_dequeued_transfer(Doc);
 
-handle(Doc = #document{value = #transfer{invalidation_status = active}}) ->
-    handle_active_invalidation(Doc);
+handle(Doc = #document{value = #transfer{eviction_status = active}}) ->
+    handle_active_replica_eviction(Doc);
 
-handle(Doc = #document{value = #transfer{invalidation_status = aborting}}) ->
-    handle_aborting_invalidation(Doc);
+handle(Doc = #document{value = #transfer{eviction_status = aborting}}) ->
+    handle_aborting_replica_eviction(Doc);
 
 handle(Doc = #document{
     value = #transfer{
         replication_status = ReplicationStatus,
-        invalidation_status = InvalidationStatus
+        eviction_status = EvictionStatus
     }
 }) when ReplicationStatus =/= skipped andalso
-    (InvalidationStatus =:= completed orelse
-     InvalidationStatus =:= failed orelse
-     InvalidationStatus =:= cancelled)
+    (EvictionStatus =:= completed orelse
+     EvictionStatus =:= failed orelse
+     EvictionStatus =:= cancelled)
 ->
     handle_finished_migration(Doc);
 
@@ -290,31 +290,31 @@ handle_aborting_replication(#document{key = TransferId, value = #transfer{
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Starts invalidation or cancel it depending on cancel flag.
+%% Starts replica_eviction or cancel it depending on cancel flag.
 %% In case of starting, due to transfer doc conflict resolution and possible
 %% races, this function can be called multiple times. To avoid spawning
-%% multiple invalidation controllers, try to mark invalidation as enqueued and
+%% multiple replica_eviction controllers, try to mark replica_eviction as enqueued and
 %% spawn controller only if it succeed.
-%% This will be done only by provider that performs invalidation.
+%% This will be done only by provider that performs replica_eviction.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_scheduled_invalidation(transfer:doc()) -> ok.
-handle_scheduled_invalidation(Doc = #document{
+-spec handle_scheduled_replica_eviction(transfer:doc()) -> ok.
+handle_scheduled_replica_eviction(Doc = #document{
     key = TransferId,
     value = #transfer{
-        invalidation_status = scheduled,
-        invalidating_provider = InvalidatingProviderId,
+        eviction_status = scheduled,
+        evicting_provider = EvictingProviderId,
         cancel = Cancel
     }
 }) ->
-    ?run_if_is_self(InvalidatingProviderId, fun() ->
+    ?run_if_is_self(EvictingProviderId, fun() ->
         case Cancel of
             true ->
-                invalidation_status:handle_cancelled(TransferId);
+                replica_eviction_status:handle_cancelled(TransferId);
             false ->
-                case invalidation_status:handle_enqueued(TransferId) of
+                case replica_eviction_status:handle_enqueued(TransferId) of
                     {ok, _} ->
-                        new_invalidation(Doc);
+                        new_replica_eviction(Doc);
                     {error, _Error} ->
                         ok
                 end
@@ -325,22 +325,22 @@ handle_scheduled_invalidation(Doc = #document{
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% If cancel flag is set, cancels invalidation. Otherwise do nothing.
-%% This will be done only by provider that performs invalidation.
+%% If cancel flag is set, cancels replica_eviction. Otherwise do nothing.
+%% This will be done only by provider that performs replica_eviction.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_enqueued_invalidation(transfer:doc()) -> ok.
-handle_enqueued_invalidation(#document{
+-spec handle_enqueued_replica_eviction(transfer:doc()) -> ok.
+handle_enqueued_replica_eviction(#document{
     key = TransferId,
     value = #transfer{
-        invalidation_status = enqueued,
-        invalidating_provider = InvalidatingProviderId,
+        eviction_status = enqueued,
+        evicting_provider = EvictingProviderId,
         cancel = Cancel
     }
 }) ->
-    ?run_if_is_self(InvalidatingProviderId, fun() ->
+    ?run_if_is_self(EvictingProviderId, fun() ->
         case Cancel of
-            true -> invalidation_status:handle_cancelled(TransferId);
+            true -> replica_eviction_status:handle_cancelled(TransferId);
             false -> ok
         end
     end).
@@ -349,57 +349,57 @@ handle_enqueued_invalidation(#document{
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Function called when transfer doc with invalidation_status = active
+%% Function called when transfer doc with eviction_status = active
 %% is modified.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_active_invalidation(transfer:doc()) -> ok.
-handle_active_invalidation(#document{key = TransferId, value = #transfer{
+-spec handle_active_replica_eviction(transfer:doc()) -> ok.
+handle_active_replica_eviction(#document{key = TransferId, value = #transfer{
     cancel = true,
-    invalidating_provider = InvalidatingProviderId,
+    evicting_provider = EvictingProviderId,
     pid = Pid
 }}) ->
-    ?run_if_is_self(InvalidatingProviderId, fun() ->
+    ?run_if_is_self(EvictingProviderId, fun() ->
         DecodedPid = ?decode_pid(Pid),
         case is_process_alive(DecodedPid) of
             true ->
-                invalidation_controller:mark_aborting(DecodedPid, cancellation);
+                replica_eviction_controller:mark_aborting(DecodedPid, cancellation);
             false ->
-                invalidation_status:handle_aborting(TransferId)
+                replica_eviction_status:handle_aborting(TransferId)
         end
     end);
 
-handle_active_invalidation(#document{value = #transfer{
+handle_active_replica_eviction(#document{value = #transfer{
     files_to_process = FilesToProcess,
     files_processed = FilesToProcess,
     failed_files = 0,
-    invalidating_provider = InvalidatingProviderId,
+    evicting_provider = EvictingProviderId,
     pid = Pid
 }}) ->
-    ?run_if_is_self(InvalidatingProviderId, fun() ->
-        invalidation_controller:mark_completed(?decode_pid(Pid))
+    ?run_if_is_self(EvictingProviderId, fun() ->
+        replica_eviction_controller:mark_completed(?decode_pid(Pid))
     end);
 
-handle_active_invalidation(#document{value = #transfer{
+handle_active_replica_eviction(#document{value = #transfer{
     files_to_process = FilesToProcess,
     files_processed = FilesToProcess,
-    invalidating_provider = InvalidatingProviderId,
+    evicting_provider = EvictingProviderId,
     pid = Pid
 }}) ->
-    ?run_if_is_self(InvalidatingProviderId, fun() ->
-        invalidation_controller:mark_aborting(
+    ?run_if_is_self(EvictingProviderId, fun() ->
+        replica_eviction_controller:mark_aborting(
             ?decode_pid(Pid), exceeded_number_of_failed_files)
     end);
 
-handle_active_invalidation(#document{value = #transfer{
+handle_active_replica_eviction(#document{value = #transfer{
     failed_files = FailedFiles,
-    invalidating_provider = InvalidatingProviderId,
+    evicting_provider = EvictingProviderId,
     pid = Pid
 }}) ->
     case FailedFiles > ?MAX_FILE_TRANSFER_FAILURES_PER_TRANSFER of
         true ->
-            ?run_if_is_self(InvalidatingProviderId, fun() ->
-                invalidation_controller:mark_aborting(
+            ?run_if_is_self(EvictingProviderId, fun() ->
+                replica_eviction_controller:mark_aborting(
                     ?decode_pid(Pid), exceeded_number_of_failed_files)
             end);
         false ->
@@ -410,35 +410,35 @@ handle_active_invalidation(#document{value = #transfer{
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Notifies invalidation controller about cancelled (if cancel flag is set) or
+%% Notifies replica_eviction_controller about cancelled (if cancel flag is set) or
 %% failed (if cancel flag is unset) transfer or if controller is dead manually
 %% changes status.
-%% This will be done only by provider that performs invalidation.
+%% This will be done only by provider that performs eviction.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_aborting_invalidation(transfer:doc()) -> ok.
-handle_aborting_invalidation(#document{key = TransferId, value = #transfer{
+-spec handle_aborting_replica_eviction(transfer:doc()) -> ok.
+handle_aborting_replica_eviction(#document{key = TransferId, value = #transfer{
     cancel = Cancel,
     files_to_process = FilesToProcess,
     files_processed = FilesProcessed,
-    invalidating_provider = InvalidatingProviderId,
+    evicting_provider = EvictingProviderId,
     pid = Pid
 }}) ->
     case FilesProcessed >= FilesToProcess of
         false ->
             ok;
         true ->
-            ?run_if_is_self(InvalidatingProviderId, fun() ->
+            ?run_if_is_self(EvictingProviderId, fun() ->
                 DecodedPid = ?decode_pid(Pid),
                 case {Cancel, is_process_alive(DecodedPid)} of
                     {true, true} ->
-                        invalidation_controller:mark_cancelled(DecodedPid);
+                        replica_eviction_controller:mark_cancelled(DecodedPid);
                     {false, true} ->
-                        invalidation_controller:mark_failed(DecodedPid);
+                        replica_eviction_controller:mark_failed(DecodedPid);
                     {true, false} ->
-                        invalidation_status:handle_cancelled(TransferId);
+                        replica_eviction_status:handle_cancelled(TransferId);
                     {false, false} ->
-                        invalidation_status:handle_failed(TransferId, false)
+                        replica_eviction_status:handle_failed(TransferId, false)
                 end
             end)
     end.
@@ -466,7 +466,7 @@ handle_dequeued_transfer(#document{key = TransferId, value = #transfer{
 %% @private
 %% @doc
 %% Deletes transfer from active links tree in case of finished migration
-%% (after finished invalidation).
+%% (after finished eviction).
 %% This will be done only by provider that carried replication and added
 %% given transfer to active links tree, namely target provider.
 %% @end
@@ -509,12 +509,12 @@ new_replication_or_migration(#document{
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Starts new invalidation based on existing doc synchronized
+%% Starts new replica_eviction based on existing doc synchronized
 %% from other provider.
 %% @end
 %%--------------------------------------------------------------------
--spec new_invalidation(transfer:doc()) -> ok.
-new_invalidation(#document{
+-spec new_replica_eviction(transfer:doc()) -> ok.
+new_replica_eviction(#document{
     key = TransferId,
     value = #transfer{
         file_uuid = FileUuid,
@@ -524,6 +524,6 @@ new_invalidation(#document{
     }
 }) ->
     FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
-    {ok, _Pid} = gen_server2:start(invalidation_controller,
+    {ok, _Pid} = gen_server2:start(replica_eviction_controller,
         [session:root_session_id(), TransferId, FileGuid, Callback, TargetProviderId], []),
     ok.

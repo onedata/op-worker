@@ -63,10 +63,10 @@
     ?APP_NAME, replication_controllers_num, 10)
 ).
 
--define(INVALIDATION_WORKER, invalidation_worker).
--define(INVALIDATION_WORKERS_POOL, invalidation_workers_pool).
--define(INVALIDATION_WORKERS_NUM, application:get_env(
-    ?APP_NAME, invalidation_workers_num, 10)
+-define(REPLICA_EVICTION_WORKER, replica_eviction_worker).
+-define(REPLICA_EVICTION_WORKERS_POOL, replica_eviction_workers_pool).
+-define(REPLICA_EVICTION_WORKERS_NUM, application:get_env(
+    ?APP_NAME, replica_eviction_workers_num, 10)
 ).
 
 -define(REPLICA_DELETION_WORKER, replica_deletion_worker).

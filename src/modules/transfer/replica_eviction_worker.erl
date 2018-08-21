@@ -5,12 +5,12 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Implementation of worker for invalidation_workers_pool.
-%%% Worker is responsible for invalidation of one file
+%%% Implementation of worker for replica_eviction_workers_pool.
+%%% Worker is responsible for replica eviction of one file
 %%% (regular or directory).
 %%% @end
 %%%-------------------------------------------------------------------
--module(invalidation_worker).
+-module(replica_eviction_worker).
 -author("Jakub Kudzia").
 
 -behaviour(gen_server).
@@ -32,8 +32,8 @@
 
 -define(SERVER, ?MODULE).
 
--define(MAX_FILE_INVALIDATION_RETRIES,
-    application:get_env(?APP_NAME, max_file_invalidation_retries_per_file, 5)).
+-define(MAX_REPLICA_EVICTION_RETRIES,
+    application:get_env(?APP_NAME, max_replica_eviction_retries_per_file, 5)).
 
 -record(state, {}).
 -type state() :: #state{}.
@@ -61,12 +61,12 @@ start_link() ->
 -spec process_replica_deletion_result(replica_deletion:result(), file_meta:uuid(),
     transfer:id()) -> ok.
 process_replica_deletion_result({ok, ReleasedBytes}, FileUuid, TransferId) ->
-    ?debug("Invalidation of file ~p in transfer ~p released ~p bytes.",
+    ?debug("Replica eviction of file ~p in transfer ~p released ~p bytes.",
         [FileUuid, TransferId, ReleasedBytes]),
-    {ok, _} = transfer:increment_files_invalidated_and_processed_counters(TransferId),
+    {ok, _} = transfer:increment_files_evicted_and_processed_counters(TransferId),
     ok;
 process_replica_deletion_result(Error, FileUuid, TransferId) ->
-    ?error("Error ~p occured during invalidation of file ~p in procedure ~p",
+    ?error("Error ~p occured during replica eviction of file ~p in procedure ~p",
         [Error, FileUuid, TransferId]),
     {ok, _} = transfer:increment_files_processed_counter(TransferId),
     ok.
@@ -115,14 +115,14 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}).
-handle_cast({start_file_invalidation, UserCtx, FileCtx,  SupportingProviderId,
+handle_cast({start_replica_eviction, UserCtx, FileCtx,  SupportingProviderId,
     TransferId, RetriesLeft, NextRetryTimestamp}, State
 ) ->
     RetriesLeft2 = utils:ensure_defined(RetriesLeft, undefined,
-        ?MAX_FILE_INVALIDATION_RETRIES),
+        ?MAX_REPLICA_EVICTION_RETRIES),
     case should_start(NextRetryTimestamp) of
         true ->
-            case invalidate_file(UserCtx, FileCtx, SupportingProviderId, 
+            case evict_replica(UserCtx, FileCtx, SupportingProviderId,
                 TransferId, RetriesLeft2) 
             of
                 ok ->
@@ -134,7 +134,7 @@ handle_cast({start_file_invalidation, UserCtx, FileCtx,  SupportingProviderId,
                     {ok, _} = transfer:increment_files_failed_and_processed_counters(TransferId)
             end;
         _ ->
-            invalidation_req:enqueue_file_invalidation(UserCtx, FileCtx, SupportingProviderId,
+            replica_eviction_req:enqueue_replica_eviction(UserCtx, FileCtx, SupportingProviderId,
                 TransferId, RetriesLeft2, NextRetryTimestamp)
     end,
     {noreply, State, hibernate}.
@@ -185,26 +185,21 @@ code_change(_OldVsn, State, _Extra) ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Invalidates file replica
+%% Evicts file replica
 %% @end
 %%-------------------------------------------------------------------
--spec invalidate_file(user:ctx(), file_ctx:ctx(), sync_req:provider_id(),
+-spec evict_replica(user:ctx(), file_ctx:ctx(), sync_req:provider_id(),
     sync_req:transfer_id(), non_neg_integer()) -> ok | {error, term()}.
-invalidate_file(UserCtx, FileCtx, SupportingProviderId, TransferId, RetriesLeft) ->
-    try invalidation_req:invalidate_file_replica(UserCtx, FileCtx,
+evict_replica(UserCtx, FileCtx, SupportingProviderId, TransferId, RetriesLeft) ->
+    try replica_eviction_req:evict_file_replica(UserCtx, FileCtx,
         SupportingProviderId, TransferId)
     of
         #provider_response{status = #status{code = ?OK}}  ->
             ok;
         Error = {error, not_found} ->
             maybe_retry(UserCtx, FileCtx, SupportingProviderId, TransferId,
-                RetriesLeft, Error);
-        Error = {error, invalidation_timeout} ->
-            maybe_retry(UserCtx, FileCtx, SupportingProviderId, TransferId,
                 RetriesLeft, Error)
     catch
-        throw:{transfer_cancelled, TransferId} ->
-            {error, transfer_cancelled};
         Error:Reason ->
             maybe_retry(UserCtx, FileCtx, SupportingProviderId, TransferId,
                 RetriesLeft,
@@ -214,39 +209,39 @@ invalidate_file(UserCtx, FileCtx, SupportingProviderId, TransferId, RetriesLeft)
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Checks whether file invalidation can be retried and repeats
-%% invalidation if it's possible.
+%% Checks whether file replica eviction can be retried and repeats
+%% replica eviction if it's possible.
 %% @end
 %%-------------------------------------------------------------------
 -spec maybe_retry(user:ctx(), file_ctx:ctx(), sync_req:provider_id(),
     sync_req:transfer_id(), non_neg_integer(), term()) -> ok | {error, term()}.
 maybe_retry(_UserCtx, _FileCtx, _SupportingProviderId, TransferId, 0, Error = {error, not_found}) ->
     ?error(
-        "Invalidation in scope of transfer ~p failed due to ~p~n"
+        "Replica eviction in scope of transfer ~p failed due to ~p~n"
         "No retries left", [TransferId, Error]),
     Error;
 maybe_retry(UserCtx, FileCtx, SupportingProviderId, TransferId, RetriesLeft,
     Error = {error, not_found}
 ) ->
     ?warning_stacktrace(
-        "Invalidation in scope of transfer ~p failed due to ~p~n"
-        "File Invalidation will be retried (attempts left: ~p)",
+        "Replica eviction in scope of transfer ~p failed due to ~p~n"
+        "File replica eviction will be retried (attempts left: ~p)",
         [TransferId, Error, RetriesLeft - 1]),
-    invalidation_req:enqueue_file_invalidation(UserCtx, FileCtx, SupportingProviderId, TransferId,
+    replica_eviction_req:enqueue_replica_eviction(UserCtx, FileCtx, SupportingProviderId, TransferId,
         RetriesLeft - 1, next_retry(RetriesLeft));
 maybe_retry(_UserCtx, FileCtx, _SupportingProviderId, TransferId, 0, Error) ->
     {Path, _FileCtx2} = file_ctx:get_canonical_path(FileCtx),
     ?error(
-        "Invalidation of file ~p in scope of transfer ~p failed due to ~p~n"
+        "Replica eviction of file ~p in scope of transfer ~p failed due to ~p~n"
         "No retries left", [Path, TransferId, Error]),
     {error, retries_per_file_transfer_exceeded};
 maybe_retry(UserCtx, FileCtx, SupportingProviderId, TransferId, Retries, Error) ->
     {Path, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
     ?warning_stacktrace(
-        "Invalidation of file ~p in scope of transfer ~p failed due to ~p~n"
-        "File Invalidation will be retried (attempts left: ~p)",
+        "Replica eviction of file ~p in scope of transfer ~p failed due to ~p~n"
+        "File Replica eviction will be retried (attempts left: ~p)",
         [Path, TransferId, Error, Retries - 1]),
-    invalidation_req:enqueue_file_invalidation(UserCtx, FileCtx2, SupportingProviderId, TransferId,
+    replica_eviction_req:enqueue_replica_eviction(UserCtx, FileCtx2, SupportingProviderId, TransferId,
         Retries - 1, next_retry(Retries)).
 
 
@@ -255,11 +250,11 @@ maybe_retry(UserCtx, FileCtx, SupportingProviderId, TransferId, Retries, Error) 
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% This functions check whether invalidation can be started.
+%% This functions check whether eviction can be started.
 %% if NextRetryTimestamp is:
-%%  * undefined - invalidation can be started
-%%  * greater than current timestamp - invalidation cannot be started
-%%  * otherwise invalidation can be started
+%%  * undefined - replica eviction can be started
+%%  * greater than current timestamp - replica eviction cannot be started
+%%  * otherwise replica eviction can be started
 %% @end
 %%-------------------------------------------------------------------
 -spec should_start(undefined | non_neg_integer()) -> boolean().
@@ -277,8 +272,8 @@ should_start(NextRetryTimestamp) ->
 %%-------------------------------------------------------------------
 -spec next_retry(non_neg_integer()) -> non_neg_integer().
 next_retry(RetriesLeft) ->
-    RetryNum = ?MAX_FILE_INVALIDATION_RETRIES - RetriesLeft,
-    MinSecsToWait = backoff(RetryNum, ?MAX_FILE_INVALIDATION_RETRIES),
+    RetryNum = ?MAX_REPLICA_EVICTION_RETRIES - RetriesLeft,
+    MinSecsToWait = backoff(RetryNum, ?MAX_REPLICA_EVICTION_RETRIES),
     time_utils:cluster_time_seconds() + MinSecsToWait.
 
 

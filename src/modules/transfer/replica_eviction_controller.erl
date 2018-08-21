@@ -6,14 +6,14 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Manages replica invalidation, which include starting the invalidation and
-%%% tracking invalidation's status.
+%%% Manages replica eviction, which include starting the replica eviction and
+%%% tracking replica eviction's status.
 %%% It will change status on receiving certain messages according to
-%%% state machine presented in invalidation_status module.
-%%% Such gen_server is created for each replica invalidation.
+%%% state machine presented in replica_eviction_status module.
+%%% Such gen_server is created for each replica replica eviction.
 %%% @end
 %%%--------------------------------------------------------------------
--module(invalidation_controller).
+-module(replica_eviction_controller).
 -author("Tomasz Lichon").
 
 -behaviour(gen_server).
@@ -46,39 +46,39 @@
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Informs invalidation_controller process about aborting invalidation.
+%% Informs replica_eviction_controller process about aborting replica eviction.
 %% @end
 %%-------------------------------------------------------------------
 -spec mark_aborting(pid(), term()) -> ok.
 mark_aborting(Pid, Reason) ->
-    gen_server2:cast(Pid, {invalidation_aborting, Reason}).
+    gen_server2:cast(Pid, {replica_eviction_aborting, Reason}).
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Stops invalidation_controller process and marks invalidation as completed.
+%% Stops replica_eviction_controller process and marks replica eviction as completed.
 %% @end
 %%-------------------------------------------------------------------
 -spec mark_completed(pid()) -> ok.
 mark_completed(Pid) ->
-    gen_server2:cast(Pid, invalidation_completed).
+    gen_server2:cast(Pid, replica_eviction_completed).
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Stops invalidation_controller process and marks transfer as failed.
+%% Stops replica_eviction_controller process and marks transfer as failed.
 %% @end
 %%-------------------------------------------------------------------
 -spec mark_failed(pid()) -> ok.
 mark_failed(Pid) ->
-    gen_server2:cast(Pid, invalidation_failed).
+    gen_server2:cast(Pid, replica_eviction_failed).
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Stops invalidation_controller process and marks transfer as cancelled.
+%% Stops replica_eviction_controller process and marks transfer as cancelled.
 %% @end
 %%-------------------------------------------------------------------
 -spec mark_cancelled(pid()) -> ok.
 mark_cancelled(Pid) ->
-    gen_server2:cast(Pid, invalidation_cancelled).
+    gen_server2:cast(Pid, replica_eviction_cancelled).
 
 
 %%%===================================================================
@@ -95,7 +95,7 @@ mark_cancelled(Pid) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
 init([SessionId, TransferId, FileGuid, Callback, SupportingProviderId]) ->
-    ok = gen_server2:cast(self(), start_invalidation),
+    ok = gen_server2:cast(self(), start_replica_eviction),
     {ok, #state{
         transfer_id = TransferId,
         session_id = SessionId,
@@ -134,18 +134,18 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_cast(start_invalidation, State = #state{
+handle_cast(start_replica_eviction, State = #state{
     transfer_id = TransferId,
     session_id = SessionId,
     file_guid = FileGuid,
     supporting_provider_id = SupportingProviderId
 }) ->
     flush(),
-    case invalidation_status:handle_active(TransferId) of
+    case replica_eviction_status:handle_active(TransferId) of
         {ok, _} ->
             UserCtx = user_ctx:new(SessionId),
             FileCtx = file_ctx:new_by_guid(FileGuid),
-            invalidation_req:enqueue_file_invalidation(UserCtx, FileCtx, SupportingProviderId, TransferId),
+            replica_eviction_req:enqueue_replica_eviction(UserCtx, FileCtx, SupportingProviderId, TransferId),
             {noreply, State#state{status = active}};
         {error, active} ->
             {ok, _} = transfer:set_controller_process(TransferId),
@@ -157,38 +157,38 @@ handle_cast(start_invalidation, State = #state{
             {stop, normal, S}
     end;
 
-handle_cast(invalidation_completed, State = #state{
+handle_cast(replica_eviction_completed, State = #state{
     transfer_id = TransferId,
     callback = Callback,
     status = active
 }) ->
-    {ok, _} = invalidation_status:handle_completed(TransferId),
+    {ok, _} = replica_eviction_status:handle_completed(TransferId),
     notify_callback(Callback),
     {stop, normal, State};
 
-handle_cast({invalidation_aborting, Reason}, State = #state{
+handle_cast({replica_eviction_aborting, Reason}, State = #state{
     transfer_id = TransferId,
     file_guid = FileGuid,
     status = active
 }) ->
-    {ok, _} = invalidation_status:handle_aborting(TransferId),
+    {ok, _} = replica_eviction_status:handle_aborting(TransferId),
     ?error_stacktrace("Could not invalidate file ~p due to ~p", [
         FileGuid, Reason
     ]),
     {noreply, State#state{status = aborting}};
 
-handle_cast(invalidation_cancelled, State = #state{
+handle_cast(replica_eviction_cancelled, State = #state{
     transfer_id = TransferId,
     status = aborting
 }) ->
-    {ok, _} = invalidation_status:handle_cancelled(TransferId),
+    {ok, _} = replica_eviction_status:handle_cancelled(TransferId),
     {stop, normal, State};
 
-handle_cast(invalidation_failed, State = #state{
+handle_cast(replica_eviction_failed, State = #state{
     transfer_id = TransferId,
     status = aborting
 }) ->
-    {ok, _} = invalidation_status:handle_failed(TransferId, false),
+    {ok, _} = replica_eviction_status:handle_failed(TransferId, false),
     {stop, normal, State};
 
 handle_cast(Request, State = #state{status = Status}) ->
@@ -243,7 +243,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Notifies callback about successful invalidation
+%% Notifies callback about successful replica eviction
 %% @end
 %%--------------------------------------------------------------------
 -spec notify_callback(transfer:callback()) -> ok.
@@ -257,20 +257,20 @@ notify_callback(Callback) ->
 %% @private
 %% @doc
 %% Flushes message queue. It is necessary because this module is executed
-%% by some pool worker, which could have taken care of other invalidation
-%% previously. As such some messages for previous invalidation may be still
+%% by some pool worker, which could have taken care of other replica eviction
+%% previously. As such some messages for previous replica eviction may be still
 %% in queue.
 %% @end
 %%--------------------------------------------------------------------
 flush() ->
     receive
-        invalidation_completed ->
+        replica_eviction_completed ->
             flush();
-        {invalidation_aborting, _Reason} ->
+        {replica_eviction_aborting, _Reason} ->
             flush();
-        invalidation_failed ->
+        replica_eviction_failed ->
             flush();
-        invalidation_cancelled ->
+        replica_eviction_cancelled ->
             flush()
     after 0 ->
         ok

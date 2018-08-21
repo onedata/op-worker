@@ -516,11 +516,11 @@
     enqueued = true :: boolean(),
     cancel = false :: boolean(),
     replication_status :: undefined | transfer:status(),
-    invalidation_status :: undefined | transfer:status(),
+    eviction_status :: undefined | transfer:status(),
     scheduling_provider_id :: od_provider:id(),
     replicating_provider :: undefined | od_provider:id(),
-    invalidating_provider :: undefined | od_provider:id(),
-    % pid of replication or invalidation controller, as both cannot execute
+    evicting_provider :: undefined | od_provider:id(),
+    % pid of replication or replica_eviction controller, as both cannot execute
     % simultaneously for given TransferId
     pid :: undefined | binary(), %todo VFS-3657
 
@@ -534,7 +534,7 @@
     % counters interesting for users
     files_replicated = 0 :: non_neg_integer(),
     bytes_replicated = 0 :: non_neg_integer(),
-    files_invalidated = 0 :: non_neg_integer(),
+    files_evicted = 0 :: non_neg_integer(),
     schedule_time = 0 :: non_neg_integer(),
     start_time = 0 :: non_neg_integer(),
     finish_time = 0 :: non_neg_integer(),
@@ -599,7 +599,7 @@
     type :: replica_deletion:type()
 }).
 
-%% Model used for setting read-write lock to synchronize invalidation
+%% Model used for setting read-write lock to synchronize replica deletion
 %% of file replicas.
 -record(replica_deletion_lock, {
     read = 0 :: non_neg_integer(),

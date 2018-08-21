@@ -123,12 +123,12 @@ create_record(<<"transfer">>, Data) ->
     ReplicatingProvider = gs_protocol:null_to_undefined(proplists:get_value(
         <<"replicatingProvider">>, Data
     )),
-    InvalidatingProvider = gs_protocol:null_to_undefined(proplists:get_value(
+    EvictingProvider = gs_protocol:null_to_undefined(proplists:get_value(
         <<"invalidatingProvider">>, Data
     )),
 
-    TransferType = case {ReplicatingProvider, InvalidatingProvider} of
-        {undefined, ProviderId} when is_binary(ProviderId) -> invalidation;
+    TransferType = case {ReplicatingProvider, EvictingProvider} of
+        {undefined, ProviderId} when is_binary(ProviderId) -> eviction;
         {ProviderId, undefined} when is_binary(ProviderId) -> replication;
         {_, _} -> migration
     end,
@@ -138,10 +138,10 @@ create_record(<<"transfer">>, Data) ->
             logical_file_manager:schedule_file_replication(
                 SessionId, {guid, FileGuid}, ReplicatingProvider
             );
-        Type when Type == invalidation orelse Type == migration ->
-            logical_file_manager:schedule_replica_invalidation(
+        Type when Type == eviction orelse Type == migration ->
+            logical_file_manager:schedule_replica_eviction(
                 SessionId, {guid, FileGuid},
-                InvalidatingProvider, ReplicatingProvider
+                EvictingProvider, ReplicatingProvider
             )
     end,
 
@@ -155,10 +155,10 @@ create_record(<<"transfer">>, Data) ->
             "~n\tfile=~p,"
             "~n\ttype=~p,"
             "~n\treplicatingProvider=~p"
-            "~n\tinvalidatingProvider=~p},"
+            "~n\tevictingProvider=~p},"
             "~n due to: ~p", [
                 FileGuid, TransferType,
-                ReplicatingProvider, InvalidatingProvider,
+                ReplicatingProvider, EvictingProvider,
                 Error
             ]),
             gui_error:internal_server_error()
@@ -293,7 +293,7 @@ transfer_record(TypeAndTransferId) ->
     SessionId = gui_session:get_session_id(),
     {ok, #document{value = Transfer = #transfer{
         replicating_provider = ReplicatingProviderId,
-        invalidating_provider = InvalidatingProviderId,
+        evicting_provider = InvalidatingProviderId,
         file_uuid = FileUuid,
         path = Path,
         user_id = UserId,
@@ -512,7 +512,7 @@ transfer_current_stat_record(TransferId) ->
     {ok, #document{value = Transfer = #transfer{
         bytes_replicated = BytesReplicated,
         files_replicated = FilesReplicated,
-        files_invalidated = FilesInvalidated
+        files_evicted = FilesInvalidated
     }}} = transfer:get(TransferId),
     LastUpdate = get_last_update(Transfer),
     {ok, [
@@ -539,16 +539,16 @@ transfer_current_stat_record(TransferId) ->
 get_status(T = #transfer{
     replication_status = completed,
     replicating_provider = P1,
-    invalidating_provider = P2
+    evicting_provider = P2
 }) when is_binary(P1) andalso is_binary(P2) ->
-    case T#transfer.invalidation_status of
+    case T#transfer.eviction_status of
         scheduled -> invalidating;
         enqueued -> invalidating;
         active -> invalidating;
         Status -> Status
     end;
 get_status(T = #transfer{replication_status = skipped}) ->
-    case T#transfer.invalidation_status of
+    case T#transfer.eviction_status of
         active -> invalidating;
         Status -> Status
     end;
