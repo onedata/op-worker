@@ -68,7 +68,7 @@ synchronize_block(UserCtx, FileCtx, undefined, Prefetch, TransferId, Priority) -
         Prefetch, TransferId, Priority);
 synchronize_block(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
     case replica_synchronizer:synchronize(UserCtx, FileCtx, Block,
-        Prefetch,TransferId, Priority) of
+        Prefetch, TransferId, Priority) of
         {ok, Ans} ->
             #fuse_response{status = #status{code = ?OK}, fuse_response = Ans};
         {error, _} = Error ->
@@ -221,7 +221,8 @@ enqueue_file_replication(UserCtx, FileCtx, Block, TransferId) ->
 -spec replicate_file_insecure(user_ctx:ctx(), file_ctx:ctx(), block(),
     transfer_id()) -> provider_response().
 replicate_file_insecure(UserCtx, FileCtx, Block, TransferId) ->
-    case transfer:is_ongoing(TransferId) of
+    {ok, TransferDoc} = transfer:get(TransferId),
+    case transfer:is_ongoing(TransferDoc) of
         true ->
             case file_ctx:is_dir(FileCtx) of
                 {true, FileCtx2} ->
@@ -230,7 +231,14 @@ replicate_file_insecure(UserCtx, FileCtx, Block, TransferId) ->
                     replicate_regular_file(UserCtx, FileCtx2, Block, TransferId)
             end;
         false ->
-            throw(replication_cancelled)
+            case transfer:get_replication_status(TransferDoc) of
+                aborting ->
+                    throw(replication_cancelled);
+                cancelled ->
+                    throw(replication_cancelled);
+                failed ->
+                    throw({replication_failed, TransferId})
+            end
     end.
 
 %%-------------------------------------------------------------------

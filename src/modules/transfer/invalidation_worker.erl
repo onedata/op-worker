@@ -5,7 +5,9 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% WRITEME
+%%% Implementation of worker for invalidation_workers_pool.
+%%% Worker is responsible for invalidation of one file
+%%% (regular or directory).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(invalidation_worker).

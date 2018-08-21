@@ -86,7 +86,7 @@ get_name(SessionId, SpaceId) ->
 
 
 -spec get_eff_users(gs_client_worker:client(), od_space:id()) ->
-    {ok, [od_user:id()]} | gs_protocol:error().
+    {ok, maps:map(od_user:id(), [privileges:space_privilege()])} | gs_protocol:error().
 get_eff_users(SessionId, SpaceId) ->
     case get(SessionId, SpaceId) of
         {ok, #document{value = #od_space{eff_users = EffUsers}}} ->

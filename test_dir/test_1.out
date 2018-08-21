@@ -1,0 +1,54 @@
+
+
+Common Test v1.15.3 starting (cwd is /home/kuba/workspace/work/op-worker/test_distributed)
+
+
+Common Test: Running make in test directories...
+Including the following directories:
+"/home/kuba/workspace/work/op-worker/test_distributed/../include"
+"/home/kuba/workspace/work/op-worker/test_distributed/../_build/default/lib"
+
+CWD set to: "/home/kuba/workspace/work/op-worker/test_distributed/logs/ct_run.testmaster@testmaster.1534770581.test.2018-08-20_13.09.43"
+
+TEST INFO: 1 test(s), 1 case(s) in 1 suite(s)
+
+Testing op-worker.test_distributed.multi_provider_rest_test_SUITE.list_transfers: Starting test, 1 test cases
+
+----------------------------------------------------
+2018-08-20 13:09:46.219
+Environment initialization in multi_provider_rest_test_SUITE
+
+
+----------------------------------------------------
+2018-08-20 13:11:03.040
+Prepare of environment failed throw:invalid_json
+[{json_utils,decode_deprecated,1,
+             [{file,"/home/kuba/workspace/work/op-worker/_build/default/lib/ctool/src/utils/json_utils.erl"},
+              {line,63}]},
+ {json_parser,parse_json_binary_to_atom_proplist,1,
+              [{file,"/home/kuba/workspace/work/op-worker/_build/default/lib/ctool/src/test/json_parser.erl"},
+               {line,32}]},
+ {test_node_starter,prepare_test_environment,3,
+                    [{file,"/home/kuba/workspace/work/op-worker/_build/default/lib/ctool/src/test/test_node_starter.erl"},
+                     {line,86}]},
+ {cth_env_up,post_init_per_suite,4,
+             [{file,"/home/kuba/workspace/work/op-worker/_build/default/lib/ctool/src/test/cth_env_up.erl"},
+              {line,57}]},
+ {ct_hooks,catch_apply,3,[{file,"ct_hooks.erl"},{line,424}]},
+ {ct_hooks,do_call_generic,4,[{file,"ct_hooks.erl"},{line,199}]},
+ {ct_hooks,call,4,[{file,"ct_hooks.erl"},{line,248}]},
+ {ct_hooks,call,4,[{file,"ct_hooks.erl"},{line,251}]}]
+
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+Error detected: "cth_posthook:post_init_per_suite/4 CTH call failed"
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Testing op-worker.test_distributed.multi_provider_rest_test_SUITE.list_transfers: *** FAILED {multi_provider_rest_test_SUITE,init_per_suite} ***
+Testing op-worker.test_distributed.multi_provider_rest_test_SUITE.list_transfers: TEST COMPLETE, 0 ok, 0 failed, 1 skipped of 1 test cases
+
+Updating /home/kuba/workspace/work/op-worker/test_distributed/logs/index.html ... done
+Updating /home/kuba/workspace/work/op-worker/test_distributed/logs/all_runs.html ... done
+
+Found dockers config in /home/kuba/workspace/work/op-worker/dockers.config
+Using preconfigured image for worker: onedata/worker:v57

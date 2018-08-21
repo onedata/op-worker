@@ -1,0 +1,26 @@
+
+
+Common Test v1.15.3 starting (cwd is /home/kuba/workspace/work/op-worker/test_distributed)
+
+
+Common Test: Running make in test directories...
+Including the following directories:
+"/home/kuba/workspace/work/op-worker/test_distributed/../include"
+"/home/kuba/workspace/work/op-worker/test_distributed/../_build/default/lib"
+
+CWD set to: "/home/kuba/workspace/work/op-worker/test_distributed/logs/ct_run.testmaster@testmaster.1534758745.test.2018-08-20_09.52.28"
+
+TEST INFO: 1 test(s), 1 case(s) in 1 suite(s)
+
+Testing op-worker.test_distributed.multi_provider_rest_test_SUITE.list_transfers: Starting test, 1 test cases
+
+----------------------------------------------------
+2018-08-20 09:52:30.903
+Environment initialization in multi_provider_rest_test_SUITE
+
+Found dockers config in /home/kuba/workspace/work/op-worker/dockers.config
+Using preconfigured image for worker: onedata/worker:v57
+Traceback (most recent call last):
+  File "./ct_run.py", line 328, in <module>
+    os.remove(new_cover)
+OSError: [Errno 2] No such file or directory: '/home/kuba/workspace/work/op-worker/test_distributed/cover_tmp.spec'
