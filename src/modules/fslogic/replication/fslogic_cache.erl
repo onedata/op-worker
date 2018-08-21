@@ -685,7 +685,7 @@ flush_key(Key, Type) ->
 
             Ans = case file_location:save(DocToSave) of
                 {ok, _} ->
-                    flush_local_blocks(Key, DelBlocks, AddBlocks, Type);
+                    flush_local_blocks(DocToSave, DelBlocks, AddBlocks, Type);
                 Error ->
                     ?error("Flush failed for key ~p: ~p", [Key, Error]),
                     Error
@@ -705,9 +705,10 @@ flush_key(Key, Type) ->
 %% Flushes local blocks.
 %% @end
 %%-------------------------------------------------------------------
--spec flush_local_blocks(file_location:id(), list(), list(), flush_type()) ->
+-spec flush_local_blocks(file_location:doc(), list(), list(), flush_type()) ->
     ok | {error, term()} | [{error, term()}].
-flush_local_blocks(Key, DelBlocks, AddBlocks, Type) ->
+flush_local_blocks(#document{key = Key,
+    value = #file_location{blocks = PublicBlocks}}, DelBlocks, AddBlocks, Type) ->
     Proceed = case ?LOCAL_BLOCKS_FLUSH of
         always -> true;
         on_terminate -> Type =:= terminate
@@ -728,7 +729,7 @@ flush_local_blocks(Key, DelBlocks, AddBlocks, Type) ->
                     verify_flush_ans(Key, Check1, Check2)
             end;
         {true, doc} ->
-            case file_local_blocks:update(Key, get_blocks(Key)) of
+            case file_local_blocks:update(Key, get_blocks(Key) -- PublicBlocks) of
                 ok ->
                     erase({?DELETED_BLOCKS, Key}),
                     erase({?RESET_BLOCKS, Key}),
@@ -904,7 +905,7 @@ merge_local_blocks(#document{key = Key,
                     {PublicBlocks ++ LocalBlocks, false};
                 doc ->
                     {ok, LocalBlocks} = file_local_blocks:get(Key),
-                    {LocalBlocks, true};
+                    {PublicBlocks ++ LocalBlocks, false};
                 none ->
                     {PublicBlocks, true}
             end;
