@@ -428,7 +428,7 @@ release(FileHandle) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_distribution(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
-    {ok, list()} | error_reply().
+    {ok, Blocks :: [[non_neg_integer()]]} | error_reply().
 get_file_distribution(SessId, FileKey) ->
     ?run(fun() -> lfm_files:get_file_distribution(SessId, FileKey) end).
 
