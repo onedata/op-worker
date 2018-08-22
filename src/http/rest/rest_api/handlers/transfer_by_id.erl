@@ -138,7 +138,7 @@ rerun_transfer(Req, State) ->
     #{auth := SessionId, id := Tid} = State2,
 
     {ok, UserId} = session:get_user_id(SessionId),
-    case transfer:rerun(UserId, Tid) of
+    case transfer:rerun_ended(UserId, Tid) of
         {ok, NewTransferId} ->
             Path = binary_to_list(<<"transfers/", NewTransferId/binary>>),
             Location = oneprovider:get_rest_endpoint(Path),
@@ -154,34 +154,33 @@ rerun_transfer(Req, State) ->
 %%% Internal functions
 %%%===================================================================
 
--spec transfer_to_json(Transfer :: transfer:transfer()) -> maps:map().
-transfer_to_json(Transfer) ->
-    #transfer{
-        file_uuid = FileUuid,
-        space_id = SpaceId,
-        user_id = UserId,
-        rerun_id = RerunId,
-        path = Path,
-        replication_status = ReplicationStatus,
-        eviction_status = EvictionStatus,
-        evicting_provider = EvictingProvider,
-        replicating_provider = ReplicatingProviderId,
-        callback = Callback,
-        files_to_process = FilesToProcess,
-        files_processed = FilesProcessed,
-        failed_files = FailedFiles,
-        files_replicated = FilesReplicated,
-        bytes_replicated = BytesReplicated,
-        files_evicted = FilesEvicted,
-        schedule_time = ScheduleTime,
-        start_time = StartTime,
-        finish_time = FinishTime,
-        last_update = LastUpdate,
-        min_hist = MinHist,
-        hr_hist = HrHist,
-        dy_hist = DyHist,
-        mth_hist = MthHist
-    } = Transfer,
+-spec transfer_to_json(transfer:transfer()) -> maps:map().
+transfer_to_json(#transfer{
+    file_uuid = FileUuid,
+    space_id = SpaceId,
+    user_id = UserId,
+    rerun_id = RerunId,
+    path = Path,
+    replication_status = ReplicationStatus,
+    eviction_status = EvictionStatus,
+    evicting_provider = EvictingProvider,
+    replicating_provider = ReplicatingProviderId,
+    callback = Callback,
+    files_to_process = FilesToProcess,
+    files_processed = FilesProcessed,
+    failed_files = FailedFiles,
+    files_replicated = FilesReplicated,
+    bytes_replicated = BytesReplicated,
+    files_evicted = FilesEvicted,
+    schedule_time = ScheduleTime,
+    start_time = StartTime,
+    finish_time = FinishTime,
+    last_update = LastUpdate,
+    min_hist = MinHist,
+    hr_hist = HrHist,
+    dy_hist = DyHist,
+    mth_hist = MthHist
+}) ->
     FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
     NullableCallback = utils:ensure_defined(Callback, undefined, null),
     {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),

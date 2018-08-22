@@ -221,8 +221,7 @@ enqueue_file_replication(UserCtx, FileCtx, Block, TransferId) ->
 -spec replicate_file_insecure(user_ctx:ctx(), file_ctx:ctx(), block(),
     transfer_id()) -> provider_response().
 replicate_file_insecure(UserCtx, FileCtx, Block, TransferId) ->
-    {ok, TransferDoc} = transfer:get(TransferId),
-    case transfer:is_ongoing(TransferDoc) of
+    case transfer:is_ongoing(TransferId) of
         true ->
             case file_ctx:is_dir(FileCtx) of
                 {true, FileCtx2} ->

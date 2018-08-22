@@ -223,6 +223,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 
+-spec handle_enqueued(transfer:id(), transfer:callback(), boolean()) -> ok.
 handle_enqueued(TransferId, Callback, EvictSourceReplica) ->
     receive
         replication_active ->
@@ -239,6 +240,7 @@ handle_enqueued(TransferId, Callback, EvictSourceReplica) ->
     ok.
 
 
+-spec handle_active(transfer:id(), transfer:callback(), boolean()) -> ok.
 handle_active(TransferId, Callback, EvictSourceReplica) ->
     receive
         replication_completed ->
@@ -255,6 +257,7 @@ handle_active(TransferId, Callback, EvictSourceReplica) ->
     ok.
 
 
+-spec handle_aborting(transfer:id()) -> ok.
 handle_aborting(TransferId) ->
     receive
         replication_cancelled ->
@@ -292,6 +295,7 @@ notify_callback(Callback, false) ->
 %% in queue.
 %% @end
 %%--------------------------------------------------------------------
+-spec flush() -> ok.
 flush() ->
     receive
         replication_completed ->

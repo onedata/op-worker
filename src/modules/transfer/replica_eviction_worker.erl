@@ -33,7 +33,7 @@
 -define(SERVER, ?MODULE).
 
 -define(MAX_REPLICA_EVICTION_RETRIES,
-    application:get_env(?APP_NAME, max_replica_eviction_retries_per_file, 5)).
+    application:get_env(?APP_NAME, max_eviction_retries_per_file_replica, 5)).
 
 -record(state, {}).
 -type state() :: #state{}.

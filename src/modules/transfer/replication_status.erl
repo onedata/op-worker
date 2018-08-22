@@ -92,7 +92,7 @@ handle_active(TransferId) ->
     transfer:update_and_run(
         TransferId,
         fun mark_active/1,
-        fun transfer_links:add_ongoing_transfer_link/1
+        fun transfer_links:add_ongoing/1
     ).
 
 
@@ -100,7 +100,7 @@ handle_active(TransferId) ->
 handle_aborting(TransferId) ->
     OnSuccessfulUpdate = fun(Doc) ->
         replica_synchronizer:cancel(TransferId),
-        transfer_links:add_ongoing_transfer_link(Doc)
+        transfer_links:add_ongoing(Doc)
     end,
 
     transfer:update_and_run(
@@ -130,7 +130,7 @@ handle_failed(TransferId, Force) ->
     transfer:update_and_run(
         TransferId,
         UpdateFun,
-        fun transfer_links:move_transfer_link_from_ongoing_to_ended/1
+        fun transfer_links:move_from_ongoing_to_ended/1
     ).
 
 
@@ -139,7 +139,7 @@ handle_cancelled(TransferId) ->
     transfer:update_and_run(
         TransferId,
         fun mark_cancelled/1,
-        fun transfer_links:move_transfer_link_from_ongoing_to_ended/1
+        fun transfer_links:move_from_ongoing_to_ended/1
     ).
 
 

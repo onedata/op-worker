@@ -224,11 +224,10 @@ handle_active_replication(#document{value = #transfer{
             ?run_if_is_self(ReplicatingProviderId, fun() ->
                 replication_controller:mark_aborting(
                     ?decode_pid(Pid), exceeded_number_of_failed_files)
-            end);
+                end);
         false ->
             ok
     end.
-
 
 %%--------------------------------------------------------------------
 %% @private
@@ -266,25 +265,23 @@ handle_aborting_replication(#document{key = TransferId, value = #transfer{
     files_processed = FilesProcessed,
     replicating_provider = ReplicatingProviderId,
     pid = Pid
-}}) ->
-    case FilesProcessed >= FilesToProcess of
-        false ->
-            ok;
-        true ->
-            ?run_if_is_self(ReplicatingProviderId, fun() ->
-                DecodedPid = ?decode_pid(Pid),
-                case {Cancel, is_process_alive(DecodedPid)} of
-                    {true, true} ->
-                        replication_controller:mark_cancelled(DecodedPid);
-                    {true, false} ->
-                        replication_status:handle_cancelled(TransferId);
-                    {false, true} ->
-                        replication_controller:mark_failed(DecodedPid);
-                    {false, false} ->
-                        replication_status:handle_failed(TransferId, false)
-                end
-            end)
-    end.
+}}) when FilesProcessed >= FilesToProcess ->
+    ?run_if_is_self(ReplicatingProviderId, fun() ->
+        DecodedPid = ?decode_pid(Pid),
+        case {Cancel, is_process_alive(DecodedPid)} of
+            {true, true} ->
+                replication_controller:mark_cancelled(DecodedPid);
+            {true, false} ->
+                replication_status:handle_cancelled(TransferId);
+            {false, true} ->
+                replication_controller:mark_failed(DecodedPid);
+            {false, false} ->
+                replication_status:handle_failed(TransferId, false)
+        end
+    end);
+
+handle_aborting_replication(_) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -293,8 +290,8 @@ handle_aborting_replication(#document{key = TransferId, value = #transfer{
 %% Starts replica_eviction or cancel it depending on cancel flag.
 %% In case of starting, due to transfer doc conflict resolution and possible
 %% races, this function can be called multiple times. To avoid spawning
-%% multiple replica_eviction controllers, try to mark replica_eviction as enqueued and
-%% spawn controller only if it succeed.
+%% multiple replica_eviction controllers, try to mark replica_eviction as
+%% enqueued and spawn controller only if it succeed.
 %% This will be done only by provider that performs replica_eviction.
 %% @end
 %%--------------------------------------------------------------------
@@ -410,9 +407,9 @@ handle_active_replica_eviction(#document{value = #transfer{
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Notifies replica_eviction_controller about cancelled (if cancel flag is set) or
-%% failed (if cancel flag is unset) transfer or if controller is dead manually
-%% changes status.
+%% Notifies replica_eviction_controller about cancelled (if cancel flag is set)
+%% or failed (if cancel flag is unset) transfer or if controller is dead
+%% manually changes status.
 %% This will be done only by provider that performs eviction.
 %% @end
 %%--------------------------------------------------------------------
@@ -423,25 +420,23 @@ handle_aborting_replica_eviction(#document{key = TransferId, value = #transfer{
     files_processed = FilesProcessed,
     evicting_provider = EvictingProviderId,
     pid = Pid
-}}) ->
-    case FilesProcessed >= FilesToProcess of
-        false ->
-            ok;
-        true ->
-            ?run_if_is_self(EvictingProviderId, fun() ->
-                DecodedPid = ?decode_pid(Pid),
-                case {Cancel, is_process_alive(DecodedPid)} of
-                    {true, true} ->
-                        replica_eviction_controller:mark_cancelled(DecodedPid);
-                    {false, true} ->
-                        replica_eviction_controller:mark_failed(DecodedPid);
-                    {true, false} ->
-                        replica_eviction_status:handle_cancelled(TransferId);
-                    {false, false} ->
-                        replica_eviction_status:handle_failed(TransferId, false)
-                end
-            end)
-    end.
+}}) when FilesProcessed >= FilesToProcess ->
+    ?run_if_is_self(EvictingProviderId, fun() ->
+        DecodedPid = ?decode_pid(Pid),
+        case {Cancel, is_process_alive(DecodedPid)} of
+            {true, true} ->
+                replica_eviction_controller:mark_cancelled(DecodedPid);
+            {false, true} ->
+                replica_eviction_controller:mark_failed(DecodedPid);
+            {true, false} ->
+                replica_eviction_status:handle_cancelled(TransferId);
+            {false, false} ->
+                replica_eviction_status:handle_failed(TransferId, false)
+        end
+    end);
+
+handle_aborting_replica_eviction(_) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -476,7 +471,7 @@ handle_finished_migration(Doc = #document{value = #transfer{
     replicating_provider = ReplicatingProviderId
 }}) ->
     ?run_if_is_self(ReplicatingProviderId, fun() ->
-        transfer_links:move_transfer_link_from_ongoing_to_ended(Doc)
+        transfer_links:move_from_ongoing_to_ended(Doc)
     end).
 
 
@@ -525,5 +520,6 @@ new_replica_eviction(#document{
 }) ->
     FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
     {ok, _Pid} = gen_server2:start(replica_eviction_controller,
-        [session:root_session_id(), TransferId, FileGuid, Callback, TargetProviderId], []),
+        [session:root_session_id(),
+            TransferId, FileGuid, Callback, TargetProviderId], []),
     ok.

@@ -64,8 +64,8 @@ terminate() ->
 %%--------------------------------------------------------------------
 -spec find_record(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find_record(<<"transfer">>, TypeAndTransferId) ->
-    transfer_record(TypeAndTransferId);
+find_record(<<"transfer">>, StateAndTransferId) ->
+    transfer_record(StateAndTransferId);
 
 find_record(<<"on-the-fly-transfer">>, TransferId) ->
     on_the_fly_transfer_record(TransferId);
@@ -195,10 +195,9 @@ delete_record(_ResourceType, _Id) ->
 %% Cancel transfer of given id.
 %% @end
 %%--------------------------------------------------------------------
--spec cancel_transfer(TypeAndTransferId :: binary()) ->
-    ok | gui_error:error_result().
-cancel_transfer(TypeAndTransferId) ->
-    {_, TransferId} = op_gui_utils:association_to_ids(TypeAndTransferId),
+-spec cancel_transfer(binary()) -> ok | gui_error:error_result().
+cancel_transfer(StateAndTransferId) ->
+    {_, TransferId} = op_gui_utils:association_to_ids(StateAndTransferId),
     case transfer:cancel(TransferId) of
         ok ->
             ok;
@@ -215,12 +214,12 @@ cancel_transfer(TypeAndTransferId) ->
 %% Rerun transfer of given id.
 %% @end
 %%--------------------------------------------------------------------
--spec rerun_transfer(SessionId :: session:id(), TypeAndTransferId :: binary()) ->
+-spec rerun_transfer(SessionId :: session:id(), StateAndTransferId :: binary()) ->
     ok | gui_error:error_result().
-rerun_transfer(SessionId, TypeAndTransferId) ->
-    {_, TransferId} = op_gui_utils:association_to_ids(TypeAndTransferId),
+rerun_transfer(SessionId, StateAndTransferId) ->
+    {_, TransferId} = op_gui_utils:association_to_ids(StateAndTransferId),
     {ok, UserId} = session:get_user_id(SessionId),
-    case transfer:rerun(UserId, TransferId) of
+    case transfer:rerun_ended(UserId, TransferId) of
         {ok, NewTransferId} ->
             {ok, [
                 {<<"id">>, op_gui_utils:ids_to_association(
@@ -241,13 +240,13 @@ rerun_transfer(SessionId, TypeAndTransferId) ->
 %% can be provided.
 %% @end
 %%--------------------------------------------------------------------
--spec list_transfers(od_space:id(), Type :: binary(),
+-spec list_transfers(od_space:id(), State :: binary(),
     StartFromIndex :: null | transfer_links:link_key(),
     Offset :: integer(), Limit :: transfer:list_limit()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-list_transfers(SpaceId, Type, StartFromIndex, Offset, Limit) ->
+list_transfers(SpaceId, State, StartFromIndex, Offset, Limit) ->
     StartFromLink = gs_protocol:null_to_undefined(StartFromIndex),
-    {ok, TransferIds} = case Type of
+    {ok, TransferIds} = case State of
         ?WAITING_TRANSFERS_STATE ->
             transfer:list_waiting_transfers(SpaceId, StartFromLink, Offset, Limit);
         ?ONGOING_TRANSFERS_STATE ->
@@ -256,7 +255,7 @@ list_transfers(SpaceId, Type, StartFromIndex, Offset, Limit) ->
             transfer:list_ended_transfers(SpaceId, StartFromLink, Offset, Limit)
     end,
     {ok, [
-        {<<"list">>, [op_gui_utils:ids_to_association(Type, TId) || TId <- TransferIds]}
+        {<<"list">>, [op_gui_utils:ids_to_association(State, TId) || TId <- TransferIds]}
     ]}.
 
 
@@ -270,15 +269,16 @@ list_transfers(SpaceId, Type, StartFromIndex, Offset, Limit) ->
 -spec get_transfers_for_file(fslogic_worker:file_guid()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 get_transfers_for_file(FileGuid) ->
-    {ok, ResultMap = #{
+    {ok, #{
         ongoing := Ongoing,
         ended := Ended
     }} = transferred_file:get_transfers(FileGuid),
-    ResultMap2 = ResultMap#{
+
+    ResultMap = #{
         ongoing => [op_gui_utils:ids_to_association(?ONGOING_TRANSFERS_STATE, TId) || TId <- Ongoing],
         ended => [op_gui_utils:ids_to_association(?ENDED_TRANSFERS_STATE, TId) || TId <- Ended]
     },
-    {ok, maps:to_list(ResultMap2)}.
+    {ok, maps:to_list(ResultMap)}.
 
 
 %%%===================================================================
@@ -292,10 +292,10 @@ get_transfers_for_file(FileGuid) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec transfer_record(binary()) -> {ok, proplists:proplist()}.
-transfer_record(TypeAndTransferId) ->
-    {Type, TransferId} = op_gui_utils:association_to_ids(TypeAndTransferId),
+transfer_record(StateAndTransferId) ->
+    {State, TransferId} = op_gui_utils:association_to_ids(StateAndTransferId),
     SessionId = gui_session:get_session_id(),
-    {ok, #document{value = Transfer = #transfer{
+    {ok, TransferDoc = #document{value = Transfer = #transfer{
         replicating_provider = ReplicatingProviderId,
         evicting_provider = InvalidatingProviderId,
         file_uuid = FileUuid,
@@ -317,9 +317,9 @@ transfer_record(TypeAndTransferId) ->
         true -> null;
         false -> Transfer#transfer.finish_time
     end,
-    {ok, LinkKey} = transfer:get_link_key_by_state(TransferId, Type),
+    {ok, LinkKey} = transfer:get_link_key_by_state(TransferDoc, State),
     {ok, [
-        {<<"id">>, TypeAndTransferId},
+        {<<"id">>, StateAndTransferId},
         {<<"index">>, LinkKey},
         {<<"invalidatingProvider">>, gs_protocol:undefined_to_null(
             InvalidatingProviderId

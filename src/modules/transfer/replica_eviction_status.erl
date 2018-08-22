@@ -93,7 +93,7 @@ handle_active(TransferId) ->
     OnSuccessfulUpdate = fun(Doc = #document{value = Transfer}) ->
         case transfer:is_migration(Transfer) of
             true -> ok;
-            false -> transfer_links:add_ongoing_transfer_link(Doc)
+            false -> transfer_links:add_ongoing(Doc)
         end
     end,
     transfer:update_and_run(

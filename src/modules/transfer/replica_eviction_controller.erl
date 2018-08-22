@@ -262,6 +262,7 @@ notify_callback(Callback) ->
 %% in queue.
 %% @end
 %%--------------------------------------------------------------------
+-spec flush() -> ok.
 flush() ->
     receive
         replica_eviction_completed ->

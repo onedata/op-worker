@@ -27,7 +27,7 @@
 -export([
     init/0, cleanup/0,
     start/6, get/1, update/2, update_and_run/3, delete/1,
-    cancel/1, rerun/2
+    cancel/1, rerun_ended/2
 ]).
 
 -export([
@@ -165,11 +165,20 @@ start_for_user(UserId, FileGuid, FilePath, EvictingProviderId,
         }},
 
     {ok, Doc = #document{key = TransferId}} = create(ToCreate),
-    transfer_links:add_waiting_transfer_link(Doc),
+    transfer_links:add_waiting(Doc),
     transfer_changes:handle(Doc),
     {ok, TransferId}.
 
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Traverses waiting and ongoing links in search of transfers targeting local
+%% provider. If they were still ongoing marks them as failed and reruns.
+%% Otherwise does not rerun them but move to ended links and mark as failed
+%% if necessary.
+%% This function should be called only once after provider restart.
+%% @end
+%%-------------------------------------------------------------------
 -spec rerun_not_ended_transfers(od_space:id()) -> [id()].
 rerun_not_ended_transfers(SpaceId) ->
     {ok, WaitingTransferIds} = list_waiting_transfers(SpaceId),
@@ -199,9 +208,9 @@ rerun_not_ended_transfers(SpaceId) ->
     maps:values(Reruns).
 
 
--spec rerun(undefined | od_user:id(), doc() | id()) ->
+-spec rerun_ended(undefined | od_user:id(), doc() | id()) ->
     {ok, id()} | {error, term()}.
-rerun(UserId, #document{key = TransferId, value = Transfer}) ->
+rerun_ended(UserId, #document{key = TransferId, value = Transfer}) ->
     case is_ended(Transfer) of
         false ->
             {error, not_ended};
@@ -227,9 +236,9 @@ rerun(UserId, #document{key = TransferId, value = Transfer}) ->
             end),
             {ok, NewTransferId}
     end;
-rerun(UserId, TransferId) ->
+rerun_ended(UserId, TransferId) ->
     case ?MODULE:get(TransferId) of
-        {ok, Doc} -> rerun(UserId, Doc);
+        {ok, Doc} -> rerun_ended(UserId, Doc);
         {error, Error} -> {error, Error}
     end.
 
@@ -250,15 +259,15 @@ get(TransferId) ->
 -spec delete(id()) -> ok.
 delete(TransferId) ->
     {ok, Doc} = ?MODULE:get(TransferId),
-    ok = transfer_links:delete_waiting_transfer_link(Doc),
-    ok = transfer_links:delete_ongoing_transfer_link(Doc),
-    ok = transfer_links:delete_ended_transfer_link(Doc),
+    ok = transfer_links:delete_waiting(Doc),
+    ok = transfer_links:delete_ongoing(Doc),
+    ok = transfer_links:delete_ended(Doc),
     ok = transferred_file:report_transfer_deletion(Doc),
     ok = datastore_model:delete(?CTX, TransferId).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Schedule cancellation of transfer. It is not possible for ended transfers.
+%% Schedules cancellation of transfer. It is not possible for ended transfers.
 %% @end
 %%--------------------------------------------------------------------
 -spec cancel(id()) -> ok | {error, term()}.
@@ -288,7 +297,7 @@ mark_dequeued(TransferId) ->
     update_and_run(
         TransferId,
         fun(Transfer) -> {ok, Transfer#transfer{enqueued = false}} end,
-        fun transfer_links:delete_waiting_transfer_link/1
+        fun transfer_links:delete_waiting/1
     ).
 
 
@@ -315,18 +324,14 @@ is_eviction(#transfer{}) ->
 
 
 -spec is_migration(transfer()) -> boolean().
-is_migration(#transfer{
-    replicating_provider = ReplicatingProvider,
-    evicting_provider = EvictingProviderId
-}) ->
-    is_binary(ReplicatingProvider) andalso is_binary(EvictingProviderId).
+is_migration(#transfer{replicating_provider = undefined}) -> false;
+is_migration(#transfer{evicting_provider = undefined}) -> false;
+is_migration(_) -> true.
 
 
 -spec is_ongoing(doc() | transfer() | id() | undefined) -> boolean().
 is_ongoing(undefined) ->
     true;
-is_ongoing(#document{value = Transfer}) ->
-    is_ongoing(Transfer);
 is_ongoing(Transfer = #transfer{}) ->
     is_replication_ongoing(Transfer) orelse is_eviction_ongoing(Transfer);
 is_ongoing(TransferId) ->
@@ -532,7 +537,7 @@ list_waiting_transfers(SpaceId, Offset, Limit) ->
 -spec list_waiting_transfers(od_space:id(), undefined | id(),
     integer(), list_limit()) -> {ok, [id()]}.
 list_waiting_transfers(SpaceId, StartId, Offset, Limit) ->
-    {ok, transfer_links:list_links(SpaceId, ?WAITING_TRANSFERS_KEY,
+    {ok, transfer_links:list(SpaceId, ?WAITING_TRANSFERS_KEY,
         StartId, Offset, Limit)}.
 
 %%--------------------------------------------------------------------
@@ -562,7 +567,7 @@ list_ongoing_transfers(SpaceId, Offset, Limit) ->
 -spec list_ongoing_transfers(od_space:id(), undefined | id(),
     integer(), list_limit()) -> {ok, [id()]}.
 list_ongoing_transfers(SpaceId, StartId, Offset, Limit) ->
-    {ok, transfer_links:list_links(SpaceId, ?ONGOING_TRANSFERS_KEY,
+    {ok, transfer_links:list(SpaceId, ?ONGOING_TRANSFERS_KEY,
         StartId, Offset, Limit)}.
 
 %%--------------------------------------------------------------------
@@ -592,7 +597,7 @@ list_ended_transfers(SpaceId, Offset, Limit) ->
 -spec list_ended_transfers(od_space:id(), undefined | id(),
     integer(), list_limit()) -> {ok, [id()]}.
 list_ended_transfers(SpaceId, StartId, Offset, Limit) ->
-    {ok, transfer_links:list_links(SpaceId, ?ENDED_TRANSFERS_KEY,
+    {ok, transfer_links:list(SpaceId, ?ENDED_TRANSFERS_KEY,
         StartId, Offset, Limit)}.
 
 %%--------------------------------------------------------------------
@@ -677,10 +682,14 @@ update_and_run(TransferId, UpdateFun, OnSuccessfulUpdate) ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% This function reruns given transfer (replication, migration or replica_eviction)
-%% if possible.
+%% This function reruns given transfer (replication, migration or
+%% replica_eviction) if possible. Otherwise marks it as failed (transfers which
+%% were being aborted) or moves to ended (transfers already ended but kept in
+%% ongoing link tree).
 %% @end
 %%-------------------------------------------------------------------
+-spec maybe_rerun(doc()) ->
+    {ok, id() | marked_failed | moved_to_ended} | {error, term()}.
 maybe_rerun(Doc = #document{key = TransferId, value = Transfer}) ->
     SourceProviderId = Transfer#transfer.evicting_provider,
     TargetProviderId = Transfer#transfer.replicating_provider,
@@ -697,13 +706,13 @@ maybe_rerun(Doc = #document{key = TransferId, value = Transfer}) ->
     } of
         {true, _, _, _, TargetProviderId} ->
             replication_status:handle_failed(TransferId, true),
-            rerun(undefined, TransferId);
+            rerun_ended(undefined, TransferId);
         {_, true, _, _, TargetProviderId} ->
             replication_status:handle_failed(TransferId, true),
             {ok, marked_failed};
         {_, _, true, _, SourceProviderId} ->
             replica_eviction_status:handle_failed(TransferId, true),
-            rerun(undefined, TransferId);
+            rerun_ended(undefined, TransferId);
         {_, _, _, true, SourceProviderId} ->
             replica_eviction_status:handle_failed(TransferId, true),
             {ok, marked_failed};
@@ -714,15 +723,15 @@ maybe_rerun(Doc = #document{key = TransferId, value = Transfer}) ->
             case {IsEviction, IsReplication, IsMigration, SelfId} of
                 % replica_eviction
                 {true, false, false, SourceProviderId} ->
-                    transfer_links:move_transfer_link_from_ongoing_to_ended(Doc),
+                    transfer_links:move_from_ongoing_to_ended(Doc),
                     {ok, moved_to_ended};
                 % replication
                 {false, true, false, TargetProviderId} ->
-                    transfer_links:move_transfer_link_from_ongoing_to_ended(Doc),
+                    transfer_links:move_from_ongoing_to_ended(Doc),
                     {ok, moved_to_ended};
                 % migration
                 {false, false, true, TargetProviderId} ->
-                    transfer_links:move_transfer_link_from_ongoing_to_ended(Doc),
+                    transfer_links:move_from_ongoing_to_ended(Doc),
                     {ok, moved_to_ended};
                 {_, _, _, _} ->
                     {error, non_participating_provider}

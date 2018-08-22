@@ -20,15 +20,14 @@
 %% API
 % link utils functions
 -export([
-    add_waiting_transfer_link/1, delete_waiting_transfer_link/1,
-    add_ongoing_transfer_link/1, delete_ongoing_transfer_link/1,
-    add_ended_transfer_link/1, delete_ended_transfer_link/1,
+    add_waiting/1, delete_waiting/1,
+    add_ongoing/1, delete_ongoing/1,
+    add_ended/1, delete_ended/1,
 
-    move_transfer_link_from_ongoing_to_ended/1,
+    move_from_ongoing_to_ended/1,
     move_to_ended_if_not_migration/1
 ]).
--export([for_each_ongoing_transfer/3]).
--export([list_links/5]).
+-export([list/5]).
 -export([link_key/2]).
 
 -type link_key() :: binary().
@@ -55,8 +54,8 @@
 %% ongoing transfers for file (transferred_file doc).
 %% @end
 %%--------------------------------------------------------------------
--spec add_waiting_transfer_link(transfer:doc()) -> ok.
-add_waiting_transfer_link(#document{key = TransferId, value = Transfer}) ->
+-spec add_waiting(transfer:doc()) -> ok.
+add_waiting(#document{key = TransferId, value = Transfer}) ->
     SpaceId = Transfer#transfer.space_id,
     ScheduleTime = Transfer#transfer.schedule_time,
     FileGuid = fslogic_uuid:uuid_to_guid(Transfer#transfer.file_uuid, SpaceId),
@@ -64,8 +63,8 @@ add_waiting_transfer_link(#document{key = TransferId, value = Transfer}) ->
     ok = add_link(?WAITING_TRANSFERS_KEY, TransferId, SpaceId, ScheduleTime).
 
 
--spec add_ongoing_transfer_link(transfer:doc()) -> ok.
-add_ongoing_transfer_link(#document{key = TransferId, value = Transfer}) ->
+-spec add_ongoing(transfer:doc()) -> ok.
+add_ongoing(#document{key = TransferId, value = Transfer}) ->
     SpaceId = Transfer#transfer.space_id,
     ScheduleTime = Transfer#transfer.schedule_time,
     ok = add_link(?ONGOING_TRANSFERS_KEY, TransferId, SpaceId, ScheduleTime).
@@ -77,8 +76,8 @@ add_ongoing_transfer_link(#document{key = TransferId, value = Transfer}) ->
 %% ongoing transfers for file (transferred_file doc).
 %% @end
 %%--------------------------------------------------------------------
--spec add_ended_transfer_link(transfer:doc()) -> ok.
-add_ended_transfer_link(#document{key = TransferId, value = Transfer}) ->
+-spec add_ended(transfer:doc()) -> ok.
+add_ended(#document{key = TransferId, value = Transfer}) ->
     SpaceId = Transfer#transfer.space_id,
     ScheduleTime = Transfer#transfer.schedule_time,
     FinishTime = Transfer#transfer.finish_time,
@@ -89,31 +88,31 @@ add_ended_transfer_link(#document{key = TransferId, value = Transfer}) ->
     ok = add_link(?ENDED_TRANSFERS_KEY, TransferId, SpaceId, FinishTime).
 
 
--spec delete_waiting_transfer_link(transfer:doc()) -> ok.
-delete_waiting_transfer_link(#document{key = TransferId, value = Transfer}) ->
+-spec delete_waiting(transfer:doc()) -> ok.
+delete_waiting(#document{key = TransferId, value = Transfer}) ->
     SpaceId = Transfer#transfer.space_id,
     ScheduleTime = Transfer#transfer.schedule_time,
     ok = delete_links(?WAITING_TRANSFERS_KEY, TransferId, SpaceId, ScheduleTime).
 
 
--spec delete_ongoing_transfer_link(transfer:doc()) -> ok.
-delete_ongoing_transfer_link(#document{key = TransferId, value = Transfer}) ->
+-spec delete_ongoing(transfer:doc()) -> ok.
+delete_ongoing(#document{key = TransferId, value = Transfer}) ->
     SpaceId = Transfer#transfer.space_id,
     ScheduleTime = Transfer#transfer.schedule_time,
     ok = delete_links(?ONGOING_TRANSFERS_KEY, TransferId, SpaceId, ScheduleTime).
 
 
--spec delete_ended_transfer_link(transfer:doc()) -> ok.
-delete_ended_transfer_link(#document{key = TransferId, value = Transfer}) ->
+-spec delete_ended(transfer:doc()) -> ok.
+delete_ended(#document{key = TransferId, value = Transfer}) ->
     SpaceId = Transfer#transfer.space_id,
     FinishTime = Transfer#transfer.finish_time,
     ok = delete_links(?ENDED_TRANSFERS_KEY, TransferId, SpaceId, FinishTime).
 
 
--spec move_transfer_link_from_ongoing_to_ended(transfer:doc()) -> ok.
-move_transfer_link_from_ongoing_to_ended(Doc) ->
-    add_ended_transfer_link(Doc),
-    delete_ongoing_transfer_link(Doc).
+-spec move_from_ongoing_to_ended(transfer:doc()) -> ok.
+move_from_ongoing_to_ended(Doc) ->
+    add_ended(Doc),
+    delete_ongoing(Doc).
 
 
 %%--------------------------------------------------------------------
@@ -126,13 +125,13 @@ move_transfer_link_from_ongoing_to_ended(Doc) ->
 move_to_ended_if_not_migration(Doc = #document{value = Transfer}) ->
     case transfer:is_migration(Transfer) of
         true -> ok;
-        false -> move_transfer_link_from_ongoing_to_ended(Doc)
+        false -> move_from_ongoing_to_ended(Doc)
     end.
 
 
--spec list_links(SpaceId :: od_space:id(), virtual_list_id(),
+-spec list(SpaceId :: od_space:id(), virtual_list_id(),
     transfer:id() | undefined, offset(), list_limit()) -> [transfer:id()].
-list_links(SpaceId, ListDocId, StartId, Offset, Limit) ->
+list(SpaceId, ListDocId, StartId, Offset, Limit) ->
     Opts = #{offset => Offset},
 
     Opts2 = case StartId of
@@ -145,22 +144,10 @@ list_links(SpaceId, ListDocId, StartId, Offset, Limit) ->
         _ -> Opts2#{size => Limit}
     end,
 
-    {ok, Transfers} = for_each_transfer(ListDocId, fun(_LinkName, TransferId, Acc) ->
+    {ok, Transfers} = for_each_link(ListDocId, fun(_LinkName, TransferId, Acc) ->
         [TransferId | Acc]
     end, [], SpaceId, Opts3),
     lists:reverse(Transfers).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Executes callback for each ongoing transfer.
-%% @end
-%%--------------------------------------------------------------------
--spec for_each_ongoing_transfer(
-    Callback :: fun((link_key(), transfer:id(), Acc0 :: term()) -> Acc :: term()),
-    Acc0 :: term(), od_space:id()) -> {ok, Acc :: term()} | {error, term()}.
-for_each_ongoing_transfer(Callback, Acc0, SpaceId) ->
-    for_each_transfer(?ONGOING_TRANSFERS_KEY, Callback, Acc0, SpaceId).
 
 
 -spec link_key(transfer:id(), non_neg_integer()) -> link_key().
@@ -173,6 +160,17 @@ link_key(TransferId, Timestamp) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns links tree root for given space.
+%% @end
+%%-------------------------------------------------------------------
+-spec link_root(binary(), od_space:id()) -> binary().
+link_root(Prefix, SpaceId) ->
+    <<Prefix/binary, "_", SpaceId/binary>>.
 
 
 %%--------------------------------------------------------------------
@@ -229,43 +227,18 @@ delete_links(SourceId, TransferId, SpaceId, Timestamp) ->
     end.
 
 
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns links tree root for given space.
-%% @end
-%%-------------------------------------------------------------------
--spec link_root(binary(), od_space:id()) -> binary().
-link_root(Prefix, SpaceId) ->
-    <<Prefix/binary, "_", SpaceId/binary>>.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% @equiv for_each_transfer(ListDocId, Callback,  Acc0, SpaceId, #{}).
-%% @end
-%%--------------------------------------------------------------------
--spec for_each_transfer(
-    virtual_list_id(),
-    Callback :: fun((link_key(), transfer:id(), Acc0 :: term()) -> Acc :: term()),
-    Acc0 :: term(), od_space:id()) -> {ok, Acc :: term()} | {error, term()}.
-for_each_transfer(ListDocId, Callback, Acc0, SpaceId) ->
-    for_each_transfer(ListDocId, Callback, Acc0, SpaceId, #{}).
-
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% Executes callback for each transfer.
 %% @end
 %%--------------------------------------------------------------------
--spec for_each_transfer(
+-spec for_each_link(
     virtual_list_id(),
     Callback :: fun((link_key(), transfer:id(), Acc0 :: term()) -> Acc :: term()),
     Acc0 :: term(), od_space:id(), datastore_model:fold_opts()) ->
     {ok, Acc :: term()} | {error, term()}.
-for_each_transfer(ListDocId, Callback, Acc0, SpaceId, Options) ->
+for_each_link(ListDocId, Callback, Acc0, SpaceId, Options) ->
     datastore_model:fold_links(?CTX, link_root(ListDocId, SpaceId), all, fun
         (#link{name = Name, target = Target}, Acc) ->
             {ok, Callback(Name, Target, Acc)}

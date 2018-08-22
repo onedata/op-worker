@@ -50,7 +50,10 @@
 ]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_struct/1]).
+-export([
+    get_ctx/0, get_record_struct/1, get_record_version/0,
+    upgrade_record/2
+]).
 
 -type id() :: binary().
 -type record() :: #replica_deletion{}.
@@ -197,6 +200,15 @@ get_ctx() ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns model's record version.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_record_version() -> datastore_model:record_version().
+get_record_version() ->
+    2.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Returns model's record structure in provided version.
 %% @end
 %%--------------------------------------------------------------------
@@ -224,4 +236,25 @@ get_record_struct(1) ->
         {requestee, string},
         {doc_id, string},
         {type, atom}
-    ]}.
+    ]};
+get_record_struct(2) ->
+    get_record_struct(1).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Upgrades model's record from provided version to the next one.
+%% @end
+%%--------------------------------------------------------------------
+-spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
+    {datastore_model:record_version(), datastore_model:record()}.
+upgrade_record(1, {?MODULE, FileUuid, SpaceId, Status, RequestedBlocks,
+    SupportedBlocks, VersionVector, Requester, Requestee, DocId, Type}
+) ->
+    NewType = case Type of
+        invalidation -> eviction;
+        _ -> Type
+    end,
+
+    {2, {?MODULE, FileUuid, SpaceId, Status, RequestedBlocks,
+        SupportedBlocks, VersionVector, Requester, Requestee, DocId, NewType
+    }}.
