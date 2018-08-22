@@ -339,6 +339,12 @@
     storage_file_created = false :: boolean()
 }).
 
+%% Model for storing file's blocks
+-record(file_local_blocks, {
+    last :: boolean(),
+    blocks = [] :: fslogic_blocks:blocks()
+}).
+
 %% Model for storing dir's location data
 -record(dir_location, {
     storage_file_created = false :: boolean()

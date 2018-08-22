@@ -111,6 +111,7 @@ do_local_truncate(FileSize, LocalLocation = #document{value = #file_location{siz
 append(Doc, [], _) ->
     Doc;
 append(#document{value = #file_location{size = OldSize} = Loc} = Doc, Blocks, BumpVersion) ->
+    % TODO VFS-4743 - some changes are published but blocks does not appear (blocks are private)
     OldBlocks = fslogic_location_cache:get_blocks(Doc, #{overlapping_blocks => Blocks}),
     NewBlocks = fslogic_blocks:merge(Blocks, OldBlocks),
     NewSize = fslogic_blocks:upper(Blocks),
@@ -120,9 +121,8 @@ append(#document{value = #file_location{size = OldSize} = Loc} = Doc, Blocks, Bu
             version_vector:bump_version(
                 replica_changes:add_change(
                     fslogic_location_cache:update_blocks(Doc#document{value =
-                        Loc#file_location{size = max(OldSize, NewSize)}}, NewBlocks),
-                    Blocks
-                ));
+                    Loc#file_location{size = max(OldSize, NewSize)}}, NewBlocks),
+                    Blocks));
         false ->
             fslogic_location_cache:update_blocks(Doc#document{value =
                 Loc#file_location{size = max(OldSize, NewSize)}}, NewBlocks)
@@ -143,6 +143,4 @@ shrink(Doc = #document{value = Loc}, Blocks, NewSize) ->
         replica_changes:add_change(
             fslogic_location_cache:update_blocks(Doc#document{value =
             Loc#file_location{size = NewSize}}, NewBlocks1),
-            {shrink, NewSize}
-        )
-    ).
+            {shrink, NewSize})).

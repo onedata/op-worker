@@ -24,6 +24,8 @@
                                             application:get_env(rtransfer_link, transfer, []),
                                             6665)).
 
+-define(MOCK, application:get_env(?APP_NAME, rtransfer_mock, false)).
+
 %% API
 -export([start_rtransfer/0, restart_link/0, fetch/6]).
 -export([get_nodes/1, open/2, fsync/1, close/1, auth_request/2, get_connection_secret/2]).
@@ -81,8 +83,17 @@ restart_link() ->
             SpaceId :: binary(), FileGuid :: binary()) ->
                    {ok, reference()} | {error, Reason :: any()}.
 fetch(Request, NotifyFun, CompleteFun, TransferId, SpaceId, FileGuid) ->
-    TransferData = erlang:term_to_binary({TransferId, SpaceId, FileGuid}),
-    rtransfer_link:fetch(Request, TransferData, NotifyFun, CompleteFun).
+    case ?MOCK of
+        true ->
+            #{offset := O, size := S} = Request,
+            Ref = make_ref(),
+            NotifyFun(Ref, O, S),
+            CompleteFun(Ref, {ok, ok}),
+            {ok, Ref};
+        _ ->
+            TransferData = erlang:term_to_binary({TransferId, SpaceId, FileGuid}),
+            rtransfer_link:fetch(Request, TransferData, NotifyFun, CompleteFun)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
