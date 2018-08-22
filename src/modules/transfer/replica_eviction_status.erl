@@ -6,9 +6,9 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module contains functions that handle replica_eviction status transition
-%%% for transfers. This includes updating/marking status and moving from one
-%%% link tree to other according to following state machine.
+%%% This module contains functions that handle replica_eviction status
+%%% transition for transfers. This includes updating/marking status and moving
+%%% from one link tree to other according to following state machine.
 %%%
 %%%
 %%%                       REPLICA_EVICTION STATE MACHINE:
@@ -48,7 +48,8 @@
 %%% It is necessary when transfer were interrupted abruptly,
 %%% like for example shutdown and restart of provider.
 %%% There is one more status not shown on state machines, which is skipped.
-%%% It is used to mark that given REPLICA_EVICTION never happened/should not happen.
+%%% It is used to mark that given REPLICA_EVICTION
+%%% never happened/should not happen.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(replica_eviction_status).

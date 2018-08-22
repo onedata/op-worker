@@ -206,12 +206,6 @@
     <<"error_provider_not_supporting_space">>,
     <<"Given provider does not support requested space.">>)
 ).
--define(ERROR_NOT_TARGET_PROVIDER, ?ERROR_REPLY(
-    ?BAD_REQUEST,
-    <<"error_not_target_provider">>,
-    <<"Local provider is not target provider for given replication transfer.
-    Replication transfers can only be restarted by target providers">>)
-).
 -define(ERROR_TRANSFER_NOT_FOUND, ?ERROR_REPLY(
     ?BAD_REQUEST,
     <<"error_transfer_not_found">>,

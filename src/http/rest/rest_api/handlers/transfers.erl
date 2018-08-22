@@ -113,7 +113,9 @@ list_transfers(Req, State) ->
 
     NextPageToken = case length(Transfers) of
         Limit ->
-            {ok, LinkKey} = transfer:get_link_key_by_state(lists:last(Transfers), TransferState),
+            {ok, LinkKey} = transfer:get_link_key_by_state(
+                lists:last(Transfers), TransferState
+            ),
             #{<<"nextPageToken">> => LinkKey};
         _ ->
             #{}

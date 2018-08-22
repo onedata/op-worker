@@ -57,7 +57,7 @@
 -type doc() :: datastore_doc:doc(record()).
 -type action() :: request | confirm | refuse | release_lock.
 -type diff() :: datastore_doc:diff(record()).
--type type() :: autocleaning | eviciton.
+-type type() :: autocleaning | eviction.
 -type report_id() :: autocleaning:id() | transfer:id().
 -type result() :: {ok, non_neg_integer()} | {error, term()}.
 

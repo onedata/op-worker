@@ -38,9 +38,10 @@
     is_ended/1, is_replication_ended/1, is_eviction_ended/1,
 
     increment_files_to_process_counter/2, increment_files_processed_counter/1,
-    increment_files_failed_and_processed_counters/1, increment_files_replicated_counter/1,
-    mark_data_replication_finished/3,
     increment_files_evicted_and_processed_counters/1,
+    increment_files_failed_and_processed_counters/1,
+    increment_files_replicated_counter/1, mark_data_replication_finished/3,
+
     rerun_not_ended_transfers/1,
     restart_pools/0
 ]).
@@ -52,7 +53,7 @@
     list_ended_transfers/1, list_ended_transfers/3, list_ended_transfers/4
 ]).
 
--export([get_link_key/2, get_link_key_by_state/2, get_replication_status/1]).
+-export([get_link_key/2, get_link_key_by_state/2]).
 
 %% datastore_model callbacks
 -export([
@@ -284,7 +285,6 @@ cancel(TransferId) ->
 %%--------------------------------------------------------------------
 -spec mark_dequeued(id()) -> {ok, doc()} | {error, term()}.
 mark_dequeued(TransferId) ->
-    %todo move to utils???
     update_and_run(
         TransferId,
         fun(Transfer) -> {ok, Transfer#transfer{enqueued = false}} end,
@@ -633,12 +633,6 @@ get_link_key(TransferId, Timestamp) ->
 restart_pools() ->
     ok = stop_pools(),
     ok = start_pools().
-
--spec get_replication_status(doc() | transfer()) -> status().
-get_replication_status(#transfer{replication_status = Status}) ->
-    Status;
-get_replication_status(#document{value = Transfer}) ->
-    get_replication_status(Transfer).
 
 %%%===================================================================
 %%% Internal functions

@@ -10,7 +10,7 @@
 %%% tracking replica eviction's status.
 %%% It will change status on receiving certain messages according to
 %%% state machine presented in replica_eviction_status module.
-%%% Such gen_server is created for each replica replica eviction.
+%%% Such gen_server is created for each replica eviction.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(replica_eviction_controller).

@@ -29,7 +29,7 @@
 ]).
 -export([for_each_ongoing_transfer/3]).
 -export([list_links/5]).
--export([link_key/2, choose_link_timestamp_by_type/3]).
+-export([link_key/2]).
 
 -type link_key() :: binary().
 -type virtual_list_id() :: binary(). % ?(WAITING|ONGOING|ENDED)_TRANSFERS_KEY
@@ -168,16 +168,6 @@ link_key(TransferId, Timestamp) ->
     TimestampPart = (integer_to_binary(?EPOCH_INFINITY - Timestamp)),
     IdPart = binary:part(TransferId, 0, ?LINK_NAME_ID_PART_LENGTH),
     <<TimestampPart/binary, IdPart/binary>>.
-
-
--spec choose_link_timestamp_by_type(non_neg_integer(), non_neg_integer(), binary()) ->
-    non_neg_integer().
-choose_link_timestamp_by_type(ScheduleTime, _FinishTime, ?WAITING_TRANSFERS_STATE) ->
-    ScheduleTime;
-choose_link_timestamp_by_type(ScheduleTime, _FinishTime, ?ONGOING_TRANSFERS_STATE) ->
-    ScheduleTime;
-choose_link_timestamp_by_type(_ScheduleTime, FinishTime, ?ENDED_TRANSFERS_STATE) ->
-    FinishTime.
 
 
 %%%===================================================================

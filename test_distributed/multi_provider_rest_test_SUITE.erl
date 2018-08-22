@@ -3168,7 +3168,6 @@ verify_files_distribution(Worker, FilesNum, ExpectedDistribution, FileGuidsAndPa
 
 get_ongoing_transfers_for_file(Worker, FileGuid) ->
     {ok, #{ongoing := Transfers}} = rpc:call(Worker, transferred_file, get_transfers, [FileGuid]),
-    {ok, #{ongoing := Transfers}} = rpc:call(Worker, transferred_file, get_transfers, [FileGuid]),
     Transfers.
 
 get_ended_transfers_for_file(Worker, FileGuid) ->

@@ -147,7 +147,9 @@ create_record(<<"transfer">>, Data) ->
 
     case Result of
         {ok, TransferId} ->
-            transfer_record(op_gui_utils:ids_to_association(?WAITING_TRANSFERS_STATE, TransferId));
+            transfer_record(op_gui_utils:ids_to_association(
+                ?WAITING_TRANSFERS_STATE, TransferId
+            ));
         {error, ?EACCES} ->
             gui_error:unauthorized();
         {error, Error} ->
@@ -221,7 +223,9 @@ rerun_transfer(SessionId, TypeAndTransferId) ->
     case transfer:rerun(UserId, TransferId) of
         {ok, NewTransferId} ->
             {ok, [
-                {<<"id">>, NewTransferId}
+                {<<"id">>, op_gui_utils:ids_to_association(
+                    ?WAITING_TRANSFERS_STATE, NewTransferId
+                )}
             ]};
         {error, not_ended} ->
             gui_error:report_error(<<
@@ -315,7 +319,7 @@ transfer_record(TypeAndTransferId) ->
     end,
     {ok, LinkKey} = transfer:get_link_key_by_state(TransferId, Type),
     {ok, [
-        {<<"id">>, TransferId},
+        {<<"id">>, TypeAndTransferId},
         {<<"index">>, LinkKey},
         {<<"invalidatingProvider">>, gs_protocol:undefined_to_null(
             InvalidatingProviderId

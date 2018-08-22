@@ -239,4 +239,3 @@ schedule_file_replica_deletion(FileCtx, SupportingProviderId, TransferId) ->
     version_vector:version_vector(), transfer:id(), od_space:id()) -> ok.
 schedule_replica_deletion_task(FileUuid, Provider, Blocks, VV, TransferId, SpaceId) ->
     replica_deletion_master:enqueue_task(FileUuid, Provider, Blocks, VV, TransferId, eviction, SpaceId).
-

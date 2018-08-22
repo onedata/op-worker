@@ -231,14 +231,7 @@ replicate_file_insecure(UserCtx, FileCtx, Block, TransferId) ->
                     replicate_regular_file(UserCtx, FileCtx2, Block, TransferId)
             end;
         false ->
-            case transfer:get_replication_status(TransferDoc) of
-                aborting ->
-                    throw(replication_cancelled);
-                cancelled ->
-                    throw(replication_cancelled);
-                failed ->
-                    throw({replication_failed, TransferId})
-            end
+            throw(already_ended)
     end.
 
 %%-------------------------------------------------------------------

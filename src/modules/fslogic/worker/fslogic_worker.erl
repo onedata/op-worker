@@ -137,7 +137,7 @@ handle(invalidate_permissions_cache) ->
     ),
     ok;
 handle(restart_transfers) ->
-    ?debug("Restarting unfinished transfers"),
+    ?debug("Rerunning unfinished transfers"),
     try provider_logic:get_spaces() of
         {ok, SpaceIds} ->
             lists:foreach(fun(SpaceId) ->
