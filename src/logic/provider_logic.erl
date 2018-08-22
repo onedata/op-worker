@@ -106,28 +106,22 @@ get_protected_data(SessionId, ProviderId) ->
 %% Useful for RPC calls from onepanel where od_provider record is not defined.
 %% @end
 %%--------------------------------------------------------------------
--spec get_as_map() -> map().
+-spec get_as_map() -> {ok, map()} | gs_protocol:error().
 get_as_map() ->
-    {ok, #document{key = ProviderId, value = ProviderRecord}} = ?MODULE:get(),
-    #od_provider{
-        name = Name,
-        admin_email = AdminEmail,
-        subdomain_delegation = SubdomainDelegation,
-        domain = Domain,
-        subdomain = Subdomain,
-        longitude = Longitude,
-        latitude = Latitude
-    } = ProviderRecord,
-    #{
-        id => ProviderId,
-        name => Name,
-        admin_email => AdminEmail,
-        subdomain_delegation => SubdomainDelegation,
-        domain => Domain,
-        subdomain => Subdomain,
-        longitude => Longitude,
-        latitude => Latitude
-    }.
+    case ?MODULE:get() of
+        {ok, #document{key = Id, value = Record}} ->
+            {ok, #{
+                id => Id,
+                name => Record#od_provider.name,
+                admin_email => Record#od_provider.admin_email,
+                subdomain_delegation => Record#od_provider.subdomain_delegation,
+                domain => Record#od_provider.domain,
+                subdomain => Record#od_provider.subdomain,
+                longitude => Record#od_provider.longitude,
+                latitude => Record#od_provider.latitude
+            }};
+        Error -> Error
+    end.
 
 
 %%--------------------------------------------------------------------
