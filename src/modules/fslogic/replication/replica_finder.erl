@@ -373,7 +373,7 @@ compare_blocks({Block1, {_, VV1, _} = BlockInfo1} = B1,
             [B2 | lists:map(fun(B) -> {B, BlockInfo1} end, B1List)];
         greater ->
             B2List = fslogic_blocks:invalidate([Block2], Block1),
-            lists:map(fun(B) -> {B, BlockInfo2} end, B2List) ++ B1;
+            lists:map(fun(B) -> {B, BlockInfo2} end, B2List) ++ [B1];
         _ ->
             [B2, B1]
     end.

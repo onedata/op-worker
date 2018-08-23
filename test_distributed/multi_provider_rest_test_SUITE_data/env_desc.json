@@ -131,7 +131,8 @@
             "space2": {
                 "displayed_name": "space2",
                 "users": [
-                    "user1"
+                    "user1",
+                    "user2"
                 ],
                 "groups": [
                 ],
@@ -163,7 +164,8 @@
             "space4": {
                 "displayed_name": "space4",
                 "users": [
-                    "user1"
+                    "user1",
+                    "user2"
                 ],
                 "groups": [
                 ],
@@ -180,7 +182,8 @@
             "space5": {
                 "displayed_name": "space5",
                 "users": [
-                    "user1"
+                    "user1",
+                    "user2"
                 ],
                 "groups": [
                 ],
@@ -198,7 +201,8 @@
             "space6": {
                 "displayed_name": "space6",
                 "users": [
-                    "user1"
+                    "user1",
+                    "user2"
                 ],
                 "groups": [
                 ],
@@ -215,7 +219,8 @@
             "space7": {
                 "displayed_name": "space7",
                 "users": [
-                    "user1"
+                    "user1",
+                    "user2"
                 ],
                 "groups": [
                 ],
@@ -233,7 +238,8 @@
             "space8": {
                 "displayed_name": "space8",
                 "users": [
-                    "user1"
+                    "user1",
+                    "user2"
                 ],
                 "groups": [
                 ],
@@ -251,7 +257,8 @@
             "space9": {
                 "displayed_name": "space9",
                 "users": [
-                    "user1"
+                    "user1",
+                    "user2"
                 ],
                 "groups": [
                 ],
@@ -269,7 +276,8 @@
             "space10": {
                 "displayed_name": "space10",
                 "users": [
-                    "user1"
+                    "user1",
+                    "user2"
                 ],
                 "groups": [
                 ],

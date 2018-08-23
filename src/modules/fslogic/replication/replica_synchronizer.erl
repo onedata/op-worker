@@ -18,8 +18,8 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
--include("timeouts.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include("timeouts.hrl").
 
 -behaviour(gen_server).
 
@@ -538,7 +538,7 @@ handle_info({Ref, complete, {ok, _} = _Status}, #state{from_sessions = FS,
             TempState = flush_stats(State2#state{cached_stats = JobsStats}, false),
             TempState#state{cached_stats = #{undefined => OnfStats}}
     end,
-    [transfer:increase_files_transferred_counter(TID) || TID <- TransferIdsList],
+    [transfer:increment_files_replicated_counter(TID) || TID <- TransferIdsList],
     [gen_server2:reply(From, {ok, Message}) || {From, Message} <- Ans],
     {noreply, State3#state{from_sessions = FS2, requested_blocks = RB2}, ?DIE_AFTER};
 
@@ -661,7 +661,7 @@ cancel_transfer_id(TransferId, State) ->
             AffectedRefs),
 
     [rtransfer_link:cancel(Ref) || Ref <- OrphanedRefs],
-    gen_server2:reply(From, {error, canceled}),
+    gen_server2:reply(From, {error, cancelled}),
 
     InProgress =
         lists:filter(fun({_Block, Ref}) -> lists:member(Ref, OrphanedRefs) end,
@@ -1054,9 +1054,7 @@ flush_stats(#state{cached_stats = Stats} = State, _) when map_size(Stats) == 0 -
     State;
 flush_stats(#state{space_id = SpaceId} = State, CancelTimer) ->
     lists:foreach(fun({TransferId, BytesPerProvider}) ->
-        case transfer:mark_data_transfer_finished(
-            TransferId, SpaceId, BytesPerProvider
-        ) of
+        case transfer:mark_data_replication_finished(TransferId, SpaceId, BytesPerProvider) of
             {ok, _} ->
                 ok;
             {error, Error} ->

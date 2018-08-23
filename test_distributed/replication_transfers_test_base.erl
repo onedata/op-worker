@@ -68,12 +68,12 @@ replicate_empty_dir(Config, Type, FileKeyType) ->
             },
             expected = #expected{
                 expected_transfer = #{
-                    status => completed,
+                    replication_status => completed,
                     scheduling_provider_id => transfers_test_utils:provider_id(WorkerP1),
                     files_to_process => 1,
                     files_processed => 1,
-                    files_transferred => 0,
-                    bytes_transferred => 0
+                    files_replicated => 0,
+                    bytes_replicated => 0
                 },
                 assertion_nodes = [WorkerP1, WorkerP2]
             }
@@ -99,12 +99,12 @@ replicate_tree_of_empty_dirs(Config, Type, FileKeyType) ->
             },
             expected = #expected{
                 expected_transfer = #{
-                    status => completed,
+                    replication_status => completed,
                     scheduling_provider_id => transfers_test_utils:provider_id(WorkerP1),
                     files_to_process => 1111,
                     files_processed => 1111,
-                    files_transferred => 0,
-                    bytes_transferred => 0
+                    files_replicated => 0,
+                    bytes_replicated => 0
                 },
                 assertion_nodes = [WorkerP1, WorkerP2],
                 attempts = 120
@@ -134,12 +134,12 @@ replicate_regular_file(Config, Type, FileKeyType) ->
             },
             expected = #expected{
                 expected_transfer = #{
-                    status => completed,
+                    replication_status => completed,
                     scheduling_provider_id => transfers_test_utils:provider_id(WorkerP1),
                     files_to_process => 1,
                     files_processed => 1,
-                    files_transferred => 1,
-                    bytes_transferred => ?DEFAULT_SIZE,
+                    files_replicated => 1,
+                    bytes_replicated => ?DEFAULT_SIZE,
                     min_hist => ?MIN_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
                     hr_hist => ?HOUR_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
                     dy_hist => ?DAY_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
@@ -176,12 +176,12 @@ replicate_file_in_directory(Config, Type, FileKeyType) ->
             },
             expected = #expected{
                 expected_transfer = #{
-                    status => completed,
+                    replication_status => completed,
                     scheduling_provider_id => transfers_test_utils:provider_id(WorkerP1),
                     files_to_process => 2,
                     files_processed => 2,
-                    files_transferred => 1,
-                    bytes_transferred => ?DEFAULT_SIZE,
+                    files_replicated => 1,
+                    bytes_replicated => ?DEFAULT_SIZE,
                     min_hist => ?MIN_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
                     hr_hist => ?HOUR_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
                     dy_hist => ?DAY_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
@@ -220,12 +220,12 @@ replicate_big_file(Config, Type, FileKeyType) ->
             },
             expected = #expected{
                 expected_transfer = #{
-                    status => completed,
+                    replication_status => completed,
                     scheduling_provider_id => transfers_test_utils:provider_id(WorkerP1),
                     files_to_process => 1,
                     files_processed => 1,
-                    files_transferred => 1,
-                    bytes_transferred => Size,
+                    files_replicated => 1,
+                    bytes_replicated => Size,
                     hr_hist => ?HOUR_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => Size}),
                     dy_hist => ?DAY_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => Size}),
                     mth_hist => ?MONTH_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => Size})
@@ -261,12 +261,12 @@ schedule_replication_to_source_provider(Config, Type, FileKeyType) ->
             },
             expected = #expected{
                 expected_transfer = #{
-                    status => completed,
+                    replication_status => completed,
                     scheduling_provider_id => transfers_test_utils:provider_id(WorkerP1),
                     files_to_process => 1,
                     files_processed => 1,
-                    files_transferred => 0,
-                    bytes_transferred => 0,
+                    files_replicated => 0,
+                    bytes_replicated => 0,
                     min_hist => ?MIN_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0}),
                     hr_hist => ?HOUR_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0}),
                     dy_hist => ?DAY_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0}),
@@ -302,12 +302,12 @@ replicate_already_replicated_file(Config, Type, FileKeyType) ->
             },
             expected = #expected{
                 expected_transfer = #{
-                    status => completed,
+                    replication_status => completed,
                     scheduling_provider_id => transfers_test_utils:provider_id(WorkerP1),
                     files_to_process => 1,
                     files_processed => 1,
-                    files_transferred => 1,
-                    bytes_transferred => ?DEFAULT_SIZE,
+                    files_replicated => 1,
+                    bytes_replicated => ?DEFAULT_SIZE,
                     min_hist => ?MIN_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
                     hr_hist => ?HOUR_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
                     dy_hist => ?DAY_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
@@ -334,12 +334,12 @@ replicate_already_replicated_file(Config, Type, FileKeyType) ->
             },
             expected = #expected{
                 expected_transfer = #{
-                    status => completed,
+                    replication_status => completed,
                     scheduling_provider_id => transfers_test_utils:provider_id(WorkerP1),
                     files_to_process => 1,
                     files_processed => 1,
-                    files_transferred => 0,
-                    bytes_transferred => 0,
+                    files_replicated => 0,
+                    bytes_replicated => 0,
                     min_hist => ?MIN_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0}),
                     hr_hist => ?HOUR_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0}),
                     dy_hist => ?DAY_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0}),
@@ -375,12 +375,12 @@ not_synced_file_should_not_be_replicated(Config, Type, FileKeyType) ->
             },
             expected = #expected{
                 expected_transfer = #{
-                    status => completed,
+                    replication_status => completed,
                     scheduling_provider_id => transfers_test_utils:provider_id(WorkerP1),
                     files_to_process => 1,
                     files_processed => 1,
-                    files_transferred => 0,
-                    bytes_transferred => 0,
+                    files_replicated => 0,
+                    bytes_replicated => 0,
                     min_hist => ?MIN_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0}),
                     hr_hist => ?HOUR_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0}),
                     dy_hist => ?DAY_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0}),
@@ -418,12 +418,12 @@ replicate_100_files_separately(Config, Type, FileKeyType) ->
             },
             expected = #expected{
                 expected_transfer = #{
-                    status => completed,
+                    replication_status => completed,
                     scheduling_provider_id => transfers_test_utils:provider_id(WorkerP1),
                     files_to_process => 1,
                     files_processed => 1,
-                    files_transferred => 1,
-                    bytes_transferred => ?DEFAULT_SIZE,
+                    files_replicated => 1,
+                    bytes_replicated => ?DEFAULT_SIZE,
                     min_hist => ?MIN_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
                     hr_hist => ?HOUR_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
                     dy_hist => ?DAY_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
@@ -466,12 +466,12 @@ replicate_100_files_in_one_transfer(Config, Type, FileKeyType) ->
             },
             expected = #expected{
                 expected_transfer = #{
-                    status => completed,
+                    replication_status => completed,
                     scheduling_provider_id => transfers_test_utils:provider_id(WorkerP1),
                     files_to_process => 111,
                     files_processed => 111,
-                    files_transferred => FilesNum,
-                    bytes_transferred => TotalTransferredBytes,
+                    files_replicated => FilesNum,
+                    bytes_replicated => TotalTransferredBytes,
                     hr_hist => ?HOUR_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => TotalTransferredBytes}),
                     dy_hist => ?DAY_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => TotalTransferredBytes}),
                     mth_hist => ?MONTH_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => TotalTransferredBytes})
@@ -513,13 +513,13 @@ replication_should_succeed_when_there_is_enough_space_for_file(Config, Type, Fil
             },
             expected = #expected{
                 expected_transfer = #{
-                    status => completed,
+                    replication_status => completed,
                     scheduling_provider_id => transfers_test_utils:provider_id(WorkerP1),
                     files_to_process => 1,
                     files_processed => 1,
                     failed_files => 0,
-                    files_transferred => 1,
-                    bytes_transferred => ?DEFAULT_SIZE,
+                    files_replicated => 1,
+                    bytes_replicated => ?DEFAULT_SIZE,
                     min_hist => ?MIN_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
                     hr_hist => ?HOUR_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
                     dy_hist => ?DAY_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
@@ -559,13 +559,13 @@ replication_should_fail_when_space_is_full(Config, Type, FileKeyType) ->
             },
             expected = #expected{
                 expected_transfer = #{
-                    status => failed,
+                    replication_status => failed,
                     scheduling_provider_id => transfers_test_utils:provider_id(WorkerP1),
                     files_to_process => 1,
                     files_processed => 1,
                     failed_files => 1,
-                    files_transferred => 0,
-                    bytes_transferred => 0,
+                    files_replicated => 0,
+                    bytes_replicated => 0,
                     min_hist => ?MIN_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0}),
                     hr_hist => ?HOUR_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0}),
                     dy_hist => ?DAY_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0}),
@@ -677,6 +677,12 @@ schedule_replication_on_not_supporting_provider(Config, Type, FileKeyType) ->
 cancel_replication_on_target_nodes(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     transfers_test_utils:mock_prolonged_replication(WorkerP2, 0.5, 15),
+%%    tracer:start([WorkerP1, WorkerP2]),
+%%    tracer:trace_calls(replication_worker, replicate_file),
+%%    tracer:trace_calls(sync_req, replicate_file),
+%%    tracer:trace_calls(sync_req, replicate_file_insecure),
+%%    tracer:trace_calls(sync_req, replicate_regular_file),
+%%    tracer:trace_calls(sync_req, replicate_dir),
     transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{
@@ -698,7 +704,7 @@ cancel_replication_on_target_nodes(Config, Type) ->
             },
             expected = #expected{
                 expected_transfer = #{
-                    status => cancelled,
+                    replication_status => cancelled,
                     scheduling_provider_id => transfers_test_utils:provider_id(WorkerP1),
                     failed_files => 0
                 },
@@ -731,13 +737,13 @@ restart_replication_on_target_nodes(Config, Type) ->
             },
             expected = #expected{
                 expected_transfer = #{
-                    status => failed,
+                    replication_status => failed,
                     scheduling_provider_id => transfers_test_utils:provider_id(WorkerP1),
                     files_to_process => 2,
                     files_processed => 2,
                     failed_files => 1,
-                    files_transferred => 0,
-                    bytes_transferred => 0
+                    files_replicated => 0,
+                    bytes_replicated => 0
                 },
                 distribution = [
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
@@ -759,12 +765,12 @@ restart_replication_on_target_nodes(Config, Type) ->
             },
             expected = #expected{
                 expected_transfer = #{
-                    status => completed,
+                    replication_status => completed,
                     files_to_process => 2,
                     files_processed => 2,
                     failed_files => 0,
-                    files_transferred => 1,
-                    bytes_transferred => ?DEFAULT_SIZE
+                    files_replicated => 1,
+                    bytes_replicated => ?DEFAULT_SIZE
                 },
                 distribution = [
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
@@ -801,12 +807,12 @@ file_replication_failures_should_fail_whole_transfer(Config, Type, FileKeyType) 
             },
             expected = #expected{
                 expected_transfer = #{
-                    status => failed,
+                    replication_status => failed,
                     scheduling_provider_id => transfers_test_utils:provider_id(WorkerP1),
                     files_to_process => AllFiles,
                     files_processed => AllFiles,
-                    files_transferred => 0,
-                    bytes_transferred => 0,
+                    files_replicated => 0,
+                    bytes_replicated => 0,
                     hr_hist => ?HOUR_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0}),
                     dy_hist => ?DAY_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0}),
                     mth_hist => ?MONTH_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0})
@@ -843,13 +849,13 @@ many_simultaneous_failed_transfers(Config, Type, FileKeyType) ->
             },
             expected = #expected{
                 expected_transfer = #{
-                    status => failed,
+                    replication_status => failed,
                     scheduling_provider_id => transfers_test_utils:provider_id(WorkerP1),
                     files_to_process => 1,
                     files_processed => 1,
                     failed_files => 1,
-                    files_transferred => 0,
-                    bytes_transferred => 0,
+                    files_replicated => 0,
+                    bytes_replicated => 0,
                     hr_hist => ?HOUR_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0}),
                     dy_hist => ?DAY_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0}),
                     mth_hist => ?MONTH_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0})

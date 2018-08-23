@@ -46,7 +46,6 @@
     schedule_replication_on_not_supporting_provider_by_guid/1,
     schedule_replication_on_not_supporting_provider_by_path/1,
     cancel_replication_on_target_nodes/1,
-    restart_replication_on_target_nodes/1,
     file_replication_failures_should_fail_whole_transfer/1,
     many_simultaneous_failed_transfers/1
 ]).
@@ -75,7 +74,6 @@ all() -> [
     schedule_replication_on_not_supporting_provider_by_guid,
     schedule_replication_on_not_supporting_provider_by_path,
     cancel_replication_on_target_nodes,
-    restart_replication_on_target_nodes,
     % file_replication_failures_should_fail_whole_transfer, TODO uncomment after resolving VFS-4742
     many_simultaneous_failed_transfers
 ].
@@ -153,9 +151,6 @@ schedule_replication_on_not_supporting_provider_by_path(Config) ->
 
 cancel_replication_on_target_nodes(Config) ->
     replication_transfers_test_base:cancel_replication_on_target_nodes(Config, rest).
-
-restart_replication_on_target_nodes(Config) ->
-    replication_transfers_test_base:restart_replication_on_target_nodes(Config, rest).
 
 file_replication_failures_should_fail_whole_transfer(Config) ->
     replication_transfers_test_base:file_replication_failures_should_fail_whole_transfer(Config, rest, guid).

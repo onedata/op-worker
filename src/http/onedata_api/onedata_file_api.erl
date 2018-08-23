@@ -23,7 +23,7 @@
 %% Functions operating on files
 -export([create/3, create/4, open/3, write/3, read/3, truncate/3, unlink/2, fsync/1,
     release/1, get_file_distribution/2]).
--export([schedule_file_replication/4, schedule_replica_invalidation/4]).
+-export([schedule_file_replication/4, schedule_replica_eviction/4]).
 %% Functions concerning file permissions
 -export([set_perms/3, check_perms/3, set_acl/3, get_acl/2, remove_acl/2]).
 %% Functions concerning file attributes
@@ -251,15 +251,15 @@ schedule_file_replication(Auth, FileKey, ProviderId, Callback) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Invalidates file replica on given provider, migrates unique data to provider
+%% Evicts file replica on given provider, migrates unique data to provider
 %% given as MigrateProviderId
 %% @end
 %%--------------------------------------------------------------------
--spec schedule_replica_invalidation(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path(),
+-spec schedule_replica_eviction(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path(),
     ProviderId :: oneprovider:id(), MigrationProviderId :: undefined | oneprovider:id()) ->
     {ok, transfer:id()} | error_reply().
-schedule_replica_invalidation(Auth, FileKey, SourceProviderId, TargetProviderId) ->
-    logical_file_manager:schedule_replica_invalidation(Auth, FileKey, SourceProviderId, TargetProviderId).
+schedule_replica_eviction(Auth, FileKey, SourceProviderId, TargetProviderId) ->
+    logical_file_manager:schedule_replica_eviction(Auth, FileKey, SourceProviderId, TargetProviderId).
 
 %%--------------------------------------------------------------------
 %% @doc Changes the permissions of a file.

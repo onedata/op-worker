@@ -23,15 +23,15 @@
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--define(WAITING_TRANSFERS_STATE, <<"waiting">>).
--define(ONGOING_TRANSFERS_STATE, <<"ongoing">>).
--define(ENDED_TRANSFERS_STATE, <<"ended">>).
 
 %% API
 -export([init/0, terminate/0]).
 -export([find_record/2, find_all/1, query/2, query_record/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
--export([list_transfers/5, get_transfers_for_file/1]).
+-export([
+    list_transfers/5, get_transfers_for_file/1,
+    rerun_transfer/2, cancel_transfer/1
+]).
 
 %%%===================================================================
 %%% data_backend_behaviour callbacks
@@ -64,8 +64,8 @@ terminate() ->
 %%--------------------------------------------------------------------
 -spec find_record(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find_record(<<"transfer">>, TransferId) ->
-    transfer_record(TransferId);
+find_record(<<"transfer">>, StateAndTransferId) ->
+    transfer_record(StateAndTransferId);
 
 find_record(<<"on-the-fly-transfer">>, TransferId) ->
     on_the_fly_transfer_record(TransferId);
@@ -120,36 +120,48 @@ query_record(_ResourceType, _Data) ->
 create_record(<<"transfer">>, Data) ->
     SessionId = gui_session:get_session_id(),
     FileGuid = proplists:get_value(<<"file">>, Data),
-    Migration = proplists:get_value(<<"migration">>, Data),
-    MigrationSource = proplists:get_value(<<"migrationSource">>, Data),
-    Destination = case proplists:get_value(<<"destination">>, Data) of
-        null -> undefined;
-        ProviderId -> ProviderId
+    ReplicatingProvider = gs_protocol:null_to_undefined(proplists:get_value(
+        <<"replicatingProvider">>, Data
+    )),
+    EvictingProvider = gs_protocol:null_to_undefined(proplists:get_value(
+        <<"invalidatingProvider">>, Data
+    )),
+
+    TransferType = case {ReplicatingProvider, EvictingProvider} of
+        {undefined, ProviderId} when is_binary(ProviderId) -> eviction;
+        {ProviderId, undefined} when is_binary(ProviderId) -> replication;
+        {_, _} -> migration
     end,
-    Result = case Migration of
-        false ->
+
+    Result = case TransferType of
+        replication ->
             logical_file_manager:schedule_file_replication(
-                SessionId, {guid, FileGuid}, Destination
+                SessionId, {guid, FileGuid}, ReplicatingProvider
             );
-        true ->
-            logical_file_manager:schedule_replica_invalidation(
-                SessionId, {guid, FileGuid}, MigrationSource, Destination
+        Type when Type == eviction orelse Type == migration ->
+            logical_file_manager:schedule_replica_eviction(
+                SessionId, {guid, FileGuid},
+                EvictingProvider, ReplicatingProvider
             )
     end,
 
     case Result of
         {ok, TransferId} ->
-            transfer_record(TransferId);
+            transfer_record(op_gui_utils:ids_to_association(
+                ?WAITING_TRANSFERS_STATE, TransferId
+            ));
         {error, ?EACCES} ->
             gui_error:unauthorized();
         {error, Error} ->
             ?error("Failed to schedule transfer{"
             "~n\tfile=~p,"
-            "~n\tmigration=~p,"
-            "~n\tmigrationSource=~p,"
-            "~n\tdestination=~p}"
+            "~n\ttype=~p,"
+            "~n\treplicatingProvider=~p"
+            "~n\tevictingProvider=~p},"
             "~n due to: ~p", [
-                FileGuid, Migration, MigrationSource, Destination, Error
+                FileGuid, TransferType,
+                ReplicatingProvider, EvictingProvider,
+                Error
             ]),
             gui_error:internal_server_error()
     end.
@@ -180,17 +192,61 @@ delete_record(_ResourceType, _Id) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Cancel transfer of given id.
+%% @end
+%%--------------------------------------------------------------------
+-spec cancel_transfer(binary()) -> ok | gui_error:error_result().
+cancel_transfer(StateAndTransferId) ->
+    {_, TransferId} = op_gui_utils:association_to_ids(StateAndTransferId),
+    case transfer:cancel(TransferId) of
+        ok ->
+            ok;
+        {error, already_ended} ->
+            gui_error:report_error(<<
+                "Given transfer could not be cancelled "
+                "because it has already ended."
+            >>)
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Rerun transfer of given id.
+%% @end
+%%--------------------------------------------------------------------
+-spec rerun_transfer(SessionId :: session:id(), StateAndTransferId :: binary()) ->
+    ok | gui_error:error_result().
+rerun_transfer(SessionId, StateAndTransferId) ->
+    {_, TransferId} = op_gui_utils:association_to_ids(StateAndTransferId),
+    {ok, UserId} = session:get_user_id(SessionId),
+    case transfer:rerun_ended(UserId, TransferId) of
+        {ok, NewTransferId} ->
+            {ok, [
+                {<<"id">>, op_gui_utils:ids_to_association(
+                    ?WAITING_TRANSFERS_STATE, NewTransferId
+                )}
+            ]};
+        {error, not_ended} ->
+            gui_error:report_error(<<
+                "Given transfer could not be rerun "
+                "because it has not ended yet."
+            >>)
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Lists transfers of given type in given space. Starting Id, Offset and Limit
 %% can be provided.
 %% @end
 %%--------------------------------------------------------------------
--spec list_transfers(od_space:id(), Type :: binary(),
+-spec list_transfers(od_space:id(), State :: binary(),
     StartFromIndex :: null | transfer_links:link_key(),
     Offset :: integer(), Limit :: transfer:list_limit()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-list_transfers(SpaceId, Type, StartFromIndex, Offset, Limit) ->
+list_transfers(SpaceId, State, StartFromIndex, Offset, Limit) ->
     StartFromLink = gs_protocol:null_to_undefined(StartFromIndex),
-    {ok, TransferIds} = case Type of
+    {ok, TransferIds} = case State of
         ?WAITING_TRANSFERS_STATE ->
             transfer:list_waiting_transfers(SpaceId, StartFromLink, Offset, Limit);
         ?ONGOING_TRANSFERS_STATE ->
@@ -199,7 +255,7 @@ list_transfers(SpaceId, Type, StartFromIndex, Offset, Limit) ->
             transfer:list_ended_transfers(SpaceId, StartFromLink, Offset, Limit)
     end,
     {ok, [
-        {<<"list">>, TransferIds}
+        {<<"list">>, [op_gui_utils:ids_to_association(State, TId) || TId <- TransferIds]}
     ]}.
 
 
@@ -213,7 +269,15 @@ list_transfers(SpaceId, Type, StartFromIndex, Offset, Limit) ->
 -spec get_transfers_for_file(fslogic_worker:file_guid()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 get_transfers_for_file(FileGuid) ->
-    {ok, ResultMap} = transferred_file:get_transfers(FileGuid),
+    {ok, #{
+        ongoing := Ongoing,
+        ended := Ended
+    }} = transferred_file:get_transfers(FileGuid),
+
+    ResultMap = #{
+        ongoing => [op_gui_utils:ids_to_association(?ONGOING_TRANSFERS_STATE, TId) || TId <- Ongoing],
+        ended => [op_gui_utils:ids_to_association(?ENDED_TRANSFERS_STATE, TId) || TId <- Ended]
+    },
     {ok, maps:to_list(ResultMap)}.
 
 
@@ -227,12 +291,13 @@ get_transfers_for_file(FileGuid) ->
 %% Returns a client-compliant transfer record based on link and transfer id.
 %% @end
 %%--------------------------------------------------------------------
--spec transfer_record(transfer:id()) -> {ok, proplists:proplist()}.
-transfer_record(TransferId) ->
+-spec transfer_record(binary()) -> {ok, proplists:proplist()}.
+transfer_record(StateAndTransferId) ->
+    {State, TransferId} = op_gui_utils:association_to_ids(StateAndTransferId),
     SessionId = gui_session:get_session_id(),
-    {ok, Doc = #document{value = Transfer = #transfer{
-        source_provider_id = SourceProviderId,
-        target_provider_id = DestinationProviderId,
+    {ok, TransferDoc = #document{value = Transfer = #transfer{
+        replicating_provider = ReplicatingProviderId,
+        evicting_provider = InvalidatingProviderId,
         file_uuid = FileUuid,
         path = Path,
         user_id = UserId,
@@ -240,7 +305,6 @@ transfer_record(TransferId) ->
         schedule_time = ScheduleTime,
         start_time = StartTime
     }}} = transfer:get(TransferId),
-    {ok, LinkKey} = transfer:get_link_key(Doc),
     FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
     FileType = case logical_file_manager:stat(SessionId, {guid, FileGuid}) of
         {ok, #file_attr{type = ?DIRECTORY_TYPE}} -> <<"dir">>;
@@ -248,18 +312,21 @@ transfer_record(TransferId) ->
         {error, ?ENOENT} -> <<"deleted">>;
         {error, _} -> <<"unknown">>
     end,
-    IsOngoing = transfer_utils:is_ongoing(Transfer),
+    IsOngoing = transfer:is_ongoing(Transfer),
     FinishTime = case IsOngoing of
         true -> null;
         false -> Transfer#transfer.finish_time
     end,
-    IsInvalidation = transfer_utils:is_invalidation(Transfer),
+    {ok, LinkKey} = transfer:get_link_key_by_state(TransferDoc, State),
     {ok, [
-        {<<"id">>, TransferId},
+        {<<"id">>, StateAndTransferId},
         {<<"index">>, LinkKey},
-        {<<"migration">>, IsInvalidation},
-        {<<"migrationSource">>, gs_protocol:undefined_to_null(SourceProviderId)},
-        {<<"destination">>, utils:ensure_defined(DestinationProviderId, undefined, null)},
+        {<<"invalidatingProvider">>, gs_protocol:undefined_to_null(
+            InvalidatingProviderId
+        )},
+        {<<"replicatingProvider">>, gs_protocol:undefined_to_null(
+            ReplicatingProviderId
+        )},
         {<<"isOngoing">>, IsOngoing},
         {<<"space">>, SpaceId},
         {<<"file">>, FileGuid},
@@ -298,7 +365,7 @@ on_the_fly_transfer_record(RecordId) ->
 
     {ok, [
         {<<"id">>, RecordId},
-        {<<"destination">>, ProviderId},
+        {<<"replicatingProvider">>, ProviderId},
         {<<"minuteStat">>, op_gui_utils:ids_to_association(
             ?ON_THE_FLY_TRANSFERS_TYPE, ?MINUTE_STAT_TYPE, TransferStatsId)},
         {<<"hourStat">>, op_gui_utils:ids_to_association(
@@ -355,7 +422,7 @@ prepare_histograms(?JOB_TRANSFERS_TYPE, HistogramsType, TransferId) ->
     % Return historical statistics of finished transfers intact. As for active
     % ones, pad them with zeroes to current time and erase recent n-seconds to
     % avoid fluctuations on charts
-    {Histograms, LastUpdate, TimeWindow} = case transfer_utils:is_ongoing(T) of
+    {Histograms, LastUpdate, TimeWindow} = case transfer:is_ongoing(T) of
         false ->
             RequestedHistograms = get_histograms(T, HistogramsType),
             Window = transfer_histograms:type_to_time_window(HistogramsType),
@@ -447,17 +514,17 @@ prepare_histograms(Stats, HistogramsType, CurrentTime, LastUpdates) ->
 -spec transfer_current_stat_record(transfer:id()) -> {ok, proplists:proplist()}.
 transfer_current_stat_record(TransferId) ->
     {ok, #document{value = Transfer = #transfer{
-        bytes_transferred = BytesTransferred,
-        files_transferred = FilesTransferred,
-        files_invalidated = FilesInvalidated
+        bytes_replicated = BytesReplicated,
+        files_replicated = FilesReplicated,
+        files_evicted = FilesInvalidated
     }}} = transfer:get(TransferId),
     LastUpdate = get_last_update(Transfer),
     {ok, [
         {<<"id">>, TransferId},
         {<<"status">>, get_status(Transfer)},
         {<<"timestamp">>, LastUpdate},
-        {<<"transferredBytes">>, BytesTransferred},
-        {<<"transferredFiles">>, FilesTransferred},
+        {<<"replicatedBytes">>, BytesReplicated},
+        {<<"replicatedFiles">>, FilesReplicated},
         {<<"invalidatedFiles">>, FilesInvalidated}
     ]}.
 
@@ -465,39 +532,32 @@ transfer_current_stat_record(TransferId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns status of given transfer. Adds one special status 'invalidating' to
-%% indicate that the transfer itself has finished, but source replica
-%% invalidation is still in progress (concerns only replica migration transfers).
+%% Returns status of given transfer. Replaces active status with 'replicating'
+%% for replication and 'invalidating' for invalidation.
+%% In case of migration 'invalidating' indicates that the transfer itself has
+%% finished, but source replica invalidation is still in progress.
 %% @end
 %%--------------------------------------------------------------------
--spec get_status(transfer:record()) -> transfer:status() | invalidating.
-get_status(T = #transfer{invalidate_source_replica = true, status = completed}) ->
-    case T#transfer.invalidation_status of
-        completed -> completed;
-        skipped -> completed;
-        cancelled -> cancelled;
-        failed -> failed;
+-spec get_status(transfer:record()) ->
+    transfer:status() | invalidating | replicating.
+get_status(T = #transfer{
+    replication_status = completed,
+    replicating_provider = P1,
+    evicting_provider = P2
+}) when is_binary(P1) andalso is_binary(P2) ->
+    case T#transfer.eviction_status of
         scheduled -> invalidating;
-        active -> invalidating
+        enqueued -> invalidating;
+        active -> invalidating;
+        Status -> Status
     end;
-get_status(T = #transfer{invalidate_source_replica = true, status = skipped}) ->
-    case T#transfer.invalidation_status of
-        completed -> completed;
-        skipped -> skipped;
-        cancelled -> cancelled;
-        failed -> failed;
-        scheduled -> invalidating;
-        active -> invalidating
+get_status(T = #transfer{replication_status = skipped}) ->
+    case T#transfer.eviction_status of
+        active -> invalidating;
+        Status -> Status
     end;
-get_status(#transfer{
-    status = active,
-    files_processed = 0,
-    bytes_transferred = 0
-}) ->
-    % transfer will be visible in GUI as active when files_processed counter > 0
-    scheduled;
-get_status(#transfer{status = Status}) ->
-    Status.
+get_status(#transfer{replication_status = active}) -> replicating;
+get_status(#transfer{replication_status = Status}) -> Status.
 
 
 -spec get_last_update(#transfer{}) -> non_neg_integer().

@@ -1754,7 +1754,7 @@ read_big_file(Config, _FileSize, File, Worker, true) ->
     {ok, TransferID} = ?assertMatch({ok, _},
         lfm_proxy:schedule_file_replication(Worker1, SessId(Worker1),
             {path, File}, ProviderId)),
-    ?assertMatch({ok, #document{value = #transfer{status = completed}}},
+    ?assertMatch({ok, #document{value = #transfer{replication_status = completed}}},
         rpc:call(Worker1, transfer, get, [TransferID]), Attempts),
     timer:now_diff(os:timestamp(), Start);
 read_big_file(Config, FileSize, File, Worker, _) ->

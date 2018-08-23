@@ -516,16 +516,17 @@
     file_uuid :: undefined | file_meta:uuid(),
     space_id :: undefined | od_space:id(),
     user_id :: undefined | od_user:id(),
+    rerun_id = undefined :: undefined | transfer:id(),
     path :: undefined | file_meta:path(),
     callback :: undefined | transfer:callback(),
     enqueued = true :: boolean(),
-    status = skipped :: transfer:status(),
-    invalidation_status = skipped ::  transfer:status(),
+    cancel = false :: boolean(),
+    replication_status :: undefined | transfer:status(),
+    eviction_status :: undefined | transfer:status(),
     scheduling_provider_id :: od_provider:id(),
-    source_provider_id :: undefined | od_provider:id(),
-    target_provider_id :: undefined | od_provider:id(),
-    invalidate_source_replica = false :: boolean(),
-    % pid of transfer or invalidation controller, as both cannot execute
+    replicating_provider :: undefined | od_provider:id(),
+    evicting_provider :: undefined | od_provider:id(),
+    % pid of replication or replica_eviction controller, as both cannot execute
     % simultaneously for given TransferId
     pid :: undefined | binary(), %todo VFS-3657
 
@@ -537,9 +538,9 @@
     failed_files = 0 :: non_neg_integer(),
 
     % counters interesting for users
-    files_transferred = 0 :: non_neg_integer(),
-    bytes_transferred = 0 :: non_neg_integer(),
-    files_invalidated = 0 :: non_neg_integer(),
+    files_replicated = 0 :: non_neg_integer(),
+    bytes_replicated = 0 :: non_neg_integer(),
+    files_evicted = 0 :: non_neg_integer(),
     schedule_time = 0 :: non_neg_integer(),
     start_time = 0 :: non_neg_integer(),
     finish_time = 0 :: non_neg_integer(),
@@ -604,7 +605,7 @@
     type :: replica_deletion:type()
 }).
 
-%% Model used for setting read-write lock to synchronize invalidation
+%% Model used for setting read-write lock to synchronize replica deletion
 %% of file replicas.
 -record(replica_deletion_lock, {
     read = 0 :: non_neg_integer(),

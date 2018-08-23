@@ -122,11 +122,11 @@ change_replicated_internal(_SpaceId, Transfer = #document{
 }) ->
     ?debug("change_replicated_internal: changed transfer ~p", [TransferId]),
     transfer_changes:handle(Transfer);
-change_replicated_internal(_SpaceId, InvalidationMessage = #document{
+change_replicated_internal(_SpaceId, ReplicaDeletion = #document{
     key = MsgId,
     value = #replica_deletion{}
 }) ->
     ?debug("change_replicated_internal: changed replica_deletion ~p", [MsgId]),
-    replica_deletion_changes:handle(InvalidationMessage);
+    replica_deletion_changes:handle(ReplicaDeletion);
 change_replicated_internal(_SpaceId, _Change) ->
     ok.

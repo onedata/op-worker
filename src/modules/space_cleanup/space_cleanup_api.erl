@@ -10,8 +10,8 @@
 %%% Cleaning procedures is started basing on #autocleaning_config record{}.
 %%% Each cleaning procedure is associated with exactly one autocleaning
 %%% document that contains information about this operation and exactly
-%%% one autocleaning_controller gen_server that is responsible for invalidation
-%%% of unpopular files.
+%%% one autocleaning_controller gen_server that is responsible for
+%%% deletion of unpopular file replicas.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(space_cleanup_api).

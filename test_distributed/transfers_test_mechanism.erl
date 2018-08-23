@@ -639,10 +639,10 @@ await_transfer_starts(Node, TransferId) ->
     ?assertEqual(true, begin
         try
             #transfer{
-                bytes_transferred = BytesTransferred,
-                files_transferred = FilesTransferred
+                bytes_replicated = BytesReplicated,
+                files_replicated = FilesReplicated
             } = transfers_test_utils:get_transfer(Node, TransferId),
-            (BytesTransferred > 0) or (FilesTransferred > 0)
+            (BytesReplicated > 0) or (FilesReplicated > 0)
         catch
             throw:transfer_not_found ->
                 false
