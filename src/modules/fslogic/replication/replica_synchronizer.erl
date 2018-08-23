@@ -18,8 +18,8 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
--include("timeouts.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include("timeouts.hrl").
 
 -behaviour(gen_server).
 
@@ -82,8 +82,8 @@
 }).
 
 % API
--export([synchronize/6, update_replica/4, flush_location/1,
-    force_flush_events/1, cancel/1]).
+-export([synchronize/6, update_replica/4, force_flush_events/1, cancel/1,
+    terminate_all/0]).
 % gen_server callbacks
 -export([handle_call/3, handle_cast/2, handle_info/2, init/1, code_change/3,
     terminate/2]).
@@ -127,15 +127,6 @@ update_replica(FileCtx, Blocks, FileSize, BumpVersion) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Forces location cache flush.
-%% @end
-%%--------------------------------------------------------------------
--spec flush_location(file_meta:uuid()) -> ok.
-flush_location(Uuid) ->
-    apply_if_alive_no_check(Uuid, ?FLUSH_LOCATION).
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Forces events cache flush.
 %% @end
 %%--------------------------------------------------------------------
@@ -153,6 +144,20 @@ cancel(TransferId) ->
     lists:foreach(
         fun(Pid) -> gen_server2:cast(Pid, {cancel, TransferId}) end,
         gproc:lookup_pids({c, l, TransferId})).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Terminates all synchronizers.
+%% @end
+%%--------------------------------------------------------------------
+-spec terminate_all() -> ok.
+terminate_all() ->
+    Selection = gproc:select([{{{'_', '_', '$1'}, '_', '_'},
+        [{is_binary, '$1'}], ['$$']}]),
+    Pids = request_terminate(Selection),
+
+    lists:foreach(fun(Pid) -> Pid ! terminate end, Pids),
+    wait_for_terminate(Pids).
 
 %%%===================================================================
 %%% Apply functions
@@ -423,15 +428,11 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
     {_, NewRefs} = lists:unzip(NewTransfers),
     case ExistingRefs ++ NewRefs of
         [] ->
-            FileLocation = fslogic_cache:get_local_location(),
-            % TODO VFS-4743 - fill gaps?
-            ReturnedBlocks = fslogic_location_cache:get_blocks(FileLocation,
-                #{overlapping_blocks => [Block]}),
-            {EventOffset, EventSize} =
-                fslogic_location_cache:get_blocks_range(ReturnedBlocks, [Block]),
-            FLC = #file_location_changed{
-                file_location = fslogic_location_cache:set_final_blocks(
-                    FileLocation#document.value, ReturnedBlocks),
+            FileLocation =
+                file_ctx:fill_location_gaps([Block], fslogic_cache:get_local_location(),
+                    fslogic_cache:get_all_locations(), fslogic_cache:get_uuid()),
+            {EventOffset, EventSize} = fslogic_location_cache:get_blocks_range(FileLocation, [Block]),
+            FLC = #file_location_changed{file_location = FileLocation,
                 change_beg_offset = EventOffset, change_end_offset = EventSize},
             {reply, {ok, FLC}, State, ?DIE_AFTER};
         RelevantRefs ->
@@ -451,18 +452,6 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
             State7 = State6#state{requested_blocks = maps:put(From, Block, RB)},
             {noreply, State7, ?DIE_AFTER}
     end;
-
-handle_call(?FLUSH_LOCATION, _From, State) ->
-    Ans = fslogic_cache:flush(),
-
-    case application:get_env(?APP_NAME, synchronizer_gc, on_flush_location) of
-        on_flush_location ->
-            erlang:garbage_collect();
-        _ ->
-            ok
-    end,
-
-    {reply, Ans, State, ?DIE_AFTER};
 
 handle_call(?FLUSH_EVENTS, _From, State) ->
     {reply, ok, flush_events(State), ?DIE_AFTER};
@@ -549,7 +538,7 @@ handle_info({Ref, complete, {ok, _} = _Status}, #state{from_sessions = FS,
             TempState = flush_stats(State2#state{cached_stats = JobsStats}, false),
             TempState#state{cached_stats = #{undefined => OnfStats}}
     end,
-    [transfer:increase_files_transferred_counter(TID) || TID <- TransferIdsList],
+    [transfer:increment_files_replicated_counter(TID) || TID <- TransferIdsList],
     [gen_server2:reply(From, {ok, Message}) || {From, Message} <- Ans],
     {noreply, State3#state{from_sessions = FS2, requested_blocks = RB2}, ?DIE_AFTER};
 
@@ -578,9 +567,24 @@ handle_info({Ref, complete, ErrorStatus}, State) ->
 
     {noreply, State3, ?DIE_AFTER};
 
-handle_info(check_flush, State) ->
+handle_info(fslogic_cache_check_flush, State) ->
     fslogic_cache:check_flush(),
+
+    case application:get_env(?APP_NAME, synchronizer_gc, on_flush_location) of
+        on_flush_location ->
+            erlang:garbage_collect();
+        _ ->
+            ok
+    end,
+
     {noreply, State, ?DIE_AFTER};
+
+handle_info({fslogic_cache_flushed, Key, Check1, Check2}, State) ->
+    fslogic_cache:verify_flush_ans(Key, Check1, Check2),
+    {noreply, State, ?DIE_AFTER};
+
+handle_info(terminate, State) ->
+    {stop, normal, State};
 
 handle_info(Msg, State) ->
     ?log_bad_request(Msg),
@@ -594,7 +598,7 @@ terminate(_Reason, State) ->
     flush_stats(State2, true),
     flush_events(State2),
     % TODO VFS-4691 - should not terminate when flush failed
-    fslogic_cache:flush(),
+    fslogic_cache:flush(terminate),
     ignore.
 
 %%%===================================================================
@@ -657,7 +661,7 @@ cancel_transfer_id(TransferId, State) ->
             AffectedRefs),
 
     [rtransfer_link:cancel(Ref) || Ref <- OrphanedRefs],
-    gen_server2:reply(From, {error, canceled}),
+    gen_server2:reply(From, {error, cancelled}),
 
     InProgress =
         lists:filter(fun({_Block, Ref}) -> lists:member(Ref, OrphanedRefs) end,
@@ -1012,7 +1016,8 @@ flush_blocks(#state{cached_blocks = Blocks} = State, ExcludeSessions,
 -spec flush_blocks_list([block()], [session:id()], all | off
     | {threshold, non_neg_integer()}) -> #file_location_changed{}.
 flush_blocks_list(AllBlocks, ExcludeSessions, Flush) ->
-    Location = file_ctx:fill_location_gaps(AllBlocks, fslogic_cache:get_local_location(),
+    #file_location{blocks = FinalBlocks} = Location =
+        file_ctx:fill_location_gaps(AllBlocks, fslogic_cache:get_local_location(),
         fslogic_cache:get_all_locations(), fslogic_cache:get_uuid()),
     {EventOffset, EventSize} = fslogic_location_cache:get_blocks_range(Location, AllBlocks),
 
@@ -1024,7 +1029,7 @@ flush_blocks_list(AllBlocks, ExcludeSessions, Flush) ->
                 fslogic_event_emitter:create_file_location_changed(Location,
                     EventOffset, EventSize));
         {threshold, Bytes} ->
-            BlocksSize = fslogic_blocks:size(AllBlocks),
+            BlocksSize = fslogic_blocks:size(FinalBlocks),
             case BlocksSize >= Bytes of
                 true ->
                     fslogic_cache:cache_event(ExcludeSessions,
@@ -1049,9 +1054,7 @@ flush_stats(#state{cached_stats = Stats} = State, _) when map_size(Stats) == 0 -
     State;
 flush_stats(#state{space_id = SpaceId} = State, CancelTimer) ->
     lists:foreach(fun({TransferId, BytesPerProvider}) ->
-        case transfer:mark_data_transfer_finished(
-            TransferId, SpaceId, BytesPerProvider
-        ) of
+        case transfer:mark_data_replication_finished(TransferId, SpaceId, BytesPerProvider) of
             {ok, _} ->
                 ok;
             {error, Error} ->
@@ -1145,3 +1148,38 @@ cancel_events_timer(#state{caching_events_timer = TimerRef} = State) ->
 %%get_summarized_blocks_size(Blocks) ->
 %%    lists:foldl(fun(#file_block{size = Size}, Acc) ->
 %%        Acc + Size end, 0, Blocks).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Requests termination of all synchronizers.
+%% @end
+%%--------------------------------------------------------------------
+-spec request_terminate(term()) -> [pid()].
+request_terminate('$end_of_table') ->
+    [];
+request_terminate({Match, Continuation}) ->
+    request_terminate(Match) ++ request_terminate(gproc:select(Continuation));
+request_terminate(List) ->
+    lists:map(fun([_, Pid, _]) -> Pid end, List).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Waits for synchronizers termination.
+%% @end
+%%--------------------------------------------------------------------
+-spec wait_for_terminate(pid() | [pid()]) -> ok.
+wait_for_terminate([]) ->
+    ok;
+wait_for_terminate([Pid | Pids]) ->
+    wait_for_terminate(Pid),
+    wait_for_terminate(Pids);
+wait_for_terminate(Pid) ->
+    case erlang:is_process_alive(Pid) of
+        true ->
+            timer:sleep(500),
+            wait_for_terminate(Pid);
+        _ ->
+            ok
+    end.

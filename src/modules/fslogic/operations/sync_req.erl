@@ -33,13 +33,13 @@
 -export([
     synchronize_block/6,
     synchronize_block_and_compute_checksum/5,
-    get_file_distribution/2,
-    start_transfer/4
+    get_file_distribution/2
 ]).
 
 -export([
     schedule_file_replication/4,
     replicate_file/4,
+    enqueue_file_replication/4,
     enqueue_file_replication/6
 ]).
 
@@ -67,9 +67,13 @@ synchronize_block(UserCtx, FileCtx, undefined, Prefetch, TransferId, Priority) -
     synchronize_block(UserCtx, FileCtx3, #file_block{offset = 0, size = Size},
         Prefetch, TransferId, Priority);
 synchronize_block(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
-    {ok, Ans} = replica_synchronizer:synchronize(UserCtx, FileCtx, Block,
-        Prefetch, TransferId, Priority),
-    #fuse_response{status = #status{code = ?OK}, fuse_response = Ans}.
+    case replica_synchronizer:synchronize(UserCtx, FileCtx, Block,
+        Prefetch, TransferId, Priority) of
+        {ok, Ans} ->
+            #fuse_response{status = #status{code = ?OK}, fuse_response = Ans};
+        {error, _} = Error ->
+            Error
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -126,16 +130,6 @@ get_file_distribution(_UserCtx, FileCtx) ->
         }
     }.
 
-%%-------------------------------------------------------------------
-%% @doc
-%% Marks transfer as enqueued and adds task for replication to worker_pool.
-%% @end
-%%-------------------------------------------------------------------
--spec start_transfer(user_ctx:ctx(), file_ctx:ctx(), block(), transfer_id()) -> ok.
-start_transfer(UserCtx, FileCtx, Block, TransferId) ->
-    {ok, _} = transfer:mark_enqueued(TransferId),
-    enqueue_file_replication(UserCtx, FileCtx, Block, TransferId).
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Schedules file or dir replication, returns the id of created transfer doc
@@ -171,13 +165,13 @@ replicate_file(UserCtx, FileCtx, Block, TransferId) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Adds task of file replication to worker from ?TRANSFER_WORKERS_POOL.
+%% Adds task of file replication to worker from ?REPLICATION_WORKERS_POOL.
 %% @end
 %%-------------------------------------------------------------------
 -spec enqueue_file_replication(user_ctx:ctx(), file_ctx:ctx(), block(),
     transfer_id(), undefined | non_neg_integer(), undefined | non_neg_integer()) -> ok.
 enqueue_file_replication(UserCtx, FileCtx, Block, TransferId, Retries, NextRetry) ->
-    worker_pool:cast(?TRANSFER_WORKERS_POOL,
+    worker_pool:cast(?REPLICATION_WORKERS_POOL,
         {start_file_replication, UserCtx, FileCtx, Block, TransferId, Retries, NextRetry}).
 
 %%%===================================================================
@@ -197,7 +191,7 @@ schedule_file_replication(UserCtx, FileCtx, FilePath, TargetProviderId, Callback
     SessionId = user_ctx:get_session_id(UserCtx),
     FileGuid = file_ctx:get_guid_const(FileCtx),
     {ok, TransferId} = transfer:start(SessionId, FileGuid, FilePath, undefined,
-        TargetProviderId, Callback, false),
+        TargetProviderId, Callback),
     #provider_response{
         status = #status{code = ?OK},
         provider_response = #scheduled_transfer{
@@ -227,8 +221,7 @@ enqueue_file_replication(UserCtx, FileCtx, Block, TransferId) ->
 -spec replicate_file_insecure(user_ctx:ctx(), file_ctx:ctx(), block(),
     transfer_id()) -> provider_response().
 replicate_file_insecure(UserCtx, FileCtx, Block, TransferId) ->
-    {ok, TransferDoc} = transfer:get(TransferId),
-    case transfer_utils:is_ongoing(TransferDoc) of
+    case transfer:is_ongoing(TransferId) of
         true ->
             case file_ctx:is_dir(FileCtx) of
                 {true, FileCtx2} ->
@@ -237,12 +230,7 @@ replicate_file_insecure(UserCtx, FileCtx, Block, TransferId) ->
                     replicate_regular_file(UserCtx, FileCtx2, Block, TransferId)
             end;
         false ->
-            case transfer_utils:get_status(TransferDoc) of
-                cancelled ->
-                    throw({transfer_cancelled, TransferId});
-                failed ->
-                    throw({transfer_failed, TransferId})
-            end
+            throw(already_ended)
     end.
 
 %%-------------------------------------------------------------------
@@ -259,12 +247,12 @@ replicate_dir(UserCtx, FileCtx, Block, Offset, TransferId) ->
     Length = length(Children),
     case Length < Chunk of
         true ->
-            transfer:increase_files_to_process_counter(TransferId, Length),
+            transfer:increment_files_to_process_counter(TransferId, Length),
             enqueue_children_replication(UserCtx, Children, Block, TransferId),
-            transfer:increase_files_processed_counter(TransferId),
+            transfer:increment_files_processed_counter(TransferId),
             #provider_response{status = #status{code = ?OK}};
         false ->
-            transfer:increase_files_to_process_counter(TransferId, Chunk),
+            transfer:increment_files_to_process_counter(TransferId, Chunk),
             enqueue_children_replication(UserCtx, Children, Block, TransferId),
             replicate_dir(UserCtx, FileCtx2, Block, Offset + Chunk, TransferId)
     end.
@@ -278,10 +266,15 @@ replicate_dir(UserCtx, FileCtx, Block, Offset, TransferId) ->
 -spec replicate_regular_file(user_ctx:ctx(), file_ctx:ctx(), block(),
     transfer_id()) -> provider_response().
 replicate_regular_file(UserCtx, FileCtx, Block, TransferId) ->
-    #fuse_response{status = Status} = synchronize_block(UserCtx, FileCtx,
-        Block, false, TransferId, ?DEFAULT_REPLICATION_PRIORITY),
-    transfer:increase_files_processed_counter(TransferId),
-    #provider_response{status = Status}.
+    case synchronize_block(UserCtx, FileCtx, Block, false, TransferId,
+        ?DEFAULT_REPLICATION_PRIORITY
+    ) of
+        #fuse_response{status = Status} ->
+            transfer:increment_files_processed_counter(TransferId),
+            #provider_response{status = Status};
+        {error, cancelled} ->
+            throw(replication_cancelled)
+    end.
 
 %%-------------------------------------------------------------------
 %% @doc

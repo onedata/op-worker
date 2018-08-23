@@ -108,8 +108,8 @@ apply_size_change(SpaceId, SizeDiff) ->
 apply_size_change_and_maybe_emit(_SpaceId, 0) ->
     ok;
 apply_size_change_and_maybe_emit(SpaceId, SizeDiff) ->
-    Before = space_quota:available_size(SpaceId),
     {ok, _} = space_quota:apply_size_change(SpaceId, SizeDiff),
+    Before = space_quota:available_size(SpaceId),
     After = space_quota:available_size(SpaceId),
     case Before * After =< 0 of
         true -> fslogic_event_emitter:emit_quota_exceeded();

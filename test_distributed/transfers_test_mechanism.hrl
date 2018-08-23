@@ -71,26 +71,6 @@
     scenario :: undefined | #scenario{}
 }).
 
--record(expected_transfer, {
-    assert_histograms = false :: boolean(),
-    assert_counters = false :: boolean(),
-    histograms_from :: binary(),
-    user_id = ?DEFAULT_USER :: od_user:id(),
-    enqueued = false :: boolean(),
-    status = skipped :: transfer:status(),
-    invalidation_status = skipped ::  transfer:status(),
-    scheduling_provider_id :: od_provider:id(),
-    source_provider_id :: undefined | od_provider:id(),
-    invalidate_source_replica = false :: boolean(),
-    files_to_process :: non_neg_integer(),
-    files_processed :: non_neg_integer(),
-    failed_files :: non_neg_integer(),
-    files_transferred :: non_neg_integer(),
-    bytes_transferred :: non_neg_integer(),
-    files_invalidated :: non_neg_integer()
-}).
-
-
 -define(FILE_COUNTER, file_counter).
 -define(WORKER_POOL, worker_pool).
 -define(WORKER_POOL_SIZE, 8).

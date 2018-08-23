@@ -19,7 +19,7 @@
 %% API
 %% Functions operating on directories or files
 -export([unlink/3, rm/2, mv/3, cp/3, get_parent/2, get_file_path/2,
-    get_file_guid/2, schedule_file_replication/4, schedule_replica_invalidation/4]).
+    get_file_guid/2, schedule_file_replication/4, schedule_replica_eviction/4]).
 %% Functions operating on files
 -export([create/2, create/3, create/4, open/3, fsync/1, fsync/3, write/3,
     write_without_events/3, read/3, read/4, read_without_events/3,
@@ -161,10 +161,10 @@ schedule_file_replication(SessId, FileKey, TargetProviderId, Callback) ->
 %% given as MigrateProviderId
 %% @end
 %%--------------------------------------------------------------------
--spec schedule_replica_invalidation(session:id(), fslogic_worker:file_guid_or_path(),
+-spec schedule_replica_eviction(session:id(), fslogic_worker:file_guid_or_path(),
     ProviderId :: oneprovider:id(), MigrationProviderId :: undefined | oneprovider:id()) ->
     {ok, transfer:id()} | logical_file_manager:error_reply().
-schedule_replica_invalidation(SessId, FileKey, ProviderId, MigrationProviderId) ->
+schedule_replica_eviction(SessId, FileKey, ProviderId, MigrationProviderId) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
         #schedule_replica_invalidation{
@@ -447,24 +447,22 @@ truncate(SessId, FileKey, Size) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_distribution(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
-    {ok, list()} | logical_file_manager:error_reply().
+    {ok, Blocks :: [[non_neg_integer()]]} | logical_file_manager:error_reply().
 get_file_distribution(SessId, FileKey) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
         #get_file_distribution{},
         fun(#file_distribution{provider_file_distributions = Distributions}) ->
-            Distribution =
-                lists:map(fun(#provider_file_distribution{
-                    provider_id = ProviderId,
-                    blocks = Blocks
-                }) ->
-                    #{
-                        <<"providerId">> => ProviderId,
-                        <<"blocks">> => lists:map(fun(#file_block{offset = O, size = S}) ->
-                            [O, S] end, Blocks)
-                    }
-                end, Distributions),
-            {ok, Distribution}
+            {ok, lists:map(fun(#provider_file_distribution{provider_id = ProviderId, blocks = Blocks}) ->
+                {BlockList, TotalBlocksSize} = lists:mapfoldl(fun(#file_block{offset = O, size = S}, SizeAcc) ->
+                    {[O, S], SizeAcc + S}
+                end, 0, Blocks),
+                #{
+                    <<"providerId">> => ProviderId,
+                    <<"blocks">> => BlockList,
+                    <<"totalBlocksSize">> => TotalBlocksSize
+                }
+            end, Distributions)}
         end).
 
 %%%===================================================================
@@ -593,7 +591,7 @@ read_internal(LfmCtx, Offset, MaxSize, GenerateEvents, PrefetchData, SyncOptions
             ok = remote_utils:call_fslogic(SessId, file_request, FileGuid,
                 #synchronize_block{block = #file_block{offset = Offset, size = MaxSize},
                     prefetch = PrefetchData, priority = Priority},
-                fun(_) -> ok end)    
+                fun(_) -> ok end)
     end,
 
     FileId = lfm_context:get_file_id(LfmCtx),

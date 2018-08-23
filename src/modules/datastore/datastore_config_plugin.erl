@@ -38,6 +38,7 @@ get_models() -> [
     file_meta,
     storage,
     file_location,
+    file_local_blocks,
     space_storage,
     dbsync_state,
     files_to_chown,
