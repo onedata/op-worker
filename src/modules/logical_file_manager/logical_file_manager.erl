@@ -46,7 +46,7 @@
     get_child_attr/3, get_children_count/2, get_parent/2]).
 %% Functions operating on directories or files
 -export([mv/3, cp/3, get_file_path/2, get_file_guid/2, rm_recursive/2, unlink/3]).
--export([schedule_file_replication/3, schedule_file_replication/4, schedule_replica_invalidation/4]).
+-export([schedule_file_replication/3, schedule_file_replication/4, schedule_replica_eviction/4]).
 %% Functions operating on files
 -export([create/2, create/3, create/4, open/3, fsync/1, fsync/3, write/3, read/3,
     silent_read/3, truncate/3, release/1, get_file_distribution/2,
@@ -269,14 +269,14 @@ schedule_file_replication(SessId, FileKey, TargetProviderId, Callback) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Schedules file replica invalidation on given provider, migrates unique data
+%% Schedules file replica eviction on given provider, migrates unique data
 %% to provider given as MigrateProviderId.
 %% @end
 %%--------------------------------------------------------------------
--spec schedule_replica_invalidation(session:id(), fslogic_worker:file_guid_or_path(),
+-spec schedule_replica_eviction(session:id(), fslogic_worker:file_guid_or_path(),
     SourceProviderId :: oneprovider:id(), TargetProviderId :: undefined | oneprovider:id()) ->
     {ok, transfer:id()} | error_reply().
-schedule_replica_invalidation(SessId, FileKey, SourceProviderId, TargetProviderId) ->
+schedule_replica_eviction(SessId, FileKey, SourceProviderId, TargetProviderId) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
 
@@ -295,7 +295,7 @@ schedule_replica_invalidation(SessId, FileKey, SourceProviderId, TargetProviderI
             {error, ?EACCES};
         true ->
             ?run(fun() ->
-                lfm_files:schedule_replica_invalidation(SessId, FileKey, SourceProviderId, TargetProviderId)
+                lfm_files:schedule_replica_eviction(SessId, FileKey, SourceProviderId, TargetProviderId)
             end)
     end.
 
@@ -428,7 +428,7 @@ release(FileHandle) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_distribution(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
-    {ok, list()} | error_reply().
+    {ok, Blocks :: [[non_neg_integer()]]} | error_reply().
 get_file_distribution(SessId, FileKey) ->
     ?run(fun() -> lfm_files:get_file_distribution(SessId, FileKey) end).
 

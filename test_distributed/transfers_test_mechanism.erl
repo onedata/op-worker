@@ -269,7 +269,7 @@ assert_transfer_state(Node, TransferId, SpaceId, FileGuid, FilePath, TargetNode,
                     ct:pal(
                         "Assertion of field \"~p\" in transfer ~p failed.~n"
                         "    Expected: ~p~n"
-                        "    Value: ~p~n" ++ Format,[Field, TransferId, Expected, Value | Args]),
+                        "    Value: ~p~n" ++ Format, [Field, TransferId, Expected, Value | Args]),
                     ct:fail("assertion failed")
             end
     end.
@@ -352,8 +352,17 @@ assert_files_visible_on_all_nodes(Config, AssertionNodes, Attempts, Timetrap) ->
 assert_files_distribution_on_all_nodes(_Config, _AssertionNodes, undefined, _Attempts, _Timetrap) ->
     ok;
 assert_files_distribution_on_all_nodes(Config, AssertionNodes, ExpectedDistribution, Attempts, Timetrap) ->
+    % Deduce expected block size automatically based on expected blocks
+    ExpectedDistributionWithBlockSize = lists:map(fun(Distribution) ->
+        Distribution#{
+            <<"totalBlocksSize">> => lists:foldl(fun([_Offset, Size], SizeAcc) ->
+                SizeAcc + Size
+            end, 0, maps:get(<<"blocks">>, Distribution))
+        }
+    end, ExpectedDistribution),
+
     Refs = lists:map(fun(AssertionNode) ->
-        cast_files_distribution_assertion(Config, AssertionNode, ExpectedDistribution, Attempts)
+        cast_files_distribution_assertion(Config, AssertionNode, ExpectedDistributionWithBlockSize, Attempts)
     end, AssertionNodes),
     await_countdown(Refs, Timetrap).
 
@@ -547,11 +556,11 @@ schedule_file_replication_by_rest(Worker, ProviderId, {path, FilePath}, Config) 
         <<"replicas/", FilePath/binary, "?provider_id=", ProviderId/binary>>,
         post, ?DEFAULT_USER_TOKEN_HEADERS(Config), []
     ) of
-    {ok, 200, _, Body} ->
-        DecodedBody = json_utils:decode(Body),
-        #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
-        {ok, Tid};
-    {ok, 400, _, Body} ->
+        {ok, 200, _, Body} ->
+            DecodedBody = json_utils:decode(Body),
+            #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
+            {ok, Tid};
+        {ok, 400, _, Body} ->
             {error, Body}
     end;
 schedule_file_replication_by_rest(Worker, ProviderId, {guid, FileGuid}, Config) ->
@@ -600,7 +609,7 @@ file_key(_Guid, Path, path) ->
 assert(ExpectedTransfer, Transfer) ->
     maps:fold(fun(FieldName, ExpectedValue, _AccIn) ->
         assert_field(ExpectedValue, Transfer, FieldName)
-    end, undefined,  ExpectedTransfer).
+    end, undefined, ExpectedTransfer).
 
 assert_field(ExpectedValue, Transfer, FieldName) ->
     Value = get_transfer_value(Transfer, FieldName),
@@ -639,10 +648,10 @@ await_transfer_starts(Node, TransferId) ->
     ?assertEqual(true, begin
         try
             #transfer{
-                bytes_transferred = BytesTransferred,
-                files_transferred = FilesTransferred
+                bytes_replicated = BytesReplicated,
+                files_replicated = FilesReplicated
             } = transfers_test_utils:get_transfer(Node, TransferId),
-            (BytesTransferred > 0) or (FilesTransferred > 0)
+            (BytesReplicated > 0) or (FilesReplicated > 0)
         catch
             throw:transfer_not_found ->
                 false

@@ -160,5 +160,14 @@ handle(<<"getTransfersForFile">>, Props) ->
             {ok, Result}
     end;
 
+handle(<<"cancelTransfer">>, Props) ->
+    TransferId = proplists:get_value(<<"transferId">>, Props),
+    transfer_data_backend:cancel_transfer(TransferId);
+
+handle(<<"rerunTransfer">>, Props) ->
+    SessionId = gui_session:get_session_id(),
+    TransferId = proplists:get_value(<<"transferId">>, Props),
+    transfer_data_backend:rerun_transfer(SessionId, TransferId);
+
 handle(_, _) ->
     gui_error:report_error(<<"Not implemented">>).

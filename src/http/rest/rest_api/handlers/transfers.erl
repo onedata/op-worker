@@ -14,6 +14,7 @@
 
 -include("global_definitions.hrl").
 -include("http/http_common.hrl").
+-include("modules/datastore/transfer.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include("http/rest/http_status.hrl").
@@ -43,21 +44,24 @@ terminate(_, _, _) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:allowed_methods/2
 %%--------------------------------------------------------------------
--spec allowed_methods(req(), maps:map() | {error, term()}) -> {[binary()], req(), maps:map()}.
+-spec allowed_methods(req(), maps:map() | {error, term()}) ->
+    {[binary()], req(), maps:map()}.
 allowed_methods(Req, State) ->
     {[<<"GET">>], Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
 %%--------------------------------------------------------------------
--spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | stop, req(), maps:map()}.
+-spec is_authorized(req(), maps:map()) ->
+    {true | {false, binary()} | stop, req(), maps:map()}.
 is_authorized(Req, State) ->
     onedata_auth_api:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_provided/2
 %%--------------------------------------------------------------------
--spec content_types_provided(req(), maps:map()) -> {[{binary(), atom()}], req(), maps:map()}.
+-spec content_types_provided(req(), maps:map()) ->
+    {[{binary(), atom()}], req(), maps:map()}.
 content_types_provided(Req, State) ->
     {[
         {<<"application/json">>, list_transfers}
@@ -99,17 +103,19 @@ list_transfers(Req, State) ->
     end,
 
     {ok, Transfers} = case TransferState of
-        <<"waiting">> ->
+        ?WAITING_TRANSFERS_STATE ->
             transfer:list_waiting_transfers(SpaceId, StartId, Offset, Limit);
-        <<"ongoing">> ->
+        ?ONGOING_TRANSFERS_STATE ->
             transfer:list_ongoing_transfers(SpaceId, StartId, Offset, Limit);
-        <<"ended">> ->
+        ?ENDED_TRANSFERS_STATE ->
             transfer:list_ended_transfers(SpaceId, StartId, Offset, Limit)
     end,
 
     NextPageToken = case length(Transfers) of
         Limit ->
-            {ok, LinkKey} = transfer:get_link_key(lists:last(Transfers)),
+            {ok, LinkKey} = transfer:get_link_key_by_state(
+                lists:last(Transfers), TransferState
+            ),
             #{<<"nextPageToken">> => LinkKey};
         _ ->
             #{}

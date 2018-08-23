@@ -59,6 +59,7 @@
 %% Starts the aggregator for onf transfer stats.
 %% @end
 %%--------------------------------------------------------------------
+-spec start_link() -> {ok, pid()} | ignore | {error, Reason :: term()}.
 start_link() ->
     gen_server2:start_link({local, ?MODULE}, ?MODULE, [], []).
 

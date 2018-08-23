@@ -50,14 +50,17 @@
 ]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_struct/1]).
+-export([
+    get_ctx/0, get_record_struct/1, get_record_version/0,
+    upgrade_record/2
+]).
 
 -type id() :: binary().
 -type record() :: #replica_deletion{}.
 -type doc() :: datastore_doc:doc(record()).
 -type action() :: request | confirm | refuse | release_lock.
 -type diff() :: datastore_doc:diff(record()).
--type type() :: autocleaning | invalidation.
+-type type() :: autocleaning | eviction.
 -type report_id() :: autocleaning:id() | transfer:id().
 -type result() :: {ok, non_neg_integer()} | {error, term()}.
 
@@ -75,7 +78,7 @@
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Sends message requesting invalidation support.
+%% Sends message requesting replica_deletion support.
 %% @end
 %%-------------------------------------------------------------------
 -spec request(file_meta:uuid(), fslogic_blocks:blocks(),
@@ -87,7 +90,7 @@ request(FileUuid, FileBlocks, VV, Requestee, SpaceId, Type, Id) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Sends message confirming invalidation support.
+%% Sends message confirming replica_deletion support.
 %% @end
 %%-------------------------------------------------------------------
 -spec confirm(id(), fslogic_blocks:blocks()) -> ok.
@@ -102,7 +105,7 @@ confirm(Id, Blocks) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Sends message refusing invalidation support.
+%% Sends message refusing replica_deletion support.
 %% @end
 %%-------------------------------------------------------------------
 -spec refuse(id()) -> ok.
@@ -175,7 +178,7 @@ new_doc(FileUuid, FileBlocks, VV, Requestee, SpaceId, Type, Id) ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Updates action field in #invalidation_msg{} record.
+%% Updates action field in #replica_deletion_msg{} record.
 %% @end
 %%-------------------------------------------------------------------
 -spec update_action(record(), action()) -> record().
@@ -194,6 +197,15 @@ update_action(ReplicaDeletion, NewStatus) ->
 -spec get_ctx() -> datastore:ctx().
 get_ctx() ->
     ?CTX.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's record version.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_record_version() -> datastore_model:record_version().
+get_record_version() ->
+    2.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -224,4 +236,25 @@ get_record_struct(1) ->
         {requestee, string},
         {doc_id, string},
         {type, atom}
-    ]}.
+    ]};
+get_record_struct(2) ->
+    get_record_struct(1).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Upgrades model's record from provided version to the next one.
+%% @end
+%%--------------------------------------------------------------------
+-spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
+    {datastore_model:record_version(), datastore_model:record()}.
+upgrade_record(1, {?MODULE, FileUuid, SpaceId, Status, RequestedBlocks,
+    SupportedBlocks, VersionVector, Requester, Requestee, DocId, Type}
+) ->
+    NewType = case Type of
+        invalidation -> eviction;
+        _ -> Type
+    end,
+
+    {2, {?MODULE, FileUuid, SpaceId, Status, RequestedBlocks,
+        SupportedBlocks, VersionVector, Requester, Requestee, DocId, NewType
+    }}.

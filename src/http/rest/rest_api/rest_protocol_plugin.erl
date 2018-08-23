@@ -48,7 +48,8 @@ routes() ->
         {"/api/v3/oneprovider/spaces", #{handler => spaces}},
         {"/api/v3/oneprovider/spaces/:sid", #{handler => space_by_id}},
         {"/api/v3/oneprovider/spaces/:sid/transfers", #{handler => transfers}},
-        {"/api/v3/oneprovider/transfers/:id", #{handler => transfer_by_id}}
+        {"/api/v3/oneprovider/transfers/:id", #{handler => transfer_by_id}},
+        {"/api/v3/oneprovider/transfers/:id/rerun", #{handler => transfer_by_id}}
 ].
 
 

@@ -100,6 +100,7 @@ get_unique_blocks(FileCtx) ->
 -spec get_duplicated_blocks(file_ctx:ctx(), version_vector:version_vector()) ->
     {undefined | [{od_provider:id(), fslogic_blocks:blocks()}] , file_ctx:ctx()}.
 get_duplicated_blocks(FileCtx, LocalVV) ->
+    % TODO - local blocks are always duplicated somewhere
     {LocationDocs, FileCtx2} = file_ctx:get_file_location_docs(FileCtx),
     LocalLocations = filter_local_locations(LocationDocs),
     LocalBlocksList = get_all_blocks(LocalLocations),
@@ -372,7 +373,7 @@ compare_blocks({Block1, {_, VV1, _} = BlockInfo1} = B1,
             [B2 | lists:map(fun(B) -> {B, BlockInfo1} end, B1List)];
         greater ->
             B2List = fslogic_blocks:invalidate([Block2], Block1),
-            lists:map(fun(B) -> {B, BlockInfo2} end, B2List) ++ B1;
+            lists:map(fun(B) -> {B, BlockInfo2} end, B2List) ++ [B1];
         _ ->
             [B2, B1]
     end.
