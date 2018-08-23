@@ -111,7 +111,7 @@ query(<<"file-distribution">>, [{<<"file">>, FileId}]) ->
     end, 0, Distributions),
 
     BlocksOfSyncedProviders = lists:map(
-        fun(#{<<"providerId">> := ProviderId, <<"blocks">> := Blocks}) ->
+        fun(#{<<"providerId">> := ProviderId, <<"blocks">> := Blocks, <<"totalBlocksSize">> := TotalBlocksSize}) ->
             % JSON keys must be binaries
             Data = [{integer_to_binary(BarNum), Fill} || {BarNum, Fill} <- interpolate_chunks(Blocks, FileSize)],
             [
@@ -119,6 +119,7 @@ query(<<"file-distribution">>, [{<<"file">>, FileId}]) ->
                 {<<"file">>, FileId},
                 {<<"provider">>, ProviderId},
                 {<<"chunksBarData">>, Data},
+                {<<"blocksPercentage">>, TotalBlocksSize * 100.0 / FileSize},
                 {<<"neverSynchronized">>, false}
             ]
         end, Distributions),

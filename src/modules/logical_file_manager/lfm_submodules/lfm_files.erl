@@ -454,11 +454,13 @@ get_file_distribution(SessId, FileKey) ->
         #get_file_distribution{},
         fun(#file_distribution{provider_file_distributions = Distributions}) ->
             {ok, lists:map(fun(#provider_file_distribution{provider_id = ProviderId, blocks = Blocks}) ->
+                {BlockList, TotalBlocksSize} = lists:mapfoldl(fun(#file_block{offset = O, size = S}, SizeAcc) ->
+                    {[O, S], SizeAcc + S}
+                end, 0, Blocks),
                 #{
                     <<"providerId">> => ProviderId,
-                    <<"blocks">> => lists:map(fun(#file_block{offset = O, size = S}) ->
-                        [O, S]
-                    end, Blocks)
+                    <<"blocks">> => BlockList,
+                    <<"totalBlocksSize">> => TotalBlocksSize
                 }
             end, Distributions)}
         end).

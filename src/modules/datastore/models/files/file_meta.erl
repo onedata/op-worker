@@ -598,7 +598,7 @@ get_scope_id(Entry) ->
 %%--------------------------------------------------------------------
 -spec setup_onedata_user(UserId :: od_user:id(), EffSpaces :: [od_space:id()]) -> ok.
 setup_onedata_user(UserId, EffSpaces) ->
-    ?info("Setting up user: ~p", [UserId]),
+    ?debug("Setting up user: ~p", [UserId]),
     critical_section:run([od_user, UserId], fun() ->
         try
             CTime = time_utils:cluster_time_seconds(),

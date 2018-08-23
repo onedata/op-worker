@@ -58,7 +58,7 @@
     fold_enabled => true
 }).
 
--define(SESSION_TTL, application:get_env(op_worker, session_ttl, 3600)).
+-define(SESSION_TTL, application:get_env(op_worker, gui_session_ttl_seconds, 3600)).
 
 -define(FILE_HANDLES_TREE_ID, <<"storage_file_handles">>).
 -define(HELPER_HANDLES_TREE_ID, <<"helper_handles">>).
