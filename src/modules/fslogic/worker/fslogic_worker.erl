@@ -183,6 +183,7 @@ handle(_Request) ->
     Error :: timeout | term().
 cleanup() ->
     transfer:cleanup(),
+    replica_synchronizer:terminate_all(),
     ok.
 
 %%%===================================================================

@@ -268,7 +268,7 @@ start_link(SpaceId) ->
     {file_meta:uuid(), od_provider:id(), fslogic_blocks:blocks(),
         version_vector:version_vector()} | undefined.
 get_setting_for_deletion_task(FileCtx) ->
-    case file_ctx:get_local_file_location_doc(FileCtx) of
+    case file_ctx:get_local_file_location_doc(FileCtx, false) of
         {undefined, _} ->
             undefined;
         {LocalLocation, FileCtx2} ->

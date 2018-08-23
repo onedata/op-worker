@@ -100,6 +100,7 @@ get_unique_blocks(FileCtx) ->
 -spec get_duplicated_blocks(file_ctx:ctx(), version_vector:version_vector()) ->
     {undefined | [{od_provider:id(), fslogic_blocks:blocks()}] , file_ctx:ctx()}.
 get_duplicated_blocks(FileCtx, LocalVV) ->
+    % TODO - local blocks are always duplicated somewhere
     {LocationDocs, FileCtx2} = file_ctx:get_file_location_docs(FileCtx),
     LocalLocations = filter_local_locations(LocationDocs),
     LocalBlocksList = get_all_blocks(LocalLocations),
