@@ -447,24 +447,22 @@ truncate(SessId, FileKey, Size) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_distribution(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
-    {ok, list()} | logical_file_manager:error_reply().
+    {ok, Blocks :: [[non_neg_integer()]]} | logical_file_manager:error_reply().
 get_file_distribution(SessId, FileKey) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
         #get_file_distribution{},
         fun(#file_distribution{provider_file_distributions = Distributions}) ->
-            Distribution =
-                lists:map(fun(#provider_file_distribution{
-                    provider_id = ProviderId,
-                    blocks = Blocks
-                }) ->
-                    #{
-                        <<"providerId">> => ProviderId,
-                        <<"blocks">> => lists:map(fun(#file_block{offset = O, size = S}) ->
-                            [O, S] end, Blocks)
-                    }
-                end, Distributions),
-            {ok, Distribution}
+            {ok, lists:map(fun(#provider_file_distribution{provider_id = ProviderId, blocks = Blocks}) ->
+                {BlockList, TotalBlocksSize} = lists:mapfoldl(fun(#file_block{offset = O, size = S}, SizeAcc) ->
+                    {[O, S], SizeAcc + S}
+                end, 0, Blocks),
+                #{
+                    <<"providerId">> => ProviderId,
+                    <<"blocks">> => BlockList,
+                    <<"totalBlocksSize">> => TotalBlocksSize
+                }
+            end, Distributions)}
         end).
 
 %%%===================================================================
@@ -593,7 +591,7 @@ read_internal(LfmCtx, Offset, MaxSize, GenerateEvents, PrefetchData, SyncOptions
             ok = remote_utils:call_fslogic(SessId, file_request, FileGuid,
                 #synchronize_block{block = #file_block{offset = Offset, size = MaxSize},
                     prefetch = PrefetchData, priority = Priority},
-                fun(_) -> ok end)    
+                fun(_) -> ok end)
     end,
 
     FileId = lfm_context:get_file_id(LfmCtx),
