@@ -151,8 +151,16 @@ all() ->
 -define(LIST_TRANSFER, fun(Id, Acc) -> [Id | Acc] end).
 -define(ATTEMPTS, 100).
 
+-define(normalizeDistribution(__Distributions), lists:sort(lists:map(fun(__Distribution) ->
+    __Distribution#{
+        <<"totalBlocksSize">> => lists:foldl(fun([_Offset, __Size], __SizeAcc) ->
+            __SizeAcc + __Size
+        end, 0, maps:get(<<"blocks">>, __Distribution))
+    }
+end, __Distributions))).
+
 -define(assertDistribution(Worker, ExpectedDistribution, Config, File),
-    ?assertEqual(lists:sort(ExpectedDistribution), begin
+    ?assertEqual(?normalizeDistribution(ExpectedDistribution), begin
         case rest_test_utils:request(Worker, <<"replicas", File/binary>>, get,
             ?USER_1_AUTH_HEADERS(Config), []
         ) of
@@ -164,14 +172,14 @@ all() ->
     end, ?ATTEMPTS)).
 
 -define(assertDistributionProxyByGuid(Worker, SessionId, ExpectedDistribution, FileGuid),
-    ?assertEqual(lists:sort(ExpectedDistribution), begin
+    ?assertEqual(?normalizeDistribution(ExpectedDistribution), begin
         {ok, __FileBlocks} = lfm_proxy:get_file_distribution(Worker, SessionId, {guid, FileGuid}),
         lists:sort(__FileBlocks)
     end, ?ATTEMPTS)
 ).
 
 -define(assertDistributionById(Worker, ExpectedDistribution, Config, FileId),
-    ?assertEqual(lists:sort(ExpectedDistribution), begin
+    ?assertEqual(?normalizeDistribution(ExpectedDistribution), begin
         case rest_test_utils:request(Worker, <<"replicas-id/", FileId/binary>>, get,
             ?USER_1_AUTH_HEADERS(Config), []
         ) of

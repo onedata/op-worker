@@ -21,6 +21,6 @@
 TARGET_DIR='_build/default/lib/gui_static'
 # Image which will be used by default to get the static files. If it cannot
 # be resolved, the script will fall back to secondary.
-PRIMARY_IMAGE='docker.onedata.org/op-gui-default:VFS-4242-add-cancel-button-for-transfers'
+PRIMARY_IMAGE='docker.onedata.org/op-gui-default:VFS-4791-many-chunks-render'
 # Image which will be used if primary image is not resolved.
-SECONDARY_IMAGE='onedata/op-gui-default:VFS-4242-add-cancel-button-for-transfers'
+SECONDARY_IMAGE='onedata/op-gui-default:VFS-4791-many-chunks-render'
