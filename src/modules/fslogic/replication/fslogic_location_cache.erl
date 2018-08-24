@@ -279,7 +279,7 @@ set_blocks(#document{key = Key, value = FileLocation} = Doc, Blocks) ->
             Doc#document{value = FileLocation#file_location{blocks = Blocks}};
         _ ->
             fslogic_cache:save_blocks(Key, Blocks),
-            fslogic_cache:mark_changed_blocks(Key, all, all),
+            fslogic_cache:mark_changed_blocks(Key, all, all, [], []),
             Doc
     end.
 
@@ -318,15 +318,17 @@ update_blocks(#document{key = LocID, value = FileLocation} = Doc, NewBlocks) ->
                     end
                 end, {Blocks, [], 0, BlocksToDel, BlocksToSave}, OldBlocks),
 
+            NewBlocks2 = NewBlocks -- Exclude,
             {Blocks3, SizeChange2, BlocksToSave3} = lists:foldl(fun(#file_block{offset = O, size = S} = B,
                 {Acc, TmpSize, TmpBlocksToSave}) ->
                 B2 = #file_block{offset = O+S, size = S},
                 {gb_sets:add(B2, Acc), TmpSize + S, sets:add_element(B, TmpBlocksToSave)}
-            end, {Blocks2, SizeChange, BlocksToSave2}, NewBlocks -- Exclude),
+            end, {Blocks2, SizeChange, BlocksToSave2}, NewBlocks2),
 
             fslogic_cache:update_size(LocID, SizeChange2),
             fslogic_cache:save_blocks(LocID, Blocks3),
-            fslogic_cache:mark_changed_blocks(LocID, BlocksToSave3, BlocksToDel2),
+            fslogic_cache:mark_changed_blocks(LocID, BlocksToSave3, BlocksToDel2,
+                NewBlocks2, OldBlocks -- Exclude),
             Doc
     end.
 

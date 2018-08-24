@@ -29,7 +29,7 @@
 % Block API
 -export([get_blocks/1, save_blocks/2, cache_blocks/2, get_blocks_tree/1,
     use_blocks/2, finish_blocks_usage/1, get_changed_blocks/1,
-    mark_changed_blocks/3, set_local_change/1]).
+    mark_changed_blocks/5, set_local_change/1]).
 % Size API
 -export([get_local_size/1, update_size/2]).
 
@@ -200,9 +200,7 @@ verify_flush_ans(Key, Check1, Check2) ->
 
             case Check2 of
                 [] ->
-                    erase({?SAVED_BLOCKS, Key, true}),
-                    erase({?SAVED_BLOCKS, Key, undefined}),
-
+                    erase({?SAVED_BLOCKS, Key}),
                     ok;
                 _ ->
                     ?error("Local blocks flush failed for key"
@@ -496,8 +494,7 @@ finish_blocks_usage(Key) ->
 %%-------------------------------------------------------------------
 -spec get_changed_blocks(file_location:id()) -> {sets:set(), sets:set()}.
 get_changed_blocks(Key) ->
-    Local = get(?LOCAL_CHANGES),
-    Saved = get_set({?SAVED_BLOCKS, Key, Local}),
+    Saved = get_set({?SAVED_BLOCKS, Key}),
     Deleted = get_set({?DELETED_BLOCKS, Key}),
     {Saved, Deleted}.
 
@@ -507,34 +504,28 @@ get_changed_blocks(Key) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec mark_changed_blocks(file_location:id(), sets:set() | all,
-    sets:set() | all) -> ok.
-mark_changed_blocks(Key, all, all) ->
-    erase({?SAVED_BLOCKS, Key, true}),
-    erase({?SAVED_BLOCKS, Key, undefined}),
+    sets:set() | all, fslogic_blocks:blocks(), fslogic_blocks:blocks()) -> ok.
+mark_changed_blocks(Key, all, all, _, _) ->
+    erase({?SAVED_BLOCKS, Key}),
     erase({?DELETED_BLOCKS, Key}),
     put({?RESET_BLOCKS, Key}, true),
     ok;
-mark_changed_blocks(Key, Saved, Deleted) ->
+mark_changed_blocks(Key, Saved, Deleted, LastSaved, LastDelete) ->
     Local = get(?LOCAL_CHANGES),
+    PublicBlocks = get({?PUBLIC_BLOCKS, Key}),
+    PublicDel = lists:any(fun(Block) ->
+        lists:member(Block, PublicBlocks)
+    end, LastDelete),
 
-    case Local of
+    case PublicDel orelse (Local =/= true) of
         true ->
-            PublicBlocks = get({?PUBLIC_BLOCKS, Key}),
-            PublicDel = lists:any(fun(Block) ->
-                sets:is_element(Block, Deleted)
-            end, PublicBlocks),
-
-            case PublicDel of
-                true ->
-                    put({?SAVED_BLOCKS, Key, undefined}, Saved);
-                _ ->
-                    put({?SAVED_BLOCKS, Key, Local}, Saved)
-            end,
-            put({?DELETED_BLOCKS, Key}, Deleted);
+            put({?PUBLIC_BLOCKS, Key}, (PublicBlocks -- LastDelete) ++ LastSaved);
         _ ->
-            put({?SAVED_BLOCKS, Key, Local}, Saved),
-            put({?DELETED_BLOCKS, Key}, Deleted)
+            ok
     end,
+
+    put({?SAVED_BLOCKS, Key}, Saved),
+    put({?DELETED_BLOCKS, Key}, Deleted),
     ok.
 
 %%-------------------------------------------------------------------
@@ -643,35 +634,33 @@ flush_key(Key, Type) ->
                     PercentThreshold = application:get_env(?APP_NAME,
                         public_block_percent_treshold, 10),
 
-                    PublicBlocks = get_set({?SAVED_BLOCKS, Key, undefined}),
-                    % Warning - LocalBlocks are not sorted
+                    SavedBlocks = get_set({?SAVED_BLOCKS, Key}),
+                    PublicBlocks = get({?PUBLIC_BLOCKS, Key}),
+                    SavedBlocks2 = sets:subtract(SavedBlocks, sets:from_list(PublicBlocks)),
+
                     {LocalBlocks, PublicBlocks2} = sets:fold(
                         fun(#file_block{size = S} = Block, {TmpLocalBlocks, TmpPublicBlocks}) ->
                             case (S >= SizeThreshold) orelse (S >= (Size * PercentThreshold / 100)) of
                                 true ->
-                                    {TmpLocalBlocks, sets:add_element(Block, TmpPublicBlocks)};
+                                    {TmpLocalBlocks, [Block | TmpPublicBlocks]};
                                 _ ->
                                     {[Block | TmpLocalBlocks], TmpPublicBlocks}
                             end
-                        end, {[], PublicBlocks}, get_set({?SAVED_BLOCKS, Key, true})),
+                        end, {[], PublicBlocks}, SavedBlocks2),
 
-                    DeletedBlocksSet = get_set({?DELETED_BLOCKS, Key}),
-                    DeletedBlocks = sets:to_list(DeletedBlocksSet),
-                    BlocksToSave = get({?PUBLIC_BLOCKS, Key}),
-                    BlocksToSave2 = BlocksToSave -- DeletedBlocks,
-                    BlocksToSave3 = BlocksToSave2 ++ sets:to_list(PublicBlocks2),
-                    BlocksToSave4 = lists:sort(BlocksToSave3),
+                    DeletedBlocks = sets:to_list(get_set({?DELETED_BLOCKS, Key})),
+                    BlocksToSave = lists:sort(PublicBlocks2),
 
-                    {BlocksToSave5, LocalBlocks2} = case {BlocksToSave4, LocalBlocks} of
+                    {BlocksToSave2, LocalBlocks2} = case {BlocksToSave, lists:sort(LocalBlocks)} of
                         {[], [FirstLocal | LocalBlocksTail]} ->
                             {[FirstLocal], LocalBlocksTail};
                         _ ->
-                            {BlocksToSave4, LocalBlocks}
+                            {BlocksToSave, LocalBlocks}
                     end,
 
-                    put({?PUBLIC_BLOCKS, Key}, BlocksToSave5),
+                    put({?PUBLIC_BLOCKS, Key}, BlocksToSave2),
                     {Doc#document{value = Location#file_location{
-                        blocks = BlocksToSave5}}, LocalBlocks2, DeletedBlocks}
+                        blocks = BlocksToSave2}}, LocalBlocks2, DeletedBlocks}
             end,
 
             case get(?FLUSH_PID) of
@@ -737,16 +726,14 @@ flush_local_blocks(#document{key = Key,
                 ok ->
                     erase({?DELETED_BLOCKS, Key}),
                     erase({?RESET_BLOCKS, Key}),
-                    erase({?SAVED_BLOCKS, Key, true}),
-                    erase({?SAVED_BLOCKS, Key, undefined}),
+                    erase({?SAVED_BLOCKS, Key}),
                     ok;
                 Error -> Error
             end;
         _ ->
             erase({?DELETED_BLOCKS, Key}),
             erase({?RESET_BLOCKS, Key}),
-            erase({?SAVED_BLOCKS, Key, true}),
-            erase({?SAVED_BLOCKS, Key, undefined}),
+            erase({?SAVED_BLOCKS, Key}),
             ok
     end.
 
