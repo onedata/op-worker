@@ -660,7 +660,7 @@ flush_key(Key, Type) ->
 
                     DeletedBlocks = sets:to_list(get_set({?DELETED_BLOCKS, Key})),
 
-                    {BlocksToSave, ResultLocalBlocks} = case
+                    {ResultPublicBlocks, ResultLocalBlocks} = case
                         {lists:sort(MergedPublicBlocks), lists:sort(LocalBlocks)} of
                         {[], [FirstLocal | LocalBlocksTail]} ->
                             {[FirstLocal], LocalBlocksTail};
@@ -668,9 +668,9 @@ flush_key(Key, Type) ->
                             {Public, Local}
                     end,
 
-                    put({?PUBLIC_BLOCKS, Key}, BlocksToSave),
+                    put({?PUBLIC_BLOCKS, Key}, ResultPublicBlocks),
                     {Doc#document{value = Location#file_location{
-                        blocks = BlocksToSave}}, ResultLocalBlocks, DeletedBlocks}
+                        blocks = ResultPublicBlocks}}, ResultLocalBlocks, DeletedBlocks}
             end,
 
             case get(?FLUSH_PID) of
