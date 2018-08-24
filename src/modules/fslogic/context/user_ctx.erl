@@ -19,8 +19,7 @@
 
 %% Context definition
 -record(user_ctx, {
-    session :: session:doc(),
-    user_doc :: od_user:doc()
+    session :: session:doc()
 }).
 
 -type ctx() :: #user_ctx{}.
@@ -41,13 +40,9 @@
 %%--------------------------------------------------------------------
 -spec new(session:id()) -> ctx() | no_return().
 new(SessId) ->
-    {ok, Session = #document{value = #session{
-        identity = #user_identity{user_id = UserId}
-    }}} = session:get(SessId),
-    {ok, User} = user_logic:get(SessId, UserId),
+    {ok, Session} = session:get(SessId),
     #user_ctx{
-        session = Session,
-        user_doc = User
+        session = Session
     }.
 
 %%--------------------------------------------------------------------
@@ -56,8 +51,17 @@ new(SessId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_user(ctx()) -> od_user:doc().
-get_user(#user_ctx{user_doc = User}) ->
-    User.
+get_user(#user_ctx{session = #document{key = SessId, value = #session{
+    identity = #user_identity{user_id = UserId}
+}}}) ->
+    case get(user_ctx_cache) of
+        undefined ->
+            {ok, User} = user_logic:get(SessId, UserId),
+            put(user_ctx_cache, User),
+            User;
+        CachedUser ->
+            CachedUser
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
