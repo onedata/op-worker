@@ -29,7 +29,7 @@
 % Block API
 -export([get_blocks/1, save_blocks/2, cache_blocks/2, get_blocks_tree/1,
     use_blocks/2, finish_blocks_usage/1, get_changed_blocks/1,
-    mark_changed_blocks/5, set_local_change/1]).
+    mark_changed_blocks/1, mark_changed_blocks/5, set_local_change/1]).
 % Size API
 -export([get_local_size/1, update_size/2]).
 
@@ -500,6 +500,15 @@ get_changed_blocks(Key) ->
 
 %%-------------------------------------------------------------------
 %% @doc
+%% @equiv mark_changed_blocks(Key, all, all, [], []).
+%% @end
+%%-------------------------------------------------------------------
+-spec mark_changed_blocks(file_location:id()) -> ok.
+mark_changed_blocks(Key) ->
+    mark_changed_blocks(Key, all, all, [], []).
+
+%%-------------------------------------------------------------------
+%% @doc
 %% Marks blocks as changed.
 %% @end
 %%-------------------------------------------------------------------
@@ -510,16 +519,16 @@ mark_changed_blocks(Key, all, all, _, _) ->
     erase({?DELETED_BLOCKS, Key}),
     put({?RESET_BLOCKS, Key}, true),
     ok;
-mark_changed_blocks(Key, Saved, Deleted, LastSaved, LastDelete) ->
-    Local = get(?LOCAL_CHANGES),
+mark_changed_blocks(Key, Saved, Deleted, LastSaved, LastDeleted) ->
+    AreChangesLocal = get(?LOCAL_CHANGES),
     PublicBlocks = get({?PUBLIC_BLOCKS, Key}),
-    PublicDel = lists:any(fun(Block) ->
+    WasDeletedFromPublic = lists:any(fun(Block) ->
         lists:member(Block, PublicBlocks)
-    end, LastDelete),
+    end, LastDeleted),
 
-    case PublicDel orelse (Local =/= true) of
+    case WasDeletedFromPublic orelse (AreChangesLocal =/= true) of
         true ->
-            put({?PUBLIC_BLOCKS, Key}, (PublicBlocks -- LastDelete) ++ LastSaved);
+            put({?PUBLIC_BLOCKS, Key}, (PublicBlocks -- LastDeleted) ++ LastSaved);
         _ ->
             ok
     end,
@@ -636,9 +645,10 @@ flush_key(Key, Type) ->
 
                     SavedBlocks = get_set({?SAVED_BLOCKS, Key}),
                     PublicBlocks = get({?PUBLIC_BLOCKS, Key}),
-                    SavedBlocks2 = sets:subtract(SavedBlocks, sets:from_list(PublicBlocks)),
+                    SavedBlocksWithoutPublic = sets:subtract(SavedBlocks,
+                        sets:from_list(PublicBlocks)),
 
-                    {LocalBlocks, PublicBlocks2} = sets:fold(
+                    {LocalBlocks, MergedPublicBlocks} = sets:fold(
                         fun(#file_block{size = S} = Block, {TmpLocalBlocks, TmpPublicBlocks}) ->
                             case (S >= SizeThreshold) orelse (S >= (Size * PercentThreshold / 100)) of
                                 true ->
@@ -646,21 +656,21 @@ flush_key(Key, Type) ->
                                 _ ->
                                     {[Block | TmpLocalBlocks], TmpPublicBlocks}
                             end
-                        end, {[], PublicBlocks}, SavedBlocks2),
+                        end, {[], PublicBlocks}, SavedBlocksWithoutPublic),
 
                     DeletedBlocks = sets:to_list(get_set({?DELETED_BLOCKS, Key})),
-                    BlocksToSave = lists:sort(PublicBlocks2),
 
-                    {BlocksToSave2, LocalBlocks2} = case {BlocksToSave, lists:sort(LocalBlocks)} of
+                    {BlocksToSave, ResultLocalBlocks} = case
+                        {lists:sort(MergedPublicBlocks), lists:sort(LocalBlocks)} of
                         {[], [FirstLocal | LocalBlocksTail]} ->
                             {[FirstLocal], LocalBlocksTail};
-                        _ ->
-                            {BlocksToSave, LocalBlocks}
+                        {Public, Local} ->
+                            {Public, Local}
                     end,
 
-                    put({?PUBLIC_BLOCKS, Key}, BlocksToSave2),
+                    put({?PUBLIC_BLOCKS, Key}, BlocksToSave),
                     {Doc#document{value = Location#file_location{
-                        blocks = BlocksToSave2}}, LocalBlocks2, DeletedBlocks}
+                        blocks = BlocksToSave}}, ResultLocalBlocks, DeletedBlocks}
             end,
 
             case get(?FLUSH_PID) of
