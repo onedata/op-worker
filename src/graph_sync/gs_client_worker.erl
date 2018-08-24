@@ -47,9 +47,6 @@
 -type connection_ref() :: pid().
 -type doc() :: datastore:document().
 
--define(KEEPALIVE_INTERVAL,
-    application:get_env(?APP_NAME, graph_sync_keepalive_interval, timer:seconds(30))
-).
 
 %% API
 -export([start_link/0]).
@@ -154,7 +151,6 @@ init([]) ->
             yes = global:register_name(?GS_CLIENT_WORKER_GLOBAL_NAME, self()),
             ?info("Started connection to Onezone: ~p", [ClientRef]),
             oneprovider:on_connection_to_oz(),
-            erlang:send_after(?KEEPALIVE_INTERVAL, self(), keepalive),
             {ok, #state{client_ref = ClientRef}};
         {error, _} = Error ->
             ?warning("Cannot start connection to Onezone: ~p", [Error]),
@@ -211,17 +207,6 @@ handle_cast(Request, #state{} = State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_info(keepalive, State = #state{client_ref = ClientRef}) ->
-    GsReq = #gs_req{
-        subtype = graph,
-        request = #gs_req_graph{
-            operation = get,
-            gri = #gri{type = od_provider, id = undefined, aspect = current_time}
-        }
-    },
-    {ok, _} = gs_client:sync_request(ClientRef, GsReq),
-    erlang:send_after(?KEEPALIVE_INTERVAL, self(), keepalive),
-    {noreply, State};
 handle_info({'EXIT', Pid, Reason}, #state{client_ref = Pid} = State) ->
     ?warning("Connection to Onezone lost, reason: ~p", [Reason]),
     {stop, normal, State};
@@ -555,10 +540,6 @@ is_authorized(?ROOT_SESS_ID, _, #gri{type = od_user, scope = protected}, _) ->
 is_authorized(?ROOT_SESS_ID, _, #gri{type = od_user, scope = shared}, _) ->
     true;
 
-is_authorized(?ROOT_SESS_ID, _, #gri{type = od_group, scope = private}, _) ->
-    false;
-is_authorized(?ROOT_SESS_ID, _, #gri{type = od_group, scope = protected}, _) ->
-    true;
 is_authorized(?ROOT_SESS_ID, _, #gri{type = od_group, scope = shared}, _) ->
     true;
 
@@ -619,26 +600,18 @@ is_user_authorized(UserId, _, _, #gri{type = od_user, id = UserId, scope = share
     true;
 is_user_authorized(ClientUserId, Client, AuthHint, #gri{type = od_user, id = TargetUserId, scope = shared}, _) ->
     case AuthHint of
-        ?THROUGH_GROUP(GroupId) ->
-            group_logic:can_view_user_through_group(Client, GroupId, ClientUserId, TargetUserId);
         ?THROUGH_SPACE(SpaceId) ->
             space_logic:can_view_user_through_space(Client, SpaceId, ClientUserId, TargetUserId);
         _ ->
             false
     end;
 
-is_user_authorized(UserId, _, _, #gri{type = od_group, scope = private}, CachedDoc) ->
-    group_logic:has_eff_privilege(CachedDoc, UserId, ?GROUP_VIEW);
-is_user_authorized(UserId, SessionId, _, #gri{type = od_group, scope = protected}, CachedDoc) ->
-    user_logic:has_eff_group(SessionId, UserId, CachedDoc#document.key);
-is_user_authorized(ClientUserId, Client, AuthHint, GRI = #gri{type = od_group, id = ChildId, scope = shared}, CachedDoc) ->
+is_user_authorized(ClientUserId, Client, AuthHint, #gri{type = od_group, id = GroupId, scope = shared}, _) ->
     case AuthHint of
-        ?THROUGH_GROUP(GroupId) ->
-            group_logic:can_view_child_through_group(Client, GroupId, ClientUserId, ChildId);
         ?THROUGH_SPACE(SpaceId) ->
-            space_logic:can_view_group_through_space(Client, SpaceId, ClientUserId, ChildId);
+            space_logic:can_view_group_through_space(Client, SpaceId, ClientUserId, GroupId);
         _ ->
-            is_user_authorized(ClientUserId, Client, AuthHint, GRI#gri{scope = protected}, CachedDoc)
+            user_logic:has_eff_group(Client, ClientUserId, GroupId)
     end;
 
 is_user_authorized(UserId, _, _, #gri{type = od_space, scope = private}, CachedDoc) ->

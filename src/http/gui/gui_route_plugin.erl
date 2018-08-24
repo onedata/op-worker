@@ -83,19 +83,11 @@ route(_) -> undefined.
     HandlerModule :: module().
 data_backend(true, <<"user">>) -> user_data_backend;
 
-data_backend(true, <<"group">>) -> group_data_backend;
-data_backend(true, <<"group-user-list">>) -> group_data_backend;
-data_backend(true, <<"group-group-list">>) -> group_data_backend;
-data_backend(true, <<"group-user-permission">>) -> group_data_backend;
-data_backend(true, <<"group-group-permission">>) -> group_data_backend;
-
 data_backend(true, <<"space">>) -> space_data_backend;
 data_backend(true, <<"space-user-list">>) -> space_data_backend;
 data_backend(true, <<"space-group-list">>) -> space_data_backend;
 data_backend(true, <<"space-provider-list">>) -> space_data_backend;
 data_backend(true, <<"space-transfer-list">>) -> space_data_backend;
-data_backend(true, <<"space-user-permission">>) -> space_data_backend;
-data_backend(true, <<"space-group-permission">>) -> space_data_backend;
 data_backend(true, <<"space-transfer-stat">>) -> space_data_backend;
 data_backend(true, <<"space-transfer-time-stat">>) -> space_data_backend;
 data_backend(true, <<"space-transfer-link-state">>) -> space_data_backend;

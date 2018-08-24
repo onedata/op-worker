@@ -44,7 +44,7 @@
 -export([verify_provider_identity/1, verify_provider_identity/2]).
 -export([verify_provider_nonce/2]).
 
--define(IPS_CACHE_TTL, 600). % 10 minutes
+-define(IPS_CACHE_TTL, application:get_env(?APP_NAME, provider_ips_cache_ttl, timer:minutes(10))). 
 
 %%%===================================================================
 %%% API
@@ -106,28 +106,22 @@ get_protected_data(SessionId, ProviderId) ->
 %% Useful for RPC calls from onepanel where od_provider record is not defined.
 %% @end
 %%--------------------------------------------------------------------
--spec get_as_map() -> map().
+-spec get_as_map() -> {ok, map()} | gs_protocol:error().
 get_as_map() ->
-    {ok, #document{key = ProviderId, value = ProviderRecord}} = ?MODULE:get(),
-    #od_provider{
-        name = Name,
-        admin_email = AdminEmail,
-        subdomain_delegation = SubdomainDelegation,
-        domain = Domain,
-        subdomain = Subdomain,
-        longitude = Longitude,
-        latitude = Latitude
-    } = ProviderRecord,
-    #{
-        id => ProviderId,
-        name => Name,
-        admin_email => AdminEmail,
-        subdomain_delegation => SubdomainDelegation,
-        domain => Domain,
-        subdomain => Subdomain,
-        longitude => Longitude,
-        latitude => Latitude
-    }.
+    case ?MODULE:get() of
+        {ok, #document{key = Id, value = Record}} ->
+            {ok, #{
+                id => Id,
+                name => Record#od_provider.name,
+                admin_email => Record#od_provider.admin_email,
+                subdomain_delegation => Record#od_provider.subdomain_delegation,
+                domain => Record#od_provider.domain,
+                subdomain => Record#od_provider.subdomain,
+                longitude => Record#od_provider.longitude,
+                latitude => Record#od_provider.latitude
+            }};
+        Error -> Error
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -294,21 +288,17 @@ resolve_ips(ProviderId) ->
 -spec resolve_ips(gs_client_worker:client(), od_provider:id()) ->
     {ok, [inet:ip4_address()]} | {error, term()}.
 resolve_ips(SessionId, ProviderId) ->
-    Now = time_utils:cluster_time_seconds(),
-    Name = binary_to_atom(term_to_binary({cached_ips, ProviderId}), latin1),
-    case application:get_env(?APP_NAME, Name) of
-        {ok, {IPs, Timestamp}} when Timestamp + ?IPS_CACHE_TTL > Now ->
-            IPs;
-        _ ->
-            case get_domain(SessionId, ProviderId) of
-                {ok, Domain} ->
-                    Ans = inet:getaddrs(binary_to_list(Domain), inet),
-                    application:set_env(?APP_NAME, Name, {Ans, Now}),
-                    Ans;
-                {error, _} = Error ->
-                    Error
-            end
-    end.
+    ResolveIPs = fun() ->
+        case get_domain(SessionId, ProviderId) of
+            {ok, Domain} ->
+                Ans = inet:getaddrs(binary_to_list(Domain), inet),
+                {true, Ans, ?IPS_CACHE_TTL};
+            {error, _} = Error ->
+                {false, Error}
+        end
+    end,
+    {ok, IP} = simple_cache:get({cached_ip, ProviderId}, ResolveIPs),
+    IP.
 
 
 %%--------------------------------------------------------------------
