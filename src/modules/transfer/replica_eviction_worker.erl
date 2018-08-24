@@ -68,7 +68,7 @@ process_replica_deletion_result({ok, ReleasedBytes}, FileUuid, TransferId) ->
 process_replica_deletion_result(Error, FileUuid, TransferId) ->
     ?error("Error ~p occured during replica eviction of file ~p in procedure ~p",
         [Error, FileUuid, TransferId]),
-    {ok, _} = transfer:increment_files_processed_counter(TransferId),
+    {ok, _} = transfer:increment_files_failed_and_processed_counters(TransferId),
     ok.
 
 %%%===================================================================
