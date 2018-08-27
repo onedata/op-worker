@@ -80,6 +80,8 @@ get_location(LocId, FileUuid, BlocksOptions) ->
                         {ok, LocationDoc};
                     true ->
                         {ok, fslogic_cache:attach_blocks(LocationDoc)};
+                    skip_local_blocks ->
+                        {ok, fslogic_cache:attach_public_blocks(LocationDoc)};
                     {blocks_num, Num} ->
                         {ok, LocationDoc#document{value =
                         Location#file_location{blocks =

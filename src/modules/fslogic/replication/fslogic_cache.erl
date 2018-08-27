@@ -25,7 +25,7 @@
     cache_event/2, clear_events/0]).
 % Doc API
 -export([get_doc/1, save_doc/1, cache_doc/1, delete_doc/1, attach_blocks/1,
-    attach_local_blocks/1, merge_local_blocks/1]).
+    attach_local_blocks/1, attach_public_blocks/1, merge_local_blocks/1]).
 % Block API
 -export([get_blocks/1, save_blocks/2, cache_blocks/2, get_blocks_tree/1,
     use_blocks/2, finish_blocks_usage/1, get_changed_blocks/1,
@@ -381,12 +381,22 @@ delete_doc(Key) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Attaches blocks to document as list or tree.
+%% Attaches blocks to document.
 %% @end
 %%-------------------------------------------------------------------
 -spec attach_blocks(file_location:doc()) -> file_location:doc().
 attach_blocks(#document{key = Key, value = Location} = LocationDoc) ->
     Blocks = get_blocks(Key),
+    LocationDoc#document{value = Location#file_location{blocks = Blocks}}.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Attaches public blocks to document.
+%% @end
+%%-------------------------------------------------------------------
+-spec attach_public_blocks(file_location:doc()) -> file_location:doc().
+attach_public_blocks(#document{key = Key, value = Location} = LocationDoc) ->
+    Blocks = get_public_blocks(Key),
     LocationDoc#document{value = Location#file_location{blocks = Blocks}}.
 
 %%-------------------------------------------------------------------
