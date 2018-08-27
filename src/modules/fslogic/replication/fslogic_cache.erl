@@ -29,7 +29,8 @@
 % Block API
 -export([get_blocks/1, save_blocks/2, cache_blocks/2, get_blocks_tree/1,
     use_blocks/2, finish_blocks_usage/1, get_changed_blocks/1,
-    mark_changed_blocks/1, mark_changed_blocks/5, set_local_change/1]).
+    mark_changed_blocks/1, mark_changed_blocks/5, set_local_change/1,
+    get_public_blocks/1]).
 % Size API
 -export([get_local_size/1, update_size/2]).
 
@@ -415,6 +416,26 @@ attach_local_blocks(#document{value = Location} = LocationDoc) ->
 -spec get_blocks(file_location:id()) -> fslogic_blocks:blocks().
 get_blocks(Key) ->
     tree_to_blocks(get_blocks_tree(Key)).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns public blocks of location.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_public_blocks(file_location:id()) -> fslogic_blocks:blocks().
+get_public_blocks(Key) ->
+    case get({?PUBLIC_BLOCKS, Key}) of
+        undefined ->
+            case get_doc(Key) of
+                #document{} ->
+                    get_public_blocks(Key);
+                _ ->
+                    ?warning("Get public blocks for not existing key ~p", [Key]),
+                    []
+            end;
+        Blocks ->
+            Blocks
+    end.
 
 %%-------------------------------------------------------------------
 %% @doc
