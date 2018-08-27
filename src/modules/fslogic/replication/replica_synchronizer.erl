@@ -432,69 +432,76 @@ init(FileCtx) ->
 handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priority, Type}, From,
     #state{from_sessions = FS, requested_blocks = RB, file_guid = FG,
         from_requests_types = RequestTypesMap} = State0) ->
-    State = case FG of
-        undefined ->
-            FileGuid = file_ctx:get_guid_const(FileCtx),
-            SpaceId = file_ctx:get_space_id_const(FileCtx),
-            {_LocalDoc, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
-            {DestStorageId, FileCtx3} = file_ctx:get_storage_id(FileCtx2),
-            {DestFileId, FileCtx4} = file_ctx:get_storage_file_id(FileCtx3),
-            {_LocationDocs, FileCtx5} = file_ctx:get_file_location_docs(FileCtx4),
-            State0#state{
-                file_ctx = FileCtx5,
-                dest_storage_id = DestStorageId,
-                dest_file_id = DestFileId,
-                file_guid = FileGuid,
-                space_id = SpaceId
-            };
-        _ ->
-            State0
-    end,
+    try
+        State = case FG of
+            undefined ->
+                FileGuid = file_ctx:get_guid_const(FileCtx),
+                SpaceId = file_ctx:get_space_id_const(FileCtx),
+                {_LocalDoc, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
+                {DestStorageId, FileCtx3} = file_ctx:get_storage_id(FileCtx2),
+                {DestFileId, FileCtx4} = file_ctx:get_storage_file_id(FileCtx3),
+                {_LocationDocs, FileCtx5} = file_ctx:get_file_location_docs(FileCtx4),
+                State0#state{
+                    file_ctx = FileCtx5,
+                    dest_storage_id = DestStorageId,
+                    dest_file_id = DestFileId,
+                    file_guid = FileGuid,
+                    space_id = SpaceId
+                };
+            _ ->
+                State0
+        end,
 
-    TransferId =/= undefined andalso (catch gproc:add_local_counter(TransferId, 1)),
-    OverlappingInProgress = find_overlapping(Block, State),
-    {OverlappingBlocks, ExistingRefs} = lists:unzip(OverlappingInProgress),
-    Holes = get_holes(Block, OverlappingBlocks),
-    NewTransfers = start_transfers(Holes, TransferId, State, Priority),
-    {_, NewRefs} = lists:unzip(NewTransfers),
-    case ExistingRefs ++ NewRefs of
-        [] ->
-            FileLocation =
-                file_ctx:fill_location_gaps([Block], fslogic_cache:get_local_location(),
-                    fslogic_cache:get_all_locations(), fslogic_cache:get_uuid()),
-            {EventOffset, EventSize} = fslogic_location_cache:get_blocks_range(FileLocation, [Block]),
-            FLC = #file_location_changed{file_location = FileLocation,
-                change_beg_offset = EventOffset, change_end_offset = EventSize},
-            case Type of
-                sync ->
-                    {reply, {ok, FLC}, State, ?DIE_AFTER};
-                async ->
-                    {reply, ok, State, ?DIE_AFTER}
-            end;
-        RelevantRefs ->
-            State1 = associate_from_with_refs(From, RelevantRefs, State),
-            State2 = associate_from_with_tid(From, TransferId, State1),
-            State3 = add_in_progress(NewTransfers, State2),
-            State5 = case Prefetch of
-                true ->
-                    % TODO VFS-4690 - does not work well while many simultaneous
-                    % transfers do prefetching
-                    State4 = adjust_sequence_hits(Block, NewRefs, State3),
-                    prefetch(NewTransfers, TransferId, State4);
-                _ ->
-                    State3
-            end,
-            State6 = State5#state{from_sessions = maps:put(From, Session, FS)},
-            State7 = State6#state{requested_blocks = maps:put(From, Block, RB)},
-            State8 = State7#state{from_requests_types =
-            maps:put(From, Type, RequestTypesMap)},
+        TransferId =/= undefined andalso (catch gproc:add_local_counter(TransferId, 1)),
+        OverlappingInProgress = find_overlapping(Block, State),
+        {OverlappingBlocks, ExistingRefs} = lists:unzip(OverlappingInProgress),
+        Holes = get_holes(Block, OverlappingBlocks),
+        NewTransfers = start_transfers(Holes, TransferId, State, Priority),
+        {_, NewRefs} = lists:unzip(NewTransfers),
+        case ExistingRefs ++ NewRefs of
+            [] ->
+                FileLocation =
+                    file_ctx:fill_location_gaps([Block], fslogic_cache:get_local_location(),
+                        fslogic_cache:get_all_locations(), fslogic_cache:get_uuid()),
+                {EventOffset, EventSize} = fslogic_location_cache:get_blocks_range(FileLocation, [Block]),
+                FLC = #file_location_changed{file_location = FileLocation,
+                    change_beg_offset = EventOffset, change_end_offset = EventSize},
+                case Type of
+                    sync ->
+                        {reply, {ok, FLC}, State, ?DIE_AFTER};
+                    async ->
+                        {reply, ok, State, ?DIE_AFTER}
+                end;
+            RelevantRefs ->
+                State1 = associate_from_with_refs(From, RelevantRefs, State),
+                State2 = associate_from_with_tid(From, TransferId, State1),
+                State3 = add_in_progress(NewTransfers, State2),
+                State5 = case Prefetch of
+                    true ->
+                        % TODO VFS-4690 - does not work well while many simultaneous
+                        % transfers do prefetching
+                        State4 = adjust_sequence_hits(Block, NewRefs, State3),
+                        prefetch(NewTransfers, TransferId, State4);
+                    _ ->
+                        State3
+                end,
+                State6 = State5#state{from_sessions = maps:put(From, Session, FS)},
+                State7 = State6#state{requested_blocks = maps:put(From, Block, RB)},
+                State8 = State7#state{from_requests_types =
+                maps:put(From, Type, RequestTypesMap)},
 
-            case Type of
-                sync ->
-                    {noreply, State8, ?DIE_AFTER};
-                async ->
-                    {reply, ok, State8, ?DIE_AFTER}
-            end
+                case Type of
+                    sync ->
+                        {noreply, State8, ?DIE_AFTER};
+                    async ->
+                        {reply, ok, State8, ?DIE_AFTER}
+                end
+        end
+    catch
+        E1:E2 ->
+            ?error_stacktrace("Unable to start transfer due to error ~p:~p",
+                [E1, E2]),
+            {reply, {error, E2}, State0, ?DIE_AFTER}
     end;
 
 handle_call(?FLUSH_EVENTS, _From, State) ->
