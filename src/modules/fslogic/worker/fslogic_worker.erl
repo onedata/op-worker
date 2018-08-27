@@ -408,6 +408,9 @@ handle_file_request(UserCtx, #truncate{size = Size}, FileCtx) ->
 handle_file_request(UserCtx, #synchronize_block{block = Block, prefetch = Prefetch,
     priority = Priority}, FileCtx) ->
     sync_req:synchronize_block(UserCtx, FileCtx, Block, Prefetch, undefined, Priority);
+handle_file_request(UserCtx, #block_synchronization_request{block = Block, prefetch = Prefetch,
+    priority = Priority}, FileCtx) ->
+    sync_req:request_block_synchronization(UserCtx, FileCtx, Block, Prefetch, undefined, Priority);
 handle_file_request(UserCtx, #synchronize_block_and_compute_checksum{block = Block,
     prefetch = Prefetch, priority = Priority}, FileCtx) ->
     sync_req:synchronize_block_and_compute_checksum(UserCtx, FileCtx, Block, Prefetch, Priority);
