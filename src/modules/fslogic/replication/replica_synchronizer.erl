@@ -121,7 +121,7 @@ synchronize(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
 %%--------------------------------------------------------------------
 -spec request_synchronization(user_ctx:ctx(), file_ctx:ctx(), block(),
     Prefetch :: boolean(), transfer:id() | undefined, non_neg_integer()) ->
-    {ok, #file_location_changed{}} | {error, Reason :: any()}.
+    ok | {error, Reason :: any()}.
 request_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
     request_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId,
         Priority, async).
@@ -135,7 +135,7 @@ request_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority)
 %%--------------------------------------------------------------------
 -spec request_synchronization(user_ctx:ctx(), file_ctx:ctx(), block(),
     Prefetch :: boolean(), transfer:id() | undefined, non_neg_integer(),
-    request_type()) -> {ok, #file_location_changed{}} | {error, Reason :: any()}.
+    request_type()) -> ok | {ok, #file_location_changed{}} | {error, Reason :: any()}.
 request_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId,
     Priority, SyncType) ->
     EnlargedBlock = enlarge_block(Block, Prefetch),
@@ -1055,7 +1055,7 @@ flush_blocks(#state{cached_blocks = Blocks} = State, ExcludeSessions,
         off ->
             false;
         _ ->
-            ToInvalidate = [FinalBlock || {_From, FinalBlock} <- FinalBlocks],
+            ToInvalidate = [FinalBlock || {_From, FinalBlock, _Type} <- FinalBlocks],
             Blocks2 = fslogic_blocks:consolidate(fslogic_blocks:invalidate(Blocks, ToInvalidate)),
             lists:foreach(fun(Block) ->
                 flush_blocks_list([Block], ExcludeSessions, all)
