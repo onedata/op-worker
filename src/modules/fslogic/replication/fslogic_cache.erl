@@ -119,12 +119,18 @@ flush() ->
 flush(Type) ->
     KM = get(?KEYS_MODIFIED),
     KBM = get(?KEYS_BLOCKS_MODIFIED),
+    KeysToFlush = case Type of
+        terminate -> get(?KEYS);
+        _ ->
+            KM ++ (KBM -- KM)
+    end,
+
     Saved = lists:foldl(fun(Key, Acc) ->
         case flush_key(Key, Type) of
             ok -> [Key | Acc];
             _ -> Acc
         end
-    end, [], KM ++ (KBM -- KM)),
+    end, [], KeysToFlush),
     NewKM = KM -- Saved,
     NewKBM = KBM -- Saved,
     put(?KEYS_MODIFIED, NewKM),
