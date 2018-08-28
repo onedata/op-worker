@@ -81,7 +81,7 @@ get_blocks_for_sync(Locations, Blocks) ->
 %%--------------------------------------------------------------------
 -spec get_unique_blocks(file_ctx:ctx()) -> {fslogic_blocks:blocks(), file_ctx:ctx()}.
 get_unique_blocks(FileCtx) ->
-    {LocationDocs, FileCtx2} = file_ctx:get_file_location_docs(FileCtx),
+    {LocationDocs, FileCtx2} = file_ctx:get_file_location_docs(FileCtx, skip_local_blocks),
     LocalLocations = filter_local_locations(LocationDocs),
     RemoteLocations = LocationDocs -- LocalLocations,
     LocalBlocksList = get_all_blocks(LocalLocations),
@@ -101,7 +101,7 @@ get_unique_blocks(FileCtx) ->
     {undefined | [{od_provider:id(), fslogic_blocks:blocks()}] , file_ctx:ctx()}.
 get_duplicated_blocks(FileCtx, LocalVV) ->
     % TODO - local blocks are always duplicated somewhere
-    {LocationDocs, FileCtx2} = file_ctx:get_file_location_docs(FileCtx),
+    {LocationDocs, FileCtx2} = file_ctx:get_file_location_docs(FileCtx, skip_local_blocks),
     LocalLocations = filter_local_locations(LocationDocs),
     LocalBlocksList = get_all_blocks(LocalLocations),
     case LocalBlocksList of
@@ -123,7 +123,7 @@ get_duplicated_blocks(FileCtx, LocalVV) ->
 -spec get_all_blocks([file_location:doc()]) -> fslogic_blocks:blocks().
 get_all_blocks(LocationList) ->
     Blocks = lists:flatmap(fun(Location) ->
-        fslogic_location_cache:get_blocks(Location)
+        fslogic_location_cache:get_blocks(Location, #{skip_local => true})
     end, LocationList),
     fslogic_blocks:consolidate(lists:sort(Blocks)).
 
