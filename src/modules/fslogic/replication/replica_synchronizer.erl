@@ -78,6 +78,8 @@
     caching_events_timer :: undefined | reference()
 }).
 
+-define(BLOCK(__Offset, __Size), #file_block{offset = __Offset, size = __Size}).
+
 % API
 -export([synchronize/6, update_replica/4, force_flush_events/1, cancel/1,
     terminate_all/0]).
@@ -869,13 +871,14 @@ enlarge_block(Block, _Prefetch) ->
 %% priorities equal or higher (numerically lower ones) are taken in account).
 %% @end
 %%--------------------------------------------------------------------
--spec find_overlapping(block(), priority(), InProgress) -> Overlapping when
-    InProgress :: ordsets:ordset([{block(), fetch_ref(), priority()}]),
+-spec find_overlapping(block(), priority(), Blocks) -> Overlapping when
+    Blocks :: ordsets:ordset([{block(), fetch_ref(), priority()}]),
     Overlapping :: [{block(), fetch_ref(), priority()}].
-find_overlapping(#file_block{offset = Offset, size = Size}, Priority, InProgress) ->
+find_overlapping(#file_block{offset = Begin, size = Size}, Priority, Blocks) ->
+    End = Begin + Size,
     lists:filter(fun({#file_block{offset = O, size = S}, _Ref, P}) ->
-        P =< Priority andalso O < Offset + Size andalso O + S > Offset
-    end, ordsets:to_list(InProgress)).
+        P =< Priority andalso O < End andalso O + S > Begin
+    end, ordsets:to_list(Blocks)).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -895,17 +898,20 @@ get_holes(#file_block{offset = Offset, size = Size}, ExistingBlocks) ->
 %%--------------------------------------------------------------------
 -spec get_holes(Offset :: non_neg_integer(), Size :: non_neg_integer(),
     Existing :: [block()], Acc :: [block()]) -> Holes :: [block()].
-get_holes(_Offset, Size, [], Acc) when Size =< 0 ->
+get_holes(_Offset, Size, _Existing, Acc) when Size =< 0 ->
     lists:reverse(Acc);
 get_holes(Offset, Size, [], Acc) ->
-    get_holes(Offset + Size, 0, [],
-        [#file_block{offset = Offset, size = Size} | Acc]);
-get_holes(Offset, Size, [#file_block{offset = Offset, size = S} | Blocks], Acc) ->
-    get_holes(Offset + S, Size - S, Blocks, Acc);
-get_holes(Offset, Size, [#file_block{offset = O} | Blocks], Acc) ->
-    HoleSize = O - Offset,
-    get_holes(Offset + HoleSize, Size - HoleSize, Blocks,
-        [#file_block{offset = Offset, size = HoleSize} | Acc]).
+    get_holes(Offset + Size, 0, [], [?BLOCK(Offset, Size) | Acc]);
+get_holes(Offset, Size, [?BLOCK(O, S) | Blocks], Acc) when Offset < O ->
+    NewOffset = O + S,
+    NewSize = Offset + Size - NewOffset,
+    get_holes(NewOffset, NewSize, Blocks, [?BLOCK(Offset, O - Offset) | Acc]);
+get_holes(Offset, Size, [?BLOCK(O, S) | Blocks], Acc) when O =< Offset andalso O + S > Offset ->
+    NewOffset = O + S,
+    NewSize = Offset + Size - NewOffset,
+    get_holes(NewOffset, NewSize, Blocks, Acc);
+get_holes(Offset, Size, [_ | Blocks], Acc) ->
+    get_holes(Offset, Size, Blocks, Acc).
 
 %%--------------------------------------------------------------------
 %% @private

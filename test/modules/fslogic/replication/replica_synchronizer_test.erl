@@ -247,6 +247,27 @@ get_holes_test_() ->
         ),
 
         ?_assertEqual(
+            [?BLOCK(7, 1), ?BLOCK(15, 1)],
+            replica_synchronizer:get_holes(
+                ?BLOCK(7, 9), [?BLOCK(8, 7)]
+            )
+        ),
+
+        ?_assertEqual(
+            [?BLOCK(7, 1), ?BLOCK(11, 1), ?BLOCK(15, 1)],
+            replica_synchronizer:get_holes(
+                ?BLOCK(7, 9), [?BLOCK(8, 3), ?BLOCK(12, 3)]
+            )
+        ),
+
+        ?_assertEqual(
+            [?BLOCK(7, 1), ?BLOCK(11, 1), ?BLOCK(15, 1)],
+            replica_synchronizer:get_holes(
+                ?BLOCK(7, 9), [?BLOCK(8, 3), ?BLOCK(9, 2), ?BLOCK(12, 3)]
+            )
+        ),
+
+        ?_assertEqual(
             [
                 ?BLOCK(7, 1)
             ],
