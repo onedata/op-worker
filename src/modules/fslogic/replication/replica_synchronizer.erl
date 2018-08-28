@@ -90,6 +90,8 @@
 % For RPC
 -export([apply_if_alive_internal/2, apply_internal/2, apply_or_run_locally_internal/3,
     init_or_return_existing/1]).
+% For testing
+-export([find_overlapping/3]).
 
 %%%===================================================================
 %%% API
@@ -418,7 +420,7 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
     end,
 
     TransferId =/= undefined andalso (catch gproc:add_local_counter(TransferId, 1)),
-    OverlappingInProgress = find_overlapping(Block, Priority, State),
+    OverlappingInProgress = find_overlapping(Block, Priority, State#state.in_progress),
     {OverlappingBlocks, ExistingRefs, _Priorities} = lists:unzip3(OverlappingInProgress),
     Holes = get_holes(Block, OverlappingBlocks),
     NewTransfers = start_transfers(Holes, TransferId, State, Priority),
@@ -867,15 +869,13 @@ enlarge_block(Block, _Prefetch) ->
 %% priorities equal or higher (numerically lower ones) are taken in account).
 %% @end
 %%--------------------------------------------------------------------
--spec find_overlapping(block(), priority(), #state{}) ->
+-spec find_overlapping(block(), priority(), InProgress) -> Overlapping when
+    InProgress :: ordsets:ordset([{block(), fetch_ref(), priority()}]),
     Overlapping :: [{block(), fetch_ref(), priority()}].
-find_overlapping(#file_block{offset = Offset, size = Size}, Priority, State) ->
+find_overlapping(#file_block{offset = Offset, size = Size}, Priority, InProgress) ->
     lists:filter(fun({#file_block{offset = O, size = S}, _Ref, P}) ->
-        AreOverlapping = (O =< Offset andalso Offset < O + S) orelse
-            (Offset =< O andalso O < Offset + Size),
-
-        P =< Priority andalso AreOverlapping
-    end, State#state.in_progress).
+        P =< Priority andalso O < Offset + Size andalso O + S > Offset
+    end, ordsets:to_list(InProgress)).
 
 %%--------------------------------------------------------------------
 %% @private
