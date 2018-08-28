@@ -91,7 +91,7 @@
 -export([apply_if_alive_internal/2, apply_internal/2, apply_or_run_locally_internal/3,
     init_or_return_existing/1]).
 % For testing
--export([find_overlapping/3]).
+-export([find_overlapping/3, get_holes/2]).
 
 %%%===================================================================
 %%% API

@@ -22,11 +22,12 @@
 -define(IN_PROGRESS(Offset, Size, Priority),
     {?BLOCK(Offset, Size), undefined, Priority}).
 
+
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
 
-%% tests function aggregate/2
+
 find_overlapping_test_() ->
     BlocksInProgress = ordsets:from_list([
         ?IN_PROGRESS(0, 10, 0),
@@ -209,5 +210,67 @@ find_overlapping_test_() ->
                 ?BLOCK(280, 10), 155, BlocksInProgress
             ))
     ].
+
+
+get_holes_test_() ->
+    [
+        ?_assertEqual(
+            [
+                ?BLOCK(7, 9)
+            ],
+            replica_synchronizer:get_holes(
+                ?BLOCK(7, 9), []
+            )
+        ),
+
+        ?_assertEqual(
+            [
+                ?BLOCK(8, 8)
+            ],
+            replica_synchronizer:get_holes(
+                ?BLOCK(7, 9), [?BLOCK(5, 3)]
+            )
+        ),
+
+        ?_assertEqual(
+            [],
+            replica_synchronizer:get_holes(
+                ?BLOCK(7, 9), [?BLOCK(6, 11)]
+            )
+        ),
+
+        ?_assertEqual(
+            [],
+            replica_synchronizer:get_holes(
+                ?BLOCK(7, 9), [?BLOCK(7, 9)]
+            )
+        ),
+
+        ?_assertEqual(
+            [
+                ?BLOCK(7, 1)
+            ],
+            replica_synchronizer:get_holes(
+                ?BLOCK(7, 9), [?BLOCK(8, 10)]
+            )
+        ),
+
+        ?_assertEqual(
+            [
+                ?BLOCK(10, 5)
+            ],
+            replica_synchronizer:get_holes(
+                ?BLOCK(7, 9), [?BLOCK(0, 10), ?BLOCK(15, 5)]
+            )
+        ),
+
+        ?_assertEqual(
+            [],
+            replica_synchronizer:get_holes(
+                ?BLOCK(7, 9), [?BLOCK(0, 12), ?BLOCK(10, 10)]
+            )
+        )
+    ].
+
 
 -endif.
