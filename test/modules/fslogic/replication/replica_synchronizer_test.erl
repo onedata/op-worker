@@ -288,6 +288,13 @@ get_holes_test_() ->
         ?_assertEqual(
             [],
             replica_synchronizer:get_holes(
+                ?BLOCK(7, 9), [?BLOCK(0, 20), ?BLOCK(10, 20), ?BLOCK(15, 30)]
+            )
+        ),
+
+        ?_assertEqual(
+            [],
+            replica_synchronizer:get_holes(
                 ?BLOCK(7, 9), [?BLOCK(0, 12), ?BLOCK(10, 10)]
             )
         )

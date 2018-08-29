@@ -24,6 +24,8 @@
 %% API
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
+-export([replicate_block/3]).
+
 -export([
     db_sync_basic_opts_test/1,
     db_sync_many_ops_test/1,
@@ -50,7 +52,8 @@
     distributed_delete_test/1,
     remote_driver_test/1,
     db_sync_with_delays_test/1,
-    db_sync_create_after_del_test/1
+    db_sync_create_after_del_test/1,
+    rtransfer_fetch_test/1
 ]).
 
 -define(TEST_CASES, [
@@ -71,7 +74,8 @@
     echo_and_delete_file_loop_test,
     distributed_delete_test,
     remote_driver_test,
-    db_sync_create_after_del_test
+    db_sync_create_after_del_test,
+    rtransfer_fetch_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -416,6 +420,160 @@ remote_driver_test(Config) ->
 
 db_sync_with_delays_test(Config) ->
     multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {4,0,0,2}, 300, 50, 50).
+
+rtransfer_fetch_test(Config) ->
+    [Worker1a, Worker1b, Worker2 | _] = ?config(op_worker_nodes, Config),
+    Workers1 = [Worker1a, Worker1b],
+
+    User = <<"user1">>,
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
+    SessId = fun(W) -> ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config) end,
+    FilePath = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
+
+    ChunkSize = 1024,
+    ChunksNum = 1024,
+    PartNum = 1, % file size in MB
+    FileSizeBytes = ChunkSize * ChunksNum * PartNum,
+
+    % File creation
+    ?assertMatch({ok, _}, lfm_proxy:create(
+        Worker2, SessId(Worker2), FilePath, 8#755
+    )),
+    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(
+        Worker2, SessId(Worker2), {path, FilePath}, rdwr
+    )),
+
+    BytesChunk = crypto:strong_rand_bytes(ChunkSize),
+    Bytes = lists:foldl(fun(_, Acc) ->
+        <<Acc/binary, BytesChunk/binary>>
+    end, <<>>, lists:seq(1, ChunksNum)),
+
+    PartSize = ChunksNum * ChunkSize,
+    lists:foreach(fun(Num) ->
+        ?assertEqual({ok, PartSize}, lfm_proxy:write(
+            Worker2, Handle, Num * PartSize, Bytes
+        ))
+    end, lists:seq(0, PartNum - 1)),
+
+    ?assertEqual(ok, lfm_proxy:close(Worker2, Handle)),
+
+    {ok, #file_attr{guid = GUID}} =
+        ?assertMatch({ok, #file_attr{size = FileSizeBytes}},
+            lfm_proxy:stat(Worker1a, SessId(Worker1a), {path, FilePath}), 60),
+    FileCtx = file_ctx:new_by_guid(GUID),
+
+    ct:pal("File created"),
+
+    InitialBlock1 = {0, 100, 10},
+    InitialBlock2 = {50, 150, 20},
+    FollowingBlocks = [
+        % overlapping block, but with higher priority - should be fetched
+        {90, 20, 0},
+
+        % partially overlapping block - non-overlapping part should be fetched
+        {190, 20, 32},
+
+        % non overlapping block - should be fetched
+        {300, 100, 255},
+
+        % overlapping blocks with lower priorities - should not be fetched
+        {0, 5, 10}, {70, 20, 10}, {70, 130, 20},
+        {90, 20, 32}, {5, 10, 32}, {150, 50, 32}, {110, 5, 32}, {190, 10, 32},
+        {0, 15, 96}, {15, 15, 96}, {25, 15, 96}, {35, 15, 96}, {45, 15, 96},
+        {55, 15, 96}, {65, 15, 96}, {75, 15, 96}, {85, 15, 96}, {95, 15, 96},
+        {105, 15, 96}, {115, 15, 96}, {125, 15, 96}, {135, 15, 96},
+        {145, 15, 96}, {155, 15, 96}, {165, 15, 96}, {175, 15, 96}
+    ],
+    ExpectedBlocks = lists:sort([
+        {0, 100}, {100, 100}, {90, 20}, {200, 10}, {300, 100}
+    ]),
+    ExpectedBlocksNum = length(ExpectedBlocks),
+
+    ct:timetrap(timer:minutes(5)),
+
+    ok = test_utils:mock_new(Workers1, rtransfer_config, [passthrough]),
+    ok = test_utils:mock_expect(Workers1, rtransfer_config, fetch,
+        fun(Request, NotifyFun, CompleteFun, _, _, _) ->
+            #{offset := O, size := S} = Request,
+            Ref = make_ref(),
+            spawn(fun() ->
+                timer:sleep(timer:seconds(60)),
+                NotifyFun(Ref, O, S),
+                CompleteFun(Ref, {ok, ok})
+            end),
+            {ok, Ref}
+        end
+    ),
+
+    [Promise1] = async_replicate_blocks_start(
+        Worker1a, SessId(Worker1a), FileCtx, [InitialBlock1]
+    ),
+    timer:sleep(timer:seconds(5)),
+    [Promise2] = async_replicate_blocks_start(
+        Worker1a, SessId(Worker1a), FileCtx, [InitialBlock2]
+    ),
+    timer:sleep(timer:seconds(5)),
+    ?assertMatch(ok, replicate_blocks(
+        Worker1a, SessId(Worker1a), FileCtx, FollowingBlocks
+    )),
+    async_replicate_blocks_end([Promise1, Promise2]),
+
+    FetchRequests = lists:sum(meck_get_num_calls(
+        Workers1, rtransfer_config, fetch, '_')
+    ),
+    ?assertMatch(ExpectedBlocksNum, FetchRequests),
+
+    FetchedBlocks = lists:sort(get_fetched_blocks(Workers1)),
+    ?assertMatch(ExpectedBlocks, FetchedBlocks),
+
+    ok = test_utils:mock_unload(Workers1, rtransfer_config).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+get_fetched_blocks(Nodes) ->
+    Mod = rtransfer_config,
+    Fun = fetch,
+    lists:flatmap(fun(Node) ->
+        [CallsNum] = meck_get_num_calls([Node], Mod, Fun, '_'),
+        lists:foldl(fun(Num, Acc) ->
+            case rpc:call(Node, meck, capture, [Num, Mod, Fun, '_', 1]) of
+                #{offset := O, size := S} ->
+                    [{O, S} | Acc];
+                _ ->
+                    Acc
+            end
+        end, [], lists:seq(1, CallsNum))
+    end, Nodes).
+
+replicate_blocks(Worker, SessionID, FileCtx, Blocks) ->
+    Promises = async_replicate_blocks_start(Worker, SessionID, FileCtx, Blocks),
+    async_replicate_blocks_end(Promises).
+
+async_replicate_blocks_start(Worker, SessionID, FileCtx, Blocks) ->
+    lists:map(fun(Block) ->
+        rpc:async_call(Worker, ?MODULE, replicate_block, [
+            SessionID, FileCtx, Block
+        ])
+    end, Blocks).
+
+async_replicate_blocks_end(Promises) ->
+    lists:foreach(fun(Promise) ->
+        ?assertMatch(ok, rpc:yield(Promise))
+    end, Promises).
+
+replicate_block(SessionID, FileCtx, {Offset, Size, Priority}) ->
+    UserCtx = user_ctx:new(SessionID),
+    ?assertMatch({ok, _}, replica_synchronizer:synchronize(UserCtx, FileCtx,
+        #file_block{offset = Offset, size = Size}, false, undefined, Priority
+    )),
+    ok.
+
+meck_get_num_calls(Nodes, Module, Fun, Args) ->
+    lists:map(fun(Node) ->
+        rpc:call(Node, meck, num_calls, [Module, Fun, Args], timer:seconds(60))
+    end, Nodes).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
