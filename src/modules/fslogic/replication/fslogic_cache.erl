@@ -794,7 +794,7 @@ wait_for_flush(Key, FlushPid) ->
             ok
     after
         1000 ->
-            case rlang:is_process_alive(FlushPid) of
+            case erlang:is_process_alive(FlushPid) of
                 true ->
                     wait_for_flush(Key, FlushPid);
                 _ ->
