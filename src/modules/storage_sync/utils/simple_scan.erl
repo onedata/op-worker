@@ -173,13 +173,17 @@ maybe_import_storage_file(Job = #space_strategy_job{
                             }} = FL} ->
                             case fslogic_location_cache:get_blocks(FL, #{count => 2}) of
                                 [#file_block{offset = 0, size = Size}] ->
+                                    ?critical("FULL FILE LOCATION"),
                                     maybe_import_file_with_existing_metadata(Job2, FileCtx);
                                 [] when Size =:= 0 ->
+                                    ?critical("FULL FILE LOCATION2"),
                                     maybe_import_file_with_existing_metadata(Job2, FileCtx);
                                 _ ->
+                                    ?critical("NOT FULL FILE LOCATION"),
                                     {processed, FileCtx, Job2}
                             end;
                         _Other ->
+                            ?critical("NOT FULL FILE LOCATION"),
                             {processed, FileCtx, Job2}
                     end
             end
@@ -553,7 +557,22 @@ maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
         ->
             storage_sync_info:update_stat_time(FileUuid, NewLastStat, SpaceId),
             not_updated;
-        _ ->
+        #document{value = #storage_sync_info{
+            mtime = LastMtime,
+            last_stat = LastStat
+        }} ->
+            ?critical("LastMtime =:= StMtime = ~p, LastMtime = ~p, StMtime = ~p", [LastMtime =:= StMtime, LastMtime, StMtime]),
+            ?critical("Size =:= StSize = ~p", [Size =:= StSize]),
+            ?critical("LastStat > StMtime = ~p, LastStat = ~p, StMtime = ~p", [LastStat > StMtime, LastStat, StMtime]),
+
+            FileGuid = file_ctx:get_guid_const(FileCtx3),
+            NewFileBlocks = create_file_blocks(StSize),
+            replica_updater:update(FileCtx3, NewFileBlocks, StSize, true),
+            ok = lfm_event_utils:emit_file_written(FileGuid, NewFileBlocks, StSize, ?ROOT_SESS_ID),
+            storage_sync_info:update_mtime_and_stat_time(FileUuid, StMtime, NewLastStat, SpaceId),
+            updated;
+        Other ->
+            ?critical("OTHER: ~p", [Other]),
             FileGuid = file_ctx:get_guid_const(FileCtx3),
             NewFileBlocks = create_file_blocks(StSize),
             replica_updater:update(FileCtx3, NewFileBlocks, StSize, true),

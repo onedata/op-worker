@@ -769,8 +769,10 @@ get_file_location_with_filled_gaps(FileCtx, ReqRange)
     when is_list(ReqRange) orelse ReqRange == undefined ->
     % get locations
     {Locations, FileCtx2} = file_ctx:get_file_location_docs(FileCtx),
+%%    ?alert("Locations: ~p", [Locations]),
     {FileLocationDoc, FileCtx3} =
         file_ctx:get_or_create_local_file_location_doc(FileCtx2),
+%%    ?alert("FileLocationDoc: ~p", [FileLocationDoc]),
     {fill_location_gaps(ReqRange, FileLocationDoc, Locations,
         file_ctx:get_uuid_const(FileCtx3)), FileCtx3};
 get_file_location_with_filled_gaps(FileCtx, ReqRange) ->
@@ -1233,7 +1235,7 @@ get_or_create_local_regular_file_location_doc(FileCtx, IncludeBlocks) ->
                 replica_dbsync_hook:on_file_location_change(FileCtx4, ChangedLocation)
             end, LocationDocs),
             FileUuid = get_uuid_const(FileCtx),
-
+%%            ?alert("CreatedLocation: ~p", [CreatedLocation]),
             {
                 #document{
                     key = file_location:local_id(FileUuid),

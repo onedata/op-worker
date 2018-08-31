@@ -523,7 +523,7 @@
     cancel = false :: boolean(),
     replication_status :: undefined | transfer:status(),
     eviction_status :: undefined | transfer:status(),
-    scheduling_provider_id :: od_provider:id(),
+    scheduling_provider :: od_provider:id(),
     replicating_provider :: undefined | od_provider:id(),
     evicting_provider :: undefined | od_provider:id(),
     % pid of replication or replica_eviction controller, as both cannot execute

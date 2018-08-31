@@ -103,7 +103,10 @@ update_outdated_local_location_replica(FileCtx,
 ) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
     ?debug("Updating outdated replica of file ~p, versions: ~p vs ~p", [FileGuid, VV1, VV2]),
+%%    ?emergency("LocalDoc: ~p", [LocalDoc]),
+%%    ?emergency("ExternalDoc: ~p", [ExternalDoc]),
     LocationDocWithNewVersion = version_vector:merge_location_versions(LocalDoc, ExternalDoc),
+%%    ?emergency("LocationDocWithNewVersion: ~p", [LocationDocWithNewVersion]),
     Diff = version_vector:version_diff(LocalDoc, ExternalDoc),
     Changes = replica_changes:get_changes(ExternalDoc, Diff),
     case replica_invalidator:invalidate_changes(FileCtx, LocationDocWithNewVersion, Changes, NewSize, []) of

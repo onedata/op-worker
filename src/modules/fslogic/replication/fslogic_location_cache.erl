@@ -37,7 +37,7 @@
     force_flush/1]).
 %% Blocks getters/setters
 -export([get_blocks/1, get_blocks/2, set_blocks/2, set_final_blocks/2,
-    update_blocks/2]).
+    update_blocks/2, clear_blocks/2]).
 %% Blocks API
 -export([get_location_size/2, get_blocks_range/1, get_blocks_range/2]).
 
@@ -67,6 +67,7 @@ get_location(LocId, FileUuid, BlocksOptions) ->
     replica_synchronizer:apply_or_run_locally(FileUuid, fun() ->
         case fslogic_cache:get_doc(LocId) of
             #document{} = LocationDoc ->
+%%                ?emergency("LocationDoc: ~p", [LocationDoc]),
                 {ok, LocationDoc};
             Error ->
                 Error
@@ -99,8 +100,10 @@ get_location(LocId, FileUuid, BlocksOptions) ->
 -spec save_location(file_location:doc()) -> {ok, file_location:id()} | {error, term()}.
 save_location(#document{value = #file_location{uuid = Uuid}} = FileLocation) ->
     replica_synchronizer:apply_or_run_locally(Uuid, fun() ->
+%%        ?emergency("FUN1"),
         fslogic_cache:save_doc(FileLocation)
     end, fun() ->
+%%        ?emergency("FUN2"),
         fslogic_cache:save_doc(FileLocation)
     end, fun() ->
         file_location:save_and_update_quota(FileLocation)
@@ -282,6 +285,21 @@ set_blocks(#document{key = Key, value = FileLocation} = Doc, Blocks) ->
             fslogic_cache:mark_changed_blocks(Key),
             Doc
     end.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Clear blocks in location document.
+%% @end
+%%-------------------------------------------------------------------
+-spec clear_blocks(file_ctx:ctx(), location()) -> location().
+clear_blocks(FileCtx, Key) ->
+    replica_synchronizer:apply(FileCtx, fun() ->
+        fslogic_cache:init_flush_check(),
+        fslogic_cache:get_doc(Key),
+        fslogic_cache:save_blocks(Key, []),
+        fslogic_cache:mark_changed_blocks(Key)
+%%        fslogic_cache:flush_key(Key, sync)
+    end).
 
 %%-------------------------------------------------------------------
 %% @doc

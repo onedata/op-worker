@@ -151,6 +151,7 @@ can_support_deletion(#replica_deletion{
     requested_blocks = RequestedBlocks
 }) ->
     FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
+    ?critical("~nFileUuid: ~p~n", [FileUuid]),
     FileCtx = file_ctx:new_by_guid(FileGuid),
     {LocalLocationDoc, _FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
     LocalBlocks = replica_finder:get_all_blocks([LocalLocationDoc]),
@@ -158,12 +159,17 @@ can_support_deletion(#replica_deletion{
         [] ->
             % todo VFS-3728 currently works only if provider has all requested blocks
             LocalVV = file_location:get_version_vector(LocalLocationDoc),
+            ?critical("~nLocalVV: ~p~n", [LocalVV]),
+            ?critical("~nVV: ~p~n", [VV]),
             case version_vector:compare(LocalVV, VV)  of
                 greater ->
+                    ?critical("greater"),
                     {true, RequestedBlocks};
                 identical ->
+                    ?critical("identical"),
                     {true, RequestedBlocks};
-                _ ->
+                Other ->
+                    ?critical("other: ~p", [Other]),
                     false
             end;
         _ ->

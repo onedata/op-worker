@@ -156,5 +156,8 @@ get_replica_id(#document{key = LocationId, value = #file_location{provider_id = 
 %%--------------------------------------------------------------------
 -spec merge(version_vector(), version_vector(), replica_id()) -> version_vector().
 merge(LocalVV, ExternalVV, ReplicaId) ->
+    ?alert("version_vector:merge(~p, ~p, ~p)", [LocalVV, ExternalVV, ReplicaId]),
+    ?alert("get_version(ReplicaId, LocalVV) = ~p", [get_version(ReplicaId, LocalVV)]),
+    ?alert("get_version(ReplicaId, ExternalVV) = ~p", [get_version(ReplicaId, ExternalVV)]),
     ReplicaVersion = max(get_version(ReplicaId, LocalVV), get_version(ReplicaId, ExternalVV)),
     maps:put(ReplicaId, ReplicaVersion, LocalVV).

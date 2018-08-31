@@ -128,6 +128,7 @@
 }).
 
 -record(file_distribution, {
+    size
     provider_file_distributions :: [#provider_file_distribution{}]
 }).
 

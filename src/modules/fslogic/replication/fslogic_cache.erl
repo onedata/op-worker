@@ -19,7 +19,7 @@
 
 % Control API
 -export([init/1, is_current_proc_cache/0, flush/0, flush/1, flush/2, check_flush/0,
-    verify_flush_ans/3]).
+    verify_flush_ans/3, init_flush_check/0, flush_key/2]).
 % File/UUID API
 -export([get_uuid/0, get_local_location/0, get_all_locations/0,
     cache_event/2, clear_events/0]).
@@ -293,16 +293,20 @@ get_doc(Key) ->
     case get({?DOCS, Key}) of
         undefined ->
             case file_location:get(Key) of
-                {ok, #document{key = Key, value = #file_location{blocks = PublicBlocks}
-                    = Location} = LocationDoc} ->
-                    LocationDoc2 = LocationDoc#document{value =
-                    Location#file_location{blocks = []}},
+                {ok, LocationDoc = #document{
+                    key = Key,
+                    value = Location = #file_location{blocks = PublicBlocks}}
+                } ->
+                    LocationDoc2 = LocationDoc#document{
+                        value = Location#file_location{blocks = []}
+                    },
                     cache_doc(LocationDoc),
 
                     {Blocks, Sorted} = merge_local_blocks(LocationDoc),
                     put({?BLOCKS, Key}, blocks_to_tree(Blocks, Sorted)),
 
                     put({?PUBLIC_BLOCKS, Key}, PublicBlocks),
+%%                    ?emergency("LocationDoc2: ~p", [LocationDoc2]),
                     LocationDoc2;
                 {error, not_found} = ENF ->
                     ENF;
@@ -311,6 +315,7 @@ get_doc(Key) ->
                     throw({fslogic_cache_error, Error})
             end;
         Doc ->
+%%            ?emergency("LocationDoc3: ~p", [Doc]),
             Doc
     end.
 
@@ -321,6 +326,7 @@ get_doc(Key) ->
 %%-------------------------------------------------------------------
 -spec save_doc(file_location:doc()) -> {ok, file_location:id()}.
 save_doc(#document{key = Key} = LocationDoc) ->
+%%    ?emergency("save_doc: ~p", [LocationDoc]),
     Keys = get(?KEYS_MODIFIED),
     put(?KEYS_MODIFIED, [Key | (Keys -- [Key])]),
     init_flush_check(),
@@ -333,6 +339,7 @@ save_doc(#document{key = Key} = LocationDoc) ->
 %%-------------------------------------------------------------------
 -spec cache_doc(file_location:doc()) -> {ok, file_location:id()}.
 cache_doc(#document{key = Key} = LocationDoc) ->
+%%    ?emergency("cache_doc: ~p", [LocationDoc]),
     put({?FLUSHED_DOCS, Key}, LocationDoc),
     store_doc(LocationDoc).
 
@@ -629,50 +636,51 @@ flush_key(Key, Type) ->
             ok;
         #document{key = Key, value = #file_location{uuid = FileUuid,
             size = Size0} = Location} = Doc ->
-            {DocToSave, AddBlocks, DelBlocks} = case get({?RESET_BLOCKS, Key}) of
-                true ->
-                    % TODO VFS-4743 - makes all blocks public
-                    {attach_blocks(Doc), [], all};
-                _ ->
-                    Size = case Size0 of
-                        undefined -> 0;
-                        _ -> Size0
-                    end,
-                    SizeThreshold = application:get_env(?APP_NAME,
-                        public_block_size_treshold, 104857600),
-                    PercentThreshold = application:get_env(?APP_NAME,
-                        public_block_percent_treshold, 10),
+            {DocToSave = #document{value = #file_location{blocks = BlocksToSave}}, AddBlocks, DelBlocks} =
+                case get({?RESET_BLOCKS, Key}) of
+                    true ->
+                        % TODO VFS-4743 - makes all blocks public
+                        {attach_blocks(Doc), [], all};
+                    _ ->
+                        Size = case Size0 of
+                            undefined -> 0;
+                            _ -> Size0
+                        end,
+                        SizeThreshold = application:get_env(?APP_NAME,
+                            public_block_size_treshold, 104857600),
+                        PercentThreshold = application:get_env(?APP_NAME,
+                            public_block_percent_treshold, 10),
 
-                    SavedBlocks = get_set({?SAVED_BLOCKS, Key}),
-                    PublicBlocks = get({?PUBLIC_BLOCKS, Key}),
-                    SavedBlocksWithoutPublic = sets:subtract(SavedBlocks,
-                        sets:from_list(PublicBlocks)),
+                        SavedBlocks = get_set({?SAVED_BLOCKS, Key}),
+                        PublicBlocks = get({?PUBLIC_BLOCKS, Key}),
+                        SavedBlocksWithoutPublic = sets:subtract(SavedBlocks,
+                            sets:from_list(PublicBlocks)),
 
-                    {LocalBlocks, MergedPublicBlocks} = sets:fold(
-                        fun(#file_block{size = S} = Block, {TmpLocalBlocks, TmpPublicBlocks}) ->
-                            case (S >= SizeThreshold) orelse (S >= (Size * PercentThreshold / 100)) of
-                                true ->
-                                    {TmpLocalBlocks, [Block | TmpPublicBlocks]};
-                                _ ->
-                                    {[Block | TmpLocalBlocks], TmpPublicBlocks}
-                            end
-                        end, {[], PublicBlocks}, SavedBlocksWithoutPublic),
+                        {LocalBlocks, MergedPublicBlocks} = sets:fold(
+                            fun(#file_block{size = S} = Block, {TmpLocalBlocks, TmpPublicBlocks}) ->
+                                case (S >= SizeThreshold) orelse (S >= (Size * PercentThreshold / 100)) of
+                                    true ->
+                                        {TmpLocalBlocks, [Block | TmpPublicBlocks]};
+                                    _ ->
+                                        {[Block | TmpLocalBlocks], TmpPublicBlocks}
+                                end
+                            end, {[], PublicBlocks}, SavedBlocksWithoutPublic),
 
-                    DeletedBlocks = sets:to_list(get_set({?DELETED_BLOCKS, Key})),
+                        DeletedBlocks = sets:to_list(get_set({?DELETED_BLOCKS, Key})),
 
-                    {ResultPublicBlocks, ResultLocalBlocks} = case
-                        {lists:sort(MergedPublicBlocks), lists:sort(LocalBlocks)} of
-                        {[], [FirstLocal | LocalBlocksTail]} ->
-                            {[FirstLocal], LocalBlocksTail};
-                        {Public, Local} ->
-                            {Public, Local}
-                    end,
+                        {ResultPublicBlocks, ResultLocalBlocks} = case
+                            {lists:sort(MergedPublicBlocks), lists:sort(LocalBlocks)} of
+                            {[], [FirstLocal | LocalBlocksTail]} ->
+                                {[FirstLocal], LocalBlocksTail};
+                            {Public, Local} ->
+                                {Public, Local}
+                        end,
 
-                    put({?PUBLIC_BLOCKS, Key}, ResultPublicBlocks),
-                    {Doc#document{value = Location#file_location{
-                        blocks = ResultPublicBlocks}}, ResultLocalBlocks, DeletedBlocks}
+                        {Doc#document{value = Location#file_location{
+                            blocks = ResultPublicBlocks}}, ResultLocalBlocks, DeletedBlocks}
             end,
 
+            put({?PUBLIC_BLOCKS, Key}, BlocksToSave),
             case get(?FLUSH_PID) of
                 undefined ->
                     ok;
@@ -794,7 +802,7 @@ wait_for_flush(Key, FlushPid) ->
             ok
     after
         1000 ->
-            case rlang:is_process_alive(FlushPid) of
+            case erlang:is_process_alive(FlushPid) of
                 true ->
                     wait_for_flush(Key, FlushPid);
                 _ ->
