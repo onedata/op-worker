@@ -243,6 +243,11 @@ handle_enqueued(TransferId, Callback, EvictSourceReplica) ->
 -spec handle_active(transfer:id(), transfer:callback(), boolean()) -> ok.
 handle_active(TransferId, Callback, EvictSourceReplica) ->
     receive
+        % Due to asynchronous nature of transfer_changes, active msg can be
+        % sent several times. In case the controller is already in active state,
+        % it can be safely ignored.
+        replication_active ->
+            handle_active(TransferId, Callback, EvictSourceReplica);
         replication_completed ->
             {ok, _} = replication_status:handle_completed(TransferId),
             notify_callback(Callback, EvictSourceReplica);
@@ -260,6 +265,11 @@ handle_active(TransferId, Callback, EvictSourceReplica) ->
 -spec handle_aborting(transfer:id()) -> ok.
 handle_aborting(TransferId) ->
     receive
+        % Due to asynchronous nature of transfer_changes, aborting msg can be
+        % sent several times. In case the controller is already in aborting
+        % state, it can be safely ignored.
+        {replication_aborting, _Reason} ->
+            handle_aborting(TransferId);
         replication_cancelled ->
             {ok, _} = replication_status:handle_cancelled(TransferId);
         replication_failed ->
