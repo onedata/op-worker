@@ -58,7 +58,7 @@
 -spec get() ->
     {ok, od_provider:doc()} | gs_protocol:error().
 get() ->
-    get(?ROOT_SESS_ID, oneprovider:get_id_or_undefined()).
+    get(?ROOT_SESS_ID, ?SELF).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -77,6 +77,11 @@ get(ProviderId) ->
 %%--------------------------------------------------------------------
 -spec get(gs_client_worker:client(), od_provider:id()) ->
     {ok, od_provider:doc()} | gs_protocol:error().
+get(SessionId, ?SELF) ->
+    case oneprovider:get_id_or_undefined() of
+        undefined -> ?ERROR_UNREGISTERED_PROVIDER;
+        ProviderId -> get(SessionId, ProviderId)
+    end;
 get(SessionId, ProviderId) ->
     gs_client_worker:request(SessionId, #gs_req_graph{
         operation = get,
@@ -92,6 +97,11 @@ get(SessionId, ProviderId) ->
 %%--------------------------------------------------------------------
 -spec get_protected_data(gs_client_worker:client(), od_provider:id()) ->
     {ok, od_provider:doc()} | gs_protocol:error().
+get_protected_data(SessionId, ?SELF) ->
+    case oneprovider:get_id_or_undefined() of
+        undefined -> ?ERROR_UNREGISTERED_PROVIDER;
+        ProviderId -> get_protected_data(SessionId, ProviderId)
+    end;
 get_protected_data(SessionId, ProviderId) ->
     gs_client_worker:request(SessionId, #gs_req_graph{
         operation = get,
@@ -137,7 +147,7 @@ get_as_map() ->
 %%--------------------------------------------------------------------
 -spec get_name() -> {ok, od_provider:name()} | gs_protocol:error().
 get_name() ->
-    get_name(?ROOT_SESS_ID, oneprovider:get_id_or_undefined()).
+    get_name(?ROOT_SESS_ID, ?SELF).
 
 
 %%--------------------------------------------------------------------
@@ -173,7 +183,7 @@ get_name(SessionId, ProviderId) ->
 %%--------------------------------------------------------------------
 -spec get_spaces() -> {ok, [od_space:id()]} | gs_protocol:error().
 get_spaces() ->
-    get_spaces(?ROOT_SESS_ID, oneprovider:get_id_or_undefined()).
+    get_spaces(?ROOT_SESS_ID, ?SELF).
 
 
 %%--------------------------------------------------------------------
@@ -220,7 +230,7 @@ has_eff_user(SessionId, ProviderId, UserId) ->
 
 -spec supports_space(od_space:id()) -> boolean().
 supports_space(SpaceId) ->
-    supports_space(?ROOT_SESS_ID, oneprovider:get_id_or_undefined(), SpaceId).
+    supports_space(?ROOT_SESS_ID, ?SELF, SpaceId).
 
 
 -spec supports_space(od_provider:doc(), od_space:id()) ->
@@ -248,7 +258,7 @@ supports_space(SessionId, ProviderId, SpaceId) ->
 -spec get_domain() ->
     {ok, od_provider:doc()} | gs_protocol:error().
 get_domain() ->
-    get_domain(?ROOT_SESS_ID, oneprovider:get_id_or_undefined()).
+    get_domain(?ROOT_SESS_ID, ?SELF).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -346,7 +356,7 @@ set_delegated_subdomain(Subdomain) ->
     IPs = node_manager:get_cluster_ips(),
     case set_subdomain_delegation(Subdomain, IPs) of
         ok ->
-            gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id_or_undefined()),
+            gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id()),
             ok;
         ?ERROR_BAD_VALUE_IDENTIFIER_OCCUPIED(<<"subdomain">>) ->
             {error, subdomain_exists};
@@ -388,7 +398,7 @@ update_subdomain_delegation_ips() ->
 get_subdomain_delegation_ips() ->
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = get,
-        gri = #gri{type = od_provider, id = oneprovider:get_id_or_undefined(),
+        gri = #gri{type = od_provider, id = ?SELF,
             aspect = domain_config}
     }),
     case Result of
@@ -417,11 +427,11 @@ set_domain(Domain) ->
         <<"domain">> => Domain},
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = update, data = Data,
-        gri = #gri{type = od_provider, id = oneprovider:get_id_or_undefined(),
+        gri = #gri{type = od_provider, id = ?SELF,
             aspect = domain_config}
     }),
     ?ON_SUCCESS(Result, fun(_) ->
-        gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id_or_undefined())
+        gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id())
     end).
 
 
@@ -440,7 +450,7 @@ set_txt_record(Name, Content, TTL) ->
     end,
     ok = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create, data = Data2,
-        gri = #gri{type = od_provider, id = oneprovider:get_id_or_undefined(),
+        gri = #gri{type = od_provider, id = ?SELF,
             aspect = {dns_txt_record, Name}}
     }).
 
@@ -454,7 +464,7 @@ set_txt_record(Name, Content, TTL) ->
 remove_txt_record(Name) ->
     ok = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = delete,
-        gri = #gri{type = od_provider, id = oneprovider:get_id_or_undefined(),
+        gri = #gri{type = od_provider, id = ?SELF,
             aspect = {dns_txt_record, Name}}
     }).
 
@@ -474,17 +484,16 @@ set_subdomain_delegation(Subdomain, IPs) ->
         (IP) when is_tuple(IP) -> list_to_binary(inet:ntoa(IP))
     end, IPs),
 
-    ProviderId = oneprovider:get_id_or_undefined(),
     Data = #{
         <<"subdomainDelegation">> => true,
         <<"subdomain">> => Subdomain,
         <<"ipList">> => IPBinaries},
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = update, data = Data,
-        gri = #gri{type = od_provider, id = ProviderId, aspect = domain_config}
+        gri = #gri{type = od_provider, id = ?SELF, aspect = domain_config}
     }),
     ?ON_SUCCESS(Result, fun(_) ->
-        gs_client_worker:invalidate_cache(od_provider, ProviderId)
+        gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id())
     end).
 
 
