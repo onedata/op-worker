@@ -26,8 +26,6 @@
 -define(MINIMAL_SYNC_REQUEST, application:get_env(?APP_NAME, minimal_sync_request, 32768)).
 -define(TRIGGER_BYTE, application:get_env(?APP_NAME, trigger_byte, 52428800)).
 -define(PREFETCH_SIZE, application:get_env(?APP_NAME, prefetch_size, 104857600)).
--define(MAX_OVERLAPPING_MULTIPLIER,
-    application:get_env(?APP_NAME, overlapping_block_max_multiplier, 5)).
 
 %% The process is supposed to die after ?DIE_AFTER time of idling (no requests in flight)
 -define(DIE_AFTER, 60000).
@@ -45,8 +43,6 @@
     ?APP_NAME, rtransfer_events_caching_time, 1000)
 ).
 
--define(RESTART_PRIORITY,
-    application:get_env(?APP_NAME, default_restart_priority, 32)).
 -define(PREFETCH_PRIORITY,
     application:get_env(?APP_NAME, default_prefetch_priority, 96)).
 
@@ -57,6 +53,7 @@
 
 -type fetch_ref() :: reference().
 -type block() :: fslogic_blocks:block().
+-type priority() :: non_neg_integer().
 -type from() :: {pid(), any()}. %% `From` argument to gen_server:call callback
 
 -record(state, {
@@ -66,7 +63,7 @@
     dest_storage_id :: storage:id() | undefined,
     dest_file_id :: helpers:file_id() | undefined,
     last_transfer :: undefined | block(),
-    in_progress :: ordsets:ordset({block(), fetch_ref()}),
+    in_progress :: ordsets:ordset({block(), fetch_ref(), priority()}),
     in_sequence_hits = 0 :: non_neg_integer(),
     from_to_refs = #{} :: #{from() => [fetch_ref()]},
     ref_to_froms = #{} :: #{fetch_ref() => [from()]},
@@ -81,6 +78,8 @@
     caching_events_timer :: undefined | reference()
 }).
 
+-define(BLOCK(__Offset, __Size), #file_block{offset = __Offset, size = __Size}).
+
 % API
 -export([synchronize/6, update_replica/4, force_flush_events/1, cancel/1,
     terminate_all/0]).
@@ -93,6 +92,8 @@
 % For RPC
 -export([apply_if_alive_internal/2, apply_internal/2, apply_or_run_locally_internal/3,
     init_or_return_existing/1]).
+% For testing
+-export([find_overlapping/3, get_holes/2]).
 
 %%%===================================================================
 %%% API
@@ -421,11 +422,11 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
     end,
 
     TransferId =/= undefined andalso (catch gproc:add_local_counter(TransferId, 1)),
-    OverlappingInProgress = find_overlapping(Block, State),
-    {OverlappingBlocks, ExistingRefs} = lists:unzip(OverlappingInProgress),
+    OverlappingInProgress = find_overlapping(Block, Priority, State#state.in_progress),
+    {OverlappingBlocks, ExistingRefs, _Priorities} = lists:unzip3(OverlappingInProgress),
     Holes = get_holes(Block, OverlappingBlocks),
     NewTransfers = start_transfers(Holes, TransferId, State, Priority),
-    {_, NewRefs} = lists:unzip(NewTransfers),
+    {_, NewRefs, _} = lists:unzip3(NewTransfers),
     case ExistingRefs ++ NewRefs of
         [] ->
             FileLocation =
@@ -508,7 +509,7 @@ handle_info(?FLUSH_EVENTS, State) ->
 
 handle_info({Ref, complete, {ok, _} = _Status}, #state{from_sessions = FS,
     requested_blocks = RB, from_to_transfer_id = FromToTransferId} = State) ->
-    {__Block, __AffectedFroms, FinishedFroms, State1} = disassociate_ref(Ref, State),
+    {_Block, _Priority, _AffectedFroms, FinishedFroms, State1} = disassociate_ref(Ref, State),
 
     {ExcludeSessions, FS2} = lists:foldl(fun(From, {Acc, TmpFS}) ->
         case maps:get(From, TmpFS, undefined) of
@@ -543,21 +544,20 @@ handle_info({Ref, complete, {ok, _} = _Status}, #state{from_sessions = FS,
     {noreply, State3#state{from_sessions = FS2, requested_blocks = RB2}, ?DIE_AFTER};
 
 handle_info({FailedRef, complete, {error, disconnected}}, State) ->
-    {Block, AffectedFroms, _FinishedFroms, State1} = disassociate_ref(FailedRef, State),
-    % TODO VFS-4692 - use the same priority as for transfer
-    NewTransfers = start_transfers([Block], undefined, State1, ?RESTART_PRIORITY),
+    {Block, Priority, AffectedFroms, _FinishedFroms, State1} = disassociate_ref(FailedRef, State),
+    NewTransfers = start_transfers([Block], undefined, State1, Priority),
 
     ?warning("Replaced failed transfer ~p (~p) with new transfers ~p",
         [FailedRef, Block, NewTransfers]),
 
-    {_, NewRefs} = lists:unzip(NewTransfers),
+    {_, NewRefs, _} = lists:unzip3(NewTransfers),
     State2 = associate_froms_with_refs(AffectedFroms, NewRefs, State1),
     State3 = add_in_progress(NewTransfers, State2),
     {noreply, State3};
 
 handle_info({Ref, complete, ErrorStatus}, State) ->
     ?error("Transfer ~p failed: ~p", [Ref, ErrorStatus]),
-    {_Block, AffectedFroms, FinishedFroms, State1} = disassociate_ref(Ref, State),
+    {_Block, _Priority, AffectedFroms, FinishedFroms, State1} = disassociate_ref(Ref, State),
     State2 = disassociate_transfer_ids(FinishedFroms, State1),
 
     %% Cancel TransferIds that are still left (i.e. the failed ref was only a part of the transfer)
@@ -612,13 +612,13 @@ terminate(_Reason, State) ->
 %% returns From tuples for further handling.
 %% @end
 %%--------------------------------------------------------------------
--spec disassociate_ref(fetch_ref(), #state{}) -> {block(), AffectedFroms :: [from()],
-    FinishedFroms :: [from()], #state{}}.
+-spec disassociate_ref(fetch_ref(), #state{}) -> {block(), priority(),
+    AffectedFroms :: [from()], FinishedFroms :: [from()], #state{}}.
 disassociate_ref(Ref, State) ->
-    {Block, InProgress} =
+    {Block, Priority, InProgress} =
         case lists:keytake(Ref, 2, State#state.in_progress) of
-            {value, {B, _}, IP} -> {B, IP};
-            false -> {undefined, State#state.in_progress}
+            {value, {B, _, P}, IP} -> {B, P, IP};
+            false -> {undefined, undefined, State#state.in_progress}
         end,
     AffectedFroms = maps:get(Ref, State#state.ref_to_froms, []),
     RefToFroms = maps:remove(Ref, State#state.ref_to_froms),
@@ -633,9 +633,11 @@ disassociate_ref(Ref, State) ->
             end,
             {[], State#state.from_to_refs},
             AffectedFroms),
-    {Block, AffectedFroms, FinishedFroms, State#state{in_progress = InProgress,
+    {Block, Priority, AffectedFroms, FinishedFroms, State#state{
+        in_progress = InProgress,
         ref_to_froms = RefToFroms,
-        from_to_refs = FromToRefs}}.
+        from_to_refs = FromToRefs
+    }}.
 
 disassociate_transfer_ids(Froms, State) ->
     TransferIds = maps:values(maps:with(Froms, State#state.from_to_transfer_id)),
@@ -664,7 +666,7 @@ cancel_transfer_id(TransferId, State) ->
     gen_server2:reply(From, {error, cancelled}),
 
     InProgress =
-        lists:filter(fun({_Block, Ref}) -> lists:member(Ref, OrphanedRefs) end,
+        lists:filter(fun({_Block, Ref, _Priority}) -> lists:member(Ref, OrphanedRefs) end,
             State#state.in_progress),
     FromToRefs = maps:remove(From, State#state.from_to_refs),
     RefToFroms = maps:without(OrphanedRefs, State#state.ref_to_froms),
@@ -723,6 +725,7 @@ associate_from_with_tid(From, TransferId, State) ->
     State#state{from_to_transfer_id = FromToTransferId,
         transfer_id_to_from = TransferIdToFrom}.
 
+-spec add_in_progress([{block(), fetch_ref(), priority()}], #state{}) -> #state{}.
 add_in_progress(NewTransfers, State) ->
     InProgress = ordsets:union(State#state.in_progress, ordsets:from_list(NewTransfers)),
     State#state{in_progress = InProgress}.
@@ -767,8 +770,8 @@ is_sequential(_, _State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec start_transfers([block()], transfer:id() | undefined,
-    #state{}, non_neg_integer()) ->
-    NewRequests :: [{block(), fetch_ref()}].
+    #state{}, priority()) ->
+    NewRequests :: [{block(), fetch_ref(), priority()}].
 start_transfers(InitialBlocks, TransferId, State, Priority) ->
     LocationDocs = fslogic_cache:get_all_locations(),
     ProvidersAndBlocks = replica_finder:get_blocks_for_sync(LocationDocs, InitialBlocks),
@@ -797,7 +800,7 @@ start_transfers(InitialBlocks, TransferId, State, Priority) ->
                     CompleteFun = make_complete_fun(Self),
                     {ok, NewRef} = rtransfer_config:fetch(Request, NotifyFun, CompleteFun,
                         TransferId, SpaceId, FileGuid),
-                    {FetchedBlock, NewRef}
+                    {FetchedBlock, NewRef, Priority}
                 end, Blocks)
         end, ProvidersAndBlocks).
 
@@ -864,24 +867,18 @@ enlarge_block(Block, _Prefetch) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Finds parts of a block that are already in progress.
+%% Finds parts of a block that are already in progress (only blocks with
+%% priorities equal or higher (numerically lower ones) are taken in account).
 %% @end
 %%--------------------------------------------------------------------
--spec find_overlapping(block(), #state{}) -> Overlapping :: [{block(), fetch_ref()}].
-find_overlapping(#file_block{offset = Offset, size = Size}, #state{in_progress = InProgress}) ->
-    MaxMultip = ?MAX_OVERLAPPING_MULTIPLIER,
-    lists:filter(
-        fun({#file_block{offset = O, size = S}, _Ref}) ->
-            case
-                (O =< Offset andalso Offset < O + S) orelse
-                    (Offset =< O andalso O < Offset + Size) of
-                true ->
-                    (S < MaxMultip * Size) orelse (MaxMultip =:= 0);
-                false ->
-                    false
-            end
-        end,
-        InProgress).
+-spec find_overlapping(block(), priority(), Blocks) -> Overlapping when
+    Blocks :: ordsets:ordset([{block(), fetch_ref(), priority()}]),
+    Overlapping :: [{block(), fetch_ref(), priority()}].
+find_overlapping(#file_block{offset = Begin, size = Size}, Priority, Blocks) ->
+    End = Begin + Size,
+    lists:filter(fun({#file_block{offset = O, size = S}, _Ref, P}) ->
+        P =< Priority andalso O < End andalso O + S > Begin
+    end, ordsets:to_list(Blocks)).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -901,17 +898,20 @@ get_holes(#file_block{offset = Offset, size = Size}, ExistingBlocks) ->
 %%--------------------------------------------------------------------
 -spec get_holes(Offset :: non_neg_integer(), Size :: non_neg_integer(),
     Existing :: [block()], Acc :: [block()]) -> Holes :: [block()].
-get_holes(_Offset, Size, [], Acc) when Size =< 0 ->
+get_holes(_Offset, Size, _Existing, Acc) when Size =< 0 ->
     lists:reverse(Acc);
 get_holes(Offset, Size, [], Acc) ->
-    get_holes(Offset + Size, 0, [],
-        [#file_block{offset = Offset, size = Size} | Acc]);
-get_holes(Offset, Size, [#file_block{offset = Offset, size = S} | Blocks], Acc) ->
-    get_holes(Offset + S, Size - S, Blocks, Acc);
-get_holes(Offset, Size, [#file_block{offset = O} | Blocks], Acc) ->
-    HoleSize = O - Offset,
-    get_holes(Offset + HoleSize, Size - HoleSize, Blocks,
-        [#file_block{offset = Offset, size = HoleSize} | Acc]).
+    get_holes(Offset + Size, 0, [], [?BLOCK(Offset, Size) | Acc]);
+get_holes(Offset, Size, [?BLOCK(O, S) | Blocks], Acc) when Offset < O ->
+    NewOffset = O + S,
+    NewSize = Offset + Size - NewOffset,
+    get_holes(NewOffset, NewSize, Blocks, [?BLOCK(Offset, O - Offset) | Acc]);
+get_holes(Offset, Size, [?BLOCK(O, S) | Blocks], Acc) when O =< Offset andalso O + S > Offset ->
+    NewOffset = O + S,
+    NewSize = Offset + Size - NewOffset,
+    get_holes(NewOffset, NewSize, Blocks, Acc);
+get_holes(Offset, Size, [_ | Blocks], Acc) ->
+    get_holes(Offset, Size, Blocks, Acc).
 
 %%--------------------------------------------------------------------
 %% @private

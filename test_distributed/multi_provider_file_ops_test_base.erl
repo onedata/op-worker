@@ -462,7 +462,9 @@ rtransfer_test_base2(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     FileLocationUpdates = lists:sum(mock_get_num_calls(
         Workers2, replica_updater, update, '_')),
     FLUPS = FileLocationUpdates / Duration,
+
     ok = test_utils:mock_unload(Workers2, transfer),
+    ok = test_utils:mock_unload(Workers2, replica_updater),
 
     ct:pal("Transfer duration [s]: ~p~n"
            "Transfer stats updates per second ~p~n"
@@ -1481,7 +1483,7 @@ teardown_env(Config) ->
 mock_get_num_calls(Nodes, Module, Fun, Args) ->
     lists:map(fun(Node) ->
         rpc:call(Node, meck, num_calls, [Module, Fun, Args], timer:seconds(60))
-              end, Nodes).
+    end, Nodes).
 
 get_links(W, FileUuid) ->
     rpc:call(W, ?MODULE, get_links, [FileUuid]).
