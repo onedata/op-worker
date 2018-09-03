@@ -540,7 +540,8 @@ zone_time_seconds() ->
                     {ok, Timestamp2} ->
                         {ok, Timestamp2};
                     _ ->
-                        error
+                        % Use local time if Onezone is unreachable
+                        {ok, time_utils:system_time_millis()}
                 end
         end
     end),
