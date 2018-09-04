@@ -55,6 +55,7 @@
 -type block() :: fslogic_blocks:block().
 -type priority() :: non_neg_integer().
 -type from() :: {pid(), any()}. %% `From` argument to gen_server:call callback
+-type request_type() :: sync | async.
 
 -record(state, {
     file_ctx :: file_ctx:ctx(),
@@ -68,6 +69,7 @@
     from_to_refs = #{} :: #{from() => [fetch_ref()]},
     ref_to_froms = #{} :: #{fetch_ref() => [from()]},
     from_sessions = #{} :: #{from() => session:id()},
+    from_requests_types = #{} :: #{from() => request_type()},
     from_to_transfer_id = #{} :: #{from() => transfer:id() | undefined},
     transfer_id_to_from = #{} :: #{transfer:id() | undefined => from()},
     cached_stats = #{} :: #{undefined | transfer:id() => #{od_provider:id() => integer()}},
@@ -81,8 +83,8 @@
 -define(BLOCK(__Offset, __Size), #file_block{offset = __Offset, size = __Size}).
 
 % API
--export([synchronize/6, update_replica/4, force_flush_events/1, cancel/1,
-    terminate_all/0]).
+-export([synchronize/6, request_synchronization/6, request_synchronization/7,
+    update_replica/4, force_flush_events/1, cancel/1, terminate_all/0]).
 % gen_server callbacks
 -export([handle_call/3, handle_cast/2, handle_info/2, init/1, code_change/3,
     terminate/2]).
@@ -101,18 +103,46 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Blocks until a block is synchronized from a remote provider with
-%% a newer version of data.
+%% @equiv request_synchronization(UserCtx, FileCtx, Block, Prefetch,
+%% TransferId, Priority, sync).
 %% @end
 %%--------------------------------------------------------------------
 -spec synchronize(user_ctx:ctx(), file_ctx:ctx(), block(),
     Prefetch :: boolean(), transfer:id() | undefined, non_neg_integer()) ->
     {ok, #file_location_changed{}} | {error, Reason :: any()}.
 synchronize(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
+    request_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId,
+        Priority, sync).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv request_synchronization(UserCtx, FileCtx, Block, Prefetch,
+%% TransferId, Priority, async).
+%% @end
+%%--------------------------------------------------------------------
+-spec request_synchronization(user_ctx:ctx(), file_ctx:ctx(), block(),
+    Prefetch :: boolean(), transfer:id() | undefined, non_neg_integer()) ->
+    ok | {error, Reason :: any()}.
+request_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
+    request_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId,
+        Priority, async).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends sync request. If request type is sync,
+%% blocks until a block is synchronized from a remote provider with
+%% a newer version of data.
+%% @end
+%%--------------------------------------------------------------------
+-spec request_synchronization(user_ctx:ctx(), file_ctx:ctx(), block(),
+    Prefetch :: boolean(), transfer:id() | undefined, non_neg_integer(),
+    request_type()) -> ok | {ok, #file_location_changed{}} | {error, Reason :: any()}.
+request_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId,
+    Priority, SyncType) ->
     EnlargedBlock = enlarge_block(Block, Prefetch),
     SessionId = user_ctx:get_session_id(UserCtx),
     apply_no_check(FileCtx, {synchronize, FileCtx, EnlargedBlock,
-        Prefetch, TransferId, SessionId, Priority}).
+        Prefetch, TransferId, SessionId, Priority, SyncType}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -400,58 +430,79 @@ init(FileCtx) ->
 %% synchronized to the newest version.
 %% @end
 %%--------------------------------------------------------------------
-handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priority}, From,
-    #state{from_sessions = FS, requested_blocks = RB, file_guid = FG} = State0) ->
-    State = case FG of
-        undefined ->
-            FileGuid = file_ctx:get_guid_const(FileCtx),
-            SpaceId = file_ctx:get_space_id_const(FileCtx),
-            {_LocalDoc, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
-            {DestStorageId, FileCtx3} = file_ctx:get_storage_id(FileCtx2),
-            {DestFileId, FileCtx4} = file_ctx:get_storage_file_id(FileCtx3),
-            {_LocationDocs, FileCtx5} = file_ctx:get_file_location_docs(FileCtx4),
-            State0#state{
-                file_ctx = FileCtx5,
-                dest_storage_id = DestStorageId,
-                dest_file_id = DestFileId,
-                file_guid = FileGuid,
-                space_id = SpaceId
-            };
-        _ ->
-            State0
-    end,
+handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priority, Type}, From,
+    #state{from_sessions = FS, requested_blocks = RB, file_guid = FG,
+        from_requests_types = RequestTypesMap} = State0) ->
+    try
+        State = case FG of
+            undefined ->
+                FileGuid = file_ctx:get_guid_const(FileCtx),
+                SpaceId = file_ctx:get_space_id_const(FileCtx),
+                {_LocalDoc, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
+                {DestStorageId, FileCtx3} = file_ctx:get_storage_id(FileCtx2),
+                {DestFileId, FileCtx4} = file_ctx:get_storage_file_id(FileCtx3),
+                {_LocationDocs, FileCtx5} = file_ctx:get_file_location_docs(FileCtx4),
+                State0#state{
+                    file_ctx = FileCtx5,
+                    dest_storage_id = DestStorageId,
+                    dest_file_id = DestFileId,
+                    file_guid = FileGuid,
+                    space_id = SpaceId
+                };
+            _ ->
+                State0
+        end,
 
-    TransferId =/= undefined andalso (catch gproc:add_local_counter(TransferId, 1)),
-    OverlappingInProgress = find_overlapping(Block, Priority, State#state.in_progress),
-    {OverlappingBlocks, ExistingRefs, _Priorities} = lists:unzip3(OverlappingInProgress),
-    Holes = get_holes(Block, OverlappingBlocks),
-    NewTransfers = start_transfers(Holes, TransferId, State, Priority),
-    {_, NewRefs, _} = lists:unzip3(NewTransfers),
-    case ExistingRefs ++ NewRefs of
-        [] ->
-            FileLocation =
-                file_ctx:fill_location_gaps([Block], fslogic_cache:get_local_location(),
-                    fslogic_cache:get_all_locations(), fslogic_cache:get_uuid()),
-            {EventOffset, EventSize} = fslogic_location_cache:get_blocks_range(FileLocation, [Block]),
-            FLC = #file_location_changed{file_location = FileLocation,
-                change_beg_offset = EventOffset, change_end_offset = EventSize},
-            {reply, {ok, FLC}, State, ?DIE_AFTER};
-        RelevantRefs ->
-            State1 = associate_from_with_refs(From, RelevantRefs, State),
-            State2 = associate_from_with_tid(From, TransferId, State1),
-            State3 = add_in_progress(NewTransfers, State2),
-            State5 = case Prefetch of
-                true ->
-                    % TODO VFS-4690 - does not work well while many simultaneous
-                    % transfers do prefetching
-                    State4 = adjust_sequence_hits(Block, NewRefs, State3),
-                    prefetch(NewTransfers, TransferId, State4);
-                _ ->
-                    State3
-            end,
-            State6 = State5#state{from_sessions = maps:put(From, Session, FS)},
-            State7 = State6#state{requested_blocks = maps:put(From, Block, RB)},
-            {noreply, State7, ?DIE_AFTER}
+        TransferId =/= undefined andalso (catch gproc:add_local_counter(TransferId, 1)),
+        OverlappingInProgress = find_overlapping(Block, Priority, State#state.in_progress),
+        {OverlappingBlocks, ExistingRefs, _Priorities} = lists:unzip3(OverlappingInProgress),
+        Holes = get_holes(Block, OverlappingBlocks),
+        NewTransfers = start_transfers(Holes, TransferId, State, Priority),
+        {_, NewRefs, _} = lists:unzip3(NewTransfers),
+        case ExistingRefs ++ NewRefs of
+            [] ->
+                FileLocation =
+                    file_ctx:fill_location_gaps([Block], fslogic_cache:get_local_location(),
+                        fslogic_cache:get_all_locations(), fslogic_cache:get_uuid()),
+                {EventOffset, EventSize} = fslogic_location_cache:get_blocks_range(FileLocation, [Block]),
+                FLC = #file_location_changed{file_location = FileLocation,
+                    change_beg_offset = EventOffset, change_end_offset = EventSize},
+                case Type of
+                    sync ->
+                        {reply, {ok, FLC}, State, ?DIE_AFTER};
+                    async ->
+                        {reply, ok, State, ?DIE_AFTER}
+                end;
+            RelevantRefs ->
+                State1 = associate_from_with_refs(From, RelevantRefs, State),
+                State2 = associate_from_with_tid(From, TransferId, State1),
+                State3 = add_in_progress(NewTransfers, State2),
+                State5 = case Prefetch of
+                    true ->
+                        % TODO VFS-4690 - does not work well while many simultaneous
+                        % transfers do prefetching
+                        State4 = adjust_sequence_hits(Block, NewRefs, State3),
+                        prefetch(NewTransfers, TransferId, State4);
+                    _ ->
+                        State3
+                end,
+                State6 = State5#state{from_sessions = maps:put(From, Session, FS)},
+                State7 = State6#state{requested_blocks = maps:put(From, Block, RB)},
+                State8 = State7#state{from_requests_types =
+                maps:put(From, Type, RequestTypesMap)},
+
+                case Type of
+                    sync ->
+                        {noreply, State8, ?DIE_AFTER};
+                    async ->
+                        {reply, ok, State8, ?DIE_AFTER}
+                end
+        end
+    catch
+        E1:E2 ->
+            ?error_stacktrace("Unable to start transfer due to error ~p:~p",
+                [E1, E2]),
+            {reply, {error, E2}, State0, ?DIE_AFTER}
     end;
 
 handle_call(?FLUSH_EVENTS, _From, State) ->
@@ -508,7 +559,8 @@ handle_info(?FLUSH_EVENTS, State) ->
     {noreply, flush_events(State), ?DIE_AFTER};
 
 handle_info({Ref, complete, {ok, _} = _Status}, #state{from_sessions = FS,
-    requested_blocks = RB, from_to_transfer_id = FromToTransferId} = State) ->
+    requested_blocks = RB, from_to_transfer_id = FromToTransferId,
+    from_requests_types = RequestTypesMap} = State) ->
     {_Block, _Priority, _AffectedFroms, FinishedFroms, State1} = disassociate_ref(Ref, State),
 
     {ExcludeSessions, FS2} = lists:foldl(fun(From, {Acc, TmpFS}) ->
@@ -520,7 +572,12 @@ handle_info({Ref, complete, {ok, _} = _Status}, #state{from_sessions = FS,
         end
     end, {[], FS}, FinishedFroms),
 
-    FinishedBlocks = [{From, maps:get(From, RB)} || From <- FinishedFroms],
+    RequestTypesMap2 = lists:foldl(fun(From, TmpMap) ->
+        maps:remove(From, TmpMap)
+    end, RequestTypesMap, FinishedFroms),
+
+    FinishedBlocks = [{From, maps:get(From, RB), maps:get(From, RequestTypesMap)}
+        || From <- FinishedFroms],
     RB2 = lists:foldl(fun(From, Acc) ->
         maps:remove(From, Acc)
     end, RB, FinishedFroms),
@@ -541,19 +598,27 @@ handle_info({Ref, complete, {ok, _} = _Status}, #state{from_sessions = FS,
     end,
     [transfer:increment_files_replicated_counter(TID) || TID <- TransferIdsList],
     [gen_server2:reply(From, {ok, Message}) || {From, Message} <- Ans],
-    {noreply, State3#state{from_sessions = FS2, requested_blocks = RB2}, ?DIE_AFTER};
+
+    {noreply, State3#state{from_sessions = FS2, requested_blocks = RB2,
+        from_requests_types = RequestTypesMap2}, ?DIE_AFTER};
 
 handle_info({FailedRef, complete, {error, disconnected}}, State) ->
     {Block, Priority, AffectedFroms, _FinishedFroms, State1} = disassociate_ref(FailedRef, State),
-    NewTransfers = start_transfers([Block], undefined, State1, Priority),
+    case Block of
+        undefined ->
+            ?error("Failed transfer ~p not found in state", [FailedRef]),
+            {noreply, State1};
+        _ ->
+            NewTransfers = start_transfers([Block], undefined, State1, Priority),
 
-    ?warning("Replaced failed transfer ~p (~p) with new transfers ~p",
-        [FailedRef, Block, NewTransfers]),
+                    ?warning("Replaced failed transfer ~p (~p) with new transfers ~p",
+                        [FailedRef, Block, NewTransfers]),
 
-    {_, NewRefs, _} = lists:unzip3(NewTransfers),
-    State2 = associate_froms_with_refs(AffectedFroms, NewRefs, State1),
-    State3 = add_in_progress(NewTransfers, State2),
-    {noreply, State3};
+            {_, NewRefs, _} = lists:unzip3(NewTransfers),
+            State2 = associate_froms_with_refs(AffectedFroms, NewRefs, State1),
+            State3 = add_in_progress(NewTransfers, State2),
+            {noreply, State3}
+    end;
 
 handle_info({Ref, complete, ErrorStatus}, State) ->
     ?error("Transfer ~p failed: ~p", [Ref, ErrorStatus]),
@@ -970,8 +1035,8 @@ flush_blocks(State) ->
 %% Flush aggregated so far file blocks.
 %% @end
 %%--------------------------------------------------------------------
--spec flush_blocks(#state{}, [session:id()], [{from(), block()}], boolean()) ->
-    {[{from(), #file_location_changed{}}], #state{}}.
+-spec flush_blocks(#state{}, [session:id()], [{from(), block(), request_type()}],
+    boolean()) -> {[{from(), #file_location_changed{}}], #state{}}.
 flush_blocks(#state{cached_blocks = Blocks} = State, ExcludeSessions,
     FinalBlocks, IsTransfer) ->
 
@@ -982,15 +1047,22 @@ flush_blocks(#state{cached_blocks = Blocks} = State, ExcludeSessions,
             application:get_env(?APP_NAME, synchronizer_on_fly_finished_events, all)
     end,
 
-    Ans = lists:map(fun({From, FinalBlock}) ->
-        {From, flush_blocks_list([FinalBlock], ExcludeSessions, FlushFinalBlocks)}
-    end, FinalBlocks),
+    Ans = lists:foldl(fun({From, FinalBlock, Type}, Acc) ->
+        case Type of
+                sync ->
+                    [{From, flush_blocks_list([FinalBlock], ExcludeSessions,
+                        FlushFinalBlocks)} | Acc];
+                async ->
+                    flush_blocks_list([FinalBlock], [], all),
+                    Acc
+        end
+    end, [], FinalBlocks),
 
     case application:get_env(?APP_NAME, synchronizer_in_progress_events, transfers_only) of
         off ->
             false;
         _ ->
-            ToInvalidate = [FinalBlock || {_From, FinalBlock} <- FinalBlocks],
+            ToInvalidate = [FinalBlock || {_From, FinalBlock, _Type} <- FinalBlocks],
             Blocks2 = fslogic_blocks:consolidate(fslogic_blocks:invalidate(Blocks, ToInvalidate)),
             lists:foreach(fun(Block) ->
                 flush_blocks_list([Block], ExcludeSessions, all)

@@ -25,11 +25,12 @@
     cache_event/2, clear_events/0]).
 % Doc API
 -export([get_doc/1, save_doc/1, cache_doc/1, delete_doc/1, attach_blocks/1,
-    attach_local_blocks/1, merge_local_blocks/1]).
+    attach_local_blocks/1, attach_public_blocks/1, merge_local_blocks/1]).
 % Block API
 -export([get_blocks/1, save_blocks/2, cache_blocks/2, get_blocks_tree/1,
     use_blocks/2, finish_blocks_usage/1, get_changed_blocks/1,
-    mark_changed_blocks/1, mark_changed_blocks/5, set_local_change/1]).
+    mark_changed_blocks/1, mark_changed_blocks/5, set_local_change/1,
+    get_public_blocks/1]).
 % Size API
 -export([get_local_size/1, update_size/2]).
 
@@ -119,12 +120,18 @@ flush() ->
 flush(Type) ->
     KM = get(?KEYS_MODIFIED),
     KBM = get(?KEYS_BLOCKS_MODIFIED),
+    KeysToFlush = case Type of
+        terminate -> get(?KEYS);
+        _ ->
+            KM ++ (KBM -- KM)
+    end,
+
     Saved = lists:foldl(fun(Key, Acc) ->
         case flush_key(Key, Type) of
             ok -> [Key | Acc];
             _ -> Acc
         end
-    end, [], KM ++ (KBM -- KM)),
+    end, [], KeysToFlush),
     NewKM = KM -- Saved,
     NewKBM = KBM -- Saved,
     put(?KEYS_MODIFIED, NewKM),
@@ -380,12 +387,22 @@ delete_doc(Key) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Attaches blocks to document as list or tree.
+%% Attaches blocks to document.
 %% @end
 %%-------------------------------------------------------------------
 -spec attach_blocks(file_location:doc()) -> file_location:doc().
 attach_blocks(#document{key = Key, value = Location} = LocationDoc) ->
     Blocks = get_blocks(Key),
+    LocationDoc#document{value = Location#file_location{blocks = Blocks}}.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Attaches public blocks to document.
+%% @end
+%%-------------------------------------------------------------------
+-spec attach_public_blocks(file_location:doc()) -> file_location:doc().
+attach_public_blocks(#document{key = Key, value = Location} = LocationDoc) ->
+    Blocks = get_public_blocks(Key),
     LocationDoc#document{value = Location#file_location{blocks = Blocks}}.
 
 %%-------------------------------------------------------------------
@@ -415,6 +432,26 @@ attach_local_blocks(#document{value = Location} = LocationDoc) ->
 -spec get_blocks(file_location:id()) -> fslogic_blocks:blocks().
 get_blocks(Key) ->
     tree_to_blocks(get_blocks_tree(Key)).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns public blocks of location.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_public_blocks(file_location:id()) -> fslogic_blocks:blocks().
+get_public_blocks(Key) ->
+    case get({?PUBLIC_BLOCKS, Key}) of
+        undefined ->
+            case get_doc(Key) of
+                #document{} ->
+                    get_public_blocks(Key);
+                _ ->
+                    ?warning("Get public blocks for not existing key ~p", [Key]),
+                    []
+            end;
+        Blocks ->
+            Blocks
+    end.
 
 %%-------------------------------------------------------------------
 %% @doc

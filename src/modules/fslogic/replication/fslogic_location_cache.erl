@@ -25,11 +25,12 @@
 -type stored_blocks() :: blocks() | blocks_tree(). % set only when used by blocks' cache
 -type location() :: file_location:doc().
 -type location_or_record() :: location() | file_location:record().
--type get_doc_opts() :: boolean() | {blocks_num, non_neg_integer()}.
+-type get_doc_opts() :: boolean() | skip_local_blocks |
+    {blocks_num, non_neg_integer()}.
 -type get_blocks_opts() :: #{overlapping_blocks => blocks(),
-    count => non_neg_integer()}.
+    count => non_neg_integer(), skip_local => boolean()}.
 
--export_type([block/0, blocks/0, blocks_tree/0, stored_blocks/0]).
+-export_type([block/0, blocks/0, blocks_tree/0, stored_blocks/0, get_doc_opts/0]).
 
 %% Location getters/setters
 -export([get_location/2, get_location/3, save_location/1, cache_location/1,
@@ -79,6 +80,8 @@ get_location(LocId, FileUuid, BlocksOptions) ->
                         {ok, LocationDoc};
                     true ->
                         {ok, fslogic_cache:attach_blocks(LocationDoc)};
+                    skip_local_blocks ->
+                        {ok, fslogic_cache:attach_public_blocks(LocationDoc)};
                     {blocks_num, Num} ->
                         {ok, LocationDoc#document{value =
                         Location#file_location{blocks =
@@ -264,6 +267,8 @@ get_blocks(Key, #{count := Num}) ->
             Iter = gb_sets:iterator(Blocks),
             Ans = get_blocks_num(Iter, Num),
             Ans;
+get_blocks(Key, #{skip_local := true}) ->
+    fslogic_cache:get_public_blocks(Key);
 get_blocks(Key, _Options) ->
     fslogic_cache:get_blocks(Key).
 
@@ -488,6 +493,8 @@ get_location_not_cached(LocId, true) ->
         Error ->
             Error
     end;
+get_location_not_cached(LocId, skip_local_blocks) ->
+    file_location:get(LocId);
 get_location_not_cached(LocId, {blocks_num, Num}) ->
     case file_location:get(LocId) of
         {ok, LocationDoc} ->

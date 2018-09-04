@@ -32,6 +32,7 @@
 %% API
 -export([
     synchronize_block/6,
+    request_block_synchronization/6,
     synchronize_block_and_compute_checksum/5,
     get_file_distribution/2
 ]).
@@ -71,6 +72,29 @@ synchronize_block(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
         Prefetch, TransferId, Priority) of
         {ok, Ans} ->
             #fuse_response{status = #status{code = ?OK}, fuse_response = Ans};
+        {error, _} = Error ->
+            Error
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Requests synchronization of given block with remote replicas.
+%% Does not wait for sync.
+%% @end
+%%--------------------------------------------------------------------
+-spec request_block_synchronization(user_ctx:ctx(), file_ctx:ctx(), block(),
+    Prefetch :: boolean(), transfer_id(), non_neg_integer()) -> fuse_response().
+request_block_synchronization(UserCtx, FileCtx, undefined, Prefetch, TransferId, Priority) ->
+    % trigger file_location creation
+    {_, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx, false),
+    {Size, FileCtx3} = file_ctx:get_file_size(FileCtx2),
+    request_block_synchronization(UserCtx, FileCtx3, #file_block{offset = 0, size = Size},
+        Prefetch, TransferId, Priority);
+request_block_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
+    case replica_synchronizer:request_synchronization(UserCtx, FileCtx, Block,
+        Prefetch, TransferId, Priority) of
+        ok ->
+            #fuse_response{status = #status{code = ?OK}};
         {error, _} = Error ->
             Error
     end.
