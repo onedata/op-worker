@@ -73,7 +73,7 @@ synchronize_block(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
         {ok, Ans} ->
             #fuse_response{status = #status{code = ?OK}, fuse_response = Ans};
         {error, _} = Error ->
-            Error
+            throw(Error)
     end.
 
 %%--------------------------------------------------------------------
@@ -96,7 +96,7 @@ request_block_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId, Pri
         ok ->
             #fuse_response{status = #status{code = ?OK}};
         {error, _} = Error ->
-            Error
+            throw(Error)
     end.
 
 %%--------------------------------------------------------------------
