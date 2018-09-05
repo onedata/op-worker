@@ -76,7 +76,6 @@ list() ->
 -spec register_open(file_ctx:ctx(), session:id(), pos_integer()) ->
     ok | {error, term()}.
 register_open(FileCtx, SessId, Count) ->
-    replica_synchronizer:cancel_transfers_of_session(SessId, FileCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     FileGuid = file_ctx:get_guid_const(FileCtx),
     Diff = fun
@@ -129,6 +128,7 @@ register_open(FileCtx, SessId, Count) ->
 -spec register_release(file_ctx:ctx(), session:id(), pos_integer() | infinity) ->
     ok | {error, term()}.
 register_release(FileCtx, SessId, Count) ->
+    replica_synchronizer:cancel_transfers_of_session(SessId, FileCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     FileGuid = file_ctx:get_guid_const(FileCtx),
     Diff = fun(Handle = #file_handles{is_removed = Removed, descriptors = Fds}) ->

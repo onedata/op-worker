@@ -188,10 +188,10 @@ cancel(TransferId) ->
 %%--------------------------------------------------------------------
 -spec cancel_transfers_of_session(session:id(), file_ctx:ctx()) -> ok.
 cancel_transfers_of_session(SessionId, FileCtx) ->
-    ok.
-%%    lists:foreach(
-%%        fun(Pid) -> gen_server2:cast(Pid, {cancel_transfers_of_session, SessionId}) end,
-%%        gproc:lookup_pids({c, l, TransferId})).
+    Uuid = file_ctx:get_uuid_const(FileCtx),
+    apply_if_alive(Uuid, fun() ->
+        gen_server2:cast(self(), {cancel_transfers_of_session, SessionId})
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -288,7 +288,7 @@ apply_or_run_locally(Uuid, InCacheFun, ApplyOnCacheFun, FallbackFun) ->
 %% @equiv apply_if_alive_internal(Uuid, FunOrMsg) on chosen node.
 %% @end
 %%--------------------------------------------------------------------
--spec apply_if_alive_no_check(file_ctx:ctx(), term()) ->
+-spec apply_if_alive_no_check(file_meta:uuid(), term()) ->
     term().
 apply_if_alive_no_check(Uuid, FunOrMsg) ->
     Node = consistent_hasing:get_node(Uuid),
@@ -358,7 +358,7 @@ apply_internal(FileCtx, FunOrMsg) ->
 %% Warning: cannot be called from the inside of synchronizer.
 %% @end
 %%--------------------------------------------------------------------
--spec apply_if_alive_internal(file_ctx:ctx(), term()) -> term().
+-spec apply_if_alive_internal(file_meta:uuid(), term()) -> term().
 apply_if_alive_internal(Uuid, FunOrMsg) ->
     case gproc:lookup_local_name(Uuid) of
         undefined ->
@@ -721,11 +721,11 @@ disassociate_ref(Ref, State = #state{
             Res
     end,
 
-    {FinishedFroms, FTRs2} = lists:foldl(fun(From, {FF, FTR}) ->
-        WaitingForRefs = maps:get(From, FTR, []),
+    {FinishedFroms, FTRs2} = lists:foldl(fun(From, {FF, TmpFTRs}) ->
+        WaitingForRefs = maps:get(From, TmpFTRs, []),
         case lists:delete(Ref, WaitingForRefs) of
-            [] -> {[From | FF], maps:remove(From, FTR)};
-            Remaining -> {FF, maps:put(From, Remaining, FTR)}
+            [] -> {[From | FF], maps:remove(From, TmpFTRs)};
+            Remaining -> {FF, maps:put(From, Remaining, TmpFTRs)}
         end
     end, {[], FTRs}, AffectedFroms),
 
