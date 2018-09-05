@@ -76,6 +76,7 @@ list() ->
 -spec register_open(file_ctx:ctx(), session:id(), pos_integer()) ->
     ok | {error, term()}.
 register_open(FileCtx, SessId, Count) ->
+    replica_synchronizer:cancel_transfers_of_session(SessId, FileCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     FileGuid = file_ctx:get_guid_const(FileCtx),
     Diff = fun
