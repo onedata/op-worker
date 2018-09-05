@@ -76,8 +76,8 @@
     get_file_location_with_filled_gaps/2, fill_location_gaps/4,
     get_or_create_local_file_location_doc/1, get_local_file_location_doc/1,
     get_local_file_location_doc/2, get_or_create_local_file_location_doc/2,
-    get_file_location_ids/1, get_file_location_docs/1, get_acl/1,
-    get_raw_storage_path/1, get_child_canonical_path/2, get_file_size/1,
+    get_file_location_ids/1, get_file_location_docs/1, get_file_location_docs/2,
+    get_acl/1, get_raw_storage_path/1, get_child_canonical_path/2, get_file_size/1,
     get_owner/1, get_group_owner/1, get_local_storage_file_size/1,
     is_import_on/1, get_and_cache_file_doc_including_deleted/1, get_dir_location_doc/1,
     get_storage_sync_info/1]).
@@ -905,11 +905,23 @@ get_file_location_ids(FileCtx = #file_ctx{file_location_ids = Locations}) ->
 -spec get_file_location_docs(ctx()) ->
     {[file_location:doc()], ctx()}.
 % TODO VFS-4412 - export as _const function
-get_file_location_docs(FileCtx = #file_ctx{}) ->
+get_file_location_docs(FileCtx) ->
+    get_file_location_docs(FileCtx, true).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file location docs.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_location_docs(ctx(), fslogic_location_cache:get_blocks_opts()) ->
+    {[file_location:doc()], ctx()}.
+% TODO VFS-4412 - export as _const function
+get_file_location_docs(FileCtx = #file_ctx{}, GetLocationOpts) ->
     {LocationIds, FileCtx2} = get_file_location_ids(FileCtx),
     FileUuid = get_uuid_const(FileCtx),
     LocationDocs = lists:filtermap(fun(LocId) ->
-        case fslogic_location_cache:get_location(LocId, FileUuid) of
+        case fslogic_location_cache:get_location(LocId, FileUuid,
+            GetLocationOpts) of
             {ok, Location} ->
                 {true, Location};
             _Error ->

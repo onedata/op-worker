@@ -177,6 +177,14 @@ handle_cast({replica_eviction_aborting, Reason}, State = #state{
     ]),
     {noreply, State#state{status = aborting}};
 
+% Due to asynchronous nature of transfer_changes, aborting msg can be
+% sent several times. In case the controller is already in aborting
+% state, it can be safely ignored.
+handle_cast({replica_eviction_aborting, _Reason}, State = #state{
+    status = aborting
+}) ->
+    {noreply, State};
+
 handle_cast(replica_eviction_cancelled, State = #state{
     transfer_id = TransferId,
     status = aborting

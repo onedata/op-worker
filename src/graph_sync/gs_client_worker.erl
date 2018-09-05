@@ -93,12 +93,7 @@ request(Req) ->
     result().
 request(Client, Req) ->
     try
-        case get_connection_pid() of
-            undefined ->
-                ?ERROR_NO_CONNECTION_TO_OZ;
-            Pid ->
-                do_request(Pid, Client, Req)
-        end
+        do_request(Client, Req)
     catch
         throw:Error = {error, _} ->
             Error;
@@ -287,35 +282,34 @@ start_gs_connection() ->
     end.
 
 
--spec do_request(connection_ref(), client(),
-    gs_protocol:rpc_req() | gs_protocol:graph_req()) -> result().
-do_request(ConnRef, Client, #gs_req_rpc{} = RpcReq) ->
-    case call_onezone(ConnRef, Client, RpcReq) of
+-spec do_request(client(), gs_protocol:rpc_req() | gs_protocol:graph_req()) -> result().
+do_request(Client, #gs_req_rpc{} = RpcReq) ->
+    case call_onezone(Client, RpcReq) of
         {ok, #gs_resp_rpc{result = Res}} ->
             {ok, Res};
         {error, _} = Error ->
             Error
     end;
-do_request(ConnRef, Client, #gs_req_graph{operation = get} = GraphReq) ->
-    case maybe_serve_from_cache(ConnRef, Client, GraphReq) of
+do_request(Client, #gs_req_graph{operation = get} = GraphReq) ->
+    case maybe_serve_from_cache(Client, GraphReq) of
         {error, _} = Err1 ->
             Err1;
         {true, Doc} ->
             {ok, Doc};
         false ->
-            case call_onezone(ConnRef, Client, GraphReq) of
+            case call_onezone(Client, GraphReq) of
                 {error, _} = Err2 ->
                     Err2;
                 {ok, #gs_resp_graph{data_format = resource, data = Resource}} ->
                     GRIStr = maps:get(<<"gri">>, Resource),
                     NewGRI = gs_protocol:string_to_gri(GRIStr),
                     Doc = gs_client_translator:translate(NewGRI, maps:remove(<<"gri">>, Resource)),
-                    cache_record(ConnRef, NewGRI, Doc),
+                    cache_record(get_connection_pid(), NewGRI, Doc),
                     {ok, Doc}
             end
     end;
-do_request(ConnRef, Client, #gs_req_graph{operation = create} = GraphReq) ->
-    case call_onezone(ConnRef, Client, GraphReq) of
+do_request(Client, #gs_req_graph{operation = create} = GraphReq) ->
+    case call_onezone(Client, GraphReq) of
         {error, _} = Error ->
             Error;
         {ok, GsRespGraph} ->
@@ -327,17 +321,29 @@ do_request(ConnRef, Client, #gs_req_graph{operation = create} = GraphReq) ->
                 #gs_resp_graph{data_format = resource, data = #{<<"gri">> := GRIStr} = Map} ->
                     NewGRI = gs_protocol:string_to_gri(GRIStr),
                     Doc = gs_client_translator:translate(NewGRI, maps:remove(<<"gri">>, Map)),
-                    cache_record(ConnRef, NewGRI, Doc),
+                    cache_record(get_connection_pid(), NewGRI, Doc),
                     {ok, {NewGRI, Doc}}
             end
     end;
 % covers 'delete' and 'update' operations
-do_request(ConnRef, Client, #gs_req_graph{} = GraphReq) ->
-    case call_onezone(ConnRef, Client, GraphReq) of
+do_request(Client, #gs_req_graph{} = GraphReq) ->
+    case call_onezone(Client, GraphReq) of
         {error, _} = Error ->
             Error;
         {ok, #gs_resp_graph{}} ->
             ok
+    end.
+
+
+-spec call_onezone(client(), gs_protocol:rpc_req() | gs_protocol:graph_req() | gs_protocol:unsub_req()) ->
+    {ok, gs_protocol:rpc_resp() | gs_protocol:graph_resp() | gs_protocol:unsub_resp()} |
+    gs_protocol:error().
+call_onezone(Client, Request) ->
+    case get_connection_pid() of
+        undefined ->
+            ?ERROR_NO_CONNECTION_TO_OZ;
+        Pid ->
+            call_onezone(Pid, Client, Request)
     end.
 
 
@@ -369,16 +375,17 @@ call_onezone(ConnRef, Client, Request) ->
     end.
 
 
--spec maybe_serve_from_cache(connection_ref(), client(), gs_protocol:graph_req()) ->
+-spec maybe_serve_from_cache(client(), gs_protocol:graph_req()) ->
     {true, doc()} | false | gs_protocol:error().
-maybe_serve_from_cache(ConnRef, Client, #gs_req_graph{gri = #gri{aspect = instance} = GRI, auth_hint = AuthHint}) ->
+maybe_serve_from_cache(Client, #gs_req_graph{gri = #gri{aspect = instance} = GRI, auth_hint = AuthHint}) ->
     case get_from_cache(GRI) of
         false ->
             false;
         {true, CachedDoc} ->
             #{connection_ref := CachedConnRef, scope := CachedScope} = get_cache_state(CachedDoc),
             #gri{scope = Scope} = GRI,
-            case CachedConnRef =/= ConnRef orelse is_scope_lower(CachedScope, Scope) of
+            ConnRef = get_connection_pid(),
+            case (is_pid(ConnRef) andalso ConnRef =/= CachedConnRef) orelse is_scope_lower(CachedScope, Scope) of
                 true ->
                     % There was a reconnect since last update or cached scope is
                     % lower than requested -> invalidate cache
@@ -400,7 +407,7 @@ maybe_serve_from_cache(ConnRef, Client, #gs_req_graph{gri = #gri{aspect = instan
                     end
             end
     end;
-maybe_serve_from_cache(_, _, _) ->
+maybe_serve_from_cache(_, _) ->
     false.
 
 
@@ -625,10 +632,13 @@ is_user_authorized(UserId, Client, _, #gri{type = od_share, scope = private}, Ca
 is_user_authorized(_UserId, _, _, #gri{type = od_provider, scope = private}, _) ->
     false;
 
-is_user_authorized(UserId, _, _, #gri{type = od_provider, scope = protected}, CachedDoc) ->
-    case get_cache_state(CachedDoc) of
-        #{scope := private} ->
+is_user_authorized(UserId, Client, AuthHint, #gri{type = od_provider, id = ProviderId, scope = protected}, CachedDoc) ->
+    case {get_cache_state(CachedDoc), AuthHint} of
+        {#{scope := private}, _} ->
             provider_logic:has_eff_user(CachedDoc, UserId);
+        {#{scope := protected}, ?THROUGH_SPACE(SpaceId)} ->
+            space_logic:has_eff_user(Client, SpaceId, UserId) andalso
+                space_logic:is_supported(Client, SpaceId, ProviderId);
         _ ->
             unknown
     end;

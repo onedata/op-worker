@@ -32,6 +32,7 @@
 %% API
 -export([
     synchronize_block/6,
+    request_block_synchronization/6,
     synchronize_block_and_compute_checksum/5,
     get_file_distribution/2
 ]).
@@ -71,8 +72,33 @@ synchronize_block(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
         Prefetch, TransferId, Priority) of
         {ok, Ans} ->
             #fuse_response{status = #status{code = ?OK}, fuse_response = Ans};
+        {error, cancelled} ->
+            throw(replication_cancelled);
         {error, _} = Error ->
-            Error
+            throw(Error)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Requests synchronization of given block with remote replicas.
+%% Does not wait for sync.
+%% @end
+%%--------------------------------------------------------------------
+-spec request_block_synchronization(user_ctx:ctx(), file_ctx:ctx(), block(),
+    Prefetch :: boolean(), transfer_id(), non_neg_integer()) -> fuse_response().
+request_block_synchronization(UserCtx, FileCtx, undefined, Prefetch, TransferId, Priority) ->
+    % trigger file_location creation
+    {_, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx, false),
+    {Size, FileCtx3} = file_ctx:get_file_size(FileCtx2),
+    request_block_synchronization(UserCtx, FileCtx3, #file_block{offset = 0, size = Size},
+        Prefetch, TransferId, Priority);
+request_block_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
+    case replica_synchronizer:request_synchronization(UserCtx, FileCtx, Block,
+        Prefetch, TransferId, Priority) of
+        ok ->
+            #fuse_response{status = #status{code = ?OK}};
+        {error, _} = Error ->
+            throw(Error)
     end.
 
 %%--------------------------------------------------------------------
@@ -266,15 +292,11 @@ replicate_dir(UserCtx, FileCtx, Block, Offset, TransferId) ->
 -spec replicate_regular_file(user_ctx:ctx(), file_ctx:ctx(), block(),
     transfer_id()) -> provider_response().
 replicate_regular_file(UserCtx, FileCtx, Block, TransferId) ->
-    case synchronize_block(UserCtx, FileCtx, Block, false, TransferId,
-        ?DEFAULT_REPLICATION_PRIORITY
-    ) of
-        #fuse_response{status = Status} ->
-            transfer:increment_files_processed_counter(TransferId),
-            #provider_response{status = Status};
-        {error, cancelled} ->
-            throw(replication_cancelled)
-    end.
+    #fuse_response{status = Status} =
+        synchronize_block(UserCtx, FileCtx, Block, false, TransferId,
+            ?DEFAULT_REPLICATION_PRIORITY),
+    transfer:increment_files_processed_counter(TransferId),
+    #provider_response{status = Status}.
 
 %%-------------------------------------------------------------------
 %% @doc

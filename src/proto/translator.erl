@@ -297,6 +297,10 @@ translate_from_protobuf(#'SynchronizeBlockAndComputeChecksum'{
     block = #'FileBlock'{offset = O, size = S}, prefetch = Prefetch, priority = Priority}) ->
     #synchronize_block_and_compute_checksum{block =
     #file_block{offset = O, size = S}, prefetch = Prefetch, priority = Priority};
+translate_from_protobuf(#'BlockSynchronizationRequest'{block = #'FileBlock'{
+    offset = O, size = S}, prefetch = Prefetch, priority = Priority}) ->
+    #block_synchronization_request{block = #file_block{offset = O, size = S},
+        prefetch = Prefetch, priority = Priority};
 
 translate_from_protobuf(#'FuseResponse'{status = Status, fuse_response = {_, FuseResponse}}) ->
     #fuse_response{
@@ -837,6 +841,11 @@ translate_to_protobuf(#synchronize_block_and_compute_checksum{block = Block,
     {synchronize_block_and_compute_checksum,
         #'SynchronizeBlockAndComputeChecksum'{block =
         translate_to_protobuf(Block), prefetch = Prefetch, priority = Priority}};
+translate_to_protobuf(#block_synchronization_request{block = Block, prefetch = Prefetch,
+    priority = Priority}) ->
+    {block_synchronization_request,
+        #'BlockSynchronizationRequest'{block = translate_to_protobuf(Block),
+            prefetch = Prefetch, priority = Priority}};
 
 translate_to_protobuf(#fuse_response{status = Status, fuse_response = FuseResponse}) ->
     {status, StatProto} = translate_to_protobuf(Status),

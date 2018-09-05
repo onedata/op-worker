@@ -24,6 +24,7 @@
 
 -include("proto/common/credentials.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/api_errors.hrl").
@@ -105,9 +106,8 @@ query(_ResourceType, _Data) ->
 -spec query_record(ResourceType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 query_record(<<"system-provider">>, Data) ->
-    SessionId = gui_session:get_session_id(),
     ProviderId = proplists:get_value(<<"id">>, Data),
-    case provider_logic:get_protected_data(SessionId, ProviderId) of
+    case provider_logic:get_protected_data(?ROOT_SESS_ID, ProviderId) of
         ?ERROR_FORBIDDEN ->
             gui_error:unauthorized();
         {ok, #document{value = Provider}} ->
