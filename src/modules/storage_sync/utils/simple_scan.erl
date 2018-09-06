@@ -254,6 +254,7 @@ run_internal(Job = #space_strategy_job{
         storage_file_ctx:get_stat_buf(StorageFileCtx)
     catch
         throw:?ENOENT ->
+            ?error_stacktrace("simple_scan failed due to ~p for file ~p in space ~p", [?ENOENT, CanonicalPath, SpaceId]),
             {error, ?ENOENT}
     end,
 
