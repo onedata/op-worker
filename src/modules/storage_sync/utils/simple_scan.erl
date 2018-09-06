@@ -27,25 +27,25 @@
 -export_type([job_result/0]).
 
 %% API
--export([run_safe/1, maybe_import_storage_file_and_children/1,
+-export([run/1, maybe_import_storage_file_and_children/1,
     maybe_import_storage_file/1, import_children/5,
     handle_already_imported_file/3, generate_jobs_for_importing_children/4,
     import_regular_subfiles/1, import_file_safe/2, import_file/2]).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% calls ?MODULE:run/1 and catches exception
+%% calls ?MODULE:run_internal/1 and catches exceptions
 %% @end
 %%--------------------------------------------------------------------
--spec run_safe(space_strategy:job()) ->
+-spec run(space_strategy:job()) ->
     {space_strategy:job_result(), [space_strategy:job()]}.
-run_safe(Job =  #space_strategy_job{data = #{
+run(Job =  #space_strategy_job{data = #{
     file_name := FileName,
     space_id := SpaceId,
     storage_id := StorageId
 }}) ->
     try
-        run(Job)
+        run_internal(Job)
     catch
         Error:Reason ->
             ?error_stacktrace("simple_scan:run for file ~p in space ~p failed due to ~p:~p",
@@ -53,48 +53,6 @@ run_safe(Job =  #space_strategy_job{data = #{
             ),
             storage_sync_monitoring:mark_failed_file(SpaceId, StorageId),
             {{error, Reason}, []}
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Implementation for 'simple_scan' strategy.
-%% @end
-%%--------------------------------------------------------------------
--spec run(space_strategy:job()) ->
-    {space_strategy:job_result(), [space_strategy:job()]}.
-run(Job = #space_strategy_job{
-    data = #{
-        storage_file_ctx := StorageFileCtx
-}}) when StorageFileCtx =/= undefined ->
-    maybe_import_storage_file_and_children(Job);
-run(Job = #space_strategy_job{
-    data = Data = #{
-        parent_ctx := ParentCtx,
-        file_name := FileName,
-        space_id := SpaceId,
-        storage_id := StorageId
-    }}) ->
-
-    {CanonicalPath, ParentCtx2} = file_ctx:get_child_canonical_path(ParentCtx, FileName),
-    StorageFileCtx = storage_file_ctx:new(CanonicalPath, SpaceId, StorageId),
-    StatResult = try
-        storage_file_ctx:get_stat_buf(StorageFileCtx)
-    catch
-        throw:?ENOENT ->
-            {error, ?ENOENT}
-    end,
-
-    case StatResult of
-        Error = {error, _} ->
-            storage_sync_monitoring:mark_failed_file(SpaceId, StorageId),
-            {Error, []};
-        {_StatBuf, StorageFileCtx2}  ->
-            Data2 = Data#{
-                parent_ctx => ParentCtx2,
-                storage_file_ctx => StorageFileCtx2
-            },
-            run(Job#space_strategy_job{data = Data2})
     end.
 
 %%--------------------------------------------------------------------
@@ -230,12 +188,8 @@ import_children(Job = #space_strategy_job{
     BatchKey = Offset div BatchSize,
     {ChildrenStorageCtxsBatch1, _} =
         storage_file_ctx:get_children_ctxs_batch(StorageFileCtx, Offset, BatchSize),
-    {Path, _} = file_ctx:get_canonical_path(FileCtx),
-    Uuid = file_ctx:get_uuid_const(FileCtx),
     {BatchHash, ChildrenStorageCtxsBatch2} =
         storage_sync_changes:count_files_attrs_hash(ChildrenStorageCtxsBatch1),
-    ?debug("SYNC: 1counted hash out of ~p subfiles of directory ~p with uuid ~p, from offset ~p with batch ~p~n"
-    "HASH=~p", [length(ChildrenStorageCtxsBatch1), Path, Uuid, Offset, BatchSize, BatchHash]),
     {FilesJobs, DirsJobs} = generate_jobs_for_importing_children(Job, Offset,
         FileCtx, ChildrenStorageCtxsBatch2),
     FilesToHandleNum = length(FilesJobs) + length(DirsJobs),
@@ -265,13 +219,55 @@ import_children(#space_strategy_job{}, _Type, _Offset, _FileCtx, _) ->
 -spec import_regular_subfiles([space_strategy:job()]) -> [space_strategy:job_result()].
 import_regular_subfiles(FilesJobs) ->
     utils:pmap(fun(Job) ->
-        worker_pool:call(?STORAGE_SYNC_FILE_POOL_NAME, {?MODULE, run_safe, [Job]},
+        worker_pool:call(?STORAGE_SYNC_FILE_POOL_NAME, {?MODULE, run, [Job]},
             worker_pool:default_strategy(), ?FILES_IMPORT_TIMEOUT)
     end, FilesJobs).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Implementation for 'simple_scan' strategy.
+%% @end
+%%--------------------------------------------------------------------
+-spec run_internal(space_strategy:job()) ->
+    {space_strategy:job_result(), [space_strategy:job()]}.
+run_internal(Job = #space_strategy_job{
+    data = #{
+        storage_file_ctx := StorageFileCtx
+    }}) when StorageFileCtx =/= undefined ->
+    maybe_import_storage_file_and_children(Job);
+run_internal(Job = #space_strategy_job{
+    data = Data = #{
+        parent_ctx := ParentCtx,
+        file_name := FileName,
+        space_id := SpaceId,
+        storage_id := StorageId
+    }}) ->
+
+    {CanonicalPath, ParentCtx2} = file_ctx:get_child_canonical_path(ParentCtx, FileName),
+    StorageFileCtx = storage_file_ctx:new(CanonicalPath, SpaceId, StorageId),
+    StatResult = try
+        storage_file_ctx:get_stat_buf(StorageFileCtx)
+    catch
+        throw:?ENOENT ->
+            {error, ?ENOENT}
+    end,
+
+    case StatResult of
+        Error = {error, _} ->
+            storage_sync_monitoring:mark_failed_file(SpaceId, StorageId),
+            {Error, []};
+        {_StatBuf, StorageFileCtx2}  ->
+            Data2 = Data#{
+                parent_ctx => ParentCtx2,
+                storage_file_ctx => StorageFileCtx2
+            },
+            run_internal(Job#space_strategy_job{data = Data2})
+    end.
 
 %%-------------------------------------------------------------------
 %% @private

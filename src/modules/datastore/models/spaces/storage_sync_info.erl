@@ -14,7 +14,6 @@
 
 -include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
--include_lib("ctool/include/logging.hrl").
 
 -type key() :: file_meta:uuid().
 -type doc() :: datastore_model:doc(record()).
@@ -134,9 +133,7 @@ create_or_update(Uuid, NewMTime, NewHashKey, NewHashValue, NewStatTime, SpaceId)
             {undefined, _} -> ChildrenAttrsHashes0;
             {_, undefined} -> ChildrenAttrsHashes0;
             {_, <<"">>} -> ChildrenAttrsHashes0;
-            {_, _} ->
-                ?debug("SYNC: adding hash ~p for key ~p for directory with uuid ~p", [NewHashValue, NewHashKey, Uuid]),
-                ChildrenAttrsHashes0#{NewHashKey => NewHashValue}
+            {_, _} -> ChildrenAttrsHashes0#{NewHashKey => NewHashValue}
         end,
         StatTime = utils:ensure_defined(NewStatTime, undefined, StatTime0),
         {ok, SSI#storage_sync_info{
