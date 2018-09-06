@@ -1233,7 +1233,6 @@ get_or_create_local_regular_file_location_doc(FileCtx, IncludeBlocks) ->
                 replica_dbsync_hook:on_file_location_change(FileCtx4, ChangedLocation)
             end, LocationDocs),
             FileUuid = get_uuid_const(FileCtx),
-
             {
                 #document{
                     key = file_location:local_id(FileUuid),

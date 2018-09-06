@@ -18,9 +18,12 @@
 -define(DEFAULT_CONTENT, <<"test_data">>).
 -define(DEFAULT_SIZE, byte_size(?DEFAULT_CONTENT)).
 -define(DEFAULT_SESSION(Node, Config),
-    ?config({session_id, {?DEFAULT_USER, ?GET_DOMAIN(Node)}}, Config)
+    ?USER_SESSION(Node, ?DEFAULT_USER, Config)
 ).
 
+-define(USER_SESSION(Node, User, Config),
+    ?config({session_id, {User, ?GET_DOMAIN(Node)}}, Config)
+).
 
 -define(ATTEMPTS, 60).
 -define(DEFAULT_TIMETRAP, timer:minutes(2)).
@@ -31,7 +34,9 @@
 -define(DIR_PREFIX, <<"dir_">>).
 
 -record(setup, {
+    user = ?DEFAULT_USER,
     root_directory :: binary(),
+    replicate_to_nodes = [],
     files_structure = [] :: [{non_neg_integer(), non_neg_integer()}],
     size = ?DEFAULT_SIZE :: non_neg_integer(),
     mode = ?DEFAULT_MODE :: non_neg_integer(),
@@ -45,6 +50,7 @@
 }).
 
 -record(scenario, {
+    user = ?DEFAULT_USER,
     type = lfm :: lfm | rest,
     file_key_type = guid :: guid | path,
     schedule_node :: node(),
@@ -53,6 +59,7 @@
 }).
 
 -record(expected, {
+    user = ?DEFAULT_USER,
     distribution :: [#{}],
     minHist :: #{},
     hrHist :: #{},
