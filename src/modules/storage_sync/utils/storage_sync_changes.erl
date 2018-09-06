@@ -142,7 +142,8 @@ count_file_attrs_hash(StorageFileCtx) ->
             %% don't count hash for directory as it will be scanned anyway
             {<<"">>, StorageFileCtx3};
         ?REGULAR_FILE_TYPE ->
-            {hash([StMode, StSize, StAtime, STMtime, STCtime, Xattr]), StorageFileCtx3}
+            FileId = storage_file_ctx:get_file_id_const(StorageFileCtx2),
+            {hash([FileId, StMode, StSize, StAtime, STMtime, STCtime, Xattr]), StorageFileCtx3}
     end.
 
 %%-------------------------------------------------------------------
