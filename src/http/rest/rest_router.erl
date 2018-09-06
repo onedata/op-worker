@@ -31,6 +31,7 @@
     space_by_id,
     transfers,
     transfer_by_id,
+    transfers_mock,
     cdmi_capabilities_handler,
     cdmi_container_capabilities_handler,
     cdmi_container_handler,
