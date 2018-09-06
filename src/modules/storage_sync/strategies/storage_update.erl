@@ -327,7 +327,7 @@ import_children(Job = #space_strategy_job{
                 {Path, _} = file_ctx:get_canonical_path(FileCtx),
                 Uuid = file_ctx:get_uuid_const(FileCtx),
 
-                ?critical("SYNC: 3counted hash out of ~p subfiles of directory ~p with uuid ~p, from offset ~p with batch ~p~n"
+                ?debug("SYNC: 3counted hash out of ~p subfiles of directory ~p with uuid ~p, from offset ~p with batch ~p~n"
                 "HASH=~p", [length(CtxsB), Path, Uuid, Offset, ?DIR_BATCH, H]),
                 {H, CtxsB, D};
             {BatchHash0, Data1} ->
@@ -379,11 +379,11 @@ handle_already_imported_directory(Job = #space_strategy_job{
     Uuid = file_ctx:get_uuid_const(FileCtx),
     case storage_sync_changes:mtime_has_changed(StorageSyncInfo, StorageFileCtx) of
         true ->
-            ?critical("SYNC: Mtime has changed for directory ~p with uuid ~p, from offset ~p with batch ~p~n",
+            ?debug("SYNC: Mtime has changed for directory ~p with uuid ~p, from offset ~p with batch ~p~n",
                 [Path, Uuid, Offset, ?DIR_BATCH]),
             handle_already_imported_directory_changed_mtime(Job, FileAttr, FileCtx2);
         false ->
-            ?critical("SYNC: Mtime has not changed for directory ~p with uuid ~p, from offset ~p with batch ~p~n",
+            ?debug("SYNC: Mtime has not changed for directory ~p with uuid ~p, from offset ~p with batch ~p~n",
                 [Path, Uuid, Offset, ?DIR_BATCH]),
             handle_already_imported_directory_unchanged_mtime(Job, FileAttr, FileCtx2)
     end.
@@ -435,7 +435,7 @@ handle_already_imported_directory_unchanged_mtime(Job = #space_strategy_job{
     {Path, _} = file_ctx:get_canonical_path(FileCtx),
     Uuid = file_ctx:get_uuid_const(FileCtx),
 
-    ?critical("SYNC: 2counted hash out of ~p subfiles of directory ~p with uuid ~p, from offset ~p with batch ~p~n"
+    ?debug("SYNC: 2counted hash out of ~p subfiles of directory ~p with uuid ~p, from offset ~p with batch ~p~n"
     "HASH=~p", [length(ChildrenStorageCtxsBatch), Path, Uuid, Offset, ?DIR_BATCH, BatchHash]),
 
     ChildrenStorageCtxs = maps:get(children_storage_file_ctxs, Data0, #{}),
@@ -458,12 +458,12 @@ handle_already_imported_directory_unchanged_mtime(Job = #space_strategy_job{
         BatchHash, BatchKey)
     of
         true ->
-            ?critical("SYNC: Hash has changed for directory ~p with uuid ~p, from offset ~p with batch ~p~n",
+            ?debug("SYNC: Hash has changed for directory ~p with uuid ~p, from offset ~p with batch ~p~n",
                 [Path, Uuid, Offset, ?DIR_BATCH]),
                 handle_already_imported_directory_changed_hash(Job2, FileAttr,
                     FileCtx2, BatchHash);
         false ->
-            ?critical("SYNC: Hash has not changed for directory ~p with uuid ~p, from offset ~p with batch ~p~n",
+            ?debug("SYNC: Hash has not changed for directory ~p with uuid ~p, from offset ~p with batch ~p~n",
                 [Path, Uuid, Offset, ?DIR_BATCH]),
             import_dirs_only(Job2, FileAttr, FileCtx2)
     end;

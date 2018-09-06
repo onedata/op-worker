@@ -85,7 +85,7 @@ get_file_id_const(#storage_file_ctx{id = FileId}) ->
 -spec get_children_ctxs_batch(ctx(), non_neg_integer(),
     non_neg_integer()) -> {ChildrenCtxs :: [ctx()], NewParentCtx :: ctx()}.
 get_children_ctxs_batch(StorageFileCtx = #storage_file_ctx{canonical_path = Path}, Offset, BatchSize) ->
-    ?critical("SYNC: listing directory: ~p with offset: ~p and batch size: ~p", [Path, Offset, BatchSize]),
+    ?debug("SYNC: listing directory: ~p with offset: ~p and batch size: ~p", [Path, Offset, BatchSize]),
     {SFMHandle, StorageFileCtx2} = storage_file_ctx:get_handle(StorageFileCtx),
     case storage_file_manager:readdir(SFMHandle, Offset, BatchSize) of
         {error, ?ENOENT} ->
@@ -129,7 +129,7 @@ get_child_ctx(ParentCtx = #storage_file_ctx{
 get_stat_buf(StorageFileCtx = #storage_file_ctx{stat = undefined, handle = undefined}) ->
     get_stat_buf(set_sfm_handle(StorageFileCtx));
 get_stat_buf(StorageFileCtx = #storage_file_ctx{stat = undefined, handle = SFMHandle, canonical_path = Path}) ->
-    ?critical("SYNC: stat file: ~p", [Path]),
+    ?debug("SYNC: stat file: ~p", [Path]),
     Timestamp = time_utils:system_time_seconds(),
     case storage_file_manager:stat(SFMHandle) of
         {ok, StatBuf} ->

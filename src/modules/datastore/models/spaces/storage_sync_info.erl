@@ -135,7 +135,7 @@ create_or_update(Uuid, NewMTime, NewHashKey, NewHashValue, NewStatTime, SpaceId)
             {_, undefined} -> ChildrenAttrsHashes0;
             {_, <<"">>} -> ChildrenAttrsHashes0;
             {_, _} ->
-                ?critical("SYNC: adding hash ~p for key ~p for directory with uuid ~p", [NewHashValue, NewHashKey, Uuid]),
+                ?debug("SYNC: adding hash ~p for key ~p for directory with uuid ~p", [NewHashValue, NewHashKey, Uuid]),
                 ChildrenAttrsHashes0#{NewHashKey => NewHashValue}
         end,
         StatTime = utils:ensure_defined(NewStatTime, undefined, StatTime0),

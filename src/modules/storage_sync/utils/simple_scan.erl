@@ -234,7 +234,7 @@ import_children(Job = #space_strategy_job{
     Uuid = file_ctx:get_uuid_const(FileCtx),
     {BatchHash, ChildrenStorageCtxsBatch2} =
         storage_sync_changes:count_files_attrs_hash(ChildrenStorageCtxsBatch1),
-    ?critical("SYNC: 1counted hash out of ~p subfiles of directory ~p with uuid ~p, from offset ~p with batch ~p~n"
+    ?debug("SYNC: 1counted hash out of ~p subfiles of directory ~p with uuid ~p, from offset ~p with batch ~p~n"
     "HASH=~p", [length(ChildrenStorageCtxsBatch1), Path, Uuid, Offset, BatchSize, BatchHash]),
     {FilesJobs, DirsJobs} = generate_jobs_for_importing_children(Job, Offset,
         FileCtx, ChildrenStorageCtxsBatch2),
@@ -515,7 +515,7 @@ handle_already_imported_file(Job = #space_strategy_job{
         {Result, Job}
     catch
         Error:Reason ->
-            ?critical("simple_scan:handle_already_imported file for file ~p in space ~p failed due to ~p:~p",
+            ?error_stacktrace("simple_scan:handle_already_imported file for file ~p in space ~p failed due to ~p:~p",
                 [FileName, SpaceId, Error, Reason]),
             {{error, Reason}, Job}
     end.
