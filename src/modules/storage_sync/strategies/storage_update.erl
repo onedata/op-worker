@@ -370,14 +370,21 @@ import_children(#space_strategy_job{}, _Type, _Offset, _FileCtx, _) ->
 -spec handle_already_imported_directory(space_strategy:job(), #file_attr{},
     file_ctx:ctx()) -> {ok, space_strategy:job()}.
 handle_already_imported_directory(Job = #space_strategy_job{
-    data = #{storage_file_ctx := StorageFileCtx}
+    data = Data = #{storage_file_ctx := StorageFileCtx}
 }, FileAttr, FileCtx
 ) ->
     {StorageSyncInfo, FileCtx2} = file_ctx:get_storage_sync_info(FileCtx),
+    {Path, _} = file_ctx:get_canonical_path(FileCtx),
+    Offset = maps:get(dir_offset, Data, 0),
+    Uuid = file_ctx:get_uuid_const(FileCtx),
     case storage_sync_changes:mtime_has_changed(StorageSyncInfo, StorageFileCtx) of
         true ->
+            ?critical("SYNC: Mtime has changed for directory ~p with uuid ~p, from offset ~p with batch ~p~n",
+                [Path, Uuid, Offset, ?DIR_BATCH]),
             handle_already_imported_directory_changed_mtime(Job, FileAttr, FileCtx2);
         false ->
+            ?critical("SYNC: Mtime has not changed for directory ~p with uuid ~p, from offset ~p with batch ~p~n",
+                [Path, Uuid, Offset, ?DIR_BATCH]),
             handle_already_imported_directory_unchanged_mtime(Job, FileAttr, FileCtx2)
     end.
 
@@ -451,9 +458,13 @@ handle_already_imported_directory_unchanged_mtime(Job = #space_strategy_job{
         BatchHash, BatchKey)
     of
         true ->
-            handle_already_imported_directory_changed_hash(Job2, FileAttr,
-                FileCtx2, BatchHash);
+            ?critical("SYNC: Hash has changed for directory ~p with uuid ~p, from offset ~p with batch ~p~n",
+                [Path, Uuid, Offset, ?DIR_BATCH]),
+                handle_already_imported_directory_changed_hash(Job2, FileAttr,
+                    FileCtx2, BatchHash);
         false ->
+            ?critical("SYNC: Hash has not changed for directory ~p with uuid ~p, from offset ~p with batch ~p~n",
+                [Path, Uuid, Offset, ?DIR_BATCH]),
             import_dirs_only(Job2, FileAttr, FileCtx2)
     end;
 handle_already_imported_directory_unchanged_mtime(Job = #space_strategy_job{

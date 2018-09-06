@@ -143,7 +143,10 @@ count_file_attrs_hash(StorageFileCtx) ->
             {<<"">>, StorageFileCtx3};
         ?REGULAR_FILE_TYPE ->
             FileId = storage_file_ctx:get_file_id_const(StorageFileCtx2),
-            {hash([FileId, StMode, StSize, StAtime, STMtime, STCtime, Xattr]), StorageFileCtx3}
+            CanonicalPath = storage_file_ctx:get_canonical_path_const(StorageFileCtx2),
+            Hash = hash([FileId, StMode, StSize, StAtime, STMtime, STCtime, Xattr]),
+            ?critical("SYNC: Hash for file ~p, ~p is ~p", [FileId, CanonicalPath, Hash]),
+            {Hash, StorageFileCtx3}
     end.
 
 %%-------------------------------------------------------------------
