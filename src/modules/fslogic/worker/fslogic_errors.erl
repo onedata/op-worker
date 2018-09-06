@@ -81,6 +81,8 @@ gen_status_message(not_found) ->
     #status{code = ?ENOENT, description = describe_error(?ENOENT)};
 gen_status_message(already_exists) ->
     #status{code = ?EEXIST, description = describe_error(?EEXIST)};
+gen_status_message(<<"quota exceeded">>) ->
+    #status{code = ?ENOSPC, description = describe_error(?ENOSPC)};
 gen_status_message({403, <<>>, <<>>}) ->
     #status{code = ?EACCES, description = describe_error(?EACCES)};
 gen_status_message(Error) when is_atom(Error) ->
