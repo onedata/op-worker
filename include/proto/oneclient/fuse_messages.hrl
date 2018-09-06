@@ -116,6 +116,12 @@
     priority :: non_neg_integer()
 }).
 
+-record(block_synchronization_request, {
+    block :: #file_block{},
+    prefetch = false :: boolean(),
+    priority :: non_neg_integer()
+}).
+
 -record(get_xattr, {
     name :: xattr:name(),
     inherited = false :: boolean()
@@ -149,6 +155,7 @@
     #update_times{} | #change_mode{} | #rename{} | #create_file{} | #make_file{} |
     #open_file{} | #get_file_location{} | #release{} | #truncate{} |
     #synchronize_block{} | #synchronize_block_and_compute_checksum{} |
+    #block_synchronization_request{} |
     #get_child_attr{} | #get_xattr{} | #set_xattr{} | #remove_xattr{} |
     #list_xattr{} | #fsync{} | #get_file_children_attrs{} |
     #storage_file_created{} | #open_file_with_extended_info{}.

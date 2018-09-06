@@ -397,9 +397,10 @@ maybe_serve_from_cache(Client, #gs_req_graph{gri = #gri{aspect = instance} = GRI
         false ->
             false;
         {true, CachedDoc} ->
-            #{scope := CachedScope} = get_cache_state(CachedDoc),
+            #{connection_ref := CachedConnRef, scope := CachedScope} = get_cache_state(CachedDoc),
             #gri{scope = Scope} = GRI,
-            case is_scope_lower(CachedScope, Scope) of
+            ConnRef = get_connection_pid(),
+            case (is_pid(ConnRef) andalso ConnRef =/= CachedConnRef) orelse is_scope_lower(CachedScope, Scope) of
                 true ->
                     % There was a reconnect since last update or cached scope is
                     % lower than requested -> invalidate cache
