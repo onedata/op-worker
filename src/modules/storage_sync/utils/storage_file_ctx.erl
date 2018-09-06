@@ -37,7 +37,7 @@
 -export([new/3, get_child_ctx/2, get_children_ctxs_batch/3, reset/1]).
 -export([get_stat_buf/1, get_handle/1, get_file_id_const/1,
     get_storage_doc/1, get_nfs4_acl/1, get_space_id_const/1,
-    get_stat_timestamp_const/1]).
+    get_stat_timestamp_const/1, get_canonical_path_const/1]).
 
 
 %%-------------------------------------------------------------------
@@ -84,7 +84,8 @@ get_file_id_const(#storage_file_ctx{id = FileId}) ->
 %%-------------------------------------------------------------------
 -spec get_children_ctxs_batch(ctx(), non_neg_integer(),
     non_neg_integer()) -> {ChildrenCtxs :: [ctx()], NewParentCtx :: ctx()}.
-get_children_ctxs_batch(StorageFileCtx, Offset, BatchSize) ->
+get_children_ctxs_batch(StorageFileCtx = #storage_file_ctx{canonical_path = Path}, Offset, BatchSize) ->
+    ?critical("SYNC: listing directory: ~p with offset: ~p and batch size: ~p", [Path, Offset, BatchSize]),
     {SFMHandle, StorageFileCtx2} = storage_file_ctx:get_handle(StorageFileCtx),
     case storage_file_manager:readdir(SFMHandle, Offset, BatchSize) of
         {error, ?ENOENT} ->
@@ -127,7 +128,8 @@ get_child_ctx(ParentCtx = #storage_file_ctx{
 -spec get_stat_buf(ctx()) -> {#statbuf{}, ctx()}.
 get_stat_buf(StorageFileCtx = #storage_file_ctx{stat = undefined, handle = undefined}) ->
     get_stat_buf(set_sfm_handle(StorageFileCtx));
-get_stat_buf(StorageFileCtx = #storage_file_ctx{stat = undefined, handle = SFMHandle}) ->
+get_stat_buf(StorageFileCtx = #storage_file_ctx{stat = undefined, handle = SFMHandle, canonical_path = Path}) ->
+    ?critical("SYNC: stat file: ~p", [Path]),
     Timestamp = time_utils:system_time_seconds(),
     case storage_file_manager:stat(SFMHandle) of
         {ok, StatBuf} ->
@@ -223,6 +225,10 @@ get_xattr(StorageFileCtx = #storage_file_ctx{handle = SFMHandle}, XattrName) ->
         {error, ?ENOENT} ->
             throw(?ENOENT)
     end.
+
+-spec get_canonical_path_const(ctx()) -> file_meta:path().
+get_canonical_path_const(#storage_file_ctx{canonical_path = CanonicalPath}) ->
+    CanonicalPath.
 
 %%%===================================================================
 %%% Internal functions

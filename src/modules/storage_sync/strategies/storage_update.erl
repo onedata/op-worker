@@ -146,7 +146,7 @@ strategy_init_jobs(StrategyName, StrategyArgs, InitData) ->
     {space_strategy:job_result(), [space_strategy:job()]}.
 strategy_handle_job(Job = #space_strategy_job{strategy_name = simple_scan}) ->
     ok = datastore_throttling:throttle(import),
-    simple_scan:run(Job);
+    simple_scan:run_safe(Job);
 strategy_handle_job(#space_strategy_job{strategy_name = no_update}) ->
     {ok, []}.
 
@@ -322,7 +322,14 @@ import_children(Job = #space_strategy_job{
     {BatchHash, ChildrenStorageCtxsBatch, Data} =
         case storage_sync_utils:take_hash_for_batch(BatchKey, Data0) of
             {undefined, _} ->
-                count_batch_hash(Offset, BatchSize, Data0, StorageFileCtx);
+                {H, CtxsB, D} = count_batch_hash(Offset, BatchSize, Data0, StorageFileCtx),
+
+                {Path, _} = file_ctx:get_canonical_path(FileCtx),
+                Uuid = file_ctx:get_uuid_const(FileCtx),
+
+                ?critical("SYNC: 3counted hash out of ~p subfiles of directory ~p with uuid ~p, from offset ~p with batch ~p~n"
+                "HASH=~p", [length(CtxsB), Path, Uuid, Offset, ?DIR_BATCH, H]),
+                {H, CtxsB, D};
             {BatchHash0, Data1} ->
                 {ChildrenStorageCtxsBatch0, Data2} =
                     storage_sync_utils:take_children_storage_ctxs_for_batch(BatchKey, Data1),
@@ -417,6 +424,12 @@ handle_already_imported_directory_unchanged_mtime(Job = #space_strategy_job{
         StorageFileCtx, Offset, ?DIR_BATCH),
     {BatchHash, ChildrenStorageCtxsBatch2} =
         storage_sync_changes:count_files_attrs_hash(ChildrenStorageCtxsBatch),
+
+    {Path, _} = file_ctx:get_canonical_path(FileCtx),
+    Uuid = file_ctx:get_uuid_const(FileCtx),
+
+    ?critical("SYNC: 2counted hash out of ~p subfiles of directory ~p with uuid ~p, from offset ~p with batch ~p~n"
+    "HASH=~p", [length(ChildrenStorageCtxsBatch), Path, Uuid, Offset, ?DIR_BATCH, BatchHash]),
 
     ChildrenStorageCtxs = maps:get(children_storage_file_ctxs, Data0, #{}),
     HashesMap = maps:get(hashes_map, Data0, #{}),

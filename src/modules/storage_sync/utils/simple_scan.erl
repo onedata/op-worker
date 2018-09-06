@@ -27,12 +27,36 @@
 -export_type([job_result/0]).
 
 %% API
--export([run/1, maybe_import_storage_file_and_children/1,
+-export([run_safe/1, maybe_import_storage_file_and_children/1,
     maybe_import_storage_file/1, import_children/5,
     handle_already_imported_file/3, generate_jobs_for_importing_children/4,
     import_regular_subfiles/1, import_file_safe/2, import_file/2]).
 
 %%--------------------------------------------------------------------
+%% @doc
+%% calls ?MODULE:run/1 and catches exception
+%% @end
+%%--------------------------------------------------------------------
+-spec run_safe(space_strategy:job()) ->
+    {space_strategy:job_result(), [space_strategy:job()]}.
+run_safe(Job =  #space_strategy_job{data = #{
+    file_name := FileName,
+    space_id := SpaceId,
+    storage_id := StorageId
+}}) ->
+    try
+        run(Job)
+    catch
+        Error:Reason ->
+            ?error_stacktrace("simple_scan:run for file ~p in space ~p failed due to ~p:~p",
+                [FileName, SpaceId, Error, Reason]
+            ),
+            storage_sync_monitoring:mark_failed_file(SpaceId, StorageId),
+            {{error, Reason}, []}
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Implementation for 'simple_scan' strategy.
 %% @end
@@ -97,40 +121,38 @@ maybe_import_storage_file_and_children(Job0 = #space_strategy_job{
     {LocalResult, FileCtx, Job2} = maybe_import_storage_file(Job1),
 
     case LocalResult of
-        {error, {ErrorType, Reason}} ->
+        {error, Reason} ->
             storage_sync_monitoring:mark_failed_file(SpaceId, StorageId),
-            erlang:ErrorType(Reason);
+            {{error, Reason}, []};
         _ ->
-            ok
-    end,
+            Data2 = Job2#space_strategy_job.data,
+            Offset = maps:get(dir_offset, Data2, 0),
+            Type = file_meta:type(Mode),
 
-    Data2 = Job2#space_strategy_job.data,
-    Offset = maps:get(dir_offset, Data2, 0),
-    Type = file_meta:type(Mode),
+            Job3 = case Offset of
+                0 ->
+                    %remember mtime to save after importing all subfiles
+                    space_strategy:update_job_data(mtime, StorageMtime, Job2);
+                _ -> Job2
+            end,
+            Module = storage_sync_utils:module(Job3),
+            SubJobs = delegate(Module, import_children, [Job3, Type, Offset, FileCtx, ?DIR_BATCH], 5),
 
-    Job3 = case Offset of
-        0 ->
-            %remember mtime to save after importing all subfiles
-            space_strategy:update_job_data(mtime, StorageMtime, Job2);
-        _ -> Job2
-    end,
-    Module = storage_sync_utils:module(Job3),
-    SubJobs = delegate(Module, import_children, [Job3, Type, Offset, FileCtx, ?DIR_BATCH], 5),
-
-    LocalResult2 = case LocalResult of
-        imported ->
-            storage_sync_monitoring:mark_imported_file(SpaceId, StorageId),
-            ok;
-        updated ->
-            storage_sync_monitoring:mark_updated_file(SpaceId, StorageId),
-            ok;
-        processed ->
-            storage_sync_monitoring:mark_processed_file(SpaceId, StorageId),
-            ok;
-        ok ->
-            ok
-    end,
-    {LocalResult2, SubJobs}.
+            LocalResult2 = case LocalResult of
+                imported ->
+                    storage_sync_monitoring:mark_imported_file(SpaceId, StorageId),
+                    ok;
+                updated ->
+                    storage_sync_monitoring:mark_updated_file(SpaceId, StorageId),
+                    ok;
+                processed ->
+                    storage_sync_monitoring:mark_processed_file(SpaceId, StorageId),
+                    ok;
+                ok ->
+                    ok
+            end,
+            {LocalResult2, SubJobs}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -208,8 +230,12 @@ import_children(Job = #space_strategy_job{
     BatchKey = Offset div BatchSize,
     {ChildrenStorageCtxsBatch1, _} =
         storage_file_ctx:get_children_ctxs_batch(StorageFileCtx, Offset, BatchSize),
+    {Path, _} = file_ctx:get_canonical_path(FileCtx),
+    Uuid = file_ctx:get_uuid_const(FileCtx),
     {BatchHash, ChildrenStorageCtxsBatch2} =
         storage_sync_changes:count_files_attrs_hash(ChildrenStorageCtxsBatch1),
+    ?critical("SYNC: 1counted hash out of ~p subfiles of directory ~p with uuid ~p, from offset ~p with batch ~p~n"
+    "HASH=~p", [length(ChildrenStorageCtxsBatch1), Path, Uuid, Offset, BatchSize, BatchHash]),
     {FilesJobs, DirsJobs} = generate_jobs_for_importing_children(Job, Offset,
         FileCtx, ChildrenStorageCtxsBatch2),
     FilesToHandleNum = length(FilesJobs) + length(DirsJobs),
@@ -239,7 +265,7 @@ import_children(#space_strategy_job{}, _Type, _Offset, _FileCtx, _) ->
 -spec import_regular_subfiles([space_strategy:job()]) -> [space_strategy:job_result()].
 import_regular_subfiles(FilesJobs) ->
     utils:pmap(fun(Job) ->
-        worker_pool:call(?STORAGE_SYNC_FILE_POOL_NAME, {?MODULE, run, [Job]},
+        worker_pool:call(?STORAGE_SYNC_FILE_POOL_NAME, {?MODULE, run_safe, [Job]},
             worker_pool:default_strategy(), ?FILES_IMPORT_TIMEOUT)
     end, FilesJobs).
 
@@ -299,15 +325,16 @@ maybe_import_file_with_existing_metadata(Job = #space_strategy_job{}, FileCtx) -
 import_file_safe(Job = #space_strategy_job{
     data = #{
         file_name := FileName,
+        space_id := SpaceId,
         parent_ctx := ParentCtx
 }}, FileUuid) ->
     try
         ?MODULE:import_file(Job, FileUuid)
     catch
         Error:Reason ->
-            ?error_stacktrace("importing file ~p failed with ~p:~p", [FileName, Error, Reason]),
+            ?error_stacktrace("importing file ~p in space ~p failed with ~p:~p", [FileName, SpaceId, Error, Reason]),
             full_update:delete_imported_file(FileName, ParentCtx),
-            {{error, {Error, Reason}}, undefined}
+            {{error, Reason}, undefined}
     end.
 
 %%--------------------------------------------------------------------
@@ -471,10 +498,14 @@ new_job(Job, Data, StorageFileCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_already_imported_file(space_strategy:job(), #file_attr{},
-    file_ctx:ctx()) -> {job_result(), space_strategy:job()}.
+    file_ctx:ctx()) -> {space_strategy:job_result(), space_strategy:job()}.
 handle_already_imported_file(Job = #space_strategy_job{
     strategy_args = Args,
-    data = #{storage_file_ctx := StorageFileCtx}
+    data = #{
+        file_name := FileName,
+        space_id := SpaceId,
+        storage_file_ctx := StorageFileCtx
+    }
 }, FileAttr, FileCtx) ->
 
     SyncAcl = maps:get(sync_acl, Args, false),
@@ -484,7 +515,9 @@ handle_already_imported_file(Job = #space_strategy_job{
         {Result, Job}
     catch
         Error:Reason ->
-            {{error, {Error, Reason}}, Job}
+            ?critical("simple_scan:handle_already_imported file for file ~p in space ~p failed due to ~p:~p",
+                [FileName, SpaceId, Error, Reason]),
+            {{error, Reason}, Job}
     end.
 
 %%--------------------------------------------------------------------
