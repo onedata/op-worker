@@ -296,7 +296,7 @@ import_children(Job = #space_strategy_job{
             FileUuid = file_ctx:get_uuid_const(FileCtx),
             case storage_sync_utils:all_children_imported(DirsJobs, FileUuid) of
                 true ->
-                    storage_sync_info:update_mtime(FileUuid, Mtime, SpaceId);
+                    storage_sync_info:create_or_update(FileUuid, #{mtime => Mtime}, SpaceId);
                 _ ->
                     ok
             end;
@@ -340,9 +340,16 @@ import_children(Job = #space_strategy_job{
             FileUuid = file_ctx:get_uuid_const(FileCtx),
             case storage_sync_utils:all_children_imported(DirsJobs, FileUuid) of
                 true ->
-                    storage_sync_info:update_mtime_and_children_hash(FileUuid, Mtime, BatchKey, BatchHash, SpaceId);
+                    storage_sync_info:create_or_update(FileUuid, #{
+                        mtime => Mtime,
+                        hash_key => BatchKey,
+                        hash_value => BatchHash
+                    }, SpaceId);
                 _ ->
-                    storage_sync_info:update_children_hash(FileUuid, BatchKey, BatchHash, SpaceId)
+                    storage_sync_info:create_or_update(FileUuid, #{
+                        hash_key => BatchKey,
+                        hash_value => BatchHash
+                    }, SpaceId)
             end;
         _ -> ok
     end,

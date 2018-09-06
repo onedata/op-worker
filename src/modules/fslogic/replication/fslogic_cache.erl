@@ -548,6 +548,11 @@ set_local_change(false) ->
     ok;
 set_local_change(Value) ->
     put(?LOCAL_CHANGES, Value),
+    LocationId = file_location:local_id(get(?MAIN_KEY)),
+    Uuid = get_uuid(),
+    fslogic_location_cache:update_location(Uuid, LocationId, fun(FL) ->
+        {ok, FL#file_location{last_replication_timestamp = time_utils:system_time_seconds()}}
+    end, false),
     ok.
 
 %%%===================================================================

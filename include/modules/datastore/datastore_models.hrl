@@ -336,7 +336,8 @@
         NewChanges :: [replica_changes:change()]
     },
     last_rename :: replica_changes:last_rename(),
-    storage_file_created = false :: boolean()
+    storage_file_created = false :: boolean(),
+    last_replication_timestamp :: non_neg_integer() | undefined
 }).
 
 %% Model for storing file's blocks

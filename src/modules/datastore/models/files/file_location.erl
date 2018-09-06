@@ -324,7 +324,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    3.
+    4.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -352,7 +352,10 @@ get_record_struct(2) ->
     {record, proplists:delete(handle_id, Struct)};
 get_record_struct(3) ->
     {record, Struct} = get_record_struct(2),
-    {record, Struct ++ [{storage_file_created, boolean}]}.
+    {record, Struct ++ [{storage_file_created, boolean}]};
+get_record_struct(4) ->
+    {record, Struct} = get_record_struct(3),
+    {record, Struct ++ [{last_replication_timestamp, integer}]}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -363,17 +366,19 @@ get_record_struct(3) ->
     {datastore_model:record_version(), datastore_model:record()}.
 upgrade_record(1, {?MODULE, Uuid, ProviderId, StorageId, FileId, Blocks,
     VersionVector, Size, _HandleId, SpaceId, RecentChanges, LastRename}) ->
-    {2, #file_location{
-        uuid = Uuid, provider_id = ProviderId, storage_id = StorageId,
-        file_id = FileId, blocks = Blocks, version_vector = VersionVector,
-        size = Size, space_id = SpaceId, recent_changes = RecentChanges,
-        last_rename = LastRename
+    {2, {?MODULE,
+        Uuid, ProviderId, StorageId, FileId, Blocks, VersionVector, Size,
+        SpaceId, RecentChanges, LastRename
     }};
 upgrade_record(2, {?MODULE, Uuid, ProviderId, StorageId, FileId, Blocks,
     VersionVector, Size, SpaceId, RecentChanges, LastRename}) ->
-    {3, #file_location{
-        uuid = Uuid, provider_id = ProviderId, storage_id = StorageId,
-        file_id = FileId, blocks = Blocks, version_vector = VersionVector,
-        size = Size, space_id = SpaceId, recent_changes = RecentChanges,
-        last_rename = LastRename, storage_file_created = true
+    {3, {?MODULE,
+        Uuid, ProviderId, StorageId, FileId, Blocks, VersionVector, Size,
+        SpaceId, RecentChanges, LastRename, true
+    }};
+upgrade_record(3, {?MODULE, Uuid, ProviderId, StorageId, FileId, Blocks,
+    VersionVector, Size, SpaceId, RecentChanges, LastRename, StorageFileCreated}) ->
+    {4, {?MODULE,
+        Uuid, ProviderId, StorageId, FileId, Blocks, VersionVector, Size,
+        SpaceId, RecentChanges, LastRename, StorageFileCreated, undefined
     }}.

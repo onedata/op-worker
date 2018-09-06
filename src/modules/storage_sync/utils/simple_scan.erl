@@ -221,9 +221,16 @@ import_children(Job = #space_strategy_job{
             FileUuid = file_ctx:get_uuid_const(FileCtx),
             case storage_sync_utils:all_children_imported(DirsJobs, FileUuid) of
                 true ->
-                    storage_sync_info:update_mtime_and_children_hash(FileUuid, Mtime, BatchKey, BatchHash, SpaceId);
+                    storage_sync_info:create_or_update(FileUuid, #{
+                        mtime => Mtime,
+                        hash_key => BatchKey,
+                        hash_value => BatchHash
+                    }, SpaceId);
                 _ ->
-                    storage_sync_info:update_children_hash(FileUuid, BatchKey, BatchHash, SpaceId)
+                    storage_sync_info:create_or_update(FileUuid, #{
+                        hash_key => BatchKey,
+                        hash_value => BatchHash
+                    }, SpaceId)
             end;
         _ -> ok
     end,
@@ -346,7 +353,10 @@ import_file(#space_strategy_job{
     case file_meta:type(Mode) of
         ?REGULAR_FILE_TYPE ->
             StatTimestamp = storage_file_ctx:get_stat_timestamp_const(StorageFileCtx4),
-            storage_sync_info:update_mtime_and_stat_time(FileUuid2, MTime, StatTimestamp, SpaceId),
+            storage_sync_info:create_or_update(FileUuid2, #{
+                mtime => MTime,
+                last_stat => StatTimestamp
+            }, SpaceId),
             ok = create_file_location(SpaceId, StorageId, FileUuid2, CanonicalPath, FSize);
         _ ->
             {ok, _} = dir_location:mark_dir_created_on_storage(FileUuid2, SpaceId)
@@ -540,27 +550,111 @@ maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
     FileCtx, ?REGULAR_FILE_TYPE, StorageFileCtx
 ) ->
     {StorageSyncInfo, FileCtx2} = file_ctx:get_storage_sync_info(FileCtx),
-    {Size, FileCtx3} = file_ctx:get_file_size(FileCtx2),
-    FileUuid = file_ctx:get_uuid_const(FileCtx3),
-    SpaceId = file_ctx:get_space_id_const(FileCtx3),
+    {Size, FileCtx3} = file_ctx:get_local_storage_file_size(FileCtx2),
+    {{_, _ , MTime}, FileCtx4} = file_ctx:get_times(FileCtx3),
+    FileUuid = file_ctx:get_uuid_const(FileCtx4),
+    SpaceId = file_ctx:get_space_id_const(FileCtx4),
     NewLastStat = storage_file_ctx:get_stat_timestamp_const(StorageFileCtx),
-    case StorageSyncInfo of
-        #document{value = #storage_sync_info{
+    LocationId = file_location:local_id(FileUuid),
+    {ok, #document{
+        value = #file_location{
+            last_replication_timestamp = LastReplicationTimestamp
+    }}} = fslogic_location_cache:get_location(LocationId, FileUuid),
+
+    Result2 = case {LastReplicationTimestamp, StorageSyncInfo} of
+
+        {undefined, undefined} when MTime < StMtime orelse Size =/= StSize ->
+            % file created locally and modified on storage
+            update_file_location(FileCtx4, StSize),
+            updated;
+
+        {undefined, undefined} ->
+            % file created locally and not modified on storage
+            not_updated;
+
+        {undefined, #document{value = #storage_sync_info{
             mtime = LastMtime,
             last_stat = LastStat
-        }} when
-            LastMtime =:= StMtime andalso Size =:= StSize andalso LastStat > StMtime
+        }}} when LastMtime =:= StMtime
+            andalso Size =:= StSize
+            andalso LastStat > StMtime
         ->
-            storage_sync_info:update_stat_time(FileUuid, NewLastStat, SpaceId),
+            % file not replicated and already handled because LastStat > StMtime
             not_updated;
-        _ ->
-            FileGuid = file_ctx:get_guid_const(FileCtx3),
-            NewFileBlocks = create_file_blocks(StSize),
-            replica_updater:update(FileCtx3, NewFileBlocks, StSize, true),
-            ok = lfm_event_utils:emit_file_written(FileGuid, NewFileBlocks, StSize, ?ROOT_SESS_ID),
-            storage_sync_info:update_mtime_and_stat_time(FileUuid, StMtime, NewLastStat, SpaceId),
-            updated
-    end.
+
+        {undefined, #document{value = #storage_sync_info{
+            mtime = LastMtime,
+            last_stat = LastStat
+        }}} ->
+            case MTime < StMtime of
+                true ->
+                    update_file_location(FileCtx4, StSize),
+                    updated;
+                false ->
+                    not_updated
+            end;
+
+        {_, undefined} ->
+            case LastReplicationTimestamp < StMtime of
+                true ->
+                    % file was modified after replication and has never been synced
+                    case MTime < StMtime of
+                        true ->
+                            % file was modified on storage
+                            update_file_location(FileCtx4, StSize),
+                            updated;
+                        false ->
+                            % file was modified via onedata
+                            not_updated
+                    end;
+                false ->
+                    % file was replicated
+                    not_updated
+            end;
+
+        {_, #document{value = #storage_sync_info{
+            mtime = LastMtime,
+            last_stat = LastStat
+        }}} when LastMtime =:= StMtime
+            andalso Size =:= StSize
+            andalso LastStat > StMtime
+        ->
+            % file replicated and already handled because LastStat > StMtime
+            not_updated;
+
+        {_, #document{value = #storage_sync_info{
+            mtime = LastMtime,
+            last_stat = LastStat
+        }}} ->
+            case LastReplicationTimestamp < StMtime of
+                true ->
+                    % file was modified after replication
+                    case MTime < StMtime of
+                        true ->
+                            %there was modified on storage
+                            update_file_location(FileCtx4, StSize),
+                            updated;
+                        false ->
+                            % file was modified via onedata
+                            not_updated
+                        end;
+                false ->
+                    % file was replicated
+                    not_updated
+            end
+    end,
+    storage_sync_info:create_or_update(FileUuid, #{
+        mtime => StMtime,
+        last_stat => NewLastStat
+    }, SpaceId),
+    Result2.
+
+-spec update_file_location(file_ctx:ctx(), non_neg_integer()) -> ok.
+update_file_location(FileCtx, StorageSize) ->
+    FileGuid = file_ctx:get_guid_const(FileCtx),
+    NewFileBlocks = create_file_blocks(StorageSize),
+    replica_updater:update(FileCtx, NewFileBlocks, StorageSize, true),
+    ok = lfm_event_utils:emit_file_written(FileGuid, NewFileBlocks, StorageSize, ?ROOT_SESS_ID).
 
 %%--------------------------------------------------------------------
 %% @private
