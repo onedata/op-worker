@@ -1064,6 +1064,37 @@ get_record_struct(8) ->
         {hr_hist, #{string => [integer]}},
         {dy_hist, #{string => [integer]}},
         {mth_hist, #{string => [integer]}}
+    ]};
+get_record_struct(9) ->
+    {record, [
+        {file_uuid, string},
+        {space_id, string},
+        {user_id, string},
+        {rerun_id, string},
+        {path, string},
+        {callback, string},
+        {enqueued, atom},
+        {cancel, atom},
+        {replication_status, atom},
+        {eviction_status, atom},
+        {scheduling_provider, string},
+        {replicating_provider, string},
+        {evicting_provider, string},
+        {pid, string}, %todo VFS-3657
+        {files_to_process, integer},
+        {files_processed, integer},
+        {failed_files, integer},
+        {files_replicated, integer},
+        {bytes_replicated, integer},
+        {files_evicted, integer},
+        {schedule_time, integer},
+        {start_time, integer},
+        {finish_time, integer},
+        {last_update, #{string => integer}},
+        {min_hist, #{string => [integer]}},
+        {hr_hist, #{string => [integer]}},
+        {dy_hist, #{string => [integer]}},
+        {mth_hist, #{string => [integer]}}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -1181,6 +1212,20 @@ upgrade_record(7, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, Enqueued,
         TargetProviderId, SourceProviderId, Pid, FilesToProcess,
         FilesProcessed, FailedFiles, FilesTransferred, BytesTransferred,
         FilesInvalidated, ScheduleTime, StartTime, FinishTime,
+        LastUpdate, MinHist, HrHist, DyHist, MthHist
+    }};
+upgrade_record(8, {?MODULE, FileUuid, SpaceId, UserId, RerunId, Path, CallBack, Enqueued,
+    Cancel, ReplicationStatus, EvictionStatus, SchedulingProvider,
+    ReplicatingProvider, EvictingProvider, Pid, FilesToProcess,
+    FilesProcessed, FailedFiles, FilesReplicated, BytesReplicated,
+    FilesEvicted, ScheduleTime, StartTime, FinishTime,
+    LastUpdate, MinHist, HrHist, DyHist, MthHist
+}) ->
+    {9, {?MODULE, FileUuid, SpaceId, UserId, RerunId, Path, CallBack, Enqueued,
+        Cancel, ReplicationStatus, EvictionStatus, SchedulingProvider,
+        ReplicatingProvider, EvictingProvider, Pid, FilesToProcess,
+        FilesProcessed, FailedFiles, FilesReplicated, BytesReplicated,
+        FilesEvicted, ScheduleTime, StartTime, FinishTime,
         LastUpdate, MinHist, HrHist, DyHist, MthHist
     }}.
 

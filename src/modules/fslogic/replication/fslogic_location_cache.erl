@@ -296,11 +296,9 @@ set_blocks(#document{key = Key, value = FileLocation} = Doc, Blocks) ->
 -spec clear_blocks(file_ctx:ctx(), location()) -> location().
 clear_blocks(FileCtx, Key) ->
     replica_synchronizer:apply(FileCtx, fun() ->
-        fslogic_cache:init_flush_check(),
         fslogic_cache:get_doc(Key),
         fslogic_cache:save_blocks(Key, []),
         fslogic_cache:mark_changed_blocks(Key)
-%%        fslogic_cache:flush_key(Key, sync)
     end).
 
 %%-------------------------------------------------------------------

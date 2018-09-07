@@ -42,7 +42,7 @@
 run(Job = #space_strategy_job{
     data = #{
         storage_file_ctx := StorageFileCtx
-}}) when StorageFileCtx =/= undefined ->
+    }}) when StorageFileCtx =/= undefined ->
     maybe_import_storage_file_and_children(Job);
 run(Job = #space_strategy_job{
     data = Data = #{
@@ -65,7 +65,7 @@ run(Job = #space_strategy_job{
         Error = {error, _} ->
             storage_sync_monitoring:mark_failed_file(SpaceId, StorageId),
             {Error, []};
-        {_StatBuf, StorageFileCtx2}  ->
+        {_StatBuf, StorageFileCtx2} ->
             Data2 = Data#{
                 parent_ctx => ParentCtx2,
                 storage_file_ctx => StorageFileCtx2
@@ -221,16 +221,20 @@ import_children(Job = #space_strategy_job{
             FileUuid = file_ctx:get_uuid_const(FileCtx),
             case storage_sync_utils:all_children_imported(DirsJobs, FileUuid) of
                 true ->
-                    storage_sync_info:create_or_update(FileUuid, #{
-                        mtime => Mtime,
-                        hash_key => BatchKey,
-                        hash_value => BatchHash
-                    }, SpaceId);
+                    storage_sync_info:create_or_update(FileUuid,
+                        fun(SSI = #storage_sync_info{children_attrs_hashes = CAH}) ->
+                            {ok, SSI#storage_sync_info{
+                                mtime = Mtime,
+                                children_attrs_hashes = CAH#{BatchKey => BatchHash}
+                            }}
+                        end, SpaceId);
                 _ ->
-                    storage_sync_info:create_or_update(FileUuid, #{
-                        hash_key => BatchKey,
-                        hash_value => BatchHash
-                    }, SpaceId)
+                    storage_sync_info:create_or_update(FileUuid,
+                        fun(SSI = #storage_sync_info{children_attrs_hashes = CAH}) ->
+                            {ok, SSI#storage_sync_info{
+                                children_attrs_hashes = CAH#{BatchKey => BatchHash}
+                            }}
+                        end, SpaceId)
             end;
         _ -> ok
     end,
@@ -353,10 +357,12 @@ import_file(#space_strategy_job{
     case file_meta:type(Mode) of
         ?REGULAR_FILE_TYPE ->
             StatTimestamp = storage_file_ctx:get_stat_timestamp_const(StorageFileCtx4),
-            storage_sync_info:create_or_update(FileUuid2, #{
-                mtime => MTime,
-                last_stat => StatTimestamp
-            }, SpaceId),
+            storage_sync_info:create_or_update(FileUuid2, fun(SSI) ->
+                {ok, SSI#storage_sync_info{
+                    mtime = MTime,
+                    last_stat = StatTimestamp
+                }}
+            end, SpaceId),
             ok = create_file_location(SpaceId, StorageId, FileUuid2, CanonicalPath, FSize);
         _ ->
             {ok, _} = dir_location:mark_dir_created_on_storage(FileUuid2, SpaceId)
@@ -424,27 +430,27 @@ generate_jobs_for_subfiles(Job = #space_strategy_job{
         try
             {#statbuf{st_mode = Mode}, ChildStorageCtx2} =
                 storage_file_ctx:get_stat_buf(ChildStorageCtx),
-                FileName = storage_file_ctx:get_file_id_const(ChildStorageCtx2),
-                case file_meta:is_hidden(FileName) of
-                    false ->
-                        case file_meta:type(Mode) of
-                            ?DIRECTORY_TYPE ->
-                                ChildStorageCtx3 = storage_file_ctx:reset(ChildStorageCtx2),
-                                {FileJobsIn, [
-                                    new_job(Job, ChildrenData, ChildStorageCtx3)
-                                    | DirJobsIn
-                                ]};
-                            ?REGULAR_FILE_TYPE when DirsOnly ->
-                                AccIn;
-                            ?REGULAR_FILE_TYPE ->
-                                ChildStorageCtx3 = storage_file_ctx:reset(ChildStorageCtx2),
-                                {[new_job(Job, ChildrenData, ChildStorageCtx3)
-                                    | FileJobsIn
-                                ], DirJobsIn}
-                        end;
-                    _ ->
-                        AccIn
-                end
+            FileName = storage_file_ctx:get_file_id_const(ChildStorageCtx2),
+            case file_meta:is_hidden(FileName) of
+                false ->
+                    case file_meta:type(Mode) of
+                        ?DIRECTORY_TYPE ->
+                            ChildStorageCtx3 = storage_file_ctx:reset(ChildStorageCtx2),
+                            {FileJobsIn, [
+                                new_job(Job, ChildrenData, ChildStorageCtx3)
+                                | DirJobsIn
+                            ]};
+                        ?REGULAR_FILE_TYPE when DirsOnly ->
+                            AccIn;
+                        ?REGULAR_FILE_TYPE ->
+                            ChildStorageCtx3 = storage_file_ctx:reset(ChildStorageCtx2),
+                            {[new_job(Job, ChildrenData, ChildStorageCtx3)
+                                | FileJobsIn
+                            ], DirJobsIn}
+                    end;
+                _ ->
+                    AccIn
+            end
         catch
             throw:?ENOENT ->
                 FileId = storage_file_ctx:get_file_id_const(ChildStorageCtx),
@@ -586,7 +592,7 @@ maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
             mtime = LastMtime,
             last_stat = LastStat
         }}} ->
-            case MTime < StMtime of
+            case (MTime < StMtime) or (Size =/= StSize) of
                 true ->
                     update_file_location(FileCtx4, StSize),
                     updated;
@@ -598,7 +604,7 @@ maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
             case LastReplicationTimestamp < StMtime of
                 true ->
                     % file was modified after replication and has never been synced
-                    case MTime < StMtime of
+                    case (MTime < StMtime) or (Size =/= StSize) of
                         true ->
                             % file was modified on storage
                             update_file_location(FileCtx4, StSize),
@@ -622,14 +628,11 @@ maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
             % file replicated and already handled because LastStat > StMtime
             not_updated;
 
-        {_, #document{value = #storage_sync_info{
-            mtime = LastMtime,
-            last_stat = LastStat
-        }}} ->
+        {_, #document{value = #storage_sync_info{}}} ->
             case LastReplicationTimestamp < StMtime of
                 true ->
                     % file was modified after replication
-                    case MTime < StMtime of
+                    case (MTime < StMtime) or (Size =/= StSize) of
                         true ->
                             %there was modified on storage
                             update_file_location(FileCtx4, StSize),
@@ -637,16 +640,18 @@ maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
                         false ->
                             % file was modified via onedata
                             not_updated
-                        end;
+                    end;
                 false ->
                     % file was replicated
                     not_updated
             end
     end,
-    storage_sync_info:create_or_update(FileUuid, #{
-        mtime => StMtime,
-        last_stat => NewLastStat
-    }, SpaceId),
+    storage_sync_info:create_or_update(FileUuid, fun(SSI) ->
+        {ok, SSI#storage_sync_info{
+            mtime = StMtime,
+            last_stat = NewLastStat
+        }}
+    end, SpaceId),
     Result2.
 
 -spec update_file_location(file_ctx:ctx(), non_neg_integer()) -> ok.

@@ -19,6 +19,7 @@
 -type doc() :: datastore_model:doc(record()).
 -type record() :: #storage_sync_info{}.
 -type error() :: {error, term()}.
+-type diff() :: datastore_doc:diff(record()).
 
 -export_type([key/0, doc/0, record/0]).
 
@@ -46,6 +47,16 @@
 get(Uuid) ->
     datastore_model:get(?CTX, Uuid).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates or updates storage_sync_info document.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_or_update(key(), diff(), od_space:id()) -> {ok, doc()} | error().
+create_or_update(Uuid, Diff, SpaceId) ->
+    DefaultDoc = default_doc(Uuid, Diff, SpaceId),
+    datastore_model:update(?CTX, Uuid, Diff, DefaultDoc).
+
 %%-------------------------------------------------------------------
 %% @doc
 %% @equiv datastore_model:delete(?CTX, Uuid).
@@ -55,110 +66,24 @@ get(Uuid) ->
 delete(Uuid) ->
     datastore_model:delete(?CTX, Uuid).
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns value of given field from ?MODULE record.
-%% @end
-%%-------------------------------------------------------------------
--spec get_field_by_name(atom(), record()) -> term().
-get_field_by_name(FieldName, StorageSyncInfo) ->
-    FieldsList = record_info(fields, ?MODULE),
-    Index = index(FieldName, FieldsList),
-    element(Index + 1, StorageSyncInfo).
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns index of Key in given List.
-%% @end
-%%-------------------------------------------------------------------
--spec index(atom(), [atom()]) -> non_neg_integer().
-index(Key, List) ->
-    {Index, _} = lists:keyfind(Key, 2, lists:zip(lists:seq(1, length(List)), List)),
-    Index.
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Ensures that given field value is defined.
-%% @end
-%%-------------------------------------------------------------------
--spec ensure_defined(atom(), maps:map(), record()) -> term().
-ensure_defined(children_attrs_hashes, #{
-    hash_key := NewHashKey,
-    hash_value := NewHashValue
-}, #storage_sync_info{children_attrs_hashes = ChildrenAttrsHashes0}) ->
-    case {NewHashKey, NewHashValue} of
-        {undefined, _} -> ChildrenAttrsHashes0;
-        {_, undefined} -> ChildrenAttrsHashes0;
-        {_, <<"">>} -> ChildrenAttrsHashes0;
-        {_, _} -> ChildrenAttrsHashes0#{NewHashKey => NewHashValue}
-    end;
-ensure_defined(FieldName, NewValuesMap, StorageSyncInfo) ->
-    NewValue = maps:get(FieldName, NewValuesMap, undefined),
-    utils:ensure_defined(NewValue, undefined, get_field_by_name(FieldName, StorageSyncInfo)).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates or updates storage_sync_info document.
-%% @end
-%%--------------------------------------------------------------------
--spec create_or_update(key(), maps:map(), od_space:id()) -> {ok, doc()} | error().
-create_or_update(Uuid, NewValuesMap, SpaceId
-) ->
-    Diff = fun(SSI = #storage_sync_info{
-    }) ->
-        MTime = ensure_defined(mtime, NewValuesMap, SSI),
-        ChildrenAttrsHashes = ensure_defined(children_attrs_hashes, NewValuesMap, SSI),
-        StatTime = ensure_defined(last_stat, NewValuesMap, SSI),
-        {ok, SSI#storage_sync_info{
-            mtime = MTime,
-            children_attrs_hashes = ChildrenAttrsHashes,
-            last_stat = StatTime
-        }}
-    end,
-    NewDoc = new_doc(Uuid, NewValuesMap, SpaceId),
-    datastore_model:update(?CTX, Uuid, Diff, NewDoc).
 
 %%===================================================================
 %% Internal functions
 %%===================================================================
 
 %%-------------------------------------------------------------------
-%% @private
 %% @doc
-%% Returns ?MODULE:doc()
+%% Returns default doc on which Diff has been performed.
 %% @end
 %%-------------------------------------------------------------------
--spec new_doc(key(), maps:map(), od_space:id()) -> doc().
-new_doc(Key, NewValuesMap, SpaceId) ->
-    NewMTime = maps:get(mtime, NewValuesMap, undefined),
-    NewLastStat = maps:get(last_stat, NewValuesMap, undefined),
+-spec default_doc(key(), diff(), od_space:id()) -> doc().
+default_doc(Key, Diff, SpaceId) ->
+    {ok, NewSSI} = Diff(#storage_sync_info{}),
     #document{
         key = Key,
-        value = #storage_sync_info{
-            mtime = NewMTime,
-            children_attrs_hashes = new_children_attrs_hashes(NewValuesMap),
-            last_stat = NewLastStat
-        },
+        value = NewSSI,
         scope = SpaceId
     }.
-
-
--spec new_children_attrs_hashes(maps:map()) -> maps:map().
-new_children_attrs_hashes(#{hash_key := undefined}) -> #{};
-new_children_attrs_hashes(#{hash_value := undefined}) -> #{};
-new_children_attrs_hashes(#{
-    hash_key := NewHashKey,
-    hash_value := NewHashValue
-}) ->
-    #{NewHashKey => NewHashValue};
-new_children_attrs_hashes(#{}) -> #{}.
 
 %%%===================================================================
 %%% datastore_model callbacks

@@ -19,7 +19,7 @@
 
 % Control API
 -export([init/1, is_current_proc_cache/0, flush/0, flush/1, flush/2, check_flush/0,
-    verify_flush_ans/3, init_flush_check/0, flush_key/2]).
+    verify_flush_ans/3]).
 % File/UUID API
 -export([get_uuid/0, get_local_location/0, get_all_locations/0,
     cache_event/2, clear_events/0]).
@@ -483,6 +483,7 @@ get_blocks_tree(Key) ->
 %%-------------------------------------------------------------------
 -spec save_blocks(file_location:id(), fslogic_blocks:stored_blocks()) -> ok.
 save_blocks(Key, Blocks) ->
+    init_flush_check(),
     Keys = get(?KEYS_BLOCKS_MODIFIED),
     put(?KEYS_BLOCKS_MODIFIED, [Key | (Keys -- [Key])]),
     put({?BLOCKS, Key}, blocks_to_tree(Blocks)),
@@ -588,11 +589,9 @@ set_local_change(false) ->
     ok;
 set_local_change(Value) ->
     put(?LOCAL_CHANGES, Value),
-    LocationId = file_location:local_id(get(?MAIN_KEY)),
-    Uuid = get_uuid(),
-    fslogic_location_cache:update_location(Uuid, LocationId, fun(FL) ->
-        {ok, FL#file_location{last_replication_timestamp = time_utils:system_time_seconds()}}
-    end, false),
+    UpdatedDoc = file_location:set_last_replication_timestamp(
+        get_local_location(), time_utils:system_time_seconds()),
+    save_doc(UpdatedDoc),
     ok.
 
 %%%===================================================================

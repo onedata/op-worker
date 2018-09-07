@@ -430,7 +430,7 @@ import_nfs_acl_with_disabled_luma_should_fail_test(Config) ->
     storage_sync_test_base:import_nfs_acl_with_disabled_luma_should_fail_test(Config, false).
 
 sync_should_not_invalidate_file_after_replication(Config) ->
-    storage_sync_test_base:sync_should_not_invalidate_file_after_replication(Config, false).
+    storage_sync_test_base:sync_should_not_invalidate_file_after_replication(Config).
 
 %===================================================================
 % SetUp and TearDown functions

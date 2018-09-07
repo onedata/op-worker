@@ -38,8 +38,7 @@
     rerun_file_replication/1,
     rerun_file_replication_by_other_user/1,
     cancel_file_replication_on_2_providers_simultaneously/1,
-    rerun_dir_replication/1
-    ,
+    rerun_dir_replication/1,
     evict_file_replica_with_migration/1,
     eviction_should_succeed_when_remote_provider_modified_file_replica/1,
     eviction_should_fail_when_eviction_provider_modified_file_replica/1,
