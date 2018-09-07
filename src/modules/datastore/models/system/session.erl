@@ -337,9 +337,13 @@ get_connections(SessId, HideOverloaded) ->
 -spec remove_connection(id(), Con :: pid()) ->
     ok | {error, term()}.
 remove_connection(SessId, Con) ->
-    Diff = fun(#session{connections = Cons} = Sess) ->
+    Diff = fun(#session{connections = Cons, status = OldStatus} = Sess) ->
         NewCons = lists:filter(fun(C) -> C =/= Con end, Cons),
-        {ok, Sess#session{connections = NewCons}}
+        NewStatus = case NewCons of
+            [] -> inactive;
+            _ -> OldStatus
+        end,
+        {ok, Sess#session{connections = NewCons, status = NewStatus}}
     end,
     case session:update(SessId, Diff) of
         {ok, _} -> ok;
