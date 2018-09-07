@@ -34,43 +34,25 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Implementation for 'simple_scan' strategy.
+%% calls ?MODULE:run_internal/1 and catches exceptions
 %% @end
 %%--------------------------------------------------------------------
 -spec run(space_strategy:job()) ->
     {space_strategy:job_result(), [space_strategy:job()]}.
-run(Job = #space_strategy_job{
-    data = #{
-        storage_file_ctx := StorageFileCtx
-    }}) when StorageFileCtx =/= undefined ->
-    maybe_import_storage_file_and_children(Job);
-run(Job = #space_strategy_job{
-    data = Data = #{
-        parent_ctx := ParentCtx,
-        file_name := FileName,
-        space_id := SpaceId,
-        storage_id := StorageId
-    }}) ->
-
-    {CanonicalPath, ParentCtx2} = file_ctx:get_child_canonical_path(ParentCtx, FileName),
-    StorageFileCtx = storage_file_ctx:new(CanonicalPath, SpaceId, StorageId),
-    StatResult = try
-        storage_file_ctx:get_stat_buf(StorageFileCtx)
+run(Job =  #space_strategy_job{data = #{
+    file_name := FileName,
+    space_id := SpaceId,
+    storage_id := StorageId
+}}) ->
+    try
+        run_internal(Job)
     catch
-        throw:?ENOENT ->
-            {error, ?ENOENT}
-    end,
-
-    case StatResult of
-        Error = {error, _} ->
+        Error:Reason ->
+            ?error_stacktrace("simple_scan:run for file ~p in space ~p failed due to ~p:~p",
+                [FileName, SpaceId, Error, Reason]
+            ),
             storage_sync_monitoring:mark_failed_file(SpaceId, StorageId),
-            {Error, []};
-        {_StatBuf, StorageFileCtx2} ->
-            Data2 = Data#{
-                parent_ctx => ParentCtx2,
-                storage_file_ctx => StorageFileCtx2
-            },
-            run(Job#space_strategy_job{data = Data2})
+            {{error, Reason}, []}
     end.
 
 %%--------------------------------------------------------------------
@@ -97,40 +79,38 @@ maybe_import_storage_file_and_children(Job0 = #space_strategy_job{
     {LocalResult, FileCtx, Job2} = maybe_import_storage_file(Job1),
 
     case LocalResult of
-        {error, {ErrorType, Reason}} ->
+        {error, Reason} ->
             storage_sync_monitoring:mark_failed_file(SpaceId, StorageId),
-            erlang:ErrorType(Reason);
+            {{error, Reason}, []};
         _ ->
-            ok
-    end,
+            Data2 = Job2#space_strategy_job.data,
+            Offset = maps:get(dir_offset, Data2, 0),
+            Type = file_meta:type(Mode),
 
-    Data2 = Job2#space_strategy_job.data,
-    Offset = maps:get(dir_offset, Data2, 0),
-    Type = file_meta:type(Mode),
+            Job3 = case Offset of
+                0 ->
+                    %remember mtime to save after importing all subfiles
+                    space_strategy:update_job_data(mtime, StorageMtime, Job2);
+                _ -> Job2
+            end,
+            Module = storage_sync_utils:module(Job3),
+            SubJobs = delegate(Module, import_children, [Job3, Type, Offset, FileCtx, ?DIR_BATCH], 5),
 
-    Job3 = case Offset of
-        0 ->
-            %remember mtime to save after importing all subfiles
-            space_strategy:update_job_data(mtime, StorageMtime, Job2);
-        _ -> Job2
-    end,
-    Module = storage_sync_utils:module(Job3),
-    SubJobs = delegate(Module, import_children, [Job3, Type, Offset, FileCtx, ?DIR_BATCH], 5),
-
-    LocalResult2 = case LocalResult of
-        imported ->
-            storage_sync_monitoring:mark_imported_file(SpaceId, StorageId),
-            ok;
-        updated ->
-            storage_sync_monitoring:mark_updated_file(SpaceId, StorageId),
-            ok;
-        processed ->
-            storage_sync_monitoring:mark_processed_file(SpaceId, StorageId),
-            ok;
-        ok ->
-            ok
-    end,
-    {LocalResult2, SubJobs}.
+            LocalResult2 = case LocalResult of
+                imported ->
+                    storage_sync_monitoring:mark_imported_file(SpaceId, StorageId),
+                    ok;
+                updated ->
+                    storage_sync_monitoring:mark_updated_file(SpaceId, StorageId),
+                    ok;
+                processed ->
+                    storage_sync_monitoring:mark_processed_file(SpaceId, StorageId),
+                    ok;
+                ok ->
+                    ok
+            end,
+            {LocalResult2, SubJobs}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -258,6 +238,49 @@ import_regular_subfiles(FilesJobs) ->
 %%% Internal functions
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Implementation for 'simple_scan' strategy.
+%% @end
+%%--------------------------------------------------------------------
+-spec run_internal(space_strategy:job()) ->
+    {space_strategy:job_result(), [space_strategy:job()]}.
+run_internal(Job = #space_strategy_job{
+    data = #{
+        storage_file_ctx := StorageFileCtx
+    }}) when StorageFileCtx =/= undefined ->
+    maybe_import_storage_file_and_children(Job);
+run_internal(Job = #space_strategy_job{
+    data = Data = #{
+        parent_ctx := ParentCtx,
+        file_name := FileName,
+        space_id := SpaceId,
+        storage_id := StorageId
+    }}) ->
+
+    {CanonicalPath, ParentCtx2} = file_ctx:get_child_canonical_path(ParentCtx, FileName),
+    StorageFileCtx = storage_file_ctx:new(CanonicalPath, SpaceId, StorageId),
+    StatResult = try
+        storage_file_ctx:get_stat_buf(StorageFileCtx)
+    catch
+        throw:?ENOENT ->
+            ?error_stacktrace("simple_scan failed due to ~p for file ~p in space ~p", [?ENOENT, CanonicalPath, SpaceId]),
+            {error, ?ENOENT}
+    end,
+
+    case StatResult of
+        Error = {error, _} ->
+            storage_sync_monitoring:mark_failed_file(SpaceId, StorageId),
+            {Error, []};
+        {_StatBuf, StorageFileCtx2}  ->
+            Data2 = Data#{
+                parent_ctx => ParentCtx2,
+                storage_file_ctx => StorageFileCtx2
+            },
+            run_internal(Job#space_strategy_job{data = Data2})
+    end.
+
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
@@ -310,15 +333,16 @@ maybe_import_file_with_existing_metadata(Job = #space_strategy_job{}, FileCtx) -
 import_file_safe(Job = #space_strategy_job{
     data = #{
         file_name := FileName,
+        space_id := SpaceId,
         parent_ctx := ParentCtx
 }}, FileUuid) ->
     try
         ?MODULE:import_file(Job, FileUuid)
     catch
         Error:Reason ->
-            ?error_stacktrace("importing file ~p failed with ~p:~p", [FileName, Error, Reason]),
+            ?error_stacktrace("importing file ~p in space ~p failed with ~p:~p", [FileName, SpaceId, Error, Reason]),
             full_update:delete_imported_file(FileName, ParentCtx),
-            {{error, {Error, Reason}}, undefined}
+            {{error, Reason}, undefined}
     end.
 
 %%--------------------------------------------------------------------
@@ -487,10 +511,14 @@ new_job(Job, Data, StorageFileCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_already_imported_file(space_strategy:job(), #file_attr{},
-    file_ctx:ctx()) -> {job_result(), space_strategy:job()}.
+    file_ctx:ctx()) -> {space_strategy:job_result(), space_strategy:job()}.
 handle_already_imported_file(Job = #space_strategy_job{
     strategy_args = Args,
-    data = #{storage_file_ctx := StorageFileCtx}
+    data = #{
+        file_name := FileName,
+        space_id := SpaceId,
+        storage_file_ctx := StorageFileCtx
+    }
 }, FileAttr, FileCtx) ->
 
     SyncAcl = maps:get(sync_acl, Args, false),
@@ -500,7 +528,9 @@ handle_already_imported_file(Job = #space_strategy_job{
         {Result, Job}
     catch
         Error:Reason ->
-            {{error, {Error, Reason}}, Job}
+            ?error_stacktrace("simple_scan:handle_already_imported file for file ~p in space ~p failed due to ~p:~p",
+                [FileName, SpaceId, Error, Reason]),
+            {{error, Reason}, Job}
     end.
 
 %%--------------------------------------------------------------------
