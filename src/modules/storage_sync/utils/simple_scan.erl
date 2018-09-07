@@ -599,7 +599,7 @@ maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
 
     Result2 = case {LastReplicationTimestamp, StorageSyncInfo} of
         %todo VFS-4847 refactor this case, use when wherever possible
-        {undefined, undefined} when MTime < StMtime orelse Size =/= StSize ->
+        {undefined, undefined} when MTime < StMtime ->
             % file created locally and modified on storage
             update_file_location(FileCtx4, StSize),
             updated;
@@ -634,7 +634,7 @@ maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
             case LastReplicationTimestamp < StMtime of
                 true ->
                     % file was modified after replication and has never been synced
-                    case (MTime < StMtime) or (Size =/= StSize) of
+                    case (MTime < StMtime) of
                         true ->
                             % file was modified on storage
                             update_file_location(FileCtx4, StSize),
@@ -662,7 +662,7 @@ maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
             case LastReplicationTimestamp < StMtime of
                 true ->
                     % file was modified after replication
-                    case (MTime < StMtime) or (Size =/= StSize) of
+                    case (MTime < StMtime) of
                         true ->
                             %there was modified on storage
                             update_file_location(FileCtx4, StSize),
