@@ -186,12 +186,9 @@ cancel(TransferId) ->
 %% Asynchronously cancels a transfers associated with specified session and file.
 %% @end
 %%--------------------------------------------------------------------
--spec cancel_transfers_of_session(session:id(), file_ctx:ctx()) -> ok.
-cancel_transfers_of_session(SessionId, FileCtx) ->
-    Uuid = file_ctx:get_uuid_const(FileCtx),
-    apply_if_alive(Uuid, fun() ->
-        gen_server2:cast(self(), {cancel_transfers_of_session, SessionId})
-    end).
+-spec cancel_transfers_of_session(file_meta:uuid(), session:id()) -> ok.
+cancel_transfers_of_session(FileUuid, SessionId) ->
+    apply_if_alive(FileUuid, {async, {cancel_transfers_of_session, SessionId}}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -218,7 +215,7 @@ terminate_all() ->
 %% (executes function immediately).
 %% @end
 %%--------------------------------------------------------------------
--spec apply_if_alive(file_meta:uuid(), fun(() -> term())) ->
+-spec apply_if_alive(file_meta:uuid(), term()) ->
     term().
 apply_if_alive(Uuid, Fun) ->
     case fslogic_cache:is_current_proc_cache() of
@@ -392,6 +389,8 @@ apply_or_run_locally_internal(Uuid, Fun, FallbackFun) ->
 -spec send_or_apply(pid(), term()) -> term().
 send_or_apply(Process, FunOrMsg) when is_function(FunOrMsg) ->
     gen_server2:call(Process, {apply, FunOrMsg}, infinity);
+send_or_apply(Process, {async, FunOrMsg}) ->
+    gen_server2:cast(Process, FunOrMsg);
 send_or_apply(Process, FunOrMsg) ->
     gen_server2:call(Process, FunOrMsg, infinity).
 
@@ -791,7 +790,7 @@ disassociate_froms(Froms, State = #state{
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Cancels a transfer by TransferId, SessionId or synchronization request froms.
+%% Cancels a transfer by TransferId.
 %% @end
 %%--------------------------------------------------------------------
 -spec cancel_transfer_id(transfer:id(), #state{}) -> #state{}.
@@ -799,6 +798,12 @@ cancel_transfer_id(TransferId, State) ->
     From = maps:get(TransferId, State#state.transfer_id_to_from),
     cancel_froms([From], State).
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Cancels a transfers by SessionId.
+%% @end
+%%--------------------------------------------------------------------
 -spec cancel_session(session:id(), #state{}) -> #state{}.
 cancel_session(SessionId, State) ->
     case maps:take(SessionId, State#state.session_to_froms) of
@@ -810,6 +815,12 @@ cancel_session(SessionId, State) ->
             })
     end.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Cancels a transfers by synchronization request froms.
+%% @end
+%%--------------------------------------------------------------------
 -spec cancel_froms([from()], #state{}) -> #state{}.
 cancel_froms([], State) ->
     State;

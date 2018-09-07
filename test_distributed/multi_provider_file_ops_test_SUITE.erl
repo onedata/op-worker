@@ -596,8 +596,9 @@ rtransfer_config_fetch_mock(Request, NotifyFun, CompleteFun, _, _, _) ->
     {ok, Ref}.
 
 cancel_transfers_for_session_and_file(Node, SessionId, FileCtx) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
     rpc:call(Node, replica_synchronizer, cancel_transfers_of_session, [
-        SessionId, FileCtx
+        FileUuid, SessionId
     ]).
 
 get_fetched_blocks(Nodes) ->
