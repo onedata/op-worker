@@ -23,6 +23,7 @@
 -type blocks() :: fslogic_blocks:blocks().
 -type blocks_tree() :: gb_sets:set(). % TODO - use gb_trees (it is faster)
 -type stored_blocks() :: blocks() | blocks_tree(). % set only when used by blocks' cache
+-type id() :: file_location:id().
 -type location() :: file_location:doc().
 -type location_or_record() :: location() | file_location:record().
 -type get_doc_opts() :: boolean() | skip_local_blocks |
@@ -38,7 +39,7 @@
     force_flush/1]).
 %% Blocks getters/setters
 -export([get_blocks/1, get_blocks/2, set_blocks/2, set_final_blocks/2,
-    update_blocks/2]).
+    update_blocks/2, clear_blocks/2]).
 %% Blocks API
 -export([get_location_size/2, get_blocks_range/1, get_blocks_range/2]).
 
@@ -287,6 +288,19 @@ set_blocks(#document{key = Key, value = FileLocation} = Doc, Blocks) ->
             fslogic_cache:mark_changed_blocks(Key),
             Doc
     end.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Clear blocks in location document.
+%% @end
+%%-------------------------------------------------------------------
+-spec clear_blocks(file_ctx:ctx(), id()) -> location().
+clear_blocks(FileCtx, Key) ->
+    replica_synchronizer:apply(FileCtx, fun() ->
+        fslogic_cache:get_doc(Key),
+        fslogic_cache:save_blocks(Key, []),
+        fslogic_cache:mark_changed_blocks(Key)
+    end).
 
 %%-------------------------------------------------------------------
 %% @doc
