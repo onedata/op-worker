@@ -68,7 +68,8 @@
     in_sequence_hits = 0 :: non_neg_integer(),
     from_to_refs = #{} :: #{from() => [fetch_ref()]},
     ref_to_froms = #{} :: #{fetch_ref() => [from()]},
-    from_sessions = #{} :: #{from() => session:id()},
+    from_to_session = #{} :: #{from() => session:id()},
+    session_to_froms = #{} :: #{session:id() => sets:set(from())},
     from_requests_types = #{} :: #{from() => request_type()},
     from_to_transfer_id = #{} :: #{from() => transfer:id() | undefined},
     transfer_id_to_from = #{} :: #{transfer:id() | undefined => from()},
@@ -83,8 +84,12 @@
 -define(BLOCK(__Offset, __Size), #file_block{offset = __Offset, size = __Size}).
 
 % API
--export([synchronize/6, request_synchronization/6, request_synchronization/7,
-    update_replica/4, force_flush_events/1, cancel/1, terminate_all/0]).
+-export([
+    synchronize/6, request_synchronization/6, request_synchronization/7,
+    update_replica/4, force_flush_events/1,
+    cancel/1, cancel_transfers_of_session/2,
+    terminate_all/0
+]).
 % gen_server callbacks
 -export([handle_call/3, handle_cast/2, handle_info/2, init/1, code_change/3,
     terminate/2]).
@@ -167,7 +172,7 @@ force_flush_events(Uuid) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Asynchronically cancels a transfer in a best-effort manner.
+%% Asynchronously cancels a transfer in a best-effort manner.
 %% @end
 %%--------------------------------------------------------------------
 -spec cancel(transfer:id()) -> ok.
@@ -175,6 +180,15 @@ cancel(TransferId) ->
     lists:foreach(
         fun(Pid) -> gen_server2:cast(Pid, {cancel, TransferId}) end,
         gproc:lookup_pids({c, l, TransferId})).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Asynchronously cancels a transfers associated with specified session and file.
+%% @end
+%%--------------------------------------------------------------------
+-spec cancel_transfers_of_session(file_meta:uuid(), session:id()) -> ok.
+cancel_transfers_of_session(FileUuid, SessionId) ->
+    apply_if_alive(FileUuid, {async, {cancel_transfers_of_session, SessionId}}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -201,7 +215,7 @@ terminate_all() ->
 %% (executes function immediately).
 %% @end
 %%--------------------------------------------------------------------
--spec apply_if_alive(file_meta:uuid(), fun(() -> term())) ->
+-spec apply_if_alive(file_meta:uuid(), term()) ->
     term().
 apply_if_alive(Uuid, Fun) ->
     case fslogic_cache:is_current_proc_cache() of
@@ -271,7 +285,7 @@ apply_or_run_locally(Uuid, InCacheFun, ApplyOnCacheFun, FallbackFun) ->
 %% @equiv apply_if_alive_internal(Uuid, FunOrMsg) on chosen node.
 %% @end
 %%--------------------------------------------------------------------
--spec apply_if_alive_no_check(file_ctx:ctx(), term()) ->
+-spec apply_if_alive_no_check(file_meta:uuid(), term()) ->
     term().
 apply_if_alive_no_check(Uuid, FunOrMsg) ->
     Node = consistent_hasing:get_node(Uuid),
@@ -341,7 +355,7 @@ apply_internal(FileCtx, FunOrMsg) ->
 %% Warning: cannot be called from the inside of synchronizer.
 %% @end
 %%--------------------------------------------------------------------
--spec apply_if_alive_internal(file_ctx:ctx(), term()) -> term().
+-spec apply_if_alive_internal(file_meta:uuid(), term()) -> term().
 apply_if_alive_internal(Uuid, FunOrMsg) ->
     case gproc:lookup_local_name(Uuid) of
         undefined ->
@@ -375,6 +389,8 @@ apply_or_run_locally_internal(Uuid, Fun, FallbackFun) ->
 -spec send_or_apply(pid(), term()) -> term().
 send_or_apply(Process, FunOrMsg) when is_function(FunOrMsg) ->
     gen_server2:call(Process, {apply, FunOrMsg}, infinity);
+send_or_apply(Process, {async, FunOrMsg}) ->
+    gen_server2:cast(Process, FunOrMsg);
 send_or_apply(Process, FunOrMsg) ->
     gen_server2:call(Process, FunOrMsg, infinity).
 
@@ -413,12 +429,13 @@ init_or_return_existing(FileCtx) ->
 %%% gen_server callbacks
 %%%===================================================================
 
--spec init(file_ctx:ctx()) ->
-    {ok, #state{}, Timeout :: non_neg_integer()}.
+-spec init(file_ctx:ctx()) -> {ok, #state{}, Timeout :: non_neg_integer()}.
 init(FileCtx) ->
     fslogic_cache:init(file_ctx:get_uuid_const(FileCtx)),
-    {ok, #state{file_ctx = FileCtx,
-        in_progress = ordsets:new()}, ?DIE_AFTER}.
+    {ok, #state{
+        file_ctx = FileCtx,
+        in_progress = ordsets:new()
+    }, ?DIE_AFTER}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -431,8 +448,12 @@ init(FileCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priority, Type}, From,
-    #state{from_sessions = FS, requested_blocks = RB, file_guid = FG,
-        from_requests_types = RequestTypesMap} = State0) ->
+    #state{
+        requested_blocks = RB,
+        file_guid = FG,
+        from_requests_types = RequestTypesMap
+    } = State0
+) ->
     try
         State = case FG of
             undefined ->
@@ -486,7 +507,7 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
                     _ ->
                         State3
                 end,
-                State6 = State5#state{from_sessions = maps:put(From, Session, FS)},
+                State6 = associate_from_with_session(From, Session, State5),
                 State7 = State6#state{requested_blocks = maps:put(From, Block, RB)},
                 State8 = State7#state{from_requests_types =
                 maps:put(From, Type, RequestTypesMap)},
@@ -522,6 +543,18 @@ handle_cast({cancel, TransferId}, State) ->
             {noreply, State, ?DIE_AFTER}
     end;
 
+handle_cast({cancel_transfers_of_session, SessionId}, State) ->
+    try
+        NewState = cancel_session(SessionId, State),
+        {noreply, NewState, ?DIE_AFTER}
+    catch
+        _:Reason ->
+            ?error_stacktrace("Unable to cancel transfers of ~p: ~p", [
+                SessionId, Reason
+            ]),
+            {noreply, State, ?DIE_AFTER}
+    end;
+
 handle_cast(Msg, State) ->
     ?log_bad_request(Msg),
     {noreply, State, ?DIE_AFTER}.
@@ -544,7 +577,7 @@ handle_info({Ref, active, ProviderId, Block}, #state{
     AffectedFroms = maps:get(Ref, RefToFroms, []),
     TransferIds = case maps:values(maps:with(AffectedFroms, FromToTransferId)) of
         [] -> [undefined];
-        Values -> Values
+        Values -> lists:usort(Values)
     end,
     {noreply, cache_stats_and_blocks(TransferIds, ProviderId, Block, State), ?DIE_AFTER};
 
@@ -558,62 +591,49 @@ handle_info(?FLUSH_BLOCKS, State) ->
 handle_info(?FLUSH_EVENTS, State) ->
     {noreply, flush_events(State), ?DIE_AFTER};
 
-handle_info({Ref, complete, {ok, _} = _Status}, #state{from_sessions = FS,
-    requested_blocks = RB, from_to_transfer_id = FromToTransferId,
-    from_requests_types = RequestTypesMap} = State) ->
-    {_Block, _Priority, _AffectedFroms, FinishedFroms, State1} = disassociate_ref(Ref, State),
+handle_info({Ref, complete, {ok, _} = _Status}, State) ->
+    {Block, _Priority, _AffectedFroms, FinishedFroms, State1} =
+        disassociate_ref(Ref, State),
+    {FinishedBlocks, ExcludeSessions, EndedTransfers, State2} =
+        disassociate_froms(FinishedFroms, State1),
 
-    {ExcludeSessions, FS2} = lists:foldl(fun(From, {Acc, TmpFS}) ->
-        case maps:get(From, TmpFS, undefined) of
-            undefined ->
-                {Acc, TmpFS};
-            S ->
-                {[S | Acc -- [S]], maps:remove(From, TmpFS)}
-        end
-    end, {[], FS}, FinishedFroms),
+    {Ans, State3} = flush_blocks(State2, ExcludeSessions, FinishedBlocks,
+        EndedTransfers =/= []),
 
-    RequestTypesMap2 = lists:foldl(fun(From, TmpMap) ->
-        maps:remove(From, TmpMap)
-    end, RequestTypesMap, FinishedFroms),
-
-    FinishedBlocks = [{From, maps:get(From, RB), maps:get(From, RequestTypesMap)}
-        || From <- FinishedFroms],
-    RB2 = lists:foldl(fun(From, Acc) ->
-        maps:remove(From, Acc)
-    end, RB, FinishedFroms),
-    TransferIds = maps:with(FinishedFroms, FromToTransferId),
-    TransferIdsList = [TID || TID <- maps:values(TransferIds)],
-    {Ans, State2} = flush_blocks(State1, ExcludeSessions, FinishedBlocks,
-        TransferIdsList =/= []),
     % Transfer on the fly statistics are being kept under `undefined` key in
     % `state.cached_stats` map, so take it from it and flush only jobs stats;
     % on the lfy transfer stats are flushed only on cache timer timeout
-
-    State3 = case maps:take(undefined, State2#state.cached_stats) of
+    State4 = case maps:take(undefined, State2#state.cached_stats) of
         error ->
-            flush_stats(State2, true);
+            flush_stats(State3, true);
         {OnfStats, JobsStats} ->
-            TempState = flush_stats(State2#state{cached_stats = JobsStats}, false),
+            TempState = flush_stats(State3#state{cached_stats = JobsStats}, false),
             TempState#state{cached_stats = #{undefined => OnfStats}}
     end,
-    [transfer:increment_files_replicated_counter(TID) || TID <- TransferIdsList],
-    [gen_server2:reply(From, {ok, Message}) || {From, Message} <- Ans],
 
-    {noreply, State3#state{from_sessions = FS2, requested_blocks = RB2,
-        from_requests_types = RequestTypesMap2}, ?DIE_AFTER};
+    case Block of
+        undefined ->
+            [gen_server2:reply(From, {error, cancelled}) || From <- FinishedFroms];
+        _ ->
+            [transfer:increment_files_replicated_counter(TID) || TID <- EndedTransfers],
+            [gen_server2:reply(From, {ok, Message}) || {From, Message} <- Ans]
+    end,
+
+    {noreply, State4, ?DIE_AFTER};
 
 handle_info({FailedRef, complete, {error, disconnected}}, State) ->
-    {Block, Priority, AffectedFroms, _FinishedFroms, State1} = disassociate_ref(FailedRef, State),
+    {Block, Priority, AffectedFroms, _FinishedFroms, State1} =
+        disassociate_ref(FailedRef, State),
+
     case Block of
         undefined ->
             ?error("Failed transfer ~p not found in state", [FailedRef]),
             {noreply, State1};
         _ ->
             NewTransfers = start_transfers([Block], undefined, State1, Priority),
-
-                    ?warning("Replaced failed transfer ~p (~p) with new transfers ~p",
-                        [FailedRef, Block, NewTransfers]),
-
+            ?warning("Replaced failed transfer ~p (~p) with new transfers ~p", [
+                FailedRef, Block, NewTransfers
+            ]),
             {_, NewRefs, _} = lists:unzip3(NewTransfers),
             State2 = associate_froms_with_refs(AffectedFroms, NewRefs, State1),
             State3 = add_in_progress(NewTransfers, State2),
@@ -622,8 +642,10 @@ handle_info({FailedRef, complete, {error, disconnected}}, State) ->
 
 handle_info({Ref, complete, ErrorStatus}, State) ->
     ?error("Transfer ~p failed: ~p", [Ref, ErrorStatus]),
-    {_Block, _Priority, AffectedFroms, FinishedFroms, State1} = disassociate_ref(Ref, State),
-    State2 = disassociate_transfer_ids(FinishedFroms, State1),
+    {_Block, _Priority, AffectedFroms, FinishedFroms, State1} =
+        disassociate_ref(Ref, State),
+    {_FailedBlocks, _ExcludeSessions, _FailedTransfers, State2} =
+        disassociate_froms(FinishedFroms, State1),
 
     %% Cancel TransferIds that are still left (i.e. the failed ref was only a part of the transfer)
     AffectedTransferIds = maps:values(maps:with(AffectedFroms, State2#state.from_to_transfer_id)),
@@ -679,69 +701,160 @@ terminate(_Reason, State) ->
 %%--------------------------------------------------------------------
 -spec disassociate_ref(fetch_ref(), #state{}) -> {block(), priority(),
     AffectedFroms :: [from()], FinishedFroms :: [from()], #state{}}.
-disassociate_ref(Ref, State) ->
-    {Block, Priority, InProgress} =
-        case lists:keytake(Ref, 2, State#state.in_progress) of
-            {value, {B, _, P}, IP} -> {B, P, IP};
-            false -> {undefined, undefined, State#state.in_progress}
-        end,
-    AffectedFroms = maps:get(Ref, State#state.ref_to_froms, []),
-    RefToFroms = maps:remove(Ref, State#state.ref_to_froms),
-    {FinishedFroms, FromToRefs} =
-        lists:foldl(
-            fun(From, {FF, FTR}) ->
-                WaitingForRefs = maps:get(From, FTR, []),
-                case lists:delete(Ref, WaitingForRefs) of
-                    [] -> {[From | FF], maps:remove(From, FTR)};
-                    Remaining -> {FF, maps:put(From, Remaining, FTR)}
-                end
-            end,
-            {[], State#state.from_to_refs},
-            AffectedFroms),
+disassociate_ref(Ref, State = #state{
+    in_progress = InProgress,
+    ref_to_froms = RTFs,
+    from_to_refs = FTRs
+}) ->
+    {Block, Priority, InProgress2} = case lists:keytake(Ref, 2, InProgress) of
+        {value, {B, _, P}, IP} ->
+            {B, P, IP};
+        false ->
+            {undefined, undefined, InProgress}
+    end,
+
+    {AffectedFroms, RTFs2} = case maps:take(Ref, RTFs) of
+        error ->
+            {[], RTFs};
+        Res ->
+            Res
+    end,
+
+    {FinishedFroms, FTRs2} = lists:foldl(fun(From, {FF, TmpFTRs}) ->
+        WaitingForRefs = maps:get(From, TmpFTRs, []),
+        case lists:delete(Ref, WaitingForRefs) of
+            [] -> {[From | FF], maps:remove(From, TmpFTRs)};
+            Remaining -> {FF, maps:put(From, Remaining, TmpFTRs)}
+        end
+    end, {[], FTRs}, AffectedFroms),
+
     {Block, Priority, AffectedFroms, FinishedFroms, State#state{
-        in_progress = InProgress,
-        ref_to_froms = RefToFroms,
-        from_to_refs = FromToRefs
+        in_progress = InProgress2,
+        ref_to_froms = RTFs2,
+        from_to_refs = FTRs2
     }}.
-
-disassociate_transfer_ids(Froms, State) ->
-    TransferIds = maps:values(maps:with(Froms, State#state.from_to_transfer_id)),
-    FromToTransferId = maps:without(Froms, State#state.from_to_transfer_id),
-    TransferIdToFrom = maps:without(TransferIds, State#state.transfer_id_to_from),
-    State#state{from_to_transfer_id = FromToTransferId,
-        transfer_id_to_from = TransferIdToFrom}.
-
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Cancels a transfer.
+%% Removes a transfer request froms associations with everything beside refs.
+%% @end
+%%--------------------------------------------------------------------
+-spec disassociate_froms([from()], #state{}) -> {
+    FinishedBlocks :: [{from(), block(), request_type()}],
+    FinishedSessions :: [session:id()],
+    FinishedTransferIds :: [transfer:id()], #state{}}.
+disassociate_froms([], State) ->
+    {[], [], [], State};
+disassociate_froms(Froms, State = #state{
+    requested_blocks = RB,
+    from_requests_types = RT,
+    from_to_session = FTS,
+    session_to_froms = STFs,
+    from_to_transfer_id = FTT,
+    transfer_id_to_from = TTF
+}) ->
+    {FinishedBlocks, FinishedSessions, RB2, RT2, FTS2, STFs2} = lists:foldr(
+        fun(From, {BlocksAcc, SessionsAcc, TmpRB, TmpRT, TmpFTS, TmpSTFs}) ->
+            {Block, TmpRB2} = maps:take(From, TmpRB),
+            {ReqType, TmpRT2} = maps:take(From, TmpRT),
+            BlocksAcc1 = [{From, Block, ReqType} | BlocksAcc],
+
+            {SessionsAcc2, TmpFTS2, TmpSTFs2} = case maps:take(From, TmpFTS) of
+                error ->
+                    {SessionsAcc, TmpFTS, TmpSTFs};
+                {SessionId, TmpFTS1} ->
+                    SessionsAcc1 = [SessionId | SessionsAcc -- [SessionId]],
+                    SessionFroms = maps:get(SessionId, TmpSTFs, sets:new()),
+                    TmpSTFs1 = TmpSTFs#{
+                        SessionId => sets:del_element(From, SessionFroms)
+                    },
+                    {SessionsAcc1, TmpFTS1, TmpSTFs1}
+            end,
+
+            {BlocksAcc1, SessionsAcc2, TmpRB2, TmpRT2, TmpFTS2, TmpSTFs2}
+        end,
+    {[], [], RB, RT, FTS, STFs}, Froms),
+
+    FinishedTransfers = maps:values(maps:with(Froms, FTT)),
+
+    {FinishedBlocks, FinishedSessions, FinishedTransfers, State#state{
+        requested_blocks = RB2,
+        from_requests_types = RT2,
+        from_to_session = FTS2,
+        session_to_froms = STFs2,
+        from_to_transfer_id = maps:without(Froms, FTT),
+        transfer_id_to_from = maps:without(FinishedTransfers, TTF)
+    }}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Cancels a transfer by TransferId.
 %% @end
 %%--------------------------------------------------------------------
 -spec cancel_transfer_id(transfer:id(), #state{}) -> #state{}.
 cancel_transfer_id(TransferId, State) ->
     From = maps:get(TransferId, State#state.transfer_id_to_from),
-    AffectedRefs = maps:get(From, State#state.from_to_refs, []),
-    OrphanedRefs =
-        lists:filter(fun(Ref) ->
-            maps:get(Ref, State#state.ref_to_froms) == [From] end,
-            AffectedRefs),
+    cancel_froms([From], State).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Cancels a transfers by SessionId.
+%% @end
+%%--------------------------------------------------------------------
+-spec cancel_session(session:id(), #state{}) -> #state{}.
+cancel_session(SessionId, State) ->
+    case maps:take(SessionId, State#state.session_to_froms) of
+        error ->
+            State;
+        {Froms, STFs} ->
+            cancel_froms(sets:to_list(Froms), State#state{
+                session_to_froms = STFs
+            })
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Cancels a transfers by synchronization request froms.
+%% @end
+%%--------------------------------------------------------------------
+-spec cancel_froms([from()], #state{}) -> #state{}.
+cancel_froms([], State) ->
+    State;
+cancel_froms(Froms, State = #state{
+    in_progress = InProgress,
+    from_to_refs = FTRs,
+    ref_to_froms = RTFs
+}) ->
+    AffectedRefs = lists:flatmap(fun(From) -> maps:get(From, FTRs, []) end, Froms),
+
+    {RTFs2, OrphanedRefs} = lists:foldl(fun(Ref, {TmpRTFs, OrphanedRefsAcc}) ->
+        case maps:get(Ref, TmpRTFs, []) -- Froms of
+            [] ->
+                {maps:remove(Ref, TmpRTFs), [Ref | OrphanedRefsAcc]};
+            RemainingFroms ->
+                {TmpRTFs#{Ref => RemainingFroms}, OrphanedRefsAcc}
+        end
+    end, {RTFs, []}, AffectedRefs),
 
     [rtransfer_link:cancel(Ref) || Ref <- OrphanedRefs],
-    gen_server2:reply(From, {error, cancelled}),
+    [gen_server2:reply(From, {error, cancelled}) || From <- Froms],
 
-    InProgress =
-        lists:filter(fun({_Block, Ref, _Priority}) -> lists:member(Ref, OrphanedRefs) end,
-            State#state.in_progress),
-    FromToRefs = maps:remove(From, State#state.from_to_refs),
-    RefToFroms = maps:without(OrphanedRefs, State#state.ref_to_froms),
-    FromToTransferId = maps:remove(From, State#state.from_to_transfer_id),
-    TransferIdToFrom = maps:remove(TransferId, State#state.transfer_id_to_from),
-    State#state{in_progress = InProgress,
-        from_to_refs = FromToRefs,
-        ref_to_froms = RefToFroms,
-        from_to_transfer_id = FromToTransferId,
-        transfer_id_to_from = TransferIdToFrom}.
+    InProgress2 = lists:filter(fun({_Block, Ref, _Priority}) ->
+        not lists:member(Ref, OrphanedRefs)
+    end, InProgress),
+
+    {_CancelledBlocks, _ExcludeSessions, _CancelledTransfers, State2} =
+        disassociate_froms(Froms, State#state{
+            in_progress = InProgress2,
+            from_to_refs = maps:without(Froms, FTRs),
+            ref_to_froms = RTFs2
+        }),
+
+    State2.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -789,6 +902,23 @@ associate_from_with_tid(From, TransferId, State) ->
     TransferIdToFrom = maps:put(TransferId, From, State#state.transfer_id_to_from),
     State#state{from_to_transfer_id = FromToTransferId,
         transfer_id_to_from = TransferIdToFrom}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Associates a new synchronization request with a session.
+%% @end
+%%--------------------------------------------------------------------
+-spec associate_from_with_session(from(), session:id(), #state{}) -> #state{}.
+associate_from_with_session(From, SessionId, State = #state{
+    from_to_session = FTS,
+    session_to_froms = STFs
+}) ->
+    Froms = maps:get(SessionId, STFs, sets:new()),
+    State#state{
+        from_to_session = FTS#{From => SessionId},
+        session_to_froms = STFs#{SessionId => sets:add_element(From, Froms)}
+    }.
 
 -spec add_in_progress([{block(), fetch_ref(), priority()}], #state{}) -> #state{}.
 add_in_progress(NewTransfers, State) ->
