@@ -33,15 +33,14 @@
     replicate_each_file_separately/2,
     error_on_replicating_files/2,
     cancel_replication_on_target_nodes/2,
-    evict_root_directory/2,
-    evict_each_file_replica_separately/2, error_on_evicting_file_replica/2]).
+    restart_replication_on_target_nodes/2
+]).
 
 -export([move_transfer_ids_to_old_key/1]).
 
 % functions exported to be called by rpc
 -export([create_files_structure/10, create_file/6,
-    assert_file_visible/5, assert_file_distribution/6, prereplicate_file/6,
-    cast_files_prereplication/5]).
+    assert_file_visible/5, assert_file_distribution/6]).
 
 -define(DEFAULT_USER_TOKEN_HEADERS(Config),
     [?USER_TOKEN_HEADER(Config, ?DEFAULT_USER)]).
@@ -90,7 +89,6 @@ run_test(Config, #transfer_test_spec{
 %%%===================================================================
 
 replicate_root_directory(Config, #scenario{
-    user = User,
     type = Type,
     file_key_type = FileKeyType,
     schedule_node = ScheduleNode,
@@ -100,7 +98,7 @@ replicate_root_directory(Config, #scenario{
     FileKey = file_key(Guid, Path, FileKeyType),
     NodesTransferIdsAndFiles = lists:map(fun(TargetNode) ->
         TargetProviderId = transfers_test_utils:provider_id(TargetNode),
-        {ok, Tid} = schedule_file_replication(ScheduleNode, TargetProviderId, User, FileKey, Config, Type),
+        {ok, Tid} = schedule_file_replication(ScheduleNode, TargetProviderId, FileKey, Config, Type),
         {TargetNode, Tid, Guid, Path}
     end, TargetNodes),
     update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
@@ -109,7 +107,6 @@ replicate_root_directory(Config, #scenario{
 
 
 replicate_each_file_separately(Config, #scenario{
-    user = User,
     type = Type,
     file_key_type = FileKeyType,
     schedule_node = ScheduleNode,
@@ -120,7 +117,7 @@ replicate_each_file_separately(Config, #scenario{
         lists:map(fun({Guid, Path}) ->
             FileKey = file_key(Guid, Path, FileKeyType),
             TargetProviderId = transfers_test_utils:provider_id(TargetNode),
-            {ok, Tid} = schedule_file_replication(ScheduleNode, TargetProviderId, User, FileKey, Config, Type),
+            {ok, Tid} = schedule_file_replication(ScheduleNode, TargetProviderId, FileKey, Config, Type),
             {TargetNode, Tid, Guid, Path}
         end, FilesGuidsAndPaths)
     end, TargetNodes),
@@ -130,7 +127,6 @@ replicate_each_file_separately(Config, #scenario{
     end, Config, []).
 
 error_on_replicating_files(Config, #scenario{
-    user = User,
     type = Type,
     file_key_type = FileKeyType,
     schedule_node = ScheduleNode,
@@ -142,13 +138,12 @@ error_on_replicating_files(Config, #scenario{
             TargetProviderId = transfers_test_utils:provider_id(TargetNode),
             FileKey = file_key(Guid, Path, FileKeyType),
             ?assertMatch({error, _},
-                schedule_file_replication(ScheduleNode, TargetProviderId, User, FileKey, Config, Type))
+                schedule_file_replication(ScheduleNode, TargetProviderId, FileKey, Config, Type))
         end, FilesGuidsAndPaths)
     end, TargetNodes),
     Config.
 
 cancel_replication_on_target_nodes(Config, #scenario{
-    user = User,
     type = Type,
     file_key_type = FileKeyType,
     schedule_node = ScheduleNode,
@@ -158,7 +153,7 @@ cancel_replication_on_target_nodes(Config, #scenario{
     FileKey = file_key(Guid, Path, FileKeyType),
     NodesTransferIdsAndFiles = lists:map(fun(TargetNode) ->
         TargetProviderId = transfers_test_utils:provider_id(TargetNode),
-        {ok, Tid} = schedule_file_replication(ScheduleNode, TargetProviderId, User, FileKey, Config, Type),
+        {ok, Tid} = schedule_file_replication(ScheduleNode, TargetProviderId, FileKey, Config, Type),
         {TargetNode, Tid, Guid, Path}
     end, TargetNodes),
 
@@ -171,67 +166,12 @@ cancel_replication_on_target_nodes(Config, #scenario{
         NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
     end, Config, []).
 
-evict_root_directory(Config, #scenario{
-    user = User,
-    type = Type,
-    file_key_type = FileKeyType,
-    schedule_node = ScheduleNode,
-    target_nodes = TargetNodes
-}) ->
-    {Guid, Path} = ?config(?ROOT_DIR_KEY, Config),
-    FileKey = file_key(Guid, Path, FileKeyType),
-    NodesTransferIdsAndFiles = lists:map(fun(TargetNode) ->
-        TargetProviderId = transfers_test_utils:provider_id(TargetNode),
-        {ok, Tid} = schedule_replica_eviction(ScheduleNode, TargetProviderId, User, FileKey, Config, Type),
-        {TargetNode, Tid, Guid, Path}
-    end, TargetNodes),
-    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
-        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
-    end, Config, []).
-
-evict_each_file_replica_separately(Config, #scenario{
-    user = User,
-    type = Type,
-    file_key_type = FileKeyType,
-    schedule_node = ScheduleNode,
-    target_nodes = TargetNodes
-}) ->
-    FilesGuidsAndPaths = ?config(?FILES_KEY, Config),
-    NodesTransferIdsAndFiles = lists:flatmap(fun(TargetNode) ->
-        lists:map(fun({Guid, Path}) ->
-            FileKey = file_key(Guid, Path, FileKeyType),
-            TargetProviderId = transfers_test_utils:provider_id(TargetNode),
-            {ok, Tid} = schedule_replica_eviction(ScheduleNode, TargetProviderId,  User, FileKey, Config, Type),
-            {TargetNode, Tid, Guid, Path}
-        end, FilesGuidsAndPaths)
-    end, TargetNodes),
-
-    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
-        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
-    end, Config, []).
-
-error_on_evicting_file_replica(Config, #scenario{
-    user = User,
-    type = Type,
-    file_key_type = FileKeyType,
-    schedule_node = ScheduleNode,
-    target_nodes = TargetNodes
-}) ->
-
-
-
-    FilesGuidsAndPaths = ?config(?FILES_KEY, Config),
-    lists:foreach(fun(TargetNode) ->
-        lists:foreach(fun({Guid, Path}) ->
-            FileKey = file_key(Guid, Path, FileKeyType),
-            TargetProviderId = transfers_test_utils:provider_id(TargetNode),
-            ?assertMatch({error, _},
-                ok = lfm_proxy:set_perms(ScheduleNode, ?DEFAULT_SESSION(ScheduleNode, Config), FileKey, 8#644),
-                schedule_replica_eviction(ScheduleNode, TargetProviderId,  User, FileKey, Config, Type))
-        end, FilesGuidsAndPaths)
-    end, TargetNodes),
+restart_replication_on_target_nodes(Config, #scenario{type = Type}) ->
+    NodesTransferIdsAndFiles = ?config(?TRANSFERS_KEY, Config),
+    lists:foreach(fun({TargetNode, Tid, _Guid, _Path}) ->
+        restart_transfer(TargetNode, Tid, Config, Type)
+    end, NodesTransferIdsAndFiles),
     Config.
-
 
 %%%===================================================================
 %%% Internal functions
@@ -251,24 +191,10 @@ setup_test(Config, Setup) ->
     Nodes = ?config(op_worker_nodes, Config),
     lists:foreach(fun(N) -> countdown_server:start_link(self(), N) end, Nodes),
     Config2 = create_files(Config, Setup),
-    maybe_prereplicate_files(Config2, Setup),
     assert_setup(Config2, Setup),
     Config2.
 
-maybe_prereplicate_files(Config, #setup{
-    user = User,
-    size = Size,
-    replicate_to_nodes = ReplicateToNodes,
-    attempts = Attempts,
-    timeout = Timetrap
-}) ->
-    Refs = lists:map(fun(Node) ->
-        cast_files_prereplication(Config, Node, User, Size, Attempts)
-    end, ReplicateToNodes),
-    await_countdown(Refs, Timetrap).
-
 assert_expectations(Config, Expected = #expected{
-    user = User,
     assertion_nodes = AssertionNodes,
     distribution = ExpectedDistribution,
     attempts = Attempts,
@@ -285,7 +211,7 @@ assert_expectations(Config, Expected = #expected{
         lists:foreach(fun({TargetNode, TransferId, FileGuid, FilePath}) ->
             assert_transfer(Config, AssertionNode, Expected, TransferId,
                 FileGuid, FilePath, TargetNode),
-            assert_files_distribution_on_all_nodes(Config, AssertionNodes, User,
+            assert_files_distribution_on_all_nodes(Config, AssertionNodes,
                 ExpectedDistribution, Attempts, Timetrap),
             ?assertEqual([], transfers_test_utils:get_ongoing_transfers_for_file(AssertionNode, FileGuid), Attempts),
             ?assertEqual(true, begin
@@ -330,6 +256,7 @@ assert_transfer_state(Node, TransferId, SpaceId, FileGuid, FilePath, TargetNode,
                 true ->
                     ct:pal("Transfer: ~p not found.", [TransferId]),
                     ct:fail("Transfer: ~p not found.", [TransferId])
+
             end;
         throw:{assertion_error, Field, Expected, Value} ->
             case Attempts == 0 of
@@ -348,7 +275,6 @@ assert_transfer_state(Node, TransferId, SpaceId, FileGuid, FilePath, TargetNode,
     end.
 
 create_files(Config, #setup{
-    user = User,
     setup_node = SetupNode,
     files_structure = FilesStructure,
     root_directory = RootDirectory,
@@ -358,9 +284,10 @@ create_files(Config, #setup{
     dir_prefix = DirPrefix,
     timeout = Timetrap
 }) ->
+
     validate_root_directory(RootDirectory),
     RootDirectory2 = utils:ensure_defined(RootDirectory, undefined, <<"">>),
-    SessionId = ?USER_SESSION(SetupNode, User, Config),
+    SessionId = ?DEFAULT_SESSION(SetupNode, Config),
     SpaceId = ?config(?SPACE_ID_KEY, Config),
     {DirsToCreate, FilesToCreate} = count_files_and_dirs(FilesStructure),
 
@@ -386,14 +313,13 @@ assert_setup(Config, #setup{
 }) ->
     Config;
 assert_setup(Config, #setup{
-    user = User,
     assertion_nodes = AssertionNodes,
     distribution = ExpectedDistribution,
     attempts = Attempts,
     timeout = Timetrap
 }) ->
-    assert_files_visible_on_all_nodes(Config, AssertionNodes, User, Attempts, Timetrap),
-    assert_files_distribution_on_all_nodes(Config, AssertionNodes, User,
+    assert_files_visible_on_all_nodes(Config, AssertionNodes, Attempts, Timetrap),
+    assert_files_distribution_on_all_nodes(Config, AssertionNodes,
         ExpectedDistribution, Attempts, Timetrap).
 
 await_countdown(Refs, Timetrap) when is_list(Refs) ->
@@ -402,36 +328,30 @@ await_countdown(Refs, Timetrap) ->
     await_countdown(Refs, #{}, Timetrap).
 
 await_countdown(Refs, DataMap, Timetrap) ->
-    case sets:size(Refs) of
-        0 ->
-            DataMap;
-        _ ->
-            receive
-                {?COUNTDOWN_FINISHED, Ref, AssertionNode, Data} ->
-                    Refs2 = sets:del_element(Ref, Refs),
-                    DataMap2 = DataMap#{Ref => Data},
+    receive
+        {?COUNTDOWN_FINISHED, Ref, AssertionNode, Data} ->
+            Refs2 = sets:del_element(Ref, Refs),
+            DataMap2 = DataMap#{Ref => Data},
+            case sets:size(Refs2) of
+                0 ->
+                    DataMap2;
+                _ ->
                     await_countdown(Refs2, DataMap2, Timetrap)
-%%                    case sets:size(Refs2) of
-%%                        0 ->
-%%                            DataMap2;
-%%                        _ ->
-%%                            await_countdown(Refs2, DataMap2, Timetrap)
-%%                    end
-            after
-                Timetrap ->
-                    throw(?TEST_TIMEOUT(?FUNCTION_NAME))
             end
+    after
+        Timetrap ->
+            throw(?TEST_TIMEOUT(?FUNCTION_NAME))
     end.
 
-assert_files_visible_on_all_nodes(Config, AssertionNodes, User, Attempts, Timetrap) ->
+assert_files_visible_on_all_nodes(Config, AssertionNodes, Attempts, Timetrap) ->
     Refs = lists:map(fun(AssertionNode) ->
-        cast_files_visible_assertion(Config, AssertionNode, User, Attempts)
+        cast_files_visible_assertion(Config, AssertionNode, Attempts)
     end, AssertionNodes),
     await_countdown(Refs, Timetrap).
 
-assert_files_distribution_on_all_nodes(_Config, _AssertionNodes, _User, undefined, _Attempts, _Timetrap) ->
+assert_files_distribution_on_all_nodes(_Config, _AssertionNodes, undefined, _Attempts, _Timetrap) ->
     ok;
-assert_files_distribution_on_all_nodes(Config, AssertionNodes, User, ExpectedDistribution, Attempts, Timetrap) ->
+assert_files_distribution_on_all_nodes(Config, AssertionNodes, ExpectedDistribution, Attempts, Timetrap) ->
     % Deduce expected block size automatically based on expected blocks
     ExpectedDistributionWithBlockSize = lists:map(fun(Distribution) ->
         Distribution#{
@@ -442,54 +362,24 @@ assert_files_distribution_on_all_nodes(Config, AssertionNodes, User, ExpectedDis
     end, ExpectedDistribution),
 
     Refs = lists:map(fun(AssertionNode) ->
-        cast_files_distribution_assertion(Config, AssertionNode, User, ExpectedDistributionWithBlockSize, Attempts)
+        cast_files_distribution_assertion(Config, AssertionNode, ExpectedDistributionWithBlockSize, Attempts)
     end, AssertionNodes),
     await_countdown(Refs, Timetrap).
 
-cast_files_distribution_assertion(Config, Node, User, Expected, Attempts) ->
+cast_files_distribution_assertion(Config, Node, Expected, Attempts) ->
     FileGuidsAndPaths = ?config(?FILES_KEY, Config),
-    SessionId = ?USER_SESSION(Node, User, Config),
+    SessionId = ?DEFAULT_SESSION(Node, Config),
     CounterRef = countdown_server:init_counter(Node, length(FileGuidsAndPaths)),
     lists:foreach(fun({FileGuid, _FilePath}) ->
         cast_file_distribution_assertion(Expected, Node, SessionId, FileGuid, CounterRef, Attempts)
     end, FileGuidsAndPaths),
     CounterRef.
 
-cast_files_prereplication(Config, Node, User, ExpectedSize, Attempts) ->
-    FilesGuidsAndPaths = ?config(?FILES_KEY, Config),
-    SessionId = ?USER_SESSION(Node, User, Config),
-    CounterRef = countdown_server:init_counter(Node, length(FilesGuidsAndPaths)),
-    lists:foreach(fun({FileGuid, _FilePath}) ->
-        cast_files_prereplication(Node, SessionId, FileGuid, CounterRef, ExpectedSize, Attempts)
-    end, FilesGuidsAndPaths),
-    CounterRef.
-
-cast_files_prereplication(Node, SessionId, FileGuid, CounterRef, ExpectedSize, Attempts) ->
-    worker_pool:cast(?WORKER_POOL, {?MODULE, prereplicate_file,
-        [Node, SessionId, FileGuid, CounterRef, ExpectedSize, Attempts]}
-    ).
-
-prereplicate_file(Node, SessionId, FileGuid, CounterRef, ExpectedSize, Attempts) ->
-    execute_in_worker(fun() ->
-        ?assertMatch(ExpectedSize, begin
-            try
-                {ok, Handle} = lfm_proxy:open(Node, SessionId, {guid, FileGuid}, read),
-                {ok, Data} = lfm_proxy:read(Node, Handle, 0, ExpectedSize),
-                lfm_proxy:close(Node, Handle),
-                byte_size(Data)
-            catch
-                E:R ->
-                    error
-            end
-        end, Attempts),
-        countdown_server:decrease(Node, CounterRef, FileGuid)
-    end).
-
-cast_files_visible_assertion(Config, Node, User, Attempts) ->
+cast_files_visible_assertion(Config, Node, Attempts) ->
     RootDirGuidAndPath = ?config(?ROOT_DIR_KEY, Config),
     FilesGuidsAndPaths = ?config(?FILES_KEY, Config),
     DirsGuidsAndPaths = ?config(?DIRS_KEY, Config),
-    SessionId = ?USER_SESSION(Node, User, Config),
+    SessionId = ?DEFAULT_SESSION(Node, Config),
     GuidsAndPaths = FilesGuidsAndPaths ++ [RootDirGuidAndPath | DirsGuidsAndPaths],
     CounterRef = countdown_server:init_counter(Node, length(GuidsAndPaths)),
     lists:foreach(fun({FileGuid, _FilePath}) ->
@@ -507,26 +397,25 @@ cast_file_distribution_assertion(Expected, Node, SessionId, FileGuid, CounterRef
         [Expected, Node, SessionId, FileGuid, CounterRef, Attempts]}
     ).
 
-
 assert_file_visible(Node, SessId, FileGuid, CounterRef, Attempts) ->
-    execute_in_worker(fun() ->
+    try
         ?assertMatch({ok, _}, lfm_proxy:stat(Node, SessId, {guid, FileGuid}), Attempts),
         countdown_server:decrease(Node, CounterRef, FileGuid)
-    end).
+    catch
+        _:_ ->
+            % this function is executed by worker_pool process
+            % this catch is used to avoid "ugly" worker pool error log
+            ok
+    end.
 
 assert_file_distribution(Expected, Node, SessId, FileGuid, CounterRef, Attempts) ->
     Expected2 = lists:sort(Expected),
-    execute_in_worker(fun() ->
+    try
         ?assertMatch(Expected2, begin
             {ok, Distribution} = lfm_proxy:get_file_distribution(Node, SessId, {guid, FileGuid}),
             lists:sort(Distribution)
         end, Attempts),
         countdown_server:decrease(Node, CounterRef, FileGuid)
-    end).
-
-execute_in_worker(Fun) ->
-    try
-        Fun()
     catch
         _:_ ->
             % this function is executed by worker_pool process
@@ -653,19 +542,19 @@ update_config(Key, UpdateFun, Config, DefaultValue) ->
             lists:keyreplace(Key, 1, Config, {Key, UpdateFun(OldValue)})
     end.
 
-schedule_file_replication(ScheduleNode, ProviderId, User, FileKey, Config, lfm) ->
-    schedule_file_replication_by_lfm(ScheduleNode, ProviderId, User, FileKey, Config);
-schedule_file_replication(ScheduleNode, ProviderId, User, FileKey, Config, rest) ->
-    schedule_file_replication_by_rest(ScheduleNode, ProviderId, User, FileKey, Config).
+schedule_file_replication(ScheduleNode, ProviderId, FileKey, Config, lfm) ->
+    schedule_file_replication_by_lfm(ScheduleNode, ProviderId, FileKey, Config);
+schedule_file_replication(ScheduleNode, ProviderId, FileKey, Config, rest) ->
+    schedule_file_replication_by_rest(ScheduleNode, ProviderId, FileKey, Config).
 
-schedule_file_replication_by_lfm(ScheduleNode, ProviderId, User, FileKey, Config) ->
-    SessionId = ?USER_SESSION(ScheduleNode, User, Config),
+schedule_file_replication_by_lfm(ScheduleNode, ProviderId, FileKey, Config) ->
+    SessionId = ?DEFAULT_SESSION(ScheduleNode, Config),
     lfm_proxy:schedule_file_replication(ScheduleNode, SessionId, FileKey, ProviderId).
 
-schedule_file_replication_by_rest(Worker, ProviderId, User, {path, FilePath}, Config) ->
+schedule_file_replication_by_rest(Worker, ProviderId, {path, FilePath}, Config) ->
     case rest_test_utils:request(Worker,
         <<"replicas/", FilePath/binary, "?provider_id=", ProviderId/binary>>,
-        post, [?USER_TOKEN_HEADER(Config, User)], []
+        post, ?DEFAULT_USER_TOKEN_HEADERS(Config), []
     ) of
         {ok, 200, _, Body} ->
             DecodedBody = json_utils:decode(Body),
@@ -674,55 +563,17 @@ schedule_file_replication_by_rest(Worker, ProviderId, User, {path, FilePath}, Co
         {ok, 400, _, Body} ->
             {error, Body}
     end;
-schedule_file_replication_by_rest(Worker, ProviderId, User, {guid, FileGuid}, Config) ->
+schedule_file_replication_by_rest(Worker, ProviderId, {guid, FileGuid}, Config) ->
     {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
     case rest_test_utils:request(Worker,
         <<"replicas-id/", FileObjectId/binary, "?provider_id=", ProviderId/binary>>,
-        post, [?USER_TOKEN_HEADER(Config, User)], []
+        post, ?DEFAULT_USER_TOKEN_HEADERS(Config), []
     ) of
         {ok, 200, _, Body} ->
             DecodedBody = json_utils:decode(Body),
             #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
             {ok, Tid};
         {ok, 400, _, Body} ->
-            {error, Body}
-    end.
-
-schedule_replica_eviction(ScheduleNode, ProviderId, User, FileKey, Config, lfm) ->
-    schedule_replica_eviction_by_lfm(ScheduleNode, ProviderId, User, FileKey, Config);
-schedule_replica_eviction(ScheduleNode, ProviderId, User, FileKey, Config, rest) ->
-    schedule_replica_eviction_by_rest(ScheduleNode, ProviderId, User, FileKey, Config).
-
-schedule_replica_eviction_by_lfm(ScheduleNode, ProviderId, User, FileKey, Config) ->
-    SessionId = ?USER_SESSION(ScheduleNode, User, Config),
-    lfm_proxy:schedule_file_replica_eviction(ScheduleNode, SessionId, FileKey, ProviderId, undefined).
-
-schedule_replica_eviction_by_rest(Worker, ProviderId, User, {path, FilePath}, Config) ->
-    case rest_test_utils:request(Worker,
-        <<"replicas/", FilePath/binary, "?provider_id=", ProviderId/binary>>,
-        delete, [?USER_TOKEN_HEADER(Config, User)], []
-    ) of
-        {ok, 200, _, Body} ->
-            DecodedBody = json_utils:decode(Body),
-            #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
-            {ok, Tid};
-        {ok, _, _, Body} ->
-            {error, Body}
-    end;
-schedule_replica_eviction_by_rest(Worker, ProviderId, User, {guid, FileGuid}, Config) ->
-    {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
-    ct:pal("User ~p", [User]),
-%%    ct:timetrap({hours, 24}),
-%%    ct:sleep({hours, 24}),
-    case rest_test_utils:request(Worker,
-        <<"replicas-id/", FileObjectId/binary, "?provider_id=", ProviderId/binary>>,
-        delete, [?USER_TOKEN_HEADER(Config, User)], []
-    ) of
-        {ok, 200, _, Body} ->
-            DecodedBody = json_utils:decode(Body),
-            #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
-            {ok, Tid};
-        {ok, _, _, Body} ->
             {error, Body}
     end.
 
@@ -731,11 +582,23 @@ cancel_transfer(ScheduleNode, Tid, Config, lfm) ->
 cancel_transfer(ScheduleNode, Tid, Config, rest) ->
     cancel_transfer_by_rest(ScheduleNode, Tid, Config).
 
+restart_transfer(ScheduleNode, Tid, Config, lfm) ->
+    restart_transfer_by_lfm(ScheduleNode, Tid, Config);
+restart_transfer(ScheduleNode, Tid, Config, rest) ->
+    restart_transfer_by_rest(ScheduleNode, Tid, Config).
+
 cancel_transfer_by_lfm(_Worker, _Tid, _Config) ->
+    erlang:error(not_implemented).
+
+restart_transfer_by_lfm(_ScheduleNode, _Tid, _Config) ->
     erlang:error(not_implemented).
 
 cancel_transfer_by_rest(Worker, Tid, Config) ->
     rest_test_utils:request(Worker, <<"transfers/", Tid/binary>>, delete,
+        ?DEFAULT_USER_TOKEN_HEADERS(Config), []).
+
+restart_transfer_by_rest(Worker, Tid, Config) ->
+    rest_test_utils:request(Worker, <<"transfers/", Tid/binary>>, patch,
         ?DEFAULT_USER_TOKEN_HEADERS(Config), []).
 
 file_key(Guid, _Path, guid) ->
