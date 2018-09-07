@@ -20,7 +20,8 @@
     is_storage_file_created/1, get/2, get_local/1, get_version_vector/1]).
 -export([create/1, create/2, create_and_update_quota/2, save/1,
     save_and_update_quota/1, get/1, update/2,
-    delete/1, delete_and_update_quota/1, get_owner_id/1, set_last_replication_timestamp/2]).
+    delete/1, delete_and_update_quota/1, get_owner_id/1,
+    set_last_replication_timestamp/2]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).

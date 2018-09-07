@@ -598,7 +598,7 @@ maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
     }}} = fslogic_location_cache:get_location(LocationId, FileUuid),
 
     Result2 = case {LastReplicationTimestamp, StorageSyncInfo} of
-
+        %todo VFS-4847 refactor this case, use when wherever possible
         {undefined, undefined} when MTime < StMtime orelse Size =/= StSize ->
             % file created locally and modified on storage
             update_file_location(FileCtx4, StSize),
@@ -684,6 +684,12 @@ maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
     end, SpaceId),
     Result2.
 
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Updates file_location
+%% @end
+%%-------------------------------------------------------------------
 -spec update_file_location(file_ctx:ctx(), non_neg_integer()) -> ok.
 update_file_location(FileCtx, StorageSize) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
