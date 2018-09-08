@@ -141,9 +141,6 @@
             },
             "user3": {
                 "default_space": "space3"
-            },
-            "user4": {
-                "default_space": "space1"
             }
         },
         "groups": {
@@ -152,8 +149,7 @@
             "space1": {
                 "displayed_name": "space1",
                 "users": [
-                    "user1",
-                    "user4"
+                    "user1"
                 ],
                 "groups": [
                 ],

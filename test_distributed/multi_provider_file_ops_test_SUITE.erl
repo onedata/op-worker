@@ -53,8 +53,7 @@
     remote_driver_test/1,
     db_sync_with_delays_test/1,
     db_sync_create_after_del_test/1,
-    rtransfer_fetch_test/1,
-    rtransfer_cancel_for_session_test/1
+    rtransfer_fetch_test/1
 ]).
 
 -define(TEST_CASES, [
@@ -76,8 +75,7 @@
     distributed_delete_test,
     remote_driver_test,
     db_sync_create_after_del_test,
-    rtransfer_fetch_test,
-    rtransfer_cancel_for_session_test
+    rtransfer_fetch_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -427,13 +425,43 @@ rtransfer_fetch_test(Config) ->
     [Worker1a, Worker1b, Worker2 | _] = ?config(op_worker_nodes, Config),
     Workers1 = [Worker1a, Worker1b],
 
-    User1 = <<"user1">>,
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, User1}, Config),
-    SessId = fun(W, User) ->
-        ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config)
-    end,
+    User = <<"user1">>,
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
+    SessId = fun(W) -> ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config) end,
     FilePath = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
-    FileCtx = create_file(FilePath, 1, User1, Worker2, Worker1a, SessId),
+
+    ChunkSize = 1024,
+    ChunksNum = 1024,
+    PartNum = 1, % file size in MB
+    FileSizeBytes = ChunkSize * ChunksNum * PartNum,
+
+    % File creation
+    ?assertMatch({ok, _}, lfm_proxy:create(
+        Worker2, SessId(Worker2), FilePath, 8#755
+    )),
+    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(
+        Worker2, SessId(Worker2), {path, FilePath}, rdwr
+    )),
+
+    BytesChunk = crypto:strong_rand_bytes(ChunkSize),
+    Bytes = lists:foldl(fun(_, Acc) ->
+        <<Acc/binary, BytesChunk/binary>>
+    end, <<>>, lists:seq(1, ChunksNum)),
+
+    PartSize = ChunksNum * ChunkSize,
+    lists:foreach(fun(Num) ->
+        ?assertEqual({ok, PartSize}, lfm_proxy:write(
+            Worker2, Handle, Num * PartSize, Bytes
+        ))
+    end, lists:seq(0, PartNum - 1)),
+
+    ?assertEqual(ok, lfm_proxy:close(Worker2, Handle)),
+
+    {ok, #file_attr{guid = GUID}} =
+        ?assertMatch({ok, #file_attr{size = FileSizeBytes}},
+            lfm_proxy:stat(Worker1a, SessId(Worker1a), {path, FilePath}), 60),
+    FileCtx = file_ctx:new_by_guid(GUID),
+
     ct:pal("File created"),
 
     InitialBlock1 = {0, 100, 10},
@@ -461,27 +489,34 @@ rtransfer_fetch_test(Config) ->
     ]),
     ExpectedBlocksNum = length(ExpectedBlocks),
 
-    ok = test_utils:mock_new(Workers1, rtransfer_config, [passthrough]),
-    ok = test_utils:mock_expect(Workers1, rtransfer_config, fetch,
-        fun rtransfer_config_fetch_mock/6
-    ),
-
     ct:timetrap(timer:minutes(5)),
 
+    ok = test_utils:mock_new(Workers1, rtransfer_config, [passthrough]),
+    ok = test_utils:mock_expect(Workers1, rtransfer_config, fetch,
+        fun(Request, NotifyFun, CompleteFun, _, _, _) ->
+            #{offset := O, size := S} = Request,
+            Ref = make_ref(),
+            spawn(fun() ->
+                timer:sleep(timer:seconds(60)),
+                NotifyFun(Ref, O, S),
+                CompleteFun(Ref, {ok, ok})
+            end),
+            {ok, Ref}
+        end
+    ),
+
     [Promise1] = async_replicate_blocks_start(
-        Worker1a, SessId(Worker1a, User1), FileCtx, [InitialBlock1]
+        Worker1a, SessId(Worker1a), FileCtx, [InitialBlock1]
     ),
     timer:sleep(timer:seconds(5)),
     [Promise2] = async_replicate_blocks_start(
-        Worker1a, SessId(Worker1a, User1), FileCtx, [InitialBlock2]
+        Worker1a, SessId(Worker1a), FileCtx, [InitialBlock2]
     ),
     timer:sleep(timer:seconds(5)),
-
-    ExpectedResponses = lists:duplicate(length(FollowingBlocks), ok),
-    ?assertMatch(ExpectedResponses, replicate_blocks(
-        Worker1a, SessId(Worker1a, User1), FileCtx, FollowingBlocks
+    ?assertMatch(ok, replicate_blocks(
+        Worker1a, SessId(Worker1a), FileCtx, FollowingBlocks
     )),
-    ?assertMatch([ok, ok], async_replicate_blocks_end([Promise1, Promise2])),
+    async_replicate_blocks_end([Promise1, Promise2]),
 
     FetchRequests = lists:sum(meck_get_num_calls(
         Workers1, rtransfer_config, fetch, '_')
@@ -493,113 +528,9 @@ rtransfer_fetch_test(Config) ->
 
     ok = test_utils:mock_unload(Workers1, rtransfer_config).
 
-rtransfer_cancel_for_session_test(Config) ->
-    [Worker1a, Worker1b, Worker2 | _] = ?config(op_worker_nodes, Config),
-    Workers1 = [Worker1a, Worker1b],
-
-    User1 = <<"user1">>,
-    User2 = <<"user4">>,
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, User1}, Config),
-    SessId = fun(W, User) ->
-        ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config)
-    end,
-    FilePath = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
-    FileCtx = create_file(FilePath, 1, User1, Worker2, Worker1a, SessId),
-    ct:pal("File created"),
-
-    % Some blocks are overlapping so that more than 1 request would be made
-    % for them, so that they should not be cancelled for others.
-    Blocks1 = [
-        {0, 15, 96}, {30, 15, 96}, {60, 15, 96}, {90, 30, 0}, {130, 30, 0},
-        {170, 20, 0}
-    ],
-    Blocks2 = [
-        {100, 30, 96}, {135, 15, 96}, {165, 15, 96}, {200, 100, 255}
-    ],
-
-    ok = test_utils:mock_new(Workers1, rtransfer_config, [passthrough]),
-    ok = test_utils:mock_expect(Workers1, rtransfer_config, fetch,
-        fun rtransfer_config_fetch_mock/6
-    ),
-
-    ct:timetrap(timer:minutes(5)),
-
-    Promises1 = async_replicate_blocks_start(
-        Worker1a, SessId(Worker1a, User1), FileCtx, Blocks1
-    ),
-    timer:sleep(timer:seconds(5)),
-
-    Promises2 = async_replicate_blocks_start(
-        Worker1a, SessId(Worker1a, User2), FileCtx, Blocks2
-    ),
-    timer:sleep(timer:seconds(5)),
-
-    cancel_transfers_for_session_and_file(Worker1a, SessId(Worker1a, User1),
-        FileCtx
-    ),
-
-    ExpectedResponses1 = lists:duplicate(length(Blocks1), {error, cancelled}),
-    ?assertMatch(ExpectedResponses1, async_replicate_blocks_end(Promises1)),
-
-    ExpectedResponses2 = lists:duplicate(length(Blocks2), ok),
-    ?assertMatch(ExpectedResponses2, async_replicate_blocks_end(Promises2)),
-
-    ok = test_utils:mock_unload(Workers1, rtransfer_config).
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-create_file(Path, Size, User, CreationNode, AssertionNode, SessionGetter) ->
-    ChunkSize = 1024,
-    ChunksNum = 1024,
-    PartSize = ChunksNum * ChunkSize,
-    FileSizeBytes = PartSize * Size, % size in MB
-
-    % File creation
-    ?assertMatch({ok, _}, lfm_proxy:create(
-        CreationNode, SessionGetter(CreationNode, User), Path, 8#755)
-    ),
-    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(
-        CreationNode, SessionGetter(CreationNode, User), {path, Path}, rdwr
-    )),
-
-    BytesChunk = crypto:strong_rand_bytes(ChunkSize),
-    Bytes = lists:foldl(fun(_, Acc) ->
-        <<Acc/binary, BytesChunk/binary>>
-    end, <<>>, lists:seq(1, ChunksNum)),
-
-    lists:foreach(fun(Num) ->
-        ?assertEqual({ok, PartSize}, lfm_proxy:write(
-            CreationNode, Handle, Num * PartSize, Bytes
-        ))
-    end, lists:seq(0, Size - 1)),
-
-    ?assertEqual(ok, lfm_proxy:close(CreationNode, Handle)),
-
-    {ok, #file_attr{guid = GUID}} =
-        ?assertMatch({ok, #file_attr{size = FileSizeBytes}},
-            lfm_proxy:stat(AssertionNode, SessionGetter(AssertionNode, User),
-                {path, Path}), 60
-        ),
-
-    file_ctx:new_by_guid(GUID).
-
-rtransfer_config_fetch_mock(Request, NotifyFun, CompleteFun, _, _, _) ->
-    #{offset := O, size := S} = Request,
-    Ref = make_ref(),
-    spawn(fun() ->
-        timer:sleep(timer:seconds(60)),
-        NotifyFun(Ref, O, S),
-        CompleteFun(Ref, {ok, ok})
-    end),
-    {ok, Ref}.
-
-cancel_transfers_for_session_and_file(Node, SessionId, FileCtx) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    rpc:call(Node, replica_synchronizer, cancel_transfers_of_session, [
-        FileUuid, SessionId
-    ]).
 
 get_fetched_blocks(Nodes) ->
     Mod = rtransfer_config,
@@ -628,18 +559,16 @@ async_replicate_blocks_start(Worker, SessionID, FileCtx, Blocks) ->
     end, Blocks).
 
 async_replicate_blocks_end(Promises) ->
-    lists:map(fun(Promise) ->
-        case rpc:yield(Promise) of
-            {ok, _} -> ok;
-            Error -> Error
-        end
+    lists:foreach(fun(Promise) ->
+        ?assertMatch(ok, rpc:yield(Promise))
     end, Promises).
 
 replicate_block(SessionID, FileCtx, {Offset, Size, Priority}) ->
     UserCtx = user_ctx:new(SessionID),
-    replica_synchronizer:synchronize(UserCtx, FileCtx,
+    ?assertMatch({ok, _}, replica_synchronizer:synchronize(UserCtx, FileCtx,
         #file_block{offset = Offset, size = Size}, false, undefined, Priority
-    ).
+    )),
+    ok.
 
 meck_get_num_calls(Nodes, Module, Fun, Args) ->
     lists:map(fun(Node) ->
