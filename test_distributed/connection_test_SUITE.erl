@@ -54,10 +54,7 @@
     proto_version_test/1,
     timeouts_test/1,
     client_keepalive_test/1,
-    socket_timeout_test/1,
-    % This test in order to work properly unmocks session:remove_connection
-    % (mocked in init_per_suite) and as such should be run as last
-    broken_connection_test/1
+    socket_timeout_test/1
 ]).
 
 %%test_bases
@@ -92,8 +89,7 @@
     multi_connection_test,
     bandwidth_test,
     python_client_test,
-    proto_version_test,
-    broken_connection_test
+    proto_version_test
 ]).
 
 -define(PERFORMANCE_CASES_NAMES, [
@@ -1019,78 +1015,12 @@ proto_version_test(Config) ->
     ?assert(is_integer(Minor)),
     ok = ssl:close(Sock).
 
-broken_connection_test(Config) ->
-    % given
-    [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    RootGuid = get_guid(Worker1, SessionId, <<"/space_name1">>),
-
-    Mod = replica_synchronizer,
-    Fun = cancel_transfers_of_session,
-    test_utils:mock_new(Workers, Mod, [passthrough]),
-    test_utils:mock_expect(Workers, Mod, Fun, fun(FileUuid, SessId) ->
-        meck:passthrough([FileUuid, SessId])
-    end),
-
-    % Create a couple of connections within the same session
-    {ok, {Sock, _}} = connect_via_macaroon(Worker1, [{active, true}], SessionId),
-
-    % when
-    ok = ssl:send(Sock, generate_create_message(RootGuid, <<"1">>, <<"f1">>)),
-    #'ServerMessage'{message_body = {
-        fuse_response, #'FuseResponse'{fuse_response = {
-            file_created, #'FileCreated'{handle_id = _Handle}}}
-    }} = ?assertMatch(#'ServerMessage'{message_body = {
-        fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
-    }, message_id = <<"1">>}, receive_server_message()),
-
-    FileGuid = get_guid(Worker1, SessionId, <<"/space_name1/f1">>),
-    FileUuid = rpc:call(Worker1, fslogic_uuid, guid_to_uuid, [FileGuid]),
-
-    ok = ssl:send(Sock, generate_open_file_message(FileGuid, <<"2">>)),
-    #'ServerMessage'{message_body = {
-        fuse_response, #'FuseResponse'{fuse_response = {
-            file_opened, #'FileOpened'{handle_id = _Handle1}}}
-    }} = ?assertMatch(#'ServerMessage'{message_body = {
-        fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
-    }, message_id = <<"2">>}, receive_server_message()),
-
-    ok = ssl:close(Sock),
-
-    % then
-    timer:sleep(timer:seconds(60)),
-
-    CallsNum = lists:sum(meck_get_num_calls([Worker1], Mod, Fun, '_')),
-    ?assertMatch(2, CallsNum),
-
-    lists:foreach(fun(Num) ->
-        ?assertMatch(FileUuid,
-            rpc:call(Worker1, meck, capture, [Num, Mod, Fun, '_', 1])
-        ),
-        ?assertMatch(SessionId,
-            rpc:call(Worker1, meck, capture, [Num, Mod, Fun, '_', 2])
-        )
-    end, lists:seq(1, CallsNum)),
-
-    ok = test_utils:mock_unload(Workers, [Mod]),
-    ok.
-
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
 
 init_per_suite(Config) ->
-    Posthook = fun(NewConfig) ->
-        Workers = ?config(op_worker_nodes, NewConfig),
-        test_utils:mock_new(Workers, session, [passthrough]),
-
-        % Do not delete session when last connection is removed
-        test_utils:mock_expect(Workers, session, remove_connection,
-            fun session_remove_connection_mock/2
-        ),
-
-        initializer:setup_storage(NewConfig)
-    end,
+    Posthook = fun(NewConfig) -> initializer:setup_storage(NewConfig) end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
 init_per_testcase(Case, Config) when
@@ -1207,14 +1137,6 @@ init_per_testcase(timeouts_test, Config) ->
 
 init_per_testcase(client_keepalive_test, Config) ->
     init_per_testcase(timeouts_test, Config);
-
-% This scenario needs to unmock session module in order to work
-init_per_testcase(broken_connection_test, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, [session]),
-
-    % Shorten ttl to force quicker client session removal
-    init_per_testcase(timeouts_test, [{fuse_session_ttl_seconds, 10} | Config]);
 
 init_per_testcase(socket_timeout_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -1601,27 +1523,3 @@ generate_fsync_message(RootGuid, MsgId) ->
     }}}
     },
     messages:encode_msg(Message).
-
-generate_open_file_message(FileGuid, MsgId) ->
-    Message = #'ClientMessage'{message_id = MsgId, message_body =
-    {fuse_request, #'FuseRequest'{fuse_request = {file_request,
-        #'FileRequest'{context_guid = FileGuid,
-            file_request = {open_file, #'OpenFile'{flag = 'READ_WRITE'}}}
-    }}}
-    },
-    messages:encode_msg(Message).
-
-meck_get_num_calls(Nodes, Module, Fun, Args) ->
-    lists:map(fun(Node) ->
-        rpc:call(Node, meck, num_calls, [Module, Fun, Args], timer:seconds(60))
-    end, Nodes).
-
-session_remove_connection_mock(SessId, Con) ->
-    Diff = fun(#session{connections = Cons} = Sess) ->
-        NewCons = lists:filter(fun(C) -> C =/= Con end, Cons),
-        {ok, Sess#session{connections = NewCons}}
-    end,
-    case session:update(SessId, Diff) of
-        {ok, _} -> ok;
-        Other -> Other
-    end.

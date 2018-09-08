@@ -670,14 +670,8 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     space_logic_mock_setup(AllWorkers, Spaces, SpaceUsers, SpacesToProviders),
     provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup),
 
-    %% Set expiration time for session to value specified in Config or to 1d.
-    FuseSessionTTL = case ?config(fuse_session_ttl_seconds, Config) of
-        undefined ->
-            240 * 60 * 60;
-        Val ->
-            Val
-    end,
-    {_, []} = rpc:multicall(AllWorkers, application, set_env, [?APP_NAME, fuse_session_ttl_seconds, FuseSessionTTL]),
+    %% Set expiration time for session to 1d.
+    {_, []} = rpc:multicall(AllWorkers, application, set_env, [?APP_NAME, fuse_session_ttl_seconds, 240 * 60 * 60]),
 
     lists:foreach(fun(Worker) ->
         test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
