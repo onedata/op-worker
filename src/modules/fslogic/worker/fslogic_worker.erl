@@ -58,7 +58,7 @@
     spaces_cleanup_interval, timer:hours(1))).
 
 -define(TRANSFERS_RESTART_DELAY, application:get_env(?APP_NAME,
-    transfers_restart_delay, timer:seconds(3))).
+    transfers_restart_delay, 0)).
 
 -define(EXOMETER_NAME(Param), ?exometer_name(?MODULE, count, Param)).
 -define(EXOMETER_TIME_NAME(Param), ?exometer_name(?MODULE, time,
@@ -137,11 +137,11 @@ handle(invalidate_permissions_cache) ->
     ),
     ok;
 handle(restart_transfers) ->
-    ?debug("Restarting unfinished transfers"),
+    ?debug("Rerunning unfinished transfers"),
     try provider_logic:get_spaces() of
         {ok, SpaceIds} ->
             lists:foreach(fun(SpaceId) ->
-                Restarted = transfer:restart_unfinished_transfers(SpaceId),
+                Restarted = transfer:rerun_not_ended_transfers(SpaceId),
                 ?debug("Restarted following transfers: ~p", [Restarted])
             end, SpaceIds);
         ?ERROR_UNREGISTERED_PROVIDER ->
@@ -183,6 +183,7 @@ handle(_Request) ->
     Error :: timeout | term().
 cleanup() ->
     transfer:cleanup(),
+    replica_synchronizer:terminate_all(),
     ok.
 
 %%%===================================================================
@@ -407,9 +408,12 @@ handle_file_request(UserCtx, #truncate{size = Size}, FileCtx) ->
 handle_file_request(UserCtx, #synchronize_block{block = Block, prefetch = Prefetch,
     priority = Priority}, FileCtx) ->
     sync_req:synchronize_block(UserCtx, FileCtx, Block, Prefetch, undefined, Priority);
-handle_file_request(UserCtx, #synchronize_block_and_compute_checksum{block = Block,
+handle_file_request(UserCtx, #block_synchronization_request{block = Block, prefetch = Prefetch,
     priority = Priority}, FileCtx) ->
-    sync_req:synchronize_block_and_compute_checksum(UserCtx, FileCtx, Block, Priority);
+    sync_req:request_block_synchronization(UserCtx, FileCtx, Block, Prefetch, undefined, Priority);
+handle_file_request(UserCtx, #synchronize_block_and_compute_checksum{block = Block,
+    prefetch = Prefetch, priority = Priority}, FileCtx) ->
+    sync_req:synchronize_block_and_compute_checksum(UserCtx, FileCtx, Block, Prefetch, Priority);
 handle_file_request(UserCtx, #get_xattr{
     name = XattrName,
     inherited = Inherited
@@ -451,7 +455,7 @@ handle_provider_request(UserCtx, #schedule_file_replication{
 handle_provider_request(UserCtx, #schedule_replica_invalidation{
     source_provider_id = SourceProviderId, target_provider_id = TargetProviderId
 }, FileCtx) ->
-    invalidation_req:schedule_replica_invalidation(UserCtx, FileCtx, SourceProviderId, TargetProviderId);
+    replica_eviction_req:schedule_replica_eviction(UserCtx, FileCtx, SourceProviderId, TargetProviderId);
 handle_provider_request(UserCtx, #get_parent{}, FileCtx) ->
     guid_req:get_parent(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #get_file_path{}, FileCtx) ->

@@ -5,11 +5,11 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Implementation of worker for transfer_workers_pool.
+%%% Implementation of worker for replication_workers_pool.
 %%% Worker is responsible for replication of one file.
 %%% @end
 %%%-------------------------------------------------------------------
--module(transfer_worker).
+-module(replication_worker).
 -author("Jakub Kudzia").
 
 -behaviour(gen_server).
@@ -22,17 +22,19 @@
 -export([start_link/0]).
 
 %% gen_server callbacks
--export([init/1,
+-export([
+    init/1,
     handle_call/3,
     handle_cast/2,
     handle_info/2,
     terminate/2,
-    code_change/3]).
+    code_change/3
+]).
 
 -define(SERVER, ?MODULE).
 
--define(MAX_FILE_TRANSFER_RETRIES,
-    application:get_env(?APP_NAME, max_file_transfer_retries_per_file, 5)).
+-define(MAX_FILE_REPLICATION_RETRIES,
+    application:get_env(?APP_NAME, max_file_replication_retries_per_file, 5)).
 
 -record(state, {}).
 -type state() :: #state{}.
@@ -100,19 +102,21 @@ handle_cast({start_file_replication, UserCtx, FileCtx, Block, TransferId,
     RetriesLeft, NextRetryTimestamp}, State
 ) ->
     RetriesLeft2 = utils:ensure_defined(RetriesLeft, undefined,
-        ?MAX_FILE_TRANSFER_RETRIES),
+        ?MAX_FILE_REPLICATION_RETRIES),
     case should_start(NextRetryTimestamp) of
         true ->
             case replicate_file(UserCtx, FileCtx, Block, TransferId, RetriesLeft2) of
                 ok ->
                     ok;
-                {error, transfer_cancelled} ->
-                    ok;
+                {error, already_ended} ->
+                    {ok, _} = transfer:increment_files_processed_counter(TransferId);
+                {error, replication_cancelled} ->
+                    {ok, _} = transfer:increment_files_processed_counter(TransferId);
                 {error, not_found} ->
                     % todo VFS-4218 currently we ignore this case
-                    {ok, _} = transfer:increase_files_processed_counter(TransferId);
+                    {ok, _} = transfer:increment_files_processed_counter(TransferId);
                 {error, _Reason} ->
-                    {ok, _} = transfer:mark_failed_file_processing(TransferId)
+                    {ok, _} = transfer:increment_files_failed_and_processed_counters(TransferId)
             end;
         _ ->
             sync_req:enqueue_file_replication(UserCtx, FileCtx, Block,
@@ -178,8 +182,10 @@ replicate_file(UserCtx, FileCtx, Block, TransferId, RetriesLeft) ->
         Error = {error, not_found} ->
             maybe_retry(UserCtx, FileCtx, Block, TransferId, RetriesLeft, Error)
     catch
-        throw:{transfer_cancelled, TransferId} ->
-            {error, transfer_cancelled};
+        throw:already_ended ->
+            {error, already_ended};
+        throw:replication_cancelled ->
+            {error, replication_cancelled};
         Error:Reason ->
             maybe_retry(UserCtx, FileCtx, Block, TransferId, RetriesLeft,
                 {Error, Reason})
@@ -249,8 +255,8 @@ should_start(NextRetryTimestamp) ->
 %%-------------------------------------------------------------------
 -spec next_retry(non_neg_integer()) -> non_neg_integer().
 next_retry(RetriesLeft) ->
-    RetryNum = ?MAX_FILE_TRANSFER_RETRIES - RetriesLeft,
-    MinSecsToWait = backoff(RetryNum, ?MAX_FILE_TRANSFER_RETRIES),
+    RetryNum = ?MAX_FILE_REPLICATION_RETRIES - RetriesLeft,
+    MinSecsToWait = backoff(RetryNum, ?MAX_FILE_REPLICATION_RETRIES),
     time_utils:cluster_time_seconds() + MinSecsToWait.
 
 

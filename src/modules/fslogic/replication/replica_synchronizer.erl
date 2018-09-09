@@ -18,16 +18,14 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
--include("timeouts.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include("timeouts.hrl").
 
 -behaviour(gen_server).
 
 -define(MINIMAL_SYNC_REQUEST, application:get_env(?APP_NAME, minimal_sync_request, 32768)).
 -define(TRIGGER_BYTE, application:get_env(?APP_NAME, trigger_byte, 52428800)).
 -define(PREFETCH_SIZE, application:get_env(?APP_NAME, prefetch_size, 104857600)).
--define(MAX_OVERLAPPING_MULTIPLIER,
-    application:get_env(?APP_NAME, overlapping_block_max_multiplier, 5)).
 
 %% The process is supposed to die after ?DIE_AFTER time of idling (no requests in flight)
 -define(DIE_AFTER, 60000).
@@ -45,8 +43,6 @@
     ?APP_NAME, rtransfer_events_caching_time, 1000)
 ).
 
--define(RESTART_PRIORITY,
-    application:get_env(?APP_NAME, default_restart_priority, 32)).
 -define(PREFETCH_PRIORITY,
     application:get_env(?APP_NAME, default_prefetch_priority, 96)).
 
@@ -57,7 +53,9 @@
 
 -type fetch_ref() :: reference().
 -type block() :: fslogic_blocks:block().
+-type priority() :: non_neg_integer().
 -type from() :: {pid(), any()}. %% `From` argument to gen_server:call callback
+-type request_type() :: sync | async.
 
 -record(state, {
     file_ctx :: file_ctx:ctx(),
@@ -66,11 +64,12 @@
     dest_storage_id :: storage:id() | undefined,
     dest_file_id :: helpers:file_id() | undefined,
     last_transfer :: undefined | block(),
-    in_progress :: ordsets:ordset({block(), fetch_ref()}),
+    in_progress :: ordsets:ordset({block(), fetch_ref(), priority()}),
     in_sequence_hits = 0 :: non_neg_integer(),
     from_to_refs = #{} :: #{from() => [fetch_ref()]},
     ref_to_froms = #{} :: #{fetch_ref() => [from()]},
     from_sessions = #{} :: #{from() => session:id()},
+    from_requests_types = #{} :: #{from() => request_type()},
     from_to_transfer_id = #{} :: #{from() => transfer:id() | undefined},
     transfer_id_to_from = #{} :: #{transfer:id() | undefined => from()},
     cached_stats = #{} :: #{undefined | transfer:id() => #{od_provider:id() => integer()}},
@@ -81,9 +80,11 @@
     caching_events_timer :: undefined | reference()
 }).
 
+-define(BLOCK(__Offset, __Size), #file_block{offset = __Offset, size = __Size}).
+
 % API
--export([synchronize/6, update_replica/4, flush_location/1,
-    force_flush_events/1, cancel/1]).
+-export([synchronize/6, request_synchronization/6, request_synchronization/7,
+    update_replica/4, force_flush_events/1, cancel/1, terminate_all/0]).
 % gen_server callbacks
 -export([handle_call/3, handle_cast/2, handle_info/2, init/1, code_change/3,
     terminate/2]).
@@ -93,6 +94,8 @@
 % For RPC
 -export([apply_if_alive_internal/2, apply_internal/2, apply_or_run_locally_internal/3,
     init_or_return_existing/1]).
+% For testing
+-export([find_overlapping/3, get_holes/2]).
 
 %%%===================================================================
 %%% API
@@ -100,18 +103,46 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Blocks until a block is synchronized from a remote provider with
-%% a newer version of data.
+%% @equiv request_synchronization(UserCtx, FileCtx, Block, Prefetch,
+%% TransferId, Priority, sync).
 %% @end
 %%--------------------------------------------------------------------
 -spec synchronize(user_ctx:ctx(), file_ctx:ctx(), block(),
     Prefetch :: boolean(), transfer:id() | undefined, non_neg_integer()) ->
     {ok, #file_location_changed{}} | {error, Reason :: any()}.
 synchronize(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
+    request_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId,
+        Priority, sync).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv request_synchronization(UserCtx, FileCtx, Block, Prefetch,
+%% TransferId, Priority, async).
+%% @end
+%%--------------------------------------------------------------------
+-spec request_synchronization(user_ctx:ctx(), file_ctx:ctx(), block(),
+    Prefetch :: boolean(), transfer:id() | undefined, non_neg_integer()) ->
+    ok | {error, Reason :: any()}.
+request_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
+    request_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId,
+        Priority, async).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends sync request. If request type is sync,
+%% blocks until a block is synchronized from a remote provider with
+%% a newer version of data.
+%% @end
+%%--------------------------------------------------------------------
+-spec request_synchronization(user_ctx:ctx(), file_ctx:ctx(), block(),
+    Prefetch :: boolean(), transfer:id() | undefined, non_neg_integer(),
+    request_type()) -> ok | {ok, #file_location_changed{}} | {error, Reason :: any()}.
+request_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId,
+    Priority, SyncType) ->
     EnlargedBlock = enlarge_block(Block, Prefetch),
     SessionId = user_ctx:get_session_id(UserCtx),
     apply_no_check(FileCtx, {synchronize, FileCtx, EnlargedBlock,
-        Prefetch, TransferId, SessionId, Priority}).
+        Prefetch, TransferId, SessionId, Priority, SyncType}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -123,18 +154,7 @@ synchronize(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
     FileSize :: non_neg_integer() | undefined, BumpVersion :: boolean()) ->
     {ok, size_changed} | {ok, size_not_changed} | {error, Reason :: term()}.
 update_replica(FileCtx, Blocks, FileSize, BumpVersion) ->
-    apply_no_check(FileCtx, fun() ->
-        replica_updater:update(FileCtx, Blocks, FileSize, BumpVersion)
-    end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Forces location cache flush.
-%% @end
-%%--------------------------------------------------------------------
--spec flush_location(file_meta:uuid()) -> ok.
-flush_location(Uuid) ->
-    apply_if_alive_no_check(Uuid, ?FLUSH_LOCATION).
+    replica_updater:update(FileCtx, Blocks, FileSize, BumpVersion).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -155,6 +175,20 @@ cancel(TransferId) ->
     lists:foreach(
         fun(Pid) -> gen_server2:cast(Pid, {cancel, TransferId}) end,
         gproc:lookup_pids({c, l, TransferId})).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Terminates all synchronizers.
+%% @end
+%%--------------------------------------------------------------------
+-spec terminate_all() -> ok.
+terminate_all() ->
+    Selection = gproc:select([{{{'_', '_', '$1'}, '_', '_'},
+        [{is_binary, '$1'}], ['$$']}]),
+    Pids = request_terminate(Selection),
+
+    lists:foreach(fun(Pid) -> Pid ! terminate end, Pids),
+    wait_for_terminate(Pids).
 
 %%%===================================================================
 %%% Apply functions
@@ -396,74 +430,80 @@ init(FileCtx) ->
 %% synchronized to the newest version.
 %% @end
 %%--------------------------------------------------------------------
-handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priority}, From,
-    #state{from_sessions = FS, requested_blocks = RB, file_guid = FG} = State0) ->
-    State = case FG of
-        undefined ->
-            FileGuid = file_ctx:get_guid_const(FileCtx),
-            SpaceId = file_ctx:get_space_id_const(FileCtx),
-            {_LocalDoc, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
-            {DestStorageId, FileCtx3} = file_ctx:get_storage_id(FileCtx2),
-            {DestFileId, FileCtx4} = file_ctx:get_storage_file_id(FileCtx3),
-            {_LocationDocs, FileCtx5} = file_ctx:get_file_location_docs(FileCtx4),
-            State0#state{
-                file_ctx = FileCtx5,
-                dest_storage_id = DestStorageId,
-                dest_file_id = DestFileId,
-                file_guid = FileGuid,
-                space_id = SpaceId
-            };
-        _ ->
-            State0
-    end,
+handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priority, Type}, From,
+    #state{from_sessions = FS, requested_blocks = RB, file_guid = FG,
+        from_requests_types = RequestTypesMap} = State0) ->
+    try
+        State = case FG of
+            undefined ->
+                FileGuid = file_ctx:get_guid_const(FileCtx),
+                SpaceId = file_ctx:get_space_id_const(FileCtx),
+                {_LocalDoc, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
+                {DestStorageId, FileCtx3} = file_ctx:get_storage_id(FileCtx2),
+                {DestFileId, FileCtx4} = file_ctx:get_storage_file_id(FileCtx3),
+                {_LocationDocs, FileCtx5} = file_ctx:get_file_location_docs(FileCtx4),
+                State0#state{
+                    file_ctx = FileCtx5,
+                    dest_storage_id = DestStorageId,
+                    dest_file_id = DestFileId,
+                    file_guid = FileGuid,
+                    space_id = SpaceId
+                };
+            _ ->
+                State0
+        end,
 
-    TransferId =/= undefined andalso (catch gproc:add_local_counter(TransferId, 1)),
-    OverlappingInProgress = find_overlapping(Block, State),
-    {OverlappingBlocks, ExistingRefs} = lists:unzip(OverlappingInProgress),
-    Holes = get_holes(Block, OverlappingBlocks),
-    NewTransfers = start_transfers(Holes, TransferId, State, Priority),
-    {_, NewRefs} = lists:unzip(NewTransfers),
-    case ExistingRefs ++ NewRefs of
-        [] ->
-            FileLocation = fslogic_cache:get_local_location(),
-            ReturnedBlocks = fslogic_location_cache:get_blocks(FileLocation,
-                #{overlapping_blocks => [Block]}),
-            {EventOffset, EventSize} =
-                fslogic_location_cache:get_blocks_range(ReturnedBlocks, [Block]),
-            FLC = #file_location_changed{
-                file_location = fslogic_location_cache:set_final_blocks(
-                    FileLocation#document.value, ReturnedBlocks),
-                change_beg_offset = EventOffset, change_end_offset = EventSize},
-            {reply, {ok, FLC}, State, ?DIE_AFTER};
-        RelevantRefs ->
-            State1 = associate_from_with_refs(From, RelevantRefs, State),
-            State2 = associate_from_with_tid(From, TransferId, State1),
-            State3 = add_in_progress(NewTransfers, State2),
-            State5 = case Prefetch of
-                true ->
-                    % TODO VFS-4690 - does not work well while many simultaneous
-                    % transfers do prefetching
-                    State4 = adjust_sequence_hits(Block, NewRefs, State3),
-                    prefetch(NewTransfers, TransferId, State4);
-                _ ->
-                    State3
-            end,
-            State6 = State5#state{from_sessions = maps:put(From, Session, FS)},
-            State7 = State6#state{requested_blocks = maps:put(From, Block, RB)},
-            {noreply, State7, ?DIE_AFTER}
+        TransferId =/= undefined andalso (catch gproc:add_local_counter(TransferId, 1)),
+        OverlappingInProgress = find_overlapping(Block, Priority, State#state.in_progress),
+        {OverlappingBlocks, ExistingRefs, _Priorities} = lists:unzip3(OverlappingInProgress),
+        Holes = get_holes(Block, OverlappingBlocks),
+        NewTransfers = start_transfers(Holes, TransferId, State, Priority),
+        {_, NewRefs, _} = lists:unzip3(NewTransfers),
+        case ExistingRefs ++ NewRefs of
+            [] ->
+                FileLocation =
+                    file_ctx:fill_location_gaps([Block], fslogic_cache:get_local_location(),
+                        fslogic_cache:get_all_locations(), fslogic_cache:get_uuid()),
+                {EventOffset, EventSize} = fslogic_location_cache:get_blocks_range(FileLocation, [Block]),
+                FLC = #file_location_changed{file_location = FileLocation,
+                    change_beg_offset = EventOffset, change_end_offset = EventSize},
+                case Type of
+                    sync ->
+                        {reply, {ok, FLC}, State, ?DIE_AFTER};
+                    async ->
+                        {reply, ok, State, ?DIE_AFTER}
+                end;
+            RelevantRefs ->
+                State1 = associate_from_with_refs(From, RelevantRefs, State),
+                State2 = associate_from_with_tid(From, TransferId, State1),
+                State3 = add_in_progress(NewTransfers, State2),
+                State5 = case Prefetch of
+                    true ->
+                        % TODO VFS-4690 - does not work well while many simultaneous
+                        % transfers do prefetching
+                        State4 = adjust_sequence_hits(Block, NewRefs, State3),
+                        prefetch(NewTransfers, TransferId, State4);
+                    _ ->
+                        State3
+                end,
+                State6 = State5#state{from_sessions = maps:put(From, Session, FS)},
+                State7 = State6#state{requested_blocks = maps:put(From, Block, RB)},
+                State8 = State7#state{from_requests_types =
+                maps:put(From, Type, RequestTypesMap)},
+
+                case Type of
+                    sync ->
+                        {noreply, State8, ?DIE_AFTER};
+                    async ->
+                        {reply, ok, State8, ?DIE_AFTER}
+                end
+        end
+    catch
+        E1:E2 ->
+            ?error_stacktrace("Unable to start transfer due to error ~p:~p",
+                [E1, E2]),
+            {reply, {error, E2}, State0, ?DIE_AFTER}
     end;
-
-handle_call(?FLUSH_LOCATION, _From, State) ->
-    Ans = fslogic_cache:flush(),
-
-    case application:get_env(?APP_NAME, synchronizer_gc, on_flush_location) of
-        on_flush_location ->
-            erlang:garbage_collect();
-        _ ->
-            ok
-    end,
-
-    {reply, Ans, State, ?DIE_AFTER};
 
 handle_call(?FLUSH_EVENTS, _From, State) ->
     {reply, ok, flush_events(State), ?DIE_AFTER};
@@ -498,7 +538,9 @@ handle_info({Ref, active, ProviderId, Block}, #state{
     ref_to_froms = RefToFroms,
     from_to_transfer_id = FromToTransferId
 } = State) ->
+    fslogic_cache:set_local_change(true),
     {ok, _} = replica_updater:update(FileCtx, [Block], undefined, false),
+    fslogic_cache:set_local_change(false),
     AffectedFroms = maps:get(Ref, RefToFroms, []),
     TransferIds = case maps:values(maps:with(AffectedFroms, FromToTransferId)) of
         [] -> [undefined];
@@ -517,8 +559,9 @@ handle_info(?FLUSH_EVENTS, State) ->
     {noreply, flush_events(State), ?DIE_AFTER};
 
 handle_info({Ref, complete, {ok, _} = _Status}, #state{from_sessions = FS,
-    requested_blocks = RB, from_to_transfer_id = FromToTransferId} = State) ->
-    {__Block, __AffectedFroms, FinishedFroms, State1} = disassociate_ref(Ref, State),
+    requested_blocks = RB, from_to_transfer_id = FromToTransferId,
+    from_requests_types = RequestTypesMap} = State) ->
+    {_Block, _Priority, _AffectedFroms, FinishedFroms, State1} = disassociate_ref(Ref, State),
 
     {ExcludeSessions, FS2} = lists:foldl(fun(From, {Acc, TmpFS}) ->
         case maps:get(From, TmpFS, undefined) of
@@ -529,7 +572,12 @@ handle_info({Ref, complete, {ok, _} = _Status}, #state{from_sessions = FS,
         end
     end, {[], FS}, FinishedFroms),
 
-    FinishedBlocks = [{From, maps:get(From, RB)} || From <- FinishedFroms],
+    RequestTypesMap2 = lists:foldl(fun(From, TmpMap) ->
+        maps:remove(From, TmpMap)
+    end, RequestTypesMap, FinishedFroms),
+
+    FinishedBlocks = [{From, maps:get(From, RB), maps:get(From, RequestTypesMap)}
+        || From <- FinishedFroms],
     RB2 = lists:foldl(fun(From, Acc) ->
         maps:remove(From, Acc)
     end, RB, FinishedFroms),
@@ -548,26 +596,33 @@ handle_info({Ref, complete, {ok, _} = _Status}, #state{from_sessions = FS,
             TempState = flush_stats(State2#state{cached_stats = JobsStats}, false),
             TempState#state{cached_stats = #{undefined => OnfStats}}
     end,
-    [transfer:increase_files_transferred_counter(TID) || TID <- TransferIdsList],
+    [transfer:increment_files_replicated_counter(TID) || TID <- TransferIdsList],
     [gen_server2:reply(From, {ok, Message}) || {From, Message} <- Ans],
-    {noreply, State3#state{from_sessions = FS2, requested_blocks = RB2}, ?DIE_AFTER};
+
+    {noreply, State3#state{from_sessions = FS2, requested_blocks = RB2,
+        from_requests_types = RequestTypesMap2}, ?DIE_AFTER};
 
 handle_info({FailedRef, complete, {error, disconnected}}, State) ->
-    {Block, AffectedFroms, _FinishedFroms, State1} = disassociate_ref(FailedRef, State),
-    % TODO VFS-4692 - use the same priority as for transfer
-    NewTransfers = start_transfers([Block], undefined, State1, ?RESTART_PRIORITY),
+    {Block, Priority, AffectedFroms, _FinishedFroms, State1} = disassociate_ref(FailedRef, State),
+    case Block of
+        undefined ->
+            ?error("Failed transfer ~p not found in state", [FailedRef]),
+            {noreply, State1};
+        _ ->
+            NewTransfers = start_transfers([Block], undefined, State1, Priority),
 
-    ?warning("Replaced failed transfer ~p (~p) with new transfers ~p",
-        [FailedRef, Block, NewTransfers]),
+                    ?warning("Replaced failed transfer ~p (~p) with new transfers ~p",
+                        [FailedRef, Block, NewTransfers]),
 
-    {_, NewRefs} = lists:unzip(NewTransfers),
-    State2 = associate_froms_with_refs(AffectedFroms, NewRefs, State1),
-    State3 = add_in_progress(NewTransfers, State2),
-    {noreply, State3};
+            {_, NewRefs, _} = lists:unzip3(NewTransfers),
+            State2 = associate_froms_with_refs(AffectedFroms, NewRefs, State1),
+            State3 = add_in_progress(NewTransfers, State2),
+            {noreply, State3}
+    end;
 
 handle_info({Ref, complete, ErrorStatus}, State) ->
     ?error("Transfer ~p failed: ~p", [Ref, ErrorStatus]),
-    {_Block, AffectedFroms, FinishedFroms, State1} = disassociate_ref(Ref, State),
+    {_Block, _Priority, AffectedFroms, FinishedFroms, State1} = disassociate_ref(Ref, State),
     State2 = disassociate_transfer_ids(FinishedFroms, State1),
 
     %% Cancel TransferIds that are still left (i.e. the failed ref was only a part of the transfer)
@@ -577,9 +632,24 @@ handle_info({Ref, complete, ErrorStatus}, State) ->
 
     {noreply, State3, ?DIE_AFTER};
 
-handle_info(check_flush, State) ->
+handle_info(fslogic_cache_check_flush, State) ->
     fslogic_cache:check_flush(),
+
+    case application:get_env(?APP_NAME, synchronizer_gc, on_flush_location) of
+        on_flush_location ->
+            erlang:garbage_collect();
+        _ ->
+            ok
+    end,
+
     {noreply, State, ?DIE_AFTER};
+
+handle_info({fslogic_cache_flushed, Key, Check1, Check2}, State) ->
+    fslogic_cache:verify_flush_ans(Key, Check1, Check2),
+    {noreply, State, ?DIE_AFTER};
+
+handle_info(terminate, State) ->
+    {stop, normal, State};
 
 handle_info(Msg, State) ->
     ?log_bad_request(Msg),
@@ -593,7 +663,7 @@ terminate(_Reason, State) ->
     flush_stats(State2, true),
     flush_events(State2),
     % TODO VFS-4691 - should not terminate when flush failed
-    fslogic_cache:flush(),
+    fslogic_cache:flush(terminate),
     ignore.
 
 %%%===================================================================
@@ -607,13 +677,13 @@ terminate(_Reason, State) ->
 %% returns From tuples for further handling.
 %% @end
 %%--------------------------------------------------------------------
--spec disassociate_ref(fetch_ref(), #state{}) -> {block(), AffectedFroms :: [from()],
-    FinishedFroms :: [from()], #state{}}.
+-spec disassociate_ref(fetch_ref(), #state{}) -> {block(), priority(),
+    AffectedFroms :: [from()], FinishedFroms :: [from()], #state{}}.
 disassociate_ref(Ref, State) ->
-    {Block, InProgress} =
+    {Block, Priority, InProgress} =
         case lists:keytake(Ref, 2, State#state.in_progress) of
-            {value, {B, _}, IP} -> {B, IP};
-            false -> {undefined, State#state.in_progress}
+            {value, {B, _, P}, IP} -> {B, P, IP};
+            false -> {undefined, undefined, State#state.in_progress}
         end,
     AffectedFroms = maps:get(Ref, State#state.ref_to_froms, []),
     RefToFroms = maps:remove(Ref, State#state.ref_to_froms),
@@ -628,9 +698,11 @@ disassociate_ref(Ref, State) ->
             end,
             {[], State#state.from_to_refs},
             AffectedFroms),
-    {Block, AffectedFroms, FinishedFroms, State#state{in_progress = InProgress,
+    {Block, Priority, AffectedFroms, FinishedFroms, State#state{
+        in_progress = InProgress,
         ref_to_froms = RefToFroms,
-        from_to_refs = FromToRefs}}.
+        from_to_refs = FromToRefs
+    }}.
 
 disassociate_transfer_ids(Froms, State) ->
     TransferIds = maps:values(maps:with(Froms, State#state.from_to_transfer_id)),
@@ -656,10 +728,10 @@ cancel_transfer_id(TransferId, State) ->
             AffectedRefs),
 
     [rtransfer_link:cancel(Ref) || Ref <- OrphanedRefs],
-    gen_server2:reply(From, {error, canceled}),
+    gen_server2:reply(From, {error, cancelled}),
 
     InProgress =
-        lists:filter(fun({_Block, Ref}) -> lists:member(Ref, OrphanedRefs) end,
+        lists:filter(fun({_Block, Ref, _Priority}) -> lists:member(Ref, OrphanedRefs) end,
             State#state.in_progress),
     FromToRefs = maps:remove(From, State#state.from_to_refs),
     RefToFroms = maps:without(OrphanedRefs, State#state.ref_to_froms),
@@ -718,6 +790,7 @@ associate_from_with_tid(From, TransferId, State) ->
     State#state{from_to_transfer_id = FromToTransferId,
         transfer_id_to_from = TransferIdToFrom}.
 
+-spec add_in_progress([{block(), fetch_ref(), priority()}], #state{}) -> #state{}.
 add_in_progress(NewTransfers, State) ->
     InProgress = ordsets:union(State#state.in_progress, ordsets:from_list(NewTransfers)),
     State#state{in_progress = InProgress}.
@@ -762,8 +835,8 @@ is_sequential(_, _State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec start_transfers([block()], transfer:id() | undefined,
-    #state{}, non_neg_integer()) ->
-    NewRequests :: [{block(), fetch_ref()}].
+    #state{}, priority()) ->
+    NewRequests :: [{block(), fetch_ref(), priority()}].
 start_transfers(InitialBlocks, TransferId, State, Priority) ->
     LocationDocs = fslogic_cache:get_all_locations(),
     ProvidersAndBlocks = replica_finder:get_blocks_for_sync(LocationDocs, InitialBlocks),
@@ -792,7 +865,7 @@ start_transfers(InitialBlocks, TransferId, State, Priority) ->
                     CompleteFun = make_complete_fun(Self),
                     {ok, NewRef} = rtransfer_config:fetch(Request, NotifyFun, CompleteFun,
                         TransferId, SpaceId, FileGuid),
-                    {FetchedBlock, NewRef}
+                    {FetchedBlock, NewRef, Priority}
                 end, Blocks)
         end, ProvidersAndBlocks).
 
@@ -859,24 +932,18 @@ enlarge_block(Block, _Prefetch) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Finds parts of a block that are already in progress.
+%% Finds parts of a block that are already in progress (only blocks with
+%% priorities equal or higher (numerically lower ones) are taken in account).
 %% @end
 %%--------------------------------------------------------------------
--spec find_overlapping(block(), #state{}) -> Overlapping :: [{block(), fetch_ref()}].
-find_overlapping(#file_block{offset = Offset, size = Size}, #state{in_progress = InProgress}) ->
-    MaxMultip = ?MAX_OVERLAPPING_MULTIPLIER,
-    lists:filter(
-        fun({#file_block{offset = O, size = S}, _Ref}) ->
-            case
-                (O =< Offset andalso Offset < O + S) orelse
-                    (Offset =< O andalso O < Offset + Size) of
-                true ->
-                    (S < MaxMultip * Size) orelse (MaxMultip =:= 0);
-                false ->
-                    false
-            end
-        end,
-        InProgress).
+-spec find_overlapping(block(), priority(), Blocks) -> Overlapping when
+    Blocks :: ordsets:ordset([{block(), fetch_ref(), priority()}]),
+    Overlapping :: [{block(), fetch_ref(), priority()}].
+find_overlapping(#file_block{offset = Begin, size = Size}, Priority, Blocks) ->
+    End = Begin + Size,
+    lists:filter(fun({#file_block{offset = O, size = S}, _Ref, P}) ->
+        P =< Priority andalso O < End andalso O + S > Begin
+    end, ordsets:to_list(Blocks)).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -896,17 +963,20 @@ get_holes(#file_block{offset = Offset, size = Size}, ExistingBlocks) ->
 %%--------------------------------------------------------------------
 -spec get_holes(Offset :: non_neg_integer(), Size :: non_neg_integer(),
     Existing :: [block()], Acc :: [block()]) -> Holes :: [block()].
-get_holes(_Offset, Size, [], Acc) when Size =< 0 ->
+get_holes(_Offset, Size, _Existing, Acc) when Size =< 0 ->
     lists:reverse(Acc);
 get_holes(Offset, Size, [], Acc) ->
-    get_holes(Offset + Size, 0, [],
-        [#file_block{offset = Offset, size = Size} | Acc]);
-get_holes(Offset, Size, [#file_block{offset = Offset, size = S} | Blocks], Acc) ->
-    get_holes(Offset + S, Size - S, Blocks, Acc);
-get_holes(Offset, Size, [#file_block{offset = O} | Blocks], Acc) ->
-    HoleSize = O - Offset,
-    get_holes(Offset + HoleSize, Size - HoleSize, Blocks,
-        [#file_block{offset = Offset, size = HoleSize} | Acc]).
+    get_holes(Offset + Size, 0, [], [?BLOCK(Offset, Size) | Acc]);
+get_holes(Offset, Size, [?BLOCK(O, S) | Blocks], Acc) when Offset < O ->
+    NewOffset = O + S,
+    NewSize = Offset + Size - NewOffset,
+    get_holes(NewOffset, NewSize, Blocks, [?BLOCK(Offset, O - Offset) | Acc]);
+get_holes(Offset, Size, [?BLOCK(O, S) | Blocks], Acc) when O =< Offset andalso O + S > Offset ->
+    NewOffset = O + S,
+    NewSize = Offset + Size - NewOffset,
+    get_holes(NewOffset, NewSize, Blocks, Acc);
+get_holes(Offset, Size, [_ | Blocks], Acc) ->
+    get_holes(Offset, Size, Blocks, Acc).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -965,8 +1035,8 @@ flush_blocks(State) ->
 %% Flush aggregated so far file blocks.
 %% @end
 %%--------------------------------------------------------------------
--spec flush_blocks(#state{}, [session:id()], [{from(), block()}], boolean()) ->
-    {[{from(), #file_location_changed{}}], #state{}}.
+-spec flush_blocks(#state{}, [session:id()], [{from(), block(), request_type()}],
+    boolean()) -> {[{from(), #file_location_changed{}}], #state{}}.
 flush_blocks(#state{cached_blocks = Blocks} = State, ExcludeSessions,
     FinalBlocks, IsTransfer) ->
 
@@ -977,15 +1047,22 @@ flush_blocks(#state{cached_blocks = Blocks} = State, ExcludeSessions,
             application:get_env(?APP_NAME, synchronizer_on_fly_finished_events, all)
     end,
 
-    Ans = lists:map(fun({From, FinalBlock}) ->
-        {From, flush_blocks_list([FinalBlock], ExcludeSessions, FlushFinalBlocks)}
-    end, FinalBlocks),
+    Ans = lists:foldl(fun({From, FinalBlock, Type}, Acc) ->
+        case Type of
+                sync ->
+                    [{From, flush_blocks_list([FinalBlock], ExcludeSessions,
+                        FlushFinalBlocks)} | Acc];
+                async ->
+                    flush_blocks_list([FinalBlock], [], all),
+                    Acc
+        end
+    end, [], FinalBlocks),
 
     case application:get_env(?APP_NAME, synchronizer_in_progress_events, transfers_only) of
         off ->
             false;
         _ ->
-            ToInvalidate = [FinalBlock || {_From, FinalBlock} <- FinalBlocks],
+            ToInvalidate = [FinalBlock || {_From, FinalBlock, _Type} <- FinalBlocks],
             Blocks2 = fslogic_blocks:consolidate(fslogic_blocks:invalidate(Blocks, ToInvalidate)),
             lists:foreach(fun(Block) ->
                 flush_blocks_list([Block], ExcludeSessions, all)
@@ -1011,7 +1088,8 @@ flush_blocks(#state{cached_blocks = Blocks} = State, ExcludeSessions,
 -spec flush_blocks_list([block()], [session:id()], all | off
     | {threshold, non_neg_integer()}) -> #file_location_changed{}.
 flush_blocks_list(AllBlocks, ExcludeSessions, Flush) ->
-    Location = file_ctx:fill_location_gaps(AllBlocks, fslogic_cache:get_local_location(),
+    #file_location{blocks = FinalBlocks} = Location =
+        file_ctx:fill_location_gaps(AllBlocks, fslogic_cache:get_local_location(),
         fslogic_cache:get_all_locations(), fslogic_cache:get_uuid()),
     {EventOffset, EventSize} = fslogic_location_cache:get_blocks_range(Location, AllBlocks),
 
@@ -1023,7 +1101,7 @@ flush_blocks_list(AllBlocks, ExcludeSessions, Flush) ->
                 fslogic_event_emitter:create_file_location_changed(Location,
                     EventOffset, EventSize));
         {threshold, Bytes} ->
-            BlocksSize = fslogic_blocks:size(AllBlocks),
+            BlocksSize = fslogic_blocks:size(FinalBlocks),
             case BlocksSize >= Bytes of
                 true ->
                     fslogic_cache:cache_event(ExcludeSessions,
@@ -1048,9 +1126,7 @@ flush_stats(#state{cached_stats = Stats} = State, _) when map_size(Stats) == 0 -
     State;
 flush_stats(#state{space_id = SpaceId} = State, CancelTimer) ->
     lists:foreach(fun({TransferId, BytesPerProvider}) ->
-        case transfer:mark_data_transfer_finished(
-            TransferId, SpaceId, BytesPerProvider
-        ) of
+        case transfer:mark_data_replication_finished(TransferId, SpaceId, BytesPerProvider) of
             {ok, _} ->
                 ok;
             {error, Error} ->
@@ -1144,3 +1220,38 @@ cancel_events_timer(#state{caching_events_timer = TimerRef} = State) ->
 %%get_summarized_blocks_size(Blocks) ->
 %%    lists:foldl(fun(#file_block{size = Size}, Acc) ->
 %%        Acc + Size end, 0, Blocks).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Requests termination of all synchronizers.
+%% @end
+%%--------------------------------------------------------------------
+-spec request_terminate(term()) -> [pid()].
+request_terminate('$end_of_table') ->
+    [];
+request_terminate({Match, Continuation}) ->
+    request_terminate(Match) ++ request_terminate(gproc:select(Continuation));
+request_terminate(List) ->
+    lists:map(fun([_, Pid, _]) -> Pid end, List).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Waits for synchronizers termination.
+%% @end
+%%--------------------------------------------------------------------
+-spec wait_for_terminate(pid() | [pid()]) -> ok.
+wait_for_terminate([]) ->
+    ok;
+wait_for_terminate([Pid | Pids]) ->
+    wait_for_terminate(Pid),
+    wait_for_terminate(Pids);
+wait_for_terminate(Pid) ->
+    case erlang:is_process_alive(Pid) of
+        true ->
+            timer:sleep(500),
+            wait_for_terminate(Pid);
+        _ ->
+            ok
+    end.

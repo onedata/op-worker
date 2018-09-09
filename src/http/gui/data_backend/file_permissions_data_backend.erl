@@ -134,7 +134,7 @@ update_record(<<"file-permission">>, FileId, Data) ->
                         {ok, #file_attr{
                             mode = PermissionsAttr
                         }} = logical_file_manager:stat(SessId, {guid, FileId}),
-                        integer_to_binary((PermissionsAttr rem 1000), 8);
+                        PermissionsAttr rem 8#1000;
                     Val ->
                         case is_integer(Val) of
                             true ->
@@ -202,7 +202,7 @@ file_permissions_record(SessId, FileId) ->
         {error, ?ENOENT} ->
             gui_error:report_error(<<"No such file or directory.">>);
         {ok, #file_attr{mode = PermissionsAttr}} ->
-            PosixValue = integer_to_binary((PermissionsAttr rem 1000), 8),
+            PosixValue = integer_to_binary((PermissionsAttr rem 8#1000), 8),
             GetAclResult = logical_file_manager:get_acl(SessId, {guid, FileId}),
             {Type, AclValue} = case GetAclResult of
                 {error, ?ENOATTR} ->

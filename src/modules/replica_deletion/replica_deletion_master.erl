@@ -242,8 +242,8 @@ check_internal(SpaceId) ->
     replica_deletion:result(), replica_deletion:report_id()) -> ok.
 process_result(autocleaning, FileUuid, Result, ReportId) ->
     autocleaning_controller:process_replica_deletion_result(Result, FileUuid, ReportId);
-process_result(invalidation, FileUuid, Result, ReportId) ->
-    invalidation_worker:process_replica_deletion_result(Result, FileUuid, ReportId).
+process_result(eviction, FileUuid, Result, ReportId) ->
+    replica_eviction_worker:process_replica_deletion_result(Result, FileUuid, ReportId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -268,7 +268,7 @@ start_link(SpaceId) ->
     {file_meta:uuid(), od_provider:id(), fslogic_blocks:blocks(),
         version_vector:version_vector()} | undefined.
 get_setting_for_deletion_task(FileCtx) ->
-    case file_ctx:get_local_file_location_doc(FileCtx) of
+    case file_ctx:get_local_file_location_doc(FileCtx, false) of
         {undefined, _} ->
             undefined;
         {LocalLocation, FileCtx2} ->
@@ -524,6 +524,6 @@ cancel_task(#task{task = #deletion_task{type = Type}, id = ReportId}, SpaceId) -
 mark_processed_file(autocleaning, AutocleaningId) ->
     {ok, _} = autocleaning:mark_processed_file(AutocleaningId),
     ok;
-mark_processed_file(invalidation, TransferId) ->
-    {ok, _} = transfer:increase_files_processed_counter(TransferId),
+mark_processed_file(eviction, TransferId) ->
+    {ok, _} = transfer:increment_files_processed_counter(TransferId),
     ok.

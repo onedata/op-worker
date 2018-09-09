@@ -25,7 +25,7 @@
     get_cdmi_completion_status/3, set_cdmi_completion_status/4, get_mimetype/3,
     set_mimetype/4, fsync/2, fsync/4, rm_recursive/3, get_metadata/6, set_metadata/6,
     has_custom_metadata/3, remove_metadata/4, check_perms/4, create_share/4,
-    remove_share/3, remove_share_by_guid/3, resolve_guid/3, invalidate_file_replica/5,
+    remove_share/3, remove_share_by_guid/3, resolve_guid/3, schedule_file_replica_eviction/5,
     schedule_file_replication/4, get_file_distribution/3]).
 
 -define(EXEC(Worker, Function),
@@ -401,13 +401,13 @@ resolve_guid(Worker, SessId, Path) ->
             {ok, Guid}
         end)).
 
--spec invalidate_file_replica(node(), session:id(), logical_file_manager:file_key(),
+-spec schedule_file_replica_eviction(node(), session:id(), logical_file_manager:file_key(),
     ProviderId :: oneprovider:id(), MigrationProviderId :: undefined | oneprovider:id()) -> ok.
-invalidate_file_replica(Worker, SessId, FileKey, ProviderId, MigrationProviderId) ->
-    ?EXEC(Worker, logical_file_manager:schedule_replica_invalidation(SessId, FileKey, ProviderId, MigrationProviderId)).
+schedule_file_replica_eviction(Worker, SessId, FileKey, ProviderId, MigrationProviderId) ->
+    ?EXEC(Worker, logical_file_manager:schedule_replica_eviction(SessId, FileKey, ProviderId, MigrationProviderId)).
 
 -spec schedule_file_replication(node(), session:id(), logical_file_manager:file_key(),
-    ProviderId :: oneprovider:id()) -> ok.
+    ProviderId :: oneprovider:id()) -> {ok, transfer:id()} | {error, term()}.
 schedule_file_replication(Worker, SessId, FileKey, ProviderId) ->
     ?EXEC(Worker, logical_file_manager:schedule_file_replication(SessId, FileKey, ProviderId)).
 

@@ -26,7 +26,7 @@
     soft_assert_write/2, current_size/1]).
 
 %% datastore_model callbacks
--export([get_record_struct/1, get_posthooks/0]).
+-export([get_ctx/0, get_record_struct/1, get_posthooks/0]).
 
 -type id() :: binary().
 -type doc() :: datastore:doc().
@@ -108,8 +108,8 @@ apply_size_change(SpaceId, SizeDiff) ->
 apply_size_change_and_maybe_emit(_SpaceId, 0) ->
     ok;
 apply_size_change_and_maybe_emit(SpaceId, SizeDiff) ->
-    Before = space_quota:available_size(SpaceId),
     {ok, _} = space_quota:apply_size_change(SpaceId, SizeDiff),
+    Before = space_quota:available_size(SpaceId),
     After = space_quota:available_size(SpaceId),
     case Before * After =< 0 of
         true -> fslogic_event_emitter:emit_quota_exceeded();
@@ -128,15 +128,16 @@ current_size(SpaceId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns current available size of given space. Values below 0 mean that there are more
-%% bytes written to the space then quota allows.
+%% Returns current available size of given space.
+%% Values below 0 mean that there are more bytes written to the space
+%% then quota allows.
 %% @end
 %%--------------------------------------------------------------------
 -spec available_size(SpaceId :: od_space:id()) ->
     AvailableSize :: integer().
 available_size(SpaceId) ->
     try
-        {ok, #document{value = #space_quota{current_size = CSize}}} = ?MODULE:get(SpaceId),
+        CSize = ?MODULE:current_size(SpaceId),
         {ok, Supports} = space_logic:get_providers_supports(?ROOT_SESS_ID, SpaceId),
         SupSize = maps:get(oneprovider:get_id(), Supports, 0),
         SupSize - CSize
@@ -233,6 +234,15 @@ run_after(_, _, Result) ->
 %%%===================================================================
 %%% datastore_model callbacks
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_ctx() -> datastore:ctx().
+get_ctx() ->
+    ?CTX.
 
 %%--------------------------------------------------------------------
 %% @doc

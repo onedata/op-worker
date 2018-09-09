@@ -34,43 +34,25 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Implementation for 'simple_scan' strategy.
+%% calls ?MODULE:run_internal/1 and catches exceptions
 %% @end
 %%--------------------------------------------------------------------
 -spec run(space_strategy:job()) ->
     {space_strategy:job_result(), [space_strategy:job()]}.
-run(Job = #space_strategy_job{
-    data = #{
-        storage_file_ctx := StorageFileCtx
-}}) when StorageFileCtx =/= undefined ->
-    maybe_import_storage_file_and_children(Job);
-run(Job = #space_strategy_job{
-    data = Data = #{
-        parent_ctx := ParentCtx,
-        file_name := FileName,
-        space_id := SpaceId,
-        storage_id := StorageId
-    }}) ->
-
-    {CanonicalPath, ParentCtx2} = file_ctx:get_child_canonical_path(ParentCtx, FileName),
-    StorageFileCtx = storage_file_ctx:new(CanonicalPath, SpaceId, StorageId),
-    StatResult = try
-        storage_file_ctx:get_stat_buf(StorageFileCtx)
+run(Job =  #space_strategy_job{data = #{
+    file_name := FileName,
+    space_id := SpaceId,
+    storage_id := StorageId
+}}) ->
+    try
+        run_internal(Job)
     catch
-        throw:?ENOENT ->
-            {error, ?ENOENT}
-    end,
-
-    case StatResult of
-        Error = {error, _} ->
+        Error:Reason ->
+            ?error_stacktrace("simple_scan:run for file ~p in space ~p failed due to ~p:~p",
+                [FileName, SpaceId, Error, Reason]
+            ),
             storage_sync_monitoring:mark_failed_file(SpaceId, StorageId),
-            {Error, []};
-        {_StatBuf, StorageFileCtx2}  ->
-            Data2 = Data#{
-                parent_ctx => ParentCtx2,
-                storage_file_ctx => StorageFileCtx2
-            },
-            run(Job#space_strategy_job{data = Data2})
+            {{error, Reason}, []}
     end.
 
 %%--------------------------------------------------------------------
@@ -97,40 +79,38 @@ maybe_import_storage_file_and_children(Job0 = #space_strategy_job{
     {LocalResult, FileCtx, Job2} = maybe_import_storage_file(Job1),
 
     case LocalResult of
-        {error, {ErrorType, Reason}} ->
+        {error, Reason} ->
             storage_sync_monitoring:mark_failed_file(SpaceId, StorageId),
-            erlang:ErrorType(Reason);
+            {{error, Reason}, []};
         _ ->
-            ok
-    end,
+            Data2 = Job2#space_strategy_job.data,
+            Offset = maps:get(dir_offset, Data2, 0),
+            Type = file_meta:type(Mode),
 
-    Data2 = Job2#space_strategy_job.data,
-    Offset = maps:get(dir_offset, Data2, 0),
-    Type = file_meta:type(Mode),
+            Job3 = case Offset of
+                0 ->
+                    %remember mtime to save after importing all subfiles
+                    space_strategy:update_job_data(mtime, StorageMtime, Job2);
+                _ -> Job2
+            end,
+            Module = storage_sync_utils:module(Job3),
+            SubJobs = delegate(Module, import_children, [Job3, Type, Offset, FileCtx, ?DIR_BATCH], 5),
 
-    Job3 = case Offset of
-        0 ->
-            %remember mtime to save after importing all subfiles
-            space_strategy:update_job_data(mtime, StorageMtime, Job2);
-        _ -> Job2
-    end,
-    Module = storage_sync_utils:module(Job3),
-    SubJobs = delegate(Module, import_children, [Job3, Type, Offset, FileCtx, ?DIR_BATCH], 5),
-
-    LocalResult2 = case LocalResult of
-        imported ->
-            storage_sync_monitoring:mark_imported_file(SpaceId, StorageId),
-            ok;
-        updated ->
-            storage_sync_monitoring:mark_updated_file(SpaceId, StorageId),
-            ok;
-        processed ->
-            storage_sync_monitoring:mark_processed_file(SpaceId, StorageId),
-            ok;
-        ok ->
-            ok
-    end,
-    {LocalResult2, SubJobs}.
+            LocalResult2 = case LocalResult of
+                imported ->
+                    storage_sync_monitoring:mark_imported_file(SpaceId, StorageId),
+                    ok;
+                updated ->
+                    storage_sync_monitoring:mark_updated_file(SpaceId, StorageId),
+                    ok;
+                processed ->
+                    storage_sync_monitoring:mark_processed_file(SpaceId, StorageId),
+                    ok;
+                ok ->
+                    ok
+            end,
+            {LocalResult2, SubJobs}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -221,9 +201,20 @@ import_children(Job = #space_strategy_job{
             FileUuid = file_ctx:get_uuid_const(FileCtx),
             case storage_sync_utils:all_children_imported(DirsJobs, FileUuid) of
                 true ->
-                    storage_sync_info:update_mtime_and_children_hash(FileUuid, Mtime, BatchKey, BatchHash, SpaceId);
+                    storage_sync_info:create_or_update(FileUuid,
+                        fun(SSI = #storage_sync_info{children_attrs_hashes = CAH}) ->
+                            {ok, SSI#storage_sync_info{
+                                mtime = Mtime,
+                                children_attrs_hashes = CAH#{BatchKey => BatchHash}
+                            }}
+                        end, SpaceId);
                 _ ->
-                    storage_sync_info:update_children_hash(FileUuid, BatchKey, BatchHash, SpaceId)
+                    storage_sync_info:create_or_update(FileUuid,
+                        fun(SSI = #storage_sync_info{children_attrs_hashes = CAH}) ->
+                            {ok, SSI#storage_sync_info{
+                                children_attrs_hashes = CAH#{BatchKey => BatchHash}
+                            }}
+                        end, SpaceId)
             end;
         _ -> ok
     end,
@@ -246,6 +237,49 @@ import_regular_subfiles(FilesJobs) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Implementation for 'simple_scan' strategy.
+%% @end
+%%--------------------------------------------------------------------
+-spec run_internal(space_strategy:job()) ->
+    {space_strategy:job_result(), [space_strategy:job()]}.
+run_internal(Job = #space_strategy_job{
+    data = #{
+        storage_file_ctx := StorageFileCtx
+    }}) when StorageFileCtx =/= undefined ->
+    maybe_import_storage_file_and_children(Job);
+run_internal(Job = #space_strategy_job{
+    data = Data = #{
+        parent_ctx := ParentCtx,
+        file_name := FileName,
+        space_id := SpaceId,
+        storage_id := StorageId
+    }}) ->
+
+    {CanonicalPath, ParentCtx2} = file_ctx:get_child_canonical_path(ParentCtx, FileName),
+    StorageFileCtx = storage_file_ctx:new(CanonicalPath, SpaceId, StorageId),
+    StatResult = try
+        storage_file_ctx:get_stat_buf(StorageFileCtx)
+    catch
+        throw:?ENOENT ->
+            ?error_stacktrace("simple_scan failed due to ~p for file ~p in space ~p", [?ENOENT, CanonicalPath, SpaceId]),
+            {error, ?ENOENT}
+    end,
+
+    case StatResult of
+        Error = {error, _} ->
+            storage_sync_monitoring:mark_failed_file(SpaceId, StorageId),
+            {Error, []};
+        {_StatBuf, StorageFileCtx2}  ->
+            Data2 = Data#{
+                parent_ctx => ParentCtx2,
+                storage_file_ctx => StorageFileCtx2
+            },
+            run_internal(Job#space_strategy_job{data = Data2})
+    end.
 
 %%-------------------------------------------------------------------
 %% @private
@@ -299,15 +333,16 @@ maybe_import_file_with_existing_metadata(Job = #space_strategy_job{}, FileCtx) -
 import_file_safe(Job = #space_strategy_job{
     data = #{
         file_name := FileName,
+        space_id := SpaceId,
         parent_ctx := ParentCtx
 }}, FileUuid) ->
     try
         ?MODULE:import_file(Job, FileUuid)
     catch
         Error:Reason ->
-            ?error_stacktrace("importing file ~p failed with ~p:~p", [FileName, Error, Reason]),
+            ?error_stacktrace("importing file ~p in space ~p failed with ~p:~p", [FileName, SpaceId, Error, Reason]),
             full_update:delete_imported_file(FileName, ParentCtx),
-            {{error, {Error, Reason}}, undefined}
+            {{error, Reason}, undefined}
     end.
 
 %%--------------------------------------------------------------------
@@ -346,7 +381,12 @@ import_file(#space_strategy_job{
     case file_meta:type(Mode) of
         ?REGULAR_FILE_TYPE ->
             StatTimestamp = storage_file_ctx:get_stat_timestamp_const(StorageFileCtx4),
-            storage_sync_info:update_mtime_and_stat_time(FileUuid2, MTime, StatTimestamp, SpaceId),
+            storage_sync_info:create_or_update(FileUuid2, fun(SSI) ->
+                {ok, SSI#storage_sync_info{
+                    mtime = MTime,
+                    last_stat = StatTimestamp
+                }}
+            end, SpaceId),
             ok = create_file_location(SpaceId, StorageId, FileUuid2, CanonicalPath, FSize);
         _ ->
             {ok, _} = dir_location:mark_dir_created_on_storage(FileUuid2, SpaceId)
@@ -414,27 +454,27 @@ generate_jobs_for_subfiles(Job = #space_strategy_job{
         try
             {#statbuf{st_mode = Mode}, ChildStorageCtx2} =
                 storage_file_ctx:get_stat_buf(ChildStorageCtx),
-                FileName = storage_file_ctx:get_file_id_const(ChildStorageCtx2),
-                case file_meta:is_hidden(FileName) of
-                    false ->
-                        case file_meta:type(Mode) of
-                            ?DIRECTORY_TYPE ->
-                                ChildStorageCtx3 = storage_file_ctx:reset(ChildStorageCtx2),
-                                {FileJobsIn, [
-                                    new_job(Job, ChildrenData, ChildStorageCtx3)
-                                    | DirJobsIn
-                                ]};
-                            ?REGULAR_FILE_TYPE when DirsOnly ->
-                                AccIn;
-                            ?REGULAR_FILE_TYPE ->
-                                ChildStorageCtx3 = storage_file_ctx:reset(ChildStorageCtx2),
-                                {[new_job(Job, ChildrenData, ChildStorageCtx3)
-                                    | FileJobsIn
-                                ], DirJobsIn}
-                        end;
-                    _ ->
-                        AccIn
-                end
+            FileName = storage_file_ctx:get_file_id_const(ChildStorageCtx2),
+            case file_meta:is_hidden(FileName) of
+                false ->
+                    case file_meta:type(Mode) of
+                        ?DIRECTORY_TYPE ->
+                            ChildStorageCtx3 = storage_file_ctx:reset(ChildStorageCtx2),
+                            {FileJobsIn, [
+                                new_job(Job, ChildrenData, ChildStorageCtx3)
+                                | DirJobsIn
+                            ]};
+                        ?REGULAR_FILE_TYPE when DirsOnly ->
+                            AccIn;
+                        ?REGULAR_FILE_TYPE ->
+                            ChildStorageCtx3 = storage_file_ctx:reset(ChildStorageCtx2),
+                            {[new_job(Job, ChildrenData, ChildStorageCtx3)
+                                | FileJobsIn
+                            ], DirJobsIn}
+                    end;
+                _ ->
+                    AccIn
+            end
         catch
             throw:?ENOENT ->
                 FileId = storage_file_ctx:get_file_id_const(ChildStorageCtx),
@@ -471,10 +511,14 @@ new_job(Job, Data, StorageFileCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_already_imported_file(space_strategy:job(), #file_attr{},
-    file_ctx:ctx()) -> {job_result(), space_strategy:job()}.
+    file_ctx:ctx()) -> {space_strategy:job_result(), space_strategy:job()}.
 handle_already_imported_file(Job = #space_strategy_job{
     strategy_args = Args,
-    data = #{storage_file_ctx := StorageFileCtx}
+    data = #{
+        file_name := FileName,
+        space_id := SpaceId,
+        storage_file_ctx := StorageFileCtx
+    }
 }, FileAttr, FileCtx) ->
 
     SyncAcl = maps:get(sync_acl, Args, false),
@@ -484,7 +528,9 @@ handle_already_imported_file(Job = #space_strategy_job{
         {Result, Job}
     catch
         Error:Reason ->
-            {{error, {Error, Reason}}, Job}
+            ?error_stacktrace("simple_scan:handle_already_imported file for file ~p in space ~p failed due to ~p:~p",
+                [FileName, SpaceId, Error, Reason]),
+            {{error, Reason}, Job}
     end.
 
 %%--------------------------------------------------------------------
@@ -540,27 +586,116 @@ maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
     FileCtx, ?REGULAR_FILE_TYPE, StorageFileCtx
 ) ->
     {StorageSyncInfo, FileCtx2} = file_ctx:get_storage_sync_info(FileCtx),
-    {Size, FileCtx3} = file_ctx:get_file_size(FileCtx2),
-    FileUuid = file_ctx:get_uuid_const(FileCtx3),
-    SpaceId = file_ctx:get_space_id_const(FileCtx3),
+    {Size, FileCtx3} = file_ctx:get_local_storage_file_size(FileCtx2),
+    {{_, _ , MTime}, FileCtx4} = file_ctx:get_times(FileCtx3),
+    FileUuid = file_ctx:get_uuid_const(FileCtx4),
+    SpaceId = file_ctx:get_space_id_const(FileCtx4),
     NewLastStat = storage_file_ctx:get_stat_timestamp_const(StorageFileCtx),
-    case StorageSyncInfo of
-        #document{value = #storage_sync_info{
+    LocationId = file_location:local_id(FileUuid),
+    {ok, #document{
+        value = #file_location{
+            last_replication_timestamp = LastReplicationTimestamp
+    }}} = fslogic_location_cache:get_location(LocationId, FileUuid),
+
+    Result2 = case {LastReplicationTimestamp, StorageSyncInfo} of
+        %todo VFS-4847 refactor this case, use when wherever possible
+        {undefined, undefined} when MTime < StMtime ->
+            % file created locally and modified on storage
+            update_file_location(FileCtx4, StSize),
+            updated;
+
+        {undefined, undefined} ->
+            % file created locally and not modified on storage
+            not_updated;
+
+        {undefined, #document{value = #storage_sync_info{
             mtime = LastMtime,
             last_stat = LastStat
-        }} when
-            LastMtime =:= StMtime andalso Size =:= StSize andalso LastStat > StMtime
+        }}} when LastMtime =:= StMtime
+            andalso Size =:= StSize
+            andalso LastStat > StMtime
         ->
-            storage_sync_info:update_stat_time(FileUuid, NewLastStat, SpaceId),
+            % file not replicated and already handled because LastStat > StMtime
             not_updated;
-        _ ->
-            FileGuid = file_ctx:get_guid_const(FileCtx3),
-            NewFileBlocks = create_file_blocks(StSize),
-            replica_updater:update(FileCtx3, NewFileBlocks, StSize, true),
-            ok = lfm_event_utils:emit_file_written(FileGuid, NewFileBlocks, StSize, ?ROOT_SESS_ID),
-            storage_sync_info:update_mtime_and_stat_time(FileUuid, StMtime, NewLastStat, SpaceId),
-            updated
-    end.
+
+        {undefined, #document{value = #storage_sync_info{
+            mtime = LastMtime,
+            last_stat = LastStat
+        }}} ->
+            case (MTime < StMtime) or (Size =/= StSize) of
+                true ->
+                    update_file_location(FileCtx4, StSize),
+                    updated;
+                false ->
+                    not_updated
+            end;
+
+        {_, undefined} ->
+            case LastReplicationTimestamp < StMtime of
+                true ->
+                    % file was modified after replication and has never been synced
+                    case (MTime < StMtime) of
+                        true ->
+                            % file was modified on storage
+                            update_file_location(FileCtx4, StSize),
+                            updated;
+                        false ->
+                            % file was modified via onedata
+                            not_updated
+                    end;
+                false ->
+                    % file was replicated
+                    not_updated
+            end;
+
+        {_, #document{value = #storage_sync_info{
+            mtime = LastMtime,
+            last_stat = LastStat
+        }}} when LastMtime =:= StMtime
+            andalso Size =:= StSize
+            andalso LastStat > StMtime
+        ->
+            % file replicated and already handled because LastStat > StMtime
+            not_updated;
+
+        {_, #document{value = #storage_sync_info{}}} ->
+            case LastReplicationTimestamp < StMtime of
+                true ->
+                    % file was modified after replication
+                    case (MTime < StMtime) of
+                        true ->
+                            %there was modified on storage
+                            update_file_location(FileCtx4, StSize),
+                            updated;
+                        false ->
+                            % file was modified via onedata
+                            not_updated
+                    end;
+                false ->
+                    % file was replicated
+                    not_updated
+            end
+    end,
+    storage_sync_info:create_or_update(FileUuid, fun(SSI) ->
+        {ok, SSI#storage_sync_info{
+            mtime = StMtime,
+            last_stat = NewLastStat
+        }}
+    end, SpaceId),
+    Result2.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Updates file_location
+%% @end
+%%-------------------------------------------------------------------
+-spec update_file_location(file_ctx:ctx(), non_neg_integer()) -> ok.
+update_file_location(FileCtx, StorageSize) ->
+    FileGuid = file_ctx:get_guid_const(FileCtx),
+    NewFileBlocks = create_file_blocks(StorageSize),
+    replica_updater:update(FileCtx, NewFileBlocks, StorageSize, true),
+    ok = lfm_event_utils:emit_file_written(FileGuid, NewFileBlocks, StorageSize, ?ROOT_SESS_ID).
 
 %%--------------------------------------------------------------------
 %% @private

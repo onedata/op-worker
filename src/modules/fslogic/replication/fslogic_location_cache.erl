@@ -23,13 +23,15 @@
 -type blocks() :: fslogic_blocks:blocks().
 -type blocks_tree() :: gb_sets:set(). % TODO - use gb_trees (it is faster)
 -type stored_blocks() :: blocks() | blocks_tree(). % set only when used by blocks' cache
+-type id() :: file_location:id().
 -type location() :: file_location:doc().
 -type location_or_record() :: location() | file_location:record().
--type get_doc_opts() :: boolean() | {blocks_num, non_neg_integer()}.
+-type get_doc_opts() :: boolean() | skip_local_blocks |
+    {blocks_num, non_neg_integer()}.
 -type get_blocks_opts() :: #{overlapping_blocks => blocks(),
-    count => non_neg_integer()}.
+    count => non_neg_integer(), skip_local => boolean()}.
 
--export_type([block/0, blocks/0, blocks_tree/0, stored_blocks/0]).
+-export_type([block/0, blocks/0, blocks_tree/0, stored_blocks/0, get_doc_opts/0]).
 
 %% Location getters/setters
 -export([get_location/2, get_location/3, save_location/1, cache_location/1,
@@ -37,7 +39,7 @@
     force_flush/1]).
 %% Blocks getters/setters
 -export([get_blocks/1, get_blocks/2, set_blocks/2, set_final_blocks/2,
-    update_blocks/2]).
+    update_blocks/2, clear_blocks/2]).
 %% Blocks API
 -export([get_location_size/2, get_blocks_range/1, get_blocks_range/2]).
 
@@ -79,6 +81,8 @@ get_location(LocId, FileUuid, BlocksOptions) ->
                         {ok, LocationDoc};
                     true ->
                         {ok, fslogic_cache:attach_blocks(LocationDoc)};
+                    skip_local_blocks ->
+                        {ok, fslogic_cache:attach_public_blocks(LocationDoc)};
                     {blocks_num, Num} ->
                         {ok, LocationDoc#document{value =
                         Location#file_location{blocks =
@@ -127,6 +131,7 @@ cache_location(#document{key = Key, value = #file_location{uuid = Uuid, blocks =
 -spec update_location(file_meta:uuid(), file_location:id(), file_location:diff(),
     boolean()) -> {ok, file_location:doc()} | {error, term()}.
 update_location(FileUuid, LocId, Diff, ModifyBlocks) ->
+    % TODO 4743 - Cannot update local blocks with update
     replica_synchronizer:apply_or_run_locally(FileUuid, fun() ->
         case fslogic_cache:flush(LocId, ModifyBlocks) of
             ok ->
@@ -263,6 +268,8 @@ get_blocks(Key, #{count := Num}) ->
             Iter = gb_sets:iterator(Blocks),
             Ans = get_blocks_num(Iter, Num),
             Ans;
+get_blocks(Key, #{skip_local := true}) ->
+    fslogic_cache:get_public_blocks(Key);
 get_blocks(Key, _Options) ->
     fslogic_cache:get_blocks(Key).
 
@@ -278,8 +285,22 @@ set_blocks(#document{key = Key, value = FileLocation} = Doc, Blocks) ->
             Doc#document{value = FileLocation#file_location{blocks = Blocks}};
         _ ->
             fslogic_cache:save_blocks(Key, Blocks),
+            fslogic_cache:mark_changed_blocks(Key),
             Doc
     end.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Clear blocks in location document.
+%% @end
+%%-------------------------------------------------------------------
+-spec clear_blocks(file_ctx:ctx(), id()) -> location().
+clear_blocks(FileCtx, Key) ->
+    replica_synchronizer:apply(FileCtx, fun() ->
+        fslogic_cache:get_doc(Key),
+        fslogic_cache:save_blocks(Key, []),
+        fslogic_cache:mark_changed_blocks(Key)
+    end).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -295,25 +316,38 @@ update_blocks(#document{key = LocID, value = FileLocation} = Doc, NewBlocks) ->
             Blocks = fslogic_cache:get_blocks_tree(LocID),
             OldBlocks = fslogic_cache:finish_blocks_usage(LocID),
 
-            {Blocks2, Exclude, SizeChange} = lists:foldl(fun(#file_block{offset = O,
-                size = S} = B, {TmpBlocks, NotChanged, TmpSize}) ->
-                B2 = #file_block{offset = O+S, size = S},
-                case lists:member(B, NewBlocks) of
-                    true ->
-                        {TmpBlocks, [B | NotChanged], TmpSize};
-                    _ ->
-                        {gb_sets:delete(B2, TmpBlocks), NotChanged, TmpSize - S}
-                end
-            end, {Blocks, [], 0}, OldBlocks),
+            {BlocksToSave, BlocksToDel} = fslogic_cache:get_changed_blocks(LocID),
 
-            {Blocks3, SizeChange2} = lists:foldl(fun(#file_block{offset = O, size = S},
-                {Acc, TmpSize}) ->
+            {Blocks2, Exclude, SizeChange, BlocksToDel2, BlocksToSave2} =
+                lists:foldl(fun(#file_block{offset = O, size = S} = B,
+                    {TmpBlocks, NotChanged, TmpSize, TmpBlocksToDel, TmpBlocksToSave}) ->
+                    B2 = #file_block{offset = O+S, size = S},
+                    case lists:member(B, NewBlocks) of
+                        true ->
+                            {TmpBlocks, [B | NotChanged], TmpSize, TmpBlocksToDel, TmpBlocksToSave};
+                        _ ->
+                            case sets:is_element(B, TmpBlocksToSave) of
+                                true ->
+                                    {gb_sets:delete(B2, TmpBlocks), NotChanged, TmpSize - S,
+                                        TmpBlocksToDel, sets:del_element(B, TmpBlocksToSave)};
+                                _ ->
+                                    {gb_sets:delete(B2, TmpBlocks), NotChanged, TmpSize - S,
+                                        sets:add_element(B, TmpBlocksToDel), TmpBlocksToSave}
+                            end
+                    end
+                end, {Blocks, [], 0, BlocksToDel, BlocksToSave}, OldBlocks),
+
+            FilteredBlocks = NewBlocks -- Exclude,
+            {Blocks3, SizeChange2, BlocksToSave3} = lists:foldl(fun(#file_block{offset = O, size = S} = B,
+                {Acc, TmpSize, TmpBlocksToSave}) ->
                 B2 = #file_block{offset = O+S, size = S},
-                {gb_sets:add(B2, Acc), TmpSize + S}
-            end, {Blocks2, SizeChange}, NewBlocks -- Exclude),
+                {gb_sets:add(B2, Acc), TmpSize + S, sets:add_element(B, TmpBlocksToSave)}
+            end, {Blocks2, SizeChange, BlocksToSave2}, FilteredBlocks),
 
             fslogic_cache:update_size(LocID, SizeChange2),
             fslogic_cache:save_blocks(LocID, Blocks3),
+            fslogic_cache:mark_changed_blocks(LocID, BlocksToSave3, BlocksToDel2,
+                FilteredBlocks, OldBlocks -- Exclude),
             Doc
     end.
 
@@ -467,11 +501,20 @@ get_location_not_cached(LocId, false) ->
             Error
     end;
 get_location_not_cached(LocId, true) ->
+    case file_location:get(LocId) of
+        {ok, Doc} ->
+            {ok, fslogic_cache:attach_local_blocks(Doc)};
+        Error ->
+            Error
+    end;
+get_location_not_cached(LocId, skip_local_blocks) ->
     file_location:get(LocId);
 get_location_not_cached(LocId, {blocks_num, Num}) ->
     case file_location:get(LocId) of
-        {ok, #document{value = #file_location{blocks = Blocks} = Location} = LocationDoc} ->
-            {ok, LocationDoc#document{value =
+        {ok, LocationDoc} ->
+            #document{value = #file_location{blocks = Blocks} = Location}
+                = LocationDoc2 = fslogic_cache:attach_local_blocks(LocationDoc),
+            {ok, LocationDoc2#document{value =
             Location#file_location{blocks = lists:sublist(Blocks, Num)}}};
         Error ->
             Error

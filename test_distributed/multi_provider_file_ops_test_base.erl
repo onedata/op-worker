@@ -42,7 +42,7 @@
     random_read_test_base/1,
     random_read_test_base/3,
     synchronizer_test_base/1,
-    synchronize_stress_test_base/1
+    synchronize_stress_test_base/2
 ]).
 -export([init_env/1, teardown_env/1]).
 
@@ -153,7 +153,7 @@ synchronizer_test_base(Config0) ->
         1000000 * Threads * BlocksCount / SyncTime1_2, 1000000 * Threads * BlocksCount / SyncTime2,
         1000000 * Threads * BlocksCount / SyncTime2_2]).
 
-synchronize_stress_test_base(Config0) ->
+synchronize_stress_test_base(Config0, RandomRead) ->
     Config = extend_config(Config0, <<"user1">>, {2,0,0,1}, 1),
     FileSize = ?config(file_size_gb, Config),
     BlockSize = ?config(block_size, Config),
@@ -163,6 +163,11 @@ synchronize_stress_test_base(Config0) ->
     SessId = ?config(session, Config),
     SpaceName = ?config(space_name, Config),
 
+    ChunkSize = 10240,
+    ChunksNum = 1024,
+    PartNum = 100 * FileSize,
+    FileSizeBytes = ChunkSize * ChunksNum * PartNum,
+
     RepNum = ?config(rep_num, Config),
     FileCtxs = case RepNum of
         1 ->
@@ -171,11 +176,6 @@ synchronize_stress_test_base(Config0) ->
             OpenAns = lfm_proxy:open(Worker2, SessId(Worker2), {path, File}, rdwr),
             ?assertMatch({ok, _}, OpenAns),
             {ok, Handle} = OpenAns,
-
-            ChunkSize = 10240,
-            ChunksNum = 1024,
-            PartNum = 100 * FileSize,
-            FileSizeBytes = ChunkSize * ChunksNum * PartNum,
 
             BytesChunk = crypto:strong_rand_bytes(ChunkSize),
             Bytes = lists:foldl(fun(_, Acc) ->
@@ -202,9 +202,16 @@ synchronize_stress_test_base(Config0) ->
             get(ctxs)
     end,
 
-    Blocks = lists:map(fun(Num) ->
-        2 * Num - 1 + 2 * BlocksCount * (RepNum - 1)
-    end, lists:seq(1, BlocksCount)),
+    Blocks = case RandomRead of
+        true ->
+            lists:map(fun(_Num) ->
+                random:uniform(FileSizeBytes)
+            end, lists:seq(1, BlocksCount));
+        _ ->
+            lists:map(fun(Num) ->
+                2 * Num - 1 + 2 * BlocksCount * (RepNum - 1)
+            end, lists:seq(1, BlocksCount))
+    end,
 
     {SyncTime1, SyncTime1_2} = do_sync_test(FileCtxs, Worker1, SessId(Worker1), BlockSize, Blocks),
     {SyncTime2, SyncTime2_2} = do_sync_test(FileCtxs, Worker1, SessId(Worker1), BlockSize, Blocks),
@@ -212,10 +219,18 @@ synchronize_stress_test_base(Config0) ->
     ct:print("Repeat: ~p: iops remote 1: ~p, iops remote 2: ~p, "
         "iops local 1: ~p, iops local 2: ~p", [RepNum,  1000000 * BlocksCount / SyncTime1,
         1000000 * BlocksCount / SyncTime1_2, 1000000 * BlocksCount / SyncTime2,
-        1000000 * BlocksCount / SyncTime2_2]).
+        1000000 * BlocksCount / SyncTime2_2]),
+
+    case RepNum >= 10000 of
+        true ->
+            [stop, ok];
+        _ ->
+            ok
+    end.
 
 random_read_test_base(Config) ->
     random_read_test_base(Config, true, true),
+    random_read_test_base(Config, random, true),
     random_read_test_base(Config, false, true).
 
 random_read_test_base(Config0, SeparateBlocks, PrintAns) ->
@@ -227,6 +242,11 @@ random_read_test_base(Config0, SeparateBlocks, PrintAns) ->
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
     SessId = ?config(session, Config),
     SpaceName = ?config(space_name, Config),
+
+    ChunkSize = 10240,
+    ChunksNum = 1024,
+    PartNum = 100 * FileSize,
+    FileSizeBytes = ChunkSize * ChunksNum * PartNum,
 
     RepNum = ?config(rep_num, Config),
     FilePath = case RepNum of
@@ -242,11 +262,6 @@ random_read_test_base(Config0, SeparateBlocks, PrintAns) ->
             OpenAns = lfm_proxy:open(Worker2, SessId(Worker2), {path, File}, rdwr),
             ?assertMatch({ok, _}, OpenAns),
             {ok, Handle} = OpenAns,
-
-            ChunkSize = 10240,
-            ChunksNum = 1024,
-            PartNum = 100 * FileSize,
-            FileSizeBytes = ChunkSize * ChunksNum * PartNum,
 
             BytesChunk = crypto:strong_rand_bytes(ChunkSize),
             Bytes = lists:foldl(fun(_, Acc) ->
@@ -274,8 +289,24 @@ random_read_test_base(Config0, SeparateBlocks, PrintAns) ->
     OpenTime = timer:now_diff(os:timestamp(), Start1),
     ?assertMatch({ok, _}, OpenAns2),
     {ok, Handle2} = OpenAns2,
-    ReadTime1 = read_blocks(Worker1, Handle2, BlockSize, BlocksCount, RepNum, SeparateBlocks),
-    ReadTime2 = read_blocks(Worker1, Handle2, BlockSize, BlocksCount, RepNum, SeparateBlocks),
+
+    Blocks = case SeparateBlocks of
+        true ->
+            lists:map(fun(Num) ->
+                2 * Num - 1 + 2 * BlocksCount * (RepNum - 1)
+            end, lists:seq(1, BlocksCount));
+        random ->
+            lists:map(fun(_Num) ->
+                random:uniform(FileSizeBytes)
+            end, lists:seq(1, BlocksCount));
+        _ ->
+            lists:map(fun(Num) ->
+                Num + BlocksCount * (RepNum - 1)
+            end, lists:seq(1, BlocksCount))
+    end,
+
+    ReadTime1 = read_blocks(Worker1, Handle2, BlockSize, Blocks),
+    ReadTime2 = read_blocks(Worker1, Handle2, BlockSize, Blocks),
     Start2 = os:timestamp(),
     ?assertEqual(ok, lfm_proxy:close(Worker1, Handle2)),
     CloseTime = timer:now_diff(os:timestamp(), Start2),
@@ -431,7 +462,9 @@ rtransfer_test_base2(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     FileLocationUpdates = lists:sum(mock_get_num_calls(
         Workers2, replica_updater, update, '_')),
     FLUPS = FileLocationUpdates / Duration,
+
     ok = test_utils:mock_unload(Workers2, transfer),
+    ok = test_utils:mock_unload(Workers2, replica_updater),
 
     ct:pal("Transfer duration [s]: ~p~n"
            "Transfer stats updates per second ~p~n"
@@ -1450,7 +1483,7 @@ teardown_env(Config) ->
 mock_get_num_calls(Nodes, Module, Fun, Args) ->
     lists:map(fun(Node) ->
         rpc:call(Node, meck, num_calls, [Module, Fun, Args], timer:seconds(60))
-              end, Nodes).
+    end, Nodes).
 
 get_links(W, FileUuid) ->
     rpc:call(W, ?MODULE, get_links, [FileUuid]).
@@ -1723,7 +1756,7 @@ read_big_file(Config, _FileSize, File, Worker, true) ->
     {ok, TransferID} = ?assertMatch({ok, _},
         lfm_proxy:schedule_file_replication(Worker1, SessId(Worker1),
             {path, File}, ProviderId)),
-    ?assertMatch({ok, #document{value = #transfer{status = completed}}},
+    ?assertMatch({ok, #document{value = #transfer{replication_status = completed}}},
         rpc:call(Worker1, transfer, get, [TransferID]), Attempts),
     timer:now_diff(os:timestamp(), Start);
 read_big_file(Config, FileSize, File, Worker, _) ->
@@ -1887,18 +1920,7 @@ verify_dir_size(Config, DirToCheck, DSize) ->
     end,
     ?match(ToMatch, AssertLinks(), Attempts).
 
-read_blocks(Worker, Handle, BlockSize, BlocksCount, RepNum, SeparateBlocks) ->
-    Blocks = case SeparateBlocks of
-        true ->
-            lists:map(fun(Num) ->
-                2 * Num - 1 + 2 * BlocksCount * (RepNum - 1)
-            end, lists:seq(1, BlocksCount));
-        _ ->
-            lists:map(fun(Num) ->
-                Num + BlocksCount * (RepNum - 1)
-            end, lists:seq(1, BlocksCount))
-    end,
-
+read_blocks(Worker, Handle, BlockSize, Blocks) ->
     lists:foldl(fun(BlockNum, Acc) ->
         Start = os:timestamp(),
         ReadAns = lfm_proxy:silent_read(Worker, Handle, BlockNum, BlockSize),

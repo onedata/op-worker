@@ -32,14 +32,15 @@
 %% API
 -export([
     synchronize_block/6,
-    synchronize_block_and_compute_checksum/4,
-    get_file_distribution/2,
-    start_transfer/4
+    request_block_synchronization/6,
+    synchronize_block_and_compute_checksum/5,
+    get_file_distribution/2
 ]).
 
 -export([
     schedule_file_replication/4,
     replicate_file/4,
+    enqueue_file_replication/4,
     enqueue_file_replication/6
 ]).
 
@@ -67,9 +68,38 @@ synchronize_block(UserCtx, FileCtx, undefined, Prefetch, TransferId, Priority) -
     synchronize_block(UserCtx, FileCtx3, #file_block{offset = 0, size = Size},
         Prefetch, TransferId, Priority);
 synchronize_block(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
-    {ok, Ans} = replica_synchronizer:synchronize(UserCtx, FileCtx, Block,
-        Prefetch,TransferId, Priority),
-    #fuse_response{status = #status{code = ?OK}, fuse_response = Ans}.
+    case replica_synchronizer:synchronize(UserCtx, FileCtx, Block,
+        Prefetch, TransferId, Priority) of
+        {ok, Ans} ->
+            #fuse_response{status = #status{code = ?OK}, fuse_response = Ans};
+        {error, cancelled} ->
+            throw(replication_cancelled);
+        {error, _} = Error ->
+            throw(Error)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Requests synchronization of given block with remote replicas.
+%% Does not wait for sync.
+%% @end
+%%--------------------------------------------------------------------
+-spec request_block_synchronization(user_ctx:ctx(), file_ctx:ctx(), block(),
+    Prefetch :: boolean(), transfer_id(), non_neg_integer()) -> fuse_response().
+request_block_synchronization(UserCtx, FileCtx, undefined, Prefetch, TransferId, Priority) ->
+    % trigger file_location creation
+    {_, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx, false),
+    {Size, FileCtx3} = file_ctx:get_file_size(FileCtx2),
+    request_block_synchronization(UserCtx, FileCtx3, #file_block{offset = 0, size = Size},
+        Prefetch, TransferId, Priority);
+request_block_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
+    case replica_synchronizer:request_synchronization(UserCtx, FileCtx, Block,
+        Prefetch, TransferId, Priority) of
+        ok ->
+            #fuse_response{status = #status{code = ?OK}};
+        {error, _} = Error ->
+            throw(Error)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -78,26 +108,28 @@ synchronize_block(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec synchronize_block_and_compute_checksum(user_ctx:ctx(), file_ctx:ctx(),
-    block(), non_neg_integer()) -> fuse_response().
+    block(), boolean(), non_neg_integer()) -> fuse_response().
 synchronize_block_and_compute_checksum(UserCtx, FileCtx,
-    Range = #file_block{offset = Offset, size = Size}, Priority
+    Range = #file_block{offset = Offset, size = Size}, Prefetch, Priority
 ) ->
     SessId = user_ctx:get_session_id(UserCtx),
     FileGuid = file_ctx:get_guid_const(FileCtx),
+
+    {ok, Ans} = replica_synchronizer:synchronize(UserCtx, FileCtx, Range,
+        Prefetch, undefined, Priority),
+
     %todo do not use lfm, operate on fslogic directly
     {ok, Handle} = lfm_files:open(SessId, {guid, FileGuid}, read),
     % does sync internally
-    {ok, _, Data} = lfm_files:read_without_events(Handle, Offset, Size, Priority),
+    {ok, _, Data} = lfm_files:read_without_events(Handle, Offset, Size, off),
     lfm_files:release(Handle),
 
     Checksum = crypto:hash(md4, Data),
-    % TODO VFS-4412 Refactor similarly to synchronize_block
-    {LocationToSend, _FileCtx2} = file_ctx:get_file_location_with_filled_gaps(FileCtx, Range),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #sync_response{
             checksum = Checksum,
-            file_location = LocationToSend
+            file_location_changed = Ans
         }
     }.
 
@@ -123,16 +155,6 @@ get_file_distribution(_UserCtx, FileCtx) ->
             provider_file_distributions = ProviderDistributions
         }
     }.
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Marks transfer as enqueued and adds task for replication to worker_pool.
-%% @end
-%%-------------------------------------------------------------------
--spec start_transfer(user_ctx:ctx(), file_ctx:ctx(), block(), transfer_id()) -> ok.
-start_transfer(UserCtx, FileCtx, Block, TransferId) ->
-    {ok, _} = transfer:mark_enqueued(TransferId),
-    enqueue_file_replication(UserCtx, FileCtx, Block, TransferId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -169,13 +191,13 @@ replicate_file(UserCtx, FileCtx, Block, TransferId) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Adds task of file replication to worker from ?TRANSFER_WORKERS_POOL.
+%% Adds task of file replication to worker from ?REPLICATION_WORKERS_POOL.
 %% @end
 %%-------------------------------------------------------------------
 -spec enqueue_file_replication(user_ctx:ctx(), file_ctx:ctx(), block(),
     transfer_id(), undefined | non_neg_integer(), undefined | non_neg_integer()) -> ok.
 enqueue_file_replication(UserCtx, FileCtx, Block, TransferId, Retries, NextRetry) ->
-    worker_pool:cast(?TRANSFER_WORKERS_POOL,
+    worker_pool:cast(?REPLICATION_WORKERS_POOL,
         {start_file_replication, UserCtx, FileCtx, Block, TransferId, Retries, NextRetry}).
 
 %%%===================================================================
@@ -195,7 +217,7 @@ schedule_file_replication(UserCtx, FileCtx, FilePath, TargetProviderId, Callback
     SessionId = user_ctx:get_session_id(UserCtx),
     FileGuid = file_ctx:get_guid_const(FileCtx),
     {ok, TransferId} = transfer:start(SessionId, FileGuid, FilePath, undefined,
-        TargetProviderId, Callback, false),
+        TargetProviderId, Callback),
     #provider_response{
         status = #status{code = ?OK},
         provider_response = #scheduled_transfer{
@@ -225,7 +247,7 @@ enqueue_file_replication(UserCtx, FileCtx, Block, TransferId) ->
 -spec replicate_file_insecure(user_ctx:ctx(), file_ctx:ctx(), block(),
     transfer_id()) -> provider_response().
 replicate_file_insecure(UserCtx, FileCtx, Block, TransferId) ->
-    case transfer_utils:is_ongoing(TransferId) of
+    case transfer:is_ongoing(TransferId) of
         true ->
             case file_ctx:is_dir(FileCtx) of
                 {true, FileCtx2} ->
@@ -234,7 +256,7 @@ replicate_file_insecure(UserCtx, FileCtx, Block, TransferId) ->
                     replicate_regular_file(UserCtx, FileCtx2, Block, TransferId)
             end;
         false ->
-            throw({transfer_cancelled, TransferId})
+            throw(already_ended)
     end.
 
 %%-------------------------------------------------------------------
@@ -251,12 +273,12 @@ replicate_dir(UserCtx, FileCtx, Block, Offset, TransferId) ->
     Length = length(Children),
     case Length < Chunk of
         true ->
-            transfer:increase_files_to_process_counter(TransferId, Length),
+            transfer:increment_files_to_process_counter(TransferId, Length),
             enqueue_children_replication(UserCtx, Children, Block, TransferId),
-            transfer:increase_files_processed_counter(TransferId),
+            transfer:increment_files_processed_counter(TransferId),
             #provider_response{status = #status{code = ?OK}};
         false ->
-            transfer:increase_files_to_process_counter(TransferId, Chunk),
+            transfer:increment_files_to_process_counter(TransferId, Chunk),
             enqueue_children_replication(UserCtx, Children, Block, TransferId),
             replicate_dir(UserCtx, FileCtx2, Block, Offset + Chunk, TransferId)
     end.
@@ -270,9 +292,10 @@ replicate_dir(UserCtx, FileCtx, Block, Offset, TransferId) ->
 -spec replicate_regular_file(user_ctx:ctx(), file_ctx:ctx(), block(),
     transfer_id()) -> provider_response().
 replicate_regular_file(UserCtx, FileCtx, Block, TransferId) ->
-    #fuse_response{status = Status} = synchronize_block(UserCtx, FileCtx,
-        Block, false, TransferId, ?DEFAULT_REPLICATION_PRIORITY),
-    transfer:increase_files_processed_counter(TransferId),
+    #fuse_response{status = Status} =
+        synchronize_block(UserCtx, FileCtx, Block, false, TransferId,
+            ?DEFAULT_REPLICATION_PRIORITY),
+    transfer:increment_files_processed_counter(TransferId),
     #provider_response{status = Status}.
 
 %%-------------------------------------------------------------------

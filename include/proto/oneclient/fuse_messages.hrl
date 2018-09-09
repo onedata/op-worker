@@ -112,6 +112,13 @@
 
 -record(synchronize_block_and_compute_checksum, {
     block :: #file_block{},
+    prefetch = false :: boolean(),
+    priority :: non_neg_integer()
+}).
+
+-record(block_synchronization_request, {
+    block :: #file_block{},
+    prefetch = false :: boolean(),
     priority :: non_neg_integer()
 }).
 
@@ -148,6 +155,7 @@
     #update_times{} | #change_mode{} | #rename{} | #create_file{} | #make_file{} |
     #open_file{} | #get_file_location{} | #release{} | #truncate{} |
     #synchronize_block{} | #synchronize_block_and_compute_checksum{} |
+    #block_synchronization_request{} |
     #get_child_attr{} | #get_xattr{} | #set_xattr{} | #remove_xattr{} |
     #list_xattr{} | #fsync{} | #get_file_children_attrs{} |
     #storage_file_created{} | #open_file_with_extended_info{}.
@@ -218,9 +226,15 @@
     file_content :: binary()
 }).
 
+-record(file_location_changed, {
+    file_location :: #file_location{},
+    change_beg_offset :: undefined | non_neg_integer(),
+    change_end_offset :: undefined | non_neg_integer()
+}).
+
 -record(sync_response, {
     checksum :: binary(),
-    file_location :: #file_location{}
+    file_location_changed :: #file_location_changed{}
 }).
 
 -record(file_created, {
@@ -251,12 +265,6 @@
 
 -record(xattr_list, {
     names :: [xattr:name()]
-}).
-
--record(file_location_changed, {
-    file_location :: #file_location{},
-    change_beg_offset :: undefined | non_neg_integer(),
-    change_end_offset :: undefined | non_neg_integer()
 }).
 
 -type fuse_response_type() ::

@@ -81,7 +81,7 @@ get_blocks_for_sync(Locations, Blocks) ->
 %%--------------------------------------------------------------------
 -spec get_unique_blocks(file_ctx:ctx()) -> {fslogic_blocks:blocks(), file_ctx:ctx()}.
 get_unique_blocks(FileCtx) ->
-    {LocationDocs, FileCtx2} = file_ctx:get_file_location_docs(FileCtx),
+    {LocationDocs, FileCtx2} = file_ctx:get_file_location_docs(FileCtx, skip_local_blocks),
     LocalLocations = filter_local_locations(LocationDocs),
     RemoteLocations = LocationDocs -- LocalLocations,
     LocalBlocksList = get_all_blocks(LocalLocations),
@@ -100,7 +100,8 @@ get_unique_blocks(FileCtx) ->
 -spec get_duplicated_blocks(file_ctx:ctx(), version_vector:version_vector()) ->
     {undefined | [{od_provider:id(), fslogic_blocks:blocks()}] , file_ctx:ctx()}.
 get_duplicated_blocks(FileCtx, LocalVV) ->
-    {LocationDocs, FileCtx2} = file_ctx:get_file_location_docs(FileCtx),
+    % TODO - local blocks are always duplicated somewhere
+    {LocationDocs, FileCtx2} = file_ctx:get_file_location_docs(FileCtx, skip_local_blocks),
     LocalLocations = filter_local_locations(LocationDocs),
     LocalBlocksList = get_all_blocks(LocalLocations),
     case LocalBlocksList of
@@ -122,7 +123,7 @@ get_duplicated_blocks(FileCtx, LocalVV) ->
 -spec get_all_blocks([file_location:doc()]) -> fslogic_blocks:blocks().
 get_all_blocks(LocationList) ->
     Blocks = lists:flatmap(fun(Location) ->
-        fslogic_location_cache:get_blocks(Location)
+        fslogic_location_cache:get_blocks(Location, #{skip_local => true})
     end, LocationList),
     fslogic_blocks:consolidate(lists:sort(Blocks)).
 
@@ -372,7 +373,7 @@ compare_blocks({Block1, {_, VV1, _} = BlockInfo1} = B1,
             [B2 | lists:map(fun(B) -> {B, BlockInfo1} end, B1List)];
         greater ->
             B2List = fslogic_blocks:invalidate([Block2], Block1),
-            lists:map(fun(B) -> {B, BlockInfo2} end, B2List) ++ B1;
+            lists:map(fun(B) -> {B, BlockInfo2} end, B2List) ++ [B1];
         _ ->
             [B2, B1]
     end.

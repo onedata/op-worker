@@ -19,13 +19,12 @@
 -type doc() :: datastore_model:doc(record()).
 -type record() :: #storage_sync_info{}.
 -type error() :: {error, term()}.
+-type diff() :: datastore_doc:diff(record()).
 
 -export_type([key/0, doc/0, record/0]).
 
 %% API
--export([update_mtime_and_children_hash/5, update_mtime_and_stat_time/4,
-    update_children_hash/4, update_stat_time/3, update_mtime/3,
-    delete/1, get/1, new_doc/6]).
+-export([delete/1, get/1, create_or_update/3]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0, upgrade_record/2]).
@@ -50,56 +49,13 @@ get(Uuid) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Updates storage_sync_info document.
+%% Creates or updates storage_sync_info document.
 %% @end
 %%--------------------------------------------------------------------
--spec update_mtime_and_children_hash(key(), undefined | non_neg_integer(),
-    non_neg_integer() | undefined, binary() | undefined, od_space:id()) -> 
-    {ok, doc()} | error().
-update_mtime_and_children_hash(Uuid, NewMTime, NewHashKey, NewHashValue, 
-    SpaceId
-) ->
-    create_or_update(Uuid, NewMTime, NewHashKey, NewHashValue, undefined, SpaceId).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates storage_sync_info document.
-%% @end
-%%--------------------------------------------------------------------
--spec update_children_hash(key(), undefined | non_neg_integer(),
-    binary() | undefined, od_space:id()) -> {ok, doc()} | error().
-update_children_hash(Uuid, NewHashKey, NewHashValue, SpaceId) ->
-    create_or_update(Uuid, undefined, NewHashKey, NewHashValue, undefined, SpaceId).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates storage_sync_info document.
-%% @end
-%%--------------------------------------------------------------------
--spec update_mtime(key(), undefined | non_neg_integer(), od_space:id()) ->
-    {ok, doc()} | error().
-update_mtime(Uuid, NewMTime, SpaceId) ->
-    create_or_update(Uuid, NewMTime, undefined, undefined, undefined, SpaceId).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates storage_sync_info document.
-%% @end
-%%--------------------------------------------------------------------
--spec update_stat_time(key(), undefined | non_neg_integer(), od_space:id()) ->
-    {ok, doc()} | error().
-update_stat_time(Uuid, NewStatTime, SpaceId) ->
-    create_or_update(Uuid, undefined, undefined, undefined, NewStatTime, SpaceId).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates storage_sync_info document.
-%% @end
-%%--------------------------------------------------------------------
--spec update_mtime_and_stat_time(key(), undefined | non_neg_integer(),
-    undefined | non_neg_integer(), od_space:id()) -> {ok, doc()} | error().
-update_mtime_and_stat_time(Uuid, NewMTime, StatTime, SpaceId) ->
-    create_or_update(Uuid, NewMTime, undefined, undefined, StatTime, SpaceId).
+-spec create_or_update(key(), diff(), od_space:id()) -> {ok, doc()} | error().
+create_or_update(Uuid, Diff, SpaceId) ->
+    DefaultDoc = default_doc(Uuid, Diff, SpaceId),
+    datastore_model:update(?CTX, Uuid, Diff, DefaultDoc).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -110,74 +66,22 @@ update_mtime_and_stat_time(Uuid, NewMTime, StatTime, SpaceId) ->
 delete(Uuid) ->
     datastore_model:delete(?CTX, Uuid).
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates storage_sync_info document.
-%% @end
-%%--------------------------------------------------------------------
--spec create_or_update(key(), undefined | non_neg_integer(),
-    undefined | non_neg_integer(), binary() | undefined,
-    undefined | non_neg_integer(), od_space:id()) -> {ok, doc()} | error().
-create_or_update(Uuid, NewMTime, NewHashKey, NewHashValue, NewStatTime, SpaceId) ->
-    Diff = fun(SSI = #storage_sync_info{
-        mtime = MTime0,
-        children_attrs_hashes = ChildrenAttrsHashes0,
-        last_stat = StatTime0
-    }) ->
-        MTime = utils:ensure_defined(NewMTime, undefined, MTime0),
-        ChildrenAttrsHashes = case {NewHashKey, NewHashValue} of
-            {undefined, _} -> ChildrenAttrsHashes0;
-            {_, undefined} -> ChildrenAttrsHashes0;
-            {_, <<"">>} -> ChildrenAttrsHashes0;
-            {_, _} -> ChildrenAttrsHashes0#{NewHashKey => NewHashValue}
-        end,
-        StatTime = utils:ensure_defined(NewStatTime, undefined, StatTime0),
-        {ok, SSI#storage_sync_info{
-            mtime = MTime,
-            children_attrs_hashes = ChildrenAttrsHashes,
-            last_stat = StatTime
-        }}
-    end,
-    NewDoc = new_doc(Uuid, NewMTime, NewHashKey, NewHashValue, NewStatTime, SpaceId),
-    datastore_model:update(?CTX, Uuid, Diff, NewDoc).
 
 %%===================================================================
 %% Internal functions
 %%===================================================================
 
 %%-------------------------------------------------------------------
-%% @private
 %% @doc
-%% Returns ?MODULE:doc()
+%% Returns default doc on which Diff has been performed.
 %% @end
 %%-------------------------------------------------------------------
--spec new_doc(key(), non_neg_integer() | undefined, non_neg_integer() | undefined,
-    binary() | undefined, non_neg_integer() | undefined, od_space:id()) -> doc().
-new_doc(Key, NewMTime, NewHashKey, NewHashValue, StatTime, SpaceId) when
-    NewHashKey =:= undefined;
-    NewHashValue =:= undefined
-->
+-spec default_doc(key(), diff(), od_space:id()) -> doc().
+default_doc(Key, Diff, SpaceId) ->
+    {ok, NewSSI} = Diff(#storage_sync_info{}),
     #document{
         key = Key,
-        value = #storage_sync_info{
-            mtime = NewMTime,
-            children_attrs_hashes = #{},
-            last_stat = StatTime
-        },
-        scope = SpaceId
-    };
-new_doc(Key, NewMTime, NewHashKey, NewHashValue, StatTime, SpaceId) ->
-    #document{
-        key = Key,
-        value = #storage_sync_info{
-            mtime = NewMTime,
-            children_attrs_hashes = #{NewHashKey => NewHashValue},
-            last_stat = StatTime
-        },
+        value = NewSSI,
         scope = SpaceId
     }.
 
