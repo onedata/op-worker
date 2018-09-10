@@ -38,7 +38,8 @@
     replicate_to_missing_provider/3,
     replicate_to_not_supporting_provider/3,
     schedule_replication_on_not_supporting_provider/3,
-    cancel_replication_on_target_nodes/2,
+    cancel_replication_on_target_nodes/2
+    ,
     file_replication_failures_should_fail_whole_transfer/3,
     many_simultaneous_failed_transfers/3]).
 
