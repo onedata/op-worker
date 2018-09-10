@@ -651,6 +651,13 @@ end_per_testcase(Case, Config) when
     ok = test_utils:mock_unload(Workers, [reverse_luma_proxy, storage_file_ctx, storage_file_manager]),
     end_per_testcase(default, Config);
 
+end_per_testcase(Case, Config) when
+    Case =:= import_nfs_acl_with_disabled_luma_should_fail_test
+    ->
+    Workers = ?config(op_worker_nodes, Config),
+    ok = test_utils:mock_unload(Workers, [storage_file_manager]),
+    end_per_testcase(default, Config);
+
 end_per_testcase(_Case, Config) ->
     Workers = [W1 | _] = ?config(op_worker_nodes, Config),
     storage_sync_test_base:clean_reverse_luma_cache(W1),
