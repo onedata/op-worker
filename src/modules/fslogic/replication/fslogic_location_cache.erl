@@ -305,7 +305,7 @@ clear_blocks(FileCtx, Key) ->
         fslogic_cache:save_blocks(Key, []),
         fslogic_cache:update_size(Key, SizeChange),
         fslogic_cache:mark_changed_blocks(Key)
-end).
+    end).
 
 %%-------------------------------------------------------------------
 %% @doc
