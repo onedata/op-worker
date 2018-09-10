@@ -284,7 +284,8 @@ set_blocks(#document{key = Key, value = FileLocation} = Doc, Blocks) ->
         false ->
             Doc#document{value = FileLocation#file_location{blocks = Blocks}};
         _ ->
-            SizeChange = -1 * fslogic_blocks:size(Blocks),
+            CurrentBlocks = fslogic_cache:get_blocks(Key),
+            SizeChange = fslogic_blocks:size(Blocks) - fslogic_blocks:size(CurrentBlocks),
             fslogic_cache:save_blocks(Key, Blocks),
             fslogic_cache:update_size(Key, SizeChange),
             fslogic_cache:mark_changed_blocks(Key),
@@ -299,8 +300,7 @@ set_blocks(#document{key = Key, value = FileLocation} = Doc, Blocks) ->
 -spec clear_blocks(file_ctx:ctx(), id()) -> location().
 clear_blocks(FileCtx, Key) ->
     replica_synchronizer:apply(FileCtx, fun() ->
-        fslogic_cache:get_doc(Key),
-        Blocks = get_blocks(Key),
+        Blocks = fslogic_cache:get_blocks(Key),
         SizeChange = -1 * fslogic_blocks:size(Blocks),
         fslogic_cache:save_blocks(Key, []),
         fslogic_cache:update_size(Key, SizeChange),
