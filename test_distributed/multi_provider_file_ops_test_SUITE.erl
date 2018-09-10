@@ -437,7 +437,7 @@ rtransfer_fetch_test(Config) ->
     ct:pal("File created"),
 
     InitialBlock1 = {0, 100, 10},
-    InitialBlock2 = {50, 150, 20},
+    InitialBlocks2 = [{50, 150, 20}, {220, 5, 0}, {260, 6, 0}],
     FollowingBlocks = [
         % overlapping block, but with higher priority - should be fetched
         {90, 20, 0},
@@ -448,6 +448,12 @@ rtransfer_fetch_test(Config) ->
         % non overlapping block - should be fetched
         {300, 100, 255},
 
+        % blocks overlapping/containing already started blocks;
+        % taking into account min_hole_size 1st block should be wholly
+        % replicated within 1 transfer but replication of 2nd one should be
+        % split into 2 transfers
+        {210, 30, 96}, {250, 30, 96},
+
         % overlapping blocks with lower priorities - should not be fetched
         {0, 5, 10}, {70, 20, 10}, {70, 130, 20},
         {90, 20, 32}, {5, 10, 32}, {150, 50, 32}, {110, 5, 32}, {190, 10, 32},
@@ -457,7 +463,8 @@ rtransfer_fetch_test(Config) ->
         {145, 15, 96}, {155, 15, 96}, {165, 15, 96}, {175, 15, 96}
     ],
     ExpectedBlocks = lists:sort([
-        {0, 100}, {100, 100}, {90, 20}, {200, 10}, {300, 100}
+        {0, 100}, {100, 100}, {90, 20}, {200, 10}, {300, 100},
+        {220, 5}, {210, 30}, {250, 10}, {260, 6}, {266, 14}
     ]),
     ExpectedBlocksNum = length(ExpectedBlocks),
 
@@ -472,8 +479,8 @@ rtransfer_fetch_test(Config) ->
         Worker1a, SessId(Worker1a, User1), FileCtx, [InitialBlock1]
     ),
     timer:sleep(timer:seconds(5)),
-    [Promise2] = async_replicate_blocks_start(
-        Worker1a, SessId(Worker1a, User1), FileCtx, [InitialBlock2]
+    Promises2 = async_replicate_blocks_start(
+        Worker1a, SessId(Worker1a, User1), FileCtx, InitialBlocks2
     ),
     timer:sleep(timer:seconds(5)),
 
@@ -481,7 +488,9 @@ rtransfer_fetch_test(Config) ->
     ?assertMatch(ExpectedResponses, replicate_blocks(
         Worker1a, SessId(Worker1a, User1), FileCtx, FollowingBlocks
     )),
-    ?assertMatch([ok, ok], async_replicate_blocks_end([Promise1, Promise2])),
+    ?assertMatch([ok, ok, ok, ok],
+        async_replicate_blocks_end([Promise1 | Promises2])
+    ),
 
     FetchRequests = lists:sum(meck_get_num_calls(
         Workers1, rtransfer_config, fetch, '_')
@@ -691,6 +700,18 @@ init_per_testcase(db_sync_with_delays_test, Config) ->
     ),
 
     Config2;
+init_per_testcase(rtransfer_fetch_test, Config) ->
+    Config2 = init_per_testcase(?DEFAULT_CASE(rtransfer_fetch_test), Config),
+
+    [Node | _ ] = Nodes = ?config(op_worker_nodes, Config),
+    {ok, HoleSize} = rpc:call(Node, application, get_env, [
+        ?APP_NAME, rtransfer_min_hole_size
+    ]),
+    rpc:multicall(Nodes, application, set_env, [
+        ?APP_NAME, rtransfer_min_hole_size, 6
+    ]),
+
+    [{default_min_hole_size, HoleSize} | Config2];
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 60}),
     lfm_proxy:init(Config).
@@ -706,5 +727,12 @@ end_per_testcase(db_sync_with_delays_test, Config) ->
     ]),
 
     end_per_testcase(?DEFAULT_CASE(db_sync_with_delays_test), Config);
+end_per_testcase(rtransfer_fetch_test, Config) ->
+    Nodes = ?config(op_worker_nodes, Config),
+    MinHoleSize = ?config(default_min_hole_size, Config),
+    rpc:multicall(Nodes, application, set_env, [
+        ?APP_NAME, rtransfer_min_hole_size, MinHoleSize
+    ]),
+    end_per_testcase(?DEFAULT_CASE(rtransfer_fetch_test), Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).
