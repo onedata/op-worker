@@ -2750,8 +2750,7 @@ init_per_testcase(Case, Config) when
     Case =:= eviction_should_succeed_when_remote_provider_modified_file_replica;
     Case =:= eviction_should_fail_when_eviction_provider_modified_file_replica;
     Case =:= rerun_eviction_of_file_replica_with_migration;
-    Case =:= evict_dir_replica;
-    Case =:= quota_decreased_after_eviciton
+    Case =:= evict_dir_replica
     ->
     init_per_testcase(all, [{space_id, <<"space3">>} | Config]);
 
@@ -2771,6 +2770,13 @@ init_per_testcase(Case, Config) when
     [_, WorkerP1] = ?config(op_worker_nodes, Config),
     {ok, _} = rpc:call(WorkerP1, space_storage, enable_file_popularity, [<<"space1">>]),
     init_per_testcase(all, Config);
+
+init_per_testcase(Case, Config) when
+    Case =:= quota_decreased_after_eviciton
+    ->
+    SpaceId = <<"space6">>,
+    Config2 = [{space_id, SpaceId} | Config],
+    init_per_testcase(all, Config2);
 
 init_per_testcase(Case, Config) when
     Case =:= basic_autocleaning_test ->
