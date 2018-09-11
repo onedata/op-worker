@@ -54,7 +54,8 @@
     type = lfm :: lfm | rest,
     file_key_type = guid :: guid | path,
     schedule_node :: node(),
-    target_nodes :: [node()],
+    replicating_nodes :: [node()],
+    evicting_nodes :: [node()],
     function :: function
 }).
 

@@ -38,8 +38,7 @@
     replicate_to_missing_provider/3,
     replicate_to_not_supporting_provider/3,
     schedule_replication_on_not_supporting_provider/3,
-    cancel_replication_on_target_nodes/2
-    ,
+    cancel_replication_on_target_nodes/2,
     file_replication_failures_should_fail_whole_transfer/3,
     many_simultaneous_failed_transfers/3]).
 
@@ -63,7 +62,7 @@ replicate_empty_dir(Config, Type, FileKeyType) ->
                 type = Type,
                 file_key_type = FileKeyType,
                 schedule_node = WorkerP1,
-                target_nodes = [WorkerP2],
+                replicating_nodes = [WorkerP2],
                 function = fun transfers_test_mechanism:replicate_root_directory/2
             },
             expected = #expected{
@@ -94,7 +93,7 @@ replicate_tree_of_empty_dirs(Config, Type, FileKeyType) ->
                 type = Type,
                 file_key_type = FileKeyType,
                 schedule_node = WorkerP1,
-                target_nodes = [WorkerP2],
+                replicating_nodes = [WorkerP2],
                 function = fun transfers_test_mechanism:replicate_root_directory/2
             },
             expected = #expected{
@@ -129,7 +128,7 @@ replicate_regular_file(Config, Type, FileKeyType) ->
                 type = Type,
                 file_key_type = FileKeyType,
                 schedule_node = WorkerP1,
-                target_nodes = [WorkerP2],
+                replicating_nodes = [WorkerP2],
                 function = fun transfers_test_mechanism:replicate_each_file_separately/2
             },
             expected = #expected{
@@ -171,7 +170,7 @@ replicate_file_in_directory(Config, Type, FileKeyType) ->
                 type = Type,
                 file_key_type = FileKeyType,
                 schedule_node = WorkerP1,
-                target_nodes = [WorkerP2],
+                replicating_nodes = [WorkerP2],
                 function = fun transfers_test_mechanism:replicate_root_directory/2
             },
             expected = #expected{
@@ -215,7 +214,7 @@ replicate_big_file(Config, Type, FileKeyType) ->
                 type = Type,
                 file_key_type = FileKeyType,
                 schedule_node = WorkerP1,
-                target_nodes = [WorkerP2],
+                replicating_nodes = [WorkerP2],
                 function = fun transfers_test_mechanism:replicate_each_file_separately/2
             },
             expected = #expected{
@@ -256,7 +255,7 @@ schedule_replication_to_source_provider(Config, Type, FileKeyType) ->
                 type = Type,
                 file_key_type = FileKeyType,
                 schedule_node = WorkerP1,
-                target_nodes = [WorkerP1],
+                replicating_nodes = [WorkerP1],
                 function = fun transfers_test_mechanism:replicate_each_file_separately/2
             },
             expected = #expected{
@@ -297,7 +296,7 @@ replicate_already_replicated_file(Config, Type, FileKeyType) ->
                 type = Type,
                 file_key_type = FileKeyType,
                 schedule_node = WorkerP1,
-                target_nodes = [WorkerP2],
+                replicating_nodes = [WorkerP2],
                 function = fun transfers_test_mechanism:replicate_each_file_separately/2
             },
             expected = #expected{
@@ -327,7 +326,7 @@ replicate_already_replicated_file(Config, Type, FileKeyType) ->
             setup = undefined,
             scenario = #scenario{
                 schedule_node = WorkerP1,
-                target_nodes = [WorkerP1],
+                replicating_nodes = [WorkerP1],
                 function = fun transfers_test_mechanism:replicate_each_file_separately/2,
                 type = Type,
                 file_key_type = FileKeyType
@@ -370,7 +369,7 @@ not_synced_file_should_not_be_replicated(Config, Type, FileKeyType) ->
                 type = Type,
                 file_key_type = FileKeyType,
                 schedule_node = WorkerP1,
-                target_nodes = [WorkerP2],
+                replicating_nodes = [WorkerP2],
                 function = fun transfers_test_mechanism:replicate_each_file_separately/2
             },
             expected = #expected{
@@ -413,7 +412,7 @@ replicate_100_files_separately(Config, Type, FileKeyType) ->
                 type = Type,
                 file_key_type = FileKeyType,
                 schedule_node = WorkerP1,
-                target_nodes = [WorkerP2],
+                replicating_nodes = [WorkerP2],
                 function = fun transfers_test_mechanism:replicate_each_file_separately/2
             },
             expected = #expected{
@@ -461,7 +460,7 @@ replicate_100_files_in_one_transfer(Config, Type, FileKeyType) ->
                 type = Type,
                 file_key_type = FileKeyType,
                 schedule_node = WorkerP1,
-                target_nodes = [WorkerP2],
+                replicating_nodes = [WorkerP2],
                 function = fun transfers_test_mechanism:replicate_root_directory/2
             },
             expected = #expected{
@@ -508,7 +507,7 @@ replication_should_succeed_when_there_is_enough_space_for_file(Config, Type, Fil
                 type = Type,
                 file_key_type = FileKeyType,
                 schedule_node = WorkerP1,
-                target_nodes = [WorkerP2],
+                replicating_nodes = [WorkerP2],
                 function = fun transfers_test_mechanism:replicate_each_file_separately/2
             },
             expected = #expected{
@@ -554,7 +553,7 @@ replication_should_fail_when_space_is_full(Config, Type, FileKeyType) ->
                 type = Type,
                 file_key_type = FileKeyType,
                 schedule_node = WorkerP1,
-                target_nodes = [WorkerP2],
+                replicating_nodes = [WorkerP2],
                 function = fun transfers_test_mechanism:replicate_each_file_separately/2
             },
             expected = #expected{
@@ -598,7 +597,7 @@ replicate_to_missing_provider(Config, Type, FileKeyType) ->
                 type = Type,
                 file_key_type = FileKeyType,
                 schedule_node = WorkerP1,
-                target_nodes = [?MISSING_PROVIDER_NODE],
+                replicating_nodes = [?MISSING_PROVIDER_NODE],
                 function = fun transfers_test_mechanism:error_on_replicating_files/2
             },
             expected = #expected{
@@ -630,7 +629,7 @@ replicate_to_not_supporting_provider(Config, Type, FileKeyType) ->
                 type = Type,
                 file_key_type = FileKeyType,
                 schedule_node = WorkerP1,
-                target_nodes = [WorkerP2],
+                replicating_nodes = [WorkerP2],
                 function = fun transfers_test_mechanism:error_on_replicating_files/2
             },
             expected = #expected{
@@ -661,7 +660,7 @@ schedule_replication_on_not_supporting_provider(Config, Type, FileKeyType) ->
                 type = Type,
                 file_key_type = FileKeyType,
                 schedule_node = WorkerP2,
-                target_nodes = [WorkerP1],
+                replicating_nodes = [WorkerP1],
                 function = fun transfers_test_mechanism:error_on_replicating_files/2
             },
             expected = #expected{
@@ -677,12 +676,6 @@ schedule_replication_on_not_supporting_provider(Config, Type, FileKeyType) ->
 cancel_replication_on_target_nodes(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     transfers_test_utils:mock_prolonged_replication(WorkerP2, 0.5, 15),
-%%    tracer:start([WorkerP1, WorkerP2]),
-%%    tracer:trace_calls(replication_worker, replicate_file),
-%%    tracer:trace_calls(sync_req, replicate_file),
-%%    tracer:trace_calls(sync_req, replicate_file_insecure),
-%%    tracer:trace_calls(sync_req, replicate_regular_file),
-%%    tracer:trace_calls(sync_req, replicate_dir),
     transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{
@@ -699,7 +692,7 @@ cancel_replication_on_target_nodes(Config, Type) ->
             scenario = #scenario{
                 type = Type,
                 schedule_node = WorkerP1,
-                target_nodes = [WorkerP2],
+                replicating_nodes = [WorkerP2],
                 function = fun transfers_test_mechanism:cancel_replication_on_target_nodes/2
             },
             expected = #expected{
@@ -735,7 +728,7 @@ file_replication_failures_should_fail_whole_transfer(Config, Type, FileKeyType) 
                 type = Type,
                 file_key_type = FileKeyType,
                 schedule_node = WorkerP1,
-                target_nodes = [WorkerP2],
+                replicating_nodes = [WorkerP2],
                 function = fun transfers_test_mechanism:replicate_root_directory/2
             },
             expected = #expected{
@@ -777,7 +770,7 @@ many_simultaneous_failed_transfers(Config, Type, FileKeyType) ->
                 type = Type,
                 file_key_type = FileKeyType,
                 schedule_node = WorkerP1,
-                target_nodes = [WorkerP2],
+                replicating_nodes = [WorkerP2],
                 function = fun transfers_test_mechanism:replicate_each_file_separately/2
             },
             expected = #expected{

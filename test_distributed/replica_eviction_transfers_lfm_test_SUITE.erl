@@ -8,7 +8,7 @@
 %%% This module contains tests of replication jobs, scheduled via REST.
 %%% @end
 %%%-------------------------------------------------------------------
--module(replica_eviction_transfers_rest_test_SUITE).
+-module(replica_eviction_transfers_lfm_test_SUITE).
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
@@ -47,7 +47,7 @@ all() -> [
     evict_big_file_replica,
     evict_100_files_in_one_request,
     evict_100_files_each_file_separately,
-%%    fail_to_evict_file_replica_without_permissions %todo VFS-4844,
+%%    fail_to_evict_file_replica_without_permissions    %todo VFS-4844,
     eviction_should_succeed_when_remote_provider_modified_file_replica,
     eviction_should_fail_when_evicting_provider_modified_file_replica
 ].
@@ -57,46 +57,47 @@ all() -> [
 %%%===================================================================
 
 evict_empty_dir_by_guid(Config) ->
-    replica_eviction_transfers_test_base:evict_empty_dir(Config, rest, guid).
+    replica_eviction_transfers_test_base:evict_empty_dir(Config, lfm, guid).
 
 evict_empty_dir_by_path(Config) ->
-    replica_eviction_transfers_test_base:evict_empty_dir(Config, rest, path).
+    replica_eviction_transfers_test_base:evict_empty_dir(Config, lfm, path).
 
 evict_tree_of_empty_dirs_by_guid(Config) ->
-    replica_eviction_transfers_test_base:evict_tree_of_empty_dirs(Config, rest, guid).
+    replica_eviction_transfers_test_base:evict_tree_of_empty_dirs(Config, lfm, guid).
 
 evict_tree_of_empty_dirs_by_path(Config) ->
-    replica_eviction_transfers_test_base:evict_tree_of_empty_dirs(Config, rest, path).
+    replica_eviction_transfers_test_base:evict_tree_of_empty_dirs(Config, lfm, path).
 
 evict_regular_file_replica_by_guid(Config) ->
-    replica_eviction_transfers_test_base:evict_regular_file_replica(Config, rest, guid).
+    replica_eviction_transfers_test_base:evict_regular_file_replica(Config, lfm, guid).
 
 evict_regular_file_replica_by_path(Config) ->
-    replica_eviction_transfers_test_base:evict_regular_file_replica(Config, rest, path).
+    replica_eviction_transfers_test_base:evict_regular_file_replica(Config, lfm, path).
 
 evict_regular_file_replica_in_directory_by_guid(Config) ->
-    replica_eviction_transfers_test_base:evict_regular_file_replica_in_directory(Config, rest, guid).
+    replica_eviction_transfers_test_base:evict_regular_file_replica_in_directory(Config, lfm, guid).
 
 evict_regular_file_replica_in_directory_by_path(Config) ->
-    replica_eviction_transfers_test_base:evict_regular_file_replica_in_directory(Config, rest, path).
+    replica_eviction_transfers_test_base:evict_regular_file_replica_in_directory(Config, lfm, path).
 
 evict_big_file_replica(Config) ->
-    replica_eviction_transfers_test_base:evict_big_file_replica(Config, rest, guid).
+    replica_eviction_transfers_test_base:evict_big_file_replica(Config, lfm, guid).
 
 evict_100_files_in_one_request(Config) ->
-    replica_eviction_transfers_test_base:evict_100_files_in_one_request(Config, rest, path).
+    replica_eviction_transfers_test_base:evict_100_files_in_one_request(Config, lfm, path).
 
 evict_100_files_each_file_separately(Config) ->
-    replica_eviction_transfers_test_base:evict_100_files_each_file_separately(Config, rest, path).
+    replica_eviction_transfers_test_base:evict_100_files_each_file_separately(Config, lfm, path).
 
 fail_to_evict_file_replica_without_permissions(Config) ->
-    replica_eviction_transfers_test_base:fail_to_evict_file_replica_without_permissions(Config, rest, path).
+    replica_eviction_transfers_test_base:fail_to_evict_file_replica_without_permissions(Config, lfm, path).
 
 eviction_should_succeed_when_remote_provider_modified_file_replica(Config) ->
     replica_eviction_transfers_test_base:eviction_should_succeed_when_remote_provider_modified_file_replica(Config, rest, path).
 
 eviction_should_fail_when_evicting_provider_modified_file_replica(Config) ->
     replica_eviction_transfers_test_base:eviction_should_fail_when_evicting_provider_modified_file_replica(Config, rest, path).
+
 
 %%%===================================================================
 %%% SetUp and TearDown functions
