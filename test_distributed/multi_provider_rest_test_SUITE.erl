@@ -142,7 +142,7 @@ all() ->
         empty_metadata_invalid_json_test,
         spatial_flag_test,
         list_transfers,
-        %% quota_decreased_after_eviciton,   % TODO uncomment after resolving VFS-4041
+        quota_decreased_after_eviciton,
         evict_big_dir,
         migrate_big_dir,
         track_transferred_files
@@ -234,6 +234,17 @@ end, __Distributions))).
         threshold => Threshold
     }
 ).
+
+-define(assertQuota(Worker, SpaceId, ExpectedSize), {
+    ?assertEqual(ExpectedSize, case rpc:call(Worker, space_quota, get, [SpaceId]) of
+        {ok, #document{
+            value = #space_quota{
+                current_size = CurrentSize
+            }
+        }} -> CurrentSize;
+        Error -> Error
+    end
+)}).
 
 -define(USER_1_AUTH_HEADERS(Config), ?USER_1_AUTH_HEADERS(Config, [])).
 -define(USER_1_AUTH_HEADERS(Config, OtherHeaders),
@@ -2407,13 +2418,11 @@ quota_decreased_after_eviciton(Config) ->
     SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
     SpaceId = ?config(space_id, Config),
     DomainP2 = domain(WorkerP2),
-
     File = ?absPath(SpaceId, <<"file_quota_decreased">>),
-    File2 = ?absPath(SpaceId, <<"file_quota_decreased2">>),
-    FileGuid = create_test_file(WorkerP1, SessionId, File, <<"0123456789">>),
-    FileGuid2 = create_test_file(WorkerP1, SessionId, File2, <<"9876543210">>),
+    TestData = <<"0123456789">>,
+    TestDataSize = byte_size(TestData),
+    FileGuid = create_test_file(WorkerP1, SessionId, File, TestData),
     {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
-    {ok, FileObjectId2} = cdmi_id:guid_to_objectid(FileGuid2),
 
     ExpectedDistribution0 = [
         #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 10]]}
@@ -2440,67 +2449,15 @@ quota_decreased_after_eviciton(Config) ->
         <<"bytesReplicated">> := 10
     }, WorkerP1, Tid, Config),
 
-    ExpectedDistribution = [
+    ExpectedDistribution1 = [
         #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 10]]},
         #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 10]]}
     ],
 
-    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File),
-    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid], list_ended_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid], list_ended_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
-
-    % when
-    Tid2 = schedule_file_replication(WorkerP1, DomainP2, File2, Config),
-    ?assertEqual([Tid2],
-        get_ongoing_transfers_for_file(WorkerP1, FileGuid2), ?ATTEMPTS),
-
-    % then file cannot be replicated because of quota
-    ?assertTransferStatus(#{
-        <<"replicationStatus">> := <<"failed">>,
-        <<"replicatingProviderId">> := DomainP2,
-        <<"path">> := File2,
-        <<"replicaEvictionStatus">> := <<"skipped">>,
-        <<"fileId">> := FileObjectId2,
-        <<"callback">> := null,
-        <<"filesToProcess">> := 1,
-        <<"filesProcessed">> := 1,
-        <<"failedFiles">> := 1,
-        <<"fileReplicasEvicted">> := 0,
-        <<"filesReplicated">> := 0,
-        <<"bytesReplicated">> := 0
-    }, WorkerP1, Tid2, Config),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid2, Tid], list_ended_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-    ?assertEqual([Tid2, Tid], get_ended_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid2, Tid], list_ended_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
-    ?assertEqual([Tid2, Tid], get_ended_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
-
-    ExpectedDistribution2 = [
-        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 10]]},
-        #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => []}
-    ],
-    ?assertDistribution(WorkerP1, ExpectedDistribution2, Config, File2),
-    ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, File2),
-
-    Tid3 = schedule_replica_eviction(WorkerP2, DomainP2, File, Config),
-    ?assertEqual([Tid3],
-        get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
+    ?assertDistribution(WorkerP1, ExpectedDistribution1, Config, File),
+    ?assertDistribution(WorkerP2, ExpectedDistribution1, Config, File),
+    ?assertQuota(WorkerP2, SpaceId, TestDataSize),
+    Tid2 = schedule_replica_eviction(WorkerP2, DomainP2, File, Config),
 
     ?assertTransferStatus(#{
         <<"replicationStatus">> := <<"skipped">>,
@@ -2514,52 +2471,16 @@ quota_decreased_after_eviciton(Config) ->
         <<"fileReplicasEvicted">> := 1,
         <<"filesReplicated">> := 0,
         <<"bytesReplicated">> := 0
-    }, WorkerP1, Tid3, Config),
+    }, WorkerP1, Tid2, Config),
 
     % File replica is evicted
-    ExpectedDistribution3 = [
+    ExpectedDistribution2 = [
         #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 10]]},
         #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => []}
     ],
-    ?assertDistribution(WorkerP1, ExpectedDistribution3, Config, File),
-    ?assertDistribution(WorkerP2, ExpectedDistribution3, Config, File),
-
-    %File2 can now be replicated
-    % when
-    Tid4 = schedule_file_replication(WorkerP1, DomainP2, File2, Config),
-    ?assertEqual([Tid4],
-        get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-
-    {ok, FileObjectId2} = cdmi_id:guid_to_objectid(FileGuid2),
-    DomainP2 = domain(WorkerP2),
-    ?assertTransferStatus(#{
-        <<"replicationStatus">> := <<"completed">>,
-        <<"replicatingProviderId">> := DomainP2,
-        <<"path">> := File2,
-        <<"replicaEvictionStatus">> := <<"skipped">>,
-        <<"fileId">> := FileObjectId2,
-        <<"callback">> := null,
-        <<"filesToProcess">> := 1,
-        <<"filesProcessed">> := 1,
-        <<"fileReplicasEvicted">> := 0,
-        <<"filesReplicated">> := 1,
-        <<"bytesReplicated">> := 10
-    }, WorkerP1, Tid4, Config),
-
-    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File2),
-    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File2),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid4, Tid3, Tid2, Tid], list_ended_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-    ?assertEqual([Tid4, Tid3, Tid2, Tid], get_ended_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid4, Tid3, Tid2, Tid], list_ended_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
-    ?assertEqual([Tid4, Tid3, Tid2, Tid], get_ended_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS).
+    ?assertDistribution(WorkerP1, ExpectedDistribution2, Config, File),
+    ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, File),
+    ?assertQuota(WorkerP2, SpaceId, 0).
 
 evict_big_dir(Config) ->
     ct:timetrap({hours, 1}),
@@ -2853,12 +2774,8 @@ init_per_testcase(Case, Config) when
 init_per_testcase(Case, Config) when
     Case =:= quota_decreased_after_eviciton
     ->
-    [WorkerP2, _WorkerP1] = ?config(op_worker_nodes, Config),
     SpaceId = <<"space6">>,
-    clean_monitoring_dir(WorkerP2, SpaceId),
-    OldSoftQuota = rpc:call(WorkerP2, application, get_env, [op_worker, soft_quota_limit_size]),
-    ok = rpc:call(WorkerP2, application, set_env, [op_worker, soft_quota_limit_size, 15]),
-    Config2 = [{old_soft_quota, OldSoftQuota}, {space_id, SpaceId} | Config],
+    Config2 = [{space_id, SpaceId} | Config],
     init_per_testcase(all, Config2);
 
 init_per_testcase(Case, Config) when
@@ -2916,14 +2833,6 @@ end_per_testcase(Case = automatic_cleanup_should_evict_unpopular_files, Config) 
     check_if_space_empty(WorkerP1, SpaceId),
     check_if_space_empty(WorkerP2, SpaceId),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
-
-end_per_testcase(Case, Config) when
-    Case =:= quota_decreased_after_eviciton
-    ->
-    [WorkerP2, _WorkerP1] = ?config(op_worker_nodes, Config),
-    {ok, OldSoftQuota} = ?config(old_soft_quota, Config),
-    rpc:call(WorkerP2, application, set_env, [op_worker, soft_quota_limit_size, OldSoftQuota]),
-    end_per_testcase(all, Config);
 
 end_per_testcase(Case, Config) when
     Case =:= query_file_popularity_index;
