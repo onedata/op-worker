@@ -55,8 +55,6 @@
     timeouts_test/1,
     client_keepalive_test/1,
     socket_timeout_test/1,
-    % This test in order to work properly unmocks session:remove_connection
-    % (mocked in init_per_suite) and as such should be run as last
     broken_connection_test/1
 ]).
 
@@ -1037,10 +1035,7 @@ broken_connection_test(Config) ->
 
     % when
     ok = ssl:send(Sock, generate_create_message(RootGuid, <<"1">>, <<"f1">>)),
-    #'ServerMessage'{message_body = {
-        fuse_response, #'FuseResponse'{fuse_response = {
-            file_created, #'FileCreated'{handle_id = _Handle}}}
-    }} = ?assertMatch(#'ServerMessage'{message_body = {
+    ?assertMatch(#'ServerMessage'{message_body = {
         fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
     }, message_id = <<"1">>}, receive_server_message()),
 
@@ -1048,10 +1043,7 @@ broken_connection_test(Config) ->
     FileUuid = rpc:call(Worker1, fslogic_uuid, guid_to_uuid, [FileGuid]),
 
     ok = ssl:send(Sock, generate_open_file_message(FileGuid, <<"2">>)),
-    #'ServerMessage'{message_body = {
-        fuse_response, #'FuseResponse'{fuse_response = {
-            file_opened, #'FileOpened'{handle_id = _Handle1}}}
-    }} = ?assertMatch(#'ServerMessage'{message_body = {
+    ?assertMatch(#'ServerMessage'{message_body = {
         fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
     }, message_id = <<"2">>}, receive_server_message()),
 
@@ -1080,17 +1072,7 @@ broken_connection_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    Posthook = fun(NewConfig) ->
-        Workers = ?config(op_worker_nodes, NewConfig),
-        test_utils:mock_new(Workers, session, [passthrough]),
-
-        % Do not delete session when last connection is removed
-        test_utils:mock_expect(Workers, session, remove_connection,
-            fun session_remove_connection_mock/2
-        ),
-
-        initializer:setup_storage(NewConfig)
-    end,
+    Posthook = fun(NewConfig) -> initializer:setup_storage(NewConfig) end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
 init_per_testcase(Case, Config) when
@@ -1208,11 +1190,7 @@ init_per_testcase(timeouts_test, Config) ->
 init_per_testcase(client_keepalive_test, Config) ->
     init_per_testcase(timeouts_test, Config);
 
-% This scenario needs to unmock session module in order to work
 init_per_testcase(broken_connection_test, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, [session]),
-
     % Shorten ttl to force quicker client session removal
     init_per_testcase(timeouts_test, [{fuse_session_ttl_seconds, 10} | Config]);
 
@@ -1615,13 +1593,3 @@ meck_get_num_calls(Nodes, Module, Fun, Args) ->
     lists:map(fun(Node) ->
         rpc:call(Node, meck, num_calls, [Module, Fun, Args], timer:seconds(60))
     end, Nodes).
-
-session_remove_connection_mock(SessId, Con) ->
-    Diff = fun(#session{connections = Cons} = Sess) ->
-        NewCons = lists:filter(fun(C) -> C =/= Con end, Cons),
-        {ok, Sess#session{connections = NewCons}}
-    end,
-    case session:update(SessId, Diff) of
-        {ok, _} -> ok;
-        Other -> Other
-    end.
