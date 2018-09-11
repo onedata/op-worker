@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module contains tests of replication jobs, scheduled via REST.
+%%% This module contains tests of replica eviction jobs, scheduled via REST.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(replica_eviction_transfers_rest_test_SUITE).
@@ -33,7 +33,8 @@
     evict_100_files_each_file_separately/1,
     fail_to_evict_file_replica_without_permissions/1,
     eviction_should_succeed_when_remote_provider_modified_file_replica/1,
-    eviction_should_fail_when_evicting_provider_modified_file_replica/1]).
+    eviction_should_fail_when_evicting_provider_modified_file_replica/1,
+    quota_decreased_after_eviction/1]).
 
 all() -> [
     evict_empty_dir_by_guid,
@@ -49,7 +50,8 @@ all() -> [
     evict_100_files_each_file_separately,
 %%    fail_to_evict_file_replica_without_permissions %todo VFS-4844,
     eviction_should_succeed_when_remote_provider_modified_file_replica,
-    eviction_should_fail_when_evicting_provider_modified_file_replica
+    eviction_should_fail_when_evicting_provider_modified_file_replica,
+    quota_decreased_after_eviction
 ].
 
 %%%===================================================================
@@ -97,6 +99,9 @@ eviction_should_succeed_when_remote_provider_modified_file_replica(Config) ->
 
 eviction_should_fail_when_evicting_provider_modified_file_replica(Config) ->
     replica_eviction_transfers_test_base:eviction_should_fail_when_evicting_provider_modified_file_replica(Config, rest, path).
+
+quota_decreased_after_eviction(Config) ->
+    replica_eviction_transfers_test_base:quota_decreased_after_eviction(Config, rest, path).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

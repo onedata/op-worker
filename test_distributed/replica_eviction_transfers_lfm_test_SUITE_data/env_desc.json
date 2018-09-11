@@ -146,8 +146,26 @@
                         "supported_size": 10737418240
                     }
                 }
+            },
+            "space3": {
+                "displayed_name": "space3",
+                "users": [
+                    "user1",
+                    "user2"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st1",
+                        "supported_size": 10737418240
+                    },
+                    "p2": {
+                        "storage": "/mnt/st2",
+                        "supported_size": 10737418240
+                    }
+                }
             }
-
         }
     }
 }

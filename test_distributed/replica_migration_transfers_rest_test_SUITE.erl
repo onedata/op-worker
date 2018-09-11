@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module contains tests of replication jobs, scheduled via REST.
+%%% This module contains tests of replica migration jobs, scheduled via REST.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(replica_migration_transfers_rest_test_SUITE).
@@ -23,7 +23,7 @@
 %% API
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 -export([
-    migrate_empty_dir_by_guid/1, migrate_empty_dir_by_path/1,
+    migrate_empty_dir_by_guid/1, migrate_empty_dir_by_path/1,r
     migrate_tree_of_empty_dirs_by_guid/1, migrate_tree_of_empty_dirs_by_path/1,
     migrate_regular_file_replica_by_guid/1, migrate_regular_file_replica_by_path/1,
     migrate_regular_file_replica_in_directory_by_guid/1,

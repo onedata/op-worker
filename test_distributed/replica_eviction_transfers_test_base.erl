@@ -32,10 +32,20 @@
     evict_100_files_each_file_separately/3,
     fail_to_evict_file_replica_without_permissions/3,
     eviction_should_succeed_when_remote_provider_modified_file_replica/3,
-    eviction_should_fail_when_evicting_provider_modified_file_replica/3
-]).
+    eviction_should_fail_when_evicting_provider_modified_file_replica/3,
+    quota_decreased_after_eviction/3]).
 
 -define(SPACE_ID, <<"space1">>).
+-define(assertQuota(Worker, SpaceId, ExpectedSize), {
+    ?assertEqual(ExpectedSize, case rpc:call(Worker, space_quota, get, [SpaceId]) of
+        {ok, #document{
+            value = #space_quota{
+                current_size = CurrentSize
+            }
+        }} -> CurrentSize;
+        Error -> Error
+    end
+    )}).
 
 %%%===================================================================
 %%% API
@@ -299,9 +309,6 @@ evict_100_files_each_file_separately(Config, Type, FileKeyType) ->
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP2), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ]
-                %%                ,
-                %%                attempts = 600,
-                %%                timeout = timer:minutes(10)
             },
             scenario = #scenario{
                 type = Type,
@@ -327,9 +334,6 @@ evict_100_files_each_file_separately(Config, Type, FileKeyType) ->
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP2), <<"blocks">> => []}
                 ]
-                %%                ,
-                %%                attempts = 600,
-                %%                timeout = timer:minutes(10)
             }
         }
     ).
@@ -492,6 +496,59 @@ eviction_should_fail_when_evicting_provider_modified_file_replica(Config, Type, 
         }
     ).
 
+quota_decreased_after_eviction(Config, Type, FileKeyType) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SpaceId = ?config(?SPACE_ID_KEY, Config),
+    Config2 = transfers_test_mechanism:run_test(
+        Config, #transfer_test_spec{
+            setup = #setup{
+                setup_node = WorkerP1,
+                assertion_nodes = [WorkerP2],
+                files_structure = [{0, 1}],
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
+                replicate_to_nodes = [WorkerP2],
+                distribution = [
+                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP2), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ]
+            },
+            scenario = undefined,
+            expected = undefined
+        }
+    ),
+    ?assertQuota(WorkerP2, SpaceId, ?DEFAULT_SIZE),
+
+    transfers_test_mechanism:run_test(
+        Config2, #transfer_test_spec{
+            setup = undefined,
+            scenario = #scenario{
+                type = Type,
+                file_key_type = FileKeyType,
+                schedule_node = WorkerP1,
+                evicting_nodes = [WorkerP2],
+                function = fun transfers_test_mechanism:evict_each_file_replica_separately/2
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    replication_status => skipped,
+                    eviction_status => completed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+                    evicting_provider => transfers_test_utils:provider_id(WorkerP2),
+                    files_to_process => 1,
+                    files_processed => 1,
+                    files_replicated => 0,
+                    bytes_replicated => 0,
+                    files_evicted => 1
+                },
+                distribution = [
+                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP2), <<"blocks">> => []}
+                ],
+                assertion_nodes = [WorkerP1, WorkerP2]
+            }
+        }
+    ),
+    ?assertQuota(WorkerP2, SpaceId, 0).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -527,6 +584,9 @@ init_per_testcase(not_synced_file_should_not_be_replicated, Config) ->
         {error, not_found}
     end),
     init_per_testcase(all, Config);
+
+init_per_testcase(quota_decreased_after_eviction, Config) ->
+    init_per_testcase(all, [{?SPACE_ID_KEY, <<"space3">>} | Config]);
 
 init_per_testcase(_Case, Config) ->
     ct:timetrap(timer:minutes(10)),

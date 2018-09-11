@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module contains tests of replication jobs, scheduled via REST.
+%%% This module contains tests of replica migration jobs, scheduled via LFM.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(replica_migration_transfers_lfm_test_SUITE).
