@@ -488,12 +488,12 @@ replicate_100_files_in_one_transfer(Config, Type, FileKeyType) ->
 
 replication_should_succeed_when_there_is_enough_space_for_file(Config, Type, FileKeyType) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-
+    Config2 = [{space_id, <<"space3">>} | Config],
     Support = transfers_test_utils:get_space_support(WorkerP2, ?SPACE_ID),
     transfers_test_utils:mock_space_occupancy(WorkerP2, ?SPACE_ID, Support - ?DEFAULT_SIZE),
 
     transfers_test_mechanism:run_test(
-        Config, #transfer_test_spec{
+        Config2, #transfer_test_spec{
             setup = #setup{
                 setup_node = WorkerP1,
                 assertion_nodes = [WorkerP2],
@@ -612,8 +612,8 @@ replicate_to_missing_provider(Config, Type, FileKeyType) ->
 
 replicate_to_not_supporting_provider(Config, Type, FileKeyType) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    Config2 = [{space_id, <<"space2">>} | Config],
     % space2 is supported only by P1
+    Config2 = [{space_id, <<"space2">>} | Config],
     transfers_test_mechanism:run_test(
         Config2, #transfer_test_spec{
             setup = #setup{

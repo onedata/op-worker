@@ -395,31 +395,10 @@ init_per_suite(Config) ->
         | Config
     ].
 
-init_per_testcase(not_synced_file_should_not_be_replicated, Config) ->
-    [WorkerP2 | _] = ?config(op_worker_nodes, Config),
-    ok = test_utils:mock_new(WorkerP2, sync_req),
-    ok = test_utils:mock_expect(WorkerP2, sync_req, replicate_file, fun(_, _, _, _) ->
-        {error, not_found}
-    end),
-    init_per_testcase(all, Config);
-
 init_per_testcase(_Case, Config) ->
     ct:timetrap(timer:minutes(10)),
     lfm_proxy:init(Config),
     [{space_id, ?SPACE_ID} | Config].
-
-end_per_testcase(not_synced_file_should_not_be_replicated, Config) ->
-    [WorkerP2 | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(WorkerP2, sync_req),
-    end_per_testcase(all, Config);
-
-end_per_testcase(Case, Config) when
-    Case =:= replication_should_succeed_when_there_is_enough_space_for_file;
-    Case =:= replication_should_fail_when_space_is_full
-    ->
-    [WorkerP2 | _] = ?config(op_worker_nodes, Config),
-    transfers_test_utils:unmock_space_occupancy(WorkerP2, ?SPACE_ID),
-    end_per_testcase(all, Config);
 
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
