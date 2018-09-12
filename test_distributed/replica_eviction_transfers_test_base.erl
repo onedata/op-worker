@@ -546,7 +546,8 @@ quota_decreased_after_eviction(Config, Type, FileKeyType) ->
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP2), <<"blocks">> => []}
                 ],
-                assertion_nodes = [WorkerP1, WorkerP2]
+                assertion_nodes = [WorkerP1, WorkerP2],
+                attempts = 120
             }
         }
     ),
