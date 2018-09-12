@@ -333,7 +333,8 @@ evict_100_files_each_file_separately(Config, Type, FileKeyType) ->
                 distribution = [
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP2), <<"blocks">> => []}
-                ]
+                ],
+            attempts = 120
             }
         }
     ).
@@ -499,6 +500,7 @@ eviction_should_fail_when_evicting_provider_modified_file_replica(Config, Type, 
 quota_decreased_after_eviction(Config, Type, FileKeyType) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SpaceId = ?config(?SPACE_ID_KEY, Config),
+    ct:pal("SpaceId: ~p", [SpaceId]),
     Config2 = transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{
@@ -591,7 +593,12 @@ init_per_testcase(quota_decreased_after_eviction, Config) ->
 init_per_testcase(_Case, Config) ->
     ct:timetrap(timer:minutes(10)),
     lfm_proxy:init(Config),
-    [{space_id, ?SPACE_ID} | Config].
+    case ?config(?SPACE_ID_KEY, Config) of
+        undefined ->
+            [{?SPACE_ID_KEY, ?SPACE_ID} | Config];
+        _ ->
+            Config
+    end.
 
 end_per_testcase(not_synced_file_should_not_be_replicated, Config) ->
     [WorkerP2 | _] = ?config(op_worker_nodes, Config),

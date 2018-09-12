@@ -95,10 +95,10 @@ fail_to_evict_file_replica_without_permissions(Config) ->
     replica_eviction_transfers_test_base:fail_to_evict_file_replica_without_permissions(Config, lfm, path).
 
 eviction_should_succeed_when_remote_provider_modified_file_replica(Config) ->
-    replica_eviction_transfers_test_base:eviction_should_succeed_when_remote_provider_modified_file_replica(Config, rest, path).
+    replica_eviction_transfers_test_base:eviction_should_succeed_when_remote_provider_modified_file_replica(Config, lfm, path).
 
 eviction_should_fail_when_evicting_provider_modified_file_replica(Config) ->
-    replica_eviction_transfers_test_base:eviction_should_fail_when_evicting_provider_modified_file_replica(Config, rest, path).
+    replica_eviction_transfers_test_base:eviction_should_fail_when_evicting_provider_modified_file_replica(Config, lfm, path).
 
 quota_decreased_after_eviction(Config) ->
     replica_eviction_transfers_test_base:quota_decreased_after_eviction(Config, lfm, path).
