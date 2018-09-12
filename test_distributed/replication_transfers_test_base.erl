@@ -787,6 +787,7 @@ many_simultaneous_failed_transfers(Config, Type, FileKeyType) ->
                     mth_hist => ?MONTH_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0})
                 },
                 assertion_nodes = [WorkerP2],
+                timeout = timer:minutes(10),
                 attempts = 600
             }
         }
@@ -828,7 +829,7 @@ init_per_testcase(not_synced_file_should_not_be_replicated, Config) ->
     init_per_testcase(all, Config);
 
 init_per_testcase(_Case, Config) ->
-    ct:timetrap(timer:minutes(10)),
+    ct:timetrap(timer:minutes(20)),
     lfm_proxy:init(Config),
     [{space_id, ?SPACE_ID} | Config].
 

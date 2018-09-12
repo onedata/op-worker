@@ -502,12 +502,6 @@ await_countdown(Refs, DataMap, Timetrap) ->
                     Refs2 = sets:del_element(Ref, Refs),
                     DataMap2 = DataMap#{Ref => Data},
                     await_countdown(Refs2, DataMap2, Timetrap)
-%%                    case sets:size(Refs2) of
-%%                        0 ->
-%%                            DataMap2;
-%%                        _ ->
-%%                            await_countdown(Refs2, DataMap2, Timetrap)
-%%                    end
             after
                 Timetrap ->
                     throw(?TEST_TIMEOUT(?FUNCTION_NAME))
