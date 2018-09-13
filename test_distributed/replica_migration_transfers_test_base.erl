@@ -90,7 +90,7 @@ migrate_tree_of_empty_dirs(Config, Type, FileKeyType) ->
                 schedule_node = WorkerP1,
                 evicting_nodes = [WorkerP1],
                 replicating_nodes = [WorkerP2],
-                function = fun transfers_test_mechanism:migrate_each_file_replica_separately/2
+                function = fun transfers_test_mechanism:migrate_root_directory/2
             },
             expected = #expected{
                 expected_transfer = #{
@@ -337,8 +337,6 @@ migrate_100_files_each_file_separately(Config, Type, FileKeyType) ->
 
 fail_to_migrate_file_replica_without_permissions(Config, Type, FileKeyType) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    tracer:start(WorkerP1),
-    tracer:trace_calls(replica_eviction_req, schedule_replica_eviction),
     transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{

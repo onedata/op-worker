@@ -303,7 +303,7 @@ evict_100_files_each_file_separately(Config, Type, FileKeyType) ->
             setup = #setup{
                 setup_node = WorkerP1,
                 assertion_nodes = [WorkerP2],
-                files_structure = [{0, 10}],
+                files_structure = [{0, 100}],
                 root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
                 replicate_to_nodes = [WorkerP2],
                 distribution = [
@@ -343,8 +343,6 @@ evict_100_files_each_file_separately(Config, Type, FileKeyType) ->
 
 fail_to_evict_file_replica_without_permissions(Config, Type, FileKeyType) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    tracer:start(WorkerP1),
-    tracer:trace_calls(replica_eviction_req, schedule_replica_eviction),
     transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{

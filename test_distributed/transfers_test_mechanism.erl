@@ -289,7 +289,7 @@ migrate_each_file_replica_separately(Config, #scenario{
                     EvictingProviderId,  User, FileKey, Config, Type, ReplicatingProviderId),
                 {EvictingNode, Tid, Guid, Path}
             end, FilesGuidsAndPaths)
-              end, EvictingNodes)
+        end, EvictingNodes)
     end, ReplicatingNodes),
 
     update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
