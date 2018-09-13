@@ -787,8 +787,8 @@ many_simultaneous_failed_transfers(Config, Type, FileKeyType) ->
                     mth_hist => ?MONTH_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0})
                 },
                 assertion_nodes = [WorkerP2],
-                timeout = timer:minutes(10),
-                attempts = 600
+                timeout = timer:minutes(15),
+                attempts = 900
             }
         }
     ).
