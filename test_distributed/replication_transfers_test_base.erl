@@ -829,7 +829,7 @@ init_per_testcase(not_synced_file_should_not_be_replicated, Config) ->
     init_per_testcase(all, Config);
 
 init_per_testcase(_Case, Config) ->
-    ct:timetrap(timer:minutes(20)),
+    ct:timetrap(timer:minutes(60)),
     lfm_proxy:init(Config),
     [{space_id, ?SPACE_ID} | Config].
 
