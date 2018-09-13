@@ -290,7 +290,8 @@ evict_100_files_in_one_request(Config, Type, FileKeyType) ->
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP2), <<"blocks">> => []}
                 ],
-                attempts = 120
+                attempts = 600,
+                timeout = timer:minutes(10)
             }
         }
     ).
@@ -334,7 +335,8 @@ evict_100_files_each_file_separately(Config, Type, FileKeyType) ->
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP2), <<"blocks">> => []}
                 ],
-            attempts = 120
+                attempts = 600,
+                timeout = timer:minutes(10)
             }
         }
     ).

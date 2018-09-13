@@ -282,7 +282,8 @@ migrate_100_files_in_one_request(Config, Type, FileKeyType) ->
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP2), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
                 assertion_nodes = [WorkerP1, WorkerP2],
-                attempts = 120
+                attempts = 600,
+                timeout = timer:minutes(10)
             }
         }
     ).
