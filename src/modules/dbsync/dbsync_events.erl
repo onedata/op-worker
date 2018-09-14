@@ -49,20 +49,11 @@ change_replicated(SpaceId, Change) ->
 
 change_replicated_internal(SpaceId, #document{
     key = FileUuid,
-    value = #file_meta{deleted = Del1},
+    value = FileMeta = #file_meta{deleted = Del1},
     deleted = Del2
 } = FileDoc) when Del1 or Del2 ->
     ?debug("change_replicated_internal: deleted file_meta ~p", [FileUuid]),
-    Ctx = datastore_model_default:get_ctx(file_meta),
-
-    Proceed = case datastore_model:get(Ctx, FileUuid) of
-        {error, not_found} ->
-            true;
-        {ok, #document{value = #file_meta{deleted = Del}}} ->
-            Del
-    end,
-
-    case Proceed of
+    case FileMeta#file_meta.deleted of
         true ->
             FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
             fslogic_deletion_worker:request_remote_deletion(FileCtx),

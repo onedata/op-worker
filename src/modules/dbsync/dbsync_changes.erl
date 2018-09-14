@@ -78,12 +78,15 @@ apply(Doc = #document{value = Value, scope = SpaceId, seq = Seq}) ->
     try
         DocToHandle = case Value of
             #links_forest{model = Model, key = Key} ->
+            % link documents never have conflicts, therefore we return original doc
                 links_save(Model, Key, Doc),
                 Doc;
             #links_node{model = Model, key = Key} ->
+            % link documents never have conflicts, therefore we return original doc
                 links_save(Model, Key, Doc),
                 Doc;
             #links_mask{} ->
+            % link documents never have conflicts, therefore we return original doc
                 links_delete(Doc),
                 Doc;
             _ ->
