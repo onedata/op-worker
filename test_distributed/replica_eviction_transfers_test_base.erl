@@ -584,7 +584,7 @@ init_per_testcase(quota_decreased_after_eviction, Config) ->
     init_per_testcase(all, [{?SPACE_ID_KEY, <<"space3">>} | Config]);
 
 init_per_testcase(_Case, Config) ->
-    ct:timetrap(timer:minutes(10)),
+    ct:timetrap(timer:minutes(60)),
     lfm_proxy:init(Config),
     case ?config(?SPACE_ID_KEY, Config) of
         undefined ->

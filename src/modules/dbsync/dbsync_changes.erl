@@ -76,29 +76,33 @@ apply_batch(Docs, BatchRange) ->
 -spec apply(datastore:doc()) -> ok | {error, datastore:seq(), term()}.
 apply(Doc = #document{value = Value, scope = SpaceId, seq = Seq}) ->
     try
-        case Value of
+        DocToHandle = case Value of
             #links_forest{model = Model, key = Key} ->
-                links_save(Model, Key, Doc);
+                links_save(Model, Key, Doc),
+                Doc;
             #links_node{model = Model, key = Key} ->
-                links_save(Model, Key, Doc);
+                links_save(Model, Key, Doc),
+                Doc;
             #links_mask{} ->
-                links_delete(Doc);
+                links_delete(Doc),
+                Doc;
             _ ->
                 Model = element(1, Value),
                 Ctx = datastore_model_default:get_ctx(Model),
                 Ctx2 = Ctx#{sync_change => true, hooks_disabled => true},
-                {ok, _} = datastore_model:save(Ctx2, Doc),
+                {ok, Doc2} = datastore_model:save(Ctx2, Doc),
 
                 case Value of
                     #file_location{} ->
                         fslogic_location_cache:cache_location(Doc);
                     _ ->
                         ok
-                end
+                end,
+                Doc2
         end,
 
         try
-            dbsync_events:change_replicated(SpaceId, Doc)
+            dbsync_events:change_replicated(SpaceId, DocToHandle)
         catch
             _:Reason_ ->
                 ?error_stacktrace("Change ~p post-processing failed due "
