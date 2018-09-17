@@ -228,7 +228,6 @@ get_xattr(StorageFileCtx = #storage_file_ctx{handle = SFMHandle}, XattrName) ->
 %%% Internal functions
 %%%===================================================================
 
-
 %%-------------------------------------------------------------------
 %% @private
 %% @doc

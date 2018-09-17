@@ -449,7 +449,7 @@ handle_aborting_replica_eviction(_) ->
 %%--------------------------------------------------------------------
 -spec handle_dequeued_transfer(transfer:doc()) -> ok.
 handle_dequeued_transfer(#document{key = TransferId, value = #transfer{
-    scheduling_provider_id = SchedulingProviderId
+    scheduling_provider = SchedulingProviderId
 }}) ->
     ?run_if_is_self(SchedulingProviderId, fun() ->
         transfer:mark_dequeued(TransferId)
