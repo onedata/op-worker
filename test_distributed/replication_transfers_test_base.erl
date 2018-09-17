@@ -224,10 +224,7 @@ replicate_big_file(Config, Type, FileKeyType) ->
                     files_to_process => 1,
                     files_processed => 1,
                     files_replicated => 1,
-                    bytes_replicated => Size,
-                    hr_hist => ?HOUR_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => Size}),
-                    dy_hist => ?DAY_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => Size}),
-                    mth_hist => ?MONTH_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => Size})
+                    bytes_replicated => Size
                 },
                 distribution = [
                     #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, Size]]},
