@@ -42,7 +42,9 @@
     random_read_test_base/1,
     random_read_test_base/3,
     synchronizer_test_base/1,
-    synchronize_stress_test_base/2
+    synchronize_stress_test_base/2,
+    cancel_synchronizations_for_session_with_mocked_rtransfer_test_base/1,
+    cancel_synchronizations_for_session_test_base/1
 ]).
 -export([init_env/1, teardown_env/1]).
 
@@ -52,6 +54,8 @@
 -export([extend_config/4]).
 -export([verify/2, verify_workers/2]).
 -export([sync_blocks/4]).
+-export([request_synchronization/3]).
+-export([async_synchronize/3]).
 
 -define(match(Expect, Expr, Attempts),
     case Attempts of
@@ -1443,6 +1447,145 @@ echo_and_delete_file_loop_test_base(Config0, IterationsNum, User) ->
     end, lists:seq(1, IterationsNum)),
     ok.
 
+-include_lib("ctool/include/logging.hrl").
+
+cancel_synchronizations_for_session_with_mocked_rtransfer_test_base(Config0) ->
+    ct:timetrap({minutes, 240}),
+
+    User1 = <<"user1">>,
+    Config = extend_config(Config0, User1, {2,0,0,1}, 1),
+    BlockSize = ?config(block_size, Config),
+    BlocksCount = ?config(block_count, Config),
+    UserCount = ?config(user_count, Config),
+    BlockSizeBytes = BlockSize * 1024 * 1024,
+    
+    Users = [<<"user", Num>> || Num <- lists:seq($1, $0 + UserCount)],
+
+    [Worker1, Worker2] = ?config(op_worker_nodes, Config),
+    SessId = fun(User, W) ->
+        ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config)
+    end,
+
+    SpaceName = ?config(space_name, Config),
+    FilePath = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
+    FileSize = BlocksCount * BlockSizeBytes,
+
+    ?assertMatch({ok, _}, lfm_proxy:create(Worker2, SessId(User1, Worker2),
+        FilePath, 8#755)
+    ),
+    ?assertMatch(ok, lfm_proxy:truncate(Worker2, SessId(User1, Worker2),
+        {path, FilePath}, FileSize)
+    ),
+
+    {ok, #file_attr{guid = GUID}} =
+        ?assertMatch({ok, #file_attr{size = FileSize}},
+            lfm_proxy:stat(Worker1, SessId(User1, Worker1), {path, FilePath}), 60
+        ),
+    FileCtx = file_ctx:new_by_guid(GUID),
+
+    ct:pal("File created"),
+
+    lists:foreach(fun(Num) ->
+        User = lists:nth(rand:uniform(length(Users)), Users),
+        Block = #file_block{offset = Num * BlockSizeBytes, size = BlockSizeBytes},
+        case Num rem 1000 of
+            0 -> ct:pal("REQ: ~p", [Num]);
+            _ -> ok
+        end,
+        request_synchronization(Worker1, User, SessId, FileCtx, Block)
+    end, lists:seq(0, BlocksCount - 1)),
+
+    timer:sleep(timer:seconds(2)),
+    ct:pal("Transfers started"),
+
+    Start = erlang:monotonic_time(millisecond),
+    Times = lists:map(fun(User) ->
+        SessionId = SessId(User, Worker1),
+        Start1 = erlang:monotonic_time(millisecond),
+        cancel_transfers_for_session_and_file_sync(Worker1, SessionId, FileCtx),
+        End1 = erlang:monotonic_time(millisecond),
+        End1-Start1
+    end, Users),
+    End = erlang:monotonic_time(millisecond),
+
+    ct:pal("Transfers canceled"),
+    
+    ct:pal("File size: ~p~n"
+           "Block count: ~p~n"
+           "Number of users: ~p~n"
+           "Total time[ms]: ~p~n"
+           "Average time per user[ms]: ~p", 
+        [FileSize, BlocksCount, UserCount, End-Start, lists:sum(Times)/length(Times)]).
+
+cancel_synchronizations_for_session_test_base(Config0) ->
+    ct:timetrap({minutes, 240}),
+
+    User1 = <<"user1">>,
+    Config = extend_config(Config0, User1, {2,0,0,1}, 1),
+    BlockSize = ?config(block_size, Config),
+    BlocksCount = ?config(block_count, Config),
+    UserCount = ?config(user_count, Config),
+    BlockSizeBytes = BlockSize * 1024 * 1024,
+
+    Users = [<<"user", Num>> || Num <- lists:seq($1, $0 + UserCount)],
+
+    [Worker1, Worker2] = ?config(op_worker_nodes, Config),
+    SessId = fun(User, W) ->
+        ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config)
+    end,
+
+    SpaceName = ?config(space_name, Config),
+    FilePath = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
+    FileSize = BlocksCount * BlockSizeBytes,
+
+    ?assertMatch({ok, _}, lfm_proxy:create(Worker2, SessId(User1, Worker2),
+        FilePath, 8#755)
+    ),
+    ?assertMatch(ok, lfm_proxy:truncate(Worker2, SessId(User1, Worker2),
+        {path, FilePath}, FileSize)
+    ),
+
+    {ok, #file_attr{guid = GUID}} =
+        ?assertMatch({ok, #file_attr{size = FileSize}},
+            lfm_proxy:stat(Worker1, SessId(User1, Worker1), {path, FilePath}), 60
+        ),
+    FileCtx = file_ctx:new_by_guid(GUID),
+
+    ct:pal("File created"),
+
+    Promises = lists:map(fun(Num) ->
+        User = lists:nth(rand:uniform(length(Users)), Users),
+        Block = #file_block{offset = Num * BlockSizeBytes, size = BlockSizeBytes},
+        case Num rem 1000 of
+            0 -> ct:pal("REQ: ~p", [Num]);
+            _ -> ok
+        end,
+        async_synchronize(Worker1, User, SessId, FileCtx, Block)
+     end, lists:seq(0, BlocksCount - 1)),
+    
+    timer:sleep(timer:seconds(5)),
+    ct:pal("Transfers started"),
+
+    Start = erlang:monotonic_time(millisecond),
+    lists:foreach(fun(User) ->
+        SessionId = SessId(User, Worker1),
+        cancel_transfers_for_session_and_file(Worker1, SessionId, FileCtx)
+    end, Users),
+
+    ct:pal("Transfers canceled"),
+    
+    lists:foreach(fun(Promise) ->
+        ?assertMatch({error, cancelled}, rpc:yield(Promise))
+    end, Promises),
+    End = erlang:monotonic_time(millisecond),
+
+    
+    ct:pal("File size: ~p~n"
+    "Block count: ~p~n"
+    "Number of users: ~p~n"
+    "Total time[s]: ~p~n",
+        [FileSize, BlocksCount, UserCount, (End-Start)/1000]).
+
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -1479,6 +1622,38 @@ teardown_env(Config) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+async_synchronize(SessionId, FileCtx, Block) ->
+    UserCtx = user_ctx:new(SessionId),
+    replica_synchronizer:synchronize(UserCtx, FileCtx, Block, false, undefined, 96).
+
+async_synchronize(Worker, User, SessId, FileCtx, Block) ->
+    rpc:async_call(Worker, ?MODULE, async_synchronize, [
+        SessId(User, Worker), FileCtx, Block
+    ]).
+
+request_synchronization(SessionID, FileCtx, Block) ->
+    UserCtx = user_ctx:new(SessionID),
+    replica_synchronizer:request_synchronization(UserCtx, FileCtx, Block,
+        false, undefined, 96
+    ).
+
+request_synchronization(Worker, User, SessId, FileCtx, Block) ->
+    rpc:call(Worker, ?MODULE, request_synchronization, [
+        SessId(User, Worker), FileCtx, Block
+    ]).
+
+cancel_transfers_for_session_and_file(Node, SessionId, FileCtx) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    rpc:call(Node, replica_synchronizer, cancel_transfers_of_session, [
+        FileUuid, SessionId
+    ]).
+
+cancel_transfers_for_session_and_file_sync(Node, SessionId, FileCtx) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    rpc:call(Node, replica_synchronizer, cancel_transfers_of_session_sync, [
+        FileUuid, SessionId
+    ]).
 
 mock_get_num_calls(Nodes, Module, Fun, Args) ->
     lists:map(fun(Node) ->

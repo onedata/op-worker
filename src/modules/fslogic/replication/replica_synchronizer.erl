@@ -87,7 +87,7 @@
 -export([
     synchronize/6, request_synchronization/6, request_synchronization/7,
     update_replica/4, force_flush_events/1,
-    cancel/1, cancel_transfers_of_session/2,
+    cancel/1, cancel_transfers_of_session/2, cancel_transfers_of_session_sync/2,
     terminate_all/0
 ]).
 % gen_server callbacks
@@ -183,12 +183,21 @@ cancel(TransferId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Asynchronously cancels a transfers associated with specified session and file.
+%% Asynchronously cancels transfers associated with specified session and file.
 %% @end
 %%--------------------------------------------------------------------
 -spec cancel_transfers_of_session(file_meta:uuid(), session:id()) -> ok.
 cancel_transfers_of_session(FileUuid, SessionId) ->
     apply_if_alive(FileUuid, {async, {cancel_transfers_of_session, SessionId}}).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Synchronously cancels transfers associated with specified session and file.
+%% @end
+%%--------------------------------------------------------------------
+-spec cancel_transfers_of_session_sync(file_meta:uuid(), session:id()) -> ok.
+cancel_transfers_of_session_sync(FileUuid, SessionId) ->
+    apply_if_alive(FileUuid, {cancel_transfers_of_session, SessionId}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -531,7 +540,11 @@ handle_call(?FLUSH_EVENTS, _From, State) ->
 
 handle_call({apply, Fun}, _From, State) ->
     Ans = Fun(),
-    {reply, Ans, State, ?DIE_AFTER}.
+    {reply, Ans, State, ?DIE_AFTER};
+
+handle_call({cancel_transfers_of_session, SessionId}, _From, State) ->
+    NewState = cancel_session(SessionId, State),
+    {reply, ok, NewState, ?DIE_AFTER}.
 
 handle_cast({cancel, TransferId}, State) ->
     try
@@ -544,16 +557,8 @@ handle_cast({cancel, TransferId}, State) ->
     end;
 
 handle_cast({cancel_transfers_of_session, SessionId}, State) ->
-    try
-        NewState = cancel_session(SessionId, State),
-        {noreply, NewState, ?DIE_AFTER}
-    catch
-        _:Reason ->
-            ?error_stacktrace("Unable to cancel transfers of ~p: ~p", [
-                SessionId, Reason
-            ]),
-            {noreply, State, ?DIE_AFTER}
-    end;
+    NewState = cancel_session(SessionId, State),
+    {noreply, NewState, ?DIE_AFTER};
 
 handle_cast(Msg, State) ->
     ?log_bad_request(Msg),
@@ -802,22 +807,31 @@ cancel_transfer_id(TransferId, State) ->
     From = maps:get(TransferId, State#state.transfer_id_to_from),
     cancel_froms([From], State).
 
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% Cancels a transfers by SessionId.
 %% @end
 %%--------------------------------------------------------------------
--spec cancel_session(session:id(), #state{}) -> #state{}.
 cancel_session(SessionId, State) ->
-    case maps:take(SessionId, State#state.session_to_froms) of
-        error ->
-            State;
-        {Froms, STFs} ->
-            cancel_froms(sets:to_list(Froms), State#state{
-                session_to_froms = STFs
-            })
+    try
+        case maps:take(SessionId, State#state.session_to_froms) of
+            error ->
+                State;
+            {Froms, STFs} ->
+                cancel_froms(sets:to_list(Froms), State#state{
+                    session_to_froms = STFs
+                })
+        end
+    catch
+        _:Reason ->
+            ?error_stacktrace("Unable to cancel transfers of ~p: ~p", [
+                SessionId, Reason
+            ]),
+            State
     end.
+
 
 %%--------------------------------------------------------------------
 %% @private
