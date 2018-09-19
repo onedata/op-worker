@@ -31,6 +31,7 @@ routes() ->
     [
         {"/api/v3/oneprovider/attributes/[...]", #{handler => attributes}},
         {"/api/v3/oneprovider/changes/metadata/:sid", #{handler => changes}},
+        {"/api/v3/oneprovider/debug/transfers_mock", #{handler => transfers_mock}},
         {"/api/v3/oneprovider/files/[...]", #{handler => files}},
         {"/api/v3/oneprovider/index", #{handler => index_collection}},
         {"/api/v3/oneprovider/index/:id", #{handler => index}},
