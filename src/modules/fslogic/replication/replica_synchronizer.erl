@@ -640,6 +640,10 @@ handle_info({FailedRef, complete, {error, disconnected}}, State) ->
             {noreply, State3}
     end;
 
+handle_info({Ref, complete, {error, {connection, <<"canceled">>}}}, State) ->
+    ?debug("Transfer ~p cancelled", [Ref]),
+    {noreply, State, ?DIE_AFTER};
+
 handle_info({Ref, complete, ErrorStatus}, State) ->
     ?error("Transfer ~p failed: ~p", [Ref, ErrorStatus]),
     {_Block, _Priority, AffectedFroms, FinishedFroms, State1} =
@@ -831,20 +835,25 @@ cancel_froms(Froms, State = #state{
 }) ->
     AffectedRefs = lists:flatmap(fun(From) -> maps:get(From, FTRs, []) end, Froms),
 
-    {RTFs2, OrphanedRefs} = lists:foldl(fun(Ref, {TmpRTFs, OrphanedRefsAcc}) ->
-        case maps:get(Ref, TmpRTFs, []) -- Froms of
-            [] ->
-                {maps:remove(Ref, TmpRTFs), [Ref | OrphanedRefsAcc]};
-            RemainingFroms ->
-                {TmpRTFs#{Ref => RemainingFroms}, OrphanedRefsAcc}
-        end
-    end, {RTFs, []}, AffectedRefs),
+    FromsSet = gb_sets:from_list(Froms),
 
-    [rtransfer_link:cancel(Ref) || Ref <- OrphanedRefs],
-    [gen_server2:reply(From, {error, cancelled}) || From <- Froms],
+    {RTFs2, OrphanedRefs} = maps:fold(fun(Ref, RefFroms, {TmpRTFs, TmpRefs}) ->
+        RemainingFroms = gb_sets:subtract(gb_sets:from_list(RefFroms), FromsSet),
+        case gb_sets:is_empty(RemainingFroms) of
+            true ->
+                rtransfer_link:cancel(Ref),
+                {maps:remove(Ref, TmpRTFs), sets:add_element(Ref, TmpRefs)};
+            false ->
+                {TmpRTFs#{Ref => gb_sets:to_list(RemainingFroms)}, TmpRefs}
+        end
+    end, {RTFs, sets:new()}, maps:with(AffectedRefs, RTFs)),
+
+    lists:foreach(fun(From) ->
+        gen_server2:reply(From, {error, cancelled})
+    end, Froms),
 
     InProgress2 = lists:filter(fun({_Block, Ref, _Priority}) ->
-        not lists:member(Ref, OrphanedRefs)
+        not sets:is_element(Ref, OrphanedRefs)
     end, InProgress),
 
     {_CancelledBlocks, _ExcludeSessions, _CancelledTransfers, State2} =
