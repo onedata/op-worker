@@ -143,7 +143,8 @@ stream_loop(Req, State = #{timeout := Timeout, ref := Ref, space_id := SpaceId})
                 send_change(Req, Change, SpaceId)
             catch
                 _:E ->
-                    ?error_stacktrace("Cannot stream change of ~p due to: ~p", [Change, E])
+                    % Can appear when document connected with deleted file_meta appears
+                    ?debug_stacktrace("Cannot stream change of ~p due to: ~p", [Change, E])
             end,
             stream_loop(Req, State)
     after
@@ -209,7 +210,7 @@ prepare_response(#change{seq = Seq, doc = FileDoc = #document{
             TimesValue
         catch
             _:Error0 ->
-                ?error("Cannot fetch times for changes, error: ~p", [Error0]),
+                ?debug("Cannot fetch times for changes, error: ~p", [Error0]),
                 #times{}
         end,
     Guid =
@@ -218,7 +219,7 @@ prepare_response(#change{seq = Seq, doc = FileDoc = #document{
             Val
         catch
             _:Error1 ->
-                ?error("Cannot fetch guid for changes, error: ~p", [Error1]),
+                ?debug("Cannot fetch guid for changes, error: ~p", [Error1]),
                 <<>>
         end,
     Path =
@@ -226,7 +227,7 @@ prepare_response(#change{seq = Seq, doc = FileDoc = #document{
             fslogic_uuid:uuid_to_path(?ROOT_SESS_ID, Uuid)
         catch
             _:Error2 ->
-                ?error("Cannot fetch Path for changes, error: ~p", [Error2]),
+                ?debug("Cannot fetch Path for changes, error: ~p", [Error2]),
                 <<>>
         end,
     Xattrs =
@@ -239,7 +240,7 @@ prepare_response(#change{seq = Seq, doc = FileDoc = #document{
             end
         catch
             _:Error3 ->
-                ?error("Cannot fetch xattrs for changes, error: ~p", [Error3]),
+                ?debug("Cannot fetch xattrs for changes, error: ~p", [Error3]),
                 <<"fetching_error">>
         end,
     Size =
@@ -249,7 +250,7 @@ prepare_response(#change{seq = Seq, doc = FileDoc = #document{
             FileSize
         catch
             _:Error4 ->
-                ?error("Cannot fetch size for changes, error: ~p", [Error4]),
+                ?debug("Cannot fetch size for changes, error: ~p", [Error4]),
                 <<"fetching_error">>
         end,
 
@@ -302,6 +303,10 @@ notify(Pid, Ref, {ok, Docs}) when is_list(Docs) ->
     lists:foreach(fun(Doc) ->
         notify(Pid, Ref, {ok, Doc})
     end, Docs);
+notify(Pid, Ref, {error, _Seq, shutdown = Reason}) ->
+    ?debug("Changes stream terminated due to: ~p", [Reason]),
+    Pid ! {Ref, stream_ended},
+    ok;
 notify(Pid, Ref, {error, _Seq, Reason}) ->
     ?error("Changes stream terminated abnormally due to: ~p", [Reason]),
     Pid ! {Ref, stream_ended},

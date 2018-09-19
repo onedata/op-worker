@@ -12,10 +12,6 @@
 -ifndef(GUI_PATHS_HRL).
 -define(GUI_PATHS_HRL, 1).
 
-%% Endpoints used to get Onezone or Oneprovider version
--define(PROVIDER_VERSION_PATH, "/version").
--define(ZONE_VERSION_PATH, "/version").
-
 %% Endpoints used to get current configuration of services
 -define(PROVIDER_CONFIGURATION_PATH, "/configuration").
 -define(ZONE_CONFIGURATION_PATH, "/configuration").
