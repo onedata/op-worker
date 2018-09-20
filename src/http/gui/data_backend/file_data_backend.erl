@@ -405,7 +405,8 @@ file_record(ModelType, SessionId, ResId, ChildrenFromCache, ChildrenLimit) ->
                 {<<"filePermission">>, FileAcl},
                 {<<"share">>, Share},
                 {<<"provider">>, ProviderId},
-                {<<"fileProperty">>, Metadata}
+                {<<"fileProperty">>, Metadata},
+                {<<"cdmiObjectId">>, cdmi_id:guid_to_objectid(FileId)}
             ],
             {ok, Res}
     end.
