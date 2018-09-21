@@ -296,7 +296,8 @@ import_children(Job = #space_strategy_job{
             FileUuid = file_ctx:get_uuid_const(FileCtx),
             case storage_sync_utils:all_children_imported(DirsJobs, FileUuid) of
                 true ->
-                    storage_sync_info:create_or_update(FileUuid, fun(SSI) ->
+                    {StorageFileId, _} = file_ctx:get_storage_file_id(FileCtx),
+                    storage_sync_info:create_or_update(StorageFileId, fun(SSI) ->
                         {ok, SSI#storage_sync_info{mtime = Mtime}}
                     end, SpaceId);
                 _ ->
@@ -340,9 +341,10 @@ import_children(Job = #space_strategy_job{
     case StrategyType:strategy_merge_result(FilesJobs, FilesResults) of
         ok ->
             FileUuid = file_ctx:get_uuid_const(FileCtx),
+            {StorageFileId, _} = file_ctx:get_storage_file_id(FileCtx),
             case storage_sync_utils:all_children_imported(DirsJobs, FileUuid) of
                 true ->
-                    storage_sync_info:create_or_update(FileUuid,
+                    storage_sync_info:create_or_update(StorageFileId,
                         fun(SSI = #storage_sync_info{children_attrs_hashes = CAH}) ->
                             {ok, SSI#storage_sync_info{
                                 mtime = Mtime,
@@ -350,7 +352,7 @@ import_children(Job = #space_strategy_job{
                             }}
                         end, SpaceId);
                 _ ->
-                    storage_sync_info:create_or_update(FileUuid,
+                    storage_sync_info:create_or_update(StorageFileId,
                         fun(SSI = #storage_sync_info{children_attrs_hashes = CAH}) ->
                             {ok, SSI#storage_sync_info{
                                 children_attrs_hashes = CAH#{BatchKey => BatchHash}
