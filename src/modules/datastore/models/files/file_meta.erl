@@ -810,8 +810,7 @@ is_valid_filename(FileName) when is_binary(FileName) ->
 cleanup(delete, [_, FileUuid], ok) ->
     ok = custom_metadata:delete(FileUuid),
     ok = file_force_proxy:delete(FileUuid),
-    ok = times:delete(FileUuid),
-    ok = storage_sync_info:delete(FileUuid);
+    ok = times:delete(FileUuid);
 cleanup(_, _, Result) ->
     Result.
 

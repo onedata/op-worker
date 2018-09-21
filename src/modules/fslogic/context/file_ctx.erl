@@ -1017,12 +1017,13 @@ get_group_owner(FileCtx) ->
 %%-------------------------------------------------------------------
 -spec get_storage_sync_info(ctx()) -> {storage_sync_info:doc() | undefined, ctx()}.
 get_storage_sync_info(FileCtx = #file_ctx{storage_sync_info = undefined}) ->
-    FileUuid = get_uuid_const(FileCtx),
-    case storage_sync_info:get(FileUuid) of
+    {FilePath, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
+    SpaceId = get_space_id_const(FileCtx2),
+    case storage_sync_info:get(FilePath, SpaceId) of
         {error, _Reason} ->
-            {undefined, FileCtx};
+            {undefined, FileCtx2};
         {ok, StorageSyncInfo} ->
-            {StorageSyncInfo, FileCtx#file_ctx{storage_sync_info = StorageSyncInfo}}
+            {StorageSyncInfo, FileCtx2#file_ctx{storage_sync_info = StorageSyncInfo}}
     end;
 get_storage_sync_info(FileCtx = #file_ctx{storage_sync_info = StorageSyncInfo}) ->
     {StorageSyncInfo, FileCtx}.
