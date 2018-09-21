@@ -485,6 +485,10 @@ unlink(#sfm_handle{
     session_id = SessionId
 }, CurrentSize) ->
     {ok, HelperHandle} = session:get_helper(SessionId, SpaceId, Storage),
+    case storage_sync_info:delete(FileId, SpaceId) of
+        ok -> ok;
+        {error, not_found} -> ok
+    end,
     helpers:unlink(HelperHandle, FileId, CurrentSize).
 
 %%--------------------------------------------------------------------

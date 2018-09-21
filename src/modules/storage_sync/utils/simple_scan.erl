@@ -128,14 +128,26 @@ maybe_import_storage_file(Job = #space_strategy_job{
         space_id := SpaceId,
         storage_id := StorageId
 }}) ->
-    {#statbuf{st_mode = Mode}, StorageFileCtx2} =
+    {#statbuf{st_mode = Mode, st_mtime = StMTime}, StorageFileCtx2} =
         storage_file_ctx:get_stat_buf(StorageFileCtx),
     FileType = file_meta:type(Mode),
     Job2 = space_strategy:update_job_data(storage_file_ctx, StorageFileCtx2, Job),
     case try_to_resolve_child_link(FileName, ParentCtx) of
         {error, not_found} ->
-            {LocalResult, FileCtx} = import_file_safe(Job2, undefined),
-            {LocalResult, FileCtx, Job2};
+            {ParentStorageId, _} = file_ctx:get_storage_file_id(ParentCtx),
+            FileStorageId = filename:join([ParentStorageId, FileName]),
+            case storage_sync_info:get(FileStorageId, SpaceId) of
+                {error, _} ->
+                    {LocalResult, FileCtx} = import_file_safe(Job2, undefined),
+                    {LocalResult, FileCtx, Job2};
+                {ok, #document{value = #storage_sync_info{mtime = LastMTime}}}
+                    when StMTime =:= LastMTime
+                ->
+                    {processed, undefined, Job2};
+                _ ->
+                    {LocalResult, FileCtx} = import_file_safe(Job2, undefined),
+                    {LocalResult, FileCtx, Job2}
+            end;
         {ok, FileUuid} ->
             FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
             FileCtx = file_ctx:new_by_guid(FileGuid),
@@ -195,13 +207,13 @@ import_children(Job = #space_strategy_job{
     FilesToHandleNum = length(FilesJobs) + length(DirsJobs),
     storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, FilesToHandleNum),
     FilesResults = import_regular_subfiles(FilesJobs),
-
+    {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
     case StrategyType:strategy_merge_result(FilesJobs, FilesResults) of
         ok ->
-            FileUuid = file_ctx:get_uuid_const(FileCtx),
+            FileUuid = file_ctx:get_uuid_const(FileCtx2),
             case storage_sync_utils:all_children_imported(DirsJobs, FileUuid) of
                 true ->
-                    storage_sync_info:create_or_update(FileUuid,
+                    storage_sync_info:create_or_update(StorageFileId,
                         fun(SSI = #storage_sync_info{children_attrs_hashes = CAH}) ->
                             {ok, SSI#storage_sync_info{
                                 mtime = Mtime,
@@ -209,7 +221,7 @@ import_children(Job = #space_strategy_job{
                             }}
                         end, SpaceId);
                 _ ->
-                    storage_sync_info:create_or_update(FileUuid,
+                    storage_sync_info:create_or_update(StorageFileId,
                         fun(SSI = #storage_sync_info{children_attrs_hashes = CAH}) ->
                             {ok, SSI#storage_sync_info{
                                 children_attrs_hashes = CAH#{BatchKey => BatchHash}
@@ -378,10 +390,13 @@ import_file(#space_strategy_job{
     {ok, _} = create_times(FileUuid2, MTime, ATime, CTime, SpaceId),
     {ParentPath, _} = file_ctx:get_storage_file_id(ParentCtx),
     CanonicalPath = filename:join([ParentPath, FileName]),
+    FileGuid = fslogic_uuid:uuid_to_guid(FileUuid2, SpaceId),
+    FileCtx = file_ctx:new_by_guid(FileGuid),
+    {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
     case file_meta:type(Mode) of
         ?REGULAR_FILE_TYPE ->
             StatTimestamp = storage_file_ctx:get_stat_timestamp_const(StorageFileCtx4),
-            storage_sync_info:create_or_update(FileUuid2, fun(SSI) ->
+            storage_sync_info:create_or_update(StorageFileId, fun(SSI) ->
                 {ok, SSI#storage_sync_info{
                     mtime = MTime,
                     last_stat = StatTimestamp
@@ -391,16 +406,13 @@ import_file(#space_strategy_job{
         _ ->
             {ok, _} = dir_location:mark_dir_created_on_storage(FileUuid2, SpaceId)
     end,
-    FileGuid = fslogic_uuid:uuid_to_guid(FileUuid2, SpaceId),
-    FileCtx = file_ctx:new_by_guid(FileGuid),
     SyncAcl = maps:get(sync_acl, Args, false),
     case SyncAcl of
         true ->
-            ok = import_nfs4_acl(FileCtx, StorageFileCtx4);
+            ok = import_nfs4_acl(FileCtx2, StorageFileCtx4);
         _ ->
             ok
     end,
-    {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
     ?debug("Import storage file ~p", [{StorageFileId, CanonicalPath}]),
     storage_sync_utils:log_import(StorageFileId, SpaceId),
     {imported, FileCtx2}.
@@ -618,10 +630,7 @@ maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
             % file not replicated and already handled because LastStat > StMtime
             not_updated;
 
-        {undefined, #document{value = #storage_sync_info{
-            mtime = LastMtime,
-            last_stat = LastStat
-        }}} ->
+        {undefined, #document{value = #storage_sync_info{}}} ->
             case (MTime < StMtime) or (Size =/= StSize) of
                 true ->
                     update_file_location(FileCtx4, StSize),
@@ -676,7 +685,8 @@ maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
                     not_updated
             end
     end,
-    storage_sync_info:create_or_update(FileUuid, fun(SSI) ->
+    {StorageFileId, _} = file_ctx:get_storage_file_id(FileCtx4),
+    storage_sync_info:create_or_update(StorageFileId, fun(SSI) ->
         {ok, SSI#storage_sync_info{
             mtime = StMtime,
             last_stat = NewLastStat
