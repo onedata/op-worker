@@ -258,9 +258,9 @@ create_and_get_view(Config) ->
 
     FinalCheck = fun() ->
         try
-            {ok, GuidsBlue} = {ok, [_ | _]} = rpc:call(Worker, indexes, query_view, [ViewId, [{key, <<"blue">>}, {stale, false}]]),
-            {ok, GuidsRed} = rpc:call(Worker, indexes, query_view, [ViewId, [{key, <<"red">>}]]),
-            {ok, GuidsOrange} = rpc:call(Worker, indexes, query_view, [ViewId, [{key, <<"orange">>}]]),
+            {ok, GuidsBlue} = {ok, [_ | _]} = rpc:call(Worker, indexes, query_view_and_filter_values, [ViewId, [{key, <<"blue">>}, {stale, false}]]),
+            {ok, GuidsRed} = rpc:call(Worker, indexes, query_view_and_filter_values, [ViewId, [{key, <<"red">>}]]),
+            {ok, GuidsOrange} = rpc:call(Worker, indexes, query_view_and_filter_values, [ViewId, [{key, <<"orange">>}]]),
 
             true = lists:member(Guid1, GuidsBlue),
             false = lists:member(Guid2, GuidsBlue),

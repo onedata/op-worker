@@ -22,7 +22,7 @@
 
 %% API
 -export([
-    schedule_replica_eviction/4]).
+    schedule_replica_eviction/6]).
 
 %% internal API
 -export([
@@ -45,14 +45,15 @@
 %%--------------------------------------------------------------------
 -spec schedule_replica_eviction(user_ctx:ctx(), file_ctx:ctx(),
     SourceProviderId :: sync_req:provider_id(),
-    MigrationProviderId :: sync_req:provider_id()) -> sync_req:provider_response().
+    MigrationProviderId :: sync_req:provider_id(), sync_req:index_id(),
+    sync_req:query_view_params()) -> sync_req:provider_response().
 schedule_replica_eviction(UserCtx, FileCtx, SourceProviderId,
-    MigrationProviderId
+    MigrationProviderId, IndexId, QueryViewParams
 ) ->
     check_permissions:execute(
         [], %todo VFS-4844
-        [UserCtx, FileCtx, SourceProviderId, MigrationProviderId],
-        fun schedule_replica_eviction_insecure/4).
+        [UserCtx, FileCtx, SourceProviderId, MigrationProviderId, IndexId, QueryViewParams],
+        fun schedule_replica_eviction_insecure/6).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -128,15 +129,16 @@ enqueue_replica_eviction(UserCtx, FileCtx, MigrationProviderId, TransferId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_replica_eviction_insecure(user_ctx:ctx(), file_ctx:ctx(),
-    sync_req:provider_id(), sync_req:provider_id()) -> sync_req:provider_response().
+    sync_req:provider_id(), sync_req:provider_id(),  sync_req:index_id(),
+    sync_req:query_view_params()) -> sync_req:provider_response().
 schedule_replica_eviction_insecure(UserCtx, FileCtx, SourceProviderId,
-    MigrationProviderId
+    MigrationProviderId, IndexId, QueryViewParams
 ) ->
     {FilePath, _} = file_ctx:get_logical_path(FileCtx, UserCtx),
     SessionId = user_ctx:get_session_id(UserCtx),
     FileGuid = file_ctx:get_guid_const(FileCtx),
     {ok, TransferId} = transfer:start(SessionId, FileGuid, FilePath,
-        SourceProviderId, MigrationProviderId, undefined),
+        SourceProviderId, MigrationProviderId, undefined, IndexId, QueryViewParams),
     #provider_response{
         status = #status{code = ?OK},
         provider_response = #scheduled_transfer{

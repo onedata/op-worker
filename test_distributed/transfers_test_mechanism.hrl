@@ -56,7 +56,10 @@
     schedule_node :: node(),
     replicating_nodes :: [node()],
     evicting_nodes :: [node()],
-    function :: function
+    function :: function,
+    index_id :: binary(),
+    query_view_params :: list(),
+    space_id :: od_space:id()
 }).
 
 -record(expected, {
@@ -68,7 +71,7 @@
     mthHist :: #{},
     expected_transfer :: #{},
     assertion_nodes :: [node()],
-    ended_transfers,
+    assert_transferred_file_model = true :: boolean(),
     attempts = ?ATTEMPTS,
     timeout = ?DEFAULT_TIMETRAP :: non_neg_integer()
 }).

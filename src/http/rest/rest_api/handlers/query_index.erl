@@ -83,7 +83,7 @@ query_index(Req, State) ->
     #{auth := _Auth, id := Id} = StateWithSpatial,
 
     Options = prepare_options(StateWithSpatial),
-    {ok, Guids} = indexes:query_view(Id, Options),
+    {ok, Guids} = indexes:query_view_and_filter_values(Id, Options),
     ObjectIds = lists:map(fun(Guid) ->
         {ok, ObjectId} = cdmi_id:guid_to_objectid(Guid),
         ObjectId

@@ -17,9 +17,9 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([add_index/5, get_index/2, remove_index/2, query_view/2,
-    get_all_indexes/1, change_index_function/3, save/1, get/1, exists/1,
-    delete/1, update/2, create/1, create_or_update/2]).
+-export([add_index/5, get_index/2, remove_index/2, query_view_and_filter_values/2,
+    get_all_indexes/1, change_index_function/4, save/1, get/1, exists/1,
+    delete/1, update/2, create/1, create_or_update/2, query_view/2]).
 
 %% datastore_model callbacks
 -export([get_record_struct/1]).
@@ -30,6 +30,7 @@
 -type diff() :: datastore_doc:diff(record()).
 -type view_name() :: binary().
 -type index_id() :: binary().
+-type view_opts() :: [couchbase_driver:view_opt()].
 -type view_function() :: binary().
 % when set to true, view is of spatial type. It should emit geospatial json keys,
 % and can be queried with use of bbox, start_range, end_range params. More info
@@ -40,7 +41,7 @@ space_id => od_space:id(),
 function => indexes:view_function(),
 spatial => indexes:spatial()}.
 
--export_type([view_name/0, index_id/0, view_function/0, spatial/0]).
+-export_type([view_name/0, index_id/0, view_function/0, spatial/0, view_opts/0]).
 
 -define(CTX, #{model => ?MODULE}).
 -define(DISC_CTX, #{bucket => <<"onedata">>}).
@@ -50,22 +51,19 @@ spatial => indexes:spatial()}.
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @equiv add_index(UserId, ViewName, ViewFunction, SpaceId, Spatial, datastore_utils:gen_uuid()).
-%%--------------------------------------------------------------------
--spec add_index(od_user:id(), view_name(), view_function(), od_space:id(), spatial()) ->
-    {ok, index_id()} | {error, any()}.
-add_index(UserId, ViewName, ViewFunction, SpaceId, Spatial) ->
-    add_index(UserId, ViewName, ViewFunction, SpaceId, Spatial, datastore_utils:gen_key()).
-
-%%--------------------------------------------------------------------
 %% @doc
 %% Add or update view defined by given function.
 %% @end
 %%--------------------------------------------------------------------
--spec add_index(od_user:id(), view_name() | undefined, view_function(),
-    od_space:id() | undefined, spatial() | undefined, index_id()) -> {ok, index_id()} | {error, any()}.
-add_index(UserId, ViewName, ViewFunction, SpaceId, Spatial, IndexId) ->
+-spec add_index(od_user:id(), view_name(), view_function(), od_space:id(), spatial()) ->
+    {ok, index_id()} | {error, any()}.
+add_index(UserId, ViewName, ViewFunction, SpaceId, Spatial) ->
     EscapedViewFunction = escape_js_function(ViewFunction),
+    IndexId = index_id(ViewName, SpaceId),
+    %TODO should we allow users to refer to indexes via IndexId and pair (ViewName, SpaceID)?
+    %TODO * using index id is more RESTful, as we have path .../index/{id}
+    %TODO * on the other hand using viewname and space_id is more user friendly
+
     critical_section:run([?MODULE, UserId], fun() ->
         case indexes:get(UserId) of
             {ok, Doc = #document{value = IndexesDoc = #indexes{value = Indexes}}} ->
@@ -146,9 +144,10 @@ remove_index(UserId, IndexId) ->
 %% Change index js function.
 %% @end
 %%--------------------------------------------------------------------
--spec change_index_function(od_user:id(), index_id(), view_function()) -> {ok, index_id()} | {error, any()}.
-change_index_function(UserId, IndexId, Function) ->
-    add_index(UserId, undefined, Function, undefined, undefined, IndexId).
+-spec change_index_function(od_user:id(), view_name(), od_space:id(),
+    view_function()) -> {ok, index_id()} | {error, any()}.
+change_index_function(UserId, IndexName, SpaceId, Function) ->
+    add_index(UserId, IndexName, Function, SpaceId, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -171,8 +170,8 @@ get_all_indexes(UserId) ->
 %% Get view result.
 %% @end
 %%--------------------------------------------------------------------
--spec query_view(index_id(), list()) -> {ok, [file_meta:uuid()]}.
-query_view(Id, Options) ->
+-spec query_view_and_filter_values(index_id(), list()) -> {ok, [file_meta:uuid()]}.
+query_view_and_filter_values(Id, Options) ->
     {ok, {Rows}} = couchbase_driver:query_view(?DISC_CTX, Id, Id, Options),
     FileUuids = lists:map(fun(Row) ->
         {<<"value">>, FileUuid} = lists:keyfind(<<"value">>, 1, Row),
@@ -187,6 +186,10 @@ query_view(Id, Options) ->
                 false
         end
     end, FileUuids)}.
+
+query_view(Id, Options) ->
+    couchbase_driver:query_view(?DISC_CTX, Id, Id, Options).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -257,6 +260,10 @@ exists(Key) ->
 %%%===================================================================
 %%% Internal functions
 %%%==================================================================
+
+-spec index_id(view_name(), od_space:id()) -> index_id().
+index_id(ViewName, SpaceId) ->
+    <<ViewName/binary, "_", SpaceId/binary>>.
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -24,6 +24,8 @@
 -type block() :: undefined | fslogic_blocks:block().
 -type transfer_id() :: undefined | transfer:id().
 -type provider_id() :: undefined | od_provider:id().
+-type index_id() :: undefined | transfer:index_id().
+-type query_view_params() :: transfer:query_view_params().
 -type fuse_response() :: fslogic_worker:fuse_response().
 -type provider_response() :: fslogic_worker:provider_response().
 
@@ -38,10 +40,10 @@
 ]).
 
 -export([
-    schedule_file_replication/4,
-    replicate_file/4,
-    enqueue_file_replication/4,
-    enqueue_file_replication/6
+    schedule_file_replication/6,
+    replicate_file/6,
+    enqueue_file_replication/6,
+    enqueue_file_replication/8
 ]).
 
 % exported for tests
@@ -164,24 +166,28 @@ get_file_distribution(_UserCtx, FileCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_file_replication(user_ctx:ctx(), file_ctx:ctx(),
-    od_provider:id(), transfer:callback()) -> provider_response().
-schedule_file_replication(UserCtx, FileCtx, TargetProviderId, Callback) ->
+    od_provider:id(), transfer:callback(), transfer:index_id(),
+    query_view_params()) -> provider_response().
+schedule_file_replication(UserCtx, FileCtx, TargetProviderId, Callback,
+    IndexId, QueryViewParams
+) ->
     {FilePath, _} = file_ctx:get_logical_path(FileCtx, UserCtx),
-    schedule_file_replication(UserCtx, FileCtx, FilePath, TargetProviderId, Callback).
+    schedule_file_replication(UserCtx, FileCtx, FilePath, TargetProviderId,
+        Callback, IndexId, QueryViewParams).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% @equiv replicate_file_insecure/5 with permission check
 %% @end
 %%--------------------------------------------------------------------
--spec replicate_file(user_ctx:ctx(), file_ctx:ctx(), block(), transfer_id()) ->
-    provider_response() | {error, term()}.
-replicate_file(UserCtx, FileCtx, Block, TransferId) ->
+-spec replicate_file(user_ctx:ctx(), file_ctx:ctx(), block(), transfer_id(),
+    index_id(), query_view_params()) -> provider_response() | {error, term()}.
+replicate_file(UserCtx, FileCtx, Block, TransferId, IndexId, QueryViewParams) ->
     try
         check_permissions:execute(
             [traverse_ancestors, ?write_object],
-            [UserCtx, FileCtx, Block, TransferId],
-            fun replicate_file_insecure/4)
+            [UserCtx, FileCtx, Block, TransferId, IndexId, QueryViewParams],
+            fun replicate_file_insecure/6)
     catch
         error:{badmatch, {error, not_found}} ->
             {error, not_found};
@@ -191,14 +197,30 @@ replicate_file(UserCtx, FileCtx, Block, TransferId) ->
 
 %%-------------------------------------------------------------------
 %% @doc
+%% @equiv
+%% enqueue_file_replication(UserCtx, FileCtx, Block, TransferId,
+%% undefined, undefined).
+%% @end
+%%-------------------------------------------------------------------
+-spec enqueue_file_replication(user_ctx:ctx(), file_ctx:ctx(),
+    block(), transfer_id(), transfer:index_id(), query_view_params()) -> ok.
+enqueue_file_replication(UserCtx, FileCtx, Block, TransferId, IndexId, QueryViewParams) ->
+    enqueue_file_replication(UserCtx, FileCtx, Block, TransferId, undefined, undefined, IndexId, QueryViewParams).
+
+%%-------------------------------------------------------------------
+%% @doc
 %% Adds task of file replication to worker from ?REPLICATION_WORKERS_POOL.
 %% @end
 %%-------------------------------------------------------------------
 -spec enqueue_file_replication(user_ctx:ctx(), file_ctx:ctx(), block(),
-    transfer_id(), undefined | non_neg_integer(), undefined | non_neg_integer()) -> ok.
-enqueue_file_replication(UserCtx, FileCtx, Block, TransferId, Retries, NextRetry) ->
+    transfer_id(), undefined | non_neg_integer(), undefined | non_neg_integer(),
+    transfer:index_id(), query_view_params()) -> ok.
+enqueue_file_replication(UserCtx, FileCtx, Block, TransferId, Retries,
+    NextRetry, IndexId, QueryViewParams
+) ->
     worker_pool:cast(?REPLICATION_WORKERS_POOL,
-        {start_file_replication, UserCtx, FileCtx, Block, TransferId, Retries, NextRetry}).
+        {start_file_replication, UserCtx, FileCtx, Block, TransferId, Retries, 
+            NextRetry, IndexId, QueryViewParams}).
 
 %%%===================================================================
 %%% Internal functions
@@ -212,30 +234,21 @@ enqueue_file_replication(UserCtx, FileCtx, Block, TransferId, Retries, NextRetry
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_file_replication(user_ctx:ctx(), file_ctx:ctx(),
-    file_meta:path(), od_provider:id(), transfer:callback()) -> provider_response().
-schedule_file_replication(UserCtx, FileCtx, FilePath, TargetProviderId, Callback) ->
+    file_meta:path(), od_provider:id(), transfer:callback(),
+    transfer:index_id(), query_view_params()) -> provider_response().
+schedule_file_replication(UserCtx, FileCtx, FilePath, TargetProviderId, Callback,
+    IndexId, QueryViewParams
+) ->
     SessionId = user_ctx:get_session_id(UserCtx),
     FileGuid = file_ctx:get_guid_const(FileCtx),
     {ok, TransferId} = transfer:start(SessionId, FileGuid, FilePath, undefined,
-        TargetProviderId, Callback),
+        TargetProviderId, Callback, IndexId, QueryViewParams),
     #provider_response{
         status = #status{code = ?OK},
         provider_response = #scheduled_transfer{
             transfer_id = TransferId
         }
     }.
-
-%%-------------------------------------------------------------------
-%% @doc
-%% @equiv
-%% enqueue_file_replication(UserCtx, FileCtx, Block, TransferId,
-%% undefined, undefined).
-%% @end
-%%-------------------------------------------------------------------
--spec enqueue_file_replication(user_ctx:ctx(), file_ctx:ctx(),
-    block(), transfer_id()) -> ok.
-enqueue_file_replication(UserCtx, FileCtx, Block, TransferId) ->
-    enqueue_file_replication(UserCtx, FileCtx, Block, TransferId, undefined, undefined).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -245,8 +258,22 @@ enqueue_file_replication(UserCtx, FileCtx, Block, TransferId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec replicate_file_insecure(user_ctx:ctx(), file_ctx:ctx(), block(),
+    transfer_id(), index_id(), query_view_params()) -> provider_response().
+replicate_file_insecure(UserCtx, FileCtx, Block, TransferId, undefined, _QueryViewParams) ->
+    replicate_fs_subtree(UserCtx, FileCtx, Block, TransferId);
+replicate_file_insecure(UserCtx, FileCtx, Block, TransferId, IndexId, QueryViewParams) ->
+    replicate_files_from_index(UserCtx, FileCtx, Block, TransferId, IndexId, QueryViewParams, undefined).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Replicates given dir or file on current provider
+%% (the space has to be locally supported).
+%% @end
+%%--------------------------------------------------------------------
+-spec replicate_fs_subtree(user_ctx:ctx(), file_ctx:ctx(), block(),
     transfer_id()) -> provider_response().
-replicate_file_insecure(UserCtx, FileCtx, Block, TransferId) ->
+replicate_fs_subtree(UserCtx, FileCtx, Block, TransferId) ->
     case transfer:is_ongoing(TransferId) of
         true ->
             case file_ctx:is_dir(FileCtx) of
@@ -257,6 +284,50 @@ replicate_file_insecure(UserCtx, FileCtx, Block, TransferId) ->
             end;
         false ->
             throw(already_ended)
+    end.
+
+replicate_files_from_index(UserCtx, FileCtx, Block, TransferId, IndexId, QueryViewParams, LastDocId) ->
+    Chunk = application:get_env(?APP_NAME, replication_by_index_batch, 1000),
+    QueryViewParams2 = case LastDocId of
+        undefined ->
+            [{skip, 0} | QueryViewParams];
+        _ ->
+            [{skip, 1}, {startkey_docid, LastDocId} | QueryViewParams]
+    end,
+
+    case indexes:query_view(IndexId, [{limit, Chunk} | QueryViewParams2]) of
+        {ok, {Rows}} ->
+            NumberOfFiles = length(Rows),
+            {NewLastDocId, Guids} = lists:foldl(fun(Row, AccIn = {_LastDocId, FileGuids}) ->
+                {<<"value">>, FileUuid} = lists:keyfind(<<"value">>, 1, Row),
+                {<<"id">>, DocId} = lists:keyfind(<<"id">>, 1, Row),
+                try
+                    FileGuid = fslogic_uuid:uuid_to_guid(FileUuid),
+                    {DocId, [FileGuid | FileGuids]}
+                catch
+                    Error:Reason ->
+                        ?error_stacktrace("Cannot resolve uuid of file ~p in index ~p, due to error ~p:~p", [FileUuid, IndexId, Error, Reason]),
+                        AccIn
+                end
+            end, {undefined, []}, Rows),
+            % Guids are reversed now
+            ChildrenCtxs = lists:foldl(fun(Guid, Ctxs) ->
+                [file_ctx:new_by_guid(Guid) | Ctxs]
+            end, [], Guids),
+            transfer:increment_files_to_process_counter(TransferId, NumberOfFiles),
+            case NumberOfFiles < Chunk of
+                true ->
+                    enqueue_children_replication(UserCtx, ChildrenCtxs, undefined, TransferId),
+                    transfer:increment_files_processed_counter(TransferId),
+                    #provider_response{status = #status{code = ?OK}};
+                false ->
+                    enqueue_children_replication(UserCtx, ChildrenCtxs, undefined, TransferId),
+                    replicate_files_from_index(UserCtx, FileCtx, Block, TransferId, IndexId, QueryViewParams, NewLastDocId)
+            end;
+        Error = {error, Reason} ->
+            ?error("Querying view ~p failed due to ~p when processing transfer ~p", [IndexId, Reason, TransferId]),
+            throw(Error)
+
     end.
 
 %%-------------------------------------------------------------------
@@ -320,5 +391,5 @@ get_file_children(FileCtx, UserCtx, Offset, Chunk) ->
     transfer_id()) -> ok.
 enqueue_children_replication(UserCtx, Children, Block, TransferId) ->
     lists:foreach(fun(ChildCtx) ->
-        enqueue_file_replication(UserCtx, ChildCtx, Block, TransferId)
+        enqueue_file_replication(UserCtx, ChildCtx, Block, TransferId, undefined, [])
     end, Children).

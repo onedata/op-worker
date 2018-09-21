@@ -137,23 +137,23 @@ handle(invalidate_permissions_cache) ->
     ),
     ok;
 handle(restart_transfers) ->
-    ?debug("Rerunning unfinished transfers"),
-    try provider_logic:get_spaces() of
-        {ok, SpaceIds} ->
-            lists:foreach(fun(SpaceId) ->
-                Restarted = transfer:rerun_not_ended_transfers(SpaceId),
-                ?debug("Restarted following transfers: ~p", [Restarted])
-            end, SpaceIds);
-        ?ERROR_UNREGISTERED_PROVIDER ->
-            schedule_restart_transfers();
-        ?ERROR_NO_CONNECTION_TO_OZ ->
-            schedule_restart_transfers();
-        Error = {error, _} ->
-            ?error("Unable to restart transfers due to: ~p", [Error])
-    catch
-        Error2:Reason ->
-            ?error_stacktrace("Unable to restart transfers due to: ~p", [{Error2, Reason}])
-    end;
+    ?debug("Rerunning unfinished transfers");
+%%    try provider_logic:get_spaces() of
+%%        {ok, SpaceIds} ->
+%%            lists:foreach(fun(SpaceId) ->
+%%                Restarted = transfer:rerun_not_ended_transfers(SpaceId),
+%%                ?debug("Restarted following transfers: ~p", [Restarted])
+%%            end, SpaceIds);
+%%        ?ERROR_UNREGISTERED_PROVIDER ->
+%%            schedule_restart_transfers();
+%%        ?ERROR_NO_CONNECTION_TO_OZ ->
+%%            schedule_restart_transfers();
+%%        Error = {error, _} ->
+%%            ?error("Unable to restart transfers due to: ~p", [Error])
+%%    catch
+%%        Error2:Reason ->
+%%            ?error_stacktrace("Unable to restart transfers due to: ~p", [{Error2, Reason}])
+%%    end;
 handle({fuse_request, SessId, FuseRequest}) ->
     ?debug("fuse_request(~p): ~p", [SessId, FuseRequest]),
     Response = handle_request_and_process_response(SessId, FuseRequest),
@@ -449,13 +449,16 @@ handle_file_request(UserCtx, #fsync{
 handle_provider_request(UserCtx, #get_file_distribution{}, FileCtx) ->
     sync_req:get_file_distribution(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #schedule_file_replication{
-    block = _Block, target_provider_id = TargetProviderId, callback = Callback
+    block = _Block, target_provider_id = TargetProviderId, callback = Callback,
+    index_id = IndexId, query_view_params = QueryViewParams
 }, FileCtx) ->
-    sync_req:schedule_file_replication(UserCtx, FileCtx, TargetProviderId, Callback);
+    sync_req:schedule_file_replication(UserCtx, FileCtx, TargetProviderId, Callback, IndexId, QueryViewParams);
 handle_provider_request(UserCtx, #schedule_replica_invalidation{
-    source_provider_id = SourceProviderId, target_provider_id = TargetProviderId
+    source_provider_id = SourceProviderId, target_provider_id = TargetProviderId,
+    index_id = IndexId,  query_view_params = QueryViewParams
 }, FileCtx) ->
-    replica_eviction_req:schedule_replica_eviction(UserCtx, FileCtx, SourceProviderId, TargetProviderId);
+    replica_eviction_req:schedule_replica_eviction(UserCtx, FileCtx,
+        SourceProviderId, TargetProviderId, IndexId, QueryViewParams);
 handle_provider_request(UserCtx, #get_parent{}, FileCtx) ->
     guid_req:get_parent(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #get_file_path{}, FileCtx) ->

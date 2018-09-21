@@ -146,15 +146,16 @@ get_index(Req, State) ->
 %%--------------------------------------------------------------------
 -spec modify_index(req(), maps:map()) -> term().
 modify_index(Req, State) ->
-    {State1, Req1} = validator:parse_id(Req, State),
+    {State1, Req1} = validator:parse_name(Req, State),
     {State2, Req2} = validator:parse_function(Req1, State1),
+    {State3, Req3} = validator:parse_space_id(Req2, State2),
 
-    #{auth := Auth, id := Id, function := Function} = State2,
+    #{auth := Auth, name := IndexName, space_id := SpaceId, function := Function} = State3,
 
     {ok, UserId} = session:get_user_id(Auth),
-    {ok, Id} = indexes:change_index_function(UserId, Id, Function),
+    {ok, _} = indexes:change_index_function(UserId, IndexName, SpaceId, Function),
 
-    {true, Req2, State2}.
+    {true, Req3, State3}.
 
 
 

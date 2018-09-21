@@ -34,7 +34,7 @@
     fail_to_evict_file_replica_without_permissions/1,
     eviction_should_succeed_when_remote_provider_modified_file_replica/1,
     eviction_should_fail_when_evicting_provider_modified_file_replica/1,
-    quota_decreased_after_eviction/1]).
+    quota_decreased_after_eviction/1, schedule_replica_eviction_by_index/1]).
 
 all() -> [
     evict_empty_dir_by_guid,
@@ -51,7 +51,8 @@ all() -> [
 %%    fail_to_evict_file_replica_without_permissions    %todo VFS-4844,
     eviction_should_succeed_when_remote_provider_modified_file_replica,
     eviction_should_fail_when_evicting_provider_modified_file_replica,
-    quota_decreased_after_eviction
+    quota_decreased_after_eviction,
+    schedule_replica_eviction_by_index
 ].
 
 %%%===================================================================
@@ -102,6 +103,9 @@ eviction_should_fail_when_evicting_provider_modified_file_replica(Config) ->
 
 quota_decreased_after_eviction(Config) ->
     replica_eviction_transfers_test_base:quota_decreased_after_eviction(Config, lfm, path).
+
+schedule_replica_eviction_by_index(Config) ->
+    replica_eviction_transfers_test_base:schedule_replica_eviction_by_index(Config, lfm).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

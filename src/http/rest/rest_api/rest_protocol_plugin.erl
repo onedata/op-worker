@@ -46,6 +46,7 @@ routes() ->
         {"/api/v3/oneprovider/replicas/[...]", #{handler => replicas}},
         {"/api/v3/oneprovider/replicas-id/:id", #{handler => replicas,
             handler_initial_opts => #{resource_type => id}}},
+        {"/api/v3/oneprovider/replicas-index/[...]", #{handler => replicas_index}},
         {"/api/v3/oneprovider/spaces", #{handler => spaces}},
         {"/api/v3/oneprovider/spaces/:sid", #{handler => space_by_id}},
         {"/api/v3/oneprovider/spaces/:sid/transfers", #{handler => transfers}},

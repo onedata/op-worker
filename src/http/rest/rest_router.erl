@@ -27,6 +27,7 @@
     onedata_metrics,
     query_index,
     replicas,
+    replicas_index,
     spaces,
     space_by_id,
     transfers,

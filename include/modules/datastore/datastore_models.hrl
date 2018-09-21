@@ -554,7 +554,14 @@
     min_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
     hr_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
     dy_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
-    mth_hist = #{} :: maps:map(od_provider:id(), histogram:histogram())
+    mth_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
+
+    % Only replication of files existing in given index will be scheduled
+    % if this value is undefined, whole subtree will be iterated
+    index_id :: transfer:index_id(),
+    % query_view_params are directly passed to couchbase
+    % if index_id is undefined query_view_params are ignored
+    query_view_params = [] :: transfer:query_view_params()
 }).
 
 %% Model that tracks what files are currently transferred

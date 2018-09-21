@@ -23,7 +23,8 @@
 %% Functions operating on files
 -export([create/3, create/4, open/3, write/3, read/3, truncate/3, unlink/2, fsync/1,
     release/1, get_file_distribution/2]).
--export([schedule_file_replication/4, schedule_replica_eviction/4]).
+-export([schedule_file_replication/4, schedule_replica_eviction/4,
+    schedule_replication_by_index/6, schedule_replica_eviction_by_index/6]).
 %% Functions concerning file permissions
 -export([set_perms/3, check_perms/3, set_acl/3, get_acl/2, remove_acl/2]).
 %% Functions concerning file attributes
@@ -247,7 +248,19 @@ get_file_distribution(Auth, FileKey) ->
     FileKey :: file_id_or_path(), ProviderId :: binary(), transfer:callback()) ->
     {ok, transfer:id()} | error_reply().
 schedule_file_replication(Auth, FileKey, ProviderId, Callback) ->
-    logical_file_manager:schedule_file_replication(Auth, FileKey, ProviderId, Callback).
+    logical_file_manager:schedule_file_replication(Auth, FileKey, ProviderId,
+        Callback).
+
+%%--------------------------------------------------------------------
+%% @doc Replicates file on given provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec schedule_replication_by_index(Auth :: onedata_auth_api:auth(),
+    ProviderId :: binary(), transfer:callback(), od_space:id(),
+    transfer:index_id(), transfer:query_view_params()) -> {ok, transfer:id()} | error_reply().
+schedule_replication_by_index(Auth, ProviderId, Callback, SpaceId, IndexId, QueryParams) ->
+    logical_file_manager:schedule_replication_by_index(Auth, ProviderId, Callback,
+        SpaceId, IndexId, QueryParams).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -260,6 +273,22 @@ schedule_file_replication(Auth, FileKey, ProviderId, Callback) ->
     {ok, transfer:id()} | error_reply().
 schedule_replica_eviction(Auth, FileKey, SourceProviderId, TargetProviderId) ->
     logical_file_manager:schedule_replica_eviction(Auth, FileKey, SourceProviderId, TargetProviderId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Evicts file replicas of files from given index on given provider,
+%% migrates unique data to provider given as MigrateProviderId
+%% @end
+%%--------------------------------------------------------------------
+-spec schedule_replica_eviction_by_index(session:id(), SourceProviderId :: oneprovider:id(),
+    TargetProviderId :: undefined | oneprovider:id(), od_space:id(),
+    transfer:index_id(), transfer:query_view_params()) ->
+    {ok, transfer:id()} | error_reply().
+schedule_replica_eviction_by_index(SessId, SourceProviderId, TargetProviderId,
+    SpaceId, IndexId, QueryViewParams
+) ->
+    logical_file_manager:schedule_replica_eviction_by_index(SessId,
+        SourceProviderId, TargetProviderId, SpaceId, IndexId, QueryViewParams).
 
 %%--------------------------------------------------------------------
 %% @doc Changes the permissions of a file.

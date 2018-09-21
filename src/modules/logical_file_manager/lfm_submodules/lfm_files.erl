@@ -19,13 +19,14 @@
 %% API
 %% Functions operating on directories or files
 -export([unlink/3, rm/2, mv/3, cp/3, get_parent/2, get_file_path/2,
-    get_file_guid/2, schedule_file_replication/4, schedule_replica_eviction/4]).
+    get_file_guid/2, schedule_file_replication/4, schedule_replica_eviction/4,
+    schedule_replication_by_index/6]).
 %% Functions operating on files
 -export([create/2, create/3, create/4, open/3, fsync/1, fsync/3, write/3,
     write_without_events/3, read/3, read/4, read_without_events/3,
     read_without_events/4, silent_read/3, silent_read/4,
     truncate/3, release/1, get_file_distribution/2, create_and_open/5,
-    create_and_open/4]).
+    create_and_open/4, schedule_replica_eviction_by_index/6]).
 
 -compile({no_auto_import, [unlink/1]}).
 
@@ -141,7 +142,7 @@ get_file_guid(SessId, FilePath) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns block map for a file.
+%% Returns ID of scheduled transfer.
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_file_replication(session:id(), fslogic_worker:file_guid_or_path(),
@@ -150,7 +151,31 @@ get_file_guid(SessId, FilePath) ->
 schedule_file_replication(SessId, FileKey, TargetProviderId, Callback) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
-        #schedule_file_replication{target_provider_id = TargetProviderId, callback = Callback},
+        #schedule_file_replication{
+            target_provider_id = TargetProviderId,
+            callback = Callback
+        },
+        fun(#scheduled_transfer{transfer_id = TransferId}) ->
+            {ok, TransferId}
+        end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns ID of scheduled transfer.
+%% @end
+%%--------------------------------------------------------------------
+-spec schedule_replication_by_index(session:id(), ProviderId :: oneprovider:id(),
+    transfer:callback(), od_space:id(), transfer:index_id(),
+    transfer:query_view_params()) -> {ok, transfer:id()} | logical_file_manager:error_reply().
+schedule_replication_by_index(SessId, TargetProviderId, Callback, SpaceId, IndexId, QueryParams) ->
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    remote_utils:call_fslogic(SessId, provider_request, SpaceGuid,
+        #schedule_file_replication{
+            target_provider_id = TargetProviderId,
+            callback = Callback,
+            index_id = IndexId,
+            query_view_params = QueryParams
+        },
         fun(#scheduled_transfer{transfer_id = TransferId}) ->
             {ok, TransferId}
         end).
@@ -170,6 +195,28 @@ schedule_replica_eviction(SessId, FileKey, ProviderId, MigrationProviderId) ->
         #schedule_replica_invalidation{
             source_provider_id = ProviderId,
             target_provider_id = MigrationProviderId
+        },
+        fun(#scheduled_transfer{transfer_id = TransferId}) ->
+            {ok, TransferId}
+        end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Invalidates file replicas existing in given index on given provider,
+%% migrates unique data to provider given as MigrateProviderId
+%% @end
+%%--------------------------------------------------------------------
+-spec schedule_replica_eviction_by_index(session:id(), ProviderId :: oneprovider:id(),
+    MigrationProviderId :: undefined | oneprovider:id(), od_space:id(), transfer:index_id(), transfer:query_view_params()) ->
+    {ok, transfer:id()} | logical_file_manager:error_reply().
+schedule_replica_eviction_by_index(SessId, ProviderId, MigrationProviderId, SpaceId, IndexId, QueryViewParams) ->
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    remote_utils:call_fslogic(SessId, provider_request, SpaceGuid,
+        #schedule_replica_invalidation{
+            source_provider_id = ProviderId,
+            target_provider_id = MigrationProviderId,
+            index_id = IndexId,
+            query_view_params = QueryViewParams
         },
         fun(#scheduled_transfer{transfer_id = TransferId}) ->
             {ok, TransferId}
