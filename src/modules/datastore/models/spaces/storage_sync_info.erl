@@ -15,7 +15,7 @@
 -include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
 
--type key() :: binary().
+-type key() :: datastore:key().
 -type doc() :: datastore_model:doc(record()).
 -type record() :: #storage_sync_info{}.
 -type error() :: {error, term()}.
