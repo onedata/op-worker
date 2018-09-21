@@ -392,6 +392,7 @@ file_record(ModelType, SessionId, ResId, ChildrenFromCache, ChildrenLimit) ->
                 false -> null;
                 true -> ResId
             end,
+            {ok, CdmiId} = cdmi_id:guid_to_objectid(FileId),
             Res = [
                 {<<"id">>, ResId},
                 {<<"name">>, Name},
@@ -406,7 +407,7 @@ file_record(ModelType, SessionId, ResId, ChildrenFromCache, ChildrenLimit) ->
                 {<<"share">>, Share},
                 {<<"provider">>, ProviderId},
                 {<<"fileProperty">>, Metadata},
-                {<<"cdmiObjectId">>, cdmi_id:guid_to_objectid(FileId)}
+                {<<"cdmiObjectId">>, CdmiId}
             ],
             {ok, Res}
     end.

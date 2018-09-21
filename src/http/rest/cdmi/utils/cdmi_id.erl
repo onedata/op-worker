@@ -43,7 +43,7 @@
 %% Support for CDMI CRC-16 for Object IDs.
 %%
 %% The CDMI specification requires a CRC field as part of the object
-%% ID. The CRC algorithim specified has the following parameters:
+%% ID. The CRC algorithm specified has the following parameters:
 %% -- Name: "CRC-16"
 %% -- Width: 16
 %% -- Poly: 0x8005
