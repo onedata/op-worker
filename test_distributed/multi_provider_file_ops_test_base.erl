@@ -44,7 +44,8 @@
     synchronizer_test_base/1,
     synchronize_stress_test_base/2,
     cancel_synchronizations_for_session_with_mocked_rtransfer_test_base/1,
-    cancel_synchronizations_for_session_test_base/1
+    cancel_synchronizations_for_session_test_base/1,
+    transfer_files_to_source_provider/1
 ]).
 -export([init_env/1, teardown_env/1]).
 
@@ -1590,6 +1591,49 @@ cancel_synchronizations_for_session_test_base(Config0) ->
     "Finished transfers: ~p~n"
     "Cancelled transfers: ~p~n",
         [BlockSize, BlocksCount, UserCount, (End-Start)/1000, OkCount, CancelCount]).
+
+
+transfer_files_to_source_provider(Config0) ->
+    ct:timetrap(timer:minutes(10)),
+    Config = extend_config(Config0, <<"user1">>, {0, 0, 0, 0}, 0),
+    SessionId = ?config(session, Config),
+    SpaceName = ?config(space_name, Config),
+    Worker = ?config(worker1, Config),
+    FilesNum = ?config(files_num, Config),
+    Size = ?config(file_size, Config),
+    
+    Guids = utils:pmap(fun(Num) ->
+        FilePath = <<"/", SpaceName/binary, "/file_",  (integer_to_binary(Num))/binary>>,
+        {ok, Guid} = lfm_proxy:create(Worker, SessionId(Worker), FilePath, 8#755),
+        {ok, Handle} = lfm_proxy:open(Worker, SessionId(Worker), {guid, Guid}, write),
+        {ok, _} = lfm_proxy:write(Worker, Handle, 0, crypto:strong_rand_bytes(Size)),
+        ok = lfm_proxy:close(Worker, Handle),
+        Guid
+    end, lists:seq(1, FilesNum)),
+    
+    ct:pal("~p files created", [FilesNum]),
+    
+    Start = erlang:monotonic_time(millisecond),
+    
+    TidsAndGuids = utils:pmap(fun(Guid) ->
+        {ok, Tid} = lfm_proxy:schedule_file_replication(Worker, SessionId(Worker), {guid, Guid}, ?GET_DOMAIN_BIN(Worker)),
+        {Tid, Guid}
+    end, Guids),
+    
+    utils:pforeach(fun F({Tid, Guid}) ->
+        {ok, #{ended := Transfers}} = rpc:call(Worker, transferred_file, get_transfers, [Guid]),
+        case Transfers of
+            [Tid] ->
+                ok;
+            _ -> 
+                F({Tid, Guid})
+        end
+    end, TidsAndGuids),
+    
+    End = erlang:monotonic_time(millisecond),
+    
+    ct:pal("Total time[s]: ~p~n"
+           "Average time per file[ms]: ~p", [(End-Start)/1000, (End-Start)/FilesNum]).
 
 
 %%%===================================================================
