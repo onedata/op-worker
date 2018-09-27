@@ -44,7 +44,7 @@
 -export([verify_provider_identity/1, verify_provider_identity/2]).
 -export([verify_provider_nonce/2]).
 
--define(IPS_CACHE_TTL, application:get_env(?APP_NAME, provider_ips_cache_ttl, timer:minutes(10))). 
+-define(IPS_CACHE_TTL, application:get_env(?APP_NAME, provider_ips_cache_ttl, timer:minutes(10))).
 
 %%%===================================================================
 %%% API
@@ -632,8 +632,6 @@ verify_provider_nonce(ProviderId, Nonce) ->
 -spec assert_zone_compatibility() -> ok | no_return().
 assert_zone_compatibility() ->
     OzUrl = oneprovider:get_oz_url(),
-
-
     case fetch_oz_compatibility_config(OzUrl) of
         {ok, OzVersion, CompOpVersionsBin} ->
             OpVersion = oneprovider:get_version(),
@@ -723,20 +721,15 @@ fetch_oz_compatibility_config(OzUrl) ->
     case http_client:get(URL, #{}, <<>>, [{ssl_options, SslOpts}]) of
         {ok, 200, _, JsonBody} ->
             JsonMap = json_utils:decode(JsonBody),
-            case maps:is_key(<<"version">>, JsonMap) of
-                true ->
-                    OzVersion = maps:get(<<"version">>, JsonMap),
-                    CompatibleOpVersions = maps:get(
-                        <<"compatibleOneproviderVersions">>, JsonMap, []
-                    ),
-                    {ok, OzVersion, CompatibleOpVersions};
-                false ->
-                    % Fallback for older OZ versions
-                    deprecated_fetch_oz_compatibility_config(OzUrl)
-            end;
-        _ ->
-            % Fallback for older OZ versions
-            deprecated_fetch_oz_compatibility_config(OzUrl)
+            OzVersion = maps:get(<<"version">>, JsonMap, <<"unknown">>),
+            CompatibleOpVersions = maps:get(
+                <<"compatibleOneproviderVersions">>, JsonMap, []
+            ),
+            {ok, OzVersion, CompatibleOpVersions};
+        {ok, Code, _, Body} ->
+            {error, {bad_response, Code, Body}};
+        {error, Error} ->
+            {error, Error}
     end.
 
 %%%===================================================================
@@ -762,41 +755,10 @@ fetch_op_compatibility_config(Hostname, SslOpts) ->
                 <<"compatibleOneproviderVersions">>, JsonMap, []
             ),
             {ok, OpVersion, CompatibleOpVersions};
-        _ ->
-            % Fallback for older OP versions
-            deprecated_fetch_op_compatibility_config(Hostname, SslOpts)
-    end.
-
-
-%% @private
-% @TODO VFS-4294 Remove when obsolete
--spec deprecated_fetch_oz_compatibility_config(Hostname :: string()) ->
-    {ok, OzVersion :: binary(), CompatibleOpVersions :: [binary()]} |
-    {error, {bad_response, Code :: integer(), Body :: binary()}} |
-    {error, term()}.
-deprecated_fetch_oz_compatibility_config(Hostname) ->
-    SslOpts = [{cacerts, oneprovider:trusted_ca_certs()}],
-    URL = Hostname ++ ?ZONE_VERSION_PATH,
-    case http_client:get(URL, #{}, <<>>, [{ssl_options, SslOpts}]) of
-        {ok, 200, _, Version} -> {ok, Version, []};
-        {ok, Code, _, Body} -> {error, {bad_response, Code, Body}};
-        {error, Error} -> {error, Error}
-    end.
-
-
-%% @private
-% @TODO VFS-4294 Remove when obsolete
--spec deprecated_fetch_op_compatibility_config(Hostname :: string(),
-    [http_client:ssl_opt()]) ->
-    {ok, OzVersion :: binary(), CompatibleOpVersions :: [binary()]} |
-    {error, {bad_response, Code :: integer(), Body :: binary()}} |
-    {error, term()}.
-deprecated_fetch_op_compatibility_config(Hostname, SslOpts) ->
-    URL = str_utils:format_bin("https://~s~s", [Hostname, ?PROVIDER_VERSION_PATH]),
-    case http_client:get(URL, #{}, <<>>, [{ssl_options, SslOpts}]) of
-        {ok, 200, _, Version} -> {ok, Version, []};
-        {ok, Code, _, Body} -> {error, {bad_response, Code, Body}};
-        {error, Error} -> {error, Error}
+        {ok, Code, _, Body} ->
+            {error, {bad_response, Code, Body}};
+        {error, Error} ->
+            {error, Error}
     end.
 
 

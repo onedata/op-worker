@@ -58,21 +58,25 @@
     create_file_import_check_user_id_error_test/1,
     import_nfs_acl_test/1,
     update_nfs_acl_test/1,
-    import_nfs_acl_with_disabled_luma_should_fail_test/1,
     create_directory_import_error_test/1,
     update_syncs_files_after_import_failed_test/1,
     update_syncs_files_after_previous_update_failed_test/1,
-    create_delete_import2_test/1, recreate_file_deleted_by_sync_test/1,
+    create_delete_import2_test/1,
+    sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changes/1,
+    recreate_file_deleted_by_sync_test/1,
     sync_should_not_delete_not_replicated_file_created_in_remote_provider/1,
     sync_should_not_delete_dir_created_in_remote_provider/1,
     sync_should_not_delete_not_replicated_files_created_in_remote_provider2/1,
     create_delete_import_test_read_both/1,
-    should_not_sync_file_while_being_replicated/1,
+    should_not_sync_file_during_replication/1,
     change_file_content_constant_size_test/1,
     change_file_content_update_test/1,
     change_file_content_the_same_moment_when_sync_performs_stat_on_file_test/1,
     append_empty_file_update_test/1,
-    import_file_with_link_but_no_doc_test/1, append_file_not_changing_mtime_update_test/1]).
+    import_file_with_link_but_no_doc_test/1,
+    append_file_not_changing_mtime_update_test/1,
+    sync_should_not_invalidate_file_after_replication/1,
+    import_nfs_acl_with_disabled_luma_should_fail_test/1]).
 
 -define(TEST_CASES, [
     create_directory_import_test,
@@ -90,6 +94,7 @@
     create_delete_import_test_read_both,
     create_delete_import_test_read_remote_only,
     create_delete_import2_test,
+    sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changes,
     create_file_import_check_user_id_test,
     create_file_import_check_user_id_error_test,
     create_file_export_test,
@@ -127,10 +132,8 @@
     import_nfs_acl_test,
     update_nfs_acl_test,
     import_nfs_acl_with_disabled_luma_should_fail_test,
-    should_not_sync_file_while_being_replicated
-%%    import_file_by_path_test, %todo uncomment after resolving and merging with VFS-3052
-%%    get_child_attr_by_path_test,
-%%    import_remote_file_by_path_test
+    should_not_sync_file_during_replication,
+    sync_should_not_invalidate_file_after_replication
 ]).
 
 all() -> ?ALL(?TEST_CASES).
@@ -183,6 +186,9 @@ create_delete_import_test_read_remote_only(Config) ->
 
 create_delete_import2_test(Config) ->
     storage_sync_test_base:create_delete_import2_test(Config, false, true).
+
+sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changes(Config) ->
+    storage_sync_test_base:sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changes(Config, false).
 
 create_file_import_check_user_id_test(Config) ->
     storage_sync_test_base:create_file_import_check_user_id_test(Config, false).
@@ -297,7 +303,7 @@ copy_file_update_test(Config) ->
 
     timer:sleep(timer:seconds(2)),  %ensure that copy time is different from read time
     %% Copy file
-    file:copy(StorageTestFilePath, StorageTestFilePath2),
+    {ok, _} = file:copy(StorageTestFilePath, StorageTestFilePath2),
 
     storage_sync_test_base:enable_storage_update(Config),
     storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID),
@@ -381,10 +387,7 @@ sync_should_not_delete_dir_created_in_remote_provider(Config) ->
 sync_should_not_delete_not_replicated_files_created_in_remote_provider2(Config) ->
     storage_sync_test_base:sync_should_not_delete_not_replicated_files_created_in_remote_provider2(Config, false).
 
-import_file_by_path_test(Config) ->
-    storage_sync_test_base:import_file_by_path_test(Config, false).
-
-should_not_sync_file_while_being_replicated(Config) ->
+should_not_sync_file_during_replication(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER, ?GET_DOMAIN(W2)}}, Config),
@@ -398,7 +401,7 @@ should_not_sync_file_while_being_replicated(Config) ->
 
     {ok, FileHandle} =
         ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, {guid, FileGuid}, write)),
-    Size = 1024 * 1024 * 1024,
+    Size = 1024 * 1024 * 100,
     TestData = crypto:strong_rand_bytes(Size),
     ?assertEqual({ok, Size}, lfm_proxy:write(W2, FileHandle, 0, TestData)),
     ?assertEqual(ok, lfm_proxy:fsync(W2, FileHandle)),
@@ -417,14 +420,11 @@ should_not_sync_file_while_being_replicated(Config) ->
     ?assertMatch({ok, #file_attr{size = Size}},
         lfm_proxy:stat(W2, SessId2, {guid, FileGuid})).
 
-get_child_attr_by_path_test(Config) ->
-    storage_sync_test_base:get_child_attr_by_path_test(Config, false).
-
-import_remote_file_by_path_test(Config) ->
-    storage_sync_test_base:import_remote_file_by_path_test(Config, false).
-
 import_nfs_acl_with_disabled_luma_should_fail_test(Config) ->
     storage_sync_test_base:import_nfs_acl_with_disabled_luma_should_fail_test(Config, false).
+
+sync_should_not_invalidate_file_after_replication(Config) ->
+    storage_sync_test_base:sync_should_not_invalidate_file_after_replication(Config).
 
 %===================================================================
 % SetUp and TearDown functions
@@ -503,7 +503,7 @@ init_per_testcase(Case, Config) when
     Case =:= delete_file_update_test;
     Case =:= move_file_update_test;
     Case =:= create_subfiles_and_delete_before_import_is_finished_test
-->
+    ->
     Config2 = [
         {update_config, #{
             delete_enable => true,
@@ -518,6 +518,7 @@ init_per_testcase(Case, Config) when
     Case =:= sync_should_not_delete_not_replicated_file_created_in_remote_provider;
     Case =:= sync_should_not_delete_dir_created_in_remote_provider;
     Case =:= sync_should_not_delete_not_replicated_files_created_in_remote_provider2;
+    Case =:= sync_should_not_invalidate_file_after_replication;
     Case =:= sync_works_properly_after_delete_test ->
     Config2 = [
         {update_config, #{
@@ -543,7 +544,7 @@ init_per_testcase(Case, Config) when
 
 init_per_testcase(Case, Config) when
     Case =:= chmod_file_update2_test
-->
+    ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     {ok, OldDirBatchSize} = test_utils:get_env(W1, op_worker, dir_batch_size),
     test_utils:set_env(W1, op_worker, dir_batch_size, 2),
@@ -610,17 +611,9 @@ init_per_testcase(_Case, Config) ->
     Config2.
 
 end_per_testcase(Case, Config) when
-    Case =:= import_file_by_path_test;
-    Case =:= get_child_attr_by_path_test
-->
-    Workers = ?config(op_worker_nodes, Config),
-    storage_sync_test_base:reset_enoent_strategies(Workers, ?SPACE_ID),
-    end_per_testcase(default, Config);
-
-end_per_testcase(Case, Config) when
     Case =:= chmod_file_update2_test;
     Case =:= create_file_in_dir_exceed_batch_update_test
-->
+    ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     OldDirBatchSize = ?config(old_dir_batch_size, Config),
     test_utils:set_env(W1, op_worker, dir_batch_size, OldDirBatchSize),
@@ -642,6 +635,16 @@ end_per_testcase(Case, Config) when
     ->
     Workers = ?config(op_worker_nodes, Config),
     ok = test_utils:mock_unload(Workers, [reverse_luma_proxy, storage_file_ctx, storage_file_manager]),
+    end_per_testcase(default, Config);
+
+end_per_testcase(import_nfs_acl_with_disabled_luma_should_fail_test, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    ok = test_utils:mock_unload(Workers, [storage_file_manager]),
+    end_per_testcase(default, Config);
+
+end_per_testcase(sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changes, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    ok = test_utils:mock_unload(Workers, [fslogic_path]),
     end_per_testcase(default, Config);
 
 end_per_testcase(_Case, Config) ->

@@ -50,7 +50,7 @@ schedule_replica_eviction(UserCtx, FileCtx, SourceProviderId,
     MigrationProviderId
 ) ->
     check_permissions:execute(
-        [traverse_ancestors, ?write_object],
+        [], %todo VFS-4844
         [UserCtx, FileCtx, SourceProviderId, MigrationProviderId],
         fun schedule_replica_eviction_insecure/4).
 
@@ -63,7 +63,7 @@ schedule_replica_eviction(UserCtx, FileCtx, SourceProviderId,
     sync_req:transfer_id()) -> sync_req:provider_response().
 evict_file_replica(UserCtx, FileCtx, MigrationProviderId, TransferId) ->
     check_permissions:execute(
-        [traverse_ancestors, ?write_object],
+        [], %todo VFS-4844
         [UserCtx, FileCtx, MigrationProviderId, TransferId],
         fun evict_file_replica_insecure/4).
 

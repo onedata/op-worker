@@ -83,13 +83,16 @@
 -define(assertMonitoring(Worker, Expected, SpaceId),
     ?assertMonitoring(Worker, Expected, SpaceId, 1)).
 
--define(assertHashChangedFun(Uuid, ExpectedResult0),
+-define(assertHashChangedFun(StorageFilePath, MountPoint, SpaceId, ExpectedResult0),
     fun
         ({_, {storage_sync_changes, children_attrs_hash_has_changed, Args}, Result})
             when Result =:= ExpectedResult0
-            ->
+        ->
+            __StorageFileId = storage_sync_test_base:to_storage_file_id(
+                StorageFilePath, MountPoint),
+            Id = storage_sync_info:id(__StorageFileId, SpaceId),
             case hd(Args) of
-                #document{key = Uuid} -> 1;
+                #document{key = Id} -> 1;
                 _ -> 0
             end;
         (_) ->
@@ -97,13 +100,18 @@
     end
 ).
 
--define(assertMtimeChangedFun(Uuid, ExpectedResult0),
+-define(assertMtimeChangedFun(StorageFilePath, MountPoint, SpaceId, ExpectedResult0),
     fun
         ({_, {storage_sync_changes, mtime_has_changed, Args}, Result})
             when Result =:= ExpectedResult0
-            ->
+        ->
+            __StorageFileId = storage_sync_test_base:to_storage_file_id(
+                StorageFilePath, MountPoint),
+            ct:pal("STORAGE FILE ID: ~p for storage file path: ~p", [__StorageFileId, StorageFilePath]),
+            Id = storage_sync_info:id(__StorageFileId, SpaceId),
+            ct:pal("Id: ~p", [Id]),
             case hd(Args) of
-                #document{key = Uuid} -> 1;
+                #document{key = Id} -> 1;
                 _ -> 0
             end;
         (_) ->

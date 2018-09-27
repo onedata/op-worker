@@ -53,33 +53,18 @@ change_replicated_internal(SpaceId, #document{
     deleted = Del2
 } = FileDoc) when Del1 or Del2 ->
     ?debug("change_replicated_internal: deleted file_meta ~p", [FileUuid]),
-    Ctx = datastore_model_default:get_ctx(file_meta),
-
-    Proceed = case datastore_model:get(Ctx, FileUuid) of
-        {error, not_found} ->
-            true;
-        {ok, #document{value = #file_meta{deleted = Del}}} ->
-            Del
-    end,
-
-    case Proceed of
-        true ->
-            FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
-            fslogic_deletion_worker:request_remote_deletion(FileCtx),
-            file_popularity:delete(FileUuid),
-            storage_sync_info:delete(FileUuid),
-            ok;
-        _ ->
-            ok
-    end;
+    FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
+    fslogic_deletion_worker:request_remote_deletion(FileCtx),
+    file_popularity:delete(FileUuid),
+    ok;
 change_replicated_internal(SpaceId, #document{
     key = FileUuid,
     value = #file_meta{deleted = true}
 } = FileDoc) ->
+    % TODO VFS-4876 remove this function clause
     ?debug("change_replicated_internal: deleted file_meta (internal delete field is true) ~p",
         [FileUuid]),
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
-    storage_sync_info:delete(FileUuid),
     file_popularity:delete(FileUuid),
     fslogic_event_emitter:emit_file_removed(FileCtx, []);
 change_replicated_internal(SpaceId, #document{

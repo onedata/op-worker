@@ -39,12 +39,7 @@
     rerun_file_replication_by_other_user/1,
     cancel_file_replication_on_2_providers_simultaneously/1,
     rerun_dir_replication/1,
-    evict_file_replica/1,
-    evict_file_replica_with_migration/1,
-    eviction_should_succeed_when_remote_provider_modified_file_replica/1,
-    eviction_should_fail_when_eviction_provider_modified_file_replica/1,
     rerun_eviction_of_file_replica_with_migration/1,
-    evict_dir_replica/1,
     basic_autocleaning_test/1,
     automatic_cleanup_should_evict_unpopular_files/1,
     posix_mode_get/1,
@@ -80,12 +75,9 @@
     primitive_json_metadata_test/1,
     empty_metadata_invalid_json_test/1,
     spatial_flag_test/1,
-    quota_decreased_after_eviciton/1,
-    migrate_big_dir/1,
     list_transfers/1,
-    evict_big_dir/1,
-    track_transferred_files/1,
-    fail_to_evict_file_replica_without_permissions/1]).
+    track_transferred_files/1
+]).
 
 %utils
 -export([verify_file/3, create_file/3, create_dir/3,
@@ -100,12 +92,7 @@ all() ->
         rerun_file_replication_by_other_user,
         cancel_file_replication_on_2_providers_simultaneously,
         rerun_dir_replication,
-        evict_file_replica,
-        evict_file_replica_with_migration,
-        eviction_should_succeed_when_remote_provider_modified_file_replica,
-        eviction_should_fail_when_eviction_provider_modified_file_replica,
         rerun_eviction_of_file_replica_with_migration,
-        evict_dir_replica,
         basic_autocleaning_test,
         automatic_cleanup_should_evict_unpopular_files,
         posix_mode_get,
@@ -142,9 +129,6 @@ all() ->
         empty_metadata_invalid_json_test,
         spatial_flag_test,
         list_transfers,
-        %% quota_decreased_after_eviciton,   % TODO uncomment after resolving VFS-4041
-        evict_big_dir,
-        migrate_big_dir,
         track_transferred_files
     ]).
 
@@ -234,6 +218,17 @@ end, __Distributions))).
         threshold => Threshold
     }
 ).
+
+-define(assertQuota(Worker, SpaceId, ExpectedSize), {
+    ?assertEqual(ExpectedSize, case rpc:call(Worker, space_quota, get, [SpaceId]) of
+        {ok, #document{
+            value = #space_quota{
+                current_size = CurrentSize
+            }
+        }} -> CurrentSize;
+        Error -> Error
+    end
+)}).
 
 -define(USER_1_AUTH_HEADERS(Config), ?USER_1_AUTH_HEADERS(Config, [])).
 -define(USER_1_AUTH_HEADERS(Config, OtherHeaders),
@@ -580,11 +575,11 @@ cancel_file_replication_on_2_providers_simultaneously(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
-    SpaceId = <<"space3">>,
+    SpaceId = <<"space2">>,
     DomainP2 = domain(WorkerP2),
 
     Size = 1024 * 1024 * 1024,
-    File = <<"/space3/file_cancel_replication_simultaneously">>,
+    File = <<"/space2/file_cancel_replication_simultaneously">>,
     FileGuid = create_test_file(WorkerP1, SessionId, File, crypto:strong_rand_bytes(Size)),
     {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
 
@@ -741,404 +736,6 @@ rerun_dir_replication(Config) ->
     ?assertEqual([NewTransferId, Tid],
         get_ended_transfers_for_file(WorkerP2, Dir1Guid), ?ATTEMPTS).
 
-evict_file_replica(Config) ->
-    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
-    SpaceId = ?config(space_id, Config),
-    File = ?absPath(SpaceId, <<"file_evict">>),
-    FileGuid = create_test_file(WorkerP1, SessionId, File, ?TEST_DATA),
-    DomainP2 = domain(WorkerP2),
-    {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
-
-    % when
-    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
-    Tid = schedule_file_replication(WorkerP1, DomainP2, File, Config),
-    ?assertEqual([Tid], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-    ?assertEqual([], get_ended_transfers_for_file(WorkerP1, FileGuid)),
-
-    ?assertTransferStatus(#{
-        <<"replicationStatus">> := <<"completed">>,
-        <<"replicatingProviderId">> := DomainP2,
-        <<"path">> := File,
-        <<"replicaEvictionStatus">> := <<"skipped">>,
-        <<"fileId">> := FileObjectId,
-        <<"callback">> := null,
-        <<"filesToProcess">> := 1,
-        <<"filesProcessed">> := 1,
-        <<"failedFiles">> := 0,
-        <<"fileReplicasEvicted">> := 0,
-        <<"filesReplicated">> := 1,
-        <<"bytesReplicated">> := 4
-    }, WorkerP1, Tid, Config),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid], list_ended_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-    ?assertEqual([Tid], get_ended_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid], list_ended_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
-    ?assertEqual([Tid], get_ended_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
-
-    ExpectedDistribution = [
-        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
-        #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
-    ],
-    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File),
-    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
-
-    Tid1 = schedule_replica_eviction(WorkerP1, DomainP2, File, Config),
-    ?assertEqual([Tid1], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-    ExpectedDistribution2 = [
-        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
-        #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => []}
-    ],
-
-    ?assertTransferStatus(#{
-        <<"replicationStatus">> := <<"skipped">>,
-        <<"replicatingProviderId">> := null,
-        <<"evictingProviderId">> := DomainP2,
-        <<"path">> := File,
-        <<"replicaEvictionStatus">> := <<"completed">>,
-        <<"fileId">> := FileObjectId,
-        <<"callback">> := null,
-        <<"filesToProcess">> := 1,
-        <<"filesProcessed">> := 1,
-        <<"failedFiles">> :=0,
-        <<"filesReplicated">> := 0,
-        <<"fileReplicasEvicted">> := 1,
-        <<"bytesReplicated">> := 0
-    }, WorkerP1, Tid1, Config),
-
-    ?assertDistribution(WorkerP1, ExpectedDistribution2, Config, File),
-    ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, File),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid1, Tid], list_ended_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-    ?assertEqual([Tid1, Tid], get_ended_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid1, Tid], list_ended_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
-    ?assertEqual([Tid1, Tid], get_ended_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS).
-
-fail_to_evict_file_replica_without_permissions(Config) ->
-    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    %NOTE in this test file will be created by user2 and user1 will try to evict it
-    SessionId = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    SessionId2 = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(WorkerP2)}}, Config),
-    SpaceId = ?config(space_id, Config),
-    File = ?absPath(SpaceId, <<"file_evict">>),
-    FileGuid = create_test_file(WorkerP1, SessionId, File, ?TEST_DATA),
-
-    DomainP2 = domain(WorkerP2),
-    {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
-
-    % when
-    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
-    Tid = schedule_file_replication(WorkerP1, DomainP2, File, Config),
-    ?assertEqual([Tid], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-
-    ?assertTransferStatus(#{
-        <<"replicationStatus">> := <<"completed">>,
-        <<"replicatingProviderId">> := DomainP2,
-        <<"path">> := File,
-        <<"replicaEvictionStatus">> := <<"skipped">>,
-        <<"fileId">> := FileObjectId,
-        <<"callback">> := null,
-        <<"filesToProcess">> := 1,
-        <<"filesProcessed">> := 1,
-        <<"failedFiles">> := 0,
-        <<"fileReplicasEvicted">> := 0,
-        <<"filesReplicated">> := 1,
-        <<"bytesReplicated">> := 4
-    }, WorkerP1, Tid, Config),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid], list_ended_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid], list_ended_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
-
-    ExpectedDistribution = [
-        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
-        #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
-    ],
-    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File),
-    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
-
-    % user1 should fail to schedule file replica eviction
-    ?assertMatch({ok, 403, _, _}, rest_test_utils:request(WorkerP1,
-        <<"replicas/", File/binary, "?provider_id=", DomainP2/binary>>,
-        delete, ?USER_1_AUTH_HEADERS(Config), []),
-        ?ATTEMPTS),
-
-    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File),
-    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid], list_ended_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid], list_ended_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS).
-
-evict_file_replica_with_migration(Config) ->
-    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
-    SpaceId = ?config(space_id, Config),
-    File = ?absPath(SpaceId, <<"file_evict_migration">>),
-    FileGuid = create_test_file(WorkerP1, SessionId, File, ?TEST_DATA),
-    DomainP1 = domain(WorkerP1),
-    DomainP2 = domain(WorkerP2),
-    {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
-
-    % when
-    ExpectedDistribution = [
-        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]}
-    ],
-    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File),
-    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
-
-    % then
-    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
-    Tid = schedule_replica_eviction(WorkerP1, DomainP1, DomainP2, File, Config),
-    ?assertEqual([Tid], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-    ?assertEqual([], get_ended_transfers_for_file(WorkerP1, FileGuid)),
-
-    ?assertTransferStatus(#{
-        <<"replicationStatus">> := <<"completed">>,
-        <<"replicatingProviderId">> := DomainP2,
-        <<"evictingProviderId">> := DomainP1,
-        <<"path">> := File,
-        <<"replicaEvictionStatus">> := <<"completed">>,
-        <<"fileId">> := FileObjectId,
-        <<"callback">> := null,
-        <<"filesToProcess">> := 2,
-        <<"filesProcessed">> := 2,
-        <<"failedFiles">> := 0,
-        <<"filesReplicated">> := 1,
-        <<"bytesReplicated">> := 4,
-        <<"fileReplicasEvicted">> := 1,
-        <<"callback">> := null
-    }, WorkerP1, Tid, Config),
-
-    ExpectedDistribution2 = [
-        #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]},
-        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => []}
-    ],
-    ?assertDistribution(WorkerP1, ExpectedDistribution2, Config, File),
-    ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, File),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid], list_ended_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid], list_ended_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS).
-
-eviction_should_succeed_when_remote_provider_modified_file_replica(Config) ->
-    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
-    SpaceId = ?config(space_id, Config),
-    File = ?absPath(SpaceId, <<"file_evict_remote_modification">>),
-    FileGuid = create_test_file(WorkerP1, SessionId, File, ?TEST_DATA),
-    DomainP2 = domain(WorkerP2),
-    {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
-
-    % when
-    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
-    Tid = schedule_file_replication(WorkerP1, DomainP2, File, Config),
-    ?assertEqual([Tid], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-
-    ?assertTransferStatus(#{
-        <<"replicationStatus">> := <<"completed">>,
-        <<"replicatingProviderId">> := DomainP2,
-        <<"path">> := File,
-        <<"replicaEvictionStatus">> := <<"skipped">>,
-        <<"fileId">> := FileObjectId,
-        <<"callback">> := null,
-        <<"filesToProcess">> := 1,
-        <<"filesProcessed">> := 1,
-        <<"failedFiles">> := 0,
-        <<"fileReplicasEvicted">> := 0,
-        <<"filesReplicated">> := 1,
-        <<"bytesReplicated">> := 4
-    }, WorkerP1, Tid, Config),
-    ?assertEqual([], list_waiting_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid], list_ended_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid], list_ended_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
-
-    ExpectedDistribution = [
-        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
-        #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
-    ],
-    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File),
-    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
-
-    % bump version on WorkerP2
-    {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
-    {ok, _} = lfm_proxy:write(WorkerP1, Handle, 1, <<"#">>),
-    lfm_proxy:close(WorkerP1, Handle),
-    Tid1 = schedule_replica_eviction(WorkerP1, DomainP2, File, Config),
-    ?assertEqual([Tid1], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-    ExpectedDistribution2 = [
-        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
-        #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => []}
-    ],
-
-    ?assertTransferStatus(#{
-        <<"replicationStatus">> := <<"skipped">>,
-        <<"replicatingProviderId">> := null,
-        <<"path">> := File,
-        <<"replicaEvictionStatus">> := <<"completed">>,
-        <<"fileId">> := FileObjectId,
-        <<"callback">> := null,
-        <<"filesToProcess">> := 1,
-        <<"filesProcessed">> := 1,
-        <<"failedFiles">> :=0,
-        <<"filesReplicated">> := 0,
-        <<"fileReplicasEvicted">> := 1,
-        <<"bytesReplicated">> := 0
-    }, WorkerP1, Tid1, Config),
-
-    ?assertDistribution(WorkerP1, ExpectedDistribution2, Config, File),
-    ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, File),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid1, Tid], list_ended_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-    ?assertEqual([Tid1, Tid], get_ended_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid1, Tid], list_ended_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
-    ?assertEqual([Tid1, Tid], get_ended_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS).
-
-eviction_should_fail_when_eviction_provider_modified_file_replica(Config) ->
-    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
-    SpaceId = ?config(space_id, Config),
-    File = ?absPath(SpaceId, <<"file_evict_local_modification">>),
-    FileGuid = create_test_file(WorkerP1, SessionId, File, ?TEST_DATA),
-    lfm_proxy:set_perms(WorkerP1, SessionId, {guid, FileGuid}, 8#777),
-    DomainP2 = domain(WorkerP2),
-    {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
-
-    % when
-    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
-    Tid = schedule_file_replication(WorkerP1, DomainP2, File, Config),
-    ?assertEqual([Tid], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-
-    ?assertTransferStatus(#{
-        <<"replicationStatus">> := <<"completed">>,
-        <<"replicatingProviderId">> := DomainP2,
-        <<"path">> := File,
-        <<"replicaEvictionStatus">> := <<"skipped">>,
-        <<"fileId">> := FileObjectId,
-        <<"callback">> := null,
-        <<"filesToProcess">> := 1,
-        <<"filesProcessed">> := 1,
-        <<"failedFiles">> := 0,
-        <<"fileReplicasEvicted">> := 0,
-        <<"filesReplicated">> := 1,
-        <<"bytesReplicated">> := 4
-    }, WorkerP1, Tid, Config),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid], list_ended_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-    ?assertEqual([Tid], get_ended_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid], list_ended_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
-    ?assertEqual([Tid], get_ended_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
-
-    ExpectedDistribution = [
-        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
-        #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
-    ],
-    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File),
-    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
-
-    ok = test_utils:mock_new(WorkerP2, replica_deletion_req),
-    ok = test_utils:mock_expect(WorkerP2, replica_deletion_req, delete_blocks, fun(FileCtx, Blocks, AllowedVV) ->
-        {ok, Handle} = logical_file_manager:open(SessionId2, {path, File}, write),
-        {ok, _, 1} = logical_file_manager:write(Handle, 1, <<"#">>),
-        ok = logical_file_manager:fsync(Handle),
-        ok = logical_file_manager:release(Handle),
-        meck:passthrough([FileCtx, Blocks, AllowedVV])
-    end),
-
-    Tid1 = schedule_replica_eviction(WorkerP1, DomainP2, File, Config),
-
-    ?assertEqual([Tid1], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-
-    ExpectedDistribution2 = [
-        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 1], [2, 2]]},
-        #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
-    ],
-
-    ?assertTransferStatus(#{
-        <<"replicationStatus">> := <<"skipped">>,
-        <<"replicatingProviderId">> := null,
-        <<"path">> := File,
-        <<"replicaEvictionStatus">> := <<"failed">>,
-        <<"fileId">> := FileObjectId,
-        <<"callback">> := null,
-        <<"filesToProcess">> := 1,
-        <<"filesProcessed">> := 1,
-        <<"failedFiles">> := 1,
-        <<"filesReplicated">> := 0,
-        <<"fileReplicasEvicted">> := 0,
-        <<"bytesReplicated">> := 0
-    }, WorkerP1, Tid1, Config),
-
-    ?assertDistribution(WorkerP1, ExpectedDistribution2, Config, File),
-    ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, File),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid1, Tid], list_ended_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid1, Tid], list_ended_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS).
-
-
 rerun_eviction_of_file_replica_with_migration(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
@@ -1239,120 +836,6 @@ rerun_eviction_of_file_replica_with_migration(Config) ->
     ?assertDistribution(WorkerP1, ExpectedDistribution2, Config, File),
     ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, File).
 
-evict_dir_replica(Config) ->
-    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
-    SpaceId = ?config(space_id, Config),
-    DomainP2 = domain(WorkerP2),
-
-    Dir1 = ?absPath(SpaceId, <<"dir1_evict">>),
-    Dir2 = ?absPath(SpaceId, <<"dir1_evict/dir2">>),
-    File1 = ?absPath(SpaceId, <<"dir1_evict/file1">>),
-    File2 = ?absPath(SpaceId, <<"dir1_evict/file2">>),
-    File3 = ?absPath(SpaceId, <<"dir1_evict/dir2/file3">>),
-    {ok, Dir1Guid} = lfm_proxy:mkdir(WorkerP1, SessionId, Dir1),
-    {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, Dir2),
-    create_test_file(WorkerP1, SessionId, File1, ?TEST_DATA),
-    create_test_file(WorkerP1, SessionId, File2, ?TEST_DATA),
-    create_test_file(WorkerP1, SessionId, File3, ?TEST_DATA),
-
-    {ok, FileObjectId} = cdmi_id:guid_to_objectid(Dir1Guid),
-
-    % when
-    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File1}), ?ATTEMPTS),
-    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File2}), ?ATTEMPTS),
-    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File3}), ?ATTEMPTS),
-    Tid = schedule_file_replication(WorkerP1, DomainP2, Dir1, Config),
-    ?assertEqual([Tid], get_ongoing_transfers_for_file(WorkerP1, Dir1Guid), ?ATTEMPTS),
-    ?assertEqual([], get_ended_transfers_for_file(WorkerP1, Dir1Guid)),
-
-    {ok, FileObjectId} = cdmi_id:guid_to_objectid(Dir1Guid),
-    DomainP2 = domain(WorkerP2),
-
-    % then
-    ?assertTransferStatus(#{
-        <<"replicationStatus">> := <<"completed">>,
-        <<"replicatingProviderId">> := DomainP2,
-        <<"path">> := Dir1,
-        <<"replicaEvictionStatus">> := <<"skipped">>,
-        <<"fileId">> := FileObjectId,
-        <<"callback">> := null,
-        <<"filesToProcess">> := 5,
-        <<"filesProcessed">> := 5,
-        <<"failedFiles">> := 0,
-        <<"fileReplicasEvicted">> := 0,
-        <<"filesReplicated">> := 3,
-        <<"bytesReplicated">> := 12
-    }, WorkerP1, Tid, Config),
-
-    ExpectedDistribution = [
-        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
-        #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]}
-    ],
-    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File1),
-    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File2),
-    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File3),
-    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File1),
-    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File2),
-    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File3),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid], list_ended_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP1, Dir1Guid), ?ATTEMPTS),
-    ?assertEqual([Tid], get_ended_transfers_for_file(WorkerP1, Dir1Guid), ?ATTEMPTS),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid], list_ended_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, Dir1Guid), ?ATTEMPTS),
-    ?assertEqual([Tid], get_ended_transfers_for_file(WorkerP2, Dir1Guid), ?ATTEMPTS),
-
-    Tid2 = schedule_replica_eviction(WorkerP1, DomainP2, Dir1, Config),
-    ?assertEqual([Tid2],
-        get_ongoing_transfers_for_file(WorkerP1, Dir1Guid), ?ATTEMPTS),
-
-    ?assertTransferStatus(#{
-        <<"path">> := Dir1,
-        <<"callback">> := null,
-        <<"replicationStatus">> := <<"skipped">>,
-        <<"replicaEvictionStatus">> := <<"completed">>,
-        <<"replicatingProviderId">> := null,
-        <<"evictingProviderId">> := DomainP2,
-        <<"fileId">> := FileObjectId,
-        <<"filesToProcess">> := 5,
-        <<"filesProcessed">> := 5,
-        <<"failedFiles">> := 0,
-        <<"fileReplicasEvicted">> := 3,
-        <<"filesReplicated">> := 0,
-        <<"bytesReplicated">> := 0
-    }, WorkerP1, Tid2, Config),
-
-    %then
-    ExpectedDistribution2 = [
-        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]},
-        #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => []}
-    ],
-    ?assertDistribution(WorkerP1, ExpectedDistribution2, Config, File1),
-    ?assertDistribution(WorkerP1, ExpectedDistribution2, Config, File2),
-    ?assertDistribution(WorkerP1, ExpectedDistribution2, Config, File3),
-    ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, File1),
-    ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, File2),
-    ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, File3),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid2, Tid], list_ended_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP1, Dir1Guid), ?ATTEMPTS),
-    ?assertEqual([Tid2, Tid], get_ended_transfers_for_file(WorkerP1, Dir1Guid), ?ATTEMPTS),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid2, Tid], list_ended_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, Dir1Guid), ?ATTEMPTS),
-    ?assertEqual([Tid2, Tid], get_ended_transfers_for_file(WorkerP2, Dir1Guid), ?ATTEMPTS).
-
 basic_autocleaning_test(Config) ->
     % autocleaning configuration
     %   lower_file_size_limit => 0,
@@ -1377,7 +860,7 @@ basic_autocleaning_test(Config) ->
     lfm_proxy:close(WorkerP2, ReadHandle1),
 
     % ensure that events from rtransfer are handled
-    ?assertEqual(Size, rpc:call(WorkerP2, space_quota, current_size, [<<"space5">>]), ?ATTEMPTS),
+    ?assertEqual(Size, rpc:call(WorkerP2, space_quota, current_size, [<<"space3">>]), ?ATTEMPTS),
     ExpectedDistribution0 = [
         #{<<"providerId">> => DomainP1, <<"blocks">> => [[0, Size]]},
         #{<<"providerId">> => DomainP2, <<"blocks">> => [[0, Size]]}
@@ -1411,11 +894,11 @@ automatic_cleanup_should_evict_unpopular_files(Config) ->
     DomainP1 = domain(WorkerP1),
     DomainP2 = domain(WorkerP2),
 
-    File1 = <<"/space5/file1_too_small">>,
-    File2 = <<"/space5/file2_popular">>,
-    File3 = <<"/space5/file3_unpopular">>,
-    File4 = <<"/space5/file4_too_big">>,
-    File5 = <<"/space5/file5_to_write">>,
+    File1 = <<"/space3/file1_too_small">>,
+    File2 = <<"/space3/file2_popular">>,
+    File3 = <<"/space3/file3_unpopular">>,
+    File4 = <<"/space3/file4_too_big">>,
+    File5 = <<"/space3/file5_to_write">>,
     % threshold is 35
     % size of files File1-4 is 4 + 9 + 9 + 11 = 33
     % target is 30
@@ -1488,7 +971,7 @@ automatic_cleanup_should_evict_unpopular_files(Config) ->
     ?assertDistributionProxyByGuid(WorkerP2, SessionIdP2, ExpectedDistribution3, File4Guid),
     ?assertDistributionProxyByGuid(WorkerP2, SessionIdP2, ExpectedDistribution1, File5Guid),
 
-    [Report] = rpc:call(WorkerP2, autocleaning, list_reports_since, [<<"space5">>, 0]),
+    [Report] = rpc:call(WorkerP2, autocleaning, list_reports_since, [<<"space3">>, 0]),
     ?assertMatch(#{
         bytesToRelease := 12,
         releasedBytes := NormalSize,
@@ -1649,12 +1132,12 @@ metric_get(Config) ->
 
     MonitoringId = #monitoring_id{
         main_subject_type = space,
-        main_subject_id = <<"space3">>,
+        main_subject_id = <<"space2">>,
         metric_type = storage_quota,
         provider_id = Prov1ID
     },
 
-    ?assertMatch(ok, rpc:call(WorkerP1, monitoring_utils, create, [<<"space3">>, MonitoringId, time_utils:system_time_seconds()])),
+    ?assertMatch(ok, rpc:call(WorkerP1, monitoring_utils, create, [<<"space2">>, MonitoringId, time_utils:system_time_seconds()])),
     {ok, #document{value = State}} = rpc:call(WorkerP1, monitoring_state, get, [MonitoringId]),
     ?assertMatch({ok, _}, rpc:call(WorkerP1, monitoring_state, save, [
         #document{
@@ -1666,7 +1149,7 @@ metric_get(Config) ->
     ])),
 
     % when
-    {ok, 200, _, Body} = rest_test_utils:request(WorkerP1, <<"metrics/space/space3?metric=storage_quota">>, get, ?USER_1_AUTH_HEADERS(Config), []),
+    {ok, 200, _, Body} = rest_test_utils:request(WorkerP1, <<"metrics/space/space2?metric=storage_quota">>, get, ?USER_1_AUTH_HEADERS(Config), []),
     DecodedBody = json_utils:decode(Body),
 
     % then
@@ -1680,13 +1163,13 @@ metric_get(Config) ->
 list_file(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    File = <<"/space3/file1_lf">>,
+    File = <<"/space2/file1_lf">>,
     Mode = 8#700,
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
 
     % when
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"files/space3/file1_lf">>, get, ?USER_1_AUTH_HEADERS(Config), [])),
+        rest_test_utils:request(WorkerP1, <<"files/space2/file1_lf">>, get, ?USER_1_AUTH_HEADERS(Config), [])),
 
     % then
     DecodedBody = json_utils:decode(Body),
@@ -1708,15 +1191,9 @@ list_dir(Config) ->
     ?assertMatch(
         [
             #{<<"id">> := _, <<"path">> := <<"/space1">>},
-            #{<<"id">> := _, <<"path">> := <<"/space10">>},
             #{<<"id">> := _, <<"path">> := <<"/space2">>},
             #{<<"id">> := _, <<"path">> := <<"/space3">>},
-            #{<<"id">> := _, <<"path">> := <<"/space4">>},
-            #{<<"id">> := _, <<"path">> := <<"/space5">>},
-            #{<<"id">> := _, <<"path">> := <<"/space6">>},
-            #{<<"id">> := _, <<"path">> := <<"/space7">>},
-            #{<<"id">> := _, <<"path">> := <<"/space8">>},
-            #{<<"id">> := _, <<"path">> := <<"/space9">>}
+            #{<<"id">> := _, <<"path">> := <<"/space4">>}
         ],
         lists:sort(fun(#{<<"path">> := Path1}, #{<<"path">> := Path2}) ->
             Path1 =< Path2
@@ -1929,15 +1406,9 @@ list_spaces(Config) ->
     ?assertMatch(
         [
             #{<<"name">> := <<"space1">>, <<"spaceId">> := <<"space1">>},
-            #{<<"name">> := <<"space10">>, <<"spaceId">> := <<"space10">>},
             #{<<"name">> := <<"space2">>, <<"spaceId">> := <<"space2">>},
             #{<<"name">> := <<"space3">>, <<"spaceId">> := <<"space3">>},
-            #{<<"name">> := <<"space4">>, <<"spaceId">> := <<"space4">>},
-            #{<<"name">> := <<"space5">>, <<"spaceId">> := <<"space5">>},
-            #{<<"name">> := <<"space6">>, <<"spaceId">> := <<"space6">>},
-            #{<<"name">> := <<"space7">>, <<"spaceId">> := <<"space7">>},
-            #{<<"name">> := <<"space8">>, <<"spaceId">> := <<"space8">>},
-            #{<<"name">> := <<"space9">>, <<"spaceId">> := <<"space9">>}
+            #{<<"name">> := <<"space4">>, <<"spaceId">> := <<"space4">>}
         ],
         lists:sort(DecodedBody)
     ).
@@ -1947,13 +1418,13 @@ get_space(Config) ->
 
     % when
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"spaces/space3">>, get, ?USER_1_AUTH_HEADERS(Config), [])),
+        rest_test_utils:request(WorkerP1, <<"spaces/space2">>, get, ?USER_1_AUTH_HEADERS(Config), [])),
 
     % then
     DecodedBody = json_utils:decode(Body),
     ?assertMatch(
         #{
-            <<"name">> := <<"space3">>,
+            <<"name">> := <<"space2">>,
             <<"providers">> := [
                 #{
                     <<"providerId">> := PID1,
@@ -1964,7 +1435,7 @@ get_space(Config) ->
                     <<"providerName">> := PID2
                 }
             ],
-            <<"spaceId">> := <<"space3">>
+            <<"spaceId">> := <<"space2">>
         },
         DecodedBody
     ).
@@ -1974,12 +1445,12 @@ set_get_json_metadata(Config) ->
 
     % when
     ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space3?metadata_type=json">>, put,
+        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json">>, put,
             ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), "{\"key\": \"value\"}")),
 
     % then
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space3?metadata_type=json">>, get,
+        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json">>, get,
             ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])),
     DecodedBody = json_utils:decode(Body),
     ?assertMatch(
@@ -1991,13 +1462,13 @@ set_get_json_metadata(Config) ->
 
     % then
     ?assertMatch({ok, 200, _, <<"\"value\"">>},
-        rest_test_utils:request(WorkerP1, <<"metadata/space3?filter_type=keypath&filter=key">>, get,
+        rest_test_utils:request(WorkerP1, <<"metadata/space2?filter_type=keypath&filter=key">>, get,
             ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])).
 
 set_get_json_metadata_id(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    {ok, Guid} = lfm_proxy:create(WorkerP1, SessionId, <<"/space3/file_sgjmi">>, 8#777),
+    {ok, Guid} = lfm_proxy:create(WorkerP1, SessionId, <<"/space2/file_sgjmi">>, 8#777),
     {ok, ObjectId} = cdmi_id:guid_to_objectid(Guid),
 
     % when
@@ -2027,19 +1498,19 @@ set_get_rdf_metadata(Config) ->
 
     % when
     ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space3?metadata_type=rdf">>, put,
+        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=rdf">>, put,
             ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/rdf+xml">>}]), "some_xml")),
 
     % then
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space3?metadata_type=rdf">>, get,
+        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=rdf">>, get,
             ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/rdf+xml">>}]), [])),
     ?assertMatch(<<"some_xml">>, Body).
 
 set_get_rdf_metadata_id(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    {ok, Guid} = lfm_proxy:create(WorkerP1, SessionId, <<"/space3/file_sgrmi">>, 8#777),
+    {ok, Guid} = lfm_proxy:create(WorkerP1, SessionId, <<"/space2/file_sgrmi">>, 8#777),
     {ok, ObjectId} = cdmi_id:guid_to_objectid(Guid),
 
     % when
@@ -2187,16 +1658,16 @@ set_get_json_metadata_inherited(Config) ->
 
     % when
     ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space3?metadata_type=json">>, put,
+        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json">>, put,
             ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), <<"{\"a\": {\"a1\": \"b1\"}, \"b\": \"c\", \"e\": \"f\"}">>)),
-    {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, <<"/space3/dir">>),
+    {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, <<"/space2/dir">>),
     ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space3/dir?metadata_type=json">>, put,
+        rest_test_utils:request(WorkerP1, <<"metadata/space2/dir?metadata_type=json">>, put,
             ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), <<"{\"a\": {\"a2\": \"b2\"}, \"b\": \"d\"}">>)),
 
     % then
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space3/dir?metadata_type=json&inherited=true">>, get,
+        rest_test_utils:request(WorkerP1, <<"metadata/space2/dir?metadata_type=json&inherited=true">>, get,
             ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])),
     DecodedBody = json_utils:decode(Body),
     ?assertMatch(
@@ -2211,8 +1682,8 @@ set_get_json_metadata_inherited(Config) ->
 set_get_xattr_inherited(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, <<"/space3/dir_test">>),
-    {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, <<"/space3/dir_test/child">>),
+    {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, <<"/space2/dir_test">>),
+    {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, <<"/space2/dir_test/child">>),
 
     % when
     XattrSpace = json_utils:encode(#{<<"k1">> => <<"v1">>}),
@@ -2221,24 +1692,24 @@ set_get_xattr_inherited(Config) ->
     XattrChild2 = json_utils:encode(#{<<"k3">> => <<"v3">>}),
 
     ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space3?metadata_type=json">>, put,
+        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json">>, put,
             ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), <<"{\"a\":5}">>)),
     ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"attributes/space3?extended=true">>, put,
+        rest_test_utils:request(WorkerP1, <<"attributes/space2?extended=true">>, put,
             ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), XattrSpace)),
     ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"attributes/space3/dir_test?extended=true">>, put,
+        rest_test_utils:request(WorkerP1, <<"attributes/space2/dir_test?extended=true">>, put,
             ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), XattrDir)),
     ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"attributes/space3/dir_test/child?extended=true">>, put,
+        rest_test_utils:request(WorkerP1, <<"attributes/space2/dir_test/child?extended=true">>, put,
             ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), XattrChild)),
     ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"attributes/space3/dir_test/child?extended=true">>, put,
+        rest_test_utils:request(WorkerP1, <<"attributes/space2/dir_test/child?extended=true">>, put,
             ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), XattrChild2)),
 
     % then
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"attributes/space3/dir_test/child?inherited=true&extended=true">>, get,
+        rest_test_utils:request(WorkerP1, <<"attributes/space2/dir_test/child?inherited=true&extended=true">>, get,
             ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])),
     DecodedBody = json_utils:decode(Body),
     ?assertMatch(#{
@@ -2253,35 +1724,35 @@ set_get_json_metadata_using_filter(Config) ->
 
     % when
     ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space3?metadata_type=json">>, put,
+        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json">>, put,
             ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), <<"{\"key1\": \"value1\", \"key2\": \"value2\", \"key3\": [\"v1\", \"v2\"]}">>)),
 
     % then
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space3?metadata_type=json&filter_type=keypath&filter=key1">>, get,
+        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json&filter_type=keypath&filter=key1">>, get,
             ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])),
     DecodedBody = json_utils:decode(Body),
     ?assertMatch(<<"value1">>, DecodedBody),
     {_, _, _, Body2} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space3?metadata_type=json&filter_type=keypath&filter=key3.[1]">>, get,
+        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json&filter_type=keypath&filter=key3.[1]">>, get,
             ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])),
     DecodedBody2 = json_utils:decode(Body2),
     ?assertMatch(<<"v2">>, DecodedBody2),
 
     %when
     ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space3?metadata_type=json&filter_type=keypath&filter=key1">>, put,
+        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json&filter_type=keypath&filter=key1">>, put,
             ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), <<"\"value11\"">>)),
     ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space3?metadata_type=json&filter_type=keypath&filter=key2">>, put,
+        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json&filter_type=keypath&filter=key2">>, put,
             ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), <<"{\"key22\": \"value22\"}">>)),
     ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space3?metadata_type=json&filter_type=keypath&filter=key3.[0]">>, put,
+        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json&filter_type=keypath&filter=key3.[0]">>, put,
             ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), <<"\"v11\"">>)),
 
     %then
     {_, _, _, ReponseBody} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space3?metadata_type=json">>, get,
+        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json">>, get,
             ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])),
     ?assertMatch(
         #{
@@ -2299,10 +1770,10 @@ primitive_json_metadata_test(Config) ->
 
     lists:foreach(fun(Primitive) ->
         ?assertMatch({ok, 204, _, _},
-            rest_test_utils:request(WorkerP1, <<"metadata/space3?metadata_type=json">>, put,
+            rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json">>, put,
                 ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), Primitive)),
         ?assertMatch({ok, 200, _, Primitive},
-            rest_test_utils:request(WorkerP1, <<"metadata/space3?metadata_type=json">>, get,
+            rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json">>, get,
                 ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), []))
     end, Primitives).
 
@@ -2313,7 +1784,7 @@ empty_metadata_invalid_json_test(Config) ->
 
     lists:foreach(fun(InvalidJson) ->
         ?assertMatch({ok, 400, _, _},
-            rest_test_utils:request(WorkerP1, <<"metadata/space3?metadata_type=json">>, put,
+            rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json">>, put,
                 ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), InvalidJson))
     end, InvalidJsons).
 
@@ -2330,7 +1801,7 @@ list_transfers(Config) ->
     [P2, P1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(P1)}}, Config),
     SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(P2)}}, Config),
-    Space = <<"space10">>,
+    Space = <<"space4">>,
     RootDir = filename:join([<<"/">>, Space, <<"list_transfers">>]),
     FilesNum = 100,
     Structure = [FilesNum],
@@ -2400,307 +1871,10 @@ list_transfers(Config) ->
     ?assertMatch(AllTransfers, lists:sort(Ended(P1)), ?ATTEMPTS),
     ?assertMatch(AllTransfers, lists:sort(Ended(P2)), ?ATTEMPTS).
 
-quota_decreased_after_eviciton(Config) ->
-    ct:timetrap({hours, 1}),
-    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
-    SpaceId = ?config(space_id, Config),
-    DomainP2 = domain(WorkerP2),
-
-    File = ?absPath(SpaceId, <<"file_quota_decreased">>),
-    File2 = ?absPath(SpaceId, <<"file_quota_decreased2">>),
-    FileGuid = create_test_file(WorkerP1, SessionId, File, <<"0123456789">>),
-    FileGuid2 = create_test_file(WorkerP1, SessionId, File2, <<"9876543210">>),
-    {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
-    {ok, FileObjectId2} = cdmi_id:guid_to_objectid(FileGuid2),
-
-    ExpectedDistribution0 = [
-        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 10]]}
-    ],
-    ?assertDistributionProxyByGuid(WorkerP2, SessionId2, ExpectedDistribution0, FileGuid),
-
-    % when
-    Tid = schedule_file_replication(WorkerP1, DomainP2, File, Config),
-    ?assertEqual([Tid], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-
-    % then
-    ?assertTransferStatus(#{
-        <<"replicationStatus">> := <<"completed">>,
-        <<"replicatingProviderId">> := DomainP2,
-        <<"path">> := File,
-        <<"replicaEvictionStatus">> := <<"skipped">>,
-        <<"fileId">> := FileObjectId,
-        <<"callback">> := null,
-        <<"filesToProcess">> := 1,
-        <<"filesProcessed">> := 1,
-        <<"failedFiles">> := 0,
-        <<"fileReplicasEvicted">> := 0,
-        <<"filesReplicated">> := 1,
-        <<"bytesReplicated">> := 10
-    }, WorkerP1, Tid, Config),
-
-    ExpectedDistribution = [
-        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 10]]},
-        #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 10]]}
-    ],
-
-    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File),
-    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid], list_ended_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid], list_ended_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
-
-    % when
-    Tid2 = schedule_file_replication(WorkerP1, DomainP2, File2, Config),
-    ?assertEqual([Tid2],
-        get_ongoing_transfers_for_file(WorkerP1, FileGuid2), ?ATTEMPTS),
-
-    % then file cannot be replicated because of quota
-    ?assertTransferStatus(#{
-        <<"replicationStatus">> := <<"failed">>,
-        <<"replicatingProviderId">> := DomainP2,
-        <<"path">> := File2,
-        <<"replicaEvictionStatus">> := <<"skipped">>,
-        <<"fileId">> := FileObjectId2,
-        <<"callback">> := null,
-        <<"filesToProcess">> := 1,
-        <<"filesProcessed">> := 1,
-        <<"failedFiles">> := 1,
-        <<"fileReplicasEvicted">> := 0,
-        <<"filesReplicated">> := 0,
-        <<"bytesReplicated">> := 0
-    }, WorkerP1, Tid2, Config),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid2, Tid], list_ended_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-    ?assertEqual([Tid2, Tid], get_ended_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid2, Tid], list_ended_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
-    ?assertEqual([Tid2, Tid], get_ended_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
-
-    ExpectedDistribution2 = [
-        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 10]]},
-        #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => []}
-    ],
-    ?assertDistribution(WorkerP1, ExpectedDistribution2, Config, File2),
-    ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, File2),
-
-    Tid3 = schedule_replica_eviction(WorkerP2, DomainP2, File, Config),
-    ?assertEqual([Tid3],
-        get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
-
-    ?assertTransferStatus(#{
-        <<"replicationStatus">> := <<"skipped">>,
-        <<"replicatingProviderId">> := null,
-        <<"path">> := File,
-        <<"replicaEvictionStatus">> := <<"completed">>,
-        <<"callback">> := null,
-        <<"filesToProcess">> := 1,
-        <<"filesProcessed">> := 1,
-        <<"failedFiles">> := 0,
-        <<"fileReplicasEvicted">> := 1,
-        <<"filesReplicated">> := 0,
-        <<"bytesReplicated">> := 0
-    }, WorkerP1, Tid3, Config),
-
-    % File replica is evicted
-    ExpectedDistribution3 = [
-        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 10]]},
-        #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => []}
-    ],
-    ?assertDistribution(WorkerP1, ExpectedDistribution3, Config, File),
-    ?assertDistribution(WorkerP2, ExpectedDistribution3, Config, File),
-
-    %File2 can now be replicated
-    % when
-    Tid4 = schedule_file_replication(WorkerP1, DomainP2, File2, Config),
-    ?assertEqual([Tid4],
-        get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-
-    {ok, FileObjectId2} = cdmi_id:guid_to_objectid(FileGuid2),
-    DomainP2 = domain(WorkerP2),
-    ?assertTransferStatus(#{
-        <<"replicationStatus">> := <<"completed">>,
-        <<"replicatingProviderId">> := DomainP2,
-        <<"path">> := File2,
-        <<"replicaEvictionStatus">> := <<"skipped">>,
-        <<"fileId">> := FileObjectId2,
-        <<"callback">> := null,
-        <<"filesToProcess">> := 1,
-        <<"filesProcessed">> := 1,
-        <<"fileReplicasEvicted">> := 0,
-        <<"filesReplicated">> := 1,
-        <<"bytesReplicated">> := 10
-    }, WorkerP1, Tid4, Config),
-
-    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File2),
-    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File2),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid4, Tid3, Tid2, Tid], list_ended_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-    ?assertEqual([Tid4, Tid3, Tid2, Tid], get_ended_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid4, Tid3, Tid2, Tid], list_ended_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
-    ?assertEqual([Tid4, Tid3, Tid2, Tid], get_ended_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS).
-
-evict_big_dir(Config) ->
-    ct:timetrap({hours, 1}),
-    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
-    Space = <<"/space3">>,
-    RootDir = filename:join(Space, <<"big_dir_eviction">>),
-    Structure = [10, 10], % last level are files
-    FilesToCreate = lists:foldl(fun(N, AccIn) ->
-        1 + AccIn * N end, 1, Structure),
-    RegularFilesNum = lists:foldl(fun(N, AccIn) -> N * AccIn end, 1, Structure),
-    DomainP2 = domain(WorkerP2),
-    DomainP1 = domain(WorkerP1),
-
-    true = register(?CREATE_FILE_COUNTER, spawn_link(?MODULE, create_file_counter, [0, FilesToCreate, self(), []])),
-    true = register(?SYNC_FILE_COUNTER, spawn_link(?MODULE, sync_file_counter, [0, FilesToCreate, self()])),
-
-    DirGuid = create_nested_directory_tree(WorkerP1, SessionId, Structure, RootDir),
-    FileGuidsAndPaths = receive {create, FileGuidsAndPaths0} ->
-        FileGuidsAndPaths0 end,
-
-    lists:foreach(fun({FileGuid, _FilePath}) ->
-        worker_pool:cast(?VERIFY_POOL, {?MODULE, verify_file, [WorkerP2, SessionId2, FileGuid]})
-    end, FileGuidsAndPaths),
-    receive files_synchronized -> ok end,
-
-    ExpectedDistribution0 = [#{<<"providerId">> => DomainP1, <<"blocks">> => [[0, 4]]}],
-    verify_files_distribution(WorkerP2, FilesToCreate, ExpectedDistribution0, FileGuidsAndPaths, SessionId2, Config),
-
-    Tid = schedule_file_replication(WorkerP2, DomainP2, RootDir, Config),
-    ?assertEqual([Tid], get_ongoing_transfers_for_file(WorkerP2, DirGuid), ?ATTEMPTS),
-    ?assertEqual([], get_ended_transfers_for_file(WorkerP2, DirGuid), ?ATTEMPTS),
-
-    % then
-    ?assertTransferStatus(#{
-        <<"replicationStatus">> := <<"completed">>,
-        <<"replicatingProviderId">> := DomainP2,
-        <<"path">> := RootDir,
-        <<"replicaEvictionStatus">> := <<"skipped">>,
-        <<"callback">> := null,
-        <<"filesToProcess">> := FilesToCreate,
-        <<"filesProcessed">> := FilesToCreate,
-        <<"filesReplicated">> := RegularFilesNum,
-        <<"fileReplicasEvicted">> := 0,
-        <<"failedFiles">> := 0
-    }, WorkerP1, Tid, Config, 600),
-
-    ExpectedDistribution = [
-        #{<<"providerId">> => DomainP1, <<"blocks">> => [[0, 4]]},
-        #{<<"providerId">> => DomainP2, <<"blocks">> => [[0, 4]]}
-    ],
-
-    verify_files_distribution(WorkerP1, FilesToCreate, ExpectedDistribution, FileGuidsAndPaths, SessionId, Config),
-    Tid2 = schedule_replica_eviction(WorkerP1, DomainP1, RootDir, Config),
-    ?assertEqual([Tid2], get_ongoing_transfers_for_file(WorkerP1, DirGuid), ?ATTEMPTS),
-
-    % then
-    ?assertTransferStatus(#{
-        <<"replicationStatus">> := <<"skipped">>,
-        <<"replicatingProviderId">> := null,
-        <<"evictingProviderId">> := DomainP1,
-        <<"path">> := RootDir,
-        <<"replicaEvictionStatus">> := <<"completed">>,
-        <<"callback">> := null,
-        <<"filesToProcess">> := FilesToCreate,
-        <<"filesProcessed">> := FilesToCreate,
-        <<"filesReplicated">> := 0,
-        <<"fileReplicasEvicted">> := RegularFilesNum,
-        <<"failedFiles">> := 0
-    }, WorkerP1, Tid2, Config, 600),
-
-    ExpectedDistribution2 = [
-        #{<<"providerId">> => DomainP2, <<"blocks">> => [[0, 4]]},
-        #{<<"providerId">> => DomainP1, <<"blocks">> => []}
-    ],
-    verify_files_distribution(WorkerP2, FilesToCreate, ExpectedDistribution2, FileGuidsAndPaths, SessionId2, Config),
-    verify_files_distribution(WorkerP1, FilesToCreate, ExpectedDistribution2, FileGuidsAndPaths, SessionId, Config),
-
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP1, DirGuid), ?ATTEMPTS),
-    ?assertEqual([Tid2, Tid], get_ended_transfers_for_file(WorkerP1, DirGuid), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, DirGuid), ?ATTEMPTS),
-    ?assertEqual([Tid2, Tid], get_ended_transfers_for_file(WorkerP2, DirGuid), ?ATTEMPTS).
-
-migrate_big_dir(Config) ->
-    ct:timetrap({hours, 1}),
-    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
-    Space = <<"/space3">>,
-    RootDir = filename:join(Space, <<"big_dir_migration">>),
-    Structure = [10, 10], % last level are files
-    FilesToCreate = lists:foldl(fun(N, AccIn) ->
-        1 + AccIn * N end, 1, Structure),
-    RegularFilesNum = lists:foldl(fun(N, AccIn) -> N * AccIn end, 1, Structure),
-    DomainP2 = domain(WorkerP2),
-    DomainP1 = domain(WorkerP1),
-
-    true = register(?CREATE_FILE_COUNTER, spawn_link(?MODULE, create_file_counter, [0, FilesToCreate, self(), []])),
-    true = register(?SYNC_FILE_COUNTER, spawn_link(?MODULE, sync_file_counter, [0, FilesToCreate, self()])),
-
-    DirGuid = create_nested_directory_tree(WorkerP1, SessionId, Structure, RootDir),
-
-    FileGuidsAndPaths = receive {create, FileGuidsAndPaths0} ->
-        FileGuidsAndPaths0 end,
-
-    lists:foreach(fun({FileGuid, _FilePath}) ->
-        worker_pool:cast(?VERIFY_POOL, {?MODULE, verify_file, [WorkerP2, SessionId2, FileGuid]})
-    end, FileGuidsAndPaths),
-
-    receive files_synchronized -> ok end,
-
-    Tid = schedule_replica_eviction(WorkerP2, DomainP1, DomainP2, RootDir, Config),
-    ?assertEqual([Tid], get_ongoing_transfers_for_file(WorkerP1, DirGuid), ?ATTEMPTS),
-    ?assertEqual([], get_ended_transfers_for_file(WorkerP1, DirGuid), ?ATTEMPTS),
-
-    % then
-    FilesToProcess = 2 * FilesToCreate,
-    ?assertTransferStatus(#{
-        <<"replicationStatus">> := <<"completed">>,
-        <<"replicatingProviderId">> := DomainP2,
-        <<"evictingProviderId">> := DomainP1,
-        <<"path">> := RootDir,
-        <<"replicaEvictionStatus">> := <<"completed">>,
-        <<"callback">> := null,
-        <<"filesToProcess">> := FilesToProcess,
-        <<"filesProcessed">> := FilesToProcess,
-        <<"filesReplicated">> := RegularFilesNum,
-        <<"fileReplicasEvicted">> := RegularFilesNum,
-        <<"failedFiles">> := 0
-    }, WorkerP1, Tid, Config, 600),
-
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP1, DirGuid), ?ATTEMPTS),
-    ?assertEqual([Tid], get_ended_transfers_for_file(WorkerP1, DirGuid), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, DirGuid), ?ATTEMPTS),
-    ?assertEqual([Tid], get_ended_transfers_for_file(WorkerP2, DirGuid), ?ATTEMPTS).
-
 track_transferred_files(Config) ->
     [Provider1, Provider2] = ?config(op_worker_nodes, Config),
     FileUuid = <<"file1">>,
-    SpaceId = <<"space3">>,
+    SpaceId = <<"space2">>,
     FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
     ScheduleTime = 100,
     FinishTime = 150,
@@ -2823,15 +1997,9 @@ init_per_testcase(Case, Config) when
     Case =:= rerun_file_replication;
     Case =:= rerun_file_replication_by_other_user;
     Case =:= rerun_dir_replication;
-    Case =:= evict_file_replica;
-    Case =:= fail_to_evict_file_replica_without_permissions;
-    Case =:= evict_file_replica_with_migration;
-    Case =:= eviction_should_succeed_when_remote_provider_modified_file_replica;
-    Case =:= eviction_should_fail_when_eviction_provider_modified_file_replica;
-    Case =:= rerun_eviction_of_file_replica_with_migration;
-    Case =:= evict_dir_replica
+    Case =:= rerun_eviction_of_file_replica_with_migration
     ->
-    init_per_testcase(all, [{space_id, <<"space3">>} | Config]);
+    init_per_testcase(all, [{space_id, <<"space2">>} | Config]);
 
 init_per_testcase(metric_get, Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -2851,19 +2019,8 @@ init_per_testcase(Case, Config) when
     init_per_testcase(all, Config);
 
 init_per_testcase(Case, Config) when
-    Case =:= quota_decreased_after_eviciton
-    ->
-    [WorkerP2, _WorkerP1] = ?config(op_worker_nodes, Config),
-    SpaceId = <<"space6">>,
-    clean_monitoring_dir(WorkerP2, SpaceId),
-    OldSoftQuota = rpc:call(WorkerP2, application, get_env, [op_worker, soft_quota_limit_size]),
-    ok = rpc:call(WorkerP2, application, set_env, [op_worker, soft_quota_limit_size, 15]),
-    Config2 = [{old_soft_quota, OldSoftQuota}, {space_id, SpaceId} | Config],
-    init_per_testcase(all, Config2);
-
-init_per_testcase(Case, Config) when
     Case =:= basic_autocleaning_test ->
-    SpaceId = <<"space5">>,
+    SpaceId = <<"space3">>,
     [WorkerP2 | _] = ?config(op_worker_nodes, Config),
     {ok, _} = rpc:call(WorkerP2, space_storage, enable_file_popularity, [SpaceId]),
     AutocleaningConfig = ?AUTOCLEANING_CONFIG(1, undefined, 0, 0, 1),
@@ -2872,7 +2029,7 @@ init_per_testcase(Case, Config) when
     init_per_testcase(all, [{space_id, SpaceId} | Config]);
 
 init_per_testcase(automatic_cleanup_should_evict_unpopular_files, Config) ->
-    SpaceId = <<"space5">>,
+    SpaceId = <<"space3">>,
     [WorkerP2 | _] = ?config(op_worker_nodes, Config),
     {ok, _} = rpc:call(WorkerP2, space_storage, enable_file_popularity, [SpaceId]),
     AutocleaningConfig = ?AUTOCLEANING_CONFIG(5, 10, 15, 30, 35),
@@ -2892,9 +2049,7 @@ end_per_testcase(Case, Config) when
     Case =:= basic_autocleaning_test ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SpaceId = ?config(space_id, Config),
-    %%    rpc:call(WorkerP1, space_storage, disable_file_popularity, [<<"space5">>]),
     rpc:call(WorkerP2, space_storage, disable_file_popularity, [SpaceId]),
-    %%    rpc:call(WorkerP1, space_cleanup_api, disable_autocleaning, [<<"space5">>]),
     rpc:call(WorkerP2, space_cleanup_api, disable_autocleaning, [SpaceId]),
     clean_space(WorkerP1, SpaceId),
     clean_space(WorkerP2, SpaceId),
@@ -2906,9 +2061,7 @@ end_per_testcase(Case, Config) when
 end_per_testcase(Case = automatic_cleanup_should_evict_unpopular_files, Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SpaceId = ?config(space_id, Config),
-    %%    rpc:call(WorkerP1, space_storage, disable_file_popularity, [<<"space5">>]),
     rpc:call(WorkerP2, space_storage, disable_file_popularity, [SpaceId]),
-    %%    rpc:call(WorkerP1, space_cleanup_api, disable_autocleaning, [SpaceId]),
     rpc:call(WorkerP2, space_cleanup_api, disable_autocleaning, [SpaceId]),
     remove_autocleaning_reports(WorkerP2, SpaceId),
     clean_space(WorkerP1, SpaceId),
@@ -2916,14 +2069,6 @@ end_per_testcase(Case = automatic_cleanup_should_evict_unpopular_files, Config) 
     check_if_space_empty(WorkerP1, SpaceId),
     check_if_space_empty(WorkerP2, SpaceId),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
-
-end_per_testcase(Case, Config) when
-    Case =:= quota_decreased_after_eviciton
-    ->
-    [WorkerP2, _WorkerP1] = ?config(op_worker_nodes, Config),
-    {ok, OldSoftQuota} = ?config(old_soft_quota, Config),
-    rpc:call(WorkerP2, application, set_env, [op_worker, soft_quota_limit_size, OldSoftQuota]),
-    end_per_testcase(all, Config);
 
 end_per_testcase(Case, Config) when
     Case =:= query_file_popularity_index;
@@ -2940,13 +2085,7 @@ end_per_testcase(Case, Config) when
     Case =:= rerun_file_replication;
     Case =:= rerun_file_replication_by_other_user;
     Case =:= rerun_dir_replication;
-    Case =:= evict_file_replica;
-    Case =:= fail_to_evict_file_replica_without_permissions;
-    Case =:= evict_file_replica_with_migration;
-    Case =:= eviction_should_succeed_when_remote_provider_modified_file_replica;
-    Case =:= eviction_should_fail_when_eviction_provider_modified_file_replica;
-    Case =:= rerun_eviction_of_file_replica_with_migration;
-    Case =:= evict_dir_replica
+    Case =:= rerun_eviction_of_file_replica_with_migration
     ->
     end_per_testcase(all, Config);
 
@@ -3040,18 +2179,6 @@ verify_distribution(Worker, ExpectedDistribution, Config, FileGuid, FilePath, Se
             ?SYNC_FILE_COUNTER ! verified
     end.
 
-clean_monitoring_dir(Worker, SpaceId) ->
-    RootSessionId = <<"0">>,
-    SpaceGuid = rpc:call(Worker, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
-    RRDDir = rpc:call(Worker, file_meta, hidden_file_name, [<<"rrd">>]),
-    case rpc:call(Worker, logical_file_manager, get_child_attr, [RootSessionId, SpaceGuid, RRDDir]) of
-        {ok, #file_attr{
-            guid = RRDGuid}
-        } ->
-            lfm_proxy:rm_recursive(Worker, RootSessionId, {guid, RRDGuid});
-        _ -> ok
-    end.
-
 list_ended_transfers(Worker, SpaceId) ->
     {ok, Transfers} = rpc:call(Worker, transfer, list_ended_transfers, [SpaceId]),
     Transfers.
@@ -3134,9 +2261,6 @@ rerun_file_replication(UserId, Worker, Tid, Config) ->
     [_, NewTransferId] = binary:split(Location, <<"transfers/">>),
     {ok, NewTransferId}.
 
-schedule_replica_eviction(Worker, ProviderId, File, Config) ->
-    schedule_replica_eviction(Worker, ProviderId, undefined, File, Config).
-
 schedule_replica_eviction(Worker, ProviderId, undefined, File, Config) ->
     {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(Worker,
         <<"replicas/", File/binary, "?provider_id=", ProviderId/binary>>,
@@ -3165,14 +2289,6 @@ create_test_file(Worker, SessionId, File, TestData) ->
     lfm_proxy:fsync(Worker, Handle),
     lfm_proxy:close(Worker, Handle),
     FileGuid.
-
-verify_files_distribution(Worker, FilesNum, ExpectedDistribution, FileGuidsAndPaths, SessionId, Config) ->
-    ?assertMatch(undefined, whereis(?SYNC_FILE_COUNTER), ?ATTEMPTS),
-    true = register(?SYNC_FILE_COUNTER, spawn_link(?MODULE, sync_file_counter, [0, FilesNum, self()])),
-    lists:foreach(fun({FileGuid, FilePath}) ->
-        worker_pool:cast(?VERIFY_POOL, {?MODULE, verify_distribution, [Worker, ExpectedDistribution, Config, FileGuid, FilePath, SessionId]})
-    end, FileGuidsAndPaths),
-    receive files_synchronized -> ok end.
 
 get_ongoing_transfers_for_file(Worker, FileGuid) ->
     {ok, #{ongoing := Transfers}} = rpc:call(Worker, transferred_file, get_transfers, [FileGuid]),
