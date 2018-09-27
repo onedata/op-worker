@@ -25,8 +25,7 @@
 -type key() :: file_meta:name() | atom().
 
 %% API
--export([run/2, maybe_delete_imported_file_and_update_counters/3,
-    delete_imported_file/2]).
+-export([run/2, delete_imported_file/2]).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -298,9 +297,10 @@ iterate_and_remove(StKey, StorageTable, DBKey, DBTable, FileCtx, SpaceId, Storag
 %% and save their names in ets TableName.
 %% @end
 %%-------------------------------------------------------------------
--spec save_db_children_names(atom(), file_ctx:ctx()) -> term().
+-spec save_db_children_names(atom(), file_ctx:ctx()) -> ok.
 save_db_children_names(TableName, FileCtx) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
+    UserCtx = user_ctx:new(?ROOT_SESS_ID),
     file_meta:foreach_child({uuid, FileUuid}, fun
         (LinkName, _LinkTarget, AccIn) ->
             case file_meta:is_hidden(LinkName) of
@@ -310,7 +310,43 @@ save_db_children_names(TableName, FileCtx) ->
                     ets:insert(TableName, {LinkName, undefined}),
                     AccIn
             end
-    end, []).
+    end, []),
+
+    First = ets:first(TableName),
+    filter_children_in_db(First, FileCtx, UserCtx, TableName).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Iterates over all children (in db ets) and deletes files/dirs without
+%% location doc.
+%% @end
+%%-------------------------------------------------------------------
+-spec filter_children_in_db(key(), file_ctx:ctx(), user_ctx:ctx(), atom()) -> ok.
+filter_children_in_db('$end_of_table', _FileCtx, _UserCtx, _TableName) ->
+    ok;
+filter_children_in_db(LinkName, FileCtx, UserCtx, TableName) ->
+    {ChildCtx, _} = file_ctx:get_child(FileCtx, LinkName, UserCtx),
+    {IsDir, ChildCtx2} = file_ctx:is_dir(ChildCtx),
+    case IsDir of
+        true ->
+            {DirLocation, _} = file_ctx:get_dir_location_doc(ChildCtx2),
+            case dir_location:is_storage_file_created(DirLocation) of
+                true ->
+                    ok;
+                _ ->
+                    ets:delete(TableName, LinkName)
+            end;
+        _ ->
+            {FileLocation, _} = file_ctx:get_local_file_location_doc(ChildCtx2, false),
+            case file_location:is_storage_file_created(FileLocation) of
+                true ->
+                    ok;
+                _ ->
+                    ets:delete(TableName, LinkName)
+            end
+    end,
+    filter_children_in_db(ets:next(TableName, LinkName), FileCtx, UserCtx, TableName).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -362,39 +398,24 @@ save_storage_children_names(TableName, StorageFileCtx, Offset, BatchSize) ->
 -spec maybe_delete_imported_dir_and_update_counters(file_ctx:ctx(),
     od_space:id(), storage:id()) -> ok.
 maybe_delete_imported_dir_and_update_counters(FileCtx, SpaceId, StorageId) ->
-    {DirLocation, FileCtx2} = file_ctx:get_dir_location_doc(FileCtx),
-    case dir_location:is_storage_file_created(DirLocation) of
-        true ->
-            delete_imported_dir(FileCtx2, SpaceId, StorageId),
-            {StorageFileId, _} = file_ctx:get_storage_file_id(FileCtx2),
-            storage_sync_utils:log_deletion(StorageFileId, SpaceId),
-            storage_sync_monitoring:mark_deleted_file(SpaceId, StorageId);
-        false ->
-            %file has been created in remote provider and not yet replicated
-            storage_sync_monitoring:mark_processed_file(SpaceId, StorageId)
-    end,
+    delete_imported_dir(FileCtx, SpaceId, StorageId),
+    {StorageFileId, _} = file_ctx:get_storage_file_id(FileCtx),
+    storage_sync_utils:log_deletion(StorageFileId, SpaceId),
+    storage_sync_monitoring:mark_deleted_file(SpaceId, StorageId),
     ok.
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Checks whether given regular file can be deleted by sync.
-%% If true, this function deletes it and update syn counters.
+%% This function deletes regular file and update syn counters.
 %% @end
 %%-------------------------------------------------------------------
 -spec maybe_delete_imported_regular_file_and_update_counters(file_ctx:ctx(),
     od_space:id(), storage:id()) -> ok.
 maybe_delete_imported_regular_file_and_update_counters(FileCtx, SpaceId, StorageId) ->
-    {FileLocation, FileCtx2} = file_ctx:get_local_file_location_doc(FileCtx, false),
-    case file_location:is_storage_file_created(FileLocation) of
-        true ->
-            delete_imported_file(FileCtx2),
-            {StorageFileId, _} = file_ctx:get_storage_file_id(FileCtx2),
-            storage_sync_utils:log_deletion(StorageFileId, SpaceId),
-            storage_sync_monitoring:mark_deleted_file(SpaceId, StorageId);
-        false ->
-            %file has been created in remote provider and not yet replicated
-            storage_sync_monitoring:mark_processed_file(SpaceId, StorageId)
-    end,
+    delete_imported_file(FileCtx),
+    {StorageFileId, _} = file_ctx:get_storage_file_id(FileCtx),
+    storage_sync_utils:log_deletion(StorageFileId, SpaceId),
+    storage_sync_monitoring:mark_deleted_file(SpaceId, StorageId),
     ok.
 
 
