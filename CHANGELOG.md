@@ -6,6 +6,34 @@ CHANGELOG
 
 ### 18.02.0-rc11
 
+* ensure that sync does not invalidate replicated files
+* VFS-4813 Update error on quota
+* VFS-4813 Throw sync errors
+* VFS-4816 Use local time instead of Zone time when Onezone is unreachable
+* VFS-4816 Do not ivalidate GraphSync cache immediately after a connection to Onezone fails
+* VFS-4778 - refactor replica_synchronizer:get_holes
+* VFS-4778 - simplify find_overlapping logic, add unit tests for it
+* VFS-4813 Do not use local blocks in replica finder
+* VFS-4741 Prevent synchronizer from crush when provider is not connected to onezone
+* VFS-4741 Invalidation uses only public blocks
+* VFS-4741 Add async synchronization requests
+* VFS-4778 Add priority to transfer blocks in progress
+* VFS-4769 Do not get user document when it is not needed
+* Updating GUI, including: VFS-4806-fix-distribution-dir * VFS-4806 Fixed regression bug: file distribution modal for directory has no transfers buttons
+* Updating GUI, including: VFS-4791-many-chunks-render * VFS-4791 Support for highly scattered files in file distribution charts
+* VFS-4788 Add calculation of total blocks size in get_distribution API
+* VFS-4788 Implement file chunks interpolation to avoid transferring large file blocks lists to GUI frontend
+* Updating GUI, including: VFS-4242-add-cancel-button-for-transfers * VFS-4242 Added transfers cancelling and rerunning actions
+* VFS-4741 Force publishing of at least one block
+* VFS-4741 Flush synchrinizers on terminate
+* VFS-4741 Allow async local blocks flush
+* VFS-3858 Fix a minor bug in space_data_backend
+* VFS-3858 Update cluster_worker ref, adjust to new Graph Sync proto version
+* VFS-4741 Update cluster_worker to allow int keys in links
+* VFS-4757 Fix file permissions conversion in GUI backend, tidy up .gitignore
+* VFS-4741 Create local blocks store
+* VFS-4708 Minor fslogic cache fix
+* VFS-4708 Optimize sync and compute checksum
 * Upgrade rtransfer_link.
 * VFS-4055 Update bp_tree
 * VFS-4726 Add backwards compatibility for changing privileges in 18.07
