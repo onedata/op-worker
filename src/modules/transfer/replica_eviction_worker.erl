@@ -116,14 +116,14 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}).
 handle_cast({start_replica_eviction, UserCtx, FileCtx,  SupportingProviderId,
-    TransferId, RetriesLeft, NextRetryTimestamp}, State
+    TransferId, RetriesLeft, NextRetryTimestamp, Index, QueryViewParams}, State
 ) ->
     RetriesLeft2 = utils:ensure_defined(RetriesLeft, undefined,
         ?MAX_REPLICA_EVICTION_RETRIES),
     case should_start(NextRetryTimestamp) of
         true ->
             case evict_replica(UserCtx, FileCtx, SupportingProviderId,
-                TransferId, RetriesLeft2) 
+                TransferId, RetriesLeft2, Index, QueryViewParams)
             of
                 ok ->
                     ok;
@@ -134,8 +134,10 @@ handle_cast({start_replica_eviction, UserCtx, FileCtx,  SupportingProviderId,
                     {ok, _} = transfer:increment_files_failed_and_processed_counters(TransferId)
             end;
         _ ->
-            replica_eviction_req:enqueue_replica_eviction(UserCtx, FileCtx, SupportingProviderId,
-                TransferId, RetriesLeft2, NextRetryTimestamp)
+            replica_eviction_req:enqueue_replica_eviction(UserCtx, FileCtx,
+                SupportingProviderId, TransferId, RetriesLeft2,
+                NextRetryTimestamp, Index, QueryViewParams
+            )
     end,
     {noreply, State, hibernate}.
 
@@ -189,20 +191,23 @@ code_change(_OldVsn, State, _Extra) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec evict_replica(user:ctx(), file_ctx:ctx(), sync_req:provider_id(),
-    sync_req:transfer_id(), non_neg_integer()) -> ok | {error, term()}.
-evict_replica(UserCtx, FileCtx, SupportingProviderId, TransferId, RetriesLeft) ->
+    sync_req:transfer_id(), non_neg_integer(), transfer:index_id(),
+    transfer:query_view_params()) -> ok | {error, term()}.
+evict_replica(UserCtx, FileCtx, SupportingProviderId, TransferId, RetriesLeft,
+    Index, QueryViewParams
+) ->
     try replica_eviction_req:evict_file_replica(UserCtx, FileCtx,
-        SupportingProviderId, TransferId)
+        SupportingProviderId, TransferId, Index, QueryViewParams)
     of
         #provider_response{status = #status{code = ?OK}}  ->
             ok;
         Error = {error, not_found} ->
             maybe_retry(UserCtx, FileCtx, SupportingProviderId, TransferId,
-                RetriesLeft, Error)
+                RetriesLeft, Index, QueryViewParams, Error)
     catch
         Error:Reason ->
             maybe_retry(UserCtx, FileCtx, SupportingProviderId, TransferId,
-                RetriesLeft,
+                RetriesLeft, Index, QueryViewParams,
                 {Error, Reason})
     end.
 
@@ -214,35 +219,42 @@ evict_replica(UserCtx, FileCtx, SupportingProviderId, TransferId, RetriesLeft) -
 %% @end
 %%-------------------------------------------------------------------
 -spec maybe_retry(user:ctx(), file_ctx:ctx(), sync_req:provider_id(),
-    sync_req:transfer_id(), non_neg_integer(), term()) -> ok | {error, term()}.
-maybe_retry(_UserCtx, _FileCtx, _SupportingProviderId, TransferId, 0, Error = {error, not_found}) ->
+    sync_req:transfer_id(), non_neg_integer(), transfer:index_id(),
+    transfer:query_view_params(), term()) -> ok | {error, term()}.
+maybe_retry(_UserCtx, _FileCtx, _SupportingProviderId, TransferId, 0,
+    _Index, _QueryViewParams, Error = {error, not_found}
+) ->
     ?error(
         "Replica eviction in scope of transfer ~p failed due to ~p~n"
         "No retries left", [TransferId, Error]),
     Error;
 maybe_retry(UserCtx, FileCtx, SupportingProviderId, TransferId, RetriesLeft,
-    Error = {error, not_found}
+    Index, QueryViewParams, Error = {error, not_found}
 ) ->
     ?warning_stacktrace(
         "Replica eviction in scope of transfer ~p failed due to ~p~n"
         "File replica eviction will be retried (attempts left: ~p)",
         [TransferId, Error, RetriesLeft - 1]),
     replica_eviction_req:enqueue_replica_eviction(UserCtx, FileCtx, SupportingProviderId, TransferId,
-        RetriesLeft - 1, next_retry(RetriesLeft));
-maybe_retry(_UserCtx, FileCtx, _SupportingProviderId, TransferId, 0, Error) ->
+        RetriesLeft - 1, next_retry(RetriesLeft), Index, QueryViewParams);
+maybe_retry(_UserCtx, FileCtx, _SupportingProviderId, TransferId, 0,
+    _Index, _QueryViewParams, Error
+) ->
     {Path, _FileCtx2} = file_ctx:get_canonical_path(FileCtx),
     ?error(
         "Replica eviction of file ~p in scope of transfer ~p failed due to ~p~n"
         "No retries left", [Path, TransferId, Error]),
     {error, retries_per_file_transfer_exceeded};
-maybe_retry(UserCtx, FileCtx, SupportingProviderId, TransferId, Retries, Error) ->
+maybe_retry(UserCtx, FileCtx, SupportingProviderId, TransferId, Retries,
+    Index, QueryViewParams, Error
+) ->
     {Path, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
     ?warning_stacktrace(
         "Replica eviction of file ~p in scope of transfer ~p failed due to ~p~n"
         "File Replica eviction will be retried (attempts left: ~p)",
         [Path, TransferId, Error, Retries - 1]),
     replica_eviction_req:enqueue_replica_eviction(UserCtx, FileCtx2, SupportingProviderId, TransferId,
-        Retries - 1, next_retry(Retries)).
+        Retries - 1, next_retry(Retries), Index, QueryViewParams).
 
 
 %%TODO VFS-4624 move below functions to utils module, because they're duplicated in transfer_worker !

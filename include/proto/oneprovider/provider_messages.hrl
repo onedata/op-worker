@@ -62,10 +62,10 @@
 
 -record(schedule_file_replication, {
     target_provider_id :: oneprovider:id(),
-    block :: #file_block{} | undefined,
+    block :: undefined | #file_block{},
     callback :: transfer:callback(),
     index_id :: transfer:index_id(),
-    query_view_params :: transfer:query_params()
+    query_view_params :: transfer:query_view_params()
 }).
 
 -record(schedule_replica_invalidation, {

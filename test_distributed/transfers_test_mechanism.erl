@@ -270,14 +270,14 @@ evict_replicas_from_index(Config, #scenario{
     index_id = IndexId,
     query_view_params = QueryViewParams,
     schedule_node = ScheduleNode,
-    replicating_nodes = ReplicatingNodes
+    evicting_nodes = EvictingNodes
 }) ->
-    NodesTransferIdsAndFiles = lists:map(fun(TargetNode) ->
-        TargetProviderId = transfers_test_utils:provider_id(TargetNode),
+    NodesTransferIdsAndFiles = lists:map(fun(EvictingNode) ->
+        EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
         {ok, Tid} = schedule_replica_eviction_by_index(ScheduleNode,
-            TargetProviderId, User, SpaceId, IndexId, QueryViewParams, Config, Type),
-        {TargetNode, Tid, undefined, undefined}
-    end, ReplicatingNodes),
+            EvictingProviderId, User, SpaceId, IndexId, QueryViewParams, Config, Type),
+        {EvictingNode, Tid, undefined, undefined}
+    end, EvictingNodes),
 
     update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
         NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles

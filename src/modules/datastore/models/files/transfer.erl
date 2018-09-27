@@ -70,8 +70,8 @@
 -type doc() :: datastore_doc:doc(transfer()).
 -type timestamp() :: non_neg_integer().
 -type list_limit() :: non_neg_integer() | all.
--type index_id() :: indexes:index_id().
--type query_view_params() ::indexes:view_opts() .
+-type index_id() :: undefined | indexes:index_id().
+-type query_view_params() :: undefined | indexes:view_opts() .
 
 -export_type([
     id/0, transfer/0, status/0, callback/0, doc/0,
@@ -117,7 +117,8 @@ cleanup() ->
     undefined | od_provider:id(), undefined | od_provider:id(), binary(),
     index_id(), query_view_params()) -> {ok, id()} | ignore | {error, Reason :: term()}.
 start(SessionId, FileGuid, FilePath, SourceProviderId, TargetProviderId,
-    Callback, IndexId, QueryViewParams) ->
+    Callback, IndexId, QueryViewParams
+) ->
     {ok, UserId} = session:get_user_id(SessionId),
     start_for_user(UserId, FileGuid, FilePath, SourceProviderId,
         TargetProviderId, Callback, IndexId, QueryViewParams

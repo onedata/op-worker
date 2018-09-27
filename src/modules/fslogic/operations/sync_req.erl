@@ -24,7 +24,6 @@
 -type block() :: undefined | fslogic_blocks:block().
 -type transfer_id() :: undefined | transfer:id().
 -type provider_id() :: undefined | od_provider:id().
--type index_id() :: undefined | transfer:index_id().
 -type query_view_params() :: transfer:query_view_params().
 -type fuse_response() :: fslogic_worker:fuse_response().
 -type provider_response() :: fslogic_worker:provider_response().
@@ -181,7 +180,7 @@ schedule_file_replication(UserCtx, FileCtx, TargetProviderId, Callback,
 %% @end
 %%--------------------------------------------------------------------
 -spec replicate_file(user_ctx:ctx(), file_ctx:ctx(), block(), transfer_id(),
-    index_id(), query_view_params()) -> provider_response() | {error, term()}.
+    transfer:index_id(), query_view_params()) -> provider_response() | {error, term()}.
 replicate_file(UserCtx, FileCtx, Block, TransferId, IndexId, QueryViewParams) ->
     try
         check_permissions:execute(
@@ -199,7 +198,7 @@ replicate_file(UserCtx, FileCtx, Block, TransferId, IndexId, QueryViewParams) ->
 %% @doc
 %% @equiv
 %% enqueue_file_replication(UserCtx, FileCtx, Block, TransferId,
-%% undefined, undefined).
+%% undefined, undefined, IndexId, QueryViewParams).
 %% @end
 %%-------------------------------------------------------------------
 -spec enqueue_file_replication(user_ctx:ctx(), file_ctx:ctx(),
@@ -258,7 +257,7 @@ schedule_file_replication(UserCtx, FileCtx, FilePath, TargetProviderId, Callback
 %% @end
 %%--------------------------------------------------------------------
 -spec replicate_file_insecure(user_ctx:ctx(), file_ctx:ctx(), block(),
-    transfer_id(), index_id(), query_view_params()) -> provider_response().
+    transfer_id(), transfer:index_id(), query_view_params()) -> provider_response().
 replicate_file_insecure(UserCtx, FileCtx, Block, TransferId, undefined, _QueryViewParams) ->
     replicate_fs_subtree(UserCtx, FileCtx, Block, TransferId);
 replicate_file_insecure(UserCtx, FileCtx, Block, TransferId, IndexId, QueryViewParams) ->
@@ -286,8 +285,41 @@ replicate_fs_subtree(UserCtx, FileCtx, Block, TransferId) ->
             throw(already_ended)
     end.
 
-replicate_files_from_index(UserCtx, FileCtx, Block, TransferId, IndexId, QueryViewParams, LastDocId) ->
-    Chunk = application:get_env(?APP_NAME, replication_by_index_batch, 1000),
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Replicates files from specified index.
+%% @end
+%%--------------------------------------------------------------------
+-spec replicate_files_from_index(user_ctx:ctx(), file_ctx:ctx(), block(),
+    transfer_id(), transfer:index_id(), query_view_params(), file_meta:uuid()
+) ->
+    provider_response().
+replicate_files_from_index(UserCtx, FileCtx, Block, TransferId, IndexId,
+    QueryViewParams, LastDocId
+) ->
+    case transfer:is_ongoing(TransferId) of
+        true ->
+            Chunk = application:get_env(?APP_NAME, replication_by_index_batch, 1000),
+            replicate_files_from_index(UserCtx, FileCtx, Block, TransferId,
+                IndexId, Chunk, QueryViewParams, LastDocId
+            );
+        false ->
+            throw(already_ended)
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Replicates files from specified index by specified chunk.
+%% @end
+%%--------------------------------------------------------------------
+-spec replicate_files_from_index(user_ctx:ctx(), file_ctx:ctx(), block(),
+    transfer_id(), transfer:index_id(), non_neg_integer(), query_view_params(),
+    file_meta:uuid()) -> provider_response().
+replicate_files_from_index(UserCtx, FileCtx, Block, TransferId, IndexId, Chunk,
+    QueryViewParams, LastDocId
+) ->
     QueryViewParams2 = case LastDocId of
         undefined ->
             [{skip, 0} | QueryViewParams];

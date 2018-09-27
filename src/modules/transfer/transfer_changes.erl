@@ -519,12 +519,16 @@ new_replica_eviction(#document{
         file_uuid = FileUuid,
         space_id = SpaceId,
         callback = Callback,
-        replicating_provider = TargetProviderId
+        replicating_provider = TargetProviderId,
+        index_id = IndexId,
+        query_view_params = QueryViewParams
     }
 }) ->
     FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
     %TODO pass IndexId and QueryViewParams to controller
     {ok, _Pid} = gen_server2:start(replica_eviction_controller,
         [session:root_session_id(),
-            TransferId, FileGuid, Callback, TargetProviderId], []),
+            TransferId, FileGuid, Callback, TargetProviderId,
+            IndexId, QueryViewParams],
+        []),
     ok.
