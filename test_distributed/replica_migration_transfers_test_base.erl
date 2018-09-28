@@ -30,7 +30,14 @@
     migrate_regular_file_replica/3,
     migrate_regular_file_replica_in_directory/3,
     migrate_big_file_replica/3,
-    fail_to_migrate_file_replica_without_permissions/3]).
+    fail_to_migrate_file_replica_without_permissions/3,
+
+    schedule_migration_by_index/2,
+    scheduling_migration_by_not_existing_index_should_fail/2,
+    scheduling_migration_by_empty_index_should_succeed/2,
+    scheduling_migration_by_not_existing_key_in_index_should_succeed/2,
+    schedule_migration_of_100_regular_files_by_index/2
+]).
 
 -define(SPACE_ID, <<"space1">>).
 
@@ -367,6 +374,347 @@ fail_to_migrate_file_replica_without_permissions(Config, Type, FileKeyType) ->
         }
     ).
 
+schedule_migration_by_index(Config, Type) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId2 = ?DEFAULT_SESSION(WorkerP2, Config),
+    SpaceId = ?SPACE_ID,
+    Config2 = transfers_test_mechanism:run_test(
+        Config, #transfer_test_spec{
+            setup = #setup{
+                setup_node = WorkerP1,
+                files_structure = [{0, 1}],
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type),
+                distribution = [
+                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ],
+                assertion_nodes = [WorkerP1, WorkerP2]
+            }}),
+
+    [{FileGuid, _}] = ?config(?FILES_KEY, Config2),
+
+    % set xattr on file to be replicated
+    XattrName = transfers_test_utils:random_job_name(),
+    XattrValue = 1,
+    Xattr = #xattr{name = XattrName, value = XattrValue},
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
+    ViewName = <<"migration_jobs">>,
+    ViewFunction = transfers_test_utils:view_function(XattrName),
+    {ok, ViewId} = rpc:call(WorkerP1, indexes, add_index, [?DEFAULT_USER, ViewName, ViewFunction, SpaceId, false]),
+    {ok, ViewId} = rpc:call(WorkerP2, indexes, add_index, [?DEFAULT_USER, ViewName, ViewFunction, SpaceId, false]),
+
+    ?assertMatch({ok, [FileGuid]},
+        rpc:call(WorkerP1, indexes, query_view_and_filter_values, [ViewId, [{key, XattrValue}]]),
+        ?ATTEMPTS),
+    ?assertMatch({ok, [FileGuid]},
+        rpc:call(WorkerP2, indexes, query_view_and_filter_values, [ViewId, [{key, XattrValue}]]),
+        ?ATTEMPTS),
+
+    transfers_test_mechanism:run_test(
+        Config2, #transfer_test_spec{
+            setup = undefined,
+            scenario = #scenario{
+                type = Type,
+                schedule_node = WorkerP1,
+                replicating_nodes = [WorkerP2],
+                evicting_nodes = [WorkerP1],
+                space_id = SpaceId,
+                function = fun transfers_test_mechanism:migrate_replicas_from_index/2,
+                query_view_params = [{key, XattrValue}],
+                index_id = ViewId
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    replication_status => completed,
+                    eviction_status => completed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+                    replicating_provider => transfers_test_utils:provider_id(WorkerP2),
+                    evicting_provider => transfers_test_utils:provider_id(WorkerP1),
+                    files_to_process => 4,
+                    files_processed => 4,
+                    files_replicated => 1,
+                    bytes_replicated => ?DEFAULT_SIZE,
+                    files_evicted => 1,
+                    min_hist => ?MIN_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
+                    hr_hist => ?HOUR_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
+                    dy_hist => ?DAY_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
+                    mth_hist => ?MONTH_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE})
+                },
+                assertion_nodes = [WorkerP1, WorkerP2],
+                distribution = [
+                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => []},
+                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP2), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ],
+                assert_transferred_file_model = false
+            }
+        }
+    ).
+
+scheduling_migration_by_not_existing_index_should_fail(Config, Type) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId2 = ?DEFAULT_SESSION(WorkerP2, Config),
+    SpaceId = ?SPACE_ID,
+
+    Config2 = transfers_test_mechanism:run_test(
+        Config, #transfer_test_spec{
+            setup = #setup{
+                setup_node = WorkerP1,
+                files_structure = [{0, 1}],
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type),
+                distribution = [
+                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ],
+                assertion_nodes = [WorkerP1, WorkerP2]
+            }}),
+
+    [{FileGuid, _}] = ?config(?FILES_KEY, Config2),
+
+    % set xattr on file to be replicated
+    XattrName = transfers_test_utils:random_job_name(),
+    XattrValue = 1,
+    Xattr = #xattr{name = XattrName, value = XattrValue},
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
+    IndexId = <<"not_existing_index">>,
+
+    transfers_test_mechanism:run_test(
+        Config2, #transfer_test_spec{
+            setup = undefined,
+            scenario = #scenario{
+                type = Type,
+                schedule_node = WorkerP1,
+                replicating_nodes = [WorkerP2],
+                evicting_nodes = [WorkerP1],
+                space_id = SpaceId,
+                function = fun transfers_test_mechanism:migrate_replicas_from_index/2,
+                query_view_params = [{key, XattrValue}],
+                index_id = IndexId
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    replication_status => failed,
+                    eviction_status => failed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+                    replicating_provider => transfers_test_utils:provider_id(WorkerP2),
+                    evicting_provider => transfers_test_utils:provider_id(WorkerP1),
+                    files_to_process => 1,
+                    files_processed => 1,
+                    files_replicated => 0,
+                    bytes_replicated => 0,
+                    files_evicted => 0,
+                    failed_files => 1
+                },
+                assertion_nodes = [WorkerP1, WorkerP2],
+                distribution = [
+                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ],
+                assert_transferred_file_model = false
+            }
+        }
+    ).
+
+scheduling_migration_by_empty_index_should_succeed(Config, Type) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SpaceId = ?SPACE_ID,
+    XattrName = transfers_test_utils:random_job_name(),
+    ViewName = <<"migration_jobs">>,
+    ViewFunction = transfers_test_utils:view_function(XattrName),
+    {ok, ViewId} = rpc:call(WorkerP1, indexes, add_index, [?DEFAULT_USER, ViewName, ViewFunction, SpaceId, false]),
+    {ok, ViewId} = rpc:call(WorkerP2, indexes, add_index, [?DEFAULT_USER, ViewName, ViewFunction, SpaceId, false]),
+    ?assertMatch({ok, []},
+        rpc:call(WorkerP1, indexes, query_view_and_filter_values, [ViewId, []]),
+        ?ATTEMPTS),
+    ?assertMatch({ok, []},
+        rpc:call(WorkerP2, indexes, query_view_and_filter_values, [ViewId, []]),
+        ?ATTEMPTS),
+
+    transfers_test_mechanism:run_test(
+        Config, #transfer_test_spec{
+            setup = undefined,
+            scenario = #scenario{
+                type = Type,
+                schedule_node = WorkerP1,
+                replicating_nodes = [WorkerP2],
+                evicting_nodes = [WorkerP1],
+                space_id = SpaceId,
+                function = fun transfers_test_mechanism:migrate_replicas_from_index/2,
+                query_view_params = [],
+                index_id = ViewId
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    replication_status => completed,
+                    eviction_status => completed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+                    replicating_provider => transfers_test_utils:provider_id(WorkerP2),
+                    evicting_provider => transfers_test_utils:provider_id(WorkerP1),
+                    files_to_process => 2,
+                    files_processed => 2,
+                    files_replicated => 0,
+                    bytes_replicated => 0,
+                    files_evicted => 0
+                },
+                assertion_nodes = [WorkerP1, WorkerP2],
+                distribution = undefined,
+                assert_transferred_file_model = false
+            }
+        }
+    ).
+
+scheduling_migration_by_not_existing_key_in_index_should_succeed(Config, Type) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId2 = ?DEFAULT_SESSION(WorkerP2, Config),
+    SpaceId = ?SPACE_ID,
+
+    Config2 = transfers_test_mechanism:run_test(
+        Config, #transfer_test_spec{
+            setup = #setup{
+                setup_node = WorkerP1,
+                files_structure = [{0, 1}],
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type),
+                distribution = [
+                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ],
+                assertion_nodes = [WorkerP1, WorkerP2]
+            }}),
+
+    [{FileGuid, _}] = ?config(?FILES_KEY, Config2),
+
+    % set xattr on file to be replicated
+    XattrName = transfers_test_utils:random_job_name(),
+    XattrValue = 1,
+    XattrValue2 = 2,
+    Xattr = #xattr{name = XattrName, value = XattrValue},
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
+    ViewName = <<"migration_jobs">>,
+    ViewFunction = transfers_test_utils:view_function(XattrName),
+    {ok, ViewId} = rpc:call(WorkerP1, indexes, add_index, [?DEFAULT_USER, ViewName, ViewFunction, SpaceId, false]),
+    {ok, ViewId} = rpc:call(WorkerP2, indexes, add_index, [?DEFAULT_USER, ViewName, ViewFunction, SpaceId, false]),
+
+    ?assertMatch({ok, [FileGuid]},
+        rpc:call(WorkerP1, indexes, query_view_and_filter_values, [ViewId, [{key, XattrValue}]]),
+        ?ATTEMPTS),
+    ?assertMatch({ok, [FileGuid]},
+        rpc:call(WorkerP2, indexes, query_view_and_filter_values, [ViewId, [{key, XattrValue}]]),
+        ?ATTEMPTS),
+
+    transfers_test_mechanism:run_test(
+        Config2, #transfer_test_spec{
+            setup = undefined,
+            scenario = #scenario{
+                type = Type,
+                schedule_node = WorkerP1,
+                replicating_nodes = [WorkerP2],
+                evicting_nodes = [WorkerP1],
+                space_id = SpaceId,
+                function = fun transfers_test_mechanism:migrate_replicas_from_index/2,
+                query_view_params = [{key, XattrValue2}],
+                index_id = ViewId
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    replication_status => completed,
+                    eviction_status => completed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+                    replicating_provider => transfers_test_utils:provider_id(WorkerP2),
+                    evicting_provider => transfers_test_utils:provider_id(WorkerP1),
+                    files_to_process => 2,
+                    files_processed => 2,
+                    files_replicated => 0,
+                    bytes_replicated => 0,
+                    files_evicted => 0
+                },
+                assertion_nodes = [WorkerP1, WorkerP2],
+                distribution = [
+                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ],
+                assert_transferred_file_model = false
+            }
+        }
+    ).
+
+schedule_migration_of_100_regular_files_by_index(Config, Type) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId2 = ?DEFAULT_SESSION(WorkerP2, Config),
+    SpaceId = ?SPACE_ID,
+    NumberOfFiles = 100,
+    Config2 = transfers_test_mechanism:run_test(
+        Config, #transfer_test_spec{
+            setup = #setup{
+                setup_node = WorkerP1,
+                files_structure = [{0, NumberOfFiles}],
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type),
+                distribution = [
+                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ],
+                assertion_nodes = [WorkerP1, WorkerP2]
+            }}),
+
+    FileGuidsAndPaths = ?config(?FILES_KEY, Config2),
+
+    % set xattr on file to be replicated
+    XattrName = transfers_test_utils:random_job_name(),
+    XattrValue = 1,
+    Xattr = #xattr{name = XattrName, value = XattrValue},
+
+    FileGuids = lists:map(fun({FileGuid, _}) ->
+        ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
+        FileGuid
+    end, FileGuidsAndPaths),
+
+    ViewName = <<"migration_jobs">>,
+    ViewFunction = transfers_test_utils:view_function(XattrName),
+    {ok, ViewId} = rpc:call(WorkerP1, indexes, add_index, [?DEFAULT_USER, ViewName, ViewFunction, SpaceId, false]),
+    {ok, ViewId} = rpc:call(WorkerP2, indexes, add_index, [?DEFAULT_USER, ViewName, ViewFunction, SpaceId, false]),
+
+    FileGuidsSorted = lists:sort(FileGuids),
+    ?assertMatch(FileGuidsSorted,
+        case rpc:call(WorkerP1, indexes, query_view_and_filter_values, [ViewId, [{key, XattrValue}]]) of
+            {ok, Results} -> lists:sort(Results);
+            Other -> Other
+        end,
+        ?ATTEMPTS),
+    ?assertMatch(FileGuidsSorted,
+        case rpc:call(WorkerP2, indexes, query_view_and_filter_values, [ViewId, [{key, XattrValue}]]) of
+            {ok, Results} -> lists:sort(Results);
+            Other -> Other
+        end,
+        ?ATTEMPTS),
+
+    transfers_test_mechanism:run_test(
+        Config2, #transfer_test_spec{
+            setup = undefined,
+            scenario = #scenario{
+                type = Type,
+                schedule_node = WorkerP1,
+                replicating_nodes = [WorkerP2],
+                evicting_nodes = [WorkerP1],
+                space_id = SpaceId,
+                function = fun transfers_test_mechanism:migrate_replicas_from_index/2,
+                query_view_params = [{key, XattrValue}],
+                index_id = ViewId
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    replication_status => completed,
+                    eviction_status => completed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+                    replicating_provider => transfers_test_utils:provider_id(WorkerP2),
+                    evicting_provider => transfers_test_utils:provider_id(WorkerP1),
+                    files_to_process => 2 * (NumberOfFiles + 1),
+                    files_processed => 2 * (NumberOfFiles + 1),
+                    files_replicated => NumberOfFiles,
+                    bytes_replicated => NumberOfFiles * ?DEFAULT_SIZE,
+                    files_evicted => NumberOfFiles
+                },
+                assertion_nodes = [WorkerP1, WorkerP2],
+                distribution = [
+                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => []},
+                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP2), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ],
+                assert_transferred_file_model = false
+            }
+        }
+    ).
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -394,10 +742,43 @@ init_per_suite(Config) ->
         | Config
     ].
 
+init_per_testcase(schedule_migration_of_100_regular_files_by_index_with_batch_100, Config) ->
+    Nodes = [WorkerP2 | _] = ?config(op_worker_nodes, Config),
+    {ok, OldReplicationBatch} = test_utils:get_env(WorkerP2, op_worker, replication_by_index_batch),
+    test_utils:set_env(Nodes, op_worker, replication_by_index_batch, 100),
+    {ok, OldEvictionBatch} = test_utils:get_env(WorkerP2, op_worker, replica_eviction_by_index_batch),
+    test_utils:set_env(Nodes, op_worker, replica_eviction_by_index_batch, 100),
+    init_per_testcase(all, [
+        {replication_by_index_batch, OldReplicationBatch},
+        {replica_eviction_by_index_batch, OldEvictionBatch} | Config
+    ]);
+
+init_per_testcase(schedule_migration_of_100_regular_files_by_index_with_batch_10, Config) ->
+    Nodes = [WorkerP2 | _] = ?config(op_worker_nodes, Config),
+    {ok, OldReplicationBatch} = test_utils:get_env(WorkerP2, op_worker, replication_by_index_batch),
+    test_utils:set_env(Nodes, op_worker, replication_by_index_batch, 10),
+    {ok, OldEvictionBatch} = test_utils:get_env(WorkerP2, op_worker, replica_eviction_by_index_batch),
+    test_utils:set_env(Nodes, op_worker, replica_eviction_by_index_batch, 10),
+    init_per_testcase(all, [
+        {replication_by_index_batch, OldReplicationBatch},
+        {replica_eviction_by_index_batch, OldEvictionBatch} | Config
+    ]);
+
 init_per_testcase(_Case, Config) ->
     ct:timetrap(timer:minutes(10)),
     lfm_proxy:init(Config),
     [{space_id, ?SPACE_ID} | Config].
+
+end_per_testcase(Case, Config) when
+    Case =:= schedule_migration_of_100_regular_files_by_index_with_batch_100;
+    Case =:= schedule_migration_of_100_regular_files_by_index_with_batch_10
+    ->
+    Nodes = ?config(op_worker_nodes, Config),
+    OldReplicationBatch = ?config(replication_by_index_batch, Config),
+    OldEvictionBatch = ?config(replica_eviction_by_index_batch, Config),
+    test_utils:set_env(Nodes, op_worker, replication_by_index_batch, OldReplicationBatch),
+    test_utils:set_env(Nodes, op_worker, replica_eviction_by_index_batch, OldEvictionBatch),
+    end_per_testcase(all, Config);
 
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -405,6 +786,7 @@ end_per_testcase(_Case, Config) ->
     transfers_test_utils:unmock_replica_synchronizer_failure(Workers),
     transfers_test_utils:remove_transfers(Config),
     rpc:multicall(Workers, transfer, restart_pools, []),
+    transfers_test_utils:remove_all_indexes(Workers, ?DEFAULT_USER),
     transfers_test_utils:ensure_transfers_removed(Config).
 
 end_per_suite(Config) ->

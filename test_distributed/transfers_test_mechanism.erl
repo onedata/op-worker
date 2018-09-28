@@ -38,8 +38,11 @@
     schedule_replica_eviction_without_permissions/2,
     migrate_root_directory/2,
     migrate_each_file_replica_separately/2,
-    schedule_replica_migration_without_permissions/2
-    , replicate_files_from_index/2, evict_replicas_from_index/2]).
+    schedule_replica_migration_without_permissions/2,
+    replicate_files_from_index/2,
+    evict_replicas_from_index/2,
+    migrate_replicas_from_index/2
+]).
 
 -export([move_transfer_ids_to_old_key/1]).
 
@@ -359,6 +362,33 @@ schedule_replica_migration_without_permissions(Config, #scenario{
         end, ReplicatingNodes)
     end, EvictingNodes),
     Config.
+
+migrate_replicas_from_index(Config, #scenario{
+    user = User,
+    type = Type,
+    space_id = SpaceId,
+    index_id = IndexId,
+    query_view_params = QueryViewParams,
+    schedule_node = ScheduleNode,
+    replicating_nodes = ReplicatingNodes,
+    evicting_nodes = EvictingNodes
+}) ->
+    NodesTransferIdsAndFiles = lists:flatmap(fun(ReplicatingNode) ->
+        lists:map(fun(EvictingNode) ->
+                ReplicatingProviderId = transfers_test_utils:provider_id(ReplicatingNode),
+                EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
+
+                {ok, Tid} = schedule_replica_migration_by_index(ScheduleNode,
+                    EvictingProviderId, User, SpaceId, IndexId,
+                    QueryViewParams, Config, Type, ReplicatingProviderId
+                ),
+                {EvictingNode, Tid, undefined, undefined}
+        end, EvictingNodes)
+    end, ReplicatingNodes),
+
+    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
+        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
+    end, Config, []).
 
 %%%===================================================================
 %%% Internal functions
@@ -850,23 +880,6 @@ schedule_replication_by_index_via_lfm(ScheduleNode, ProviderId, User, SpaceId, I
     SessionId = ?USER_SESSION(ScheduleNode, User, Config),
     lfm_proxy:schedule_replication_by_index(ScheduleNode, SessionId, ProviderId, SpaceId, IndexId, QueryViewParams).
 
-schedule_replica_eviction_by_index(ScheduleNode, ProviderId, User, SpaceId, IndexId, QueryViewParams, Config, lfm) ->
-    schedule_replica_eviction_by_index_via_lfm(ScheduleNode, ProviderId, User, SpaceId, IndexId, QueryViewParams, Config);
-schedule_replica_eviction_by_index(ScheduleNode, ProviderId, User, SpaceId, IndexId, QueryViewParams, Config, rest) ->
-    schedule_replica_eviction_by_index_via_rest(ScheduleNode, ProviderId, User, SpaceId, IndexId, QueryViewParams, Config).
-
-schedule_replica_eviction_by_index_via_lfm(ScheduleNode, ProviderId, User, SpaceId, IndexId, QueryViewParams, Config) ->
-    SessionId = ?USER_SESSION(ScheduleNode, User, Config),
-    lfm_proxy:schedule_replica_eviction_by_index(ScheduleNode, SessionId, ProviderId, undefined, SpaceId, IndexId, QueryViewParams).
-
-schedule_replica_eviction_by_index_via_rest(ScheduleNode, ProviderId, User, SpaceId, IndexId, QueryViewParams, Config) ->
-    error(not_implemented).
-
-schedule_replica_migration(ScheduleNode, ProviderId, User, FileKey, Config, lfm, MigrationProviderId) ->
-    schedule_replica_migration_by_lfm(ScheduleNode, ProviderId, User, FileKey, Config, MigrationProviderId);
-schedule_replica_migration(ScheduleNode, ProviderId, User, FileKey, Config, rest, MigrationProviderId) ->
-    schedule_replica_eviction_by_rest(ScheduleNode, ProviderId, User, FileKey, Config, MigrationProviderId).
-
 schedule_replica_eviction(ScheduleNode, ProviderId, User, FileKey, Config, lfm) ->
     schedule_replica_eviction_by_lfm(ScheduleNode, ProviderId, User, FileKey, Config);
 schedule_replica_eviction(ScheduleNode, ProviderId, User, FileKey, Config, rest) ->
@@ -875,10 +888,6 @@ schedule_replica_eviction(ScheduleNode, ProviderId, User, FileKey, Config, rest)
 schedule_replica_eviction_by_lfm(ScheduleNode, ProviderId, User, FileKey, Config) ->
     SessionId = ?USER_SESSION(ScheduleNode, User, Config),
     lfm_proxy:schedule_file_replica_eviction(ScheduleNode, SessionId, FileKey, ProviderId, undefined).
-
-schedule_replica_migration_by_lfm(ScheduleNode, ProviderId, User, FileKey, Config, MigrationProviderId) ->
-    SessionId = ?USER_SESSION(ScheduleNode, User, Config),
-    lfm_proxy:schedule_file_replica_eviction(ScheduleNode, SessionId, FileKey, ProviderId, MigrationProviderId).
 
 schedule_replica_eviction_by_rest(Worker, ProviderId, User, {path, FilePath}, Config, MigrationProviderId) ->
     URL = case MigrationProviderId of
@@ -914,6 +923,39 @@ schedule_replica_eviction_by_rest(Worker, ProviderId, User, {guid, FileGuid}, Co
         {ok, _, _, Body} ->
             {error, Body}
     end.
+
+schedule_replica_eviction_by_index(ScheduleNode, ProviderId, User, SpaceId, IndexId, QueryViewParams, Config, lfm) ->
+    schedule_replica_eviction_by_index_via_lfm(ScheduleNode, ProviderId, User, SpaceId, IndexId, QueryViewParams, Config);
+schedule_replica_eviction_by_index(ScheduleNode, ProviderId, User, SpaceId, IndexId, QueryViewParams, Config, rest) ->
+    schedule_replica_eviction_by_index_via_rest(ScheduleNode, ProviderId, User, SpaceId, IndexId, QueryViewParams, Config).
+
+schedule_replica_eviction_by_index_via_lfm(ScheduleNode, ProviderId, User, SpaceId, IndexId, QueryViewParams, Config) ->
+    SessionId = ?USER_SESSION(ScheduleNode, User, Config),
+    lfm_proxy:schedule_replica_eviction_by_index(ScheduleNode, SessionId, ProviderId, undefined, SpaceId, IndexId, QueryViewParams).
+
+schedule_replica_eviction_by_index_via_rest(ScheduleNode, ProviderId, User, SpaceId, IndexId, QueryViewParams, Config) ->
+    error(not_implemented).
+
+schedule_replica_migration(ScheduleNode, ProviderId, User, FileKey, Config, lfm, MigrationProviderId) ->
+    schedule_replica_migration_by_lfm(ScheduleNode, ProviderId, User, FileKey, Config, MigrationProviderId);
+schedule_replica_migration(ScheduleNode, ProviderId, User, FileKey, Config, rest, MigrationProviderId) ->
+    schedule_replica_eviction_by_rest(ScheduleNode, ProviderId, User, FileKey, Config, MigrationProviderId).
+
+schedule_replica_migration_by_lfm(ScheduleNode, ProviderId, User, FileKey, Config, MigrationProviderId) ->
+    SessionId = ?USER_SESSION(ScheduleNode, User, Config),
+    lfm_proxy:schedule_file_replica_eviction(ScheduleNode, SessionId, FileKey, ProviderId, MigrationProviderId).
+
+schedule_replica_migration_by_index(ScheduleNode, ProviderId, User, SpaceId, IndexId, QueryViewParams, Config, lfm, MigrationProviderId) ->
+    schedule_replica_migration_by_index_via_lfm(ScheduleNode, ProviderId, User, SpaceId, IndexId, QueryViewParams, Config, MigrationProviderId);
+schedule_replica_migration_by_index(ScheduleNode, ProviderId, User, SpaceId, IndexId, QueryViewParams, Config, rest, MigrationProviderId) ->
+    schedule_replica_migration_by_index_via_rest(ScheduleNode, ProviderId, User, SpaceId, IndexId, QueryViewParams, Config, MigrationProviderId).
+
+schedule_replica_migration_by_index_via_lfm(ScheduleNode, ProviderId, User, SpaceId, IndexId, QueryViewParams, Config, MigrationProviderId) ->
+    SessionId = ?USER_SESSION(ScheduleNode, User, Config),
+    lfm_proxy:schedule_replica_eviction_by_index(ScheduleNode, SessionId, ProviderId, MigrationProviderId, SpaceId, IndexId, QueryViewParams).
+
+schedule_replica_migration_by_index_via_rest(ScheduleNode, ProviderId, User, SpaceId, IndexId, QueryViewParams, Config, MigrationProviderId) ->
+    error(not_implemented).
 
 cancel_transfer(ScheduleNode, Tid, Config, lfm) ->
     cancel_transfer_by_lfm(ScheduleNode, Tid, Config);
