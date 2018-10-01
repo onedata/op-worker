@@ -34,7 +34,7 @@ routes() ->
         {"/api/v3/oneprovider/debug/transfers_mock", #{handler => transfers_mock}},
         {"/api/v3/oneprovider/files/[...]", #{handler => files}},
         {"/api/v3/oneprovider/index", #{handler => index_collection}},
-        {"/api/v3/oneprovider/index/:id", #{handler => index}},
+        {"/api/v3/oneprovider/spaces/:sid/indexes/:index_name", #{handler => index_by_name}},
         {"/api/v3/oneprovider/metadata/[...]", #{handler => metadata}},
         {"/api/v3/oneprovider/metadata-id/:id", #{handler => metadata,
             handler_initial_opts => #{resource_type => id}}},

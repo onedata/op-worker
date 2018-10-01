@@ -6,10 +6,10 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Handler for getting and modifying indexes.
+%%% Handler for creating, getting, modifying and deleting indexes.
 %%% @end
 %%%--------------------------------------------------------------------
--module(index).
+-module(index_by_name).
 -author("Tomasz Lichon").
 
 -include("http/http_common.hrl").
@@ -20,7 +20,7 @@
     content_types_provided/2, content_types_accepted/2, delete_resource/2]).
 
 %% resource functions
--export([get_index/2, modify_index/2]).
+-export([get_index/2, create_or_modify_index/2]).
 
 %%%===================================================================
 %%% API
@@ -36,24 +36,27 @@ terminate(_, _, _) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:allowed_methods/2
 %%--------------------------------------------------------------------
--spec allowed_methods(req(), maps:map() | {error, term()}) -> {[binary()], req(), maps:map()}.
+-spec allowed_methods(req(), maps:map() | {error, term()}) ->
+    {[binary()], req(), maps:map()}.
 allowed_methods(Req, State) ->
-    {[<<"GET">>, <<"PUT">>, <<"DELETE">>], Req, State}.
+    {[<<"GET">>, <<"PUT">>, <<"PATCH">>, <<"DELETE">>], Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
 %%--------------------------------------------------------------------
--spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | stop, req(), maps:map()}.
+-spec is_authorized(req(), maps:map()) ->
+    {true | {false, binary()} | stop, req(), maps:map()}.
 is_authorized(Req, State) ->
     onedata_auth_api:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_provided/2
 %%--------------------------------------------------------------------
--spec content_types_provided(req(), maps:map()) -> {[{binary(), atom()}], req(), maps:map()}.
+-spec content_types_provided(req(), maps:map()) ->
+    {[{binary(), atom()}], req(), maps:map()}.
 content_types_provided(Req, State) ->
     {[
-        {<<"application/javascript">>, get_index}
+        {<<"application/json">>, get_index}
     ], Req, State}.
 
 %%--------------------------------------------------------------------
@@ -63,34 +66,40 @@ content_types_provided(Req, State) ->
     {[{binary(), atom()}], req(), maps:map()}.
 content_types_accepted(Req, State) ->
     {[
-        {<<"application/javascript">>, modify_index}
+        {<<"application/javascript">>, create_or_modify_index}
     ], Req, State}.
 
 %%--------------------------------------------------------------------
-%% '/api/v3/oneprovider/index/{iid}'
+%% '/api/v3/oneprovider/spaces/{sid}/indexes/{name}'
 %% @doc This method removes index
 %%
 %% HTTP method: DELETE
 %%
-%% @param iid Id of the index to return.
+%% @param sid Id of the space within which index exist.
+%% @param name Name of the index.
 %%--------------------------------------------------------------------
 -spec delete_resource(req(), maps:map()) -> {term(), req(), maps:map()}.
 delete_resource(Req, State) ->
-    {State2, Req2} = validator:parse_id(Req, State),
+    {State2, Req2} = validator:parse_space_id(Req, State),
+    {State3, Req3} = validator:parse_index_name(Req2, State2),
 
-    #{auth := Auth, id := IndexId} = State2,
+    #{space_id := SpaceId, index_name := IndexName} = State3,
 
-    {ok, UserId} = session:get_user_id(Auth),
-    ok = indexes:remove_index(UserId, IndexId),
-    {true, Req2, State2}.
+    case index:delete(SpaceId, IndexName) of
+        ok ->
+            {true, Req3, State3};
+        {error, _} ->
+            ok
+            % TODO handle errors ?
+    end.
 
 %%%===================================================================
 %%% Content type handler functions
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% '/api/v3/oneprovider/index/{iid}'
-%% @doc This method returns a specific index source code.
+%% '/api/v3/oneprovider/spaces/{sid}/indexes/{name}'
+%% @doc This method returns a JSON containing index options and functions.
 %%
 %% The indexes are defined as JavaScript functions which are executed
 %% on the database backend.
@@ -100,28 +109,43 @@ delete_resource(Req, State) ->
 %% **Get list of indexes for space**
 %% &#x60;&#x60;&#x60;bash
 %% curl --tlsv1.2 -H \&quot;X-Auth-Token: $TOKEN\&quot; -X GET \\
-%% https://$HOST:443/api/v1/oneprovider/index/f209c965-e212-4149-af72-860faea4187a
+%% https://$HOST:443/api/v1/oneprovider/spaces/$SPACE_ID/indexes/$INDEX_NAME
 %%
-%%
-%% function(x) {
-%% ...
+%% {
+%%   "name": $INDEX_NAME,
+%%   "spatial": false,
+%%   "map_function": "function(x){...}",
+%%   "reduce_function": null,
+%%   "index_options": {}
 %% }
 %% &#x60;&#x60;&#x60;
 %%
 %% HTTP method: GET
 %%
-%% @param iid Id of the index to return.
+%% @param sid Id of the space within which index exist.
+%% @param name Name of the index.
 %%--------------------------------------------------------------------
 -spec get_index(req(), maps:map()) -> {term(), req(), maps:map()}.
 get_index(Req, State) ->
-    {State1, Req1} = validator:parse_id(Req, State),
+    {State2, Req2} = validator:parse_space_id(Req, State),
+    {State3, Req3} = validator:parse_index_name(Req2, State2),
 
-    #{auth := Auth, id := Id} = State1,
+    #{space_id := SpaceId, index_name := IndexName} = State3,
 
-    {ok, UserId} = session:get_user_id(Auth),
-    {ok, Index} = indexes:get_index(UserId, Id),
+    case index:get_json(SpaceId, IndexName) of
+        {ok, JSON} ->
+            {json_utils:encode(JSON), Req3, State3};
+        {error, _} ->
+            ok
+            % TODO handle errors ?
+    end.
 
-    {maps:get(function, Index), Req1, State1}.
+%%    {State1, Req1} = validator:parse_id(Req, State),
+%%
+%%    #{auth := Auth, id := Id} = State1,
+%%
+%%    {ok, UserId} = session:get_user_id(Auth),
+%%    {ok, Index} = indexes:get_index(UserId, Id),
 
 %%--------------------------------------------------------------------
 %% '/api/v3/oneprovider/index/{iid}'
@@ -144,18 +168,49 @@ get_index(Req, State) ->
 %%
 %% @param iid Id of the index to update.
 %%--------------------------------------------------------------------
+-spec create_or_modify_index(req(), maps:map()) -> term().
+create_or_modify_index(#{method := Method} = Req, State) ->
+    {State2, Req2} = validator:parse_space_id(Req, State),
+    {State3, Req3} = validator:parse_index_name(Req2, State2),
+    {State4, Req4} = validator:parse_spatial(Req3, State3),
+    {State5, Req5} = validator:parse_function(Req4, State4),
+
+    {State6, Req6} = validator:parse_index_options(Req5, State5),
+    {State7, Req7} = validator:parse_index_providers(Req6, State6),
+
+    case Method of
+        <<"PUT">> ->
+            create_index(Req7, State7);
+        <<"PATCH">> ->
+            modify_index(Req7, State7)
+    end.
+
+%%%===================================================================
+%%% Internal functions
+%%%==================================================================
+
+-spec create_index(req(), maps:map()) -> term().
+create_index(Req, State) ->
+    #{
+        space_id := SpaceId,
+        index_name := Name,
+        spatial := Spatial,
+        function := Function,
+        index_options := Options,
+        providers := Providers
+    } = State,
+
+    {true, Req, State}.
+
 -spec modify_index(req(), maps:map()) -> term().
 modify_index(Req, State) ->
-    {State1, Req1} = validator:parse_name(Req, State),
-    {State2, Req2} = validator:parse_function(Req1, State1),
-    {State3, Req3} = validator:parse_space_id(Req2, State2),
+%%    {State1, Req1} = validator:parse_name(Req, State),
+%%    {State2, Req2} = validator:parse_function(Req1, State1),
+%%    {State3, Req3} = validator:parse_space_id(Req2, State2),
+%%
+%%    #{auth := Auth, name := IndexName, space_id := SpaceId, function := Function} = State3,
+%%
+%%    {ok, UserId} = session:get_user_id(Auth),
+%%    {ok, _} = indexes:change_index_function(UserId, IndexName, SpaceId, Function),
 
-    #{auth := Auth, name := IndexName, space_id := SpaceId, function := Function} = State3,
-
-    {ok, UserId} = session:get_user_id(Auth),
-    {ok, _} = indexes:change_index_function(UserId, IndexName, SpaceId, Function),
-
-    {true, Req3, State3}.
-
-
-
+    {true, Req, State}.

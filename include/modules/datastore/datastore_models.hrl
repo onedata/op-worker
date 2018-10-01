@@ -620,4 +620,17 @@
     write = 0 :: non_neg_integer()
 }).
 
+%% Model that holds information on database view.
+%% Specifying reduce function is optional in case of non-spatial index and
+%% forbidden in case of spatial ones (map_function is treated as
+%% spacial function).
+-record(index, {
+    name :: binary(),
+    spatial :: boolean(),
+    map_function :: binary(),
+    reduce_function :: undefined | binary(),
+    index_options = #{} :: #{binary() => term()},
+    providers :: all | [od_provider:id()]
+}).
+
 -endif.

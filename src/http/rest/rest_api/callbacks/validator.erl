@@ -35,7 +35,9 @@
     parse_function/2, parse_bbox/2, parse_descending/2, parse_endkey/2, parse_key/2,
     parse_keys/2, parse_skip/2, parse_stale/2, parse_limit/2, parse_inclusive_end/2,
     parse_startkey/2, parse_filter/2, parse_filter_type/2, parse_inherited/2,
-    parse_spatial/2, parse_start_range/2, parse_end_range/2]).
+    parse_spatial/2, parse_start_range/2, parse_end_range/2,
+    parse_index_name/2
+]).
 
 %% TODO VFS-2574 Make validation of result map
 -type parse_result() :: maps:map().
@@ -230,6 +232,17 @@ parse_space_id(Req, State = #{auth := SessionId}) ->
         false ->
             throw(?ERROR_SPACE_NOT_FOUND)
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's index name and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_index_name(cowboy_req:req(), maps:map()) ->
+    {parse_result(), cowboy_req:req()}.
+parse_index_name(Req, State) ->
+    Name = cowboy_req:binding(index_name, Req),
+    {State#{index_name => Name}, Req}.
 
 %%--------------------------------------------------------------------
 %% @doc
