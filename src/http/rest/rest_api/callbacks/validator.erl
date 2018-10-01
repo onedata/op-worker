@@ -36,7 +36,9 @@
     parse_keys/2, parse_skip/2, parse_stale/2, parse_limit/2, parse_inclusive_end/2,
     parse_startkey/2, parse_filter/2, parse_filter_type/2, parse_inherited/2,
     parse_spatial/2, parse_start_range/2, parse_end_range/2,
-    parse_index_name/2
+
+    parse_index_name/2, parse_update_min_changes/2,
+    parse_replica_update_min_changes/2
 ]).
 
 %% TODO VFS-2574 Make validation of result map
@@ -620,6 +622,59 @@ parse_inherited(Req, State) ->
             {State#{inherited => false}, NewReq};
         _ ->
             throw(?ERROR_INVALID_INHERITED_FLAG)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's update min changes param and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_update_min_changes(cowboy_req:req(), maps:map()) ->
+    {parse_result(), cowboy_req:req()}.
+parse_update_min_changes(Req, State) ->
+    {Val, NewReq} = qs_val(<<"updateMinChanges">>, Req),
+    {State#{update_min_changes => Val}, NewReq}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's replica update min changes param and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_limit(cowboy_req:req(), maps:map()) ->
+    {parse_result(), cowboy_req:req()}.
+parse_replica_update_min_changes(Req, State) ->
+    {Val, NewReq} = qs_val(<<"replicaUpdateMinChanges">>, Req),
+    {State#{replica_update_min_changes => Val}, NewReq}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's inherited param and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_index_providers(cowboy_req:req(), maps:map()) ->
+    {parse_result(), cowboy_req:req()}.
+parse_index_providers(Req, State) ->
+    {RawProvidersList, NewReq} = qs_val(<<"providers">>, Req),
+    case RawProvidersList of
+        undefined ->
+            {State#{providers => [oneprovider:get_id()]}, NewReq};
+        _ ->
+            try
+                Limit = binary_to_integer(RawLimit),
+                case Limit > 0 of
+                    true -> ok;
+                    false -> throw(?ERROR_INVALID_LIMIT)
+                end,
+                case Limit < ?MAX_LIMIT of
+                    true ->
+                        {State#{limit => Limit}, NewReq};
+                    false ->
+                        throw(?ERROR_LIMIT_TOO_LARGE(?MAX_LIMIT))
+                end
+            catch
+                _:_ ->
+                    throw(?ERROR_INVALID_LIMIT)
+            end
     end.
 
 %%%===================================================================

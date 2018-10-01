@@ -18,8 +18,8 @@
 
 %% API
 -export([
-    delete/2
-]).
+    delete/2, query_view_and_filter_values/3, get_json/2
+    , list/4, save/6, is_supported/3]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
@@ -41,15 +41,33 @@
 %%% API
 %%%===================================================================
 
+-spec save(od_space:id(), name(), index_function(), options(), boolean(),
+    [od_provider:id()]) -> ok.
+save(SpaceId, Name, MapFunction, Options, Spatial, Providers) ->
+    ok.
+
+-spec is_supported(od_space:id(), binary(), od_provider:id()) -> boolean().
+is_supported(SpaceId, IndexName, ProviderId) ->
+    true.
+
+-spec query_view_and_filter_values(od_space:id(), name(), list()) ->
+    {ok, [file_meta:uuid()]}.
+query_view_and_filter_values(SpaceId, IndexName, Options) ->
+    {ok, []}.
+
+-spec list(od_space:id(), undefined | name(), integer(), non_neg_integer() | all) ->
+    [index:name()].
+list(SpaceId, StartId, Offset, Limit) ->
+    {ok, []}.
+
 -spec get_json(od_space:id(), binary()) ->
     #{binary() => term()} | {error, term()}.
 get_json(SpaceId, IndexName) ->
-    {}.
+    #{}.
 
 -spec delete(od_space:id(), binary()) -> ok | {error, term()}.
 delete(SpaceId, IndexName) ->
     ok.
-
 
 %%%===================================================================
 %%% datastore_model callbacks

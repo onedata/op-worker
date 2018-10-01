@@ -61,12 +61,22 @@ content_types_provided(Req, State) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc This method returns the list of files which match the query on a predefined index.
+%% '/api/v3/oneprovider/spaces/{sid}/indexes/{index_name}/query'
+%% @doc This method returns the list of files which match the query on a
+%% predefined index.
+%%
+%% HTTP method: GET
+%%
+%% @param sid Id of the space within which index exist.
+%% @param name Name of the index.
 %%--------------------------------------------------------------------
 -spec query_index(req(), maps:map()) -> {term(), req(), maps:map()}.
 query_index(Req, State) ->
-    {StateWithId, ReqWithId} = validator:parse_id(Req, State),
-    {StateWithBbox, ReqWithBbox} = validator:parse_bbox(ReqWithId, StateWithId),
+    {StateWithSpaceId, ReqWithSpaceId} = validator:parse_space_id(Req, State),
+    {StateWithIndexName, ReqWithIndexName} = validator:parse_index_name(ReqWithSpaceId, StateWithSpaceId),
+
+    % get options
+    {StateWithBbox, ReqWithBbox} = validator:parse_bbox(ReqWithIndexName, StateWithIndexName),
     {StateWithDescending, ReqWithDescending} = validator:parse_descending(ReqWithBbox, StateWithBbox),
     {StateWithEndkey, ReqWithEndkey} = validator:parse_endkey(ReqWithDescending, StateWithDescending),
     {StateWithInclusiveEnd, ReqWithInclusiveEnd} = validator:parse_inclusive_end(ReqWithEndkey, StateWithEndkey),
@@ -80,146 +90,19 @@ query_index(Req, State) ->
     {StateWithEndRange, ReqWithEndRange} = validator:parse_end_range(ReqWithStartRange, StateWithStartRange),
     {StateWithSpatial, ReqWithSpatial} = validator:parse_spatial(ReqWithEndRange, StateWithEndRange),
 
-    #{auth := _Auth, id := Id} = StateWithSpatial,
+    #{space_id := SpaceId, index_name := IndexName} = StateWithSpatial,
+    Options = index_utils:sanitize_query_options(StateWithSpatial),
 
-    Options = prepare_options(StateWithSpatial),
-    {ok, Guids} = indexes:query_view_and_filter_values(Id, Options),
-    ObjectIds = lists:map(fun(Guid) ->
-        {ok, ObjectId} = cdmi_id:guid_to_objectid(Guid),
-        ObjectId
-    end, Guids),
+    case index:query_view_and_filter_values(SpaceId, IndexName, Options) of
+        {ok, Guids} ->
+            ObjectIds = lists:map(fun(Guid) ->
+                {ok, ObjectId} = cdmi_id:guid_to_objectid(Guid),
+                ObjectId
+            end, Guids),
 
-    {json_utils:encode(ObjectIds), ReqWithSpatial, StateWithSpatial}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Convert Request parameters to couchdb view query options
-%% @end
-%%--------------------------------------------------------------------
--spec prepare_options(maps:map() | list()) -> list().
-prepare_options(Map) when is_map(Map) ->
-    prepare_options(maps:to_list(Map));
-prepare_options([]) ->
-    [];
-prepare_options([{id, _} | Rest]) ->
-    prepare_options(Rest);
-prepare_options([{auth, _} | Rest]) ->
-    prepare_options(Rest);
-
-prepare_options([{bbox, undefined} | Rest]) ->
-    prepare_options(Rest);
-prepare_options([{bbox, Bbox} | Rest]) ->
-    [{bbox, Bbox} | prepare_options(Rest)];
-
-prepare_options([{descending, true} | Rest]) ->
-    [descending | prepare_options(Rest)];
-prepare_options([{descending, undefined} | Rest]) ->
-    prepare_options(Rest);
-prepare_options([{descending, _} | _Rest]) ->
-    throw(?ERROR_INVALID_DESCENDING);
-
-prepare_options([{endkey, undefined} | Rest]) ->
-    prepare_options(Rest);
-prepare_options([{endkey, Endkey} | Rest]) ->
-    try
-        [{endkey, jiffy:decode(Endkey)} | prepare_options(Rest)]
-    catch
-        _:_ ->
-            throw(?ERROR_INVALID_ENDKEY)
-    end;
-
-prepare_options([{startkey, undefined} | Rest]) ->
-    prepare_options(Rest);
-prepare_options([{startkey, StartKey} | Rest]) ->
-    try
-        [{startkey, jiffy:decode(StartKey)} | prepare_options(Rest)]
-    catch
-        _:_ ->
-            throw(?ERROR_INVALID_STARTKEY)
-    end;
-
-prepare_options([{inclusive_end, true} | Rest]) ->
-    [inclusive_end | prepare_options(Rest)];
-prepare_options([{inclusive_end, undefined} | Rest]) ->
-    prepare_options(Rest);
-prepare_options([{inclusive_end, _} | _Rest]) ->
-    throw(?ERROR_INVALID_INCLUSIVE_END);
-
-prepare_options([{key, undefined} | Rest]) ->
-    prepare_options(Rest);
-prepare_options([{key, Key} | Rest]) ->
-    try
-        [{key, jiffy:decode(Key)} | prepare_options(Rest)]
-    catch
-        _:_ ->
-            throw(?ERROR_INVALID_KEY)
-    end;
-
-prepare_options([{keys, undefined} | Rest]) ->
-    prepare_options(Rest);
-prepare_options([{keys, Keys} | Rest]) ->
-    try
-        DecodedKeys = jiffy:decode(Keys),
-        true = is_list(DecodedKeys),
-        [{keys, DecodedKeys} | prepare_options(Rest)]
-    catch
-        _:_ ->
-            throw(?ERROR_INVALID_KEYS)
-    end;
-
-prepare_options([{limit, undefined} | Rest]) ->
-    prepare_options(Rest);
-prepare_options([{limit, Limit} | Rest]) ->
-    case catch binary_to_integer(Limit) of
-        N when is_integer(N) ->
-            [{limit, N} | prepare_options(Rest)];
-        _Error ->
-            throw(?ERROR_INVALID_LIMIT)
-    end;
-
-prepare_options([{skip, undefined} | Rest]) ->
-    prepare_options(Rest);
-prepare_options([{skip, Skip} | Rest]) ->
-    case catch binary_to_integer(Skip) of
-        N when is_integer(N) ->
-            [{skip, N} | prepare_options(Rest)];
-        _Error ->
-            throw(?ERROR_INVALID_SKIP)
-    end;
-
-prepare_options([{stale, undefined} | Rest]) ->
-    prepare_options(Rest);
-prepare_options([{stale, <<"ok">>} | Rest]) ->
-    [{stale, ok} | prepare_options(Rest)];
-prepare_options([{stale, <<"update_after">>} | Rest]) ->
-    [{stale, update_after} | prepare_options(Rest)];
-prepare_options([{stale, <<"false">>} | Rest]) ->
-    [{stale, false} | prepare_options(Rest)];
-prepare_options([{stale, _} | _]) ->
-    throw(?ERROR_INVALID_STALE);
-prepare_options([{spatial, true} | Rest]) ->
-    [{spatial, true} | prepare_options(Rest)];
-prepare_options([{spatial, false} | Rest]) ->
-    prepare_options(Rest);
-
-prepare_options([{start_range, undefined} | Rest]) ->
-    prepare_options(Rest);
-prepare_options([{start_range, Endkey} | Rest]) ->
-    StartRange = try
-        {start_range, jiffy:decode(Endkey)}
-    catch
-        _:_ ->
-            throw(?ERROR_INVALID_START_RANGE)
-    end,
-    [StartRange | prepare_options(Rest)];
-
-prepare_options([{end_range, undefined} | Rest]) ->
-    prepare_options(Rest);
-prepare_options([{end_range, Endkey} | Rest]) ->
-    EndRange = try
-        {end_range, jiffy:decode(Endkey)}
-    catch
-        _:_ ->
-            throw(?ERROR_INVALID_END_RANGE)
-    end,
-    [EndRange | prepare_options(Rest)].
+            {json_utils:encode(ObjectIds), ReqWithSpatial, StateWithSpatial};
+        {error, not_found} ->
+            throw(?ERROR_INDEX_NOT_FOUND);
+        {error, not_supported} ->
+            ok % TODO index not supported on this provider
+    end.
