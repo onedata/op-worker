@@ -11,11 +11,14 @@
 -module(file_deletion_test_SUITE).
 -author("Michal Wrona").
 
+-include("fuse_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
+-include_lib("clproto/include/messages.hrl").
+-include_lib("proto/common/credentials.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -34,7 +37,8 @@
     file_shouldnt_be_listed_after_deletion/1,
     file_stat_should_return_enoent_after_deletion/1,
     file_open_should_return_enoent_after_deletion/1,
-    file_handle_should_work_after_deletion/1
+    file_handle_should_work_after_deletion/1,
+    remove_file_on_ceph_using_client/1
 ]).
 
 -define(TEST_CASES, [
@@ -49,7 +53,8 @@
     file_shouldnt_be_listed_after_deletion,
     file_stat_should_return_enoent_after_deletion,
     file_open_should_return_enoent_after_deletion,
-    file_handle_should_work_after_deletion
+    file_handle_should_work_after_deletion,
+    remove_file_on_ceph_using_client
 ]).
 
 all() -> ?ALL(?TEST_CASES).
@@ -298,16 +303,45 @@ file_handle_should_work_after_deletion(Config) ->
     ?assertEqual({ok, <<"test_content">>}, lfm_proxy:read(Worker, Handle, 0, 15)),
     ?assertEqual(ok, lfm_proxy:close(Worker, Handle)).
 
+remove_file_on_ceph_using_client(Config0) ->
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, <<"user2">>, {0, 0, 0, 0}, 0),
+    [Worker | _] = ?config(workers1, Config),
+    SessionId = ?config(session, Config),
+    SpaceName = <<"space2">>,
+    FilePath = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
+
+    [{_, Ceph} | _] = proplists:get_value(cephrados, ?config(storages, Config)),
+    ContainerId = proplists:get_value(container_id, Ceph),
+
+    {ok, Guid} = lfm_proxy:create(Worker, SessionId(Worker), FilePath, 8#755),
+    {ok, Handle} = lfm_proxy:open(Worker, SessionId(Worker), {guid, Guid}, write),
+    {ok, _} = lfm_proxy:write(Worker, Handle, 0, crypto:strong_rand_bytes(100)),
+    ok = lfm_proxy:close(Worker, Handle),
+
+    {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker, [{active, true}], SessionId(Worker)),
+
+    L = utils:cmd(["docker exec", atom_to_list(ContainerId), "rados -p onedata ls -"]),
+    ?assertEqual(true, length(L) > 0),
+
+    ok = ssl:send(Sock, fuse_utils:generate_delete_file_message(Guid, <<"2">>)),
+    ?assertMatch(#'ServerMessage'{message_body = {
+        fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
+    }, message_id = <<"2">>}, fuse_utils:receive_server_message()),
+
+    ?assertMatch({error, enoent}, lfm_proxy:ls(Worker, SessionId(Worker), {guid, Guid}, 0, 0), 60),
+
+    ?assertMatch([], utils:cmd(["docker exec", atom_to_list(ContainerId), "rados -p onedata ls -"])).
+
 %===================================================================
 % SetUp and TearDown functions
 %===================================================================
 
 init_per_suite(Config) ->
-    Posthook = fun(NewConfig) -> initializer:setup_storage(NewConfig) end,
-    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
+    Posthook = fun(NewConfig) -> multi_provider_file_ops_test_base:init_env(NewConfig) end,
+    [{?LOAD_MODULES, [initializer, multi_provider_file_ops_test_base]}, {?ENV_UP_POSTHOOK, Posthook} | Config].
 
 end_per_suite(Config) ->
-    initializer:teardown_storage(Config).
+    multi_provider_file_ops_test_base:teardown_env(Config).
 
 init_per_testcase(Case, Config) when
     Case =:= counting_file_open_and_release_test;
@@ -325,6 +359,21 @@ init_per_testcase(Case, Config) when
         end),
     Config;
 
+
+init_per_testcase(remove_file_on_ceph_using_client, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    initializer:remove_pending_messages(),
+    ssl:start(),
+
+    test_utils:mock_new(Workers, user_identity),
+    test_utils:mock_expect(Workers, user_identity, get_or_fetch,
+        fun(#macaroon_auth{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS}) ->
+            {ok, #document{value = #user_identity{user_id = <<"user2">>}}}
+        end
+    ),
+    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(
+        ?TEST_FILE(Config, "env_desc.json"), Config),
+    lfm_proxy:init(ConfigWithSessionInfo);
 init_per_testcase(Case, Config) when
     Case =:= init_should_clear_open_files;
     Case =:= init_should_clear_delayed_open_files;

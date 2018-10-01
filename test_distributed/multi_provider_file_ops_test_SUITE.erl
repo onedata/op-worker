@@ -12,6 +12,7 @@
 -module(multi_provider_file_ops_test_SUITE).
 -author("Michal Wrzeszcz").
 
+-include("fuse_utils.hrl").
 -include("global_definitions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -21,6 +22,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/global_definitions.hrl").
 
+-include("transfers_test_mechanism.hrl").
 %% API
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
@@ -55,7 +57,9 @@
     db_sync_create_after_del_test/1,
     rtransfer_fetch_test/1,
     rtransfer_cancel_for_session_test/1,
-    remove_file_during_transfers_test/1
+    remove_file_during_transfers_test/1,
+    remove_file_on_remote_provider_ceph/1,
+    evict_on_ceph/1
 ]).
 
 -define(TEST_CASES, [
@@ -79,7 +83,9 @@
     db_sync_create_after_del_test,
     rtransfer_fetch_test,
     rtransfer_cancel_for_session_test,
-    remove_file_during_transfers_test
+    remove_file_during_transfers_test,
+    remove_file_on_remote_provider_ceph,
+    evict_on_ceph
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -601,6 +607,88 @@ remove_file_during_transfers_test(Config0) ->
         ?assertMatch({error, file_deleted}, rpc:yield(Promise))
     end, Promises).
 
+remove_file_on_remote_provider_ceph(Config0) ->
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, <<"user2">>, {0, 0, 0, 0}, 0),
+    [Worker1 | _] = ?config(workers1, Config),
+    [Worker2 | _] = ?config(workers_not1, Config),
+
+    SessionId = ?config(session, Config),
+    
+    SpaceName = <<"space7">>,
+    FilePath = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
+    
+    [{_, Ceph} | _] = proplists:get_value(cephrados, ?config(storages, Config)),
+    ContainerId = proplists:get_value(container_id, Ceph),
+    
+    {ok, Guid} = lfm_proxy:create(Worker1, SessionId(Worker1), FilePath, 8#755),
+    {ok, Handle} = lfm_proxy:open(Worker1, SessionId(Worker1), {guid, Guid}, write),
+    {ok, _} = lfm_proxy:write(Worker1, Handle, 0, crypto:strong_rand_bytes(100)),
+    ok = lfm_proxy:close(Worker1, Handle),
+
+    ?assertMatch({ok, _}, lfm_proxy:ls(Worker2, SessionId(Worker2), {guid, Guid}, 0, 0), 60),
+    L = utils:cmd(["docker exec", atom_to_list(ContainerId), "rados -p onedata ls -"]),
+    ?assertEqual(true, length(L) > 0),
+       
+    lfm_proxy:unlink(Worker2, SessionId(Worker2), {guid, Guid}),
+
+    ?assertMatch({error, enoent}, lfm_proxy:ls(Worker1, SessionId(Worker1), {guid, Guid}, 0, 0), 60),
+    ?assertMatch([], utils:cmd(["docker exec", atom_to_list(ContainerId), "rados -p onedata ls -"])).
+    
+evict_on_ceph(Config0) ->
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, <<"user2">>, {0, 0, 0, 0}, 0),
+    Type = lfm,
+    FileKeyType = path,
+    [Worker1 | _] = ?config(workers1, Config),
+    [Worker2 | _] = ?config(workers_not1, Config),
+    Size = 100,
+    User = <<"user2">>,
+    transfers_test_mechanism:run_test(
+        Config, #transfer_test_spec{
+            setup = #setup{
+                user = User,
+                setup_node = Worker2,
+                assertion_nodes = [Worker1],
+                files_structure = [{0, 1}],
+                replicate_to_nodes = [Worker1],
+                size = Size,
+                distribution = [
+                    #{<<"providerId">> => ?GET_DOMAIN_BIN(Worker1), <<"blocks">> => [[0, Size]]},
+                    #{<<"providerId">> => ?GET_DOMAIN_BIN(Worker2), <<"blocks">> => [[0, Size]]}
+                ]
+            },
+            scenario = #scenario{
+                user = User,
+                type = Type,
+                file_key_type = FileKeyType,
+                schedule_node = Worker2,
+                evicting_nodes = [Worker1],
+                function = fun transfers_test_mechanism:evict_each_file_replica_separately/2
+            },
+            expected = #expected{
+                user = User,
+                expected_transfer = #{
+                    replication_status => skipped,
+                    eviction_status => completed,
+                    scheduling_provider => transfers_test_utils:provider_id(Worker2),
+                    evicting_provider => transfers_test_utils:provider_id(Worker1),
+                    files_to_process => 1,
+                    files_processed => 1,
+                    files_replicated => 0,
+                    bytes_replicated => 0,
+                    files_evicted => 1
+                },
+                distribution = [
+                    #{<<"providerId">> => ?GET_DOMAIN_BIN(Worker2), <<"blocks">> => [[0, Size]]},
+                    #{<<"providerId">> => ?GET_DOMAIN_BIN(Worker1), <<"blocks">> => []}
+                ],
+                assertion_nodes = [Worker1, Worker2]
+            }
+        }
+    ),
+    [{_, Ceph} | _] = proplists:get_value(cephrados, ?config(storages, Config)),
+    ContainerId = proplists:get_value(container_id, Ceph),
+    ?assertMatch([], utils:cmd(["docker exec", atom_to_list(ContainerId), "rados -p onedata ls -"])).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -758,6 +846,8 @@ init_per_testcase(rtransfer_fetch_test, Config) ->
     ]),
 
     [{default_min_hole_size, HoleSize} | Config2];
+init_per_testcase(evict_on_ceph, Config) ->
+    init_per_testcase(all, [{?SPACE_ID_KEY, <<"space7">>} | Config]);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 60}),
     lfm_proxy:init(Config).
