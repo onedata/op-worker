@@ -144,8 +144,8 @@ rename_within_space(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
 
     SourceTokens = fslogic_path:split(SourcePath),
     TargetTokens = fslogic_path:split(TargetPath),
-    TokensDiff = TargetTokens -- SourceTokens,
-    MoveIntoItself = (length(SourceTokens) =:= length(TargetTokens) - length(TokensDiff)),
+    TargetTokensBeg = lists:sublist(TargetTokens, length(SourceTokens)),
+    MoveIntoItself = (TargetTokensBeg =:= SourceTokens),
 
     case {SourceEqualsTarget, MoveIntoItself} of
         {true, _} ->
