@@ -488,7 +488,7 @@ new_replication_or_migration(#document{
         file_uuid = FileUuid,
         space_id = SpaceId,
         callback = Callback,
-        index_id = IndexId,
+        index_name = IndexName,
         query_view_params = QueryViewParams
     }
 }) ->
@@ -500,7 +500,7 @@ new_replication_or_migration(#document{
         FileGuid,
         Callback,
         transfer:is_migration(Transfer),
-        IndexId,
+        IndexName,
         QueryViewParams
     }).
 
@@ -520,15 +520,14 @@ new_replica_eviction(#document{
         space_id = SpaceId,
         callback = Callback,
         replicating_provider = TargetProviderId,
-        index_id = IndexId,
+        index_name = IndexName,
         query_view_params = QueryViewParams
     }
 }) ->
     FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
-    %TODO pass IndexId and QueryViewParams to controller
     {ok, _Pid} = gen_server2:start(replica_eviction_controller,
         [session:root_session_id(),
             TransferId, FileGuid, Callback, TargetProviderId,
-            IndexId, QueryViewParams],
+            IndexName, QueryViewParams],
         []),
     ok.

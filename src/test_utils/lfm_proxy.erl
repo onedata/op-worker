@@ -414,20 +414,20 @@ schedule_file_replication(Worker, SessId, FileKey, ProviderId) ->
     ?EXEC(Worker, logical_file_manager:schedule_file_replication(SessId, FileKey, ProviderId, undefined)).
 
 -spec schedule_replication_by_index(node(), session:id(),
-    ProviderId :: oneprovider:id(), SpaceId :: od_space:id(), IndexId :: transfer:index_id(),
+    ProviderId :: oneprovider:id(), SpaceId :: od_space:id(), IndexName :: transfer:index_name(),
     transfer:query_view_params()) -> {ok, transfer:id()} | {error, term()}.
-schedule_replication_by_index(Worker, SessId, ProviderId, SpaceId, IndexId, QueryViewParams) ->
+schedule_replication_by_index(Worker, SessId, ProviderId, SpaceId, IndexName, QueryViewParams) ->
     ?EXEC(Worker, logical_file_manager:schedule_replication_by_index(SessId,
-        ProviderId, undefined, SpaceId, IndexId, QueryViewParams)).
+        ProviderId, undefined, SpaceId, IndexName, QueryViewParams)).
 
 -spec schedule_replica_eviction_by_index(node(), session:id(), ProviderId :: oneprovider:id(),
     MigrationProviderId :: undefined | oneprovider:id(), od_space:id(),
-    transfer:index_id(), transfer:query_view_params()) -> {ok, transfer:id()} | {error, term()}.
+    transfer:index_name(), transfer:query_view_params()) -> {ok, transfer:id()} | {error, term()}.
 schedule_replica_eviction_by_index(Worker, SessId, ProviderId, MigrationProviderId,
-    SpaceId, IndexId, QueryViewParams
+    SpaceId, IndexName, QueryViewParams
 ) ->
     ?EXEC(Worker, logical_file_manager:schedule_replica_eviction_by_index(
-        SessId, ProviderId, MigrationProviderId, SpaceId, IndexId, QueryViewParams
+        SessId, ProviderId, MigrationProviderId, SpaceId, IndexName, QueryViewParams
     )).
 
 -spec get_file_distribution(node(), session:id(), logical_file_manager:file_key()) -> {ok, list()}.

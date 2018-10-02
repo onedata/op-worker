@@ -99,14 +99,14 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}).
 handle_cast({start_file_replication, UserCtx, FileCtx, Block, TransferId,
-    RetriesLeft, NextRetryTimestamp, IndexId, QueryViewParams}, State
+    RetriesLeft, NextRetryTimestamp, IndexName, QueryViewParams}, State
 ) ->
     RetriesLeft2 = utils:ensure_defined(RetriesLeft, undefined,
         ?MAX_FILE_REPLICATION_RETRIES),
     case should_start(NextRetryTimestamp) of
         true ->
             case replicate_file(UserCtx, FileCtx, Block, TransferId,
-                RetriesLeft2, IndexId, QueryViewParams) of
+                RetriesLeft2, IndexName, QueryViewParams) of
                 ok ->
                     ok;
                 {error, already_ended} ->
@@ -121,7 +121,7 @@ handle_cast({start_file_replication, UserCtx, FileCtx, Block, TransferId,
             end;
         _ ->
             sync_req:enqueue_file_replication(UserCtx, FileCtx, Block,
-                TransferId, RetriesLeft2, NextRetryTimestamp, IndexId, QueryViewParams)
+                TransferId, RetriesLeft2, NextRetryTimestamp, IndexName, QueryViewParams)
     end,
     {noreply, State, hibernate}.
 
@@ -175,16 +175,16 @@ code_change(_OldVsn, State, _Extra) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec replicate_file(user:ctx(), file_ctx:ctx(), fslogic_blocks:block(),
-    transfer:id(), non_neg_integer(), transfer:index_id() | undefined,
+    transfer:id(), non_neg_integer(), transfer:index_name() | undefined,
     transfer:query_view_params()) -> ok | {error, term()}.
-replicate_file(UserCtx, FileCtx, Block, TransferId, RetriesLeft, IndexId, QueryViewParams) ->
-    try sync_req:replicate_file(UserCtx, FileCtx, Block, TransferId, IndexId,
+replicate_file(UserCtx, FileCtx, Block, TransferId, RetriesLeft, IndexName, QueryViewParams) ->
+    try sync_req:replicate_file(UserCtx, FileCtx, Block, TransferId, IndexName,
         QueryViewParams)
     of
         #provider_response{status = #status{code = ?OK}}  ->
             ok;
         Error = {error, not_found} ->
-            maybe_retry(UserCtx, FileCtx, Block, TransferId, IndexId, QueryViewParams,
+            maybe_retry(UserCtx, FileCtx, Block, TransferId, IndexName, QueryViewParams,
                 RetriesLeft, Error)
     catch
         throw:already_ended ->
@@ -192,8 +192,8 @@ replicate_file(UserCtx, FileCtx, Block, TransferId, RetriesLeft, IndexId, QueryV
         throw:replication_cancelled ->
             {error, replication_cancelled};
         Error:Reason ->
-            ?critical_stacktrace("DUPA ERROR: ~p:~p", [Error, Reason]),
-            maybe_retry(UserCtx, FileCtx, Block, TransferId, IndexId,
+            ?error_stacktrace("Unexpected error ~p:~p during transfer ~p", [Error, Reason, TransferId]),
+            maybe_retry(UserCtx, FileCtx, Block, TransferId, IndexName,
                 QueryViewParams, RetriesLeft, {Error, Reason})
     end.
 
@@ -205,16 +205,16 @@ replicate_file(UserCtx, FileCtx, Block, TransferId, RetriesLeft, IndexId, QueryV
 %% @end
 %%-------------------------------------------------------------------
 -spec maybe_retry(user:ctx(), file_ctx:ctx(), fslogic_blocks:block(),
-    transfer:id(), transfer:index_id(),transfer:query_view_params(),
+    transfer:id(), transfer:index_name(),transfer:query_view_params(),
     non_neg_integer(), term()) -> ok | {error, term()}.
-maybe_retry(_UserCtx, _FileCtx, _Block, TransferId, _IndexId, _QueryViewParams,
+maybe_retry(_UserCtx, _FileCtx, _Block, TransferId, _IndexName, _QueryViewParams,
     0, Error = {error, not_found}
 ) ->
     ?error(
         "Replication in scope of transfer ~p failed due to ~p~n"
         "No retries left", [TransferId, Error]),
     Error;
-maybe_retry(UserCtx, FileCtx, Block, TransferId, IndexId, QueryViewParams,
+maybe_retry(UserCtx, FileCtx, Block, TransferId, IndexName, QueryViewParams,
     RetriesLeft, Error = {error, not_found}
 ) ->
     ?warning(
@@ -222,8 +222,8 @@ maybe_retry(UserCtx, FileCtx, Block, TransferId, IndexId, QueryViewParams,
         "File transfer will be retried (attempts left: ~p)",
         [TransferId, Error, RetriesLeft - 1]),
     sync_req:enqueue_file_replication(UserCtx, FileCtx, Block, TransferId,
-        RetriesLeft - 1, next_retry(RetriesLeft), IndexId, QueryViewParams);
-maybe_retry(_UserCtx, FileCtx, _Block, TransferId, _IndexId, _QueryViewParams,
+        RetriesLeft - 1, next_retry(RetriesLeft), IndexName, QueryViewParams);
+maybe_retry(_UserCtx, FileCtx, _Block, TransferId, _IndexName, _QueryViewParams,
     0, Error
 ) ->
     {Path, _FileCtx2} = file_ctx:get_canonical_path(FileCtx),
@@ -231,7 +231,7 @@ maybe_retry(_UserCtx, FileCtx, _Block, TransferId, _IndexId, _QueryViewParams,
         "Replication of file ~p in scope of transfer ~p failed due to ~p~n"
         "No retries left", [Path, TransferId, Error]),
     {error, retries_per_file_transfer_exceeded};
-maybe_retry(UserCtx, FileCtx, Block, TransferId, IndexId, QueryViewParams,
+maybe_retry(UserCtx, FileCtx, Block, TransferId, IndexName, QueryViewParams,
     Retries, Error
 ) ->
     {Path, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
@@ -240,7 +240,7 @@ maybe_retry(UserCtx, FileCtx, Block, TransferId, IndexId, QueryViewParams,
         "File transfer will be retried (attempts left: ~p)",
         [Path, TransferId, Error, Retries - 1]),
     sync_req:enqueue_file_replication(UserCtx, FileCtx2, Block, TransferId,
-        Retries - 1, next_retry(Retries),  IndexId, QueryViewParams).
+        Retries - 1, next_retry(Retries), IndexName, QueryViewParams).
 
 
 %%-------------------------------------------------------------------

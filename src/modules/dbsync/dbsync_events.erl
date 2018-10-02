@@ -115,5 +115,11 @@ change_replicated_internal(_SpaceId, ReplicaDeletion = #document{
 }) ->
     ?debug("change_replicated_internal: changed replica_deletion ~p", [MsgId]),
     replica_deletion_changes:handle(ReplicaDeletion);
+change_replicated_internal(_SpaceId, Index = #document{
+    key = IndexId,
+    value = #index{}
+}) ->
+    ?debug("change_replicated_internal: changed index ~p", [IndexId]),
+    index_changes:handle(Index);
 change_replicated_internal(_SpaceId, _Change) ->
     ok.

@@ -450,17 +450,17 @@ handle_provider_request(UserCtx, #get_file_distribution{}, FileCtx) ->
     sync_req:get_file_distribution(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #schedule_file_replication{
     block = _Block, target_provider_id = TargetProviderId, callback = Callback,
-    index_id = IndexId, query_view_params = QueryViewParams
+    index_name = IndexName, query_view_params = QueryViewParams
 }, FileCtx) ->
     sync_req:schedule_file_replication(UserCtx, FileCtx, TargetProviderId,
-        Callback, IndexId, QueryViewParams
+        Callback, IndexName, QueryViewParams
     );
 handle_provider_request(UserCtx, #schedule_replica_invalidation{
     source_provider_id = SourceProviderId, target_provider_id = TargetProviderId,
-    index_id = IndexId,  query_view_params = QueryViewParams
+    index_name = IndexName,  query_view_params = QueryViewParams
 }, FileCtx) ->
     replica_eviction_req:schedule_replica_eviction(UserCtx, FileCtx,
-        SourceProviderId, TargetProviderId, IndexId, QueryViewParams
+        SourceProviderId, TargetProviderId, IndexName, QueryViewParams
     );
 handle_provider_request(UserCtx, #get_parent{}, FileCtx) ->
     guid_req:get_parent(UserCtx, FileCtx);

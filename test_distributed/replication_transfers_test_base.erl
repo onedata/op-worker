@@ -820,10 +820,10 @@ schedule_replication_of_regular_file_by_index(Config, Type) ->
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
     ViewName = <<"replication_jobs">>,
     ViewFunction = transfers_test_utils:view_function(XattrName),
-    {ok, ViewId} = rpc:call(WorkerP2, indexes, add_index, [?DEFAULT_USER, ViewName, ViewFunction, SpaceId, false]),
+    ok = rpc:call(WorkerP2, index, save, [SpaceId, ViewName, ViewFunction, [], false, [?GET_DOMAIN_BIN(WorkerP1), ?GET_DOMAIN_BIN(WorkerP2)]]),
 
     ?assertMatch({ok, [FileGuid]},
-        rpc:call(WorkerP2, indexes, query_view_and_filter_values, [ViewId, [{key, XattrValue}]]),
+        rpc:call(WorkerP2, index, query_view_and_filter_values, [SpaceId, ViewName,  [{key, XattrValue}]]),
     ?ATTEMPTS),
 
     transfers_test_mechanism:run_test(
@@ -836,7 +836,7 @@ schedule_replication_of_regular_file_by_index(Config, Type) ->
                 space_id = SpaceId,
                 function = fun transfers_test_mechanism:replicate_files_from_index/2,
                 query_view_params = [{key, XattrValue}],
-                index_id = ViewId
+                index_name = ViewName
             },
             expected = #expected{
                 expected_transfer = #{
@@ -879,14 +879,14 @@ scheduling_replication_by_not_existing_index_should_fail(Config, Type) ->
             }}),
 
     [{FileGuid, _}] = ?config(?FILES_KEY, Config2),
-    ct:pal("FileGuid: ~p", [FileGuid]),
+%%    ct:pal("FileGuid: ~p", [FileGuid]),
 
     % set xattr on file to be replicated
     XattrName = transfers_test_utils:random_job_name(),
     XattrValue = 1,
     Xattr = #xattr{name = XattrName, value = XattrValue},
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
-    IndexId = <<"not_existing_index">>,
+    IndexName = <<"not_existing_index">>,
 
     transfers_test_mechanism:run_test(
         Config2, #transfer_test_spec{
@@ -898,7 +898,7 @@ scheduling_replication_by_not_existing_index_should_fail(Config, Type) ->
                 space_id = SpaceId,
                 function = fun transfers_test_mechanism:replicate_files_from_index/2,
                 query_view_params = [{key, XattrValue}],
-                index_id = IndexId
+                index_name = IndexName
             },
             expected = #expected{
                 expected_transfer = #{
@@ -925,10 +925,9 @@ scheduling_replication_by_empty_index_should_succeed(Config, Type) ->
     XattrName = transfers_test_utils:random_job_name(),
     ViewName = <<"replication_jobs">>,
     ViewFunction = transfers_test_utils:view_function(XattrName),
-    {ok, ViewId} = rpc:call(WorkerP2, indexes, add_index, [?DEFAULT_USER, ViewName, ViewFunction, SpaceId, false]),
-    ct:pal("ViewId: ~p", [ViewId]),
+    ok = rpc:call(WorkerP2, index, save, [SpaceId, ViewName, ViewFunction, [], false, [?GET_DOMAIN_BIN(WorkerP1), ?GET_DOMAIN_BIN(WorkerP2)]]),
     ?assertMatch({ok, []},
-        rpc:call(WorkerP2, indexes, query_view_and_filter_values, [ViewId, []]),
+        rpc:call(WorkerP2, index, query_view_and_filter_values, [SpaceId, ViewName,  []]),
     ?ATTEMPTS),
 
     transfers_test_mechanism:run_test(
@@ -941,7 +940,7 @@ scheduling_replication_by_empty_index_should_succeed(Config, Type) ->
                 space_id = SpaceId,
                 function = fun transfers_test_mechanism:replicate_files_from_index/2,
                 query_view_params = [],
-                index_id = ViewId
+                index_name = ViewName
             },
             expected = #expected{
                 expected_transfer = #{
@@ -986,10 +985,10 @@ scheduling_replication_by_not_existing_key_in_index_should_succeed(Config, Type)
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
     ViewName = <<"replication_jobs">>,
     ViewFunction = transfers_test_utils:view_function(XattrName),
-    {ok, ViewId} = rpc:call(WorkerP2, indexes, add_index, [?DEFAULT_USER, ViewName, ViewFunction, SpaceId, false]),
+    ok = rpc:call(WorkerP2, index, save, [SpaceId, ViewName, ViewFunction, [], false, [?GET_DOMAIN_BIN(WorkerP1), ?GET_DOMAIN_BIN(WorkerP2)]]),
 
     ?assertMatch({ok, [FileGuid]},
-        rpc:call(WorkerP2, indexes, query_view_and_filter_values, [ViewId, [{key, XattrValue}]]),
+        rpc:call(WorkerP2, index, query_view_and_filter_values, [SpaceId, ViewName,  [{key, XattrValue}]]),
         ?ATTEMPTS),
 
     transfers_test_mechanism:run_test(
@@ -1002,7 +1001,7 @@ scheduling_replication_by_not_existing_key_in_index_should_succeed(Config, Type)
                 space_id = SpaceId,
                 function = fun transfers_test_mechanism:replicate_files_from_index/2,
                 query_view_params = [{key, XattrValue2}],
-                index_id = ViewId
+                index_name = ViewName
             },
             expected = #expected{
                 expected_transfer = #{
@@ -1053,11 +1052,11 @@ schedule_replication_of_100_regular_files_by_index(Config, Type) ->
 
     ViewName = <<"replication_jobs">>,
     ViewFunction = transfers_test_utils:view_function(XattrName),
-    {ok, ViewId} = rpc:call(WorkerP2, indexes, add_index, [?DEFAULT_USER, ViewName, ViewFunction, SpaceId, false]),
+    ok = rpc:call(WorkerP2, index, save, [SpaceId, ViewName, ViewFunction, [], false, [?GET_DOMAIN_BIN(WorkerP1), ?GET_DOMAIN_BIN(WorkerP2)]]),
 
     FileGuidsSorted = lists:sort(FileGuids),
     ?assertMatch(FileGuidsSorted,
-        case rpc:call(WorkerP2, indexes, query_view_and_filter_values, [ViewId, [{key, XattrValue}]]) of
+        case rpc:call(WorkerP2, index, query_view_and_filter_values, [SpaceId, ViewName,  [{key, XattrValue}]]) of
             {ok, Results} -> lists:sort(Results);
             Other -> Other
         end,
@@ -1073,7 +1072,7 @@ schedule_replication_of_100_regular_files_by_index(Config, Type) ->
                 space_id = SpaceId,
                 function = fun transfers_test_mechanism:replicate_files_from_index/2,
                 query_view_params = [{key, XattrValue}],
-                index_id = ViewId
+                index_name = ViewName
             },
             expected = #expected{
                 expected_transfer = #{
@@ -1125,7 +1124,7 @@ init_per_suite(Config) ->
 init_per_testcase(not_synced_file_should_not_be_replicated, Config) ->
     [WorkerP2 | _] = ?config(op_worker_nodes, Config),
     ok = test_utils:mock_new(WorkerP2, sync_req),
-    ok = test_utils:mock_expect(WorkerP2, sync_req, replicate_file, fun(_, _, _, _) ->
+    ok = test_utils:mock_expect(WorkerP2, sync_req, replicate_file, fun(_, _, _, _, _, _) ->
         {error, not_found}
     end),
     init_per_testcase(all, Config);

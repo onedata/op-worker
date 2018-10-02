@@ -78,7 +78,7 @@ content_types_accepted(Req, State) ->
 %%--------------------------------------------------------------------
 -spec delete_resource(req(), maps:map()) -> {term(), req(), maps:map()}.
 delete_resource(Req, State) ->
-    % todo parse IndexId/IndexName and query view parameters, copy from query_index
+    % todo parse IndexName and query view parameters, copy from query_index
     {State2, Req2} = validator:parse_space_id(Req, State),
     {State3, Req3} = validator:parse_provider_id(Req2, State2),
     {State4, Req4} = validator:parse_migration_provider_id(Req3, State3),
@@ -107,7 +107,7 @@ delete_resource(Req, State) ->
 %%--------------------------------------------------------------------
 -spec replicate_files_from_index(req(), maps:map()) -> {term(), req(), maps:map()}.
 replicate_files_from_index(Req, State) ->
-    % todo parse IndexId/IndexName and query view parameters, copy from query_index
+    % todo parse IndexName and query view parameters, copy from query_index
     {State2, Req2} = validator:parse_space_id(Req, State),
     {State3, Req3} = validator:parse_provider_id(Req2, State2),
     {State4, Req4} = validator:parse_callback(Req3, State3),
@@ -132,11 +132,11 @@ evict_file_replica_internal(Req, State = #{
 }) ->
     throw_if_non_local_space(SpaceId),
     throw_if_nonexistent_provider(SpaceId, MigrationProviderId),
-    % todo parse index id and query view parameters
-    IndexId = undefined,    %todo
+    % todo parse IndexName and query view parameters
+    IndexName = <<"">>,    %todo
     QueryViewParams = #{},  %todo
     {ok, TransferId} = onedata_file_api:schedule_replica_eviction_by_index(
-        Auth, SourceProviderId, MigrationProviderId, SpaceId, IndexId,
+        Auth, SourceProviderId, MigrationProviderId, SpaceId, IndexName,
         QueryViewParams
     ),
 
@@ -158,11 +158,11 @@ replicate_files_from_index_internal(Req, #{
 } = State) ->
     throw_if_non_local_space(SpaceId),
     throw_if_nonexistent_provider(SpaceId, ProviderId),
-    % todo parse index id and query view parameters
-    IndexId = undefined,    %todo
+    % todo parse IndexName and query view parameters
+    IndexName = <<"">>,    %todo
     QueryViewParams = #{},  %todo
     {ok, TransferId} = onedata_file_api:schedule_replication_by_index(
-        Auth, ProviderId, Callback, SpaceId, IndexId, QueryViewParams
+        Auth, ProviderId, Callback, SpaceId, IndexName, QueryViewParams
     ),
 
     Response = json_utils:encode(#{<<"transferId">> => TransferId}),

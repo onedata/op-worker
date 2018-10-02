@@ -257,10 +257,10 @@ schedule_file_replication(Auth, FileKey, ProviderId, Callback) ->
 %%--------------------------------------------------------------------
 -spec schedule_replication_by_index(Auth :: onedata_auth_api:auth(),
     ProviderId :: binary(), transfer:callback(), od_space:id(),
-    transfer:index_id(), transfer:query_view_params()) -> {ok, transfer:id()} | error_reply().
-schedule_replication_by_index(Auth, ProviderId, Callback, SpaceId, IndexId, QueryParams) ->
+    transfer:index_name(), transfer:query_view_params()) -> {ok, transfer:id()} | error_reply().
+schedule_replication_by_index(Auth, ProviderId, Callback, SpaceId, IndexName, QueryParams) ->
     logical_file_manager:schedule_replication_by_index(Auth, ProviderId, Callback,
-        SpaceId, IndexId, QueryParams).
+        SpaceId, IndexName, QueryParams).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -282,13 +282,13 @@ schedule_replica_eviction(Auth, FileKey, SourceProviderId, TargetProviderId) ->
 %%--------------------------------------------------------------------
 -spec schedule_replica_eviction_by_index(session:id(), SourceProviderId :: oneprovider:id(),
     TargetProviderId :: undefined | oneprovider:id(), od_space:id(),
-    transfer:index_id(), transfer:query_view_params()) ->
+    transfer:index_name(), transfer:query_view_params()) ->
     {ok, transfer:id()} | error_reply().
 schedule_replica_eviction_by_index(SessId, SourceProviderId, TargetProviderId,
-    SpaceId, IndexId, QueryViewParams
+    SpaceId, IndexName, QueryViewParams
 ) ->
     logical_file_manager:schedule_replica_eviction_by_index(SessId,
-        SourceProviderId, TargetProviderId, SpaceId, IndexId, QueryViewParams).
+        SourceProviderId, TargetProviderId, SpaceId, IndexName, QueryViewParams).
 
 %%--------------------------------------------------------------------
 %% @doc Changes the permissions of a file.

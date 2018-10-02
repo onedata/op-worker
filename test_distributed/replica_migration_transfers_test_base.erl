@@ -399,14 +399,12 @@ schedule_migration_by_index(Config, Type) ->
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
     ViewName = <<"migration_jobs">>,
     ViewFunction = transfers_test_utils:view_function(XattrName),
-    {ok, ViewId} = rpc:call(WorkerP1, indexes, add_index, [?DEFAULT_USER, ViewName, ViewFunction, SpaceId, false]),
-    {ok, ViewId} = rpc:call(WorkerP2, indexes, add_index, [?DEFAULT_USER, ViewName, ViewFunction, SpaceId, false]),
-
+    ok = rpc:call(WorkerP2, index, save, [SpaceId, ViewName, ViewFunction, [], false, [?GET_DOMAIN_BIN(WorkerP1), ?GET_DOMAIN_BIN(WorkerP2)]]),
     ?assertMatch({ok, [FileGuid]},
-        rpc:call(WorkerP1, indexes, query_view_and_filter_values, [ViewId, [{key, XattrValue}]]),
+        rpc:call(WorkerP1, index, query_view_and_filter_values, [SpaceId, ViewName, [{key, XattrValue}]]),
         ?ATTEMPTS),
     ?assertMatch({ok, [FileGuid]},
-        rpc:call(WorkerP2, indexes, query_view_and_filter_values, [ViewId, [{key, XattrValue}]]),
+        rpc:call(WorkerP2, index, query_view_and_filter_values, [SpaceId, ViewName, [{key, XattrValue}]]),
         ?ATTEMPTS),
 
     transfers_test_mechanism:run_test(
@@ -420,7 +418,7 @@ schedule_migration_by_index(Config, Type) ->
                 space_id = SpaceId,
                 function = fun transfers_test_mechanism:migrate_replicas_from_index/2,
                 query_view_params = [{key, XattrValue}],
-                index_id = ViewId
+                index_name = ViewName
             },
             expected = #expected{
                 expected_transfer = #{
@@ -473,7 +471,7 @@ scheduling_migration_by_not_existing_index_should_fail(Config, Type) ->
     XattrValue = 1,
     Xattr = #xattr{name = XattrName, value = XattrValue},
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
-    IndexId = <<"not_existing_index">>,
+    IndexName = <<"not_existing_index">>,
 
     transfers_test_mechanism:run_test(
         Config2, #transfer_test_spec{
@@ -486,7 +484,7 @@ scheduling_migration_by_not_existing_index_should_fail(Config, Type) ->
                 space_id = SpaceId,
                 function = fun transfers_test_mechanism:migrate_replicas_from_index/2,
                 query_view_params = [{key, XattrValue}],
-                index_id = IndexId
+                index_name = IndexName
             },
             expected = #expected{
                 expected_transfer = #{
@@ -517,13 +515,12 @@ scheduling_migration_by_empty_index_should_succeed(Config, Type) ->
     XattrName = transfers_test_utils:random_job_name(),
     ViewName = <<"migration_jobs">>,
     ViewFunction = transfers_test_utils:view_function(XattrName),
-    {ok, ViewId} = rpc:call(WorkerP1, indexes, add_index, [?DEFAULT_USER, ViewName, ViewFunction, SpaceId, false]),
-    {ok, ViewId} = rpc:call(WorkerP2, indexes, add_index, [?DEFAULT_USER, ViewName, ViewFunction, SpaceId, false]),
+    ok = rpc:call(WorkerP2, index, save, [SpaceId, ViewName, ViewFunction, [], false, [?GET_DOMAIN_BIN(WorkerP1), ?GET_DOMAIN_BIN(WorkerP2)]]),
     ?assertMatch({ok, []},
-        rpc:call(WorkerP1, indexes, query_view_and_filter_values, [ViewId, []]),
+        rpc:call(WorkerP1, index, query_view_and_filter_values, [SpaceId, ViewName, []]),
         ?ATTEMPTS),
     ?assertMatch({ok, []},
-        rpc:call(WorkerP2, indexes, query_view_and_filter_values, [ViewId, []]),
+        rpc:call(WorkerP2, index, query_view_and_filter_values, [SpaceId, ViewName, []]),
         ?ATTEMPTS),
 
     transfers_test_mechanism:run_test(
@@ -537,7 +534,7 @@ scheduling_migration_by_empty_index_should_succeed(Config, Type) ->
                 space_id = SpaceId,
                 function = fun transfers_test_mechanism:migrate_replicas_from_index/2,
                 query_view_params = [],
-                index_id = ViewId
+                index_name = ViewName
             },
             expected = #expected{
                 expected_transfer = #{
@@ -586,14 +583,13 @@ scheduling_migration_by_not_existing_key_in_index_should_succeed(Config, Type) -
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
     ViewName = <<"migration_jobs">>,
     ViewFunction = transfers_test_utils:view_function(XattrName),
-    {ok, ViewId} = rpc:call(WorkerP1, indexes, add_index, [?DEFAULT_USER, ViewName, ViewFunction, SpaceId, false]),
-    {ok, ViewId} = rpc:call(WorkerP2, indexes, add_index, [?DEFAULT_USER, ViewName, ViewFunction, SpaceId, false]),
+ok = rpc:call(WorkerP2, index, save, [SpaceId, ViewName, ViewFunction, [], false, [?GET_DOMAIN_BIN(WorkerP1), ?GET_DOMAIN_BIN(WorkerP2)]]),
 
     ?assertMatch({ok, [FileGuid]},
-        rpc:call(WorkerP1, indexes, query_view_and_filter_values, [ViewId, [{key, XattrValue}]]),
+        rpc:call(WorkerP1, index, query_view_and_filter_values, [SpaceId, ViewName, [{key, XattrValue}]]),
         ?ATTEMPTS),
     ?assertMatch({ok, [FileGuid]},
-        rpc:call(WorkerP2, indexes, query_view_and_filter_values, [ViewId, [{key, XattrValue}]]),
+        rpc:call(WorkerP2, index, query_view_and_filter_values, [SpaceId, ViewName, [{key, XattrValue}]]),
         ?ATTEMPTS),
 
     transfers_test_mechanism:run_test(
@@ -607,7 +603,7 @@ scheduling_migration_by_not_existing_key_in_index_should_succeed(Config, Type) -
                 space_id = SpaceId,
                 function = fun transfers_test_mechanism:migrate_replicas_from_index/2,
                 query_view_params = [{key, XattrValue2}],
-                index_id = ViewId
+                index_name = ViewName
             },
             expected = #expected{
                 expected_transfer = #{
@@ -662,18 +658,17 @@ schedule_migration_of_100_regular_files_by_index(Config, Type) ->
 
     ViewName = <<"migration_jobs">>,
     ViewFunction = transfers_test_utils:view_function(XattrName),
-    {ok, ViewId} = rpc:call(WorkerP1, indexes, add_index, [?DEFAULT_USER, ViewName, ViewFunction, SpaceId, false]),
-    {ok, ViewId} = rpc:call(WorkerP2, indexes, add_index, [?DEFAULT_USER, ViewName, ViewFunction, SpaceId, false]),
+ok = rpc:call(WorkerP2, index, save, [SpaceId, ViewName, ViewFunction, [], false, [?GET_DOMAIN_BIN(WorkerP1), ?GET_DOMAIN_BIN(WorkerP2)]]),
 
     FileGuidsSorted = lists:sort(FileGuids),
     ?assertMatch(FileGuidsSorted,
-        case rpc:call(WorkerP1, indexes, query_view_and_filter_values, [ViewId, [{key, XattrValue}]]) of
+        case rpc:call(WorkerP1, index, query_view_and_filter_values, [SpaceId, ViewName, [{key, XattrValue}]]) of
             {ok, Results} -> lists:sort(Results);
             Other -> Other
         end,
         ?ATTEMPTS),
     ?assertMatch(FileGuidsSorted,
-        case rpc:call(WorkerP2, indexes, query_view_and_filter_values, [ViewId, [{key, XattrValue}]]) of
+        case rpc:call(WorkerP2, index, query_view_and_filter_values, [SpaceId, ViewName, [{key, XattrValue}]]) of
             {ok, Results} -> lists:sort(Results);
             Other -> Other
         end,
@@ -690,7 +685,7 @@ schedule_migration_of_100_regular_files_by_index(Config, Type) ->
                 space_id = SpaceId,
                 function = fun transfers_test_mechanism:migrate_replicas_from_index/2,
                 query_view_params = [{key, XattrValue}],
-                index_id = ViewId
+                index_name = ViewName
             },
             expected = #expected{
                 expected_transfer = #{

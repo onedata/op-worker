@@ -18,8 +18,6 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include("proto/common/credentials.hrl").
--include_lib("ctool/include/logging.hrl").
-
 %% API
 -export([get_transfer/2, provider_id/1, ensure_transfers_removed/1,
     list_ended_transfers/2, list_waiting_transfers/2, list_ongoing_transfers/2,
@@ -157,13 +155,13 @@ mock_replica_synchronizer_failure(Node) ->
 unmock_replica_synchronizer_failure(Node) ->
     ok = test_utils:mock_unload(Node, replica_synchronizer).
 
-remove_all_indexes(Nodes, UserId) ->
+remove_all_indexes(Nodes, SpaceId) ->
     lists:foreach(fun(Node) ->
-        {ok, IndexesMap} = rpc:call(Node, indexes, get_all_indexes, [UserId]),
-        lists:foreach(fun(IndexId) ->
-            ct:pal("Removing: ~p", [IndexId]),
-            ok = rpc:call(Node, indexes, remove_index, [UserId, IndexId])
-        end, maps:keys(IndexesMap))
+        {ok, IndexNames} = rpc:call(Node, index, list, [SpaceId]),
+        lists:foreach(fun(IndexName) ->
+            ct:pal("Removing: ~p", [IndexName]),
+            ok = rpc:call(Node, index, delete, [SpaceId, IndexName])
+        end, IndexNames)
     end, Nodes).
 
 random_job_name() ->
