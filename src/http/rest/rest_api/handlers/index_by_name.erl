@@ -179,9 +179,10 @@ create_or_modify_index(Req, State) ->
         spatial := Spatial,
         function := MapFunction,
         providers := Providers
-    } = State,
+    } = State8,
 
-    index:save(SpaceId, IndexName, MapFunction, Options, Spatial, Providers).
+    index:save(SpaceId, IndexName, MapFunction, Options, Spatial, Providers),
+    {stop, cowboy_req:reply(?HTTP_OK, Req8), State8}.
 
 %%%===================================================================
 %%% Internal functions

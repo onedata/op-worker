@@ -14,6 +14,7 @@
 
 -include("http/http_common.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 
 -define(ALLOWED_METADATA_TYPES, [<<"json">>, <<"rdf">>, undefined]).
 
@@ -38,7 +39,7 @@
     parse_spatial/2, parse_start_range/2, parse_end_range/2,
 
     parse_index_name/2, parse_update_min_changes/2,
-    parse_replica_update_min_changes/2
+    parse_replica_update_min_changes/2, parse_index_providers/2
 ]).
 
 %% TODO VFS-2574 Make validation of result map
@@ -640,7 +641,7 @@ parse_update_min_changes(Req, State) ->
 %% Retrieves request's replica update min changes param and adds it to State.
 %% @end
 %%--------------------------------------------------------------------
--spec parse_limit(cowboy_req:req(), maps:map()) ->
+-spec parse_replica_update_min_changes(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_replica_update_min_changes(Req, State) ->
     {Val, NewReq} = qs_val(<<"replicaUpdateMinChanges">>, Req),
@@ -648,34 +649,32 @@ parse_replica_update_min_changes(Req, State) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Retrieves request's inherited param and adds it to State.
+%% Retrieves request's providers param and adds it to State.
 %% @end
 %%--------------------------------------------------------------------
 -spec parse_index_providers(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
-parse_index_providers(Req, State) ->
-    {RawProvidersList, NewReq} = qs_val(<<"providers">>, Req),
-    case RawProvidersList of
-        undefined ->
-            {State#{providers => [oneprovider:get_id()]}, NewReq};
-        _ ->
-            try
-                Limit = binary_to_integer(RawLimit),
-                case Limit > 0 of
-                    true -> ok;
-                    false -> throw(?ERROR_INVALID_LIMIT)
-                end,
-                case Limit < ?MAX_LIMIT of
-                    true ->
-                        {State#{limit => Limit}, NewReq};
-                    false ->
-                        throw(?ERROR_LIMIT_TOO_LARGE(?MAX_LIMIT))
-                end
-            catch
-                _:_ ->
-                    throw(?ERROR_INVALID_LIMIT)
-            end
-    end.
+parse_index_providers(Req, State = #{space_id := SpaceId}) ->
+    ConstraintFun = fun(ProviderId) ->
+        case space_logic:is_supported(?ROOT_SESS_ID, SpaceId, ProviderId) of
+            true ->
+                {true, ProviderId};
+            false ->
+                throw(?ERROR_PROVIDER_NOT_SUPPORTING_SPACE)
+        end
+    end,
+    #{providers := Providers} = cowboy_req:match_qs([
+        {providers, ConstraintFun, [oneprovider:get_id()]}
+    ], Req),
+
+    ProvidersList = case Providers of
+        _ when is_list(Providers) ->
+            Providers;
+        _ when is_binary(Providers) ->
+            [Providers]
+    end,
+
+    {State#{providers => ProvidersList}, Req}.
 
 %%%===================================================================
 %%% Internal functions

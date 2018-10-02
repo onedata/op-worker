@@ -73,7 +73,7 @@ is_supported(SpaceId, IndexName, ProviderId) ->
     true.
 
 -spec get_json(od_space:id(), binary()) ->
-    #{binary() => term()} | {error, term()}.
+    {ok, #{binary() => term()}} | {error, term()}.
 get_json(SpaceId, IndexName) ->
     Id = id(IndexName, SpaceId),
     case datastore_model:get(?CTX, Id) of
@@ -83,13 +83,13 @@ get_json(SpaceId, IndexName) ->
             index_options = Options,
             providers = Providers
         }}} ->
-            #{
+            {ok, #{
                 <<"indexOptions">> => Options,
                 <<"providers">> => Providers,
                 <<"mapFunction">> => MapFunction,
                 % <<"reduceFunction">> => ReduceFunction, todo
                 <<"spatial">> => Spatial
-            };
+            }};
         Error -> Error
     end.
 
