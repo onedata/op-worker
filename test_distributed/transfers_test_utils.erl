@@ -136,14 +136,14 @@ root_name(FunctionName, Type, FileKeyType, RandomSufix) ->
 mock_prolonged_replication(Worker, ProlongationProbability, ProlongationTime) ->
     ok = test_utils:mock_new(Worker, sync_req),
     ok = test_utils:mock_expect(Worker, sync_req, replicate_file,
-        fun(UserCtx, FileCtx, Block, TransferId) ->
+        fun(UserCtx, FileCtx, Block, TransferId, IndexName, QueryViewParams) ->
             case rand:uniform() < ProlongationProbability of
                 true ->
                     timer:sleep(timer:seconds(ProlongationTime));
                 false ->
                     ok
             end,
-            meck:passthrough([UserCtx, FileCtx, Block, TransferId])
+            meck:passthrough([UserCtx, FileCtx, Block, TransferId, IndexName, QueryViewParams])
         end).
 
 mock_replica_synchronizer_failure(Node) ->

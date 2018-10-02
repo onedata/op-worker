@@ -52,7 +52,8 @@
     scheduling_replication_by_not_existing_key_in_index_should_succeed/1,
     schedule_replication_of_100_regular_files_by_index_with_batch_1000/1,
     schedule_replication_of_100_regular_files_by_index_with_batch_100/1,
-    schedule_replication_of_100_regular_files_by_index_with_batch_10/1]).
+    schedule_replication_of_100_regular_files_by_index_with_batch_10/1
+]).
 
 all() -> [
     replicate_empty_dir_by_guid,
