@@ -116,14 +116,14 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}).
 handle_cast({start_replica_eviction, UserCtx, FileCtx,  SupportingProviderId,
-    TransferId, RetriesLeft, NextRetryTimestamp, Index, QueryViewParams}, State
+    TransferId, RetriesLeft, NextRetryTimestamp, IndexName, QueryViewParams}, State
 ) ->
     RetriesLeft2 = utils:ensure_defined(RetriesLeft, undefined,
         ?MAX_REPLICA_EVICTION_RETRIES),
     case should_start(NextRetryTimestamp) of
         true ->
             case evict_replica(UserCtx, FileCtx, SupportingProviderId,
-                TransferId, RetriesLeft2, Index, QueryViewParams)
+                TransferId, RetriesLeft2, IndexName, QueryViewParams)
             of
                 ok ->
                     ok;
@@ -136,7 +136,7 @@ handle_cast({start_replica_eviction, UserCtx, FileCtx,  SupportingProviderId,
         _ ->
             replica_eviction_req:enqueue_replica_eviction(UserCtx, FileCtx,
                 SupportingProviderId, TransferId, RetriesLeft2,
-                NextRetryTimestamp, Index, QueryViewParams
+                NextRetryTimestamp, IndexName, QueryViewParams
             )
     end,
     {noreply, State, hibernate}.
@@ -191,23 +191,23 @@ code_change(_OldVsn, State, _Extra) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec evict_replica(user:ctx(), file_ctx:ctx(), sync_req:provider_id(),
-    sync_req:transfer_id(), non_neg_integer(), transfer:index_id(),
+    sync_req:transfer_id(), non_neg_integer(), transfer:index_name(),
     transfer:query_view_params()) -> ok | {error, term()}.
 evict_replica(UserCtx, FileCtx, SupportingProviderId, TransferId, RetriesLeft,
-    Index, QueryViewParams
+    IndexName, QueryViewParams
 ) ->
     try replica_eviction_req:evict_file_replica(UserCtx, FileCtx,
-        SupportingProviderId, TransferId, Index, QueryViewParams)
+        SupportingProviderId, TransferId, IndexName, QueryViewParams)
     of
         #provider_response{status = #status{code = ?OK}}  ->
             ok;
         Error = {error, not_found} ->
             maybe_retry(UserCtx, FileCtx, SupportingProviderId, TransferId,
-                RetriesLeft, Index, QueryViewParams, Error)
+                RetriesLeft, IndexName, QueryViewParams, Error)
     catch
         Error:Reason ->
             maybe_retry(UserCtx, FileCtx, SupportingProviderId, TransferId,
-                RetriesLeft, Index, QueryViewParams,
+                RetriesLeft, IndexName, QueryViewParams,
                 {Error, Reason})
     end.
 
@@ -219,7 +219,7 @@ evict_replica(UserCtx, FileCtx, SupportingProviderId, TransferId, RetriesLeft,
 %% @end
 %%-------------------------------------------------------------------
 -spec maybe_retry(user:ctx(), file_ctx:ctx(), sync_req:provider_id(),
-    sync_req:transfer_id(), non_neg_integer(), transfer:index_id(),
+    sync_req:transfer_id(), non_neg_integer(), transfer:index_name(),
     transfer:query_view_params(), term()) -> ok | {error, term()}.
 maybe_retry(_UserCtx, _FileCtx, _SupportingProviderId, TransferId, 0,
     _Index, _QueryViewParams, Error = {error, not_found}

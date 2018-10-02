@@ -70,12 +70,12 @@
 -type doc() :: datastore_doc:doc(transfer()).
 -type timestamp() :: non_neg_integer().
 -type list_limit() :: non_neg_integer() | all.
--type index_id() :: undefined | indexes:index_id().
--type query_view_params() :: undefined | indexes:view_opts() .
+-type index_name() :: undefined | index:key().
+-type query_view_params() :: undefined | index:query_options() .
 
 -export_type([
     id/0, transfer/0, status/0, callback/0, doc/0,
-    timestamp/0, list_limit/0, index_id/0, query_view_params/0
+    timestamp/0, list_limit/0, index_name/0, query_view_params/0
 ]).
 
 -define(CTX, #{
@@ -115,13 +115,13 @@ cleanup() ->
 %%--------------------------------------------------------------------
 -spec start(session:id(), fslogic_worker:file_guid(), file_meta:path(),
     undefined | od_provider:id(), undefined | od_provider:id(), binary(),
-    index_id(), query_view_params()) -> {ok, id()} | ignore | {error, Reason :: term()}.
+    index_name(), query_view_params()) -> {ok, id()} | ignore | {error, Reason :: term()}.
 start(SessionId, FileGuid, FilePath, SourceProviderId, TargetProviderId,
-    Callback, IndexId, QueryViewParams
+    Callback, IndexName, QueryViewParams
 ) ->
     {ok, UserId} = session:get_user_id(SessionId),
     start_for_user(UserId, FileGuid, FilePath, SourceProviderId,
-        TargetProviderId, Callback, IndexId, QueryViewParams
+        TargetProviderId, Callback, IndexName, QueryViewParams
     ).
 
 %%--------------------------------------------------------------------
@@ -131,10 +131,10 @@ start(SessionId, FileGuid, FilePath, SourceProviderId, TargetProviderId,
 %%--------------------------------------------------------------------
 -spec start_for_user(od_user:id(), fslogic_worker:file_uuid(),
     file_meta:path(), undefined | od_provider:id(), undefined | od_provider:id(),
-    callback(), index_id(), query_view_params()) ->
+    callback(), index_name(), query_view_params()) ->
     {ok, id()} | ignore | {error, Reason :: term()}.
 start_for_user(UserId, FileGuid, FilePath, EvictingProviderId,
-    ReplicatingProviderId, Callback, IndexId, QueryViewParams
+    ReplicatingProviderId, Callback, IndexName, QueryViewParams
 ) ->
     ReplicationStatus = case ReplicatingProviderId of
         undefined -> skipped;
@@ -167,7 +167,7 @@ start_for_user(UserId, FileGuid, FilePath, EvictingProviderId,
             hr_hist = #{},
             dy_hist = #{},
             mth_hist = #{},
-            index_id = IndexId,
+            index_name = IndexName,
             query_view_params = QueryViewParams
         }},
 
@@ -230,7 +230,7 @@ rerun_ended(UserId, #document{key = TransferId, value = Transfer}) ->
                 evicting_provider = EvictingProviderId,
                 replicating_provider = ReplicatingProviderId,
                 callback = Callback,
-                index_id = IndexId,
+                index_name = IndexName,
                 query_view_params = QueryViewParams
             } = Transfer,
 
@@ -238,7 +238,7 @@ rerun_ended(UserId, #document{key = TransferId, value = Transfer}) ->
             FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
 
             {ok, NewTransferId} = start_for_user(NewUserId, FileGuid, FilePath,
-                EvictingProviderId, ReplicatingProviderId, Callback, IndexId,
+                EvictingProviderId, ReplicatingProviderId, Callback, IndexName,
                 QueryViewParams
             ),
             update(TransferId, fun(OldTransfer) ->

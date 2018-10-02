@@ -558,7 +558,7 @@
 
     % Only replication of files existing in given index will be scheduled
     % if this value is undefined, whole subtree will be iterated
-    index_id :: transfer:index_id(),
+    index_name :: transfer:index_name(),
     % query_view_params are directly passed to couchbase
     % if index_id is undefined query_view_params are ignored
     query_view_params = [] :: transfer:query_view_params()
@@ -625,12 +625,13 @@
 %% forbidden in case of spatial ones (map_function is treated as
 %% spacial function).
 -record(index, {
-    name :: binary(),
-    spatial :: boolean(),
-    map_function :: binary(),
-    reduce_function :: undefined | binary(),
-    index_options = #{} :: #{binary() => term()},
-    providers :: all | [od_provider:id()]
+    name :: index:name(),
+    space_id :: od_space:id(),
+    spatial = false :: boolean(),
+    map_function :: index:index_function(),
+    reduce_function :: undefined | index:index_function(),
+    index_options = [] :: index:options(),
+    providers = [] :: all | [od_provider:id()]
 }).
 
 -endif.

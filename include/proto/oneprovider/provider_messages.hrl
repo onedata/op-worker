@@ -64,14 +64,14 @@
     target_provider_id :: oneprovider:id(),
     block :: undefined | #file_block{},
     callback :: transfer:callback(),
-    index_id :: transfer:index_id(),
+    index_name :: transfer:index_name(),
     query_view_params :: transfer:query_view_params()
 }).
 
 -record(schedule_replica_invalidation, {
     source_provider_id :: oneprovider:id(),
     target_provider_id :: undefined | oneprovider:id(),
-    index_id :: transfer:index_id(),
+    index_name :: transfer:index_name(),
     query_view_params :: transfer:query_view_params()
 }).
 

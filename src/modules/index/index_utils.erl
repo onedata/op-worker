@@ -33,7 +33,7 @@ sanitize_query_options(RawOptionsList) ->
 %%% Internal functions
 %%%===================================================================
 
--spec sanitize_query_options(list()) -> list().
+-spec sanitize_query_options(list(), list()) -> list().
 sanitize_query_options([], Options) ->
     Options;
 

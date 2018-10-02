@@ -165,15 +165,15 @@ schedule_file_replication(SessId, FileKey, TargetProviderId, Callback) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_replication_by_index(session:id(), ProviderId :: oneprovider:id(),
-    transfer:callback(), od_space:id(), transfer:index_id(),
+    transfer:callback(), od_space:id(), transfer:index_name(),
     transfer:query_view_params()) -> {ok, transfer:id()} | logical_file_manager:error_reply().
-schedule_replication_by_index(SessId, TargetProviderId, Callback, SpaceId, IndexId, QueryParams) ->
+schedule_replication_by_index(SessId, TargetProviderId, Callback, SpaceId, IndexName, QueryParams) ->
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     remote_utils:call_fslogic(SessId, provider_request, SpaceGuid,
         #schedule_file_replication{
             target_provider_id = TargetProviderId,
             callback = Callback,
-            index_id = IndexId,
+            index_name = IndexName,
             query_view_params = QueryParams
         },
         fun(#scheduled_transfer{transfer_id = TransferId}) ->
@@ -207,15 +207,16 @@ schedule_replica_eviction(SessId, FileKey, ProviderId, MigrationProviderId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_replica_eviction_by_index(session:id(), ProviderId :: oneprovider:id(),
-    MigrationProviderId :: undefined | oneprovider:id(), od_space:id(), transfer:index_id(), transfer:query_view_params()) ->
+    MigrationProviderId :: undefined | oneprovider:id(), od_space:id(),
+    transfer:index_name(), transfer:query_view_params()) ->
     {ok, transfer:id()} | logical_file_manager:error_reply().
-schedule_replica_eviction_by_index(SessId, ProviderId, MigrationProviderId, SpaceId, IndexId, QueryViewParams) ->
+schedule_replica_eviction_by_index(SessId, ProviderId, MigrationProviderId, SpaceId, IndexName, QueryViewParams) ->
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     remote_utils:call_fslogic(SessId, provider_request, SpaceGuid,
         #schedule_replica_invalidation{
             source_provider_id = ProviderId,
             target_provider_id = MigrationProviderId,
-            index_id = IndexId,
+            index_name = IndexName,
             query_view_params = QueryViewParams
         },
         fun(#scheduled_transfer{transfer_id = TransferId}) ->

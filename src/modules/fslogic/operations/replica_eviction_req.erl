@@ -46,14 +46,14 @@
 %%--------------------------------------------------------------------
 -spec schedule_replica_eviction(user_ctx:ctx(), file_ctx:ctx(),
     SourceProviderId :: sync_req:provider_id(),
-    MigrationProviderId :: sync_req:provider_id(), transfer:index_id(),
+    MigrationProviderId :: sync_req:provider_id(), transfer:index_name(),
     sync_req:query_view_params()) -> sync_req:provider_response().
 schedule_replica_eviction(UserCtx, FileCtx, SourceProviderId,
-    MigrationProviderId, IndexId, QueryViewParams
+    MigrationProviderId, IndexName, QueryViewParams
 ) ->
     check_permissions:execute(
         [], %todo VFS-4844
-        [UserCtx, FileCtx, SourceProviderId, MigrationProviderId, IndexId, QueryViewParams],
+        [UserCtx, FileCtx, SourceProviderId, MigrationProviderId, IndexName, QueryViewParams],
         fun schedule_replica_eviction_insecure/6).
 
 %%--------------------------------------------------------------------
@@ -62,14 +62,14 @@ schedule_replica_eviction(UserCtx, FileCtx, SourceProviderId,
 %% @end
 %%--------------------------------------------------------------------
 -spec evict_file_replica(user_ctx:ctx(), file_ctx:ctx(), sync_req:block(),
-    sync_req:transfer_id(), transfer:index_id(), sync_req:query_view_params()
+    sync_req:transfer_id(), transfer:index_name(), sync_req:query_view_params()
 ) -> sync_req:provider_response().
 evict_file_replica(UserCtx, FileCtx, MigrationProviderId, TransferId,
-    IndexId, QueryViewParams
+    IndexName, QueryViewParams
 ) ->
     check_permissions:execute(
         [], %todo VFS-4844
-        [UserCtx, FileCtx, MigrationProviderId, TransferId, IndexId, QueryViewParams],
+        [UserCtx, FileCtx, MigrationProviderId, TransferId, IndexName, QueryViewParams],
         fun evict_file_replica_insecure/6).
 
 
@@ -86,12 +86,12 @@ evict_file_replica(UserCtx, FileCtx, MigrationProviderId, TransferId,
 -spec enqueue_replica_eviction(user_ctx:ctx(), file_ctx:ctx(),
     sync_req:provider_id(), sync_req:transfer_id(),
     undefined | non_neg_integer(), undefined | non_neg_integer(),
-    transfer:index_id(), sync_req:query_view_params()) -> ok.
+    transfer:index_name(), sync_req:query_view_params()) -> ok.
 enqueue_replica_eviction(UserCtx, FileCtx, MigrationProviderId, TransferId,
-    Retries, NextRetry, Index, QueryViewParams) ->
+    Retries, NextRetry, IndexName, QueryViewParams) ->
     worker_pool:cast(?REPLICA_EVICTION_WORKERS_POOL,
         {start_replica_eviction, UserCtx, FileCtx, MigrationProviderId,
-            TransferId, Retries, NextRetry, Index, QueryViewParams
+            TransferId, Retries, NextRetry, IndexName, QueryViewParams
         }
     ).
 
@@ -117,12 +117,12 @@ enqueue_children_eviction(UserCtx, Children, MigrationProviderId, TransferId) ->
 %%--------------------------------------------------------------------
 -spec enqueue_replica_eviction(user_ctx:ctx(), file_ctx:ctx(),
     sync_req:provider_id(), sync_req:transfer_id(),
-    transfer:index_id(), sync_req:query_view_params()) -> ok.
+    transfer:index_name(), sync_req:query_view_params()) -> ok.
 enqueue_replica_eviction(UserCtx, FileCtx, MigrationProviderId, TransferId,
-    Index, QueryViewParams
+    IndexName, QueryViewParams
 ) ->
     enqueue_replica_eviction(UserCtx, FileCtx, MigrationProviderId,
-        TransferId, undefined, undefined, Index, QueryViewParams).
+        TransferId, undefined, undefined, IndexName, QueryViewParams).
 
 %%%===================================================================
 %%% Internal functions
@@ -136,16 +136,16 @@ enqueue_replica_eviction(UserCtx, FileCtx, MigrationProviderId, TransferId,
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_replica_eviction_insecure(user_ctx:ctx(), file_ctx:ctx(),
-    sync_req:provider_id(), sync_req:provider_id(), transfer:index_id(),
+    sync_req:provider_id(), sync_req:provider_id(), transfer:index_name(),
     sync_req:query_view_params()) -> sync_req:provider_response().
 schedule_replica_eviction_insecure(UserCtx, FileCtx, SourceProviderId,
-    MigrationProviderId, IndexId, QueryViewParams
+    MigrationProviderId, IndexName, QueryViewParams
 ) ->
     {FilePath, _} = file_ctx:get_logical_path(FileCtx, UserCtx),
     SessionId = user_ctx:get_session_id(UserCtx),
     FileGuid = file_ctx:get_guid_const(FileCtx),
     {ok, TransferId} = transfer:start(SessionId, FileGuid, FilePath,
-        SourceProviderId, MigrationProviderId, undefined, IndexId, QueryViewParams),
+        SourceProviderId, MigrationProviderId, undefined, IndexName, QueryViewParams),
     #provider_response{
         status = #status{code = ?OK},
         provider_response = #scheduled_transfer{
@@ -161,15 +161,15 @@ schedule_replica_eviction_insecure(UserCtx, FileCtx, SourceProviderId,
 %% @end
 %%--------------------------------------------------------------------
 -spec evict_file_replica_insecure(user_ctx:ctx(), file_ctx:ctx(),
-    sync_req:provider_id(), sync_req:transfer_id(), transfer:index_id(),
+    sync_req:provider_id(), sync_req:transfer_id(), transfer:index_name(),
     sync_req:query_view_params()) -> sync_req:provider_response().
 evict_file_replica_insecure(UserCtx, FileCtx, MigrationProviderId, TransferId, undefined, _) ->
     evict_fs_subtree(UserCtx, FileCtx, MigrationProviderId, TransferId);
 evict_file_replica_insecure(UserCtx, FileCtx, MigrationProviderId, TransferId,
-    IndexId, QueryViewParams
+    IndexName, QueryViewParams
 ) ->
     evict_file_replicas_from_index(UserCtx, FileCtx, MigrationProviderId,
-        TransferId, IndexId, QueryViewParams, undefined
+        TransferId, IndexName, QueryViewParams, undefined
     ).
 
 %%--------------------------------------------------------------------
@@ -202,16 +202,16 @@ evict_fs_subtree(UserCtx, FileCtx, MigrationProviderId, TransferId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec evict_file_replicas_from_index(user_ctx:ctx(), file_ctx:ctx(),
-    sync_req:provider_id(), sync_req:transfer_id(), transfer:index_id(),
+    sync_req:provider_id(), sync_req:transfer_id(), transfer:index_name(),
     sync_req:query_view_params(), file_meta:uuid()) -> sync_req:provider_response().
 evict_file_replicas_from_index(UserCtx, FileCtx, MigrationProviderId,
-    TransferId, IndexId, QueryViewParams, LastDocId
+    TransferId, IndexName, QueryViewParams, LastDocId
 ) ->
     case transfer:is_ongoing(TransferId) of
         true ->
             Chunk = application:get_env(?APP_NAME, replica_eviction_by_index_batch, 1000),
             evict_file_replicas_from_index(UserCtx, FileCtx, MigrationProviderId,
-                TransferId, IndexId, Chunk, QueryViewParams, LastDocId
+                TransferId, IndexName, Chunk, QueryViewParams, LastDocId
             );
         false ->
             throw(already_ended)
@@ -224,12 +224,12 @@ evict_file_replicas_from_index(UserCtx, FileCtx, MigrationProviderId,
 %% @end
 %%--------------------------------------------------------------------
 -spec evict_file_replicas_from_index(user_ctx:ctx(), file_ctx:ctx(),
-    sync_req:provider_id(), sync_req:transfer_id(), transfer:index_id(),
+    sync_req:provider_id(), sync_req:transfer_id(), transfer:index_name(),
     non_neg_integer(), sync_req:query_view_params(), file_meta:uuid()
 ) ->
     sync_req:provider_response().
 evict_file_replicas_from_index(UserCtx, FileCtx, MigrationProviderId,
-    TransferId, IndexId, Chunk, QueryViewParams, LastDocId
+    TransferId, IndexName, Chunk, QueryViewParams, LastDocId
 ) ->
     QueryViewParams2 = case LastDocId of
         undefined ->
@@ -237,8 +237,8 @@ evict_file_replicas_from_index(UserCtx, FileCtx, MigrationProviderId,
         _ ->
             [{skip, 1}, {startkey_docid, LastDocId} | QueryViewParams]
     end,
-
-    case indexes:query_view(IndexId, [{limit, Chunk} | QueryViewParams2]) of
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    case index:query_view(SpaceId, IndexName, [{limit, Chunk} | QueryViewParams2]) of
         {ok, {Rows}} ->
             NumberOfFiles = length(Rows),
             {NewLastDocId, Guids} = lists:foldl(fun(Row, AccIn = {_LastDocId, FileGuids}) ->
@@ -249,7 +249,7 @@ evict_file_replicas_from_index(UserCtx, FileCtx, MigrationProviderId,
                     {DocId, [FileGuid | FileGuids]}
                 catch
                     Error:Reason ->
-                        ?error_stacktrace("Cannot resolve uuid of file ~p in index ~p, due to error ~p:~p", [FileUuid, IndexId, Error, Reason]),
+                        ?error_stacktrace("Cannot resolve uuid of file ~p in index ~p, due to error ~p:~p", [FileUuid, IndexName, Error, Reason]),
                         AccIn
                 end
             end, {undefined, []}, Rows),
@@ -270,12 +270,12 @@ evict_file_replicas_from_index(UserCtx, FileCtx, MigrationProviderId,
                         MigrationProviderId, TransferId
                     ),
                     evict_file_replicas_from_index(UserCtx, FileCtx,
-                        MigrationProviderId, TransferId, IndexId,
+                        MigrationProviderId, TransferId, IndexName,
                         QueryViewParams, NewLastDocId
                     )
             end;
         Error = {error, Reason} ->
-            ?error("Querying view ~p failed due to ~p when processing transfer ~p", [IndexId, Reason, TransferId]),
+            ?error("Querying view ~p failed due to ~p when processing transfer ~p", [IndexName, Reason, TransferId]),
             throw(Error)
     end.
 

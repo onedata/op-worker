@@ -275,9 +275,9 @@ schedule_file_replication(SessId, FileKey, TargetProviderId, Callback) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_replication_by_index(session:id(), TargetProviderId :: oneprovider:id(),
-    transfer:callback(), od_space:id(), transfer:index_id(),
+    transfer:callback(), od_space:id(), transfer:index_name(),
     transfer:query_view_params()) -> {ok, transfer:id()} | error_reply().
-schedule_replication_by_index(SessId, TargetProviderId, Callback, SpaceId, IndexId, QueryParams) ->
+schedule_replication_by_index(SessId, TargetProviderId, Callback, SpaceId, IndexName, QueryParams) ->
     % Scheduling and target providers must support given space
     HasAccess = provider_logic:supports_space(SpaceId)
         andalso space_logic:is_supported(?ROOT_SESS_ID, SpaceId, TargetProviderId),
@@ -286,7 +286,7 @@ schedule_replication_by_index(SessId, TargetProviderId, Callback, SpaceId, Index
             {error, ?EACCES};
         true ->
             ?run(fun() ->
-                lfm_files:schedule_replication_by_index(SessId, TargetProviderId, Callback, SpaceId, IndexId, QueryParams)
+                lfm_files:schedule_replication_by_index(SessId, TargetProviderId, Callback, SpaceId, IndexName, QueryParams)
             end)
     end.
 
@@ -330,10 +330,10 @@ schedule_replica_eviction(SessId, FileKey, SourceProviderId, TargetProviderId) -
 %%--------------------------------------------------------------------
 -spec schedule_replica_eviction_by_index(session:id(), SourceProviderId :: oneprovider:id(),
     TargetProviderId :: undefined | oneprovider:id(), od_space:id(),
-    transfer:index_id(), transfer:query_view_params()) ->
+    transfer:index_name(), transfer:query_view_params()) ->
     {ok, transfer:id()} | error_reply().
 schedule_replica_eviction_by_index(SessId, SourceProviderId, TargetProviderId,
-    SpaceId, IndexId, QueryViewParams
+    SpaceId, IndexName, QueryViewParams
 ) ->
     SupportedByTarget = case TargetProviderId of
         undefined -> true;
@@ -351,7 +351,7 @@ schedule_replica_eviction_by_index(SessId, SourceProviderId, TargetProviderId,
         true ->
             ?run(fun() ->
                 lfm_files:schedule_replica_eviction_by_index(SessId,
-                    SourceProviderId, TargetProviderId, SpaceId, IndexId, QueryViewParams)
+                    SourceProviderId, TargetProviderId, SpaceId, IndexName, QueryViewParams)
             end)
     end.
 

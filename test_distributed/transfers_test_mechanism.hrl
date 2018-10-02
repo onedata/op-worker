@@ -57,7 +57,7 @@
     replicating_nodes :: [node()],
     evicting_nodes :: [node()],
     function :: function,
-    index_id :: binary(),
+    index_name :: binary(),
     query_view_params :: list(),
     space_id :: od_space:id()
 }).

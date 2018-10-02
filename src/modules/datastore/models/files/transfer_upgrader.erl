@@ -314,7 +314,7 @@ get_record_struct(10) ->
         {hr_hist, #{string => [integer]}},
         {dy_hist, #{string => [integer]}},
         {mth_hist, #{string => [integer]}},
-        {index_id, string},
+        {index_name, string},
         {query_view_params, [{term, term}]}    %todo specific type?
     ]}.
 

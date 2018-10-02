@@ -234,6 +234,9 @@ modify_cdmi_attrs(Config) ->
 create_and_get_view(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    SpaceId = <<"space_id1">>,
+    ViewName = <<"view_name">>,
+    ProviderId = rpc:call(Worker, oneprovider, get_id, []),
     Path1 = <<"/space_name1/t6_file">>,
     Path2 = <<"/space_name1/t7_file">>,
     Path3 = <<"/space_name1/t8_file">>,
@@ -252,15 +255,13 @@ create_and_get_view(Config) ->
     ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, Guid1}, json, MetaBlue, [])),
     ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, Guid2}, json, MetaRed, [])),
     ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, Guid3}, json, MetaBlue, [])),
-    {ok, ViewId} = rpc:call(Worker, indexes, add_index, [<<"user1">>, <<"name">>, ViewFunction, <<"space_id1">>, false]),
-    ?assertMatch({ok, #{name := <<"name">>, space_id := <<"space_id1">>, function := _}},
-        rpc:call(Worker, indexes, get_index, [<<"user1">>, ViewId])),
-
+    ok = rpc:call(Worker, index, save, [SpaceId, ViewName, ViewFunction, [], false, [ProviderId]]),
+    ?assertMatch({ok, [ViewName]}, rpc:call(Worker, index, list, [SpaceId])),
     FinalCheck = fun() ->
         try
-            {ok, GuidsBlue} = {ok, [_ | _]} = rpc:call(Worker, indexes, query_view_and_filter_values, [ViewId, [{key, <<"blue">>}, {stale, false}]]),
-            {ok, GuidsRed} = rpc:call(Worker, indexes, query_view_and_filter_values, [ViewId, [{key, <<"red">>}]]),
-            {ok, GuidsOrange} = rpc:call(Worker, indexes, query_view_and_filter_values, [ViewId, [{key, <<"orange">>}]]),
+            {ok, GuidsBlue} = {ok, [_ | _]} = rpc:call(Worker, index, query_view_and_filter_values, [SpaceId, ViewName, [{key, <<"blue">>}, {stale, false}]]),
+            {ok, GuidsRed} = rpc:call(Worker, index, query_view_and_filter_values, [SpaceId, ViewName, [{key, <<"red">>}]]),
+            {ok, GuidsOrange} = rpc:call(Worker, index, query_view_and_filter_values, [SpaceId, ViewName, [{key, <<"orange">>}]]),
 
             true = lists:member(Guid1, GuidsBlue),
             false = lists:member(Guid2, GuidsBlue),

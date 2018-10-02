@@ -66,7 +66,8 @@ get_models() -> [
     storage_sync_monitoring,
     storage_sync_info,
     replica_deletion,
-    replica_deletion_lock
+    replica_deletion_lock,
+    index
 ].
 
 %%--------------------------------------------------------------------
