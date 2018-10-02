@@ -78,7 +78,7 @@ list_indexes(Req, State) ->
     {State2, Req2} = validator:parse_dir_limit(Req1, State1),
     {State3, Req3} = validator:parse_page_token(Req2, State2),
 
-    #{space_id := SpaceId, limit := LimitOrUndef, page_token := PageToken} = State1,
+    #{space_id := SpaceId, limit := LimitOrUndef, page_token := PageToken} = State3,
 
     Limit = utils:ensure_defined(LimitOrUndef, undefined, ?DEFAULT_LIMIT),
 

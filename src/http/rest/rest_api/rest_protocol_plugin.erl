@@ -33,9 +33,6 @@ routes() ->
         {"/api/v3/oneprovider/changes/metadata/:sid", #{handler => changes}},
         {"/api/v3/oneprovider/debug/transfers_mock", #{handler => transfers_mock}},
         {"/api/v3/oneprovider/files/[...]", #{handler => files}},
-        {"/api/v3/oneprovider/spaces/:sid/indexes", #{handler => index_collection}},
-        {"/api/v3/oneprovider/spaces/:sid/indexes/:index_name", #{handler => index_by_name}},
-        {"/api/v3/oneprovider/spaces/:sid/indexes/:index_name/query", #{handler => query_index}},
         {"/api/v3/oneprovider/metadata/[...]", #{handler => metadata}},
         {"/api/v3/oneprovider/metadata-id/:id", #{handler => metadata,
             handler_initial_opts => #{resource_type => id}}},
@@ -50,6 +47,9 @@ routes() ->
         {"/api/v3/oneprovider/spaces", #{handler => spaces}},
         {"/api/v3/oneprovider/spaces/:sid", #{handler => space_by_id}},
         {"/api/v3/oneprovider/spaces/:sid/transfers", #{handler => transfers}},
+        {"/api/v3/oneprovider/spaces/:sid/indexes", #{handler => index_collection}},
+        {"/api/v3/oneprovider/spaces/:sid/indexes/:index_name", #{handler => index_by_name}},
+        {"/api/v3/oneprovider/spaces/:sid/indexes/:index_name/query", #{handler => query_index}},
         {"/api/v3/oneprovider/transfers/:id", #{handler => transfer_by_id}},
         {"/api/v3/oneprovider/transfers/:id/rerun", #{handler => transfer_by_id}}
 ].

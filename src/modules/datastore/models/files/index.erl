@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([delete/2, list/1, save/6, save_db_view/5, query_view_and_filter_values/3,
+-export([delete/2, list/1, list/4, save/6, save_db_view/5, query_view_and_filter_values/3,
     query_view/3, get_json/2, is_supported/3]).
 
 %% datastore_model callbacks
