@@ -78,19 +78,22 @@ content_types_accepted(Req, State) ->
 %%--------------------------------------------------------------------
 -spec delete_resource(req(), maps:map()) -> {term(), req(), maps:map()}.
 delete_resource(Req, State) ->
-    % todo parse IndexName and query view parameters, copy from query_index
-    {State2, Req2} = validator:parse_space_id(Req, State),
+    {State1, Req1} = validator:parse_index_name(Req, State),
+    {State2, Req2} = validator:parse_query_space_id(Req1, State1),
     {State3, Req3} = validator:parse_provider_id(Req2, State2),
     {State4, Req4} = validator:parse_migration_provider_id(Req3, State3),
 
-    evict_file_replica_internal(Req4, State4).
+    % parse options
+    {StateWithOptions, ReqWithOptions} = parse_options(Req4, State4),
+
+    evict_file_replica_internal(ReqWithOptions, StateWithOptions).
 
 %%%===================================================================
 %%% Content type handler functions
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% '/api/v3/oneprovider/replicas/{path}'
+%% '/api/v3/oneprovider/replicas-index/{index_name}'
 %% @doc Replicates a file to a specified provider. This operation is asynchronous
 %% as it can  take a long time depending on the size of the data to move.
 %% If the &#x60;path&#x60; parameter specifies a folder, entire folder is
@@ -107,16 +110,38 @@ delete_resource(Req, State) ->
 %%--------------------------------------------------------------------
 -spec replicate_files_from_index(req(), maps:map()) -> {term(), req(), maps:map()}.
 replicate_files_from_index(Req, State) ->
-    % todo parse IndexName and query view parameters, copy from query_index
-    {State2, Req2} = validator:parse_space_id(Req, State),
+    {State1, Req1} = validator:parse_index_name(Req, State),
+    {State2, Req2} = validator:parse_query_space_id(Req1, State1),
     {State3, Req3} = validator:parse_provider_id(Req2, State2),
     {State4, Req4} = validator:parse_callback(Req3, State3),
 
-    replicate_files_from_index_internal(Req4, State4).
+    % parse options
+    {StateWithOptions, ReqWithOptions} = parse_options(Req4, State4),
+
+    replicate_files_from_index_internal(ReqWithOptions, StateWithOptions).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc parse supported query options
+%% @end
+%%--------------------------------------------------------------------
+parse_options(Req, State) ->
+    {StateWithBbox, ReqWithBbox} = validator:parse_bbox(Req, State),
+    {StateWithDescending, ReqWithDescending} = validator:parse_descending(ReqWithBbox, StateWithBbox),
+    {StateWithEndkey, ReqWithEndkey} = validator:parse_endkey(ReqWithDescending, StateWithDescending),
+    {StateWithInclusiveEnd, ReqWithInclusiveEnd} = validator:parse_inclusive_end(ReqWithEndkey, StateWithEndkey),
+    {StateWithKey, ReqWithKey} = validator:parse_key(ReqWithInclusiveEnd, StateWithInclusiveEnd),
+    {StateWithLimit, ReqWithLimit} = validator:parse_limit(ReqWithKey, StateWithKey),
+    {StateWithSkip, ReqWithSkip} = validator:parse_skip(ReqWithLimit, StateWithLimit),
+    {StateWithStale, ReqWithStale} = validator:parse_stale(ReqWithSkip, StateWithSkip),
+    {StateWithStartkey, ReqWithStartkey} = validator:parse_startkey(ReqWithStale, StateWithStale),
+    {StateWithStartRange, ReqWithStartRange} = validator:parse_start_range(ReqWithStartkey, StateWithStartkey),
+    {StateWithEndRange, ReqWithEndRange} = validator:parse_end_range(ReqWithStartRange, StateWithStartRange),
+    validator:parse_spatial(ReqWithEndRange, StateWithEndRange).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -126,15 +151,18 @@ replicate_files_from_index(Req, State) ->
 -spec evict_file_replica_internal(req(), maps:map()) -> {term(), req(), maps:map()}.
 evict_file_replica_internal(Req, State = #{
     auth := Auth,
+    space_id := SpaceId,
+    index_name := IndexName,
     provider_id := SourceProviderId,
-    migration_provider_id := MigrationProviderId,
-    space_id := SpaceId
+    migration_provider_id := MigrationProviderId
 }) ->
     throw_if_non_local_space(SpaceId),
     throw_if_nonexistent_provider(SpaceId, MigrationProviderId),
-    % todo parse IndexName and query view parameters
-    IndexName = <<"">>,    %todo
-    QueryViewParams = #{},  %todo
+    throw_if_index_not_supported(SpaceId, IndexName, SourceProviderId),
+    throw_if_index_not_supported(SpaceId, IndexName, MigrationProviderId),
+
+    QueryViewParams = index_utils:sanitize_query_options(State),
+
     {ok, TransferId} = onedata_file_api:schedule_replica_eviction_by_index(
         Auth, SourceProviderId, MigrationProviderId, SpaceId, IndexName,
         QueryViewParams
@@ -152,15 +180,17 @@ evict_file_replica_internal(Req, State = #{
 -spec replicate_files_from_index_internal(req(), maps:map()) -> {term(), req(), maps:map()}.
 replicate_files_from_index_internal(Req, #{
     auth := Auth,
+    space_id := SpaceId,
+    index_name := IndexName,
     provider_id := ProviderId,
-    callback := Callback,
-    space_id := SpaceId
+    callback := Callback
 } = State) ->
     throw_if_non_local_space(SpaceId),
     throw_if_nonexistent_provider(SpaceId, ProviderId),
-    % todo parse IndexName and query view parameters
-    IndexName = <<"">>,    %todo
-    QueryViewParams = #{},  %todo
+    throw_if_index_not_supported(SpaceId, IndexName, ProviderId),
+
+    QueryViewParams = index_utils:sanitize_query_options(State),
+
     {ok, TransferId} = onedata_file_api:schedule_replication_by_index(
         Auth, ProviderId, Callback, SpaceId, IndexName, QueryViewParams
     ),
@@ -193,6 +223,23 @@ throw_if_nonexistent_provider(_SpaceId, undefined) ->
     ok;
 throw_if_nonexistent_provider(SpaceId, ProviderId) ->
     case space_logic:is_supported(?ROOT_SESS_ID, SpaceId, ProviderId) of
+        true ->
+            ok;
+        false ->
+            throw(?ERROR_PROVIDER_NOT_SUPPORTING_SPACE)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Throws error if given provider does not support given index
+%% @end
+%%--------------------------------------------------------------------
+-spec throw_if_index_not_supported(od_space:id(), binary(), od_provider:id()) ->
+    ok.
+throw_if_index_not_supported(_SpaceId, _IndexName, undefined) ->
+    ok;
+throw_if_index_not_supported(SpaceId, IndexName, ProviderId) ->
+    case index:is_supported(SpaceId, IndexName, ProviderId) of
         true ->
             ok;
         false ->

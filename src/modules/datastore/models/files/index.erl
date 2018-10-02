@@ -19,7 +19,7 @@
 
 %% API
 -export([delete/2, list/1, save/6, save_db_view/5, query_view_and_filter_values/3,
-    query_view/3, get_json/2]).
+    query_view/3, get_json/2, is_supported/3]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
@@ -67,6 +67,10 @@ save(SpaceId, Name, MapFunction, Options, Spatial, Providers) ->
     {ok, _} = datastore_model:save(?CTX, Doc),
     ok = save_db_view(Id, SpaceId, EscapedMapFunction, Spatial, Options),
     ok = index_links:add_link(Name, SpaceId).
+
+-spec is_supported(od_space:id(), binary(), od_provider:id()) -> boolean().
+is_supported(SpaceId, IndexName, ProviderId) ->
+    true.
 
 -spec get_json(od_space:id(), binary()) ->
     #{binary() => term()} | {error, term()}.

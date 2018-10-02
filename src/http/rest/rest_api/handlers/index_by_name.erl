@@ -88,9 +88,8 @@ delete_resource(Req, State) ->
     case index:delete(SpaceId, IndexName) of
         ok ->
             {true, Req3, State3};
-        {error, _} ->
-            ok
-            % TODO handle errors ?
+        {error, not_found} ->
+            throw(?ERROR_INDEX_NOT_FOUND)
     end.
 
 %%%===================================================================
@@ -114,9 +113,8 @@ delete_resource(Req, State) ->
 %% {
 %%   "name": $INDEX_NAME,
 %%   "spatial": false,
-%%   "map_function": "function(x){...}",
-%%   "reduce_function": null,
-%%   "index_options": {}
+%%   "mapFunction": "function(x){...}",
+%%   "indexOptions": {}
 %% }
 %% &#x60;&#x60;&#x60;
 %%
@@ -135,17 +133,9 @@ get_index(Req, State) ->
     case index:get_json(SpaceId, IndexName) of
         {ok, JSON} ->
             {json_utils:encode(JSON), Req3, State3};
-        {error, _} ->
-            ok
-            % TODO handle errors ?
+        {error, not_found} ->
+            throw(?ERROR_INDEX_NOT_FOUND)
     end.
-
-%%    {State1, Req1} = validator:parse_id(Req, State),
-%%
-%%    #{auth := Auth, id := Id} = State1,
-%%
-%%    {ok, UserId} = session:get_user_id(Auth),
-%%    {ok, Index} = indexes:get_index(UserId, Id),
 
 %%--------------------------------------------------------------------
 %% '/api/v3/oneprovider/index/{iid}'
@@ -169,48 +159,64 @@ get_index(Req, State) ->
 %% @param iid Id of the index to update.
 %%--------------------------------------------------------------------
 -spec create_or_modify_index(req(), maps:map()) -> term().
-create_or_modify_index(#{method := Method} = Req, State) ->
+create_or_modify_index(Req, State) ->
     {State2, Req2} = validator:parse_space_id(Req, State),
     {State3, Req3} = validator:parse_index_name(Req2, State2),
     {State4, Req4} = validator:parse_spatial(Req3, State3),
     {State5, Req5} = validator:parse_function(Req4, State4),
 
-    {State6, Req6} = validator:parse_index_options(Req5, State5),
-    {State7, Req7} = validator:parse_index_providers(Req6, State6),
+    % get options
+    {State6, Req6} = validator:parse_update_min_changes(Req5, State5),
+    {State7, Req7} = validator:parse_replica_update_min_changes(Req6, State6),
+    Options = prepare_options(State7),
 
-    case Method of
-        <<"PUT">> ->
-            create_index(Req7, State7);
-        <<"PATCH">> ->
-            modify_index(Req7, State7)
-    end.
+    % get providers
+    {State8, Req8} = validator:parse_index_providers(Req7, State7),
 
-%%%===================================================================
-%%% Internal functions
-%%%==================================================================
-
--spec create_index(req(), maps:map()) -> term().
-create_index(Req, State) ->
     #{
         space_id := SpaceId,
-        index_name := Name,
+        index_name := IndexName,
         spatial := Spatial,
-        function := Function,
-        index_options := Options,
+        function := MapFunction,
         providers := Providers
     } = State,
 
-    {true, Req, State}.
+    index:save(SpaceId, IndexName, MapFunction, Options, Spatial, Providers).
 
--spec modify_index(req(), maps:map()) -> term().
-modify_index(Req, State) ->
-%%    {State1, Req1} = validator:parse_name(Req, State),
-%%    {State2, Req2} = validator:parse_function(Req1, State1),
-%%    {State3, Req3} = validator:parse_space_id(Req2, State2),
-%%
-%%    #{auth := Auth, name := IndexName, space_id := SpaceId, function := Function} = State3,
-%%
-%%    {ok, UserId} = session:get_user_id(Auth),
-%%    {ok, _} = indexes:change_index_function(UserId, IndexName, SpaceId, Function),
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
-    {true, Req, State}.
+-spec prepare_options(maps:map() | list()) -> list().
+prepare_options(Map) when is_map(Map) ->
+    #{
+        update_min_changes := UpdateMinChanges,
+        replica_update_min_changes := ReplicaUpdateMinChanges
+    } = Map,
+
+    RawList = [
+        {update_min_changes, UpdateMinChanges},
+        {replica_update_min_changes, ReplicaUpdateMinChanges}
+    ],
+    prepare_options(RawList);
+prepare_options([]) ->
+    [];
+prepare_options([{update_min_changes, undefined} | Rest]) ->
+    prepare_options(Rest);
+prepare_options([{update_min_changes, UpdateMinChanges} | Rest]) ->
+    case catch binary_to_integer(UpdateMinChanges) of
+        N when is_integer(N) ->
+            [{update_min_changes, N} | prepare_options(Rest)];
+        _Error ->
+            throw(?ERROR_INVALID_UPDATE_MIN_CHANGES)
+    end;
+
+prepare_options([{replica_update_min_changes, undefined} | Rest]) ->
+    prepare_options(Rest);
+prepare_options([{replica_update_min_changes, ReplicaUpdateMinChanges} | Rest]) ->
+    case catch binary_to_integer(ReplicaUpdateMinChanges) of
+        N when is_integer(N) ->
+            [{replica_update_min_changes, N} | prepare_options(Rest)];
+        _Error ->
+            throw(?ERROR_INVALID_REPLICA_UPDATE_MIN_CHANGES)
+    end.

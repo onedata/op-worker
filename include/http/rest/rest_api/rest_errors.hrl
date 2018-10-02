@@ -191,6 +191,28 @@
     <<"error_invalid_bbox">>,
     <<"Bounding box is invalid, it needs to be bbox=W,S,E,N where each direction is a number.">>)
 ).
+
+-define(ERROR_INDEX_NOT_FOUND, ?ERROR_REPLY(
+    ?NOT_FOUND,
+    <<"error_index_not_found">>,
+    <<"Given index could not be found.">>)
+).
+-define(ERROR_INVALID_UPDATE_MIN_CHANGES, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"invalid_update_min_changes">>,
+    <<"Requested update min changes is invalid, it must be a positive integer.">>)
+).
+-define(ERROR_INVALID_REPLICA_UPDATE_MIN_CHANGES, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"invalid_replica_update_min_changes">>,
+    <<"Requested replica update min changes is invalid, it must be a positive integer.">>)
+).
+-define(ERROR_PROVIDER_NOT_SUPPORTING_INDEX, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"error_provider_not_supporting_index">>,
+    <<"Given provider does not support specified index.">>)
+).
+
 -define(ERROR_SPACE_NOT_SUPPORTED, ?ERROR_REPLY(
     ?BAD_REQUEST,
     <<"error_space_not_supported">>,
