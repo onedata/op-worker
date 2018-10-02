@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([delete/2, list/1, save/6, save_db_view/5, query_view_and_filter_values/3,
+-export([delete/2, list/1, save/7, save_db_view/6, query_view_and_filter_values/3,
     query_view/3, get_json/2, is_supported/3]).
 
 %% datastore_model callbacks
@@ -48,10 +48,15 @@
 
 % TODO jakie ma być id?
 
--spec save(od_space:id(), name(), index_function(), options(), boolean(), [od_provider:id()]) -> ok.
-save(SpaceId, Name, MapFunction, Options, Spatial, Providers) ->
+-spec save(od_space:id(), name(), index_function(), undefined | index_function(),
+    options(), boolean(), [od_provider:id()]) -> ok.
+save(SpaceId, Name, MapFunction, ReduceFunction, Options, Spatial, Providers) ->
     Id = id(Name, SpaceId),
     EscapedMapFunction = escape_js_function(MapFunction),
+    EscapedReduceFunction = case ReduceFunction of
+        undefined -> undefined;
+        _ -> escape_js_function(ReduceFunction)
+    end,
     Doc = #document{
         key = Id,
         value = #index{
@@ -59,18 +64,24 @@ save(SpaceId, Name, MapFunction, Options, Spatial, Providers) ->
             space_id = SpaceId,
             spatial = Spatial,
             map_function = EscapedMapFunction,
+            reduce_function = EscapedReduceFunction,
             index_options = Options,
             providers = Providers
         },
         scope = SpaceId
     },
     {ok, _} = datastore_model:save(?CTX, Doc),
-    ok = save_db_view(Id, SpaceId, EscapedMapFunction, Spatial, Options),
+    ok = save_db_view(Id, SpaceId, EscapedMapFunction, EscapedReduceFunction, Spatial, Options),
     ok = index_links:add_link(Name, SpaceId).
 
 -spec is_supported(od_space:id(), binary(), od_provider:id()) -> boolean().
 is_supported(SpaceId, IndexName, ProviderId) ->
-    true.
+    case datastore_model:get(?CTX, id(IndexName, SpaceId)) of
+        {ok, #document{value = #index{providers = ProviderIds}}} ->
+            lists:member(ProviderId, ProviderIds);
+        _Error ->
+            false
+    end.
 
 -spec get_json(od_space:id(), binary()) ->
     #{binary() => term()} | {error, term()}.
@@ -80,6 +91,7 @@ get_json(SpaceId, IndexName) ->
         {ok, #document{value = #index{
             spatial = Spatial,
             map_function = MapFunction,
+            reduce_function = ReduceFunction,
             index_options = Options,
             providers = Providers
         }}} ->
@@ -87,7 +99,7 @@ get_json(SpaceId, IndexName) ->
                 <<"indexOptions">> => Options,
                 <<"providers">> => Providers,
                 <<"mapFunction">> => MapFunction,
-                % <<"reduceFunction">> => ReduceFunction, todo
+                <<"reduceFunction">> => ReduceFunction,
                 <<"spatial">> => Spatial
             };
         Error -> Error
@@ -117,18 +129,28 @@ id(IndexName, SpaceId) ->
 %% with one argument function.
 %% @end
 %%--------------------------------------------------------------------
--spec save_db_view(key(), od_space:id(), index_function(), boolean(), options()) -> ok.
-save_db_view(IndexId, SpaceId, Function, Spatial, Options) ->
+-spec save_db_view(key(), od_space:id(), index_function(),
+    undefined | index_function(), boolean(), options()) -> ok.
+save_db_view(IndexId, SpaceId, Function, ReduceFunction, Spatial, Options) ->
     RecordName = custom_metadata,
     RecordNameBin = atom_to_binary(RecordName, utf8),
-    ViewFunction = <<"function (doc, meta) { 'use strict'; if(doc['_record'] == '", RecordNameBin/binary, "' && doc['space_id'] == '", SpaceId/binary, "') { "
-    "var key = eval.call(null, '(", Function/binary, ")'); ",
-        "var key_to_emit = key(doc['value']); if(key_to_emit) { emit(key_to_emit, doc['_key']); } } }">>,
+    ViewFunction =
+    <<"function (doc, meta) {
+        'use strict';
+        if(doc['_record'] == '", RecordNameBin/binary, "' && doc['space_id'] == '", SpaceId/binary, "') {
+            var key = eval.call(null, '(", Function/binary, ")');
+            var key_to_emit = key(doc['value']);
+            if(key_to_emit) {
+                emit(key_to_emit, doc['_key']);
+            }
+        }
+    }">>,
+    % todo ReduceFunction
     ok = case Spatial of
         true ->
             couchbase_driver:save_spatial_view_doc(?DISC_CTX, IndexId, ViewFunction, Options);
         _ ->
-            couchbase_driver:save_view_doc(?DISC_CTX, IndexId, ViewFunction, Options)
+            couchbase_driver:save_view_doc(?DISC_CTX, IndexId, ViewFunction, ReduceFunction, Options)
     end.
 
 %%--------------------------------------------------------------------

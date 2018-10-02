@@ -178,10 +178,11 @@ create_or_modify_index(Req, State) ->
         index_name := IndexName,
         spatial := Spatial,
         function := MapFunction,
+        reduce_function := ReduceFunction,
         providers := Providers
     } = State,
 
-    index:save(SpaceId, IndexName, MapFunction, Options, Spatial, Providers).
+    index:save(SpaceId, IndexName, MapFunction, ReduceFunction, Options, Spatial, Providers).
 
 %%%===================================================================
 %%% Internal functions

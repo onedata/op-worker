@@ -640,42 +640,42 @@ parse_update_min_changes(Req, State) ->
 %% Retrieves request's replica update min changes param and adds it to State.
 %% @end
 %%--------------------------------------------------------------------
--spec parse_limit(cowboy_req:req(), maps:map()) ->
+-spec parse_replica_update_min_changes(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_replica_update_min_changes(Req, State) ->
     {Val, NewReq} = qs_val(<<"replicaUpdateMinChanges">>, Req),
     {State#{replica_update_min_changes => Val}, NewReq}.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Retrieves request's inherited param and adds it to State.
-%% @end
-%%--------------------------------------------------------------------
--spec parse_index_providers(cowboy_req:req(), maps:map()) ->
-    {parse_result(), cowboy_req:req()}.
-parse_index_providers(Req, State) ->
-    {RawProvidersList, NewReq} = qs_val(<<"providers">>, Req),
-    case RawProvidersList of
-        undefined ->
-            {State#{providers => [oneprovider:get_id()]}, NewReq};
-        _ ->
-            try
-                Limit = binary_to_integer(RawLimit),
-                case Limit > 0 of
-                    true -> ok;
-                    false -> throw(?ERROR_INVALID_LIMIT)
-                end,
-                case Limit < ?MAX_LIMIT of
-                    true ->
-                        {State#{limit => Limit}, NewReq};
-                    false ->
-                        throw(?ERROR_LIMIT_TOO_LARGE(?MAX_LIMIT))
-                end
-            catch
-                _:_ ->
-                    throw(?ERROR_INVALID_LIMIT)
-            end
-    end.
+%%%%--------------------------------------------------------------------
+%%%% @doc
+%%%% Retrieves request's inherited param and adds it to State.
+%%%% @end
+%%%%--------------------------------------------------------------------
+%%-spec parse_index_providers(cowboy_req:req(), maps:map()) ->
+%%    {parse_result(), cowboy_req:req()}.
+%%parse_index_providers(Req, State) ->
+%%    {RawProvidersList, NewReq} = qs_val(<<"providers">>, Req),
+%%    case RawProvidersList of
+%%        undefined ->
+%%            {State#{providers => [oneprovider:get_id()]}, NewReq};
+%%        _ ->
+%%            try
+%%                Limit = binary_to_integer(RawLimit),
+%%                case Limit > 0 of
+%%                    true -> ok;
+%%                    false -> throw(?ERROR_INVALID_LIMIT)
+%%                end,
+%%                case Limit < ?MAX_LIMIT of
+%%                    true ->
+%%                        {State#{limit => Limit}, NewReq};
+%%                    false ->
+%%                        throw(?ERROR_LIMIT_TOO_LARGE(?MAX_LIMIT))
+%%                end
+%%            catch
+%%                _:_ ->
+%%                    throw(?ERROR_INVALID_LIMIT)
+%%            end
+%%    end.
 
 %%%===================================================================
 %%% Internal functions

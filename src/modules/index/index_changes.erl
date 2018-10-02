@@ -49,11 +49,12 @@ handle_internal(#document{
         space_id = SpaceId,
         spatial = Spatial,
         map_function = MapFunction,
+        reduce_function = ReduceFunction,
         index_options = Options
 }}) ->
     case provider_logic:supports_space(SpaceId) of
         true ->
-            ok = index:save_db_view(Id, SpaceId, MapFunction, Spatial, Options);
+            ok = index:save_db_view(Id, SpaceId, MapFunction, ReduceFunction, Spatial, Options);
         false ->
             ?warning("Creation of index ~p with id ~p requested within not supported space ~p",
                 [IndexName, Id, SpaceId])
