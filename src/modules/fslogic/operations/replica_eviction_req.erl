@@ -238,17 +238,22 @@ evict_file_replicas_from_index(UserCtx, FileCtx, MigrationProviderId,
             [{skip, 1}, {startkey_docid, LastDocId} | QueryViewParams]
     end,
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    case index:query_view(SpaceId, IndexName, [{limit, Chunk} | QueryViewParams2]) of
+    case index:query(SpaceId, IndexName, [{limit, Chunk} | QueryViewParams2]) of
         {ok, {Rows}} ->
             NumberOfFiles = length(Rows),
             {NewLastDocId, Guids} = lists:foldl(fun(Row, AccIn = {_LastDocId, FileGuids}) ->
-                {<<"value">>, FileUuid} = lists:keyfind(<<"value">>, 1, Row),
+                {<<"value">>, Values} = lists:keyfind(<<"value">>, 1, Row),
                 {<<"id">>, DocId} = lists:keyfind(<<"id">>, 1, Row),
+                FileUuid = case is_list(Values) of
+                    true -> hd(Values);
+                    false -> Values
+                end,
                 try
                     FileGuid = fslogic_uuid:uuid_to_guid(FileUuid),
                     {DocId, [FileGuid | FileGuids]}
                 catch
                     Error:Reason ->
+                        transfer:increment_files_failed_and_processed_counters(TransferId),
                         ?error_stacktrace("Cannot resolve uuid of file ~p in index ~p, due to error ~p:~p", [FileUuid, IndexName, Error, Reason]),
                         AccIn
                 end

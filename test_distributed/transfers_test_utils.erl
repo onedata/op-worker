@@ -169,9 +169,9 @@ random_job_name() ->
     <<"job_", RandomIntBin/binary>>.
 
 view_function(XattrName) ->
-    <<"function (meta) {
+    <<"function (id, meta) {
         if(meta['", XattrName/binary,"']) {
-            return meta['", XattrName/binary,"'];
+            return [meta['", XattrName/binary,"'], id];
         }
         return null;
     }">>.

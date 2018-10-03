@@ -18,8 +18,8 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([delete/2, list/1, save/7, save_db_view/6, query_view_and_filter_values/3,
-    query_view/3, get_json/2, is_supported/3]).
+-export([delete/2, list/1, save/7, save_db_view/6,
+    query/3, get_json/2, is_supported/3]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
@@ -132,20 +132,17 @@ id(IndexName, SpaceId) ->
 -spec save_db_view(key(), od_space:id(), index_function(),
     undefined | index_function(), boolean(), options()) -> ok.
 save_db_view(IndexId, SpaceId, Function, ReduceFunction, Spatial, Options) ->
-    RecordName = custom_metadata,
-    RecordNameBin = atom_to_binary(RecordName, utf8),
     ViewFunction =
     <<"function (doc, meta) {
         'use strict';
-        if(doc['_record'] == '", RecordNameBin/binary, "' && doc['space_id'] == '", SpaceId/binary, "') {
-            var key = eval.call(null, '(", Function/binary, ")');
-            var key_to_emit = key(doc['value']);
-            if(key_to_emit) {
-                emit(key_to_emit, doc['_key']);
+        if(doc['_record'] == 'custom_metadata' && doc['space_id'] == '", SpaceId/binary, "') {
+            var user_map_callback = eval.call(null, '(", Function/binary, ")');
+            var result = user_map_callback(doc['_key'], doc['value']);
+            if(result) {
+                emit(result[0], result[1]);
             }
         }
     }">>,
-    % todo ReduceFunction
     ok = case Spatial of
         true ->
             couchbase_driver:save_spatial_view_doc(?DISC_CTX, IndexId, ViewFunction, Options);
@@ -155,28 +152,11 @@ save_db_view(IndexId, SpaceId, Function, ReduceFunction, Spatial, Options) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get view result.
+%% Query view.
 %% @end
 %%--------------------------------------------------------------------
--spec query_view_and_filter_values(od_space:id(), name(), list()) -> {ok, [file_meta:uuid()]}.
-query_view_and_filter_values(SpaceId, IndexName, Options) ->
-    Id = id(IndexName, SpaceId),
-    {ok, {Rows}} = couchbase_driver:query_view(?DISC_CTX, Id, Id, Options),
-    FileUuids = lists:map(fun(Row) ->
-        {<<"value">>, FileUuid} = lists:keyfind(<<"value">>, 1, Row),
-        FileUuid
-    end, Rows),
-    {ok, lists:filtermap(fun(Uuid) ->
-        try
-            {true, fslogic_uuid:uuid_to_guid(Uuid)}
-        catch
-            _:Error ->
-                ?error("Cannot resolve uuid of file ~p in index ~p, error ~p", [Uuid, Id, Error]),
-                false
-        end
-    end, FileUuids)}.
-
-query_view(SpaceId, IndexName, Options) ->
+-spec query(od_space:id(), name(), options()) -> {ok, datastore_json:ejson()} | {error, term()}.
+query(SpaceId, IndexName, Options) ->
     Id = id(IndexName, SpaceId),
     couchbase_driver:query_view(?DISC_CTX, Id, Id, Options).
 

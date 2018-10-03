@@ -14,6 +14,7 @@
 
 -include("http/http_common.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([terminate/3, allowed_methods/2, is_authorized/2,
@@ -93,16 +94,54 @@ query_index(Req, State) ->
     #{space_id := SpaceId, index_name := IndexName} = StateWithSpatial,
     Options = index_utils:sanitize_query_options(StateWithSpatial),
 
-    case index:query_view_and_filter_values(SpaceId, IndexName, Options) of
-        {ok, Guids} ->
-            ObjectIds = lists:map(fun(Guid) ->
-                {ok, ObjectId} = cdmi_id:guid_to_objectid(Guid),
-                ObjectId
-            end, Guids),
-
-            {json_utils:encode(ObjectIds), ReqWithSpatial, StateWithSpatial};
+    case index:query(SpaceId, IndexName, Options) of
+        {ok, QueryResult} ->
+            case process_query_result(QueryResult) of
+                {error, index_function} ->
+                    throw(?ERROR_INDEX_FUNCTION);
+                ProcessedResult ->
+                    {json_utils:encode(ProcessedResult), ReqWithSpatial, StateWithSpatial}
+            end;
         {error, not_found} ->
             throw(?ERROR_INDEX_NOT_FOUND);
         {error, not_supported} ->
             ok % TODO index not supported on this provider
+    end.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Processes query result before returning it to user.
+%% @end
+%%-------------------------------------------------------------------
+-spec process_query_result(datastore_json:ejson()) -> datastore_json:ejson().
+process_query_result(QueryResult) ->
+    {Rows} = QueryResult,
+    Rows2 = lists:map(fun(Row) ->
+        {<<"value">>, Value} = lists:keyfind(<<"value">>, 1, Row),
+        Value2 = process_value(Value),
+        lists:keyreplace(<<"value">>, 1, Value2, Row)
+    end, Rows),
+    Rows2.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Processes query values from one row.
+%% FileUuid is replaced with cdmi objectid.
+%% @end
+%%-------------------------------------------------------------------
+-spec process_value(file_meta:uuid() | [term()]) ->
+    cdmi_id:objectid() | [term()].
+process_value([Uuid | RestValues]) ->
+    ObjectId = process_value(Uuid),
+    [ObjectId | RestValues];
+process_value(Uuid) ->
+    try
+        Guid = fslogic_uuid:uuid_to_guid(Uuid),
+        cdmi_id:guid_to_objectid(Guid)
+    catch
+        Error:Reason ->
+            ?error_stacktrace("Processing result of index query failed due to ~p:~p", [Error, Reason]),
+            {error, index_function}
     end.
