@@ -21,7 +21,7 @@
     attributes,
     changes,
     files,
-    index,
+    index_by_name,
     index_collection,
     metadata,
     onedata_metrics,

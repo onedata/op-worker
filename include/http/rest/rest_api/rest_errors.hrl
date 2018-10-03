@@ -207,10 +207,10 @@
     <<"invalid_replica_update_min_changes">>,
     <<"Requested replica update min changes is invalid, it must be a positive integer.">>)
 ).
--define(ERROR_PROVIDER_NOT_SUPPORTING_INDEX, ?ERROR_REPLY(
+-define(ERROR_PROVIDER_NOT_SUPPORTING_INDEX(__ProviderId), ?ERROR_REPLY(
     ?BAD_REQUEST,
     <<"error_provider_not_supporting_index">>,
-    <<"Given provider does not support specified index.">>)
+    <<"Provider ", __ProviderId/binary, " does not support specified index.">>)
 ).
 -define(ERROR_INDEX_FUNCTION, ?ERROR_REPLY(
     ?BAD_REQUEST,
@@ -229,10 +229,10 @@
     <<"error_provider_not_found">>,
     <<"Given provider could not be found.">>)
 ).
--define(ERROR_PROVIDER_NOT_SUPPORTING_SPACE, ?ERROR_REPLY(
+-define(ERROR_PROVIDER_NOT_SUPPORTING_SPACE(__ProviderId), ?ERROR_REPLY(
     ?BAD_REQUEST,
     <<"error_provider_not_supporting_space">>,
-    <<"Given provider does not support requested space.">>)
+    <<"Provider ", __ProviderId/binary, " does not support requested space.">>)
 ).
 -define(ERROR_TRANSFER_NOT_FOUND, ?ERROR_REPLY(
     ?BAD_REQUEST,

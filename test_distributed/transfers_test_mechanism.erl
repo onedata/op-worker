@@ -579,7 +579,7 @@ await_countdown(Refs, DataMap, Timetrap) ->
             DataMap;
         _ ->
             receive
-                {?COUNTDOWN_FINISHED, Ref, AssertionNode, Data} ->
+                {?COUNTDOWN_FINISHED, Ref, _AssertionNode, Data} ->
                     Refs2 = sets:del_element(Ref, Refs),
                     DataMap2 = DataMap#{Ref => Data},
                     await_countdown(Refs2, DataMap2, Timetrap)
@@ -644,7 +644,7 @@ prereplicate_file(Node, SessionId, FileGuid, CounterRef, ExpectedSize, Attempts)
                 lfm_proxy:close(Node, Handle),
                 byte_size(Data)
             catch
-                E:R ->
+                _E:_R ->
                     error
             end
         end, Attempts),
@@ -864,8 +864,9 @@ schedule_replication_by_index(ScheduleNode, ProviderId, User, SpaceId, IndexName
     schedule_replication_by_index_via_rest(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config).
 
 schedule_replication_by_index_via_rest(Worker, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config) ->
+    QueryParamsBin = create_query_string(QueryViewParams),
     case rest_test_utils:request(Worker,
-        <<"replicas-index/", IndexName/binary, "?provider_id=", ProviderId/binary, "&space_id=", SpaceId/binary>>, % todo queryParams to qs,
+        <<"replicas-index/", IndexName/binary, "?provider_id=", ProviderId/binary, "&space_id=", SpaceId/binary, QueryParamsBin/binary>>,
         post, [?USER_TOKEN_HEADER(Config, User)], []
     ) of
         {ok, 200, _, Body} ->
@@ -934,7 +935,18 @@ schedule_replica_eviction_by_index_via_lfm(ScheduleNode, ProviderId, User, Space
     lfm_proxy:schedule_replica_eviction_by_index(ScheduleNode, SessionId, ProviderId, undefined, SpaceId, IndexName, QueryViewParams).
 
 schedule_replica_eviction_by_index_via_rest(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config) ->
-    error(not_implemented).
+    QueryParamsBin = create_query_string(QueryViewParams),
+    case rest_test_utils:request(ScheduleNode,
+        <<"replicas-index/", IndexName/binary, "?provider_id=", ProviderId/binary, "&space_id=", SpaceId/binary, QueryParamsBin/binary>>,
+        delete, [?USER_TOKEN_HEADER(Config, User)], []
+    ) of
+        {ok, 200, _, Body} ->
+            DecodedBody = json_utils:decode(Body),
+            #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
+            {ok, Tid};
+        {ok, 400, _, Body} ->
+            {error, Body}
+    end.
 
 schedule_replica_migration(ScheduleNode, ProviderId, User, FileKey, Config, lfm, MigrationProviderId) ->
     schedule_replica_migration_by_lfm(ScheduleNode, ProviderId, User, FileKey, Config, MigrationProviderId);
@@ -955,7 +967,20 @@ schedule_replica_migration_by_index_via_lfm(ScheduleNode, ProviderId, User, Spac
     lfm_proxy:schedule_replica_eviction_by_index(ScheduleNode, SessionId, ProviderId, MigrationProviderId, SpaceId, IndexName, QueryViewParams).
 
 schedule_replica_migration_by_index_via_rest(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config, MigrationProviderId) ->
-    error(not_implemented).
+    QueryParamsBin = create_query_string(QueryViewParams),
+    case rest_test_utils:request(ScheduleNode,
+        <<"replicas-index/", IndexName/binary, "?provider_id=", ProviderId/binary,
+            "&migration_provider_id=", MigrationProviderId/binary, "&space_id=", SpaceId/binary, QueryParamsBin/binary
+        >>,
+        delete, [?USER_TOKEN_HEADER(Config, User)], []
+    ) of
+        {ok, 200, _, Body} ->
+            DecodedBody = json_utils:decode(Body),
+            #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
+            {ok, Tid};
+        {ok, 400, _, Body} ->
+            {error, Body}
+    end.
 
 cancel_transfer(ScheduleNode, Tid, Config, lfm) ->
     cancel_transfer_by_lfm(ScheduleNode, Tid, Config);
@@ -1025,3 +1050,26 @@ await_transfer_starts(Node, TransferId) ->
                 false
         end
     end, 60).
+
+create_query_string(QueryViewParams) ->
+    lists:foldl(fun(Option, TmpQuery) ->
+        OptionBin = case Option of
+            {Key, Val} ->
+                KeyBin = atom_to_binary(Key, utf8),
+                ValBin = binary_from_term(Val),
+                <<KeyBin/binary, "=", ValBin/binary>>;
+            _ ->
+                TmpOptionBin = atom_to_binary(Option, utf8),
+                <<TmpOptionBin/binary, "=true">>
+        end,
+        <<TmpQuery/binary, "&", OptionBin/binary>>
+    end, <<>>, QueryViewParams).
+
+binary_from_term(Val) when is_binary(Val) ->
+    Val;
+binary_from_term(Val) when is_integer(Val) ->
+    integer_to_binary(Val);
+binary_from_term(Val) when is_float(Val) ->
+    float_to_binary(Val);
+binary_from_term(Val) when is_atom(Val) ->
+    atom_to_binary(Val, utf8).

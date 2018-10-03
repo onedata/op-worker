@@ -255,5 +255,5 @@ throw_if_nonexistent_provider(SpaceId, ProviderId) ->
         true ->
             ok;
         false ->
-            throw(?ERROR_PROVIDER_NOT_SUPPORTING_SPACE)
+            throw(?ERROR_PROVIDER_NOT_SUPPORTING_SPACE(ProviderId))
     end.

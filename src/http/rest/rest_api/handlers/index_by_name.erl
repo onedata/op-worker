@@ -14,6 +14,7 @@
 
 -include("http/http_common.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 
 %% API
 -export([terminate/3, allowed_methods/2, is_authorized/2,
@@ -85,12 +86,8 @@ delete_resource(Req, State) ->
 
     #{space_id := SpaceId, index_name := IndexName} = State3,
 
-    case index:delete(SpaceId, IndexName) of
-        ok ->
-            {true, Req3, State3};
-        {error, not_found} ->
-            throw(?ERROR_INDEX_NOT_FOUND)
-    end.
+    ok = index:delete(SpaceId, IndexName),
+    {true, Req3, State3}.
 
 %%%===================================================================
 %%% Content type handler functions
@@ -138,25 +135,14 @@ get_index(Req, State) ->
     end.
 
 %%--------------------------------------------------------------------
-%% '/api/v3/oneprovider/index/{iid}'
-%% @doc This method replaces an existing index code with request body content.
-%%
-%% The indexes are defined as JavaScript functions which are executed
-%% on the database backend.
-%%
-%% ***Example cURL requests***
-%%
-%% **Get list of indexes for space**
-%% &#x60;&#x60;&#x60;bash
-%% curl --tlsv1.2 -H \&quot;X-Auth-Token: $TOKEN\&quot; -X PUT \\
-%% -H \&quot;Content-type: application/javascript\&quot; \\
-%% -d \&quot;@./my_improved_index1.js\&quot; \\
-%% https://$HOST:443/api/v1/oneprovider/index/f209c965-e212-4149-af72-860faea4187a
-%% &#x60;&#x60;&#x60;
+%% '/api/v3/oneprovider/spaces/{sid}/indexes/{name}'
+%% @doc This method creates or replaces an existing index code with request
+%% body content and options specified in query string.
 %%
 %% HTTP method: PUT
 %%
-%% @param iid Id of the index to update.
+%% @param sid Id of the space within which index exist.
+%% @param name Name of the index.
 %%--------------------------------------------------------------------
 -spec create_or_modify_index(req(), maps:map()) -> term().
 create_or_modify_index(Req, State) ->
@@ -180,9 +166,14 @@ create_or_modify_index(Req, State) ->
         function := MapFunction,
         reduce_function := ReduceFunction,
         providers := Providers
-    } = State,
+    } = State8,
 
-    index:save(SpaceId, IndexName, MapFunction, ReduceFunction, Options, Spatial, Providers).
+    lists:foreach(fun(ProviderId) ->
+        throw_if_provider_does_not_support_space(SpaceId, ProviderId)
+    end, Providers),
+
+    ok = index:save(SpaceId, IndexName, MapFunction, ReduceFunction, Options, Spatial, Providers),
+    {stop, cowboy_req:reply(?HTTP_OK, Req8), State8}.
 
 %%%===================================================================
 %%% Internal functions
@@ -220,4 +211,21 @@ prepare_options([{replica_update_min_changes, ReplicaUpdateMinChanges} | Rest]) 
             [{replica_update_min_changes, N} | prepare_options(Rest)];
         _Error ->
             throw(?ERROR_INVALID_REPLICA_UPDATE_MIN_CHANGES)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Throws error if given provider does not support given space
+%% @end
+%%--------------------------------------------------------------------
+-spec throw_if_provider_does_not_support_space(od_space:id(), od_provider:id()) ->
+    ok.
+throw_if_provider_does_not_support_space(_SpaceId, undefined) ->
+    ok;
+throw_if_provider_does_not_support_space(SpaceId, ProviderId) ->
+    case space_logic:is_supported(?ROOT_SESS_ID, SpaceId, ProviderId) of
+        true ->
+            ok;
+        false ->
+            throw(?ERROR_PROVIDER_NOT_SUPPORTING_SPACE(ProviderId))
     end.

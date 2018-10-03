@@ -14,6 +14,7 @@
 
 -include("http/http_common.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 
 -define(ALLOWED_METADATA_TYPES, [<<"json">>, <<"rdf">>, undefined]).
 
@@ -38,7 +39,7 @@
     parse_spatial/2, parse_start_range/2, parse_end_range/2,
 
     parse_index_name/2, parse_update_min_changes/2,
-    parse_replica_update_min_changes/2
+    parse_replica_update_min_changes/2, parse_index_providers/2
 ]).
 
 %% TODO VFS-2574 Make validation of result map
@@ -646,36 +647,24 @@ parse_replica_update_min_changes(Req, State) ->
     {Val, NewReq} = qs_val(<<"replicaUpdateMinChanges">>, Req),
     {State#{replica_update_min_changes => Val}, NewReq}.
 
-%%%%--------------------------------------------------------------------
-%%%% @doc
-%%%% Retrieves request's inherited param and adds it to State.
-%%%% @end
-%%%%--------------------------------------------------------------------
-%%-spec parse_index_providers(cowboy_req:req(), maps:map()) ->
-%%    {parse_result(), cowboy_req:req()}.
-%%parse_index_providers(Req, State) ->
-%%    {RawProvidersList, NewReq} = qs_val(<<"providers">>, Req),
-%%    case RawProvidersList of
-%%        undefined ->
-%%            {State#{providers => [oneprovider:get_id()]}, NewReq};
-%%        _ ->
-%%            try
-%%                Limit = binary_to_integer(RawLimit),
-%%                case Limit > 0 of
-%%                    true -> ok;
-%%                    false -> throw(?ERROR_INVALID_LIMIT)
-%%                end,
-%%                case Limit < ?MAX_LIMIT of
-%%                    true ->
-%%                        {State#{limit => Limit}, NewReq};
-%%                    false ->
-%%                        throw(?ERROR_LIMIT_TOO_LARGE(?MAX_LIMIT))
-%%                end
-%%            catch
-%%                _:_ ->
-%%                    throw(?ERROR_INVALID_LIMIT)
-%%            end
-%%    end.
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's providers param and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_index_providers(cowboy_req:req(), maps:map()) ->
+    {parse_result(), cowboy_req:req()}.
+parse_index_providers(Req, State) ->
+    {RawProviders, NewReq} = qs_val(<<"providers[]">>, Req),
+    Providers = case RawProviders of
+        undefined ->
+            [oneprovider:get_id()];
+        _ when is_binary(RawProviders) ->
+            [RawProviders];
+        _ ->
+            RawProviders
+    end,
+    {State#{providers => Providers}, NewReq}.
 
 %%%===================================================================
 %%% Internal functions
@@ -691,7 +680,6 @@ parse_replica_update_min_changes(Req, State) ->
 qs_val(Name, Req) ->
     qs_val(Name, Req, undefined).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Retrieves qs param and cache parsed params.
@@ -702,8 +690,25 @@ qs_val(Name, Req) ->
 qs_val(Name, Req, Default) ->
     case maps:get('_params', Req, undefined) of
         undefined ->
-            Params = maps:from_list(cowboy_req:parse_qs(Req)),
+            Params = parse_qs(Req),
             {maps:get(Name, Params, Default), Req#{'_params' => Params}};
         Map ->
             {maps:get(Name, Map, Default), Req}
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Parse query string.
+%% @end
+%%--------------------------------------------------------------------
+parse_qs(Req) ->
+    lists:foldl(fun({Key, Val}, AccMap) ->
+        case maps:get(Key, AccMap, undefined) of
+            undefined ->
+                AccMap#{Key => Val};
+            OldVal when is_list(OldVal) ->
+                AccMap#{Key => [Val | OldVal]};
+            OldVal ->
+                AccMap#{Key => [Val, OldVal]}
+        end
+    end, #{}, cowboy_req:parse_qs(Req)).

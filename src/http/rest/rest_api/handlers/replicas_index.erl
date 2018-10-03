@@ -226,7 +226,7 @@ throw_if_nonexistent_provider(SpaceId, ProviderId) ->
         true ->
             ok;
         false ->
-            throw(?ERROR_PROVIDER_NOT_SUPPORTING_SPACE)
+            throw(?ERROR_PROVIDER_NOT_SUPPORTING_SPACE(ProviderId))
     end.
 
 %%--------------------------------------------------------------------
@@ -243,5 +243,5 @@ throw_if_index_not_supported(SpaceId, IndexName, ProviderId) ->
         true ->
             ok;
         false ->
-            throw(?ERROR_PROVIDER_NOT_SUPPORTING_SPACE)
+            throw(?ERROR_PROVIDER_NOT_SUPPORTING_INDEX(ProviderId))
     end.

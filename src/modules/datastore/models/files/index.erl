@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([delete/2, list/1, save/7, save_db_view/6,
+-export([delete/2, list/1, list/4, save/7, save_db_view/6,
     query/3, get_json/2, is_supported/3]).
 
 %% datastore_model callbacks
@@ -46,16 +46,14 @@
 %%% API
 %%%===================================================================
 
-% TODO jakie ma być id?
-
 -spec save(od_space:id(), name(), index_function(), undefined | index_function(),
     options(), boolean(), [od_provider:id()]) -> ok.
 save(SpaceId, Name, MapFunction, ReduceFunction, Options, Spatial, Providers) ->
     Id = id(Name, SpaceId),
-    EscapedMapFunction = escape_js_function(MapFunction),
+    EscapedMapFunction = index_utils:escape_js_function(MapFunction),
     EscapedReduceFunction = case ReduceFunction of
         undefined -> undefined;
-        _ -> escape_js_function(ReduceFunction)
+        _ -> index_utils:escape_js_function(ReduceFunction)
     end,
     Doc = #document{
         key = Id,
@@ -84,7 +82,7 @@ is_supported(SpaceId, IndexName, ProviderId) ->
     end.
 
 -spec get_json(od_space:id(), binary()) ->
-    #{binary() => term()} | {error, term()}.
+    {ok, #{binary() => term()}} | {error, term()}.
 get_json(SpaceId, IndexName) ->
     Id = id(IndexName, SpaceId),
     case datastore_model:get(?CTX, Id) of
@@ -95,13 +93,13 @@ get_json(SpaceId, IndexName) ->
             index_options = Options,
             providers = Providers
         }}} ->
-            #{
+            {ok, #{
                 <<"indexOptions">> => Options,
                 <<"providers">> => Providers,
                 <<"mapFunction">> => MapFunction,
                 <<"reduceFunction">> => ReduceFunction,
                 <<"spatial">> => Spatial
-            };
+            }};
         Error -> Error
     end.
 
@@ -163,28 +161,6 @@ query(SpaceId, IndexName, Options) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc escapes characters: \ " ' \n \t \v \0 \f \r
-%%--------------------------------------------------------------------
--spec escape_js_function(Function :: binary()) -> binary().
-escape_js_function(undefined) ->
-    undefined;
-escape_js_function(Function) ->
-    escape_js_function(Function, [{<<"\\\\">>, <<"\\\\\\\\">>}, {<<"'">>, <<"\\\\'">>},
-        {<<"\"">>, <<"\\\\\"">>}, {<<"\\n">>, <<"\\\\n">>}, {<<"\\t">>, <<"\\\\t">>},
-        {<<"\\v">>, <<"\\\\v">>}, {<<"\\0">>, <<"\\\\0">>}, {<<"\\f">>, <<"\\\\f">>},
-        {<<"\\r">>, <<"\\\\r">>}]).
-
-%%--------------------------------------------------------------------
-%% @doc Escapes characters given as proplists, in provided Function.
-%%--------------------------------------------------------------------
--spec escape_js_function(Function :: binary(), [{binary(), binary()}]) -> binary().
-escape_js_function(Function, []) ->
-    Function;
-escape_js_function(Function, [{Pattern, Replacement} | Rest]) ->
-    EscapedFunction = re:replace(Function, Pattern, Replacement, [{return, binary}, global]),
-    escape_js_function(EscapedFunction, Rest).
 
 %%%===================================================================
 %%% datastore_model callbacks
