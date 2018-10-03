@@ -1447,8 +1447,6 @@ echo_and_delete_file_loop_test_base(Config0, IterationsNum, User) ->
     end, lists:seq(1, IterationsNum)),
     ok.
 
--include_lib("ctool/include/logging.hrl").
-
 cancel_synchronizations_for_session_with_mocked_rtransfer_test_base(Config0) ->
     ct:timetrap({minutes, 240}),
 
@@ -1459,8 +1457,7 @@ cancel_synchronizations_for_session_with_mocked_rtransfer_test_base(Config0) ->
     UserCount = ?config(user_count, Config),
     BlockSizeBytes = BlockSize * 1024 * 1024,
     
-    Users = [<<"user", Num>> || Num <- lists:seq($1, $0 + UserCount)],
-
+    Users = [<<"user", (integer_to_binary(Num))/binary>> || Num <- lists:seq(1, UserCount)],
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
     SessId = fun(User, W) ->
         ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config)
@@ -1510,12 +1507,12 @@ cancel_synchronizations_for_session_with_mocked_rtransfer_test_base(Config0) ->
 
     ct:pal("Transfers canceled"),
     
-    ct:pal("File size: ~p~n"
+    ct:pal("Block size: ~p~n"
            "Block count: ~p~n"
            "Number of users: ~p~n"
            "Total time[ms]: ~p~n"
            "Average time per user[ms]: ~p", 
-        [FileSize, BlocksCount, UserCount, End-Start, lists:sum(Times)/length(Times)]).
+        [BlockSize, BlocksCount, UserCount, End-Start, lists:sum(Times)/length(Times)]).
 
 cancel_synchronizations_for_session_test_base(Config0) ->
     ct:timetrap({minutes, 240}),
@@ -1527,7 +1524,7 @@ cancel_synchronizations_for_session_test_base(Config0) ->
     UserCount = ?config(user_count, Config),
     BlockSizeBytes = BlockSize * 1024 * 1024,
 
-    Users = [<<"user", Num>> || Num <- lists:seq($1, $0 + UserCount)],
+    Users = [<<"user", (integer_to_binary(Num))/binary>> || Num <- lists:seq(1, UserCount)],
 
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
     SessId = fun(User, W) ->
@@ -1574,17 +1571,25 @@ cancel_synchronizations_for_session_test_base(Config0) ->
 
     ct:pal("Transfers canceled"),
     
-    lists:foreach(fun(Promise) ->
-        ?assertMatch({error, cancelled}, rpc:yield(Promise))
-    end, Promises),
-    End = erlang:monotonic_time(millisecond),
-
+    {OkCount, CancelCount} = lists:foldl(fun(Promise, {Ok, Cancel}) ->
+        case rpc:yield(Promise) of
+            {error, cancelled} ->
+                {Ok, Cancel+1};
+            {ok, _} ->
+                {Ok+1, Cancel}
+        end
+    end, {0,0}, Promises),
     
-    ct:pal("File size: ~p~n"
+    ?assertEqual(0, rpc:call(Worker1, ets, info, [rtransfer_link_requests, size]), 500),
+    End = erlang:monotonic_time(millisecond),
+    
+    ct:pal("Block size: ~p~n"
     "Block count: ~p~n"
     "Number of users: ~p~n"
-    "Total time[s]: ~p~n",
-        [FileSize, BlocksCount, UserCount, (End-Start)/1000]).
+    "Total time[s]: ~p~n"
+    "Finished transfers: ~p~n"
+    "Cancelled transfers: ~p~n",
+        [BlockSize, BlocksCount, UserCount, (End-Start)/1000, OkCount, CancelCount]).
 
 
 %%%===================================================================

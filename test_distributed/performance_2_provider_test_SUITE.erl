@@ -126,6 +126,7 @@ cancel_synchronizations_for_session_with_mocked_rtransfer_test(Config) ->
             [{name, block_size}, {value, 80}, {description, "Block size in MB"}],
             [{name, block_count}, {value, 120000},
                 {description, "Total number of blocks to synchronize"}],
+            % note: users have to be defined in env_desc.json and have form like <<"user1">>
             [{name, user_count}, {value, 1}, {description, "Number of users used in test"}]
         ]},
         {description, "Test performance of transfer cancelation"},
@@ -154,11 +155,18 @@ cancel_synchronizations_for_session_test(Config) ->
             [{name, block_size}, {value, 80}, {description, "Block size in MB"}],
             [{name, block_count}, {value, 60000},
                 {description, "Total number of blocks to synchronize"}],
+            % note: users have to be defined in env_desc.json and have form like <<"user1">>
             [{name, user_count}, {value, 1}, {description, "Number of users used in test"}]
         ]},
         {description, "Test performance of transfer cancelation"},
         {config, [{name, basic},
             {parameters, [
+            ]},
+            {description, ""}
+        ]},
+        {config, [{name, many_users},
+            {parameters, [
+                [{name, user_count}, {value, 9}]
             ]},
             {description, ""}
         ]}
@@ -208,7 +216,7 @@ init_per_testcase(cancel_synchronizations_for_session_with_mocked_rtransfer_test
             {ok, Ref}
         end
     ),
-    init_per_testcase(default, Config);
+    init_per_testcase(?DEFAULT_CASE(cancel_synchronizations_for_session_with_mocked_rtransfer_test), Config);
 init_per_testcase(_Case, Config) ->
     ssl:start(),
     hackney:start(),
@@ -228,9 +236,3 @@ end_per_testcase(_Case, Config) ->
     initializer:unload_quota_mocks(Config),
     hackney:stop(),
     ssl:stop().
-
-meck_get_num_calls(Nodes, Module, Fun, Args) ->
-    lists:map(fun(Node) ->
-        rpc:call(Node, meck, num_calls, [Module, Fun, Args], timer:seconds(60))
-              end, Nodes).
-

@@ -87,7 +87,7 @@
 -export([
     synchronize/6, request_synchronization/6, request_synchronization/7,
     update_replica/4, force_flush_events/1,
-    cancel/1, cancel_transfers_of_session/2, cancel_transfers_of_session_sync/2,
+    cancel/1, cancel_transfers_of_session/2,
     terminate_all/0
 ]).
 % gen_server callbacks
@@ -100,7 +100,7 @@
 -export([apply_if_alive_internal/2, apply_internal/2, apply_or_run_locally_internal/3,
     init_or_return_existing/1]).
 % For testing
--export([find_overlapping/3, get_holes/2]).
+-export([find_overlapping/3, get_holes/2, cancel_transfers_of_session_sync/2]).
 
 %%%===================================================================
 %%% API
@@ -811,9 +811,10 @@ cancel_transfer_id(TransferId, State) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Cancels a transfers by SessionId.
+%% Cancels transfers by SessionId.
 %% @end
 %%--------------------------------------------------------------------
+-spec cancel_session(session:id(), #state{}) -> #state{}.
 cancel_session(SessionId, State) ->
     try
         case maps:take(SessionId, State#state.session_to_froms) of
