@@ -15,7 +15,7 @@
 -include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
 
--type key() :: file_meta:uuid().
+-type key() :: datastore:key().
 -type doc() :: datastore_model:doc(record()).
 -type record() :: #storage_sync_info{}.
 -type error() :: {error, term()}.
@@ -24,10 +24,10 @@
 -export_type([key/0, doc/0, record/0]).
 
 %% API
--export([delete/1, get/1, create_or_update/3]).
+-export([delete/2, get/2, create_or_update/3]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_struct/1, get_record_version/0, upgrade_record/2]).
+-export([get_ctx/0, get_record_struct/1, get_record_version/0, upgrade_record/2, id/2]).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -43,29 +43,39 @@
 %% @equiv datastore_model:get(?CTX, Uuid).
 %% @end
 %%-------------------------------------------------------------------
--spec get(key()) -> {ok, doc()} | error().
-get(Uuid) ->
-    datastore_model:get(?CTX, Uuid).
+-spec get(file_meta:path(), od_space:id()) -> {ok, doc()} | error().
+get(FilePath, SpaceId) ->
+    datastore_model:get(?CTX, id(FilePath, SpaceId)).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates or updates storage_sync_info document.
 %% @end
 %%--------------------------------------------------------------------
--spec create_or_update(key(), diff(), od_space:id()) -> {ok, doc()} | error().
-create_or_update(Uuid, Diff, SpaceId) ->
-    DefaultDoc = default_doc(Uuid, Diff, SpaceId),
-    datastore_model:update(?CTX, Uuid, Diff, DefaultDoc).
+-spec create_or_update(file_meta:path(), diff(), od_space:id()) ->
+    {ok, doc()} | error().
+create_or_update(FilePath, Diff, SpaceId) ->
+    Id = id(FilePath, SpaceId),
+    DefaultDoc = default_doc(Id, Diff, SpaceId),
+    datastore_model:update(?CTX, Id, Diff, DefaultDoc).
 
 %%-------------------------------------------------------------------
 %% @doc
 %% @equiv datastore_model:delete(?CTX, Uuid).
 %% @end
 %%-------------------------------------------------------------------
--spec delete(key()) -> ok | error().
-delete(Uuid) ->
-    datastore_model:delete(?CTX, Uuid).
+-spec delete(file_meta:path(), od_space:id()) -> ok | error().
+delete(FilePath, SpaceId) ->
+    datastore_model:delete(?CTX, id(FilePath, SpaceId)).
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Generates key basing of given FilePath
+%% @end
+%%-------------------------------------------------------------------
+-spec id(file_meta:path(), od_space:id()) -> key().
+id(FilePath, SpaceId) ->
+    datastore_utils:gen_key(SpaceId, FilePath).
 
 %%===================================================================
 %% Internal functions
