@@ -654,27 +654,17 @@ parse_replica_update_min_changes(Req, State) ->
 %%--------------------------------------------------------------------
 -spec parse_index_providers(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
-parse_index_providers(Req, State = #{space_id := SpaceId}) ->
-    ConstraintFun = fun(ProviderId) ->
-        case space_logic:is_supported(?ROOT_SESS_ID, SpaceId, ProviderId) of
-            true ->
-                {true, ProviderId};
-            false ->
-                throw(?ERROR_PROVIDER_NOT_SUPPORTING_SPACE)
-        end
+parse_index_providers(Req, State) ->
+    {RawProviders, NewReq} = qs_val(<<"providers[]">>, Req),
+    Providers = case RawProviders of
+        undefined ->
+            [oneprovider:get_id()];
+        _ when is_binary(RawProviders) ->
+            [RawProviders];
+        _ ->
+            RawProviders
     end,
-    #{providers := Providers} = cowboy_req:match_qs([
-        {providers, ConstraintFun, [oneprovider:get_id()]}
-    ], Req),
-
-    ProvidersList = case Providers of
-        _ when is_list(Providers) ->
-            Providers;
-        _ when is_binary(Providers) ->
-            [Providers]
-    end,
-
-    {State#{providers => ProvidersList}, Req}.
+    {State#{providers => Providers}, NewReq}.
 
 %%%===================================================================
 %%% Internal functions
@@ -690,7 +680,6 @@ parse_index_providers(Req, State = #{space_id := SpaceId}) ->
 qs_val(Name, Req) ->
     qs_val(Name, Req, undefined).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Retrieves qs param and cache parsed params.
@@ -701,8 +690,25 @@ qs_val(Name, Req) ->
 qs_val(Name, Req, Default) ->
     case maps:get('_params', Req, undefined) of
         undefined ->
-            Params = maps:from_list(cowboy_req:parse_qs(Req)),
+            Params = parse_qs(Req),
             {maps:get(Name, Params, Default), Req#{'_params' => Params}};
         Map ->
             {maps:get(Name, Map, Default), Req}
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Parse query string.
+%% @end
+%%--------------------------------------------------------------------
+parse_qs(Req) ->
+    lists:foldl(fun({Key, Val}, AccMap) ->
+        case maps:get(Key, AccMap, undefined) of
+            undefined ->
+                AccMap#{Key => Val};
+            OldVal when is_list(OldVal) ->
+                AccMap#{Key => [Val | OldVal]};
+            OldVal ->
+                AccMap#{Key => [Val, OldVal]}
+        end
+    end, #{}, cowboy_req:parse_qs(Req)).

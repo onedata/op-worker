@@ -51,7 +51,7 @@
 -spec save(od_space:id(), name(), index_function(), options(), boolean(), [od_provider:id()]) -> ok.
 save(SpaceId, Name, MapFunction, Options, Spatial, Providers) ->
     Id = id(Name, SpaceId),
-    EscapedMapFunction = escape_js_function(MapFunction),
+    EscapedMapFunction = index_utils:escape_js_function(MapFunction),
     Doc = #document{
         key = Id,
         value = #index{
@@ -161,28 +161,6 @@ query_view(SpaceId, IndexName, Options) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc escapes characters: \ " ' \n \t \v \0 \f \r
-%%--------------------------------------------------------------------
--spec escape_js_function(Function :: binary()) -> binary().
-escape_js_function(undefined) ->
-    undefined;
-escape_js_function(Function) ->
-    escape_js_function(Function, [{<<"\\\\">>, <<"\\\\\\\\">>}, {<<"'">>, <<"\\\\'">>},
-        {<<"\"">>, <<"\\\\\"">>}, {<<"\\n">>, <<"\\\\n">>}, {<<"\\t">>, <<"\\\\t">>},
-        {<<"\\v">>, <<"\\\\v">>}, {<<"\\0">>, <<"\\\\0">>}, {<<"\\f">>, <<"\\\\f">>},
-        {<<"\\r">>, <<"\\\\r">>}]).
-
-%%--------------------------------------------------------------------
-%% @doc Escapes characters given as proplists, in provided Function.
-%%--------------------------------------------------------------------
--spec escape_js_function(Function :: binary(), [{binary(), binary()}]) -> binary().
-escape_js_function(Function, []) ->
-    Function;
-escape_js_function(Function, [{Pattern, Replacement} | Rest]) ->
-    EscapedFunction = re:replace(Function, Pattern, Replacement, [{return, binary}, global]),
-    escape_js_function(EscapedFunction, Rest).
 
 %%%===================================================================
 %%% datastore_model callbacks

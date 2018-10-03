@@ -14,6 +14,7 @@
 
 -include("http/http_common.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 
 %% API
 -export([terminate/3, allowed_methods/2, is_authorized/2,
@@ -166,6 +167,10 @@ create_or_modify_index(Req, State) ->
         providers := Providers
     } = State8,
 
+    lists:foreach(fun(ProviderId) ->
+        throw_if_provider_does_not_support_space(SpaceId, ProviderId)
+    end, Providers),
+
     ok = index:save(SpaceId, IndexName, MapFunction, Options, Spatial, Providers),
     {stop, cowboy_req:reply(?HTTP_OK, Req8), State8}.
 
@@ -205,4 +210,21 @@ prepare_options([{replica_update_min_changes, ReplicaUpdateMinChanges} | Rest]) 
             [{replica_update_min_changes, N} | prepare_options(Rest)];
         _Error ->
             throw(?ERROR_INVALID_REPLICA_UPDATE_MIN_CHANGES)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Throws error if given provider does not support given space
+%% @end
+%%--------------------------------------------------------------------
+-spec throw_if_provider_does_not_support_space(od_space:id(), od_provider:id()) ->
+    ok.
+throw_if_provider_does_not_support_space(_SpaceId, undefined) ->
+    ok;
+throw_if_provider_does_not_support_space(SpaceId, ProviderId) ->
+    case space_logic:is_supported(?ROOT_SESS_ID, SpaceId, ProviderId) of
+        true ->
+            ok;
+        false ->
+            throw(?ERROR_PROVIDER_NOT_SUPPORTING_SPACE(ProviderId))
     end.

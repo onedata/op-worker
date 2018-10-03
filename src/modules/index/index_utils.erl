@@ -15,7 +15,7 @@
 -include("http/rest/rest_api/rest_errors.hrl").
 
 %% API
--export([sanitize_query_options/1]).
+-export([sanitize_query_options/1, escape_js_function/1]).
 
 
 %%--------------------------------------------------------------------
@@ -28,6 +28,28 @@ sanitize_query_options(Map) when is_map(Map) ->
     sanitize_query_options(maps:to_list(Map), []);
 sanitize_query_options(RawOptionsList) ->
     sanitize_query_options(RawOptionsList, []).
+
+%%--------------------------------------------------------------------
+%% @doc escapes characters: \ " ' \n \t \v \0 \f \r
+%%--------------------------------------------------------------------
+-spec escape_js_function(Function :: binary()) -> binary().
+escape_js_function(undefined) ->
+    undefined;
+escape_js_function(Function) ->
+    escape_js_function(Function, [{<<"\\\\">>, <<"\\\\\\\\">>}, {<<"'">>, <<"\\\\'">>},
+        {<<"\"">>, <<"\\\\\"">>}, {<<"\\n">>, <<"\\\\n">>}, {<<"\\t">>, <<"\\\\t">>},
+        {<<"\\v">>, <<"\\\\v">>}, {<<"\\0">>, <<"\\\\0">>}, {<<"\\f">>, <<"\\\\f">>},
+        {<<"\\r">>, <<"\\\\r">>}]).
+
+%%--------------------------------------------------------------------
+%% @doc Escapes characters given as proplists, in provided Function.
+%%--------------------------------------------------------------------
+-spec escape_js_function(Function :: binary(), [{binary(), binary()}]) -> binary().
+escape_js_function(Function, []) ->
+    Function;
+escape_js_function(Function, [{Pattern, Replacement} | Rest]) ->
+    EscapedFunction = re:replace(Function, Pattern, Replacement, [{return, binary}, global]),
+    escape_js_function(EscapedFunction, Rest).
 
 %%%===================================================================
 %%% Internal functions
