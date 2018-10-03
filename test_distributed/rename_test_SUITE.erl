@@ -46,6 +46,7 @@
     times_update_test/1,
     moving_dir_into_itself_test/1,
     moving_dir_into_child_test/1,
+    moving_dir_permutated_path_test/1,
     moving_file_onto_itself_test/1,
     reading_from_open_file_after_rename_test/1,
     redirecting_event_to_renamed_file_test/1]).
@@ -65,6 +66,7 @@ all() ->
         times_update_test,
         moving_dir_into_itself_test,
         moving_dir_into_child_test,
+        moving_dir_permutated_path_test,
         moving_file_onto_itself_test,
         reading_from_open_file_after_rename_test,
         redirecting_event_to_renamed_file_test
@@ -633,6 +635,29 @@ moving_dir_into_child_test(Config) ->
         filename(1, TestDir, "/dir/dir2/dir3/dir_target"))),
     ?assertMatch({ok, [{_, <<"dir">>}]},
         lfm_proxy:ls(W, SessId, {path, filename(1, TestDir, "")}, 0, 100)).
+
+moving_dir_permutated_path_test(Config) ->
+    [W | _] = sorted_workers(Config),
+    TestDir = ?config(test_dir, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, ""))),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, "/dir"))),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, "/dir/dir2"))),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, "/dir2"))),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, "/dir2/dir"))),
+    ?assertMatch({ok, [{_, <<"dir">>}, {_, <<"dir2">>}]},
+        lfm_proxy:ls(W, SessId, {path, filename(1, TestDir, "")}, 0, 100)),
+
+    ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, {path, filename(1, TestDir, "/dir/dir2")},
+        filename(1, TestDir, "/dir2/dir/dir_target"))),
+
+    ?assertMatch({ok, [{_, <<"dir">>}, {_, <<"dir2">>}]},
+        lfm_proxy:ls(W, SessId, {path, filename(1, TestDir, "")}, 0, 100)),
+    ?assertMatch({ok, []},
+        lfm_proxy:ls(W, SessId, {path, filename(1, TestDir, "/dir")}, 0, 100)),
+    ?assertMatch({ok, [{_, <<"dir_target">>}]},
+        lfm_proxy:ls(W, SessId, {path, filename(1, TestDir, "/dir2/dir")}, 0, 100)).
 
 moving_file_onto_itself_test(Config) ->
     [W | _] = sorted_workers(Config),
