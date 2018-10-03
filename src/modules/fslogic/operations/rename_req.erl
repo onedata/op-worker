@@ -136,14 +136,27 @@ rename_within_space(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     {TargetFileType, TargetFileCtx, TargetParentFileCtx2} =
         get_child_type(TargetParentFileCtx, TargetName, UserCtx),
 
-    SourceEqualsTarget = TargetFileCtx =/= undefined
-        andalso file_ctx:equals(SourceFileCtx2, TargetFileCtx),
-    case SourceEqualsTarget of
-        true ->
-            rename_into_itself(file_ctx:get_guid_const(SourceFileCtx2));
-        false ->
+    SourceEqualsTarget = ((TargetFileCtx =/= undefined)
+        andalso (file_ctx:equals(SourceFileCtx2, TargetFileCtx))),
+
+    {SourcePath, SourceFileCtx3} = file_ctx:get_canonical_path(SourceFileCtx2),
+    {TargetPath, TargetParentFileCtx3} = file_ctx:get_canonical_path(TargetParentFileCtx2),
+
+    SourceTokens = fslogic_path:split(SourcePath),
+    TargetTokens = fslogic_path:split(TargetPath),
+    TargetTokensBeg = lists:sublist(TargetTokens, length(SourceTokens)),
+    MoveIntoItself = (TargetTokensBeg =:= SourceTokens),
+
+    case {SourceEqualsTarget, MoveIntoItself} of
+        {true, _} ->
+            rename_into_itself(file_ctx:get_guid_const(SourceFileCtx3));
+        {false, true} ->
+            #fuse_response{
+                status = #status{code = ?EINVAL}
+            };
+        _ ->
             rename_into_different_place_within_space(
-                UserCtx, SourceFileCtx2, TargetParentFileCtx2, TargetName,
+                UserCtx, SourceFileCtx3, TargetParentFileCtx3, TargetName,
                 SourceFileType, TargetFileType, TargetFileCtx)
     end.
 
