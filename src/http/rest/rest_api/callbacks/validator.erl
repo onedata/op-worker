@@ -633,7 +633,7 @@ parse_inherited(Req, State) ->
 -spec parse_update_min_changes(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_update_min_changes(Req, State) ->
-    {Val, NewReq} = qs_val(<<"updateMinChanges">>, Req),
+    {Val, NewReq} = qs_val(<<"update_min_changes">>, Req),
     {State#{update_min_changes => Val}, NewReq}.
 
 %%--------------------------------------------------------------------
@@ -644,7 +644,7 @@ parse_update_min_changes(Req, State) ->
 -spec parse_replica_update_min_changes(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_replica_update_min_changes(Req, State) ->
-    {Val, NewReq} = qs_val(<<"replicaUpdateMinChanges">>, Req),
+    {Val, NewReq} = qs_val(<<"replica_update_min_changes">>, Req),
     {State#{replica_update_min_changes => Val}, NewReq}.
 
 %%--------------------------------------------------------------------

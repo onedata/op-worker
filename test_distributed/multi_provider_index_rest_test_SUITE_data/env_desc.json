@@ -141,6 +141,19 @@
                         "storage": "nulldevice2"
                     }
                 }
+            },
+            "space2": {
+                "displayed_name": "space2",
+                "users": [
+                    "user1"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p2": {
+                        "storage": "nulldevice2"
+                    }
+                }
             }
         }
     }

@@ -26,6 +26,8 @@
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
+-include("http/rest/rest_api/rest_errors.hrl").
+
 
 %% API
 -export([
@@ -35,9 +37,12 @@
 ]).
 
 -export([
-    create_geospatial_index/1,
-    list_indexes/1,
     create_get_update_delete_index/1,
+    getting_nonexistent_index_should_fail/1,
+
+    getting_index_of_not_supported_space_should_fail/1,
+    list_indexes/1,
+    create_geospatial_index/1,
     query_geospatial_index/1,
     query_file_popularity_index/1,
     spatial_flag_test/1
@@ -45,9 +50,11 @@
 
 all() ->
     ?ALL([
-        create_geospatial_index,
-        list_indexes,
         create_get_update_delete_index,
+        getting_nonexistent_index_should_fail,
+        getting_index_of_not_supported_space_should_fail,
+        list_indexes,
+        create_geospatial_index,
         query_geospatial_index,
         query_file_popularity_index,
         spatial_flag_test
@@ -67,28 +74,21 @@ all() ->
 ).
 
 -define(MAP_FUNCTION,
-    <<"function (meta) {
+    <<"function (id, meta) {
         if(meta['onedata_json'] && meta['onedata_json']['meta'] && meta['onedata_json']['meta']['color']) {
-            return meta['onedata_json']['meta']['color'];
+            return [meta['onedata_json']['meta']['color'], id];
         }
         return null;
     }">>
 ).
 -define(GEOSPATIAL_MAP_FUNCTION,
-    <<"function (meta) {
+    <<"function (id, meta) {
         if(meta['onedata_json'] && meta['onedata_json']['loc']) {
-            return meta['onedata_json']['loc'];
+            return [meta['onedata_json']['loc'], id];
         }
         return null;
     }">>
 ).
-
--define(absPath(SpaceId, Path), <<"/", SpaceId/binary, "/", Path/binary>>).
-
--define(TEST_DATA, <<"test">>).
--define(TEST_DATA_SIZE, 4).
--define(TEST_DATA2, <<"test01234">>).
--define(TEST_DATA_SIZE2, 9).
 
 %%%===================================================================
 %%% Test functions
@@ -98,18 +98,12 @@ create_get_update_delete_index(Config) ->
     Workers = [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     Provider1 = ?PROVIDER_ID(WorkerP1),
     Provider2 = ?PROVIDER_ID(WorkerP2),
-
     IndexName = <<"name1">>,
-    Options = #{
-        update_min_changes => 10000,
-        replica_update_min_changes => 100
-    },
 
     % create on one provider
     ?assertMatch([], list_indexes_via_rest(Config, WorkerP1, ?SPACE_ID, 100)),
     ?assertMatch(ok, create_index_via_rest(
-        Config, WorkerP1, ?SPACE_ID, IndexName,
-        ?MAP_FUNCTION, false, [Provider1, Provider2], Options
+        Config, WorkerP1, ?SPACE_ID, IndexName, ?MAP_FUNCTION, false
     )),
     ?assertMatch([IndexName], list_indexes_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
     ?assertMatch([IndexName], list_indexes_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
@@ -117,19 +111,77 @@ create_get_update_delete_index(Config) ->
     % get on both
     ExpMapFun = index_utils:escape_js_function(?MAP_FUNCTION),
     lists:foreach(fun(Worker) ->
-        ?assertMatch(#{
-            <<"indexOptions">> := [], % todo options
-            <<"providers">> := [Provider2, Provider1],
+        ?assertMatch({ok, #{
+            <<"indexOptions">> := #{},
+            <<"providers">> := [Provider1],
             <<"mapFunction">> := ExpMapFun,
-            % <<"reduceFunction">> := ReduceFunction, todo
+            <<"reduceFunction">> := null,
             <<"spatial">> := false
-        }, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
+        }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
+    end, Workers),
+
+    % update on other provider (via create)
+    Options = #{
+        <<"update_min_changes">> => 10000,
+        <<"replica_update_min_changes">> => 100
+    },
+    ?assertMatch(ok, create_index_via_rest(
+        Config, WorkerP1, ?SPACE_ID, IndexName,
+        ?MAP_FUNCTION, false, [Provider2], Options
+    )),
+    ?assertMatch([IndexName], list_indexes_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([IndexName], list_indexes_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
+
+    % get on both after update
+    lists:foreach(fun(Worker) ->
+        ?assertMatch({ok, #{
+            <<"indexOptions">> := Options,
+            <<"providers">> := [Provider2],
+            <<"mapFunction">> := ExpMapFun,
+            <<"reduceFunction">> := null,
+            <<"spatial">> := false
+        }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
     end, Workers),
 
     % delete on other provider
     ?assertMatch(ok, remove_index_via_rest(Config, WorkerP2, ?SPACE_ID, IndexName)),
     ?assertMatch([], list_indexes_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
     ?assertMatch([], list_indexes_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS).
+
+getting_nonexistent_index_should_fail(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    IndexName = <<"nonexistent_index">>,
+    ExpError = ?ERROR_INDEX_NOT_FOUND,
+
+    lists:foreach(fun(Worker) ->
+        ?assertMatch(ExpError, get_index_via_rest(
+            Config, Worker, ?SPACE_ID, IndexName
+        ))
+    end, Workers).
+
+getting_index_of_not_supported_space_should_fail(Config) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    IndexName = <<"name1">>,
+    SpaceId = <<"space2">>,
+
+    ?assertMatch(ok, create_index_via_rest(
+        Config, WorkerP2, SpaceId, IndexName, ?MAP_FUNCTION, false
+    )),
+
+    ExpMapFun = index_utils:escape_js_function(?MAP_FUNCTION),
+    ExpProviders = [?PROVIDER_ID(WorkerP2)],
+    ?assertMatch({ok, #{
+        <<"indexOptions">> := #{},
+        <<"providers">> := ExpProviders,
+        <<"mapFunction">> := ExpMapFun,
+        <<"reduceFunction">> := null,
+        <<"spatial">> := false
+    }}, get_index_via_rest(Config, WorkerP2, SpaceId, IndexName), ?ATTEMPTS),
+
+    ExpError = ?ERROR_INDEX_NOT_FOUND,
+    ?assertMatch(ExpError, get_index_via_rest(
+        Config, WorkerP1, SpaceId, IndexName
+    )).
 
 list_indexes(Config) ->
     Workers = [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -163,21 +215,22 @@ create_geospatial_index(Config) ->
     ExpMapFun = index_utils:escape_js_function(?GEOSPATIAL_MAP_FUNCTION),
     ExpProviders = [?PROVIDER_ID(WorkerP1)],
     lists:foreach(fun(Worker) ->
-        ?assertMatch(#{
-            <<"indexOptions">> := [],
+        ?assertMatch({ok, #{
+            <<"indexOptions">> := #{},
             <<"providers">> := ExpProviders,
             <<"mapFunction">> := ExpMapFun,
-            % <<"reduceFunction">> := null, todo
+            <<"reduceFunction">> := null,
             <<"spatial">> := true
-        }, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
+        }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
     end, Workers).
 
 query_geospatial_index(Config) ->
-    Workers = [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    Workers = [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     IndexName = <<"geospatial_index_1">>,
 
+    list_to_binary(filename:join(["/", binary_to_list(SpaceName), "f0"])),
     Path1 = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "f1"])),
     Path2 = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "f2"])),
     Path3 = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "f3"])),
@@ -191,28 +244,37 @@ query_geospatial_index(Config) ->
     ?assertMatch(ok, create_index_via_rest(
         Config, WorkerP1, SpaceId, IndexName,
         ?GEOSPATIAL_MAP_FUNCTION, true,
-        [?PROVIDER_ID(WorkerP1), ?PROVIDER_ID(WorkerP2)], []
+        [?PROVIDER_ID(WorkerP1)], #{}
     )),
     timer:sleep(timer:seconds(5)), % let the data be stored in db todo VFS-3462
 
+    Query = fun Q1(Node, Options) ->
+        {ok, Body} = ?assertMatch({ok, _}, query_index_via_rest(
+            Config, Node, SpaceId, IndexName, Options
+        ), ?ATTEMPTS),
+        case Body of
+            [] -> Q1(Node, Options);
+            _ -> lists:sort(objectids_to_guids(Body))
+        end
+%%        lists:sort(objectids_to_guids(Body))
+    end,
+
     lists:foreach(fun(Worker) ->
-        QueryOptions1 = #{
-            spatial => true,
-            stale => false
-        },
-        Body1 = query_index_via_rest(Config, Worker, SpaceId, IndexName, QueryOptions1),
-        ct:pal("BODY1: ~p", [Body1]),
-        Guids1 = objectids_to_guids(Body1),
-        ?assertEqual(lists:sort([Guid1, Guid2, Guid3]), lists:sort(Guids1)),
+        ct:pal("~p", [Worker]),
+        QueryOptions1 = #{spatial => true, stale => false},
+%%        Body1 = query_index_via_rest(Config, Worker, SpaceId, IndexName, QueryOptions1),
+%%        ct:pal("BODY1: ~p", [Body1]),
+%%        Guids1 = objectids_to_guids(Body1),
+        ?assertEqual(lists:sort([Guid1, Guid2, Guid3]), Query(Worker, QueryOptions1)),
 
         QueryOptions2 = QueryOptions1#{
             start_range => <<"[0,0]">>,
             end_range => <<"[5.5,10.5]">>
         },
-        Body2 = query_index_via_rest(Config, Worker, SpaceId, IndexName, QueryOptions2),
-        Guids2 = objectids_to_guids(Body2),
-        ?assertEqual(lists:sort([Guid1, Guid2, Guid3]), lists:sort(Guids2))
-    end, Workers).
+%%        Body2 = query_index_via_rest(Config, Worker, SpaceId, IndexName, QueryOptions2),
+%%        Guids2 = objectids_to_guids(Body2),
+        ?assertEqual(lists:sort([Guid1, Guid2, Guid3]), Query(Worker, QueryOptions2))
+    end, [WorkerP1]).
 
 
 query_file_popularity_index(Config) ->
@@ -242,9 +304,23 @@ spatial_flag_test(Config) ->
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
+        NewConfig1 = [{space_storage_mock, false} | NewConfig],
+        NewConfig2 = initializer:setup_storage(NewConfig1),
+        lists:foreach(fun(Worker) ->
+            test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
+            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_update_interval, timer:seconds(1)),
+            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_stream_update_interval, timer:seconds(1)),
+            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
+            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(1)), % TODO - change to 2 seconds
+            test_utils:set_env(Worker, ?APP_NAME, prefetching, off),
+            test_utils:set_env(Worker, ?APP_NAME, public_block_size_treshold, 0),
+            test_utils:set_env(Worker, ?APP_NAME, public_block_percent_treshold, 0)
+        end, ?config(op_worker_nodes, NewConfig2)),
+
         application:start(ssl),
         hackney:start(),
-        initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig, "env_desc.json"), NewConfig)
+        NewConfig3 = initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2),
+        NewConfig3
     end,
     [
         {?ENV_UP_POSTHOOK, Posthook},
@@ -275,15 +351,15 @@ init_per_testcase(_Case, Config) ->
 end_per_testcase(Case, Config) when
     Case =:= query_file_popularity_index;
     Case =:= spatial_flag_test
-    ->
+->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     rpc:call(WorkerP1, space_storage, disable_file_popularity, [?SPACE_ID]),
     rpc:call(WorkerP2, space_storage, disable_file_popularity, [?SPACE_ID]),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(_Case, Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    remove_all_indexes([WorkerP1], ?SPACE_ID),
+    Workers = ?config(op_worker_nodes, Config),
+    remove_all_indexes(Workers, ?SPACE_ID),
     lfm_proxy:teardown(Config).
 
 %%%===================================================================
@@ -297,16 +373,14 @@ create_index_via_rest(Config, Worker, SpaceId, IndexName, MapFunction) ->
 create_index_via_rest(Config, Worker, SpaceId, IndexName, MapFunction, Spatial) ->
     create_index_via_rest(
         Config, Worker, SpaceId, IndexName, MapFunction,
-        Spatial, [], undefined
+        Spatial, [], #{}
     ).
 
-create_index_via_rest(Config, Worker, SpaceId, IndexName, MapFunction, Spatial, Providers, _Options) -> % todo options
-    SpatialBin = <<"spatial=", (atom_to_binary(Spatial, utf8))/binary>>,
-    ProvidersBin = lists:foldl(fun(ProviderId, Acc) ->
-        <<Acc/binary, "&providers[]=", ProviderId/binary>>
-    end, <<>>, Providers),
-    QueryString = <<"?", SpatialBin/binary, ProvidersBin/binary>>,
-
+create_index_via_rest(Config, Worker, SpaceId, IndexName, MapFunction, Spatial, Providers, Options) ->
+    QueryString = create_query_string(Options#{
+        spatial => Spatial,
+        providers => Providers
+    }),
     Path = <<(?INDEX_PATH(SpaceId, IndexName))/binary, QueryString/binary>>,
 
     Headers = ?USER_1_AUTH_HEADERS(Config, [
@@ -316,17 +390,19 @@ create_index_via_rest(Config, Worker, SpaceId, IndexName, MapFunction, Spatial, 
     case rest_test_utils:request(Worker, Path, put, Headers, MapFunction) of
         {ok, 200, _, _} ->
             ok;
-        Res ->
-            Res
+        {ok, Code, _, Body} ->
+            {Code, json_utils:decode(Body)}
     end.
 
 get_index_via_rest(Config, Worker, SpaceId, IndexName) ->
     Path = ?INDEX_PATH(SpaceId, IndexName),
     Headers = ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]),
-    {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(Worker, Path, get, Headers, [])
-    ),
-    json_utils:decode(Body).
+    case rest_test_utils:request(Worker, Path, get, Headers, []) of
+        {ok, 200, _, Body} ->
+            {ok, json_utils:decode(Body)};
+        {ok, Code, _, Body} ->
+            {Code, json_utils:decode(Body)}
+    end.
 
 remove_index_via_rest(Config, Worker, SpaceId, IndexName) ->
     Path = ?INDEX_PATH(SpaceId, IndexName),
@@ -334,8 +410,8 @@ remove_index_via_rest(Config, Worker, SpaceId, IndexName) ->
     case rest_test_utils:request(Worker, Path, delete, Headers, []) of
         {ok, 204, _, _} ->
             ok;
-        Res ->
-            Res
+        {ok, Code, _, Body} ->
+            {Code, json_utils:decode(Body)}
     end.
 
 query_index_via_rest(Config, Worker, SpaceId, IndexName, Options) ->
@@ -345,9 +421,9 @@ query_index_via_rest(Config, Worker, SpaceId, IndexName, Options) ->
     Headers = ?USER_1_AUTH_HEADERS(Config),
     case rest_test_utils:request(Worker, Path, get, Headers, []) of
         {ok, 200, _, Body} ->
-            json_utils:decode(Body);
-        Res ->
-            Res
+            {ok, json_utils:decode(Body)};
+        {ok, Code, _, Body} ->
+            {Code, json_utils:decode(Body)}
     end.
 
 list_indexes_via_rest(Config, Worker, Space, ChunkSize) ->
@@ -396,20 +472,28 @@ remove_all_indexes(Nodes, SpaceId) ->
         end, IndexNames)
     end, Nodes).
 
+create_query_string(undefined) ->
+    <<>>;
 create_query_string(Options) when is_map(Options) ->
     create_query_string(maps:to_list(Options));
 create_query_string(Options) ->
     lists:foldl(fun(Option, AccQuery) ->
         OptionBin = case Option of
+            {Key, Values} when is_list(Values) ->
+                KeyBin = binary_from_term(Key),
+                lists:foldl(fun(Val, Acc) ->
+                    ValBin = binary_from_term(Val),
+                    <<Acc/binary, "&", KeyBin/binary, "[]=", ValBin/binary>>
+                end, <<>>, Values);
             {Key, Val} ->
-                KeyBin = atom_to_binary(Key, utf8),
+                KeyBin = binary_from_term(Key),
                 ValBin = binary_from_term(Val),
-                <<KeyBin/binary, "=", ValBin/binary>>;
+                <<"&", KeyBin/binary, "=", ValBin/binary>>;
             _ ->
-                atom_to_binary(Option, utf8)
+                <<"&", (binary_from_term(Option))/binary>>
         end,
-        <<AccQuery/binary, "&", OptionBin/binary>>
-    end, <<>>, Options).
+        <<AccQuery/binary, OptionBin/binary>>
+    end, <<"?">>, Options).
 
 binary_from_term(Val) when is_binary(Val) ->
     Val;

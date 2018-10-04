@@ -94,10 +94,12 @@ get_json(SpaceId, IndexName) ->
             providers = Providers
         }}} ->
             {ok, #{
-                <<"indexOptions">> => Options,
+                <<"indexOptions">> => maps:from_list(Options),
                 <<"providers">> => Providers,
                 <<"mapFunction">> => MapFunction,
-                <<"reduceFunction">> => ReduceFunction,
+                <<"reduceFunction">> => utils:ensure_defined(
+                    ReduceFunction, undefined, null
+                ),
                 <<"spatial">> => Spatial
             }};
         Error -> Error

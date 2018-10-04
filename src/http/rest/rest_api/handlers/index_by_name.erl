@@ -40,7 +40,7 @@ terminate(_, _, _) ->
 -spec allowed_methods(req(), maps:map() | {error, term()}) ->
     {[binary()], req(), maps:map()}.
 allowed_methods(Req, State) ->
-    {[<<"GET">>, <<"PUT">>, <<"PATCH">>, <<"DELETE">>], Req, State}.
+    {[<<"GET">>, <<"PUT">>, <<"DELETE">>], Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
@@ -164,7 +164,6 @@ create_or_modify_index(Req, State) ->
         index_name := IndexName,
         spatial := Spatial,
         function := MapFunction,
-        reduce_function := ReduceFunction,
         providers := Providers
     } = State8,
 
@@ -172,7 +171,7 @@ create_or_modify_index(Req, State) ->
         throw_if_provider_does_not_support_space(SpaceId, ProviderId)
     end, Providers),
 
-    ok = index:save(SpaceId, IndexName, MapFunction, ReduceFunction, Options, Spatial, Providers),
+    ok = index:save(SpaceId, IndexName, MapFunction, undefined, Options, Spatial, Providers),
     {stop, cowboy_req:reply(?HTTP_OK, Req8), State8}.
 
 %%%===================================================================
