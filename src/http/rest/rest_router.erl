@@ -23,6 +23,7 @@
     files,
     index_by_name,
     index_collection,
+    index_reduce,
     metadata,
     onedata_metrics,
     query_index,

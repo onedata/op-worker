@@ -94,18 +94,12 @@ query_index(Req, State) ->
     #{space_id := SpaceId, index_name := IndexName} = StateWithSpatial,
     Options = index_utils:sanitize_query_options(StateWithSpatial),
 
-    case index:query(SpaceId, IndexName, Options) of
-        {ok, QueryResult} ->
-            case process_query_result(QueryResult) of
-                {error, index_function} ->
-                    throw(?ERROR_INDEX_FUNCTION);
-                ProcessedResult ->
-                    {json_utils:encode(ProcessedResult), ReqWithSpatial, StateWithSpatial}
-            end;
-        {error, not_found} ->
-            throw(?ERROR_INDEX_NOT_FOUND);
-        {error, not_supported} ->
-            ok % TODO index not supported on this provider
+    {ok, QueryResult} = index:query(SpaceId, IndexName, Options),
+    case process_query_result(QueryResult) of
+        {error, index_function} ->
+            throw(?ERROR_INDEX_FUNCTION);
+        ProcessedResult ->
+            {json_utils:encode(ProcessedResult), ReqWithSpatial, StateWithSpatial}
     end.
 
 %%-------------------------------------------------------------------

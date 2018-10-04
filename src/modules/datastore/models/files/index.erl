@@ -55,7 +55,7 @@ save(SpaceId, Name, MapFunction, ReduceFunction, Options, Spatial, Providers) ->
         undefined -> undefined;
         _ -> index_utils:escape_js_function(ReduceFunction)
     end,
-    Doc = #document{
+    ToCreate = #document{
         key = Id,
         value = #index{
             name = Name,
@@ -68,9 +68,10 @@ save(SpaceId, Name, MapFunction, ReduceFunction, Options, Spatial, Providers) ->
         },
         scope = SpaceId
     },
-    {ok, _} = datastore_model:save(?CTX, Doc),
-    ok = save_db_view(Id, SpaceId, EscapedMapFunction, EscapedReduceFunction, Spatial, Options),
-    ok = index_links:add_link(Name, SpaceId).
+    {ok, Doc} = datastore_model:save(?CTX, ToCreate),
+    ok = index_links:add_link(Name, SpaceId),
+    index_changes:handle(Doc),
+    ok.
 
 -spec is_supported(od_space:id(), binary(), od_provider:id()) -> boolean().
 is_supported(SpaceId, IndexName, ProviderId) ->
@@ -109,6 +110,7 @@ get_json(SpaceId, IndexName) ->
 delete(SpaceId, IndexName) ->
     Id = id(IndexName, SpaceId),
     datastore_model:delete(?CTX, Id),
+    couchbase_driver:delete_design_doc(?DISC_CTX, Id),
     index_links:delete_links(IndexName, SpaceId).
 
 -spec list(od_space:id()) -> {ok, [index:name()]}.

@@ -39,8 +39,8 @@
 -export([
     create_get_update_delete_index/1,
     getting_nonexistent_index_should_fail/1,
-
     getting_index_of_not_supported_space_should_fail/1,
+    query_index/1,
     list_indexes/1,
     create_geospatial_index/1,
     query_geospatial_index/1,
@@ -53,6 +53,7 @@ all() ->
         create_get_update_delete_index,
         getting_nonexistent_index_should_fail,
         getting_index_of_not_supported_space_should_fail,
+        query_index,
         list_indexes,
         create_geospatial_index,
         query_geospatial_index,
@@ -73,10 +74,13 @@ all() ->
     <<"spaces/", __SpaceId/binary, "/indexes/", __IndexName/binary>>
 ).
 
+-define(XATTR_NAME, <<"onexattr">>).
+-define(XATTR(__Val), #xattr{name = ?XATTR_NAME, value = __Val}).
+
 -define(MAP_FUNCTION,
     <<"function (id, meta) {
-        if(meta['onedata_json'] && meta['onedata_json']['meta'] && meta['onedata_json']['meta']['color']) {
-            return [meta['onedata_json']['meta']['color'], id];
+        if(meta['", ?XATTR_NAME/binary,"']) {
+            return [meta['", ?XATTR_NAME/binary,"'], id];
         }
         return null;
     }">>
@@ -183,6 +187,42 @@ getting_index_of_not_supported_space_should_fail(Config) ->
         Config, WorkerP1, SpaceId, IndexName
     )).
 
+query_index(Config) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    IndexName = <<"index_10">>,
+
+    Query = query_filter(Config, SpaceId, IndexName),
+    Guids = create_files_with_xattrs(WorkerP1, SessionId, SpaceName, 5),
+
+    % support index only by one provider; other should return error on query
+    ?assertMatch(ok, create_index_via_rest(
+        Config, WorkerP1, SpaceId, IndexName, ?MAP_FUNCTION,
+        false, [?PROVIDER_ID(WorkerP2)], #{}
+    )),
+
+    ExpError = ?ERROR_NOT_FOUND,
+    ExpGuids = lists:sort(Guids),
+    ?assertMatch(ExpError, Query(WorkerP1, #{}), ?ATTEMPTS),
+    ?assertEqual(ExpGuids, Query(WorkerP2, #{}), ?ATTEMPTS),
+
+    % support index on both providers and check that they returns correct results
+    ?assertMatch(ok, create_index_via_rest(
+        Config, WorkerP1, SpaceId, IndexName, ?MAP_FUNCTION,
+        false, [?PROVIDER_ID(WorkerP1), ?PROVIDER_ID(WorkerP2)], #{}
+    )),
+    ?assertEqual(ExpGuids, Query(WorkerP1, #{}), ?ATTEMPTS),
+    ?assertEqual(ExpGuids, Query(WorkerP2, #{}), ?ATTEMPTS),
+
+    % remove support for index on one provider
+    ?assertMatch(ok, create_index_via_rest(
+        Config, WorkerP2, SpaceId, IndexName, ?MAP_FUNCTION,
+        false, [?PROVIDER_ID(WorkerP1)], #{}
+    )),
+    ?assertEqual(ExpGuids, Query(WorkerP1, #{}), ?ATTEMPTS).
+%%    ?assertMatch(ExpError, Query(WorkerP2, #{}), ?ATTEMPTS). % todo handle qwe
+
 list_indexes(Config) ->
     Workers = [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
 
@@ -249,13 +289,7 @@ query_geospatial_index(Config) ->
     )),
     timer:sleep(timer:seconds(5)), % let the data be stored in db todo VFS-3462
 
-    Query = fun(Node, Options) ->
-        {ok, Body} = ?assertMatch({ok, _}, query_index_via_rest(
-            Config, Node, SpaceId, IndexName, Options
-        ), ?ATTEMPTS),
-        ObjectIds = lists:map(fun(#{<<"value">> := ObjectId}) -> ObjectId end, Body),
-        lists:sort(objectids_to_guids(ObjectIds))
-    end,
+    Query = query_filter(Config, SpaceId, IndexName),
 
     lists:foreach(fun(Worker) ->
         QueryOptions1 = #{spatial => true, stale => false},
@@ -495,7 +529,30 @@ binary_from_term(Val) when is_atom(Val) ->
     atom_to_binary(Val, utf8).
 
 objectids_to_guids(ObjectIds) ->
-    lists:map(fun(X) ->
-        {ok, ObjId} = cdmi_id:objectid_to_guid(X),
-        ObjId
+    lists:map(fun(ObjectId) ->
+        {ok, Guid} = cdmi_id:objectid_to_guid(ObjectId),
+        Guid
     end, ObjectIds).
+
+query_filter(Config, SpaceId, IndexName) ->
+    fun(Node, Options) ->
+        case query_index_via_rest(Config, Node, SpaceId, IndexName, Options) of
+            {ok, Body} ->
+                ObjectIds = lists:map(fun(#{<<"value">> := ObjectId}) ->
+                    ObjectId
+                end, Body),
+                lists:sort(objectids_to_guids(ObjectIds));
+            Error ->
+                Error
+        end
+    end.
+
+create_files_with_xattrs(Node, SessionId, SpaceName, Num) ->
+    lists:map(fun(X) ->
+        Path = list_to_binary(filename:join(
+            ["/", binary_to_list(SpaceName), "f" ++ integer_to_list(X)]
+        )),
+        {ok, Guid} = lfm_proxy:create(Node, SessionId, Path, 8#777),
+        ok = lfm_proxy:set_xattr(Node, SessionId, {guid, Guid}, ?XATTR(X)),
+        Guid
+    end, lists:seq(1, Num)).
