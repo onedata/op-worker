@@ -225,15 +225,16 @@ create_geospatial_index(Config) ->
     end, Workers).
 
 query_geospatial_index(Config) ->
-    Workers = [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    Workers = [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     IndexName = <<"geospatial_index_1">>,
 
-    list_to_binary(filename:join(["/", binary_to_list(SpaceName), "f0"])),
+    Path0 = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "f0"])),
     Path1 = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "f1"])),
     Path2 = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "f2"])),
     Path3 = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "f3"])),
+    {ok, _Guid0} = lfm_proxy:create(WorkerP1, SessionId, Path0, 8#777),
     {ok, Guid1} = lfm_proxy:create(WorkerP1, SessionId, Path1, 8#777),
     {ok, Guid2} = lfm_proxy:create(WorkerP1, SessionId, Path2, 8#777),
     {ok, Guid3} = lfm_proxy:create(WorkerP1, SessionId, Path3, 8#777),
@@ -244,38 +245,28 @@ query_geospatial_index(Config) ->
     ?assertMatch(ok, create_index_via_rest(
         Config, WorkerP1, SpaceId, IndexName,
         ?GEOSPATIAL_MAP_FUNCTION, true,
-        [?PROVIDER_ID(WorkerP1)], #{}
+        [?PROVIDER_ID(WorkerP1), ?PROVIDER_ID(WorkerP2)], #{}
     )),
     timer:sleep(timer:seconds(5)), % let the data be stored in db todo VFS-3462
 
-    Query = fun Q1(Node, Options) ->
+    Query = fun(Node, Options) ->
         {ok, Body} = ?assertMatch({ok, _}, query_index_via_rest(
             Config, Node, SpaceId, IndexName, Options
         ), ?ATTEMPTS),
-        case Body of
-            [] -> Q1(Node, Options);
-            _ -> lists:sort(objectids_to_guids(Body))
-        end
-%%        lists:sort(objectids_to_guids(Body))
+        ObjectIds = lists:map(fun(#{<<"value">> := ObjectId}) -> ObjectId end, Body),
+        lists:sort(objectids_to_guids(ObjectIds))
     end,
 
     lists:foreach(fun(Worker) ->
-        ct:pal("~p", [Worker]),
         QueryOptions1 = #{spatial => true, stale => false},
-%%        Body1 = query_index_via_rest(Config, Worker, SpaceId, IndexName, QueryOptions1),
-%%        ct:pal("BODY1: ~p", [Body1]),
-%%        Guids1 = objectids_to_guids(Body1),
         ?assertEqual(lists:sort([Guid1, Guid2, Guid3]), Query(Worker, QueryOptions1)),
 
         QueryOptions2 = QueryOptions1#{
             start_range => <<"[0,0]">>,
             end_range => <<"[5.5,10.5]">>
         },
-%%        Body2 = query_index_via_rest(Config, Worker, SpaceId, IndexName, QueryOptions2),
-%%        Guids2 = objectids_to_guids(Body2),
-        ?assertEqual(lists:sort([Guid1, Guid2, Guid3]), Query(Worker, QueryOptions2))
-    end, [WorkerP1]).
-
+        ?assertEqual(lists:sort([Guid1, Guid2]), Query(Worker, QueryOptions2))
+    end, Workers).
 
 query_file_popularity_index(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -417,7 +408,6 @@ remove_index_via_rest(Config, Worker, SpaceId, IndexName) ->
 query_index_via_rest(Config, Worker, SpaceId, IndexName, Options) ->
     QueryString = create_query_string(Options),
     Path = <<(?INDEX_PATH(SpaceId, IndexName))/binary, "/query", QueryString/binary>>,
-    ct:pal("~p", [Path]),
     Headers = ?USER_1_AUTH_HEADERS(Config),
     case rest_test_utils:request(Worker, Path, get, Headers, []) of
         {ok, 200, _, Body} ->

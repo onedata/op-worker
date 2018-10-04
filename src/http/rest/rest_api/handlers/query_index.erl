@@ -120,7 +120,8 @@ process_query_result(QueryResult) ->
     Rows2 = lists:map(fun(Row) ->
         {<<"value">>, Value} = lists:keyfind(<<"value">>, 1, Row),
         Value2 = process_value(Value),
-        lists:keyreplace(<<"value">>, 1, Value2, Row)
+        NewRow = lists:keyreplace(<<"value">>, 1, Row, {<<"value">>, Value2}),
+        maps:from_list(NewRow)
     end, Rows),
     Rows2.
 
@@ -139,7 +140,8 @@ process_value([Uuid | RestValues]) ->
 process_value(Uuid) ->
     try
         Guid = fslogic_uuid:uuid_to_guid(Uuid),
-        cdmi_id:guid_to_objectid(Guid)
+        {ok, ObjectId} = cdmi_id:guid_to_objectid(Guid),
+        ObjectId
     catch
         Error:Reason ->
             ?error_stacktrace("Processing result of index query failed due to ~p:~p", [Error, Reason]),
