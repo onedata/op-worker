@@ -179,7 +179,7 @@ cancel_replication_on_target_nodes(Config, #scenario{
     end, ReplicatingNodes),
 
     utils:pforeach(fun({TargetNode, Tid, _Guid, _Path}) ->
-        await_transfer_starts(TargetNode, Tid),
+        await_replication_starts(TargetNode, Tid),
         cancel_transfer(TargetNode, Tid, Config, Type)
     end, NodesTransferIdsAndFiles),
 
@@ -243,8 +243,8 @@ remove_file_during_replication(Config, #scenario{
 
     utils:pforeach(fun({TargetNode, Tid, Guid, Path}) ->
         FileKey = file_key(Guid, Path, FileKeyType),
-        await_transfer_starts(TargetNode, Tid),
-        ok = remove_file(ScheduleNode, User, FileKey, Config, Type)
+        await_replication_starts(TargetNode, Tid),
+        ok = remove_file(ScheduleNode, User, FileKey, Config)
     end, NodesTransferIdsAndFiles),
 
     update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
@@ -363,10 +363,16 @@ remove_file_during_eviction(Config, #scenario{
             FileKey = file_key(Guid, Path, FileKeyType),
             EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
             {ok, Tid} = schedule_replica_eviction(ScheduleNode, EvictingProviderId,  User, FileKey, Config, Type),
-            ok = remove_file(ScheduleNode, User, FileKey, Config, Type),
+            ok = remove_file(ScheduleNode, User, FileKey, Config),
             {EvictingNode, Tid, Guid, Path}
         end, FilesGuidsAndPaths)
     end, EvictingNodes),
+    
+    utils:pforeach(fun({EvictingNode, Tid, Guid, Path}) ->
+        FileKey = file_key(Guid, Path, FileKeyType),
+        await_transfer_starts(EvictingNode, Tid),
+        ok = remove_file(ScheduleNode, User, FileKey, Config)
+    end, NodesTransferIdsAndFiles),
 
     update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
         NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
@@ -907,6 +913,10 @@ subfile_path(ParentPath, FilePrefix, N) ->
 subdir_path(ParentPath, DirPrefix, N) ->
     filename:join([ParentPath, <<DirPrefix/binary, (integer_to_binary(N))/binary>>]).
 
+remove_file(Node, User, FileKey, Config) ->
+    SessionId = ?USER_SESSION(Node, User, Config),
+    lfm_proxy:unlink(Node, SessionId, FileKey).
+
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
@@ -946,13 +956,6 @@ update_config(Key, UpdateFun, Config, DefaultValue) ->
         OldValue ->
             lists:keyreplace(Key, 1, Config, {Key, UpdateFun(OldValue)})
     end.
-
-remove_file(Node, User, FileKey, Config, lfm) ->
-    remove_file_by_lfm(Node, User, FileKey, Config).
-
-remove_file_by_lfm(Node, User, FileKey, Config) ->
-    SessionId = ?USER_SESSION(Node, User, Config),
-    lfm_proxy:unlink(Node, SessionId, FileKey).
     
 schedule_file_replication(ScheduleNode, ProviderId, User, FileKey, Config, lfm) ->
     schedule_file_replication_by_lfm(ScheduleNode, ProviderId, User, FileKey, Config);
@@ -1168,7 +1171,7 @@ transfer_fields_description(Node, TransferId) ->
         {AccFormat ++ "    ~p = ~p~n", AccArgs ++ [FieldName, get_transfer_value(Transfer, FieldName)]}
     end, {"~nTransfer ~p fields values:~n", [TransferId]}, FieldsList).
 
-await_transfer_starts(Node, TransferId) ->
+await_replication_starts(Node, TransferId) ->
     ?assertEqual(true, begin
         try
             #transfer{
@@ -1179,6 +1182,19 @@ await_transfer_starts(Node, TransferId) ->
         catch
             throw:transfer_not_found ->
                 false
+        end
+    end, 60).
+
+await_transfer_starts(Node, TransferId) ->
+    ?assertEqual(true, begin
+        try
+            #transfer{
+               start_time = StartTime
+            } = transfers_test_utils:get_transfer(Node, TransferId),
+            StartTime > 0
+        catch
+            throw:transfer_not_found ->
+               false
         end
     end, 60).
 

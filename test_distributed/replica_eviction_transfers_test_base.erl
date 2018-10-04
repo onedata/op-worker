@@ -1098,6 +1098,9 @@ remove_file_during_eviction(Config, Type, FileKeyType) ->
             expected = #expected{
                 expected_transfer = #{
                     eviction_status => failed,
+                    files_to_process => 1,
+                    files_processed => 0,
+                    failed_files => 1,
                     files_evicted => 0
                 },
                 assertion_nodes = [WorkerP1, WorkerP2]
