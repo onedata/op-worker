@@ -94,50 +94,5 @@ query_index(Req, State) ->
     #{space_id := SpaceId, index_name := IndexName} = StateWithSpatial,
     Options = index_utils:sanitize_query_options(StateWithSpatial),
 
-    {ok, QueryResult} = index:query(SpaceId, IndexName, Options),
-    case process_query_result(QueryResult) of
-        {error, index_function} ->
-            throw(?ERROR_INDEX_FUNCTION);
-        ProcessedResult ->
-            {json_utils:encode(ProcessedResult), ReqWithSpatial, StateWithSpatial}
-    end.
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Processes query result before returning it to user.
-%% @end
-%%-------------------------------------------------------------------
--spec process_query_result(datastore_json:ejson()) -> datastore_json:ejson().
-process_query_result(QueryResult) ->
-    {Rows} = QueryResult,
-    Rows2 = lists:map(fun(Row) ->
-        {<<"value">>, Value} = lists:keyfind(<<"value">>, 1, Row),
-        Value2 = process_value(Value),
-        NewRow = lists:keyreplace(<<"value">>, 1, Row, {<<"value">>, Value2}),
-        maps:from_list(NewRow)
-    end, Rows),
-    Rows2.
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Processes query values from one row.
-%% FileUuid is replaced with cdmi objectid.
-%% @end
-%%-------------------------------------------------------------------
--spec process_value(file_meta:uuid() | [term()]) ->
-    cdmi_id:objectid() | [term()].
-process_value([Uuid | RestValues]) ->
-    ObjectId = process_value(Uuid),
-    [ObjectId | RestValues];
-process_value(Uuid) ->
-    try
-        Guid = fslogic_uuid:uuid_to_guid(Uuid),
-        {ok, ObjectId} = cdmi_id:guid_to_objectid(Guid),
-        ObjectId
-    catch
-        Error:Reason ->
-            ?error_stacktrace("Processing result of index query failed due to ~p:~p", [Error, Reason]),
-            {error, index_function}
-    end.
+        {ok, QueryResult} = index:query(SpaceId, IndexName, Options),
+            {json_utils:encode(QueryResult), ReqWithSpatial, StateWithSpatial}.

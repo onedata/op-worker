@@ -19,7 +19,7 @@
 
 %% API
 -export([delete/2, list/1, list/4, save/7, save_db_view/6,
-    query/3, get_json/2, is_supported/3]).
+    query/3, get_json/2, is_supported/3, id/2, add_reduce/3]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
@@ -49,11 +49,13 @@
 -spec save(od_space:id(), name(), index_function(), undefined | index_function(),
     options(), boolean(), [od_provider:id()]) -> ok.
 save(SpaceId, Name, MapFunction, ReduceFunction, Options, Spatial, Providers) ->
+    save(SpaceId, Name, MapFunction, ReduceFunction, Options, Spatial, Providers, true).
+
+save(SpaceId, Name, MapFunction, ReduceFunction, Options, Spatial, Providers, Escape) ->
     Id = id(Name, SpaceId),
-    EscapedMapFunction = index_utils:escape_js_function(MapFunction),
-    EscapedReduceFunction = case ReduceFunction of
-        undefined -> undefined;
-        _ -> index_utils:escape_js_function(ReduceFunction)
+    EscapedMapFunction = case Escape of
+        true -> index_utils:escape_js_function(MapFunction);
+        false -> MapFunction
     end,
     ToCreate = #document{
         key = Id,
@@ -62,7 +64,7 @@ save(SpaceId, Name, MapFunction, ReduceFunction, Options, Spatial, Providers) ->
             space_id = SpaceId,
             spatial = Spatial,
             map_function = EscapedMapFunction,
-            reduce_function = EscapedReduceFunction,
+            reduce_function = ReduceFunction,
             index_options = Options,
             providers = Providers
         },
@@ -72,6 +74,22 @@ save(SpaceId, Name, MapFunction, ReduceFunction, Options, Spatial, Providers) ->
     ok = index_links:add_link(Name, SpaceId),
     index_changes:handle(Doc),
     ok.
+
+add_reduce(SpaceId, Name, ReduceFunction) ->
+    Id = id(Name, SpaceId),
+    {ok, #document{
+        key = Id,
+        value = #index{
+            name = Name,
+            space_id = SpaceId,
+            spatial = Spatial,
+            map_function = EscapedMapFunction,
+            index_options = Options,
+            providers = Providers
+        }
+    }} = datastore_model:get(?CTX, Id),
+    save(SpaceId, Name, EscapedMapFunction, ReduceFunction, Options, Spatial, Providers, false).
+
 
 -spec is_supported(od_space:id(), binary(), od_provider:id()) -> boolean().
 is_supported(SpaceId, IndexName, ProviderId) ->
@@ -99,7 +117,7 @@ get_json(SpaceId, IndexName) ->
                 <<"providers">> => Providers,
                 <<"mapFunction">> => MapFunction,
                 <<"reduceFunction">> => utils:ensure_defined(
-                    ReduceFunction, undefined, null
+                    index_utils:escape_js_function(ReduceFunction), undefined, null
                 ),
                 <<"spatial">> => Spatial
             }};
@@ -139,7 +157,7 @@ save_db_view(IndexId, SpaceId, Function, ReduceFunction, Spatial, Options) ->
         'use strict';
         if(doc['_record'] == 'custom_metadata' && doc['space_id'] == '", SpaceId/binary, "') {
             var user_map_callback = eval.call(null, '(", Function/binary, ")');
-            var result = user_map_callback(doc['_key'], doc['value']);
+            var result = user_map_callback(doc['file_objectid'], doc['value']);
             if(result) {
                 emit(result[0], result[1]);
             }

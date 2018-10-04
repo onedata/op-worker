@@ -101,9 +101,9 @@ enqueue_replica_eviction(UserCtx, FileCtx, MigrationProviderId, TransferId,
 %% ?eviction_WORKERS_POOL.
 %% @end
 %%--------------------------------------------------------------------
--spec enqueue_children_eviction(user_ctx:ctx(), [file_ctx:ctx()],
+-spec enqueue_files_eviction(user_ctx:ctx(), [file_ctx:ctx()],
     oneprovider:id(), sync_req:transfer_id()) -> ok.
-enqueue_children_eviction(UserCtx, Children, MigrationProviderId, TransferId) ->
+enqueue_files_eviction(UserCtx, Children, MigrationProviderId, TransferId) ->
     lists:foreach(fun(ChildCtx) ->
         enqueue_replica_eviction(UserCtx, ChildCtx, MigrationProviderId,
             TransferId, undefined, undefined)
@@ -234,6 +234,10 @@ evict_file_replicas_from_index(UserCtx, FileCtx, MigrationProviderId,
     QueryViewParams2 = case LastDocId of
         undefined ->
             [{skip, 0} | QueryViewParams];
+        doc_id_missing ->
+            % doc_id is missing when view has reduce function defined
+            % in such case we must iterate over results using limit and skip
+            [{skip, Chunk} | QueryViewParams];
         _ ->
             [{skip, 1}, {startkey_docid, LastDocId} | QueryViewParams]
     end,
@@ -241,37 +245,43 @@ evict_file_replicas_from_index(UserCtx, FileCtx, MigrationProviderId,
     case index:query(SpaceId, IndexName, [{limit, Chunk} | QueryViewParams2]) of
         {ok, {Rows}} ->
             NumberOfFiles = length(Rows),
-            {NewLastDocId, Guids} = lists:foldl(fun(Row, AccIn = {_LastDocId, FileGuids}) ->
+            {NewLastDocId, FileCtxs} = lists:foldl(fun(Row, {_LastDocId, FileCtxsIn}) ->
                 {<<"value">>, Values} = lists:keyfind(<<"value">>, 1, Row),
-                {<<"id">>, DocId} = lists:keyfind(<<"id">>, 1, Row),
-                FileUuid = case is_list(Values) of
+                DocId = case lists:keyfind(<<"id">>, 1, Row) of
+                    {<<"id">>, Id} -> Id;
+                    _ -> doc_id_missing
+                end,
+                ObjectIds = case is_list(Values) of
                     true -> hd(Values);
                     false -> Values
                 end,
-                try
-                    FileGuid = fslogic_uuid:uuid_to_guid(FileUuid),
-                    {DocId, [FileGuid | FileGuids]}
-                catch
-                    Error:Reason ->
-                        transfer:increment_files_failed_and_processed_counters(TransferId),
-                        ?error_stacktrace("Cannot resolve uuid of file ~p in index ~p, due to error ~p:~p", [FileUuid, IndexName, Error, Reason]),
-                        AccIn
-                end
+                NewFileCtxs = lists:filtermap(fun(O) ->
+                    try
+                        {ok, G} = cdmi_id:objectid_to_guid(O),
+                        {true, file_ctx:new_by_guid(G)}
+                    catch
+                        Error:Reason ->
+                            transfer:increment_files_failed_and_processed_counters(TransferId),
+                            ?error_stacktrace("Processing result of query index ~p in space ~p failed due to ~p:~p", [IndexName, SpaceId, Error, Reason]),
+                            false
+                    end
+                end, ObjectIds),
+                {DocId, FileCtxsIn ++ NewFileCtxs}
             end, {undefined, []}, Rows),
-            % Guids are reversed now
-            ChildrenCtxs = lists:foldl(fun(Guid, Ctxs) ->
-                [file_ctx:new_by_guid(Guid) | Ctxs]
-            end, [], Guids),
+%%            % Guids are reversed now
+%%            ChildrenCtxs = lists:foldl(fun(Guid, Ctxs) ->
+%%                [file_ctx:new_by_guid(Guid) | Ctxs]
+%%            end, [], Guids),
             transfer:increment_files_to_process_counter(TransferId, NumberOfFiles),
             case NumberOfFiles < Chunk of
                 true ->
-                    enqueue_children_eviction(UserCtx, ChildrenCtxs,
+                    enqueue_files_eviction(UserCtx, FileCtxs,
                         MigrationProviderId, TransferId
                     ),
                     transfer:increment_files_processed_counter(TransferId),
                     #provider_response{status = #status{code = ?OK}};
                 false ->
-                    enqueue_children_eviction(UserCtx, ChildrenCtxs,
+                    enqueue_files_eviction(UserCtx, FileCtxs,
                         MigrationProviderId, TransferId
                     ),
                     evict_file_replicas_from_index(UserCtx, FileCtx,
@@ -300,13 +310,13 @@ evict_dir(UserCtx, FileCtx, MigrationProviderId, Offset, TransferId) ->
     case Length < Chunk of
         true ->
             transfer:increment_files_to_process_counter(TransferId, Length),
-            enqueue_children_eviction(UserCtx, Children, MigrationProviderId,
+            enqueue_files_eviction(UserCtx, Children, MigrationProviderId,
                 TransferId),
             transfer:increment_files_processed_counter(TransferId),
             #provider_response{status = #status{code = ?OK}};
         false ->
             transfer:increment_files_to_process_counter(TransferId, Chunk),
-            enqueue_children_eviction(UserCtx, Children, MigrationProviderId,
+            enqueue_files_eviction(UserCtx, Children, MigrationProviderId,
                 TransferId),
             evict_dir(UserCtx, FileCtx3,
                 MigrationProviderId, Offset + Chunk, TransferId)

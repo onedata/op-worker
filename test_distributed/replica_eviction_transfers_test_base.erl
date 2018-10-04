@@ -586,7 +586,7 @@ schedule_replica_eviction_by_index(Config, Type) ->
     Xattr = #xattr{name = XattrName, value = XattrValue},
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
     ViewName = <<"replica_eviction_jobs">>,
-    ViewFunction = transfers_test_utils:view_function(XattrName),
+    ViewFunction = transfers_test_utils:test_map_function(XattrName),
     ok = rpc:call(WorkerP2, index, save, [SpaceId, ViewName, ViewFunction, undefined, [], false, [?GET_DOMAIN_BIN(WorkerP1), ?GET_DOMAIN_BIN(WorkerP2)]]),
     ?assertIndexQuery([FileUuid], WorkerP2, SpaceId, ViewName,  [{key, XattrValue}]),
 
@@ -759,7 +759,7 @@ scheduling_replica_eviction_by_empty_index_should_succeed(Config, Type) ->
     SpaceId = ?SPACE_ID,
     XattrName = transfers_test_utils:random_job_name(),
     ViewName = <<"replica_eviction_jobs">>,
-    ViewFunction = transfers_test_utils:view_function(XattrName),
+    ViewFunction = transfers_test_utils:test_map_function(XattrName),
     ok = rpc:call(WorkerP2, index, save, [SpaceId, ViewName, ViewFunction, undefined, [], false, [?GET_DOMAIN_BIN(WorkerP1), ?GET_DOMAIN_BIN(WorkerP2)]]),
     ?assertIndexQuery([], WorkerP2, SpaceId, ViewName,  []),
 
@@ -820,7 +820,7 @@ scheduling_replica_eviction_by_not_existing_key_in_index_should_succeed(Config, 
     Xattr = #xattr{name = XattrName, value = XattrValue},
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
     ViewName = <<"replica_eviction_jobs">>,
-    ViewFunction = transfers_test_utils:view_function(XattrName),
+    ViewFunction = transfers_test_utils:test_map_function(XattrName),
     ok = rpc:call(WorkerP2, index, save, [SpaceId, ViewName, ViewFunction, undefined, [], false, [?GET_DOMAIN_BIN(WorkerP1), ?GET_DOMAIN_BIN(WorkerP2)]]),
 
     ?assertIndexQuery([FileUuid], WorkerP2, SpaceId, ViewName,  [{key, XattrValue}]),
@@ -888,7 +888,7 @@ schedule_replica_eviction_of_100_regular_files_by_index(Config, Type) ->
     end, FileGuidsAndPaths),
 
     ViewName = <<"replica_eviction_jobs">>,
-    ViewFunction = transfers_test_utils:view_function(XattrName),
+    ViewFunction = transfers_test_utils:test_map_function(XattrName),
     ok = rpc:call(WorkerP2, index, save, [SpaceId, ViewName, ViewFunction, undefined, [], false, [?GET_DOMAIN_BIN(WorkerP1), ?GET_DOMAIN_BIN(WorkerP2)]]),
     ?assertIndexQuery(FileUuids, WorkerP2, SpaceId, ViewName, [{key, XattrValue}]),
 

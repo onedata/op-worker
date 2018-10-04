@@ -46,7 +46,7 @@
     scheduling_replication_by_index_with_wrong_function_should_fail/2,
     scheduling_replication_by_empty_index_should_succeed/2,
     scheduling_replication_by_not_existing_key_in_index_should_succeed/2,
-    schedule_replication_of_100_regular_files_by_index/2]).
+    schedule_replication_of_100_regular_files_by_index/2, schedule_replication_of_regular_file_by_index_with_reduce/2]).
 
 -define(SPACE_ID, <<"space1">>).
 
@@ -814,7 +814,6 @@ schedule_replication_of_regular_file_by_index(Config, Type) ->
 
     [{FileGuid, _}] = ?config(?FILES_KEY, Config2),
     FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
-    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
 
     % set xattr on file to be replicated
     XattrName = transfers_test_utils:random_job_name(),
@@ -822,9 +821,12 @@ schedule_replication_of_regular_file_by_index(Config, Type) ->
     Xattr = #xattr{name = XattrName, value = XattrValue},
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
     ViewName = <<"replication_jobs">>,
-    ViewFunction = transfers_test_utils:view_function(XattrName),
-    ok = rpc:call(WorkerP2, index, save, [SpaceId, ViewName, ViewFunction, undefined, [], false, [?GET_DOMAIN_BIN(WorkerP1), ?GET_DOMAIN_BIN(WorkerP2)]]),
-    ?assertIndexQuery([FileUuid], WorkerP2, SpaceId, ViewName,  [{key, XattrValue}]),
+    MapFunction = transfers_test_utils:test_map_function(XattrName),
+    ok = rpc:call(WorkerP2, index, save,
+        [SpaceId, ViewName, MapFunction, undefined, [], false, [?GET_DOMAIN_BIN(WorkerP1), ?GET_DOMAIN_BIN(WorkerP2)]]),
+%%    timer:sleep(timer:seconds(20)),
+    {ok, ObjectId} = cdmi_id:guid_to_objectid(FileGuid),
+    ?assertIndexQuery([ObjectId], WorkerP2, SpaceId, ViewName,  [{key, XattrValue}]),
 
     transfers_test_mechanism:run_test(
         Config2, #transfer_test_spec{
@@ -860,6 +862,133 @@ schedule_replication_of_regular_file_by_index(Config, Type) ->
             }
         }
     ).
+
+schedule_replication_of_regular_file_by_index_with_reduce(Config, Type) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId2 = ?DEFAULT_SESSION(WorkerP2, Config),
+    SpaceId = ?SPACE_ID,
+    Config2 = transfers_test_mechanism:run_test(
+        Config, #transfer_test_spec{
+            setup = #setup{
+                setup_node = WorkerP1,
+                files_structure = [{0, 6}],
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type),
+                distribution = [
+                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ],
+                assertion_nodes = [WorkerP1, WorkerP2]
+            }}),
+
+    [
+        {FileGuid, File1}, {FileGuid2, _}, {FileGuid3, _},
+        {FileGuid4, _}, {FileGuid5, _}, {FileGuid6, File6}
+    ] = ?config(?FILES_KEY, Config2
+
+
+
+
+    ),
+    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),     % xattr1=1, xattr2=1, should be replicated
+    FileUuid2 = fslogic_uuid:guid_to_uuid(FileGuid2),   % xattr1=1, xattr2=2, should not be replicated
+    FileUuid3 = fslogic_uuid:guid_to_uuid(FileGuid3),   % xattr1=1, should not be replicated
+    FileUuid4 = fslogic_uuid:guid_to_uuid(FileGuid4),   % xattr1=2, should not be replicated
+    FileUuid5 = fslogic_uuid:guid_to_uuid(FileGuid5),   % should not be replicated
+    FileUuid6 = fslogic_uuid:guid_to_uuid(FileGuid6),   % xattr1=1, xattr2=1, should be replicated
+
+    % XattrName1 will be used by map function
+    % only files with XattrName1 = XattrValue11 will be emitted
+    % XattrName2 will be used by reduce function
+    % only files with XattrName2 = XattrValue12 will be filtered
+
+    XattrName1 = transfers_test_utils:random_job_name(),
+    XattrName2 = transfers_test_utils:random_job_name(),
+    XattrValue11 = 1,
+    XattrValue12 = 2,
+    XattrValue21 = 1,
+    XattrValue22 = 2,
+    Xattr11 = #xattr{name = XattrName1, value = XattrValue11},
+    Xattr12 = #xattr{name = XattrName1, value = XattrValue12},
+    Xattr21 = #xattr{name = XattrName2, value = XattrValue21},
+    Xattr22 = #xattr{name = XattrName2, value = XattrValue22},
+
+    % File1: xattr1=1, xattr2=1, should be replicated
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr11),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr21),
+
+    % File2: xattr1=1, xattr2=2, should not be replicated
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid2}, Xattr11),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid2}, Xattr22),
+
+    % File3: xattr1=1, should not be replicated
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid3}, Xattr11),
+
+    % File4: xattr1=2, should not be replicated
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid4}, Xattr12),
+
+    % File6: xattr1=1, xattr2=1, should be replicated
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid6}, Xattr11),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid6}, Xattr21),
+
+    ct:pal("File1: ~p", [File1]),
+    ct:pal("File6: ~p", [File6]),
+
+    ViewName = <<"replication_jobs">>,
+    MapFunction = transfers_test_utils:test_map_function(XattrName1, XattrName2),
+    ReduceFunction = transfers_test_utils:test_reduce_function(XattrValue21),
+
+    tracer:start(WorkerP2),
+    tracer:trace_calls(index, save),
+    tracer:trace_calls(index, save_db_view),
+    tracer:trace_calls(couchbase_driver, save_view_doc),
+    ok = rpc:call(WorkerP2, index, save,
+        [SpaceId, ViewName, MapFunction, ReduceFunction, [{group, 1}, {key, XattrValue11}], false,
+            [?GET_DOMAIN_BIN(WorkerP1), ?GET_DOMAIN_BIN(WorkerP2)]]),
+
+%%    timer:sleep(timer:seconds(30)),
+
+    {ok, ObjectId1} = cdmi_id:guid_to_objectid(FileGuid),
+    {ok, ObjectId6} = cdmi_id:guid_to_objectid(FileGuid6),
+
+
+    ?assertIndexQuery([ObjectId1, ObjectId6], WorkerP2, SpaceId, ViewName,  [{key, XattrValue11}]),
+%%    ct:pal("SLEEP"),
+%%    ct:timetrap({hours, 23}),
+%%    ct:sleep({hours, 23}).
+
+
+
+    transfers_test_mechanism:run_test(
+        Config2, #transfer_test_spec{
+            setup = undefined,
+            scenario = #scenario{
+                type = Type,
+                schedule_node = WorkerP1,
+                replicating_nodes = [WorkerP2],
+                space_id = SpaceId,
+                function = fun transfers_test_mechanism:replicate_files_from_index/2,
+%%                query_view_params = [{reduce, false}, {key, XattrValue11}],
+                query_view_params = [{group, true}, {key, XattrValue11}],
+                index_name = ViewName
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    replication_status => completed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+                    files_to_process => 3,
+                    files_processed => 3,
+                    files_replicated => 2,
+                    bytes_replicated => 2 * ?DEFAULT_SIZE,
+                    min_hist => ?MIN_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 2 * ?DEFAULT_SIZE}),
+                    hr_hist => ?HOUR_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 2 * ?DEFAULT_SIZE}),
+                    dy_hist => ?DAY_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 2 * ?DEFAULT_SIZE}),
+                    mth_hist => ?MONTH_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 2 * ?DEFAULT_SIZE})
+                },
+                assertion_nodes = [WorkerP1, WorkerP2],
+                assert_transferred_file_model = false
+            }
+        }
+    ).
+
 
 scheduling_replication_by_not_existing_index_should_fail(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -942,7 +1071,7 @@ scheduling_replication_by_index_with_wrong_function_should_fail(Config, Type) ->
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
     WrongValue = <<"random_value_instead_of_file_id">>,
     %functions does not emit file id in values
-    ViewFunction = <<
+    MapFunction = <<
         "function (id, meta) {
             if(meta['", XattrName/binary,"']) {
                 return [meta['", XattrName/binary, "'], '", WrongValue/binary, "'];
@@ -950,7 +1079,8 @@ scheduling_replication_by_index_with_wrong_function_should_fail(Config, Type) ->
         return null;
     }">>,
     IndexName = <<"index_with_wrong_function">>,
-    ok = rpc:call(WorkerP2, index, save, [SpaceId, IndexName, ViewFunction, undefined, [], false, [?GET_DOMAIN_BIN(WorkerP1), ?GET_DOMAIN_BIN(WorkerP2)]]),
+    ok = rpc:call(WorkerP2, index, save,
+        [SpaceId, IndexName, MapFunction, undefined, [], false, [?GET_DOMAIN_BIN(WorkerP1), ?GET_DOMAIN_BIN(WorkerP2)]]),
     ?assertIndexQuery([WrongValue], WorkerP2, SpaceId, IndexName,  [{key, XattrValue}]),
 
     transfers_test_mechanism:run_test(
@@ -990,8 +1120,9 @@ scheduling_replication_by_empty_index_should_succeed(Config, Type) ->
     SpaceId = ?SPACE_ID,
     XattrName = transfers_test_utils:random_job_name(),
     ViewName = <<"replication_jobs">>,
-    ViewFunction = transfers_test_utils:view_function(XattrName),
-    ok = rpc:call(WorkerP2, index, save, [SpaceId, ViewName, ViewFunction, undefined, [], false, [?GET_DOMAIN_BIN(WorkerP1), ?GET_DOMAIN_BIN(WorkerP2)]]),
+    MapFunction = transfers_test_utils:test_map_function(XattrName),
+    ok = rpc:call(WorkerP2, index, save,
+        [SpaceId, ViewName, MapFunction, undefined, [], false, [?GET_DOMAIN_BIN(WorkerP1), ?GET_DOMAIN_BIN(WorkerP2)]]),
     ?assertIndexQuery([], WorkerP2, SpaceId, ViewName,  []),
 
     transfers_test_mechanism:run_test(
@@ -1049,8 +1180,9 @@ scheduling_replication_by_not_existing_key_in_index_should_succeed(Config, Type)
     Xattr = #xattr{name = XattrName, value = XattrValue},
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
     ViewName = <<"replication_jobs">>,
-    ViewFunction = transfers_test_utils:view_function(XattrName),
-    ok = rpc:call(WorkerP2, index, save, [SpaceId, ViewName, ViewFunction, undefined, [], false, [?GET_DOMAIN_BIN(WorkerP1), ?GET_DOMAIN_BIN(WorkerP2)]]),
+    MapFunction = transfers_test_utils:test_map_function(XattrName),
+    ok = rpc:call(WorkerP2, index, save,
+        [SpaceId, ViewName, MapFunction, undefined, [], false, [?GET_DOMAIN_BIN(WorkerP1), ?GET_DOMAIN_BIN(WorkerP2)]]),
 
     ?assertIndexQuery([FileUuid], WorkerP2, SpaceId, ViewName,  [{key, XattrValue}]),
 
@@ -1114,8 +1246,9 @@ schedule_replication_of_100_regular_files_by_index(Config, Type) ->
     end, FileGuidsAndPaths),
 
     ViewName = <<"replication_jobs">>,
-    ViewFunction = transfers_test_utils:view_function(XattrName),
-    ok = rpc:call(WorkerP2, index, save, [SpaceId, ViewName, ViewFunction, undefined, [], false, [?GET_DOMAIN_BIN(WorkerP1), ?GET_DOMAIN_BIN(WorkerP2)]]),
+    MapFunction = transfers_test_utils:test_map_function(XattrName),
+    ok = rpc:call(WorkerP2, index, save,
+        [SpaceId, ViewName, MapFunction, undefined, [], false, [?GET_DOMAIN_BIN(WorkerP1), ?GET_DOMAIN_BIN(WorkerP2)]]),
     ?assertIndexQuery(FileUuids, WorkerP2, SpaceId, ViewName, [{key, XattrValue}]),
 
     transfers_test_mechanism:run_test(

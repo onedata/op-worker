@@ -118,17 +118,19 @@ end).
 -define(OLD_TRANSFERS_KEY, old_transfer_ids).
 -define(SPACE_ID_KEY, space_id).
 
--define(assertIndexQuery(ExpectedGuids, Worker, SpaceId, ViewName, Options),
-    ?assertIndexQuery(ExpectedGuids, Worker, SpaceId, ViewName, Options, ?ATTEMPTS)).
+-define(assertIndexQuery(ExpectedValues, Worker, SpaceId, ViewName, Options),
+    ?assertIndexQuery(ExpectedValues, Worker, SpaceId, ViewName, Options, ?ATTEMPTS)).
 
--define(assertIndexQuery(ExpectedGuids, Worker, SpaceId, ViewName, Options, Attempts),
-    ?assertEqual(lists:sort(ExpectedGuids), begin
+-define(assertIndexQuery(ExpectedValues, Worker, SpaceId, ViewName, Options, Attempts),
+    ?assertEqual(lists:sort(ExpectedValues), begin
         try
             {ok, {Rows}} = rpc:call(Worker, index, query, [SpaceId, ViewName, Options]),
-            lists:sort(lists:map(fun(Row) ->
+            Result = lists:sort(lists:flatmap(fun(Row) ->
                 {<<"value">>, Value} = lists:keyfind(<<"value">>, 1, Row),
-                Value
-            end, Rows))
+                lists:flatten([Value])
+            end, Rows)),
+            ct:pal("RESULT: ~p~nExpected: ~p", [Result, lists:sort(ExpectedValues)]),
+            Result
         catch
             _:_ ->
                 error

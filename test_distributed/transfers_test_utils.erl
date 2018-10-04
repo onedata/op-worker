@@ -26,7 +26,7 @@
     mock_space_occupancy/3, unmock_space_occupancy/2, unmock_sync_req/1,
     root_name/2, root_name/3,
     mock_prolonged_replication/3, mock_replica_synchronizer_failure/1,
-    unmock_replica_synchronizer_failure/1, remove_all_indexes/2, random_job_name/0, view_function/1]).
+    unmock_replica_synchronizer_failure/1, remove_all_indexes/2, random_job_name/0, test_map_function/1, test_reduce_function/1, test_map_function/2]).
 
 %%%===================================================================
 %%% API
@@ -168,12 +168,30 @@ random_job_name() ->
     RandomIntBin = str_utils:to_binary(rand:uniform(1024)),
     <<"job_", RandomIntBin/binary>>.
 
-view_function(XattrName) ->
+test_map_function(XattrName) ->
     <<"function (id, meta) {
         if(meta['", XattrName/binary,"']) {
             return [meta['", XattrName/binary,"'], id];
         }
         return null;
+    }">>.
+
+test_map_function(XattrName, XattrName2) ->
+    <<"function (id, meta) {
+        if(meta['", XattrName/binary,"']) {
+            return [meta['", XattrName/binary,"'], [id, meta['", XattrName2/binary, "']]];
+        }
+        return null;
+    }">>.
+
+test_reduce_function(XattrValue) ->
+    XattrValueBin = str_utils:to_binary(XattrValue),
+    <<"function (key, values, rereduce) {
+        var filtered = [];
+        for(i = 0; i < values.length; i++)
+            if(values[i][1] == ", XattrValueBin/binary ,")
+                filtered.push(values[i][0]);
+        return filtered;
     }">>.
 
 %%%===================================================================
