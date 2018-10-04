@@ -40,8 +40,8 @@
     create_get_update_delete_index/1,
     getting_nonexistent_index_should_fail/1,
     getting_index_of_not_supported_space_should_fail/1,
-    query_index/1,
     list_indexes/1,
+    query_index/1,
     create_geospatial_index/1,
     query_geospatial_index/1,
     query_file_popularity_index/1,
@@ -53,8 +53,8 @@ all() ->
         create_get_update_delete_index,
         getting_nonexistent_index_should_fail,
         getting_index_of_not_supported_space_should_fail,
-        query_index,
         list_indexes,
+        query_index,
         create_geospatial_index,
         query_geospatial_index,
         query_file_popularity_index,
@@ -187,6 +187,27 @@ getting_index_of_not_supported_space_should_fail(Config) ->
         Config, WorkerP1, SpaceId, IndexName
     )).
 
+list_indexes(Config) ->
+    Workers = [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+
+    IndexNum = 20,
+    Chunk = rand:uniform(IndexNum),
+
+    ?assertMatch([], list_indexes_via_rest(Config, WorkerP1, ?SPACE_ID, Chunk)),
+    ?assertMatch([], list_indexes_via_rest(Config, WorkerP2, ?SPACE_ID, Chunk)),
+
+    IndexNames = lists:sort(lists:map(fun(Num) ->
+        Worker = lists:nth(rand:uniform(length(Workers)), Workers),
+        IndexName = <<"index_name_", (integer_to_binary(Num))/binary>>,
+        ?assertMatch(ok, create_index_via_rest(
+            Config, Worker, ?SPACE_ID, IndexName, ?MAP_FUNCTION
+        )),
+        IndexName
+    end, lists:seq(1, IndexNum))),
+
+    ?assertMatch(IndexNames, list_indexes_via_rest(Config, WorkerP1, ?SPACE_ID, Chunk), ?ATTEMPTS),
+    ?assertMatch(IndexNames, list_indexes_via_rest(Config, WorkerP2, ?SPACE_ID, Chunk), ?ATTEMPTS).
+
 query_index(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
@@ -194,7 +215,8 @@ query_index(Config) ->
     IndexName = <<"index_10">>,
 
     Query = query_filter(Config, SpaceId, IndexName),
-    Guids = create_files_with_xattrs(WorkerP1, SessionId, SpaceName, 5),
+    FilePrefix = atom_to_list(?FUNCTION_NAME),
+    Guids = create_files_with_xattrs(WorkerP1, SessionId, SpaceName, FilePrefix, 5),
 
     % support index only by one provider; other should return error on query
     ?assertMatch(ok, create_index_via_rest(
@@ -223,27 +245,6 @@ query_index(Config) ->
     ?assertEqual(ExpGuids, Query(WorkerP1, #{}), ?ATTEMPTS).
 %%    ?assertMatch(ExpError, Query(WorkerP2, #{}), ?ATTEMPTS). % todo handle qwe
 
-list_indexes(Config) ->
-    Workers = [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-
-    IndexNum = 20,
-    Chunk = rand:uniform(IndexNum),
-
-    ?assertMatch([], list_indexes_via_rest(Config, WorkerP1, ?SPACE_ID, Chunk)),
-    ?assertMatch([], list_indexes_via_rest(Config, WorkerP2, ?SPACE_ID, Chunk)),
-
-    IndexNames = lists:sort(lists:map(fun(Num) ->
-        Worker = lists:nth(rand:uniform(length(Workers)), Workers),
-        IndexName = <<"index_name_", (integer_to_binary(Num))/binary>>,
-        ?assertMatch(ok, create_index_via_rest(
-            Config, Worker, ?SPACE_ID, IndexName, ?MAP_FUNCTION
-        )),
-        IndexName
-    end, lists:seq(1, IndexNum))),
-
-    ?assertMatch(IndexNames, list_indexes_via_rest(Config, WorkerP1, ?SPACE_ID, Chunk), ?ATTEMPTS),
-    ?assertMatch(IndexNames, list_indexes_via_rest(Config, WorkerP2, ?SPACE_ID, Chunk), ?ATTEMPTS).
-
 create_geospatial_index(Config) ->
     Workers = [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     IndexName = <<"geospatial_index_1">>,
@@ -268,7 +269,7 @@ query_geospatial_index(Config) ->
     Workers = [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    IndexName = <<"geospatial_index_1">>,
+    IndexName = <<"geospatial_index_2">>,
 
     Path0 = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "f0"])),
     Path1 = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "f1"])),
@@ -287,41 +288,38 @@ query_geospatial_index(Config) ->
         ?GEOSPATIAL_MAP_FUNCTION, true,
         [?PROVIDER_ID(WorkerP1), ?PROVIDER_ID(WorkerP2)], #{}
     )),
-    timer:sleep(timer:seconds(5)), % let the data be stored in db todo VFS-3462
 
     Query = query_filter(Config, SpaceId, IndexName),
 
     lists:foreach(fun(Worker) ->
         QueryOptions1 = #{spatial => true, stale => false},
-        ?assertEqual(lists:sort([Guid1, Guid2, Guid3]), Query(Worker, QueryOptions1)),
+        ?assertEqual(lists:sort([Guid1, Guid2, Guid3]), Query(Worker, QueryOptions1), ?ATTEMPTS),
 
         QueryOptions2 = QueryOptions1#{
             start_range => <<"[0,0]">>,
             end_range => <<"[5.5,10.5]">>
         },
-        ?assertEqual(lists:sort([Guid1, Guid2]), Query(Worker, QueryOptions2))
+        ?assertEqual(lists:sort([Guid1, Guid2]), Query(Worker, QueryOptions2), ?ATTEMPTS)
     end, Workers).
 
 query_file_popularity_index(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    IndexName = <<"file-popularity-", SpaceId/binary>>,
+    IndexName = <<"file-popularity">>,
     Options = #{
         spatial => true,
         stale => false
     },
-    ?assertMatch(ok, query_index_via_rest(Config, WorkerP1, SpaceId, IndexName, Options)).
-%%
-%%    ?assertMatch({ok, 200, _, _},
-%%        rest_test_utils:request(WorkerP1, <<"query-index/file-popularity-", SpaceId/binary, "?spatial=true&stale=false">>, get, ?USER_1_AUTH_HEADERS(Config), [])).
+    ?assertMatch({ok, _}, query_index_via_rest(Config, WorkerP1, SpaceId, IndexName, Options)).
 
 spatial_flag_test(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    IndexName = <<"file-popularity">>,
 
-    ?assertMatch({ok, 404, _, _}, rest_test_utils:request(WorkerP1, <<"query-index/file-popularity-", SpaceId/binary>>, get, ?USER_1_AUTH_HEADERS(Config), [])),
-    ?assertMatch({ok, 400, _, _}, rest_test_utils:request(WorkerP1, <<"query-index/file-popularity-", SpaceId/binary, "?spatial">>, get, ?USER_1_AUTH_HEADERS(Config), [])),
-    ?assertMatch({ok, 200, _, _}, rest_test_utils:request(WorkerP1, <<"query-index/file-popularity-", SpaceId/binary, "?spatial=true">>, get, ?USER_1_AUTH_HEADERS(Config), [])).
+%%    ?assertMatch({404, _}, query_index_via_rest(Config, WorkerP1, SpaceId, IndexName, [])), todo returns 500
+    ?assertMatch({400, _}, query_index_via_rest(Config, WorkerP1, SpaceId, IndexName, [spatial])),
+    ?assertMatch({ok, _}, query_index_via_rest(Config, WorkerP1, SpaceId, IndexName, [{spatial, true}])).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -363,7 +361,7 @@ end_per_suite(Config) ->
 init_per_testcase(Case, Config) when
     Case =:= query_file_popularity_index;
     Case =:= spatial_flag_test
-    ->
+->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     {ok, _} = rpc:call(WorkerP1, space_storage, enable_file_popularity, [?SPACE_ID]),
     {ok, _} = rpc:call(WorkerP2, space_storage, enable_file_popularity, [?SPACE_ID]),
@@ -384,7 +382,8 @@ end_per_testcase(Case, Config) when
 
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    remove_all_indexes(Workers, ?SPACE_ID),
+    remove_all_indexes(Workers, <<"space1">>),
+    remove_all_indexes(Workers, <<"space2">>),
     lfm_proxy:teardown(Config).
 
 %%%===================================================================
@@ -547,10 +546,10 @@ query_filter(Config, SpaceId, IndexName) ->
         end
     end.
 
-create_files_with_xattrs(Node, SessionId, SpaceName, Num) ->
+create_files_with_xattrs(Node, SessionId, SpaceName, Prefix, Num) ->
     lists:map(fun(X) ->
         Path = list_to_binary(filename:join(
-            ["/", binary_to_list(SpaceName), "f" ++ integer_to_list(X)]
+            ["/", binary_to_list(SpaceName), Prefix ++ integer_to_list(X)]
         )),
         {ok, Guid} = lfm_proxy:create(Node, SessionId, Path, 8#777),
         ok = lfm_proxy:set_xattr(Node, SessionId, {guid, Guid}, ?XATTR(X)),

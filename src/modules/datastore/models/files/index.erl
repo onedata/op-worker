@@ -158,6 +158,9 @@ save_db_view(IndexId, SpaceId, Function, ReduceFunction, Spatial, Options) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec query(od_space:id(), name(), options()) -> {ok, datastore_json:ejson()} | {error, term()}.
+query(SpaceId, <<"file-popularity">>, Options) ->
+    Id = <<"file-popularity-", SpaceId/binary>>,
+    couchbase_driver:query_view(?DISC_CTX, Id, Id, Options);
 query(SpaceId, IndexName, Options) ->
     Id = id(IndexName, SpaceId),
     couchbase_driver:query_view(?DISC_CTX, Id, Id, Options).
