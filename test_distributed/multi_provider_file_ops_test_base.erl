@@ -13,6 +13,7 @@
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
+-include("modules/datastore/transfer.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
@@ -1632,8 +1633,19 @@ transfer_files_to_source_provider(Config0) ->
     
     End = erlang:monotonic_time(millisecond),
     
-    ct:pal("Total time[s]: ~p~n"
-           "Average time per file[ms]: ~p", [(End-Start)/1000, (End-Start)/FilesNum]).
+    StartGui = erlang:monotonic_time(millisecond),
+    utils:pforeach(fun(Num) ->
+        {ok, [{_, List}]} = 
+            rpc:call(Worker, transfer_data_backend, list_transfers, 
+                [SpaceName, ?ENDED_TRANSFERS_STATE , null, (Num-1)*100, 100]),
+        ?assertMatch(100, length(List))
+    end, lists:seq(1, FilesNum div 100)),
+    EndGui = erlang:monotonic_time(millisecond),
+    
+    ct:pal("Transfer time[s]: ~p~n"
+           "Average time per file[ms]: ~p~n"
+           "GUI time [s]: ~p", 
+        [(End-Start)/1000, (End-Start)/FilesNum, (EndGui-StartGui)/1000]).
 
 
 %%%===================================================================
