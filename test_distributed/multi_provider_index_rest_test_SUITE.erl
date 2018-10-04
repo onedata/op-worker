@@ -38,6 +38,7 @@
 
 -export([
     create_get_update_delete_index/1,
+    create_get_delete_reduce_fun/1,
     getting_nonexistent_index_should_fail/1,
     getting_index_of_not_supported_space_should_fail/1,
     list_indexes/1,
@@ -51,6 +52,7 @@
 all() ->
     ?ALL([
         create_get_update_delete_index,
+        create_get_delete_reduce_fun,
         getting_nonexistent_index_should_fail,
         getting_index_of_not_supported_space_should_fail,
         list_indexes,
@@ -89,6 +91,15 @@ all() ->
     <<"function (id, meta) {
         if(meta['onedata_json'] && meta['onedata_json']['loc']) {
             return [meta['onedata_json']['loc'], id];
+        }
+        return null;
+    }">>
+).
+
+-define(REDUCE_FUNCTION,
+    <<"function (id, meta) {
+        if(meta['", ?XATTR_NAME/binary,"']) {
+            return [meta['", ?XATTR_NAME/binary,"'], id];
         }
         return null;
     }">>
@@ -141,6 +152,71 @@ create_get_update_delete_index(Config) ->
         ?assertMatch({ok, #{
             <<"indexOptions">> := Options,
             <<"providers">> := [Provider2],
+            <<"mapFunction">> := ExpMapFun,
+            <<"reduceFunction">> := null,
+            <<"spatial">> := false
+        }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
+    end, Workers),
+
+    % delete on other provider
+    ?assertMatch(ok, remove_index_via_rest(Config, WorkerP2, ?SPACE_ID, IndexName)),
+    ?assertMatch([], list_indexes_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([], list_indexes_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS).
+
+create_get_delete_reduce_fun(Config) ->
+    Workers = [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    Provider1 = ?PROVIDER_ID(WorkerP1),
+    IndexName = <<"name1">>,
+
+    % create on one provider
+    ?assertMatch([], list_indexes_via_rest(Config, WorkerP1, ?SPACE_ID, 100)),
+    ?assertMatch(ok, create_index_via_rest(
+        Config, WorkerP1, ?SPACE_ID, IndexName, ?MAP_FUNCTION, false
+    )),
+    ?assertMatch([IndexName], list_indexes_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([IndexName], list_indexes_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
+
+    % get on both
+    ExpMapFun = index_utils:escape_js_function(?MAP_FUNCTION),
+    lists:foreach(fun(Worker) ->
+        ?assertMatch({ok, #{
+            <<"indexOptions">> := #{},
+            <<"providers">> := [Provider1],
+            <<"mapFunction">> := ExpMapFun,
+            <<"reduceFunction">> := null,
+            <<"spatial">> := false
+        }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
+    end, Workers),
+
+    % add reduce function
+    ?assertMatch(ok, add_reduce_fun_via_rest(
+        Config, WorkerP1, ?SPACE_ID, IndexName, ?REDUCE_FUNCTION
+    )),
+    ?assertMatch([IndexName], list_indexes_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([IndexName], list_indexes_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
+
+    % get on both after adding reduce
+    ExpReduceFun = index_utils:escape_js_function(?REDUCE_FUNCTION),
+    lists:foreach(fun(Worker) ->
+        ?assertMatch({ok, #{
+            <<"indexOptions">> := #{},
+            <<"providers">> := [Provider1],
+            <<"mapFunction">> := ExpMapFun,
+            <<"reduceFunction">> := ExpReduceFun,
+            <<"spatial">> := false
+        }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
+    end, Workers),
+
+    % remove reduce function
+    ?assertMatch(ok, remove_reduce_fun_via_rest(Config, WorkerP1, ?SPACE_ID, IndexName)),
+    ?assertMatch([IndexName], list_indexes_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([IndexName], list_indexes_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
+
+    % get on both after adding reduce
+    lists:foreach(fun(Worker) ->
+        ?assertMatch({ok, #{
+            <<"indexOptions">> := #{},
+            <<"providers">> := [Provider1],
             <<"mapFunction">> := ExpMapFun,
             <<"reduceFunction">> := null,
             <<"spatial">> := false
@@ -413,6 +489,32 @@ create_index_via_rest(Config, Worker, SpaceId, IndexName, MapFunction, Spatial, 
 
     case rest_test_utils:request(Worker, Path, put, Headers, MapFunction) of
         {ok, 200, _, _} ->
+            ok;
+        {ok, Code, _, Body} ->
+            {Code, json_utils:decode(Body)}
+    end.
+
+add_reduce_fun_via_rest(Config, Worker, SpaceId, IndexName, ReduceFunction) ->
+    Path = <<(?INDEX_PATH(SpaceId, IndexName))/binary, "/reduce">>,
+    Headers = ?USER_1_AUTH_HEADERS(Config, [
+        {<<"content-type">>, <<"application/javascript">>}
+    ]),
+
+    case rest_test_utils:request(Worker, Path, put, Headers, ReduceFunction) of
+        {ok, 200, _, _} ->
+            ok;
+        {ok, Code, _, Body} ->
+            {Code, json_utils:decode(Body)}
+    end.
+
+remove_reduce_fun_via_rest(Config, Worker, SpaceId, IndexName) ->
+    Path = <<(?INDEX_PATH(SpaceId, IndexName))/binary, "/reduce">>,
+    Headers = ?USER_1_AUTH_HEADERS(Config, [
+        {<<"content-type">>, <<"application/javascript">>}
+    ]),
+
+    case rest_test_utils:request(Worker, Path, delete, Headers, []) of
+        {ok, 204, _, _} ->
             ok;
         {ok, Code, _, Body} ->
             {Code, json_utils:decode(Body)}

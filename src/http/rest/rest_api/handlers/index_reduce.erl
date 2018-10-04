@@ -78,7 +78,7 @@ delete_resource(Req, State) ->
 
     #{space_id := SpaceId, index_name := IndexName} = State3,
 
-    % TODO delete reduce fun
+    ok = index:add_reduce(SpaceId, IndexName, undefined),
     {true, Req3, State3}.
 
 %%%===================================================================
@@ -107,5 +107,5 @@ add_or_modify_index_reduce_fun(Req, State) ->
         function := ReduceFunction
     } = State4,
 
-    % TODO add reduce fun to index
+    ok = index:add_reduce(SpaceId, IndexName, ReduceFunction),
     {stop, cowboy_req:reply(?HTTP_OK, Req4), State4}.
