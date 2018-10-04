@@ -35,6 +35,7 @@
 
     schedule_migration_by_index/1,
     scheduling_migration_by_not_existing_index_should_fail/1,
+    scheduling_replica_migration_by_index_with_wrong_function_should_fail/1,
     scheduling_migration_by_empty_index_should_succeed/1,
     scheduling_migration_by_not_existing_key_in_index_should_succeed/1,
     schedule_migration_of_100_regular_files_by_index_with_batch_1000/1,
@@ -54,10 +55,10 @@ all() -> [
     migrate_big_file_replica,
     migrate_100_files_in_one_request,
     migrate_100_files_each_file_separately,
-%%    fail_to_migrate_file_replica_without_permissions %todo VFS-4844
-
+    %%    fail_to_migrate_file_replica_without_permissions %todo VFS-4844
     schedule_migration_by_index,
     scheduling_migration_by_not_existing_index_should_fail,
+    scheduling_replica_migration_by_index_with_wrong_function_should_fail,
     scheduling_migration_by_empty_index_should_succeed,
     scheduling_migration_by_not_existing_key_in_index_should_succeed,
     schedule_migration_of_100_regular_files_by_index_with_batch_1000,
@@ -110,6 +111,9 @@ schedule_migration_by_index(Config) ->
 
 scheduling_migration_by_not_existing_index_should_fail(Config) ->
     replica_migration_transfers_test_base:scheduling_migration_by_not_existing_index_should_fail(Config, lfm).
+
+scheduling_replica_migration_by_index_with_wrong_function_should_fail(Config) ->
+    replica_migration_transfers_test_base:scheduling_replica_migration_by_index_with_wrong_function_should_fail(Config, lfm).
 
 scheduling_migration_by_empty_index_should_succeed(Config) ->
     replica_migration_transfers_test_base:scheduling_migration_by_empty_index_should_succeed(Config, lfm).

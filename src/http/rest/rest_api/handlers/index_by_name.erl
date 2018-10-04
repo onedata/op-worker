@@ -164,6 +164,7 @@ create_or_modify_index(Req, State) ->
         index_name := IndexName,
         spatial := Spatial,
         function := MapFunction,
+        reduce_function := ReduceFunction,
         providers := Providers
     } = State8,
 
@@ -171,7 +172,7 @@ create_or_modify_index(Req, State) ->
         throw_if_provider_does_not_support_space(SpaceId, ProviderId)
     end, Providers),
 
-    ok = index:save(SpaceId, IndexName, MapFunction, Options, Spatial, Providers),
+    ok = index:save(SpaceId, IndexName, MapFunction, ReduceFunction, Options, Spatial, Providers),
     {stop, cowboy_req:reply(?HTTP_OK, Req8), State8}.
 
 %%%===================================================================

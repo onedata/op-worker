@@ -117,3 +117,21 @@ end).
 -define(TRANSFERS_KEY, transfer_ids).
 -define(OLD_TRANSFERS_KEY, old_transfer_ids).
 -define(SPACE_ID_KEY, space_id).
+
+-define(assertIndexQuery(ExpectedGuids, Worker, SpaceId, ViewName, Options),
+    ?assertIndexQuery(ExpectedGuids, Worker, SpaceId, ViewName, Options, ?ATTEMPTS)).
+
+-define(assertIndexQuery(ExpectedGuids, Worker, SpaceId, ViewName, Options, Attempts),
+    ?assertEqual(lists:sort(ExpectedGuids), begin
+        try
+            {ok, {Rows}} = rpc:call(Worker, index, query, [SpaceId, ViewName, Options]),
+            lists:sort(lists:map(fun(Row) ->
+                {<<"value">>, Value} = lists:keyfind(<<"value">>, 1, Row),
+                Value
+            end, Rows))
+        catch
+            _:_ ->
+                error
+        end
+    end, Attempts)
+).

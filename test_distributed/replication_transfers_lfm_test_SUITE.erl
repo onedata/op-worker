@@ -48,6 +48,7 @@
     many_simultaneous_failed_transfers/1,
     schedule_replication_of_regular_file_by_index/1,
     scheduling_replication_by_not_existing_index_should_fail/1,
+    scheduling_replication_by_index_with_wrong_function_should_fail/1,
     scheduling_replication_by_empty_index_should_succeed/1,
     scheduling_replication_by_not_existing_key_in_index_should_succeed/1,
     schedule_replication_of_100_regular_files_by_index_with_batch_1000/1,
@@ -82,6 +83,7 @@ all() -> [
     many_simultaneous_failed_transfers,
     schedule_replication_of_regular_file_by_index,
     scheduling_replication_by_not_existing_index_should_fail,
+    scheduling_replication_by_index_with_wrong_function_should_fail,
     scheduling_replication_by_empty_index_should_succeed,
     scheduling_replication_by_not_existing_key_in_index_should_succeed,
     schedule_replication_of_100_regular_files_by_index_with_batch_1000,
@@ -171,6 +173,9 @@ schedule_replication_of_regular_file_by_index(Config) ->
 
 scheduling_replication_by_not_existing_index_should_fail(Config) ->
     replication_transfers_test_base:scheduling_replication_by_not_existing_index_should_fail(Config, lfm).
+
+scheduling_replication_by_index_with_wrong_function_should_fail(Config) ->
+    replication_transfers_test_base:scheduling_replication_by_index_with_wrong_function_should_fail(Config, lfm).
 
 scheduling_replication_by_empty_index_should_succeed(Config) ->
     replication_transfers_test_base:scheduling_replication_by_empty_index_should_succeed(Config, lfm).

@@ -243,31 +243,38 @@ create_and_get_view(Config) ->
     MetaBlue = #{<<"meta">> => #{<<"color">> => <<"blue">>}},
     MetaRed = #{<<"meta">> => #{<<"color">> => <<"red">>}},
     ViewFunction =
-        <<"function (meta) {
+        <<"function (id, meta) {
               if(meta['onedata_json'] && meta['onedata_json']['meta'] && meta['onedata_json']['meta']['color']) {
-                  return meta['onedata_json']['meta']['color'];
+                  return [meta['onedata_json']['meta']['color'], id];
               }
               return null;
         }">>,
     {ok, Guid1} = lfm_proxy:create(Worker, SessId, Path1, 8#600),
     {ok, Guid2} = lfm_proxy:create(Worker, SessId, Path2, 8#600),
     {ok, Guid3} = lfm_proxy:create(Worker, SessId, Path3, 8#600),
+    Uuid1 = fslogic_uuid:guid_to_uuid(Guid1),
+    Uuid2 = fslogic_uuid:guid_to_uuid(Guid2),
+    Uuid3 = fslogic_uuid:guid_to_uuid(Guid3),
     ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, Guid1}, json, MetaBlue, [])),
     ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, Guid2}, json, MetaRed, [])),
     ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, Guid3}, json, MetaBlue, [])),
-    ok = rpc:call(Worker, index, save, [SpaceId, ViewName, ViewFunction, [], false, [ProviderId]]),
+    ok = rpc:call(Worker, index, save, [SpaceId, ViewName, ViewFunction, undefined, undefined, [], false, [ProviderId]]),
     ?assertMatch({ok, [ViewName]}, rpc:call(Worker, index, list, [SpaceId])),
     FinalCheck = fun() ->
         try
-            {ok, GuidsBlue} = {ok, [_ | _]} = rpc:call(Worker, index, query_view_and_filter_values, [SpaceId, ViewName, [{key, <<"blue">>}, {stale, false}]]),
-            {ok, GuidsRed} = rpc:call(Worker, index, query_view_and_filter_values, [SpaceId, ViewName, [{key, <<"red">>}]]),
-            {ok, GuidsOrange} = rpc:call(Worker, index, query_view_and_filter_values, [SpaceId, ViewName, [{key, <<"orange">>}]]),
+            {ok, QueryResultBlue} = query_index(Worker, SpaceId, ViewName, [{key, <<"blue">>}, {stale, false}]),
+            {ok, QueryResultRed} = query_index(Worker, SpaceId, ViewName, [{key, <<"red">>}]),
+            {ok, QueryResultOrange} = query_index(Worker, SpaceId, ViewName, [{key, <<"orange">>}]),
 
-            true = lists:member(Guid1, GuidsBlue),
-            false = lists:member(Guid2, GuidsBlue),
-            true = lists:member(Guid3, GuidsBlue),
-            [Guid2] = GuidsRed,
-            [] = GuidsOrange,
+            UuidsBlue = extract_query_values(QueryResultBlue),
+            UuidsRed = extract_query_values(QueryResultRed),
+            UuidsOrange = extract_query_values(QueryResultOrange),
+
+            true = lists:member(Uuid1, UuidsBlue),
+            false = lists:member(Uuid2, UuidsBlue),
+            true = lists:member(Uuid3, UuidsBlue),
+            [Uuid2] = UuidsRed,
+            [] = UuidsOrange,
             ok
         catch
             E1:E2 ->
@@ -380,3 +387,13 @@ end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     test_utils:mock_validate_and_unload(Workers, [communicator]).
+
+query_index(Worker, SpaceId, ViewName, Options) ->
+    rpc:call(Worker, index, query, [SpaceId, ViewName, Options]).
+
+extract_query_values(QueryResult) ->
+    {Rows} = QueryResult,
+    lists:map(fun(Row) ->
+        {<<"value">>, Value} = lists:keyfind(<<"value">>, 1, Row),
+        Value
+    end, Rows).

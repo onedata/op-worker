@@ -212,6 +212,12 @@
     <<"error_provider_not_supporting_index">>,
     <<"Provider ", __ProviderId/binary, " does not support specified index.">>)
 ).
+-define(ERROR_INDEX_FUNCTION, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"error_index_function">>,
+    <<"Processing query result failed.
+    Ensure that returned value from map/reduce function is file id or list of which first element is file id.">>)
+).
 
 -define(ERROR_SPACE_NOT_SUPPORTED, ?ERROR_REPLY(
     ?BAD_REQUEST,

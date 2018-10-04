@@ -292,8 +292,7 @@ replicate_fs_subtree(UserCtx, FileCtx, Block, TransferId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec replicate_files_from_index(user_ctx:ctx(), file_ctx:ctx(), block(),
-    transfer_id(), transfer:index_name(), query_view_params(), file_meta:uuid()
-) ->
+    transfer_id(), transfer:index_name(), query_view_params(), file_meta:uuid()) ->
     provider_response().
 replicate_files_from_index(UserCtx, FileCtx, Block, TransferId, IndexName,
     QueryViewParams, LastDocId
@@ -323,21 +322,33 @@ replicate_files_from_index(UserCtx, FileCtx, Block, TransferId, IndexName, Chunk
     QueryViewParams2 = case LastDocId of
         undefined ->
             [{skip, 0} | QueryViewParams];
+        doc_id_missing ->
+            % doc_id is missing when view has reduce function defined
+            % in such case we must iterate over results using limit and skip
+            [{skip, Chunk} | QueryViewParams];
         _ ->
             [{skip, 1}, {startkey_docid, LastDocId} | QueryViewParams]
     end,
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    case index:query_view(SpaceId, IndexName, [{limit, Chunk} | QueryViewParams2]) of
+    case index:query(SpaceId, IndexName, [{limit, Chunk} | QueryViewParams2]) of
         {ok, {Rows}} ->
             NumberOfFiles = length(Rows),
             {NewLastDocId, Guids} = lists:foldl(fun(Row, AccIn = {_LastDocId, FileGuids}) ->
-                {<<"value">>, FileUuid} = lists:keyfind(<<"value">>, 1, Row),
-                {<<"id">>, DocId} = lists:keyfind(<<"id">>, 1, Row),
+                {<<"value">>, Values} = lists:keyfind(<<"value">>, 1, Row),
+                DocId = case lists:keyfind(<<"id">>, 1, Row) of
+                    {<<"id">>, Id} -> Id;
+                    _ -> doc_id_missing
+                end,
+                FileUuid = case is_list(Values) of
+                    true -> hd(Values);
+                    false -> Values
+                end,
                 try
                     FileGuid = fslogic_uuid:uuid_to_guid(FileUuid),
                     {DocId, [FileGuid | FileGuids]}
                 catch
                     Error:Reason ->
+                        transfer:increment_files_failed_and_processed_counters(TransferId),
                         ?error_stacktrace("Cannot resolve uuid of file ~p in index ~p, due to error ~p:~p", [FileUuid, IndexName, Error, Reason]),
                         AccIn
                 end
