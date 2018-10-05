@@ -55,7 +55,7 @@ start() ->
     {ok, CertFile} = application:get_env(?APP_NAME, web_cert_file),
     ChainFile = application:get_env(?APP_NAME, web_cert_chain_file, undefined),
 
-    {ok, CustomRoot} = application:get_env(?APP_NAME, gui_custom_static_root),
+    {ok, CustomRoot} = application:get_env(?APP_NAME, gui_static_root_override),
     {ok, DefaultRoot} = application:get_env(?APP_NAME, gui_default_static_root),
 
     CustomCowboyRoutes = lists:flatten([
@@ -92,7 +92,7 @@ start() ->
         dynamic_pages = DynamicPageRoutes,
         custom_cowboy_routes = CustomCowboyRoutes,
         default_static_root = DefaultRoot,
-        custom_static_root = CustomRoot
+        static_root_override = CustomRoot
     }).
 
 

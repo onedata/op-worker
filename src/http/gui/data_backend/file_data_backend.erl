@@ -176,7 +176,9 @@ update_record(<<"file">>, FileId, [{<<"name">>, NewName}]) ->
             {error, ?EPERM} ->
                 gui_error:report_warning(<<"Permission denied.">>);
             {error, ?EACCES} ->
-                gui_error:report_warning(<<"Access denied.">>)
+                gui_error:report_warning(<<"Access denied.">>);
+            {error, ?EINVAL} ->
+                gui_error:report_warning(<<"Invalid argument.">>)
         end
     catch Error:Message ->
         ?error_stacktrace("Cannot rename file via GUI - ~p:~p", [
