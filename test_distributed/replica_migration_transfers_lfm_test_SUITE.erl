@@ -129,9 +129,11 @@ schedule_migration_of_100_regular_files_by_index_with_batch_1000(Config) ->
     replica_migration_transfers_test_base:schedule_migration_of_100_regular_files_by_index(Config, lfm).
 
 schedule_migration_of_100_regular_files_by_index_with_batch_100(Config) ->
+    %replica_migration_transfers_test_base:init_per_testcase sets replica_eviction_by_index_batch variable to 100
     replica_migration_transfers_test_base:schedule_migration_of_100_regular_files_by_index(Config, lfm).
 
 schedule_migration_of_100_regular_files_by_index_with_batch_10(Config) ->
+    %replica_migration_transfers_test_base:init_per_testcase sets replica_eviction_by_index_batch variable to 10
     replica_migration_transfers_test_base:schedule_migration_of_100_regular_files_by_index(Config, lfm).
 
 %%%===================================================================

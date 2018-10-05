@@ -54,6 +54,7 @@ list(SpaceId, StartId, Offset, Limit) ->
 
 -spec delete_links(index:name(), od_space:id()) -> ok.
 delete_links(IndexName, SpaceId) ->
+    % todo VFS-4939
     LinkRoot = link_root(SpaceId),
     case datastore_model:get_links(?CTX, LinkRoot, all, IndexName) of
         {error, not_found} ->

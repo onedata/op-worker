@@ -191,9 +191,11 @@ schedule_replication_of_100_regular_files_by_index_with_batch_1000(Config) ->
     replication_transfers_test_base:schedule_replication_of_100_regular_files_by_index(Config, lfm).
 
 schedule_replication_of_100_regular_files_by_index_with_batch_100(Config) ->
+    %replication_transfers_test_base:init_per_testcase sets replica_eviction_by_index_batch variable to 100
     replication_transfers_test_base:schedule_replication_of_100_regular_files_by_index(Config, lfm).
 
 schedule_replication_of_100_regular_files_by_index_with_batch_10(Config) ->
+    %replication_transfers_test_base:init_per_testcase sets replica_eviction_by_index_batch variable to 10
     replication_transfers_test_base:schedule_replication_of_100_regular_files_by_index(Config, lfm).
 
 
