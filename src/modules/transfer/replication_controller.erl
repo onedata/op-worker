@@ -149,13 +149,14 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
 handle_cast({start_replication, SessionId, TransferId, FileGuid, Callback,
-    EvictSourceReplica}, State
+    EvictSourceReplica, IndexName, QueryViewParams}, State
 ) ->
     flush(),
     case replication_status:handle_enqueued(TransferId) of
         {ok, _} ->
             sync_req:enqueue_file_replication(user_ctx:new(SessionId),
-                file_ctx:new_by_guid(FileGuid), undefined, TransferId
+                file_ctx:new_by_guid(FileGuid), undefined, TransferId, IndexName,
+                QueryViewParams
             ),
             handle_enqueued(TransferId, Callback, EvictSourceReplica);
         {error, enqueued} ->

@@ -64,17 +64,11 @@
     set_get_json_metadata_id/1,
     set_get_rdf_metadata/1,
     set_get_rdf_metadata_id/1,
-    remove_index/1,
-    create_list_index/1,
-    create_geospatial_index/1,
-    query_geospatial_index/1,
-    query_file_popularity_index/1,
     set_get_json_metadata_inherited/1,
     set_get_xattr_inherited/1,
     set_get_json_metadata_using_filter/1,
     primitive_json_metadata_test/1,
     empty_metadata_invalid_json_test/1,
-    spatial_flag_test/1,
     list_transfers/1,
     track_transferred_files/1
 ]).
@@ -117,17 +111,11 @@ all() ->
         set_get_json_metadata_id,
         set_get_rdf_metadata,
         set_get_rdf_metadata_id,
-        remove_index,
-        create_list_index,
-        create_geospatial_index,
-        query_geospatial_index,
-        query_file_popularity_index,
         set_get_json_metadata_inherited,
         set_get_xattr_inherited,
         set_get_json_metadata_using_filter,
         primitive_json_metadata_test,
         empty_metadata_invalid_json_test,
-        spatial_flag_test,
         list_transfers,
         track_transferred_files
     ]).
@@ -1524,134 +1512,6 @@ set_get_rdf_metadata_id(Config) ->
             ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/rdf+xml">>}]), [])),
     ?assertMatch(<<"some_xml">>, Body).
 
-remove_index(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    Function =
-        <<"function (meta) {
-              if(meta['onedata_json'] && meta['onedata_json']['meta'] && meta['onedata_json']['meta']['color']) {
-                  return meta['onedata_json']['meta']['color'];
-              }
-              return null;
-        }">>,
-    {ok, 303, Headers, _} = ?assertMatch({ok, 303, _, _},
-        rest_test_utils:request(WorkerP1, <<"index?space_id=space1&name=name">>, post, ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/javascript">>}]), Function)),
-    <<"/api/v3/oneprovider/index/", Id/binary>> = proplists:get_value(<<"location">>, Headers),
-    {ok, _, _, ListBody} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(WorkerP1, <<"index">>, get, ?USER_1_AUTH_HEADERS(Config), [])),
-    IndexList = json_utils:decode(ListBody),
-    ?assertMatch([_], IndexList),
-
-    %when
-    ?assertMatch({ok, 204, _, _}, rest_test_utils:request(WorkerP1, <<"index/", Id/binary>>, delete, ?USER_1_AUTH_HEADERS(Config), [])),
-
-    %then
-    ?assertMatch({ok, 200, _, <<"[]">>}, rest_test_utils:request(WorkerP1, <<"index">>, get, ?USER_1_AUTH_HEADERS(Config), [])).
-
-create_list_index(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    Function =
-        <<"function (meta) {
-              if(meta['onedata_json'] && meta['onedata_json']['meta'] && meta['onedata_json']['meta']['color']) {
-                  return meta['onedata_json']['meta']['color'];
-              }
-              return null;
-        }">>,
-    ?assertMatch({ok, 200, _, <<"[]">>}, rest_test_utils:request(WorkerP1, <<"index">>, get, ?USER_1_AUTH_HEADERS(Config), [])),
-
-    % when
-    {ok, 303, Headers, _} = ?assertMatch({ok, 303, _, _},
-        rest_test_utils:request(WorkerP1, <<"index?space_id=space1&name=name">>, post, ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/javascript">>}]), Function)),
-    <<"/api/v3/oneprovider/index/", Id/binary>> = proplists:get_value(<<"location">>, Headers),
-
-    % then
-    {ok, _, _, ListBody} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(WorkerP1, <<"index">>, get, ?USER_1_AUTH_HEADERS(Config), [])),
-    IndexList = json_utils:decode(ListBody),
-    ?assertMatch([#{<<"spaceId">> := <<"space1">>, <<"name">> := <<"name">>, <<"indexId">> := Id, <<"spatial">> := false}], IndexList),
-    ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"index/", Id/binary>>, get, ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/javascript">>}]), [])),
-
-    % when
-    {ok, 303, _, _} = ?assertMatch({ok, 303, _, _},
-        rest_test_utils:request(WorkerP1, <<"index?space_id=space1&name=name2">>, post,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/javascript">>}]), Function)),
-
-    % then
-    {ok, _, _, ListBody2} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(WorkerP1, <<"index">>, get,
-        ?USER_1_AUTH_HEADERS(Config), [])),
-    IndexList2 = json_utils:decode(ListBody2),
-    ?assertMatch([#{}, #{}], IndexList2).
-
-create_geospatial_index(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    Function =
-        <<"function (meta) {
-              if(meta['onedata_json'] && meta['onedata_json']['loc']) {
-                  return meta['onedata_json']['loc'];
-              }
-              return null;
-        }">>,
-
-    % when
-    {ok, 303, Headers, _} = ?assertMatch({ok, 303, _, _},
-        rest_test_utils:request(WorkerP1, <<"index?space_id=space1&name=name&spatial=true">>, post, ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/javascript">>}]), Function)),
-    <<"/api/v3/oneprovider/index/", Id/binary>> = proplists:get_value(<<"location">>, Headers),
-
-    % then
-    {ok, _, _, ListBody} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(WorkerP1, <<"index">>, get, ?USER_1_AUTH_HEADERS(Config), [])),
-    IndexList = json_utils:decode(ListBody),
-    ?assert(lists:member(#{<<"spaceId">> => <<"space1">>, <<"name">> => <<"name">>, <<"indexId">> => Id, <<"spatial">> => true}, IndexList)),
-    ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"index/", Id/binary>>, get, ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/javascript">>}]), [])).
-
-query_geospatial_index(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    Function =
-        <<"function (meta) {
-              if(meta['onedata_json'] && meta['onedata_json']['loc']) {
-                  return meta['onedata_json']['loc'];
-              }
-              return null;
-        }">>,
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    Path1 = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "f1"])),
-    Path2 = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "f2"])),
-    Path3 = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "f3"])),
-    {ok, Guid1} = lfm_proxy:create(WorkerP1, SessionId, Path1, 8#777),
-    {ok, Guid2} = lfm_proxy:create(WorkerP1, SessionId, Path2, 8#777),
-    {ok, Guid3} = lfm_proxy:create(WorkerP1, SessionId, Path3, 8#777),
-    ok = lfm_proxy:set_metadata(WorkerP1, SessionId, {guid, Guid1}, json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [5.1, 10.22]}, [<<"loc">>]),
-    ok = lfm_proxy:set_metadata(WorkerP1, SessionId, {guid, Guid2}, json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [0, 0]}, [<<"loc">>]),
-    ok = lfm_proxy:set_metadata(WorkerP1, SessionId, {guid, Guid3}, json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [10, 5]}, [<<"loc">>]),
-    {ok, 303, Headers, _} = ?assertMatch({ok, 303, _, _},
-        rest_test_utils:request(WorkerP1, <<"index?space_id=space1&name=name&spatial=true">>, post,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/javascript">>}]), Function)),
-    <<"/api/v3/oneprovider/index/", Id/binary>> = proplists:get_value(<<"location">>, Headers),
-    timer:sleep(timer:seconds(5)), % let the data be stored in db todo VFS-3462
-
-    % when
-    {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(WorkerP1, <<"query-index/", Id/binary, "?spatial=true&stale=false">>, get, ?USER_1_AUTH_HEADERS(Config), [])),
-
-    % then
-    Guids = lists:map(fun(X) ->
-        {ok, ObjId} = cdmi_id:objectid_to_guid(X),
-        ObjId
-    end, json_utils:decode(Body)),
-    ?assertEqual(lists:sort([Guid1, Guid2, Guid3]), lists:sort(Guids)),
-
-    % when
-    {ok, 200, _, Body2} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(WorkerP1, <<"query-index/", Id/binary, "?spatial=true&stale=false&start_range=[0,0]&end_range=[5.5,10.5]">>, get, ?USER_1_AUTH_HEADERS(Config), [])),
-
-    % then
-    Guids2 = lists:map(fun(X) -> {ok, ObjId} = cdmi_id:objectid_to_guid(X),
-        ObjId end, json_utils:decode(Body2)),
-    ?assertEqual(lists:sort([Guid1, Guid2]), lists:sort(Guids2)).
-
-query_file_popularity_index(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"query-index/file-popularity-", SpaceId/binary, "?spatial=true&stale=false">>, get, ?USER_1_AUTH_HEADERS(Config), [])).
-
 set_get_json_metadata_inherited(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
@@ -1787,14 +1647,6 @@ empty_metadata_invalid_json_test(Config) ->
             rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json">>, put,
                 ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), InvalidJson))
     end, InvalidJsons).
-
-spatial_flag_test(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-
-    ?assertMatch({ok, 404, _, _}, rest_test_utils:request(WorkerP1, <<"query-index/file-popularity-", SpaceId/binary>>, get, ?USER_1_AUTH_HEADERS(Config), [])),
-    ?assertMatch({ok, 400, _, _}, rest_test_utils:request(WorkerP1, <<"query-index/file-popularity-", SpaceId/binary, "?spatial">>, get, ?USER_1_AUTH_HEADERS(Config), [])),
-    ?assertMatch({ok, 200, _, _}, rest_test_utils:request(WorkerP1, <<"query-index/file-popularity-", SpaceId/binary, "?spatial=true">>, get, ?USER_1_AUTH_HEADERS(Config), [])).
 
 list_transfers(Config) ->
     ct:timetrap({hours, 1}),
@@ -2011,14 +1863,6 @@ init_per_testcase(metric_get, Config) ->
     init_per_testcase(all, Config);
 
 init_per_testcase(Case, Config) when
-    Case =:= query_file_popularity_index;
-    Case =:= spatial_flag_test
-    ->
-    [_, WorkerP1] = ?config(op_worker_nodes, Config),
-    {ok, _} = rpc:call(WorkerP1, space_storage, enable_file_popularity, [<<"space1">>]),
-    init_per_testcase(all, Config);
-
-init_per_testcase(Case, Config) when
     Case =:= basic_autocleaning_test ->
     SpaceId = <<"space3">>,
     [WorkerP2 | _] = ?config(op_worker_nodes, Config),
@@ -2069,16 +1913,6 @@ end_per_testcase(Case = automatic_cleanup_should_evict_unpopular_files, Config) 
     check_if_space_empty(WorkerP1, SpaceId),
     check_if_space_empty(WorkerP2, SpaceId),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
-
-end_per_testcase(Case, Config) when
-    Case =:= query_file_popularity_index;
-    Case =:= spatial_flag_test
-    ->
-    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    rpc:call(WorkerP1, space_storage, disable_file_popularity, [<<"space1">>]),
-    rpc:call(WorkerP2, space_storage, disable_file_popularity, [<<"space1">>]),
-    end_per_testcase(?DEFAULT_CASE(Case), Config);
-
 
 end_per_testcase(Case, Config) when
     Case =:= transfers_should_be_ordered_by_timestamps;

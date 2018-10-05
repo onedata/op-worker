@@ -37,7 +37,9 @@
     callback :: transfer:callback(),
     space_id :: od_space:id(),
     status :: transfer:status(),
-    supporting_provider_id :: od_provider:id()
+    supporting_provider_id :: od_provider:id(),
+    index_name :: transfer:index_name(),
+    query_view_params :: transfer:query_view_params()
 }).
 
 %%%===================================================================
@@ -94,7 +96,9 @@ mark_cancelled(Pid) ->
 -spec init(Args :: term()) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
-init([SessionId, TransferId, FileGuid, Callback, SupportingProviderId]) ->
+init([SessionId, TransferId, FileGuid, Callback, SupportingProviderId,
+    IndexName, QueryViewParams
+]) ->
     ok = gen_server2:cast(self(), start_replica_eviction),
     {ok, #state{
         transfer_id = TransferId,
@@ -103,7 +107,9 @@ init([SessionId, TransferId, FileGuid, Callback, SupportingProviderId]) ->
         callback = Callback,
         space_id = fslogic_uuid:guid_to_space_id(FileGuid),
         status = enqueued,
-        supporting_provider_id = SupportingProviderId
+        supporting_provider_id = SupportingProviderId,
+        index_name = IndexName,
+        query_view_params = QueryViewParams
     }}.
 
 %%--------------------------------------------------------------------
@@ -138,14 +144,18 @@ handle_cast(start_replica_eviction, State = #state{
     transfer_id = TransferId,
     session_id = SessionId,
     file_guid = FileGuid,
-    supporting_provider_id = SupportingProviderId
+    supporting_provider_id = SupportingProviderId,
+    index_name = IndexName,
+    query_view_params = QueryViewParams
 }) ->
     flush(),
     case replica_eviction_status:handle_active(TransferId) of
         {ok, _} ->
             UserCtx = user_ctx:new(SessionId),
             FileCtx = file_ctx:new_by_guid(FileGuid),
-            replica_eviction_req:enqueue_replica_eviction(UserCtx, FileCtx, SupportingProviderId, TransferId),
+            replica_eviction_req:enqueue_replica_eviction(UserCtx, FileCtx,
+                SupportingProviderId, TransferId, IndexName, QueryViewParams
+            ),
             {noreply, State#state{status = active}};
         {error, active} ->
             {ok, _} = transfer:set_controller_process(TransferId),

@@ -38,15 +38,20 @@
     schedule_replica_eviction_without_permissions/2,
     migrate_root_directory/2,
     migrate_each_file_replica_separately/2,
-    schedule_replica_migration_without_permissions/2
-]).
+    schedule_replica_migration_without_permissions/2,
+    replicate_files_from_index/2,
+    evict_replicas_from_index/2,
+    migrate_replicas_from_index/2,
+    fail_to_replicate_files_from_index/2,
+    fail_to_evict_replicas_from_index/2,
+    fail_to_migrate_replicas_from_index/2]).
 
 -export([move_transfer_ids_to_old_key/1]).
 
 % functions exported to be called by rpc
 -export([create_files_structure/10, create_file/6,
     assert_file_visible/5, assert_file_distribution/6, prereplicate_file/6,
-    cast_files_prereplication/5]).
+    cast_files_prereplication/5, update_config/4, schedule_replication_by_index/8]).
 
 -define(DEFAULT_USER_TOKEN_HEADERS(Config),
     [?USER_TOKEN_HEADER(Config, ?DEFAULT_USER)]).
@@ -180,6 +185,42 @@ cancel_replication_on_target_nodes(Config, #scenario{
         NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
     end, Config, []).
 
+replicate_files_from_index(Config, #scenario{
+    user = User,
+    type = Type,
+    space_id = SpaceId,
+    index_name = IndexName,
+    query_view_params = QueryViewParams,
+    schedule_node = ScheduleNode,
+    replicating_nodes = ReplicatingNodes
+}) ->
+    NodesTransferIdsAndFiles = lists:map(fun(TargetNode) ->
+        TargetProviderId = transfers_test_utils:provider_id(TargetNode),
+        {ok, Tid} = schedule_replication_by_index(ScheduleNode,
+            TargetProviderId, User, SpaceId, IndexName, QueryViewParams, Config, Type),
+        {TargetNode, Tid, undefined, undefined}
+    end, ReplicatingNodes),
+
+    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
+        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
+    end, Config, []).
+
+fail_to_replicate_files_from_index(Config, #scenario{
+    user = User,
+    type = Type,
+    space_id = SpaceId,
+    index_name = IndexName,
+    query_view_params = QueryViewParams,
+    schedule_node = ScheduleNode,
+    replicating_nodes = ReplicatingNodes
+}) ->
+    lists:foreach(fun(TargetNode) ->
+        TargetProviderId = transfers_test_utils:provider_id(TargetNode),
+        ?assertMatch({error, _}, schedule_replication_by_index(ScheduleNode,
+            TargetProviderId, User, SpaceId, IndexName, QueryViewParams, Config, Type))
+    end, ReplicatingNodes),
+    Config.
+
 %%%===================================================================
 %%% Eviction scenarios
 %%%===================================================================
@@ -240,6 +281,42 @@ schedule_replica_eviction_without_permissions(Config, #scenario{
                 ok = lfm_proxy:set_perms(ScheduleNode, ?DEFAULT_SESSION(ScheduleNode, Config), FileKey, 8#644),
                 schedule_replica_eviction(ScheduleNode, EvictingProviderId,  User, FileKey, Config, Type))
         end, FilesGuidsAndPaths)
+    end, EvictingNodes),
+    Config.
+
+evict_replicas_from_index(Config, #scenario{
+    user = User,
+    type = Type,
+    space_id = SpaceId,
+    index_name = IndexName,
+    query_view_params = QueryViewParams,
+    schedule_node = ScheduleNode,
+    evicting_nodes = EvictingNodes
+}) ->
+    NodesTransferIdsAndFiles = lists:map(fun(EvictingNode) ->
+        EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
+        {ok, Tid} = schedule_replica_eviction_by_index(ScheduleNode,
+            EvictingProviderId, User, SpaceId, IndexName, QueryViewParams, Config, Type),
+        {EvictingNode, Tid, undefined, undefined}
+    end, EvictingNodes),
+
+    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
+        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
+    end, Config, []).
+
+fail_to_evict_replicas_from_index(Config, #scenario{
+    user = User,
+    type = Type,
+    space_id = SpaceId,
+    index_name = IndexName,
+    query_view_params = QueryViewParams,
+    schedule_node = ScheduleNode,
+    evicting_nodes = EvictingNodes
+}) ->
+    lists:foreach(fun(EvictingNode) ->
+        EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
+        ?assertMatch({error, _}, schedule_replica_eviction_by_index(ScheduleNode,
+            EvictingProviderId, User, SpaceId, IndexName, QueryViewParams, Config, Type))
     end, EvictingNodes),
     Config.
 
@@ -320,6 +397,55 @@ schedule_replica_migration_without_permissions(Config, #scenario{
     end, EvictingNodes),
     Config.
 
+migrate_replicas_from_index(Config, #scenario{
+    user = User,
+    type = Type,
+    space_id = SpaceId,
+    index_name = IndexName,
+    query_view_params = QueryViewParams,
+    schedule_node = ScheduleNode,
+    replicating_nodes = ReplicatingNodes,
+    evicting_nodes = EvictingNodes
+}) ->
+    NodesTransferIdsAndFiles = lists:flatmap(fun(ReplicatingNode) ->
+        lists:map(fun(EvictingNode) ->
+                ReplicatingProviderId = transfers_test_utils:provider_id(ReplicatingNode),
+                EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
+
+                {ok, Tid} = schedule_replica_migration_by_index(ScheduleNode,
+                    EvictingProviderId, User, SpaceId, IndexName,
+                    QueryViewParams, Config, Type, ReplicatingProviderId
+                ),
+                {EvictingNode, Tid, undefined, undefined}
+        end, EvictingNodes)
+    end, ReplicatingNodes),
+
+    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
+        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
+    end, Config, []).
+
+fail_to_migrate_replicas_from_index(Config, #scenario{
+    user = User,
+    type = Type,
+    space_id = SpaceId,
+    index_name = IndexName,
+    query_view_params = QueryViewParams,
+    schedule_node = ScheduleNode,
+    replicating_nodes = ReplicatingNodes,
+    evicting_nodes = EvictingNodes
+}) ->
+    lists:foreach(fun(ReplicatingNode) ->
+        lists:foreach(fun(EvictingNode) ->
+            ReplicatingProviderId = transfers_test_utils:provider_id(ReplicatingNode),
+            EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
+            ?assertMatch({error, _}, schedule_replica_migration_by_index(ScheduleNode,
+                EvictingProviderId, User, SpaceId, IndexName,
+                QueryViewParams, Config, Type, ReplicatingProviderId
+            ))
+        end, EvictingNodes)
+    end, ReplicatingNodes),
+    Config.
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -362,8 +488,10 @@ assert_expectations(Config, Expected = #expected{
     user = User,
     assertion_nodes = AssertionNodes,
     distribution = ExpectedDistribution,
+    assert_distribution_for_files = AssertDistributionForFiles,
     attempts = Attempts,
-    timeout = Timetrap
+    timeout = Timetrap,
+    assert_transferred_file_model = AssertTransferredFileModel
 }) ->
     NodesTransferIdsAndFiles = ?config(?TRANSFERS_KEY, Config, []),
     OldNodesTransferIdsAndFiles = ?config(?OLD_TRANSFERS_KEY, Config, []),
@@ -377,12 +505,22 @@ assert_expectations(Config, Expected = #expected{
             assert_transfer(Config, AssertionNode, Expected, TransferId,
                 FileGuid, FilePath, TargetNode),
             assert_files_distribution_on_all_nodes(Config, AssertionNodes, User,
-                ExpectedDistribution, Attempts, Timetrap),
-            ?assertEqual([], transfers_test_utils:get_ongoing_transfers_for_file(AssertionNode, FileGuid), Attempts),
-            ?assertEqual(true, begin
-                EndedTransfersForFile = transfers_test_utils:get_ended_transfers_for_file(AssertionNode, FileGuid),
-                lists:member(TransferId, EndedTransfersForFile)
-            end, Attempts),
+                ExpectedDistribution, AssertDistributionForFiles, Attempts, Timetrap),
+
+            case AssertTransferredFileModel of
+                true ->
+                    ?assertEqual([],
+                        transfers_test_utils:get_ongoing_transfers_for_file(AssertionNode, FileGuid),
+                    Attempts),
+
+                    ?assertEqual(true, begin
+                        EndedTransfersForFile =
+                            transfers_test_utils:get_ended_transfers_for_file(AssertionNode, FileGuid),
+                        lists:member(TransferId, EndedTransfersForFile)
+                    end, Attempts);
+                false ->
+                    ok
+            end,
             TransferId
         end, NodesTransferIdsAndFiles),
 
@@ -485,7 +623,7 @@ assert_setup(Config, #setup{
 }) ->
     assert_files_visible_on_all_nodes(Config, AssertionNodes, User, Attempts, Timetrap),
     assert_files_distribution_on_all_nodes(Config, AssertionNodes, User,
-        ExpectedDistribution, Attempts, Timetrap).
+        ExpectedDistribution, undefined, Attempts, Timetrap).
 
 await_countdown(Refs, Timetrap) when is_list(Refs) ->
     await_countdown(sets:from_list(Refs), Timetrap);
@@ -498,7 +636,7 @@ await_countdown(Refs, DataMap, Timetrap) ->
             DataMap;
         _ ->
             receive
-                {?COUNTDOWN_FINISHED, Ref, AssertionNode, Data} ->
+                {?COUNTDOWN_FINISHED, Ref, _AssertionNode, Data} ->
                     Refs2 = sets:del_element(Ref, Refs),
                     DataMap2 = DataMap#{Ref => Data},
                     await_countdown(Refs2, DataMap2, Timetrap)
@@ -514,9 +652,9 @@ assert_files_visible_on_all_nodes(Config, AssertionNodes, User, Attempts, Timetr
     end, AssertionNodes),
     await_countdown(Refs, Timetrap).
 
-assert_files_distribution_on_all_nodes(_Config, _AssertionNodes, _User, undefined, _Attempts, _Timetrap) ->
+assert_files_distribution_on_all_nodes(_Config, _AssertionNodes, _User, undefined, _AssertDistributionForFiles, _Attempts, _Timetrap) ->
     ok;
-assert_files_distribution_on_all_nodes(Config, AssertionNodes, User, ExpectedDistribution, Attempts, Timetrap) ->
+assert_files_distribution_on_all_nodes(Config, AssertionNodes, User, ExpectedDistribution, AssertDistributionForFiles, Attempts, Timetrap) ->
     % Deduce expected block size automatically based on expected blocks
     ExpectedDistributionWithBlockSize = lists:map(fun(Distribution) ->
         Distribution#{
@@ -527,17 +665,27 @@ assert_files_distribution_on_all_nodes(Config, AssertionNodes, User, ExpectedDis
     end, ExpectedDistribution),
 
     Refs = lists:map(fun(AssertionNode) ->
-        cast_files_distribution_assertion(Config, AssertionNode, User, ExpectedDistributionWithBlockSize, Attempts)
+        cast_files_distribution_assertion(Config, AssertionNode, User, ExpectedDistributionWithBlockSize, AssertDistributionForFiles, Attempts)
     end, AssertionNodes),
     await_countdown(Refs, Timetrap).
 
-cast_files_distribution_assertion(Config, Node, User, Expected, Attempts) ->
+cast_files_distribution_assertion(Config, Node, User, Expected, AssertDistributionForFiles, Attempts) ->
     FileGuidsAndPaths = ?config(?FILES_KEY, Config),
+    FilesToPerformAssertion = case AssertDistributionForFiles of
+        undefined ->  [G || {G, _} <- FileGuidsAndPaths];
+        _ ->
+            lists:filtermap(fun({G, _P}) ->
+            case lists:member(G, AssertDistributionForFiles) of
+                true -> {true, G};
+                false -> false
+            end
+        end, FileGuidsAndPaths)
+    end,
     SessionId = ?USER_SESSION(Node, User, Config),
-    CounterRef = countdown_server:init_counter(Node, length(FileGuidsAndPaths)),
-    lists:foreach(fun({FileGuid, _FilePath}) ->
+    CounterRef = countdown_server:init_counter(Node, length(FilesToPerformAssertion)),
+    lists:foreach(fun(FileGuid) ->
         cast_file_distribution_assertion(Expected, Node, SessionId, FileGuid, CounterRef, Attempts)
-    end, FileGuidsAndPaths),
+    end, FilesToPerformAssertion),
     CounterRef.
 
 cast_files_prereplication(Config, Node, User, ExpectedSize, Attempts) ->
@@ -563,7 +711,7 @@ prereplicate_file(Node, SessionId, FileGuid, CounterRef, ExpectedSize, Attempts)
                 lfm_proxy:close(Node, Handle),
                 byte_size(Data)
             catch
-                E:R ->
+                _E:_R ->
                     error
             end
         end, Attempts),
@@ -573,9 +721,12 @@ prereplicate_file(Node, SessionId, FileGuid, CounterRef, ExpectedSize, Attempts)
 cast_files_visible_assertion(Config, Node, User, Attempts) ->
     RootDirGuidAndPath = ?config(?ROOT_DIR_KEY, Config),
     FilesGuidsAndPaths = ?config(?FILES_KEY, Config),
+    FilesGuidsAndPaths2 = utils:ensure_defined(FilesGuidsAndPaths, undefined, []),
     DirsGuidsAndPaths = ?config(?DIRS_KEY, Config),
+    DirsGuidsAndPaths2 = utils:ensure_defined(DirsGuidsAndPaths, undefined, []),
     SessionId = ?USER_SESSION(Node, User, Config),
-    GuidsAndPaths = FilesGuidsAndPaths ++ [RootDirGuidAndPath | DirsGuidsAndPaths],
+
+    GuidsAndPaths = FilesGuidsAndPaths2 ++ [RootDirGuidAndPath | DirsGuidsAndPaths2],
     CounterRef = countdown_server:init_counter(Node, length(GuidsAndPaths)),
     lists:foreach(fun({FileGuid, _FilePath}) ->
         cast_file_visible_assertion(Node, SessionId, FileGuid, CounterRef, Attempts)
@@ -773,10 +924,28 @@ schedule_file_replication_by_rest(Worker, ProviderId, User, {guid, FileGuid}, Co
             {error, Body}
     end.
 
-schedule_replica_migration(ScheduleNode, ProviderId, User, FileKey, Config, lfm, MigrationProviderId) ->
-    schedule_replica_migration_by_lfm(ScheduleNode, ProviderId, User, FileKey, Config, MigrationProviderId);
-schedule_replica_migration(ScheduleNode, ProviderId, User, FileKey, Config, rest, MigrationProviderId) ->
-    schedule_replica_eviction_by_rest(ScheduleNode, ProviderId, User, FileKey, Config, MigrationProviderId).
+schedule_replication_by_index(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config, lfm) ->
+    schedule_replication_by_index_via_lfm(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config);
+schedule_replication_by_index(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config, rest) ->
+    schedule_replication_by_index_via_rest(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config).
+
+schedule_replication_by_index_via_rest(Worker, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config) ->
+    QueryParamsBin = create_query_string(QueryViewParams),
+    case rest_test_utils:request(Worker,
+        <<"replicas-index/", IndexName/binary, "?provider_id=", ProviderId/binary, "&space_id=", SpaceId/binary, QueryParamsBin/binary>>,
+        post, [?USER_TOKEN_HEADER(Config, User)], []
+    ) of
+        {ok, 200, _, Body} ->
+            DecodedBody = json_utils:decode(Body),
+            #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
+            {ok, Tid};
+        {ok, 400, _, Body} ->
+            {error, Body}
+    end.
+
+schedule_replication_by_index_via_lfm(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config) ->
+    SessionId = ?USER_SESSION(ScheduleNode, User, Config),
+    lfm_proxy:schedule_replication_by_index(ScheduleNode, SessionId, ProviderId, SpaceId, IndexName, QueryViewParams).
 
 schedule_replica_eviction(ScheduleNode, ProviderId, User, FileKey, Config, lfm) ->
     schedule_replica_eviction_by_lfm(ScheduleNode, ProviderId, User, FileKey, Config);
@@ -786,10 +955,6 @@ schedule_replica_eviction(ScheduleNode, ProviderId, User, FileKey, Config, rest)
 schedule_replica_eviction_by_lfm(ScheduleNode, ProviderId, User, FileKey, Config) ->
     SessionId = ?USER_SESSION(ScheduleNode, User, Config),
     lfm_proxy:schedule_file_replica_eviction(ScheduleNode, SessionId, FileKey, ProviderId, undefined).
-
-schedule_replica_migration_by_lfm(ScheduleNode, ProviderId, User, FileKey, Config, MigrationProviderId) ->
-    SessionId = ?USER_SESSION(ScheduleNode, User, Config),
-    lfm_proxy:schedule_file_replica_eviction(ScheduleNode, SessionId, FileKey, ProviderId, MigrationProviderId).
 
 schedule_replica_eviction_by_rest(Worker, ProviderId, User, {path, FilePath}, Config, MigrationProviderId) ->
     URL = case MigrationProviderId of
@@ -823,6 +988,63 @@ schedule_replica_eviction_by_rest(Worker, ProviderId, User, {guid, FileGuid}, Co
             #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
             {ok, Tid};
         {ok, _, _, Body} ->
+            {error, Body}
+    end.
+
+schedule_replica_eviction_by_index(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config, lfm) ->
+    schedule_replica_eviction_by_index_via_lfm(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config);
+schedule_replica_eviction_by_index(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config, rest) ->
+    schedule_replica_eviction_by_index_via_rest(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config).
+
+schedule_replica_eviction_by_index_via_lfm(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config) ->
+    SessionId = ?USER_SESSION(ScheduleNode, User, Config),
+    lfm_proxy:schedule_replica_eviction_by_index(ScheduleNode, SessionId, ProviderId, undefined, SpaceId, IndexName, QueryViewParams).
+
+schedule_replica_eviction_by_index_via_rest(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config) ->
+    QueryParamsBin = create_query_string(QueryViewParams),
+    case rest_test_utils:request(ScheduleNode,
+        <<"replicas-index/", IndexName/binary, "?provider_id=", ProviderId/binary, "&space_id=", SpaceId/binary, QueryParamsBin/binary>>,
+        delete, [?USER_TOKEN_HEADER(Config, User)], []
+    ) of
+        {ok, 200, _, Body} ->
+            DecodedBody = json_utils:decode(Body),
+            #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
+            {ok, Tid};
+        {ok, 400, _, Body} ->
+            {error, Body}
+    end.
+
+schedule_replica_migration(ScheduleNode, ProviderId, User, FileKey, Config, lfm, MigrationProviderId) ->
+    schedule_replica_migration_by_lfm(ScheduleNode, ProviderId, User, FileKey, Config, MigrationProviderId);
+schedule_replica_migration(ScheduleNode, ProviderId, User, FileKey, Config, rest, MigrationProviderId) ->
+    schedule_replica_eviction_by_rest(ScheduleNode, ProviderId, User, FileKey, Config, MigrationProviderId).
+
+schedule_replica_migration_by_lfm(ScheduleNode, ProviderId, User, FileKey, Config, MigrationProviderId) ->
+    SessionId = ?USER_SESSION(ScheduleNode, User, Config),
+    lfm_proxy:schedule_file_replica_eviction(ScheduleNode, SessionId, FileKey, ProviderId, MigrationProviderId).
+
+schedule_replica_migration_by_index(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config, lfm, MigrationProviderId) ->
+    schedule_replica_migration_by_index_via_lfm(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config, MigrationProviderId);
+schedule_replica_migration_by_index(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config, rest, MigrationProviderId) ->
+    schedule_replica_migration_by_index_via_rest(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config, MigrationProviderId).
+
+schedule_replica_migration_by_index_via_lfm(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config, MigrationProviderId) ->
+    SessionId = ?USER_SESSION(ScheduleNode, User, Config),
+    lfm_proxy:schedule_replica_eviction_by_index(ScheduleNode, SessionId, ProviderId, MigrationProviderId, SpaceId, IndexName, QueryViewParams).
+
+schedule_replica_migration_by_index_via_rest(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config, MigrationProviderId) ->
+    QueryParamsBin = create_query_string(QueryViewParams),
+    case rest_test_utils:request(ScheduleNode,
+        <<"replicas-index/", IndexName/binary, "?provider_id=", ProviderId/binary,
+            "&migration_provider_id=", MigrationProviderId/binary, "&space_id=", SpaceId/binary, QueryParamsBin/binary
+        >>,
+        delete, [?USER_TOKEN_HEADER(Config, User)], []
+    ) of
+        {ok, 200, _, Body} ->
+            DecodedBody = json_utils:decode(Body),
+            #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
+            {ok, Tid};
+        {ok, 400, _, Body} ->
             {error, Body}
     end.
 
@@ -894,3 +1116,26 @@ await_transfer_starts(Node, TransferId) ->
                 false
         end
     end, 60).
+
+create_query_string(QueryViewParams) ->
+    lists:foldl(fun(Option, TmpQuery) ->
+        OptionBin = case Option of
+            {Key, Val} ->
+                KeyBin = atom_to_binary(Key, utf8),
+                ValBin = binary_from_term(Val),
+                <<KeyBin/binary, "=", ValBin/binary>>;
+            _ ->
+                TmpOptionBin = atom_to_binary(Option, utf8),
+                <<TmpOptionBin/binary, "=true">>
+        end,
+        <<TmpQuery/binary, "&", OptionBin/binary>>
+    end, <<>>, QueryViewParams).
+
+binary_from_term(Val) when is_binary(Val) ->
+    Val;
+binary_from_term(Val) when is_integer(Val) ->
+    integer_to_binary(Val);
+binary_from_term(Val) when is_float(Val) ->
+    float_to_binary(Val);
+binary_from_term(Val) when is_atom(Val) ->
+    atom_to_binary(Val, utf8).
