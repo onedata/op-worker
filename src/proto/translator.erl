@@ -468,20 +468,72 @@ translate_from_protobuf(#'GetFileDistribution'{}) ->
 translate_from_protobuf(#'ScheduleFileReplication'{
     target_provider_id = ProviderId,
     block = Block,
-    callback = Callback
+    callback = Callback,
+    index_name = IndexName,
+    query_params = QueryParams
 }) ->
     #schedule_file_replication{
         target_provider_id = ProviderId,
         block = translate_from_protobuf(Block),
-        callback = Callback
+        callback = Callback,
+        index_name = IndexName,
+        query_view_params = translate_from_protobuf(QueryParams)
     };
+translate_from_protobuf(#'QueryParams'{
+    descending = Descending,
+    endkey = EndKey,
+    endkey_docid = EndKeyDocId,
+    full_set = FullSet,
+    group = Group,
+    group_level = GroupLevel,
+    inclusive_end = InclusiveEnd,
+    key = Key,
+    limit = Limit,
+    on_error = OnError,
+    reduce = Reduce,
+    spatial = Spatial,
+    skip = Skip,
+    stale = Stale,
+    startkey = StartKey,
+    startkey_docid = StartKeyDocId,
+    bbox = BBox,
+    start_range = StartRange,
+    end_range = EndRange
+}) ->
+    #query_view_params{params = [
+        {descending, Descending},
+        {endkey, EndKey},
+        {endkey_docid, EndKeyDocId},
+        {full_set, FullSet},
+        {group, Group},
+        {group_level, GroupLevel},
+        {inclusive_end, InclusiveEnd},
+        {key, Key},
+        {limit, Limit},
+        {on_error, OnError},
+        {reduce, Reduce},
+        {spatial, Spatial},
+        {skip, Skip},
+        {stale, Stale},
+        {startkey, StartKey},
+        {startkey_docid, StartKeyDocId},
+        {bbox, BBox},
+        {start_range, StartRange},
+        {end_range, EndRange}
+
+    ]};
 translate_from_protobuf(#'ScheduleReplicaInvalidation'{
     source_provider_id = SourceProviderId,
-    target_provider_id = TargetProviderId
+    target_provider_id = TargetProviderId,
+    index_name = IndexName,
+    query_params = QueryParams
+
 }) ->
     #schedule_replica_invalidation{
         source_provider_id = SourceProviderId,
-        target_provider_id = TargetProviderId
+        target_provider_id = TargetProviderId,
+        index_name = IndexName,
+        query_view_params = translate_from_protobuf(QueryParams)
     };
 translate_from_protobuf(#'ReadMetadata'{type = Type, names = Names, inherited = Inherited}) ->
     #get_metadata{type = binary_to_existing_atom(Type, utf8), names = Names, inherited = Inherited};
@@ -1019,20 +1071,50 @@ translate_to_protobuf(#get_file_distribution{}) ->
 translate_to_protobuf(#schedule_file_replication{
     target_provider_id = ProviderId,
     block = Block,
-    callback = Callback
+    callback = Callback,
+    index_name = IndexName,
+    query_view_params = QueryViewParams
 }) ->
     {replicate_file, #'ScheduleFileReplication'{
         target_provider_id = ProviderId,
         block = translate_to_protobuf(Block),
-        callback = Callback
+        callback = Callback,
+        index_name = IndexName,
+        query_params = translate_to_protobuf(QueryViewParams)
     }};
 translate_to_protobuf(#schedule_replica_invalidation{
     source_provider_id = ProviderId,
-    target_provider_id = MigrationProviderId
+    target_provider_id = MigrationProviderId,
+    index_name = IndexName,
+    query_view_params = QueryViewParams
 }) ->
     {invalidate_file_replica, #'ScheduleReplicaInvalidation'{
         source_provider_id = ProviderId,
-        target_provider_id = MigrationProviderId
+        target_provider_id = MigrationProviderId,
+        index_name =_id = IndexName,
+        query_params = translate_to_protobuf(QueryViewParams)
+    }};
+translate_to_protobuf(#query_view_params{params = Params}) ->
+    {query_view_params, #'QueryParams'{
+        descending = proplists:get_value(descending, Params, undefined),
+        endkey = proplists:get_value(endkey, Params, undefined),
+        endkey_docid = proplists:get_value(endkey_docid, Params, undefined),
+        full_set = proplists:get_value(full_set, Params, undefined),
+        group = proplists:get_value(group, Params, undefined),
+        group_level = proplists:get_value(group_level, Params, undefined),
+        inclusive_end = proplists:get_value(inclusive_end, Params, undefined),
+        key = proplists:get_value(key, Params, undefined),
+        limit = proplists:get_value(limit, Params, undefined),
+        on_error = proplists:get_value(on_error, Params, undefined),
+        reduce = proplists:get_value(reduce, Params, undefined),
+        spatial = proplists:get_value(spatial, Params, undefined),
+        skip = proplists:get_value(skip, Params, undefined),
+        stale = proplists:get_value(stale, Params, undefined),
+        startkey = proplists:get_value(startkey, Params, undefined),
+        startkey_docid = proplists:get_value(startkey_docid, Params, undefined),
+        bbox = proplists:get_value(bbox, Params, undefined),
+        start_range = proplists:get_value(start_range, Params, undefined),
+        end_range = proplists:get_value(end_range, Params, undefined)
     }};
 translate_to_protobuf(#get_metadata{type = Type, names = Names, inherited = Inherited}) ->
     {read_metadata, #'ReadMetadata'{type = atom_to_binary(Type, utf8), names = Names, inherited = Inherited}};

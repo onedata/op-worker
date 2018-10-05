@@ -56,19 +56,25 @@
     schedule_node :: node(),
     replicating_nodes :: [node()],
     evicting_nodes :: [node()],
-    function :: function
+    function :: function,
+    index_name :: binary(),
+    query_view_params :: list(),
+    space_id :: od_space:id()
 }).
 
 -record(expected, {
     user = ?DEFAULT_USER,
     distribution :: [#{}],
+    % distribution will be checked only for files from assert_files list
+    % if it's undefined, assertion will be performed for all files
+    assert_distribution_for_files = undefined :: undefined | list(),
     minHist :: #{},
     hrHist :: #{},
     dyHist :: #{},
     mthHist :: #{},
     expected_transfer :: #{},
     assertion_nodes :: [node()],
-    ended_transfers,
+    assert_transferred_file_model = true :: boolean(),
     attempts = ?ATTEMPTS,
     timeout = ?DEFAULT_TIMETRAP :: non_neg_integer()
 }).
@@ -114,3 +120,34 @@ end).
 -define(TRANSFERS_KEY, transfer_ids).
 -define(OLD_TRANSFERS_KEY, old_transfer_ids).
 -define(SPACE_ID_KEY, space_id).
+
+-define(assertIndexVisible(Worker, SpaceId, IndexName),
+    ?assertIndexVisible(Worker, SpaceId, IndexName, ?ATTEMPTS)).
+
+-define(assertIndexVisible(Worker, SpaceId, IndexName, Attempts),
+    ?assertMatch(true, begin
+        case rpc:call(Worker, index, list, [SpaceId]) of
+            {ok, Indexes} -> lists:member(IndexName, Indexes);
+            Error -> Error
+        end
+    end, Attempts)).
+
+-define(assertIndexQuery(ExpectedValues, Worker, SpaceId, ViewName, Options),
+    ?assertIndexQuery(ExpectedValues, Worker, SpaceId, ViewName, Options, ?ATTEMPTS)).
+
+-define(assertIndexQuery(ExpectedValues, Worker, SpaceId, ViewName, Options, Attempts),
+    ?assertEqual(lists:sort(ExpectedValues), begin
+        try
+            {ok, {Rows}} = rpc:call(Worker, index, query, [SpaceId, ViewName, Options]),
+            Result = lists:sort(lists:flatmap(fun(Row) ->
+                {<<"value">>, Value} = lists:keyfind(<<"value">>, 1, Row),
+                lists:flatten([Value])
+            end, Rows)),
+%%            ct:pal("RESULT: ~p~nExpected: ~p", [Result, lists:sort(ExpectedValues)]),
+            Result
+        catch
+            _:_ ->
+                error
+        end
+    end, Attempts)
+).

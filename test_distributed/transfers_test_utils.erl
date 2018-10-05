@@ -18,8 +18,6 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include("proto/common/credentials.hrl").
--include_lib("ctool/include/logging.hrl").
-
 %% API
 -export([get_transfer/2, provider_id/1, ensure_transfers_removed/1,
     list_ended_transfers/2, list_waiting_transfers/2, list_ongoing_transfers/2,
@@ -28,8 +26,9 @@
     mock_space_occupancy/3, unmock_space_occupancy/2, unmock_sync_req/1,
     root_name/2, root_name/3,
     mock_prolonged_replication/3, mock_replica_synchronizer_failure/1,
-    unmock_replica_synchronizer_failure/1
-]).
+    unmock_replica_synchronizer_failure/1, remove_all_indexes/2, random_job_name/0,
+    test_map_function/1, test_reduce_function/1, test_map_function/2,
+    create_index/7, create_index/6]).
 
 %%%===================================================================
 %%% API
@@ -72,10 +71,14 @@ list_ongoing_transfers(Worker, SpaceId) ->
     {ok, Transfers} = rpc:call(Worker, transfer, list_ongoing_transfers, [SpaceId]),
     Transfers.
 
+get_ongoing_transfers_for_file(_Worker, undefined) ->
+    [];
 get_ongoing_transfers_for_file(Worker, FileGuid) ->
     {ok, #{ongoing := Transfers}} = rpc:call(Worker, transferred_file, get_transfers, [FileGuid]),
     lists:sort(Transfers).
 
+get_ended_transfers_for_file(_Worker, undefined) ->
+    [];
 get_ended_transfers_for_file(Worker, FileGuid) ->
     {ok, #{ended := Transfers}} = rpc:call(Worker, transferred_file, get_transfers, [FileGuid]),
     lists:sort(Transfers).
@@ -114,10 +117,15 @@ root_name(FunctionName, Type) ->
     root_name(FunctionName, Type, <<"">>).
 
 root_name(FunctionName, Type, FileKeyType) ->
+    RandIntBin = str_utils:to_binary(rand:uniform(1024)),
+    root_name(FunctionName, Type, FileKeyType, RandIntBin).
+
+root_name(FunctionName, Type, FileKeyType, RandomSufix) ->
     TypeBin = str_utils:to_binary(Type),
     FileKeyTypeBin = str_utils:to_binary(FileKeyType),
     FunctionNameBin = str_utils:to_binary(FunctionName),
-    <<FunctionNameBin/binary, "_", TypeBin/binary, "_" , FileKeyTypeBin/binary>>.
+    SuffixBin = str_utils:to_binary(RandomSufix),
+    <<FunctionNameBin/binary, "_", TypeBin/binary, "_" , FileKeyTypeBin/binary, "_", SuffixBin/binary>>.
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -130,14 +138,14 @@ root_name(FunctionName, Type, FileKeyType) ->
 mock_prolonged_replication(Worker, ProlongationProbability, ProlongationTime) ->
     ok = test_utils:mock_new(Worker, sync_req),
     ok = test_utils:mock_expect(Worker, sync_req, replicate_file,
-        fun(UserCtx, FileCtx, Block, TransferId) ->
+        fun(UserCtx, FileCtx, Block, TransferId, IndexName, QueryViewParams) ->
             case rand:uniform() < ProlongationProbability of
                 true ->
                     timer:sleep(timer:seconds(ProlongationTime));
                 false ->
                     ok
             end,
-            meck:passthrough([UserCtx, FileCtx, Block, TransferId])
+            meck:passthrough([UserCtx, FileCtx, Block, TransferId, IndexName, QueryViewParams])
         end).
 
 mock_replica_synchronizer_failure(Node) ->
@@ -148,6 +156,51 @@ mock_replica_synchronizer_failure(Node) ->
 
 unmock_replica_synchronizer_failure(Node) ->
     ok = test_utils:mock_unload(Node, replica_synchronizer).
+
+remove_all_indexes(Nodes, SpaceId) ->
+    lists:foreach(fun(Node) ->
+        {ok, IndexNames} = rpc:call(Node, index, list, [SpaceId]),
+        lists:foreach(fun(IndexName) ->
+            ok = rpc:call(Node, index, delete, [SpaceId, IndexName])
+        end, IndexNames)
+    end, Nodes).
+
+random_job_name() ->
+    RandomIntBin = str_utils:to_binary(rand:uniform(1024)),
+    <<"job_", RandomIntBin/binary>>.
+
+test_map_function(XattrName) ->
+    <<"function (id, meta) {
+        if(meta['", XattrName/binary,"']) {
+            return [meta['", XattrName/binary,"'], id];
+        }
+        return null;
+    }">>.
+
+test_map_function(XattrName, XattrName2) ->
+    <<"function (id, meta) {
+        if(meta['", XattrName/binary,"']) {
+            return [meta['", XattrName/binary,"'], [id, meta['", XattrName2/binary, "']]];
+        }
+        return null;
+    }">>.
+
+test_reduce_function(XattrValue) ->
+    XattrValueBin = str_utils:to_binary(XattrValue),
+    <<"function (key, values, rereduce) {
+        var filtered = [];
+        for(i = 0; i < values.length; i++)
+            if(values[i][1] == ", XattrValueBin/binary ,")
+                filtered.push(values[i][0]);
+        return filtered;
+    }">>.
+
+create_index(Worker, SpaceId, IndexName, MapFunction, Options, Providers) ->
+    create_index(Worker, SpaceId, IndexName, MapFunction, undefined, Options, Providers).
+
+create_index(Worker, SpaceId, IndexName, MapFunction, ReduceFunction, Options, Providers) ->
+    ok = rpc:call(Worker, index, create, [SpaceId, IndexName, MapFunction, ReduceFunction,
+        Options, false, Providers]).
 
 %%%===================================================================
 %%% Internal functions

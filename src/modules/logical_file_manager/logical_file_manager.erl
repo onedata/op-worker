@@ -46,7 +46,8 @@
     get_child_attr/3, get_children_count/2, get_parent/2]).
 %% Functions operating on directories or files
 -export([mv/3, cp/3, get_file_path/2, get_file_guid/2, rm_recursive/2, unlink/3]).
--export([schedule_file_replication/3, schedule_file_replication/4, schedule_replica_eviction/4]).
+-export([schedule_file_replication/3, schedule_file_replication/4,
+    schedule_replica_eviction/4, schedule_replication_by_index/6, schedule_replica_eviction_by_index/6]).
 %% Functions operating on files
 -export([create/2, create/3, create/4, open/3, fsync/1, fsync/3, write/3, read/3,
     silent_read/3, truncate/3, release/1, get_file_distribution/2,
@@ -238,7 +239,8 @@ unlink(SessId, FileEntry, Silent) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_file_replication(session:id(), fslogic_worker:file_guid_or_path(),
-    TargetProviderId :: oneprovider:id()) -> {ok, transfer:id()} | error_reply().
+    TargetProviderId :: oneprovider:id()) ->
+    {ok, transfer:id()} | error_reply().
 schedule_file_replication(SessId, FileKey, TargetProviderId) ->
     schedule_file_replication(SessId, FileKey, TargetProviderId, undefined).
 
@@ -263,7 +265,33 @@ schedule_file_replication(SessId, FileKey, TargetProviderId, Callback) ->
             {error, ?EACCES};
         true ->
             ?run(fun() ->
-                lfm_files:schedule_file_replication(SessId, FileKey, TargetProviderId, Callback)
+                lfm_files:schedule_file_replication(SessId, FileKey,
+                    TargetProviderId, Callback)
+            end)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Schedules file replication to given provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec schedule_replication_by_index(session:id(), TargetProviderId :: oneprovider:id(),
+    transfer:callback(), od_space:id(), transfer:index_name(),
+    transfer:query_view_params()) -> {ok, transfer:id()} | error_reply().
+schedule_replication_by_index(SessId, TargetProviderId, Callback, SpaceId,
+    IndexName, QueryParams
+) ->
+    % Scheduling and target providers must support given space
+    HasAccess = provider_logic:supports_space(SpaceId)
+        andalso space_logic:is_supported(?ROOT_SESS_ID, SpaceId, TargetProviderId),
+    IndexSupported = index:is_supported(SpaceId, IndexName, TargetProviderId),
+    case HasAccess and IndexSupported of
+        false ->
+            {error, ?EACCES};
+        true ->
+            ?run(fun() ->
+                lfm_files:schedule_replication_by_index(SessId,
+                    TargetProviderId, Callback, SpaceId, IndexName, QueryParams)
             end)
     end.
 
@@ -295,7 +323,49 @@ schedule_replica_eviction(SessId, FileKey, SourceProviderId, TargetProviderId) -
             {error, ?EACCES};
         true ->
             ?run(fun() ->
-                lfm_files:schedule_replica_eviction(SessId, FileKey, SourceProviderId, TargetProviderId)
+                lfm_files:schedule_replica_eviction(SessId, FileKey,
+                    SourceProviderId, TargetProviderId)
+            end)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Schedules file replica eviction on given provider, migrates unique data
+%% to provider given as MigrateProviderId.
+%% @end
+%%--------------------------------------------------------------------
+-spec schedule_replica_eviction_by_index(session:id(), oneprovider:id(),
+    undefined | oneprovider:id(), od_space:id(),
+    transfer:index_name(), transfer:query_view_params()) ->
+    {ok, transfer:id()} | error_reply().
+schedule_replica_eviction_by_index(SessId, EvictingProviderId, ReplicatingProviderId,
+    SpaceId, IndexName, QueryViewParams
+) ->
+    SupportedByTarget = case ReplicatingProviderId of
+        undefined -> true;
+        _ -> space_logic:is_supported(?ROOT_SESS_ID, SpaceId, ReplicatingProviderId)
+    end,
+
+    % Scheduling, source and target providers must support given space
+    HasAccess = SupportedByTarget
+        andalso provider_logic:supports_space(SpaceId)
+        andalso space_logic:is_supported(?ROOT_SESS_ID, SpaceId, EvictingProviderId),
+
+    IndexSupported = index:is_supported(SpaceId, IndexName, EvictingProviderId)
+        andalso (
+            (ReplicatingProviderId == undefined)
+            or
+            (index:is_supported(SpaceId, IndexName, ReplicatingProviderId))
+        ),
+
+    case HasAccess and IndexSupported of
+        false ->
+            {error, ?EACCES};
+        true ->
+            ?run(fun() ->
+                lfm_files:schedule_replica_eviction_by_index(SessId,
+                    EvictingProviderId, ReplicatingProviderId, SpaceId,
+                    IndexName, QueryViewParams)
             end)
     end.
 
