@@ -841,7 +841,7 @@ cancel_froms(Froms, State = #state{
         RemainingFroms = gb_sets:subtract(gb_sets:from_list(RefFroms), FromsSet),
         case gb_sets:is_empty(RemainingFroms) of
             true ->
-                rtransfer_link:cancel(Ref),
+                cancel_ref(Ref, 3),
                 {maps:remove(Ref, TmpRTFs), sets:add_element(Ref, TmpRefs)};
             false ->
                 {TmpRTFs#{Ref => gb_sets:to_list(RemainingFroms)}, TmpRefs}
@@ -864,6 +864,35 @@ cancel_froms(Froms, State = #state{
         }),
 
     State2.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Cancels transfer via reference.
+%% @end
+%%--------------------------------------------------------------------
+-spec cancel_ref(fetch_ref(), non_neg_integer()) -> ok | failed.
+cancel_ref(_Ref, 0) ->
+    failed;
+cancel_ref(Ref, RetryNum) ->
+    try
+        rtransfer_link:cancel(Ref)
+    catch
+        %% The process we called was already terminating because of idle timeout,
+        %% there's nothing to worry about.
+        exit:{{shutdown, timeout}, _} ->
+            ?warning("Transfer cancel failed because of a timeout, "
+            "retrying with a new one"),
+            cancel_ref(Ref, RetryNum - 1);
+        _:{noproc, _} ->
+            ?warning("Transfer cancel failed because of noproc, "
+            "retrying with a new one"),
+            cancel_ref(Ref, RetryNum - 1);
+        exit:{normal, _} ->
+            ?warning("Transfer cancel failed because of exit:normal, "
+            "retrying with a new one"),
+            cancel_ref(Ref, RetryNum - 1)
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
