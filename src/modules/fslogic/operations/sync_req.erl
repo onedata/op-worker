@@ -203,8 +203,11 @@ replicate_file(UserCtx, FileCtx, Block, TransferId, IndexName, QueryViewParams) 
 %%-------------------------------------------------------------------
 -spec enqueue_file_replication(user_ctx:ctx(), file_ctx:ctx(),
     block(), transfer_id(), transfer:index_name(), query_view_params()) -> ok.
-enqueue_file_replication(UserCtx, FileCtx, Block, TransferId, IndexName, QueryViewParams) ->
-    enqueue_file_replication(UserCtx, FileCtx, Block, TransferId, undefined, undefined, IndexName, QueryViewParams).
+enqueue_file_replication(UserCtx, FileCtx, Block, TransferId, IndexName,
+    QueryViewParams
+) ->
+    enqueue_file_replication(UserCtx, FileCtx, Block, TransferId,
+        undefined, undefined, IndexName, QueryViewParams).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -333,47 +336,45 @@ replicate_files_from_index(UserCtx, FileCtx, Block, TransferId, IndexName, Chunk
     case index:query(SpaceId, IndexName, [{limit, Chunk} | QueryViewParams2]) of
         {ok, {Rows}} ->
             {NewLastDocId, FileCtxs} = lists:foldl(fun(Row, {_LastDocId, FileCtxsIn}) ->
-                {<<"value">>, Value} = lists:keyfind(<<"value">>, 1, Row),
-                DocId = case lists:keyfind(<<"id">>, 1, Row) of
-                    {<<"id">>, Id} -> Id;
-                    _ -> doc_id_missing
-                end,
-                ObjectIds = case is_list(Value) of
-                    true -> lists:flatten(Value);
-                    false -> [Value]
-                end,
-                NewFileCtxs = lists:filtermap(fun(O) ->
-                    try
-                        {ok, G} = cdmi_id:objectid_to_guid(O),
-                        {true, file_ctx:new_by_guid(G)}
-                    catch
-                    Error:Reason ->
-                        transfer:increment_files_failed_and_processed_counters(TransferId),
-                        ?error_stacktrace("Processing result of query index ~p in space ~p failed due to ~p:~p", [IndexName, SpaceId, Error, Reason]),
-                        false
-                    end
-                end, ObjectIds),
-                {DocId, FileCtxsIn ++ NewFileCtxs}
-            end, {undefined, []}, Rows),
+                    {<<"value">>, Value} = lists:keyfind(<<"value">>, 1, Row),
+                    DocId = case lists:keyfind(<<"id">>, 1, Row) of
+                        {<<"id">>, Id} -> Id;
+                        _ -> doc_id_missing
+                    end,
+                    ObjectIds = case is_list(Value) of
+                        true -> lists:flatten(Value);
+                        false -> [Value]
+                    end,
+                    transfer:increment_files_to_process_counter(TransferId, length(ObjectIds)),
+                    NewFileCtxs = lists:filtermap(fun(O) ->
+                        try
+                            {ok, G} = cdmi_id:objectid_to_guid(O),
+                            {true, file_ctx:new_by_guid(G)}
+                        catch
+                        Error:Reason ->
+                            transfer:increment_files_failed_and_processed_counters(TransferId),
+                            ?error_stacktrace(
+                                "Processing result of query index ~p in space ~p failed due to ~p:~p",
+                                [IndexName, SpaceId, Error, Reason]),
+                            false
+                        end
+                    end, ObjectIds),
+                    {DocId, FileCtxsIn ++ NewFileCtxs}
+                end, {undefined, []}, Rows),
 
-%%            % Guids are reversed now
-%%            FileCtxs = lists:foldl(fun(Guid, Ctxs) ->
-%%                [file_ctx:new_by_guid(Guid) | Ctxs]
-%%            end, [], Guids),
-
-            NumberOfFiles = length(FileCtxs),
-            transfer:increment_files_to_process_counter(TransferId, NumberOfFiles),
-            case NumberOfFiles < Chunk of
+            case length(Rows) < Chunk of
                 true ->
                     enqueue_files_replication(UserCtx, FileCtxs, undefined, TransferId),
                     transfer:increment_files_processed_counter(TransferId),
                     #provider_response{status = #status{code = ?OK}};
                 false ->
                     enqueue_files_replication(UserCtx, FileCtxs, undefined, TransferId),
-                    replicate_files_from_index(UserCtx, FileCtx, Block, TransferId, IndexName, QueryViewParams, NewLastDocId)
+                    replicate_files_from_index(UserCtx, FileCtx, Block,
+                        TransferId, IndexName, QueryViewParams, NewLastDocId)
             end;
         Error = {error, Reason} ->
-            ?error("Querying view ~p failed due to ~p when processing transfer ~p", [IndexName, Reason, TransferId]),
+            ?error("Querying view ~p failed due to ~p when processing transfer ~p",
+                [IndexName, Reason, TransferId]),
             throw(Error)
 
     end.

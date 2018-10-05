@@ -1,6 +1,6 @@
 %%%--------------------------------------------------------------------
-%%% @author Tomasz Lichon
-%%% @copyright (C) 2016 ACK CYFRONET AGH
+%%% @author Jakub Kudzia
+%%% @copyright (C) 2018 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -10,7 +10,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 -module(index_by_name).
--author("Tomasz Lichon").
+-author("Jakub Kudzia").
 
 -include("http/http_common.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").

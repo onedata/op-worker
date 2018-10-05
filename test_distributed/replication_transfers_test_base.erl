@@ -42,11 +42,12 @@
     file_replication_failures_should_fail_whole_transfer/3,
     many_simultaneous_failed_transfers/3,
     schedule_replication_of_regular_file_by_index/2,
+    schedule_replication_of_regular_file_by_index_with_reduce/2,
     scheduling_replication_by_not_existing_index_should_fail/2,
     scheduling_replication_by_index_with_wrong_function_should_fail/2,
     scheduling_replication_by_empty_index_should_succeed/2,
     scheduling_replication_by_not_existing_key_in_index_should_succeed/2,
-    schedule_replication_of_100_regular_files_by_index/2, schedule_replication_of_regular_file_by_index_with_reduce/2]).
+    schedule_replication_of_100_regular_files_by_index/2]).
 
 -define(SPACE_ID, <<"space1">>).
 
@@ -119,6 +120,9 @@ replicate_tree_of_empty_dirs(Config, Type, FileKeyType) ->
 
 replicate_regular_file(Config, Type, FileKeyType) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
+
     transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{
@@ -127,7 +131,7 @@ replicate_regular_file(Config, Type, FileKeyType) ->
                 files_structure = [{0, 1}],
                 root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ]
             },
             scenario = #scenario{
@@ -145,14 +149,14 @@ replicate_regular_file(Config, Type, FileKeyType) ->
                     files_processed => 1,
                     files_replicated => 1,
                     bytes_replicated => ?DEFAULT_SIZE,
-                    min_hist => ?MIN_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
-                    hr_hist => ?HOUR_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
-                    dy_hist => ?DAY_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
-                    mth_hist => ?MONTH_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE})
+                    min_hist => ?MIN_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
+                    hr_hist => ?HOUR_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
+                    dy_hist => ?DAY_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
+                    mth_hist => ?MONTH_HIST(#{ProviderId1 => ?DEFAULT_SIZE})
                 },
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP2), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
                 assertion_nodes = [WorkerP1, WorkerP2]
             }
@@ -161,6 +165,9 @@ replicate_regular_file(Config, Type, FileKeyType) ->
 
 replicate_file_in_directory(Config, Type, FileKeyType) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
+
     transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{
@@ -169,7 +176,7 @@ replicate_file_in_directory(Config, Type, FileKeyType) ->
                 files_structure = [{0, 1}],
                 root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ]
             },
             scenario = #scenario{
@@ -187,14 +194,14 @@ replicate_file_in_directory(Config, Type, FileKeyType) ->
                     files_processed => 2,
                     files_replicated => 1,
                     bytes_replicated => ?DEFAULT_SIZE,
-                    min_hist => ?MIN_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
-                    hr_hist => ?HOUR_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
-                    dy_hist => ?DAY_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
-                    mth_hist => ?MONTH_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE})
+                    min_hist => ?MIN_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
+                    hr_hist => ?HOUR_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
+                    dy_hist => ?DAY_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
+                    mth_hist => ?MONTH_HIST(#{ProviderId1 => ?DEFAULT_SIZE})
                 },
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP2), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
                 assertion_nodes = [WorkerP1, WorkerP2]
             }
@@ -204,6 +211,9 @@ replicate_file_in_directory(Config, Type, FileKeyType) ->
 replicate_big_file(Config, Type, FileKeyType) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     Size = 1024 * 1024 * 1024,
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
+
     transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{
@@ -213,7 +223,7 @@ replicate_big_file(Config, Type, FileKeyType) ->
                 files_structure = [{0, 1}],
                 root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, Size]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, Size]]}
                 ]
             },
             scenario = #scenario{
@@ -233,8 +243,8 @@ replicate_big_file(Config, Type, FileKeyType) ->
                     bytes_replicated => Size
                 },
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, Size]]},
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP2), <<"blocks">> => [[0, Size]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, Size]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, Size]]}
                 ],
                 assertion_nodes = [WorkerP1, WorkerP2]
             }
@@ -243,6 +253,8 @@ replicate_big_file(Config, Type, FileKeyType) ->
 
 schedule_replication_to_source_provider(Config, Type, FileKeyType) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+
     transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{
@@ -251,7 +263,7 @@ schedule_replication_to_source_provider(Config, Type, FileKeyType) ->
                 files_structure = [{0, 1}],
                 root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ]
             },
             scenario = #scenario{
@@ -269,13 +281,13 @@ schedule_replication_to_source_provider(Config, Type, FileKeyType) ->
                     files_processed => 1,
                     files_replicated => 0,
                     bytes_replicated => 0,
-                    min_hist => ?MIN_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0}),
-                    hr_hist => ?HOUR_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0}),
-                    dy_hist => ?DAY_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0}),
-                    mth_hist => ?MONTH_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0})
+                    min_hist => ?MIN_HIST(#{ProviderId1 => 0}),
+                    hr_hist => ?HOUR_HIST(#{ProviderId1 => 0}),
+                    dy_hist => ?DAY_HIST(#{ProviderId1 => 0}),
+                    mth_hist => ?MONTH_HIST(#{ProviderId1 => 0})
                 },
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
                 assertion_nodes = [WorkerP1, WorkerP2]
             }
@@ -284,6 +296,9 @@ schedule_replication_to_source_provider(Config, Type, FileKeyType) ->
 
 replicate_already_replicated_file(Config, Type, FileKeyType) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
+
     Config2 = transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{
@@ -292,7 +307,7 @@ replicate_already_replicated_file(Config, Type, FileKeyType) ->
                 files_structure = [{0, 1}],
                 root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ]
             },
             scenario = #scenario{
@@ -310,14 +325,14 @@ replicate_already_replicated_file(Config, Type, FileKeyType) ->
                     files_processed => 1,
                     files_replicated => 1,
                     bytes_replicated => ?DEFAULT_SIZE,
-                    min_hist => ?MIN_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
-                    hr_hist => ?HOUR_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
-                    dy_hist => ?DAY_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
-                    mth_hist => ?MONTH_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE})
+                    min_hist => ?MIN_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
+                    hr_hist => ?HOUR_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
+                    dy_hist => ?DAY_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
+                    mth_hist => ?MONTH_HIST(#{ProviderId1 => ?DEFAULT_SIZE})
                 },
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP2), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
                 assertion_nodes = [WorkerP1, WorkerP2]
             }
@@ -342,14 +357,14 @@ replicate_already_replicated_file(Config, Type, FileKeyType) ->
                     files_processed => 1,
                     files_replicated => 0,
                     bytes_replicated => 0,
-                    min_hist => ?MIN_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0}),
-                    hr_hist => ?HOUR_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0}),
-                    dy_hist => ?DAY_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0}),
-                    mth_hist => ?MONTH_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0})
+                    min_hist => ?MIN_HIST(#{ProviderId1 => 0}),
+                    hr_hist => ?HOUR_HIST(#{ProviderId1 => 0}),
+                    dy_hist => ?DAY_HIST(#{ProviderId1 => 0}),
+                    mth_hist => ?MONTH_HIST(#{ProviderId1 => 0})
                 },
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP2), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
                 assertion_nodes = [WorkerP1, WorkerP2]
             }
@@ -359,6 +374,7 @@ replicate_already_replicated_file(Config, Type, FileKeyType) ->
 not_synced_file_should_not_be_replicated(Config, Type, FileKeyType) ->
     % list on Dir1 is mocked to return not existing file
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
 
     transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
@@ -383,13 +399,13 @@ not_synced_file_should_not_be_replicated(Config, Type, FileKeyType) ->
                     files_processed => 1,
                     files_replicated => 0,
                     bytes_replicated => 0,
-                    min_hist => ?MIN_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0}),
-                    hr_hist => ?HOUR_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0}),
-                    dy_hist => ?DAY_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0}),
-                    mth_hist => ?MONTH_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0})
+                    min_hist => ?MIN_HIST(#{ProviderId1 => 0}),
+                    hr_hist => ?HOUR_HIST(#{ProviderId1 => 0}),
+                    dy_hist => ?DAY_HIST(#{ProviderId1 => 0}),
+                    mth_hist => ?MONTH_HIST(#{ProviderId1 => 0})
                 },
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
                 assertion_nodes = [WorkerP1, WorkerP2]
             }
@@ -398,6 +414,9 @@ not_synced_file_should_not_be_replicated(Config, Type, FileKeyType) ->
 
 replicate_100_files_separately(Config, Type, FileKeyType) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
+
     transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{
@@ -406,7 +425,7 @@ replicate_100_files_separately(Config, Type, FileKeyType) ->
                 files_structure = [{0, 100}],
                 root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
                 attempts = 600,
                 timeout = timer:minutes(10)
@@ -426,14 +445,14 @@ replicate_100_files_separately(Config, Type, FileKeyType) ->
                     files_processed => 1,
                     files_replicated => 1,
                     bytes_replicated => ?DEFAULT_SIZE,
-                    min_hist => ?MIN_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
-                    hr_hist => ?HOUR_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
-                    dy_hist => ?DAY_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
-                    mth_hist => ?MONTH_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE})
+                    min_hist => ?MIN_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
+                    hr_hist => ?HOUR_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
+                    dy_hist => ?DAY_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
+                    mth_hist => ?MONTH_HIST(#{ProviderId1 => ?DEFAULT_SIZE})
                 },
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP2), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
                 assertion_nodes = [WorkerP2],
                 attempts = 600,
@@ -446,6 +465,9 @@ replicate_100_files_in_one_transfer(Config, Type, FileKeyType) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     FilesNum = 100,
     TotalTransferredBytes = FilesNum * ?DEFAULT_SIZE,
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
+
     transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{
@@ -454,7 +476,7 @@ replicate_100_files_in_one_transfer(Config, Type, FileKeyType) ->
                 files_structure = [{10, 0}, {0, 10}],
                 root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
                 attempts = 600,
                 timeout = timer:minutes(10)
@@ -474,13 +496,13 @@ replicate_100_files_in_one_transfer(Config, Type, FileKeyType) ->
                     files_processed => 111,
                     files_replicated => FilesNum,
                     bytes_replicated => TotalTransferredBytes,
-                    hr_hist => ?HOUR_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => TotalTransferredBytes}),
-                    dy_hist => ?DAY_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => TotalTransferredBytes}),
-                    mth_hist => ?MONTH_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => TotalTransferredBytes})
+                    hr_hist => ?HOUR_HIST(#{ProviderId1 => TotalTransferredBytes}),
+                    dy_hist => ?DAY_HIST(#{ProviderId1 => TotalTransferredBytes}),
+                    mth_hist => ?MONTH_HIST(#{ProviderId1 => TotalTransferredBytes})
                 },
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP2), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
                 assertion_nodes = [WorkerP2],
                 attempts = 600,
@@ -492,6 +514,8 @@ replicate_100_files_in_one_transfer(Config, Type, FileKeyType) ->
 replication_should_succeed_when_there_is_enough_space_for_file(Config, Type, FileKeyType) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     Config2 = [{space_id, <<"space3">>} | Config],
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
     Support = transfers_test_utils:get_space_support(WorkerP2, ?SPACE_ID),
     transfers_test_utils:mock_space_occupancy(WorkerP2, ?SPACE_ID, Support - ?DEFAULT_SIZE),
 
@@ -503,7 +527,7 @@ replication_should_succeed_when_there_is_enough_space_for_file(Config, Type, Fil
                 files_structure = [{0, 1}],
                 root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ]
             },
             scenario = #scenario{
@@ -522,14 +546,14 @@ replication_should_succeed_when_there_is_enough_space_for_file(Config, Type, Fil
                     failed_files => 0,
                     files_replicated => 1,
                     bytes_replicated => ?DEFAULT_SIZE,
-                    min_hist => ?MIN_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
-                    hr_hist => ?HOUR_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
-                    dy_hist => ?DAY_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
-                    mth_hist => ?MONTH_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE})
+                    min_hist => ?MIN_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
+                    hr_hist => ?HOUR_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
+                    dy_hist => ?DAY_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
+                    mth_hist => ?MONTH_HIST(#{ProviderId1 => ?DEFAULT_SIZE})
                 },
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP2), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
                 assertion_nodes = [WorkerP1, WorkerP2]
             }
@@ -540,6 +564,8 @@ replication_should_fail_when_space_is_full(Config, Type, FileKeyType) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     Support = transfers_test_utils:get_space_support(WorkerP2, ?SPACE_ID),
     transfers_test_utils:mock_space_occupancy(WorkerP2, ?SPACE_ID, Support),
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
 
     transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
@@ -549,7 +575,7 @@ replication_should_fail_when_space_is_full(Config, Type, FileKeyType) ->
                 files_structure = [{0, 1}],
                 root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ]
             },
             scenario = #scenario{
@@ -568,14 +594,14 @@ replication_should_fail_when_space_is_full(Config, Type, FileKeyType) ->
                     failed_files => 1,
                     files_replicated => 0,
                     bytes_replicated => 0,
-                    min_hist => ?MIN_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0}),
-                    hr_hist => ?HOUR_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0}),
-                    dy_hist => ?DAY_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0}),
-                    mth_hist => ?MONTH_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0})
+                    min_hist => ?MIN_HIST(#{ProviderId1 => 0}),
+                    hr_hist => ?HOUR_HIST(#{ProviderId1 => 0}),
+                    dy_hist => ?DAY_HIST(#{ProviderId1 => 0}),
+                    mth_hist => ?MONTH_HIST(#{ProviderId1 => 0})
                 },
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP2), <<"blocks">> => []}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => []}
                 ],
                 assertion_nodes = [WorkerP1, WorkerP2]
             }
@@ -584,6 +610,7 @@ replication_should_fail_when_space_is_full(Config, Type, FileKeyType) ->
 
 replicate_to_missing_provider(Config, Type, FileKeyType) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
 
     transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
@@ -593,7 +620,7 @@ replicate_to_missing_provider(Config, Type, FileKeyType) ->
                 files_structure = [{0, 1}],
                 root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ]
             },
             scenario = #scenario{
@@ -606,7 +633,7 @@ replicate_to_missing_provider(Config, Type, FileKeyType) ->
             expected = #expected{
                 expected_transfer = undefined,
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
                 assertion_nodes = [WorkerP1, WorkerP2]
             }
@@ -617,6 +644,8 @@ replicate_to_not_supporting_provider(Config, Type, FileKeyType) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     % space2 is supported only by P1
     Config2 = [{space_id, <<"space2">>} | Config],
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+
     transfers_test_mechanism:run_test(
         Config2, #transfer_test_spec{
             setup = #setup{
@@ -625,7 +654,7 @@ replicate_to_not_supporting_provider(Config, Type, FileKeyType) ->
                 files_structure = [{0, 1}],
                 root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ]
             },
             scenario = #scenario{
@@ -638,7 +667,7 @@ replicate_to_not_supporting_provider(Config, Type, FileKeyType) ->
             expected = #expected{
                 expected_transfer = undefined,
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
                 assertion_nodes = [WorkerP1, WorkerP2]
             }
@@ -648,6 +677,8 @@ replicate_to_not_supporting_provider(Config, Type, FileKeyType) ->
 schedule_replication_on_not_supporting_provider(Config, Type, FileKeyType) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     Config2 = [{space_id, <<"space2">>} | Config],
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+
     transfers_test_mechanism:run_test(
         Config2, #transfer_test_spec{
             setup = #setup{
@@ -656,7 +687,7 @@ schedule_replication_on_not_supporting_provider(Config, Type, FileKeyType) ->
                 files_structure = [{0, 1}],
                 root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ]
             },
             scenario = #scenario{
@@ -669,7 +700,7 @@ schedule_replication_on_not_supporting_provider(Config, Type, FileKeyType) ->
             expected = #expected{
                 expected_transfer = undefined,
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
                 assertion_nodes = [WorkerP1, WorkerP2]
             }
@@ -679,6 +710,8 @@ schedule_replication_on_not_supporting_provider(Config, Type, FileKeyType) ->
 cancel_replication_on_target_nodes(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     transfers_test_utils:mock_prolonged_replication(WorkerP2, 0.5, 15),
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+
     transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{
@@ -687,7 +720,7 @@ cancel_replication_on_target_nodes(Config, Type) ->
                 files_structure = [{10, 0}, {0, 10}],
                 root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type),
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
                 attempts = 120,
                 timeout = timer:minutes(10)
@@ -714,6 +747,8 @@ file_replication_failures_should_fail_whole_transfer(Config, Type, FileKeyType) 
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     AllFiles = 111,
     transfers_test_utils:mock_replica_synchronizer_failure(WorkerP2),
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+
     transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{
@@ -722,7 +757,7 @@ file_replication_failures_should_fail_whole_transfer(Config, Type, FileKeyType) 
                 files_structure = [{10, 0}, {0, 10}],
                 root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
                 attempts = 60,
                 timeout = timer:minutes(1)
@@ -742,9 +777,9 @@ file_replication_failures_should_fail_whole_transfer(Config, Type, FileKeyType) 
                     files_processed => AllFiles,
                     files_replicated => 0,
                     bytes_replicated => 0,
-                    hr_hist => ?HOUR_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0}),
-                    dy_hist => ?DAY_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0}),
-                    mth_hist => ?MONTH_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0})
+                    hr_hist => ?HOUR_HIST(#{ProviderId1 => 0}),
+                    dy_hist => ?DAY_HIST(#{ProviderId1 => 0}),
+                    mth_hist => ?MONTH_HIST(#{ProviderId1 => 0})
                 },
                 assertion_nodes = [WorkerP2],
                 attempts = 120,
@@ -756,6 +791,8 @@ file_replication_failures_should_fail_whole_transfer(Config, Type, FileKeyType) 
 many_simultaneous_failed_transfers(Config, Type, FileKeyType) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     transfers_test_utils:mock_replica_synchronizer_failure(WorkerP2),
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+
     transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{
@@ -764,7 +801,7 @@ many_simultaneous_failed_transfers(Config, Type, FileKeyType) ->
                 files_structure = [{10, 0}, {0, 10}],
                 root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
                 attempts = 60,
                 timeout = timer:minutes(1)
@@ -785,9 +822,9 @@ many_simultaneous_failed_transfers(Config, Type, FileKeyType) ->
                     failed_files => 1,
                     files_replicated => 0,
                     bytes_replicated => 0,
-                    hr_hist => ?HOUR_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0}),
-                    dy_hist => ?DAY_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0}),
-                    mth_hist => ?MONTH_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 0})
+                    hr_hist => ?HOUR_HIST(#{ProviderId1 => 0}),
+                    dy_hist => ?DAY_HIST(#{ProviderId1 => 0}),
+                    mth_hist => ?MONTH_HIST(#{ProviderId1 => 0})
                 },
                 assertion_nodes = [WorkerP2],
                 timeout = timer:minutes(15),
@@ -800,6 +837,9 @@ schedule_replication_of_regular_file_by_index(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId2 = ?DEFAULT_SESSION(WorkerP2, Config),
     SpaceId = ?SPACE_ID,
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
+    
     Config2 = transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{
@@ -807,26 +847,25 @@ schedule_replication_of_regular_file_by_index(Config, Type) ->
                 files_structure = [{0, 1}],
                 root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type),
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
                 assertion_nodes = [WorkerP1, WorkerP2]
     }}),
 
     [{FileGuid, _}] = ?config(?FILES_KEY, Config2),
-    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+    {ok, FileId} = cdmi_id:guid_to_objectid(FileGuid),
 
     % set xattr on file to be replicated
     XattrName = transfers_test_utils:random_job_name(),
     XattrValue = 1,
     Xattr = #xattr{name = XattrName, value = XattrValue},
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
-    ViewName = <<"replication_jobs">>,
+    IndexName = <<"replication_jobs">>,
     MapFunction = transfers_test_utils:test_map_function(XattrName),
-    ok = rpc:call(WorkerP2, index, save,
-        [SpaceId, ViewName, MapFunction, undefined, [], false, [?GET_DOMAIN_BIN(WorkerP1), ?GET_DOMAIN_BIN(WorkerP2)]]),
-%%    timer:sleep(timer:seconds(20)),
-    {ok, ObjectId} = cdmi_id:guid_to_objectid(FileGuid),
-    ?assertIndexQuery([ObjectId], WorkerP2, SpaceId, ViewName,  [{key, XattrValue}]),
+    transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName, MapFunction,
+        [], [ProviderId2]),
+    ?assertIndexQuery([FileId], WorkerP2, SpaceId, IndexName,  [{key, XattrValue}]),
+    ?assertIndexVisible(WorkerP1, SpaceId, IndexName),
 
     transfers_test_mechanism:run_test(
         Config2, #transfer_test_spec{
@@ -838,7 +877,7 @@ schedule_replication_of_regular_file_by_index(Config, Type) ->
                 space_id = SpaceId,
                 function = fun transfers_test_mechanism:replicate_files_from_index/2,
                 query_view_params = [{key, XattrValue}],
-                index_name = ViewName
+                index_name = IndexName
             },
             expected = #expected{
                 expected_transfer = #{
@@ -848,15 +887,15 @@ schedule_replication_of_regular_file_by_index(Config, Type) ->
                     files_processed => 2,
                     files_replicated => 1,
                     bytes_replicated => ?DEFAULT_SIZE,
-                    min_hist => ?MIN_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
-                    hr_hist => ?HOUR_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
-                    dy_hist => ?DAY_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
-                    mth_hist => ?MONTH_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE})
+                    min_hist => ?MIN_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
+                    hr_hist => ?HOUR_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
+                    dy_hist => ?DAY_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
+                    mth_hist => ?MONTH_HIST(#{ProviderId1 => ?DEFAULT_SIZE})
                 },
                 assertion_nodes = [WorkerP1, WorkerP2],
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP2), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
                 assert_transferred_file_model = false
             }
@@ -867,6 +906,9 @@ schedule_replication_of_regular_file_by_index_with_reduce(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId2 = ?DEFAULT_SESSION(WorkerP2, Config),
     SpaceId = ?SPACE_ID,
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
+    
     Config2 = transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{
@@ -874,32 +916,19 @@ schedule_replication_of_regular_file_by_index_with_reduce(Config, Type) ->
                 files_structure = [{0, 6}],
                 root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type),
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
                 assertion_nodes = [WorkerP1, WorkerP2]
             }}),
 
-    [
-        {FileGuid, File1}, {FileGuid2, _}, {FileGuid3, _},
-        {FileGuid4, _}, {FileGuid5, _}, {FileGuid6, File6}
-    ] = ?config(?FILES_KEY, Config2
 
-
-
-
-    ),
-    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),     % xattr1=1, xattr2=1, should be replicated
-    FileUuid2 = fslogic_uuid:guid_to_uuid(FileGuid2),   % xattr1=1, xattr2=2, should not be replicated
-    FileUuid3 = fslogic_uuid:guid_to_uuid(FileGuid3),   % xattr1=1, should not be replicated
-    FileUuid4 = fslogic_uuid:guid_to_uuid(FileGuid4),   % xattr1=2, should not be replicated
-    FileUuid5 = fslogic_uuid:guid_to_uuid(FileGuid5),   % should not be replicated
-    FileUuid6 = fslogic_uuid:guid_to_uuid(FileGuid6),   % xattr1=1, xattr2=1, should be replicated
+    FileGuidsAndPaths = ?config(?FILES_KEY, Config2),
+    [Guid1, Guid2, Guid3, Guid4, _Guid5, Guid6 | _] = [G || {G, _} <- FileGuidsAndPaths],
 
     % XattrName1 will be used by map function
     % only files with XattrName1 = XattrValue11 will be emitted
     % XattrName2 will be used by reduce function
     % only files with XattrName2 = XattrValue12 will be filtered
-
     XattrName1 = transfers_test_utils:random_job_name(),
     XattrName2 = transfers_test_utils:random_job_name(),
     XattrValue11 = 1,
@@ -912,50 +941,39 @@ schedule_replication_of_regular_file_by_index_with_reduce(Config, Type) ->
     Xattr22 = #xattr{name = XattrName2, value = XattrValue22},
 
     % File1: xattr1=1, xattr2=1, should be replicated
-    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr11),
-    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr21),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, Guid1}, Xattr11),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, Guid1}, Xattr21),
 
     % File2: xattr1=1, xattr2=2, should not be replicated
-    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid2}, Xattr11),
-    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid2}, Xattr22),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, Guid2}, Xattr11),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, Guid2}, Xattr22),
 
-    % File3: xattr1=1, should not be replicated
-    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid3}, Xattr11),
+    % File3: xattr1=1, xattr2=null, should not be replicated
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, Guid3}, Xattr11),
 
-    % File4: xattr1=2, should not be replicated
-    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid4}, Xattr12),
+    % File4: xattr1=2, xattr2=null, should not be replicated
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, Guid4}, Xattr12),
+
+    % File5: xattr1=null, xattr2=null, should not be replicated
 
     % File6: xattr1=1, xattr2=1, should be replicated
-    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid6}, Xattr11),
-    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid6}, Xattr21),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, Guid6}, Xattr11),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, Guid6}, Xattr21),
 
-    ct:pal("File1: ~p", [File1]),
-    ct:pal("File6: ~p", [File6]),
-
-    ViewName = <<"replication_jobs">>,
+    IndexName = <<"replication_jobs">>,
     MapFunction = transfers_test_utils:test_map_function(XattrName1, XattrName2),
     ReduceFunction = transfers_test_utils:test_reduce_function(XattrValue21),
 
-    tracer:start(WorkerP2),
-    tracer:trace_calls(index, save),
-    tracer:trace_calls(index, save_db_view),
-    tracer:trace_calls(couchbase_driver, save_view_doc),
-    ok = rpc:call(WorkerP2, index, save,
-        [SpaceId, ViewName, MapFunction, ReduceFunction, [{group, 1}, {key, XattrValue11}], false,
-            [?GET_DOMAIN_BIN(WorkerP1), ?GET_DOMAIN_BIN(WorkerP2)]]),
+    ok = transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName,
+        MapFunction, ReduceFunction, [{group, 1}, {key, XattrValue11}],
+        [ProviderId2]
+    ),
 
-%%    timer:sleep(timer:seconds(30)),
+    {ok, ObjectId1} = cdmi_id:guid_to_objectid(Guid1),
+    {ok, ObjectId6} = cdmi_id:guid_to_objectid(Guid6),
 
-    {ok, ObjectId1} = cdmi_id:guid_to_objectid(FileGuid),
-    {ok, ObjectId6} = cdmi_id:guid_to_objectid(FileGuid6),
-
-
-    ?assertIndexQuery([ObjectId1, ObjectId6], WorkerP2, SpaceId, ViewName,  [{key, XattrValue11}]),
-%%    ct:pal("SLEEP"),
-%%    ct:timetrap({hours, 23}),
-%%    ct:sleep({hours, 23}).
-
-
+    ?assertIndexQuery([ObjectId1, ObjectId6], WorkerP2, SpaceId, IndexName,  [{key, XattrValue11}]),
+    ?assertIndexVisible(WorkerP1, SpaceId, IndexName),
 
     transfers_test_mechanism:run_test(
         Config2, #transfer_test_spec{
@@ -966,9 +984,8 @@ schedule_replication_of_regular_file_by_index_with_reduce(Config, Type) ->
                 replicating_nodes = [WorkerP2],
                 space_id = SpaceId,
                 function = fun transfers_test_mechanism:replicate_files_from_index/2,
-%%                query_view_params = [{reduce, false}, {key, XattrValue11}],
                 query_view_params = [{group, true}, {key, XattrValue11}],
-                index_name = ViewName
+                index_name = IndexName
             },
             expected = #expected{
                 expected_transfer = #{
@@ -978,22 +995,27 @@ schedule_replication_of_regular_file_by_index_with_reduce(Config, Type) ->
                     files_processed => 3,
                     files_replicated => 2,
                     bytes_replicated => 2 * ?DEFAULT_SIZE,
-                    min_hist => ?MIN_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 2 * ?DEFAULT_SIZE}),
-                    hr_hist => ?HOUR_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 2 * ?DEFAULT_SIZE}),
-                    dy_hist => ?DAY_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 2 * ?DEFAULT_SIZE}),
-                    mth_hist => ?MONTH_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => 2 * ?DEFAULT_SIZE})
+                    min_hist => ?MIN_HIST(#{ProviderId1 => 2 * ?DEFAULT_SIZE}),
+                    hr_hist => ?HOUR_HIST(#{ProviderId1 => 2 * ?DEFAULT_SIZE}),
+                    dy_hist => ?DAY_HIST(#{ProviderId1 => 2 * ?DEFAULT_SIZE}),
+                    mth_hist => ?MONTH_HIST(#{ProviderId1 => 2 * ?DEFAULT_SIZE})
                 },
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ],
+                assert_distribution_for_files = [Guid1, Guid6],
                 assertion_nodes = [WorkerP1, WorkerP2],
                 assert_transferred_file_model = false
             }
         }
     ).
 
-
 scheduling_replication_by_not_existing_index_should_fail(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId2 = ?DEFAULT_SESSION(WorkerP2, Config),
     SpaceId = ?SPACE_ID,
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
 
     Config2 = transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
@@ -1002,7 +1024,7 @@ scheduling_replication_by_not_existing_index_should_fail(Config, Type) ->
                 files_structure = [{0, 1}],
                 root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type),
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
                 assertion_nodes = [WorkerP1, WorkerP2]
             }}),
@@ -1023,23 +1045,14 @@ scheduling_replication_by_not_existing_index_should_fail(Config, Type) ->
                 schedule_node = WorkerP1,
                 replicating_nodes = [WorkerP2],
                 space_id = SpaceId,
-                function = fun transfers_test_mechanism:replicate_files_from_index/2,
+                function = fun transfers_test_mechanism:fail_to_replicate_files_from_index/2,
                 query_view_params = [{key, XattrValue}],
                 index_name = IndexName
             },
             expected = #expected{
-                expected_transfer = #{
-                    replication_status => failed,
-                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
-                    files_to_process => 1,
-                    files_processed => 1,
-                    files_replicated => 0,
-                    bytes_replicated => 0,
-                    failed_files => 1
-                },
                 assertion_nodes = [WorkerP1, WorkerP2],
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
                 assert_transferred_file_model = false
             }
@@ -1050,6 +1063,8 @@ scheduling_replication_by_index_with_wrong_function_should_fail(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId2 = ?DEFAULT_SESSION(WorkerP2, Config),
     SpaceId = ?SPACE_ID,
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
 
     Config2 = transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
@@ -1058,7 +1073,7 @@ scheduling_replication_by_index_with_wrong_function_should_fail(Config, Type) ->
                 files_structure = [{0, 1}],
                 root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type),
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
                 assertion_nodes = [WorkerP1, WorkerP2]
             }}),
@@ -1079,9 +1094,11 @@ scheduling_replication_by_index_with_wrong_function_should_fail(Config, Type) ->
         return null;
     }">>,
     IndexName = <<"index_with_wrong_function">>,
-    ok = rpc:call(WorkerP2, index, save,
-        [SpaceId, IndexName, MapFunction, undefined, [], false, [?GET_DOMAIN_BIN(WorkerP1), ?GET_DOMAIN_BIN(WorkerP2)]]),
+    ok = transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName,
+        MapFunction, [], [ProviderId2]
+    ),
     ?assertIndexQuery([WrongValue], WorkerP2, SpaceId, IndexName,  [{key, XattrValue}]),
+    ?assertIndexVisible(WorkerP1, SpaceId, IndexName),
 
     transfers_test_mechanism:run_test(
         Config2, #transfer_test_spec{
@@ -1107,23 +1124,25 @@ scheduling_replication_by_index_with_wrong_function_should_fail(Config, Type) ->
                 },
                 assertion_nodes = [WorkerP1, WorkerP2],
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
                 assert_transferred_file_model = false
             }
         }
     ).
 
-
 scheduling_replication_by_empty_index_should_succeed(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SpaceId = ?SPACE_ID,
     XattrName = transfers_test_utils:random_job_name(),
-    ViewName = <<"replication_jobs">>,
+    IndexName = <<"replication_jobs">>,
     MapFunction = transfers_test_utils:test_map_function(XattrName),
-    ok = rpc:call(WorkerP2, index, save,
-        [SpaceId, ViewName, MapFunction, undefined, [], false, [?GET_DOMAIN_BIN(WorkerP1), ?GET_DOMAIN_BIN(WorkerP2)]]),
-    ?assertIndexQuery([], WorkerP2, SpaceId, ViewName,  []),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
+    transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName, MapFunction,
+        [], [ProviderId2]
+    ),
+    ?assertIndexQuery([], WorkerP2, SpaceId, IndexName,  []),
+    ?assertIndexVisible(WorkerP1, SpaceId, IndexName),
 
     transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
@@ -1135,7 +1154,7 @@ scheduling_replication_by_empty_index_should_succeed(Config, Type) ->
                 space_id = SpaceId,
                 function = fun transfers_test_mechanism:replicate_files_from_index/2,
                 query_view_params = [],
-                index_name = ViewName
+                index_name = IndexName
             },
             expected = #expected{
                 expected_transfer = #{
@@ -1157,6 +1176,8 @@ scheduling_replication_by_not_existing_key_in_index_should_succeed(Config, Type)
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId2 = ?DEFAULT_SESSION(WorkerP2, Config),
     SpaceId = ?SPACE_ID,
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
 
     Config2 = transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
@@ -1165,13 +1186,13 @@ scheduling_replication_by_not_existing_key_in_index_should_succeed(Config, Type)
                 files_structure = [{0, 1}],
                 root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type),
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
                 assertion_nodes = [WorkerP1, WorkerP2]
             }}),
 
     [{FileGuid, _}] = ?config(?FILES_KEY, Config2),
-    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+    {ok, FileId} = cdmi_id:guid_to_objectid(FileGuid),
 
     % set xattr on file to be replicated
     XattrName = transfers_test_utils:random_job_name(),
@@ -1179,12 +1200,13 @@ scheduling_replication_by_not_existing_key_in_index_should_succeed(Config, Type)
     XattrValue2 = 2,
     Xattr = #xattr{name = XattrName, value = XattrValue},
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
-    ViewName = <<"replication_jobs">>,
+    IndexName = <<"replication_jobs">>,
     MapFunction = transfers_test_utils:test_map_function(XattrName),
-    ok = rpc:call(WorkerP2, index, save,
-        [SpaceId, ViewName, MapFunction, undefined, [], false, [?GET_DOMAIN_BIN(WorkerP1), ?GET_DOMAIN_BIN(WorkerP2)]]),
-
-    ?assertIndexQuery([FileUuid], WorkerP2, SpaceId, ViewName,  [{key, XattrValue}]),
+    transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName, MapFunction,
+        [], [ProviderId2]
+    ),
+    ?assertIndexQuery([FileId], WorkerP2, SpaceId, IndexName,  [{key, XattrValue}]),
+    ?assertIndexVisible(WorkerP1, SpaceId, IndexName),
 
     transfers_test_mechanism:run_test(
         Config2, #transfer_test_spec{
@@ -1196,7 +1218,7 @@ scheduling_replication_by_not_existing_key_in_index_should_succeed(Config, Type)
                 space_id = SpaceId,
                 function = fun transfers_test_mechanism:replicate_files_from_index/2,
                 query_view_params = [{key, XattrValue2}],
-                index_name = ViewName
+                index_name = IndexName
             },
             expected = #expected{
                 expected_transfer = #{
@@ -1209,7 +1231,7 @@ scheduling_replication_by_not_existing_key_in_index_should_succeed(Config, Type)
                 },
                 assertion_nodes = [WorkerP1, WorkerP2],
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
                 assert_transferred_file_model = false
             }
@@ -1221,6 +1243,9 @@ schedule_replication_of_100_regular_files_by_index(Config, Type) ->
     SessionId2 = ?DEFAULT_SESSION(WorkerP2, Config),
     SpaceId = ?SPACE_ID,
     NumberOfFiles = 100,
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
+
     Config2 = transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{
@@ -1228,7 +1253,7 @@ schedule_replication_of_100_regular_files_by_index(Config, Type) ->
                 files_structure = [{0, NumberOfFiles}],
                 root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type),
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
                 assertion_nodes = [WorkerP1, WorkerP2]
             }}),
@@ -1240,16 +1265,19 @@ schedule_replication_of_100_regular_files_by_index(Config, Type) ->
     XattrValue = 1,
     Xattr = #xattr{name = XattrName, value = XattrValue},
 
-    FileUuids = lists:map(fun({FileGuid, _}) ->
+    FileIds = lists:map(fun({FileGuid, _}) ->
         ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
-        fslogic_uuid:guid_to_uuid(FileGuid)
+        {ok, FileId} = cdmi_id:guid_to_objectid(FileGuid),
+        FileId
     end, FileGuidsAndPaths),
 
-    ViewName = <<"replication_jobs">>,
+    IndexName = <<"replication_jobs">>,
     MapFunction = transfers_test_utils:test_map_function(XattrName),
-    ok = rpc:call(WorkerP2, index, save,
-        [SpaceId, ViewName, MapFunction, undefined, [], false, [?GET_DOMAIN_BIN(WorkerP1), ?GET_DOMAIN_BIN(WorkerP2)]]),
-    ?assertIndexQuery(FileUuids, WorkerP2, SpaceId, ViewName, [{key, XattrValue}]),
+    transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName, MapFunction,
+        [], [ProviderId2]
+    ),
+    ?assertIndexQuery(FileIds, WorkerP2, SpaceId, IndexName, [{key, XattrValue}]),
+    ?assertIndexVisible(WorkerP1, SpaceId, IndexName),
 
     transfers_test_mechanism:run_test(
         Config2, #transfer_test_spec{
@@ -1261,7 +1289,7 @@ schedule_replication_of_100_regular_files_by_index(Config, Type) ->
                 space_id = SpaceId,
                 function = fun transfers_test_mechanism:replicate_files_from_index/2,
                 query_view_params = [{key, XattrValue}],
-                index_name = ViewName
+                index_name = IndexName
             },
             expected = #expected{
                 expected_transfer = #{
@@ -1274,8 +1302,8 @@ schedule_replication_of_100_regular_files_by_index(Config, Type) ->
                 },
                 assertion_nodes = [WorkerP1, WorkerP2],
                 distribution = [
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
-                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP2), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
                 assert_transferred_file_model = false
             }

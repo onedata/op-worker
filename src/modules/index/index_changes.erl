@@ -20,7 +20,8 @@
 %% API
 -export([handle/1]).
 
--define(run_if_is_on_providers_list(Doc, Fun),
+-spec handle(index:doc()) -> ok.
+handle(Doc) ->
     ProviderIds = Doc#document.value#index.providers,
     case oneprovider:get_id_or_undefined() of
         undefined ->
@@ -28,20 +29,17 @@
         ProviderId ->
             case lists:member(ProviderId, ProviderIds) of
                 true ->
-                    Fun(Doc);
+                    handle_internal(Doc);
                 _ ->
                     ok
             end
-    end
-).
-
-handle(Doc) ->
-    ?run_if_is_on_providers_list(Doc, fun handle_internal/1).
+    end.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
+-spec handle_internal(index:doc()) -> ok.
 handle_internal(#document{
     key = Id,
     value = #index{

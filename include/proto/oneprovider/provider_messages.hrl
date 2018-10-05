@@ -61,6 +61,8 @@
 }).
 
 -record(schedule_file_replication, {
+    % meaning of fields in this record is explained in datastore_models.hrl
+    % in definition of transfer record
     target_provider_id :: oneprovider:id(),
     block :: undefined | #file_block{},
     callback :: transfer:callback(),
@@ -69,6 +71,8 @@
 }).
 
 -record(schedule_replica_invalidation, {
+    % meaning of fields in this record is explained in datastore_models.hrl
+    % in definition of transfer record
     source_provider_id :: oneprovider:id(),
     target_provider_id :: undefined | oneprovider:id(),
     index_name :: transfer:index_name(),

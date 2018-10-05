@@ -26,7 +26,9 @@
     mock_space_occupancy/3, unmock_space_occupancy/2, unmock_sync_req/1,
     root_name/2, root_name/3,
     mock_prolonged_replication/3, mock_replica_synchronizer_failure/1,
-    unmock_replica_synchronizer_failure/1, remove_all_indexes/2, random_job_name/0, test_map_function/1, test_reduce_function/1, test_map_function/2]).
+    unmock_replica_synchronizer_failure/1, remove_all_indexes/2, random_job_name/0,
+    test_map_function/1, test_reduce_function/1, test_map_function/2,
+    create_index/7, create_index/6]).
 
 %%%===================================================================
 %%% API
@@ -159,7 +161,6 @@ remove_all_indexes(Nodes, SpaceId) ->
     lists:foreach(fun(Node) ->
         {ok, IndexNames} = rpc:call(Node, index, list, [SpaceId]),
         lists:foreach(fun(IndexName) ->
-            ct:pal("Removing: ~p", [IndexName]),
             ok = rpc:call(Node, index, delete, [SpaceId, IndexName])
         end, IndexNames)
     end, Nodes).
@@ -193,6 +194,13 @@ test_reduce_function(XattrValue) ->
                 filtered.push(values[i][0]);
         return filtered;
     }">>.
+
+create_index(Worker, SpaceId, IndexName, MapFunction, Options, Providers) ->
+    create_index(Worker, SpaceId, IndexName, MapFunction, undefined, Options, Providers).
+
+create_index(Worker, SpaceId, IndexName, MapFunction, ReduceFunction, Options, Providers) ->
+    ok = rpc:call(Worker, index, save, [SpaceId, IndexName, MapFunction, ReduceFunction,
+        Options, false, Providers]).
 
 %%%===================================================================
 %%% Internal functions

@@ -142,7 +142,7 @@ get_file_guid(SessId, FilePath) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns ID of scheduled transfer.
+%% Schedules replication transfer and returns its ID.
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_file_replication(session:id(), fslogic_worker:file_guid_or_path(),
@@ -161,7 +161,7 @@ schedule_file_replication(SessId, FileKey, TargetProviderId, Callback) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns ID of scheduled transfer.
+%% Schedules replication transfer by index and returns its ID.
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_replication_by_index(session:id(), ProviderId :: oneprovider:id(),
@@ -182,8 +182,9 @@ schedule_replication_by_index(SessId, TargetProviderId, Callback, SpaceId, Index
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Invalidates file replica on given provider, migrates unique data to provider
-%% given as MigrateProviderId
+%% Schedules replica_eviction transfer on given provider,
+%% migrates unique data to provider given as MigrateProviderId.
+%% Returns ID of scheduled transfer.
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_replica_eviction(session:id(), fslogic_worker:file_guid_or_path(),
@@ -202,15 +203,18 @@ schedule_replica_eviction(SessId, FileKey, ProviderId, MigrationProviderId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Invalidates file replicas existing in given index on given provider,
-%% migrates unique data to provider given as MigrateProviderId
+%% Schedules replica_eviction transfer by index on given provider,
+%% migrates unique data to provider given as MigrateProviderId.
+%% Returns ID of scheduled transfer.
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_replica_eviction_by_index(session:id(), ProviderId :: oneprovider:id(),
     MigrationProviderId :: undefined | oneprovider:id(), od_space:id(),
     transfer:index_name(), transfer:query_view_params()) ->
     {ok, transfer:id()} | logical_file_manager:error_reply().
-schedule_replica_eviction_by_index(SessId, ProviderId, MigrationProviderId, SpaceId, IndexName, QueryViewParams) ->
+schedule_replica_eviction_by_index(SessId, ProviderId, MigrationProviderId,
+    SpaceId, IndexName, QueryViewParams
+) ->
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     remote_utils:call_fslogic(SessId, provider_request, SpaceGuid,
         #schedule_replica_invalidation{

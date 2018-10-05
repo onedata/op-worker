@@ -499,7 +499,6 @@ translate_from_protobuf(#'QueryParams'{
     bbox = BBox,
     start_range = StartRange,
     end_range = EndRange
-
 }) ->
     #query_view_params{params = [
         {descending, Descending},

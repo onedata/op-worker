@@ -37,7 +37,6 @@
     parse_keys/2, parse_skip/2, parse_stale/2, parse_limit/2, parse_inclusive_end/2,
     parse_startkey/2, parse_filter/2, parse_filter_type/2, parse_inherited/2,
     parse_spatial/2, parse_start_range/2, parse_end_range/2,
-
     parse_index_name/2, parse_update_min_changes/2,
     parse_replica_update_min_changes/2, parse_index_providers/2
 ]).

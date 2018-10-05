@@ -258,7 +258,7 @@ create_and_get_view(Config) ->
     ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, Guid1}, json, MetaBlue, [])),
     ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, Guid2}, json, MetaRed, [])),
     ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, Guid3}, json, MetaBlue, [])),
-    ok = rpc:call(Worker, index, save, [SpaceId, ViewName, ViewFunction, undefined, undefined, [], false, [ProviderId]]),
+    ok = rpc:call(Worker, index, save, [SpaceId, ViewName, ViewFunction, undefined, [], false, [ProviderId]]),
     ?assertMatch({ok, [ViewName]}, rpc:call(Worker, index, list, [SpaceId])),
     FinalCheck = fun() ->
         try
@@ -387,6 +387,10 @@ end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     test_utils:mock_validate_and_unload(Workers, [communicator]).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 query_index(Worker, SpaceId, ViewName, Options) ->
     rpc:call(Worker, index, query, [SpaceId, ViewName, Options]).

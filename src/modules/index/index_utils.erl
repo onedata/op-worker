@@ -17,6 +17,9 @@
 %% API
 -export([sanitize_query_options/1, escape_js_function/1]).
 
+%%%===================================================================
+%%% API functions
+%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -41,6 +44,11 @@ escape_js_function(Function) ->
         {<<"\\v">>, <<"\\\\v">>}, {<<"\\0">>, <<"\\\\0">>}, {<<"\\f">>, <<"\\\\f">>},
         {<<"\\r">>, <<"\\\\r">>}]).
 
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
 %%--------------------------------------------------------------------
 %% @doc Escapes characters given as proplists, in provided Function.
 %%--------------------------------------------------------------------
@@ -51,9 +59,6 @@ escape_js_function(Function, [{Pattern, Replacement} | Rest]) ->
     EscapedFunction = re:replace(Function, Pattern, Replacement, [{return, binary}, global]),
     escape_js_function(EscapedFunction, Rest).
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
 
 -spec sanitize_query_options(list(), list()) -> list().
 sanitize_query_options([], Options) ->

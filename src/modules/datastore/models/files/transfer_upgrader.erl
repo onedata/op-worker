@@ -1,14 +1,13 @@
 %%%-------------------------------------------------------------------
-%%% @author Tomasz Lichon
-%%% @copyright (C) 2017 ACK CYFRONET AGH
+%%% @author Jakub Kudzia
+%%% @copyright (C) 2018 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module contains a few datastore_model callbacks functions for
-%%% transfer model. They were moved from transfer module to improve code
-%%% clarity.
+%%% This module contains record definition of transfer model and
+%%% upgrader function for this model.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(transfer_upgrader).
@@ -315,7 +314,7 @@ get_record_struct(10) ->
         {dy_hist, #{string => [integer]}},
         {mth_hist, #{string => [integer]}},
         {index_name, string},
-        {query_view_params, [{term, term}]}    %todo specific type?
+        {query_view_params, [{term, term}]}
     ]}.
 
 %%--------------------------------------------------------------------

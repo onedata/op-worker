@@ -35,8 +35,8 @@
     eviction_should_succeed_when_remote_provider_modified_file_replica/1,
     eviction_should_fail_when_evicting_provider_modified_file_replica/1,
     quota_decreased_after_eviction/1,
-
     schedule_replica_eviction_by_index/1,
+    schedule_eviction_of_regular_file_by_index_with_reduce/1,
     scheduling_replica_eviction_by_not_existing_index_should_fail/1,
     scheduling_replica_eviction_by_index_with_wrong_function_should_fail/1,
     scheduling_replica_eviction_by_empty_index_should_succeed/1,
@@ -63,6 +63,7 @@ all() -> [
     eviction_should_fail_when_evicting_provider_modified_file_replica,
     quota_decreased_after_eviction,
     schedule_replica_eviction_by_index,
+    schedule_eviction_of_regular_file_by_index_with_reduce,
     scheduling_replica_eviction_by_not_existing_index_should_fail,
     scheduling_replica_eviction_by_index_with_wrong_function_should_fail,
     scheduling_replica_eviction_by_empty_index_should_succeed,
@@ -123,6 +124,9 @@ quota_decreased_after_eviction(Config) ->
 
 schedule_replica_eviction_by_index(Config) ->
     replica_eviction_transfers_test_base:schedule_replica_eviction_by_index(Config, lfm).
+
+schedule_eviction_of_regular_file_by_index_with_reduce(Config) ->
+    replica_eviction_transfers_test_base:schedule_eviction_of_regular_file_by_index_with_reduce(Config, lfm).
 
 scheduling_replica_eviction_by_not_existing_index_should_fail(Config) ->
     replica_eviction_transfers_test_base:scheduling_replica_eviction_by_not_existing_index_should_fail(Config, lfm).

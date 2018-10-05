@@ -65,6 +65,9 @@
 -record(expected, {
     user = ?DEFAULT_USER,
     distribution :: [#{}],
+    % distribution will be checked only for files from assert_files list
+    % if it's undefined, assertion will be performed for all files
+    assert_distribution_for_files = undefined :: undefined | list(),
     minHist :: #{},
     hrHist :: #{},
     dyHist :: #{},
@@ -118,6 +121,17 @@ end).
 -define(OLD_TRANSFERS_KEY, old_transfer_ids).
 -define(SPACE_ID_KEY, space_id).
 
+-define(assertIndexVisible(Worker, SpaceId, IndexName),
+    ?assertIndexVisible(Worker, SpaceId, IndexName, ?ATTEMPTS)).
+
+-define(assertIndexVisible(Worker, SpaceId, IndexName, Attempts),
+    ?assertMatch(true, begin
+        case rpc:call(Worker, index, list, [SpaceId]) of
+            {ok, Indexes} -> lists:member(IndexName, Indexes);
+            Error -> Error
+        end
+    end, Attempts)).
+
 -define(assertIndexQuery(ExpectedValues, Worker, SpaceId, ViewName, Options),
     ?assertIndexQuery(ExpectedValues, Worker, SpaceId, ViewName, Options, ?ATTEMPTS)).
 
@@ -129,7 +143,7 @@ end).
                 {<<"value">>, Value} = lists:keyfind(<<"value">>, 1, Row),
                 lists:flatten([Value])
             end, Rows)),
-            ct:pal("RESULT: ~p~nExpected: ~p", [Result, lists:sort(ExpectedValues)]),
+%%            ct:pal("RESULT: ~p~nExpected: ~p", [Result, lists:sort(ExpectedValues)]),
             Result
         catch
             _:_ ->

@@ -38,9 +38,10 @@
 -define(CTX, #{
     model => ?MODULE,
     sync_enabled => true,
+    remote_driver => datastore_remote_driver,
     mutator => oneprovider:get_id_or_undefined()
 }).
--define(DISC_CTX, #{bucket => <<"onedata">>}).
+-define(DISK_CTX, (datastore_model_default:get_default_disk_ctx())).
 
 %%%===================================================================
 %%% API
@@ -51,30 +52,7 @@
 save(SpaceId, Name, MapFunction, ReduceFunction, Options, Spatial, Providers) ->
     save(SpaceId, Name, MapFunction, ReduceFunction, Options, Spatial, Providers, true).
 
-save(SpaceId, Name, MapFunction, ReduceFunction, Options, Spatial, Providers, Escape) ->
-    Id = id(Name, SpaceId),
-    EscapedMapFunction = case Escape of
-        true -> index_utils:escape_js_function(MapFunction);
-        false -> MapFunction
-    end,
-    ToCreate = #document{
-        key = Id,
-        value = #index{
-            name = Name,
-            space_id = SpaceId,
-            spatial = Spatial,
-            map_function = EscapedMapFunction,
-            reduce_function = ReduceFunction,
-            index_options = Options,
-            providers = Providers
-        },
-        scope = SpaceId
-    },
-    {ok, Doc} = datastore_model:save(?CTX, ToCreate),
-    ok = index_links:add_link(Name, SpaceId),
-    index_changes:handle(Doc),
-    ok.
-
+-spec add_reduce(od_space:id(), name(), index_function() | undefined) -> ok.
 add_reduce(SpaceId, Name, ReduceFunction) ->
     Id = id(Name, SpaceId),
     {ok, #document{
@@ -128,7 +106,7 @@ get_json(SpaceId, IndexName) ->
 delete(SpaceId, IndexName) ->
     Id = id(IndexName, SpaceId),
     datastore_model:delete(?CTX, Id),
-    couchbase_driver:delete_design_doc(?DISC_CTX, Id),
+    couchbase_driver:delete_design_doc(?DISK_CTX, Id),
     index_links:delete_links(IndexName, SpaceId).
 
 -spec list(od_space:id()) -> {ok, [index:name()]}.
@@ -165,9 +143,9 @@ save_db_view(IndexId, SpaceId, Function, ReduceFunction, Spatial, Options) ->
     }">>,
     ok = case Spatial of
         true ->
-            couchbase_driver:save_spatial_view_doc(?DISC_CTX, IndexId, ViewFunction, Options);
+            couchbase_driver:save_spatial_view_doc(?DISK_CTX, IndexId, ViewFunction, Options);
         _ ->
-            couchbase_driver:save_view_doc(?DISC_CTX, IndexId, ViewFunction, ReduceFunction, Options)
+            couchbase_driver:save_view_doc(?DISK_CTX, IndexId, ViewFunction, ReduceFunction, Options)
     end.
 
 %%--------------------------------------------------------------------
@@ -178,14 +156,40 @@ save_db_view(IndexId, SpaceId, Function, ReduceFunction, Spatial, Options) ->
 -spec query(od_space:id(), name(), options()) -> {ok, datastore_json:ejson()} | {error, term()}.
 query(SpaceId, <<"file-popularity">>, Options) ->
     Id = <<"file-popularity-", SpaceId/binary>>,
-    couchbase_driver:query_view(?DISC_CTX, Id, Id, Options);
+    couchbase_driver:query_view(?DISK_CTX, Id, Id, Options);
 query(SpaceId, IndexName, Options) ->
     Id = id(IndexName, SpaceId),
-    couchbase_driver:query_view(?DISC_CTX, Id, Id, Options).
+    couchbase_driver:query_view(?DISK_CTX, Id, Id, Options).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+-spec save(od_space:id(), name(), index_function(), undefined | index_function(),
+    options(), boolean(), [od_provider:id()], boolean()) -> ok.
+save(SpaceId, Name, MapFunction, ReduceFunction, Options, Spatial, Providers, Escape) ->
+    Id = id(Name, SpaceId),
+    EscapedMapFunction = case Escape of
+        true -> index_utils:escape_js_function(MapFunction);
+        false -> MapFunction
+    end,
+    ToCreate = #document{
+        key = Id,
+        value = #index{
+            name = Name,
+            space_id = SpaceId,
+            spatial = Spatial,
+            map_function = EscapedMapFunction,
+            reduce_function = ReduceFunction,
+            index_options = Options,
+            providers = Providers
+        },
+        scope = SpaceId
+    },
+    {ok, Doc} = datastore_model:save(?CTX, ToCreate),
+    ok = index_links:add_link(Name, SpaceId),
+    index_changes:handle(Doc),
+    ok.
 
 %%%===================================================================
 %%% datastore_model callbacks

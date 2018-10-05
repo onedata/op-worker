@@ -252,7 +252,9 @@ schedule_file_replication(Auth, FileKey, ProviderId, Callback) ->
         Callback).
 
 %%--------------------------------------------------------------------
-%% @doc Replicates file on given provider.
+%% @doc Replicates files to given provider.
+%% List of files to be replicated is acquired by querying
+%% index IndexName in space SpaceId.
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_replication_by_index(Auth :: onedata_auth_api:auth(),
@@ -276,8 +278,10 @@ schedule_replica_eviction(Auth, FileKey, SourceProviderId, TargetProviderId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Evicts file replicas of files from given index on given provider,
-%% migrates unique data to provider given as MigrateProviderId
+%% Evicts file replicas from given provider.
+%% List of file replicas to be evicted is acquired by querying
+%% index IndexName in space SpaceId.
+%% Migrates unique data to provider given as MigrateProviderId
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_replica_eviction_by_index(session:id(), SourceProviderId :: oneprovider:id(),

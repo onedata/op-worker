@@ -215,8 +215,8 @@
 -define(ERROR_INDEX_FUNCTION, ?ERROR_REPLY(
     ?BAD_REQUEST,
     <<"error_index_function">>,
-    <<"Processing query result failed.
-    Ensure that returned value from map/reduce function is file id or list of which first element is file id.">>)
+    <<"Processing query result failed."
+    "Ensure that returned value from map/reduce function is file id or list of which first element is file id.">>)
 ).
 
 -define(ERROR_SPACE_NOT_SUPPORTED, ?ERROR_REPLY(

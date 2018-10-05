@@ -15,7 +15,7 @@
 -include("http/http_common.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
 
--define(DEFAULT_LIMIT, 100).
+-define(DEFAULT_BATCH_SIZE, 100).
 
 %% API
 -export([
@@ -80,7 +80,7 @@ list_indexes(Req, State) ->
 
     #{space_id := SpaceId, limit := LimitOrUndef, page_token := PageToken} = State3,
 
-    Limit = utils:ensure_defined(LimitOrUndef, undefined, ?DEFAULT_LIMIT),
+    Limit = utils:ensure_defined(LimitOrUndef, undefined, ?DEFAULT_BATCH_SIZE),
 
     {StartId, Offset} = case PageToken of
         <<"null">> ->

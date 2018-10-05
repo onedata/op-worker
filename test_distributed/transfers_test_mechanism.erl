@@ -41,8 +41,10 @@
     schedule_replica_migration_without_permissions/2,
     replicate_files_from_index/2,
     evict_replicas_from_index/2,
-    migrate_replicas_from_index/2
-]).
+    migrate_replicas_from_index/2,
+    fail_to_replicate_files_from_index/2,
+    fail_to_evict_replicas_from_index/2,
+    fail_to_migrate_replicas_from_index/2]).
 
 -export([move_transfer_ids_to_old_key/1]).
 
@@ -203,6 +205,22 @@ replicate_files_from_index(Config, #scenario{
         NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
     end, Config, []).
 
+fail_to_replicate_files_from_index(Config, #scenario{
+    user = User,
+    type = Type,
+    space_id = SpaceId,
+    index_name = IndexName,
+    query_view_params = QueryViewParams,
+    schedule_node = ScheduleNode,
+    replicating_nodes = ReplicatingNodes
+}) ->
+    lists:foreach(fun(TargetNode) ->
+        TargetProviderId = transfers_test_utils:provider_id(TargetNode),
+        ?assertMatch({error, _}, schedule_replication_by_index(ScheduleNode,
+            TargetProviderId, User, SpaceId, IndexName, QueryViewParams, Config, Type))
+    end, ReplicatingNodes),
+    Config.
+
 %%%===================================================================
 %%% Eviction scenarios
 %%%===================================================================
@@ -285,6 +303,22 @@ evict_replicas_from_index(Config, #scenario{
     update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
         NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
     end, Config, []).
+
+fail_to_evict_replicas_from_index(Config, #scenario{
+    user = User,
+    type = Type,
+    space_id = SpaceId,
+    index_name = IndexName,
+    query_view_params = QueryViewParams,
+    schedule_node = ScheduleNode,
+    evicting_nodes = EvictingNodes
+}) ->
+    lists:foreach(fun(EvictingNode) ->
+        EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
+        ?assertMatch({error, _}, schedule_replica_eviction_by_index(ScheduleNode,
+            EvictingProviderId, User, SpaceId, IndexName, QueryViewParams, Config, Type))
+    end, EvictingNodes),
+    Config.
 
 %%%===================================================================
 %%% Migration scenarios
@@ -390,6 +424,28 @@ migrate_replicas_from_index(Config, #scenario{
         NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
     end, Config, []).
 
+fail_to_migrate_replicas_from_index(Config, #scenario{
+    user = User,
+    type = Type,
+    space_id = SpaceId,
+    index_name = IndexName,
+    query_view_params = QueryViewParams,
+    schedule_node = ScheduleNode,
+    replicating_nodes = ReplicatingNodes,
+    evicting_nodes = EvictingNodes
+}) ->
+    lists:foreach(fun(ReplicatingNode) ->
+        lists:foreach(fun(EvictingNode) ->
+            ReplicatingProviderId = transfers_test_utils:provider_id(ReplicatingNode),
+            EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
+            ?assertMatch({error, _}, schedule_replica_migration_by_index(ScheduleNode,
+                EvictingProviderId, User, SpaceId, IndexName,
+                QueryViewParams, Config, Type, ReplicatingProviderId
+            ))
+        end, EvictingNodes)
+    end, ReplicatingNodes),
+    Config.
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -432,6 +488,7 @@ assert_expectations(Config, Expected = #expected{
     user = User,
     assertion_nodes = AssertionNodes,
     distribution = ExpectedDistribution,
+    assert_distribution_for_files = AssertDistributionForFiles,
     attempts = Attempts,
     timeout = Timetrap,
     assert_transferred_file_model = AssertTransferredFileModel
@@ -448,7 +505,7 @@ assert_expectations(Config, Expected = #expected{
             assert_transfer(Config, AssertionNode, Expected, TransferId,
                 FileGuid, FilePath, TargetNode),
             assert_files_distribution_on_all_nodes(Config, AssertionNodes, User,
-                ExpectedDistribution, Attempts, Timetrap),
+                ExpectedDistribution, AssertDistributionForFiles, Attempts, Timetrap),
 
             case AssertTransferredFileModel of
                 true ->
@@ -566,7 +623,7 @@ assert_setup(Config, #setup{
 }) ->
     assert_files_visible_on_all_nodes(Config, AssertionNodes, User, Attempts, Timetrap),
     assert_files_distribution_on_all_nodes(Config, AssertionNodes, User,
-        ExpectedDistribution, Attempts, Timetrap).
+        ExpectedDistribution, undefined, Attempts, Timetrap).
 
 await_countdown(Refs, Timetrap) when is_list(Refs) ->
     await_countdown(sets:from_list(Refs), Timetrap);
@@ -595,9 +652,9 @@ assert_files_visible_on_all_nodes(Config, AssertionNodes, User, Attempts, Timetr
     end, AssertionNodes),
     await_countdown(Refs, Timetrap).
 
-assert_files_distribution_on_all_nodes(_Config, _AssertionNodes, _User, undefined, _Attempts, _Timetrap) ->
+assert_files_distribution_on_all_nodes(_Config, _AssertionNodes, _User, undefined, _AssertDistributionForFiles, _Attempts, _Timetrap) ->
     ok;
-assert_files_distribution_on_all_nodes(Config, AssertionNodes, User, ExpectedDistribution, Attempts, Timetrap) ->
+assert_files_distribution_on_all_nodes(Config, AssertionNodes, User, ExpectedDistribution, AssertDistributionForFiles, Attempts, Timetrap) ->
     % Deduce expected block size automatically based on expected blocks
     ExpectedDistributionWithBlockSize = lists:map(fun(Distribution) ->
         Distribution#{
@@ -608,17 +665,27 @@ assert_files_distribution_on_all_nodes(Config, AssertionNodes, User, ExpectedDis
     end, ExpectedDistribution),
 
     Refs = lists:map(fun(AssertionNode) ->
-        cast_files_distribution_assertion(Config, AssertionNode, User, ExpectedDistributionWithBlockSize, Attempts)
+        cast_files_distribution_assertion(Config, AssertionNode, User, ExpectedDistributionWithBlockSize, AssertDistributionForFiles, Attempts)
     end, AssertionNodes),
     await_countdown(Refs, Timetrap).
 
-cast_files_distribution_assertion(Config, Node, User, Expected, Attempts) ->
+cast_files_distribution_assertion(Config, Node, User, Expected, AssertDistributionForFiles, Attempts) ->
     FileGuidsAndPaths = ?config(?FILES_KEY, Config),
+    FilesToPerformAssertion = case AssertDistributionForFiles of
+        undefined ->  [G || {G, _} <- FileGuidsAndPaths];
+        _ ->
+            lists:filtermap(fun({G, _P}) ->
+            case lists:member(G, AssertDistributionForFiles) of
+                true -> {true, G};
+                false -> false
+            end
+        end, FileGuidsAndPaths)
+    end,
     SessionId = ?USER_SESSION(Node, User, Config),
-    CounterRef = countdown_server:init_counter(Node, length(FileGuidsAndPaths)),
-    lists:foreach(fun({FileGuid, _FilePath}) ->
+    CounterRef = countdown_server:init_counter(Node, length(FilesToPerformAssertion)),
+    lists:foreach(fun(FileGuid) ->
         cast_file_distribution_assertion(Expected, Node, SessionId, FileGuid, CounterRef, Attempts)
-    end, FileGuidsAndPaths),
+    end, FilesToPerformAssertion),
     CounterRef.
 
 cast_files_prereplication(Config, Node, User, ExpectedSize, Attempts) ->
@@ -661,7 +728,6 @@ cast_files_visible_assertion(Config, Node, User, Attempts) ->
 
     GuidsAndPaths = FilesGuidsAndPaths2 ++ [RootDirGuidAndPath | DirsGuidsAndPaths2],
     CounterRef = countdown_server:init_counter(Node, length(GuidsAndPaths)),
-%%    ct:pal("GUIDS AND PATHS: ~p", [GuidsAndPaths]),
     lists:foreach(fun({FileGuid, _FilePath}) ->
         cast_file_visible_assertion(Node, SessionId, FileGuid, CounterRef, Attempts)
     end, GuidsAndPaths),

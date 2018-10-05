@@ -244,17 +244,17 @@ evict_file_replicas_from_index(UserCtx, FileCtx, MigrationProviderId,
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     case index:query(SpaceId, IndexName, [{limit, Chunk} | QueryViewParams2]) of
         {ok, {Rows}} ->
-            NumberOfFiles = length(Rows),
             {NewLastDocId, FileCtxs} = lists:foldl(fun(Row, {_LastDocId, FileCtxsIn}) ->
-                {<<"value">>, Values} = lists:keyfind(<<"value">>, 1, Row),
+                {<<"value">>, Value} = lists:keyfind(<<"value">>, 1, Row),
                 DocId = case lists:keyfind(<<"id">>, 1, Row) of
                     {<<"id">>, Id} -> Id;
                     _ -> doc_id_missing
                 end,
-                ObjectIds = case is_list(Values) of
-                    true -> hd(Values);
-                    false -> Values
+                ObjectIds = case is_list(Value) of
+                    true -> lists:flatten(Value);
+                    false -> [Value]
                 end,
+                transfer:increment_files_to_process_counter(TransferId, length(ObjectIds)),
                 NewFileCtxs = lists:filtermap(fun(O) ->
                     try
                         {ok, G} = cdmi_id:objectid_to_guid(O),
@@ -268,12 +268,7 @@ evict_file_replicas_from_index(UserCtx, FileCtx, MigrationProviderId,
                 end, ObjectIds),
                 {DocId, FileCtxsIn ++ NewFileCtxs}
             end, {undefined, []}, Rows),
-%%            % Guids are reversed now
-%%            ChildrenCtxs = lists:foldl(fun(Guid, Ctxs) ->
-%%                [file_ctx:new_by_guid(Guid) | Ctxs]
-%%            end, [], Guids),
-            transfer:increment_files_to_process_counter(TransferId, NumberOfFiles),
-            case NumberOfFiles < Chunk of
+            case length(Rows) < Chunk of
                 true ->
                     enqueue_files_eviction(UserCtx, FileCtxs,
                         MigrationProviderId, TransferId

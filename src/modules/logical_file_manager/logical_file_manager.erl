@@ -265,7 +265,8 @@ schedule_file_replication(SessId, FileKey, TargetProviderId, Callback) ->
             {error, ?EACCES};
         true ->
             ?run(fun() ->
-                lfm_files:schedule_file_replication(SessId, FileKey, TargetProviderId, Callback)
+                lfm_files:schedule_file_replication(SessId, FileKey,
+                    TargetProviderId, Callback)
             end)
     end.
 
@@ -277,16 +278,20 @@ schedule_file_replication(SessId, FileKey, TargetProviderId, Callback) ->
 -spec schedule_replication_by_index(session:id(), TargetProviderId :: oneprovider:id(),
     transfer:callback(), od_space:id(), transfer:index_name(),
     transfer:query_view_params()) -> {ok, transfer:id()} | error_reply().
-schedule_replication_by_index(SessId, TargetProviderId, Callback, SpaceId, IndexName, QueryParams) ->
+schedule_replication_by_index(SessId, TargetProviderId, Callback, SpaceId,
+    IndexName, QueryParams
+) ->
     % Scheduling and target providers must support given space
     HasAccess = provider_logic:supports_space(SpaceId)
         andalso space_logic:is_supported(?ROOT_SESS_ID, SpaceId, TargetProviderId),
-    case HasAccess of
+    IndexSupported = index:is_supported(SpaceId, IndexName, TargetProviderId),
+    case HasAccess and IndexSupported of
         false ->
             {error, ?EACCES};
         true ->
             ?run(fun() ->
-                lfm_files:schedule_replication_by_index(SessId, TargetProviderId, Callback, SpaceId, IndexName, QueryParams)
+                lfm_files:schedule_replication_by_index(SessId,
+                    TargetProviderId, Callback, SpaceId, IndexName, QueryParams)
             end)
     end.
 
@@ -318,7 +323,8 @@ schedule_replica_eviction(SessId, FileKey, SourceProviderId, TargetProviderId) -
             {error, ?EACCES};
         true ->
             ?run(fun() ->
-                lfm_files:schedule_replica_eviction(SessId, FileKey, SourceProviderId, TargetProviderId)
+                lfm_files:schedule_replica_eviction(SessId, FileKey,
+                    SourceProviderId, TargetProviderId)
             end)
     end.
 
@@ -328,30 +334,38 @@ schedule_replica_eviction(SessId, FileKey, SourceProviderId, TargetProviderId) -
 %% to provider given as MigrateProviderId.
 %% @end
 %%--------------------------------------------------------------------
--spec schedule_replica_eviction_by_index(session:id(), SourceProviderId :: oneprovider:id(),
-    TargetProviderId :: undefined | oneprovider:id(), od_space:id(),
+-spec schedule_replica_eviction_by_index(session:id(), oneprovider:id(),
+    undefined | oneprovider:id(), od_space:id(),
     transfer:index_name(), transfer:query_view_params()) ->
     {ok, transfer:id()} | error_reply().
-schedule_replica_eviction_by_index(SessId, SourceProviderId, TargetProviderId,
+schedule_replica_eviction_by_index(SessId, EvictingProviderId, ReplicatingProviderId,
     SpaceId, IndexName, QueryViewParams
 ) ->
-    SupportedByTarget = case TargetProviderId of
+    SupportedByTarget = case ReplicatingProviderId of
         undefined -> true;
-        _ -> space_logic:is_supported(?ROOT_SESS_ID, SpaceId, TargetProviderId)
+        _ -> space_logic:is_supported(?ROOT_SESS_ID, SpaceId, ReplicatingProviderId)
     end,
 
     % Scheduling, source and target providers must support given space
     HasAccess = SupportedByTarget
         andalso provider_logic:supports_space(SpaceId)
-        andalso space_logic:is_supported(?ROOT_SESS_ID, SpaceId, SourceProviderId),
+        andalso space_logic:is_supported(?ROOT_SESS_ID, SpaceId, EvictingProviderId),
 
-    case HasAccess of
+    IndexSupported = index:is_supported(SpaceId, IndexName, EvictingProviderId)
+        andalso (
+            (ReplicatingProviderId == undefined)
+            or
+            (index:is_supported(SpaceId, IndexName, ReplicatingProviderId))
+        ),
+
+    case HasAccess and IndexSupported of
         false ->
             {error, ?EACCES};
         true ->
             ?run(fun() ->
                 lfm_files:schedule_replica_eviction_by_index(SessId,
-                    SourceProviderId, TargetProviderId, SpaceId, IndexName, QueryViewParams)
+                    EvictingProviderId, ReplicatingProviderId, SpaceId,
+                    IndexName, QueryViewParams)
             end)
     end.
 
