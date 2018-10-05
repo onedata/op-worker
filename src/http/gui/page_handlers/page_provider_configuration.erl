@@ -17,6 +17,8 @@
 
 -include("global_definitions.hrl").
 
+-define(to_binaries(__List), [list_to_binary(V) || V <- __List]).
+
 -export([handle/2]).
 
 %%%===================================================================
@@ -43,15 +45,31 @@ handle(<<"GET">>, Req) ->
 
 -spec get_config() -> maps:map().
 get_config() ->
-    ProviderId = case oneprovider:get_id_or_undefined() of
-        undefined -> <<"not registered yet">>;
-        Id -> Id
+    ProviderId = oneprovider:get_id_or_undefined(),
+    Name = case provider_logic:get_name() of
+        {ok, N} -> N;
+        _ -> undefined
     end,
+    Domain = case provider_logic:get_domain() of
+        {ok, D} -> D;
+        _ -> undefined
+    end,
+    OnezoneDomain = case ProviderId of
+        undefined -> undefined;
+        _ -> list_to_binary(oneprovider:get_oz_domain())
+    end,
+    CompOzVersions = application:get_env(?APP_NAME, compatible_oz_versions, []),
     CompOpVersions = application:get_env(?APP_NAME, compatible_op_versions, []),
-    CompOpVersionsBin = [list_to_binary(V) || V <- CompOpVersions],
+    CompOcVersions = application:get_env(?APP_NAME, compatible_oc_versions, []),
+
     #{
-        <<"providerId">> => ProviderId,
+        <<"providerId">> => gs_protocol:undefined_to_null(ProviderId),
+        <<"name">> => gs_protocol:undefined_to_null(Name),
+        <<"domain">> => gs_protocol:undefined_to_null(Domain),
+        <<"onezoneDomain">> => gs_protocol:undefined_to_null(OnezoneDomain),
         <<"version">> => oneprovider:get_version(),
         <<"build">> => oneprovider:get_build(),
-        <<"compatibleOneproviderVersions">> => CompOpVersionsBin
+        <<"compatibleOnezoneVersions">> => ?to_binaries(CompOzVersions),
+        <<"compatibleOneproviderVersions">> => ?to_binaries(CompOpVersions),
+        <<"compatibleOneclientVersions">> => ?to_binaries(CompOcVersions)
     }.

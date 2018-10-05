@@ -195,6 +195,11 @@ rerun_not_ended_transfers(SpaceId) ->
         case maybe_rerun(TransferId) of
             {error, non_participating_provider} ->
                 CurrReruns;
+            {error, Reason} ->
+                ?error("Failed to rerun transfer ~p due to: ~p", [
+                    TransferId, Reason
+                ]),
+                CurrReruns;
             {ok, moved_to_ended} ->
                 CurrReruns;
             {ok, marked_failed} ->

@@ -149,10 +149,10 @@ handle(restart_transfers) ->
         ?ERROR_NO_CONNECTION_TO_OZ ->
             schedule_restart_transfers();
         Error = {error, _} ->
-            ?error("Unable to restart transfers due to: ~p", [Error])
+            ?error("Unable to rerun transfers due to: ~p", [Error])
     catch
         Error2:Reason ->
-            ?error_stacktrace("Unable to restart transfers due to: ~p", [{Error2, Reason}])
+            ?error_stacktrace("Unable to rerun transfers due to: ~p", [{Error2, Reason}])
     end;
 handle({fuse_request, SessId, FuseRequest}) ->
     ?debug("fuse_request(~p): ~p", [SessId, FuseRequest]),

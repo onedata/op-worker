@@ -20,7 +20,7 @@
 %% API
 -export([
     create/7, update/6, update/7,
-    delete/2, list/1, list/4, save/7, save_db_view/6,
+    delete/2, list/1, list/4, save_db_view/6,
     query/3, get_json/2, is_supported/3, id/2, update_reduce_function/3
 ]).
 
@@ -148,35 +148,6 @@ update_reduce_function(SpaceId, Name, ReduceFunction) ->
         Error ->
             Error
     end.
-
--spec save(od_space:id(), name(), index_function(), undefined | index_function(),
-    options(), boolean(), [od_provider:id()]) -> ok.
-save(SpaceId, Name, MapFunction, ReduceFunction, Options, Spatial, Providers) ->
-    save(SpaceId, Name, MapFunction, ReduceFunction, Options, Spatial, Providers, true).
-
-save(SpaceId, Name, MapFunction, ReduceFunction, Options, Spatial, Providers, Escape) ->
-    Id = id(Name, SpaceId),
-    EscapedMapFunction = case Escape of
-        true -> index_utils:escape_js_function(MapFunction);
-        false -> MapFunction
-    end,
-    ToCreate = #document{
-        key = Id,
-        value = #index{
-            name = Name,
-            space_id = SpaceId,
-            spatial = Spatial,
-            map_function = EscapedMapFunction,
-            reduce_function = ReduceFunction,
-            index_options = Options,
-            providers = Providers
-        },
-        scope = SpaceId
-    },
-    {ok, Doc} = datastore_model:save(?CTX, ToCreate),
-    ok = index_links:add_link(Name, SpaceId),
-    index_changes:handle(Doc),
-    ok.
 
 -spec is_supported(od_space:id(), binary(), od_provider:id()) -> boolean().
 is_supported(SpaceId, IndexName, ProviderId) ->

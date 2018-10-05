@@ -244,21 +244,21 @@ create_and_get_view(Config) ->
     MetaRed = #{<<"meta">> => #{<<"color">> => <<"red">>}},
     ViewFunction =
         <<"function (id, meta) {
-              if(meta['onedata_json'] && meta['onedata_json']['meta'] && meta['onedata_json']['meta']['color']) {
-                  return [meta['onedata_json']['meta']['color'], id];
-              }
-              return null;
-        }">>,
+             if(meta['onedata_json'] && meta['onedata_json']['meta'] && meta['onedata_json']['meta']['color']) {
+                 return [meta['onedata_json']['meta']['color'], id];
+             }
+             return null;
+       }">>,
     {ok, Guid1} = lfm_proxy:create(Worker, SessId, Path1, 8#600),
     {ok, Guid2} = lfm_proxy:create(Worker, SessId, Path2, 8#600),
     {ok, Guid3} = lfm_proxy:create(Worker, SessId, Path3, 8#600),
-    Uuid1 = fslogic_uuid:guid_to_uuid(Guid1),
-    Uuid2 = fslogic_uuid:guid_to_uuid(Guid2),
-    Uuid3 = fslogic_uuid:guid_to_uuid(Guid3),
+    {ok, FileId1} = cdmi_id:guid_to_objectid(Guid1),
+    {ok, FileId2} = cdmi_id:guid_to_objectid(Guid2),
+    {ok, FileId3} = cdmi_id:guid_to_objectid(Guid3),
     ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, Guid1}, json, MetaBlue, [])),
     ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, Guid2}, json, MetaRed, [])),
     ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, Guid3}, json, MetaBlue, [])),
-    ok = rpc:call(Worker, index, save, [SpaceId, ViewName, ViewFunction, undefined, [], false, [ProviderId]]),
+    ok = rpc:call(Worker, index, create, [SpaceId, ViewName, ViewFunction, undefined, [], false, [ProviderId]]),
     ?assertMatch({ok, [ViewName]}, rpc:call(Worker, index, list, [SpaceId])),
     FinalCheck = fun() ->
         try
@@ -266,15 +266,14 @@ create_and_get_view(Config) ->
             {ok, QueryResultRed} = query_index(Worker, SpaceId, ViewName, [{key, <<"red">>}]),
             {ok, QueryResultOrange} = query_index(Worker, SpaceId, ViewName, [{key, <<"orange">>}]),
 
-            UuidsBlue = extract_query_values(QueryResultBlue),
-            UuidsRed = extract_query_values(QueryResultRed),
-            UuidsOrange = extract_query_values(QueryResultOrange),
-
-            true = lists:member(Uuid1, UuidsBlue),
-            false = lists:member(Uuid2, UuidsBlue),
-            true = lists:member(Uuid3, UuidsBlue),
-            [Uuid2] = UuidsRed,
-            [] = UuidsOrange,
+            IdsBlue = extract_query_values(QueryResultBlue),
+            IdsRed = extract_query_values(QueryResultRed),
+            IdsOrange = extract_query_values(QueryResultOrange),
+            true = lists:member(FileId1, IdsBlue),
+            false = lists:member(FileId2, IdsBlue),
+            true = lists:member(FileId3, IdsBlue),
+            [FileId2] = IdsRed,
+            [] = IdsOrange,
             ok
         catch
             E1:E2 ->
