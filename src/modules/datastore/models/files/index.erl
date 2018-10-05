@@ -18,11 +18,18 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([delete/2, list/1, list/4, save/7, save_db_view/6,
-    query/3, get_json/2, is_supported/3, id/2, add_reduce/3]).
+-export([
+    create/7, update/6, update/7,
+    delete/2, list/1, list/4, save/7, save_db_view/6,
+    query/3, get_json/2, is_supported/3, id/2, update_reduce_function/3
+]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
+
+-type id() :: binary().
+-type diff() :: datastore:diff(index()).
+-type doc() :: datastore_doc:doc(index()).
 
 -type name() :: binary().
 -type key() :: datastore_utils:key().
@@ -30,8 +37,7 @@
 -type index_function() :: binary().
 -type options() :: proplists:proplist().
 -type query_options() :: [couchbase_driver:view_opt()].
--type providers() :: all | [od_provider:id()].
--type doc() :: datastore_doc:doc(index()).
+-type providers() :: [od_provider:id(), ...].
 
 -export_type([name/0, index/0, index_function/0, doc/0, options/0, providers/0, query_options/0]).
 
@@ -47,27 +53,130 @@
 %%% API
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates new index (creates also design doc but only if this provider is on
+%% specified providers list) and adds it to links tree.
+%% @end
+%%--------------------------------------------------------------------
+-spec create(od_space:id(), name(), index_function(), undefined | index_function(),
+    options(), boolean(), providers()) -> ok | {error, term()}.
+create(SpaceId, Name, MapFunction, ReduceFunction, Options, Spatial, Providers) ->
+    IndexId = id(Name, SpaceId),
+    ToCreate = #document{
+        key = IndexId,
+        value = #index{
+            name = Name,
+            space_id = SpaceId,
+            spatial = Spatial,
+            map_function = index_utils:escape_js_function(MapFunction),
+            reduce_function = ReduceFunction,
+            index_options = Options,
+            providers = Providers
+        },
+        scope = SpaceId
+    },
+    case create(ToCreate) of
+        {ok, Doc} ->
+            ok = index_links:add_link(Name, SpaceId),
+            index_changes:handle(Doc),
+            ok;
+        Error ->
+            Error
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv update(SpaceId, Name, MapFunction, undefined, Options, Spatial, Providers).
+%% @end
+%%--------------------------------------------------------------------
+-spec update(od_space:id(), name(), undefined | index_function(), options(),
+    undefined | boolean(), undefined | providers()) -> ok | {error, term()}.
+update(SpaceId, Name, MapFunction, Options, Spatial, Providers) ->
+    update(SpaceId, Name, MapFunction, undefined, Options, Spatial, Providers).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates definition for specified index in specified space.
+%% By specifying given argument as 'undefined' old value will not be replaced.
+%% @end
+%%--------------------------------------------------------------------
+-spec update(od_space:id(), name(), undefined | index_function(),
+    undefined | index_function(), options(), undefined | boolean(),
+    undefined | providers()) -> ok | {error, term()}.
+update(SpaceId, Name, MapFunction, ReduceFunction, Options, Spatial, Providers) ->
+    IndexId = id(Name, SpaceId),
+    Diff = fun(OldIndex = #index{
+        spatial = OldSpatial,
+        map_function = OldMap,
+        reduce_function = OldReduce,
+        index_options = OldOptions,
+        providers = OldProviders
+    }) ->
+        NewOptions = maps:to_list(maps:merge(
+            maps:from_list(OldOptions), maps:from_list(Options)
+        )),
+        {ok, OldIndex#index{
+            spatial = utils:ensure_defined(Spatial, undefined, OldSpatial),
+            map_function = utils:ensure_defined(MapFunction, undefined, OldMap),
+            reduce_function = utils:ensure_defined(ReduceFunction, undefined, OldReduce),
+            index_options = NewOptions,
+            providers = utils:ensure_defined(Providers, undefined, OldProviders)
+        }}
+    end,
+    case update(IndexId, Diff) of
+        {ok, _} ->
+            ok;
+        Error ->
+            Error
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates definition of reduce function for given index or deletes it in case
+%% of specifying 'undefined' as value.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_reduce_function(od_space:id(), name(), undefined | index_function()) ->
+    ok | {error, term()}.
+update_reduce_function(SpaceId, Name, ReduceFunction) ->
+    IndexId = id(Name, SpaceId),
+    Diff = fun(Index) -> {ok, Index#index{reduce_function = ReduceFunction}} end,
+    case update(IndexId, Diff) of
+        {ok, _} ->
+            ok;
+        Error ->
+            Error
+    end.
+
 -spec save(od_space:id(), name(), index_function(), undefined | index_function(),
     options(), boolean(), [od_provider:id()]) -> ok.
 save(SpaceId, Name, MapFunction, ReduceFunction, Options, Spatial, Providers) ->
     save(SpaceId, Name, MapFunction, ReduceFunction, Options, Spatial, Providers, true).
 
--spec add_reduce(od_space:id(), name(), index_function() | undefined) -> ok.
-add_reduce(SpaceId, Name, ReduceFunction) ->
+save(SpaceId, Name, MapFunction, ReduceFunction, Options, Spatial, Providers, Escape) ->
     Id = id(Name, SpaceId),
-    {ok, #document{
+    EscapedMapFunction = case Escape of
+        true -> index_utils:escape_js_function(MapFunction);
+        false -> MapFunction
+    end,
+    ToCreate = #document{
         key = Id,
         value = #index{
             name = Name,
             space_id = SpaceId,
             spatial = Spatial,
             map_function = EscapedMapFunction,
+            reduce_function = ReduceFunction,
             index_options = Options,
             providers = Providers
-        }
-    }} = datastore_model:get(?CTX, Id),
-    save(SpaceId, Name, EscapedMapFunction, ReduceFunction, Options, Spatial, Providers, false).
-
+        },
+        scope = SpaceId
+    },
+    {ok, Doc} = datastore_model:save(?CTX, ToCreate),
+    ok = index_links:add_link(Name, SpaceId),
+    index_changes:handle(Doc),
+    ok.
 
 -spec is_supported(od_space:id(), binary(), od_provider:id()) -> boolean().
 is_supported(SpaceId, IndexName, ProviderId) ->
@@ -165,31 +274,15 @@ query(SpaceId, IndexName, Options) ->
 %%% Internal functions
 %%%===================================================================
 
--spec save(od_space:id(), name(), index_function(), undefined | index_function(),
-    options(), boolean(), [od_provider:id()], boolean()) -> ok.
-save(SpaceId, Name, MapFunction, ReduceFunction, Options, Spatial, Providers, Escape) ->
-    Id = id(Name, SpaceId),
-    EscapedMapFunction = case Escape of
-        true -> index_utils:escape_js_function(MapFunction);
-        false -> MapFunction
-    end,
-    ToCreate = #document{
-        key = Id,
-        value = #index{
-            name = Name,
-            space_id = SpaceId,
-            spatial = Spatial,
-            map_function = EscapedMapFunction,
-            reduce_function = ReduceFunction,
-            index_options = Options,
-            providers = Providers
-        },
-        scope = SpaceId
-    },
-    {ok, Doc} = datastore_model:save(?CTX, ToCreate),
-    ok = index_links:add_link(Name, SpaceId),
-    index_changes:handle(Doc),
-    ok.
+%% @private
+-spec create(doc()) -> {ok, doc()} | {error, term()}.
+create(Doc) ->
+    datastore_model:save(?CTX, Doc).
+
+%% @private
+-spec update(id(), diff()) -> {ok, doc()} | {error, term()}.
+update(IndexId, Diff) ->
+    datastore_model:update(?CTX, IndexId, Diff).
 
 %%%===================================================================
 %%% datastore_model callbacks

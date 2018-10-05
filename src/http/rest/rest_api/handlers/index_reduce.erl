@@ -6,7 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Handler for creating, getting, modifying and deleting indexes.
+%%% Handler for modifying and deleting index reduce function.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(index_reduce).
@@ -14,16 +14,15 @@
 
 -include("http/http_common.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
--include("modules/fslogic/fslogic_common.hrl").
 
 %% API
 -export([
-    terminate/3, allowed_methods/2, is_authorized/2, content_types_accepted/2,
-    delete_resource/2
+    terminate/3, allowed_methods/2, is_authorized/2,
+    content_types_accepted/2, delete_resource/2
 ]).
 
 %% resource functions
--export([add_or_modify_index_reduce_fun/2]).
+-export([update_index_reduce_fun/2]).
 
 %%%===================================================================
 %%% API
@@ -59,7 +58,7 @@ is_authorized(Req, State) ->
     {[{binary(), atom()}], req(), maps:map()}.
 content_types_accepted(Req, State) ->
     {[
-        {<<"application/javascript">>, add_or_modify_index_reduce_fun}
+        {<<"application/javascript">>, update_index_reduce_fun}
     ], Req, State}.
 
 %%--------------------------------------------------------------------
@@ -78,8 +77,12 @@ delete_resource(Req, State) ->
 
     #{space_id := SpaceId, index_name := IndexName} = State3,
 
-    ok = index:add_reduce(SpaceId, IndexName, undefined),
-    {true, Req3, State3}.
+    case index:update_reduce_function(SpaceId, IndexName, undefined) of
+        ok ->
+            {true, Req3, State3};
+        {error, not_found} ->
+            throw(?ERROR_INDEX_NOT_FOUND)
+    end.
 
 %%%===================================================================
 %%% Content type handler functions
@@ -95,8 +98,8 @@ delete_resource(Req, State) ->
 %% @param sid Id of the space within which index exist.
 %% @param name Name of the index.
 %%--------------------------------------------------------------------
--spec add_or_modify_index_reduce_fun(req(), maps:map()) -> term().
-add_or_modify_index_reduce_fun(Req, State) ->
+-spec update_index_reduce_fun(req(), maps:map()) -> term().
+update_index_reduce_fun(Req, State) ->
     {State2, Req2} = validator:parse_space_id(Req, State),
     {State3, Req3} = validator:parse_index_name(Req2, State2),
     {State4, Req4} = validator:parse_function(Req3, State3),
@@ -107,5 +110,9 @@ add_or_modify_index_reduce_fun(Req, State) ->
         function := ReduceFunction
     } = State4,
 
-    ok = index:add_reduce(SpaceId, IndexName, ReduceFunction),
-    {stop, cowboy_req:reply(?HTTP_OK, Req4), State4}.
+    case index:update_reduce_function(SpaceId, IndexName, ReduceFunction) of
+        ok ->
+            {stop, cowboy_req:reply(?HTTP_OK, Req4), State4};
+        {error, not_found} ->
+            throw(?ERROR_INDEX_NOT_FOUND)
+    end.

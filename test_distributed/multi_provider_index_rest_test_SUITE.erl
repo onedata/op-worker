@@ -38,6 +38,7 @@
 
 -export([
     create_get_update_delete_index/1,
+    overwrite_index/1,
     create_get_delete_reduce_fun/1,
     getting_nonexistent_index_should_fail/1,
     getting_index_of_not_supported_space_should_fail/1,
@@ -52,6 +53,7 @@
 all() ->
     ?ALL([
         create_get_update_delete_index,
+        overwrite_index,
         create_get_delete_reduce_fun,
         getting_nonexistent_index_should_fail,
         getting_index_of_not_supported_space_should_fail,
@@ -117,8 +119,9 @@ create_get_update_delete_index(Config) ->
 
     % create on one provider
     ?assertMatch([], list_indexes_via_rest(Config, WorkerP1, ?SPACE_ID, 100)),
+    Options1 = #{<<"update_min_changes">> => 10000},
     ?assertMatch(ok, create_index_via_rest(
-        Config, WorkerP1, ?SPACE_ID, IndexName, ?MAP_FUNCTION, false
+        Config, WorkerP1, ?SPACE_ID, IndexName, ?MAP_FUNCTION, false, [], Options1
     )),
     ?assertMatch([IndexName], list_indexes_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
     ?assertMatch([IndexName], list_indexes_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
@@ -127,7 +130,7 @@ create_get_update_delete_index(Config) ->
     ExpMapFun = index_utils:escape_js_function(?MAP_FUNCTION),
     lists:foreach(fun(Worker) ->
         ?assertMatch({ok, #{
-            <<"indexOptions">> := #{},
+            <<"indexOptions">> := Options1,
             <<"providers">> := [Provider1],
             <<"mapFunction">> := ExpMapFun,
             <<"reduceFunction">> := null,
@@ -136,6 +139,39 @@ create_get_update_delete_index(Config) ->
     end, Workers),
 
     % update on other provider (via create)
+    Options2 = #{<<"replica_update_min_changes">> => 100},
+    ?assertMatch(ok, update_index_via_rest(
+        Config, WorkerP1, ?SPACE_ID, IndexName,
+        <<>>, Options2#{providers => [Provider2]}
+    )),
+    ?assertMatch([IndexName], list_indexes_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([IndexName], list_indexes_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
+
+    % get on both after update
+    ExpOptions = maps:merge(Options1, Options2),
+    lists:foreach(fun(Worker) ->
+        ?assertMatch({ok, #{
+            <<"indexOptions">> := ExpOptions,
+            <<"providers">> := [Provider2],
+            <<"mapFunction">> := ExpMapFun,
+            <<"reduceFunction">> := null,
+            <<"spatial">> := false
+        }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
+    end, Workers),
+
+    % delete on other provider
+    ?assertMatch(ok, remove_index_via_rest(Config, WorkerP2, ?SPACE_ID, IndexName)),
+    ?assertMatch([], list_indexes_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([], list_indexes_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS).
+
+overwrite_index(Config) ->
+    Workers = [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    Provider1 = ?PROVIDER_ID(WorkerP1),
+    Provider2 = ?PROVIDER_ID(WorkerP2),
+    IndexName = <<"name1">>,
+
+    % create
+    ?assertMatch([], list_indexes_via_rest(Config, WorkerP1, ?SPACE_ID, 100)),
     Options = #{
         <<"update_min_changes">> => 10000,
         <<"replica_update_min_changes">> => 100
@@ -147,19 +183,38 @@ create_get_update_delete_index(Config) ->
     ?assertMatch([IndexName], list_indexes_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
     ?assertMatch([IndexName], list_indexes_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
 
-    % get on both after update
+    ExpMapFun1 = index_utils:escape_js_function(?MAP_FUNCTION),
     lists:foreach(fun(Worker) ->
         ?assertMatch({ok, #{
             <<"indexOptions">> := Options,
             <<"providers">> := [Provider2],
-            <<"mapFunction">> := ExpMapFun,
+            <<"mapFunction">> := ExpMapFun1,
             <<"reduceFunction">> := null,
             <<"spatial">> := false
         }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
     end, Workers),
 
-    % delete on other provider
-    ?assertMatch(ok, remove_index_via_rest(Config, WorkerP2, ?SPACE_ID, IndexName)),
+    % overwrite
+    ?assertMatch(ok, create_index_via_rest(
+        Config, WorkerP1, ?SPACE_ID, IndexName,
+        ?GEOSPATIAL_MAP_FUNCTION, true, [], #{}
+    )),
+    ?assertMatch([IndexName], list_indexes_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([IndexName], list_indexes_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
+
+    ExpMapFun2 = index_utils:escape_js_function(?GEOSPATIAL_MAP_FUNCTION),
+    lists:foreach(fun(Worker) ->
+        ?assertMatch({ok, #{
+            <<"indexOptions">> := #{},
+            <<"providers">> := [Provider1],
+            <<"mapFunction">> := ExpMapFun2,
+            <<"reduceFunction">> := null,
+            <<"spatial">> := true
+        }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
+    end, Workers),
+
+    % delete
+    ?assertMatch(ok, remove_index_via_rest(Config, WorkerP1, ?SPACE_ID, IndexName)),
     ?assertMatch([], list_indexes_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
     ?assertMatch([], list_indexes_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS).
 
@@ -224,7 +279,7 @@ create_get_delete_reduce_fun(Config) ->
     end, Workers),
 
     % delete on other provider
-    ?assertMatch(ok, remove_index_via_rest(Config, WorkerP2, ?SPACE_ID, IndexName)),
+    ?assertMatch(ok, remove_index_via_rest(Config, WorkerP1, ?SPACE_ID, IndexName)),
     ?assertMatch([], list_indexes_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
     ?assertMatch([], list_indexes_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS).
 
@@ -488,6 +543,21 @@ create_index_via_rest(Config, Worker, SpaceId, IndexName, MapFunction, Spatial, 
     ]),
 
     case rest_test_utils:request(Worker, Path, put, Headers, MapFunction) of
+        {ok, 200, _, _} ->
+            ok;
+        {ok, Code, _, Body} ->
+            {Code, json_utils:decode(Body)}
+    end.
+
+update_index_via_rest(Config, Worker, SpaceId, IndexName, MapFunction, Options) ->
+    QueryString = create_query_string(Options),
+    Path = <<(?INDEX_PATH(SpaceId, IndexName))/binary, QueryString/binary>>,
+
+    Headers = ?USER_1_AUTH_HEADERS(Config, [
+        {<<"content-type">>, <<"application/javascript">>}
+    ]),
+
+    case rest_test_utils:request(Worker, Path, patch, Headers, MapFunction) of
         {ok, 200, _, _} ->
             ok;
         {ok, Code, _, Body} ->
