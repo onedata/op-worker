@@ -534,7 +534,7 @@ schedule_migration_of_regular_file_by_index_with_reduce(Config, Type) ->
     {ok, ObjectId1} = cdmi_id:guid_to_objectid(Guid1),
     {ok, ObjectId6} = cdmi_id:guid_to_objectid(Guid6),
 
-    ?assertIndexQuery([ObjectId1, ObjectId6], WorkerP2, SpaceId, IndexName,  [{key, XattrValue11}]),
+    ?assertIndexQuery([ObjectId1, ObjectId6], WorkerP1, SpaceId, IndexName,  [{key, XattrValue11}]),
     ?assertIndexQuery([ObjectId1, ObjectId6], WorkerP2, SpaceId, IndexName,  [{key, XattrValue11}]),
 
     transfers_test_mechanism:run_test(
