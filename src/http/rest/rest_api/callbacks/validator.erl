@@ -36,10 +36,11 @@
     parse_function/2, parse_bbox/2, parse_descending/2, parse_endkey/2, parse_key/2,
     parse_keys/2, parse_skip/2, parse_stale/2, parse_limit/2, parse_inclusive_end/2,
     parse_startkey/2, parse_filter/2, parse_filter_type/2, parse_inherited/2,
-    parse_spatial/2, parse_start_range/2, parse_end_range/2,
+    parse_spatial/2, parse_spatial/3, parse_start_range/2, parse_end_range/2,
 
     parse_index_name/2, parse_update_min_changes/2,
-    parse_replica_update_min_changes/2, parse_index_providers/2
+    parse_replica_update_min_changes/2,
+    parse_index_providers/2, parse_index_providers/3
 ]).
 
 %% TODO VFS-2574 Make validation of result map
@@ -421,18 +422,30 @@ parse_function(Req, State) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Retrieves request's spatial param and adds it to State.
+%% @equiv parse_spatial(Req, State, ?DEFAULT_SPATIAL)
 %% @end
 %%--------------------------------------------------------------------
 -spec parse_spatial(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_spatial(Req, State) ->
-    {Spatial, NewReq} = qs_val(<<"spatial">>, Req, ?DEFAULT_SPATIAL),
+    parse_spatial(Req, State, ?DEFAULT_SPATIAL).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's spatial param and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_spatial(cowboy_req:req(), maps:map(), term()) ->
+    {parse_result(), cowboy_req:req()}.
+parse_spatial(Req, State, DefaultValue) ->
+    {Spatial, NewReq} = qs_val(<<"spatial">>, Req, DefaultValue),
     case Spatial of
         <<"true">> ->
             {State#{spatial => true}, NewReq};
         <<"false">> ->
             {State#{spatial => false}, NewReq};
+        DefaultValue ->
+            {State#{spatial => DefaultValue}, NewReq};
         _ ->
             throw(?ERROR_INVALID_SPATIAL_FLAG)
     end.
@@ -649,16 +662,26 @@ parse_replica_update_min_changes(Req, State) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Retrieves request's providers param and adds it to State.
+%% @equiv parse_index_providers(Req, State, [oneprovider:get_id()])
 %% @end
 %%--------------------------------------------------------------------
 -spec parse_index_providers(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_index_providers(Req, State) ->
+    parse_index_providers(Req, State, [oneprovider:get_id()]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's providers param and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_index_providers(cowboy_req:req(), maps:map(), term()) ->
+    {parse_result(), cowboy_req:req()}.
+parse_index_providers(Req, State, DefaultValue) ->
     {RawProviders, NewReq} = qs_val(<<"providers[]">>, Req),
     Providers = case RawProviders of
         undefined ->
-            [oneprovider:get_id()];
+            DefaultValue;
         _ when is_binary(RawProviders) ->
             [RawProviders];
         _ ->

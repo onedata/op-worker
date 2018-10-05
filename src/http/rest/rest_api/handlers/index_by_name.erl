@@ -40,7 +40,7 @@ terminate(_, _, _) ->
 -spec allowed_methods(req(), maps:map() | {error, term()}) ->
     {[binary()], req(), maps:map()}.
 allowed_methods(Req, State) ->
-    {[<<"GET">>, <<"PUT">>, <<"DELETE">>], Req, State}.
+    {[<<"GET">>, <<"PUT">>, <<"PATCH">>, <<"DELETE">>], Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
@@ -136,27 +136,37 @@ get_index(Req, State) ->
 
 %%--------------------------------------------------------------------
 %% '/api/v3/oneprovider/spaces/{sid}/indexes/{name}'
-%% @doc This method creates or replaces an existing index code with request
-%% body content and options specified in query string.
+%% @doc This method creates or replaces an existing index definition with
+%% request body content and options specified in query string.
 %%
-%% HTTP method: PUT
+%% HTTP method: PUT/PATCH
 %%
 %% @param sid Id of the space within which index exist.
 %% @param name Name of the index.
 %%--------------------------------------------------------------------
--spec create_or_modify_index(req(), maps:map()) -> term().
-create_or_modify_index(Req, State) ->
+-spec create_or_modify_index(req(), maps:map()) -> {term(), req(), maps:map()}.
+create_or_modify_index(#{method := <<"PUT">>} = Req, State) ->
+    create_index(Req, State);
+create_or_modify_index(#{method := <<"PATCH">>} = Req, State) ->
+    update_index(Req, State).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates index.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_index(req(), maps:map()) -> {term(), req(), maps:map()}.
+create_index(Req, State) ->
     {State2, Req2} = validator:parse_space_id(Req, State),
     {State3, Req3} = validator:parse_index_name(Req2, State2),
     {State4, Req4} = validator:parse_spatial(Req3, State3),
     {State5, Req5} = validator:parse_function(Req4, State4),
-
-    % get options
     {State6, Req6} = validator:parse_update_min_changes(Req5, State5),
     {State7, Req7} = validator:parse_replica_update_min_changes(Req6, State6),
-    Options = prepare_options(State7),
-
-    % get providers
     {State8, Req8} = validator:parse_index_providers(Req7, State7),
 
     #{
@@ -166,18 +176,66 @@ create_or_modify_index(Req, State) ->
         function := MapFunction,
         providers := Providers
     } = State8,
+    Options = prepare_options(State8),
 
     lists:foreach(fun(ProviderId) ->
         throw_if_provider_does_not_support_space(SpaceId, ProviderId)
     end, Providers),
 
-    ok = index:save(SpaceId, IndexName, MapFunction, undefined, Options, Spatial, Providers),
+    ok = index:create(
+        SpaceId, IndexName, MapFunction, undefined,
+        Options, Spatial, Providers
+    ),
     {stop, cowboy_req:reply(?HTTP_OK, Req8), State8}.
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates index definition. This operation does not require specifying all
+%% index create parameters. In case when some parameters are not specified,
+%% old values will be kept.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_index(req(), maps:map()) -> {term(), req(), maps:map()}.
+update_index(Req, State) ->
+    {State2, Req2} = validator:parse_space_id(Req, State),
+    {State3, Req3} = validator:parse_index_name(Req2, State2),
+    {State4, Req4} = validator:parse_spatial(Req3, State3, undefined),
+    {State5, Req5} = validator:parse_function(Req4, State4),
+    {State6, Req6} = validator:parse_update_min_changes(Req5, State5),
+    {State7, Req7} = validator:parse_replica_update_min_changes(Req6, State6),
+    {State8, Req8} = validator:parse_index_providers(Req7, State7, undefined),
 
+    #{
+        space_id := SpaceId,
+        index_name := IndexName,
+        spatial := Spatial,
+        function := MapFunctionRaw,
+        providers := ProvidersRaw
+    } = State8,
+    Options = prepare_options(State8),
+    MapFunction = utils:ensure_defined(MapFunctionRaw, <<>>, undefined),
+    Providers = case ProvidersRaw of
+        undefined ->
+            undefined;
+        _ ->
+            lists:foreach(fun(ProviderId) ->
+                throw_if_provider_does_not_support_space(SpaceId, ProviderId)
+            end, ProvidersRaw),
+            ProvidersRaw
+    end,
+
+    case index:update(SpaceId, IndexName, MapFunction, Options, Spatial, Providers) of
+        ok ->
+            {stop, cowboy_req:reply(?HTTP_OK, Req8), State8};
+        {error, not_found} ->
+            throw(?ERROR_INDEX_NOT_FOUND)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Parses index options.
+%% @end
+%%--------------------------------------------------------------------
 -spec prepare_options(maps:map() | list()) -> list().
 prepare_options(Map) when is_map(Map) ->
     #{

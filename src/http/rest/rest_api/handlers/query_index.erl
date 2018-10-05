@@ -94,5 +94,6 @@ query_index(Req, State) ->
     #{space_id := SpaceId, index_name := IndexName} = StateWithSpatial,
     Options = index_utils:sanitize_query_options(StateWithSpatial),
 
-        {ok, QueryResult} = index:query(SpaceId, IndexName, Options),
-            {json_utils:encode(QueryResult), ReqWithSpatial, StateWithSpatial}.
+    {ok, {Rows}} = index:query(SpaceId, IndexName, Options),
+    QueryResult = lists:map(fun(Row) -> maps:from_list(Row) end, Rows),
+    {json_utils:encode(QueryResult), ReqWithSpatial, StateWithSpatial}.
