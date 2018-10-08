@@ -17,14 +17,23 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
+-export([
+    all/0,
+    init_per_suite/1, end_per_suite/1,
+    init_per_testcase/2, end_per_testcase/2
+]).
 
 -export([
-    synchronizer_test/1, synchronizer_test_base/1
+    synchronizer_test/1, synchronizer_test_base/1,
+    cancel_synchronizations_for_session_with_mocked_rtransfer_test/1,
+    cancel_synchronizations_for_session_with_mocked_rtransfer_test_base/1,
+    cancel_synchronizations_for_session_test/1, cancel_synchronizations_for_session_test_base/1
 ]).
 
 -define(TEST_CASES, [
-    synchronizer_test
+    synchronizer_test,
+    cancel_synchronizations_for_session_with_mocked_rtransfer_test,
+    cancel_synchronizations_for_session_test
 ]).
 
 all() ->
@@ -109,6 +118,64 @@ synchronizer_test(Config) ->
 synchronizer_test_base(Config) ->
     multi_provider_file_ops_test_base:synchronizer_test_base(Config).
 
+cancel_synchronizations_for_session_with_mocked_rtransfer_test(Config) ->
+    ?PERFORMANCE(Config, [
+        {repeats, 1},
+        {success_rate, 100},
+        {parameters, [
+            [{name, block_size}, {value, 80}, {description, "Block size in MB"}],
+            [{name, block_count}, {value, 120000},
+                {description, "Total number of blocks to synchronize"}],
+            % note: users have to be defined in env_desc.json and have form like <<"user1">>
+            [{name, user_count}, {value, 1}, {description, "Number of users used in test"}]
+        ]},
+        {description, "Test performance of transfer cancelation"},
+        {config, [{name, basic},
+            {parameters, [
+            ]},
+            {description, ""}
+        ]},
+        {config, [{name, many_users},
+            {parameters, [
+                [{name, user_count}, {value, 9}]
+            ]},
+            {description, ""}
+        ]}
+    ]).
+cancel_synchronizations_for_session_with_mocked_rtransfer_test_base(Config) ->
+    multi_provider_file_ops_test_base:cancel_synchronizations_for_session_with_mocked_rtransfer_test_base(
+        Config
+    ).
+
+cancel_synchronizations_for_session_test(Config) ->
+    ?PERFORMANCE(Config, [
+        {repeats, 1},
+        {success_rate, 100},
+        {parameters, [
+            [{name, block_size}, {value, 80}, {description, "Block size in MB"}],
+            [{name, block_count}, {value, 60000},
+                {description, "Total number of blocks to synchronize"}],
+            % note: users have to be defined in env_desc.json and have form like <<"user1">>
+            [{name, user_count}, {value, 1}, {description, "Number of users used in test"}]
+        ]},
+        {description, "Test performance of transfer cancelation"},
+        {config, [{name, basic},
+            {parameters, [
+            ]},
+            {description, ""}
+        ]},
+        {config, [{name, many_users},
+            {parameters, [
+                [{name, user_count}, {value, 9}]
+            ]},
+            {description, ""}
+        ]}
+    ]).
+cancel_synchronizations_for_session_test_base(Config) ->
+    multi_provider_file_ops_test_base:cancel_synchronizations_for_session_test_base(
+        Config
+    ).
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -116,7 +183,7 @@ synchronizer_test_base(Config) ->
 init_per_suite(Config) ->
     [{?LOAD_MODULES, [initializer, multi_provider_file_ops_test_base]} | Config].
 
-init_per_testcase(_Case, Config) ->
+init_per_testcase(synchronizer_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lists:foreach(fun(Worker) ->
         test_utils:set_env(Worker, ?APP_NAME, minimal_sync_request, 1)
@@ -133,19 +200,39 @@ init_per_testcase(_Case, Config) ->
             {ok, Ref}
         end),
 
+    init_per_testcase(?DEFAULT_CASE(synchronizer_test), Config);
+init_per_testcase(cancel_synchronizations_for_session_with_mocked_rtransfer_test, Config) ->
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    ok = test_utils:mock_new(Worker1, rtransfer_config, [passthrough]),
+    ok = test_utils:mock_expect(Worker1, rtransfer_config, fetch,
+        fun(Request, NotifyFun, CompleteFun, _, _, _) ->
+            #{offset := O, size := S} = Request,
+            Ref = make_ref(),
+            spawn(fun() ->
+                timer:sleep(timer:seconds(60)),
+                NotifyFun(Ref, O, S),
+                CompleteFun(Ref, {ok, ok})
+            end),
+            {ok, Ref}
+        end
+    ),
+    init_per_testcase(?DEFAULT_CASE(cancel_synchronizations_for_session_with_mocked_rtransfer_test), Config);
+init_per_testcase(_Case, Config) ->
     ssl:start(),
     hackney:start(),
     initializer:disable_quota_limit(Config),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo).
 
+end_per_suite(_Config) ->
+    ok.
+
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
+    ok = test_utils:mock_unload(Workers, rtransfer_config),
     lfm_proxy:teardown(Config),
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:unload_quota_mocks(Config),
     hackney:stop(),
-    ssl:stop(),
-
-    ok = test_utils:mock_unload(Workers, rtransfer_config).
+    ssl:stop().
