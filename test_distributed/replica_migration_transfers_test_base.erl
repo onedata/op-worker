@@ -418,7 +418,7 @@ schedule_migration_by_index(Config, Type) ->
     XattrValue = 1,
     Xattr = #xattr{name = XattrName, value = XattrValue},
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
-    IndexName = <<"migration_jobs">>,
+    IndexName = transfers_test_utils:random_index_name(),
     MapFunction = transfers_test_utils:test_map_function(XattrName),
     transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName, MapFunction, [], [ProviderId1, ProviderId2]),
     ?assertIndexQuery([FileId], WorkerP1, SpaceId, IndexName, [{key, XattrValue}]),
@@ -522,7 +522,7 @@ schedule_migration_of_regular_file_by_index_with_reduce(Config, Type) ->
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, Guid6}, Xattr11),
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, Guid6}, Xattr21),
 
-    IndexName = <<"replication_jobs">>,
+    IndexName = transfers_test_utils:random_index_name(),
     MapFunction = transfers_test_utils:test_map_function(XattrName1, XattrName2),
     ReduceFunction = transfers_test_utils:test_reduce_function(XattrValue21),
 
@@ -602,7 +602,7 @@ scheduling_migration_by_not_existing_index_should_fail(Config, Type) ->
     XattrValue = 1,
     Xattr = #xattr{name = XattrName, value = XattrValue},
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
-    IndexName = <<"not_existing_index">>,
+    IndexName = transfers_test_utils:random_index_name(),
 
     transfers_test_mechanism:run_test(
         Config2, #transfer_test_spec{
@@ -662,7 +662,7 @@ scheduling_replica_migration_by_index_with_wrong_function_should_fail(Config, Ty
             }
         return null;
     }">>,
-    IndexName = <<"index_with_wrong_function">>,
+    IndexName = transfers_test_utils:random_index_name(),
     transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName, MapFunction, [], [ProviderId1, ProviderId2]),
     ?assertIndexQuery([WrongValue], WorkerP2, SpaceId, IndexName,  [{key, XattrValue}]),
     ?assertIndexQuery([WrongValue], WorkerP1, SpaceId, IndexName,  [{key, XattrValue}]),
@@ -708,7 +708,7 @@ scheduling_migration_by_empty_index_should_succeed(Config, Type) ->
     ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
 
     XattrName = transfers_test_utils:random_job_name(),
-    IndexName = <<"migration_jobs">>,
+    IndexName = transfers_test_utils:random_index_name(),
     MapFunction = transfers_test_utils:test_map_function(XattrName),
     transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName, MapFunction, [], [ProviderId1, ProviderId2]),
     ?assertIndexQuery([], WorkerP1, SpaceId, IndexName, []),
@@ -775,7 +775,7 @@ scheduling_migration_by_not_existing_key_in_index_should_succeed(Config, Type) -
     XattrValue2 = 2,
     Xattr = #xattr{name = XattrName, value = XattrValue},
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
-    IndexName = <<"migration_jobs">>,
+    IndexName = transfers_test_utils:random_index_name(),
     MapFunction = transfers_test_utils:test_map_function(XattrName),
     transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName, MapFunction, [], [ProviderId1, ProviderId2]),
 
@@ -850,7 +850,7 @@ schedule_migration_of_100_regular_files_by_index(Config, Type) ->
         FileId
     end, FileGuidsAndPaths),
 
-    IndexName = <<"migration_jobs">>,
+    IndexName = transfers_test_utils:random_index_name(),
     MapFunction = transfers_test_utils:test_map_function(XattrName),
     transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName, MapFunction, [], [ProviderId1, ProviderId2]),
     ?assertIndexQuery(FileIds, WorkerP1, SpaceId, IndexName, [{key, XattrValue}]),

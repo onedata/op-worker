@@ -28,7 +28,7 @@
     mock_prolonged_replication/3, mock_replica_synchronizer_failure/1,
     unmock_replica_synchronizer_failure/1, remove_all_indexes/2, random_job_name/0,
     test_map_function/1, test_reduce_function/1, test_map_function/2,
-    create_index/7, create_index/6]).
+    create_index/7, create_index/6, random_index_name/0]).
 
 %%%===================================================================
 %%% API
@@ -168,6 +168,10 @@ remove_all_indexes(Nodes, SpaceId) ->
 random_job_name() ->
     RandomIntBin = str_utils:to_binary(rand:uniform(1024)),
     <<"job_", RandomIntBin/binary>>.
+
+random_index_name() ->
+    RandomIntBin = str_utils:to_binary(rand:uniform(1024)),
+    <<"index_", RandomIntBin/binary>>.
 
 test_map_function(XattrName) ->
     <<"function (id, meta) {
