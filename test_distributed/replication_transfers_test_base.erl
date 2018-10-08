@@ -1305,7 +1305,9 @@ schedule_replication_of_100_regular_files_by_index(Config, Type) ->
                     #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
                     #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
-                assert_transferred_file_model = false
+                assert_transferred_file_model = false,
+                attempts = 600,
+                timeout = timer:minutes(10)
             }
         }
     ).
@@ -1391,7 +1393,7 @@ end_per_testcase(_Case, Config) ->
     transfers_test_utils:unmock_replica_synchronizer_failure(Workers),
     transfers_test_utils:remove_transfers(Config),
     rpc:multicall(Workers, transfer, restart_pools, []),
-    transfers_test_utils:remove_all_indexes(Workers, ?DEFAULT_USER),
+    transfers_test_utils:remove_all_indexes(Workers, ?SPACE_ID),
     transfers_test_utils:ensure_transfers_removed(Config).
 
 end_per_suite(Config) ->

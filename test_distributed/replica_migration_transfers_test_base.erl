@@ -554,7 +554,8 @@ schedule_migration_of_regular_file_by_index_with_reduce(Config, Type) ->
                 expected_transfer = #{
                     replication_status => completed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
-                    evicting_provider => transfers_test_utils:provider_id(WorkerP2),
+                    evicting_provider => transfers_test_utils:provider_id(WorkerP1),
+                    replicating_provider => transfers_test_utils:provider_id(WorkerP2),
                     files_to_process => 6,
                     files_processed => 6,
                     files_replicated => 2,
@@ -886,7 +887,9 @@ schedule_migration_of_100_regular_files_by_index(Config, Type) ->
                     #{<<"providerId">> => ProviderId1, <<"blocks">> => []},
                     #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
-                assert_transferred_file_model = false
+                assert_transferred_file_model = false,
+                attempts = 600,
+                timeout = timer:minutes(10)
             }
         }
     ).
@@ -962,7 +965,7 @@ end_per_testcase(_Case, Config) ->
     transfers_test_utils:unmock_replica_synchronizer_failure(Workers),
     transfers_test_utils:remove_transfers(Config),
     rpc:multicall(Workers, transfer, restart_pools, []),
-    transfers_test_utils:remove_all_indexes(Workers, ?DEFAULT_USER),
+    transfers_test_utils:remove_all_indexes(Workers, ?SPACE_ID),
     transfers_test_utils:ensure_transfers_removed(Config).
 
 end_per_suite(Config) ->
