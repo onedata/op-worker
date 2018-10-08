@@ -19,6 +19,8 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+-define(TRANSFER_MODEL, transfer).
+
 %% datastore_model callbacks
 -export([get_record_struct/1, upgrade_record/2]).
 
@@ -324,25 +326,25 @@ get_record_struct(10) ->
 %%--------------------------------------------------------------------
 -spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
     {datastore_model:record_version(), datastore_model:record()}.
-upgrade_record(1, {?MODULE, FileUuid, SpaceId, Path, CallBack, TransferStatus,
+upgrade_record(1, {?TRANSFER_MODEL, FileUuid, SpaceId, Path, CallBack, TransferStatus,
     InvalidationStatus, SourceProviderId, TargetProviderId,
     InvalidateSourceReplica, Pid, FilesToTransfer, FilesTransferred,
     BytesToTransfer, BytesTransferred, StartTime, LastUpdate,
     MinHist, HrHist, DyHist}
 ) ->
-    {2, {?MODULE, FileUuid, SpaceId, Path, CallBack, TransferStatus,
+    {2, {?TRANSFER_MODEL, FileUuid, SpaceId, Path, CallBack, TransferStatus,
         InvalidationStatus, SourceProviderId, TargetProviderId,
         InvalidateSourceReplica, Pid, FilesToTransfer, FilesTransferred,
         0, 0, BytesToTransfer, BytesTransferred, StartTime, LastUpdate,
         MinHist, HrHist, DyHist
     }};
-upgrade_record(2, {?MODULE, FileUuid, SpaceId, Path, CallBack, TransferStatus,
+upgrade_record(2, {?TRANSFER_MODEL, FileUuid, SpaceId, Path, CallBack, TransferStatus,
     InvalidationStatus, SourceProviderId, TargetProviderId,
     InvalidateSourceReplica, Pid, FilesToTransfer, FilesTransferred,
     FilesToInvalidate, FilesInvalidated, BytesToTransfer, BytesTransferred,
     StartTime, LastUpdate, MinHist, HrHist, DyHist}
 ) ->
-    {3, {?MODULE, FileUuid, SpaceId, undefined, Path, CallBack, TransferStatus,
+    {3, {?TRANSFER_MODEL, FileUuid, SpaceId, undefined, Path, CallBack, TransferStatus,
         InvalidationStatus, SourceProviderId, TargetProviderId,
         InvalidateSourceReplica, Pid, FilesToTransfer, FilesTransferred,
         BytesToTransfer, BytesTransferred, FilesToInvalidate, FilesInvalidated,
@@ -369,93 +371,93 @@ upgrade_record(2, {?MODULE, FileUuid, SpaceId, Path, CallBack, TransferStatus,
         % mth_hist
         #{TargetProviderId => DyHist}
     }};
-upgrade_record(3, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, Status,
+upgrade_record(3, {?TRANSFER_MODEL, FileUuid, SpaceId, UserId, Path, CallBack, Status,
     InvalidationStatus, SourceProviderId, TargetProviderId,
     InvalidateSourceReplica, Pid, FilesToTransfer, FilesTransferred,
     BytesToTransfer, BytesTransferred, FilesToInvalidate, FilesInvalidated,
     StartTime, FinishTime, LastUpdate, MinHist, HrHist, DyHist, MthHist
 }) ->
-    {4, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, Status,
+    {4, {?TRANSFER_MODEL, FileUuid, SpaceId, UserId, Path, CallBack, Status,
         InvalidationStatus, SourceProviderId, TargetProviderId,
         InvalidateSourceReplica, Pid, FilesToTransfer, FilesTransferred, 0,
         BytesToTransfer, BytesTransferred, FilesToInvalidate, FilesInvalidated,
         StartTime, FinishTime, LastUpdate, MinHist, HrHist, DyHist, MthHist
     }};
-upgrade_record(4, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, Status,
+upgrade_record(4, {?TRANSFER_MODEL, FileUuid, SpaceId, UserId, Path, CallBack, Status,
     InvalidationStatus, SourceProviderId, TargetProviderId,
     InvalidateSourceReplica, Pid, FilesToTransfer, FilesTransferred, FailedFiles,
     _BytesToTransfer, BytesTransferred, _FilesToInvalidate, FilesInvalidated,
     StartTime, FinishTime, LastUpdate, MinHist, HrHist, DyHist, MthHist
 }) ->
-    {5, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, Status,
+    {5, {?TRANSFER_MODEL, FileUuid, SpaceId, UserId, Path, CallBack, Status,
         InvalidationStatus, SourceProviderId, SourceProviderId, TargetProviderId,
         InvalidateSourceReplica, Pid, FilesToTransfer, FilesTransferred,
         FailedFiles, FilesTransferred, BytesTransferred, FilesInvalidated,
         StartTime, FinishTime, LastUpdate, MinHist, HrHist, DyHist, MthHist
     }};
-upgrade_record(5, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, Status,
+upgrade_record(5, {?TRANSFER_MODEL, FileUuid, SpaceId, UserId, Path, CallBack, Status,
     InvalidationStatus, SchedulingProviderId, SourceProviderId, TargetProviderId,
     InvalidateSourceReplica, Pid, FilesToProcess, FilesProcessed,
     FailedFiles, FilesTransferred, BytesTransferred, FilesInvalidated,
     StartTime, FinishTime, LastUpdate, MinHist, HrHist, DyHist, MthHist
 }) ->
-    {6, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, Status,
+    {6, {?TRANSFER_MODEL, FileUuid, SpaceId, UserId, Path, CallBack, Status,
         InvalidationStatus, SchedulingProviderId, SourceProviderId, TargetProviderId,
         InvalidateSourceReplica, Pid, FilesToProcess, FilesProcessed,
         FailedFiles, FilesTransferred, BytesTransferred, FilesInvalidated,
         StartTime, StartTime, FinishTime, LastUpdate, MinHist, HrHist, DyHist,
         MthHist
     }};
-upgrade_record(6, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, Status,
+upgrade_record(6, {?TRANSFER_MODEL, FileUuid, SpaceId, UserId, Path, CallBack, Status,
     InvalidationStatus, SchedulingProviderId, SourceProviderId, TargetProviderId,
     InvalidateSourceReplica, Pid, FilesToProcess, FilesProcessed,
     FailedFiles, FilesTransferred, BytesTransferred, FilesInvalidated,
     ScheduleTime, StartTime, FinishTime, LastUpdate, MinHist, HrHist, DyHist,
     MthHist
 }) ->
-    {7, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, true, Status,
+    {7, {?TRANSFER_MODEL, FileUuid, SpaceId, UserId, Path, CallBack, true, Status,
         InvalidationStatus, SchedulingProviderId, SourceProviderId, TargetProviderId,
         InvalidateSourceReplica, Pid, FilesToProcess, FilesProcessed,
         FailedFiles, FilesTransferred, BytesTransferred, FilesInvalidated,
         ScheduleTime, StartTime, FinishTime, LastUpdate, MinHist, HrHist, DyHist,
         MthHist
     }};
-upgrade_record(7, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, Enqueued,
+upgrade_record(7, {?TRANSFER_MODEL, FileUuid, SpaceId, UserId, Path, CallBack, Enqueued,
     Status, InvalidationStatus, SchedulingProviderId, SourceProviderId,
     TargetProviderId, _InvalidateSourceReplica, Pid, FilesToProcess,
     FilesProcessed, FailedFiles, FilesTransferred, BytesTransferred,
     FilesInvalidated, ScheduleTime, StartTime, FinishTime,
     LastUpdate, MinHist, HrHist, DyHist, MthHist
 }) ->
-    {8, {?MODULE, FileUuid, SpaceId, UserId, undefined, Path, CallBack, Enqueued,
+    {8, {?TRANSFER_MODEL, FileUuid, SpaceId, UserId, undefined, Path, CallBack, Enqueued,
         false, Status, InvalidationStatus, SchedulingProviderId,
         TargetProviderId, SourceProviderId, Pid, FilesToProcess,
         FilesProcessed, FailedFiles, FilesTransferred, BytesTransferred,
         FilesInvalidated, ScheduleTime, StartTime, FinishTime,
         LastUpdate, MinHist, HrHist, DyHist, MthHist
     }};
-upgrade_record(8, {?MODULE, FileUuid, SpaceId, UserId, RerunId, Path, CallBack, Enqueued,
+upgrade_record(8, {?TRANSFER_MODEL, FileUuid, SpaceId, UserId, RerunId, Path, CallBack, Enqueued,
     Cancel, ReplicationStatus, EvictionStatus, SchedulingProvider,
     ReplicatingProvider, EvictingProvider, Pid, FilesToProcess,
     FilesProcessed, FailedFiles, FilesReplicated, BytesReplicated,
     FilesEvicted, ScheduleTime, StartTime, FinishTime,
     LastUpdate, MinHist, HrHist, DyHist, MthHist
 }) ->
-    {9, {?MODULE, FileUuid, SpaceId, UserId, RerunId, Path, CallBack, Enqueued,
+    {9, {?TRANSFER_MODEL, FileUuid, SpaceId, UserId, RerunId, Path, CallBack, Enqueued,
         Cancel, ReplicationStatus, EvictionStatus, SchedulingProvider,
         ReplicatingProvider, EvictingProvider, Pid, FilesToProcess,
         FilesProcessed, FailedFiles, FilesReplicated, BytesReplicated,
         FilesEvicted, ScheduleTime, StartTime, FinishTime,
         LastUpdate, MinHist, HrHist, DyHist, MthHist
     }};
-upgrade_record(9, {?MODULE, FileUuid, SpaceId, UserId, RerunId, Path, CallBack, Enqueued,
+upgrade_record(9, {?TRANSFER_MODEL, FileUuid, SpaceId, UserId, RerunId, Path, CallBack, Enqueued,
     Cancel, ReplicationStatus, EvictionStatus, SchedulingProvider,
     ReplicatingProvider, EvictingProvider, Pid, FilesToProcess,
     FilesProcessed, FailedFiles, FilesReplicated, BytesReplicated,
     FilesEvicted, ScheduleTime, StartTime, FinishTime,
     LastUpdate, MinHist, HrHist, DyHist, MthHist
 }) ->
-    {10, {?MODULE, FileUuid, SpaceId, UserId, RerunId, Path, CallBack, Enqueued,
+    {10, {?TRANSFER_MODEL, FileUuid, SpaceId, UserId, RerunId, Path, CallBack, Enqueued,
         Cancel, ReplicationStatus, EvictionStatus, SchedulingProvider,
         ReplicatingProvider, EvictingProvider, Pid, FilesToProcess,
         FilesProcessed, FailedFiles, FilesReplicated, BytesReplicated,
