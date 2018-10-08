@@ -14,6 +14,7 @@
 
 -include("http/http_common.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 
 -define(ALLOWED_METADATA_TYPES, [<<"json">>, <<"rdf">>, undefined]).
 
@@ -35,7 +36,12 @@
     parse_function/2, parse_bbox/2, parse_descending/2, parse_endkey/2, parse_key/2,
     parse_keys/2, parse_skip/2, parse_stale/2, parse_limit/2, parse_inclusive_end/2,
     parse_startkey/2, parse_filter/2, parse_filter_type/2, parse_inherited/2,
-    parse_spatial/2, parse_start_range/2, parse_end_range/2]).
+    parse_spatial/2, parse_spatial/3, parse_start_range/2, parse_end_range/2,
+
+    parse_index_name/2, parse_update_min_changes/2,
+    parse_replica_update_min_changes/2,
+    parse_index_providers/2, parse_index_providers/3
+]).
 
 %% TODO VFS-2574 Make validation of result map
 -type parse_result() :: maps:map().
@@ -233,6 +239,17 @@ parse_space_id(Req, State = #{auth := SessionId}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Retrieves request's index name and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_index_name(cowboy_req:req(), maps:map()) ->
+    {parse_result(), cowboy_req:req()}.
+parse_index_name(Req, State) ->
+    Name = cowboy_req:binding(index_name, Req),
+    {State#{index_name => Name}, Req}.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Retrieves request's timeout and adds it to State.
 %% @end
 %%--------------------------------------------------------------------
@@ -405,18 +422,30 @@ parse_function(Req, State) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Retrieves request's spatial param and adds it to State.
+%% @equiv parse_spatial(Req, State, ?DEFAULT_SPATIAL)
 %% @end
 %%--------------------------------------------------------------------
 -spec parse_spatial(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_spatial(Req, State) ->
-    {Spatial, NewReq} = qs_val(<<"spatial">>, Req, ?DEFAULT_SPATIAL),
+    parse_spatial(Req, State, ?DEFAULT_SPATIAL).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's spatial param and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_spatial(cowboy_req:req(), maps:map(), term()) ->
+    {parse_result(), cowboy_req:req()}.
+parse_spatial(Req, State, DefaultValue) ->
+    {Spatial, NewReq} = qs_val(<<"spatial">>, Req, DefaultValue),
     case Spatial of
         <<"true">> ->
             {State#{spatial => true}, NewReq};
         <<"false">> ->
             {State#{spatial => false}, NewReq};
+        DefaultValue ->
+            {State#{spatial => DefaultValue}, NewReq};
         _ ->
             throw(?ERROR_INVALID_SPATIAL_FLAG)
     end.
@@ -609,6 +638,57 @@ parse_inherited(Req, State) ->
             throw(?ERROR_INVALID_INHERITED_FLAG)
     end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's update min changes param and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_update_min_changes(cowboy_req:req(), maps:map()) ->
+    {parse_result(), cowboy_req:req()}.
+parse_update_min_changes(Req, State) ->
+    {Val, NewReq} = qs_val(<<"update_min_changes">>, Req),
+    {State#{update_min_changes => Val}, NewReq}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's replica update min changes param and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_replica_update_min_changes(cowboy_req:req(), maps:map()) ->
+    {parse_result(), cowboy_req:req()}.
+parse_replica_update_min_changes(Req, State) ->
+    {Val, NewReq} = qs_val(<<"replica_update_min_changes">>, Req),
+    {State#{replica_update_min_changes => Val}, NewReq}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv parse_index_providers(Req, State, [oneprovider:get_id()])
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_index_providers(cowboy_req:req(), maps:map()) ->
+    {parse_result(), cowboy_req:req()}.
+parse_index_providers(Req, State) ->
+    parse_index_providers(Req, State, [oneprovider:get_id()]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's providers param and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_index_providers(cowboy_req:req(), maps:map(), term()) ->
+    {parse_result(), cowboy_req:req()}.
+parse_index_providers(Req, State, DefaultValue) ->
+    {RawProviders, NewReq} = qs_val(<<"providers[]">>, Req),
+    Providers = case RawProviders of
+        undefined ->
+            DefaultValue;
+        _ when is_binary(RawProviders) ->
+            [RawProviders];
+        _ ->
+            RawProviders
+    end,
+    {State#{providers => Providers}, NewReq}.
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -623,7 +703,6 @@ parse_inherited(Req, State) ->
 qs_val(Name, Req) ->
     qs_val(Name, Req, undefined).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Retrieves qs param and cache parsed params.
@@ -634,8 +713,25 @@ qs_val(Name, Req) ->
 qs_val(Name, Req, Default) ->
     case maps:get('_params', Req, undefined) of
         undefined ->
-            Params = maps:from_list(cowboy_req:parse_qs(Req)),
+            Params = parse_qs(Req),
             {maps:get(Name, Params, Default), Req#{'_params' => Params}};
         Map ->
             {maps:get(Name, Map, Default), Req}
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Parse query string.
+%% @end
+%%--------------------------------------------------------------------
+parse_qs(Req) ->
+    lists:foldl(fun({Key, Val}, AccMap) ->
+        case maps:get(Key, AccMap, undefined) of
+            undefined ->
+                AccMap#{Key => Val};
+            OldVal when is_list(OldVal) ->
+                AccMap#{Key => [Val | OldVal]};
+            OldVal ->
+                AccMap#{Key => [Val, OldVal]}
+        end
+    end, #{}, cowboy_req:parse_qs(Req)).

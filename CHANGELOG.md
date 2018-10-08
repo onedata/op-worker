@@ -6,6 +6,16 @@ CHANGELOG
 
 ### 18.02.0-rc11
 
+* VFS-4830 add add_reduce function
+* Updating GUI, including: VFS-4454-login-loader-close * VFS-4454 Fix hanging authorization loader spinner
+* Upgrade rtransfer_link.
+* VFS-4922 add parsing provider list in query string to validator
+* VFS-4614 Rename custom_static_root to static_root_override
+* VFS-4924 Fix move into itself check
+* VFS-4830 add migration by index tests
+* VFS-4830 enable replica eviction by index, add tests for that
+* Updating GUI, including: VFS-4856-cdmi-object-id * VFS-4856 Added CDMI object ID and file path info to file row
+* VFS-4830 transfer scheduling by index
 * ensure that sync does not invalidate replicated files
 * VFS-4813 Update error on quota
 * VFS-4813 Throw sync errors

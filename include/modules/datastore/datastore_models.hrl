@@ -554,7 +554,14 @@
     min_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
     hr_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
     dy_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
-    mth_hist = #{} :: maps:map(od_provider:id(), histogram:histogram())
+    mth_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
+
+    % Only replication of files existing in given index will be scheduled
+    % if this value is undefined, whole subtree will be iterated
+    index_name :: transfer:index_name(),
+    % query_view_params are directly passed to couchbase
+    % if index_id is undefined query_view_params are ignored
+    query_view_params = [] :: transfer:query_view_params()
 }).
 
 %% Model that tracks what files are currently transferred
@@ -611,6 +618,20 @@
 -record(replica_deletion_lock, {
     read = 0 :: non_neg_integer(),
     write = 0 :: non_neg_integer()
+}).
+
+%% Model that holds information on database view.
+%% Specifying reduce function is optional in case of non-spatial index and
+%% forbidden in case of spatial ones (map_function is treated as
+%% spacial function).
+-record(index, {
+    name :: index:name(),
+    space_id :: od_space:id(),
+    spatial = false :: boolean(),
+    map_function :: index:index_function(),
+    reduce_function :: undefined | index:index_function(),
+    index_options = [] :: index:options(),
+    providers = [] :: all | [od_provider:id()]
 }).
 
 -endif.
