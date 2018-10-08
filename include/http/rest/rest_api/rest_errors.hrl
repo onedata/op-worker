@@ -207,10 +207,10 @@
     <<"invalid_replica_update_min_changes">>,
     <<"Requested replica update min changes is invalid, it must be a positive integer.">>)
 ).
--define(ERROR_PROVIDER_NOT_SUPPORTING_INDEX(__ProviderId), ?ERROR_REPLY(
+-define(ERROR_PROVIDER_NOT_SUPPORTING_INDEX(__ProviderId, __IndexName, __SpaceId), ?ERROR_REPLY(
     ?BAD_REQUEST,
     <<"error_provider_not_supporting_index">>,
-    <<"Provider ", __ProviderId/binary, " does not support specified index.">>)
+    <<"Provider ", __ProviderId/binary, " does not support index ", __IndexName/binary, "in space ", __SpaceId/binary>>)
 ).
 -define(ERROR_INDEX_FUNCTION, ?ERROR_REPLY(
     ?BAD_REQUEST,
