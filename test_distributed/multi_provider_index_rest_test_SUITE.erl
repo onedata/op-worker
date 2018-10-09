@@ -65,7 +65,7 @@ all() ->
         spatial_flag_test
     ]).
 
--define(ATTEMPTS, 60).
+-define(ATTEMPTS, 100).
 
 -define(SPACE_ID, <<"space1">>).
 -define(PROVIDER_ID(__Node), rpc:call(__Node, oneprovider, get_id, [])).

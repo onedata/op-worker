@@ -21,8 +21,7 @@
 -export([
     create/7, update/6, update/7,
     delete/2, list/1, list/4, save_db_view/6,
-    query/3, get_json/2, is_supported/3, id/2, update_reduce_function/3
-]).
+    query/3, get_json/2, is_supported/3, id/2, update_reduce_function/3, get/2]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
@@ -196,6 +195,10 @@ list(SpaceId) ->
 -spec list(od_space:id(), undefined | name(), integer(), non_neg_integer() | all) -> {ok, [index:name()]}.
 list(SpaceId, StartId, Offset, Limit) ->
     {ok, index_links:list(SpaceId, StartId, Offset, Limit)}.
+
+-spec get(od_space:id(), name()) -> {ok, doc()} | {error, term()}.
+get(SpaceId, IndexName) ->
+    datastore_model:get(?CTX, id(IndexName, SpaceId)).
 
 -spec id(name(), od_space:id()) -> key().
 id(IndexName, SpaceId) ->

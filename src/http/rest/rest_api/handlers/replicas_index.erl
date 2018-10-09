@@ -243,5 +243,5 @@ throw_if_index_not_supported(SpaceId, IndexName, ProviderId) ->
         true ->
             ok;
         false ->
-            throw(?ERROR_PROVIDER_NOT_SUPPORTING_INDEX(ProviderId))
+            throw(?ERROR_PROVIDER_NOT_SUPPORTING_INDEX(ProviderId, IndexName, SpaceId))
     end.
