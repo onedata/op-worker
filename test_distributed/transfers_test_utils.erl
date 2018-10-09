@@ -26,9 +26,11 @@
     mock_space_occupancy/3, unmock_space_occupancy/2, unmock_sync_req/1,
     root_name/2, root_name/3,
     mock_prolonged_replication/3, mock_replica_synchronizer_failure/1,
-    unmock_replica_synchronizer_failure/1, remove_all_indexes/2, random_job_name/0,
+    unmock_replica_synchronizer_failure/1, remove_all_indexes/2, random_job_name/1,
     test_map_function/1, test_reduce_function/1, test_map_function/2,
-    create_index/7, create_index/6, random_index_name/0]).
+    create_index/7, create_index/6, random_index_name/1]).
+
+-define(RANDOM_NAMESPACE_SIZE, 1073741824). % 1024 ^ 3
 
 %%%===================================================================
 %%% API
@@ -117,7 +119,7 @@ root_name(FunctionName, Type) ->
     root_name(FunctionName, Type, <<"">>).
 
 root_name(FunctionName, Type, FileKeyType) ->
-    RandIntBin = str_utils:to_binary(rand:uniform(1024)),
+    RandIntBin = str_utils:to_binary(rand:uniform(?RANDOM_NAMESPACE_SIZE)),
     root_name(FunctionName, Type, FileKeyType, RandIntBin).
 
 root_name(FunctionName, Type, FileKeyType, RandomSufix) ->
@@ -165,13 +167,15 @@ remove_all_indexes(Nodes, SpaceId) ->
         end, IndexNames)
     end, Nodes).
 
-random_job_name() ->
-    RandomIntBin = str_utils:to_binary(rand:uniform(1024)),
-    <<"job_", RandomIntBin/binary>>.
+random_job_name(FunctionName) ->
+    FunctionNameBin = str_utils:to_binary(FunctionName),
+    RandomIntBin = str_utils:to_binary(rand:uniform(?RANDOM_NAMESPACE_SIZE)),
+    <<"job_", FunctionNameBin/binary, "_", RandomIntBin/binary>>.
 
-random_index_name() ->
-    RandomIntBin = str_utils:to_binary(rand:uniform(1024)),
-    <<"index_", RandomIntBin/binary>>.
+random_index_name(FunctionName) ->
+    FunctionNameBin = str_utils:to_binary(FunctionName),
+    RandomIntBin = str_utils:to_binary(rand:uniform(?RANDOM_NAMESPACE_SIZE)),
+    <<"index_", FunctionNameBin/binary, "_", RandomIntBin/binary>>.
 
 test_map_function(XattrName) ->
     <<"function (id, meta) {

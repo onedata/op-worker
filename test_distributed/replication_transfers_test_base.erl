@@ -856,11 +856,11 @@ schedule_replication_of_regular_file_by_index(Config, Type) ->
     {ok, FileId} = cdmi_id:guid_to_objectid(FileGuid),
 
     % set xattr on file to be replicated
-    XattrName = transfers_test_utils:random_job_name(),
+    XattrName = transfers_test_utils:random_job_name(?FUNCTION_NAME),
     XattrValue = 1,
     Xattr = #xattr{name = XattrName, value = XattrValue},
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
-    IndexName = transfers_test_utils:random_index_name(),
+    IndexName = transfers_test_utils:random_index_name(?FUNCTION_NAME),
     MapFunction = transfers_test_utils:test_map_function(XattrName),
     transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName, MapFunction,
         [], [ProviderId2]),
@@ -929,8 +929,8 @@ schedule_replication_of_regular_file_by_index_with_reduce(Config, Type) ->
     % only files with XattrName1 = XattrValue11 will be emitted
     % XattrName2 will be used by reduce function
     % only files with XattrName2 = XattrValue12 will be filtered
-    XattrName1 = transfers_test_utils:random_job_name(),
-    XattrName2 = transfers_test_utils:random_job_name(),
+    XattrName1 = transfers_test_utils:random_job_name(?FUNCTION_NAME),
+    XattrName2 = transfers_test_utils:random_job_name(?FUNCTION_NAME),
     XattrValue11 = 1,
     XattrValue12 = 2,
     XattrValue21 = 1,
@@ -960,7 +960,7 @@ schedule_replication_of_regular_file_by_index_with_reduce(Config, Type) ->
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, Guid6}, Xattr11),
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, Guid6}, Xattr21),
 
-    IndexName = transfers_test_utils:random_index_name(),
+    IndexName = transfers_test_utils:random_index_name(?FUNCTION_NAME),
     MapFunction = transfers_test_utils:test_map_function(XattrName1, XattrName2),
     ReduceFunction = transfers_test_utils:test_reduce_function(XattrValue21),
 
@@ -1031,11 +1031,11 @@ scheduling_replication_by_not_existing_index_should_fail(Config, Type) ->
 
     [{FileGuid, _}] = ?config(?FILES_KEY, Config2),
     % set xattr on file to be replicated
-    XattrName = transfers_test_utils:random_job_name(),
+    XattrName = transfers_test_utils:random_job_name(?FUNCTION_NAME),
     XattrValue = 1,
     Xattr = #xattr{name = XattrName, value = XattrValue},
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
-    IndexName = transfers_test_utils:random_index_name(),
+    IndexName = transfers_test_utils:random_index_name(?FUNCTION_NAME),
 
     transfers_test_mechanism:run_test(
         Config2, #transfer_test_spec{
@@ -1080,7 +1080,7 @@ scheduling_replication_by_index_with_wrong_function_should_fail(Config, Type) ->
 
     [{FileGuid, _}] = ?config(?FILES_KEY, Config2),
     % set xattr on file to be replicated
-    XattrName = transfers_test_utils:random_job_name(),
+    XattrName = transfers_test_utils:random_job_name(?FUNCTION_NAME),
     XattrValue = 1,
     Xattr = #xattr{name = XattrName, value = XattrValue},
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
@@ -1093,7 +1093,7 @@ scheduling_replication_by_index_with_wrong_function_should_fail(Config, Type) ->
             }
         return null;
     }">>,
-    IndexName = transfers_test_utils:random_index_name(),
+    IndexName = transfers_test_utils:random_index_name(?FUNCTION_NAME),
     ok = transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName,
         MapFunction, [], [ProviderId2]
     ),
@@ -1134,8 +1134,8 @@ scheduling_replication_by_index_with_wrong_function_should_fail(Config, Type) ->
 scheduling_replication_by_empty_index_should_succeed(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SpaceId = ?SPACE_ID,
-    XattrName = transfers_test_utils:random_job_name(),
-    IndexName = transfers_test_utils:random_index_name(),
+    XattrName = transfers_test_utils:random_job_name(?FUNCTION_NAME),
+    IndexName = transfers_test_utils:random_index_name(?FUNCTION_NAME),
     MapFunction = transfers_test_utils:test_map_function(XattrName),
     ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
     transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName, MapFunction,
@@ -1195,12 +1195,12 @@ scheduling_replication_by_not_existing_key_in_index_should_succeed(Config, Type)
     {ok, FileId} = cdmi_id:guid_to_objectid(FileGuid),
 
     % set xattr on file to be replicated
-    XattrName = transfers_test_utils:random_job_name(),
+    XattrName = transfers_test_utils:random_job_name(?FUNCTION_NAME),
     XattrValue = 1,
     XattrValue2 = 2,
     Xattr = #xattr{name = XattrName, value = XattrValue},
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
-    IndexName = transfers_test_utils:random_index_name(),
+    IndexName = transfers_test_utils:random_index_name(?FUNCTION_NAME),
     MapFunction = transfers_test_utils:test_map_function(XattrName),
     transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName, MapFunction,
         [], [ProviderId2]
@@ -1261,7 +1261,7 @@ schedule_replication_of_100_regular_files_by_index(Config, Type) ->
     FileGuidsAndPaths = ?config(?FILES_KEY, Config2),
 
     % set xattr on file to be replicated
-    XattrName = transfers_test_utils:random_job_name(),
+    XattrName = transfers_test_utils:random_job_name(?FUNCTION_NAME),
     XattrValue = 1,
     Xattr = #xattr{name = XattrName, value = XattrValue},
 
@@ -1271,7 +1271,7 @@ schedule_replication_of_100_regular_files_by_index(Config, Type) ->
         FileId
     end, FileGuidsAndPaths),
 
-    IndexName = transfers_test_utils:random_index_name(),
+    IndexName = transfers_test_utils:random_index_name(?FUNCTION_NAME),
     MapFunction = transfers_test_utils:test_map_function(XattrName),
     transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName, MapFunction,
         [], [ProviderId2]
