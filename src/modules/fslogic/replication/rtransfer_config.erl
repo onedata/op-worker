@@ -403,7 +403,7 @@ fetch(Request, TransferData, NotifyFun, CompleteFun, RetryNum) ->
 %% Get storages list. Retry if needed.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storages(non_neg_integer()) -> [doc()] | {error, term()}.
+-spec get_storages(non_neg_integer()) -> [storage:doc()] | {error, term()}.
 get_storages(Num) ->
     case {storage:list(), Num} of
         {{ok, StorageDocs}, _} ->
