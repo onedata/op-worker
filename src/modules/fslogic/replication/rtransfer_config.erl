@@ -50,7 +50,7 @@ start_rtransfer() ->
     prepare_graphite_opts(),
     {ok, RtransferPid} = rtransfer_link_sup:start_link(no_cluster),
     rtransfer_link:set_provider_nodes([node()], ?MODULE),
-    {ok, StorageDocs} = storage:list(),
+    StorageDocs = get_storages(10),
     lists:foreach(fun add_storage/1, StorageDocs),
     {ok, RtransferPid}.
 
@@ -395,4 +395,22 @@ fetch(Request, TransferData, NotifyFun, CompleteFun, RetryNum) ->
             ?warning("Rtransfer fetch failed because of exit:normal, "
             "retrying with a new one"),
             fetch(Request, TransferData, NotifyFun, CompleteFun, RetryNum - 1)
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Get storages list. Retry if needed.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_storages(non_neg_integer()) -> [doc()] | {error, term()}.
+get_storages(Num) ->
+    case {storage:list(), Num} of
+        {{ok, StorageDocs}, _} ->
+            StorageDocs;
+        {Error, 0} ->
+            Error;
+        _ ->
+            timer:sleep(500),
+            get_storages(Num - 1)
     end.
