@@ -258,16 +258,31 @@ supports_space(SessionId, ProviderId, SpaceId) ->
 %% the intended size.
 %% @end
 %%--------------------------------------------------------------------
--spec update_space_support_size(SpaceId :: od_space:id(), SupportSize :: integer()) ->
+-spec update_space_support_size(SpaceId :: od_space:id(), NewSupportSize :: integer()) ->
     ok | gs_protocol:error().
-update_space_support_size(SpaceId, SupportSize) ->
+update_space_support_size(SpaceId, NewSupportSize) ->
     OccupiedSize = space_quota:current_size(SpaceId),
-    if
-        OccupiedSize > SupportSize ->
-            {error, storage_space_occupied};
-        true ->
-            do_update_space_support_size(SpaceId, SupportSize)
-    end.
+    update_space_support_size(SpaceId, NewSupportSize, OccupiedSize).
+
+
+%% @private
+-spec update_space_support_size(SpaceId :: od_space:id(), NewSupportSize :: integer(),
+    CurrentOccupiedSize :: non_neg_integer()) ->
+    ok | gs_protocol:error().
+update_space_support_size(_SpaceId, NewSupportSize, CurrentOccupiedSize)
+    when NewSupportSize < CurrentOccupiedSize ->
+    ?ERROR_BAD_VALUE_TOO_LOW(<<"size">>, CurrentOccupiedSize);
+
+update_space_support_size(SpaceId, NewSupportSize, _CurrentOccupiedSize) ->
+    Data = #{<<"size">> => NewSupportSize},
+    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = update, data = Data,
+        gri = #gri{type = od_provider, id = ?SELF, aspect = {space, SpaceId}}
+    }),
+    ?ON_SUCCESS(Result, fun(_) ->
+        gs_client_worker:invalidate_cache(od_space, SpaceId),
+        gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id())
+    end).
 
 
 %%--------------------------------------------------------------------
@@ -798,25 +813,3 @@ strings_to_binaries(List) ->
 -spec binaries_to_strings([binary()]) -> [string()].
 binaries_to_strings(List) ->
     [binary_to_list(B) || B <- List].
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Changes support size of this provider towards given space.
-%% @end
-%%--------------------------------------------------------------------
--spec do_update_space_support_size(SpaceId :: od_space:id(), SupportSize :: integer()) ->
-    ok | gs_protocol:error().
-do_update_space_support_size(SpaceId, SupportSize) ->
-    Data = #{
-        <<"size">> => SupportSize
-    },
-    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
-        operation = update, data = Data,
-        gri = #gri{type = od_provider, id = ?SELF, aspect = {space, SpaceId}}
-    }),
-    ?ON_SUCCESS(Result, fun(_) ->
-        gs_client_worker:invalidate_cache(od_space, SpaceId),
-        gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id())
-    end).
