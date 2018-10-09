@@ -82,17 +82,6 @@
     name :: undefined | binary(),
     type = role :: od_group:type(),
 
-    % Group graph related entities
-    direct_parents = [] :: [binary()],
-    direct_children = #{} :: maps:map(od_group:id(), [privileges:group_privilege()]),
-    eff_children = #{} :: maps:map(od_group:id(), [privileges:group_privilege()]),
-
-    % Direct relations to other entities
-    direct_users = #{} :: maps:map(od_user:id(), [privileges:group_privilege()]),
-    eff_users = #{} :: maps:map(od_user:id(), [privileges:group_privilege()]),
-
-    eff_spaces = [] :: [od_space:id()],
-
     cache_state = #{} :: cache_state()
 }).
 

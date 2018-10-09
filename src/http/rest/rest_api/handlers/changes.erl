@@ -120,7 +120,7 @@ init_stream(State = #{last_seq := Since, space_id := SpaceId}) ->
     Pid = self(),
 
     % todo limit to admin only (when we will have admin users)
-    Node = consistent_hasing:get_node({dbsync_out_stream, SpaceId}),
+    Node = consistent_hashing:get_node({dbsync_out_stream, SpaceId}),
     {ok, Stream} = rpc:call(Node, couchbase_changes, stream,
         [<<"onedata">>, SpaceId, fun(Feed) ->
             notify(Pid, Ref, Feed)

@@ -439,7 +439,7 @@ route_and_send_answer(Msg = #client_message{
 }) when is_record(Req, open_file) orelse
     is_record(Req, open_file_with_extended_info) orelse is_record(Req, release) ->
     delegate(fun() ->
-        Node = consistent_hasing:get_node(fslogic_uuid:guid_to_uuid(FileGuid)),
+        Node = consistent_hashing:get_node(fslogic_uuid:guid_to_uuid(FileGuid)),
         Ref = make_ref(),
         Pid = worker_proxy:cast_and_monitor({fslogic_worker, Node},
             {fuse_request, effective_session_id(Msg), FuseRequest}, Ref),
@@ -479,7 +479,7 @@ route_and_send_answer(Msg = #client_message{
     }
 }) ->
     delegate(fun() ->
-        Node = consistent_hasing:get_node(fslogic_uuid:guid_to_uuid(FileGuid)),
+        Node = consistent_hashing:get_node(fslogic_uuid:guid_to_uuid(FileGuid)),
         Ref = make_ref(),
         Pid = worker_proxy:cast_and_monitor({fslogic_worker, Node},
             {proxyio_request, effective_session_id(Msg), ProxyIORequest}, Ref),
