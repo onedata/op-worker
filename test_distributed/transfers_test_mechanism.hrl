@@ -126,9 +126,11 @@ end).
 
 -define(assertIndexVisible(Worker, SpaceId, IndexName, Attempts),
     ?assertMatch(true, begin
-        case rpc:call(Worker, index, list, [SpaceId]) of
-            {ok, Indexes} -> lists:member(IndexName, Indexes);
-            Error -> Error
+        ListResult = rpc:call(Worker, index, list, [SpaceId]),
+        GetResult = rpc:call(Worker, index, get, [SpaceId, IndexName]),
+        case {ListResult, GetResult} of
+            {{ok, Indexes}, {ok, __Doc}} -> lists:member(IndexName, Indexes);
+            Other -> Other
         end
     end, Attempts)).
 
@@ -139,12 +141,10 @@ end).
     ?assertEqual(lists:sort(ExpectedValues), begin
         try
             {ok, {Rows}} = rpc:call(Worker, index, query, [SpaceId, ViewName, Options]),
-            Result = lists:sort(lists:flatmap(fun(Row) ->
+            lists:sort(lists:flatmap(fun(Row) ->
                 {<<"value">>, Value} = lists:keyfind(<<"value">>, 1, Row),
                 lists:flatten([Value])
-            end, Rows)),
-%%            ct:pal("RESULT: ~p~nExpected: ~p", [Result, lists:sort(ExpectedValues)]),
-            Result
+            end, Rows))
         catch
             _:_ ->
                 error

@@ -159,7 +159,9 @@ migrate_regular_file_replica(Config, Type, FileKeyType) ->
                     #{<<"providerId">> => ProviderId1, <<"blocks">> => []},
                     #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
-                assertion_nodes = [WorkerP1, WorkerP2]
+                assertion_nodes = [WorkerP1, WorkerP2],
+                attempts = 120,
+                timeout = timer:minutes(2)
             }
         }
     ).
@@ -205,7 +207,9 @@ migrate_regular_file_replica_in_directory(Config, Type, FileKeyType) ->
                     #{<<"providerId">> => ProviderId1, <<"blocks">> => []},
                     #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
-                assertion_nodes = [WorkerP1, WorkerP2]
+                assertion_nodes = [WorkerP1, WorkerP2],
+                attempts = 120,
+                timeout = timer:minutes(2)
             }
         }
     ).
@@ -459,7 +463,9 @@ schedule_migration_by_index(Config, Type) ->
                     #{<<"providerId">> => ProviderId1, <<"blocks">> => []},
                     #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
-                assert_transferred_file_model = false
+                assert_transferred_file_model = false,
+                attempts = 120,
+                timeout = timer:minutes(2)
             }
         }
     ).
@@ -572,7 +578,9 @@ schedule_migration_of_regular_file_by_index_with_reduce(Config, Type) ->
                 ],
                 assert_distribution_for_files = [Guid1, Guid6],
                 assertion_nodes = [WorkerP1, WorkerP2],
-                assert_transferred_file_model = false
+                assert_transferred_file_model = false,
+                attempts = 120,
+                timeout = timer:minutes(2)
             }
         }
     ).
@@ -696,7 +704,9 @@ scheduling_replica_migration_by_index_with_wrong_function_should_fail(Config, Ty
                 distribution = [
                     #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
-                assert_transferred_file_model = false
+                assert_transferred_file_model = false,
+                attempts = 120,
+                timeout = timer:minutes(2)
             }
         }
     ).
@@ -742,7 +752,9 @@ scheduling_migration_by_empty_index_should_succeed(Config, Type) ->
                 },
                 assertion_nodes = [WorkerP1, WorkerP2],
                 distribution = undefined,
-                assert_transferred_file_model = false
+                assert_transferred_file_model = false,
+                attempts = 120,
+                timeout = timer:minutes(2)
             }
         }
     ).
@@ -812,7 +824,9 @@ scheduling_migration_by_not_existing_key_in_index_should_succeed(Config, Type) -
                 distribution = [
                     #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
-                assert_transferred_file_model = false
+                assert_transferred_file_model = false,
+                attempts = 120,
+                timeout = timer:minutes(2)
             }
         }
     ).
@@ -964,7 +978,6 @@ end_per_testcase(_Case, Config) ->
     transfers_test_utils:unmock_sync_req(Workers),
     transfers_test_utils:unmock_replica_synchronizer_failure(Workers),
     transfers_test_utils:remove_transfers(Config),
-    rpc:multicall(Workers, transfer, restart_pools, []),
     transfers_test_utils:remove_all_indexes(Workers, ?SPACE_ID),
     transfers_test_utils:ensure_transfers_removed(Config).
 

@@ -1143,7 +1143,6 @@ end_per_testcase(_Case, Config) ->
     transfers_test_utils:unmock_sync_req(Workers),
     transfers_test_utils:unmock_replica_synchronizer_failure(Workers),
     transfers_test_utils:remove_transfers(Config),
-    rpc:multicall(Workers, transfer, restart_pools, []),
     transfers_test_utils:remove_all_indexes(Workers, ?SPACE_ID),
     transfers_test_utils:ensure_transfers_removed(Config).
 
