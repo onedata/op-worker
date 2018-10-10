@@ -24,7 +24,7 @@
     disable_file_popularity/1, get_autocleaning_config/1,
     get_cleanup_in_progress/1, mark_cleanup_finished/1,
     maybe_mark_cleanup_in_progress/2,
-    get_file_popularity_details/1, get_soft_quota/0]).
+    get_file_popularity_details/1]).
 
 %% datastore_model callbacks
 -export([get_record_version/0, get_record_struct/1, upgrade_record/2, get_posthooks/0]).
@@ -253,15 +253,6 @@ mark_cleanup_finished(SpaceId) ->
     update(SpaceId, fun(SS) ->
         {ok, SS#space_storage{cleanup_in_progress = undefined}}
     end).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Returns soft_quota limit currently set in app.config
-%% @end
-%%-------------------------------------------------------------------
--spec get_soft_quota() -> undefined | non_neg_integer().
-get_soft_quota() ->
-    application:get_env(?APP_NAME, soft_quota_limit_size, undefined).
 
 %%%===================================================================
 %%% Internal functions

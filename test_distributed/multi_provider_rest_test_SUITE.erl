@@ -225,7 +225,6 @@ end, __Distributions))).
 -define(CREATE_FILE_COUNTER, create_file_counter).
 -define(SYNC_FILE_COUNTER, sync_file_counter).
 -define(VERIFY_POOL, verify_pool).
--define(ZERO_SOFT_QUOTA, 0).
 
 %%%===================================================================
 %%% Test functions
