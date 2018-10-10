@@ -15,6 +15,16 @@
                 {
                     "type": "posix",
                     "name": "/mnt/st"
+                },
+                {
+                    "type": "nulldevice",
+                    "name": "nulldevice",
+                    "latencyMin": "10",
+                    "latencyMax": "20",
+                    "timeoutProbability": "0.0",
+                    "filter": "*",
+                    "simulatedFilesystemParameters": "",
+                    "simulatedFilesystemGrowSpeed": "0.0"
                 }
             ],
             "users": [],
@@ -25,6 +35,16 @@
                 {
                     "type": "posix",
                     "name": "/mnt/st2"
+                },
+                {
+                    "type": "nulldevice",
+                    "name": "nulldevice",
+                    "latencyMin": "10",
+                    "latencyMax": "20",
+                    "timeoutProbability": "0.0",
+                    "filter": "*",
+                    "simulatedFilesystemParameters": "",
+                    "simulatedFilesystemGrowSpeed": "0.0"
                 }
             ],
             "users": [],
@@ -215,6 +235,22 @@
                 "providers": {
                     "p2": {
                         "storage": "/mnt/st2"
+                    }
+                }
+            },
+            "space6": {
+                "displayed_name": "space6",
+                "users": [
+                    "user2"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "nulldevice"
+                    },
+                    "p2": {
+                        "storage": "nulldevice"
                     }
                 }
             }

@@ -54,7 +54,8 @@
     db_sync_with_delays_test/1,
     db_sync_create_after_del_test/1,
     rtransfer_fetch_test/1,
-    rtransfer_cancel_for_session_test/1
+    rtransfer_cancel_for_session_test/1,
+    remove_file_during_transfers_test/1
 ]).
 
 -define(TEST_CASES, [
@@ -77,7 +78,8 @@
     remote_driver_test,
     db_sync_create_after_del_test,
     rtransfer_fetch_test,
-    rtransfer_cancel_for_session_test
+    rtransfer_cancel_for_session_test,
+    remove_file_during_transfers_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -554,6 +556,50 @@ rtransfer_cancel_for_session_test(Config) ->
     ?assertMatch(ExpectedResponses2, async_replicate_blocks_end(Promises2)),
 
     ok = test_utils:mock_unload(Workers1, rtransfer_config).
+
+remove_file_during_transfers_test(Config0) ->
+    User = <<"user2">>,
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, User, {0, 0, 0, 0}, 0),
+    [Worker1 | _] = ?config(workers1, Config),
+    [Worker2 | _] = ?config(workers_not1, Config),
+    % Create file
+    SessId = fun(User, W) ->
+        ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config) 
+    end,
+    SpaceName = <<"space6">>,
+    FilePath = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>, 
+    BlocksCount = 10,
+    BlockSize = 80 * 1024 * 1024,
+    FileSize = BlocksCount * BlockSize,
+
+    ?assertMatch({ok, _}, lfm_proxy:create(Worker2, SessId(User, Worker2),
+        FilePath, 8#755)
+    ),
+    ?assertMatch(ok, lfm_proxy:truncate(Worker2, SessId(User, Worker2),
+        {path, FilePath}, FileSize)
+    ),
+
+    {ok, #file_attr{guid = GUID}} =
+        ?assertMatch({ok, #file_attr{size = FileSize}},
+            lfm_proxy:stat(Worker1, SessId(User, Worker1), {path, FilePath}), 60
+        ),
+
+    Blocks = lists:map(
+       fun(Num) -> 
+           {Num*BlockSize, BlockSize, 96}
+       end, lists:seq(0, BlocksCount -1)
+    ),
+
+    FileCtx = file_ctx:new_by_guid(GUID),
+
+    Promises = async_replicate_blocks_start(Worker1, SessId(User, Worker1), FileCtx, Blocks),
+
+    % delete file
+    timer:sleep(timer:seconds(4)),
+    lfm_proxy:unlink(Worker2, SessId(User, Worker2), {guid, GUID}),
+    lists:foreach(fun(Promise) ->
+        ?assertMatch({error, file_deleted}, rpc:yield(Promise))
+    end, Promises).
 
 %%%===================================================================
 %%% Internal functions

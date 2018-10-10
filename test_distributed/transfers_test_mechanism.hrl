@@ -39,6 +39,7 @@
     replicate_to_nodes = [],
     files_structure = [] :: [{non_neg_integer(), non_neg_integer()}],
     size = ?DEFAULT_SIZE :: non_neg_integer(),
+    truncate = false :: boolean(), % if true truncate will be used instead of creating file content
     mode = ?DEFAULT_MODE :: non_neg_integer(),
     file_prefix = ?FILE_PREFIX :: binary(),
     dir_prefix = ?DIR_PREFIX :: binary(),
