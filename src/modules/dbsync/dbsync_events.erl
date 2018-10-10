@@ -59,16 +59,6 @@ change_replicated_internal(SpaceId, #document{
     ok;
 change_replicated_internal(SpaceId, #document{
     key = FileUuid,
-    value = #file_meta{deleted = true}
-} = FileDoc) ->
-    % TODO VFS-4876 remove this function clause
-    ?debug("change_replicated_internal: deleted file_meta (internal delete field is true) ~p",
-        [FileUuid]),
-    FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
-    file_popularity:delete(FileUuid),
-    fslogic_event_emitter:emit_file_removed(FileCtx, []);
-change_replicated_internal(SpaceId, #document{
-    key = FileUuid,
     value = #file_meta{type = ?REGULAR_FILE_TYPE}
 } = FileDoc) ->
     ?debug("change_replicated_internal: changed file_meta ~p", [FileUuid]),
@@ -113,5 +103,11 @@ change_replicated_internal(_SpaceId, ReplicaDeletion = #document{
 }) ->
     ?debug("change_replicated_internal: changed replica_deletion ~p", [MsgId]),
     replica_deletion_changes:handle(ReplicaDeletion);
+change_replicated_internal(_SpaceId, Index = #document{
+    key = IndexId,
+    value = #index{}
+}) ->
+    ?debug("change_replicated_internal: changed index ~p", [IndexId]),
+    index_changes:handle(Index);
 change_replicated_internal(_SpaceId, _Change) ->
     ok.

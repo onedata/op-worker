@@ -50,7 +50,7 @@ start_rtransfer() ->
     prepare_graphite_opts(),
     {ok, RtransferPid} = rtransfer_link_sup:start_link(no_cluster),
     rtransfer_link:set_provider_nodes([node()], ?MODULE),
-    {ok, StorageDocs} = storage:list(),
+    StorageDocs = get_storages(10),
     lists:foreach(fun add_storage/1, StorageDocs),
     {ok, RtransferPid}.
 
@@ -92,7 +92,7 @@ fetch(Request, NotifyFun, CompleteFun, TransferId, SpaceId, FileGuid) ->
             {ok, Ref};
         _ ->
             TransferData = erlang:term_to_binary({TransferId, SpaceId, FileGuid}),
-            rtransfer_link:fetch(Request, TransferData, NotifyFun, CompleteFun)
+            fetch(Request, TransferData, NotifyFun, CompleteFun, 3)
     end.
 
 %%--------------------------------------------------------------------
@@ -364,4 +364,53 @@ prepare_graphite_opts() ->
                     Opts = [{graphite_url, Url}, {graphite_namespace_prefix, NewPrefix}],
                     application:set_env(rtransfer_link, monitoring, Opts)
             end
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Calls fetch on rtransfer_link.
+%% @end
+%%--------------------------------------------------------------------
+-spec fetch(rtransfer_link_request:t(), binary(), rtransfer_link:notify_fun(),
+    rtransfer_link:on_complete_fun(), non_neg_integer()) ->
+    {ok, reference()} | {error, Reason :: any()}.
+fetch(_Request, _TransferData, _NotifyFun, _CompleteFun, 0) ->
+    {error, rtransfer_link_internal_error};
+fetch(Request, TransferData, NotifyFun, CompleteFun, RetryNum) ->
+    try
+        rtransfer_link:fetch(Request, TransferData, NotifyFun, CompleteFun)
+    catch
+        %% The process we called was already terminating because of idle timeout,
+        %% there's nothing to worry about.
+        exit:{{shutdown, timeout}, _} ->
+            ?warning("Rtransfer fetch failed because of a timeout, "
+            "retrying with a new one"),
+            fetch(Request, TransferData, NotifyFun, CompleteFun, RetryNum - 1);
+        _:{noproc, _} ->
+            ?warning("Rtransfer fetch failed because of noproc, "
+            "retrying with a new one"),
+            fetch(Request, TransferData, NotifyFun, CompleteFun, RetryNum - 1);
+        exit:{normal, _} ->
+            ?warning("Rtransfer fetch failed because of exit:normal, "
+            "retrying with a new one"),
+            fetch(Request, TransferData, NotifyFun, CompleteFun, RetryNum - 1)
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Get storages list. Retry if needed.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_storages(non_neg_integer()) -> [storage:doc()] | {error, term()}.
+get_storages(Num) ->
+    case {storage:list(), Num} of
+        {{ok, StorageDocs}, _} ->
+            StorageDocs;
+        {Error, 0} ->
+            Error;
+        _ ->
+            timer:sleep(500),
+            get_storages(Num - 1)
     end.

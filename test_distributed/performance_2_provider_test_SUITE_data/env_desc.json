@@ -117,6 +117,30 @@
     "users": {
       "user1": {
         "default_space": "space1"
+      },
+      "user2": {
+        "default_space": "space1"
+      },
+      "user3": {
+        "default_space": "space1"
+      },
+      "user4": {
+        "default_space": "space1"
+      },
+      "user5": {
+        "default_space": "space1"
+      },
+      "user6": {
+        "default_space": "space1"
+      },
+      "user7": {
+        "default_space": "space1"
+      },
+      "user8": {
+        "default_space": "space1"
+      },
+      "user9": {
+        "default_space": "space1"
       }
     },
     "groups": {
@@ -125,7 +149,15 @@
       "space1": {
         "displayed_name": "space1",
         "users": [
-          "user1"
+          "user1",
+          "user2",
+          "user3",
+          "user4",
+          "user5",
+          "user6",
+          "user7",
+          "user8",
+          "user9"
         ],
         "groups": [
         ],

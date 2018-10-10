@@ -58,8 +58,13 @@
 add_waiting(#document{key = TransferId, value = Transfer}) ->
     SpaceId = Transfer#transfer.space_id,
     ScheduleTime = Transfer#transfer.schedule_time,
-    FileGuid = fslogic_uuid:uuid_to_guid(Transfer#transfer.file_uuid, SpaceId),
-    transferred_file:report_transfer_start(FileGuid, TransferId, ScheduleTime),
+    case Transfer#transfer.file_uuid of
+        undefined ->
+            ok;
+        FileUuid ->
+            FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
+            transferred_file:report_transfer_start(FileGuid, TransferId, ScheduleTime)
+    end,
     ok = add_link(?WAITING_TRANSFERS_KEY, TransferId, SpaceId, ScheduleTime).
 
 
@@ -81,10 +86,13 @@ add_ended(#document{key = TransferId, value = Transfer}) ->
     SpaceId = Transfer#transfer.space_id,
     ScheduleTime = Transfer#transfer.schedule_time,
     FinishTime = Transfer#transfer.finish_time,
-    FileGuid = fslogic_uuid:uuid_to_guid(Transfer#transfer.file_uuid, SpaceId),
-    transferred_file:report_transfer_finish(
-        FileGuid, TransferId, ScheduleTime, FinishTime
-    ),
+    case Transfer#transfer.file_uuid of
+        undefined ->
+            ok;
+        FileUuid ->
+            FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
+            transferred_file:report_transfer_finish(FileGuid, TransferId, ScheduleTime, FinishTime)
+    end,
     ok = add_link(?ENDED_TRANSFERS_KEY, TransferId, SpaceId, FinishTime).
 
 

@@ -9,8 +9,8 @@
 %%% Handler allowing for managing file replicas
 %%% @end
 %%%--------------------------------------------------------------------
--module(replicas).
--author("Tomasz Lichon").
+-module(replicas_index).
+-author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
 -include("http/http_common.hrl").
@@ -22,10 +22,10 @@
 
 %% API
 -export([terminate/3, allowed_methods/2, is_authorized/2,
-    content_types_accepted/2, content_types_provided/2, delete_resource/2]).
+    content_types_accepted/2, delete_resource/2]).
 
 %% resource functions
--export([replicate_file/2, get_file_replicas/2]).
+-export([replicate_files_from_index/2]).
 
 %%%===================================================================
 %%% API
@@ -43,7 +43,7 @@ terminate(_, _, _) ->
 %%--------------------------------------------------------------------
 -spec allowed_methods(req(), maps:map() | {error, term()}) -> {[binary()], req(), maps:map()}.
 allowed_methods(Req, State) ->
-    {[<<"GET">>, <<"POST">>, <<"DELETE">>], Req, State}.
+    {[<<"POST">>, <<"DELETE">>], Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
@@ -59,16 +59,7 @@ is_authorized(Req, State) ->
     {[{atom() | binary(), atom()}], req(), maps:map()}.
 content_types_accepted(Req, State) ->
     {[
-        {'*', replicate_file}
-    ], Req, State}.
-
-%%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:content_types_provided/2
-%%--------------------------------------------------------------------
--spec content_types_provided(req(), maps:map()) -> {[{binary(), atom()}], req(), maps:map()}.
-content_types_provided(Req, State) ->
-    {[
-        {<<"application/json">>, get_file_replicas}
+        {'*', replicate_files_from_index}
     ], Req, State}.
 
 %%--------------------------------------------------------------------
@@ -86,25 +77,23 @@ content_types_provided(Req, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_resource(req(), maps:map()) -> {term(), req(), maps:map()}.
-delete_resource(Req, State = #{resource_type := id}) ->
-    {State2, Req2} = validator:parse_objectid(Req, State),
-    {State3, Req3} = validator:parse_provider_id(Req2, State2),
-    {State4, Req4} = validator:parse_migration_provider_id(Req3, State3),
-
-    evict_file_replica_internal(Req4, State4);
 delete_resource(Req, State) ->
-    {State2, Req2} = validator:parse_path(Req, State),
+    {State1, Req1} = validator:parse_index_name(Req, State),
+    {State2, Req2} = validator:parse_query_space_id(Req1, State1),
     {State3, Req3} = validator:parse_provider_id(Req2, State2),
     {State4, Req4} = validator:parse_migration_provider_id(Req3, State3),
 
-    evict_file_replica_internal(Req4, State4).
+    % parse options
+    {StateWithOptions, ReqWithOptions} = parse_options(Req4, State4),
+
+    evict_file_replica_internal(ReqWithOptions, StateWithOptions).
 
 %%%===================================================================
 %%% Content type handler functions
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% '/api/v3/oneprovider/replicas/{path}'
+%% '/api/v3/oneprovider/replicas-index/{index_name}'
 %% @doc Replicates a file to a specified provider. This operation is asynchronous
 %% as it can  take a long time depending on the size of the data to move.
 %% If the &#x60;path&#x60; parameter specifies a folder, entire folder is
@@ -119,42 +108,40 @@ delete_resource(Req, State) ->
 %%    which will be called when the transfer is complete\n
 %% @end
 %%--------------------------------------------------------------------
--spec replicate_file(req(), maps:map()) -> {term(), req(), maps:map()}.
-replicate_file(Req, State = #{resource_type := id}) ->
-    {State2, Req2} = validator:parse_objectid(Req, State),
+-spec replicate_files_from_index(req(), maps:map()) -> {term(), req(), maps:map()}.
+replicate_files_from_index(Req, State) ->
+    {State1, Req1} = validator:parse_index_name(Req, State),
+    {State2, Req2} = validator:parse_query_space_id(Req1, State1),
     {State3, Req3} = validator:parse_provider_id(Req2, State2),
     {State4, Req4} = validator:parse_callback(Req3, State3),
 
-    replicate_file_internal(Req4, State4);
-replicate_file(Req, State) ->
-    {State2, Req2} = validator:parse_path(Req, State),
-    {State3, Req3} = validator:parse_provider_id(Req2, State2),
-    {State4, Req4} = validator:parse_callback(Req3, State3),
+    % parse options
+    {StateWithOptions, ReqWithOptions} = parse_options(Req4, State4),
 
-    replicate_file_internal(Req4, State4).
-
-%%--------------------------------------------------------------------
-%% '/api/v3/oneprovider/replicas/{path}'
-%% @doc Returns file distribution information about a specific file replicated at this provider.\n
-%%
-%% HTTP method: GET
-%%
-%% @param path File path (e.g. &#39;/My Private Space/testfiles/file1.txt&#39;)
-%% @end
-%%--------------------------------------------------------------------
--spec get_file_replicas(req(), maps:map()) -> {term(), req(), maps:map()}.
-get_file_replicas(Req, State = #{resource_type := id}) ->
-    {State2, Req2} = validator:parse_objectid(Req, State),
-
-    get_file_replicas_internal(Req2, State2);
-get_file_replicas(Req, State) ->
-    {State2, Req2} = validator:parse_path(Req, State),
-
-    get_file_replicas_internal(Req2, State2).
+    replicate_files_from_index_internal(ReqWithOptions, StateWithOptions).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc parse supported query options
+%% @end
+%%--------------------------------------------------------------------
+parse_options(Req, State) ->
+    {StateWithBbox, ReqWithBbox} = validator:parse_bbox(Req, State),
+    {StateWithDescending, ReqWithDescending} = validator:parse_descending(ReqWithBbox, StateWithBbox),
+    {StateWithEndkey, ReqWithEndkey} = validator:parse_endkey(ReqWithDescending, StateWithDescending),
+    {StateWithInclusiveEnd, ReqWithInclusiveEnd} = validator:parse_inclusive_end(ReqWithEndkey, StateWithEndkey),
+    {StateWithKey, ReqWithKey} = validator:parse_key(ReqWithInclusiveEnd, StateWithInclusiveEnd),
+    {StateWithLimit, ReqWithLimit} = validator:parse_limit(ReqWithKey, StateWithKey),
+    {StateWithSkip, ReqWithSkip} = validator:parse_skip(ReqWithLimit, StateWithLimit),
+    {StateWithStale, ReqWithStale} = validator:parse_stale(ReqWithSkip, StateWithSkip),
+    {StateWithStartkey, ReqWithStartkey} = validator:parse_startkey(ReqWithStale, StateWithStale),
+    {StateWithStartRange, ReqWithStartRange} = validator:parse_start_range(ReqWithStartkey, StateWithStartkey),
+    {StateWithEndRange, ReqWithEndRange} = validator:parse_end_range(ReqWithStartRange, StateWithStartRange),
+    validator:parse_spatial(ReqWithEndRange, StateWithEndRange).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -164,17 +151,21 @@ get_file_replicas(Req, State) ->
 -spec evict_file_replica_internal(req(), maps:map()) -> {term(), req(), maps:map()}.
 evict_file_replica_internal(Req, State = #{
     auth := Auth,
+    space_id := SpaceId,
+    index_name := IndexName,
     provider_id := SourceProviderId,
     migration_provider_id := MigrationProviderId
 }) ->
-    FileGuid = get_file_guid(State),
-    SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
-
     throw_if_non_local_space(SpaceId),
     throw_if_nonexistent_provider(SpaceId, MigrationProviderId),
-    {ok, _} = onedata_file_api:stat(Auth, {guid, FileGuid}),
-    {ok, TransferId} = onedata_file_api:schedule_replica_eviction(
-        Auth, {guid, FileGuid}, SourceProviderId, MigrationProviderId
+    throw_if_index_not_supported(SpaceId, IndexName, SourceProviderId),
+    throw_if_index_not_supported(SpaceId, IndexName, MigrationProviderId),
+
+    QueryViewParams = index_utils:sanitize_query_options(State),
+
+    {ok, TransferId} = onedata_file_api:schedule_replica_eviction_by_index(
+        Auth, SourceProviderId, MigrationProviderId, SpaceId, IndexName,
+        QueryViewParams
     ),
 
     Response = json_utils:encode(#{<<"transferId">> => TransferId}),
@@ -183,50 +174,30 @@ evict_file_replica_internal(Req, State = #{
 
 %%--------------------------------------------------------------------
 %% @private
-%% @doc internal version of replicate_file/2
+%% @doc internal version of replicate_files_from_index/2
 %% @end
 %%--------------------------------------------------------------------
--spec replicate_file_internal(req(), maps:map()) -> {term(), req(), maps:map()}.
-replicate_file_internal(Req, #{auth := Auth, provider_id := ProviderId, callback := Callback} = State) ->
-    FileGuid = get_file_guid(State),
-    SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
-
+-spec replicate_files_from_index_internal(req(), maps:map()) -> {term(), req(), maps:map()}.
+replicate_files_from_index_internal(Req, #{
+    auth := Auth,
+    space_id := SpaceId,
+    index_name := IndexName,
+    provider_id := ProviderId,
+    callback := Callback
+} = State) ->
     throw_if_non_local_space(SpaceId),
     throw_if_nonexistent_provider(SpaceId, ProviderId),
-    {ok, _} = onedata_file_api:stat(Auth, {guid, FileGuid}),
-    {ok, TransferId} = onedata_file_api:schedule_file_replication(
-        Auth, {guid, FileGuid}, ProviderId, Callback
+    throw_if_index_not_supported(SpaceId, IndexName, ProviderId),
+
+    QueryViewParams = index_utils:sanitize_query_options(State),
+
+    {ok, TransferId} = onedata_file_api:schedule_replication_by_index(
+        Auth, ProviderId, Callback, SpaceId, IndexName, QueryViewParams
     ),
 
     Response = json_utils:encode(#{<<"transferId">> => TransferId}),
     Req2 = cowboy_req:reply(?HTTP_OK, #{}, Response, Req),
     {stop, Req2, State}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc internal version of get_file_replicas/2
-%% @end
-%%--------------------------------------------------------------------
--spec get_file_replicas_internal(req(), maps:map()) -> {term(), req(), maps:map()}.
-get_file_replicas_internal(Req, #{auth := Auth} = State) ->
-    FileGuid = get_file_guid(State),
-
-    {ok, Distribution} = onedata_file_api:get_file_distribution(Auth, {guid, FileGuid}),
-    Response = json_utils:encode(Distribution),
-    {Response, Req, State}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Get file guid from state
-%% @end
-%%--------------------------------------------------------------------
--spec get_file_guid(maps:map()) -> fslogic_worker:file_guid().
-get_file_guid(#{id := Guid}) ->
-    Guid;
-get_file_guid(#{auth := Auth, path := Path}) ->
-    {ok, Guid} = logical_file_manager:get_file_guid(Auth, Path),
-    Guid.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -256,4 +227,21 @@ throw_if_nonexistent_provider(SpaceId, ProviderId) ->
             ok;
         false ->
             throw(?ERROR_PROVIDER_NOT_SUPPORTING_SPACE(ProviderId))
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Throws error if given provider does not support given index
+%% @end
+%%--------------------------------------------------------------------
+-spec throw_if_index_not_supported(od_space:id(), binary(), od_provider:id()) ->
+    ok.
+throw_if_index_not_supported(_SpaceId, _IndexName, undefined) ->
+    ok;
+throw_if_index_not_supported(SpaceId, IndexName, ProviderId) ->
+    case index:is_supported(SpaceId, IndexName, ProviderId) of
+        true ->
+            ok;
+        false ->
+            throw(?ERROR_PROVIDER_NOT_SUPPORTING_INDEX(ProviderId, IndexName, SpaceId))
     end.

@@ -487,7 +487,9 @@ new_replication_or_migration(#document{
     value = Transfer = #transfer{
         file_uuid = FileUuid,
         space_id = SpaceId,
-        callback = Callback
+        callback = Callback,
+        index_name = IndexName,
+        query_view_params = QueryViewParams
     }
 }) ->
     FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
@@ -497,7 +499,9 @@ new_replication_or_migration(#document{
         TransferId,
         FileGuid,
         Callback,
-        transfer:is_migration(Transfer)
+        transfer:is_migration(Transfer),
+        IndexName,
+        QueryViewParams
     }).
 
 
@@ -515,11 +519,15 @@ new_replica_eviction(#document{
         file_uuid = FileUuid,
         space_id = SpaceId,
         callback = Callback,
-        replicating_provider = TargetProviderId
+        replicating_provider = TargetProviderId,
+        index_name = IndexName,
+        query_view_params = QueryViewParams
     }
 }) ->
     FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
     {ok, _Pid} = gen_server2:start(replica_eviction_controller,
         [session:root_session_id(),
-            TransferId, FileGuid, Callback, TargetProviderId], []),
+            TransferId, FileGuid, Callback, TargetProviderId,
+            IndexName, QueryViewParams],
+        []),
     ok.

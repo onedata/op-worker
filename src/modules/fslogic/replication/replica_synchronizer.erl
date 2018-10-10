@@ -100,7 +100,7 @@
 -export([apply_if_alive_internal/2, apply_internal/2, apply_or_run_locally_internal/3,
     init_or_return_existing/1]).
 % For testing
--export([find_overlapping/3, get_holes/2]).
+-export([find_overlapping/3, get_holes/2, cancel_transfers_of_session_sync/2]).
 
 %%%===================================================================
 %%% API
@@ -183,12 +183,21 @@ cancel(TransferId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Asynchronously cancels a transfers associated with specified session and file.
+%% Asynchronously cancels transfers associated with specified session and file.
 %% @end
 %%--------------------------------------------------------------------
 -spec cancel_transfers_of_session(file_meta:uuid(), session:id()) -> ok.
 cancel_transfers_of_session(FileUuid, SessionId) ->
     apply_if_alive(FileUuid, {async, {cancel_transfers_of_session, SessionId}}).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Synchronously cancels transfers associated with specified session and file.
+%% @end
+%%--------------------------------------------------------------------
+-spec cancel_transfers_of_session_sync(file_meta:uuid(), session:id()) -> ok.
+cancel_transfers_of_session_sync(FileUuid, SessionId) ->
+    apply_if_alive(FileUuid, {cancel_transfers_of_session, SessionId}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -531,7 +540,11 @@ handle_call(?FLUSH_EVENTS, _From, State) ->
 
 handle_call({apply, Fun}, _From, State) ->
     Ans = Fun(),
-    {reply, Ans, State, ?DIE_AFTER}.
+    {reply, Ans, State, ?DIE_AFTER};
+
+handle_call({cancel_transfers_of_session, SessionId}, _From, State) ->
+    NewState = cancel_session(SessionId, State),
+    {reply, ok, NewState, ?DIE_AFTER}.
 
 handle_cast({cancel, TransferId}, State) ->
     try
@@ -544,16 +557,8 @@ handle_cast({cancel, TransferId}, State) ->
     end;
 
 handle_cast({cancel_transfers_of_session, SessionId}, State) ->
-    try
-        NewState = cancel_session(SessionId, State),
-        {noreply, NewState, ?DIE_AFTER}
-    catch
-        _:Reason ->
-            ?error_stacktrace("Unable to cancel transfers of ~p: ~p", [
-                SessionId, Reason
-            ]),
-            {noreply, State, ?DIE_AFTER}
-    end;
+    NewState = cancel_session(SessionId, State),
+    {noreply, NewState, ?DIE_AFTER};
 
 handle_cast(Msg, State) ->
     ?log_bad_request(Msg),
@@ -802,22 +807,32 @@ cancel_transfer_id(TransferId, State) ->
     From = maps:get(TransferId, State#state.transfer_id_to_from),
     cancel_froms([From], State).
 
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Cancels a transfers by SessionId.
+%% Cancels transfers by SessionId.
 %% @end
 %%--------------------------------------------------------------------
 -spec cancel_session(session:id(), #state{}) -> #state{}.
 cancel_session(SessionId, State) ->
-    case maps:take(SessionId, State#state.session_to_froms) of
-        error ->
-            State;
-        {Froms, STFs} ->
-            cancel_froms(sets:to_list(Froms), State#state{
-                session_to_froms = STFs
-            })
+    try
+        case maps:take(SessionId, State#state.session_to_froms) of
+            error ->
+                State;
+            {Froms, STFs} ->
+                cancel_froms(sets:to_list(Froms), State#state{
+                    session_to_froms = STFs
+                })
+        end
+    catch
+        _:Reason ->
+            ?error_stacktrace("Unable to cancel transfers of ~p: ~p", [
+                SessionId, Reason
+            ]),
+            State
     end.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -841,7 +856,7 @@ cancel_froms(Froms, State = #state{
         RemainingFroms = gb_sets:subtract(gb_sets:from_list(RefFroms), FromsSet),
         case gb_sets:is_empty(RemainingFroms) of
             true ->
-                rtransfer_link:cancel(Ref),
+                cancel_ref(Ref, 3),
                 {maps:remove(Ref, TmpRTFs), sets:add_element(Ref, TmpRefs)};
             false ->
                 {TmpRTFs#{Ref => gb_sets:to_list(RemainingFroms)}, TmpRefs}
@@ -864,6 +879,35 @@ cancel_froms(Froms, State = #state{
         }),
 
     State2.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Cancels transfer via reference.
+%% @end
+%%--------------------------------------------------------------------
+-spec cancel_ref(fetch_ref(), non_neg_integer()) -> ok | failed.
+cancel_ref(_Ref, 0) ->
+    failed;
+cancel_ref(Ref, RetryNum) ->
+    try
+        rtransfer_link:cancel(Ref)
+    catch
+        %% The process we called was already terminating because of idle timeout,
+        %% there's nothing to worry about.
+        exit:{{shutdown, timeout}, _} ->
+            ?warning("Transfer cancel failed because of a timeout, "
+            "retrying with a new one"),
+            cancel_ref(Ref, RetryNum - 1);
+        _:{noproc, _} ->
+            ?warning("Transfer cancel failed because of noproc, "
+            "retrying with a new one"),
+            cancel_ref(Ref, RetryNum - 1);
+        exit:{normal, _} ->
+            ?warning("Transfer cancel failed because of exit:normal, "
+            "retrying with a new one"),
+            cancel_ref(Ref, RetryNum - 1)
+    end.
 
 %%--------------------------------------------------------------------
 %% @private

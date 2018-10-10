@@ -191,6 +191,34 @@
     <<"error_invalid_bbox">>,
     <<"Bounding box is invalid, it needs to be bbox=W,S,E,N where each direction is a number.">>)
 ).
+
+-define(ERROR_INDEX_NOT_FOUND, ?ERROR_REPLY(
+    ?NOT_FOUND,
+    <<"error_index_not_found">>,
+    <<"Given index could not be found.">>)
+).
+-define(ERROR_INVALID_UPDATE_MIN_CHANGES, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"invalid_update_min_changes">>,
+    <<"Requested update min changes is invalid, it must be a positive integer.">>)
+).
+-define(ERROR_INVALID_REPLICA_UPDATE_MIN_CHANGES, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"invalid_replica_update_min_changes">>,
+    <<"Requested replica update min changes is invalid, it must be a positive integer.">>)
+).
+-define(ERROR_PROVIDER_NOT_SUPPORTING_INDEX(__ProviderId, __IndexName, __SpaceId), ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"error_provider_not_supporting_index">>,
+    <<"Provider ", __ProviderId/binary, " does not support index ", __IndexName/binary, "in space ", __SpaceId/binary>>)
+).
+-define(ERROR_INDEX_FUNCTION, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"error_index_function">>,
+    <<"Processing query result failed."
+    "Ensure that returned value from map/reduce function is file id or list of which first element is file id.">>)
+).
+
 -define(ERROR_SPACE_NOT_SUPPORTED, ?ERROR_REPLY(
     ?BAD_REQUEST,
     <<"error_space_not_supported">>,
@@ -201,10 +229,10 @@
     <<"error_provider_not_found">>,
     <<"Given provider could not be found.">>)
 ).
--define(ERROR_PROVIDER_NOT_SUPPORTING_SPACE, ?ERROR_REPLY(
+-define(ERROR_PROVIDER_NOT_SUPPORTING_SPACE(__ProviderId), ?ERROR_REPLY(
     ?BAD_REQUEST,
     <<"error_provider_not_supporting_space">>,
-    <<"Given provider does not support requested space.">>)
+    <<"Provider ", __ProviderId/binary, " does not support requested space.">>)
 ).
 -define(ERROR_TRANSFER_NOT_FOUND, ?ERROR_REPLY(
     ?BAD_REQUEST,

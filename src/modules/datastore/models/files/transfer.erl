@@ -26,7 +26,7 @@
 %% API
 -export([
     init/0, cleanup/0,
-    start/6, get/1, update/2, update_and_run/3, delete/1,
+    start/8, get/1, update/2, update_and_run/3, delete/1,
     cancel/1, rerun_ended/2
 ]).
 
@@ -70,10 +70,12 @@
 -type doc() :: datastore_doc:doc(transfer()).
 -type timestamp() :: non_neg_integer().
 -type list_limit() :: non_neg_integer() | all.
+-type index_name() :: undefined | index:key().
+-type query_view_params() :: undefined | index:query_options() .
 
 -export_type([
     id/0, transfer/0, status/0, callback/0, doc/0,
-    timestamp/0, list_limit/0
+    timestamp/0, list_limit/0, index_name/0, query_view_params/0
 ]).
 
 -define(CTX, #{
@@ -112,12 +114,14 @@ cleanup() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec start(session:id(), fslogic_worker:file_guid(), file_meta:path(),
-    undefined | od_provider:id(), undefined | od_provider:id(), binary()) ->
-    {ok, id()} | ignore | {error, Reason :: term()}.
-start(SessionId, FileGuid, FilePath, SourceProviderId, TargetProviderId, Callback) ->
+    undefined | od_provider:id(), undefined | od_provider:id(), binary(),
+    index_name(), query_view_params()) -> {ok, id()} | ignore | {error, Reason :: term()}.
+start(SessionId, FileGuid, FilePath, SourceProviderId, TargetProviderId,
+    Callback, IndexName, QueryViewParams
+) ->
     {ok, UserId} = session:get_user_id(SessionId),
     start_for_user(UserId, FileGuid, FilePath, SourceProviderId,
-        TargetProviderId, Callback
+        TargetProviderId, Callback, IndexName, QueryViewParams
     ).
 
 %%--------------------------------------------------------------------
@@ -127,9 +131,10 @@ start(SessionId, FileGuid, FilePath, SourceProviderId, TargetProviderId, Callbac
 %%--------------------------------------------------------------------
 -spec start_for_user(od_user:id(), fslogic_worker:file_uuid(),
     file_meta:path(), undefined | od_provider:id(), undefined | od_provider:id(),
-    binary()) -> {ok, id()} | ignore | {error, Reason :: term()}.
+    callback(), index_name(), query_view_params()) ->
+    {ok, id()} | ignore | {error, Reason :: term()}.
 start_for_user(UserId, FileGuid, FilePath, EvictingProviderId,
-    ReplicatingProviderId, Callback
+    ReplicatingProviderId, Callback, IndexName, QueryViewParams
 ) ->
     ReplicationStatus = case ReplicatingProviderId of
         undefined -> skipped;
@@ -161,7 +166,9 @@ start_for_user(UserId, FileGuid, FilePath, EvictingProviderId,
             min_hist = #{},
             hr_hist = #{},
             dy_hist = #{},
-            mth_hist = #{}
+            mth_hist = #{},
+            index_name = IndexName,
+            query_view_params = QueryViewParams
         }},
 
     {ok, Doc = #document{key = TransferId}} = create(ToCreate),
@@ -227,14 +234,17 @@ rerun_ended(UserId, #document{key = TransferId, value = Transfer}) ->
                 path = FilePath,
                 evicting_provider = EvictingProviderId,
                 replicating_provider = ReplicatingProviderId,
-                callback = Callback
+                callback = Callback,
+                index_name = IndexName,
+                query_view_params = QueryViewParams
             } = Transfer,
 
             NewUserId = utils:ensure_defined(UserId, undefined, OldUserId),
             FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
 
             {ok, NewTransferId} = start_for_user(NewUserId, FileGuid, FilePath,
-                EvictingProviderId, ReplicatingProviderId, Callback
+                EvictingProviderId, ReplicatingProviderId, Callback, IndexName,
+                QueryViewParams
             ),
             update(TransferId, fun(OldTransfer) ->
                 {ok, OldTransfer#transfer{rerun_id = NewTransferId}}
@@ -830,7 +840,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    8.
+    10.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -851,256 +861,8 @@ get_posthooks() ->
 %%--------------------------------------------------------------------
 -spec get_record_struct(datastore_model:record_version()) ->
     datastore_model:record_struct().
-get_record_struct(1) ->
-    {record, [
-        {file_uuid, string},
-        {space_id, string},
-        {path, string},
-        {callback, string},
-        {transfer_status, atom},
-        {invalidation_status, atom},
-        {source_provider_id, string},
-        {target_provider_id, string},
-        {invalidate_source_replica, boolean},
-        {pid, string}, %todo VFS-3657
-        {files_to_transfer, integer},
-        {files_transferred, integer},
-        {bytes_to_transfer, integer},
-        {bytes_transferred, integer},
-        {start_time, integer},
-        {last_update, integer},
-        {min_hist, [integer]},
-        {hr_hist, [integer]},
-        {dy_hist, [integer]}
-    ]};
-get_record_struct(2) ->
-    {record, [
-        {file_uuid, string},
-        {space_id, string},
-        {path, string},
-        {callback, string},
-        {transfer_status, atom},
-        {invalidation_status, atom},
-        {source_provider_id, string},
-        {target_provider_id, string},
-        {invalidate_source_replica, boolean},
-        {pid, string}, %todo VFS-3657
-        {files_to_transfer, integer},
-        {files_transferred, integer},
-        {files_to_invalidate, integer},
-        {files_invalidated, integer},
-        {bytes_to_transfer, integer},
-        {bytes_transferred, integer},
-        {start_time, integer},
-        {last_update, integer},
-        {min_hist, [integer]},
-        {hr_hist, [integer]},
-        {dy_hist, [integer]}
-    ]};
-get_record_struct(3) ->
-    {record, [
-        {file_uuid, string},
-        {space_id, string},
-        {user_id, string},
-        {path, string},
-        {callback, string},
-        {status, atom},
-        {invalidation_status, atom},
-        {source_provider_id, string},
-        {target_provider_id, string},
-        {invalidate_source_replica, boolean},
-        {pid, string}, %todo VFS-3657
-        {files_to_transfer, integer},
-        {files_transferred, integer},
-        {bytes_to_transfer, integer},
-        {bytes_transferred, integer},
-        {files_to_invalidate, integer},
-        {files_invalidated, integer},
-        {start_time, integer},
-        {finish_time, integer},
-        {last_update, #{string => integer}},
-        {min_hist, #{string => [integer]}},
-        {hr_hist, #{string => [integer]}},
-        {dy_hist, #{string => [integer]}},
-        {mth_hist, #{string => [integer]}}
-    ]};
-get_record_struct(4) ->
-    {record, [
-        {file_uuid, string},
-        {space_id, string},
-        {user_id, string},
-        {path, string},
-        {callback, string},
-        {status, atom},
-        {invalidation_status, atom},
-        {source_provider_id, string},
-        {target_provider_id, string},
-        {invalidate_source_replica, boolean},
-        {pid, string}, %todo VFS-3657
-        {files_to_transfer, integer},
-        {files_transferred, integer},
-        {failed_files, integer},
-        {bytes_to_transfer, integer},
-        {bytes_transferred, integer},
-        {files_to_invalidate, integer},
-        {files_invalidated, integer},
-        {start_time, integer},
-        {finish_time, integer},
-        {last_update, #{string => integer}},
-        {min_hist, #{string => [integer]}},
-        {hr_hist, #{string => [integer]}},
-        {dy_hist, #{string => [integer]}},
-        {mth_hist, #{string => [integer]}}
-    ]};
-get_record_struct(5) ->
-    {record, [
-        {file_uuid, string},
-        {space_id, string},
-        {user_id, string},
-        {path, string},
-        {callback, string},
-        {status, atom},
-        {invalidation_status, atom},
-        {schedule_provider_id, string},
-        {source_provider_id, string},
-        {target_provider_id, string},
-        {invalidate_source_replica, boolean},
-        {pid, string}, %todo VFS-3657
-        {files_to_process, integer},
-        {files_processed, integer},
-        {failed_files, integer},
-        {files_transferred, integer},
-        {bytes_transferred, integer},
-        {files_to_invalidate, integer},
-        {start_time, integer},
-        {finish_time, integer},
-        {last_update, #{string => integer}},
-        {min_hist, #{string => [integer]}},
-        {hr_hist, #{string => [integer]}},
-        {dy_hist, #{string => [integer]}},
-        {mth_hist, #{string => [integer]}}
-    ]};
-get_record_struct(6) ->
-    {record, [
-        {file_uuid, string},
-        {space_id, string},
-        {user_id, string},
-        {path, string},
-        {callback, string},
-        {status, atom},
-        {invalidation_status, atom},
-        {schedule_provider_id, string},
-        {source_provider_id, string},
-        {target_provider_id, string},
-        {invalidate_source_replica, boolean},
-        {pid, string}, %todo VFS-3657
-        {files_to_process, integer},
-        {files_processed, integer},
-        {failed_files, integer},
-        {files_transferred, integer},
-        {bytes_transferred, integer},
-        {files_invalidated, integer},
-        {schedule_time, integer},
-        {start_time, integer},
-        {finish_time, integer},
-        {last_update, #{string => integer}},
-        {min_hist, #{string => [integer]}},
-        {hr_hist, #{string => [integer]}},
-        {dy_hist, #{string => [integer]}},
-        {mth_hist, #{string => [integer]}}
-    ]};
-get_record_struct(7) ->
-    {record, [
-        {file_uuid, string},
-        {space_id, string},
-        {user_id, string},
-        {path, string},
-        {callback, string},
-        {enqueued, atom},
-        {status, atom},
-        {invalidation_status, atom},
-        {schedule_provider_id, string},
-        {source_provider_id, string},
-        {target_provider_id, string},
-        {invalidate_source_replica, boolean},
-        {pid, string}, %todo VFS-3657
-        {files_to_process, integer},
-        {files_processed, integer},
-        {failed_files, integer},
-        {files_transferred, integer},
-        {bytes_transferred, integer},
-        {files_invalidated, integer},
-        {schedule_time, integer},
-        {start_time, integer},
-        {finish_time, integer},
-        {last_update, #{string => integer}},
-        {min_hist, #{string => [integer]}},
-        {hr_hist, #{string => [integer]}},
-        {dy_hist, #{string => [integer]}},
-        {mth_hist, #{string => [integer]}}
-    ]};
-get_record_struct(8) ->
-    {record, [
-        {file_uuid, string},
-        {space_id, string},
-        {user_id, string},
-        {rerun_id, string},
-        {path, string},
-        {callback, string},
-        {enqueued, atom},
-        {cancel, atom},
-        {replication_status, atom},
-        {eviction_status, atom},
-        {schedule_provider_id, string},
-        {replicating_provider, string},
-        {evicting_provider, string},
-        {pid, string}, %todo VFS-3657
-        {files_to_process, integer},
-        {files_processed, integer},
-        {failed_files, integer},
-        {files_replicated, integer},
-        {bytes_replicated, integer},
-        {files_evicted, integer},
-        {schedule_time, integer},
-        {start_time, integer},
-        {finish_time, integer},
-        {last_update, #{string => integer}},
-        {min_hist, #{string => [integer]}},
-        {hr_hist, #{string => [integer]}},
-        {dy_hist, #{string => [integer]}},
-        {mth_hist, #{string => [integer]}}
-    ]};
-get_record_struct(9) ->
-    {record, [
-        {file_uuid, string},
-        {space_id, string},
-        {user_id, string},
-        {rerun_id, string},
-        {path, string},
-        {callback, string},
-        {enqueued, atom},
-        {cancel, atom},
-        {replication_status, atom},
-        {eviction_status, atom},
-        {scheduling_provider, string},
-        {replicating_provider, string},
-        {evicting_provider, string},
-        {pid, string}, %todo VFS-3657
-        {files_to_process, integer},
-        {files_processed, integer},
-        {failed_files, integer},
-        {files_replicated, integer},
-        {bytes_replicated, integer},
-        {files_evicted, integer},
-        {schedule_time, integer},
-        {start_time, integer},
-        {finish_time, integer},
-        {last_update, #{string => integer}},
-        {min_hist, #{string => [integer]}},
-        {hr_hist, #{string => [integer]}},
-        {dy_hist, #{string => [integer]}},
-        {mth_hist, #{string => [integer]}}
-    ]}.
+get_record_struct(Version) ->
+    transfer_upgrader:get_record_struct(Version).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1109,130 +871,8 @@ get_record_struct(9) ->
 %%--------------------------------------------------------------------
 -spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
     {datastore_model:record_version(), datastore_model:record()}.
-upgrade_record(1, {?MODULE, FileUuid, SpaceId, Path, CallBack, TransferStatus,
-    InvalidationStatus, SourceProviderId, TargetProviderId,
-    InvalidateSourceReplica, Pid, FilesToTransfer, FilesTransferred,
-    BytesToTransfer, BytesTransferred, StartTime, LastUpdate,
-    MinHist, HrHist, DyHist}
-) ->
-    {2, {?MODULE, FileUuid, SpaceId, Path, CallBack, TransferStatus,
-        InvalidationStatus, SourceProviderId, TargetProviderId,
-        InvalidateSourceReplica, Pid, FilesToTransfer, FilesTransferred,
-        0, 0, BytesToTransfer, BytesTransferred, StartTime, LastUpdate,
-        MinHist, HrHist, DyHist
-    }};
-upgrade_record(2, {?MODULE, FileUuid, SpaceId, Path, CallBack, TransferStatus,
-    InvalidationStatus, SourceProviderId, TargetProviderId,
-    InvalidateSourceReplica, Pid, FilesToTransfer, FilesTransferred,
-    FilesToInvalidate, FilesInvalidated, BytesToTransfer, BytesTransferred,
-    StartTime, LastUpdate, MinHist, HrHist, DyHist}
-) ->
-    {3, {?MODULE, FileUuid, SpaceId, undefined, Path, CallBack, TransferStatus,
-        InvalidationStatus, SourceProviderId, TargetProviderId,
-        InvalidateSourceReplica, Pid, FilesToTransfer, FilesTransferred,
-        BytesToTransfer, BytesTransferred, FilesToInvalidate, FilesInvalidated,
-        StartTime, LastUpdate,
-        % There are three changes in histograms:
-        %   1) They are now maps #{ProviderId => Histogram}, where ProviderId is
-        %       the provider FROM which the amount of data expressed in the
-        %       histogram was transferred.
-        %   2) Histogram naming convention - minute histogram is now a histogram
-        %       that SPANS OVER one minute, here with 5 seconds window.
-        %       Other histograms are renamed analogically.
-        %   3) LastUpdate must be remembered per provider to correctly keep
-        %       track in histograms.
-        % As there is no way to deduce source providers, older transfers will
-        % only have one histogram accessible under target provider id.
-        % last_update
-        #{TargetProviderId => LastUpdate},
-        % min_hist
-        #{TargetProviderId => lists:duplicate(60 div ?FIVE_SEC_TIME_WINDOW, 0)},
-        %hr_hist
-        #{TargetProviderId => MinHist},
-        % dy_hist
-        #{TargetProviderId => HrHist},
-        % mth_hist
-        #{TargetProviderId => DyHist}
-    }};
-upgrade_record(3, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, Status,
-    InvalidationStatus, SourceProviderId, TargetProviderId,
-    InvalidateSourceReplica, Pid, FilesToTransfer, FilesTransferred,
-    BytesToTransfer, BytesTransferred, FilesToInvalidate, FilesInvalidated,
-    StartTime, FinishTime, LastUpdate, MinHist, HrHist, DyHist, MthHist
-}) ->
-    {4, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, Status,
-        InvalidationStatus, SourceProviderId, TargetProviderId,
-        InvalidateSourceReplica, Pid, FilesToTransfer, FilesTransferred, 0,
-        BytesToTransfer, BytesTransferred, FilesToInvalidate, FilesInvalidated,
-        StartTime, FinishTime, LastUpdate, MinHist, HrHist, DyHist, MthHist
-    }};
-upgrade_record(4, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, Status,
-    InvalidationStatus, SourceProviderId, TargetProviderId,
-    InvalidateSourceReplica, Pid, FilesToTransfer, FilesTransferred, FailedFiles,
-    _BytesToTransfer, BytesTransferred, _FilesToInvalidate, FilesInvalidated,
-    StartTime, FinishTime, LastUpdate, MinHist, HrHist, DyHist, MthHist
-}) ->
-    {5, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, Status,
-        InvalidationStatus, SourceProviderId, SourceProviderId, TargetProviderId,
-        InvalidateSourceReplica, Pid, FilesToTransfer, FilesTransferred,
-        FailedFiles, FilesTransferred, BytesTransferred, FilesInvalidated,
-        StartTime, FinishTime, LastUpdate, MinHist, HrHist, DyHist, MthHist
-    }};
-upgrade_record(5, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, Status,
-    InvalidationStatus, SchedulingProviderId, SourceProviderId, TargetProviderId,
-    InvalidateSourceReplica, Pid, FilesToProcess, FilesProcessed,
-    FailedFiles, FilesTransferred, BytesTransferred, FilesInvalidated,
-    StartTime, FinishTime, LastUpdate, MinHist, HrHist, DyHist, MthHist
-}) ->
-    {6, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, Status,
-        InvalidationStatus, SchedulingProviderId, SourceProviderId, TargetProviderId,
-        InvalidateSourceReplica, Pid, FilesToProcess, FilesProcessed,
-        FailedFiles, FilesTransferred, BytesTransferred, FilesInvalidated,
-        StartTime, StartTime, FinishTime, LastUpdate, MinHist, HrHist, DyHist,
-        MthHist
-    }};
-upgrade_record(6, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, Status,
-    InvalidationStatus, SchedulingProviderId, SourceProviderId, TargetProviderId,
-    InvalidateSourceReplica, Pid, FilesToProcess, FilesProcessed,
-    FailedFiles, FilesTransferred, BytesTransferred, FilesInvalidated,
-    ScheduleTime, StartTime, FinishTime, LastUpdate, MinHist, HrHist, DyHist,
-    MthHist
-}) ->
-    {7, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, true, Status,
-        InvalidationStatus, SchedulingProviderId, SourceProviderId, TargetProviderId,
-        InvalidateSourceReplica, Pid, FilesToProcess, FilesProcessed,
-        FailedFiles, FilesTransferred, BytesTransferred, FilesInvalidated,
-        ScheduleTime, StartTime, FinishTime, LastUpdate, MinHist, HrHist, DyHist,
-        MthHist
-    }};
-upgrade_record(7, {?MODULE, FileUuid, SpaceId, UserId, Path, CallBack, Enqueued,
-    Status, InvalidationStatus, SchedulingProviderId, SourceProviderId,
-    TargetProviderId, _InvalidateSourceReplica, Pid, FilesToProcess,
-    FilesProcessed, FailedFiles, FilesTransferred, BytesTransferred,
-    FilesInvalidated, ScheduleTime, StartTime, FinishTime,
-    LastUpdate, MinHist, HrHist, DyHist, MthHist
-}) ->
-    {8, {?MODULE, FileUuid, SpaceId, UserId, undefined, Path, CallBack, Enqueued,
-        false, Status, InvalidationStatus, SchedulingProviderId,
-        TargetProviderId, SourceProviderId, Pid, FilesToProcess,
-        FilesProcessed, FailedFiles, FilesTransferred, BytesTransferred,
-        FilesInvalidated, ScheduleTime, StartTime, FinishTime,
-        LastUpdate, MinHist, HrHist, DyHist, MthHist
-    }};
-upgrade_record(8, {?MODULE, FileUuid, SpaceId, UserId, RerunId, Path, CallBack, Enqueued,
-    Cancel, ReplicationStatus, EvictionStatus, SchedulingProvider,
-    ReplicatingProvider, EvictingProvider, Pid, FilesToProcess,
-    FilesProcessed, FailedFiles, FilesReplicated, BytesReplicated,
-    FilesEvicted, ScheduleTime, StartTime, FinishTime,
-    LastUpdate, MinHist, HrHist, DyHist, MthHist
-}) ->
-    {9, {?MODULE, FileUuid, SpaceId, UserId, RerunId, Path, CallBack, Enqueued,
-        Cancel, ReplicationStatus, EvictionStatus, SchedulingProvider,
-        ReplicatingProvider, EvictingProvider, Pid, FilesToProcess,
-        FilesProcessed, FailedFiles, FilesReplicated, BytesReplicated,
-        FilesEvicted, ScheduleTime, StartTime, FinishTime,
-        LastUpdate, MinHist, HrHist, DyHist, MthHist
-    }}.
+upgrade_record(Version, Record) ->
+    transfer_upgrader:upgrade_record(Version, Record).
 
 %%--------------------------------------------------------------------
 %% @doc

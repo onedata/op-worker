@@ -99,13 +99,14 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}).
 handle_cast({start_file_replication, UserCtx, FileCtx, Block, TransferId,
-    RetriesLeft, NextRetryTimestamp}, State
+    RetriesLeft, NextRetryTimestamp, IndexName, QueryViewParams}, State
 ) ->
     RetriesLeft2 = utils:ensure_defined(RetriesLeft, undefined,
         ?MAX_FILE_REPLICATION_RETRIES),
     case should_start(NextRetryTimestamp) of
         true ->
-            case replicate_file(UserCtx, FileCtx, Block, TransferId, RetriesLeft2) of
+            case replicate_file(UserCtx, FileCtx, Block, TransferId,
+                RetriesLeft2, IndexName, QueryViewParams) of
                 ok ->
                     ok;
                 {error, already_ended} ->
@@ -120,7 +121,7 @@ handle_cast({start_file_replication, UserCtx, FileCtx, Block, TransferId,
             end;
         _ ->
             sync_req:enqueue_file_replication(UserCtx, FileCtx, Block,
-                TransferId, RetriesLeft2, NextRetryTimestamp)
+                TransferId, RetriesLeft2, NextRetryTimestamp, IndexName, QueryViewParams)
     end,
     {noreply, State, hibernate}.
 
@@ -174,21 +175,26 @@ code_change(_OldVsn, State, _Extra) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec replicate_file(user:ctx(), file_ctx:ctx(), fslogic_blocks:block(),
-    transfer:id(), non_neg_integer()) -> ok | {error, term()}.
-replicate_file(UserCtx, FileCtx, Block, TransferId, RetriesLeft) ->
-    try sync_req:replicate_file(UserCtx, FileCtx, Block, TransferId) of
+    transfer:id(), non_neg_integer(), transfer:index_name() | undefined,
+    transfer:query_view_params()) -> ok | {error, term()}.
+replicate_file(UserCtx, FileCtx, Block, TransferId, RetriesLeft, IndexName, QueryViewParams) ->
+    try sync_req:replicate_file(UserCtx, FileCtx, Block, TransferId, IndexName,
+        QueryViewParams)
+    of
         #provider_response{status = #status{code = ?OK}}  ->
             ok;
         Error = {error, not_found} ->
-            maybe_retry(UserCtx, FileCtx, Block, TransferId, RetriesLeft, Error)
+            maybe_retry(UserCtx, FileCtx, Block, TransferId, IndexName, QueryViewParams,
+                RetriesLeft, Error)
     catch
         throw:already_ended ->
             {error, already_ended};
         throw:replication_cancelled ->
             {error, replication_cancelled};
         Error:Reason ->
-            maybe_retry(UserCtx, FileCtx, Block, TransferId, RetriesLeft,
-                {Error, Reason})
+            ?error_stacktrace("Unexpected error ~p:~p during transfer ~p", [Error, Reason, TransferId]),
+            maybe_retry(UserCtx, FileCtx, Block, TransferId, IndexName,
+                QueryViewParams, RetriesLeft, {Error, Reason})
     end.
 
 %%-------------------------------------------------------------------
@@ -199,35 +205,42 @@ replicate_file(UserCtx, FileCtx, Block, TransferId, RetriesLeft) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec maybe_retry(user:ctx(), file_ctx:ctx(), fslogic_blocks:block(),
-    transfer:id(), non_neg_integer(), term()) -> ok | {error, term()}.
-maybe_retry(_UserCtx, _FileCtx, _Block, TransferId, 0, Error = {error, not_found}) ->
+    transfer:id(), transfer:index_name(),transfer:query_view_params(),
+    non_neg_integer(), term()) -> ok | {error, term()}.
+maybe_retry(_UserCtx, _FileCtx, _Block, TransferId, _IndexName, _QueryViewParams,
+    0, Error = {error, not_found}
+) ->
     ?error(
         "Replication in scope of transfer ~p failed due to ~p~n"
         "No retries left", [TransferId, Error]),
     Error;
-maybe_retry(UserCtx, FileCtx, Block, TransferId, RetriesLeft,
-    Error = {error, not_found}
+maybe_retry(UserCtx, FileCtx, Block, TransferId, IndexName, QueryViewParams,
+    RetriesLeft, Error = {error, not_found}
 ) ->
     ?warning(
         "Replication in scope of transfer ~p failed due to ~p~n"
         "File transfer will be retried (attempts left: ~p)",
         [TransferId, Error, RetriesLeft - 1]),
     sync_req:enqueue_file_replication(UserCtx, FileCtx, Block, TransferId,
-        RetriesLeft - 1, next_retry(RetriesLeft));
-maybe_retry(_UserCtx, FileCtx, _Block, TransferId, 0, Error) ->
+        RetriesLeft - 1, next_retry(RetriesLeft), IndexName, QueryViewParams);
+maybe_retry(_UserCtx, FileCtx, _Block, TransferId, _IndexName, _QueryViewParams,
+    0, Error
+) ->
     {Path, _FileCtx2} = file_ctx:get_canonical_path(FileCtx),
     ?error(
         "Replication of file ~p in scope of transfer ~p failed due to ~p~n"
         "No retries left", [Path, TransferId, Error]),
     {error, retries_per_file_transfer_exceeded};
-maybe_retry(UserCtx, FileCtx, Block, TransferId, Retries, Error) ->
+maybe_retry(UserCtx, FileCtx, Block, TransferId, IndexName, QueryViewParams,
+    Retries, Error
+) ->
     {Path, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
     ?warning(
         "Replication of file ~p in scope of transfer ~p failed due to ~p~n"
         "File transfer will be retried (attempts left: ~p)",
         [Path, TransferId, Error, Retries - 1]),
     sync_req:enqueue_file_replication(UserCtx, FileCtx2, Block, TransferId,
-        Retries - 1, next_retry(Retries)).
+        Retries - 1, next_retry(Retries), IndexName, QueryViewParams).
 
 
 %%-------------------------------------------------------------------
