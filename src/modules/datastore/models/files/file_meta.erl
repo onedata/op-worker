@@ -39,7 +39,7 @@
 
 
 %% datastore_model callbacks
--export([get_ctx/0, get_posthooks/0]).
+-export([get_ctx/0]).
 -export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
 
 -type doc() :: datastore:doc().
@@ -803,21 +803,6 @@ is_valid_filename(FileName) when is_binary(FileName) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Cleanup posthook.
-%% @end
-%%--------------------------------------------------------------------
--spec cleanup(atom(), list(), term()) -> term().
-cleanup(delete, [_, FileUuid], ok) ->
-    ok = custom_metadata:delete(FileUuid),
-    ok = file_force_proxy:delete(FileUuid),
-    ok = times:delete(FileUuid);
-cleanup(_, _, Result) ->
-    Result.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
 %% Returns parent child's UUID by name within given links tree set.
 %% @end
 %%--------------------------------------------------------------------
@@ -845,16 +830,6 @@ get_child_uuid(ParentUuid, TreeIds, Name) ->
 -spec get_ctx() -> datastore:ctx().
 get_ctx() ->
     ?CTX.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of callbacks which will be called after each operation
-%% on datastore model.
-%% @end
-%%--------------------------------------------------------------------
--spec get_posthooks() -> [datastore_hooks:posthook()].
-get_posthooks() ->
-    [fun cleanup/3].
 
 %%--------------------------------------------------------------------
 %% @doc
