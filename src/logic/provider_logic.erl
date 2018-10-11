@@ -29,6 +29,7 @@
 -export([get_name/0, get_name/1, get_name/2]).
 -export([get_spaces/0, get_spaces/1, get_spaces/2]).
 -export([has_eff_user/2, has_eff_user/3]).
+-export([update_space_support_size/2]).
 -export([supports_space/1, supports_space/2, supports_space/3]).
 -export([map_idp_group_to_onedata/2]).
 -export([get_domain/0, get_domain/1, get_domain/2]).
@@ -248,6 +249,40 @@ supports_space(SessionId, ProviderId, SpaceId) ->
         _ ->
             false
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Changes support size of this provider towards given space,
+%% given that data stored on this provider is not larger than
+%% the intended size.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_space_support_size(SpaceId :: od_space:id(), NewSupportSize :: integer()) ->
+    ok | gs_protocol:error().
+update_space_support_size(SpaceId, NewSupportSize) ->
+    OccupiedSize = space_quota:current_size(SpaceId),
+    update_space_support_size(SpaceId, NewSupportSize, OccupiedSize).
+
+
+%% @private
+-spec update_space_support_size(SpaceId :: od_space:id(), NewSupportSize :: integer(),
+    CurrentOccupiedSize :: non_neg_integer()) ->
+    ok | gs_protocol:error().
+update_space_support_size(_SpaceId, NewSupportSize, CurrentOccupiedSize)
+    when NewSupportSize < CurrentOccupiedSize ->
+    ?ERROR_BAD_VALUE_TOO_LOW(<<"size">>, CurrentOccupiedSize);
+
+update_space_support_size(SpaceId, NewSupportSize, _CurrentOccupiedSize) ->
+    Data = #{<<"size">> => NewSupportSize},
+    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = update, data = Data,
+        gri = #gri{type = od_provider, id = ?SELF, aspect = {space, SpaceId}}
+    }),
+    ?ON_SUCCESS(Result, fun(_) ->
+        gs_client_worker:invalidate_cache(od_space, SpaceId),
+        gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id())
+    end).
 
 
 %%--------------------------------------------------------------------
