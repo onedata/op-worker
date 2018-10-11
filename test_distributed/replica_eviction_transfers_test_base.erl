@@ -37,7 +37,7 @@
     schedule_replica_eviction_by_index/2,
     schedule_eviction_of_regular_file_by_index_with_reduce/2,
     scheduling_replica_eviction_by_not_existing_index_should_fail/2,
-    scheduling_replica_eviction_by_index_with_wrong_function_should_fail/2,
+    scheduling_replica_eviction_by_index_with_function_returning_wrong_value_should_fail/2,
     scheduling_replica_eviction_by_empty_index_should_succeed/2,
     scheduling_replica_eviction_by_not_existing_key_in_index_should_succeed/2,
     schedule_replica_eviction_of_100_regular_files_by_index/2,
@@ -818,7 +818,7 @@ scheduling_replica_eviction_by_not_existing_index_should_fail(Config, Type) ->
         }
     ).
 
-scheduling_replica_eviction_by_index_with_wrong_function_should_fail(Config, Type) ->
+scheduling_replica_eviction_by_index_with_function_returning_wrong_value_should_fail(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId2 = ?DEFAULT_SESSION(WorkerP2, Config),
     SpaceId = ?SPACE_ID,

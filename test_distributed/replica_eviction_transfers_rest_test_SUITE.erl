@@ -38,7 +38,7 @@
     schedule_replica_eviction_by_index/1,
     schedule_eviction_of_regular_file_by_index_with_reduce/1,
     scheduling_replica_eviction_by_not_existing_index_should_fail/1,
-    scheduling_replica_eviction_by_index_with_wrong_function_should_fail/1,
+    scheduling_replica_eviction_by_index_with_function_returning_wrong_value_should_fail/1,
     scheduling_replica_eviction_by_empty_index_should_succeed/1,
     scheduling_replica_eviction_by_not_existing_key_in_index_should_succeed/1,
     schedule_replica_eviction_of_100_regular_files_by_index_with_batch_1000/1,
@@ -66,7 +66,7 @@ all() -> [
     schedule_replica_eviction_by_index,
     schedule_eviction_of_regular_file_by_index_with_reduce,
     scheduling_replica_eviction_by_not_existing_index_should_fail,
-    scheduling_replica_eviction_by_index_with_wrong_function_should_fail,
+    scheduling_replica_eviction_by_index_with_function_returning_wrong_value_should_fail,
     scheduling_replica_eviction_by_empty_index_should_succeed,
     scheduling_replica_eviction_by_not_existing_key_in_index_should_succeed,
     schedule_replica_eviction_of_100_regular_files_by_index_with_batch_1000,
@@ -133,8 +133,8 @@ schedule_eviction_of_regular_file_by_index_with_reduce(Config) ->
 scheduling_replica_eviction_by_not_existing_index_should_fail(Config) ->
     replica_eviction_transfers_test_base:scheduling_replica_eviction_by_not_existing_index_should_fail(Config, rest).
 
-scheduling_replica_eviction_by_index_with_wrong_function_should_fail(Config) ->
-    replica_eviction_transfers_test_base:scheduling_replica_eviction_by_index_with_wrong_function_should_fail(Config, rest).
+scheduling_replica_eviction_by_index_with_function_returning_wrong_value_should_fail(Config) ->
+    replica_eviction_transfers_test_base:scheduling_replica_eviction_by_index_with_function_returning_wrong_value_should_fail(Config, rest).
 
 scheduling_replica_eviction_by_empty_index_should_succeed(Config) ->
     replica_eviction_transfers_test_base:scheduling_replica_eviction_by_empty_index_should_succeed(Config, rest).
