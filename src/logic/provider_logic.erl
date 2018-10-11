@@ -29,6 +29,7 @@
 -export([get_name/0, get_name/1, get_name/2]).
 -export([get_spaces/0, get_spaces/1, get_spaces/2]).
 -export([has_eff_user/2, has_eff_user/3]).
+-export([support_space/2, support_space/3]).
 -export([update_space_support_size/2]).
 -export([supports_space/1, supports_space/2, supports_space/3]).
 -export([map_idp_group_to_onedata/2]).
@@ -227,6 +228,32 @@ has_eff_user(SessionId, ProviderId, UserId) ->
         _ ->
             false
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Supports a space based on support_space_token and support size.
+%% @end
+%%--------------------------------------------------------------------
+-spec support_space(Token :: token:id() | macaroon:macaroon(), SupportSize :: integer()) ->
+    {ok, od_space:id()} | gs_protocol:error().
+support_space(Token, SupportSize) ->
+    support_space(?ROOT_SESS_ID, Token, SupportSize).
+
+-spec support_space(SessionId :: gs_client_worker:client(),
+    Token :: binary() | macaroon:macaroon(), SupportSize :: integer()) ->
+    {ok, od_space:id()} | gs_protocol:error().
+support_space(SessionId, Token, SupportSize) ->
+    Data = #{<<"token">> => Token, <<"size">> => SupportSize},
+    Result = gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = create,
+        gri = #gri{type = od_provider, id = ?SELF, aspect = support},
+        data = Data
+    }),
+
+    ?CREATE_RETURN_ID(?ON_SUCCESS(Result, fun(_) ->
+        gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id())
+    end)).
 
 
 -spec supports_space(od_space:id()) -> boolean().
