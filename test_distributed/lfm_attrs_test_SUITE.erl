@@ -210,6 +210,7 @@ remove_file_test(Config) ->
     Value1 = <<"t4_value1">>,
     Xattr1 = #xattr{name = Name1, value = Value1},
     {ok, Guid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
+    Uuid = fslogic_uuid:guid_to_uuid(Guid),
 
     ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1)),
     ?assertEqual({ok, [Name1]}, lfm_proxy:list_xattr(Worker, SessId, {guid, Guid}, false, true)),
@@ -217,7 +218,9 @@ remove_file_test(Config) ->
     ?assertEqual({error, ?ENOENT}, lfm_proxy:list_xattr(Worker, SessId, {guid, Guid}, false, true)),
     ?assertEqual({error, ?ENOENT}, lfm_proxy:get_xattr(Worker, SessId, {guid, Guid}, Name1)),
     {ok, Guid2} = lfm_proxy:create(Worker, SessId, Path, 8#600),
-    ?assertEqual({ok, []}, lfm_proxy:list_xattr(Worker, SessId, {guid, Guid2}, false, true)).
+    ?assertEqual({ok, []}, lfm_proxy:list_xattr(Worker, SessId, {guid, Guid2}, false, true)),
+    ?assertEqual({error, not_found}, rpc:call(Worker, custom_metadata, get, [Uuid])),
+    ?assertEqual({error, not_found}, rpc:call(Worker, times, get, [Uuid])).
 
 modify_cdmi_attrs(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
