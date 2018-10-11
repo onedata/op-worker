@@ -237,7 +237,7 @@ get_simple_file_distribution(Config) ->
     File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file0_gsfd"])),
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
     {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
-    lfm_proxy:write(WorkerP1, Handle, 0, ?TEST_DATA),
+    {ok,_} = lfm_proxy:write(WorkerP1, Handle, 0, ?TEST_DATA),
     lfm_proxy:fsync(WorkerP1, Handle),
 
     % when
