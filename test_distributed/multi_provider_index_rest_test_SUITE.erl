@@ -80,13 +80,16 @@ all() ->
     <<"spaces/", __SpaceId/binary, "/indexes/", __IndexName/binary>>
 ).
 
--define(XATTR_NAME, <<"onexattr">>).
--define(XATTR(__Val), #xattr{name = ?XATTR_NAME, value = __Val}).
+-define(XATTR_NAME, begin
+    __RandInt = rand:uniform(1073741824),
+    <<"onexattr_", (integer_to_binary(__RandInt))/binary>>
+end).
+-define(XATTR(__XattrName, __Val), #xattr{name = __XattrName, value = __Val}).
 
--define(MAP_FUNCTION,
+-define(MAP_FUNCTION(XattrName),
     <<"function (id, meta) {
-        if(meta['", ?XATTR_NAME/binary,"']) {
-            return [meta['", ?XATTR_NAME/binary,"'], id];
+        if(meta['", XattrName/binary,"']) {
+            return [meta['", XattrName/binary,"'], id];
         }
         return null;
     }">>
@@ -100,10 +103,10 @@ all() ->
     }">>
 ).
 
--define(REDUCE_FUNCTION,
+-define(REDUCE_FUNCTION(XattrName),
     <<"function (id, meta) {
-        if(meta['", ?XATTR_NAME/binary,"']) {
-            return [meta['", ?XATTR_NAME/binary,"'], id];
+        if(meta['", XattrName/binary,"']) {
+            return [meta['", XattrName/binary,"'], id];
         }
         return null;
     }">>
@@ -118,18 +121,19 @@ create_get_update_delete_index(Config) ->
     Provider1 = ?PROVIDER_ID(WorkerP1),
     Provider2 = ?PROVIDER_ID(WorkerP2),
     IndexName = <<"name1">>,
+    XattrName = ?XATTR_NAME,
 
     % create on one provider
     ?assertMatch([], list_indexes_via_rest(Config, WorkerP1, ?SPACE_ID, 100)),
     Options1 = #{<<"update_min_changes">> => 10000},
     ?assertMatch(ok, create_index_via_rest(
-        Config, WorkerP1, ?SPACE_ID, IndexName, ?MAP_FUNCTION, false, [], Options1
+        Config, WorkerP1, ?SPACE_ID, IndexName, ?MAP_FUNCTION(XattrName), false, [], Options1
     )),
     ?assertMatch([IndexName], list_indexes_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
     ?assertMatch([IndexName], list_indexes_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
 
     % get on both
-    ExpMapFun = index_utils:escape_js_function(?MAP_FUNCTION),
+    ExpMapFun = index_utils:escape_js_function(?MAP_FUNCTION(XattrName)),
     lists:foreach(fun(Worker) ->
         ?assertMatch({ok, #{
             <<"indexOptions">> := Options1,
@@ -171,6 +175,7 @@ overwrite_index(Config) ->
     Provider1 = ?PROVIDER_ID(WorkerP1),
     Provider2 = ?PROVIDER_ID(WorkerP2),
     IndexName = <<"name1">>,
+    XattrName = ?XATTR_NAME,
 
     % create
     ?assertMatch([], list_indexes_via_rest(Config, WorkerP1, ?SPACE_ID, 100)),
@@ -180,12 +185,12 @@ overwrite_index(Config) ->
     },
     ?assertMatch(ok, create_index_via_rest(
         Config, WorkerP1, ?SPACE_ID, IndexName,
-        ?MAP_FUNCTION, false, [Provider2], Options
+        ?MAP_FUNCTION(XattrName), false, [Provider2], Options
     )),
     ?assertMatch([IndexName], list_indexes_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
     ?assertMatch([IndexName], list_indexes_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
 
-    ExpMapFun1 = index_utils:escape_js_function(?MAP_FUNCTION),
+    ExpMapFun1 = index_utils:escape_js_function(?MAP_FUNCTION(XattrName)),
     lists:foreach(fun(Worker) ->
         ?assertMatch({ok, #{
             <<"indexOptions">> := Options,
@@ -224,17 +229,18 @@ create_get_delete_reduce_fun(Config) ->
     Workers = [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     Provider1 = ?PROVIDER_ID(WorkerP1),
     IndexName = <<"name1">>,
+    XattrName = ?XATTR_NAME,
 
     % create on one provider
     ?assertMatch([], list_indexes_via_rest(Config, WorkerP1, ?SPACE_ID, 100)),
     ?assertMatch(ok, create_index_via_rest(
-        Config, WorkerP1, ?SPACE_ID, IndexName, ?MAP_FUNCTION, false
+        Config, WorkerP1, ?SPACE_ID, IndexName, ?MAP_FUNCTION(XattrName), false
     )),
     ?assertMatch([IndexName], list_indexes_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
     ?assertMatch([IndexName], list_indexes_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
 
     % get on both
-    ExpMapFun = index_utils:escape_js_function(?MAP_FUNCTION),
+    ExpMapFun = index_utils:escape_js_function(?MAP_FUNCTION(XattrName)),
     lists:foreach(fun(Worker) ->
         ?assertMatch({ok, #{
             <<"indexOptions">> := #{},
@@ -247,13 +253,13 @@ create_get_delete_reduce_fun(Config) ->
 
     % add reduce function
     ?assertMatch(ok, add_reduce_fun_via_rest(
-        Config, WorkerP1, ?SPACE_ID, IndexName, ?REDUCE_FUNCTION
+        Config, WorkerP1, ?SPACE_ID, IndexName, ?REDUCE_FUNCTION(XattrName)
     )),
     ?assertMatch([IndexName], list_indexes_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
     ?assertMatch([IndexName], list_indexes_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
 
     % get on both after adding reduce
-    ExpReduceFun = index_utils:escape_js_function(?REDUCE_FUNCTION),
+    ExpReduceFun = index_utils:escape_js_function(?REDUCE_FUNCTION(XattrName)),
     lists:foreach(fun(Worker) ->
         ?assertMatch({ok, #{
             <<"indexOptions">> := #{},
@@ -300,12 +306,13 @@ getting_index_of_not_supported_space_should_fail(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     IndexName = <<"name1">>,
     SpaceId = <<"space2">>,
+    XattrName = ?XATTR_NAME,
 
     ?assertMatch(ok, create_index_via_rest(
-        Config, WorkerP2, SpaceId, IndexName, ?MAP_FUNCTION, false
+        Config, WorkerP2, SpaceId, IndexName, ?MAP_FUNCTION(XattrName), false
     )),
 
-    ExpMapFun = index_utils:escape_js_function(?MAP_FUNCTION),
+    ExpMapFun = index_utils:escape_js_function(?MAP_FUNCTION(XattrName)),
     ExpProviders = [?PROVIDER_ID(WorkerP2)],
     ?assertMatch({ok, #{
         <<"indexOptions">> := #{},
@@ -322,7 +329,6 @@ getting_index_of_not_supported_space_should_fail(Config) ->
 
 list_indexes(Config) ->
     Workers = [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-
     IndexNum = 20,
     Chunk = rand:uniform(IndexNum),
 
@@ -332,8 +338,9 @@ list_indexes(Config) ->
     IndexNames = lists:sort(lists:map(fun(Num) ->
         Worker = lists:nth(rand:uniform(length(Workers)), Workers),
         IndexName = <<"index_name_", (integer_to_binary(Num))/binary>>,
+        XattrName = ?XATTR_NAME,
         ?assertMatch(ok, create_index_via_rest(
-            Config, Worker, ?SPACE_ID, IndexName, ?MAP_FUNCTION
+            Config, Worker, ?SPACE_ID, IndexName, ?MAP_FUNCTION(XattrName)
         )),
         IndexName
     end, lists:seq(1, IndexNum))),
@@ -346,14 +353,15 @@ query_index(Config) ->
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     IndexName = <<"index_10">>,
+    XattrName = ?XATTR_NAME,
 
     Query = query_filter(Config, SpaceId, IndexName),
     FilePrefix = atom_to_list(?FUNCTION_NAME),
-    Guids = create_files_with_xattrs(WorkerP1, SessionId, SpaceName, FilePrefix, 5),
+    Guids = create_files_with_xattrs(WorkerP1, SessionId, SpaceName, FilePrefix, 5, XattrName),
 
     % support index only by one provider; other should return error on query
     ?assertMatch(ok, create_index_via_rest(
-        Config, WorkerP1, SpaceId, IndexName, ?MAP_FUNCTION,
+        Config, WorkerP1, SpaceId, IndexName, ?MAP_FUNCTION(XattrName),
         false, [?PROVIDER_ID(WorkerP2)], #{}
     )),
 
@@ -364,7 +372,7 @@ query_index(Config) ->
 
     % support index on both providers and check that they returns correct results
     ?assertMatch(ok, create_index_via_rest(
-        Config, WorkerP1, SpaceId, IndexName, ?MAP_FUNCTION,
+        Config, WorkerP1, SpaceId, IndexName, ?MAP_FUNCTION(XattrName),
         false, [?PROVIDER_ID(WorkerP1), ?PROVIDER_ID(WorkerP2)], #{}
     )),
     ?assertEqual(ExpGuids, Query(WorkerP1, #{}), ?ATTEMPTS),
@@ -372,7 +380,7 @@ query_index(Config) ->
 
     % remove support for index on one provider
     ?assertMatch(ok, create_index_via_rest(
-        Config, WorkerP2, SpaceId, IndexName, ?MAP_FUNCTION,
+        Config, WorkerP2, SpaceId, IndexName, ?MAP_FUNCTION(XattrName),
         false, [?PROVIDER_ID(WorkerP1)], #{}
     )),
     ?assertEqual(ExpGuids, Query(WorkerP1, #{}), ?ATTEMPTS).
@@ -458,16 +466,17 @@ file_removal_test(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    IndexName = <<"index_11">>,
+    IndexName = <<"file_removal_test_index">>,
+    XattrName = ?XATTR_NAME,
 
     Query = query_filter(Config, SpaceId, IndexName),
     FilePrefix = atom_to_list(?FUNCTION_NAME),
-    Guids = create_files_with_xattrs(WorkerP1, SessionId, SpaceName, FilePrefix, 5),
+    Guids = create_files_with_xattrs(WorkerP1, SessionId, SpaceName, FilePrefix, 5, XattrName),
     ExpGuids = lists:sort(Guids),
 
     % support index on both providers and check that they returns correct results
     ?assertMatch(ok, create_index_via_rest(
-        Config, WorkerP1, SpaceId, IndexName, ?MAP_FUNCTION,
+        Config, WorkerP1, SpaceId, IndexName, ?MAP_FUNCTION(XattrName),
         false, [?PROVIDER_ID(WorkerP1), ?PROVIDER_ID(WorkerP2)], #{}
     )),
     ?assertEqual(ExpGuids, Query(WorkerP1, #{}), ?ATTEMPTS),
@@ -746,13 +755,13 @@ query_filter(Config, SpaceId, IndexName) ->
         end
     end.
 
-create_files_with_xattrs(Node, SessionId, SpaceName, Prefix, Num) ->
+create_files_with_xattrs(Node, SessionId, SpaceName, Prefix, Num, XattrName) ->
     lists:map(fun(X) ->
         Path = list_to_binary(filename:join(
             ["/", binary_to_list(SpaceName), Prefix ++ integer_to_list(X)]
         )),
         {ok, Guid} = lfm_proxy:create(Node, SessionId, Path, 8#777),
-        ok = lfm_proxy:set_xattr(Node, SessionId, {guid, Guid}, ?XATTR(X)),
+        ok = lfm_proxy:set_xattr(Node, SessionId, {guid, Guid}, ?XATTR(XattrName, X)),
         Guid
     end, lists:seq(1, Num)).
 
