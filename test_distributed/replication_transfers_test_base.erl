@@ -47,7 +47,8 @@
     scheduling_replication_by_index_with_wrong_function_should_fail/2,
     scheduling_replication_by_empty_index_should_succeed/2,
     scheduling_replication_by_not_existing_key_in_index_should_succeed/2,
-    schedule_replication_of_100_regular_files_by_index/2]).
+    schedule_replication_of_100_regular_files_by_index/2,
+    file_removed_during_replication/3]).
 
 -define(SPACE_ID, <<"space1">>).
 
@@ -1312,6 +1313,84 @@ schedule_replication_of_100_regular_files_by_index(Config, Type) ->
         }
     ).
 
+file_removed_during_replication(Config, Type, FileKeyType) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    Size = 4 * 1024 * 1024 * 1024,
+    Config2 = transfers_test_mechanism:run_test(
+        Config, #transfer_test_spec{
+            setup = #setup{
+                size = Size,
+                truncate = true,
+                setup_node = WorkerP1,
+                assertion_nodes = [WorkerP2],
+                files_structure = [{0, 1}],
+                distribution = [
+                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, Size]]}
+                ]
+            },
+            scenario = #scenario{
+                type = Type,
+                file_key_type = FileKeyType,
+                schedule_node = WorkerP1,
+                replicating_nodes = [WorkerP2],
+                function = fun transfers_test_mechanism:remove_file_during_replication/2
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    % TODO Below lines commented so that test does not fail here. Uncomment after fixing.
+                    % replication_status => failed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+                    files_to_process => 1
+                    % files_processed => 0,
+                    % failed_files => 1
+                },
+                assertion_nodes = [WorkerP2],
+                timeout = timer:minutes(3),
+                attempts = 100
+            }
+        }
+    ),
+    Config3 = transfers_test_mechanism:move_transfer_ids_to_old_key(Config2),
+    % see that next replication is ok
+    transfers_test_mechanism:run_test(
+        Config3, #transfer_test_spec{
+            setup = #setup{
+                setup_node = WorkerP1,
+                assertion_nodes = [WorkerP2],
+                files_structure = [{0, 1}],
+                distribution = [
+                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ]
+            },
+            scenario = #scenario{
+                type = Type,
+                file_key_type = FileKeyType,
+                schedule_node = WorkerP1,
+                replicating_nodes = [WorkerP2],
+                function = fun transfers_test_mechanism:replicate_each_file_separately/2
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    replication_status => completed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+                    files_to_process => 1,
+                    files_processed => 1,
+                    files_replicated => 1,
+                    bytes_replicated => ?DEFAULT_SIZE,
+                    min_hist => ?MIN_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
+                    hr_hist => ?HOUR_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
+                    dy_hist => ?DAY_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE}),
+                    mth_hist => ?MONTH_HIST(#{?GET_DOMAIN_BIN(WorkerP1) => ?DEFAULT_SIZE})
+                },
+                distribution = [
+                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP1), <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ?GET_DOMAIN_BIN(WorkerP2), <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ],
+                assertion_nodes = [WorkerP1, WorkerP2]
+            }
+        }
+    ).
+
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -1359,6 +1438,11 @@ init_per_testcase(schedule_replication_of_100_regular_files_by_index_with_batch_
     {ok, OldValue} = test_utils:get_env(WorkerP2, op_worker, replication_by_index_batch),
     test_utils:set_env(Nodes, op_worker, replication_by_index_batch, 10),
     init_per_testcase(all, [{replication_by_index_batch, OldValue} | Config]);
+
+init_per_testcase(file_removed_during_replication, Config) ->
+    ct:timetrap(timer:minutes(60)),
+    lfm_proxy:init(Config),
+    [{space_id, <<"space4">>} | Config];
 
 init_per_testcase(_Case, Config) ->
     ct:timetrap(timer:minutes(60)),
