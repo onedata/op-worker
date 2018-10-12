@@ -299,21 +299,32 @@ iterate_and_remove(StKey, StorageTable, DBKey, DBTable, FileCtx, SpaceId, Storag
 %%-------------------------------------------------------------------
 -spec save_db_children_names(atom(), file_ctx:ctx()) -> ok.
 save_db_children_names(TableName, FileCtx) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
-    file_meta:foreach_child({uuid, FileUuid}, fun
-        (LinkName, _LinkTarget, AccIn) ->
-            case file_meta:is_hidden(LinkName) of
-                true ->
-                    AccIn;
-                false ->
-                    ets:insert(TableName, {LinkName, undefined}),
-                    AccIn
-            end
-    end, []),
-
+    save_db_children_names(TableName, FileCtx, UserCtx, 0, ?DIR_BATCH),
     First = ets:first(TableName),
     filter_children_in_db(First, FileCtx, UserCtx, TableName).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Helper function for save_db_children_names/2
+%% @end
+%%-------------------------------------------------------------------
+-spec save_db_children_names(atom(), file_ctx:ctx(), user_ctx:ctx(),
+    non_neg_integer(), non_neg_integer()) -> ok.
+save_db_children_names(TableName, FileCtx, UserCtx, Offset, Batch) ->
+    {ChildrenCtxs, FileCtx2} = file_ctx:get_file_children(FileCtx, UserCtx, 0, ?DIR_BATCH),
+    lists:foreach(fun(ChildCtx) ->
+        {FileName, _} = file_ctx:get_aliased_name(ChildCtx, UserCtx),
+        ets:insert(TableName, {FileName, undefined})
+    end, ChildrenCtxs),
+
+    case length(ChildrenCtxs) < ?DIR_BATCH of
+        true ->
+            ok;
+        false ->
+            save_db_children_names(TableName, FileCtx2, UserCtx, Offset + Batch, Batch)
+    end.
 
 %%-------------------------------------------------------------------
 %% @private
@@ -326,25 +337,34 @@ save_db_children_names(TableName, FileCtx) ->
 filter_children_in_db('$end_of_table', _FileCtx, _UserCtx, _TableName) ->
     ok;
 filter_children_in_db(LinkName, FileCtx, UserCtx, TableName) ->
-    {ChildCtx, _} = file_ctx:get_child(FileCtx, LinkName, UserCtx),
-    {IsDir, ChildCtx2} = file_ctx:is_dir(ChildCtx),
-    case IsDir of
-        true ->
-            {DirLocation, _} = file_ctx:get_dir_location_doc(ChildCtx2),
-            case dir_location:is_storage_file_created(DirLocation) of
-                true ->
-                    ok;
-                _ ->
-                    ets:delete(TableName, LinkName)
-            end;
-        _ ->
-            {FileLocation, _} = file_ctx:get_local_file_location_doc(ChildCtx2, false),
-            case file_location:is_storage_file_created(FileLocation) of
-                true ->
-                    ok;
-                _ ->
-                    ets:delete(TableName, LinkName)
-            end
+    try
+        {ChildCtx, _} = file_ctx:get_child(FileCtx, LinkName, UserCtx),
+        {IsDir, ChildCtx2} = file_ctx:is_dir(ChildCtx),
+        case IsDir of
+            true ->
+                {DirLocation, _} = file_ctx:get_dir_location_doc(ChildCtx2),
+                case dir_location:is_storage_file_created(DirLocation) of
+                    true ->
+                        ok;
+                    _ ->
+                        ets:delete(TableName, LinkName)
+                end;
+            _ ->
+                {FileLocation, _} = file_ctx:get_local_file_location_doc(ChildCtx2, false),
+                case file_location:is_storage_file_created(FileLocation) of
+                    true ->
+                        ok;
+                    _ ->
+                        ets:delete(TableName, LinkName)
+                end
+        end
+    catch
+        throw:?ENOENT ->
+            ?warning_stacktrace("full_update:filter_children_in_db failed with enoent for file ~p", [LinkName]),
+            ets:delete(TableName, LinkName);
+        Error:Reason  ->
+            ?error_stacktrace("full_update:filter_children_in_db failed with unexpected ~p:~p for file ~p", [Error, Reason, LinkName]),
+            ets:delete(TableName, LinkName)
     end,
     filter_children_in_db(ets:next(TableName, LinkName), FileCtx, UserCtx, TableName).
 
