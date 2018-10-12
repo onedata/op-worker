@@ -33,9 +33,11 @@
     replicate_each_file_separately/2,
     error_on_replicating_files/2,
     cancel_replication_on_target_nodes/2,
+    remove_file_during_replication/2,
     evict_root_directory/2,
     evict_each_file_replica_separately/2,
     schedule_replica_eviction_without_permissions/2,
+    remove_file_during_eviction/2,
     migrate_root_directory/2,
     migrate_each_file_replica_separately/2,
     schedule_replica_migration_without_permissions/2,
@@ -49,7 +51,7 @@
 -export([move_transfer_ids_to_old_key/1]).
 
 % functions exported to be called by rpc
--export([create_files_structure/10, create_file/6,
+-export([create_files_structure/11, create_file/7,
     assert_file_visible/5, assert_file_distribution/6, prereplicate_file/6,
     cast_files_prereplication/5, update_config/4, schedule_replication_by_index/8]).
 
@@ -177,7 +179,7 @@ cancel_replication_on_target_nodes(Config, #scenario{
     end, ReplicatingNodes),
 
     utils:pforeach(fun({TargetNode, Tid, _Guid, _Path}) ->
-        await_transfer_starts(TargetNode, Tid),
+        await_replication_starts(TargetNode, Tid),
         cancel_transfer(TargetNode, Tid, Config, Type)
     end, NodesTransferIdsAndFiles),
 
@@ -220,6 +222,34 @@ fail_to_replicate_files_from_index(Config, #scenario{
             TargetProviderId, User, SpaceId, IndexName, QueryViewParams, Config, Type))
     end, ReplicatingNodes),
     Config.
+
+
+remove_file_during_replication(Config, #scenario{
+    user = User,
+    type = Type,
+    file_key_type = FileKeyType,
+    schedule_node = ScheduleNode,
+    replicating_nodes = ReplicatingNodes
+}) ->
+    FilesGuidsAndPaths = ?config(?FILES_KEY, Config),
+    NodesTransferIdsAndFiles = lists:flatmap(fun(TargetNode) ->
+        lists:map(fun({Guid, Path}) ->
+            FileKey = file_key(Guid, Path, FileKeyType),
+            TargetProviderId = transfers_test_utils:provider_id(TargetNode),
+            {ok, Tid} = schedule_file_replication(ScheduleNode, TargetProviderId, User, FileKey, Config, Type),
+            {TargetNode, Tid, Guid, Path}
+        end, FilesGuidsAndPaths)
+    end, ReplicatingNodes),
+
+    utils:pforeach(fun({TargetNode, Tid, Guid, Path}) ->
+        FileKey = file_key(Guid, Path, FileKeyType),
+        await_replication_starts(TargetNode, Tid),
+        ok = remove_file(ScheduleNode, User, FileKey, Config)
+    end, NodesTransferIdsAndFiles),
+
+    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
+        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
+    end, Config, []).
 
 %%%===================================================================
 %%% Eviction scenarios
@@ -319,6 +349,34 @@ fail_to_evict_replicas_from_index(Config, #scenario{
             EvictingProviderId, User, SpaceId, IndexName, QueryViewParams, Config, Type))
     end, EvictingNodes),
     Config.
+
+remove_file_during_eviction(Config, #scenario{
+    user = User,
+    type = Type,
+    file_key_type = FileKeyType,
+    schedule_node = ScheduleNode,
+    evicting_nodes  = EvictingNodes
+}) ->
+    FilesGuidsAndPaths = ?config(?FILES_KEY, Config),
+    NodesTransferIdsAndFiles = lists:flatmap(fun(EvictingNode) ->
+        lists:map(fun({Guid, Path}) ->
+            FileKey = file_key(Guid, Path, FileKeyType),
+            EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
+            {ok, Tid} = schedule_replica_eviction(ScheduleNode, EvictingProviderId,  User, FileKey, Config, Type),
+            ok = remove_file(ScheduleNode, User, FileKey, Config),
+            {EvictingNode, Tid, Guid, Path}
+        end, FilesGuidsAndPaths)
+    end, EvictingNodes),
+    
+    utils:pforeach(fun({EvictingNode, Tid, Guid, Path}) ->
+        FileKey = file_key(Guid, Path, FileKeyType),
+        await_transfer_starts(EvictingNode, Tid),
+        ok = remove_file(ScheduleNode, User, FileKey, Config)
+    end, NodesTransferIdsAndFiles),
+
+    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
+        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
+    end, Config, []).
 
 %%%===================================================================
 %%% Migration scenarios
@@ -583,6 +641,7 @@ create_files(Config, #setup{
     root_directory = RootDirectory,
     mode = Mode,
     size = Size,
+    truncate = Truncate,
     file_prefix = FilePrefix,
     dir_prefix = DirPrefix,
     timeout = Timetrap
@@ -598,7 +657,7 @@ create_files(Config, #setup{
 
     {RootDirGuid, RootDirPath} = maybe_create_root_dir(SetupNode, RootDirectory2, SessionId, SpaceId),
     cast_create_files_structure(SetupNode, SessionId, FilesStructure, Mode, Size,
-        RootDirPath, FilesCounterRef, DirsCounterRef, FilePrefix, DirPrefix
+        RootDirPath, FilesCounterRef, DirsCounterRef, FilePrefix, DirPrefix, Truncate
     ),
 
     DirsGuidsAndPaths = countdown_server:await(SetupNode, DirsCounterRef, Timetrap),
@@ -788,45 +847,50 @@ validate_root_directory(Path = <<"/", _>>) ->
 validate_root_directory(_) -> ok.
 
 create_files_structure(_Scheduler, _SessionId, [], _Mode, _Size,
-    _RootDirPath, _FilesCounterRef, _DirsCounterRef, _FilePrefix, _DirPrefix) ->
+    _RootDirPath, _FilesCounterRef, _DirsCounterRef, _FilePrefix, _DirPrefix, _Truncate) ->
     ok;
 create_files_structure(Scheduler, SessionId, [{SubDirs, SubFiles} | Rest], Mode,
-    Size, RootDirPath, FilesCounterRef, DirsCounterRef, FilePrefix, DirPrefix
+    Size, RootDirPath, FilesCounterRef, DirsCounterRef, FilePrefix, DirPrefix, Truncate
 ) ->
     cast_subfiles_creation(Scheduler, SessionId, SubFiles, Mode, Size,
-        RootDirPath, FilesCounterRef, FilePrefix),
+        RootDirPath, FilesCounterRef, FilePrefix, Truncate),
     cast_subdirs_creation(Scheduler, SessionId, SubDirs, Rest, Mode, Size,
-        RootDirPath, FilesCounterRef, DirsCounterRef, FilePrefix, DirPrefix).
+        RootDirPath, FilesCounterRef, DirsCounterRef, FilePrefix, DirPrefix, Truncate).
 
 create_dir(Node, SessionId, DirPath, CounterRef) ->
     {ok, DirGuid} = lfm_proxy:mkdir(Node, SessionId, DirPath),
     mark_dir_created(Node, DirGuid, DirPath, CounterRef).
 
 cast_subfiles_creation(Node, SessionId, SubfilesNum, Mode, Size, ParentPath,
-    FilesCounterRef, FilePrefix) ->
+    FilesCounterRef, FilePrefix, Truncate) ->
     lists:foreach(fun(N) ->
         FilePath = subfile_path(ParentPath, FilePrefix, N),
-        cast_file_creation(Node, SessionId, FilePath, Mode, Size, FilesCounterRef)
+        cast_file_creation(Node, SessionId, FilePath, Mode, Size, FilesCounterRef, Truncate)
     end, lists:seq(1, SubfilesNum)).
 
 cast_subdirs_creation(Node, SessionId, SubDirsNum, Structure, Mode, Size,
-    ParentPath, FilesCounterRef, DirsCounterRef, FilePrefix, DirPrefix) ->
+    ParentPath, FilesCounterRef, DirsCounterRef, FilePrefix, DirPrefix, Truncate) ->
     lists:foreach(fun(N) ->
         DirPath = subdir_path(ParentPath, DirPrefix, N),
         create_dir(Node, SessionId, DirPath, DirsCounterRef),
         cast_create_files_structure(Node, SessionId, Structure, Mode, Size,
-            DirPath, FilesCounterRef, DirsCounterRef, FilePrefix, DirPrefix)
+            DirPath, FilesCounterRef, DirsCounterRef, FilePrefix, DirPrefix, Truncate)
     end, lists:seq(1, SubDirsNum)).
 
-cast_file_creation(Node, SessionId, FilePath, Mode, Size, CounterRef) ->
+cast_file_creation(Node, SessionId, FilePath, Mode, Size, CounterRef, Truncate) ->
     ok = worker_pool:cast(?WORKER_POOL, {?MODULE, create_file,
-        [Node, SessionId, FilePath, Mode, Size, CounterRef]
+        [Node, SessionId, FilePath, Mode, Size, CounterRef, Truncate]
     }).
 
-create_file(Node, SessionId, FilePath, Mode, Size, CounterRef) ->
+create_file(Node, SessionId, FilePath, Mode, Size, CounterRef, Truncate) ->
     {ok, Guid} = lfm_proxy:create(Node, SessionId, FilePath, Mode),
     {ok, Handle} = lfm_proxy:open(Node, SessionId, {guid, Guid}, write),
-    {ok, _} = lfm_proxy:write(Node, Handle, 0, crypto:strong_rand_bytes(Size)),
+    case Truncate of
+        true ->
+            ok = lfm_proxy:truncate(Node, SessionId, {guid, Guid}, Size);
+        _ ->
+            {ok, _} = lfm_proxy:write(Node, Handle, 0, crypto:strong_rand_bytes(Size))
+    end,
     ok = lfm_proxy:close(Node, Handle),
     mark_file_created(Node, Guid, FilePath, CounterRef).
 
@@ -837,17 +901,21 @@ mark_dir_created(Node, DirGuid, DirPath, CounterRef) ->
     countdown_server:decrease(Node, CounterRef, {DirGuid, DirPath}).
 
 cast_create_files_structure(Node, SessionId, Structure, Mode, Size, ParentPath,
-    FilesCounterRef, DirsCounterRef, FilePrefix, DirPrefix
+    FilesCounterRef, DirsCounterRef, FilePrefix, DirPrefix, Truncate
 ) ->
     ok = worker_pool:cast(?WORKER_POOL, {?MODULE, create_files_structure,
         [Node, SessionId, Structure, Mode, Size, ParentPath, FilesCounterRef,
-            DirsCounterRef, FilePrefix, DirPrefix]}).
+            DirsCounterRef, FilePrefix, DirPrefix, Truncate]}).
 
 subfile_path(ParentPath, FilePrefix, N) ->
     filename:join([ParentPath, <<FilePrefix/binary, (integer_to_binary(N))/binary>>]).
 
 subdir_path(ParentPath, DirPrefix, N) ->
     filename:join([ParentPath, <<DirPrefix/binary, (integer_to_binary(N))/binary>>]).
+
+remove_file(Node, User, FileKey, Config) ->
+    SessionId = ?USER_SESSION(Node, User, Config),
+    lfm_proxy:unlink(Node, SessionId, FileKey).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -888,7 +956,7 @@ update_config(Key, UpdateFun, Config, DefaultValue) ->
         OldValue ->
             lists:keyreplace(Key, 1, Config, {Key, UpdateFun(OldValue)})
     end.
-
+    
 schedule_file_replication(ScheduleNode, ProviderId, User, FileKey, Config, lfm) ->
     schedule_file_replication_by_lfm(ScheduleNode, ProviderId, User, FileKey, Config);
 schedule_file_replication(ScheduleNode, ProviderId, User, FileKey, Config, rest) ->
@@ -1103,7 +1171,7 @@ transfer_fields_description(Node, TransferId) ->
         {AccFormat ++ "    ~p = ~p~n", AccArgs ++ [FieldName, get_transfer_value(Transfer, FieldName)]}
     end, {"~nTransfer ~p fields values:~n", [TransferId]}, FieldsList).
 
-await_transfer_starts(Node, TransferId) ->
+await_replication_starts(Node, TransferId) ->
     ?assertEqual(true, begin
         try
             #transfer{
@@ -1114,6 +1182,19 @@ await_transfer_starts(Node, TransferId) ->
         catch
             throw:transfer_not_found ->
                 false
+        end
+    end, 60).
+
+await_transfer_starts(Node, TransferId) ->
+    ?assertEqual(true, begin
+        try
+            #transfer{
+               start_time = StartTime
+            } = transfers_test_utils:get_transfer(Node, TransferId),
+            StartTime > 0
+        catch
+            throw:transfer_not_found ->
+               false
         end
     end, 60).
 
