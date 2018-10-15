@@ -44,11 +44,13 @@
     schedule_replication_of_regular_file_by_index/2,
     schedule_replication_of_regular_file_by_index_with_reduce/2,
     scheduling_replication_by_not_existing_index_should_fail/2,
-    scheduling_replication_by_index_with_wrong_function_should_fail/2,
+    scheduling_replication_by_index_with_function_returning_wrong_value_should_fail/2,
     scheduling_replication_by_empty_index_should_succeed/2,
     scheduling_replication_by_not_existing_key_in_index_should_succeed/2,
     schedule_replication_of_100_regular_files_by_index/2,
-    file_removed_during_replication/3]).
+    file_removed_during_replication/3,
+    scheduling_replication_by_index_returning_not_existing_file_should_fail/2
+]).
 
 -define(SPACE_ID, <<"space1">>).
 
@@ -1060,7 +1062,7 @@ scheduling_replication_by_not_existing_index_should_fail(Config, Type) ->
         }
     ).
 
-scheduling_replication_by_index_with_wrong_function_should_fail(Config, Type) ->
+scheduling_replication_by_index_with_function_returning_wrong_value_should_fail(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId2 = ?DEFAULT_SESSION(WorkerP2, Config),
     SpaceId = ?SPACE_ID,
@@ -1131,6 +1133,82 @@ scheduling_replication_by_index_with_wrong_function_should_fail(Config, Type) ->
             }
         }
     ).
+
+scheduling_replication_by_index_returning_not_existing_file_should_fail(Config, Type) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId2 = ?DEFAULT_SESSION(WorkerP2, Config),
+    SpaceId = ?SPACE_ID,
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
+
+    Config2 = transfers_test_mechanism:run_test(
+        Config, #transfer_test_spec{
+            setup = #setup{
+                setup_node = WorkerP1,
+                files_structure = [{0, 1}],
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type),
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ],
+                assertion_nodes = [WorkerP1, WorkerP2]
+            }}),
+
+    [{FileGuid, _}] = ?config(?FILES_KEY, Config2),
+    % set xattr on file to be replicated
+    XattrName = transfers_test_utils:random_job_name(?FUNCTION_NAME),
+    XattrValue = 1,
+    Xattr = #xattr{name = XattrName, value = XattrValue},
+    ct:pal("~p", [cdmi_id:guid_to_objectid(FileGuid)]),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
+    NotExistingUuid = <<"not_existing_uuid">>,
+    NotExistingGuid = fslogic_uuid:uuid_to_guid(NotExistingUuid, SpaceId),
+    {ok, NotExistingFileId} = cdmi_id:guid_to_objectid(NotExistingGuid),
+    %functions does not emit file id in values
+    MapFunction = <<
+        "function (id, meta) {
+            if(meta['", XattrName/binary,"']) {
+                return [meta['", XattrName/binary, "'], '", NotExistingFileId/binary, "'];
+            }
+        return null;
+    }">>,
+    IndexName = transfers_test_utils:random_index_name(?FUNCTION_NAME),
+    ok = transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName,
+        MapFunction, [], [ProviderId2]
+    ),
+    ?assertIndexQuery([NotExistingFileId], WorkerP2, SpaceId, IndexName,  [{key, XattrValue}]),
+    ?assertIndexVisible(WorkerP1, SpaceId, IndexName),
+
+    transfers_test_mechanism:run_test(
+        Config2, #transfer_test_spec{
+            setup = undefined,
+            scenario = #scenario{
+                type = Type,
+                schedule_node = WorkerP1,
+                replicating_nodes = [WorkerP2],
+                space_id = SpaceId,
+                function = fun transfers_test_mechanism:replicate_files_from_index/2,
+                query_view_params = [{key, XattrValue}],
+                index_name = IndexName
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    replication_status => failed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+                    files_to_process => 2,
+                    files_processed => 2,
+                    files_replicated => 0,
+                    bytes_replicated => 0,
+                    failed_files => 0
+                },
+                assertion_nodes = [WorkerP1, WorkerP2],
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ],
+                assert_transferred_file_model = false
+            }
+        }
+    ).
+
 
 scheduling_replication_by_empty_index_should_succeed(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
