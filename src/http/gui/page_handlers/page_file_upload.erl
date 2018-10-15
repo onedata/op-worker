@@ -111,7 +111,8 @@ upload_map_insert(SessionId, UploadId, FileId) ->
 %% @todo Should be redesigned in VFS-1815.
 %% @end
 %%--------------------------------------------------------------------
--spec upload_map_lookup(session:id(), UploadId :: term()) -> FileId :: term() | undefined.
+-spec upload_map_lookup(session:id(), UploadId :: term()) -> 
+    FileId :: term() | undefined.
 upload_map_lookup(SessionId, UploadId) ->
     {ok, Map} = op_gui_session:get_value(SessionId, ?UPLOAD_MAP, #{}),
     maps:get(UploadId, Map, undefined).
@@ -140,7 +141,7 @@ upload_map_delete(SessionId, UploadId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec wait_for_file_new_file_id(session:id(), UploadId :: binary()) ->
-    fslogic_worker:file_guid().
+    {fslogic_worker:file_guid(), logical_file_manager:handle()}.
 wait_for_file_new_file_id(SessionId, UploadId) ->
     wait_for_file_new_file_id(SessionId, UploadId, ?MAX_WAIT_FOR_FILE_HANDLE).
 wait_for_file_new_file_id(_SessionId, _, Timeout) when Timeout < 0 ->
@@ -153,7 +154,9 @@ wait_for_file_new_file_id(SessionId, UploadId, Timeout) ->
                 SessionId, UploadId, Timeout - ?INTERVAL_WAIT_FOR_FILE_HANDLE
             );
         FileId ->
-            FileId
+            {ok, FileHandle} = logical_file_manager:open(
+                SessionId, {guid, FileId}, write),
+            {FileId, FileHandle}
     end.
 
 
@@ -194,9 +197,7 @@ multipart(Req, SessionId, Params) ->
                     {ok, FieldValue, Req3} = cowboy_req:read_part_body(Req2),
                     multipart(Req3, SessionId, [{FieldName, FieldValue} | Params]);
                 {file, _FieldName, _Filename, _CType} ->
-                    FileId = get_new_file_id(SessionId, Params),
-                    {ok, FileHandle} = logical_file_manager:open(
-                        SessionId, {guid, FileId}, write),
+                    {FileId, FileHandle} = get_new_file_id(SessionId, Params),
                     ChunkNumber = get_int_param(
                         <<"resumableChunkNumber">>, Params),
                     ChunkSize = get_int_param(
@@ -267,7 +268,7 @@ stream_file(Req, FileHandle, Offset, Opts) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_new_file_id(session:id(), Params :: proplists:proplist()) ->
-    file_meta:uuid().
+    {fslogic_worker:file_guid(), logical_file_manager:handle()}.
 get_new_file_id(SessionId, Params) ->
     UploadId = get_bin_param(<<"resumableIdentifier">>, Params),
     ChunkNumber = get_int_param(<<"resumableChunkNumber">>, Params),
@@ -280,9 +281,9 @@ get_new_file_id(SessionId, Params) ->
             {ok, ParentPath} = logical_file_manager:get_file_path(
                 SessionId, ParentId),
             ProposedPath = filename:join([ParentPath, FileName]),
-            FileId = create_unique_file(SessionId, ProposedPath),
+            {FileId, FileHandle} = create_unique_file(SessionId, ProposedPath),
             upload_map_insert(SessionId, UploadId, FileId),
-            FileId;
+            {FileId, FileHandle};
         _ ->
             wait_for_file_new_file_id(SessionId, UploadId, ?MAX_WAIT_FOR_FILE_HANDLE)
     end.
@@ -325,7 +326,8 @@ get_bin_param(Key, Params) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_unique_file(SessionId :: session:id(),
-    OriginalPath :: file_meta:path()) -> file_meta:uuid().
+    OriginalPath :: file_meta:path()) ->
+    {fslogic_worker:file_guid(), logical_file_manager:handle()}.
 create_unique_file(SessionId, OriginalPath) ->
     create_unique_file(SessionId, OriginalPath, 0).
 
@@ -339,7 +341,8 @@ create_unique_file(SessionId, OriginalPath) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_unique_file(SessionId :: session:id(),
-    OriginalPath :: file_meta:path(), Tries :: integer()) -> file_meta:uuid().
+    OriginalPath :: file_meta:path(), Tries :: integer()) -> 
+    {fslogic_worker:file_guid(), logical_file_manager:handle()}.
 create_unique_file(_, _, ?MAX_UNIQUE_FILENAME_COUNTER) ->
     throw(filename_occupied);
 
@@ -355,8 +358,9 @@ create_unique_file(SessionId, OriginalPath, Counter) ->
     % @todo use exists when it is implemented
     case logical_file_manager:stat(SessionId, {path, ProposedPath}) of
         {error, _} ->
-            {ok, FileId} = logical_file_manager:create(SessionId, ProposedPath),
-            FileId;
+            {ok, {FileId, FileHandle}} = logical_file_manager:create_and_open(
+                SessionId, ProposedPath, undefined, write),
+            {FileId, FileHandle};
         {ok, _} ->
             create_unique_file(SessionId, OriginalPath, Counter + 1)
     end.
