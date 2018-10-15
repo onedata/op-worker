@@ -1173,7 +1173,7 @@ remove_file_during_eviction(Config, Type, FileKeyType) ->
                 expected_transfer = #{
                     eviction_status => failed,
                     files_to_process => 1,
-                    files_processed => 0,
+                    files_processed => 1,
                     failed_files => 1,
                     files_evicted => 0
                 },
