@@ -47,7 +47,8 @@
     create_geospatial_index/1,
     query_geospatial_index/1,
     query_file_popularity_index/1,
-    spatial_flag_test/1
+    spatial_flag_test/1,
+    file_removal_test/1
 ]).
 
 all() ->
@@ -62,7 +63,8 @@ all() ->
         create_geospatial_index,
         query_geospatial_index,
         query_file_popularity_index,
-        spatial_flag_test
+        spatial_flag_test,
+        file_removal_test
     ]).
 
 -define(ATTEMPTS, 100).
@@ -452,6 +454,32 @@ spatial_flag_test(Config) ->
     ?assertMatch({400, _}, query_index_via_rest(Config, WorkerP1, SpaceId, IndexName, [spatial])),
     ?assertMatch({ok, _}, query_index_via_rest(Config, WorkerP1, SpaceId, IndexName, [{spatial, true}])).
 
+file_removal_test(Config) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    IndexName = <<"index_11">>,
+
+    Query = query_filter(Config, SpaceId, IndexName),
+    FilePrefix = atom_to_list(?FUNCTION_NAME),
+    Guids = create_files_with_xattrs(WorkerP1, SessionId, SpaceName, FilePrefix, 5),
+    ExpGuids = lists:sort(Guids),
+
+    % support index on both providers and check that they returns correct results
+    ?assertMatch(ok, create_index_via_rest(
+        Config, WorkerP1, SpaceId, IndexName, ?MAP_FUNCTION,
+        false, [?PROVIDER_ID(WorkerP1), ?PROVIDER_ID(WorkerP2)], #{}
+    )),
+    ?assertEqual(ExpGuids, Query(WorkerP1, #{}), ?ATTEMPTS),
+    ?assertEqual(ExpGuids, Query(WorkerP2, #{}), ?ATTEMPTS),
+
+    % remove files
+    remove_files(WorkerP1, SessionId, Guids),
+
+    % they should not be included in query results any more
+    ?assertEqual([], Query(WorkerP1, #{}), ?ATTEMPTS),
+    ?assertEqual([], Query(WorkerP1, #{}), ?ATTEMPTS).
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -727,3 +755,8 @@ create_files_with_xattrs(Node, SessionId, SpaceName, Prefix, Num) ->
         ok = lfm_proxy:set_xattr(Node, SessionId, {guid, Guid}, ?XATTR(X)),
         Guid
     end, lists:seq(1, Num)).
+
+remove_files(Node, SessionId, Guids) ->
+    lists:foreach(fun(G) ->
+        ok = lfm_proxy:unlink(Node, SessionId, {guid, G})
+    end, Guids).
