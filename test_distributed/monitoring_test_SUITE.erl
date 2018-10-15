@@ -49,7 +49,7 @@ all() ->
         main_subject_id = ?SPACE_ID,
         metric_type = storage_quota,
         provider_id = ?GET_PROVIDER_ID(__Worker)
-    }, [100], <<"<row><v>1.0000000000e+03</v></row>">>},
+    }, [100], <<"<row><v>1.0737418240e+10</v></row>">>},
     {#monitoring_id{
         main_subject_type = space,
         main_subject_id = ?SPACE_ID,

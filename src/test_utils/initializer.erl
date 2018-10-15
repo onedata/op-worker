@@ -410,8 +410,6 @@ disable_quota_limit(Config) ->
         fun(_, _) -> ok end),
     test_utils:mock_expect(Workers, space_quota, assert_write,
         fun(_) -> ok end),
-    test_utils:mock_expect(Workers, space_quota, soft_assert_write,
-        fun(_, _) -> ok end),
 
     test_utils:mock_expect(Workers, space_quota, available_size,
         fun(_) -> 100000000000000000 end),

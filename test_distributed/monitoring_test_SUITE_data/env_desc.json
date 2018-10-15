@@ -76,7 +76,7 @@
                 "providers": {
                     "p1": {
                         "storage": "/mnt/st1",
-                        "supported_size": 1000
+                        "supported_size": 10737418240
                     }
                 }
             }
