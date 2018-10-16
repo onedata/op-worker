@@ -818,7 +818,7 @@ scheduling_replica_eviction_by_not_existing_index_should_fail(Config, Type) ->
         }
     ).
 
-scheduling_replica_eviction_by_index_with_wrong_function_should_fail(Config, Type) ->
+scheduling_replica_eviction_by_index_with_function_returning_wrong_value_should_fail(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId2 = ?DEFAULT_SESSION(WorkerP2, Config),
     SpaceId = ?SPACE_ID,
