@@ -1063,9 +1063,6 @@ schedule_replication_of_regular_file_by_index2(Config, Type) ->
     transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName, MapFunction,
         [], [ProviderId2]),
 
-    ct:pal("MapFunction: ~p", [MapFunction]),
-
-
     ?assertIndexQuery([FileId], WorkerP2, SpaceId, IndexName,  [{key, JobId1}]),
     ?assertIndexQuery([FileId], WorkerP2, SpaceId, IndexName,  [{key, JobId2}]),
     ?assertIndexVisible(WorkerP1, SpaceId, IndexName),
