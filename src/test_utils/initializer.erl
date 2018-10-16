@@ -751,7 +751,7 @@ user_logic_mock_setup(Workers, Users) ->
         {ok, #document{key = UID, value = #od_user{
             name = UName,
             linked_accounts = [],
-            email_list = [],
+            emails = [],
             alias = <<>>,
             default_space = DefaultSpaceId,
             eff_spaces = SpaceIds,

@@ -956,7 +956,7 @@ init_per_testcase(Case, Config) when
             {ok, #document{value = #od_user{
                 name = <<"whatever">>,
                 alias = <<"whatever">>,
-                email_list = [<<"whatever">>],
+                emails = [<<"whatever">>],
                 linked_accounts = []
             }}}
         end),
