@@ -128,7 +128,9 @@ data_backend(true, <<"file-property-shared">>) -> metadata_data_backend;
 data_backend(true, <<"transfer">>) -> transfer_data_backend;
 data_backend(true, <<"on-the-fly-transfer">>) -> transfer_data_backend;
 data_backend(true, <<"transfer-time-stat">>) -> transfer_data_backend;
-data_backend(true, <<"transfer-current-stat">>) -> transfer_data_backend.
+data_backend(true, <<"transfer-current-stat">>) -> transfer_data_backend;
+
+data_backend(true, <<"db-index">>) -> db_index_data_backend.
 
 
 %%--------------------------------------------------------------------

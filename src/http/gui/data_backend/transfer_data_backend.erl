@@ -124,7 +124,7 @@ create_record(<<"transfer">>, Data) ->
         <<"replicatingProvider">>, Data
     )),
     EvictingProvider = gs_protocol:null_to_undefined(proplists:get_value(
-        <<"invalidatingProvider">>, Data
+        <<"evictingProvider">>, Data
     )),
 
     TransferType = case {ReplicatingProvider, EvictingProvider} of
@@ -297,20 +297,27 @@ transfer_record(StateAndTransferId) ->
     SessionId = gui_session:get_session_id(),
     {ok, TransferDoc = #document{value = Transfer = #transfer{
         replicating_provider = ReplicatingProviderId,
-        evicting_provider = InvalidatingProviderId,
+        evicting_provider = EvictingProviderId,
         file_uuid = FileUuid,
         path = Path,
         user_id = UserId,
         space_id = SpaceId,
         schedule_time = ScheduleTime,
-        start_time = StartTime
+        start_time = StartTime,
+        index_name = IndexName
     }}} = transfer:get(TransferId),
-    FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
-    FileType = case logical_file_manager:stat(SessionId, {guid, FileGuid}) of
-        {ok, #file_attr{type = ?DIRECTORY_TYPE}} -> <<"dir">>;
-        {ok, _} -> <<"file">>;
-        {error, ?ENOENT} -> <<"deleted">>;
-        {error, _} -> <<"unknown">>
+    {DataType, DataIdentifier} = case IndexName of
+        undefined ->
+            FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
+            FileType = case logical_file_manager:stat(SessionId, {guid, FileGuid}) of
+                {ok, #file_attr{type = ?DIRECTORY_TYPE}} -> <<"dir">>;
+                {ok, _} -> <<"file">>;
+                {error, ?ENOENT} -> <<"deleted">>;
+                {error, _} -> <<"unknown">>
+            end,
+            {FileType, FileGuid};
+        _ ->
+            {<<"index">>, op_gui_utils:ids_to_association(TransferId, IndexName)}
     end,
     IsOngoing = transfer:is_ongoing(Transfer),
     FinishTime = case IsOngoing of
@@ -321,17 +328,17 @@ transfer_record(StateAndTransferId) ->
     {ok, [
         {<<"id">>, StateAndTransferId},
         {<<"index">>, LinkKey},
-        {<<"invalidatingProvider">>, gs_protocol:undefined_to_null(
-            InvalidatingProviderId
+        {<<"evictingProvider">>, gs_protocol:undefined_to_null(
+            EvictingProviderId
         )},
         {<<"replicatingProvider">>, gs_protocol:undefined_to_null(
             ReplicatingProviderId
         )},
         {<<"isOngoing">>, IsOngoing},
         {<<"space">>, SpaceId},
-        {<<"file">>, FileGuid},
-        {<<"path">>, Path},
-        {<<"fileType">>, FileType},
+        {<<"dataType">>, DataType},
+        {<<"dataIdentifier">>, DataIdentifier},
+        {<<"path">>, gs_protocol:undefined_to_null(Path)},
         {<<"systemUserId">>, UserId},
         {<<"startTime">>, StartTime},
         {<<"scheduleTime">>, ScheduleTime},
@@ -516,7 +523,7 @@ transfer_current_stat_record(TransferId) ->
     {ok, #document{value = Transfer = #transfer{
         bytes_replicated = BytesReplicated,
         files_replicated = FilesReplicated,
-        files_evicted = FilesInvalidated
+        files_evicted = FilesEvicted
     }}} = transfer:get(TransferId),
     LastUpdate = get_last_update(Transfer),
     {ok, [
@@ -525,7 +532,7 @@ transfer_current_stat_record(TransferId) ->
         {<<"timestamp">>, LastUpdate},
         {<<"replicatedBytes">>, BytesReplicated},
         {<<"replicatedFiles">>, FilesReplicated},
-        {<<"invalidatedFiles">>, FilesInvalidated}
+        {<<"evictedFiles">>, FilesEvicted}
     ]}.
 
 
@@ -533,27 +540,27 @@ transfer_current_stat_record(TransferId) ->
 %% @private
 %% @doc
 %% Returns status of given transfer. Replaces active status with 'replicating'
-%% for replication and 'invalidating' for invalidation.
-%% In case of migration 'invalidating' indicates that the transfer itself has
-%% finished, but source replica invalidation is still in progress.
+%% for replication and 'evicting' for eviction.
+%% In case of migration 'evicting' indicates that the transfer itself has
+%% finished, but source replica eviction is still in progress.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_status(transfer:record()) ->
-    transfer:status() | invalidating | replicating.
+    transfer:status() | evicting | replicating.
 get_status(T = #transfer{
     replication_status = completed,
     replicating_provider = P1,
     evicting_provider = P2
 }) when is_binary(P1) andalso is_binary(P2) ->
     case T#transfer.eviction_status of
-        scheduled -> invalidating;
-        enqueued -> invalidating;
-        active -> invalidating;
+        scheduled -> evicting;
+        enqueued -> evicting;
+        active -> evicting;
         Status -> Status
     end;
 get_status(T = #transfer{replication_status = skipped}) ->
     case T#transfer.eviction_status of
-        active -> invalidating;
+        active -> evicting;
         Status -> Status
     end;
 get_status(#transfer{replication_status = active}) -> replicating;
