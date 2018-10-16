@@ -1132,7 +1132,7 @@ create_query_string(QueryViewParams) ->
     end, <<>>, QueryViewParams).
 
 binary_from_term(Val) when is_binary(Val) ->
-    Val;
+    <<"\"", Val/binary, "\"">>;
 binary_from_term(Val) when is_integer(Val) ->
     integer_to_binary(Val);
 binary_from_term(Val) when is_float(Val) ->
