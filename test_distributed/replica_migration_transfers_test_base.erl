@@ -33,7 +33,8 @@
     fail_to_migrate_file_replica_without_permissions/3,
     schedule_migration_by_index/2,
     scheduling_migration_by_not_existing_index_should_fail/2,
-    scheduling_replica_migration_by_index_with_wrong_function_should_fail/2,
+    scheduling_replica_migration_by_index_with_function_returning_wrong_value_should_fail/2,
+    scheduling_replica_migration_by_index_returning_not_existing_file_should_not_fail/2,
     scheduling_migration_by_empty_index_should_succeed/2,
     scheduling_migration_by_not_existing_key_in_index_should_succeed/2,
     schedule_migration_of_100_regular_files_by_index/2,
@@ -159,7 +160,9 @@ migrate_regular_file_replica(Config, Type, FileKeyType) ->
                     #{<<"providerId">> => ProviderId1, <<"blocks">> => []},
                     #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
-                assertion_nodes = [WorkerP1, WorkerP2]
+                assertion_nodes = [WorkerP1, WorkerP2],
+                attempts = 120,
+                timeout = timer:minutes(2)
             }
         }
     ).
@@ -205,7 +208,9 @@ migrate_regular_file_replica_in_directory(Config, Type, FileKeyType) ->
                     #{<<"providerId">> => ProviderId1, <<"blocks">> => []},
                     #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
-                assertion_nodes = [WorkerP1, WorkerP2]
+                assertion_nodes = [WorkerP1, WorkerP2],
+                attempts = 120,
+                timeout = timer:minutes(2)
             }
         }
     ).
@@ -414,11 +419,11 @@ schedule_migration_by_index(Config, Type) ->
     {ok, FileId} = cdmi_id:guid_to_objectid(FileGuid),
 
     % set xattr on file to be replicated
-    XattrName = transfers_test_utils:random_job_name(),
+    XattrName = transfers_test_utils:random_job_name(?FUNCTION_NAME),
     XattrValue = 1,
     Xattr = #xattr{name = XattrName, value = XattrValue},
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
-    IndexName = <<"migration_jobs">>,
+    IndexName = transfers_test_utils:random_index_name(?FUNCTION_NAME),
     MapFunction = transfers_test_utils:test_map_function(XattrName),
     transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName, MapFunction, [], [ProviderId1, ProviderId2]),
     ?assertIndexQuery([FileId], WorkerP1, SpaceId, IndexName, [{key, XattrValue}]),
@@ -459,7 +464,9 @@ schedule_migration_by_index(Config, Type) ->
                     #{<<"providerId">> => ProviderId1, <<"blocks">> => []},
                     #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
-                assert_transferred_file_model = false
+                assert_transferred_file_model = false,
+                attempts = 120,
+                timeout = timer:minutes(2)
             }
         }
     ).
@@ -491,8 +498,8 @@ schedule_migration_of_regular_file_by_index_with_reduce(Config, Type) ->
     % only files with XattrName1 = XattrValue11 will be emitted
     % XattrName2 will be used by reduce function
     % only files with XattrName2 = XattrValue12 will be filtered
-    XattrName1 = transfers_test_utils:random_job_name(),
-    XattrName2 = transfers_test_utils:random_job_name(),
+    XattrName1 = transfers_test_utils:random_job_name(?FUNCTION_NAME),
+    XattrName2 = transfers_test_utils:random_job_name(?FUNCTION_NAME),
     XattrValue11 = 1,
     XattrValue12 = 2,
     XattrValue21 = 1,
@@ -522,7 +529,7 @@ schedule_migration_of_regular_file_by_index_with_reduce(Config, Type) ->
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, Guid6}, Xattr11),
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, Guid6}, Xattr21),
 
-    IndexName = <<"replication_jobs">>,
+    IndexName = transfers_test_utils:random_index_name(?FUNCTION_NAME),
     MapFunction = transfers_test_utils:test_map_function(XattrName1, XattrName2),
     ReduceFunction = transfers_test_utils:test_reduce_function(XattrValue21),
 
@@ -554,7 +561,8 @@ schedule_migration_of_regular_file_by_index_with_reduce(Config, Type) ->
                 expected_transfer = #{
                     replication_status => completed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
-                    evicting_provider => transfers_test_utils:provider_id(WorkerP2),
+                    evicting_provider => transfers_test_utils:provider_id(WorkerP1),
+                    replicating_provider => transfers_test_utils:provider_id(WorkerP2),
                     files_to_process => 6,
                     files_processed => 6,
                     files_replicated => 2,
@@ -571,7 +579,9 @@ schedule_migration_of_regular_file_by_index_with_reduce(Config, Type) ->
                 ],
                 assert_distribution_for_files = [Guid1, Guid6],
                 assertion_nodes = [WorkerP1, WorkerP2],
-                assert_transferred_file_model = false
+                assert_transferred_file_model = false,
+                attempts = 120,
+                timeout = timer:minutes(2)
             }
         }
     ).
@@ -597,11 +607,11 @@ scheduling_migration_by_not_existing_index_should_fail(Config, Type) ->
     [{FileGuid, _}] = ?config(?FILES_KEY, Config2),
 
     % set xattr on file to be replicated
-    XattrName = transfers_test_utils:random_job_name(),
+    XattrName = transfers_test_utils:random_job_name(?FUNCTION_NAME),
     XattrValue = 1,
     Xattr = #xattr{name = XattrName, value = XattrValue},
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
-    IndexName = <<"not_existing_index">>,
+    IndexName = transfers_test_utils:random_index_name(?FUNCTION_NAME),
 
     transfers_test_mechanism:run_test(
         Config2, #transfer_test_spec{
@@ -626,7 +636,7 @@ scheduling_migration_by_not_existing_index_should_fail(Config, Type) ->
         }
     ).
 
-scheduling_replica_migration_by_index_with_wrong_function_should_fail(Config, Type) ->
+scheduling_replica_migration_by_index_with_function_returning_wrong_value_should_fail(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId2 = ?DEFAULT_SESSION(WorkerP2, Config),
     SpaceId = ?SPACE_ID,
@@ -648,7 +658,7 @@ scheduling_replica_migration_by_index_with_wrong_function_should_fail(Config, Ty
     [{FileGuid, _}] = ?config(?FILES_KEY, Config2),
 
     % set xattr on file to be replicated
-    XattrName = transfers_test_utils:random_job_name(),
+    XattrName = transfers_test_utils:random_job_name(?FUNCTION_NAME),
     XattrValue = 1,
     Xattr = #xattr{name = XattrName, value = XattrValue},
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
@@ -661,7 +671,7 @@ scheduling_replica_migration_by_index_with_wrong_function_should_fail(Config, Ty
             }
         return null;
     }">>,
-    IndexName = <<"index_with_wrong_function">>,
+    IndexName = transfers_test_utils:random_index_name(?FUNCTION_NAME),
     transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName, MapFunction, [], [ProviderId1, ProviderId2]),
     ?assertIndexQuery([WrongValue], WorkerP2, SpaceId, IndexName,  [{key, XattrValue}]),
     ?assertIndexQuery([WrongValue], WorkerP1, SpaceId, IndexName,  [{key, XattrValue}]),
@@ -695,7 +705,86 @@ scheduling_replica_migration_by_index_with_wrong_function_should_fail(Config, Ty
                 distribution = [
                     #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
-                assert_transferred_file_model = false
+                assert_transferred_file_model = false,
+                attempts = 120,
+                timeout = timer:minutes(2)
+            }
+        }
+    ).
+
+scheduling_replica_migration_by_index_returning_not_existing_file_should_not_fail(Config, Type) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId2 = ?DEFAULT_SESSION(WorkerP2, Config),
+    SpaceId = ?SPACE_ID,
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
+
+    Config2 = transfers_test_mechanism:run_test(
+        Config, #transfer_test_spec{
+            setup = #setup{
+                setup_node = WorkerP1,
+                files_structure = [{0, 1}],
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type),
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ],
+                assertion_nodes = [WorkerP1, WorkerP2]
+            }}),
+
+    [{FileGuid, _}] = ?config(?FILES_KEY, Config2),
+
+    % set xattr
+    XattrName = transfers_test_utils:random_job_name(?FUNCTION_NAME),
+    XattrValue = 1,
+    Xattr = #xattr{name = XattrName, value = XattrValue},
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
+
+    NotExistingUuid = <<"not_existing_uuid">>,
+    NotExistingGuid = fslogic_uuid:uuid_to_guid(NotExistingUuid, SpaceId),
+    {ok, NotExistingFileId} = cdmi_id:guid_to_objectid(NotExistingGuid),
+
+    %functions emits not existing file id
+    MapFunction = <<
+        "function (id, meta) {
+            if(meta['", XattrName/binary,"']) {
+                return [meta['", XattrName/binary, "'], '", NotExistingFileId/binary, "'];
+            }
+        return null;
+    }">>,
+    IndexName = transfers_test_utils:random_index_name(?FUNCTION_NAME),
+    transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName, MapFunction, [], [ProviderId1, ProviderId2]),
+    ?assertIndexQuery([NotExistingFileId], WorkerP2, SpaceId, IndexName,  [{key, XattrValue}]),
+    ?assertIndexQuery([NotExistingFileId], WorkerP1, SpaceId, IndexName,  [{key, XattrValue}]),
+
+    transfers_test_mechanism:run_test(
+        Config2, #transfer_test_spec{
+            setup = undefined,
+            scenario = #scenario{
+                type = Type,
+                schedule_node = WorkerP1,
+                replicating_nodes = [WorkerP2],
+                evicting_nodes = [WorkerP1],
+                space_id = SpaceId,
+                function = fun transfers_test_mechanism:migrate_replicas_from_index/2,
+                query_view_params = [{key, XattrValue}],
+                index_name = IndexName
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    replication_status => completed,
+                    eviction_status => completed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+                    replicating_provider => transfers_test_utils:provider_id(WorkerP2),
+                    evicting_provider => transfers_test_utils:provider_id(WorkerP1),
+                    files_to_process => 4,
+                    files_processed => 4,
+                    files_evicted => 0,
+                    failed_files => 0
+                },
+                assertion_nodes = [WorkerP1, WorkerP2],
+                assert_transferred_file_model = false,
+                attempts = 120,
+                timeout = timer:minutes(2)
             }
         }
     ).
@@ -706,8 +795,8 @@ scheduling_migration_by_empty_index_should_succeed(Config, Type) ->
     ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
     ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
 
-    XattrName = transfers_test_utils:random_job_name(),
-    IndexName = <<"migration_jobs">>,
+    XattrName = transfers_test_utils:random_job_name(?FUNCTION_NAME),
+    IndexName = transfers_test_utils:random_index_name(?FUNCTION_NAME),
     MapFunction = transfers_test_utils:test_map_function(XattrName),
     transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName, MapFunction, [], [ProviderId1, ProviderId2]),
     ?assertIndexQuery([], WorkerP1, SpaceId, IndexName, []),
@@ -741,7 +830,9 @@ scheduling_migration_by_empty_index_should_succeed(Config, Type) ->
                 },
                 assertion_nodes = [WorkerP1, WorkerP2],
                 distribution = undefined,
-                assert_transferred_file_model = false
+                assert_transferred_file_model = false,
+                attempts = 120,
+                timeout = timer:minutes(2)
             }
         }
     ).
@@ -769,12 +860,12 @@ scheduling_migration_by_not_existing_key_in_index_should_succeed(Config, Type) -
     {ok, FileId} = cdmi_id:guid_to_objectid(FileGuid),
 
     % set xattr on file to be replicated
-    XattrName = transfers_test_utils:random_job_name(),
+    XattrName = transfers_test_utils:random_job_name(?FUNCTION_NAME),
     XattrValue = 1,
     XattrValue2 = 2,
     Xattr = #xattr{name = XattrName, value = XattrValue},
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
-    IndexName = <<"migration_jobs">>,
+    IndexName = transfers_test_utils:random_index_name(?FUNCTION_NAME),
     MapFunction = transfers_test_utils:test_map_function(XattrName),
     transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName, MapFunction, [], [ProviderId1, ProviderId2]),
 
@@ -811,7 +902,9 @@ scheduling_migration_by_not_existing_key_in_index_should_succeed(Config, Type) -
                 distribution = [
                     #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
-                assert_transferred_file_model = false
+                assert_transferred_file_model = false,
+                attempts = 120,
+                timeout = timer:minutes(2)
             }
         }
     ).
@@ -839,7 +932,7 @@ schedule_migration_of_100_regular_files_by_index(Config, Type) ->
     FileGuidsAndPaths = ?config(?FILES_KEY, Config2),
 
     % set xattr on file to be replicated
-    XattrName = transfers_test_utils:random_job_name(),
+    XattrName = transfers_test_utils:random_job_name(?FUNCTION_NAME),
     XattrValue = 1,
     Xattr = #xattr{name = XattrName, value = XattrValue},
 
@@ -849,7 +942,7 @@ schedule_migration_of_100_regular_files_by_index(Config, Type) ->
         FileId
     end, FileGuidsAndPaths),
 
-    IndexName = <<"migration_jobs">>,
+    IndexName = transfers_test_utils:random_index_name(?FUNCTION_NAME),
     MapFunction = transfers_test_utils:test_map_function(XattrName),
     transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName, MapFunction, [], [ProviderId1, ProviderId2]),
     ?assertIndexQuery(FileIds, WorkerP1, SpaceId, IndexName, [{key, XattrValue}]),
@@ -886,7 +979,9 @@ schedule_migration_of_100_regular_files_by_index(Config, Type) ->
                     #{<<"providerId">> => ProviderId1, <<"blocks">> => []},
                     #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
-                assert_transferred_file_model = false
+                assert_transferred_file_model = false,
+                attempts = 600,
+                timeout = timer:minutes(10)
             }
         }
     ).
@@ -961,8 +1056,7 @@ end_per_testcase(_Case, Config) ->
     transfers_test_utils:unmock_sync_req(Workers),
     transfers_test_utils:unmock_replica_synchronizer_failure(Workers),
     transfers_test_utils:remove_transfers(Config),
-    rpc:multicall(Workers, transfer, restart_pools, []),
-    transfers_test_utils:remove_all_indexes(Workers, ?DEFAULT_USER),
+    transfers_test_utils:remove_all_indexes(Workers, ?SPACE_ID),
     transfers_test_utils:ensure_transfers_removed(Config).
 
 end_per_suite(Config) ->
