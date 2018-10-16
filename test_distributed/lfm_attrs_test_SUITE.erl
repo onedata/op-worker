@@ -55,7 +55,7 @@ all() ->
         xattr_replace_and_create_flag_in_conflict,
         remove_file_test,
         modify_cdmi_attrs,
-        create_and_get_view,
+        create_and_query_view,
         get_empty_json,
         get_empty_rdf,
         has_custom_metadata_test,
