@@ -223,8 +223,15 @@ save_db_view(IndexId, SpaceId, Function, ReduceFunction, Spatial, Options) ->
             var user_map_callback = eval.call(null, '(", Function/binary, ")');
             var result = user_map_callback(doc['file_objectid'], doc['value']);
             if(result) {
-                emit(result[0], result[1]);
+                if ('list' in result) {
+	              for (var keyValuePair of result['list'])
+	                emit(keyValuePair[0], keyValuePair[1]);
+	            }
+	          	else{
+	              emit(result[0], result[1]);
+	            }
             }
+            return null;
         }
         return null;
     }">>,

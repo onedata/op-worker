@@ -42,6 +42,7 @@
     file_replication_failures_should_fail_whole_transfer/3,
     many_simultaneous_failed_transfers/3,
     schedule_replication_of_regular_file_by_index/2,
+    schedule_replication_of_regular_file_by_index2/2,
     schedule_replication_of_regular_file_by_index_with_reduce/2,
     scheduling_replication_by_not_existing_index_should_fail/2,
     scheduling_replication_by_index_with_function_returning_wrong_value_should_fail/2,
@@ -1008,6 +1009,97 @@ schedule_replication_of_regular_file_by_index_with_reduce(Config, Type) ->
                 ],
                 assert_distribution_for_files = [Guid1, Guid6],
                 assertion_nodes = [WorkerP1, WorkerP2],
+                assert_transferred_file_model = false
+            }
+        }
+    ).
+
+schedule_replication_of_regular_file_by_index2(Config, Type) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId2 = ?DEFAULT_SESSION(WorkerP2, Config),
+    SpaceId = ?SPACE_ID,
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
+
+    Config2 = transfers_test_mechanism:run_test(
+        Config, #transfer_test_spec{
+            setup = #setup{
+                setup_node = WorkerP1,
+                files_structure = [{0, 1}],
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type),
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ],
+                assertion_nodes = [WorkerP1, WorkerP2]
+            }}),
+
+    [{FileGuid, _}] = ?config(?FILES_KEY, Config2),
+    {ok, FileId} = cdmi_id:guid_to_objectid(FileGuid),
+
+    % set xattr on file to be replicated
+    JobId1 = <<"1">>,
+    JobId2 = <<"2">>,
+    XattrName = <<"jobId.1">>,
+    XattrName2 = <<"jobId.2">>,
+    Xattr = #xattr{name = XattrName},
+    Xattr2 = #xattr{name = XattrName2},
+
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr2),
+    IndexName = transfers_test_utils:random_index_name(?FUNCTION_NAME),
+
+    MapFunction = <<
+        "function (id, meta) {
+            const JOB_PREFIX = 'jobId.';
+            var results = [];
+            for (var key of Object.keys(meta)) {
+                if (key.startsWith(JOB_PREFIX)) {
+                    var jobId = key.slice(JOB_PREFIX.length);
+                    results.push([jobId, id]);
+                }
+            }
+            return {'list': results};
+        }">>,
+    transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName, MapFunction,
+        [], [ProviderId2]),
+
+    ct:pal("MapFunction: ~p", [MapFunction]),
+
+
+    ?assertIndexQuery([FileId], WorkerP2, SpaceId, IndexName,  [{key, JobId1}]),
+    ?assertIndexQuery([FileId], WorkerP2, SpaceId, IndexName,  [{key, JobId2}]),
+    ?assertIndexVisible(WorkerP1, SpaceId, IndexName),
+
+    transfers_test_mechanism:run_test(
+        Config2, #transfer_test_spec{
+            setup = undefined,
+            scenario = #scenario{
+                type = Type,
+                schedule_node = WorkerP1,
+                replicating_nodes = [WorkerP2],
+                space_id = SpaceId,
+                function = fun transfers_test_mechanism:replicate_files_from_index/2,
+                query_view_params = [{key, JobId1}],
+                index_name = IndexName
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    replication_status => completed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+                    files_to_process => 2,
+                    files_processed => 2,
+                    files_replicated => 1,
+                    bytes_replicated => ?DEFAULT_SIZE,
+                    min_hist => ?MIN_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
+                    hr_hist => ?HOUR_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
+                    dy_hist => ?DAY_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
+                    mth_hist => ?MONTH_HIST(#{ProviderId1 => ?DEFAULT_SIZE})
+                },
+                assertion_nodes = [WorkerP1, WorkerP2],
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ],
                 assert_transferred_file_model = false
             }
         }

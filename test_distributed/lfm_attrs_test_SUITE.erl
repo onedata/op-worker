@@ -35,15 +35,15 @@
     xattr_replace_and_create_flag_in_conflict/1,
     remove_file_test/1,
     modify_cdmi_attrs/1,
-    create_and_get_view/1,
+    create_and_query_view/1,
     get_empty_json/1,
     get_empty_rdf/1,
     has_custom_metadata_test/1,
     resolve_guid_of_root_should_return_root_guid/1,
     resolve_guid_of_space_should_return_space_guid/1,
     resolve_guid_of_dir_should_return_dir_guid/1,
-    custom_metadata_doc_should_contain_file_objectid/1
-]).
+    custom_metadata_doc_should_contain_file_objectid/1,
+    create_and_query_view_mapping_on_file_to_many_rows/1]).
 
 all() ->
     ?ALL([
@@ -55,7 +55,7 @@ all() ->
         xattr_replace_and_create_flag_in_conflict,
         remove_file_test,
         modify_cdmi_attrs,
-        create_and_get_view,
+        create_and_query_view,
         get_empty_json,
         get_empty_rdf,
         has_custom_metadata_test,
@@ -234,7 +234,7 @@ modify_cdmi_attrs(Config) ->
     ?assertEqual({error, ?EPERM}, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1)),
     ?assertEqual({ok, []}, lfm_proxy:list_xattr(Worker, SessId, {guid, Guid}, false, true)).
 
-create_and_get_view(Config) ->
+create_and_query_view(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     SpaceId = <<"space_id1">>,
@@ -366,6 +366,92 @@ custom_metadata_doc_should_contain_file_objectid(Config) ->
 
     {ok, ExpectedFileObjectid} = cdmi_id:guid_to_objectid(Guid),
     ?assertEqual(ExpectedFileObjectid, FileObjectid).
+
+create_and_query_view_mapping_on_file_to_many_rows(Config) ->
+    FilePrefix = str_utils:to_binary(?FUNCTION_NAME),
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    SpaceId = <<"space_id1">>,
+    ViewName = <<"view_name">>,
+    ProviderId = rpc:call(Worker, oneprovider, get_id, []),
+    Path1 = <<"/space_name1/", FilePrefix/binary, "_file1">>,
+    Path2 = <<"/space_name1/", FilePrefix/binary, "_file2">>,
+    Path3 = <<"/space_name1/", FilePrefix/binary, "_file3">>,
+
+    Xattr1 = #xattr{name = <<"jobId.1">>},
+    Xattr2 = #xattr{name = <<"jobId.2">>},
+    Xattr3 = #xattr{name = <<"jobId.3">>},
+
+    ViewFunction =
+        <<"
+        function (id, meta) {
+            const JOB_PREFIX = 'jobId.'
+            var results = [];
+            for (var key of Object.keys(meta)) {
+                if (key.startsWith(JOB_PREFIX)) {
+                    var jobId = key.slice(JOB_PREFIX.length);
+                    results.push([jobId, id]);
+                }
+            }
+            return {'list': results};
+       }">>,
+
+    {ok, Guid1} = lfm_proxy:create(Worker, SessId, Path1, 8#600),
+    {ok, Guid2} = lfm_proxy:create(Worker, SessId, Path2, 8#600),
+    {ok, Guid3} = lfm_proxy:create(Worker, SessId, Path3, 8#600),
+
+    {ok, FileId1} = cdmi_id:guid_to_objectid(Guid1),
+    {ok, FileId2} = cdmi_id:guid_to_objectid(Guid2),
+    {ok, FileId3} = cdmi_id:guid_to_objectid(Guid3),
+
+    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid1}, Xattr1)),
+    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid1}, Xattr2)),
+    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid1}, Xattr3)),
+
+    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid2}, Xattr1)),
+    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid2}, Xattr2)),
+
+    ok = rpc:call(Worker, index, create, [SpaceId, ViewName, ViewFunction, undefined, [], false, [ProviderId]]),
+    ?assertMatch({ok, [ViewName]}, rpc:call(Worker, index, list, [SpaceId])),
+
+    FinalCheck = fun() ->
+        try
+            {ok, QueryResult1} = ?assertMatch({ok, _},
+                query_index(Worker, SpaceId, ViewName, [{key, <<"1">>}, {stale, false}])),
+            {ok, QueryResult2} = ?assertMatch({ok, _},
+                query_index(Worker, SpaceId, ViewName, [{key, <<"2">>}])),
+            {ok, QueryResult3} = ?assertMatch({ok, _},
+                query_index(Worker, SpaceId, ViewName, [{key, <<"3">>}])),
+            {ok, QueryResult4} = ?assertMatch({ok, _},
+                query_index(Worker, SpaceId, ViewName, [{key, <<"4">>}])),
+
+            Ids1 = extract_query_values(QueryResult1),
+            Ids2 = extract_query_values(QueryResult2),
+            Ids3 = extract_query_values(QueryResult3),
+            Ids4 = extract_query_values(QueryResult4),
+
+            ?assertEqual(true, lists:member(FileId1, Ids1)),
+            ?assertEqual(true, lists:member(FileId1, Ids2)),
+            ?assertEqual(true, lists:member(FileId1, Ids3)),
+
+            ?assertEqual(true, lists:member(FileId2, Ids1)),
+            ?assertEqual(true, lists:member(FileId2, Ids2)),
+            ?assertEqual(false, lists:member(FileId2, Ids3)),
+
+            ?assertEqual(false, lists:member(FileId3, Ids1)),
+            ?assertEqual(false, lists:member(FileId3, Ids2)),
+            ?assertEqual(false, lists:member(FileId3, Ids3)),
+
+            ?assertEqual([FileId1],  Ids3),
+            ?assertEqual([], Ids4),
+
+            ok
+        catch
+            E1:E2 ->
+                {error, E1, E2}
+        end
+    end,
+    ?assertEqual(ok, FinalCheck(), 10, timer:seconds(3)).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
