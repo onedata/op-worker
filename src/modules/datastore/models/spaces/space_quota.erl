@@ -22,8 +22,7 @@
 %% API
 -export([create/1, get/1, delete/1]).
 -export([apply_size_change/2, available_size/1, assert_write/1, assert_write/2,
-    get_disabled_spaces/0, apply_size_change_and_maybe_emit/2,
-    soft_assert_write/2, current_size/1]).
+    get_disabled_spaces/0, apply_size_change_and_maybe_emit/2, current_size/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_posthooks/0]).
@@ -171,24 +170,6 @@ assert_write(_SpaceId, WriteSize) when WriteSize =< 0 ->
     ok;
 assert_write(SpaceId, WriteSize) ->
     case space_quota:available_size(SpaceId) >= WriteSize of
-        true -> ok;
-        false -> throw(?ENOSPC)
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks if write operation with given size is permitted for given space while taking into
-%% consideration soft quota limit set in op_worker configuration.
-%% @end
-%%--------------------------------------------------------------------
--spec soft_assert_write(SpaceId :: od_space:id(), WriteSize :: integer()) ->
-    ok | no_return().
-soft_assert_write(_SpaceId, WriteSize) when WriteSize =< 0 ->
-    ok;
-soft_assert_write(SpaceId, WriteSize) ->
-    {ok, SoftQuotaSize} = application:get_env(?APP_NAME, soft_quota_limit_size),
-    case space_quota:available_size(SpaceId) + SoftQuotaSize >= WriteSize of
         true -> ok;
         false -> throw(?ENOSPC)
     end.

@@ -30,7 +30,10 @@
     seq :: couchbase_changes:seq(),
     changes_stash :: ets:tid(),
     changes_request_ref :: undefined | reference(),
-    apply_batch :: undefined | couchbase_changes:until()
+    apply_batch :: undefined | couchbase_changes:until(),
+    first_batch_processed = false :: boolean(),
+    lower_changes_count = 0 :: non_neg_integer(),
+    first_lower_seq = 1 :: non_neg_integer()
 }).
 
 -type state() :: #state{}.
@@ -213,7 +216,9 @@ code_change(_OldVsn, State, _Extra) ->
 -spec handle_changes_batch(couchbase_changes:since(), couchbase_changes:until(),
     [datastore:doc()], state()) -> state().
 handle_changes_batch(Since, Until, Docs,
-    State = #state{seq = Seq, apply_batch = Apply}) ->
+    State0 = #state{seq = Seq, apply_batch = Apply, first_batch_processed = FBP,
+        lower_changes_count = LCC, first_lower_seq = FLS, space_id = SpaceID}) ->
+    State = State0#state{first_batch_processed = true, lower_changes_count = 0},
     case {Since, Apply} of
         {Seq, undefined} ->
             apply_changes_batch(Since, Until, Docs, State);
@@ -223,6 +228,31 @@ handle_changes_batch(Since, Until, Docs,
         {Higher, _} when Higher >= Apply ->
             State2 = stash_changes_batch(Since, Until, Docs, State),
             schedule_changes_request(State2);
+        {Lower, _} when Lower < Seq ->
+            case FBP of
+                true ->
+                    MaxLowerChanges = application:get_env(?APP_NAME,
+                        lower_changes_before_reset, 10),
+                    case {LCC < MaxLowerChanges, LCC, MaxLowerChanges} of
+                        {true, 0, _} ->
+                            State#state{lower_changes_count = 1,
+                                first_lower_seq = Lower};
+                        {true, _, _} ->
+                            State#state{lower_changes_count = LCC + 1};
+                        {_, _, 0} ->
+                            ?info("Reset changes seq for space ~p,"
+                            " old ~p, new ~p", [SpaceID, Seq, Lower]),
+                            State#state{seq = Lower};
+                        _ ->
+                            ?info("Reset changes seq for space ~p,"
+                            " old ~p, new ~p", [SpaceID, Seq, FLS]),
+                            State#state{seq = FLS}
+                    end;
+                _ ->
+                    ?info("Reset changes seq with first batch for space ~p,"
+                    " old ~p, new ~p", [SpaceID, Seq, Lower]),
+                    State#state{seq = Lower}
+            end;
         _ ->
             State
     end.

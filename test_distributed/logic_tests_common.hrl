@@ -180,7 +180,7 @@
 -define(USER_PRIVATE_DATA_MATCHER(__User), #document{key = __User, value = #od_user{
     name = ?USER_NAME(__User),
     alias = ?USER_ALIAS(__User),
-    email_list = ?USER_EMAIL_LIST(__User),
+    emails = ?USER_EMAIL_LIST(__User),
     linked_accounts = ?USER_LINKED_ACCOUNTS_MATCHER(__User),
     default_space = ?USER_DEFAULT_SPACE(__User),
     space_aliases = ?USER_SPACE_ALIASES(__User),
@@ -192,7 +192,7 @@
 -define(USER_PROTECTED_DATA_MATCHER(__User), #document{key = __User, value = #od_user{
     name = ?USER_NAME(__User),
     alias = ?USER_ALIAS(__User),
-    email_list = ?USER_EMAIL_LIST(__User),
+    emails = ?USER_EMAIL_LIST(__User),
     linked_accounts = ?USER_LINKED_ACCOUNTS_MATCHER(__User),
     default_space = undefined,
     space_aliases = #{},
@@ -204,7 +204,7 @@
 -define(USER_SHARED_DATA_MATCHER(__User), #document{key = __User, value = #od_user{
     name = ?USER_NAME(__User),
     alias = ?USER_ALIAS(__User),
-    email_list = [],
+    emails = [],
     linked_accounts = [],
     default_space = undefined,
     space_aliases = #{},

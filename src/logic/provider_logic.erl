@@ -26,6 +26,7 @@
 
 -export([get/0, get/1, get/2, get_protected_data/2]).
 -export([get_as_map/0]).
+-export([update/1, update/2]).
 -export([get_name/0, get_name/1, get_name/2]).
 -export([get_spaces/0, get_spaces/1, get_spaces/2]).
 -export([has_eff_user/2, has_eff_user/3]).
@@ -118,28 +119,50 @@ get_protected_data(SessionId, ProviderId) ->
 %% Useful for RPC calls from onepanel where od_provider record is not defined.
 %% @end
 %%--------------------------------------------------------------------
--spec get_as_map() -> map().
+-spec get_as_map() -> {ok, map()} | gs_protocol:error().
 get_as_map() ->
-    {ok, #document{key = ProviderId, value = ProviderRecord}} = ?MODULE:get(),
-    #od_provider{
-        name = Name,
-        admin_email = AdminEmail,
-        subdomain_delegation = SubdomainDelegation,
-        domain = Domain,
-        subdomain = Subdomain,
-        longitude = Longitude,
-        latitude = Latitude
-    } = ProviderRecord,
-    #{
-        id => ProviderId,
-        name => Name,
-        admin_email => AdminEmail,
-        subdomain_delegation => SubdomainDelegation,
-        domain => Domain,
-        subdomain => Subdomain,
-        longitude => Longitude,
-        latitude => Latitude
-    }.
+    case ?MODULE:get() of
+        {ok, #document{key = Id, value = Record}} ->
+            {ok, #{
+                id => Id,
+                name => Record#od_provider.name,
+                admin_email => Record#od_provider.admin_email,
+                subdomain_delegation => Record#od_provider.subdomain_delegation,
+                domain => Record#od_provider.domain,
+                subdomain => Record#od_provider.subdomain,
+                longitude => Record#od_provider.longitude,
+                latitude => Record#od_provider.latitude
+            }};
+        Error -> Error
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates parameters of this provider using current provider's auth.
+%% Supports updating name, latitude, longitude and adminEmail.
+%% @end
+%%--------------------------------------------------------------------
+-spec update(Data :: #{binary() => term()}) -> ok | gs_protocol:error().
+update(Data) ->
+    update(?ROOT_SESS_ID, Data).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates parameters of this provider.
+%% Supports updating name, latitude, longitude and adminEmail.
+%% @end
+%%--------------------------------------------------------------------
+-spec update(SessionId :: gs_client_worker:client(),
+    Data :: #{binary() => term()}) -> ok | gs_protocol:error().
+update(SessionId, Data) ->
+    Result = gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = update, data = Data,
+        gri = #gri{type = od_provider, id = ?SELF, aspect = instance}
+    }),
+    ?ON_SUCCESS(Result, fun(_) ->
+        gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id())
+    end).
 
 
 %%--------------------------------------------------------------------
@@ -416,8 +439,6 @@ set_delegated_subdomain(Subdomain) ->
         ok ->
             gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id()),
             ok;
-        ?ERROR_BAD_VALUE_IDENTIFIER_OCCUPIED(<<"subdomain">>) ->
-            {error, subdomain_exists};
         Error ->
             Error
     end.

@@ -62,7 +62,7 @@
 -record(od_user, {
     name :: undefined | binary(),
     alias :: undefined | binary(),
-    email_list = [] :: [binary()],
+    emails = [] :: [binary()],
     linked_accounts = [] :: [od_user:linked_account()],
     default_space :: binary() | undefined,
     % List of user's aliases for spaces
