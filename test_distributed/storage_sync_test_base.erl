@@ -1063,7 +1063,7 @@ create_subfiles_import_many2_test(Config, MountSpaceInRoot) ->
     storage_sync_test_base:enable_storage_import(Config),
     Files = generate_nested_directory_tree_file_paths(DirStructure, ?SPACE_PATH),
 
-    Timeout = 120,
+    Timeout = 600,
     parallel_assert(?MODULE, verify_file, [W1, SessId, Timeout], Files, Timeout),
     assertImportTimes(W1, ?SPACE_ID, Timeout),
 
