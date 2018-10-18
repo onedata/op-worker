@@ -18,14 +18,16 @@
 -include("modules/storage_file_manager/helpers/helpers.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([new_ceph_helper/7, new_cephrados_helper/7, new_posix_helper/4,
     new_s3_helper/7, new_swift_helper/7, new_glusterfs_helper/6,
-    new_nulldevice_helper/4]).
+    new_webdav_helper/5, new_nulldevice_helper/4]).
 -export([new_ceph_user_ctx/2,new_cephrados_user_ctx/2,  new_posix_user_ctx/2,
     new_s3_user_ctx/2, new_swift_user_ctx/2, new_glusterfs_user_ctx/2,
-    new_nulldevice_user_ctx/2, validate_user_ctx/2, validate_group_ctx/2]).
+    new_webdav_user_ctx/2, new_nulldevice_user_ctx/2, validate_user_ctx/2,
+    validate_group_ctx/2]).
 -export([get_name/1, get_args/1, get_admin_ctx/1, is_insecure/1, get_params/2,
     get_proxy_params/2, get_timeout/1, get_storage_path_type/1]).
 -export([set_user_ctx/2]).
@@ -176,6 +178,26 @@ new_glusterfs_helper(Volume, Hostname, OptArgs, AdminCtx, Insecure,
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Constructs WebDAV storage helper record.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_webdav_helper(binary(), args(), user_ctx(),
+    boolean(), helpers:storage_path_type()) -> helpers:helper().
+new_webdav_helper(Endpoint, OptArgs, AdminCtx, Insecure,
+    StoragePathType) ->
+    #helper{
+        name = ?WEBDAV_HELPER_NAME,
+        args = maps:merge(OptArgs, #{
+            <<"endpoint">> => Endpoint
+        }),
+        admin_ctx = AdminCtx,
+        insecure = Insecure,
+        extended_direct_io = true,
+        storage_path_type = StoragePathType
+    }.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Constructs Null Device storage helper record.
 %% @end
 %%--------------------------------------------------------------------
@@ -264,6 +286,18 @@ new_glusterfs_user_ctx(Uid, Gid) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Constructs WebDAV storage helper user context record.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_webdav_user_ctx(binary(), binary()) -> user_ctx().
+new_webdav_user_ctx(CredentialsType, Credentials) ->
+    #{
+        <<"credentialsType">> => CredentialsType,
+        <<"credentials">> => Credentials
+    }.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Constructs Null Device storage helper user context record.
 %% @end
 %%--------------------------------------------------------------------
@@ -293,6 +327,8 @@ validate_user_ctx(#helper{name = ?SWIFT_HELPER_NAME}, UserCtx) ->
     check_user_or_group_ctx_fields([<<"username">>, <<"password">>], UserCtx);
 validate_user_ctx(#helper{name = ?GLUSTERFS_HELPER_NAME}, UserCtx) ->
     check_user_or_group_ctx_fields([<<"uid">>, <<"gid">>], UserCtx);
+validate_user_ctx(#helper{name = ?WEBDAV_HELPER_NAME}, UserCtx) ->
+    check_user_or_group_ctx_fields([<<"credentialsType">>, <<"credentials">>], UserCtx);
 validate_user_ctx(#helper{name = ?NULL_DEVICE_HELPER_NAME}, UserCtx) ->
     check_user_or_group_ctx_fields([<<"uid">>, <<"gid">>], UserCtx).
 
@@ -309,6 +345,8 @@ validate_group_ctx(#helper{name = ?GLUSTERFS_HELPER_NAME}, GroupCtx) ->
     check_user_or_group_ctx_fields([<<"gid">>], GroupCtx);
 validate_group_ctx(#helper{name = ?NULL_DEVICE_HELPER_NAME}, GroupCtx) ->
     check_user_or_group_ctx_fields([<<"gid">>], GroupCtx);
+validate_group_ctx(#helper{name = ?WEBDAV_HELPER_NAME}, GroupCtx) ->
+    ok;
 validate_group_ctx(#helper{name = HelperName}, _GroupCtx) ->
     {error, {group_ctx_not_supported, HelperName}}.
 
@@ -441,6 +479,7 @@ translate_name(<<"ProxyIO">>) -> ?PROXY_HELPER_NAME;
 translate_name(<<"AmazonS3">>) -> ?S3_HELPER_NAME;
 translate_name(<<"Swift">>) -> ?SWIFT_HELPER_NAME;
 translate_name(<<"GlusterFS">>) -> ?GLUSTERFS_HELPER_NAME;
+translate_name(<<"WebDAV">>) -> ?WEBDAV_HELPER_NAME;
 translate_name(<<"NullDevice">>) -> ?NULL_DEVICE_HELPER_NAME;
 translate_name(Name) -> Name.
 
@@ -464,6 +503,12 @@ translate_arg_name(<<"secret_key">>) -> <<"secretKey">>;
 translate_arg_name(<<"tenant_name">>) -> <<"tenantName">>;
 translate_arg_name(<<"user_name">>) -> <<"username">>;
 translate_arg_name(<<"xlator_options">>) -> <<"xlatorOptions">>;
+translate_arg_name(<<"verify_server_certificate">>) -> <<"verifyServerCertificate">>;
+translate_arg_name(<<"credentials_type">>) -> <<"credentialsType">>;
+translate_arg_name(<<"authorization_header">>) -> <<"authorizationHeader">>;
+translate_arg_name(<<"range_write_support">>) -> <<"rangeWriteSupport">>;
+translate_arg_name(<<"connection_pool_size">>) -> <<"connectionPoolSize">>;
+translate_arg_name(<<"maximum_upload_size">>) -> <<"maximumUploadSize">>;
 translate_arg_name(<<"latency_min">>) -> <<"latencyMin">>;
 translate_arg_name(<<"latency_max">>) -> <<"latencyMax">>;
 translate_arg_name(<<"timeout_probability">>) -> <<"timeoutProbability">>;

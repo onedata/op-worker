@@ -86,7 +86,7 @@ all() -> ?ALL(?TEST_CASES, ?PERF_TEST_CASES).
 
 -define(REPEATS, 10).
 -define(TEST_SIZE_BASE, 5).
--define(TEST_BLK_SIZE_BASE, 4).
+-define(TEST_BLK_SIZE_BASE, 8).
 
 %%%===================================================================
 %%% Test functions

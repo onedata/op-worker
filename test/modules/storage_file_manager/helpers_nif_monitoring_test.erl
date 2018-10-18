@@ -66,6 +66,7 @@ prepare_environment() ->
     application:set_env(?APP_NAME, s3_helper_threads_number, 1),
     application:set_env(?APP_NAME, swift_helper_threads_number, 1),
     application:set_env(?APP_NAME, glusterfs_helper_threads_number, 1),
+    application:set_env(?APP_NAME, webdav_helper_threads_number, 25),
     application:set_env(?APP_NAME, nulldevice_helper_threads_number, 1),
     application:set_env(?APP_NAME, buffer_helpers, false),
     application:set_env(?APP_NAME, buffer_scheduler_threads_number, 1),
