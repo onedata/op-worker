@@ -127,7 +127,7 @@ cancel_synchronizations_for_session_with_mocked_rtransfer_test(Config) ->
         {success_rate, 100},
         {parameters, [
             [{name, block_size}, {value, 80}, {description, "Block size in MB"}],
-            [{name, block_count}, {value, 120000},
+            [{name, block_count}, {value, 20000},
                 {description, "Total number of blocks to synchronize"}],
             % note: users have to be defined in env_desc.json and have form like <<"user1">>
             [{name, user_count}, {value, 1}, {description, "Number of users used in test"}]
@@ -135,6 +135,7 @@ cancel_synchronizations_for_session_with_mocked_rtransfer_test(Config) ->
         {description, "Test performance of transfer cancelation"},
         {config, [{name, basic},
             {parameters, [
+                [{name, block_count}, {value, 120000}]
             ]},
             {description, ""}
         ]},
@@ -156,7 +157,7 @@ cancel_synchronizations_for_session_test(Config) ->
         {success_rate, 100},
         {parameters, [
             [{name, block_size}, {value, 80}, {description, "Block size in MB"}],
-            [{name, block_count}, {value, 60000},
+            [{name, block_count}, {value, 10000},
                 {description, "Total number of blocks to synchronize"}],
             % note: users have to be defined in env_desc.json and have form like <<"user1">>
             [{name, user_count}, {value, 1}, {description, "Number of users used in test"}]
@@ -164,6 +165,7 @@ cancel_synchronizations_for_session_test(Config) ->
         {description, "Test performance of transfer cancelation"},
         {config, [{name, basic},
             {parameters, [
+                [{name, block_count}, {value, 60000}]
             ]},
             {description, ""}
         ]},
@@ -204,7 +206,11 @@ transfer_files_to_source_provider_test_base(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    [{?LOAD_MODULES, [initializer, multi_provider_file_ops_test_base]} | Config].
+    Posthook = fun(NewConfig) -> multi_provider_file_ops_test_base:init_env(NewConfig) end,
+    [{?LOAD_MODULES, [initializer, multi_provider_file_ops_test_base]}, {?ENV_UP_POSTHOOK, Posthook} | Config].
+
+end_per_suite(Config) ->
+    multi_provider_file_ops_test_base:teardown_env(Config).
 
 init_per_testcase(synchronizer_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -226,7 +232,7 @@ init_per_testcase(synchronizer_test, Config) ->
 
 init_per_testcase(cancel_synchronizations_for_session_with_mocked_rtransfer_test, Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    ok = test_utils:mock_new(Worker1, rtransfer_config, [passthrough]),
+    ok = test_utils:mock_new(Worker1, rtransfer_config),
     ok = test_utils:mock_expect(Worker1, rtransfer_config, fetch,
         fun(Request, NotifyFun, CompleteFun, _, _, _) ->
             #{offset := O, size := S} = Request,
@@ -241,11 +247,7 @@ init_per_testcase(cancel_synchronizations_for_session_with_mocked_rtransfer_test
     ),
     init_per_testcase(?DEFAULT_CASE(cancel_synchronizations_for_session_with_mocked_rtransfer_test), Config);
 init_per_testcase(_Case, Config) ->
-    ssl:start(),
-    hackney:start(),
-    initializer:disable_quota_limit(Config),
-    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
-    lfm_proxy:init(ConfigWithSessionInfo).
+    lfm_proxy:init(Config).
 
 end_per_testcase(Case, Config) when
     Case =:= synchronizer_test;
@@ -255,12 +257,5 @@ end_per_testcase(Case, Config) when
     end_per_testcase(?DEFAULT_CASE(synchronizer_test), Config);
 
 end_per_testcase(_Case, Config) ->
-    lfm_proxy:teardown(Config),
-    %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
-    initializer:clean_test_users_and_spaces_no_validate(Config),
-    initializer:unload_quota_mocks(Config),
-    hackney:stop(),
-    ssl:stop().
+    lfm_proxy:teardown(Config).
 
-end_per_suite(_Config) ->
-    ok.

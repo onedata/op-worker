@@ -35,8 +35,7 @@
     incremental_write_smaller_then_quota_should_not_fail/1,
     unlink_should_unlock_space/1,
     rename_should_unlock_space/1,
-    rename_bigger_then_quota_should_fail/1,
-    soft_quota_should_allow_bigger_writes/1
+    rename_bigger_then_quota_should_fail/1
 
 ]).
 
@@ -50,8 +49,7 @@ all() ->
         incremental_write_smaller_then_quota_should_not_fail,
         unlink_should_unlock_space,
         rename_should_unlock_space,
-        rename_bigger_then_quota_should_fail,
-        soft_quota_should_allow_bigger_writes
+        rename_bigger_then_quota_should_fail
     ]).
 
 -define(TIMEOUT, timer:seconds(5)).
@@ -388,57 +386,6 @@ rename_bigger_then_quota_should_fail(Config) ->
     ok.
 
 
-soft_quota_should_allow_bigger_writes(Config) ->
-    #env{p1 = P1, p2 = _P2, user1 = User1, user2 = User2, file1 = File1, file2 = File2, file3 = File3} =
-        gen_test_env(Config),
-
-    {ok, _} = create_file(P1, User1,    f(<<"space1">>, File1)),
-    {ok, _} = create_file(P1, User1,    f(<<"space1">>, File2)),
-    {ok, _} = create_file(P1, User2,    f(<<"space1">>, File3)),
-
-    {ok, _} = create_file(P1, User1,    f(<<"space2">>, File1)),
-    {ok, _} = create_file(P1, User1,    f(<<"space2">>, File2)),
-    {ok, _} = create_file(P1, User2,    f(<<"space2">>, File3)),
-
-    SetSoftLimit =
-        fun(Size) ->
-            Workers = ?config(op_worker_nodes, Config),
-            rpc:multicall(Workers, application, set_env, [?APP_NAME, soft_quota_limit_size, Size])
-        end,
-
-    SetSoftLimit(0),
-
-    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space1">>, File1), 0, crypto:strong_rand_bytes(16))),
-    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space1">>, File2), 0, crypto:strong_rand_bytes(12))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space1">>, File3), 0, crypto:strong_rand_bytes(8))),
-
-    SetSoftLimit(6),
-    ?assertMatch({ok, _}, write_to_file(P1, User2,          f(<<"space1">>, File3), 0, crypto:strong_rand_bytes(8))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space1">>, File3), 0, crypto:strong_rand_bytes(9))),
-
-    SetSoftLimit(10),
-    ?assertMatch({ok, _}, write_to_file(P1, User2,          f(<<"space1">>, File3), 0, crypto:strong_rand_bytes(12))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space1">>, File3), 0, crypto:strong_rand_bytes(13))),
-
-
-
-    SetSoftLimit(0),
-
-    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, File1), 0, crypto:strong_rand_bytes(36))),
-    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, File2), 0, crypto:strong_rand_bytes(12))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space2">>, File3), 0, crypto:strong_rand_bytes(8))),
-
-    SetSoftLimit(6),
-    ?assertMatch({ok, _}, write_to_file(P1, User2,          f(<<"space2">>, File3), 0, crypto:strong_rand_bytes(8))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space2">>, File3), 0, crypto:strong_rand_bytes(9))),
-
-    SetSoftLimit(10),
-    ?assertMatch({ok, _}, write_to_file(P1, User2,          f(<<"space2">>, File3), 0, crypto:strong_rand_bytes(12))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space2">>, File3), 0, crypto:strong_rand_bytes(13))),
-
-    ok.
-
-
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -448,18 +395,12 @@ init_per_suite(Config) ->
     Posthook = fun(NewConfig) -> initializer:setup_storage(NewConfig) end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
-
 end_per_suite(Config) ->
     initializer:teardown_storage(Config).
 
 init_per_testcase(_Case, Config) ->
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
-
-    Workers = ?config(op_worker_nodes, ConfigWithSessionInfo),
-    rpc:multicall(Workers, application, set_env, [?APP_NAME, soft_quota_limit_size, 0]),
-
     lfm_proxy:init(ConfigWithSessionInfo).
-
 
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),

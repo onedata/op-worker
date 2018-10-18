@@ -244,7 +244,7 @@ remove_file_during_replication(Config, #scenario{
     utils:pforeach(fun({TargetNode, Tid, Guid, Path}) ->
         FileKey = file_key(Guid, Path, FileKeyType),
         await_replication_starts(TargetNode, Tid),
-        ok = remove_file(ScheduleNode, User, FileKey, Config)
+        ok = remove_file(TargetNode, User, FileKey, Config)
     end, NodesTransferIdsAndFiles),
 
     update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
@@ -363,7 +363,6 @@ remove_file_during_eviction(Config, #scenario{
             FileKey = file_key(Guid, Path, FileKeyType),
             EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
             {ok, Tid} = schedule_replica_eviction(ScheduleNode, EvictingProviderId,  User, FileKey, Config, Type),
-            ok = remove_file(ScheduleNode, User, FileKey, Config),
             {EvictingNode, Tid, Guid, Path}
         end, FilesGuidsAndPaths)
     end, EvictingNodes),
@@ -371,7 +370,7 @@ remove_file_during_eviction(Config, #scenario{
     utils:pforeach(fun({EvictingNode, Tid, Guid, Path}) ->
         FileKey = file_key(Guid, Path, FileKeyType),
         await_transfer_starts(EvictingNode, Tid),
-        ok = remove_file(ScheduleNode, User, FileKey, Config)
+        ok = remove_file(EvictingNode, User, FileKey, Config)
     end, NodesTransferIdsAndFiles),
 
     update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
@@ -1213,7 +1212,7 @@ create_query_string(QueryViewParams) ->
     end, <<>>, QueryViewParams).
 
 binary_from_term(Val) when is_binary(Val) ->
-    Val;
+    <<"\"", Val/binary, "\"">>;
 binary_from_term(Val) when is_integer(Val) ->
     integer_to_binary(Val);
 binary_from_term(Val) when is_float(Val) ->

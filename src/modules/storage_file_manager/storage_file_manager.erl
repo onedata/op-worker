@@ -335,7 +335,7 @@ write(#sfm_handle{
     file_size = CSize
 }, Offset, Buffer) ->
     %% @todo: VFS-2086 handle sparse files
-    space_quota:soft_assert_write(SpaceId, max(0, Offset + size(Buffer) - CSize)),
+    space_quota:assert_write(SpaceId, max(0, Offset + size(Buffer) - CSize)),
     helpers:write(FileHandle, Offset, Buffer).
 
 %%--------------------------------------------------------------------
