@@ -170,7 +170,7 @@ get_user_details(SessionId, UserId) ->
                 <<"name">> => User#od_user.name,
                 <<"login">> => User#od_user.alias,
                 <<"linkedAccounts">> => User#od_user.linked_accounts,
-                <<"emailList">> => User#od_user.email_list
+                <<"emailList">> => User#od_user.emails
             };
         {error, _} ->
             #{

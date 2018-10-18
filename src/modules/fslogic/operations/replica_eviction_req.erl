@@ -184,12 +184,17 @@ evict_file_replica_insecure(UserCtx, FileCtx, MigrationProviderId, TransferId,
 evict_fs_subtree(UserCtx, FileCtx, MigrationProviderId, TransferId) ->
     case transfer:is_ongoing(TransferId) of
         true ->
-            case file_ctx:is_dir(FileCtx) of
-                {true, FileCtx2} ->
-                    evict_dir(UserCtx, FileCtx2, MigrationProviderId, 0,
-                        TransferId);
-                {false, FileCtx2} ->
-                    schedule_file_replica_deletion(FileCtx2, MigrationProviderId, TransferId)
+            case file_ctx:file_exists_const(FileCtx) of
+                true ->
+                    case file_ctx:is_dir(FileCtx) of
+                        {true, FileCtx2} ->
+                            evict_dir(UserCtx, FileCtx2, MigrationProviderId, 0,
+                                TransferId);
+                        {false, FileCtx2} ->
+                            schedule_file_replica_deletion(FileCtx2, MigrationProviderId, TransferId)
+                    end;
+                false ->
+                    {error, not_found}
             end;
         false ->
             #provider_response{status = #status{code = ?OK}}

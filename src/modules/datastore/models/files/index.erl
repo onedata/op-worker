@@ -216,13 +216,24 @@ save_db_view(IndexId, SpaceId, Function, ReduceFunction, Spatial, Options) ->
     ViewFunction =
     <<"function (doc, meta) {
         'use strict';
-        if(doc['_record'] == 'custom_metadata' && doc['space_id'] == '", SpaceId/binary, "') {
+        if(doc['_record'] == 'custom_metadata'
+            && doc['space_id'] == '", SpaceId/binary, "'
+            && doc['_deleted'] == false)
+        {
             var user_map_callback = eval.call(null, '(", Function/binary, ")');
             var result = user_map_callback(doc['file_objectid'], doc['value']);
             if(result) {
-                emit(result[0], result[1]);
+                if ('list' in result) {
+	              for (var keyValuePair of result['list'])
+	                emit(keyValuePair[0], keyValuePair[1]);
+	            }
+	          	else{
+	              emit(result[0], result[1]);
+	            }
             }
+            return null;
         }
+        return null;
     }">>,
     ok = case Spatial of
         true ->
