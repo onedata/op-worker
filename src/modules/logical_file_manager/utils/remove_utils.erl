@@ -95,6 +95,8 @@ rm_children(SessId, Guid, Offset, Chunk, Answer) ->
                 _ -> % no more children
                     FirstError
             end;
+        {error, ?ENOENT} ->
+            ok;
         Error ->
             case Answer of
                 ok -> Error;
