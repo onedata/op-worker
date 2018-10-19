@@ -76,6 +76,12 @@ all() ->
 -define(USER_1_AUTH_HEADERS(Config, OtherHeaders),
     ?USER_AUTH_HEADERS(Config, <<"user1">>, OtherHeaders)).
 
+-define(INDEX_NAME(__FunctionName), begin
+    FunctionNameBin = str_utils:to_binary(__FunctionName),
+    RandomIntBin = integer_to_binary(erlang:unique_integer([positive])),
+    <<"index_", FunctionNameBin/binary, RandomIntBin/binary>>
+end).
+
 -define(INDEX_PATH(__SpaceId, __IndexName),
     <<"spaces/", __SpaceId/binary, "/indexes/", __IndexName/binary>>
 ).
@@ -120,10 +126,10 @@ create_get_update_delete_index(Config) ->
     Workers = [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     Provider1 = ?PROVIDER_ID(WorkerP1),
     Provider2 = ?PROVIDER_ID(WorkerP2),
-    IndexName = <<"name1">>,
+    IndexName = ?INDEX_NAME(?FUNCTION_NAME),
     XattrName = ?XATTR_NAME,
 
-    % create on one provider
+    % create index
     ?assertMatch([], list_indexes_via_rest(Config, WorkerP1, ?SPACE_ID, 100)),
     Options1 = #{<<"update_min_changes">> => 10000},
     ?assertMatch(ok, create_index_via_rest(
@@ -144,7 +150,7 @@ create_get_update_delete_index(Config) ->
         }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
     end, Workers),
 
-    % update on other provider (via create)
+    % update index
     Options2 = #{<<"replica_update_min_changes">> => 100},
     ?assertMatch(ok, update_index_via_rest(
         Config, WorkerP1, ?SPACE_ID, IndexName,
@@ -174,7 +180,7 @@ overwrite_index(Config) ->
     Workers = [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     Provider1 = ?PROVIDER_ID(WorkerP1),
     Provider2 = ?PROVIDER_ID(WorkerP2),
-    IndexName = <<"name1">>,
+    IndexName = ?INDEX_NAME(?FUNCTION_NAME),
     XattrName = ?XATTR_NAME,
 
     % create
@@ -209,10 +215,11 @@ overwrite_index(Config) ->
     ?assertMatch([IndexName], list_indexes_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
     ?assertMatch([IndexName], list_indexes_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
 
+    ExpOptions = #{},
     ExpMapFun2 = index_utils:escape_js_function(?GEOSPATIAL_MAP_FUNCTION),
     lists:foreach(fun(Worker) ->
         ?assertMatch({ok, #{
-            <<"indexOptions">> := #{},
+            <<"indexOptions">> := ExpOptions,
             <<"providers">> := [Provider1],
             <<"mapFunction">> := ExpMapFun2,
             <<"reduceFunction">> := null,
@@ -228,7 +235,7 @@ overwrite_index(Config) ->
 create_get_delete_reduce_fun(Config) ->
     Workers = [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     Provider1 = ?PROVIDER_ID(WorkerP1),
-    IndexName = <<"name1">>,
+    IndexName = ?INDEX_NAME(?FUNCTION_NAME),
     XattrName = ?XATTR_NAME,
 
     % create on one provider
@@ -251,9 +258,9 @@ create_get_delete_reduce_fun(Config) ->
         }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
     end, Workers),
 
-    % add reduce function
+    % add reduce function on other provider
     ?assertMatch(ok, add_reduce_fun_via_rest(
-        Config, WorkerP1, ?SPACE_ID, IndexName, ?REDUCE_FUNCTION(XattrName)
+        Config, WorkerP2, ?SPACE_ID, IndexName, ?REDUCE_FUNCTION(XattrName)
     )),
     ?assertMatch([IndexName], list_indexes_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
     ?assertMatch([IndexName], list_indexes_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
@@ -293,7 +300,7 @@ create_get_delete_reduce_fun(Config) ->
 
 getting_nonexistent_index_should_fail(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    IndexName = <<"nonexistent_index">>,
+    IndexName = ?INDEX_NAME(?FUNCTION_NAME),
     ExpError = ?ERROR_INDEX_NOT_FOUND,
 
     lists:foreach(fun(Worker) ->
@@ -304,7 +311,7 @@ getting_nonexistent_index_should_fail(Config) ->
 
 getting_index_of_not_supported_space_should_fail(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    IndexName = <<"name1">>,
+    IndexName = ?INDEX_NAME(?FUNCTION_NAME),
     SpaceId = <<"space2">>,
     XattrName = ?XATTR_NAME,
 
@@ -352,43 +359,52 @@ query_index(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    IndexName = <<"index_10">>,
+    IndexName = ?INDEX_NAME(?FUNCTION_NAME),
     XattrName = ?XATTR_NAME,
 
     Query = query_filter(Config, SpaceId, IndexName),
     FilePrefix = atom_to_list(?FUNCTION_NAME),
     Guids = create_files_with_xattrs(WorkerP1, SessionId, SpaceName, FilePrefix, 5, XattrName),
+    ExpError = ?ERROR_NOT_FOUND,
+    ExpGuids = lists:sort(Guids),
 
     % support index only by one provider; other should return error on query
     ?assertMatch(ok, create_index_via_rest(
         Config, WorkerP1, SpaceId, IndexName, ?MAP_FUNCTION(XattrName),
         false, [?PROVIDER_ID(WorkerP2)], #{}
     )),
-
-    ExpError = ?ERROR_NOT_FOUND,
-    ExpGuids = lists:sort(Guids),
     ?assertMatch(ExpError, Query(WorkerP1, #{}), ?ATTEMPTS),
     ?assertEqual(ExpGuids, Query(WorkerP2, #{}), ?ATTEMPTS),
 
     % support index on both providers and check that they returns correct results
-    ?assertMatch(ok, create_index_via_rest(
-        Config, WorkerP1, SpaceId, IndexName, ?MAP_FUNCTION(XattrName),
-        false, [?PROVIDER_ID(WorkerP1), ?PROVIDER_ID(WorkerP2)], #{}
+    ?assertMatch(ok, update_index_via_rest(
+        Config, WorkerP2, ?SPACE_ID, IndexName, <<>>,
+        #{providers => [?PROVIDER_ID(WorkerP1), ?PROVIDER_ID(WorkerP2)]}
     )),
     ?assertEqual(ExpGuids, Query(WorkerP1, #{}), ?ATTEMPTS),
     ?assertEqual(ExpGuids, Query(WorkerP2, #{}), ?ATTEMPTS),
 
-    % remove support for index on one provider
+    % remove support for index on one provider,
+    % which should then remove it from db
     ?assertMatch(ok, create_index_via_rest(
         Config, WorkerP2, SpaceId, IndexName, ?MAP_FUNCTION(XattrName),
-        false, [?PROVIDER_ID(WorkerP1)], #{}
+        false, [?PROVIDER_ID(WorkerP2)], #{}
     )),
-    ?assertEqual(ExpGuids, Query(WorkerP1, #{}), ?ATTEMPTS).
-%%    ?assertMatch(ExpError, Query(WorkerP2, #{}), ?ATTEMPTS). % todo handle qwe
+    ?assertEqual(ExpError, Query(WorkerP1, #{}), ?ATTEMPTS),
+    ?assertMatch(ExpGuids, Query(WorkerP2, #{}), ?ATTEMPTS),
+
+    % lastly add index again on both providers and check that they
+    % returns correct results
+    ?assertMatch(ok, update_index_via_rest(
+        Config, WorkerP1, ?SPACE_ID, IndexName, <<>>,
+        #{providers => [?PROVIDER_ID(WorkerP1), ?PROVIDER_ID(WorkerP2)]}
+    )),
+    ?assertEqual(ExpGuids, Query(WorkerP1, #{}), ?ATTEMPTS),
+    ?assertEqual(ExpGuids, Query(WorkerP2, #{}), ?ATTEMPTS).
 
 create_geospatial_index(Config) ->
     Workers = [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    IndexName = <<"geospatial_index_1">>,
+    IndexName = ?INDEX_NAME(?FUNCTION_NAME),
 
     create_index_via_rest(Config, WorkerP1, ?SPACE_ID, IndexName, ?GEOSPATIAL_MAP_FUNCTION, true),
     ?assertMatch([IndexName], list_indexes_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
@@ -466,7 +482,7 @@ file_removal_test(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    IndexName = <<"file_removal_test_index">>,
+    IndexName = ?INDEX_NAME(?FUNCTION_NAME),
     XattrName = ?XATTR_NAME,
 
     Query = query_filter(Config, SpaceId, IndexName),

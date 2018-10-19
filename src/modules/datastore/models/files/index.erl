@@ -24,7 +24,10 @@
     query/3, get_json/2, is_supported/3, id/2, update_reduce_function/3, get/2]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_struct/1, get_record_version/0]).
+-export([
+    get_ctx/0, get_record_struct/1, get_record_version/0, get_posthooks/0,
+    resolve_conflict/3
+]).
 
 -type id() :: binary().
 -type diff() :: datastore:diff(index()).
@@ -75,7 +78,7 @@ create(SpaceId, Name, MapFunction, ReduceFunction, Options, Spatial, Providers) 
         },
         scope = SpaceId
     },
-    case create(ToCreate) of
+    case save(ToCreate) of
         {ok, Doc} ->
             ok = index_links:add_link(Name, SpaceId),
             index_changes:handle(Doc),
@@ -257,27 +260,52 @@ delete_db_view(SpaceId, IndexName) ->
 %% Query view.
 %% @end
 %%--------------------------------------------------------------------
--spec query(od_space:id(), name(), options()) -> {ok, datastore_json:ejson()} | {error, term()}.
+-spec query(od_space:id(), name(), options()) ->
+    {ok, datastore_json:ejson()} | {error, term()}.
 query(SpaceId, <<"file-popularity">>, Options) ->
-    Id = <<"file-popularity-", SpaceId/binary>>,
-    couchbase_driver:query_view(?DISK_CTX, Id, Id, Options);
+    query(<<"file-popularity-", SpaceId/binary>>, Options);
 query(SpaceId, IndexName, Options) ->
-    Id = id(IndexName, SpaceId),
-    couchbase_driver:query_view(?DISK_CTX, Id, Id, Options).
+    query(id(IndexName, SpaceId), Options).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
 %% @private
--spec create(doc()) -> {ok, doc()} | {error, term()}.
-create(Doc) ->
+-spec save(doc()) -> {ok, doc()} | {error, term()}.
+save(Doc) ->
     datastore_model:save(?CTX, Doc).
 
 %% @private
 -spec update(id(), diff()) -> {ok, doc()} | {error, term()}.
 update(IndexId, Diff) ->
     datastore_model:update(?CTX, IndexId, Diff).
+
+%% @private
+-spec query(id(), options()) -> {ok, datastore_json:ejson()} | {error, term()}.
+query(IndexId, Options) ->
+    case couchbase_driver:query_view(?DISK_CTX, IndexId, IndexId, Options) of
+        {ok, _} = Ans ->
+            Ans;
+        {error, {<<"case_clause">>, <<"{not_found,deleted}">>}} ->
+            {error, not_found};
+        Error ->
+            Error
+    end.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Posthook responsible for calling index_changes:handle function
+%% for locally updated document.
+%% @end
+%%-------------------------------------------------------------------
+-spec run_on_index_doc_change(atom(), list(), term()) -> {ok, doc()}.
+run_on_index_doc_change(update, [_, _, _], Result = {ok, Doc}) ->
+    index_changes:handle(Doc),
+    Result;
+run_on_index_doc_change(_, _, Result) ->
+    Result.
 
 %%%===================================================================
 %%% datastore_model callbacks
@@ -307,6 +335,19 @@ get_record_version() ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns list of callbacks which will be called after each operation
+%% on datastore model.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_posthooks() -> [datastore_hooks:posthook()].
+get_posthooks() ->
+    [
+        fun run_on_index_doc_change/3
+    ].
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Returns model's record structure in provided version.
 %% @end
 %%--------------------------------------------------------------------
@@ -322,3 +363,35 @@ get_record_struct(1) ->
         {index_options, [{atom, term}]},
         {providers, [string]}
     ]}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Provides custom resolution of remote, concurrent modification conflicts.
+%% Should return 'default' if default conflict resolution should be applied.
+%% Should return 'ignore' if new change is obsolete.
+%% Should return '{Modified, Doc}' when custom conflict resolution has been
+%% applied, where Modified defines whether next revision should be generated.
+%% If Modified is set to 'false' conflict resolution outcome will be saved as
+%% it is.
+%% =============
+%% This conflict resolution promotes the field enqueued = false in all cases
+%% in order to avoid marking a transfer dequeued multiple times.
+%% Also if transfer is still ongoing promotes the field cancel = true.
+%% In case of finished and rerun transfer promotes rerun_id of newer doc.
+%% @end
+%%--------------------------------------------------------------------
+-spec resolve_conflict(datastore_model:ctx(), doc(), doc()) ->
+    {boolean(), doc()} | ignore | default.
+resolve_conflict(_Ctx, NewDoc, PreviousDoc) ->
+    #document{revs = [Rev1 | _]} = NewDoc,
+    #document{revs = [Rev2 | _]} = PreviousDoc,
+
+    Res = case datastore_utils:is_greater_rev(Rev1, Rev2) of
+              true ->
+                  {false, NewDoc};
+              false ->
+                  ignore
+          end,
+    ?error("RES CONF:~n~nPREV: ~p~n~nNEW: ~p~n~nRES: ~p~n~n", [PreviousDoc, NewDoc, Res]),
+    Res.

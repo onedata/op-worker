@@ -78,13 +78,9 @@ apply(Doc = #document{value = Value, scope = SpaceId, seq = Seq}) ->
     try
         DocToHandle = case Value of
             #links_forest{model = Model, key = Key} ->
-                % link documents never have conflicts, therefore we return original doc
-                links_save(Model, Key, Doc),
-                Doc;
+                links_save(Model, Key, Doc);
             #links_node{model = Model, key = Key} ->
-                % link documents never have conflicts, therefore we return original doc
-                links_save(Model, Key, Doc),
-                Doc;
+                links_save(Model, Key, Doc);
             #links_mask{} ->
                 % link documents never have conflicts, therefore we return original doc
                 links_delete(Doc),
@@ -93,15 +89,18 @@ apply(Doc = #document{value = Value, scope = SpaceId, seq = Seq}) ->
                 Model = element(1, Value),
                 Ctx = datastore_model_default:get_ctx(Model),
                 Ctx2 = Ctx#{sync_change => true, hooks_disabled => true},
-                {ok, Doc2} = datastore_model:save(Ctx2, Doc),
-
-                case Value of
-                    #file_location{} ->
-                        fslogic_location_cache:cache_location(Doc);
-                    _ ->
-                        ok
-                end,
-                Doc2
+                case datastore_model:save(Ctx2, Doc) of
+                    {ok, Doc2} ->
+                        case Value of
+                            #file_location{} ->
+                                fslogic_location_cache:cache_location(Doc);
+                            _ ->
+                                ok
+                        end,
+                        Doc2;
+                    {error, ignored} ->
+                        undefined
+                end
         end,
 
         try
@@ -126,10 +125,13 @@ apply(Doc = #document{value = Value, scope = SpaceId, seq = Seq}) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Saves datastore links document.
+%% Saves datastore links document and returns doc used for applying changes.
+%% Because link documents never have conflicts (doc is either saved or ignored)
+%% original doc is returned (in case of newer doc than local one)
+%% or `undefined` (in case of obsolete doc).
 %% @end
 %%--------------------------------------------------------------------
--spec links_save(model(), key(), doc()) -> ok.
+-spec links_save(model(), key(), doc()) -> undefined | doc().
 links_save(Model, RoutingKey, Doc = #document{key = Key}) ->
     Ctx = datastore_model_default:get_ctx(Model),
     Ctx2 = Ctx#{
@@ -137,10 +139,18 @@ links_save(Model, RoutingKey, Doc = #document{key = Key}) ->
         local_links_tree_id => oneprovider:get_id()
     },
     Ctx3 = datastore_multiplier:extend_name(RoutingKey, Ctx2),
-    {ok, _} = datastore_router:route(Ctx3, RoutingKey, save, [
-        Ctx3, Key, Doc
-    ]),
-    ok.
+    case datastore_router:route(Ctx3, RoutingKey, save, [Ctx3, Key, Doc]) of
+        {ok, _} ->
+            Doc;
+        {error, ignored} ->
+            case Doc#document.value of
+                #links_forest{} ->
+                    ?error("LINKS_FOREST_SAVE: ignored");
+                #links_node{} ->
+                    ?error("LINKS_NODE_SAVE: ignored")
+            end,
+            undefined
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -148,7 +158,7 @@ links_save(Model, RoutingKey, Doc = #document{key = Key}) ->
 %% Removes datastore links based on links mask.
 %% @end
 %%--------------------------------------------------------------------
--spec links_delete(doc()) -> ok.
+-spec links_delete(doc()) -> undefined | doc().
 links_delete(Doc = #document{key = Key, value = LinksMask = #links_mask{
     key = RoutingKey, model = Model, tree_id = TreeId
 }, deleted = false}) ->
@@ -166,7 +176,7 @@ links_delete(Doc = #document{key = Key, value = LinksMask = #links_mask{
             Ctx2_2 = datastore_multiplier:extend_name(RoutingKey, Ctx),
             save_links_mask(Ctx2_2, Doc#document{deleted = Deleted});
         _ ->
-            ok
+            undefined
     end;
 links_delete(Doc = #document{
     mutators = [TreeId, RemoteTreeId],
@@ -184,10 +194,10 @@ links_delete(Doc = #document{
             Ctx3 = datastore_multiplier:extend_name(RoutingKey, Ctx2),
             save_links_mask(Ctx3, Doc);
         _ ->
-            ok
+            undefined
     end;
 links_delete(#document{}) ->
-    ok.
+    undefined.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -238,13 +248,16 @@ apply_links_mask(Ctx, #links_mask{key = Key, tree_id = TreeId, links = Links},
 %% Saves datastore links mask.
 %% @end
 %%--------------------------------------------------------------------
--spec save_links_mask(ctx(), doc()) -> ok.
+-spec save_links_mask(ctx(), doc()) -> undefined | doc().
 save_links_mask(Ctx, Doc = #document{key = Key,
     value = #links_mask{key = RoutingKey}}) ->
-    {ok, _} = datastore_router:route(Ctx, RoutingKey, save, [
-        Ctx, Key, Doc
-    ]),
-    ok.
+    case datastore_router:route(Ctx, RoutingKey, save, [Ctx, Key, Doc]) of
+        {ok, _} ->
+            Doc;
+        {error, ignored} ->
+            ?error("LINKS_MASK_SAVE: ignored"),
+            undefined
+    end.
 
 %%--------------------------------------------------------------------
 %% @private

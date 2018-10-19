@@ -22,6 +22,7 @@
 
 -spec handle(index:doc()) -> ok.
 handle(Doc = #document{value = #index{providers = ProviderIds}}) ->
+    ?error("~n~n~nCHANGE: ~p~n~n~n", [Doc]),
     case oneprovider:get_id_or_undefined() of
         undefined ->
             ok;
@@ -50,6 +51,7 @@ create_or_update_db_view(#document{
         index_options = Options
     }
 }) ->
+    ?error("~n~n~nCREATE~n~n~n"),
     case provider_logic:supports_space(SpaceId) of
         true ->
             ok = index:save_db_view(Id, SpaceId, MapFunction, ReduceFunction, Spatial, Options);
@@ -60,11 +62,15 @@ create_or_update_db_view(#document{
 
 -spec remove_db_view(index:doc()) -> ok.
 remove_db_view(#document{value = #index{name = Name, space_id = SpaceId}}) ->
-    case index:delete_db_view(Name, SpaceId) of
+    ?error("~n~n~nDELETE~n~n~n"),
+    case index:delete_db_view(SpaceId, Name) of
         ok ->
             ok;
         {error, {<<"not_found">>, <<"missing">>}} ->
             ok;
-        {error, Error} ->
-            ?error("Removal of view from provider failed due to ~p", [Error])
+        {error, {<<"not_found">>, <<"deleted">>}} ->
+            ok;
+        {error, Error} = Err ->
+            ?error("Removal of db view from provider failed due to ~p", [Error]),
+            Err
     end.
