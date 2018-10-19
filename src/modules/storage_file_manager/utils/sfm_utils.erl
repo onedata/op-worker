@@ -346,7 +346,7 @@ delete_storage_dir(FileCtx, UserCtx) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec retry_dir_deletion(storage_file_manager:handle(), file_meta:uuid(),
-    non_neg_integer()) -> {ok, {error, term()}}.
+    non_neg_integer()) -> ok  | {error, term()}.
 retry_dir_deletion(#sfm_handle{file = FileId, space_id = SpaceId}, _FileUuid, ?CLEANUP_MAX_RETRIES_NUM) ->
     ?error("Could not delete directory ~p on storage in space ~p", [FileId, SpaceId]);
 retry_dir_deletion(SFMHandle = #sfm_handle{
