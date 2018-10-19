@@ -43,6 +43,9 @@
     ?APP_NAME, rtransfer_events_caching_time, 1000)
 ).
 
+-define(REF_TO_TIDS_CLEARING_DELAY, 15000).
+-define(REF_TO_TIDS_CLEARING_MSG(__Ref), {clear_ref_to_tids_association, __Ref}).
+
 -define(PREFETCH_PRIORITY,
     application:get_env(?APP_NAME, default_prefetch_priority, 96)).
 
@@ -72,6 +75,7 @@
     session_to_froms = #{} :: #{session:id() => sets:set(from())},
     from_requests_types = #{} :: #{from() => request_type()},
     from_to_transfer_id = #{} :: #{from() => transfer:id() | undefined},
+    ref_to_transfer_ids = #{} :: #{fetch_ref() => [transfer:id()]},
     transfer_id_to_from = #{} :: #{transfer:id() | undefined => from()},
     cached_stats = #{} :: #{undefined | transfer:id() => #{od_provider:id() => integer()}},
     requested_blocks = #{} :: #{from() => block()},
@@ -571,18 +575,31 @@ handle_info(timeout, #state{in_progress = []} = State) ->
 handle_info(timeout, State) ->
     {noreply, State, ?DIE_AFTER};
 
+handle_info(?REF_TO_TIDS_CLEARING_MSG(Ref), State) ->
+    NewRefToTransferIds = maps:remove(Ref, State#state.ref_to_transfer_ids),
+    {noreply, State#state{ref_to_transfer_ids = NewRefToTransferIds}, ?DIE_AFTER};
+
 handle_info({Ref, active, ProviderId, Block}, #state{
     file_ctx = FileCtx,
     ref_to_froms = RefToFroms,
+    ref_to_transfer_ids = RefToTransferIds,
     from_to_transfer_id = FromToTransferId
 } = State) ->
     fslogic_cache:set_local_change(true),
     {ok, _} = replica_updater:update(FileCtx, [Block], undefined, false),
     fslogic_cache:set_local_change(false),
+
+    % Race where `complete` msg is send before `active` one is possible because
+    % of rtransfer. That's why association from ref to transfer ids is created
+    % and kept for some time after handling `complete` msg despite other
+    % associations being cleared. Thanks to that transfer statistics can be
+    % updated correctly.
     AffectedFroms = maps:get(Ref, RefToFroms, []),
     TransferIds = case maps:values(maps:with(AffectedFroms, FromToTransferId)) of
-        [] -> [undefined];
-        Values -> lists:usort(Values)
+        [] ->
+            maps:get(Ref, RefToTransferIds, [undefined]);
+        Values ->
+            lists:usort(Values)
     end,
     {noreply, cache_stats_and_blocks(TransferIds, ProviderId, Block, State), ?DIE_AFTER};
 
@@ -624,7 +641,8 @@ handle_info({Ref, complete, {ok, _} = _Status}, State) ->
             [gen_server2:reply(From, {ok, Message}) || {From, Message} <- Ans]
     end,
 
-    {noreply, State4, ?DIE_AFTER};
+    State5 = associate_ref_with_tids(Ref, EndedTransfers, State4),
+    {noreply, State5, ?DIE_AFTER};
 
 handle_info({FailedRef, complete, {error, disconnected}}, State) ->
     {Block, Priority, AffectedFroms, _FinishedFroms, State1} =
@@ -653,7 +671,7 @@ handle_info({Ref, complete, ErrorStatus}, State) ->
     ?error("Transfer ~p failed: ~p", [Ref, ErrorStatus]),
     {_Block, _Priority, AffectedFroms, FinishedFroms, State1} =
         disassociate_ref(Ref, State),
-    {_FailedBlocks, _ExcludeSessions, _FailedTransfers, State2} =
+    {_FailedBlocks, _ExcludeSessions, FailedTransfers, State2} =
         disassociate_froms(FinishedFroms, State1),
 
     %% Cancel TransferIds that are still left (i.e. the failed ref was only a part of the transfer)
@@ -661,7 +679,8 @@ handle_info({Ref, complete, ErrorStatus}, State) ->
     [gen_server2:reply(From, ErrorStatus) || From <- FinishedFroms],
     State3 = lists:foldl(fun cancel_transfer_id/2, State2, AffectedTransferIds),
 
-    {noreply, State3, ?DIE_AFTER};
+    State4 = associate_ref_with_tids(Ref, FailedTransfers, State3),
+    {noreply, State4, ?DIE_AFTER};
 
 handle_info(fslogic_cache_check_flush, State) ->
     fslogic_cache:check_flush(),
@@ -955,6 +974,21 @@ associate_from_with_tid(From, TransferId, State) ->
     TransferIdToFrom = maps:put(TransferId, From, State#state.transfer_id_to_from),
     State#state{from_to_transfer_id = FromToTransferId,
         transfer_id_to_from = TransferIdToFrom}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Associates a fetch ref with a transfer ids and sets timer after which
+%% msg to clear such association will be send.
+%% @end
+%%--------------------------------------------------------------------
+-spec associate_ref_with_tids(Ref :: fetch_ref(), [transfer:id()], #state{}) ->
+    #state{}.
+associate_ref_with_tids(_From, [], State) -> State;
+associate_ref_with_tids(Ref, TransferIds, State) ->
+    RefToTransferIds = maps:put(Ref, TransferIds, State#state.ref_to_transfer_ids),
+    erlang:send_after(?REF_TO_TIDS_CLEARING_DELAY, self(), ?REF_TO_TIDS_CLEARING_MSG(Ref)),
+    State#state{ref_to_transfer_ids = RefToTransferIds}.
 
 %%--------------------------------------------------------------------
 %% @private

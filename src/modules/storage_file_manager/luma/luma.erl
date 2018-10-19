@@ -386,7 +386,7 @@ select_posix_compatible_storage(SpaceId) ->
             {ok, StorageDoc} ->
                 case storage:select_helper(StorageDoc, [
                     ?POSIX_HELPER_NAME, ?GLUSTERFS_HELPER_NAME,
-                    ?NULL_DEVICE_HELPER_NAME])
+                    ?WEBDAV_HELPER_NAME, ?NULL_DEVICE_HELPER_NAME])
                 of
                     {ok, Helpers} -> {true, [{StorageDoc, Helper} || Helper <- Helpers]};
                     {error, not_found} -> false

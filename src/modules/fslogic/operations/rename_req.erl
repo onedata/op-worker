@@ -195,7 +195,8 @@ rename_into_different_place_within_space(UserCtx, SourceFileCtx, TargetParentFil
         value = #storage{helpers = [#helper{name = HelperName} | _]}
     } = StorageDoc,
     case lists:member(HelperName,
-        [?POSIX_HELPER_NAME, ?NULL_DEVICE_HELPER_NAME, ?GLUSTERFS_HELPER_NAME]) of
+        [?POSIX_HELPER_NAME, ?NULL_DEVICE_HELPER_NAME, ?GLUSTERFS_HELPER_NAME,
+         ?WEBDAV_HELPER_NAME]) of
         true ->
             rename_into_different_place_within_posix_space(UserCtx, SourceFileCtx2,
                 TargetParentFileCtx, TargetName, SourceFileType, TargetFileType,

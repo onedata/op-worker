@@ -263,8 +263,8 @@ transfers_should_be_ordered_by_timestamps(Config) ->
     {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
 
     File2 = ?absPath(SpaceId, <<"file_sorted2">>),
-    Size2 = 1024 * 1024 * 1024,
-    FileGuid2 = create_test_file(WorkerP1, SessionId, File2, crypto:strong_rand_bytes(Size2)),
+    Size2 = 3 * 1024 * 1024 * 1024,
+    FileGuid2 = create_test_file_by_size(WorkerP1, SessionId, File2, Size2),
     {ok, FileObjectId2} = cdmi_id:guid_to_objectid(FileGuid2),
 
     % when
@@ -275,14 +275,14 @@ transfers_should_be_ordered_by_timestamps(Config) ->
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
     ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, File2),
 
-    Tid2 = schedule_file_replication(WorkerP1, DomainP2, File2, Config),
-    ?assertEqual([Tid2], get_ongoing_transfers_for_file(WorkerP1, FileGuid2), ?ATTEMPTS),
-    ?assertEqual([], get_ended_transfers_for_file(WorkerP1, FileGuid2), ?ATTEMPTS),
+    Tid2 = schedule_file_replication(WorkerP2, DomainP2, File2, Config),
+    ?assertEqual([Tid2], get_ongoing_transfers_for_file(WorkerP2, FileGuid2), ?ATTEMPTS),
+    ?assertEqual([], get_ended_transfers_for_file(WorkerP2, FileGuid2), ?ATTEMPTS),
     % Wait 1 second to be sure that transfer Tid will have greater timestamp than transfer Tid2
     timer:sleep(timer:seconds(1)),
-    Tid = schedule_file_replication(WorkerP1, DomainP2, File, Config),
-    ?assertEqual([Tid], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-    ?assertEqual([], get_ended_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
+    Tid = schedule_file_replication(WorkerP2, DomainP2, File, Config),
+    ?assertEqual([Tid], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
+    ?assertEqual([], get_ended_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
 
     % then
     ?assertTransferStatus(#{
@@ -1683,11 +1683,9 @@ list_transfers(Config) ->
 
     % List using random chunk sizes
     Waiting = fun(Worker) ->
-        Chunk = rand:uniform(FilesNum),
         list_all_transfers_via_rest(Config, Worker, Space, <<"waiting">>, rand:uniform(FilesNum))
     end,
     Ongoing = fun(Worker) ->
-        Chunk = rand:uniform(FilesNum),
         list_all_transfers_via_rest(Config, Worker, Space, <<"ongoing">>, rand:uniform(FilesNum))
     end,
     Ended = fun(Worker) ->
@@ -2119,6 +2117,20 @@ create_test_file(Worker, SessionId, File, TestData) ->
     {ok, FileGuid} = lfm_proxy:create(Worker, SessionId, File, 8#700),
     {ok, Handle} = lfm_proxy:open(Worker, SessionId, {guid, FileGuid}, write),
     lfm_proxy:write(Worker, Handle, 0, TestData),
+    lfm_proxy:fsync(Worker, Handle),
+    lfm_proxy:close(Worker, Handle),
+    FileGuid.
+
+create_test_file_by_size(Worker, SessionId, File, Size) ->
+    ChunkSize = 100 * 1024 * 1024,
+    Chunks = Size div (ChunkSize + 1) + 1,
+    {ok, FileGuid} = lfm_proxy:create(Worker, SessionId, File, 8#700),
+    {ok, Handle} = lfm_proxy:open(Worker, SessionId, {guid, FileGuid}, write),
+    Data = crypto:strong_rand_bytes(ChunkSize),
+    lists:foldl(fun(_ChunkNum, WrittenSum) ->
+        {ok, Written} = lfm_proxy:write(Worker, Handle, WrittenSum, binary_part(Data, 0, min(Size - WrittenSum, ChunkSize))),
+        Written + WrittenSum
+    end, 0, lists:seq(0, Chunks - 1)),
     lfm_proxy:fsync(Worker, Handle),
     lfm_proxy:close(Worker, Handle),
     FileGuid.
