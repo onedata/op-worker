@@ -21,17 +21,16 @@
 -export([handle/1]).
 
 -spec handle(index:doc()) -> ok.
-handle(Doc) ->
-    ProviderIds = Doc#document.value#index.providers,
+handle(Doc = #document{value = #index{providers = ProviderIds}}) ->
     case oneprovider:get_id_or_undefined() of
         undefined ->
             ok;
         ProviderId ->
             case lists:member(ProviderId, ProviderIds) of
                 true ->
-                    handle_internal(Doc);
-                _ ->
-                    ok
+                    create_or_update_db_view(Doc);
+                false ->
+                    remove_db_view(Doc)
             end
     end.
 
@@ -39,8 +38,8 @@ handle(Doc) ->
 %%% Internal functions
 %%%===================================================================
 
--spec handle_internal(index:doc()) -> ok.
-handle_internal(#document{
+-spec create_or_update_db_view(index:doc()) -> ok.
+create_or_update_db_view(#document{
     key = Id,
     value = #index{
         name = IndexName,
@@ -49,11 +48,23 @@ handle_internal(#document{
         map_function = MapFunction,
         reduce_function = ReduceFunction,
         index_options = Options
-}}) ->
+    }
+}) ->
     case provider_logic:supports_space(SpaceId) of
         true ->
             ok = index:save_db_view(Id, SpaceId, MapFunction, ReduceFunction, Spatial, Options);
         false ->
             ?warning("Creation of index ~p with id ~p requested within not supported space ~p",
                 [IndexName, Id, SpaceId])
+    end.
+
+-spec remove_db_view(index:doc()) -> ok.
+remove_db_view(#document{value = #index{name = Name, space_id = SpaceId}}) ->
+    case index:delete_db_view(Name, SpaceId) of
+        ok ->
+            ok;
+        {error, {<<"not_found">>, <<"missing">>}} ->
+            ok;
+        {error, Error} ->
+            ?error("Removal of view from provider failed due to ~p", [Error])
     end.

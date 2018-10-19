@@ -20,7 +20,7 @@
 %% API
 -export([
     create/7, update/6, update/7,
-    delete/2, list/1, list/4, save_db_view/6,
+    delete/2, list/1, list/4, save_db_view/6, delete_db_view/2,
     query/3, get_json/2, is_supported/3, id/2, update_reduce_function/3, get/2]).
 
 %% datastore_model callbacks
@@ -241,6 +241,16 @@ save_db_view(IndexId, SpaceId, Function, ReduceFunction, Spatial, Options) ->
         _ ->
             couchbase_driver:save_view_doc(?DISK_CTX, IndexId, ViewFunction, ReduceFunction, Options)
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes view from db.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_db_view(od_space:id(), binary()) -> ok | {error, term()}.
+delete_db_view(SpaceId, IndexName) ->
+    Id = id(IndexName, SpaceId),
+    couchbase_driver:delete_design_doc(?DISK_CTX, Id).
 
 %%--------------------------------------------------------------------
 %% @doc

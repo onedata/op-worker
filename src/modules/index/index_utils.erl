@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Utils functions fon operating on index record.
+%%% Utils functions for operating on index record.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(index_utils).
