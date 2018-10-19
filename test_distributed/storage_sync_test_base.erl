@@ -3561,7 +3561,7 @@ clean_space(Config) ->
     Attempts = 5 * ?ATTEMPTS,
     Self = self(),
     Guids = lists:map(fun({Guid, _}) ->
-        ok = lfm_proxy:rm_recursive(W, ?ROOT_SESS_ID, {guid, Guid}),
+        lfm_proxy:rm_recursive(W, ?ROOT_SESS_ID, {guid, Guid}),
         ok = worker_pool:cast(?VERIFY_POOL, {?MODULE, verify_file_deleted, [W2, Guid, Self, Attempts]}),
         Guid
     end, Children),
