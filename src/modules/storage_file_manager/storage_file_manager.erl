@@ -311,9 +311,19 @@ readdir(#sfm_handle{
 %% @end
 %%--------------------------------------------------------------------
 -spec get_child_handle(handle(), helpers:file_id()) -> handle().
-get_child_handle(ParentSFMHandle = #sfm_handle{file = ParentFileId}, ChildName) ->
-    ParentSFMHandle#sfm_handle{
-        file = filename:join([ParentFileId, ChildName])
+get_child_handle(#sfm_handle{
+    session_id = SessionId,
+    space_id = SpaceId,
+    file = StorageFileId,
+    storage = Storage,
+    share_id = ShareId
+}, ChildName) ->
+    #sfm_handle{
+        session_id = SessionId,
+        space_id = SpaceId,
+        file = filename:join(StorageFileId, ChildName),
+        storage = Storage,
+        share_id = ShareId
     }.
 
 
@@ -489,7 +499,10 @@ unlink(#sfm_handle{
         ok -> ok;
         {error, not_found} -> ok
     end,
-    helpers:unlink(HelperHandle, FileId, CurrentSize).
+    case helpers:unlink(HelperHandle, FileId, CurrentSize) of
+        ok -> ok;
+        {error, ?ENOENT} -> ok
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
