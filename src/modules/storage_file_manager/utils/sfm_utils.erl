@@ -29,7 +29,10 @@
     create_delayed_storage_file_and_return_location/1,
     create_storage_file/2, delete_storage_file/2,
     delete_storage_file_without_location/2, delete_storage_dir/2,
-    create_parent_dirs/1, recursive_delete/2]).
+    create_parent_dirs/1, recursive_delete/2, retry_dir_deletion/3]).
+
+-define(CLEANUP_MAX_RETRIES_NUM, 10).
+-define(CLEANUP_DELAY, 5).
 
 %%%===================================================================
 %%% API
@@ -327,7 +330,44 @@ delete_storage_dir(FileCtx, UserCtx) ->
             dir_location:delete(FileUuid);
         {error, ?ENOENT} ->
             dir_location:delete(FileUuid);
+        {error, ?ENOTEMPTY} ->
+            % todo VFS-4997
+            spawn(?MODULE, retry_dir_deletion, [SFMHandle, FileUuid, 0]),
+            ok;
         Error ->
+            ?error("sfm_utils:delete_storage_dir failed with ~p", [Error]),
+            Error
+    end.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% This function is used to delay cleanup of directory on storage
+%% if it fails with ENOTEMPTY.
+%% @end
+%%-------------------------------------------------------------------
+-spec retry_dir_deletion(storage_file_manager:handle(), file_meta:uuid(),
+    non_neg_integer()) -> {ok, {error, term()}}.
+retry_dir_deletion(#sfm_handle{file = FileId, space_id = SpaceId}, _FileUuid, ?CLEANUP_MAX_RETRIES_NUM) ->
+    ?error("Could not delete directory ~p on storage in space ~p", [FileId, SpaceId]);
+retry_dir_deletion(SFMHandle = #sfm_handle{
+    file = FileId,
+    space_id = SpaceId
+}, FileUuid, RetryNum) ->
+    ?debug(
+        "Delayed deletion of directory ~p on storage in space ~p. Retry number: ~p",
+        [FileId, SpaceId, RetryNum + 1]),
+    timer:sleep(timer:seconds(?CLEANUP_DELAY)),
+    case storage_file_manager:rmdir(SFMHandle) of
+        ok ->
+            dir_location:delete(FileUuid);
+        {error, ?ENOENT} ->
+            dir_location:delete(FileUuid);
+        {error, ?ENOTEMPTY} ->
+            retry_dir_deletion(SFMHandle, FileUuid, RetryNum + 1);
+        Error ->
+            ?error(
+                "Unexpected error when trying to delete directory ~p on storage in space ~p",
+                [FileId, SpaceId]),
             Error
     end.
 
@@ -437,6 +477,7 @@ mkdir_and_maybe_chown(SFMHandle, Mode, FileCtx, ShouldChown) ->
 -spec delete_children(file_ctx:ctx(), user_ctx:ctx(), non_neg_integer(),
     non_neg_integer()) -> {ok, file_ctx:ctx()}.
 delete_children(FileCtx, UserCtx, Offset, ChunkSize) ->
+    % todo VFS-4997
     {ChildrenCtxs, FileCtx2} = file_ctx:get_file_children(FileCtx,
         UserCtx, Offset, ChunkSize),
     lists:foreach(fun(ChildCtx) ->
