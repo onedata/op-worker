@@ -320,6 +320,10 @@ transfer_record(StateAndTransferId) ->
         _ ->
             {<<"index">>, op_gui_utils:ids_to_association(SpaceId, IndexName)}
     end,
+    QueryParams = case QueryViewParams of
+        undefined -> null;
+        _ -> {QueryViewParams}
+    end,
     IsOngoing = transfer:is_ongoing(Transfer),
     FinishTime = case IsOngoing of
         true -> null;
@@ -340,7 +344,7 @@ transfer_record(StateAndTransferId) ->
         {<<"dataType">>, DataType},
         {<<"dataIdentifier">>, DataIdentifier},
         {<<"path">>, gs_protocol:undefined_to_null(Path)},
-        {<<"queryParams">>, {QueryViewParams}},
+        {<<"queryParams">>, QueryParams},
         {<<"systemUserId">>, UserId},
         {<<"startTime">>, StartTime},
         {<<"scheduleTime">>, ScheduleTime},
