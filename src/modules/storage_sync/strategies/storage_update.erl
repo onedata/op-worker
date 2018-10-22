@@ -41,7 +41,7 @@
 -export([handle_already_imported_file/3, import_children/5]).
 
 %% API
--export([start/7]).
+-export([start/8]).
 
 %%%===================================================================
 %%% space_strategy_behaviour callbacks
@@ -221,12 +221,13 @@ main_worker_pool() ->
 %%--------------------------------------------------------------------
 -spec start(od_space:id(), storage:id(), space_strategy:timestamp(),
     space_strategy:timestamp(), space_strategy:timestamp(),
-    file_ctx:ctx(), file_meta:path()) ->
+    space_strategy:timestamp(), file_ctx:ctx(), file_meta:path()) ->
     [space_strategy:job_result()] | space_strategy:job_result().
-start(SpaceId, StorageId, ImportFinishTime, LastUpdateStartTime, LastUpdateFinishTime,
+start(SpaceId, StorageId, ImportStartTime, ImportFinishTime, LastUpdateStartTime, LastUpdateFinishTime,
     ParentCtx, FileName
 ) ->
     InitialImportJobData = #{
+        import_start_time => ImportStartTime,
         import_finish_time => ImportFinishTime,
         last_update_start_time => LastUpdateStartTime,
         last_update_finish_time => LastUpdateFinishTime,
