@@ -54,8 +54,8 @@ terminate() ->
 %%--------------------------------------------------------------------
 -spec find_record(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find_record(<<"db-index">>, TransferIdAndIndexName) ->
-    db_index_record(TransferIdAndIndexName).
+find_record(<<"db-index">>, SpaceIdAndIndexName) ->
+    db_index_record(SpaceIdAndIndexName).
 
 
 %%--------------------------------------------------------------------
@@ -132,21 +132,21 @@ delete_record(_ResourceType, _Id) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns a client-compliant db index record based on transfer id and index name.
+%% Returns a client-compliant db index record based on space id and index name.
 %% @end
 %%--------------------------------------------------------------------
 -spec db_index_record(RecordId :: binary()) -> {ok, proplists:proplist()}.
 db_index_record(RecordId) ->
-    {TransferId, IndexName} = op_gui_utils:association_to_ids(RecordId),
-    {ok, #document{value = #transfer{
-        space_id = SpaceId,
-        index_name = IndexName,
-        query_view_params = QueryViewParams
-    }}} = transfer:get(TransferId),
-    {ok, IndexJson} = index:get_json(SpaceId, IndexName),
+    {SpaceId, IndexName} = op_gui_utils:association_to_ids(RecordId),
+    {ok, #document{value = Index}} = index:get(SpaceId, IndexName),
     {ok, [
         {<<"name">>, IndexName},
         {<<"space">>, SpaceId},
-        {<<"queryParams">>, QueryViewParams}
-        | maps:to_list(IndexJson)
+        {<<"indexOptions">>, {Index#index.index_options}},
+        {<<"providers">>, Index#index.providers},
+        {<<"mapFunction">>, Index#index.map_function},
+        {<<"reduceFunction">>, utils:ensure_defined(
+            Index#index.reduce_function, undefined, null
+        )},
+        {<<"spatial">>, Index#index.spatial}
     ]}.

@@ -304,7 +304,8 @@ transfer_record(StateAndTransferId) ->
         space_id = SpaceId,
         schedule_time = ScheduleTime,
         start_time = StartTime,
-        index_name = IndexName
+        index_name = IndexName,
+        query_view_params = QueryViewParams
     }}} = transfer:get(TransferId),
     {DataType, DataIdentifier} = case IndexName of
         undefined ->
@@ -317,7 +318,7 @@ transfer_record(StateAndTransferId) ->
             end,
             {FileType, FileGuid};
         _ ->
-            {<<"index">>, op_gui_utils:ids_to_association(TransferId, IndexName)}
+            {<<"index">>, op_gui_utils:ids_to_association(SpaceId, IndexName)}
     end,
     IsOngoing = transfer:is_ongoing(Transfer),
     FinishTime = case IsOngoing of
@@ -339,6 +340,7 @@ transfer_record(StateAndTransferId) ->
         {<<"dataType">>, DataType},
         {<<"dataIdentifier">>, DataIdentifier},
         {<<"path">>, gs_protocol:undefined_to_null(Path)},
+        {<<"queryParams">>, {QueryViewParams}},
         {<<"systemUserId">>, UserId},
         {<<"startTime">>, StartTime},
         {<<"scheduleTime">>, ScheduleTime},
