@@ -73,15 +73,11 @@
     api_key = <<"test_api_key">>
 }).
 
+-define(assertMonitoring(Worker, ExpectedSSM, SpaceId, Attempts),
+    storage_sync_test_base:assert_monitoring_state(Worker, ExpectedSSM, SpaceId, Attempts)).
 
--define(assertMonitoring(Worker, Expected, SpaceId, Attempts),
-    ?assertMatch(Expected, begin
-        StorageId = storage_sync_test_base:get_storage_id(Worker),
-        rpc:call(Worker, storage_sync_monitoring, get_info, [SpaceId, StorageId])
-    end, Attempts)).
-
--define(assertMonitoring(Worker, Expected, SpaceId),
-    ?assertMonitoring(Worker, Expected, SpaceId, 1)).
+-define(assertMonitoring(Worker, ExpectedSSM, SpaceId),
+    ?assertMonitoring(Worker, ExpectedSSM, SpaceId, 1)).
 
 -define(assertHashChangedFun(StorageFilePath, MountPoint, SpaceId, ExpectedResult0),
     fun

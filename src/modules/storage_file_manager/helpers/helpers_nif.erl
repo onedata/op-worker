@@ -245,6 +245,7 @@ prepare_args() ->
         s3_helper_threads_number,
         swift_helper_threads_number,
         glusterfs_helper_threads_number,
+        webdav_helper_threads_number,
         nulldevice_helper_threads_number,
         buffer_helpers,
         buffer_scheduler_threads_number,

@@ -3,9 +3,6 @@
 #include "helpers/storageHelperCreator.h"
 #include "monitoring/monitoring.h"
 
-#include <asio.hpp>
-#include <asio/executor_work_guard.hpp>
-
 #include <chrono>
 #include <map>
 #include <memory>
@@ -21,6 +18,8 @@
 #include <pwd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+
+#include <folly/executors/IOThreadPoolExecutor.h>
 
 namespace {
 /**
@@ -72,13 +71,16 @@ struct HelpersNIF {
             }
         }
 
+        webDAVExecutor = std::make_shared<folly::IOThreadPoolExecutor>(
+            std::stoul(args["webdav_helper_threads_number"].toStdString()));
+
         SHCreator = std::make_unique<one::helpers::StorageHelperCreator>(
             services[CEPH_HELPER_NAME]->service,
             services[CEPHRADOS_HELPER_NAME]->service,
             services[POSIX_HELPER_NAME]->service,
             services[S3_HELPER_NAME]->service,
             services[SWIFT_HELPER_NAME]->service,
-            services[GLUSTERFS_HELPER_NAME]->service,
+            services[GLUSTERFS_HELPER_NAME]->service, webDAVExecutor,
             services[NULL_DEVICE_HELPER_NAME]->service,
             std::stoul(args["buffer_scheduler_threads_number"].toStdString()),
             buffering::BufferLimits{
@@ -102,11 +104,13 @@ struct HelpersNIF {
                 worker.join();
             }
         }
+        webDAVExecutor->stop();
     }
 
     bool bufferingEnabled = false;
     std::unordered_map<folly::fbstring, std::unique_ptr<HelperIOService>>
         services;
+    std::shared_ptr<folly::IOThreadPoolExecutor> webDAVExecutor;
     std::unique_ptr<one::helpers::StorageHelperCreator> SHCreator;
 };
 
@@ -455,7 +459,8 @@ static void configurePerformanceMonitoring(
                 std::stoul(args["ceph_helper_threads_number"].toStdString()));
             ONE_METRIC_COUNTER_SET(
                 "comp.oneprovider.mod.options.cephrados_helper_thread_count",
-                std::stoul(args["cephrados_helper_threads_number"].toStdString()));
+                std::stoul(
+                    args["cephrados_helper_threads_number"].toStdString()));
             ONE_METRIC_COUNTER_SET(
                 "comp.oneprovider.mod.options.posix_helper_thread_count",
                 std::stoul(args["posix_helper_threads_number"].toStdString()));
@@ -505,11 +510,11 @@ static void configurePerformanceMonitoring(
 }
 
 /*********************************************************************
-*
-*                          WRAPPERS (NIF based)
-*       All functions below are described in helpers_nif.erl
-*
-*********************************************************************/
+ *
+ *                          WRAPPERS (NIF based)
+ *       All functions below are described in helpers_nif.erl
+ *
+ *********************************************************************/
 
 ERL_NIF_TERM get_handle(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
