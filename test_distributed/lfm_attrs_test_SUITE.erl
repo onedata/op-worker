@@ -246,9 +246,9 @@ create_and_query_view(Config) ->
     MetaBlue = #{<<"meta">> => #{<<"color">> => <<"blue">>}},
     MetaRed = #{<<"meta">> => #{<<"color">> => <<"red">>}},
     ViewFunction =
-        <<"function (id, meta) {
-             if(meta['onedata_json'] && meta['onedata_json']['meta'] && meta['onedata_json']['meta']['color']) {
-                 return [meta['onedata_json']['meta']['color'], id];
+        <<"function (id, file_meta, times, metadata, file_location, file_popularity) {
+             if(metadata['onedata_json'] && metadata['onedata_json']['meta'] && metadata['onedata_json']['meta']['color']) {
+                 return [metadata['onedata_json']['meta']['color'], id];
              }
              return null;
        }">>,
