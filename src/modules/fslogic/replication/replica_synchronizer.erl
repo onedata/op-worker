@@ -370,11 +370,27 @@ apply_internal(FileCtx, FunOrMsg) ->
 %%--------------------------------------------------------------------
 -spec apply_if_alive_internal(file_meta:uuid(), term()) -> term().
 apply_if_alive_internal(Uuid, FunOrMsg) ->
-    case gproc:lookup_local_name(Uuid) of
-        undefined ->
+    try
+        case gproc:lookup_local_name(Uuid) of
+            undefined ->
+                ok;
+            Process ->
+                send_or_apply(Process, FunOrMsg)
+        end
+    catch
+        %% The process we called was already terminating because of idle timeout,
+        %% there's nothing to worry about.
+        exit:{{shutdown, timeout}, _} ->
+            ?debug("Synchronizer process stopped because of a timeout, "
+            "apply cancelled"),
             ok;
-        Process ->
-            send_or_apply(Process, FunOrMsg)
+        _:{noproc, _} ->
+            ?debug("Synchronizer noproc, apply cancelled"),
+            ok;
+        exit:{normal, _} ->
+            ?debug("Synchronizer process stopped because of exit:normal, "
+            "apply cancelled"),
+            ok
     end.
 
 %%--------------------------------------------------------------------
@@ -386,11 +402,27 @@ apply_if_alive_internal(Uuid, FunOrMsg) ->
 -spec apply_or_run_locally_internal(file_meta:uuid(), fun(() -> term()),
     fun(() -> term())) -> term().
 apply_or_run_locally_internal(Uuid, Fun, FallbackFun) ->
-    case gproc:lookup_local_name(Uuid) of
-        undefined ->
+    try
+        case gproc:lookup_local_name(Uuid) of
+            undefined ->
+                FallbackFun();
+            Process ->
+                gen_server2:call(Process, {apply, Fun}, infinity)
+        end
+    catch
+        %% The process we called was already terminating because of idle timeout,
+        %% there's nothing to worry about.
+        exit:{{shutdown, timeout}, _} ->
+            ?debug("Synchronizer process stopped because of a timeout, "
+            "executing fallback function"),
             FallbackFun();
-        Process ->
-            gen_server2:call(Process, {apply, Fun}, infinity)
+        _:{noproc, _} ->
+            ?debug("Synchronizer noproc, executing fallback function"),
+            FallbackFun();
+        exit:{normal, _} ->
+            ?debug("Synchronizer process stopped because of exit:normal, "
+            "executing fallback function"),
+            FallbackFun()
     end.
 
 %%--------------------------------------------------------------------
