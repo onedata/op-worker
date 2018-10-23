@@ -178,16 +178,16 @@ random_index_name(FunctionName) ->
     <<"index_", FunctionNameBin/binary, "_", RandomIntBin/binary>>.
 
 test_map_function(XattrName) ->
-    <<"function (id, meta) {
-        if(meta['", XattrName/binary,"']) {
+    <<"function (id, type, meta, ctx) {
+        if(type == 'custom_metadata' && meta['", XattrName/binary,"']) {
             return [meta['", XattrName/binary,"'], id];
         }
         return null;
     }">>.
 
 test_map_function(XattrName, XattrName2) ->
-    <<"function (id, meta) {
-        if(meta['", XattrName/binary,"']) {
+    <<"function (id, type, meta, ctx) {
+        if(type == 'custom_metadata' && meta['", XattrName/binary,"']) {
             return [meta['", XattrName/binary,"'], [id, meta['", XattrName2/binary, "']]];
         }
         return null;

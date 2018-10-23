@@ -89,7 +89,7 @@ create_and_delete_simple_index_test(Config) ->
     IndexName = ?index_name,
     ProviderId = ?GET_DOMAIN_BIN(Worker),
     SimpleMapFunction = <<"
-        function(id, _, _, _, _, ctx) {
+        function(id, type, meta, ctx) {
             return [id, id];
         }
     ">>,
@@ -104,7 +104,7 @@ query_simple_empty_index_test(Config) ->
     IndexName = ?index_name,
     ProviderId = ?GET_DOMAIN_BIN(Worker),
     SimpleMapFunction = <<"
-        function(id, _, _, _, _, ctx) {
+        function(id, type, meta, ctx) {
             return [id, id];
         }
     ">>,
@@ -122,9 +122,9 @@ query_index_using_file_meta(Config) ->
     {ok, CdmiId} = cdmi_id:guid_to_objectid(SpaceGuid),
     ProviderId = ?GET_DOMAIN_BIN(Worker),
     SimpleMapFunction = <<"
-        function(id, file_meta, times, custom_metadata, file_popularity, ctx) {
-            if(file_meta)
-                return [id, file_meta];
+        function(id, type, meta, ctx) {
+            if(type == 'file_meta')
+                return [id, meta];
         }
     ">>,
     create_index(Worker, SpaceId, IndexName, SimpleMapFunction, undefined, [], false, [ProviderId]),
@@ -158,9 +158,9 @@ query_index_using_times(Config) ->
     {ok, CdmiId} = cdmi_id:guid_to_objectid(SpaceGuid),
     ProviderId = ?GET_DOMAIN_BIN(Worker),
     SimpleMapFunction = <<"
-        function(id, file_meta, times, custom_metadata, file_popularity, ctx) {
-            if(times)
-                return [id, times];
+        function(id, type, meta, ctx) {
+            if(type == 'times')
+                return [id, meta];
         }
     ">>,
     create_index(Worker, SpaceId, IndexName, SimpleMapFunction, undefined, [], false, [ProviderId]),
@@ -182,8 +182,8 @@ query_index_using_custom_metadata_when_xattr_is_not_set(Config) ->
     ProviderId = ?GET_DOMAIN_BIN(Worker),
     SimpleMapFunction = <<"
         function(id, file_meta, times, custom_metadata, file_popularity, ctx) {
-            if(custom_metadata)
-                return [id, custom_metadata];
+            if(type == 'custom_metadata')
+                return [id, meta];
         }
     ">>,
     create_index(Worker, SpaceId, IndexName, SimpleMapFunction, undefined, [], false, [ProviderId]),
@@ -209,9 +209,9 @@ query_index_using_custom_metadata(Config) ->
     lfm_proxy:set_xattr(Worker, ?SESS_ID(Worker), {guid, SpaceGuid}, Xattr2),
 
     SimpleMapFunction = <<"
-        function(id, file_meta, times, custom_metadata, file_popularity, ctx) {
-            if(custom_metadata)
-                return [id, custom_metadata];
+        function(id, type, meta, ctx) {
+            if(type == 'custom_metadata')
+                return [id, meta];
         }
     ">>,
     create_index(Worker, SpaceId, IndexName, SimpleMapFunction, undefined, [], false, [ProviderId]),
@@ -245,9 +245,9 @@ query_index_using_file_popularity(Config) ->
     ProviderId = ?GET_DOMAIN_BIN(Worker),
 
     SimpleMapFunction = <<"
-        function(id, file_meta, times, custom_metadata, file_popularity, ctx) {
-            if(file_popularity)
-                return [id, file_popularity];
+        function(id, type, meta, ctx) {
+            if(type == 'file_popularity')
+                return [id, meta];
         }
     ">>,
     create_index(Worker, SpaceId, IndexName, SimpleMapFunction, undefined, [], false, [ProviderId]),
@@ -278,8 +278,8 @@ query_index_and_emit_ctx(Config) ->
     {ok, CdmiId} = cdmi_id:guid_to_objectid(SpaceGuid),
     ProviderId = ?GET_DOMAIN_BIN(Worker),
     SimpleMapFunction = <<"
-        function(id, file_meta, times, custom_metadata, file_popularity, ctx) {
-            if(file_meta)
+        function(id, type, meta, ctx) {
+            if(type == 'file_meta')
                 return [id, ctx];
         }
     ">>,
@@ -301,7 +301,7 @@ wrong_map_function(Config) ->
     {ok, CdmiId} = cdmi_id:guid_to_objectid(SpaceGuid),
     ProviderId = ?GET_DOMAIN_BIN(Worker),
     SimpleMapFunction = <<"
-        function(_, _, _, _, _, _) {
+        function(_, _, _, _) {
             throw 'Test error';
         }
     ">>,
@@ -348,12 +348,6 @@ query_index(Worker, SpaceId, ViewName, Options) ->
 
 list_indexes(Worker, SpaceId) ->
     rpc:call(Worker, index, list, [SpaceId]).
-
-extract_query_values(QueryResult) ->
-    {Rows} = QueryResult,
-    lists:map(fun(Row) ->
-        json_utils:list_to_map(Row)
-    end, Rows).
 
 query_result_to_map(QueryResult) ->
     {Rows} = QueryResult,

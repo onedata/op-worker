@@ -43,7 +43,7 @@
     resolve_guid_of_space_should_return_space_guid/1,
     resolve_guid_of_dir_should_return_dir_guid/1,
     custom_metadata_doc_should_contain_file_objectid/1,
-    create_and_query_view_mapping_on_file_to_many_rows/1]).
+    create_and_query_view_mapping_one_file_to_many_rows/1]).
 
 all() ->
     ?ALL([
@@ -246,8 +246,12 @@ create_and_query_view(Config) ->
     MetaBlue = #{<<"meta">> => #{<<"color">> => <<"blue">>}},
     MetaRed = #{<<"meta">> => #{<<"color">> => <<"red">>}},
     ViewFunction =
-        <<"function (id, file_meta, times, metadata, file_location, file_popularity) {
-             if(metadata['onedata_json'] && metadata['onedata_json']['meta'] && metadata['onedata_json']['meta']['color']) {
+        <<"function (id, type, meta, ctx) {
+             if(type == 'custom_metadata'
+                && metadata['onedata_json']
+                && metadata['onedata_json']['meta']
+                && metadata['onedata_json']['meta']['color'])
+             {
                  return [metadata['onedata_json']['meta']['color'], id];
              }
              return null;
@@ -367,7 +371,7 @@ custom_metadata_doc_should_contain_file_objectid(Config) ->
     {ok, ExpectedFileObjectid} = cdmi_id:guid_to_objectid(Guid),
     ?assertEqual(ExpectedFileObjectid, FileObjectid).
 
-create_and_query_view_mapping_on_file_to_many_rows(Config) ->
+create_and_query_view_mapping_one_file_to_many_rows(Config) ->
     FilePrefix = str_utils:to_binary(?FUNCTION_NAME),
     [Worker | _] = ?config(op_worker_nodes, Config),
     {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
@@ -384,16 +388,18 @@ create_and_query_view_mapping_on_file_to_many_rows(Config) ->
 
     ViewFunction =
         <<"
-        function (id, meta) {
-            const JOB_PREFIX = 'jobId.'
-            var results = [];
-            for (var key of Object.keys(meta)) {
-                if (key.startsWith(JOB_PREFIX)) {
-                    var jobId = key.slice(JOB_PREFIX.length);
-                    results.push([jobId, id]);
+        function (id, type, meta, ctx) {
+            if (type == 'custom_metadata') {
+                const JOB_PREFIX = 'jobId.'
+                var results = [];
+                for (var key of Object.keys(meta)) {
+                    if (key.startsWith(JOB_PREFIX)) {
+                        var jobId = key.slice(JOB_PREFIX.length);
+                        results.push([jobId, id]);
+                    }
                 }
+                return {'list': results};
             }
-            return {'list': results};
        }">>,
 
     {ok, Guid1} = lfm_proxy:create(Worker, SessId, Path1, 8#600),

@@ -259,74 +259,78 @@ update(IndexId, Diff) ->
 %%     * file_popularity.
 %%
 %% More info on Couchbase views and writing mapping functions:
-%%     https://docs.couchbase.com/server/5.5/views/views-writing-map.html.
+%%     https://docs.couchbase.com/server/5.5/views/views-writing-map.html
 %%
 %% All fields starting with underscore in the above models are filtered out
-%% and not passed to user-defined function.
+%% and not passed to the mapping function.
 %%
-%% Function defined by user should accept 6 arguments:
+%% The mapping function should accept 4 arguments:
 %%     * id - cdmi object id of a file,
-%%     * file_meta - document of file_meta model,
-%%     * times - document of times,
-%%     * custom_metadata - document of custom_metadata model,
-%%     * file_popularity - document of file_popularity model,
-%%     * ctx - context object used for storing helpful information
-%%             i.e. id of a local provider.
+%%     * type - type of the document to be mapped by the function. One of:
+%%         ** file_meta
+%%         ** times
+%%         ** custom_metadata
+%%         ** file_popularity
+%%     * meta - values stored in the mapped document.
+%%     * ctx - context object used for storing helpful information. Currently it stores:
+%%         ** provider_id,
+%%         ** space_id.
 %%
-%% User mapping function should return (key, value) pair/s that are to be emitted
-%% to the view via emit(..) function.
+%% The mapping function should return (key, value) pair/s that are to be emitted
+%% to the view via emit(...) function.
 %%
-%% If one document shall be mapped to exactly one row in the view, the function should
-%% return 2-element list [key, value], where key and value can be any JS object.
+%% If one document shall be mapped to exactly one row in the view, the mapping
+%% function should return 2-element list [key, value],
+%% where key and value can be any JS object.
 %%
-%% If one document shall be mapped to many rows in the view, the function should
-%% return object with attribute "list". Value of this attribute should be a list of
-%% 2-element lists [key, value].
+%% If one document shall be mapped to many rows in the view, the mapping
+%% function should return an object with the key "list". The value should be
+%% a list of 2-element lists [key, value].
 %%
-%% User-defined mapping functions can have one of the following forms:
+%% Examples of the mapping function:
 %%
-%% function (id, file_meta, times, custom_metadata, file_popularity, ctx) {
-%%     var key = ...
-%%     var value = ...
-%%     return [key, value];
-%% }
+%%    * returning a single view row
 %%
-%% or
+%%      function (id, type, meta, ctx) {
+%%          var key = ...
+%%          var value = ...
+%%          return [key, value];
+%%      }
 %%
-%% function (id, file_meta, times, custom_metadata, file_popularity, ctx) {
-%%     var key1 = ...
-%%     var value1 = ...
-%%     var key2 = ...
-%%     var value2 = ...
-%%     .
-%%     .
-%%     .
-%%     var keyN = ...
-%%     var valueN = ...
+%%    * returning multiple view rows
 %%
-%%     return {"list": [
-%%         [key1, value1],
-%%         [key2, value2],
-%%         .
-%%         .
-%%         .
-%%         [keyN, valueN],
-%%     ]};
-%% }
+%%      function (id, type, meta, ctx) {
+%%          var key1 = ...
+%%          var value1 = ...
+%%          var key2 = ...
+%%          var value2 = ...
+%%          .
+%%          .
+%%          .
+%%          var keyN = ...
+%%          var valueN = ...
+%%
+%%          return {"list": [
+%%              [key1, value1],
+%%              [key2, value2],
+%%              .
+%%              .
+%%              .
+%%              [keyN, valueN],
+%%          ]};
+%%      }
 %% @end
 %%-------------------------------------------------------------------
 -spec map_function_wrapper(binary(), od_space:id()) -> binary().
 map_function_wrapper(UserMapFunction, SpaceId) -> <<
-    "function user_function (doc, meta) {
+    "function (doc, meta) {
         'use strict';
         var userMapCallback = eval.call(null, '(", UserMapFunction/binary, ")');
-
-        var ctx = {'providerId': '", (oneprovider:get_id())/binary ,"'};
 
         // code for building cdmi_id
         ", (build_cdmi_object_id_in_js())/binary,"
 
-        function filterValues(object) {
+        function filterHiddenValues(object) {
             var filtered = {}
             for (var key of Object.keys(object))
                 if (!key.startsWith('_'))
@@ -334,23 +338,36 @@ map_function_wrapper(UserMapFunction, SpaceId) -> <<
             return filtered;
         };
 
-        var space_id = doc['_scope'];
-        if(space_id == '", SpaceId/binary, "' && doc['_deleted'] == false) {
-            var result = null;
-            var model = doc['_record'];
-            if (model == 'file_meta') {
-                var id = buildObjectId(doc['_key'], space_id);
-                result = userMapCallback(id, filterValues(doc), null, null, null, ctx);
-            } else if (model == 'times') {
-                var id = buildObjectId(doc['_key'], space_id);
-                result = userMapCallback(id, null, filterValues(doc), null, null, ctx);
-            } else if (model == 'custom_metadata'){
-                var id = doc['file_objectid'];
-                result = userMapCallback(id, null, null, doc['value'], null, ctx);
-            } else if (model == 'file_popularity') {
-                var id = buildObjectId(doc['file_uuid'], space_id);
-                result = userMapCallback(id, null, null, null, filterValues(doc), ctx);
+        var spaceId = doc['_scope'];
+
+        if(spaceId == '", SpaceId/binary, "' && doc['_deleted'] == false) {
+            
+            var id = null;
+            var type = doc['_record'];
+            var meta = null;
+            var ctx = {
+                'spaceId': spaceId,
+                'providerId': '", (oneprovider:get_id())/binary ,"'
+            };
+
+            if (type == 'file_meta') {
+                id = buildObjectId(doc['_key'], spaceId);
+                meta = filterHiddenValues(doc);
+            } else if (type == 'times') {
+                id = buildObjectId(doc['_key'], spaceId);
+                meta = filterHiddenValues(doc);
+            } else if (type == 'custom_metadata'){
+                id = doc['file_objectid'];
+                meta = doc['value'];
+            } else if (type == 'file_popularity') {
+                id = buildObjectId(doc['file_uuid'], spaceId);
+                meta = filterHiddenValues(doc);
+            } else {
+                log('Unsupported type: ' + type);
+                return null;
             }
+
+            var result = userMapCallback(id, type, meta, ctx);
 
             if(result) {
                 if ('list' in result) {

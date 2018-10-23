@@ -665,8 +665,8 @@ scheduling_replica_migration_by_index_with_function_returning_wrong_value_should
     WrongValue = <<"random_value_instead_of_file_id">>,
     %functions does not emit file id in values
     MapFunction = <<
-        "function (id, meta) {
-            if(meta['", XattrName/binary,"']) {
+        "function (id, type, meta, ctx) {
+            if(type == 'custom_metadata' && meta['", XattrName/binary,"']) {
                 return [meta['", XattrName/binary, "'], '", WrongValue/binary, "'];
             }
         return null;
@@ -745,8 +745,8 @@ scheduling_replica_migration_by_index_returning_not_existing_file_should_not_fai
 
     %functions emits not existing file id
     MapFunction = <<
-        "function (id, meta) {
-            if(meta['", XattrName/binary,"']) {
+        "function (id, type, meta, ctx) {
+            if(type == 'custom_metadata' && meta['", XattrName/binary,"']) {
                 return [meta['", XattrName/binary, "'], '", NotExistingFileId/binary, "'];
             }
         return null;
