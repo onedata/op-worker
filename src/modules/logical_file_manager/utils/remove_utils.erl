@@ -13,6 +13,7 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 
 %% API
 -export([rm/2]).
@@ -40,7 +41,11 @@ rm(SessId, FileKey) ->
                     Error
             end;
         false ->
-            lfm_files:unlink(SessId, {guid, Guid}, false)
+            lfm_files:unlink(SessId, {guid, Guid}, false);
+        {error, ?ENOENT} ->
+            ok;
+        Error ->
+            Error
     end.
 
 %%%===================================================================
@@ -90,6 +95,8 @@ rm_children(SessId, Guid, Offset, Chunk, Answer) ->
                 _ -> % no more children
                     FirstError
             end;
+        {error, ?ENOENT} ->
+            ok;
         Error ->
             case Answer of
                 ok -> Error;

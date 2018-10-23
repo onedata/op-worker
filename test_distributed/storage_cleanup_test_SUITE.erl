@@ -272,11 +272,11 @@ remote_directory_replica_should_be_deleted_from_storage_after_deletion(Config) -
     ok = lfm_proxy:close(WorkerP2, FileHandle2),
     ?assertEqual({ok, [binary_to_list(?FILE_NAME)]}, list_dir(WorkerP2, StorageDirPath2)),
     ?assertEqual({ok, ?TEST_DATA}, read_file(WorkerP2, StorageFilePath2)),
-    ?assertEqual(ok, lfm_proxy:rm_recursive(WorkerP2, SessionId2, {guid, DirGuid})),
+    ?assertEqual(ok, lfm_proxy:rm_recursive(WorkerP1, SessionId, {guid, DirGuid})),
 
     % then
-    ?assertEqual({error, ?ENOENT}, list_dir(WorkerP2, StorageDirPath2)),
-    ?assertEqual({error, ?ENOENT}, read_file(WorkerP2, StorageFilePath2)).
+    ?assertEqual({error, ?ENOENT}, list_dir(WorkerP2, StorageDirPath2), ?ATTEMPTS),
+    ?assertEqual({error, ?ENOENT}, read_file(WorkerP2, StorageFilePath2), ?ATTEMPTS).
 
 empty_remote_directory_replica_should_be_deleted_from_storage_after_deletion(Config) ->
     [WorkerP2, WorkerP1 | _] = ?config(op_worker_nodes, Config),
@@ -289,6 +289,7 @@ empty_remote_directory_replica_should_be_deleted_from_storage_after_deletion(Con
 
     % when
     {ok, DirGuid} = lfm_proxy:mkdir(WorkerP1, SessionId, DirPath, 8#775),
+    % create file so that directory will be created on storage
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, DirGuid, ?FILE_NAME, 8#664),
     {ok, FileHandle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
     {ok, _} = lfm_proxy:write(WorkerP1, FileHandle, 0, ?TEST_DATA),
@@ -303,14 +304,16 @@ empty_remote_directory_replica_should_be_deleted_from_storage_after_deletion(Con
     ok = lfm_proxy:close(WorkerP2, FileHandle2),
     ?assertEqual({ok, [binary_to_list(?FILE_NAME)]}, list_dir(WorkerP2, StorageDirPath2)),
     ?assertEqual({ok, ?TEST_DATA}, read_file(WorkerP2, StorageFilePath2)),
+    % delete file to leave an empty directory on storage
     ?assertEqual(ok, lfm_proxy:unlink(WorkerP1, SessionId, {guid, FileGuid})),
     ?assertEqual({error, ?ENOENT}, read_file(WorkerP2, StorageFilePath2), ?ATTEMPTS),
     ?assertEqual({error, ?ENOENT}, read_file_info(WorkerP2, StorageFilePath2), ?ATTEMPTS),
-    ?assertEqual(ok, lfm_proxy:rm_recursive(WorkerP2, SessionId2, {guid, DirGuid})),
+    % delete empty directory
+    ?assertEqual(ok, lfm_proxy:rm_recursive(WorkerP1, SessionId, {guid, DirGuid})),
 
     % then
-    ?assertEqual({error, ?ENOENT}, list_dir(WorkerP2, StorageDirPath2)),
-    ?assertEqual({error, ?ENOENT}, read_file_info(WorkerP2, StorageDirPath2)).
+    ?assertEqual({error, ?ENOENT}, list_dir(WorkerP2, StorageDirPath2), ?ATTEMPTS),
+    ?assertEqual({error, ?ENOENT}, read_file_info(WorkerP2, StorageDirPath2), ?ATTEMPTS).
 
 replica_should_be_deleted_from_storage_after_releasing_handle_to_remotely_deleted_file(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),

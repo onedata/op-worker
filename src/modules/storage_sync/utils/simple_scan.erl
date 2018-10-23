@@ -186,6 +186,8 @@ maybe_import_storage_file(Job = #space_strategy_job{
 -spec import_children(space_strategy:job(), file_meta:type(),
     Offset :: non_neg_integer(), file_ctx:ctx(), non_neg_integer()) ->
     [space_strategy:job()].
+import_children(_Job, _Type, _Offset, undefined, _BatchSize) ->
+    [];
 import_children(Job = #space_strategy_job{
     strategy_type = StrategyType,
     data = #{

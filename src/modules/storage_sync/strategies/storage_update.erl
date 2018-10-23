@@ -41,7 +41,7 @@
 -export([handle_already_imported_file/3, import_children/5]).
 
 %% API
--export([start/7]).
+-export([start/8]).
 
 %%%===================================================================
 %%% space_strategy_behaviour callbacks
@@ -105,15 +105,26 @@ strategy_init_jobs(no_update, _, _) ->
     [];
 strategy_init_jobs(_, _, #{import_finish_time := undefined}) ->
     []; % import hasn't been finished yet
-strategy_init_jobs(_, Args, Data = #{
+strategy_init_jobs(_,
+    Args = #{scan_interval := ScanIntervalSeconds},
+    Data = #{
+    import_start_time := ImportStartTime,
+    import_finish_time := ImportFinishTime,
     last_update_start_time := undefined,
     space_id := SpaceId,
     storage_id := StorageId
 }) ->
     % it will be first update
     CurrentTimestamp = time_utils:cluster_time_seconds(),
-    ?debug("Starting storage_update for space: ~p and storage: ~p", [SpaceId, StorageId]),
-    init_update_job(CurrentTimestamp, Args, Data);
+    case should_init_update_job(ImportStartTime, ImportFinishTime,
+        ScanIntervalSeconds, CurrentTimestamp)
+    of
+        true ->
+            ?debug("Starting storage_update for space: ~p and storage: ~p", [SpaceId, StorageId]),
+            init_update_job(CurrentTimestamp, Args, Data);
+        false ->
+            []
+    end;
 strategy_init_jobs(simple_scan, _, #{last_update_finish_time := undefined}) ->
     []; %update is in progress
 strategy_init_jobs(simple_scan,
@@ -210,12 +221,13 @@ main_worker_pool() ->
 %%--------------------------------------------------------------------
 -spec start(od_space:id(), storage:id(), space_strategy:timestamp(),
     space_strategy:timestamp(), space_strategy:timestamp(),
-    file_ctx:ctx(), file_meta:path()) ->
+    space_strategy:timestamp(), file_ctx:ctx(), file_meta:path()) ->
     [space_strategy:job_result()] | space_strategy:job_result().
-start(SpaceId, StorageId, ImportFinishTime, LastUpdateStartTime, LastUpdateFinishTime,
+start(SpaceId, StorageId, ImportStartTime, ImportFinishTime, LastUpdateStartTime, LastUpdateFinishTime,
     ParentCtx, FileName
 ) ->
     InitialImportJobData = #{
+        import_start_time => ImportStartTime,
         import_finish_time => ImportFinishTime,
         last_update_start_time => LastUpdateStartTime,
         last_update_finish_time => LastUpdateFinishTime,
@@ -261,6 +273,8 @@ handle_already_imported_file(Job = #space_strategy_job{
 -spec import_children(space_strategy:job(), file_meta:type(),
     Offset :: non_neg_integer(), file_ctx:ctx(), non_neg_integer()) ->
     [space_strategy:job()].
+import_children(_Job, _Type, _Offset, undefined, _BatchSize) ->
+    [];
 import_children(Job = #space_strategy_job{
     strategy_type = StrategyType,
     strategy_args = #{write_once := true},
