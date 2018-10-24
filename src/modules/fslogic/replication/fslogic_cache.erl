@@ -27,8 +27,8 @@
 -export([get_doc/1, save_doc/1, cache_doc/1, delete_doc/1, attach_blocks/1,
     attach_local_blocks/1, attach_public_blocks/1, merge_local_blocks/1]).
 % Block API
--export([get_blocks/1, save_blocks/2, cache_blocks/2, get_blocks_tree/1,
-    use_blocks/2, finish_blocks_usage/1, get_changed_blocks/1,
+-export([get_blocks/1, save_blocks/2, cache_blocks/2, check_blocks/1,
+    get_blocks_tree/1, use_blocks/2, finish_blocks_usage/1, get_changed_blocks/1,
     mark_changed_blocks/1, mark_changed_blocks/5, set_local_change/1,
     get_public_blocks/1]).
 % Size API
@@ -496,9 +496,29 @@ save_blocks(Key, Blocks) ->
 %%-------------------------------------------------------------------
 -spec cache_blocks(file_location:id(), fslogic_blocks:stored_blocks()) -> ok.
 cache_blocks(Key, Blocks) ->
-    put({?BLOCKS, Key}, blocks_to_tree(Blocks)),
+    put({?BLOCKS, Key}, blocks_to_tree(Blocks, true)),
     put({?PUBLIC_BLOCKS, Key}, Blocks),
     ok.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Checks if blocks are cached and loads it to cache if needed.
+%% @end
+%%-------------------------------------------------------------------
+-spec check_blocks(file_location:doc()) -> ok.
+check_blocks(LocationDoc = #document{
+    key = Key,
+    value = #file_location{blocks = PublicBlocks}
+}) ->
+    case get({?BLOCKS, Key}) of
+        undefined ->
+            {Blocks, Sorted} = merge_local_blocks(LocationDoc),
+            put({?BLOCKS, Key}, blocks_to_tree(Blocks, Sorted)),
+            put({?PUBLIC_BLOCKS, Key}, PublicBlocks),
+            ok;
+        _ ->
+            ok
+    end.
 
 %%-------------------------------------------------------------------
 %% @doc
