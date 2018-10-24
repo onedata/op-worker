@@ -350,21 +350,22 @@ map_function_wrapper(UserMapFunction, SpaceId) -> <<
                 'providerId': '", (oneprovider:get_id())/binary ,"'
             };
 
-            if (type == 'file_meta') {
-                id = buildObjectId(doc['_key'], spaceId);
-                meta = filterHiddenValues(doc);
-            } else if (type == 'times') {
-                id = buildObjectId(doc['_key'], spaceId);
-                meta = filterHiddenValues(doc);
-            } else if (type == 'custom_metadata'){
-                id = doc['file_objectid'];
-                meta = doc['value'];
-            } else if (type == 'file_popularity') {
-                id = buildObjectId(doc['file_uuid'], spaceId);
-                meta = filterHiddenValues(doc);
-            } else {
-                log('Unsupported type: ' + type);
-                return null;
+            switch (type) {
+                case 'file_meta':
+                case 'times':
+                    id = buildObjectId(doc['_key'], spaceId);
+                    meta = filterHiddenValues(doc);
+                    break;
+                case 'custom_metadata':
+                    id = doc['file_objectid'];
+                    meta = doc['value'];
+                    break;
+                case 'file_popularity':
+                    id = buildObjectId(doc['file_uuid'], spaceId);
+                    meta = filterHiddenValues(doc);
+                    break;
+                default:
+                    return null;
             }
 
             var result = userMapCallback(id, type, meta, ctx);

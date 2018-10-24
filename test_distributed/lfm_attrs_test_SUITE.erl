@@ -248,11 +248,11 @@ create_and_query_view(Config) ->
     ViewFunction =
         <<"function (id, type, meta, ctx) {
              if(type == 'custom_metadata'
-                && metadata['onedata_json']
-                && metadata['onedata_json']['meta']
-                && metadata['onedata_json']['meta']['color'])
+                && meta['onedata_json']
+                && meta['onedata_json']['meta']
+                && meta['onedata_json']['meta']['color'])
              {
-                 return [metadata['onedata_json']['meta']['color'], id];
+                 return [meta['onedata_json']['meta']['color'], id];
              }
              return null;
        }">>,
