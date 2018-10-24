@@ -82,9 +82,7 @@ apply(Doc = #document{value = Value, scope = SpaceId, seq = Seq}) ->
             #links_node{model = Model, key = Key} ->
                 links_save(Model, Key, Doc);
             #links_mask{} ->
-                % link documents never have conflicts, therefore we return original doc
-                links_delete(Doc),
-                Doc;
+                links_delete(Doc);
             _ ->
                 Model = element(1, Value),
                 Ctx = datastore_model_default:get_ctx(Model),
@@ -143,19 +141,14 @@ links_save(Model, RoutingKey, Doc = #document{key = Key}) ->
         {ok, _} ->
             Doc;
         {error, ignored} ->
-            case Doc#document.value of
-                #links_forest{} ->
-                    ?error("LINKS_FOREST_SAVE: ignored");
-                #links_node{} ->
-                    ?error("LINKS_NODE_SAVE: ignored")
-            end,
             undefined
     end.
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Removes datastore links based on links mask.
+%% Removes datastore links based on links mask and returns doc used for
+%% applying changes.
 %% @end
 %%--------------------------------------------------------------------
 -spec links_delete(doc()) -> undefined | doc().
@@ -245,7 +238,10 @@ apply_links_mask(Ctx, #links_mask{key = Key, tree_id = TreeId, links = Links},
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Saves datastore links mask.
+%% Saves datastore links mask and returns doc used for applying changes.
+%% Because link mask documents never have conflicts (doc is either saved
+%% or ignored) original doc is returned (in case of newer doc than local one)
+%% or `undefined` (in case of obsolete doc).
 %% @end
 %%--------------------------------------------------------------------
 -spec save_links_mask(ctx(), doc()) -> undefined | doc().
@@ -255,7 +251,6 @@ save_links_mask(Ctx, Doc = #document{key = Key,
         {ok, _} ->
             Doc;
         {error, ignored} ->
-            ?error("LINKS_MASK_SAVE: ignored"),
             undefined
     end.
 

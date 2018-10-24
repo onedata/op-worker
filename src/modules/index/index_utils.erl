@@ -71,6 +71,8 @@ sanitize_query_options([{bbox, Bbox} | Rest], Options) ->
 
 sanitize_query_options([{descending, true} | Rest], Options) ->
     sanitize_query_options(Rest, [descending | Options]);
+sanitize_query_options([{descending, false} | Rest], Options) ->
+    sanitize_query_options(Rest, Options);
 sanitize_query_options([{descending, undefined} | Rest], Options) ->
     sanitize_query_options(Rest, Options);
 sanitize_query_options([{descending, _} | _Rest], _Options) ->
@@ -98,6 +100,8 @@ sanitize_query_options([{startkey, StartKey} | Rest], Options) ->
 
 sanitize_query_options([{inclusive_end, true} | Rest], Options) ->
     sanitize_query_options(Rest, [inclusive_end | Options]);
+sanitize_query_options([{inclusive_end, false} | Rest], Options) ->
+    sanitize_query_options(Rest, Options);
 sanitize_query_options([{inclusive_end, undefined} | Rest], Options) ->
     sanitize_query_options(Rest, Options);
 sanitize_query_options([{inclusive_end, _} | _Rest], _Options) ->
@@ -129,7 +133,7 @@ sanitize_query_options([{limit, undefined} | Rest], Options) ->
     sanitize_query_options(Rest, Options);
 sanitize_query_options([{limit, Limit} | Rest], Options) ->
     case catch binary_to_integer(Limit) of
-        N when is_integer(N) ->
+        N when is_integer(N), N > 0 ->
             sanitize_query_options(Rest, [{limit, N} | Options]);
         _Error ->
             throw(?ERROR_INVALID_LIMIT)
@@ -139,7 +143,7 @@ sanitize_query_options([{skip, undefined} | Rest], Options) ->
     sanitize_query_options(Rest, Options);
 sanitize_query_options([{skip, Skip} | Rest], Options) ->
     case catch binary_to_integer(Skip) of
-        N when is_integer(N) ->
+        N when is_integer(N), N > 0 ->
             sanitize_query_options(Rest, [{skip, N} | Options]);
         _Error ->
             throw(?ERROR_INVALID_SKIP)

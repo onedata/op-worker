@@ -25,8 +25,7 @@
 
 %% datastore_model callbacks
 -export([
-    get_ctx/0, get_record_struct/1, get_record_version/0, get_posthooks/0,
-    resolve_conflict/3
+    get_ctx/0, get_record_struct/1, get_record_version/0, get_posthooks/0
 ]).
 
 -type id() :: binary().
@@ -363,35 +362,3 @@ get_record_struct(1) ->
         {index_options, [{atom, term}]},
         {providers, [string]}
     ]}.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Provides custom resolution of remote, concurrent modification conflicts.
-%% Should return 'default' if default conflict resolution should be applied.
-%% Should return 'ignore' if new change is obsolete.
-%% Should return '{Modified, Doc}' when custom conflict resolution has been
-%% applied, where Modified defines whether next revision should be generated.
-%% If Modified is set to 'false' conflict resolution outcome will be saved as
-%% it is.
-%% =============
-%% This conflict resolution promotes the field enqueued = false in all cases
-%% in order to avoid marking a transfer dequeued multiple times.
-%% Also if transfer is still ongoing promotes the field cancel = true.
-%% In case of finished and rerun transfer promotes rerun_id of newer doc.
-%% @end
-%%--------------------------------------------------------------------
--spec resolve_conflict(datastore_model:ctx(), doc(), doc()) ->
-    {boolean(), doc()} | ignore | default.
-resolve_conflict(_Ctx, NewDoc, PreviousDoc) ->
-    #document{revs = [Rev1 | _]} = NewDoc,
-    #document{revs = [Rev2 | _]} = PreviousDoc,
-
-    Res = case datastore_utils:is_greater_rev(Rev1, Rev2) of
-              true ->
-                  {false, NewDoc};
-              false ->
-                  ignore
-          end,
-    ?error("RES CONF:~n~nPREV: ~p~n~nNEW: ~p~n~nRES: ~p~n~n", [PreviousDoc, NewDoc, Res]),
-    Res.

@@ -254,7 +254,7 @@ prepare_options([{update_min_changes, undefined} | Rest]) ->
     prepare_options(Rest);
 prepare_options([{update_min_changes, UpdateMinChanges} | Rest]) ->
     case catch binary_to_integer(UpdateMinChanges) of
-        N when is_integer(N) ->
+        N when is_integer(N), N > 0 ->
             [{update_min_changes, N} | prepare_options(Rest)];
         _Error ->
             throw(?ERROR_INVALID_UPDATE_MIN_CHANGES)
@@ -264,7 +264,7 @@ prepare_options([{replica_update_min_changes, undefined} | Rest]) ->
     prepare_options(Rest);
 prepare_options([{replica_update_min_changes, ReplicaUpdateMinChanges} | Rest]) ->
     case catch binary_to_integer(ReplicaUpdateMinChanges) of
-        N when is_integer(N) ->
+        N when is_integer(N), N > 0 ->
             [{replica_update_min_changes, N} | prepare_options(Rest)];
         _Error ->
             throw(?ERROR_INVALID_REPLICA_UPDATE_MIN_CHANGES)
