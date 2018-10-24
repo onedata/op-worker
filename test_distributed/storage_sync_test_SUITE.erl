@@ -76,7 +76,9 @@
     import_file_with_link_but_no_doc_test/1,
     append_file_not_changing_mtime_update_test/1,
     sync_should_not_invalidate_file_after_replication/1,
-    import_nfs_acl_with_disabled_luma_should_fail_test/1]).
+    import_nfs_acl_with_disabled_luma_should_fail_test/1,
+    delete_many_subfiles_test/1
+]).
 
 -define(TEST_CASES, [
     create_directory_import_test,
@@ -110,6 +112,7 @@
     delete_and_update_files_simultaneously_update_test,
     delete_directory_export_test,
     delete_file_update_test,
+    delete_many_subfiles_test,
     delete_file_export_test,
     append_file_update_test,
     append_file_not_changing_mtime_update_test,
@@ -234,6 +237,9 @@ delete_directory_export_test(Config) ->
 
 delete_file_update_test(Config) ->
     storage_sync_test_base:delete_file_update_test(Config, false).
+
+delete_many_subfiles_test(Config) ->
+    storage_sync_test_base:delete_many_subfiles_test(Config, false).
 
 delete_file_export_test(Config) ->
     storage_sync_test_base:delete_file_export_test(Config, false).
@@ -501,6 +507,7 @@ init_per_testcase(Case, Config) when
     Case =:= delete_empty_directory_update_test;
     Case =:= delete_non_empty_directory_update_test;
     Case =:= delete_file_update_test;
+    Case =:= delete_many_subfiles_test;
     Case =:= move_file_update_test;
     Case =:= create_subfiles_and_delete_before_import_is_finished_test
     ->
