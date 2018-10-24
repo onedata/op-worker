@@ -119,10 +119,13 @@ query_record(_ResourceType, _Data) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 create_record(<<"transfer">>, Data) ->
     SessionId = gui_session:get_session_id(),
-    FileGuid = proplists:get_value(<<"file">>, Data),
+    FileGuid = proplists:get_value(<<"dataIdentifier">>, Data),
     ReplicatingProvider = gs_protocol:null_to_undefined(proplists:get_value(
         <<"replicatingProvider">>, Data
     )),
+
+        
+
     EvictingProvider = gs_protocol:null_to_undefined(proplists:get_value(
         <<"evictingProvider">>, Data
     )),
