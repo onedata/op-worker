@@ -140,6 +140,7 @@ db_index_record(RecordId) ->
     {SpaceId, IndexName} = op_gui_utils:association_to_ids(RecordId),
     {ok, #document{value = Index}} = index:get(SpaceId, IndexName),
     {ok, [
+        {<<"id">>, RecordId},
         {<<"name">>, IndexName},
         {<<"space">>, SpaceId},
         {<<"indexOptions">>, {Index#index.index_options}},
