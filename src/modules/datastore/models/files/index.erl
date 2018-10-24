@@ -266,12 +266,12 @@ update(IndexId, Diff) ->
 %%
 %% The mapping function should accept 4 arguments:
 %%     * id - cdmi object id of a file,
-%%     * type - type of the document to be mapped by the function. One of:
-%%         ** file_meta
-%%         ** times
-%%         ** custom_metadata
-%%         ** file_popularity
-%%     * meta - values stored in the mapped document.
+%%     * type - type of the document that is being mapped by the function. One of:
+%%         ** "file_meta"
+%%         ** "times"
+%%         ** "custom_metadata"
+%%         ** "file_popularity"
+%%     * meta - values stored in the document being mapped,
 %%     * ctx - context object used for storing helpful information. Currently it stores:
 %%         ** provider_id,
 %%         ** space_id.
