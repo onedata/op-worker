@@ -734,7 +734,10 @@ delete_test_skeleton(Config, Desc, WriteOn1, OpenBeforeDel, SleepAfterVerify,
                         case CloseAfterVerify of
                             true ->
                                 ok = timer:sleep(timer:seconds(1)),
-                                lfm_proxy:close(W, Handle);
+                                lfm_proxy:close(W, Handle),
+                                % TODO - VFS-5015 - Delete sleep after fix of
+                                % race between create and delete of open file
+                                ok = timer:sleep(timer:seconds(1));
                             _ ->
                                 ok
                         end;
