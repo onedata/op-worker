@@ -1049,16 +1049,18 @@ schedule_replication_of_regular_file_by_index2(Config, Type) ->
     IndexName = transfers_test_utils:random_index_name(?FUNCTION_NAME),
 
     MapFunction = <<
-        "function (id, meta) {
-            const JOB_PREFIX = 'jobId.';
-            var results = [];
-            for (var key of Object.keys(meta)) {
-                if (key.startsWith(JOB_PREFIX)) {
-                    var jobId = key.slice(JOB_PREFIX.length);
-                    results.push([jobId, id]);
+        "function (id, type, meta, ctx) {
+            if (type == 'custom_metadata') {
+                const JOB_PREFIX = 'jobId.';
+                var results = [];
+                for (var key of Object.keys(meta)) {
+                    if (key.startsWith(JOB_PREFIX)) {
+                        var jobId = key.slice(JOB_PREFIX.length);
+                        results.push([jobId, id]);
+                    }
                 }
+                return {'list': results};
             }
-            return {'list': results};
         }">>,
     transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName, MapFunction,
         [], [ProviderId2]),
@@ -1178,8 +1180,8 @@ scheduling_replication_by_index_with_function_returning_wrong_value_should_fail(
     WrongValue = <<"random_value_instead_of_file_id">>,
     %functions does not emit file id in values
     MapFunction = <<
-        "function (id, meta) {
-            if(meta['", XattrName/binary,"']) {
+        "function (id, type, meta, ctx) {
+            if(type == 'custom_metadata' && meta['", XattrName/binary,"']) {
                 return [meta['", XattrName/binary, "'], '", WrongValue/binary, "'];
             }
         return null;
@@ -1255,8 +1257,8 @@ scheduling_replication_by_index_returning_not_existing_file_should_not_fail(Conf
 
     %functions emits not existing file id
     MapFunction = <<
-        "function (id, meta) {
-            if(meta['", XattrName/binary,"']) {
+        "function (id, type, meta, ctx) {
+            if(type == 'custom_metadata' && meta['", XattrName/binary,"']) {
                 return [meta['", XattrName/binary, "'], '", NotExistingFileId/binary, "'];
             }
         return null;
