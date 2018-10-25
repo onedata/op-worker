@@ -29,16 +29,16 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec emit_file_written(fslogic_worker:file_guid(),
-    fslogic_blocks:blocks(), non_neg_integer() | undefined,session:id()) ->
+    fslogic_blocks:blocks(), non_neg_integer() | undefined, event:manager_ref()) ->
     ok | {error, Reason :: term()}.
-emit_file_written(FileGuid, WrittenBlocks, FileSize, SessionId) ->
+emit_file_written(FileGuid, WrittenBlocks, FileSize, ManagerRef) ->
     WrittenSize = size_of_blocks(WrittenBlocks),
     event:emit(#file_written_event{
         file_guid = FileGuid,
         blocks = WrittenBlocks,
         size = WrittenSize,
         file_size = FileSize
-    }, SessionId).
+    }, ManagerRef).
 
 
 %%--------------------------------------------------------------------

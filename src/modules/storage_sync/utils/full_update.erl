@@ -319,7 +319,7 @@ save_db_children_names(TableName, FileCtx, UserCtx, Offset, Batch) ->
         ets:insert(TableName, {FileName, undefined})
     end, ChildrenCtxs),
 
-    case length(ChildrenCtxs) < ?DIR_BATCH of
+    case length(ChildrenCtxs) < Batch of
         true ->
             ok;
         false ->

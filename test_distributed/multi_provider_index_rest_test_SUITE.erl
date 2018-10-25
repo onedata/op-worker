@@ -99,16 +99,16 @@ end).
 -define(XATTR(__XattrName, __Val), #xattr{name = __XattrName, value = __Val}).
 
 -define(MAP_FUNCTION(XattrName),
-    <<"function (id, meta) {
-        if(meta['", XattrName/binary,"']) {
+    <<"function (id, type, meta, ctx) {
+        if(type == 'custom_metadata' && meta['", XattrName/binary,"']) {
             return [meta['", XattrName/binary,"'], id];
         }
         return null;
     }">>
 ).
 -define(GEOSPATIAL_MAP_FUNCTION,
-    <<"function (id, meta) {
-        if(meta['onedata_json'] && meta['onedata_json']['loc']) {
+    <<"function (id, type, meta, ctx) {
+        if(type == 'custom_metadata' && meta['onedata_json'] && meta['onedata_json']['loc']) {
             return [meta['onedata_json']['loc'], id];
         }
         return null;
