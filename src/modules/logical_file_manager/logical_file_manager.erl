@@ -397,7 +397,7 @@ create(SessId, ParentGuid, Name, Mode) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_and_open(session:id(), Path :: file_meta:path(),
-    Mode :: file_meta:posix_permissions(), fslogic_worker:open_flag()) ->
+    Mode :: undefined | file_meta:posix_permissions(), fslogic_worker:open_flag()) ->
     {ok, {fslogic_worker:file_guid(), logical_file_manager:handle()}}
     | error_reply().
 create_and_open(SessId, Path, Mode, OpenFlag) ->

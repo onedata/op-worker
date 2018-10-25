@@ -274,7 +274,7 @@ start_storage_import_and_update(SpaceId, StorageId, {ImportStartTime, ImportFini
         RootDirCtx, SpaceId),
     log_import_answer(ImportAns, SpaceId, StorageId),
 
-    UpdateAns = storage_update:start(SpaceId, StorageId, ImportFinishTime,
+    UpdateAns = storage_update:start(SpaceId, StorageId, ImportStartTime, ImportFinishTime,
         LastUpdateStartTime, LastUpdateFinishTime, RootDirCtx, SpaceId),
     log_update_answer(UpdateAns, SpaceId, StorageId).
 

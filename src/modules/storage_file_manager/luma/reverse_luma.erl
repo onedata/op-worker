@@ -291,5 +291,6 @@ is_storage_supported(#storage{
 supported_storages() -> [
     ?POSIX_HELPER_NAME,
     ?GLUSTERFS_HELPER_NAME,
+    ?WEBDAV_HELPER_NAME,
     ?NULL_DEVICE_HELPER_NAME
 ].

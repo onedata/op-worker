@@ -313,7 +313,7 @@ save_db_children_names(TableName, FileCtx) ->
 -spec save_db_children_names(atom(), file_ctx:ctx(), user_ctx:ctx(),
     non_neg_integer(), non_neg_integer()) -> ok.
 save_db_children_names(TableName, FileCtx, UserCtx, Offset, Batch) ->
-    {ChildrenCtxs, FileCtx2} = file_ctx:get_file_children(FileCtx, UserCtx, 0, ?DIR_BATCH),
+    {ChildrenCtxs, FileCtx2} = file_ctx:get_file_children(FileCtx, UserCtx, Offset, Batch),
     lists:foreach(fun(ChildCtx) ->
         {FileName, _} = file_ctx:get_aliased_name(ChildCtx, UserCtx),
         ets:insert(TableName, {FileName, undefined})
