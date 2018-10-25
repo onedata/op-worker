@@ -3677,7 +3677,7 @@ change_time(FilePath, Mtime) ->
         #file_info{mtime = Mtime}, [{time, posix}]).
 
 change_time(FilePath, Atime, Mtime) ->
-    file:write_file_info(FilePath,
+    ok = file:write_file_info(FilePath,
         #file_info{atime = Atime, mtime = Mtime}, [{time, posix}]).
 
 assert_num_results_gte(History, AssertionFun, ExpectedResultsNum) ->
