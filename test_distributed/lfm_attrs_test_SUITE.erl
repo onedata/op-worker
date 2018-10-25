@@ -265,7 +265,7 @@ create_and_query_view(Config) ->
     ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, Guid1}, json, MetaBlue, [])),
     ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, Guid2}, json, MetaRed, [])),
     ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, Guid3}, json, MetaBlue, [])),
-    ok = rpc:call(Worker, index, create, [SpaceId, ViewName, ViewFunction, undefined, [], false, [ProviderId]]),
+    ok = rpc:call(Worker, index, save, [SpaceId, ViewName, ViewFunction, undefined, [], false, [ProviderId]]),
     ?assertMatch({ok, [ViewName]}, rpc:call(Worker, index, list, [SpaceId])),
     FinalCheck = fun() ->
         try
@@ -417,7 +417,7 @@ create_and_query_view_mapping_one_file_to_many_rows(Config) ->
     ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid2}, Xattr1)),
     ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid2}, Xattr2)),
 
-    ok = rpc:call(Worker, index, create, [SpaceId, ViewName, ViewFunction, undefined, [], false, [ProviderId]]),
+    ok = rpc:call(Worker, index, save, [SpaceId, ViewName, ViewFunction, undefined, [], false, [ProviderId]]),
     ?assertMatch({ok, [ViewName]}, rpc:call(Worker, index, list, [SpaceId])),
 
     FinalCheck = fun() ->

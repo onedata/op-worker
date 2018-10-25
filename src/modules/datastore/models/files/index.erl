@@ -19,12 +19,14 @@
 
 %% API
 -export([
-    create/7, update/6, update/7,
-    delete/2, list/1, list/4, save_db_view/6,
+    save/7, update/6, update/7,
+    delete/2, list/1, list/4, save_db_view/6, delete_db_view/2,
     query/3, get_json/2, is_supported/3, id/2, update_reduce_function/3, get/2]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_struct/1, get_record_version/0]).
+-export([
+    get_ctx/0, get_record_struct/1, get_record_version/0, get_posthooks/0
+]).
 
 -type id() :: binary().
 -type diff() :: datastore:diff(index()).
@@ -58,9 +60,9 @@
 %% specified providers list) and adds it to links tree.
 %% @end
 %%--------------------------------------------------------------------
--spec create(od_space:id(), name(), index_function(), undefined | index_function(),
+-spec save(od_space:id(), name(), index_function(), undefined | index_function(),
     options(), boolean(), providers()) -> ok | {error, term()}.
-create(SpaceId, Name, MapFunction, ReduceFunction, Options, Spatial, Providers) ->
+save(SpaceId, Name, MapFunction, ReduceFunction, Options, Spatial, Providers) ->
     IndexId = id(Name, SpaceId),
     ToCreate = #document{
         key = IndexId,
@@ -75,7 +77,7 @@ create(SpaceId, Name, MapFunction, ReduceFunction, Options, Spatial, Providers) 
         },
         scope = SpaceId
     },
-    case create(ToCreate) of
+    case save(ToCreate) of
         {ok, Doc} ->
             ok = index_links:add_link(Name, SpaceId),
             index_changes:handle(Doc),
@@ -223,30 +225,65 @@ save_db_view(IndexId, SpaceId, Function, ReduceFunction, Spatial, Options) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Deletes view from db.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_db_view(od_space:id(), binary()) -> ok | {error, term()}.
+delete_db_view(SpaceId, IndexName) ->
+    Id = id(IndexName, SpaceId),
+    couchbase_driver:delete_design_doc(?DISK_CTX, Id).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Query view.
 %% @end
 %%--------------------------------------------------------------------
--spec query(od_space:id(), name(), options()) -> {ok, datastore_json:ejson()} | {error, term()}.
+-spec query(od_space:id(), name(), options()) ->
+    {ok, datastore_json:ejson()} | {error, term()}.
 query(SpaceId, <<"file-popularity">>, Options) ->
-    Id = <<"file-popularity-", SpaceId/binary>>,
-    couchbase_driver:query_view(?DISK_CTX, Id, Id, Options);
+    query(<<"file-popularity-", SpaceId/binary>>, Options);
 query(SpaceId, IndexName, Options) ->
-    Id = id(IndexName, SpaceId),
-    couchbase_driver:query_view(?DISK_CTX, Id, Id, Options).
+    query(id(IndexName, SpaceId), Options).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
 %% @private
--spec create(doc()) -> {ok, doc()} | {error, term()}.
-create(Doc) ->
+-spec save(doc()) -> {ok, doc()} | {error, term()}.
+save(Doc) ->
     datastore_model:save(?CTX, Doc).
 
 %% @private
 -spec update(id(), diff()) -> {ok, doc()} | {error, term()}.
 update(IndexId, Diff) ->
     datastore_model:update(?CTX, IndexId, Diff).
+
+%% @private
+-spec query(id(), options()) -> {ok, datastore_json:ejson()} | {error, term()}.
+query(IndexId, Options) ->
+    case couchbase_driver:query_view(?DISK_CTX, IndexId, IndexId, Options) of
+        {ok, _} = Ans ->
+            Ans;
+        {error, {<<"case_clause">>, <<"{not_found,deleted}">>}} ->
+            {error, not_found};
+        Error ->
+            Error
+    end.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Posthook responsible for calling index_changes:handle function
+%% for locally updated document.
+%% @end
+%%-------------------------------------------------------------------
+-spec run_on_index_doc_change(atom(), list(), term()) -> {ok, doc()}.
+run_on_index_doc_change(update, [_, _, _], Result = {ok, Doc}) ->
+    index_changes:handle(Doc),
+    Result;
+run_on_index_doc_change(_, _, Result) ->
+    Result.
 
 %%-------------------------------------------------------------------
 %% @private
@@ -341,7 +378,7 @@ map_function_wrapper(UserMapFunction, SpaceId) -> <<
         var spaceId = doc['_scope'];
 
         if(spaceId == '", SpaceId/binary, "' && doc['_deleted'] == false) {
-            
+
             var id = null;
             var type = doc['_record'];
             var meta = null;
@@ -486,6 +523,19 @@ get_ctx() ->
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
     1.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of callbacks which will be called after each operation
+%% on datastore model.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_posthooks() -> [datastore_hooks:posthook()].
+get_posthooks() ->
+    [
+        fun run_on_index_doc_change/3
+    ].
 
 
 %%--------------------------------------------------------------------

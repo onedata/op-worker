@@ -207,7 +207,7 @@ create_index(Worker, SpaceId, IndexName, MapFunction, Options, Providers) ->
     create_index(Worker, SpaceId, IndexName, MapFunction, undefined, Options, Providers).
 
 create_index(Worker, SpaceId, IndexName, MapFunction, ReduceFunction, Options, Providers) ->
-    ok = rpc:call(Worker, index, create, [SpaceId, IndexName, MapFunction, ReduceFunction,
+    ok = rpc:call(Worker, index, save, [SpaceId, IndexName, MapFunction, ReduceFunction,
         Options, false, Providers]).
 
 %%%===================================================================
