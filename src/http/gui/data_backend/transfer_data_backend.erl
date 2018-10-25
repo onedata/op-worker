@@ -321,7 +321,7 @@ transfer_record(StateAndTransferId) ->
             end,
             {FileType, FileGuid, Path};
         _ ->
-            {<<"index">>, op_gui_utils:ids_to_association(SpaceId, IndexName), IndexName}
+            {<<"index">>, index:id(IndexName, SpaceId), IndexName}
     end,
     QueryParams = case QueryViewParams of
         undefined -> null;

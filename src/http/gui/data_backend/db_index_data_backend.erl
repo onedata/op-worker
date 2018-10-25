@@ -54,8 +54,8 @@ terminate() ->
 %%--------------------------------------------------------------------
 -spec find_record(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find_record(<<"db-index">>, SpaceIdAndIndexName) ->
-    db_index_record(SpaceIdAndIndexName).
+find_record(<<"db-index">>, RecordId) ->
+    db_index_record(RecordId).
 
 
 %%--------------------------------------------------------------------
@@ -135,19 +135,25 @@ delete_record(_ResourceType, _Id) ->
 %% Returns a client-compliant db index record based on space id and index name.
 %% @end
 %%--------------------------------------------------------------------
--spec db_index_record(RecordId :: binary()) -> {ok, proplists:proplist()}.
-db_index_record(RecordId) ->
-    {SpaceId, IndexName} = op_gui_utils:association_to_ids(RecordId),
-    {ok, #document{value = Index}} = index:get(SpaceId, IndexName),
+-spec db_index_record(IndexId :: binary()) -> {ok, proplists:proplist()}.
+db_index_record(IndexId) ->
+    {ok, #document{value = #index{
+        name = IndexName,
+        space_id = SpaceId,
+        index_options = IndexOptions,
+        providers = Providers,
+        map_function = MapFunction,
+        reduce_function = ReduceFunction,
+        spatial = Spatial
+    }}} = index:get(IndexId),
+
     {ok, [
-        {<<"id">>, RecordId},
+        {<<"id">>, IndexId},
         {<<"name">>, IndexName},
         {<<"space">>, SpaceId},
-        {<<"indexOptions">>, {Index#index.index_options}},
-        {<<"providers">>, Index#index.providers},
-        {<<"mapFunction">>, Index#index.map_function},
-        {<<"reduceFunction">>, utils:ensure_defined(
-            Index#index.reduce_function, undefined, null
-        )},
-        {<<"spatial">>, Index#index.spatial}
+        {<<"indexOptions">>, {IndexOptions}},
+        {<<"providers">>, Providers},
+        {<<"mapFunction">>, MapFunction},
+        {<<"reduceFunction">>, utils:ensure_defined(ReduceFunction, undefined, null)},
+        {<<"spatial">>, Spatial}
     ]}.
