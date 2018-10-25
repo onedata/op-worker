@@ -1849,7 +1849,6 @@ delete_many_subfiles_test(Config, MountSpaceInRoot) ->
         <<"importedSum">> => 1001,
         <<"updatedSum">> => 1,
         <<"deletedSum">> => 0,
-        <<"importedMinHist">> => 1001,
         <<"importedHourHist">> => 1001,
         <<"importedDayHist">> => 1001,
         <<"updatedMinHist">> => 1,
