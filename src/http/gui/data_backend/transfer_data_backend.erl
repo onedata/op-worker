@@ -310,7 +310,7 @@ transfer_record(StateAndTransferId) ->
         index_name = IndexName,
         query_view_params = QueryViewParams
     }}} = transfer:get(TransferId),
-    {DataType, DataIdentifier} = case IndexName of
+    {DataType, DataIdentifier, DataName} = case IndexName of
         undefined ->
             FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
             FileType = case logical_file_manager:stat(SessionId, {guid, FileGuid}) of
@@ -319,9 +319,9 @@ transfer_record(StateAndTransferId) ->
                 {error, ?ENOENT} -> <<"deleted">>;
                 {error, _} -> <<"unknown">>
             end,
-            {FileType, FileGuid};
+            {FileType, FileGuid, Path};
         _ ->
-            {<<"index">>, op_gui_utils:ids_to_association(SpaceId, IndexName)}
+            {<<"index">>, op_gui_utils:ids_to_association(SpaceId, IndexName), IndexName}
     end,
     QueryParams = case QueryViewParams of
         undefined -> null;
@@ -346,7 +346,7 @@ transfer_record(StateAndTransferId) ->
         {<<"space">>, SpaceId},
         {<<"dataType">>, DataType},
         {<<"dataIdentifier">>, DataIdentifier},
-        {<<"path">>, gs_protocol:undefined_to_null(Path)},
+        {<<"dataName">>, DataName},
         {<<"queryParams">>, QueryParams},
         {<<"systemUserId">>, UserId},
         {<<"startTime">>, StartTime},
