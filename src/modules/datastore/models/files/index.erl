@@ -19,7 +19,7 @@
 
 %% API
 -export([
-    create/7, update/6, update/7,
+    save/7, update/6, update/7,
     delete/2, list/1, list/4, save_db_view/6, delete_db_view/2,
     query/3, get_json/2, is_supported/3, id/2, update_reduce_function/3, get/2]).
 
@@ -60,9 +60,9 @@
 %% specified providers list) and adds it to links tree.
 %% @end
 %%--------------------------------------------------------------------
--spec create(od_space:id(), name(), index_function(), undefined | index_function(),
+-spec save(od_space:id(), name(), index_function(), undefined | index_function(),
     options(), boolean(), providers()) -> ok | {error, term()}.
-create(SpaceId, Name, MapFunction, ReduceFunction, Options, Spatial, Providers) ->
+save(SpaceId, Name, MapFunction, ReduceFunction, Options, Spatial, Providers) ->
     IndexId = id(Name, SpaceId),
     ToCreate = #document{
         key = IndexId,

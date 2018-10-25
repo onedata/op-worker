@@ -91,7 +91,7 @@ apply(Doc = #document{value = Value, scope = SpaceId, seq = Seq}) ->
                     {ok, Doc2} ->
                         case Value of
                             #file_location{} ->
-                                fslogic_location_cache:cache_location(Doc);
+                                fslogic_location_cache:cache_location(Doc2);
                             _ ->
                                 ok
                         end,
@@ -123,10 +123,8 @@ apply(Doc = #document{value = Value, scope = SpaceId, seq = Seq}) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Saves datastore links document and returns doc used for applying changes.
-%% Because link documents never have conflicts (doc is either saved or ignored)
-%% original doc is returned (in case of newer doc than local one)
-%% or `undefined` (in case of obsolete doc).
+%% Saves datastore links document and returns doc used for applying changes or
+%% `undefined` if remote doc was ignored.
 %% @end
 %%--------------------------------------------------------------------
 -spec links_save(model(), key(), doc()) -> undefined | doc().
@@ -138,8 +136,8 @@ links_save(Model, RoutingKey, Doc = #document{key = Key}) ->
     },
     Ctx3 = datastore_multiplier:extend_name(RoutingKey, Ctx2),
     case datastore_router:route(Ctx3, RoutingKey, save, [Ctx3, Key, Doc]) of
-        {ok, _} ->
-            Doc;
+        {ok, Doc2} ->
+            Doc2;
         {error, ignored} ->
             undefined
     end.
@@ -238,18 +236,16 @@ apply_links_mask(Ctx, #links_mask{key = Key, tree_id = TreeId, links = Links},
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Saves datastore links mask and returns doc used for applying changes.
-%% Because link mask documents never have conflicts (doc is either saved
-%% or ignored) original doc is returned (in case of newer doc than local one)
-%% or `undefined` (in case of obsolete doc).
+%% Saves datastore links mask and returns doc used for applying changes or
+%% `undefined` if remote doc was ignored.
 %% @end
 %%--------------------------------------------------------------------
 -spec save_links_mask(ctx(), doc()) -> undefined | doc().
 save_links_mask(Ctx, Doc = #document{key = Key,
     value = #links_mask{key = RoutingKey}}) ->
     case datastore_router:route(Ctx, RoutingKey, save, [Ctx, Key, Doc]) of
-        {ok, _} ->
-            Doc;
+        {ok, Doc2} ->
+            Doc2;
         {error, ignored} ->
             undefined
     end.

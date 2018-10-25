@@ -187,8 +187,8 @@ creating_index_with_invalid_params_should_fail(Config) ->
     IndexName = ?INDEX_NAME(?FUNCTION_NAME),
     XattrName = ?XATTR_NAME,
 
-    Worker = lists:nth(rand:uniform(length(Workers)), Workers),
     lists:foreach(fun({Options, ExpError}) ->
+        Worker = lists:nth(rand:uniform(length(Workers)), Workers),
         ?assertMatch(ExpError, create_index_via_rest(
             Config, Worker, ?SPACE_ID, IndexName, ?MAP_FUNCTION(XattrName),
             maps:get(spatial, Options, false), maps:get(providers, Options, []),
@@ -232,9 +232,14 @@ updating_index_with_invalid_params_should_fail(Config) ->
         <<"reduceFunction">> => null,
         <<"spatial">> => false
     },
+    lists:foreach(fun(Worker) ->
+        ?assertMatch({ok, ExpIndex}, get_index_via_rest(
+            Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS
+        )
+    end, Workers),
 
-    Worker = lists:nth(rand:uniform(length(Workers)), Workers),
     lists:foreach(fun({Options, ExpError}) ->
+        Worker = lists:nth(rand:uniform(length(Workers)), Workers),
         ?assertMatch(ExpError, update_index_via_rest(
             Config, Worker, ?SPACE_ID, IndexName, <<>>, Options
         )),
@@ -506,9 +511,8 @@ quering_index_with_invalid_params_should_fail(Config) ->
     ?assertEqual(ExpGuids, Query(WorkerP1, #{}), ?ATTEMPTS),
     ?assertEqual(ExpGuids, Query(WorkerP2, #{}), ?ATTEMPTS),
 
-    Worker = lists:nth(rand:uniform(length(Workers)), Workers),
     lists:foreach(fun({Options, ExpError}) ->
-        ct:pal("OPTIONS: ~p", [Options]),
+        Worker = lists:nth(rand:uniform(length(Workers)), Workers),
         ?assertMatch(ExpError, Query(Worker, Options))
     end, [
         {#{bbox => ok}, ?ERROR_INVALID_BBOX},

@@ -182,7 +182,7 @@ create_index(Req, State) ->
         throw_if_provider_does_not_support_space(SpaceId, ProviderId)
     end, Providers),
 
-    ok = index:create(
+    ok = index:save(
         SpaceId, IndexName, MapFunction, undefined,
         Options, Spatial, Providers
     ),
