@@ -32,7 +32,8 @@
     disable_storage_import/1, assertNoImportInProgress/3,
     assertNoUpdateInProgress/3, append/2, recursive_rm/1, truncate/2,
     change_time/3, assert_num_results_gte/3, assert_num_results/3,
-    to_storage_files/4, parallel_assert/5, uuid/2, space_uuid/2, change_time/2, to_storage_file_id/2, assert_monitoring_state/4]).
+    to_storage_files/4, parallel_assert/5, uuid/2, space_uuid/2, change_time/2,
+    to_storage_file_id/2, assert_monitoring_state/4, verify_file_deleted/5]).
 
 %% tests
 -export([
@@ -74,7 +75,8 @@
     append_file_not_changing_mtime_update_test/2,
     change_file_content_the_same_moment_when_sync_performs_stat_on_file_test/2,
     sync_should_not_invalidate_file_after_replication/1,
-    sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changes/2]).
+    sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changes/2,
+    delete_many_subfiles_test/2]).
 
 -define(assertBlocks(Worker, SessionId, ExpectedDistribution, FileGuid),
     ?assertEqual(lists:sort(ExpectedDistribution), begin
@@ -1819,6 +1821,68 @@ delete_file_update_test(Config, MountSpaceInRoot) ->
     %% Check if file was deleted in space
     ?assertMatch({error, ?ENOENT},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS).
+
+delete_many_subfiles_test(Config, MountSpaceInRoot) ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    W1MountPoint = get_host_mount_point(W1, Config),
+    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
+    %% Create dirs and files on storage
+    RootPath = storage_test_dir_path(W1MountPoint, ?SPACE_ID, ?TEST_DIR, MountSpaceInRoot),
+    ok = file:make_dir(RootPath),
+    DirStructure = [1000],
+    create_nested_directory_tree(DirStructure, RootPath),
+    storage_sync_test_base:enable_storage_import(Config),
+    Files = generate_nested_directory_tree_file_paths(DirStructure, ?SPACE_TEST_DIR_PATH),
+
+    Timeout = 600,
+    parallel_assert(?MODULE, verify_file, [W1, SessId, Timeout], Files, Timeout),
+    assertImportTimes(W1, ?SPACE_ID, Timeout),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> => 1,
+        <<"toProcess">> => 1012,
+        <<"imported">> => 1001,
+        <<"updated">> => 1,
+        <<"deleted">> => 0,
+        <<"failed">> => 0,
+        <<"otherProcessed">> => 10,
+        <<"importedSum">> => 1001,
+        <<"updatedSum">> => 1,
+        <<"deletedSum">> => 0,
+        <<"importedHourHist">> => 1001,
+        <<"importedDayHist">> => 1001,
+        <<"updatedMinHist">> => 1,
+        <<"updatedHourHist">> => 1,
+        <<"updatedDayHist">> => 1,
+        <<"deletedMinHist">> => 0,
+        <<"deletedHourHist">> => 0,
+        <<"deletedDayHist">> => 0
+    }, ?SPACE_ID),
+
+    [] = os:cmd("rm -r " ++ str_utils:to_list(RootPath)),
+    storage_sync_test_base:enable_storage_update(Config),
+    parallel_assert(?MODULE, verify_file_deleted, [W1, SessId, Timeout], [?SPACE_TEST_DIR_PATH | Files], Timeout),
+    assertUpdateTimes(W1, ?SPACE_ID),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> => 2,
+        <<"toProcess">> => 1002,
+        <<"imported">> => 0,
+        <<"updated">> => 1,
+        <<"deleted">> => 1001,
+        <<"failed">> => 0,
+        <<"otherProcessed">> => 0,
+        <<"importedSum">> => 1001,
+        <<"updatedSum">> => 2,
+        <<"deletedSum">> => 1001,
+        <<"importedDayHist">> => 1001,
+        <<"updatedMinHist">> => 1,
+        <<"updatedHourHist">> => 2,
+        <<"updatedDayHist">> => 2,
+        <<"deletedHourHist">> => 1001,
+        <<"deletedDayHist">> => 1001
+    }, ?SPACE_ID).
+
 
 delete_file_export_test(Config, MountSpaceInRoot) ->
     [W1, _] = ?config(op_worker_nodes, Config),
@@ -3746,6 +3810,9 @@ verify_file_in_dir(N, Pid, W1, SessId, Attempts) ->
     lfm_proxy:close(W1, Handle1),
     Pid ! {finished, NBin}.
 
+verify_file_deleted(FilePath, Pid, Worker, SessId, Attempts) ->
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Worker, SessId, {path, FilePath}), Attempts),
+    Pid ! {finished, FilePath}.
 
 generate_nested_directory_tree_file_paths([SubFilesNum], Root) ->
     lists:map(fun(N) ->
@@ -3864,7 +3931,7 @@ assert_monitoring_state(Worker, ExpectedSSM, SpaceId, Attempts) ->
             end
     end.
 
-assert(ExpectedSSM, SSM) -> 
+assert(ExpectedSSM, SSM) ->
     maps:fold(fun(Key, Value, _AccIn) ->
         assert_for_key(Key, Value, SSM)
     end, undefined, ExpectedSSM).
@@ -3873,7 +3940,7 @@ assert_for_key(Key, ExpectedValue, SSM) ->
     Value = maps:get(Key, SSM),
     case Value of
         ExpectedValue -> ok;
-        _ -> 
+        _ ->
         throw({assertion_error, Key, ExpectedValue, Value})
     end.
 
