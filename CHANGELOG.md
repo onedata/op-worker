@@ -4,6 +4,41 @@
 CHANGELOG
 ---------
 
+### 18.02.0-rc13
+
+* 8.Updating GUI, including: VFS-4980-index-transfers * VFS-4980 Added support for index transfers
+* VFS-4966 Using common property for file path and index name in transfer
+* VFS-4966 Added missing db_index id in GUI API
+* VFS-4998 fix provider emitting file_written_event to itself when mtime has changed
+* VFS-4978 stop calling dbsync_changes on ignored remote docs
+* VFS-4975 enable creating indexes on additional models
+* VFS-4968 Fix minor bug in synchronizer
+* VFS-4966 Fixed undefined QueryViewParams
+* VFS-4966 fix index_db_data_backend get_record to return proper proplist
+* VFS-4966 add db-index gui model, modify transfer model
+* VFS-4976 Changed gui to use create_and_open
+* Updating GUI, including: VFS-4927-transfers-loading * VFS-4927 Fixed delay before loading transfers list; error handling
+* VFS-4998 ensure that update scan does not start to fast
+* VFS-4968 Fix link problems in cluster_worker
+* VFS-4991 handle ENOENT in remove_utils:rm_children
+* VFS-4978 rm db view from provider when he no longer supports index
+* VFS-4991 fix race on cleaning up directory from storage
+* VFS-4902 Added WebDAV helper
+* VFS-4902 Added proxygen library dependency
+* VFS-4902 Added WebDAV helper integration test
+* handle undefined FileCtx in import_children. This situation occurs when files was deleted, and its link has been already deleted too, but it is still visible on storage
+* VFS-4968 Fix remote store
+* VFS-4614 Rename email_list to emails in user record
+* VFS-4952 Implement provider modification using graph sync
+* Updating GUI, including: VFS-3774-safari-opensans * VFS-3774 Fixed broken request for OpenSans font in Safari if redirecting to Onezone
+* VFS-4936 Implement supporting space via graph sync
+* VFS-4951 fix cleaning after removing file_meta doc, filter out deleted custom_metadata docs from indexes
+* VFS-4707 remove soft_quota_limit
+* VFS-4936 Use common errors API for space support change
+* VFS-4743 Refactor link trees
+* VFS-4936 Add function to change space support size
+
+
 ### 18.02.0-rc12
 
 * Releasing new version 18.02.0-rc12
