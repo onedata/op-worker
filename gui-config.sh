@@ -21,6 +21,6 @@
 TARGET_DIR='_build/default/lib/gui_static'
 # Image which will be used by default to get the static files. If it cannot
 # be resolved, the script will fall back to secondary.
-PRIMARY_IMAGE='docker.onedata.org/op-gui-default:VFS-4927-transfers-loading'
+PRIMARY_IMAGE='docker.onedata.org/op-gui-default:VFS-4980-index-transfers'
 # Image which will be used if primary image is not resolved.
-SECONDARY_IMAGE='onedata/op-gui-default:VFS-4927-transfers-loading'
+SECONDARY_IMAGE='onedata/op-gui-default:VFS-4980-index-transfers'

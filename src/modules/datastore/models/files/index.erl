@@ -19,9 +19,10 @@
 
 %% API
 -export([
-    save/7, update/6, update/7,
+    save/7, update/6, update/7, get/1, get/2,
     delete/2, list/1, list/4, save_db_view/6, delete_db_view/2,
-    query/3, get_json/2, is_supported/3, id/2, update_reduce_function/3, get/2]).
+    query/3, get_json/2, is_supported/3, id/2, update_reduce_function/3
+]).
 
 %% datastore_model callbacks
 -export([
@@ -200,7 +201,11 @@ list(SpaceId, StartId, Offset, Limit) ->
 
 -spec get(od_space:id(), name()) -> {ok, doc()} | {error, term()}.
 get(SpaceId, IndexName) ->
-    datastore_model:get(?CTX, id(IndexName, SpaceId)).
+    ?MODULE:get(id(IndexName, SpaceId)).
+
+-spec get(id()) -> {ok, doc()} | {error, term()}.
+get(IndexId) ->
+    datastore_model:get(?CTX, IndexId).
 
 -spec id(name(), od_space:id()) -> key().
 id(IndexName, SpaceId) ->
