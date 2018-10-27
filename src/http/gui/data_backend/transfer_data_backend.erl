@@ -119,7 +119,7 @@ query_record(_ResourceType, _Data) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 create_record(<<"transfer">>, Data) ->
     SessionId = gui_session:get_session_id(),
-    FileGuid = proplists:get_value(<<"dataIdentifier">>, Data),
+    FileGuid = proplists:get_value(<<"dataSourceIdentifier">>, Data),
     ReplicatingProvider = gs_protocol:null_to_undefined(proplists:get_value(
         <<"replicatingProvider">>, Data
     )),
@@ -310,7 +310,7 @@ transfer_record(StateAndTransferId) ->
         index_name = IndexName,
         query_view_params = QueryViewParams
     }}} = transfer:get(TransferId),
-    {DataType, DataIdentifier, DataName} = case IndexName of
+    {DataSourceType, DataSourceIdentifier, DataSourceName} = case IndexName of
         undefined ->
             FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
             FileType = case logical_file_manager:stat(SessionId, {guid, FileGuid}) of
@@ -344,9 +344,9 @@ transfer_record(StateAndTransferId) ->
         )},
         {<<"isOngoing">>, IsOngoing},
         {<<"space">>, SpaceId},
-        {<<"dataType">>, DataType},
-        {<<"dataIdentifier">>, DataIdentifier},
-        {<<"dataName">>, DataName},
+        {<<"dataSourceType">>, DataSourceType},
+        {<<"dataSourceIdentifier">>, DataSourceIdentifier},
+        {<<"dataSourceName">>, DataSourceName},
         {<<"queryParams">>, QueryParams},
         {<<"systemUserId">>, UserId},
         {<<"startTime">>, StartTime},
