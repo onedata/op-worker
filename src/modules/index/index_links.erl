@@ -21,6 +21,7 @@
 -define(CTX, (index:get_ctx())).
 -define(LINK_PREFIX, <<"INDEXES">>).
 
+-spec add_link(index:name(), od_space:id()) -> ok.
 add_link(IndexName, SpaceId) ->
     TreeId = oneprovider:get_id(),
     Ctx = ?CTX#{scope => SpaceId},

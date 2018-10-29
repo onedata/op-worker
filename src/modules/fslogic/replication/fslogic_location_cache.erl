@@ -140,7 +140,7 @@ update_location(FileUuid, LocId, Diff, ModifyBlocks) ->
                         fslogic_cache:cache_doc(Doc),
                         case ModifyBlocks of
                             true -> fslogic_cache:cache_blocks(LocId, Blocks);
-                            _ -> ok
+                            _ -> fslogic_cache:check_blocks(Doc)
                         end,
                         Ans;
                     Error ->

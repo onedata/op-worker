@@ -17,6 +17,11 @@
                     "name": "/mnt/st"
                 },
                 {
+                    "type": "cephrados",
+                    "name": "cephrados",
+                    "pool": "onedata:8"
+                },
+                {
                     "type": "nulldevice",
                     "name": "nulldevice",
                     "latencyMin": "10",
@@ -251,6 +256,22 @@
                     },
                     "p2": {
                         "storage": "nulldevice"
+                    }
+                }
+            },
+            "space7": {
+                "displayed_name": "space7",
+                "users": [
+                    "user2"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "cephrados"
+                    },
+                    "p2": {
+                        "storage": "/mnt/st2"
                     }
                 }
             }

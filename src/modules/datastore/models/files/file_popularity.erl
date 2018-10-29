@@ -70,7 +70,8 @@ update_size(FileCtx, NewSize) ->
             DefaultFilePopularity = empty_file_popularity(FileCtx),
             DefaultToCreate = #document{
                 key = FileUuid,
-                value = DefaultFilePopularity#file_popularity{size=NewSize}
+                value = DefaultFilePopularity#file_popularity{size=NewSize},
+                scope = SpaceId
             },
             case
                 datastore_model:update(?CTX, FileUuid, fun(FilePopularity) ->
@@ -102,7 +103,8 @@ increment_open(FileCtx) ->
             DefaultFilePopularity = empty_file_popularity(FileCtx),
             Default = #document{
                 key = FileUuid,
-                value = increase_popularity(FileCtx, DefaultFilePopularity)
+                value = increase_popularity(FileCtx, DefaultFilePopularity),
+                scope = SpaceId
             },
             case datastore_model:update(?CTX, FileUuid, Diff, Default) of
                 {ok, _} -> ok;
