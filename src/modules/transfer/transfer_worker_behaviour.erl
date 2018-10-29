@@ -1,0 +1,471 @@
+%%%--------------------------------------------------------------------
+%%% @author Bartosz Walkowicz
+%%% @copyright (C) 2018 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%--------------------------------------------------------------------
+%%% @doc
+%%% TODO writeme.
+%%% @end
+%%%--------------------------------------------------------------------
+-module(transfer_worker_behaviour).
+-author("Bartosz Walkowicz").
+
+-behaviour(gen_server).
+
+-include("global_definitions.hrl").
+-include("modules/datastore/transfer.hrl").
+-include_lib("ctool/include/posix/acl.hrl").
+-include_lib("ctool/include/logging.hrl").
+
+%% gen_server callbacks
+-export([
+    init/1,
+    handle_call/3,
+    handle_cast/2,
+    handle_info/2,
+    terminate/2,
+    code_change/3
+]).
+
+-record(state, {mod :: module()}).
+-type state() :: #state{}.
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% TODO writeme.
+%% @end
+%%--------------------------------------------------------------------
+-callback required_permissions() -> list().
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% TODO writeme.
+%% @end
+%%--------------------------------------------------------------------
+-callback max_transfer_retries() -> non_neg_integer().
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% TODO writeme.
+%% @end
+%%--------------------------------------------------------------------
+-callback index_querying_chunk_size() -> non_neg_integer().
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% TODO writeme.
+%% @end
+%%--------------------------------------------------------------------
+-callback enqueue_data_transfer(file_ctx:ctx(), transfer_params(),
+    undefined | non_neg_integer(), undefined | non_neg_integer()) -> ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% TODO writeme.
+%% @end
+%%--------------------------------------------------------------------
+-callback transfer_regular_file(file_ctx:ctx(), transfer_params()) ->
+    ok | {error, term()}.
+
+
+%%%===================================================================
+%%% gen_server callbacks
+%%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Initializes the server
+%% @end
+%%--------------------------------------------------------------------
+-spec(init(Args :: term()) ->
+    {ok, State :: state()} | {ok, State :: state(), timeout() | hibernate} |
+    {stop, Reason :: term()} | ignore).
+init([CallbackModule]) ->
+    {ok, #state{mod = CallbackModule}}.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handling call messages
+%% @end
+%%--------------------------------------------------------------------
+-spec(handle_call(Request :: term(), From :: {pid(), Tag :: term()},
+    State :: state()) ->
+    {reply, Reply :: term(), NewState :: state()} |
+    {reply, Reply :: term(), NewState :: state(), timeout() | hibernate} |
+    {noreply, NewState :: state()} |
+    {noreply, NewState :: state(), timeout() | hibernate} |
+    {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
+    {stop, Reason :: term(), NewState :: state()}).
+handle_call(_Request, _From, State) ->
+    ?log_bad_request(_Request),
+    {reply, wrong_request, State}.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handling cast messages
+%% @end
+%%--------------------------------------------------------------------
+-spec(handle_cast(Request :: term(), State :: state()) ->
+    {noreply, NewState :: state()} |
+    {noreply, NewState :: state(), timeout() | hibernate} |
+    {stop, Reason :: term(), NewState :: state()}).
+handle_cast(?TRANSFER_DATA_REQ(FileCtx, Params, Retries, NextRetryTimestamp), State) ->
+    Mod = State#state.mod,
+    TransferId = Params#transfer_params.transfer_id,
+
+    case should_start(NextRetryTimestamp) of
+        true ->
+            case transfer_data(State, FileCtx, Params, Retries) of
+                ok ->
+                    ok;
+                {error, not_found} ->
+                    % todo VFS-4218 currently we ignore this case
+                    {ok, _} = transfer:increment_files_processed_counter(TransferId);
+                {error, cancelled} ->
+                    {ok, _} = transfer:increment_files_processed_counter(TransferId);
+                {error, already_ended} ->
+                    {ok, _} = transfer:increment_files_processed_counter(TransferId);
+                {error, _Reason} ->
+                    {ok, _} = transfer:increment_files_failed_and_processed_counters(TransferId)
+            end;
+        _ ->
+            Mod:enqueue_data_transfer(FileCtx, Params, Retries, NextRetryTimestamp)
+    end,
+    {noreply, State, hibernate};
+handle_cast(Request, State) ->
+    ?log_bad_request(Request),
+    {noreply, State}.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handling all non call/cast messages
+%% @end
+%%--------------------------------------------------------------------
+-spec(handle_info(Info :: timeout() | term(), State :: state()) ->
+    {noreply, NewState :: state()} |
+    {noreply, NewState :: state(), timeout() | hibernate} |
+    {stop, Reason :: term(), NewState :: state()}).
+handle_info(Info, State) ->
+    ?log_bad_request(Info),
+    {noreply, State}.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function is called by a gen_server when it is about to
+%% terminate. It should be the opposite of Module:init/1 and do any
+%% necessary cleaning up. When it returns, the gen_server terminates
+%% with Reason. The return value is ignored.
+%% @end
+%%--------------------------------------------------------------------
+-spec(terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
+    State :: state()) -> term()).
+terminate(_Reason, _State) ->
+    ok.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Convert process state when code is changed
+%% @end
+%%--------------------------------------------------------------------
+-spec(code_change(OldVsn :: term() | {down, term()}, State :: state(),
+    Extra :: term()) ->
+    {ok, NewState :: state()} | {error, Reason :: term()}).
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec transfer_data(state(), file_ctx:ctx(), transfer_params(), non_neg_integer()) ->
+    ok | {error, term()}.
+transfer_data(State = #state{mod = Mod}, FileCtx, Params, RetriesLeft) ->
+    Args = [State, FileCtx, Params],
+    RequiredPerms = Mod:required_permissions(),
+
+    try check_permissions:execute(RequiredPerms, Args, fun transfer_data_insecure/3) of
+        ok ->
+            ok;
+        Error = {error, _Reason} ->
+            maybe_retry(State, FileCtx, Params, RetriesLeft, Error)
+    catch
+        throw:cancelled ->
+            {error, cancelled};
+        throw:already_ended ->
+            {error, already_ended};
+        error:{badmatch, Error = {error, not_found}} ->
+            maybe_retry(State, FileCtx, Params, RetriesLeft, Error);
+        Error:Reason ->
+            ?error_stacktrace("Unexpected error ~p:~p during transfer ~p", [
+                Error, Reason, Params#transfer_params.transfer_id
+            ]),
+            maybe_retry(State, FileCtx, Params, RetriesLeft, {Error, Reason})
+    end.
+
+
+%% @private
+-spec maybe_retry(state(), file_ctx:ctx(), transfer_params(),
+    RetriesLeft :: non_neg_integer(), term()) -> ok | {error, term()}.
+maybe_retry(_State, _FileCtx, Params, 0, Error = {error, not_found}) ->
+    ?error(
+        "Data transfer in scope of transfer ~p failed due to ~p~n"
+        "No retries left", [Params#transfer_params.transfer_id, Error]
+    ),
+    Error;
+maybe_retry(State, FileCtx, Params, Retries, Error = {error, not_found}) ->
+    Mod = State#state.mod,
+    TransferId = Params#transfer_params.transfer_id,
+
+    ?warning(
+        "Data transfer in scope of transfer ~p failed due to ~p~n"
+        "File transfer will be retried (attempts left: ~p)",
+        [TransferId, Error, Retries - 1]
+    ),
+    Mod:enqueu_data_transfer(FileCtx, Params, Retries - 1, next_retry(State, Retries));
+maybe_retry(_State, FileCtx, Params, 0, Error) ->
+    TransferId = Params#transfer_params.transfer_id,
+    {Path, _FileCtx2} = file_ctx:get_canonical_path(FileCtx),
+
+    ?error(
+        "Transfer of file ~p in scope of transfer ~p failed due to ~p~n"
+        "No retries left", [Path, TransferId, Error]
+    ),
+    {error, retries_per_file_transfer_exceeded};
+maybe_retry(State, FileCtx, Params, Retries, Error) ->
+    Mod = State#state.mod,
+    TransferId = Params#transfer_params.transfer_id,
+    {Path, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
+
+    ?warning(
+        "Transfer of file ~p in scope of transfer ~p failed due to ~p~n"
+        "File transfer will be retried (attempts left: ~p)",
+        [Path, TransferId, Error, Retries - 1]
+    ),
+    Mod:enqueu_data_transfer(FileCtx2, Params, Retries - 1, next_retry(State, Retries)).
+
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% This functions check whether replication can be started.
+%% if NextRetryTimestamp is:
+%%  * undefined - replication can be started
+%%  * greater than current timestamp - replication cannot be started
+%%  * otherwise replication can be started
+%% @end
+%%-------------------------------------------------------------------
+-spec should_start(undefined | non_neg_integer()) -> boolean().
+should_start(undefined) ->
+    true;
+should_start(NextRetryTimestamp) ->
+    time_utils:cluster_time_seconds() >= NextRetryTimestamp.
+
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function returns minimal timestamp for next retry.
+%% Interval is generated basing on exponential backoff algorithm.
+%% @end
+%%-------------------------------------------------------------------
+-spec next_retry(state(), non_neg_integer()) -> non_neg_integer().
+next_retry(#state{mod = Mod}, RetriesLeft) ->
+    MaxRetries = Mod:max_transfer_retries(),
+    MinSecsToWait = backoff(MaxRetries - RetriesLeft, MaxRetries),
+    time_utils:cluster_time_seconds() + MinSecsToWait.
+
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Exponential backoff for transfer retries.
+%% Returns random number from range [1, 2^(min(RetryNum, MaxRetries)]
+%% where RetryNum is number of retry
+%% @end
+%%-------------------------------------------------------------------
+-spec backoff(non_neg_integer(), non_neg_integer()) -> non_neg_integer().
+backoff(RetryNum, MaxRetries) ->
+    rand:uniform(round(math:pow(2, min(RetryNum, MaxRetries)))).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Transfers data from appropriate source, that is either files returned by
+%% querying specified index or file system subtree (regular file or
+%% entire directory depending on file ctx).
+%% @end
+%%--------------------------------------------------------------------
+-spec transfer_data_insecure(state(), file_ctx:ctx(), transfer_params()) ->
+    ok | {error, term()}.
+transfer_data_insecure(State, FileCtx, Params = #transfer_params{index_name = undefined}) ->
+    transfer_fs_subtree(State, FileCtx, Params);
+transfer_data_insecure(State, FileCtx, Params) ->
+    transfer_files_from_index(State, FileCtx, Params, undefined).
+
+
+%% @private
+-spec enqueue_files_transfer(state(), [file_ctx:ctx()], transfer_params()) -> ok.
+enqueue_files_transfer(#state{mod = CallbackMod}, FileCtxs, TransferParams) ->
+    lists:foreach(fun(FileCtx) ->
+        CallbackMod:enqueue_data_transfer(FileCtx, TransferParams, undefined, undefined)
+    end, FileCtxs).
+
+
+%% @private
+-spec transfer_fs_subtree(state(), file_ctx:ctx(), transfer_params()) ->
+    ok | {error, term()}.
+transfer_fs_subtree(State = #state{mod = Mod}, FileCtx, Params) ->
+    case transfer:is_ongoing(Params#transfer_params.transfer_id) of
+        true ->
+            case file_ctx:file_exists_const(FileCtx) of
+                true ->
+                    case file_ctx:is_dir(FileCtx) of
+                        {true, FileCtx2} ->
+                            transfer_dir(State, FileCtx2, 0, Params);
+                        {false, FileCtx2} ->
+                            Mod:transfer_regular_file(FileCtx2, Params)
+                    end;
+                false ->
+                    {error, not_found}
+            end;
+        false ->
+            throw(already_ended)
+    end.
+
+
+%% @private
+-spec transfer_dir(state(), file_ctx:ctx(), non_neg_integer(), transfer_params()) ->
+    ok | {error, term()}.
+transfer_dir(State, FileCtx, Offset, TransferParams = #transfer_params{
+    transfer_id = TransferId,
+    user_ctx = UserCtx
+}) ->
+    {ok, Chunk} = application:get_env(?APP_NAME, ls_chunk_size),
+    {Children, FileCtx2} = file_ctx:get_file_children(FileCtx, UserCtx, Offset, Chunk),
+    Length = length(Children),
+    case Length < Chunk of
+        true ->
+            transfer:increment_files_to_process_counter(TransferId, Length),
+            enqueue_files_transfer(State, Children, TransferParams),
+            transfer:increment_files_processed_counter(TransferId),
+            ok;
+        false ->
+            transfer:increment_files_to_process_counter(TransferId, Chunk),
+            enqueue_files_transfer(State, Children, TransferParams),
+            transfer_dir(State, FileCtx2, Offset + Chunk, TransferParams)
+    end.
+
+
+%% @private
+-spec transfer_files_from_index(state(), file_ctx:ctx(), transfer_params(),
+    file_meta:uuid()) -> ok | {error, term()}.
+transfer_files_from_index(State = #state{mod = Mod}, FileCtx, Params, LastDocId) ->
+    case transfer:is_ongoing(Params#transfer_params.transfer_id) of
+        true ->
+            Chunk = Mod:index_querying_chunk_size(),
+            transfer_files_from_index(State, FileCtx, Params, Chunk, LastDocId);
+        false ->
+            throw(already_ended)
+    end.
+
+
+%% @private
+-spec transfer_files_from_index(state(), file_ctx:ctx(), transfer_params(),
+    non_neg_integer(), file_meta:uuid()) -> ok | {error, term()}.
+transfer_files_from_index(State, FileCtx, Params, Chunk, LastDocId) ->
+    #transfer_params{
+        transfer_id = TransferId,
+        index_name = IndexName,
+        query_view_params = QueryViewParams
+    } = Params,
+
+    QueryViewParams2 = case LastDocId of
+        undefined ->
+            [{skip, 0} | QueryViewParams];
+        doc_id_missing ->
+            % doc_id is missing when view has reduce function defined
+            % in such case we must iterate over results using limit and skip
+            [{skip, Chunk} | QueryViewParams];
+        _ ->
+            [{skip, 1}, {startkey_docid, LastDocId} | QueryViewParams]
+    end,
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+
+    case index:query(SpaceId, IndexName, [{limit, Chunk} | QueryViewParams2]) of
+        {ok, {Rows}} ->
+            {NewLastDocId, FileCtxs} = lists:foldl(fun(Row, {_LastDocId, FileCtxsIn}) ->
+                {<<"value">>, Value} = lists:keyfind(<<"value">>, 1, Row),
+                DocId = case lists:keyfind(<<"id">>, 1, Row) of
+                    {<<"id">>, Id} -> Id;
+                    _ -> doc_id_missing
+                end,
+                ObjectIds = case is_list(Value) of
+                    true -> lists:flatten(Value);
+                    false -> [Value]
+                end,
+                transfer:increment_files_to_process_counter(TransferId, length(ObjectIds)),
+                NewFileCtxs = lists:filtermap(fun(O) ->
+                    try
+                        {ok, G} = cdmi_id:objectid_to_guid(O),
+                        {true, file_ctx:new_by_guid(G)}
+                    catch
+                        Error:Reason ->
+                            transfer:increment_files_failed_and_processed_counters(TransferId),
+                            ?error_stacktrace(
+                                "Processing result of query index ~p "
+                                "in space ~p failed due to ~p:~p", [
+                                    IndexName, SpaceId, Error, Reason
+                                ]
+                            ),
+                            false
+                    end
+                end, ObjectIds),
+                {DocId, FileCtxsIn ++ NewFileCtxs}
+            end, {undefined, []}, Rows),
+
+            case length(Rows) < Chunk of
+                true ->
+                    enqueue_files_transfer(State, FileCtxs, Params#transfer_params{
+                        index_name = undefined, query_view_params = undefined
+                    }),
+                    transfer:increment_files_processed_counter(TransferId),
+                    ok;
+                false ->
+                    enqueue_files_transfer(State, FileCtxs, Params#transfer_params{
+                        index_name = undefined, query_view_params = undefined
+                    }),
+                    transfer_files_from_index(State, FileCtx, Params, NewLastDocId)
+            end;
+        Error = {error, Reason} ->
+            ?error("Querying view ~p failed due to ~p when processing transfer ~p", [
+                IndexName, Reason, TransferId
+            ]),
+            Error
+    end.
