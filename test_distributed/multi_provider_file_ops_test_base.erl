@@ -734,7 +734,10 @@ delete_test_skeleton(Config, Desc, WriteOn1, OpenBeforeDel, SleepAfterVerify,
                         case CloseAfterVerify of
                             true ->
                                 ok = timer:sleep(timer:seconds(1)),
-                                lfm_proxy:close(W, Handle);
+                                lfm_proxy:close(W, Handle),
+                                % TODO - VFS-5015 - Delete sleep after fix of
+                                % race between create and delete of open file
+                                ok = timer:sleep(timer:seconds(1));
                             _ ->
                                 ok
                         end;
@@ -745,7 +748,7 @@ delete_test_skeleton(Config, Desc, WriteOn1, OpenBeforeDel, SleepAfterVerify,
 
                 Beg = crypto:strong_rand_bytes(8),
                 BegSize = size(Beg),
-                create_file_on_worker(Config, Beg, BegSize, DelFile, WriteWorker, 5),
+                create_file_on_worker(Config, Beg, BegSize, DelFile, WriteWorker, 30),
                 verify_file(Config, Beg, {BegSize, DelFile})
         end, undefined, Workers ++ Workers)
     end, lists:seq(1,2)).
@@ -1940,20 +1943,22 @@ verify_stats(Config, File, IsDir) ->
 create_file_on_worker(Config, FileBeg, Offset, File, WriteWorker) ->
     create_file_on_worker(Config, FileBeg, Offset, File, WriteWorker, 0).
 
-create_file_on_worker(Config, FileBeg, Offset, File, WriteWorker, CreateAttempts) ->
+create_file_on_worker(Config, FileBeg, Offset, File, WriteWorker, Attempts) ->
     SessId = ?config(session, Config),
 
-    case CreateAttempts of
+    {ok, Handle} = case Attempts of
         0 ->
             ?assertMatch({ok, _}, lfm_proxy:create(WriteWorker,
-                SessId(WriteWorker), File, 8#755));
+                SessId(WriteWorker), File, 8#755)),
+            ?assertMatch({ok, _}, lfm_proxy:open(WriteWorker,
+                SessId(WriteWorker), {path, File}, rdwr));
         _ ->
             ?assertMatch({ok, _}, lfm_proxy:create(WriteWorker,
-                SessId(WriteWorker), File, 8#755), CreateAttempts)
+                SessId(WriteWorker), File, 8#755), Attempts),
+            ?assertMatch({ok, _}, lfm_proxy:open(WriteWorker,
+                SessId(WriteWorker), {path, File}, rdwr), Attempts)
     end,
-    OpenAns = lfm_proxy:open(WriteWorker, SessId(WriteWorker), {path, File}, rdwr),
-    ?assertMatch({ok, _}, OpenAns),
-    {ok, Handle} = OpenAns,
+
     FileBegSize = size(FileBeg),
     ?assertMatch({ok, FileBegSize}, lfm_proxy:write(WriteWorker, Handle, 0, FileBeg)),
     Size = size(File),

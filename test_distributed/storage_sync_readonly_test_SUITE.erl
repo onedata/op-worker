@@ -72,7 +72,8 @@
     change_file_content_constant_size_test/1,
     change_file_content_update_test/1, create_empty_file_import_test/1,
     append_empty_file_update_test/1,
-    change_file_content_the_same_moment_when_sync_performs_stat_on_file_test/1]).
+    change_file_content_the_same_moment_when_sync_performs_stat_on_file_test/1,
+    delete_many_subfiles_test/1]).
 
 -define(TEST_CASES, [
     create_directory_import_test,
@@ -100,6 +101,7 @@
     sync_works_properly_after_delete_test,
     delete_and_update_files_simultaneously_update_test,
     delete_file_update_test,
+    delete_many_subfiles_test,
     append_empty_file_update_test,
     append_file_update_test,
     append_file_not_changing_mtime_update_test,
@@ -711,6 +713,9 @@ delete_and_update_files_simultaneously_update_test(Config) ->
 
 delete_file_update_test(Config) ->
     storage_sync_test_base:delete_file_update_test(Config, true).
+
+delete_many_subfiles_test(Config) ->
+    storage_sync_test_base:delete_many_subfiles_test(Config, true).
 
 append_file_update_test(Config) ->
     MountSpaceInRoot = true,
@@ -1572,6 +1577,7 @@ init_per_testcase(Case, Config) when
     Case =:= delete_empty_directory_update_test;
     Case =:= delete_non_empty_directory_update_test;
     Case =:= delete_file_update_test;
+    Case =:= delete_many_subfiles_test;
     Case =:= move_file_update_test;
     Case =:= create_subfiles_and_delete_before_import_is_finished_test
     ->
