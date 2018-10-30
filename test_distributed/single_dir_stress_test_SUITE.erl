@@ -44,7 +44,7 @@ all() ->
 stress_test(Config) ->
     ?STRESS(Config,[
             {description, "Main stress test function. Links together all cases to be done multiple times as one continous test."},
-            {success_rate, 90},
+            {success_rate, 100},
             {config, [{name, stress}, {description, "Basic config for stress test"}]}
         ]
     ).
