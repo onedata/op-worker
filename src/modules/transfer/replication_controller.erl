@@ -17,6 +17,7 @@
 
 -behaviour(gen_server).
 
+-include("modules/datastore/transfer.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -154,10 +155,14 @@ handle_cast({start_replication, SessionId, TransferId, FileGuid, Callback,
     flush(),
     case replication_status:handle_enqueued(TransferId) of
         {ok, _} ->
-            sync_req:enqueue_file_replication(user_ctx:new(SessionId),
-                file_ctx:new_by_guid(FileGuid), undefined, TransferId, IndexName,
-                QueryViewParams
-            ),
+            FileCtx = file_ctx:new_by_guid(FileGuid),
+            TransferParams = #transfer_params{
+                transfer_id = TransferId,
+                user_ctx = user_ctx:new(SessionId),
+                index_name = IndexName,
+                query_view_params = QueryViewParams
+            },
+            replication_worker:enqueue_data_transfer(FileCtx, TransferParams),
             handle_enqueued(TransferId, Callback, EvictSourceReplica);
         {error, enqueued} ->
             {ok, _} = transfer:set_controller_process(TransferId),

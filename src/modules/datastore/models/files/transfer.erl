@@ -772,7 +772,7 @@ maybe_rerun(TransferId) ->
 start_pools() ->
     {ok, _} = worker_pool:start_sup_pool(?REPLICATION_WORKERS_POOL, [
         {workers, ?REPLICATION_WORKERS_NUM},
-        {worker, {?REPLICATION_WORKER, []}},
+        {worker, {gen_transfer_worker, [replication_worker]}},
         {queue_type, lifo}
     ]),
     {ok, _} = worker_pool:start_sup_pool(?REPLICATION_CONTROLLERS_POOL, [

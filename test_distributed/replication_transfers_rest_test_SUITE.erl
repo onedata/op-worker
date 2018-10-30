@@ -140,7 +140,7 @@ replicate_already_replicated_file(Config) ->
     replication_transfers_test_base:replicate_already_replicated_file(Config, rest, guid).
 
 not_synced_file_should_not_be_replicated(Config) ->
-    % sync_req:replicate_files is mocked to return {error, not_found}
+    % replication_worker:transfer_regular_file is mocked to return {error, not_found}
     replication_transfers_test_base:not_synced_file_should_not_be_replicated(Config, rest, guid).
 
 replicate_100_files_separately(Config) ->

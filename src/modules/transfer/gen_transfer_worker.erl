@@ -9,7 +9,7 @@
 %%% TODO writeme.
 %%% @end
 %%%--------------------------------------------------------------------
--module(transfer_worker_behaviour).
+-module(gen_transfer_worker).
 -author("Bartosz Walkowicz").
 
 -behaviour(gen_server).
@@ -129,12 +129,14 @@ handle_call(_Request, _From, State) ->
 handle_cast(?TRANSFER_DATA_REQ(FileCtx, Params, Retries, NextRetryTimestamp), State) ->
     Mod = State#state.mod,
     TransferId = Params#transfer_params.transfer_id,
-
     case should_start(NextRetryTimestamp) of
         true ->
             case transfer_data(State, FileCtx, Params, Retries) of
                 ok ->
-                    ok;
+                    {ok, _} = transfer:increment_files_processed_counter(TransferId);
+                {retry, NewFileCtx} ->
+                    NextRetry = next_retry(State, Retries),
+                    Mod:enqueue_data_transfer(NewFileCtx, Params, Retries - 1, NextRetry);
                 {error, not_found} ->
                     % todo VFS-4218 currently we ignore this case
                     {ok, _} = transfer:increment_files_processed_counter(TransferId);
@@ -202,74 +204,6 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 
-%% @private
--spec transfer_data(state(), file_ctx:ctx(), transfer_params(), non_neg_integer()) ->
-    ok | {error, term()}.
-transfer_data(State = #state{mod = Mod}, FileCtx, Params, RetriesLeft) ->
-    Args = [State, FileCtx, Params],
-    RequiredPerms = Mod:required_permissions(),
-
-    try check_permissions:execute(RequiredPerms, Args, fun transfer_data_insecure/3) of
-        ok ->
-            ok;
-        Error = {error, _Reason} ->
-            maybe_retry(State, FileCtx, Params, RetriesLeft, Error)
-    catch
-        throw:cancelled ->
-            {error, cancelled};
-        throw:already_ended ->
-            {error, already_ended};
-        error:{badmatch, Error = {error, not_found}} ->
-            maybe_retry(State, FileCtx, Params, RetriesLeft, Error);
-        Error:Reason ->
-            ?error_stacktrace("Unexpected error ~p:~p during transfer ~p", [
-                Error, Reason, Params#transfer_params.transfer_id
-            ]),
-            maybe_retry(State, FileCtx, Params, RetriesLeft, {Error, Reason})
-    end.
-
-
-%% @private
--spec maybe_retry(state(), file_ctx:ctx(), transfer_params(),
-    RetriesLeft :: non_neg_integer(), term()) -> ok | {error, term()}.
-maybe_retry(_State, _FileCtx, Params, 0, Error = {error, not_found}) ->
-    ?error(
-        "Data transfer in scope of transfer ~p failed due to ~p~n"
-        "No retries left", [Params#transfer_params.transfer_id, Error]
-    ),
-    Error;
-maybe_retry(State, FileCtx, Params, Retries, Error = {error, not_found}) ->
-    Mod = State#state.mod,
-    TransferId = Params#transfer_params.transfer_id,
-
-    ?warning(
-        "Data transfer in scope of transfer ~p failed due to ~p~n"
-        "File transfer will be retried (attempts left: ~p)",
-        [TransferId, Error, Retries - 1]
-    ),
-    Mod:enqueu_data_transfer(FileCtx, Params, Retries - 1, next_retry(State, Retries));
-maybe_retry(_State, FileCtx, Params, 0, Error) ->
-    TransferId = Params#transfer_params.transfer_id,
-    {Path, _FileCtx2} = file_ctx:get_canonical_path(FileCtx),
-
-    ?error(
-        "Transfer of file ~p in scope of transfer ~p failed due to ~p~n"
-        "No retries left", [Path, TransferId, Error]
-    ),
-    {error, retries_per_file_transfer_exceeded};
-maybe_retry(State, FileCtx, Params, Retries, Error) ->
-    Mod = State#state.mod,
-    TransferId = Params#transfer_params.transfer_id,
-    {Path, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
-
-    ?warning(
-        "Transfer of file ~p in scope of transfer ~p failed due to ~p~n"
-        "File transfer will be retried (attempts left: ~p)",
-        [Path, TransferId, Error, Retries - 1]
-    ),
-    Mod:enqueu_data_transfer(FileCtx2, Params, Retries - 1, next_retry(State, Retries)).
-
-
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
@@ -285,6 +219,83 @@ should_start(undefined) ->
     true;
 should_start(NextRetryTimestamp) ->
     time_utils:cluster_time_seconds() >= NextRetryTimestamp.
+
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Applies permissions check and if passed transfers data.
+%% In case of error either returns immediately with error
+%% (in case of `already_ended` error, `cancelled` error or no retries left)
+%% or enqueues data transfer for later retry decrementing number of retries left.
+%% @end
+%%-------------------------------------------------------------------
+-spec transfer_data(state(), file_ctx:ctx(), transfer_params(), non_neg_integer()) ->
+    ok | {retry, file_ctx:ctx()} | {error, term()}.
+transfer_data(State = #state{mod = Mod}, FileCtx, Params, RetriesLeft) ->
+    Args = [Params#transfer_params.user_ctx, FileCtx, State, Params],
+    RequiredPerms = Mod:required_permissions(),
+
+    try check_permissions:execute(RequiredPerms, Args, fun transfer_data_insecure/4) of
+        ok ->
+            ok;
+        Error = {error, _Reason} ->
+            maybe_retry(FileCtx, Params, RetriesLeft, Error)
+    catch
+        throw:cancelled ->
+            {error, cancelled};
+        throw:already_ended ->
+            {error, already_ended};
+        error:{badmatch, Error = {error, not_found}} ->
+            maybe_retry(FileCtx, Params, RetriesLeft, Error);
+        Error:Reason ->
+            ?error_stacktrace("Unexpected error ~p:~p during transfer ~p", [
+                Error, Reason, Params#transfer_params.transfer_id
+            ]),
+            maybe_retry(FileCtx, Params, RetriesLeft, {Error, Reason})
+    end.
+
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks whether data transfer can be retried and repeats it if it's possible.
+%% @end
+%%-------------------------------------------------------------------
+-spec maybe_retry(file_ctx:ctx(), transfer_params(), non_neg_integer(), term()) ->
+    ok | {retry, file_ctx:ctx()} | {error, term()}.
+maybe_retry(_FileCtx, Params, 0, Error = {error, not_found}) ->
+    ?error(
+        "Data transfer in scope of transfer ~p failed due to ~p~n"
+        "No retries left", [Params#transfer_params.transfer_id, Error]
+    ),
+    Error;
+maybe_retry(FileCtx, Params, Retries, Error = {error, not_found}) ->
+    ?warning(
+        "Data transfer in scope of transfer ~p failed due to ~p~n"
+        "File transfer will be retried (attempts left: ~p)",
+        [Params#transfer_params.transfer_id, Error, Retries - 1]
+    ),
+    {retry, FileCtx};
+maybe_retry(FileCtx, Params, 0, Error) ->
+    TransferId = Params#transfer_params.transfer_id,
+    {Path, _FileCtx2} = file_ctx:get_canonical_path(FileCtx),
+
+    ?error(
+        "Transfer of file ~p in scope of transfer ~p failed due to ~p~n"
+        "No retries left", [Path, TransferId, Error]
+    ),
+    {error, retries_per_file_transfer_exceeded};
+maybe_retry(FileCtx, Params, Retries, Error) ->
+    TransferId = Params#transfer_params.transfer_id,
+    {Path, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
+
+    ?warning(
+        "Transfer of file ~p in scope of transfer ~p failed due to ~p~n"
+        "File transfer will be retried (attempts left: ~p)",
+        [Path, TransferId, Error, Retries - 1]
+    ),
+    {retry, FileCtx2}.
 
 
 %%-------------------------------------------------------------------
@@ -322,19 +333,19 @@ backoff(RetryNum, MaxRetries) ->
 %% entire directory depending on file ctx).
 %% @end
 %%--------------------------------------------------------------------
--spec transfer_data_insecure(state(), file_ctx:ctx(), transfer_params()) ->
+-spec transfer_data_insecure(user_ctx:ctx(), state(), file_ctx:ctx(), transfer_params()) ->
     ok | {error, term()}.
-transfer_data_insecure(State, FileCtx, Params = #transfer_params{index_name = undefined}) ->
+transfer_data_insecure(_, FileCtx, State, Params = #transfer_params{index_name = undefined}) ->
     transfer_fs_subtree(State, FileCtx, Params);
-transfer_data_insecure(State, FileCtx, Params) ->
+transfer_data_insecure(_, FileCtx, State, Params) ->
     transfer_files_from_index(State, FileCtx, Params, undefined).
 
 
 %% @private
 -spec enqueue_files_transfer(state(), [file_ctx:ctx()], transfer_params()) -> ok.
-enqueue_files_transfer(#state{mod = CallbackMod}, FileCtxs, TransferParams) ->
+enqueue_files_transfer(#state{mod = Mod}, FileCtxs, TransferParams) ->
     lists:foreach(fun(FileCtx) ->
-        CallbackMod:enqueue_data_transfer(FileCtx, TransferParams, undefined, undefined)
+        Mod:enqueue_data_transfer(FileCtx, TransferParams, undefined, undefined)
     end, FileCtxs).
 
 
@@ -369,16 +380,15 @@ transfer_dir(State, FileCtx, Offset, TransferParams = #transfer_params{
 }) ->
     {ok, Chunk} = application:get_env(?APP_NAME, ls_chunk_size),
     {Children, FileCtx2} = file_ctx:get_file_children(FileCtx, UserCtx, Offset, Chunk),
+
     Length = length(Children),
+    transfer:increment_files_to_process_counter(TransferId, Length),
+    enqueue_files_transfer(State, Children, TransferParams),
+
     case Length < Chunk of
         true ->
-            transfer:increment_files_to_process_counter(TransferId, Length),
-            enqueue_files_transfer(State, Children, TransferParams),
-            transfer:increment_files_processed_counter(TransferId),
             ok;
         false ->
-            transfer:increment_files_to_process_counter(TransferId, Chunk),
-            enqueue_files_transfer(State, Children, TransferParams),
             transfer_dir(State, FileCtx2, Offset + Chunk, TransferParams)
     end.
 
@@ -450,17 +460,13 @@ transfer_files_from_index(State, FileCtx, Params, Chunk, LastDocId) ->
                 {DocId, FileCtxsIn ++ NewFileCtxs}
             end, {undefined, []}, Rows),
 
+            enqueue_files_transfer(State, FileCtxs, Params#transfer_params{
+                index_name = undefined, query_view_params = undefined
+            }),
             case length(Rows) < Chunk of
                 true ->
-                    enqueue_files_transfer(State, FileCtxs, Params#transfer_params{
-                        index_name = undefined, query_view_params = undefined
-                    }),
-                    transfer:increment_files_processed_counter(TransferId),
                     ok;
                 false ->
-                    enqueue_files_transfer(State, FileCtxs, Params#transfer_params{
-                        index_name = undefined, query_view_params = undefined
-                    }),
                     transfer_files_from_index(State, FileCtx, Params, NewLastDocId)
             end;
         Error = {error, Reason} ->

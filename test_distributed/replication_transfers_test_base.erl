@@ -1591,8 +1591,8 @@ init_per_suite(Config) ->
 
 init_per_testcase(not_synced_file_should_not_be_replicated, Config) ->
     [WorkerP2 | _] = ?config(op_worker_nodes, Config),
-    ok = test_utils:mock_new(WorkerP2, sync_req),
-    ok = test_utils:mock_expect(WorkerP2, sync_req, replicate_file, fun(_, _, _, _, _, _) ->
+    ok = test_utils:mock_new(WorkerP2, replication_worker),
+    ok = test_utils:mock_expect(WorkerP2, replication_worker, transfer_regular_file, fun(_, _) ->
         {error, not_found}
     end),
     init_per_testcase(all, Config);
@@ -1621,7 +1621,7 @@ init_per_testcase(_Case, Config) ->
 
 end_per_testcase(not_synced_file_should_not_be_replicated, Config) ->
     [WorkerP2 | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(WorkerP2, sync_req),
+    test_utils:mock_unload(WorkerP2, replication_worker),
     end_per_testcase(all, Config);
 
 end_per_testcase(Case, Config) when
@@ -1643,7 +1643,7 @@ end_per_testcase(Case, Config) when
 
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    transfers_test_utils:unmock_sync_req(Workers),
+    transfers_test_utils:unmock_replication_worker(Workers),
     transfers_test_utils:unmock_replica_synchronizer_failure(Workers),
     transfers_test_utils:remove_transfers(Config),
     transfers_test_utils:remove_all_indexes(Workers, ?SPACE_ID),
