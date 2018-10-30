@@ -18,6 +18,7 @@
 
 -behaviour(gen_server).
 
+-include("modules/datastore/transfer.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -151,11 +152,15 @@ handle_cast(start_replica_eviction, State = #state{
     flush(),
     case replica_eviction_status:handle_active(TransferId) of
         {ok, _} ->
-            UserCtx = user_ctx:new(SessionId),
             FileCtx = file_ctx:new_by_guid(FileGuid),
-            replica_eviction_req:enqueue_replica_eviction(UserCtx, FileCtx,
-                SupportingProviderId, TransferId, IndexName, QueryViewParams
-            ),
+            TransferParams = #transfer_params{
+                transfer_id = TransferId,
+                user_ctx = user_ctx:new(SessionId),
+                index_name = IndexName,
+                query_view_params = QueryViewParams,
+                supporting_provider = SupportingProviderId
+            },
+            replica_eviction_worker:enqueue_data_transfer(FileCtx, TransferParams),
             {noreply, State#state{status = active}};
         {error, active} ->
             {ok, _} = transfer:set_controller_process(TransferId),

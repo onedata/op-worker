@@ -133,7 +133,7 @@ handle_cast(?TRANSFER_DATA_REQ(FileCtx, Params, Retries, NextRetryTimestamp), St
         true ->
             case transfer_data(State, FileCtx, Params, Retries) of
                 ok ->
-                    {ok, _} = transfer:increment_files_processed_counter(TransferId);
+                    ok;
                 {retry, NewFileCtx} ->
                     NextRetry = next_retry(State, Retries),
                     Mod:enqueue_data_transfer(NewFileCtx, Params, Retries - 1, NextRetry);
@@ -333,7 +333,7 @@ backoff(RetryNum, MaxRetries) ->
 %% entire directory depending on file ctx).
 %% @end
 %%--------------------------------------------------------------------
--spec transfer_data_insecure(user_ctx:ctx(), state(), file_ctx:ctx(), transfer_params()) ->
+-spec transfer_data_insecure(user_ctx:ctx(), file_ctx:ctx(), state(), transfer_params()) ->
     ok | {error, term()}.
 transfer_data_insecure(_, FileCtx, State, Params = #transfer_params{index_name = undefined}) ->
     transfer_fs_subtree(State, FileCtx, Params);
@@ -387,6 +387,7 @@ transfer_dir(State, FileCtx, Offset, TransferParams = #transfer_params{
 
     case Length < Chunk of
         true ->
+            transfer:increment_files_processed_counter(TransferId),
             ok;
         false ->
             transfer_dir(State, FileCtx2, Offset + Chunk, TransferParams)
@@ -465,6 +466,7 @@ transfer_files_from_index(State, FileCtx, Params, Chunk, LastDocId) ->
             }),
             case length(Rows) < Chunk of
                 true ->
+                    transfer:increment_files_processed_counter(TransferId),
                     ok;
                 false ->
                     transfer_files_from_index(State, FileCtx, Params, NewLastDocId)

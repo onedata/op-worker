@@ -22,10 +22,11 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([
-    enqueue_data_transfer/2,
-    enqueue_data_transfer/4,
+-export([enqueue_data_transfer/2]).
 
+%% gen_transfer_worker callbacks
+-export([
+    enqueue_data_transfer/4,
     transfer_regular_file/2,
     index_querying_chunk_size/0,
     max_transfer_retries/0,
@@ -40,6 +41,18 @@
 %%% API
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv enqueue_data_transfer(FileCtx, TransferParams, undefined, undefined).
+%% @end
+%%--------------------------------------------------------------------
+-spec enqueue_data_transfer(file_ctx:ctx(), transfer_params()) -> ok.
+enqueue_data_transfer(FileCtx, TransferParams) ->
+    enqueue_data_transfer(FileCtx, TransferParams, undefined, undefined).
+
+%%%===================================================================
+%%% gen_transfer_worker callbacks
+%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -50,7 +63,6 @@
 required_permissions() ->
     [traverse_ancestors, ?write_object].
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link transfer_worker_behaviour} callback max_transfer_retries/0.
@@ -60,7 +72,6 @@ required_permissions() ->
 max_transfer_retries() ->
     application:get_env(?APP_NAME, max_file_replication_retries_per_file, 5).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link transfer_worker_behaviour} callback index_querying_chunk_size/0.
@@ -69,17 +80,6 @@ max_transfer_retries() ->
 -spec index_querying_chunk_size() -> non_neg_integer().
 index_querying_chunk_size() ->
     application:get_env(?APP_NAME, replication_by_index_batch, 1000).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% @equiv enqueue_data_transfer(FileCtx, TransferParams, undefined, undefined).
-%% @end
-%%--------------------------------------------------------------------
--spec enqueue_data_transfer(file_ctx:ctx(), transfer_params()) -> ok.
-enqueue_data_transfer(FileCtx, TransferParams) ->
-    enqueue_data_transfer(FileCtx, TransferParams, undefined, undefined).
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -95,7 +95,6 @@ enqueue_data_transfer(FileCtx, TransferParams, RetriesLeft, NextRetry) ->
     )),
     ok.
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link transfer_worker_behaviour} callback transfer_regular_file/2.
@@ -110,4 +109,5 @@ transfer_regular_file(FileCtx, #transfer_params{
     #fuse_response{status = #status{code = ?OK}} = sync_req:synchronize_block(
         UserCtx, FileCtx, Block, false, TransferId, ?DEFAULT_REPLICATION_PRIORITY
     ),
+    transfer:increment_files_processed_counter(TransferId),
     ok.

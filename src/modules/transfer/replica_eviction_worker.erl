@@ -5,38 +5,35 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Implementation of worker for replica_eviction_workers_pool.
-%%% Worker is responsible for replica eviction of one file
-%%% (regular or directory).
+%%% Implementation of gen_transfer_worker for replica_eviction_workers_pool.
+%%% Worker is responsible for replica eviction of one file.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(replica_eviction_worker).
 -author("Jakub Kudzia").
+-author("Bartosz Walkowicz").
 
--behaviour(gen_server).
+-behaviour(gen_transfer_worker).
 
 -include("global_definitions.hrl").
--include("proto/oneprovider/provider_messages.hrl").
+-include("modules/datastore/transfer.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/0, process_replica_deletion_result/3]).
+-export([
+    enqueue_data_transfer/2,
+    process_replica_deletion_result/3
+]).
 
-%% gen_server callbacks
--export([init/1,
-    handle_call/3,
-    handle_cast/2,
-    handle_info/2,
-    terminate/2,
-    code_change/3]).
-
--define(SERVER, ?MODULE).
-
--define(MAX_REPLICA_EVICTION_RETRIES,
-    application:get_env(?APP_NAME, max_eviction_retries_per_file_replica, 5)).
-
--record(state, {}).
--type state() :: #state{}.
+%% gen_transfer_worker callbacks
+-export([
+    enqueue_data_transfer/4,
+    transfer_regular_file/2,
+    index_querying_chunk_size/0,
+    max_transfer_retries/0,
+    required_permissions/0
+]).
 
 %%%===================================================================
 %%% API
@@ -44,13 +41,12 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Starts the server
+%% @equiv enqueue_data_transfer(FileCtx, TransferParams, undefined, undefined).
 %% @end
 %%--------------------------------------------------------------------
--spec(start_link() ->
-    {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link() ->
-    gen_server2:start_link({local, ?SERVER}, ?MODULE, [], []).
+-spec enqueue_data_transfer(file_ctx:ctx(), transfer_params()) -> ok.
+enqueue_data_transfer(FileCtx, TransferParams) ->
+    enqueue_data_transfer(FileCtx, TransferParams, undefined, undefined).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -61,124 +57,99 @@ start_link() ->
 -spec process_replica_deletion_result(replica_deletion:result(), file_meta:uuid(),
     transfer:id()) -> ok.
 process_replica_deletion_result({ok, ReleasedBytes}, FileUuid, TransferId) ->
-    ?debug("Replica eviction of file ~p in transfer ~p released ~p bytes.",
-        [FileUuid, TransferId, ReleasedBytes]),
+    ?debug("Replica eviction of file ~p in transfer ~p released ~p bytes.", [
+        FileUuid, TransferId, ReleasedBytes
+    ]),
     {ok, _} = transfer:increment_files_evicted_and_processed_counters(TransferId),
     ok;
 process_replica_deletion_result(Error, FileUuid, TransferId) ->
-    ?error("Error ~p occured during replica eviction of file ~p in procedure ~p",
-        [Error, FileUuid, TransferId]),
+    ?error("Error ~p occured during replica eviction of file ~p in procedure ~p", [
+        Error, FileUuid, TransferId
+    ]),
     {ok, _} = transfer:increment_files_failed_and_processed_counters(TransferId),
     ok.
 
 %%%===================================================================
-%%% gen_server callbacks
+%%% gen_transfer_worker callbacks
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
-%% Initializes the server
+%% {@link transfer_worker_behaviour} callback required_permissions/0.
 %% @end
 %%--------------------------------------------------------------------
--spec(init(Args :: term()) ->
-    {ok, State :: state()} | {ok, State :: state(), timeout() | hibernate} |
-    {stop, Reason :: term()} | ignore).
-init([]) ->
-    {ok, #state{}}.
+-spec required_permissions() -> list().
+required_permissions() ->
+    []. % todo VFS-4844
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
-%% Handling call messages
+%% {@link transfer_worker_behaviour} callback max_transfer_retries/0.
 %% @end
 %%--------------------------------------------------------------------
--spec(handle_call(Request :: term(), From :: {pid(), Tag :: term()},
-    State :: state()) ->
-    {reply, Reply :: term(), NewState :: state()} |
-    {reply, Reply :: term(), NewState :: state(), timeout() | hibernate} |
-    {noreply, NewState :: state()} |
-    {noreply, NewState :: state(), timeout() | hibernate} |
-    {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
-    {stop, Reason :: term(), NewState :: state()}).
-handle_call(_Request, _From, State) ->
-    ?log_bad_request(_Request),
-    {reply, wrong_request, State}.
+-spec max_transfer_retries() -> non_neg_integer().
+max_transfer_retries() ->
+    application:get_env(?APP_NAME, max_eviction_retries_per_file_replica, 5).
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
-%% Handling cast messages
+%% {@link transfer_worker_behaviour} callback index_querying_chunk_size/0.
 %% @end
 %%--------------------------------------------------------------------
--spec(handle_cast(Request :: term(), State :: state()) ->
-    {noreply, NewState :: state()} |
-    {noreply, NewState :: state(), timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: state()}).
-handle_cast({start_replica_eviction, UserCtx, FileCtx,  SupportingProviderId,
-    TransferId, RetriesLeft, NextRetryTimestamp, IndexName, QueryViewParams}, State
-) ->
-    RetriesLeft2 = utils:ensure_defined(RetriesLeft, undefined,
-        ?MAX_REPLICA_EVICTION_RETRIES),
-    case should_start(NextRetryTimestamp) of
-        true ->
-            case evict_replica(UserCtx, FileCtx, SupportingProviderId,
-                TransferId, RetriesLeft2, IndexName, QueryViewParams)
-            of
-                ok ->
-                    ok;
-                {error, not_found} ->
-                    % todo VFS-4218 currently we ignore this case
-                    {ok, _} = transfer:increment_files_processed_counter(TransferId);
-                {error, _Reason} ->
-                    {ok, _} = transfer:increment_files_failed_and_processed_counters(TransferId)
-            end;
-        _ ->
-            replica_eviction_req:enqueue_replica_eviction(UserCtx, FileCtx,
-                SupportingProviderId, TransferId, RetriesLeft2,
-                NextRetryTimestamp, IndexName, QueryViewParams
-            )
-    end,
-    {noreply, State, hibernate}.
+-spec index_querying_chunk_size() -> non_neg_integer().
+index_querying_chunk_size() ->
+    application:get_env(?APP_NAME, replica_eviction_by_index_batch, 1000).
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
-%% Handling all non call/cast messages
+%% {@link transfer_worker_behaviour} callback enqueue_data_transfer/4.
 %% @end
 %%--------------------------------------------------------------------
--spec(handle_info(Info :: timeout() | term(), State :: state()) ->
-    {noreply, NewState :: state()} |
-    {noreply, NewState :: state(), timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: state()}).
-handle_info(_Info, State) ->
-    {noreply, State}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function is called by a gen_server when it is about to
-%% terminate. It should be the opposite of Module:init/1 and do any
-%% necessary cleaning up. When it returns, the gen_server terminates
-%% with Reason. The return value is ignored.
-%% @end
-%%--------------------------------------------------------------------
--spec(terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
-    State :: state()) -> term()).
-terminate(_Reason, _State) ->
+-spec enqueue_data_transfer(file_ctx:ctx(), transfer_params(),
+    undefined | non_neg_integer(), undefined | non_neg_integer()) -> ok.
+enqueue_data_transfer(FileCtx, TransferParams, RetriesLeft, NextRetry) ->
+    RetriesLeft2 = utils:ensure_defined(RetriesLeft, undefined, max_transfer_retries()),
+    worker_pool:cast(?REPLICA_EVICTION_WORKERS_POOL, ?TRANSFER_DATA_REQ(
+        FileCtx, TransferParams, RetriesLeft2, NextRetry
+    )),
     ok.
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
-%% Convert process state when code is changed
+%% {@link transfer_worker_behaviour} callback transfer_regular_file/2.
+%%
+%% Schedules safe file_replica_deletion via replica_deletion mechanism.
+%% If SupportingProviderId is undefined, it will bo chosen from
+%% providers who have given file replicated.
 %% @end
 %%--------------------------------------------------------------------
--spec(code_change(OldVsn :: term() | {down, term()}, State :: state(),
-    Extra :: term()) ->
-    {ok, NewState :: state()} | {error, Reason :: term()}).
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
+-spec transfer_regular_file(file_ctx:ctx(), transfer_params()) -> ok | {error, term()}.
+transfer_regular_file(FileCtx, Params = #transfer_params{supporting_provider = undefined}) ->
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    TransferId = Params#transfer_params.transfer_id,
+    case replica_deletion_master:get_setting_for_deletion_task(FileCtx) of
+        undefined ->
+            transfer:increment_files_processed_counter(TransferId);
+        {FileUuid, ProviderId, Blocks, VV} ->
+            schedule_replica_deletion_task(
+                FileUuid, ProviderId, Blocks, VV, TransferId, SpaceId
+            )
+    end,
+    ok;
+transfer_regular_file(FileCtx, #transfer_params{
+    transfer_id = TransferId,
+    supporting_provider = SupportingProvider
+}) ->
+    {LocalFileLocationDoc, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
+    FileUuid = file_ctx:get_uuid_const(FileCtx2),
+    SpaceId = file_ctx:get_space_id_const(FileCtx2),
+    {Size, FileCtx} = file_ctx:get_file_size(FileCtx2),
+    VV = file_location:get_version_vector(LocalFileLocationDoc),
+    Blocks = [#file_block{offset = 0, size = Size}],
+    schedule_replica_deletion_task(
+        FileUuid, SupportingProvider, Blocks, VV, TransferId, SpaceId
+    ),
+    ok.
 
 %%%===================================================================
 %%% Internal functions
@@ -187,116 +158,13 @@ code_change(_OldVsn, State, _Extra) ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Evicts file replica
+%% Adds task of replica deletion to replica_deletion_master queue.
 %% @end
 %%-------------------------------------------------------------------
--spec evict_replica(user:ctx(), file_ctx:ctx(), sync_req:provider_id(),
-    sync_req:transfer_id(), non_neg_integer(), transfer:index_name(),
-    transfer:query_view_params()) -> ok | {error, term()}.
-evict_replica(UserCtx, FileCtx, SupportingProviderId, TransferId, RetriesLeft,
-    IndexName, QueryViewParams
-) ->
-    try replica_eviction_req:evict_file_replica(UserCtx, FileCtx,
-        SupportingProviderId, TransferId, IndexName, QueryViewParams)
-    of
-        #provider_response{status = #status{code = ?OK}}  ->
-            ok;
-        Error = {error, not_found} ->
-            maybe_retry(UserCtx, FileCtx, SupportingProviderId, TransferId,
-                RetriesLeft, IndexName, QueryViewParams, Error)
-    catch
-        Error:Reason ->
-            maybe_retry(UserCtx, FileCtx, SupportingProviderId, TransferId,
-                RetriesLeft, IndexName, QueryViewParams,
-                {Error, Reason})
-    end.
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Checks whether file replica eviction can be retried and repeats
-%% replica eviction if it's possible.
-%% @end
-%%-------------------------------------------------------------------
--spec maybe_retry(user:ctx(), file_ctx:ctx(), sync_req:provider_id(),
-    sync_req:transfer_id(), non_neg_integer(), transfer:index_name(),
-    transfer:query_view_params(), term()) -> ok | {error, term()}.
-maybe_retry(_UserCtx, _FileCtx, _SupportingProviderId, TransferId, 0,
-    _Index, _QueryViewParams, Error = {error, not_found}
-) ->
-    ?error(
-        "Replica eviction in scope of transfer ~p failed due to ~p~n"
-        "No retries left", [TransferId, Error]),
-    Error;
-maybe_retry(UserCtx, FileCtx, SupportingProviderId, TransferId, RetriesLeft,
-    Index, QueryViewParams, Error = {error, not_found}
-) ->
-    ?warning_stacktrace(
-        "Replica eviction in scope of transfer ~p failed due to ~p~n"
-        "File replica eviction will be retried (attempts left: ~p)",
-        [TransferId, Error, RetriesLeft - 1]),
-    replica_eviction_req:enqueue_replica_eviction(UserCtx, FileCtx, SupportingProviderId, TransferId,
-        RetriesLeft - 1, next_retry(RetriesLeft), Index, QueryViewParams);
-maybe_retry(_UserCtx, FileCtx, _SupportingProviderId, TransferId, 0,
-    _Index, _QueryViewParams, Error
-) ->
-    {Path, _FileCtx2} = file_ctx:get_canonical_path(FileCtx),
-    ?error(
-        "Replica eviction of file ~p in scope of transfer ~p failed due to ~p~n"
-        "No retries left", [Path, TransferId, Error]),
-    {error, retries_per_file_transfer_exceeded};
-maybe_retry(UserCtx, FileCtx, SupportingProviderId, TransferId, Retries,
-    Index, QueryViewParams, Error
-) ->
-    {Path, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
-    ?warning_stacktrace(
-        "Replica eviction of file ~p in scope of transfer ~p failed due to ~p~n"
-        "File Replica eviction will be retried (attempts left: ~p)",
-        [Path, TransferId, Error, Retries - 1]),
-    replica_eviction_req:enqueue_replica_eviction(UserCtx, FileCtx2, SupportingProviderId, TransferId,
-        Retries - 1, next_retry(Retries), Index, QueryViewParams).
-
-
-%%TODO VFS-4624 move below functions to utils module, because they're duplicated in transfer_worker !
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% This functions check whether eviction can be started.
-%% if NextRetryTimestamp is:
-%%  * undefined - replica eviction can be started
-%%  * greater than current timestamp - replica eviction cannot be started
-%%  * otherwise replica eviction can be started
-%% @end
-%%-------------------------------------------------------------------
--spec should_start(undefined | non_neg_integer()) -> boolean().
-should_start(undefined) ->
-    true;
-should_start(NextRetryTimestamp) ->
-    time_utils:cluster_time_seconds() >= NextRetryTimestamp.
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function returns minimal timestamp for next retry.
-%% Interval is generated basing on exponential backoff algorithm.
-%% @end
-%%-------------------------------------------------------------------
--spec next_retry(non_neg_integer()) -> non_neg_integer().
-next_retry(RetriesLeft) ->
-    RetryNum = ?MAX_REPLICA_EVICTION_RETRIES - RetriesLeft,
-    MinSecsToWait = backoff(RetryNum, ?MAX_REPLICA_EVICTION_RETRIES),
-    time_utils:cluster_time_seconds() + MinSecsToWait.
-
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Exponential backoff for transfer retries.
-%% Returns random number from range [1, 2^(min(RetryNum, MaxRetries)]
-%% where RetryNum is number of retry
-%% @end
-%%-------------------------------------------------------------------
--spec backoff(non_neg_integer(), non_neg_integer()) -> non_neg_integer().
-backoff(RetryNum, MaxRetries) ->
-    rand:uniform(round(math:pow(2, min(RetryNum, MaxRetries)))).
+-spec schedule_replica_deletion_task(file_meta:uuid(), od_provider:id(),
+    fslogic_blocks:blocks(), version_vector:version_vector(), transfer:id(),
+    od_space:id()) -> ok.
+schedule_replica_deletion_task(FileUuid, Provider, Blocks, VV, TransferId, SpaceId) ->
+    replica_deletion_master:enqueue_task(
+        FileUuid, Provider, Blocks, VV, TransferId, eviction, SpaceId
+    ).
