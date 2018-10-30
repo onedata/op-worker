@@ -235,7 +235,7 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS) ->
                     F = <<D/binary, "/", N2/binary>>,
                     {ToAddV, Ans} = measure_execution_time(fun() ->
                         try
-                            {ok, _} = case CacheGUIDS of
+                            {ok, FileGUID} = case CacheGUIDS of
                                 false ->
                                     lfm_proxy:create(Worker, SessId, F, 8#755);
                                 _ ->
@@ -248,7 +248,7 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS) ->
                                         false ->
                                             lfm_proxy:open(Worker, SessId, {path, F}, rdwr);
                                         _ ->
-                                            lfm_proxy:open(Worker, SessId, {guid, GUID}, rdwr)
+                                            lfm_proxy:open(Worker, SessId, {guid, FileGUID}, rdwr)
                                     end,
                                     WriteBuf = generator:gen_name(),
                                     WriteSize = size(WriteBuf),
