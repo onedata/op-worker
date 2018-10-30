@@ -75,28 +75,7 @@ translate(#gri{type = od_user, id = Id, aspect = instance, scope = shared}, Resu
         }
     };
 
-translate(#gri{type = od_group, id = Id, aspect = instance, scope = private}, Result) ->
-    #document{
-        key = Id,
-        value = #od_group{
-            name = maps:get(<<"name">>, Result),
-            type = binary_to_atom(maps:get(<<"type">>, Result), utf8),
-
-            direct_children = privileges_to_atoms(maps:get(<<"children">>, Result)),
-            eff_children = privileges_to_atoms(maps:get(<<"effectiveChildren">>, Result)),
-            direct_parents = maps:get(<<"parents">>, Result),
-
-            direct_users = privileges_to_atoms(maps:get(<<"users">>, Result)),
-            eff_users = privileges_to_atoms(maps:get(<<"effectiveUsers">>, Result)),
-
-            eff_spaces = maps:get(<<"spaces">>, Result)
-        }
-    };
-
-% shared and protected scopes carry the same data
-translate(GRI = #gri{type = od_group, aspect = instance, scope = shared}, Result) ->
-    translate(GRI#gri{scope = protected}, Result);
-translate(#gri{type = od_group, id = Id, scope = protected}, Result) ->
+translate(#gri{type = od_group, id = Id, scope = shared}, Result) ->
     #document{
         key = Id,
         value = #od_group{
@@ -271,22 +250,6 @@ apply_scope_mask(Doc = #document{value = User = #od_user{}}, shared) ->
             eff_spaces = [],
             eff_handle_services = [],
             eff_handles = []
-        }
-    };
-
-apply_scope_mask(Doc = #document{value = #od_group{}}, protected) ->
-    apply_scope_mask(Doc, shared);
-apply_scope_mask(Doc = #document{value = Group = #od_group{}}, shared) ->
-    Doc#document{
-        value = Group#od_group{
-            direct_children = #{},
-            eff_children = #{},
-            direct_parents = [],
-
-            direct_users = #{},
-            eff_users = #{},
-
-            eff_spaces = []
         }
     };
 

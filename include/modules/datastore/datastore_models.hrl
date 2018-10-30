@@ -82,17 +82,6 @@
     name :: undefined | binary(),
     type = role :: od_group:type(),
 
-    % Group graph related entities
-    direct_parents = [] :: [binary()],
-    direct_children = #{} :: maps:map(od_group:id(), [privileges:group_privilege()]),
-    eff_children = #{} :: maps:map(od_group:id(), [privileges:group_privilege()]),
-
-    % Direct relations to other entities
-    direct_users = #{} :: maps:map(od_user:id(), [privileges:group_privilege()]),
-    eff_users = #{} :: maps:map(od_user:id(), [privileges:group_privilege()]),
-
-    eff_spaces = [] :: [od_space:id()],
-
     cache_state = #{} :: cache_state()
 }).
 
@@ -252,13 +241,9 @@
     mode = 0 :: file_meta:posix_permissions(),
     owner :: undefined | od_user:id(),
     group_owner :: undefined | od_group:id(),
-    size = 0 :: undefined | file_meta:size(),
-    version = 0, %% Snapshot version
     is_scope = false :: boolean(),
     scope :: datastore:key(),
     provider_id :: undefined | oneprovider:id(), %% ID of provider that created this file
-    %% symlink_value for symlinks, file_guid for phantom files (redirection)
-    link_value :: undefined | file_meta:symlink_value() | fslogic_worker:file_guid(),
     shares = [] :: [od_share:id()],
     deleted = false :: boolean(),
     parent_uuid :: undefined | file_meta:uuid()

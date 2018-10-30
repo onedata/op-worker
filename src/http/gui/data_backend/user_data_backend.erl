@@ -118,20 +118,6 @@ create_record(<<"user">>, _Data) ->
 -spec update_record(RsrcType :: binary(), Id :: binary(),
     Data :: proplists:proplist()) ->
     ok | gui_error:error_result().
-update_record(<<"user">>, UserId, [{<<"defaultSpaceId">>, DefaultSpace}]) ->
-    case gui_session:get_user_id() of
-        UserId ->
-            SessionId = gui_session:get_session_id(),
-            case user_logic:set_default_space(SessionId, UserId, DefaultSpace) of
-                ok ->
-                    ok;
-                {error, _} ->
-                    gui_error:report_warning(
-                        <<"Cannot change default space due to unknown error.">>)
-            end;
-        _ ->
-            gui_error:unauthorized()
-    end;
 update_record(<<"user">>, _UserId, _Data) ->
     gui_error:report_error(<<"Not implemented">>).
 
@@ -163,7 +149,6 @@ user_record(SessionId, UserId) ->
         name = Name,
         default_space = DefaultSpaceValue,
         eff_spaces = EffSpaces,
-        eff_groups = EffGroups,
         eff_handle_services = EffHServices
     }}} = user_logic:get(SessionId, UserId),
     DefaultSpace = case DefaultSpaceValue of
@@ -188,7 +173,6 @@ user_record(SessionId, UserId) ->
         {<<"id">>, UserId},
         {<<"name">>, Name},
         {<<"defaultSpaceId">>, gs_protocol:undefined_to_null(DefaultSpace)},
-        {<<"groups">>, EffGroups},
         {<<"spaces">>, EffSpaces},
         {<<"shares">>, Shares},
         {<<"handleServices">>, EffHServices}
