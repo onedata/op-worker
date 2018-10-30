@@ -394,6 +394,11 @@ map_function_wrapper(UserMapFunction, SpaceId) -> <<
 
             switch (type) {
                 case 'file_meta':
+                    id = buildObjectId(doc['_key'], spaceId);
+                    meta = filterHiddenValues(doc);
+                    delete meta['is_scope'];
+                    delete meta['scope'];
+                    break;
                 case 'times':
                     id = buildObjectId(doc['_key'], spaceId);
                     meta = filterHiddenValues(doc);

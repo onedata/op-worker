@@ -202,8 +202,8 @@ send_change(Req, Change, RequestedSpaceId) ->
 prepare_response(#change{seq = Seq, doc = FileDoc = #document{
     key = Uuid, deleted = Deleted,
     value = #file_meta{
-        is_scope = IsScope, mode = Mode, type = Type, owner = Uid,
-        version = Version, name = Name}}}, SpaceId) ->
+        is_scope = IsScope, mode = Mode, type = Type, owner = Uid, name = Name
+    }}}, SpaceId) ->
     #times{atime = Atime, ctime = Ctime, mtime = Mtime} =
         try
             {ok, #document{value = TimesValue}} = times:get(Uuid),
@@ -266,7 +266,6 @@ prepare_response(#change{seq = Seq, doc = FileDoc = #document{
                 <<"size">> => Size,
                 <<"type">> => Type,
                 <<"uid">> => Uid,
-                <<"version">> => Version,
                 <<"xattrs">> => Xattrs
             },
             <<"deleted">> => Deleted,
