@@ -6,7 +6,6 @@
 %%%--------------------------------------------------------------------
 %%% @doc
 %%% Implementation of gen_transfer_worker for replica_eviction_workers_pool.
-%%% Worker is responsible for replica eviction of one file.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(replica_eviction_worker).

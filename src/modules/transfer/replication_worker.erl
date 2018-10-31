@@ -6,7 +6,6 @@
 %%%--------------------------------------------------------------------
 %%% @doc
 %%% Implementation of gen_transfer_worker for replication_workers_pool.
-%%% Worker is responsible for replication of one file.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(replication_worker).

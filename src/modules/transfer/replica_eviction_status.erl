@@ -105,7 +105,15 @@ handle_active(TransferId) ->
 
 -spec handle_aborting(transfer:id()) -> {ok, transfer:doc()} | {error, term()}.
 handle_aborting(TransferId) ->
-    transfer:update(TransferId, fun mark_aborting/1).
+    OnSuccessfulUpdate = fun(#document{value = #transfer{space_id = SpaceId}}) ->
+        replica_deletion_master:cancel(TransferId, SpaceId)
+    end,
+
+    transfer:update_and_run(
+        TransferId,
+        fun mark_aborting/1,
+        OnSuccessfulUpdate
+    ).
 
 
 -spec handle_completed(transfer:id()) ->
