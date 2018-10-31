@@ -128,9 +128,12 @@ single_dir_creation_test_base(Config, Clear) ->
                     end
             end,
 
+            ?assertEqual(0, SError),
+            ?assertEqual(0, DError),
             get_final_ans(SaveOk, SaveAvgTime, SError, SErrorAvgTime, DelOk, DelAvgTime, DError, DErrorAvgTime, 0);
         _ ->
             timer:sleep(timer:seconds(60)),
+            ?assertMatch({ok, _}, CheckAns),
             get_final_ans(0,0,0,0,0,0,0,0,1)
     end.
 
@@ -232,7 +235,7 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS) ->
                     F = <<D/binary, "/", N2/binary>>,
                     {ToAddV, Ans} = measure_execution_time(fun() ->
                         try
-                            {ok, _} = case CacheGUIDS of
+                            {ok, FileGUID} = case CacheGUIDS of
                                 false ->
                                     lfm_proxy:create(Worker, SessId, F, 8#755);
                                 _ ->
@@ -245,7 +248,7 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS) ->
                                         false ->
                                             lfm_proxy:open(Worker, SessId, {path, F}, rdwr);
                                         _ ->
-                                            lfm_proxy:open(Worker, SessId, {guid, GUID}, rdwr)
+                                            lfm_proxy:open(Worker, SessId, {guid, FileGUID}, rdwr)
                                     end,
                                     WriteBuf = generator:gen_name(),
                                     WriteSize = size(WriteBuf),
@@ -322,6 +325,8 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS) ->
             put(ok_sum, NewSum),
 
             ct:print("Files num ~p, dirs num ~p, agg ~p", [FilesSaved, DirsSaved, NewSum]),
+            ?assertEqual(ok, TimeoutCheck),
+            ?assertEqual(0, OtherAns),
 
             case NewLevels of
                 StartList ->
@@ -331,7 +336,9 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS) ->
 
             end;
         _ ->
+            ct:print("Dirs not ready"),
             timer:sleep(timer:seconds(60)),
+            ?assertEqual(ok, Proceed),
             get_final_ans_tree(Worker, 0, 0, 0, 0, 0,0, 1, 0)
     end.
 
