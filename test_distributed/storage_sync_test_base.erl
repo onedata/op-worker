@@ -1783,13 +1783,18 @@ delete_file_update_test(Config, MountSpaceInRoot) ->
     ok = file:write_file(StorageTestFilePath, ?TEST_DATA),
     storage_sync_test_base:enable_storage_import(Config),
     %% Check if file was imported
-    ?assertMatch({ok, #file_attr{}},
+    {ok, #file_attr{guid = FileGuid}} = ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
     {ok, Handle1} =
         ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
     lfm_proxy:close(W1, Handle1),
+
+    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+    Xattr = #xattr{name = <<"xattr_name">>, value = <<"xattr_value">>},
+    ok = lfm_proxy:set_xattr(W1, ?ROOT_SESS_ID, {guid, FileGuid}, Xattr),
+
     %% Delete file on storage
     ok = file:delete(StorageTestFilePath),
     enable_storage_update(Config),
@@ -1820,7 +1825,11 @@ delete_file_update_test(Config, MountSpaceInRoot) ->
 
     %% Check if file was deleted in space
     ?assertMatch({error, ?ENOENT},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS).
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:get_xattr(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, <<"xattr_name">>)),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:get_xattr(W1, SessId, {guid, FileGuid}, <<"xattr_name">>)),
+    ?assertMatch({error, not_found}, rpc:call(W1, custom_metadata, get, [FileUuid])).
 
 delete_many_subfiles_test(Config, MountSpaceInRoot) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
