@@ -27,6 +27,8 @@
 %% resource functions
 -export([get_space_changes/2]).
 
+-export([init_stream/1]).
+
 -record(change, {
     seq :: non_neg_integer(),
     doc :: datastore:doc(),
@@ -94,8 +96,8 @@ get_space_changes(Req, State) ->
     #{auth := Auth, space_id := SpaceId} = State4,
 
     space_membership:check_with_auth(Auth, SpaceId),
-    State5 = init_stream(State4),
-
+    State5 = ?MODULE:init_stream(State4),
+    
     Req5 = cowboy_req:stream_reply(
         ?HTTP_OK, #{<<"content-type">> => <<"application/json">>}, Req4
     ),
@@ -124,7 +126,7 @@ init_stream(State = #{last_seq := Since, space_id := SpaceId}) ->
     {ok, Stream} = rpc:call(Node, couchbase_changes, stream,
         [<<"onedata">>, SpaceId, fun(Feed) ->
             notify(Pid, Ref, Feed)
-        end, [{since, Since}]]),
+        end, [{since, Since}], [Pid]]),
 
     State#{changes_stream => Stream, ref => Ref, loop_pid => Pid}.
 
