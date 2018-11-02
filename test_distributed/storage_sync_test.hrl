@@ -103,9 +103,7 @@
         ->
             __StorageFileId = storage_sync_test_base:to_storage_file_id(
                 StorageFilePath, MountPoint),
-            ct:pal("STORAGE FILE ID: ~p for storage file path: ~p", [__StorageFileId, StorageFilePath]),
             Id = storage_sync_info:id(__StorageFileId, SpaceId),
-            ct:pal("Id: ~p", [Id]),
             case hd(Args) of
                 #document{key = Id} -> 1;
                 _ -> 0
