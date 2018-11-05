@@ -6,7 +6,13 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% TODO writeme.
+%%% This behaviour specifies an API for transfer worker - a module that
+%%% supervises/participates in transfer of data.
+%%% It implements most of required generic functionality for such worker
+%%% including walking down fs subtree or querying specified index and
+%%% scheduling transfer of individual files received.
+%%% But leaves implementation of, specific to given transfer type,
+%%% functions like transfer of regular file to callback modules.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(gen_transfer_worker).
@@ -39,15 +45,15 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% TODO writeme.
+%% Callback called to get permissions required to check before starting transfer.
 %% @end
 %%--------------------------------------------------------------------
--callback required_permissions() -> list().
+-callback required_permissions() -> [check_permissions:raw_access_definition()].
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% TODO writeme.
+%% Callback called to get maximum number of transfer retries attempts.
 %% @end
 %%--------------------------------------------------------------------
 -callback max_transfer_retries() -> non_neg_integer().
@@ -55,7 +61,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% TODO writeme.
+%% Callback called to get chunk size when querying db index.
 %% @end
 %%--------------------------------------------------------------------
 -callback index_querying_chunk_size() -> non_neg_integer().
@@ -63,16 +69,18 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% TODO writeme.
+%% Callback called to enqueue transfer of specified file with given params,
+%% retries and next retry timestamp.
 %% @end
 %%--------------------------------------------------------------------
 -callback enqueue_data_transfer(file_ctx:ctx(), transfer_params(),
-    undefined | non_neg_integer(), undefined | non_neg_integer()) -> ok.
+    RetriesLeft :: undefined | non_neg_integer(),
+    NextRetryTimestamp :: undefined | non_neg_integer()) -> ok.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% TODO writeme.
+%% Callback called when transferring regular file.
 %% @end
 %%--------------------------------------------------------------------
 -callback transfer_regular_file(file_ctx:ctx(), transfer_params()) ->
@@ -225,9 +233,8 @@ should_start(NextRetryTimestamp) ->
 %% @private
 %% @doc
 %% Applies permissions check and if passed transfers data.
-%% In case of error either returns immediately with error
-%% (in case of `already_ended` error, `cancelled` error or no retries left)
-%% or enqueues data transfer for later retry decrementing number of retries left.
+%% In case of error checks if transfer should be retried and if so returns
+%% retry request and caught error otherwise.
 %% @end
 %%-------------------------------------------------------------------
 -spec transfer_data(state(), file_ctx:ctx(), transfer_params(), non_neg_integer()) ->
@@ -259,11 +266,12 @@ transfer_data(State = #state{mod = Mod}, FileCtx, Params, RetriesLeft) ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Checks whether data transfer can be retried and repeats it if it's possible.
+%% Checks whether data transfer can be retried and if so returns retry request.
+%% Otherwise returns given error.
 %% @end
 %%-------------------------------------------------------------------
 -spec maybe_retry(file_ctx:ctx(), transfer_params(), non_neg_integer(), term()) ->
-    ok | {retry, file_ctx:ctx()} | {error, term()}.
+    {retry, file_ctx:ctx()} | {error, term()}.
 maybe_retry(_FileCtx, Params, 0, Error = {error, not_found}) ->
     ?error(
         "Data transfer in scope of transfer ~p failed due to ~p~n"
