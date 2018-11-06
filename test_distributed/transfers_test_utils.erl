@@ -28,6 +28,7 @@
     root_name/2, root_name/3,
     mock_prolonged_replication/3, mock_replica_synchronizer_failure/1,
     mock_prolonged_replica_eviction/3, unmock_prolonged_replica_eviction/1,
+    mock_replica_eviction_failure/1, unmock_replica_eviction_failure/1,
     unmock_replica_synchronizer_failure/1, remove_all_indexes/2, random_job_name/1,
     test_map_function/1, test_reduce_function/1, test_map_function/2,
     create_index/7, create_index/6, random_index_name/1]).
@@ -185,6 +186,15 @@ mock_replica_synchronizer_failure(Node) ->
 
 unmock_replica_synchronizer_failure(Node) ->
     ok = test_utils:mock_unload(Node, replica_synchronizer).
+
+mock_replica_eviction_failure(Node) ->
+    test_utils:mock_new(Node, replica_deletion_req),
+    test_utils:mock_expect(Node, replica_deletion_req, delete_blocks,
+        fun(_, _, _) -> {error, test_error} end
+    ).
+
+unmock_replica_eviction_failure(Node) ->
+    ok = test_utils:mock_unload(Node, replica_deletion_req).
 
 remove_all_indexes(Nodes, SpaceId) ->
     lists:foreach(fun(Node) ->
