@@ -38,10 +38,7 @@
 -export([
     get_simple_file_distribution/1,
     transfers_should_be_ordered_by_timestamps/1,
-
     cancel_file_replication_on_2_providers_simultaneously/1,
-    rerun_eviction_of_file_replica_with_migration/1,
-
     basic_autocleaning_test/1,
     automatic_cleanup_should_evict_unpopular_files/1,
     posix_mode_get/1,
@@ -388,106 +385,6 @@ cancel_file_replication_on_2_providers_simultaneously(Config) ->
     ?assertEqual([Tid], list_ended_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
     ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
     ?assertEqual([Tid], get_ended_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS).
-
-rerun_eviction_of_file_replica_with_migration(Config) ->
-    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
-    SpaceId = ?config(space_id, Config),
-    File = ?absPath(SpaceId, <<"file_evict_migration_rerun">>),
-    FileGuid = create_test_file(WorkerP1, SessionId, File, ?TEST_DATA),
-    DomainP1 = domain(WorkerP1),
-    DomainP2 = domain(WorkerP2),
-
-    % when
-    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
-    ExpectedDistribution = [
-        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, 4]]}
-    ],
-    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File),
-    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
-
-    mock_file_replication_failure(WorkerP2),
-    Tid1 = schedule_replica_eviction(WorkerP1, DomainP1, DomainP2, File, Config),
-    ?assertEqual([Tid1], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-    ?assertEqual([], get_ended_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-
-    % then
-    ?assertTransferStatus(#{
-        <<"rerunId">> := null,
-        <<"replicationStatus">> := <<"failed">>,
-        <<"replicaEvictionStatus">> := <<"failed">>,
-        <<"evictingProviderId">> := DomainP1,
-        <<"filesToProcess">> := 1,
-        <<"filesProcessed">> := 1,
-        <<"failedFiles">> := 1,
-        <<"fileReplicasEvicted">> := 0,
-        <<"filesReplicated">> := 0,
-        <<"bytesReplicated">> := 0
-    }, WorkerP1, Tid1, Config),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid1], list_ended_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-    ?assertEqual([Tid1], get_ended_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid1], list_ended_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
-    ?assertEqual([Tid1], get_ended_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
-
-    unmock_file_replication(WorkerP2),
-    {ok, NewTransferId} = rerun_file_replication(WorkerP2, Tid1, Config),
-    ?assertEqual([NewTransferId],
-        get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
-
-    ?assertTransferStatus(#{
-        <<"rerunId">> := NewTransferId,
-        <<"replicationStatus">> := <<"failed">>,
-        <<"replicaEvictionStatus">> := <<"failed">>,
-        <<"evictingProviderId">> := DomainP1,
-        <<"filesToProcess">> := 1,
-        <<"filesProcessed">> := 1,
-        <<"failedFiles">> := 1,
-        <<"fileReplicasEvicted">> := 0,
-        <<"filesReplicated">> := 0,
-        <<"bytesReplicated">> := 0
-    }, WorkerP1, Tid1, Config),
-
-    ?assertTransferStatus(#{
-        <<"replicationStatus">> := <<"completed">>,
-        <<"replicaEvictionStatus">> := <<"completed">>,
-        <<"evictingProviderId">> := DomainP1,
-        <<"filesToProcess">> := 2,
-        <<"filesProcessed">> := 2,
-        <<"failedFiles">> := 0,
-        <<"fileReplicasEvicted">> := 1,
-        <<"filesReplicated">> := 1,
-        <<"bytesReplicated">> := 4
-    }, WorkerP1, NewTransferId, Config),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([NewTransferId, Tid1], list_ended_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-    ?assertEqual([NewTransferId, Tid1],
-        get_ended_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([NewTransferId, Tid1], list_ended_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
-    ?assertEqual([NewTransferId, Tid1],
-        get_ended_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
-
-    ExpectedDistribution2 = [
-        #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0, 4]]},
-        #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => []}
-    ],
-    ?assertDistribution(WorkerP1, ExpectedDistribution2, Config, File),
-    ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, File).
 
 basic_autocleaning_test(Config) ->
     % autocleaning configuration
