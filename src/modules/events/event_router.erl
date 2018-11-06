@@ -37,7 +37,7 @@ add_subscriber(<<_/binary>> = Key, SessId) ->
         {ok, Sub#file_subscription{sessions = gb_sets:add_element(SessId, SessIds)}}
     end,
     case file_subscription:update(Key, Diff) of
-        {ok, Key} -> {ok, Key};
+        {ok, #document{key = Key}} -> {ok, Key};
         {error, not_found} ->
             Doc = #document{key = Key, value = #file_subscription{
                 sessions = gb_sets:from_list([SessId])
@@ -93,7 +93,16 @@ remove_subscriber(Key, SessId) ->
         {ok, Sub#file_subscription{sessions = gb_sets:del_element(SessId, SessIds)}}
     end,
     case file_subscription:update(Key, Diff) of
-        {ok, _} -> ok;
+        {ok, #document{value = #file_subscription{sessions = SIds}}} ->
+            case gb_sets:is_empty(SIds) of
+                true ->
+                    Pred = fun(#file_subscription{sessions = SIds2}) ->
+                        gb_sets:is_empty(SIds2)
+                    end,
+                    file_subscription:delete(Key, Pred);
+                false ->
+                    ok
+            end;
         {error, not_found} -> ok;
         {error, Reason} -> {error, Reason}
     end.

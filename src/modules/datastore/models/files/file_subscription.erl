@@ -17,7 +17,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1]).
+-export([save/1, get/1, list/0, exists/1, delete/2, update/2, create/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -26,6 +26,7 @@
 -type record() :: #file_subscription{}.
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
+-type pred() :: datastore_doc:pred(record()).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -50,9 +51,9 @@ save(Doc) ->
 %% Updates permission cache.
 %% @end
 %%--------------------------------------------------------------------
--spec update(key(), diff()) -> {ok, key()} | {error, term()}.
+-spec update(key(), diff()) -> {ok, doc()} | {error, term()}.
 update(Key, Diff) ->
-    ?extract_key(datastore_model:update(?CTX, Key, Diff)).
+    datastore_model:update(?CTX, Key, Diff).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -77,9 +78,9 @@ get(Key) ->
 %% Deletes permission cache.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(key()) -> ok | {error, term()}.
-delete(Key) ->
-    datastore_model:delete(?CTX, Key).
+-spec delete(key(), pred()) -> ok | {error, term()}.
+delete(Key, Pred) ->
+    datastore_model:delete(?CTX, Key, Pred).
 
 %%--------------------------------------------------------------------
 %% @doc
