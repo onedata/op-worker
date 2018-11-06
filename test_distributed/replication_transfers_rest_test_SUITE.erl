@@ -48,6 +48,9 @@
     cancel_replication_on_target_nodes/1,
     file_replication_failures_should_fail_whole_transfer/1,
     many_simultaneous_failed_transfers/1,
+    rerun_file_replication/1,
+    rerun_file_replication_by_other_user/1,
+    rerun_dir_replication/1,
     schedule_replication_of_regular_file_by_index/1,
     schedule_replication_of_regular_file_by_index2/1,
     schedule_replication_of_regular_file_by_index_with_reduce/1,
@@ -88,6 +91,9 @@ all() -> [
     cancel_replication_on_target_nodes,
     % file_replication_failures_should_fail_whole_transfer, TODO uncomment after resolving VFS-4742
     many_simultaneous_failed_transfers,
+    rerun_file_replication,
+    rerun_file_replication_by_other_user,
+    rerun_dir_replication,
     schedule_replication_of_regular_file_by_index,
     schedule_replication_of_regular_file_by_index2,
     schedule_replication_of_regular_file_by_index_with_reduce,
@@ -181,6 +187,15 @@ file_replication_failures_should_fail_whole_transfer(Config) ->
 
 many_simultaneous_failed_transfers(Config) ->
     replication_transfers_test_base:many_simultaneous_failed_transfers(Config, rest, guid).
+
+rerun_file_replication(Config) ->
+    replication_transfers_test_base:rerun_file_replication(Config, rest, guid).
+
+rerun_file_replication_by_other_user(Config) ->
+    replication_transfers_test_base:rerun_file_replication_by_other_user(Config, rest, guid).
+
+rerun_dir_replication(Config) ->
+    replication_transfers_test_base:rerun_dir_replication(Config, rest, guid).
 
 schedule_replication_of_regular_file_by_index(Config) ->
     replication_transfers_test_base:schedule_replication_of_regular_file_by_index(Config, rest).

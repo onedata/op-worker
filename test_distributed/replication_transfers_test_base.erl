@@ -41,6 +41,9 @@
     cancel_replication_on_target_nodes/2,
     file_replication_failures_should_fail_whole_transfer/3,
     many_simultaneous_failed_transfers/3,
+    rerun_file_replication/3,
+    rerun_file_replication_by_other_user/3,
+    rerun_dir_replication/3,
     schedule_replication_of_regular_file_by_index/2,
     schedule_replication_of_regular_file_by_index2/2,
     schedule_replication_of_regular_file_by_index_with_reduce/2,
@@ -835,6 +838,244 @@ many_simultaneous_failed_transfers(Config, Type, FileKeyType) ->
                 assertion_nodes = [WorkerP2],
                 timeout = timer:minutes(15),
                 attempts = 900
+            }
+        }
+    ).
+
+rerun_file_replication(Config, Type, FileKeyType) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
+
+    transfers_test_utils:mock_replica_synchronizer_failure(WorkerP2),
+
+    Config2 = transfers_test_mechanism:run_test(
+        Config, #transfer_test_spec{
+            setup = #setup{
+                setup_node = WorkerP1,
+                assertion_nodes = [WorkerP2],
+                files_structure = [{0, 1}],
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ]
+            },
+            scenario = #scenario{
+                type = Type,
+                file_key_type = FileKeyType,
+                schedule_node = WorkerP1,
+                replicating_nodes = [WorkerP2],
+                function = fun transfers_test_mechanism:replicate_each_file_separately/2
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    user_id => ?DEFAULT_USER,
+                    replication_status => failed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+                    replicating_provider => transfers_test_utils:provider_id(WorkerP2),
+                    files_to_process => 1,
+                    files_processed => 1,
+                    failed_files => 1,
+                    files_replicated => 0,
+                    bytes_replicated => 0,
+                    hr_hist => ?HOUR_HIST(#{ProviderId1 => 0}),
+                    dy_hist => ?DAY_HIST(#{ProviderId1 => 0}),
+                    mth_hist => ?MONTH_HIST(#{ProviderId1 => 0})
+                },
+                assertion_nodes = [WorkerP2]
+            }
+        }
+    ),
+    Config3 = transfers_test_mechanism:move_transfer_ids_to_old_key(Config2),
+    transfers_test_utils:unmock_replica_synchronizer_failure(WorkerP2),
+
+    transfers_test_mechanism:run_test(
+        Config3, #transfer_test_spec{
+            setup = undefined,
+            scenario = #scenario{
+                function = fun transfers_test_mechanism:rerun_transfers/2
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    user_id => ?DEFAULT_USER,
+                    replication_status => completed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP2),
+                    replicating_provider => transfers_test_utils:provider_id(WorkerP2),
+                    files_to_process => 1,
+                    files_processed => 1,
+                    failed_files => 0,
+                    files_replicated => 1,
+                    bytes_replicated => ?DEFAULT_SIZE,
+                    min_hist => ?MIN_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
+                    hr_hist => ?HOUR_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
+                    dy_hist => ?DAY_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
+                    mth_hist => ?MONTH_HIST(#{ProviderId1 => ?DEFAULT_SIZE})
+                },
+                assertion_nodes = [WorkerP1, WorkerP2],
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ]
+            }
+        }
+    ).
+
+rerun_file_replication_by_other_user(Config, Type, FileKeyType) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    User1 = <<"user1">>,
+    User2 = <<"user2">>,
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
+
+    transfers_test_utils:mock_replica_synchronizer_failure(WorkerP2),
+
+    Config2 = transfers_test_mechanism:run_test(
+        Config, #transfer_test_spec{
+            setup = #setup{
+                setup_node = WorkerP1,
+                assertion_nodes = [WorkerP2],
+                files_structure = [{0, 1}],
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ]
+            },
+            scenario = #scenario{
+                type = Type,
+                user = User1,
+                file_key_type = FileKeyType,
+                schedule_node = WorkerP1,
+                replicating_nodes = [WorkerP2],
+                function = fun transfers_test_mechanism:replicate_each_file_separately/2
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    user_id => User1,
+                    replication_status => failed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+                    replicating_provider => transfers_test_utils:provider_id(WorkerP2),
+                    files_to_process => 1,
+                    files_processed => 1,
+                    failed_files => 1,
+                    files_replicated => 0,
+                    bytes_replicated => 0,
+                    hr_hist => ?HOUR_HIST(#{ProviderId1 => 0}),
+                    dy_hist => ?DAY_HIST(#{ProviderId1 => 0}),
+                    mth_hist => ?MONTH_HIST(#{ProviderId1 => 0})
+                },
+                assertion_nodes = [WorkerP2]
+            }
+        }
+    ),
+    Config3 = transfers_test_mechanism:move_transfer_ids_to_old_key(Config2),
+    transfers_test_utils:unmock_replica_synchronizer_failure(WorkerP2),
+
+    transfers_test_mechanism:run_test(
+        Config3, #transfer_test_spec{
+            setup = undefined,
+            scenario = #scenario{
+                user = User2,
+                function = fun transfers_test_mechanism:rerun_transfers/2
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    user_id => User2,
+                    replication_status => completed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP2),
+                    replicating_provider => transfers_test_utils:provider_id(WorkerP2),
+                    files_to_process => 1,
+                    files_processed => 1,
+                    failed_files => 0,
+                    files_replicated => 1,
+                    bytes_replicated => ?DEFAULT_SIZE,
+                    min_hist => ?MIN_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
+                    hr_hist => ?HOUR_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
+                    dy_hist => ?DAY_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
+                    mth_hist => ?MONTH_HIST(#{ProviderId1 => ?DEFAULT_SIZE})
+                },
+                assertion_nodes = [WorkerP1, WorkerP2],
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ]
+            }
+        }
+    ).
+
+rerun_dir_replication(Config, Type, FileKeyType) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
+
+    transfers_test_utils:mock_replica_synchronizer_failure(WorkerP2),
+
+    Config2 = transfers_test_mechanism:run_test(
+        Config, #transfer_test_spec{
+            setup = #setup{
+                setup_node = WorkerP1,
+                assertion_nodes = [WorkerP2],
+                files_structure = [{1, 0}, {1, 2}, {0, 5}],
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ]
+            },
+            scenario = #scenario{
+                type = Type,
+                file_key_type = FileKeyType,
+                schedule_node = WorkerP1,
+                replicating_nodes = [WorkerP2],
+                function = fun transfers_test_mechanism:replicate_root_directory/2
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    user_id => ?DEFAULT_USER,
+                    replication_status => failed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+                    replicating_provider => transfers_test_utils:provider_id(WorkerP2),
+                    files_to_process => 10,
+                    files_processed => 10,
+                    failed_files => 7,
+                    files_replicated => 0,
+                    bytes_replicated => 0,
+                    hr_hist => ?HOUR_HIST(#{ProviderId1 => 0}),
+                    dy_hist => ?DAY_HIST(#{ProviderId1 => 0}),
+                    mth_hist => ?MONTH_HIST(#{ProviderId1 => 0})
+                },
+                assertion_nodes = [WorkerP2]
+            }
+        }
+    ),
+    Config3 = transfers_test_mechanism:move_transfer_ids_to_old_key(Config2),
+    transfers_test_utils:unmock_replica_synchronizer_failure(WorkerP2),
+
+    TotalSize = 7 * ?DEFAULT_SIZE,
+    transfers_test_mechanism:run_test(
+        Config3, #transfer_test_spec{
+            setup = undefined,
+            scenario = #scenario{
+                function = fun transfers_test_mechanism:rerun_transfers/2
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    user_id => ?DEFAULT_USER,
+                    replication_status => completed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP2),
+                    replicating_provider => transfers_test_utils:provider_id(WorkerP2),
+                    files_to_process => 10,
+                    files_processed => 10,
+                    failed_files => 0,
+                    files_replicated => 7,
+                    bytes_replicated => TotalSize,
+                    hr_hist => ?HOUR_HIST(#{ProviderId1 => TotalSize}),
+                    dy_hist => ?DAY_HIST(#{ProviderId1 => TotalSize}),
+                    mth_hist => ?MONTH_HIST(#{ProviderId1 => TotalSize})
+                },
+                assertion_nodes = [WorkerP1, WorkerP2],
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ]
             }
         }
     ).

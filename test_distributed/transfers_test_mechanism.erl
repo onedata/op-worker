@@ -52,7 +52,10 @@
     migrate_each_file_replica_separately/2,
     schedule_replica_migration_without_permissions/2,
     migrate_replicas_from_index/2,
-    fail_to_migrate_replicas_from_index/2
+    fail_to_migrate_replicas_from_index/2,
+
+    % generic scenarios
+    rerun_transfers/2
 ]).
 
 -export([move_transfer_ids_to_old_key/1]).
@@ -533,6 +536,22 @@ fail_to_migrate_replicas_from_index(Config, #scenario{
         end, EvictingNodes)
     end, ReplicatingNodes),
     Config.
+
+%%%===================================================================
+%%% Generic scenarios
+%%%===================================================================
+
+rerun_transfers(Config, #scenario{user = User}) ->
+    NodesTransferIdsAndFiles = lists:map(fun({TargetNode, OldTid, Guid, Path}) ->
+        {ok, NewTid} = rerun_transfer(TargetNode, User, OldTid),
+        {TargetNode, NewTid, Guid, Path}
+    end, ?config(?OLD_TRANSFERS_KEY, Config, [])),
+    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
+        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
+    end, Config, []).
+
+rerun_transfer(Worker, UserId, OldTid) ->
+    rpc:call(Worker, transfer, rerun_ended, [UserId, OldTid]).
 
 %%%===================================================================
 %%% Internal functions
