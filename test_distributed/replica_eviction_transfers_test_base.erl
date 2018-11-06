@@ -30,6 +30,7 @@
     evict_big_file_replica/3,
     evict_100_files_in_one_request/3,
     evict_100_files_each_file_separately/3,
+    cancel_replica_eviction_on_target_nodes/2,
     fail_to_evict_file_replica_without_permissions/3,
     eviction_should_succeed_when_remote_provider_modified_file_replica/3,
     eviction_should_fail_when_evicting_provider_modified_file_replica/3,
@@ -362,6 +363,49 @@ evict_100_files_each_file_separately(Config, Type, FileKeyType) ->
                 ],
                 attempts = 3600,
                 timeout = timer:minutes(60)
+            }
+        }
+    ).
+
+cancel_replica_eviction_on_target_nodes(Config, Type) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
+
+    transfers_test_mechanism:run_test(
+        Config, #transfer_test_spec{
+            setup = #setup{
+                setup_node = WorkerP1,
+                assertion_nodes = [WorkerP2],
+                files_structure = [{10, 0}, {0, 10}],
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type),
+                replicate_to_nodes = [WorkerP2],
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ],
+                attempts = 120,
+                timeout = timer:minutes(10)
+            },
+            scenario = #scenario{
+                type = Type,
+                schedule_node = WorkerP1,
+                evicting_nodes = [WorkerP2],
+                function = fun transfers_test_mechanism:cancel_replica_eviction_on_target_nodes/2
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    eviction_status => cancelled,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+                    files_to_process => 111,
+                    files_processed => 111,
+                    failed_files => 0,
+                    files_evicted => fun(X) -> X < 111 end
+                },
+                distribution = undefined,
+                assertion_nodes = [WorkerP1, WorkerP2],
+                timeout = timer:minutes(6),
+                attempts = 600
             }
         }
     ).
@@ -1209,6 +1253,21 @@ init_per_suite(Config) ->
         | Config
     ].
 
+init_per_testcase(cancel_replica_eviction_on_target_nodes, Config) ->
+    [WorkerP2 | _] = ?config(op_worker_nodes, Config),
+    OldMaxActiveReplicaEvictionTasks = rpc:call(WorkerP2, application, get_env, [
+        ?APP_NAME, max_active_deletion_tasks, 2000
+    ]),
+    ok = rpc:call(WorkerP2, application, set_env, [
+        ?APP_NAME, max_active_deletion_tasks, 10
+    ]),
+    transfers_test_utils:mock_prolonged_replica_eviction(WorkerP2, 0.5, 15),
+
+    init_per_testcase(all, [
+        {max_active_replica_eviction_tasks, OldMaxActiveReplicaEvictionTasks}
+        | Config
+    ]);
+
 init_per_testcase(quota_decreased_after_eviction, Config) ->
     init_per_testcase(all, [{?SPACE_ID_KEY, <<"space3">>} | Config]);
 
@@ -1233,6 +1292,15 @@ init_per_testcase(_Case, Config) ->
         _ ->
             Config
     end.
+
+end_per_testcase(cancel_replica_eviction_on_target_nodes, Config) ->
+    [WorkerP2 | _] = ?config(op_worker_nodes, Config),
+    OldMaxActiveReplicaEvictionTasks = ?config(max_active_replica_eviction_tasks, Config),
+    ok = rpc:call(WorkerP2, application, set_env, [
+        ?APP_NAME, max_active_deletion_tasks, OldMaxActiveReplicaEvictionTasks
+    ]),
+    transfers_test_utils:unmock_prolonged_replica_eviction(WorkerP2),
+    end_per_testcase(all, Config);
 
 end_per_testcase(eviction_should_fail_when_evicting_provider_modified_file_replica, Config) ->
     [WorkerP2 | _] = ?config(op_worker_nodes, Config),

@@ -29,24 +29,31 @@
 
 % test scenarios
 -export([
+    % replication scenarios
     replicate_root_directory/2,
     replicate_each_file_separately/2,
     error_on_replicating_files/2,
     cancel_replication_on_target_nodes/2,
+    replicate_files_from_index/2,
+    fail_to_replicate_files_from_index/2,
     remove_file_during_replication/2,
+
+    % replica eviction scenarios
     evict_root_directory/2,
     evict_each_file_replica_separately/2,
     schedule_replica_eviction_without_permissions/2,
+    cancel_replica_eviction_on_target_nodes/2,
+    evict_replicas_from_index/2,
+    fail_to_evict_replicas_from_index/2,
     remove_file_during_eviction/2,
+
+    % migration scenarios
     migrate_root_directory/2,
     migrate_each_file_replica_separately/2,
     schedule_replica_migration_without_permissions/2,
-    replicate_files_from_index/2,
-    evict_replicas_from_index/2,
     migrate_replicas_from_index/2,
-    fail_to_replicate_files_from_index/2,
-    fail_to_evict_replicas_from_index/2,
-    fail_to_migrate_replicas_from_index/2]).
+    fail_to_migrate_replicas_from_index/2
+]).
 
 -export([move_transfer_ids_to_old_key/1]).
 
@@ -313,6 +320,30 @@ schedule_replica_eviction_without_permissions(Config, #scenario{
         end, FilesGuidsAndPaths)
     end, EvictingNodes),
     Config.
+
+cancel_replica_eviction_on_target_nodes(Config, #scenario{
+    user = User,
+    type = Type,
+    file_key_type = FileKeyType,
+    schedule_node = ScheduleNode,
+    evicting_nodes = EvictingNodes
+}) ->
+    {Guid, Path} = ?config(?ROOT_DIR_KEY, Config),
+    FileKey = file_key(Guid, Path, FileKeyType),
+    NodesTransferIdsAndFiles = lists:map(fun(EvictingNode) ->
+        EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
+        {ok, Tid} = schedule_replica_eviction(ScheduleNode, EvictingProviderId,  User, FileKey, Config, Type),
+        {EvictingNode, Tid, Guid, Path}
+    end, EvictingNodes),
+
+    utils:pforeach(fun({TargetNode, Tid, _Guid, _Path}) ->
+        await_replica_eviction_starts(TargetNode, Tid),
+        cancel_transfer(TargetNode, Tid, Config, Type)
+    end, NodesTransferIdsAndFiles),
+
+    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
+        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
+    end, Config, []).
 
 evict_replicas_from_index(Config, #scenario{
     user = User,
@@ -1133,21 +1164,32 @@ file_key(_Guid, Path, path) ->
     {path, Path}.
 
 assert(ExpectedTransfer, Transfer) ->
-    maps:fold(fun(FieldName, ExpectedValue, _AccIn) ->
-        assert_field(ExpectedValue, Transfer, FieldName)
+    maps:fold(fun(FieldName, ExpectedValueOrPredicate, _AccIn) ->
+        assert_field(ExpectedValueOrPredicate, Transfer, FieldName)
     end, undefined, ExpectedTransfer).
 
-assert_field(ExpectedValue, Transfer, FieldName) ->
+assert_field(ExpectedValueOrPredicate, Transfer, FieldName) ->
     Value = get_transfer_value(Transfer, FieldName),
     try
-        case Value of
-            ExpectedValue -> ok;
-            _ ->
-                throw({assertion_error, FieldName, ExpectedValue, Value})
+        case is_function(ExpectedValueOrPredicate, 1) of
+            true ->
+                case ExpectedValueOrPredicate(Value) of
+                    true ->
+                        ok;
+                    false ->
+                        throw({assertion_error, FieldName, <<"<pred>">>, Value})
+                end;
+            false ->
+                case Value of
+                    ExpectedValueOrPredicate ->
+                        ok;
+                    _ ->
+                        throw({assertion_error, FieldName, ExpectedValueOrPredicate, Value})
+                end
         end
     catch
         error:{assertMatch_failed, _} ->
-            throw({assertion_error, FieldName, ExpectedValue, Value})
+            throw({assertion_error, FieldName, ExpectedValueOrPredicate, Value})
     end.
 
 get_transfer_value(Transfer, FieldName) ->
@@ -1178,6 +1220,20 @@ await_replication_starts(Node, TransferId) ->
                 files_replicated = FilesReplicated
             } = transfers_test_utils:get_transfer(Node, TransferId),
             (BytesReplicated > 0) or (FilesReplicated > 0)
+        catch
+            throw:transfer_not_found ->
+                false
+        end
+    end, 60).
+
+await_replica_eviction_starts(Node, TransferId) ->
+    ?assertEqual(true, begin
+        try
+            #transfer{
+                eviction_status = active,
+                files_evicted = FilesEvicted
+            } = transfers_test_utils:get_transfer(Node, TransferId),
+            FilesEvicted > 0
         catch
             throw:transfer_not_found ->
                 false
