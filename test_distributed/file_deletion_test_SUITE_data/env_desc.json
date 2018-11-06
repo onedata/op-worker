@@ -77,7 +77,8 @@
             "space1": {
                 "displayed_name": "space1",
                 "users": [
-                    "user1"
+                    "user1",
+                    "user2"
                 ],
                 "groups": [
                 ],
@@ -91,6 +92,7 @@
             "space2": {
                 "displayed_name": "space2",
                 "users": [
+                    "user1",
                     "user2"
                 ],
                 "groups": [

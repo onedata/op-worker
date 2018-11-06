@@ -38,7 +38,8 @@
     file_stat_should_return_enoent_after_deletion/1,
     file_open_should_return_enoent_after_deletion/1,
     file_handle_should_work_after_deletion/1,
-    remove_file_on_ceph_using_client/1
+    remove_file_on_ceph_using_client/1,
+    remove_opened_file_test/1
 ]).
 
 -define(TEST_CASES, [
@@ -54,7 +55,8 @@
     file_stat_should_return_enoent_after_deletion,
     file_open_should_return_enoent_after_deletion,
     file_handle_should_work_after_deletion,
-    remove_file_on_ceph_using_client
+    remove_file_on_ceph_using_client,
+    remove_opened_file_test
 ]).
 
 all() -> ?ALL(?TEST_CASES).
@@ -332,6 +334,42 @@ remove_file_on_ceph_using_client(Config0) ->
 
     ?assertMatch([], utils:cmd(["docker exec", atom_to_list(ContainerId), "rados -p onedata ls -"])).
 
+
+remove_opened_file_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = fun(User) -> ?config({session_id, {User, ?GET_DOMAIN(Worker)}}, Config) end,
+    SpaceName = <<"space2">>,
+    FilePath = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
+    
+    User1 = <<"user1">>,
+    User2 = <<"user2">>,
+
+    Size = 100,
+    Content1 = crypto:strong_rand_bytes(Size),
+    Content2 = crypto:strong_rand_bytes(Size),
+
+    % File1
+    {ok, Guid1} = lfm_proxy:create(Worker, SessId(User1), FilePath, 8#777),
+    {ok, Handle1} = lfm_proxy:open(Worker, SessId(User1), {path, FilePath}, rdwr),
+    {ok, _} = lfm_proxy:write(Worker, Handle1, 0, Content1),
+
+    % File2
+    ok = lfm_proxy:unlink(Worker, SessId(User2), {path, FilePath}),
+    {ok, _} = lfm_proxy:create(Worker, SessId(User2), FilePath, 8#777),
+    {ok, Handle2} = lfm_proxy:open(Worker, SessId(User2), {path, FilePath}, rdwr),
+    {ok, _} = lfm_proxy:write(Worker, Handle2, 0, Content2),
+    ?assertEqual({ok, Content2}, lfm_proxy:read(Worker, Handle2, 0, Size)),
+
+    % File1 
+    ?assertEqual({error, enoent}, lfm_proxy:stat(Worker, SessId(User1), {guid, Guid1})),
+    ?assertEqual({error, enoent}, lfm_proxy:open(Worker, SessId(User1), {guid, Guid1}, read)),
+    ?assertEqual({ok, Content1}, lfm_proxy:read(Worker, Handle1, 0, Size)),
+    
+    {ok, _} = lfm_proxy:write(Worker, Handle1, Size, Content1),
+    ?assertEqual({ok, <<Content1/binary, Content1/binary>>}, lfm_proxy:read(Worker, Handle1, 0, 2*Size)),
+    
+    ?assertEqual({ok, Content2}, lfm_proxy:read(Worker, Handle2, 0, Size)).
+
 %===================================================================
 % SetUp and TearDown functions
 %===================================================================
@@ -393,6 +431,12 @@ init_per_testcase(Case, Config) when
     test_utils:mock_expect(Worker, worker_proxy, cast,
         fun(W, A) -> worker_proxy:call(W, A) end),
 
+    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(
+        ?TEST_FILE(Config, "env_desc.json"), Config),
+    lfm_proxy:init(ConfigWithSessionInfo);
+init_per_testcase(remove_opened_file_test, Config) ->
+    initializer:remove_pending_messages(),
+    ssl:start(),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(
         ?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo).
