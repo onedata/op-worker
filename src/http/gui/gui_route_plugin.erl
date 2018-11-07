@@ -27,6 +27,7 @@
 -export([login_page_path/0, default_page_path/0]).
 -export([error_404_html_file/0, error_500_html_file/0]).
 -export([response_headers/0]).
+-export([check_ws_origin/1]).
 
 %% Convenience macros for defining routes.
 -define(LOGIN, #gui_route{
@@ -231,3 +232,25 @@ error_500_html_file() ->
 response_headers() ->
     {ok, Headers} = application:get_env(?APP_NAME, gui_response_headers),
     Headers.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link gui_route_plugin_behaviour} callback check_ws_origin/1
+%% @end
+%%--------------------------------------------------------------------
+-spec check_ws_origin(cowboy_req:req()) -> boolean().
+check_ws_origin(Req) ->
+    case application:get_env(?APP_NAME, check_ws_origin, true) of
+        false ->
+            true;
+        _ ->
+            OriginHeader = cowboy_req:header(<<"origin">>, Req),
+            Host = maps:get(host, url_utils:parse(OriginHeader)),
+            Domain = case provider_logic:get_domain() of
+                {ok, D} -> D;
+                _ -> undefined
+            end,
+            {_, IP} = inet:parse_ipv4strict_address(binary_to_list(Host)),
+            (Domain == Host) or (IP == node_manager:get_ip_address())
+    end.
+
