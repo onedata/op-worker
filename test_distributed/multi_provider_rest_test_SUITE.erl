@@ -73,19 +73,17 @@
 ]).
 
 %utils
--export([verify_file/3, create_file/3, create_dir/3,
+-export([
+    verify_file/3, create_file/3, create_dir/3,
     create_nested_directory_tree/4, sync_file_counter/3, create_file_counter/4,
-    verify_distribution/6]).
+    verify_distribution/6
+]).
 
 all() ->
     ?ALL([
         get_simple_file_distribution,
         transfers_should_be_ordered_by_timestamps,
-        rerun_file_replication,
-        rerun_file_replication_by_other_user,
         cancel_file_replication_on_2_providers_simultaneously,
-        rerun_dir_replication,
-        rerun_eviction_of_file_replica_with_migration,
         basic_autocleaning_test,
         automatic_cleanup_should_evict_unpopular_files,
         posix_mode_get,
@@ -1488,7 +1486,6 @@ end_per_testcase(_Case, Config) ->
     remove_transfers(Config),
     ensure_transfers_removed(Config),
     test_utils:mock_unload(Workers, [sync_req, replica_deletion_req]),
-    unmock_file_replication(Workers),
     lfm_proxy:teardown(Config).
 
 %%%===================================================================
@@ -1497,17 +1494,6 @@ end_per_testcase(_Case, Config) ->
 
 domain(Node) ->
     atom_to_binary(?GET_DOMAIN(Node), utf8).
-
-mock_file_replication_failure(Node) ->
-    test_utils:mock_new(Node, replica_synchronizer),
-    test_utils:mock_expect(Node, replica_synchronizer, synchronize,
-        fun(_, _, _, _, _, _) ->
-            throw(test_error)
-        end
-    ).
-
-unmock_file_replication(Node) ->
-    ok = test_utils:mock_unload(Node, replica_synchronizer).
 
 create_nested_directory_tree(Node, SessionId, [SubFilesNum], Root) ->
     DirGuid = create_dir(Node, SessionId, Root),
@@ -1640,34 +1626,6 @@ schedule_file_replication_by_id(Worker, ProviderId, FileId, Config) ->
         <<"replicas-id/", FileId/binary, "?provider_id=", ProviderId/binary>>,
         post, ?USER_1_AUTH_HEADERS(Config), []
     ), ?ATTEMPTS),
-    DecodedBody = json_utils:decode(Body),
-    #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
-    Tid.
-
-rerun_file_replication(Worker, Tid, Config) ->
-    rerun_file_replication(<<"user1">>, Worker, Tid, Config).
-
-rerun_file_replication(UserId, Worker, Tid, Config) ->
-    {ok, 201, Headers, _} =
-        rest_test_utils:request(Worker, <<"transfers/", Tid/binary, "/rerun">>, post,
-            ?USER_AUTH_HEADERS(Config, UserId), []),
-    Location = proplists:get_value(<<"location">>, Headers),
-    [_, NewTransferId] = binary:split(Location, <<"transfers/">>),
-    {ok, NewTransferId}.
-
-schedule_replica_eviction(Worker, ProviderId, undefined, File, Config) ->
-    {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(Worker,
-        <<"replicas/", File/binary, "?provider_id=", ProviderId/binary>>,
-        delete, ?USER_1_AUTH_HEADERS(Config), []),
-        ?ATTEMPTS),
-    DecodedBody = json_utils:decode(Body),
-    #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
-    Tid;
-schedule_replica_eviction(Worker, ProviderId, MigrationProviderId, File, Config) ->
-    {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(Worker, <<"replicas", File/binary, "?provider_id=",
-        ProviderId/binary, "&migration_provider_id=", MigrationProviderId/binary>>,
-        delete, ?USER_1_AUTH_HEADERS(Config), []),
-        ?ATTEMPTS),
     DecodedBody = json_utils:decode(Body),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
     Tid.
