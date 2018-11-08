@@ -38,7 +38,6 @@
 -export([
     get_simple_file_distribution/1,
     transfers_should_be_ordered_by_timestamps/1,
-    cancel_file_replication_on_2_providers_simultaneously/1,
     basic_autocleaning_test/1,
     automatic_cleanup_should_evict_unpopular_files/1,
     posix_mode_get/1,
@@ -83,7 +82,6 @@ all() ->
     ?ALL([
         get_simple_file_distribution,
         transfers_should_be_ordered_by_timestamps,
-        cancel_file_replication_on_2_providers_simultaneously,
         basic_autocleaning_test,
         automatic_cleanup_should_evict_unpopular_files,
         posix_mode_get,
@@ -327,62 +325,6 @@ transfers_should_be_ordered_by_timestamps(Config) ->
     ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
     ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid2), ?ATTEMPTS),
     ?assert(get_finish_time(WorkerP2, Tid, Config) =< get_finish_time(WorkerP2, Tid2, Config)).
-
-cancel_file_replication_on_2_providers_simultaneously(Config) ->
-    ct:timetrap({minutes, 10}),
-    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
-    SpaceId = <<"space2">>,
-    DomainP2 = domain(WorkerP2),
-
-    Size = 1024 * 1024 * 1024,
-    File = <<"/space2/file_cancel_replication_simultaneously">>,
-    FileGuid = create_test_file(WorkerP1, SessionId, File, crypto:strong_rand_bytes(Size)),
-    {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
-
-    % when
-    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
-    ExpectedDistribution = [#{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, Size]]}],
-    ?assertDistribution(WorkerP2, ExpectedDistribution, Config, File),
-    Tid = schedule_file_replication(WorkerP1, DomainP2, File, Config),
-
-    ?assertEqual([Tid], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-    ?assertEqual([Tid], list_ongoing_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid], list_ongoing_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ended_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-
-    % then
-    ?assertTransferStatus(#{
-        <<"replicatingProviderId">> := DomainP2,
-        <<"path">> := File,
-        <<"fileId">> := FileObjectId,
-        <<"replicationStatus">> := <<"active">>
-    }, WorkerP2, Tid, Config),
-
-    %% cancel transfer on 2 providers simultaneously
-    cancel_transfer(WorkerP2, Tid, Config),
-    cancel_transfer(WorkerP1, Tid, Config),
-
-    ?assertTransferStatus(#{
-        <<"replicationStatus">> := <<"cancelled">>,
-        <<"replicatingProviderId">> := DomainP2,
-        <<"path">> := File,
-        <<"fileId">> := FileObjectId,
-        <<"replicaEvictionStatus">> := <<"skipped">>
-    }, WorkerP2, Tid, Config),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid], list_ended_transfers(WorkerP1, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-    ?assertEqual([Tid], get_ended_transfers_for_file(WorkerP1, FileGuid), ?ATTEMPTS),
-
-    ?assertEqual([], list_waiting_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], list_ongoing_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([Tid], list_ended_transfers(WorkerP2, SpaceId), ?ATTEMPTS),
-    ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
-    ?assertEqual([Tid], get_ended_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS).
 
 basic_autocleaning_test(Config) ->
     % autocleaning configuration
@@ -1629,10 +1571,6 @@ schedule_file_replication_by_id(Worker, ProviderId, FileId, Config) ->
     DecodedBody = json_utils:decode(Body),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
     Tid.
-
-cancel_transfer(Worker, Tid, Config) ->
-    {ok, 204, _, _} = rest_test_utils:request(Worker, <<"transfers/", Tid/binary>>, delete, ?USER_1_AUTH_HEADERS(Config), []).
-
 
 create_test_file(Worker, SessionId, File, TestData) ->
     {ok, FileGuid} = lfm_proxy:create(Worker, SessionId, File, 8#700),
