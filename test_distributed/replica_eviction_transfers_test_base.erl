@@ -30,6 +30,11 @@
     evict_big_file_replica/3,
     evict_100_files_in_one_request/3,
     evict_100_files_each_file_separately/3,
+    many_simultaneous_failed_replica_evictions/3,
+    rerun_replica_eviction/3,
+    rerun_replica_eviction_by_other_user/3,
+    rerun_dir_eviction/3,
+    cancel_replica_eviction_on_target_nodes/2,
     fail_to_evict_file_replica_without_permissions/3,
     eviction_should_succeed_when_remote_provider_modified_file_replica/3,
     eviction_should_fail_when_evicting_provider_modified_file_replica/3,
@@ -362,6 +367,316 @@ evict_100_files_each_file_separately(Config, Type, FileKeyType) ->
                 ],
                 attempts = 3600,
                 timeout = timer:minutes(60)
+            }
+        }
+    ).
+
+many_simultaneous_failed_replica_evictions(Config, Type, FileKeyType) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    transfers_test_utils:mock_replica_eviction_failure(WorkerP2),
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
+
+    transfers_test_mechanism:run_test(
+        Config, #transfer_test_spec{
+            setup = #setup{
+                setup_node = WorkerP1,
+                assertion_nodes = [WorkerP2],
+                files_structure = [{10, 0}, {0, 10}],
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
+                replicate_to_nodes = [WorkerP2],
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ],
+                attempts = 60,
+                timeout = timer:minutes(1)
+            },
+            scenario = #scenario{
+                type = Type,
+                file_key_type = FileKeyType,
+                schedule_node = WorkerP1,
+                evicting_nodes = [WorkerP2],
+                function = fun transfers_test_mechanism:evict_each_file_replica_separately/2
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    eviction_status => failed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+                    evicting_provider => transfers_test_utils:provider_id(WorkerP2),
+                    files_to_process => 1,
+                    files_processed => 1,
+                    failed_files => 1,
+                    files_evicted => 0
+                },
+                assertion_nodes = [WorkerP1, WorkerP2],
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ],
+                attempts = 3600,
+                timeout = timer:minutes(60)
+            }
+        }
+    ),
+    transfers_test_utils:unmock_replica_eviction_failure(WorkerP2).
+
+rerun_replica_eviction(Config, Type, FileKeyType) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
+
+    transfers_test_utils:mock_replica_eviction_failure(WorkerP2),
+
+    Config2 = transfers_test_mechanism:run_test(
+        Config, #transfer_test_spec{
+            setup = #setup{
+                setup_node = WorkerP1,
+                assertion_nodes = [WorkerP2],
+                files_structure = [{0, 1}],
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
+                replicate_to_nodes = [WorkerP2],
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ]
+            },
+            scenario = #scenario{
+                type = Type,
+                file_key_type = FileKeyType,
+                schedule_node = WorkerP1,
+                evicting_nodes = [WorkerP2],
+                function = fun transfers_test_mechanism:evict_each_file_replica_separately/2
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    user_id => ?DEFAULT_USER,
+                    eviction_status => failed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+                    evicting_provider => transfers_test_utils:provider_id(WorkerP2),
+                    files_to_process => 1,
+                    files_processed => 1,
+                    failed_files => 1,
+                    files_evicted => 0
+                },
+                assertion_nodes = [WorkerP2]
+            }
+        }
+    ),
+    Config3 = transfers_test_mechanism:move_transfer_ids_to_old_key(Config2),
+    transfers_test_utils:unmock_replica_eviction_failure(WorkerP2),
+
+    transfers_test_mechanism:run_test(
+        Config3, #transfer_test_spec{
+            setup = undefined,
+            scenario = #scenario{
+                function = fun transfers_test_mechanism:rerun_transfers/2
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    user_id => ?DEFAULT_USER,
+                    eviction_status => completed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP2),
+                    evicting_provider => transfers_test_utils:provider_id(WorkerP2),
+                    files_to_process => 1,
+                    files_processed => 1,
+                    failed_files => 0,
+                    files_evicted => 1
+                },
+                assertion_nodes = [WorkerP1, WorkerP2],
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => []}
+                ]
+            }
+        }
+    ).
+
+rerun_replica_eviction_by_other_user(Config, Type, FileKeyType) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    User1 = <<"user1">>,
+    User2 = <<"user2">>,
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
+
+    transfers_test_utils:mock_replica_eviction_failure(WorkerP2),
+
+    Config2 = transfers_test_mechanism:run_test(
+        Config, #transfer_test_spec{
+            setup = #setup{
+                setup_node = WorkerP1,
+                assertion_nodes = [WorkerP2],
+                files_structure = [{0, 1}],
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
+                replicate_to_nodes = [WorkerP2],
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ]
+            },
+            scenario = #scenario{
+                type = Type,
+                user = User1,
+                file_key_type = FileKeyType,
+                schedule_node = WorkerP1,
+                evicting_nodes = [WorkerP2],
+                function = fun transfers_test_mechanism:evict_each_file_replica_separately/2
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    user_id => User1,
+                    eviction_status => failed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+                    evicting_provider => transfers_test_utils:provider_id(WorkerP2),
+                    files_to_process => 1,
+                    files_processed => 1,
+                    failed_files => 1,
+                    files_evicted => 0
+                },
+                assertion_nodes = [WorkerP2]
+            }
+        }
+    ),
+    Config3 = transfers_test_mechanism:move_transfer_ids_to_old_key(Config2),
+    transfers_test_utils:unmock_replica_eviction_failure(WorkerP2),
+
+    transfers_test_mechanism:run_test(
+        Config3, #transfer_test_spec{
+            setup = undefined,
+            scenario = #scenario{
+                user = User2,
+                function = fun transfers_test_mechanism:rerun_transfers/2
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    user_id => User2,
+                    eviction_status => completed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP2),
+                    evicting_provider => transfers_test_utils:provider_id(WorkerP2),
+                    files_to_process => 1,
+                    files_processed => 1,
+                    failed_files => 0,
+                    files_evicted => 1
+                },
+                assertion_nodes = [WorkerP1, WorkerP2],
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => []}
+                ]
+            }
+        }
+    ).
+
+rerun_dir_eviction(Config, Type, FileKeyType) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
+
+    transfers_test_utils:mock_replica_eviction_failure(WorkerP2),
+
+    Config2 = transfers_test_mechanism:run_test(
+        Config, #transfer_test_spec{
+            setup = #setup{
+                setup_node = WorkerP1,
+                assertion_nodes = [WorkerP2],
+                files_structure = [{1, 0}, {1, 2}, {0, 5}],
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
+                replicate_to_nodes = [WorkerP2],
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ]
+            },
+            scenario = #scenario{
+                type = Type,
+                file_key_type = FileKeyType,
+                schedule_node = WorkerP1,
+                evicting_nodes = [WorkerP2],
+                function = fun transfers_test_mechanism:evict_root_directory/2
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    user_id => ?DEFAULT_USER,
+                    eviction_status => failed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+                    evicting_provider => transfers_test_utils:provider_id(WorkerP2),
+                    files_to_process => 10,
+                    files_processed => 10,
+                    failed_files => 7,
+                    files_evicted => 0
+                },
+                assertion_nodes = [WorkerP2]
+            }
+        }
+    ),
+    Config3 = transfers_test_mechanism:move_transfer_ids_to_old_key(Config2),
+    transfers_test_utils:unmock_replica_eviction_failure(WorkerP2),
+
+    transfers_test_mechanism:run_test(
+        Config3, #transfer_test_spec{
+            setup = undefined,
+            scenario = #scenario{
+                function = fun transfers_test_mechanism:rerun_transfers/2
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    user_id => ?DEFAULT_USER,
+                    eviction_status => completed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP2),
+                    evicting_provider => transfers_test_utils:provider_id(WorkerP2),
+                    files_to_process => 10,
+                    files_processed => 10,
+                    failed_files => 0,
+                    files_evicted => 7
+                },
+                assertion_nodes = [WorkerP1, WorkerP2],
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => []}
+                ]
+            }
+        }
+    ).
+
+cancel_replica_eviction_on_target_nodes(Config, Type) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
+
+    transfers_test_mechanism:run_test(
+        Config, #transfer_test_spec{
+            setup = #setup{
+                setup_node = WorkerP1,
+                assertion_nodes = [WorkerP2],
+                files_structure = [{10, 0}, {0, 10}],
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type),
+                replicate_to_nodes = [WorkerP2],
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ],
+                attempts = 120,
+                timeout = timer:minutes(10)
+            },
+            scenario = #scenario{
+                type = Type,
+                schedule_node = WorkerP1,
+                evicting_nodes = [WorkerP2],
+                function = fun transfers_test_mechanism:cancel_replica_eviction_on_target_nodes/2
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    eviction_status => cancelled,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+                    files_to_process => 111,
+                    files_processed => 111,
+                    failed_files => 0,
+                    files_evicted => fun(X) -> X < 111 end
+                },
+                distribution = undefined,
+                assertion_nodes = [WorkerP1, WorkerP2],
+                timeout = timer:minutes(6),
+                attempts = 600
             }
         }
     ).
@@ -1209,6 +1524,21 @@ init_per_suite(Config) ->
         | Config
     ].
 
+init_per_testcase(cancel_replica_eviction_on_target_nodes, Config) ->
+    [WorkerP2 | _] = ?config(op_worker_nodes, Config),
+    OldMaxActiveReplicaEvictionTasks = rpc:call(WorkerP2, application, get_env, [
+        ?APP_NAME, max_active_deletion_tasks, 2000
+    ]),
+    ok = rpc:call(WorkerP2, application, set_env, [
+        ?APP_NAME, max_active_deletion_tasks, 10
+    ]),
+    transfers_test_utils:mock_prolonged_replica_eviction(WorkerP2, 0.5, 15),
+
+    init_per_testcase(all, [
+        {max_active_replica_eviction_tasks, OldMaxActiveReplicaEvictionTasks}
+        | Config
+    ]);
+
 init_per_testcase(quota_decreased_after_eviction, Config) ->
     init_per_testcase(all, [{?SPACE_ID_KEY, <<"space3">>} | Config]);
 
@@ -1234,6 +1564,15 @@ init_per_testcase(_Case, Config) ->
             Config
     end.
 
+end_per_testcase(cancel_replica_eviction_on_target_nodes, Config) ->
+    [WorkerP2 | _] = ?config(op_worker_nodes, Config),
+    OldMaxActiveReplicaEvictionTasks = ?config(max_active_replica_eviction_tasks, Config),
+    ok = rpc:call(WorkerP2, application, set_env, [
+        ?APP_NAME, max_active_deletion_tasks, OldMaxActiveReplicaEvictionTasks
+    ]),
+    transfers_test_utils:unmock_prolonged_replica_eviction(WorkerP2),
+    end_per_testcase(all, Config);
+
 end_per_testcase(eviction_should_fail_when_evicting_provider_modified_file_replica, Config) ->
     [WorkerP2 | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(WorkerP2, replica_deletion_req),
@@ -1250,7 +1589,7 @@ end_per_testcase(Case, Config) when
 
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    transfers_test_utils:unmock_sync_req(Workers),
+    transfers_test_utils:unmock_replication_worker(Workers),
     transfers_test_utils:unmock_replica_synchronizer_failure(Workers),
     transfers_test_utils:remove_transfers(Config),
     transfers_test_utils:remove_all_indexes(Workers, ?SPACE_ID),

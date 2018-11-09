@@ -22,34 +22,49 @@
 %%%       |            ||                             ||                       |
 %%%       |            ||                             ||                       |
 %%%       |            ||                             ||                       |
-%%%       v            ||                             ||                       |
-%%% +-----------+      ||       +------------+        ||       +-----------+   |
-%%% | enqueued  |------||------>|   active   |--------||------>| completed |   |
-%%% +-----------+      ||       +------------+        ||       +-----------+   |
+%%%       v          FR > 0                           ||                       |
+%%% +-----------+   or BR > 0   +------------+    FTP == FP     +-----------+  |
+%%% | enqueued  |------||------>|   active   |--------||------->| completed |  |
+%%% +-----------+      ||       +------------+        ||        +-----------+  |
 %%%       |            ||              |              ||                       |
 %%%       |            ||              |              ||                       |
 %%%       |            ||       cancel := true        ||                       |
 %%% cancel := true     ||     or failed_files > 0     ||                       |
 %%%       |            ||              |              ||                       |
 %%%       |            ||              |              ||                       |
-%%%       |            ||              v              ||                       |
-%%%       |            ||       +------------+        ||                       |
-%%%       +------------||------>|  aborting  |-------- cancel := true ---------+
+%%%       |            ||              v              ||      FTP == FP        |
+%%%       |            ||       +------------+        ||  and cancel := true   |
+%%%       +------------||------>|  aborting  |--------||-----------------------+
 %%%                    ||       +------------+        ||
+%%%                    ||              |              ||
+%%%                    ||              |              ||
+%%%                    ||          FTP == FP          ||
+%%%                    ||     and cancel := false     ||
 %%%                    ||              |              ||
 %%%                    ||              |              ||       +-----------+
 %%%                    ||              +--------------||------>|  failed   |
 %%%                    ||                             ||       +-----------+
 %%%                    ||                             ||
 %%%
+%%% Legend:
+%%%     FTP = files_to_process
+%%%     FP  = files_processed
+%%%     FR  = files_replicated
+%%%     BR  = bytes_replicated
 %%%
-%%% Since migration is just replica_eviction preceded by replication, if
-%%% replication fails/is cancelled, then whole migration fails/is cancelled.
-%%% Also failed status can be forced from any waiting or ongoing status.
-%%% It is necessary when transfer were interrupted abruptly,
-%%% like for example shutdown and restart of provider.
-%%% There is one more status not shown on state machines, which is skipped.
-%%% It is used to mark that given replication never happened/should not happen.
+%%%
+%%% If necessary `failed` status can be forced from any waiting or ongoing status.
+%%% It is used when transfer was interrupted abruptly (e.g. shutdown and restart
+%%% of provider).
+%%% Also there is one more status not shown on above fsm, namely `skipped`,
+%%% which is only used when replication never happened/should not happen
+%%% (e.g. replica eviction).
+%%%
+%%% Caution !!!
+%%% Above state machine works also for first part of migration, which is eviction
+%%% preceded by replication, with exception that when replication ends as `completed`
+%%% transfer link is not moved from ongoing to ended tree (there is still eviction
+%%% to do, so transfer is overall ongoing).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(replication_status).
@@ -63,13 +78,16 @@
     handle_failed/2, handle_cancelled/1
 ]).
 
+-type error() :: {error, term()}.
+-type transfer() :: transfer:transfer().
+
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 
--spec handle_enqueued(transfer:id()) -> {ok, transfer:doc()} | {error, term()}.
+-spec handle_enqueued(transfer:id()) -> {ok, transfer:doc()} | error().
 handle_enqueued(TransferId) ->
     EncodedPid = transfer_utils:encode_pid(self()),
     transfer:update(TransferId, fun(Transfer) ->
@@ -87,7 +105,7 @@ handle_enqueued(TransferId) ->
     end).
 
 
--spec handle_active(transfer:id()) -> {ok, transfer:doc()} | {error, term()}.
+-spec handle_active(transfer:id()) -> {ok, transfer:doc()} | error().
 handle_active(TransferId) ->
     transfer:update_and_run(
         TransferId,
@@ -96,7 +114,7 @@ handle_active(TransferId) ->
     ).
 
 
--spec handle_aborting(transfer:id()) -> {ok, transfer:doc()} | {error, term()}.
+-spec handle_aborting(transfer:id()) -> {ok, transfer:doc()} | error().
 handle_aborting(TransferId) ->
     OnSuccessfulUpdate = fun(Doc) ->
         replica_synchronizer:cancel(TransferId),
@@ -110,7 +128,7 @@ handle_aborting(TransferId) ->
     ).
 
 
--spec handle_completed(transfer:id()) -> {ok, transfer:doc()} | {error, term()}.
+-spec handle_completed(transfer:id()) -> {ok, transfer:doc()} | error().
 handle_completed(TransferId) ->
     transfer:update_and_run(
         TransferId,
@@ -119,8 +137,7 @@ handle_completed(TransferId) ->
     ).
 
 
--spec handle_failed(transfer:id(), boolean()) ->
-    {ok, transfer:doc()} | {error, term()}.
+-spec handle_failed(transfer:id(), boolean()) -> {ok, transfer:doc()} | error().
 handle_failed(TransferId, Force) ->
     UpdateFun = case Force of
         true -> fun mark_failed_forced/1;
@@ -134,7 +151,7 @@ handle_failed(TransferId, Force) ->
     ).
 
 
--spec handle_cancelled(transfer:id()) -> {ok, transfer:doc()} | {error, term()}.
+-spec handle_cancelled(transfer:id()) -> {ok, transfer:doc()} | error().
 handle_cancelled(TransferId) ->
     transfer:update_and_run(
         TransferId,
@@ -148,16 +165,16 @@ handle_cancelled(TransferId) ->
 %%%===================================================================
 
 
--spec mark_active(transfer:transfer()) ->
-    {ok, transfer:transfer()} | {error, term()}.
+%% @private
+-spec mark_active(transfer()) -> {ok, transfer()} | error().
 mark_active(Transfer = #transfer{replication_status = enqueued}) ->
     {ok, Transfer#transfer{replication_status = active}};
 mark_active(#transfer{replication_status = Status}) ->
     {error, Status}.
 
 
--spec mark_aborting(transfer:transfer()) ->
-    {ok, transfer:transfer()} | {error, term()}.
+%% @private
+-spec mark_aborting(transfer()) -> {ok, transfer()} | error().
 mark_aborting(Transfer) ->
     case transfer:is_replication_ongoing(Transfer) of
         true ->
@@ -167,8 +184,8 @@ mark_aborting(Transfer) ->
     end.
 
 
--spec mark_completed(transfer:transfer()) ->
-    {ok, transfer:transfer()} | {error, term()}.
+%% @private
+-spec mark_completed(transfer()) -> {ok, transfer()} | error().
 mark_completed(Transfer = #transfer{replication_status = active}) ->
     {ok, Transfer#transfer{
         replication_status = completed,
@@ -181,16 +198,16 @@ mark_completed(#transfer{replication_status = Status}) ->
     {error, Status}.
 
 
--spec mark_failed(transfer:transfer()) ->
-    {ok, transfer:transfer()} | {error, term()}.
+%% @private
+-spec mark_failed(transfer()) -> {ok, transfer()} | error().
 mark_failed(Transfer = #transfer{replication_status = aborting}) ->
     mark_failed_forced(Transfer);
 mark_failed(#transfer{replication_status = Status}) ->
     {error, Status}.
 
 
--spec mark_failed_forced(transfer:transfer()) ->
-    {ok, transfer:transfer()} | {error, term()}.
+%% @private
+-spec mark_failed_forced(transfer()) -> {ok, transfer()} | error().
 mark_failed_forced(Transfer) ->
     case transfer:is_replication_ended(Transfer) of
         true ->
@@ -208,8 +225,8 @@ mark_failed_forced(Transfer) ->
     end.
 
 
--spec mark_cancelled(transfer:transfer()) ->
-    {ok, transfer:transfer()} | {error, term()}.
+%% @private
+-spec mark_cancelled(transfer()) -> {ok, transfer()} | error().
 mark_cancelled(Transfer = #transfer{replication_status = scheduled}) ->
     {ok, Transfer#transfer{
         replication_status = cancelled,
