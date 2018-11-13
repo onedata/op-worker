@@ -120,7 +120,7 @@ init_stream(State = #{last_seq := Since, space_id := SpaceId}) ->
     Pid = self(),
 
     % todo limit to admin only (when we will have admin users)
-    Node = consistent_hasing:get_node({dbsync_out_stream, SpaceId}),
+    Node = consistent_hashing:get_node({dbsync_out_stream, SpaceId}),
     {ok, Stream} = rpc:call(Node, couchbase_changes, stream,
         [<<"onedata">>, SpaceId, fun(Feed) ->
             notify(Pid, Ref, Feed)
@@ -202,8 +202,8 @@ send_change(Req, Change, RequestedSpaceId) ->
 prepare_response(#change{seq = Seq, doc = FileDoc = #document{
     key = Uuid, deleted = Deleted,
     value = #file_meta{
-        is_scope = IsScope, mode = Mode, type = Type, owner = Uid,
-        version = Version, name = Name}}}, SpaceId) ->
+        is_scope = IsScope, mode = Mode, type = Type, owner = Uid, name = Name
+    }}}, SpaceId) ->
     #times{atime = Atime, ctime = Ctime, mtime = Mtime} =
         try
             {ok, #document{value = TimesValue}} = times:get(Uuid),
@@ -266,7 +266,6 @@ prepare_response(#change{seq = Seq, doc = FileDoc = #document{
                 <<"size">> => Size,
                 <<"type">> => Type,
                 <<"uid">> => Uid,
-                <<"version">> => Version,
                 <<"xattrs">> => Xattrs
             },
             <<"deleted">> => Deleted,

@@ -25,9 +25,7 @@
     get_shared_data_test/1,
     mixed_get_test/1,
     subscribe_test/1,
-    convenience_functions_test/1,
-    set_default_space_test/1,
-    join_or_leave_group_or_space_test/1
+    convenience_functions_test/1
 ]).
 
 all() -> ?ALL([
@@ -38,9 +36,7 @@ all() -> ?ALL([
     get_shared_data_test,
     mixed_get_test,
     subscribe_test,
-    convenience_functions_test,
-    set_default_space_test,
-    join_or_leave_group_or_space_test
+    convenience_functions_test
 ]).
 
 %%%===================================================================
@@ -231,24 +227,19 @@ get_shared_data_test(Config) ->
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
     % Other user should be able to fetch the data through common membership
-    % in space or group. Number of calls should rise because common group
-    % and space has to be fetched to verify authorization.
-    ?assertMatch(
-        {ok, ?USER_SHARED_DATA_MATCHER(?USER_1)},
-        rpc:call(Node, user_logic, get_shared_data, [User2Sess, ?USER_1, ?THROUGH_GROUP(?GROUP_1)])
-    ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    % in space. Number of calls should rise because common space has to be
+    % fetched to verify authorization.
     ?assertMatch(
         {ok, ?USER_SHARED_DATA_MATCHER(?USER_1)},
         rpc:call(Node, user_logic, get_shared_data, [User2Sess, ?USER_1, ?THROUGH_SPACE(?SPACE_1)])
     ),
-    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
 
     ?assertMatch(
         ?ERROR_FORBIDDEN,
         rpc:call(Node, user_logic, get_shared_data, [User2Sess, ?USER_1, undefined])
     ),
-    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
 
     % Provider should also be able to fetch non-cached data
     logic_tests_common:invalidate_cache(Config, od_user, ?USER_1),
@@ -256,31 +247,25 @@ get_shared_data_test(Config) ->
         {ok, ?USER_SHARED_DATA_MATCHER(?USER_1)},
         rpc:call(Node, user_logic, get_shared_data, [?ROOT_SESS_ID, ?USER_1, undefined])
     ),
-    ?assertEqual(GraphCalls + 4, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph)),
 
-    % Other user should also be able to fetch non-cached data, group and space
-    % are already fetched so request count should rise by one
+    % Other user should also be able to fetch non-cached data, the space is
+    % already fetched so request count should rise by one
     % (user is invalidated and fetched every time).
-    logic_tests_common:invalidate_cache(Config, od_user, ?USER_1),
-    ?assertMatch(
-        {ok, ?USER_SHARED_DATA_MATCHER(?USER_1)},
-        rpc:call(Node, user_logic, get_shared_data, [User2Sess, ?USER_1, ?THROUGH_GROUP(?GROUP_1)])
-    ),
-    ?assertEqual(GraphCalls + 5, logic_tests_common:count_reqs(Config, graph)),
 
     logic_tests_common:invalidate_cache(Config, od_user, ?USER_1),
     ?assertMatch(
         {ok, ?USER_SHARED_DATA_MATCHER(?USER_1)},
         rpc:call(Node, user_logic, get_shared_data, [User2Sess, ?USER_1, ?THROUGH_SPACE(?SPACE_1)])
     ),
-    ?assertEqual(GraphCalls + 6, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 4, logic_tests_common:count_reqs(Config, graph)),
 
     logic_tests_common:invalidate_cache(Config, od_user, ?USER_1),
     ?assertMatch(
         ?ERROR_FORBIDDEN,
         rpc:call(Node, user_logic, get_shared_data, [User2Sess, ?USER_1, undefined])
     ),
-    ?assertEqual(GraphCalls + 7, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 5, logic_tests_common:count_reqs(Config, graph)),
 
     ok.
 
@@ -512,41 +497,7 @@ convenience_functions_test(Config) ->
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
-    % Default space is within private scope
-    ?assertMatch(
-        {ok, ?USER_DEFAULT_SPACE(?USER_1)},
-        rpc:call(Node, user_logic, get_default_space, [User1Sess, ?USER_1])
-    ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-
     % Eff groups are within private scope
-    ?assertMatch(
-        {ok, ?USER_EFF_GROUPS(?USER_1)},
-        rpc:call(Node, user_logic, get_eff_groups, [User1Sess, ?USER_1])
-    ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-
-    % Eff spaces are within private scope
-    ?assertMatch(
-        {ok, ?USER_EFF_SPACES(?USER_1)},
-        rpc:call(Node, user_logic, get_eff_spaces, [User1Sess, ?USER_1])
-    ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-
-    % Eff handle services are within private scope
-    ?assertMatch(
-        {ok, ?USER_EFF_HANDLE_SERVICES(?USER_1)},
-        rpc:call(Node, user_logic, get_eff_handle_services, [User1Sess, ?USER_1])
-    ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-
-    % Eff handles are within private scope
-    ?assertMatch(
-        {ok, ?USER_EFF_HANDLES(?USER_1)},
-        rpc:call(Node, user_logic, get_eff_handles, [User1Sess, ?USER_1])
-    ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-
     ?assertMatch(
         true,
         rpc:call(Node, user_logic, has_eff_group, [User1Sess, ?USER_1, ?GROUP_1])
@@ -562,6 +513,13 @@ convenience_functions_test(Config) ->
     ?assertMatch(
         false,
         rpc:call(Node, user_logic, has_eff_group, [User1Sess, ?USER_1, <<"wrongId">>])
+    ),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+
+    % Eff spaces are within private scope
+    ?assertMatch(
+        {ok, ?USER_EFF_SPACES(?USER_1)},
+        rpc:call(Node, user_logic, get_eff_spaces, [User1Sess, ?USER_1])
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
 
@@ -597,86 +555,6 @@ convenience_functions_test(Config) ->
         false,
         rpc:call(Node, user_logic, get_space_by_name, [User1Sess, ?USER_1, <<"wrongName">>])
     ),
-
-    ok.
-
-
-set_default_space_test(Config) ->
-    [Node | _] = ?config(op_worker_nodes, Config),
-
-    User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
-    % Creating session should fetch user (private aspect), invalidate
-    logic_tests_common:invalidate_cache(Config, od_user, ?USER_1),
-
-    GraphCalls = logic_tests_common:count_reqs(Config, graph),
-
-    ?assertMatch(
-        ok,
-        rpc:call(Node, user_logic, set_default_space, [User1Sess, ?USER_1, ?SPACE_1])
-    ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
-
-    ?assertMatch(
-        ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"spaceId">>),
-        rpc:call(Node, user_logic, set_default_space, [User1Sess, ?USER_1, <<"wrongId">>])
-    ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-
-    ok.
-
-
-join_or_leave_group_or_space_test(Config) ->
-    [Node | _] = ?config(op_worker_nodes, Config),
-
-    User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
-    % Creating session should fetch user (private aspect), invalidate
-    logic_tests_common:invalidate_cache(Config, od_user, ?USER_1),
-
-    GraphCalls = logic_tests_common:count_reqs(Config, graph),
-
-    ?assertMatch(
-        {ok, ?MOCK_JOINED_GROUP_ID},
-        rpc:call(Node, user_logic, join_group, [User1Sess, ?USER_1, ?MOCK_JOIN_GROUP_TOKEN])
-    ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
-    ?assertMatch(
-        ?ERROR_BAD_VALUE_TOKEN(<<"token">>),
-        rpc:call(Node, user_logic, join_group, [User1Sess, ?USER_1, <<"wrongToken">>])
-    ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-
-    ?assertMatch(
-        {ok, ?MOCK_JOINED_SPACE_ID},
-        rpc:call(Node, user_logic, join_space, [User1Sess, ?USER_1, ?MOCK_JOIN_SPACE_TOKEN])
-    ),
-    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph)),
-    ?assertMatch(
-        ?ERROR_BAD_VALUE_TOKEN(<<"token">>),
-        rpc:call(Node, user_logic, join_space, [User1Sess, ?USER_1, <<"wrongToken">>])
-    ),
-    ?assertEqual(GraphCalls + 4, logic_tests_common:count_reqs(Config, graph)),
-
-    ?assertMatch(
-        ok,
-        rpc:call(Node, user_logic, leave_group, [User1Sess, ?USER_1, ?GROUP_1])
-    ),
-    ?assertEqual(GraphCalls + 5, logic_tests_common:count_reqs(Config, graph)),
-    ?assertMatch(
-        ?ERROR_NOT_FOUND,
-        rpc:call(Node, user_logic, leave_group, [User1Sess, ?USER_1, <<"wrongId">>])
-    ),
-    ?assertEqual(GraphCalls + 6, logic_tests_common:count_reqs(Config, graph)),
-
-    ?assertMatch(
-        ok,
-        rpc:call(Node, user_logic, leave_space, [User1Sess, ?USER_1, ?SPACE_1])
-    ),
-    ?assertEqual(GraphCalls + 7, logic_tests_common:count_reqs(Config, graph)),
-    ?assertMatch(
-        ?ERROR_NOT_FOUND,
-        rpc:call(Node, user_logic, leave_space, [User1Sess, ?USER_1, <<"wrongId">>])
-    ),
-    ?assertEqual(GraphCalls + 8, logic_tests_common:count_reqs(Config, graph)),
 
     ok.
 

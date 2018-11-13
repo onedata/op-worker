@@ -868,28 +868,12 @@ user_logic_mock_setup(Workers, Users) ->
 %%--------------------------------------------------------------------
 -spec group_logic_mock_setup(Workers :: node() | [node()],
     [{binary(), binary()}], [{binary(), [binary()]}]) -> ok.
-group_logic_mock_setup(Workers, Groups, Users) ->
+group_logic_mock_setup(Workers, Groups, _Users) ->
     test_utils:mock_new(Workers, group_logic),
 
-    GetGroupFun = fun(_, GroupId) ->
+    test_utils:mock_expect(Workers, group_logic, get_name, fun(_Client, GroupId) ->
         GroupName = proplists:get_value(GroupId, Groups),
-        UserIds = proplists:get_value(GroupId, Users, []),
-        EffUsers = maps:from_list(
-            [{UID, privileges:group_privileges()} || UID <- UserIds]
-        ),
-        Doc = #document{key = GroupId, value = #od_group{
-            name = GroupName,
-            eff_users = EffUsers,
-            eff_children = #{}
-        }},
-        {ok, Doc}
-    end,
-
-    test_utils:mock_expect(Workers, group_logic, get, GetGroupFun),
-
-    test_utils:mock_expect(Workers, group_logic, get_name, fun(Client, GroupId) ->
-        {ok, #document{value = #od_group{name = Name}}} = GetGroupFun(Client, GroupId),
-        {ok, Name}
+        {ok, GroupName}
     end).
 
 %%--------------------------------------------------------------------
