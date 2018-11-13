@@ -1053,7 +1053,7 @@ end_per_testcase(Case, Config) when
 
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    transfers_test_utils:unmock_sync_req(Workers),
+    transfers_test_utils:unmock_replication_worker(Workers),
     transfers_test_utils:unmock_replica_synchronizer_failure(Workers),
     transfers_test_utils:remove_transfers(Config),
     transfers_test_utils:remove_all_indexes(Workers, ?SPACE_ID),

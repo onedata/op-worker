@@ -156,7 +156,7 @@ create_get_update_delete_index(Config) ->
         }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
     end, Workers),
 
-    % update index
+    % update index without overriding map function
     Options2 = #{<<"replica_update_min_changes">> => 100},
     ?assertMatch(ok, update_index_via_rest(
         Config, WorkerP1, ?SPACE_ID, IndexName,
@@ -172,6 +172,25 @@ create_get_update_delete_index(Config) ->
             <<"indexOptions">> := ExpOptions,
             <<"providers">> := [Provider2],
             <<"mapFunction">> := ExpMapFun,
+            <<"reduceFunction">> := null,
+            <<"spatial">> := false
+        }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
+    end, Workers),
+
+    % update index with overriding map function
+    ?assertMatch(ok, update_index_via_rest(
+        Config, WorkerP1, ?SPACE_ID, IndexName, ?GEOSPATIAL_MAP_FUNCTION, #{}
+    )),
+    ?assertMatch([IndexName], list_indexes_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([IndexName], list_indexes_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
+
+    % get on both after update
+    ExpMapFun2 = index_utils:escape_js_function(?GEOSPATIAL_MAP_FUNCTION),
+    lists:foreach(fun(Worker) ->
+        ?assertMatch({ok, #{
+            <<"indexOptions">> := ExpOptions,
+            <<"providers">> := [Provider2],
+            <<"mapFunction">> := ExpMapFun2,
             <<"reduceFunction">> := null,
             <<"spatial">> := false
         }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)

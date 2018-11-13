@@ -73,3 +73,30 @@
 -define(REPLICA_DELETION_WORKERS_POOL, replica_deletion_workers_pool).
 -define(REPLICA_DELETION_WORKERS_NUM,
     application:get_env(?APP_NAME, replica_deletion_workers_num, 10)).
+
+
+-define(TRANSFER_DATA_REQ(__FileCtx, __Params, __Retries, __NextRetryTimestamp), {
+    transfer_data, __FileCtx, __Params, __Retries, __NextRetryTimestamp
+}).
+
+-record(transfer_params, {
+    transfer_id :: transfer:id(),
+    user_ctx :: user_ctx:ctx(),
+
+    % Those fields are specified only for transfers by index.
+    % Otherwise are left undefined.
+    index_name = undefined :: transfer:index_name(),
+    query_view_params = undefined :: transfer:query_view_params(),
+
+    % CAUTION!!! This field is currently unused.
+    % This field is defined only if not whole but part of file
+    % should be transferred.
+    block = undefined :: undefined | fslogic_blocks:block(),
+
+    % This field is set to replicating provider during second part of migration,
+    % which is eviction. It speeds up eviction because evicting provider
+    % do not need to search for providers that have file replicas.
+    supporting_provider = undefined :: undefined | od_provider:id()
+}).
+
+-type transfer_params() :: #transfer_params{}.

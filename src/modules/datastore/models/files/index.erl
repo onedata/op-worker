@@ -120,7 +120,9 @@ update(SpaceId, Name, MapFunction, ReduceFunction, Options, Spatial, Providers) 
         )),
         {ok, OldIndex#index{
             spatial = utils:ensure_defined(Spatial, undefined, OldSpatial),
-            map_function = utils:ensure_defined(MapFunction, undefined, OldMap),
+            map_function = utils:ensure_defined(
+                index_utils:escape_js_function(MapFunction), undefined, OldMap
+            ),
             reduce_function = utils:ensure_defined(ReduceFunction, undefined, OldReduce),
             index_options = NewOptions,
             providers = utils:ensure_defined(Providers, undefined, OldProviders)

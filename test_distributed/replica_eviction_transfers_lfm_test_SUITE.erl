@@ -31,6 +31,10 @@
     evict_big_file_replica/1,
     evict_100_files_in_one_request/1,
     evict_100_files_each_file_separately/1,
+    many_simultaneous_failed_replica_evictions/1,
+    rerun_replica_eviction/1,
+    rerun_replica_eviction_by_other_user/1,
+    rerun_dir_eviction/1,
     fail_to_evict_file_replica_without_permissions/1,
     eviction_should_succeed_when_remote_provider_modified_file_replica/1,
     eviction_should_fail_when_evicting_provider_modified_file_replica/1,
@@ -59,6 +63,10 @@ all() -> [
     evict_big_file_replica,
     evict_100_files_in_one_request,
     evict_100_files_each_file_separately,
+    many_simultaneous_failed_replica_evictions,
+    rerun_replica_eviction,
+    rerun_replica_eviction_by_other_user,
+    rerun_dir_eviction,
 %%    fail_to_evict_file_replica_without_permissions    %todo VFS-4844,
     eviction_should_succeed_when_remote_provider_modified_file_replica,
     eviction_should_fail_when_evicting_provider_modified_file_replica,
@@ -112,6 +120,18 @@ evict_100_files_in_one_request(Config) ->
 
 evict_100_files_each_file_separately(Config) ->
     replica_eviction_transfers_test_base:evict_100_files_each_file_separately(Config, lfm, path).
+
+many_simultaneous_failed_replica_evictions(Config) ->
+    replica_eviction_transfers_test_base:many_simultaneous_failed_replica_evictions(Config, lfm, guid).
+
+rerun_replica_eviction(Config) ->
+    replica_eviction_transfers_test_base:rerun_replica_eviction(Config, lfm, guid).
+
+rerun_replica_eviction_by_other_user(Config) ->
+    replica_eviction_transfers_test_base:rerun_replica_eviction_by_other_user(Config, lfm, guid).
+
+rerun_dir_eviction(Config) ->
+    replica_eviction_transfers_test_base:rerun_dir_eviction(Config, lfm, guid).
 
 fail_to_evict_file_replica_without_permissions(Config) ->
     replica_eviction_transfers_test_base:fail_to_evict_file_replica_without_permissions(Config, lfm, path).

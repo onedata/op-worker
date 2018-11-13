@@ -18,14 +18,17 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include("proto/common/credentials.hrl").
+
 %% API
 -export([get_transfer/2, provider_id/1, ensure_transfers_removed/1,
     list_ended_transfers/2, list_waiting_transfers/2, list_ongoing_transfers/2,
     get_ongoing_transfers_for_file/2, get_ended_transfers_for_file/2,
     remove_transfers/1, get_space_support/2,
-    mock_space_occupancy/3, unmock_space_occupancy/2, unmock_sync_req/1,
+    mock_space_occupancy/3, unmock_space_occupancy/2, unmock_replication_worker/1,
     root_name/2, root_name/3,
     mock_prolonged_replication/3, mock_replica_synchronizer_failure/1,
+    mock_prolonged_replica_eviction/3, unmock_prolonged_replica_eviction/1,
+    mock_replica_eviction_failure/1, unmock_replica_eviction_failure/1,
     unmock_replica_synchronizer_failure/1, remove_all_indexes/2, random_job_name/1,
     test_map_function/1, test_reduce_function/1, test_map_function/2,
     create_index/7, create_index/6, random_index_name/1]).
@@ -112,8 +115,8 @@ unmock_space_occupancy(Node, SpaceId) ->
     CurrentSize = rpc:call(Node, space_quota, current_size, [SpaceId]),
     rpc:call(Node, space_quota, apply_size_change, [SpaceId, -CurrentSize]).
 
-unmock_sync_req(Node) ->
-    test_utils:mock_unload(Node, sync_req).
+unmock_replication_worker(Node) ->
+    test_utils:mock_unload(Node, replication_worker).
 
 root_name(FunctionName, Type) ->
     root_name(FunctionName, Type, <<"">>).
@@ -131,24 +134,49 @@ root_name(FunctionName, Type, FileKeyType, RandomSufix) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Prolongs call to sync_req:replicate_file/4 function for
+%% Prolongs call to replication_worker:transfer_regular_file/2 function for
 %% ProlongationTime seconds with probability ProlongationProbability.
 %% This function should be used to prolong duration time of transfers
 %% @end
 %%-------------------------------------------------------------------
 -spec mock_prolonged_replication(node(), non_neg_integer(), non_neg_integer()) -> ok.
 mock_prolonged_replication(Worker, ProlongationProbability, ProlongationTime) ->
-    ok = test_utils:mock_new(Worker, sync_req),
-    ok = test_utils:mock_expect(Worker, sync_req, replicate_file,
-        fun(UserCtx, FileCtx, Block, TransferId, IndexName, QueryViewParams) ->
+    ok = test_utils:mock_new(Worker, replication_worker),
+    ok = test_utils:mock_expect(Worker, replication_worker, transfer_regular_file,
+        fun(FileCtx, TransferParams) ->
             case rand:uniform() < ProlongationProbability of
                 true ->
                     timer:sleep(timer:seconds(ProlongationTime));
                 false ->
                     ok
             end,
-            meck:passthrough([UserCtx, FileCtx, Block, TransferId, IndexName, QueryViewParams])
+            meck:passthrough([FileCtx, TransferParams])
         end).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Prolongs call to replica_deletion_req:delete_blocks/3 function for
+%% ProlongationTime seconds with probability ProlongationProbability.
+%% This function should be used to prolong duration time of replica eviction transfers.
+%% @end
+%%-------------------------------------------------------------------
+-spec mock_prolonged_replica_eviction(node(), non_neg_integer(), non_neg_integer()) -> ok.
+mock_prolonged_replica_eviction(Worker, ProlongationProbability, ProlongationTime) ->
+    ok = test_utils:mock_new(Worker, replica_deletion_req),
+    ok = test_utils:mock_expect(Worker, replica_deletion_req, delete_blocks,
+        fun(FileCtx, Blocks, AllowedVV) ->
+            case rand:uniform() < ProlongationProbability of
+                true ->
+                    timer:sleep(timer:seconds(ProlongationTime));
+                false ->
+                    ok
+            end,
+            meck:passthrough([FileCtx, Blocks, AllowedVV])
+        end
+    ).
+
+unmock_prolonged_replica_eviction(Worker) ->
+    ok = test_utils:mock_unload(Worker, replica_deletion_req).
 
 mock_replica_synchronizer_failure(Node) ->
     test_utils:mock_new(Node, replica_synchronizer),
@@ -158,6 +186,15 @@ mock_replica_synchronizer_failure(Node) ->
 
 unmock_replica_synchronizer_failure(Node) ->
     ok = test_utils:mock_unload(Node, replica_synchronizer).
+
+mock_replica_eviction_failure(Node) ->
+    test_utils:mock_new(Node, replica_deletion_req),
+    test_utils:mock_expect(Node, replica_deletion_req, delete_blocks,
+        fun(_, _, _) -> {error, test_error} end
+    ).
+
+unmock_replica_eviction_failure(Node) ->
+    ok = test_utils:mock_unload(Node, replica_deletion_req).
 
 remove_all_indexes(Nodes, SpaceId) ->
     lists:foreach(fun(Node) ->
