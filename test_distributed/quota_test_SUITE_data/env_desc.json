@@ -170,13 +170,45 @@
                 "providers": {
                     "p1": {
                         "storage": "/mnt/st1",
-                        "supported_size": 44
+                        "supported_size": 20
 
                     },
                     "p2": {
                         "storage": "/mnt/st2",
-                        "supported_size": 22
+                        "supported_size": 20
 
+                    }
+                }
+            },
+            "space_id4": {
+                "displayed_name": "space4",
+                "users": [
+                    "user1"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p2": {
+                        "storage": "/mnt/st1",
+                        "supported_size": 1000000000
+                    }
+                }
+            },
+            "space_id5": {
+                "displayed_name": "space5",
+                "users": [
+                    "user1"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st1",
+                        "supported_size": 1000000000
+                    },
+                    "p2": {
+                        "storage": "/mnt/st2",
+                        "supported_size": 1000000000
                     }
                 }
             }
