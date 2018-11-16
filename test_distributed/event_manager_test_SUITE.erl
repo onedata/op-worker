@@ -275,7 +275,7 @@ mock_subscription(Worker) ->
 -spec mock_subscription(Worker :: node(), Subs :: [#document{}]) -> ok.
 mock_subscription(Worker, Docs) ->
     test_utils:mock_new(Worker, [subscription]),
-    test_utils:mock_expect(Worker, subscription, list, fun
+    test_utils:mock_expect(Worker, subscription, list_durable_subscriptions, fun
         () -> {ok, Docs}
     end).
 

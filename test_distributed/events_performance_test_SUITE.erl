@@ -536,7 +536,7 @@ evt_per_sec(EvtNum, Time) ->
     [event:type()] | {error, timeout}.
 receive_file_written_events(SubId, SessId) ->
     receive_file_written_events(SubId, SessId,
-        fun event_utils:aggregate_file_written_events/2, #{}).
+        fun fslogic_event_handler:aggregate_file_written_events/2, #{}).
 
 %%--------------------------------------------------------------------
 %% @private
