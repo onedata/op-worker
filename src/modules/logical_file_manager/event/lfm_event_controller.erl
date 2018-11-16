@@ -12,8 +12,6 @@
 -module(lfm_event_controller).
 -author("Tomasz Lichon").
 
-% MWevents - flush
-
 -include("modules/events/definitions.hrl").
 -include("timeouts.hrl").
 

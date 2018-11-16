@@ -15,7 +15,6 @@
 -include("global_definitions.hrl").
 -include("proto/oneclient/message_id.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
--include("proto/oneclient/event_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/diagnostic_messages.hrl").
@@ -53,54 +52,12 @@
 -spec preroute_message(Msg :: #client_message{} | #server_message{},
     SessId :: session:id()) -> ok | {ok, #server_message{}} | delegate_ans() |
     {error, term()}.
-preroute_message(#client_message{message_body = #message_request{}} = Msg, SessId) ->
-    sequencer:route_message(Msg, SessId);
-preroute_message(#client_message{message_body = #message_acknowledgement{}} = Msg,
-    SessId) ->
-    sequencer:route_message(Msg, SessId);
-preroute_message(#client_message{message_body = #end_of_message_stream{}} = Msg,
-    SessId) ->
-    sequencer:route_message(Msg, SessId);
-preroute_message(#client_message{message_body = #message_stream_reset{}} = Msg,
-    SessId) ->
-    sequencer:route_message(Msg, SessId);
-preroute_message(#server_message{message_body = #message_request{}} = Msg,
-    SessId) ->
-    sequencer:route_message(Msg, SessId);
-preroute_message(#server_message{message_body = #message_acknowledgement{}} = Msg,
-    SessId) ->
-    sequencer:route_message(Msg, SessId);
-preroute_message(#server_message{message_body = #end_of_message_stream{}} = Msg,
-    SessId) ->
-    sequencer:route_message(Msg, SessId);
-preroute_message(#server_message{message_body = #message_stream_reset{}} = Msg,
-    SessId) ->
-    sequencer:route_message(Msg, SessId);
-preroute_message(#client_message{message_stream = undefined} = Msg, _SessId) ->
-    router:route_message(Msg);
-preroute_message(#client_message{message_body = #subscription{}} = Msg, SessId) ->
-    case session_manager:is_provider_session_id(SessId) of
-        true ->
-            ok;
-        false ->
-            sequencer:route_message(Msg, SessId)
-    end;
-preroute_message(#client_message{message_body = #subscription_cancellation{}} = Msg,
-    SessId) ->
-    case session_manager:is_provider_session_id(SessId) of
-        true ->
-            ok;
-        false ->
-            sequencer:route_message(Msg, SessId)
-    end;
-preroute_message(#server_message{message_stream = undefined} = Msg, _SessId) ->
-    router:route_message(Msg);
 preroute_message(Msg, SessId) ->
-    case session_manager:is_provider_session_id(SessId) of
-        true ->
-            ok;
-        false ->
-            sequencer:route_message(Msg, SessId)
+    case stream_router:route_message(Msg, SessId) of
+        direct_message ->
+            router:route_message(Msg);
+        Ans ->
+            Ans
     end.
 
 %%--------------------------------------------------------------------

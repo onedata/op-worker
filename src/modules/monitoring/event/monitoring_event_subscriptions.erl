@@ -10,8 +10,6 @@
 %%%--------------------------------------------------------------------
 -module(monitoring_event_subscriptions).
 
-% MWevents - subscriber
-
 -author("Michal Wrzeszcz").
 
 -include("modules/events/subscriptions.hrl").

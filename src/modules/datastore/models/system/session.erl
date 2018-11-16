@@ -13,8 +13,6 @@
 -module(session).
 -author("Tomasz Lichon").
 
-% MWevents
-
 -include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").

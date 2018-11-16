@@ -11,8 +11,6 @@
 -module(monitoring_event_handler).
 -author("Michal Wrona").
 
-% MWevents - emiter
-
 -include("modules/events/definitions.hrl").
 -include("modules/monitoring/events.hrl").
 -include("modules/fslogic/fslogic_common.hrl").

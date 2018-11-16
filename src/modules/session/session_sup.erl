@@ -12,8 +12,6 @@
 -module(session_sup).
 -author("Krzysztof Trzepla").
 
-% MWevents
-
 -include("modules/datastore/datastore_models.hrl").
 
 -behaviour(supervisor).

@@ -14,8 +14,6 @@
 
 -include("modules/events/definitions.hrl").
 
-% MWevents
-
 %% API
 -export([add_subscriber/2, get_subscribers/1, remove_subscriber/2]).
 
