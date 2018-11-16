@@ -119,7 +119,8 @@ create_and_update_quota(Doc = #document{value = #file_location{
     space_quota:apply_size_change_and_maybe_emit(SpaceId, NewSize),
     case get_owner_id(FileUuid) of
         {ok, UserId} ->
-            monitoring_event:emit_storage_used_updated(SpaceId, UserId, NewSize);
+            monitoring_event_emmiter:emit_storage_used_updated(
+                SpaceId, UserId, NewSize);
         {error, not_found} ->
             ok
     end,
@@ -157,18 +158,22 @@ save_and_update_quota(Doc = #document{key = Key, value = #file_location{
         {ok, #document{value = #file_location{space_id = SpaceId}} = OldDoc} ->
             OldSize = count_bytes(OldDoc),
             space_quota:apply_size_change_and_maybe_emit(SpaceId, NewSize - OldSize),
-            monitoring_event:emit_storage_used_updated(SpaceId, UserId, NewSize - OldSize);
+            monitoring_event_emmiter:emit_storage_used_updated(
+                SpaceId, UserId, NewSize - OldSize);
 
         {ok, #document{value = #file_location{space_id = OldSpaceId}} = OldDoc} ->
             OldSize = count_bytes(OldDoc),
             space_quota:apply_size_change_and_maybe_emit(OldSpaceId, -1 * OldSize),
-            monitoring_event:emit_storage_used_updated(OldSpaceId, UserId, -1 * OldSize),
+            monitoring_event_emmiter:emit_storage_used_updated(
+                OldSpaceId, UserId, -1 * OldSize),
 
             space_quota:apply_size_change_and_maybe_emit(SpaceId, NewSize),
-            monitoring_event:emit_storage_used_updated(SpaceId, UserId, NewSize);
+            monitoring_event_emmiter:emit_storage_used_updated(
+                SpaceId, UserId, NewSize);
         _ ->
             space_quota:apply_size_change_and_maybe_emit(SpaceId, NewSize),
-            monitoring_event:emit_storage_used_updated(SpaceId, UserId, NewSize)
+            monitoring_event_emmiter:emit_storage_used_updated(
+                SpaceId, UserId, NewSize)
     end,
     ?extract_key(datastore_model:save(?CTX, Doc#document{scope = SpaceId})).
 
@@ -233,7 +238,8 @@ delete_and_update_quota(Key) ->
             Size = count_bytes(Doc),
             space_quota:apply_size_change_and_maybe_emit(SpaceId, -1 * Size),
             {ok, UserId} = get_owner_id(FileUuid),
-            monitoring_event:emit_storage_used_updated(SpaceId, UserId, -1 * Size);
+            monitoring_event_emmiter:emit_storage_used_updated(
+                SpaceId, UserId, -1 * Size);
         _ ->
             ok
     end,

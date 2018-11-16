@@ -16,6 +16,8 @@
 -module(sequencer_manager_sup).
 -author("Krzysztof Trzepla").
 
+% MWevents
+
 -behaviour(supervisor).
 
 %% API

@@ -14,7 +14,6 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/events/definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/oneprovider/rtransfer_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").

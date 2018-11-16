@@ -43,7 +43,7 @@
 -spec get_configuration(session:id()) -> #configuration{}.
 get_configuration(SessId) ->
     {ok, UserId} = session:get_user_id(SessId),
-    {ok, Docs} = subscription:list(),
+    {ok, Docs} = subscription:list_durable_subscriptions(),
     Subs = lists:filtermap(fun(#document{value = #subscription{} = Sub}) ->
         case subscription_type:is_remote(Sub) of
             true -> {true, Sub};

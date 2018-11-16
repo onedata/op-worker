@@ -260,7 +260,7 @@ session_supervisor_child_crash_test(Config) ->
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         [Worker | _] = ?config(op_worker_nodes, NewConfig),
-        initializer:clear_models(Worker, [subscription]),
+        initializer:clear_subscriptions(Worker),
         NewConfig
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].

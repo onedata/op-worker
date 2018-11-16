@@ -385,7 +385,7 @@ fsync(SessId, FileKey, ProviderId) ->
         true ->
             ok; % flush also flushes events for provider
         _ ->
-            lfm_event_utils:flush_event_queue(SessId, ProviderId,
+            lfm_event_controller:flush_event_queue(SessId, ProviderId,
                 fslogic_uuid:guid_to_uuid(FileGuid))
     end,
     remote_utils:call_fslogic(SessId, file_request,
@@ -490,7 +490,7 @@ truncate(SessId, FileKey, Size) ->
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #truncate{size = Size},
         fun(_) ->
-            ok = lfm_event_utils:emit_file_truncated(FileGuid, Size, SessId)
+            ok = lfm_event_emmiter:emit_file_truncated(FileGuid, Size, SessId)
         end).
 
 %%--------------------------------------------------------------------
@@ -583,7 +583,7 @@ write_internal(LfmCtx, Offset, Buffer, GenerateEvents) ->
     remote_utils:call_fslogic(SessId, proxyio_request, ProxyIORequest,
         fun(#remote_write_result{wrote = Wrote}) ->
             WrittenBlocks = [#file_block{offset = Offset, size = Wrote}],
-            ok = lfm_event_utils:maybe_emit_file_written(FileGuid, WrittenBlocks,
+            ok = lfm_event_emmiter:maybe_emit_file_written(FileGuid, WrittenBlocks,
                 SessId, GenerateEvents),
             {ok, Wrote}
         end
@@ -665,7 +665,8 @@ read_internal(LfmCtx, Offset, MaxSize, GenerateEvents, PrefetchData, SyncOptions
     remote_utils:call_fslogic(SessId, proxyio_request, ProxyIORequest,
         fun(#remote_data{data = Data}) ->
             ReadBlocks = [#file_block{offset = Offset, size = size(Data)}],
-            ok = lfm_event_utils:maybe_emit_file_read(FileGuid, ReadBlocks, SessId, GenerateEvents),
+            ok = lfm_event_emmiter:maybe_emit_file_read(
+                FileGuid, ReadBlocks, SessId, GenerateEvents),
             {ok, Data}
         end
     ).

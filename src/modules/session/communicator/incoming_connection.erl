@@ -420,7 +420,7 @@ handle_normal_message(State = #state{session_id = SessId, peer_type = PeerType,
     case Msg of
         %% Remote proxy session has received message which is now to be routed as proxy message.
         #client_message{proxy_session_id = TargetSessionId} = Msg when TargetSessionId =/= EffectiveSessionId, is_binary(TargetSessionId) ->
-            router:route_proxy_message(Msg, TargetSessionId),
+            event_router:route_proxy_message(Msg, TargetSessionId),
             State;
         _ -> %% Non-proxy case
             case router:preroute_message(Msg, EffectiveSessionId) of

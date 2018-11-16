@@ -15,11 +15,14 @@
 -include("modules/events/definitions.hrl").
 -include("proto/oneclient/server_messages.hrl").
 
-%% API
+%% API Handling
 -export([handle_file_written_events/2, handle_file_read_events/2]).
+%% API Aggregation
+-export([aggregate_file_read_events/2, aggregate_file_written_events/2,
+    aggregate_attr_changed_events/2]).
 
 %%%===================================================================
-%%% API
+%%% API Handling
 %%%===================================================================
 
 %%--------------------------------------------------------------------
@@ -55,6 +58,63 @@ handle_file_read_events(Evts, #{session_id := SessId} = _UserCtxMap) ->
     end, Evts).
 
 %%%===================================================================
+%%% API Aggregation
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Provides default implementation for a file read events aggregation rule.
+%% @end
+%%--------------------------------------------------------------------
+-spec aggregate_file_read_events(OldEvt :: event:type(), NewEvt :: event:type()) ->
+    NewEvt :: event:type().
+aggregate_file_read_events(OldEvt, NewEvt) ->
+    NewEvt#file_read_event{
+        counter = OldEvt#file_read_event.counter + NewEvt#file_read_event.counter,
+        size = OldEvt#file_read_event.size + NewEvt#file_read_event.size,
+        blocks = fslogic_blocks:aggregate(
+            OldEvt#file_read_event.blocks,
+            NewEvt#file_read_event.blocks
+        )
+    }.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Provides default implementation for a file written events aggregation rule.
+%% @end
+%%--------------------------------------------------------------------
+-spec aggregate_file_written_events(OldEvt :: event:type(), NewEvt :: event:type()) ->
+    NewEvt :: event:type().
+aggregate_file_written_events(OldEvt, NewEvt) ->
+    NewEvt#file_written_event{
+        counter = OldEvt#file_written_event.counter + NewEvt#file_written_event.counter,
+        size = OldEvt#file_written_event.size + NewEvt#file_written_event.size,
+        blocks = fslogic_blocks:aggregate(
+            OldEvt#file_written_event.blocks,
+            NewEvt#file_written_event.blocks
+        )
+    }.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Provides default implementation for a attr changed events aggregation rule.
+%% @end
+%%--------------------------------------------------------------------
+-spec aggregate_attr_changed_events(OldEvt :: event:type(), NewEvt :: event:type()) ->
+    NewEvt :: event:type().
+aggregate_attr_changed_events(OldEvent, NewEvent) ->
+    OldAttr = OldEvent#file_attr_changed_event.file_attr,
+    NewAttr = NewEvent#file_attr_changed_event.file_attr,
+    OldEvent#file_attr_changed_event{
+        file_attr = NewAttr#file_attr{
+            size = case NewAttr#file_attr.size of
+                undefined -> OldAttr#file_attr.size;
+                X -> X
+            end
+        }
+    }.
+
+%%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
@@ -75,7 +135,7 @@ handle_file_written_event(#file_written_event{
     FileCtx = file_ctx:new_by_guid(FileGuid),
     {ok, UserId} = session:get_user_id(SessId),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    monitoring_event:emit_file_written_statistics(SpaceId, UserId, Size, Counter),
+    monitoring_event_emmiter:emit_file_written_statistics(SpaceId, UserId, Size, Counter),
 
     replica_synchronizer:force_flush_events(file_ctx:get_uuid_const(FileCtx)),
     case replica_synchronizer:update_replica(FileCtx, Blocks, FileSize, true) of
@@ -104,5 +164,5 @@ handle_file_read_event(#file_read_event{
     FileCtx = file_ctx:new_by_guid(FileGuid),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     {ok, UserId} = session:get_user_id(SessId),
-    monitoring_event:emit_file_read_statistics(SpaceId, UserId, Size, Counter),
+    monitoring_event_emmiter:emit_file_read_statistics(SpaceId, UserId, Size, Counter),
     fslogic_times:update_atime(FileCtx).

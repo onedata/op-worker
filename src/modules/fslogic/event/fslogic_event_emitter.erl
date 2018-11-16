@@ -20,7 +20,7 @@
 %% API
 -export([emit_file_attr_changed/2, emit_sizeless_file_attrs_changed/1,
     emit_file_location_changed/2, emit_file_location_changed/3,
-    emit_file_location_changed/4, create_file_location_changed/3,
+    emit_file_location_changed/4, emit_file_locations_changed/2,
     emit_file_perm_changed/1, emit_file_removed/2,
     emit_file_renamed_to_client/3, emit_quota_exceeded/0]).
 
@@ -112,17 +112,18 @@ emit_file_location_changed(Location, ExcludedSessions, Offset, OffsetEnd) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates #file_location_changed_event.
+%% Sends many file location changes to all subscribers except for the ones
+%% present in 'ExcludedSessions' list.
 %% @end
 %%--------------------------------------------------------------------
--spec create_file_location_changed(file_ctx:ctx(),
-    non_neg_integer() | undefined, non_neg_integer() | undefined) ->
-    #file_location_changed_event{}.
-create_file_location_changed(Location, Offset, OffsetEnd) ->
-    #file_location_changed_event{
-        file_location = Location,
-        change_beg_offset = Offset, change_end_offset = OffsetEnd
-    }.
+-spec emit_file_locations_changed({file_ctx:ctx(), non_neg_integer() | undefined,
+    non_neg_integer() | undefined}, [session:id()]) ->
+    ok | {error, Reason :: term()}.
+emit_file_locations_changed(EventsList, ExcludedSessions) ->
+    EventsList2 = lists:map(fun({Location, Offset, OffsetEnd}) ->
+        create_file_location_changed(Location, Offset, OffsetEnd)
+    end, EventsList),
+    event:emit({aggregated, EventsList2}, {exclude, ExcludedSessions}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -178,3 +179,22 @@ emit_quota_exceeded() ->
         {error, _} = Error ->
             ?debug("Cannot send disabled spaces event due to ~p", [Error])
     end.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates #file_location_changed_event.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_file_location_changed(file_ctx:ctx(),
+    non_neg_integer() | undefined, non_neg_integer() | undefined) ->
+    #file_location_changed_event{}.
+create_file_location_changed(Location, Offset, OffsetEnd) ->
+    #file_location_changed_event{
+        file_location = Location,
+        change_beg_offset = Offset, change_end_offset = OffsetEnd
+    }.

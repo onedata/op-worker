@@ -26,7 +26,7 @@
 %% API
 -export([setup_session/3, teardown_session/2, setup_storage/1, setup_storage/2, teardown_storage/1, clean_test_users_and_spaces/1,
     basic_session_setup/5, basic_session_teardown/2, remove_pending_messages/0, create_test_users_and_spaces/2,
-    remove_pending_messages/1, clear_models/2, space_storage_mock/2,
+    remove_pending_messages/1, clear_subscriptions/1, space_storage_mock/2,
     communicator_mock/1, clean_test_users_and_spaces_no_validate/1,
     domain_to_provider_id/1, mock_test_file_context/2, unmock_test_file_context/1]).
 -export([mock_provider_ids/1, mock_provider_id/4, unmock_provider_ids/1]).
@@ -236,14 +236,13 @@ remove_pending_messages(Timeout) ->
 %% Removes all records from models.
 %% @end
 %%--------------------------------------------------------------------
--spec clear_models(Worker :: node(), Names :: [atom()]) -> ok.
-clear_models(Worker, Names) ->
-    lists:foreach(fun(Name) ->
-        {ok, Docs} = ?assertMatch({ok, _}, rpc:call(Worker, Name, list, [])),
-        lists:foreach(fun(#document{key = Key}) ->
-            ?assertEqual(ok, rpc:call(Worker, Name, delete, [Key]))
-        end, Docs)
-    end, Names).
+-spec clear_subscriptions(Worker :: node()) -> ok.
+clear_subscriptions(Worker) ->
+    {ok, Docs} = ?assertMatch({ok, _}, rpc:call(Worker, subscription,
+        list_durable_subscriptions, [])),
+    lists:foreach(fun(#document{key = Key}) ->
+        ?assertEqual(ok, rpc:call(Worker, subscription, delete, [Key]))
+    end, Docs).
 
 %%--------------------------------------------------------------------
 %% @doc

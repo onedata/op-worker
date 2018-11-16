@@ -55,7 +55,7 @@
 %%--------------------------------------------------------------------
 -spec emit(Evt :: base() | type()) -> ok | {error, Reason :: term()}.
 emit(Evt) ->
-    case event_router:get_subscribers(Evt) of
+    case subscription_manager:get_subscribers(Evt) of
         {ok, SessIds} -> emit(Evt, SessIds);
         {error, Reason} -> {error, Reason}
     end.
@@ -68,7 +68,7 @@ emit(Evt) ->
 -spec emit(Evt :: base() | aggregated() | type(), MgrRef :: manager_ref()) ->
     ok | {error, Reason :: term()}.
 emit(Evt, {exclude, MgrRef}) ->
-    case event_router:get_subscribers(Evt) of
+    case subscription_manager:get_subscribers(Evt) of
         {ok, SessIds} ->
             Excluded = get_event_managers(MgrRef),
             Subscribed = get_event_managers(SessIds),
@@ -247,7 +247,8 @@ send_to_event_managers({aggregated, Messages}, Managers) ->
     end, Messages);
 send_to_event_managers(Message, Managers) ->
     lists:foreach(fun(Manager) ->
-        gen_server2:cast(Manager, Message)
+        % TODO - zwrocic blad
+        gen_server2:call(Manager, Message)
     end, Managers).
 
 %%--------------------------------------------------------------------

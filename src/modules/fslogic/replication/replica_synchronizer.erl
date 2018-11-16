@@ -1347,15 +1347,13 @@ flush_blocks_list(AllBlocks, ExcludeSessions, Flush) ->
             ok;
         all ->
             fslogic_cache:cache_event(ExcludeSessions,
-                fslogic_event_emitter:create_file_location_changed(Location,
-                    EventOffset, EventSize));
+                {Location, EventOffset, EventSize});
         {threshold, Bytes} ->
             BlocksSize = fslogic_blocks:size(FinalBlocks),
             case BlocksSize >= Bytes of
                 true ->
                     fslogic_cache:cache_event(ExcludeSessions,
-                        fslogic_event_emitter:create_file_location_changed(Location,
-                            EventOffset, EventSize));
+                        {Location, EventOffset, EventSize});
                 _ ->
                     ok
             end
@@ -1387,7 +1385,7 @@ flush_stats(#state{space_id = SpaceId} = State, CancelTimer) ->
     end, maps:to_list(State#state.cached_stats)),
 
     % TODO VFS-4412 emit rtransfer statistics
-%%    monitoring_event:emit_rtransfer_statistics(
+%%    monitoring_event_emmiter:emit_rtransfer_statistics(
 %%        SpaceId, UserId, get_summarized_blocks_size(AllBlocks)
 %%    ),
 
@@ -1418,7 +1416,8 @@ flush_stats(#state{space_id = SpaceId} = State, CancelTimer) ->
 flush_events(State) ->
     lists:foreach(fun({ExcludedSessions, Events}) ->
         % TODO - catch error and repeat
-        ok = event:emit({aggregated, lists:reverse(Events)}, {exclude, ExcludedSessions})
+        ok = fslogic_event_emitter:emit_file_locations_changed(
+            lists:reverse(Events), ExcludedSessions)
     end, lists:reverse(fslogic_cache:clear_events())),
     cancel_events_timer(State).
 

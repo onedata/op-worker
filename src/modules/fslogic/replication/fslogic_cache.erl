@@ -885,7 +885,8 @@ apply_size_change(Key, FileUuid) ->
                 {ok, UserId} = file_location:get_owner_id(FileUuid),
                 lists:foreach(fun({SpaceId, ChangeSize}) ->
                     space_quota:apply_size_change_and_maybe_emit(SpaceId, ChangeSize),
-                    monitoring_event:emit_storage_used_updated(SpaceId, UserId, ChangeSize)
+                    monitoring_event_emmiter:emit_storage_used_updated(
+                        SpaceId, UserId, ChangeSize)
                 end, Changes),
 
                 put({?SIZE_CHANGES, Key}, []),

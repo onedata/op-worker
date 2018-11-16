@@ -35,7 +35,7 @@ create(#subscription{type = Type}) ->
 
 create(#file_read_subscription{time_threshold = TimeThr}) ->
     #event_stream{
-        aggregation_rule = fun event_utils:aggregate_file_read_events/2,
+        aggregation_rule = fun fslogic_event_handler:aggregate_file_read_events/2,
         emission_time = make_emission_time(TimeThr),
         emission_rule = fun(_) -> false end,
         event_handler = fun fslogic_event_handler:handle_file_read_events/2
@@ -43,7 +43,7 @@ create(#file_read_subscription{time_threshold = TimeThr}) ->
 
 create(#file_written_subscription{time_threshold = TimeThr}) ->
     #event_stream{
-        aggregation_rule = fun event_utils:aggregate_file_written_events/2,
+        aggregation_rule = fun fslogic_event_handler:aggregate_file_written_events/2,
         emission_time = make_emission_time(TimeThr),
         emission_rule = fun(_) -> false end,
         event_handler = fun fslogic_event_handler:handle_file_written_events/2
@@ -55,18 +55,7 @@ create(#file_attr_changed_subscription{} = Sub) ->
         time_threshold = TimeThr
     } = Sub,
     #event_stream{
-        aggregation_rule = fun(OldEvent, NewEvent) ->
-            OldAttr = OldEvent#file_attr_changed_event.file_attr,
-            NewAttr = NewEvent#file_attr_changed_event.file_attr,
-            OldEvent#file_attr_changed_event{
-                file_attr = NewAttr#file_attr{
-                    size = case NewAttr#file_attr.size of
-                        undefined -> OldAttr#file_attr.size;
-                        X -> X
-                    end
-                }
-            }
-        end,
+        aggregation_rule = fun fslogic_event_handler:aggregate_attr_changed_events/2,
         emission_rule = make_counter_emission_rule(CtrThr),
         emission_time = make_emission_time(TimeThr),
         event_handler = make_send_events_handler()
@@ -105,8 +94,8 @@ create(#quota_exceeded_subscription{}) ->
 
 create(#monitoring_subscription{time_threshold = TimeThr}) ->
     #event_stream{
-        event_handler = fun monitoring_event:handle_monitoring_events/2,
-        aggregation_rule = fun monitoring_event:aggregate_monitoring_events/2,
+        event_handler = fun monitoring_event_handler:handle_monitoring_events/2,
+        aggregation_rule = fun monitoring_event_handler:aggregate_monitoring_events/2,
         emission_rule = fun(_) -> false end,
         emission_time = make_emission_time(TimeThr)
     }.

@@ -14,7 +14,6 @@
 
 -include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
--include("modules/events/definitions.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/common/handshake_messages.hrl").

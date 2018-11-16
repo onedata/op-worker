@@ -107,9 +107,10 @@ init([MgrSup, SessId]) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_call(Request, _From, State) ->
-    ?log_bad_request(Request),
-    {reply, ok, State}.
+handle_call(Request, From, State) ->
+    gen_server2:reply(From, ok),
+    % TODO - testy czy dostaniemy error jak sie cos wywali w tym w srodowisku multiprovider (flush!!!)
+    handle_cast(Request, State).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -433,7 +434,7 @@ get_context(_) ->
 -spec start_event_streams(StmsSup :: pid(), SessId :: session:id()) ->
     {Stms :: streams(), Subs :: subscriptions()}.
 start_event_streams(StmsSup, SessId) ->
-    {ok, Docs} = subscription:list(),
+    {ok, Docs} = subscription:list_durable_subscriptions(),
 
     lists:foldl(fun(#document{value = #subscription{id = Id} = Sub}, {Stms, Subs}) ->
         StmKey = subscription_type:get_stream_key(Sub),

@@ -14,7 +14,6 @@
 -author("Rafal Slota").
 
 -include("global_definitions.hrl").
--include("modules/events/definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/common/credentials.hrl").
 -include("proto/oneclient/client_messages.hrl").
