@@ -116,8 +116,8 @@ emit_file_location_changed(Location, ExcludedSessions, Offset, OffsetEnd) ->
 %% present in 'ExcludedSessions' list.
 %% @end
 %%--------------------------------------------------------------------
--spec emit_file_locations_changed({file_ctx:ctx(), non_neg_integer() | undefined,
-    non_neg_integer() | undefined}, [session:id()]) ->
+-spec emit_file_locations_changed([{file_ctx:ctx(), non_neg_integer() | undefined,
+    non_neg_integer() | undefined}], [session:id()]) ->
     ok | {error, Reason :: term()}.
 emit_file_locations_changed(EventsList, ExcludedSessions) ->
     EventsList2 = lists:map(fun({Location, Offset, OffsetEnd}) ->
