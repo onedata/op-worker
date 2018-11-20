@@ -400,7 +400,7 @@ handle_server_message(State = #state{session_id = SessId}, Data) ->
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_server_message_unsafe(State = #state{session_id = SessId,
     wait_map = WaitMap, wait_pids = Pids}, Msg) ->
-    case router:preroute_message(Msg, SessId) of
+    case router:route_message(Msg, SessId) of
         ok ->
             {noreply, State, ?PROTO_CONNECTION_TIMEOUT};
         {ok, ServerMsg} ->
