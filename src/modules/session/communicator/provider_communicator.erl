@@ -268,7 +268,7 @@ ensure_connected(SessId) ->
         - spec receive_server_message(MsgId :: #message_id{}) ->
 {ok, #server_message{}} | {error, timeout} | {error, Reason :: term()}.
 receive_server_message(MsgId) ->
-    Timeout = 3 * router:get_processes_check_interval(),
+    Timeout = 3 * async_request_manager:get_processes_check_interval(),
     receive
         #server_message{message_id = MsgId,
             message_body = #processing_status{code = 'IN_PROGRESS'}} ->

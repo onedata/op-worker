@@ -118,7 +118,7 @@ takeover(_Parent, Ref, Socket, Transport, _Opts, _Buffer, _HandlerState) ->
     ok = Transport:setopts(Socket, [binary, {packet, ?PACKET_VALUE}]),
     activate_socket_once(State),
 
-    Interval = router:get_processes_check_interval(),
+    Interval = async_request_manager:get_processes_check_interval(),
     erlang:send_after(Interval, self(), heartbeat),
 
     handler_loop(State),
@@ -218,14 +218,14 @@ handle_info(disconnect, State) ->
 handle_info(heartbeat, #state{wait_map = WaitMap, wait_pids = Pids,
     last_message_timestamp = LMT} = State) ->
     TimeoutFun = fun(Id) ->
-        send_server_message(State, router:get_heartbeat_msg(Id))
+        send_server_message(State, async_request_manager:get_heartbeat_msg(Id))
     end,
     ErrorFun = fun(Id) ->
-        send_server_message(State, router:get_error_msg(Id))
+        send_server_message(State, async_request_manager:get_error_msg(Id))
     end,
-    {Pids2, WaitMap2} = router:check_processes(Pids, WaitMap, TimeoutFun, ErrorFun),
+    {Pids2, WaitMap2} = async_request_manager:check_processes(Pids, WaitMap, TimeoutFun, ErrorFun),
 
-    Interval = router:get_processes_check_interval(),
+    Interval = async_request_manager:get_processes_check_interval(),
     erlang:send_after(Interval, self(), heartbeat),
 
     Continue = case maps:size(WaitMap2) of
@@ -244,7 +244,7 @@ handle_info(heartbeat, #state{wait_map = WaitMap, wait_pids = Pids,
     State#state{continue = Continue, wait_map = WaitMap2, wait_pids = Pids2};
 
 handle_info(Info, State = #state{wait_map = WaitMap, wait_pids = Pids}) ->
-    case router:process_ans(Info, WaitMap, Pids) of
+    case async_request_manager:process_ans(Info, WaitMap, Pids) of
         wrong_message ->
             ?log_bad_request(Info),
             State#state{continue = false};
@@ -432,7 +432,7 @@ handle_normal_message(State = #state{session_id = SessId, peer_type = PeerType,
                     {_, NewState} = send_server_message(State, ServerMsg),
                     NewState;
                 {wait, Delegation} ->
-                    {WaitMap2, Pids2} = router:save_delegation(Delegation, WaitMap, Pids),
+                    {WaitMap2, Pids2} = async_request_manager:save_delegation(Delegation, WaitMap, Pids),
                     State#state{wait_map = WaitMap2, wait_pids = Pids2};
                 {error, Reason} ->
                     ?warning("Message ~p handling error: ~p", [Msg, Reason]),
@@ -472,7 +472,7 @@ fulfill_pending_promises(#state{wait_map = WaitMap, wait_pids = Pids} = State) -
             heartbeat ->
                 handle_info(heartbeat, State);
             Info ->
-                case router:process_ans(Info, WaitMap, Pids) of
+                case async_request_manager:process_ans(Info, WaitMap, Pids) of
                     wrong_message ->
                         ?warning("Discarding message received on connection shutdown: ~p", [Info]),
                         State;
