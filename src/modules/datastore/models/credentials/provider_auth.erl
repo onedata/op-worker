@@ -50,6 +50,15 @@
 % (they might expire before they are consumed), a new one will be generated.
 -define(MIN_TTL_FROM_CACHE, 15).
 
+-define(MACAROON_FILE_CONTENT(Macaroon), 
+    <<"# Below is the provider root macaroon - a token "
+    "carrying its identity and full authorization.\n"
+    "# It can be used to authorize operations in Onezone's "
+    "REST API on behalf of the provider when sent in the "
+    "\"X-Auth-Token\" or \"Macaroon\" header.\n"
+    "# The root macaroon is highly confidential and must be "
+    "kept secret.\n\n", Macaroon/binary>>).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -69,7 +78,18 @@ save(ProviderId, Macaroon) ->
             root_macaroon = Macaroon
         }
     }),
-    simple_cache:put(?PROVIDER_ID_CACHE_KEY, ProviderId).
+    simple_cache:put(?PROVIDER_ID_CACHE_KEY, ProviderId),
+    
+    % save macaroon to file
+    {ok, ProviderRootMacaroonFile} = application:get_env(?APP_NAME, 
+        provider_root_macaroon),
+    case file:write_file(ProviderRootMacaroonFile, ?MACAROON_FILE_CONTENT(Macaroon)) of
+        ok -> 
+            ok;
+        Error ->
+            ?warning("Error when writing provider root macaroon to file: ~p", [Error]),
+            ok
+    end.
 
 
 %%--------------------------------------------------------------------
