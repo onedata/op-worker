@@ -417,27 +417,20 @@ handle_normal_message(State = #state{session_id = SessId, peer_type = PeerType,
             {Msg0, SessId}
     end,
 
-    case Msg of
-        %% Remote proxy session has received message which is now to be routed as proxy message.
-        #client_message{proxy_session_id = TargetSessionId} = Msg when TargetSessionId =/= EffectiveSessionId, is_binary(TargetSessionId) ->
-            event_router:route_message(Msg, TargetSessionId),
+    case router:route_message(Msg, EffectiveSessionId) of
+        ok ->
             State;
-        _ -> %% Non-proxy case
-            case router:route_message(Msg, EffectiveSessionId) of
-                ok ->
-                    State;
-                {ok, ServerMsg} ->
-                    % Result is ignored as there is no possible fallback if
-                    % send_server_message fails (the connection will close then).
-                    {_, NewState} = send_server_message(State, ServerMsg),
-                    NewState;
-                {wait, Delegation} ->
-                    {WaitMap2, Pids2} = async_request_manager:save_delegation(Delegation, WaitMap, Pids),
-                    State#state{wait_map = WaitMap2, wait_pids = Pids2};
-                {error, Reason} ->
-                    ?warning("Message ~p handling error: ~p", [Msg, Reason]),
-                    State#state{continue = false}
-            end
+        {ok, ServerMsg} ->
+            % Result is ignored as there is no possible fallback if
+            % send_server_message fails (the connection will close then).
+            {_, NewState} = send_server_message(State, ServerMsg),
+            NewState;
+        {wait, Delegation} ->
+            {WaitMap2, Pids2} = async_request_manager:save_delegation(Delegation, WaitMap, Pids),
+            State#state{wait_map = WaitMap2, wait_pids = Pids2};
+        {error, Reason} ->
+            ?warning("Message ~p handling error: ~p", [Msg, Reason]),
+            State#state{continue = false}
     end.
 
 
