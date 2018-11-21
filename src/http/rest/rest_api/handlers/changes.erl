@@ -6,7 +6,90 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Handler for changes streaming
+%%% Handler for streaming changes happening to `file_meta`, `file_location`,
+%%% `times` or `custom_metadata` in scope of given space.
+%%%
+%%% Possible fields to observer are shown below.
+%%%
+%%% fileMeta:
+%%%     - name
+%%%     - type
+%%%     - mode
+%%%     - owner
+%%%     - group_owner
+%%%     - provider_id
+%%%     - shares
+%%%     - deleted
+%%%
+%%% fileLocation:
+%%%     - provider_id
+%%%     - storage_id
+%%%     - size
+%%%     - space_id
+%%%     - storage_file_created
+%%%
+%%% times:
+%%%     - atime
+%%%     - mtime
+%%%     - ctime
+%%%
+%%% customMetadata:
+%%%     - onedata_json
+%%%     - onedata_rdf
+%%%     - onedata_keyvalue
+%%%     ...
+%%%
+%%% In case of `file_meta`, `file_location` and `times` fields corresponds
+%%% one to one to those held in records. As for `custom_metadata` elements
+%%% from `value` map field in record can be requested. One additional metakey
+%%% named `onedata_keyvalue` can be used to observe all elements beside
+%%% `onedata_json` and `onedata_rdf`.
+%%%
+%%% To open stream user must specify records to observe and either
+%%% fields to return (`fields`), fields for which check existence
+%%% (`exists` - only possible for `customMetadata`),
+%%% whether information about this record should be send always or
+%%% on this record changes only (`always`).
+%%%
+%%% <record>:
+%%%     [fields: <fields>]
+%%%     [exists: <fields>]
+%%%     [always: boolean()]
+%%%
+%%% Response will include beside requested information also additional metadata
+%%% like fileId, filePath, seq and mutators, rev, deleted, changed for each doc.
+%%%
+%%% EXAMPLE REQUEST:
+%%%
+%%% fileMeta:
+%%%     fields: [owner]
+%%% customMetadata:
+%%%     fields: [onedata_rdf]
+%%%     exists: [onedata_json]
+%%%     always: true
+%%%
+%%% EXAMPLE RESPONSE:
+%%%
+%%% fileId: 00000000002C66ED677569642361626562383736303665323765313
+%%% filePath: space1/my/file
+%%% seq: 100
+%%% fileMeta:
+%%%     rev: 2-c500a5eb026d9474429903d47841f9c5
+%%%     mutators: [<<"p1.1542789098.test">>]
+%%%     changed: true
+%%%     deleted: false
+%%%     fields:
+%%%         owner: john
+%%% customMetadata:
+%%%     rev: 1-09f941b4e8452ef6a244c5181d894814
+%%%     mutators: [<<"p1.1542789098.test">>]
+%%%     changed: false
+%%%     deleted: false
+%%%     exists:
+%%%         onedata_json: true
+%%%     fields:
+%%%         onedata_rdf: false
+%%%
 %%% @end
 %%%--------------------------------------------------------------------
 -module(changes).
@@ -295,66 +378,64 @@ send_change(Req, SpaceId, ChangesReqs, ChangedDoc = #document{
     key = FileUuid,
     value = #custom_metadata{}
 }) ->
-    Json = prepare_response(Seq, FileUuid, SpaceId, ChangedDoc, ChangesReqs),
-    cowboy_req:stream_body(<<Json/binary, "\r\n">>, nofin, Req);
+    send_changes(Req, Seq, FileUuid, SpaceId, ChangedDoc, ChangesReqs);
 
 send_change(Req, SpaceId, ChangesReqs, ChangedDoc = #document{
     seq = Seq,
     key = FileUuid,
     value = #times{}
 }) ->
-    Json = prepare_response(Seq, FileUuid, SpaceId, ChangedDoc, ChangesReqs),
-    cowboy_req:stream_body(<<Json/binary, "\r\n">>, nofin, Req);
+    send_changes(Req, Seq, FileUuid, SpaceId, ChangedDoc, ChangesReqs);
 
 send_change(Req, SpaceId, ChangesReqs, ChangedDoc = #document{
     seq = Seq,
     value = #file_location{uuid = FileUuid}
 }) ->
-    Json = prepare_response(Seq, FileUuid, SpaceId, ChangedDoc, ChangesReqs),
-    cowboy_req:stream_body(<<Json/binary, "\r\n">>, nofin, Req);
+    send_changes(Req, Seq, FileUuid, SpaceId, ChangedDoc, ChangesReqs);
 
 send_change(Req, SpaceId, ChangesReqs, ChangedDoc = #document{
     seq = Seq,
     key = FileUuid,
     value = #file_meta{}
 }) ->
-    Json = prepare_response(Seq, FileUuid, SpaceId, ChangedDoc, ChangesReqs),
-    cowboy_req:stream_body(<<Json/binary, "\r\n">>, nofin, Req).
+    send_changes(Req, Seq, FileUuid, SpaceId, ChangedDoc, ChangesReqs).
 
 
 %% @private
--spec prepare_response(datastore_doc:seq(), file_meta:uuid(),
-    od_space:id(), datastore:doc(), [change_req()]) -> binary().
-prepare_response(Seq, FileUuid, SpaceId, ChangedDoc, ChangesReqs) ->
-    FileId =
-        try
-            {ok, Val} = cdmi_id:guid_to_objectid(fslogic_uuid:uuid_to_guid(
-                FileUuid, SpaceId
-            )),
-            Val
-        catch
-            _:Error1 ->
-                ?debug("Cannot fetch cdmi id for changes, error: ~p", [Error1]),
-                <<>>
-        end,
-    FilePath =
-        try
-            fslogic_uuid:uuid_to_path(?ROOT_SESS_ID, FileUuid)
-        catch
-            _:Error2 ->
-                ?debug("Cannot fetch Path for changes, error: ~p", [Error2]),
-                <<>>
-        end,
-
-    CommonInfo = #{
-        <<"fileId">> => FileId,
-        <<"filePath">> => FilePath,
-        <<"seq">> => Seq
-    },
-    Changes = get_all_docs_changes(ChangesReqs, FileUuid, ChangedDoc),
-
-    Response = maps:merge(CommonInfo, Changes),
-    json_utils:encode(Response).
+-spec send_changes(req(), datastore_doc:seq(), file_meta:uuid(),
+    od_space:id(), datastore:doc(), [change_req()]) -> ok.
+send_changes(Req, Seq, FileUuid, SpaceId, ChangedDoc, ChangesReqs) ->
+    case get_all_docs_changes(ChangesReqs, FileUuid, ChangedDoc) of
+        Changes when map_size(Changes) == 0 ->
+            ok;
+        Changes ->
+            FileId =
+                try
+                    {ok, Val} = cdmi_id:guid_to_objectid(fslogic_uuid:uuid_to_guid(
+                        FileUuid, SpaceId
+                    )),
+                    Val
+                catch
+                    _:Error1 ->
+                        ?debug("Cannot fetch cdmi id for changes, error: ~p", [Error1]),
+                        <<>>
+                end,
+            FilePath =
+                try
+                    fslogic_uuid:uuid_to_path(?ROOT_SESS_ID, FileUuid)
+                catch
+                    _:Error2 ->
+                        ?debug("Cannot fetch Path for changes, error: ~p", [Error2]),
+                        <<>>
+                end,
+            CommonInfo = #{
+                <<"fileId">> => FileId,
+                <<"filePath">> => FilePath,
+                <<"seq">> => Seq
+            },
+            Response = json_utils:encode(maps:merge(CommonInfo, Changes)),
+            cowboy_req:stream_body(<<Response/binary, "\r\n">>, nofin, Req)
+    end.
 
 
 %%--------------------------------------------------------------------
