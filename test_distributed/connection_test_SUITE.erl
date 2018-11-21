@@ -554,7 +554,7 @@ fulfill_promises_after_connection_close_test(Config) ->
 protobuf_msg_test(Config) ->
     % given
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_expect(Workers, router, preroute_message, fun
+    test_utils:mock_expect(Workers, router, route_message, fun
         (#client_message{message_body = #events{events = [#event{
             type = #file_read_event{}
         }]}}, _) -> ok
@@ -1127,7 +1127,7 @@ init_per_testcase(Case, Config) when
     % Artificially prolong message handling to avoid races between response from
     % the server and connection close.
     test_utils:mock_new(Workers, router),
-    test_utils:mock_expect(Workers, router, preroute_message,
+    test_utils:mock_expect(Workers, router, route_message,
         fun(Msg, SessionId) ->
             timer:sleep(2000),
             meck:passthrough([Msg, SessionId])
