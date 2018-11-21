@@ -26,7 +26,7 @@
 -include("proto/oneprovider/rtransfer_messages.hrl").
 
 %% API
--export([route_message/2, route_direct_message/1]).
+-export([route_message/2, route_message/1]).
 -export([effective_session_id/1]).
 
 %%%===================================================================
@@ -44,7 +44,7 @@
 route_message(Msg, SessId) ->
     case stream_router:route_message(Msg, SessId) of
         direct_message ->
-            router:route_direct_message(Msg);
+            router:route_message(Msg);
         Ans ->
             Ans
     end.
@@ -54,12 +54,12 @@ route_message(Msg, SessId) ->
 %% Route message to adequate handler, this function should never throw
 %% @end
 %%--------------------------------------------------------------------
--spec route_direct_message(Msg :: #client_message{} | #server_message{}) ->
+-spec route_message(Msg :: #client_message{} | #server_message{}) ->
     ok | {ok, #server_message{}} | async_request_manager:delegate_ans() |
     {error, term()}.
-route_direct_message(Msg = #client_message{message_id = undefined}) ->
+route_message(Msg = #client_message{message_id = undefined}) ->
     route_and_ignore_answer(Msg);
-route_direct_message(Msg = #client_message{message_id = #message_id{
+route_message(Msg = #client_message{message_id = #message_id{
     issuer = Issuer,
     recipient = Recipient
 }}) ->
@@ -73,7 +73,7 @@ route_direct_message(Msg = #client_message{message_id = #message_id{
         false ->
             route_and_send_answer(Msg)
     end;
-route_direct_message(Msg = #server_message{message_id = #message_id{
+route_message(Msg = #server_message{message_id = #message_id{
     issuer = Issuer,
     recipient = Recipient
 }}) ->
@@ -243,4 +243,4 @@ route_and_send_answer(Msg = #client_message{
         {Pid, Ref}
     end, Id);
 route_and_send_answer(Msg) ->
-    event_router:route_and_send_answer(Msg).
+    event_router:route_message(Msg).
